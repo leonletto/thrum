@@ -29,6 +29,7 @@ import (
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
+	"github.com/leonletto/thrum/internal/daemon/inbox"
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
 	"github.com/leonletto/thrum/internal/daemon/monitor"
 	"github.com/leonletto/thrum/internal/daemon/nudge"
@@ -5120,6 +5121,30 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		// get exclusively. nudge.DispatchTmux is fire-and-forget; failures
 		// are intentionally swallowed because nudges are advisory.
 		nudge.DispatchTmux(thrumDir, evt.Recipients, evt.AgentID)
+
+		// hook-inbox-delivery: write a spool file for every LOCAL recipient.
+		// "Local" means the recipient has an identity file reachable from
+		// this daemon (matching the implicit rule in nudge.DispatchTmux —
+		// cross-machine recipients are a no-op because their identity file
+		// isn't on this daemon's disk). The agent-side check-inbox hook
+		// reads the spool and decides whether to surface a nudge (tmux dead)
+		// or silently consume (tmux alive — tmux path already handled it).
+		for _, recipient := range evt.Recipients {
+			if !nudge.HasLocalIdentity(thrumDir, recipient) {
+				continue
+			}
+			env := inbox.Envelope{
+				MsgID:      evt.MessageID,
+				From:       "@" + evt.AgentID,
+				ReceivedAt: time.Now().UTC(),
+			}
+			if err := inbox.WriteSpool(thrumDir, recipient, env); err != nil {
+				slog.Warn("[inbox] spool write failed",
+					"agent", recipient, "msg_id", evt.MessageID, "err", err)
+				// Continue — DB is authoritative; cron backstop surfaces
+				// unread messages regardless of spool state.
+			}
+		}
 	})
 
 	if syncManager != nil {

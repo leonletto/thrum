@@ -2,6 +2,7 @@ package nudge_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -106,4 +107,28 @@ func TestDispatchTmux_SkipsUnresolvableRecipients(t *testing.T) {
 	// but the test passes if no panic / no goroutine leak.
 	nudge.DispatchTmux(thrumDir, []string{"ghost1", "ghost2"}, "alice")
 	// No assertion needed — completing without panic is the test.
+}
+
+func TestHasLocalIdentity(t *testing.T) {
+	dir := t.TempDir()
+	thrumDir := filepath.Join(dir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeIdentity := func(name string) {
+		body := fmt.Sprintf(`{"version":1,"agent":{"name":%q}}`, name)
+		_ = os.WriteFile(
+			filepath.Join(thrumDir, "identities", name+".json"),
+			[]byte(body),
+			0o644,
+		)
+	}
+	writeIdentity("bob")
+
+	if !nudge.HasLocalIdentity(thrumDir, "bob") {
+		t.Fatal("bob should be local")
+	}
+	if nudge.HasLocalIdentity(thrumDir, "nobody") {
+		t.Fatal("nobody should not be local")
+	}
 }
