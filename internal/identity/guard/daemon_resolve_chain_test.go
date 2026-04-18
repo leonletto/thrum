@@ -112,3 +112,58 @@ func TestDaemonResolve_ChainWalk_NoConnectingPIDFallsClosed(t *testing.T) {
 		t.Fatal("want anonymous_mutating_rpc when ConnectingPID absent")
 	}
 }
+
+// TestDaemonResolve_WarnModeAnonymousStillDenied pins the intentional
+// tightening beyond G3 warn-mode semantics: when peercred ran AND the
+// chain walk produced no live match, we hard-deny regardless of
+// UnauthenticatedRPC mode. Kernel-level evidence of an unregistered
+// caller is stronger than an absent CallerAgentID on a non-peercred
+// transport, so the warn-mode "log-and-continue" fallback does not
+// extend to this path.
+func TestDaemonResolve_WarnModeAnonymousStillDenied(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.UnauthenticatedRPC = ModeWarn
+	_, err := DaemonResolve(context.Background(), cfg, DaemonResolveRequest{
+		PeercredRan:   true,
+		ConnectingPID: os.Getpid(),
+		IdentitiesDir: t.TempDir(), // empty dir: no identities to match
+	}, nil)
+	if err == nil {
+		t.Fatal("want hard-deny even in warn mode when peercred anonymous + chain empty")
+	}
+	var gErr *Error
+	if !errors.As(err, &gErr) || gErr.Reason != "anonymous_mutating_rpc" {
+		t.Errorf("want anonymous_mutating_rpc in warn mode, got %v", err)
+	}
+}
+
+// TestDaemonResolve_ChainWalk_NoRuntimeAncestor_DeniesEvenWithPIDMatch
+// enforces spec §Rule #4‴ step 2: the runtime-ancestor precondition.
+// A caller without any AI-runtime ancestor (bare shell, cron, script)
+// must fall through to anonymous even if a registered agent's
+// AgentPID happens to appear in its chain.
+//
+// Test harness: PID 1 (init/launchd) has no runtime ancestor by
+// definition — it's the root of the process tree. A seeded identity
+// with AgentPID=1 makes ChainContains(chain_of_1, 1) succeed AND
+// process.IsRunning(1) succeed, so the PID+liveness combination
+// alone would authenticate. The runtime-ancestor precondition is
+// the only backstop and must fire here.
+func TestDaemonResolve_ChainWalk_NoRuntimeAncestor_DeniesEvenWithPIDMatch(t *testing.T) {
+	identitiesDir := t.TempDir()
+	seedIdentityFile(t, identitiesDir, "impl_init", 1)
+
+	cfg := DefaultConfig()
+	_, err := DaemonResolve(context.Background(), cfg, DaemonResolveRequest{
+		PeercredRan:   true,
+		ConnectingPID: 1, // init: no runtime ancestor possible
+		IdentitiesDir: identitiesDir,
+	}, nil)
+	if err == nil {
+		t.Fatal("want hard-deny: PID 1 has no AI-runtime ancestor")
+	}
+	var gErr *Error
+	if !errors.As(err, &gErr) || gErr.Reason != "anonymous_mutating_rpc" {
+		t.Errorf("want anonymous_mutating_rpc (runtime-ancestor precondition), got %v", err)
+	}
+}

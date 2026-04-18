@@ -76,6 +76,15 @@ type ResolvedCaller struct {
 //     is returned verbatim — this is the legacy "trust the claim" path
 //     kept alive for tests and non-unix transports (browser/WS).
 //
+// Warn-mode tightening on peercred-anonymous: when peercred ran AND
+// the chain walk produced no live match, we hard-deny regardless of
+// the UnauthenticatedRPC mode. This is a deliberate deviation from
+// G3 warn's "log-and-continue" semantics — kernel-level evidence
+// that the caller is unregistered is stronger than an absent
+// CallerAgentID on a non-peercred transport, so the warn fallback
+// does not extend here. G3's warn-mode fallback still applies on
+// step 3 above (non-peercred paths).
+//
 // The logger receives structured warn-mode events when G3 fires; nil
 // is tolerated. DaemonResolve never logs trusted-path or mismatch
 // events — those are handler/dispatcher concerns.
@@ -136,13 +145,28 @@ func DaemonResolve(ctx context.Context, cfg Config, req DaemonResolveRequest, lo
 // resolveByChain walks ConnectingPID's ancestor chain and returns the
 // agent_id of the first registered identity whose AgentPID appears in
 // the chain AND is still alive. Returns "" when the walk is disabled
-// (zero PID or empty IdentitiesDir), fails, or produces no live
-// match. Stale identities (AgentPID in chain but dead) do NOT
-// authenticate — self-heal cross-verify: the DB-only PID self-heal
-// incident (thrum-pxz.14) demonstrates why single-source stale checks
-// false-positive.
+// (zero PID or empty IdentitiesDir), fails, lacks a runtime ancestor,
+// or produces no live match.
+//
+// The runtime-ancestor precondition enforces spec §Rule #4‴ step 2:
+// identity authentication only applies to callers running under a
+// recognized AI runtime (claude, codex, kiro, etc.). A bare shell,
+// cron job, or script with no runtime ancestor must fall through to
+// anonymous — they are legitimately unrelated to any agent session.
+//
+// Stale identities (AgentPID in chain but dead) do NOT authenticate:
+// a PID-only liveness check false-positives on stale files; cross-
+// verifying chain-membership with process-liveness is the minimum
+// trustworthy combination.
 func resolveByChain(ctx context.Context, req DaemonResolveRequest) string {
 	if req.ConnectingPID <= 0 || req.IdentitiesDir == "" {
+		return ""
+	}
+	// Spec §Rule #4‴ step 2: identity authentication applies only
+	// when the caller has a recognized runtime in its ancestor chain.
+	// Non-runtime callers (bare shell / cron / script) fall through
+	// to the anonymous-allow or anonymous-deny path per policy.
+	if rtPID, _, _ := ClosestRuntimeAncestor(ctx, req.ConnectingPID); rtPID == 0 {
 		return ""
 	}
 	chain, err := WalkAncestors(ctx, req.ConnectingPID)
@@ -180,9 +204,10 @@ func resolveByChain(ctx context.Context, req DaemonResolveRequest) string {
 		if id.AgentPID == 0 || !ChainContains(chain, id.AgentPID) {
 			continue
 		}
-		// Self-heal cross-verify: a stale identity file's AgentPID
-		// may appear in a descendant's chain by accident; require
-		// liveness before trusting it.
+		// A PID-only liveness check false-positives on stale files;
+		// see the self-heal cross-verify design notes. Chain-membership
+		// plus process-liveness is the minimum trustworthy combination
+		// before declaring the chain match authentic.
 		if !process.IsRunning(id.AgentPID) {
 			continue
 		}

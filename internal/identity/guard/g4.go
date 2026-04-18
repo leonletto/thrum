@@ -36,7 +36,16 @@ func G4(wc *WriterContext) error {
 		return nil
 	}
 	if wc.OriginDaemon != "" && wc.OriginDaemon != "local" {
-		return nil // cross-daemon mirror: PID is valid on the origin host
+		// Cross-daemon mirror: PID is valid on the origin host, not
+		// ours — local liveness check doesn't apply. Emit outcome=
+		// skipped so operators can distinguish "guard didn't fire"
+		// from "guard passed."
+		emitGuardFire(wc.WarnLogger, wc.Mode, "skipped", &Error{
+			Guard:       "daemon_writer_liveness",
+			Reason:      "cross_daemon_mirror",
+			ExpectedPID: wc.SubjectPID,
+		})
+		return nil
 	}
 	if wc.IsPIDAlive == nil || wc.IsPIDAlive(wc.SubjectPID) {
 		return nil

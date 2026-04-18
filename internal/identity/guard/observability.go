@@ -12,6 +12,11 @@ import "log/slog"
 //   - "denied"         — strict-mode refusal (caller gets the *Error)
 //   - "allowed"        — warn-mode fall-through (would have denied in strict)
 //   - "auto_reclaimed" — Rule #4‴ step 3.3 dead-PID reclaim
+//   - "skipped"        — guard precondition not met so enforcement did not
+//     apply (e.g. G4 cross-daemon mirror write — the subject PID is
+//     valid on the origin host, not ours, so local liveness doesn't
+//     apply). Distinct from "allowed": no fire would have happened
+//     under any mode.
 //
 // Attribute fields derive from the *Error being reported plus the
 // resolved mode + outcome. Zero-valued optional fields are omitted.
