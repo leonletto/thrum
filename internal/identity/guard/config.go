@@ -27,6 +27,37 @@ type Config struct {
 	PrimeOwnership          Mode `json:"prime_ownership"`
 }
 
+// Merge overlays repo over base and daemon over both. An empty Mode
+// ("") in a layer means "not set — defer to the lower layer." Callers
+// typically invoke as Merge(DefaultConfig(), repo, daemon) so an absent
+// .thrum/config.json field falls through to the strict default.
+func Merge(base, repo, daemon Config) Config {
+	out := base
+	overlay := func(dst *Mode, src Mode) {
+		if src != "" {
+			*dst = src
+		}
+	}
+	overlay(&out.CrossWorktree, repo.CrossWorktree)
+	overlay(&out.DeadPIDAutoReclaim, repo.DeadPIDAutoReclaim)
+	overlay(&out.QuickstartSelfRename, repo.QuickstartSelfRename)
+	overlay(&out.QuickstartNameCollision, repo.QuickstartNameCollision)
+	overlay(&out.NonGitBootstrap, repo.NonGitBootstrap)
+	overlay(&out.UnauthenticatedRPC, repo.UnauthenticatedRPC)
+	overlay(&out.DaemonWriterLiveness, repo.DaemonWriterLiveness)
+	overlay(&out.PrimeOwnership, repo.PrimeOwnership)
+
+	overlay(&out.CrossWorktree, daemon.CrossWorktree)
+	overlay(&out.DeadPIDAutoReclaim, daemon.DeadPIDAutoReclaim)
+	overlay(&out.QuickstartSelfRename, daemon.QuickstartSelfRename)
+	overlay(&out.QuickstartNameCollision, daemon.QuickstartNameCollision)
+	overlay(&out.NonGitBootstrap, daemon.NonGitBootstrap)
+	overlay(&out.UnauthenticatedRPC, daemon.UnauthenticatedRPC)
+	overlay(&out.DaemonWriterLiveness, daemon.DaemonWriterLiveness)
+	overlay(&out.PrimeOwnership, daemon.PrimeOwnership)
+	return out
+}
+
 // DefaultConfig returns the ship-default: every guard strict.
 func DefaultConfig() Config {
 	return Config{
