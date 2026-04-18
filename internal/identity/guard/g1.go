@@ -93,6 +93,63 @@ func G1a(qc *QuickstartContext) error {
 	return e
 }
 
+// G1b refuses quickstart when the requested --name is already held by
+// a different agent whose PID is still live. Dead squatters are
+// silently passed through (the new registration will overwrite the
+// stale file); callers whose own PID owns the name are passed through
+// too (that's G1a's problem to surface). --force renames the existing
+// file to .deleted and proceeds.
+func G1b(qc *QuickstartContext) error {
+	if qc.Mode == ModeOff {
+		return nil
+	}
+	target := filepath.Join(qc.IdentitiesDir, qc.RequestedName+".json")
+	id, err := loadIdentityPID(target)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // name is free
+		}
+		return fmt.Errorf("load %s: %w", target, err)
+	}
+
+	// Caller owns this name — let G1a decide.
+	if id.AgentPID != 0 && ChainContains(qc.Chain, id.AgentPID) {
+		return nil
+	}
+	// Dead squatter — takeover is safe.
+	if id.AgentPID == 0 || qc.IsPIDAlive == nil || !qc.IsPIDAlive(id.AgentPID) {
+		return nil
+	}
+	if qc.Force {
+		if err := os.Rename(target, target+".deleted"); err != nil {
+			return fmt.Errorf("rename to .deleted: %w", err)
+		}
+		return nil
+	}
+
+	e := &Error{
+		Guard:         "quickstart_name_collision",
+		Reason:        "name_held_by_live_foreign_pid",
+		CallerPID:     chainHead(qc.Chain),
+		ExpectedAgent: qc.RequestedName,
+		ExpectedPID:   id.AgentPID,
+		Remediation:   "choose another --name or pass --force to displace the existing identity",
+	}
+	if qc.Mode == ModeWarn {
+		if qc.WarnLogger != nil {
+			qc.WarnLogger.Warn("identity_guard_fire",
+				"guard", e.Guard,
+				"reason", e.Reason,
+				"expected_agent", e.ExpectedAgent,
+				"expected_pid", e.ExpectedPID,
+				"caller_pid", e.CallerPID,
+			)
+		}
+		return nil
+	}
+	return e
+}
+
 // findOwnedIdentity scans *.json files in dir, loads each, and returns
 // the name + path of the first file whose AgentPID appears in chain.
 // Empty name + nil error means "no owned identity in this dir," which
