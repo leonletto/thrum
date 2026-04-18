@@ -430,7 +430,10 @@ func (h *AgentHandler) HandleWhoami(ctx context.Context, params json.RawMessage)
 	if resolved != nil {
 		dreq.PeercredAgentID = resolved.AgentID
 	}
-	caller, err := guard.DaemonResolve(loadDaemonGuardConfig(h.state.RepoPath()), dreq, slog.Default())
+	connPID, _ := peercred.ConnectingPIDFromContext(ctx)
+	dreq.ConnectingPID = connPID
+	dreq.IdentitiesDir = identitiesDirFor(h.state.RepoPath())
+	caller, err := guard.DaemonResolve(ctx, loadDaemonGuardConfig(h.state.RepoPath()), dreq, slog.Default())
 	if err != nil {
 		return nil, fmt.Errorf("resolve identity: %w", err)
 	}

@@ -1922,7 +1922,10 @@ func (h *MessageHandler) resolveAgentAndSession(ctx context.Context, callerAgent
 	if resolved != nil {
 		req.PeercredAgentID = resolved.AgentID
 	}
-	caller, resolveErr := guard.DaemonResolve(loadDaemonGuardConfig(h.state.RepoPath()), req, slog.Default())
+	connPID, _ := peercred.ConnectingPIDFromContext(ctx)
+	req.ConnectingPID = connPID
+	req.IdentitiesDir = identitiesDirFor(h.state.RepoPath())
+	caller, resolveErr := guard.DaemonResolve(ctx, loadDaemonGuardConfig(h.state.RepoPath()), req, slog.Default())
 	if resolveErr != nil {
 		return "", "", resolveErr
 	}
@@ -1978,11 +1981,22 @@ func (h *MessageHandler) resolveAgentOnly(ctx context.Context, callerAgentID str
 	if resolved != nil {
 		req.PeercredAgentID = resolved.AgentID
 	}
-	caller, err := guard.DaemonResolve(loadDaemonGuardConfig(h.state.RepoPath()), req, slog.Default())
+	connPID, _ := peercred.ConnectingPIDFromContext(ctx)
+	req.ConnectingPID = connPID
+	req.IdentitiesDir = identitiesDirFor(h.state.RepoPath())
+	caller, err := guard.DaemonResolve(ctx, loadDaemonGuardConfig(h.state.RepoPath()), req, slog.Default())
 	if err != nil {
 		return ""
 	}
 	return caller.AgentID
+}
+
+// identitiesDirFor returns the absolute identities-directory path a
+// repo resolves to. Centralized so every DaemonResolve call site
+// computes it the same way — the chain walk enumerates files under
+// this dir.
+func identitiesDirFor(repoPath string) string {
+	return filepath.Join(repoPath, ".thrum", "identities")
 }
 
 // validateImpersonation validates that the caller is authorized to impersonate the target identity.

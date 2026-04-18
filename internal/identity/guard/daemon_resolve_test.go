@@ -2,6 +2,7 @@ package guard
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
@@ -10,7 +11,7 @@ import (
 
 func TestDaemonResolve_PeercredTrustedNoClaim(t *testing.T) {
 	cfg := DefaultConfig()
-	got, err := DaemonResolve(cfg, DaemonResolveRequest{
+	got, err := DaemonResolve(context.Background(), cfg, DaemonResolveRequest{
 		PeercredAgentID: "impl_alpha",
 		PeercredRan:     true,
 	}, nil)
@@ -24,7 +25,7 @@ func TestDaemonResolve_PeercredTrustedNoClaim(t *testing.T) {
 
 func TestDaemonResolve_PeercredTrustedMatchingClaim(t *testing.T) {
 	cfg := DefaultConfig()
-	got, err := DaemonResolve(cfg, DaemonResolveRequest{
+	got, err := DaemonResolve(context.Background(), cfg, DaemonResolveRequest{
 		CallerAgentID:   "impl_alpha",
 		PeercredAgentID: "impl_alpha",
 		PeercredRan:     true,
@@ -39,7 +40,7 @@ func TestDaemonResolve_PeercredTrustedMatchingClaim(t *testing.T) {
 
 func TestDaemonResolve_PeercredMismatchRejected(t *testing.T) {
 	cfg := DefaultConfig()
-	_, err := DaemonResolve(cfg, DaemonResolveRequest{
+	_, err := DaemonResolve(context.Background(), cfg, DaemonResolveRequest{
 		CallerAgentID:   "impl_beta", // forged
 		PeercredAgentID: "impl_alpha",
 		PeercredRan:     true,
@@ -58,7 +59,7 @@ func TestDaemonResolve_PeercredMismatchRejected(t *testing.T) {
 
 func TestDaemonResolve_PeercredAnonymousRejected(t *testing.T) {
 	cfg := DefaultConfig()
-	_, err := DaemonResolve(cfg, DaemonResolveRequest{
+	_, err := DaemonResolve(context.Background(), cfg, DaemonResolveRequest{
 		CallerAgentID: "whatever_claim",
 		PeercredRan:   true,
 		// PeercredAgentID empty → anonymous
@@ -77,7 +78,7 @@ func TestDaemonResolve_PeercredAnonymousRejected(t *testing.T) {
 
 func TestDaemonResolve_NoPeercredStrictEmptyClaim(t *testing.T) {
 	cfg := DefaultConfig() // UnauthenticatedRPC = strict
-	_, err := DaemonResolve(cfg, DaemonResolveRequest{
+	_, err := DaemonResolve(context.Background(), cfg, DaemonResolveRequest{
 		// CallerAgentID empty, PeercredRan false
 	}, nil)
 	if err == nil {
@@ -97,7 +98,7 @@ func TestDaemonResolve_NoPeercredWarnEmptyClaim(t *testing.T) {
 	cfg.UnauthenticatedRPC = ModeWarn
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	got, err := DaemonResolve(cfg, DaemonResolveRequest{}, logger)
+	got, err := DaemonResolve(context.Background(), cfg, DaemonResolveRequest{}, logger)
 	if err != nil {
 		t.Fatalf("warn mode should not error, got %v", err)
 	}
@@ -111,7 +112,7 @@ func TestDaemonResolve_NoPeercredWarnEmptyClaim(t *testing.T) {
 
 func TestDaemonResolve_NoPeercredAcceptsClaim(t *testing.T) {
 	cfg := DefaultConfig()
-	got, err := DaemonResolve(cfg, DaemonResolveRequest{
+	got, err := DaemonResolve(context.Background(), cfg, DaemonResolveRequest{
 		CallerAgentID: "impl_legacy",
 	}, nil)
 	if err != nil {
