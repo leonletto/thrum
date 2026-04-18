@@ -71,7 +71,7 @@ func TestG2_NestedSubdirOfGitRepo_Proceeds(t *testing.T) {
 	root := t.TempDir()
 	gitInit(t, root)
 	nested := filepath.Join(root, "a", "b", "c")
-	if err := os.MkdirAll(nested, 0o755); err != nil {
+	if err := os.MkdirAll(nested, 0o750); err != nil {
 		t.Fatal(err)
 	}
 	if err := G2(ModeStrict, nested, false, nil); err != nil {
