@@ -70,6 +70,30 @@ func IsClaudeProcess(ctx context.Context, pid int) bool {
 	return matchRuntimeName(processName(ctx, pid), "claude")
 }
 
+// RuntimeName returns the canonical runtime name for a given PID
+// (e.g. "claude", "codex", "cursor", "opencode"), or "" if the process
+// is not a known runtime. Canonicalization applies runtimeDisplayName
+// so both "cursor-agent" and "agent" collapse to "cursor", and
+// ".opencode" collapses to "opencode".
+func RuntimeName(ctx context.Context, pid int) string {
+	if pid <= 0 {
+		return ""
+	}
+	name := processName(ctx, pid)
+	if name == "" {
+		return ""
+	}
+	for _, rt := range knownRuntimes {
+		if matchRuntimeName(name, rt) {
+			if mapped, ok := runtimeDisplayName[rt]; ok {
+				return mapped
+			}
+			return rt
+		}
+	}
+	return ""
+}
+
 // IsRuntimeProcess checks if the given PID belongs to a process matching
 // the specified runtime binary name. If runtime is empty, checks all known runtimes.
 func IsRuntimeProcess(ctx context.Context, pid int, runtime string) bool {

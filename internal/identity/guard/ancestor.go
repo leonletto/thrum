@@ -39,6 +39,37 @@ func WalkAncestors(ctx context.Context, startPID int) ([]int, error) {
 	return chain, nil
 }
 
+// isRuntimeProcessFn and runtimeNameFn are test seams. Production code
+// delegates to internal/process; tests may swap them to simulate an
+// arbitrary process tree without actually spawning runtimes.
+var (
+	isRuntimeProcessFn = process.IsRuntimeProcess
+	runtimeNameFn      = process.RuntimeName
+)
+
+// ClosestRuntimeAncestor walks ancestors from startPID and returns the
+// first PID that is a recognized AI-coding runtime (claude, codex,
+// cursor, opencode, …) along with the canonical runtime name. Returns
+// (0, "", nil) if no runtime ancestor is found — "no runtime" is a
+// legitimate environmental state, not an error.
+//
+// If WalkAncestors fails before collecting any PIDs, the walk error is
+// returned. A partial chain is still searched, so an intermittent ps
+// failure deep in the tree does not mask a runtime match closer to the
+// caller.
+func ClosestRuntimeAncestor(ctx context.Context, startPID int) (int, string, error) {
+	chain, err := WalkAncestors(ctx, startPID)
+	if err != nil && len(chain) == 0 {
+		return 0, "", err
+	}
+	for _, pid := range chain {
+		if isRuntimeProcessFn(ctx, pid, "") {
+			return pid, runtimeNameFn(ctx, pid), nil
+		}
+	}
+	return 0, "", nil
+}
+
 // ChainContains reports whether pid appears anywhere in chain.
 func ChainContains(chain []int, pid int) bool {
 	return slices.Contains(chain, pid)
