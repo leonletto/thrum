@@ -433,7 +433,7 @@ Examples:
 
 			// Start daemon if not already running
 			if _, err := getClient(); err != nil {
-				if startErr := cli.DaemonStart(flagRepo, false); startErr != nil && !strings.Contains(startErr.Error(), "already running") {
+				if startErr := cli.DaemonStart(flagRepo, false, false); startErr != nil && !strings.Contains(startErr.Error(), "already running") {
 					fmt.Fprintf(os.Stderr, "Warning: could not auto-start daemon: %v\n", startErr)
 					fmt.Println("Start manually: thrum daemon start")
 				} else if !flagQuiet {
@@ -1233,6 +1233,7 @@ Exit codes:
 
 func daemonCmd() *cobra.Command {
 	var flagLocal bool
+	var flagForce bool
 
 	cmd := &cobra.Command{
 		Use:   "daemon",
@@ -1241,12 +1242,14 @@ func daemonCmd() *cobra.Command {
 
 	cmd.PersistentFlags().BoolVar(&flagLocal, "local", false,
 		"Local-only mode: skip git push/fetch in sync loop")
+	cmd.PersistentFlags().BoolVar(&flagForce, "force", false,
+		"Proceed even when the repo directory is not git-anchored (G2 override)")
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "start",
 		Short: "Start the daemon in the background",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := cli.DaemonStart(flagRepo, flagLocal); err != nil {
+			if err := cli.DaemonStart(flagRepo, flagLocal, flagForce); err != nil {
 				return err
 			}
 
@@ -1312,7 +1315,7 @@ func daemonCmd() *cobra.Command {
 		Use:   "restart",
 		Short: "Restart the daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := cli.DaemonRestart(flagRepo, flagLocal); err != nil {
+			if err := cli.DaemonRestart(flagRepo, flagLocal, flagForce); err != nil {
 				return err
 			}
 
@@ -1328,7 +1331,7 @@ func daemonCmd() *cobra.Command {
 		},
 	})
 
-	cmd.AddCommand(daemonRunCmd(&flagLocal))
+	cmd.AddCommand(daemonRunCmd(&flagLocal, &flagForce))
 	cmd.AddCommand(daemonLogsCmd())
 	// Old tsync/peers commands removed — replaced by top-level "thrum peer" commands
 
@@ -1373,13 +1376,13 @@ they are written. Use --since to filter by timestamp (e.g. "1h", "7d",
 	return cmd
 }
 
-func daemonRunCmd(flagLocal *bool) *cobra.Command {
+func daemonRunCmd(flagLocal *bool, flagForce *bool) *cobra.Command {
 	return &cobra.Command{
 		Use:    "run",
 		Short:  "Run the daemon in the foreground (internal use)",
 		Hidden: true, // Hidden from help - used internally by daemon start
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDaemon(flagRepo, *flagLocal)
+			return runDaemon(flagRepo, *flagLocal, *flagForce)
 		},
 	}
 }
@@ -4678,11 +4681,21 @@ func resolveLocalMentionRole() (string, error) {
 }
 
 // runDaemon runs the daemon server in the foreground.
-func runDaemon(repoPath string, flagLocal bool) error {
+func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// Resolve to absolute path
 	absPath, err := filepath.Abs(repoPath)
 	if err != nil {
 		return fmt.Errorf("failed to resolve repo path: %w", err)
+	}
+
+	// Identity Guard G2: refuse to start the daemon from a non-git
+	// directory unless --force is set. Closes the same footgun as
+	// `thrum init` G2 — prevents the daemon from anchoring to an
+	// arbitrary cwd (e.g. $HOME) and materializing a .thrum/ there.
+	// Mode is loaded from the repo's identity_guard.non_git_bootstrap
+	// config; strict is the default when unset.
+	if err := guardDaemonBootstrap(absPath, flagForce, nil); err != nil {
+		return err
 	}
 
 	// Resolve effective .thrum/ directory (follows redirect if in feature worktree)
@@ -6311,7 +6324,7 @@ func runBackupRestore(dirOverride, archivePath string, skipConfirm bool) error {
 
 	// Restart daemon if it was running before restore
 	if daemonWasRunning {
-		if restartErr := cli.DaemonRestart(flagRepo, cfg.Daemon.LocalOnly); restartErr != nil {
+		if restartErr := cli.DaemonRestart(flagRepo, cfg.Daemon.LocalOnly, false); restartErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not restart daemon: %v\n", restartErr)
 			fmt.Println("Restart manually: thrum daemon start")
 		} else {
@@ -6633,7 +6646,7 @@ func runTelegramConfigure(token, target, userID string, skipConfirm bool, allowF
 
 	// Path 3: Auto-pair flow
 	fmt.Println("\nStarting daemon with new config...")
-	if err := cli.DaemonRestart(flagRepo, false); err != nil {
+	if err := cli.DaemonRestart(flagRepo, false, false); err != nil {
 		return fmt.Errorf("daemon restart: %w", err)
 	}
 	fmt.Println("Daemon restarted")

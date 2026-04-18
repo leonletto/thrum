@@ -27,7 +27,9 @@ type DaemonStatusResult struct {
 
 // DaemonStart starts the daemon in the background.
 // When localOnly is true, the --local flag is passed to the daemon subprocess.
-func DaemonStart(repoPath string, localOnly bool) error {
+// When force is true, the --force flag is passed so the daemon's G2 guard
+// accepts non-git-anchored directories.
+func DaemonStart(repoPath string, localOnly bool, force bool) error {
 	// Convert to absolute path so the daemon knows where to run
 	absPath, err := filepath.Abs(repoPath)
 	if err != nil {
@@ -68,6 +70,9 @@ func DaemonStart(repoPath string, localOnly bool) error {
 	args := []string{"daemon", "run", "--repo", repoPath}
 	if localOnly {
 		args = append(args, "--local")
+	}
+	if force {
+		args = append(args, "--force")
 	}
 	cmd := exec.Command(executable, args...) // #nosec G204 -- executable from os.Executable(); repoPath is validated internal config, not raw user input
 
@@ -239,7 +244,8 @@ func DaemonStatus(repoPath string) (*DaemonStatusResult, error) {
 
 // DaemonRestart restarts the daemon (stop + start).
 // When localOnly is true, the restarted daemon runs in local-only mode.
-func DaemonRestart(repoPath string, localOnly bool) error {
+// When force is true, the daemon's G2 guard accepts non-git-anchored dirs.
+func DaemonRestart(repoPath string, localOnly bool, force bool) error {
 	// Read the previous WebSocket port before stopping (DaemonStop deletes ws.port)
 	prevPort := ReadWebSocketPort(repoPath)
 
@@ -256,7 +262,7 @@ func DaemonRestart(repoPath string, localOnly bool) error {
 	}
 
 	// Start daemon
-	return DaemonStart(repoPath, localOnly)
+	return DaemonStart(repoPath, localOnly, force)
 }
 
 // FormatDaemonStatus formats the daemon status for display.
