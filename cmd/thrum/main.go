@@ -37,7 +37,9 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
+	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/paths"
+	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/restart"
 	"github.com/leonletto/thrum/internal/runtime"
 	"github.com/leonletto/thrum/internal/subscriptions"
@@ -3664,6 +3666,46 @@ Examples:
 	return cmd
 }
 
+// resolvePrimeIdentityPath resolves the on-disk identity file path for
+// the current agent and returns the closest-runtime PID that prime's
+// G5 check compares against. Returns ok=false when the agent has no
+// identity file yet (first-prime) — G5 is a no-op in that case.
+func resolvePrimeIdentityPath(agentID string) (repoPath, idPath string, runtimePID int, ok bool) {
+	repoPath = paths.EffectiveRepoPath(".")
+	idPath = filepath.Join(repoPath, ".thrum", "identities", agentID+".json")
+	if _, err := os.Stat(idPath); err != nil {
+		return repoPath, "", 0, false
+	}
+	ctx := context.Background()
+	rtPID, _, _ := guard.ClosestRuntimeAncestor(ctx, os.Getpid())
+	return repoPath, idPath, rtPID, true
+}
+
+// loadPrimeOwnershipMode reads .thrum/config.json's
+// identity_guard.prime_ownership mode. Missing config → defaults
+// (strict). Parse errors also fall back to defaults rather than
+// refusing — the guard enforcement should default-on, not
+// default-off, on malformed config.
+func loadPrimeOwnershipMode(repoPath string) guard.Mode {
+	cfgPath := filepath.Join(repoPath, ".thrum", "config.json")
+	// #nosec G304 -- cfgPath is derived from the repo's own .thrum/.
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		return guard.ModeStrict
+	}
+	var tc struct {
+		IdentityGuard *json.RawMessage `json:"identity_guard,omitempty"`
+	}
+	if json.Unmarshal(data, &tc) != nil {
+		return guard.ModeStrict
+	}
+	cfg, _ := guard.ParseConfigFromRaw(tc.IdentityGuard)
+	if cfg.PrimeOwnership == "" {
+		return guard.ModeStrict
+	}
+	return cfg.PrimeOwnership
+}
+
 func primeCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "prime",
@@ -3697,6 +3739,34 @@ Examples:
 			if err != nil {
 				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
 			}
+
+			// Identity Guard G5 (prime_ownership): refuse if the caller
+			// is not the topmost runtime that owns the identity file.
+			// Dead/absent owners pass through so a first-prime or an
+			// orphaned-agent reclaim can proceed. When the closest
+			// runtime differs from the stored PID and the stored PID is
+			// dead, guard.WritePID refreshes the identity atomically.
+			if repoPath, idPath, runtimePID, ok := resolvePrimeIdentityPath(agentID); ok {
+				pc := &guard.PrimeContext{
+					Mode:         loadPrimeOwnershipMode(repoPath),
+					IdentityPath: idPath,
+					ClosestRtPID: runtimePID,
+					IsPIDAlive:   process.IsRunning,
+				}
+				if err := guard.G5(pc); err != nil {
+					return err
+				}
+				// Update identity file PID to the current runtime if
+				// it diverged (e.g. runtime restarted). This is the
+				// canonical prime-time PID write — routes through
+				// guard.WritePID so AtomicWrite + fcntl lock apply.
+				if runtimePID > 0 {
+					if err := guard.WritePID(idPath, runtimePID); err != nil {
+						fmt.Fprintf(os.Stderr, "thrum: prime WritePID failed: %v\n", err)
+					}
+				}
+			}
+
 			result := cli.ContextPrime(client, agentID)
 
 			// Wire SingleAgentMode from config
