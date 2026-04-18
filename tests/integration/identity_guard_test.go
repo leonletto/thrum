@@ -77,6 +77,23 @@ func deadPID(t *testing.T) int {
 	return pid
 }
 
+// liveSleeperPID spawns a long-running sleep subprocess and registers
+// cleanup. Returns its PID. The process stays alive for the test's
+// lifetime so guard.G1b's IsPIDAlive probe returns true.
+func liveSleeperPID(t *testing.T) int {
+	t.Helper()
+	cmd := exec.Command("sleep", "30") //nolint:gosec // test fixture
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("spawn sleep: %v", err)
+	}
+	pid := cmd.Process.Pid
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+	return pid
+}
+
 // ─── 6.1 ─── Cross-worktree PID mismatch ──────────────────────────────
 // Agent A primes in worktree /A. Agent A cd's into worktree /B (which
 // hosts a different agent's identity). Running a guard check from /B
@@ -141,4 +158,99 @@ func TestIdentityGuard_CrossWorktreeMismatch(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ─── 6.2 ─── Same-dir multi-agent ─────────────────────────────────────
+// Two agents in the same worktree with distinct names + PIDs coexist.
+// A second prime of an already-held name (by a live foreign PID) hits
+// G1b (quickstart_name_collision) in strict mode; warn allows; off
+// silently passes.
+
+func TestIdentityGuard_SameDirMultiAgent(t *testing.T) {
+	repo := newGitTempDir(t)
+	identitiesDir := filepath.Join(repo, ".thrum", "identities")
+
+	foreignLivePID := liveSleeperPID(t)
+	seedIdentity(t, repo, "impl_a", config.IdentityFile{
+		Agent:    config.AgentConfig{Kind: "agent", Role: "impl"},
+		Worktree: repo,
+		AgentPID: foreignLivePID,
+	})
+
+	t.Run("distinct_name_no_collision", func(t *testing.T) {
+		// impl_b is a new name — no existing file, no collision.
+		cfg := guard.DefaultConfig()
+		err := guard.G1b(&guard.QuickstartContext{
+			Mode:          cfg.QuickstartNameCollision,
+			IdentitiesDir: identitiesDir,
+			Chain:         []int{os.Getpid()}, // caller is self, NOT foreignLivePID
+			RequestedName: "impl_b",
+			IsPIDAlive:    func(pid int) bool { return pid == foreignLivePID },
+		})
+		if err != nil {
+			t.Errorf("distinct name should coexist, got %v", err)
+		}
+	})
+
+	t.Run("same_name_live_foreign_pid_matrix", func(t *testing.T) {
+		cases := []struct {
+			mode    guard.Mode
+			wantErr bool
+		}{
+			{guard.ModeStrict, true},
+			{guard.ModeWarn, false},
+			{guard.ModeOff, false},
+		}
+		for _, tc := range cases {
+			t.Run(string(tc.mode), func(t *testing.T) {
+				err := guard.G1b(&guard.QuickstartContext{
+					Mode:          tc.mode,
+					IdentitiesDir: identitiesDir,
+					Chain:         []int{os.Getpid()}, // not the foreign PID
+					RequestedName: "impl_a",           // collides with seeded file
+					IsPIDAlive:    func(pid int) bool { return pid == foreignLivePID },
+				})
+				if tc.wantErr && err == nil {
+					t.Errorf("%s: want G1b error, got nil", tc.mode)
+				}
+				if !tc.wantErr && err != nil {
+					t.Errorf("%s: unexpected err: %v", tc.mode, err)
+				}
+				if tc.wantErr {
+					var gErr *guard.Error
+					if !errors.As(err, &gErr) || gErr.Guard != "quickstart_name_collision" {
+						t.Errorf("%s: want *guard.Error(quickstart_name_collision), got %v", tc.mode, err)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("same_name_force_renames_to_deleted", func(t *testing.T) {
+		// Reseed a fresh fixture so the .deleted rename doesn't leak
+		// across subtests.
+		repo := newGitTempDir(t)
+		seedIdentity(t, repo, "impl_force", config.IdentityFile{
+			Agent:    config.AgentConfig{Kind: "agent", Role: "impl"},
+			Worktree: repo,
+			AgentPID: foreignLivePID,
+		})
+		identitiesDir := filepath.Join(repo, ".thrum", "identities")
+
+		err := guard.G1b(&guard.QuickstartContext{
+			Mode:          guard.ModeStrict,
+			IdentitiesDir: identitiesDir,
+			Chain:         []int{os.Getpid()},
+			RequestedName: "impl_force",
+			Force:         true,
+			IsPIDAlive:    func(pid int) bool { return pid == foreignLivePID },
+		})
+		if err != nil {
+			t.Fatalf("force should bypass + rename, got %v", err)
+		}
+		// Original file renamed to .deleted sidekick.
+		if _, statErr := os.Stat(filepath.Join(identitiesDir, "impl_force.json.deleted")); statErr != nil {
+			t.Errorf(".deleted sidekick missing: %v", statErr)
+		}
+	})
 }
