@@ -74,6 +74,109 @@ func TestG1a_WarnMode_Proceeds(t *testing.T) {
 	}
 }
 
+func TestG1b_NameFree_Proceeds(t *testing.T) {
+	dir := t.TempDir()
+	err := G1b(&QuickstartContext{
+		IdentitiesDir: dir,
+		Chain:         []int{100},
+		RequestedName: "impl_foo",
+		IsPIDAlive:    func(int) bool { return true },
+	})
+	if err != nil {
+		t.Errorf("want nil (empty dir), got %v", err)
+	}
+}
+
+func TestG1b_NameHeldByLivePID_NotInChain_Refuses(t *testing.T) {
+	dir := t.TempDir()
+	writeIdentityFile(t, dir, "impl_foo", 999, "claude")
+	err := G1b(&QuickstartContext{
+		IdentitiesDir: dir,
+		Chain:         []int{100},
+		RequestedName: "impl_foo",
+		IsPIDAlive:    func(p int) bool { return p == 999 },
+	})
+	if err == nil {
+		t.Fatal("want error (live foreign squatter)")
+	}
+	var gErr *Error
+	if !errors.As(err, &gErr) {
+		t.Fatalf("want *Error, got %T", err)
+	}
+	if gErr.Guard != "quickstart_name_collision" {
+		t.Errorf("guard=%q", gErr.Guard)
+	}
+	if gErr.ExpectedPID != 999 {
+		t.Errorf("expected_pid=%d", gErr.ExpectedPID)
+	}
+}
+
+func TestG1b_NameHeldByDeadPID_Proceeds(t *testing.T) {
+	dir := t.TempDir()
+	writeIdentityFile(t, dir, "impl_foo", 999, "claude")
+	err := G1b(&QuickstartContext{
+		IdentitiesDir: dir,
+		Chain:         []int{100},
+		RequestedName: "impl_foo",
+		IsPIDAlive:    func(int) bool { return false },
+	})
+	if err != nil {
+		t.Errorf("dead-PID squat shouldn't block, got %v", err)
+	}
+}
+
+func TestG1b_NameHeldByCaller_Proceeds(t *testing.T) {
+	// Caller owns the target — G1a is the guard that catches this,
+	// so G1b must not double-fire.
+	dir := t.TempDir()
+	writeIdentityFile(t, dir, "impl_foo", 100, "claude")
+	err := G1b(&QuickstartContext{
+		IdentitiesDir: dir,
+		Chain:         []int{100, 200},
+		RequestedName: "impl_foo",
+		IsPIDAlive:    func(int) bool { return true },
+	})
+	if err != nil {
+		t.Errorf("caller ownership is G1a's job; G1b should pass, got %v", err)
+	}
+}
+
+func TestG1b_Force_RenamesExistingToDeleted(t *testing.T) {
+	dir := t.TempDir()
+	writeIdentityFile(t, dir, "impl_foo", 999, "claude")
+	err := G1b(&QuickstartContext{
+		IdentitiesDir: dir,
+		Chain:         []int{100},
+		RequestedName: "impl_foo",
+		Force:         true,
+		IsPIDAlive:    func(int) bool { return true },
+	})
+	if err != nil {
+		t.Errorf("--force should proceed, got %v", err)
+	}
+	if _, s := os.Stat(filepath.Join(dir, "impl_foo.json")); !os.IsNotExist(s) {
+		t.Error("original should be renamed away")
+	}
+	if _, s := os.Stat(filepath.Join(dir, "impl_foo.json.deleted")); s != nil {
+		t.Errorf("expected .deleted sidekick, got %v", s)
+	}
+}
+
+func TestG1b_OffMode_NoOp(t *testing.T) {
+	dir := t.TempDir()
+	writeIdentityFile(t, dir, "impl_foo", 999, "claude")
+	err := G1b(&QuickstartContext{
+		Mode:          ModeOff,
+		IdentitiesDir: dir,
+		Chain:         []int{100},
+		RequestedName: "impl_foo",
+		IsPIDAlive:    func(int) bool { return true },
+	})
+	if err != nil {
+		t.Errorf("off mode should proceed, got %v", err)
+	}
+}
+
 func TestG1a_CallerDoesNotOwnAnyIdentity_Proceeds(t *testing.T) {
 	dir := t.TempDir()
 	writeIdentityFile(t, dir, "impl_other", 9999, "claude") // not in caller's chain
