@@ -20,6 +20,11 @@ type ThrumConfig struct {
 	Worktrees     WorktreesConfig     `json:"worktrees,omitempty"`
 	Orchestration OrchestrationConfig `json:"orchestration,omitempty"`
 
+	// IdentityGuard is the per-guard enforcement matrix. RawMessage to
+	// avoid an import cycle; internal/identity/guard parses it at load.
+	// See dev-docs/specs/2026-04-17-thrum-identity-guard-design.md.
+	IdentityGuard *json.RawMessage `json:"identity_guard,omitempty"`
+
 	// PermissionSupervisors lists recipients of permission-prompt nudges.
 	// Each entry is one of:
 	//   - a role name ("coordinator", "orchestrator") → broadcasts to
