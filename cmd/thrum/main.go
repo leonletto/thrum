@@ -209,6 +209,26 @@ Examples:
 				return fmt.Errorf("unknown runtime %q; supported: %s", runtimeFlag, strings.Join(runtime.SupportedRuntimes(), ", "))
 			}
 
+			// Identity Guard G2: refuse `thrum init` from a non-git
+			// directory unless --force is set. This closes the footgun
+			// where `init` silently materialized .thrum/ under $HOME
+			// with nonsense supervisor slugs. We only fire the check in
+			// full-init mode (skipped for --skills-only, which does not
+			// create .thrum/).
+			if !skillsOnly {
+				initDir := flagRepo
+				if initDir == "" {
+					initDir = "."
+				}
+				resolvedDir, err := filepath.Abs(initDir)
+				if err != nil {
+					resolvedDir = initDir
+				}
+				if err := guard.G2(loadInitBootstrapMode(resolvedDir), resolvedDir, force, nil); err != nil {
+					return err
+				}
+			}
+
 			// Skills-only mode: install thrum skill without full init
 			if skillsOnly {
 				return runSkillsInstall(flagRepo, runtimeFlag, force, dryRun)
@@ -3664,6 +3684,31 @@ Examples:
 	cmd.Flags().StringVar(&flagFile, "file", "", "Set preamble from file")
 
 	return cmd
+}
+
+// loadInitBootstrapMode reads .thrum/config.json's
+// identity_guard.non_git_bootstrap mode. Missing config → strict
+// default, matching loadPrimeOwnershipMode's conventions. Note that
+// in the non-git-bootstrap scenario the config file itself typically
+// does not exist yet; the fallback path is the common case.
+func loadInitBootstrapMode(dir string) guard.Mode {
+	cfgPath := filepath.Join(dir, ".thrum", "config.json")
+	// #nosec G304 -- cfgPath is derived from the caller-supplied init dir.
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		return guard.ModeStrict
+	}
+	var tc struct {
+		IdentityGuard *json.RawMessage `json:"identity_guard,omitempty"`
+	}
+	if json.Unmarshal(data, &tc) != nil {
+		return guard.ModeStrict
+	}
+	cfg, _ := guard.ParseConfigFromRaw(tc.IdentityGuard)
+	if cfg.NonGitBootstrap == "" {
+		return guard.ModeStrict
+	}
+	return cfg.NonGitBootstrap
 }
 
 // resolvePrimeIdentityPath resolves the on-disk identity file path for
