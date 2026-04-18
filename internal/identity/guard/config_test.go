@@ -3,11 +3,9 @@ package guard
 import "testing"
 
 func TestConfig_MergePrecedence(t *testing.T) {
-	base := DefaultConfig()                           // all strict
-	repo := Config{CrossWorktree: ModeWarn}           // override one
-	daemon := Config{UnauthenticatedRPC: ModeOff}     // override another
-	overlap := Config{CrossWorktree: ModeStrict}      // daemon can override repo's override
-	_ = overlap
+	base := DefaultConfig()                       // all strict
+	repo := Config{CrossWorktree: ModeWarn}       // override one
+	daemon := Config{UnauthenticatedRPC: ModeOff} // override another
 
 	result := Merge(base, repo, daemon)
 	if result.CrossWorktree != ModeWarn {
