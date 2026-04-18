@@ -81,15 +81,9 @@ func G5(pc *PrimeContext) error {
 		Remediation: "you appear to be running inside a sub-agent; the parent runtime owns this identity — run prime from the top-level runtime instead",
 	}
 	if pc.Mode == ModeWarn {
-		if pc.WarnLogger != nil {
-			pc.WarnLogger.Warn("identity_guard_fire",
-				"guard", e.Guard,
-				"reason", e.Reason,
-				"expected_pid", e.ExpectedPID,
-				"caller_pid", e.CallerPID,
-			)
-		}
+		emitGuardFire(pc.WarnLogger, pc.Mode, "allowed", e)
 		return nil
 	}
+	emitGuardFire(pc.WarnLogger, pc.Mode, "denied", e)
 	return e
 }

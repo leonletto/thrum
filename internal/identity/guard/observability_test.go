@@ -143,9 +143,9 @@ func TestRule_DeadPIDReclaim_EmitsEvent(t *testing.T) {
 		Ctx:              context.Background(),
 		Mode:             ModeStrict,
 		DeadReclaimMode:  ModeStrict,
-		Chain:            []int{1000, 2000},
+		Chain:            []int{1000, 1500}, // does NOT contain IdentityAgentPID
 		ClosestRtPID:     1000,
-		IdentityAgentPID: 2000,
+		IdentityAgentPID: 2000, // dead, not in chain → step 3.3
 		IsPIDAlive:       func(pid int) bool { return false },
 		CWDMatches:       true,
 		TmuxMatches:      true,

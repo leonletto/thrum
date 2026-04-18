@@ -61,7 +61,7 @@ func DaemonResolve(cfg Config, req DaemonResolveRequest, logger *slog.Logger) (R
 	if req.PeercredRan {
 		if req.PeercredAgentID != "" {
 			if req.CallerAgentID != "" && req.CallerAgentID != req.PeercredAgentID {
-				return ResolvedCaller{}, &Error{
+				e := &Error{
 					Guard:  "unauthenticated_rpc",
 					Reason: "identity_mismatch",
 					Remediation: fmt.Sprintf(
@@ -69,14 +69,21 @@ func DaemonResolve(cfg Config, req DaemonResolveRequest, logger *slog.Logger) (R
 						req.CallerAgentID, req.PeercredAgentID,
 					),
 				}
+				// Forgery rejection is unconditional (fires regardless
+				// of mode); emit as denied so dashboards can alert on
+				// mismatch attempts even when other guards are off.
+				emitGuardFire(logger, cfg.UnauthenticatedRPC, "denied", e)
+				return ResolvedCaller{}, e
 			}
 			return ResolvedCaller{AgentID: req.PeercredAgentID}, nil
 		}
-		return ResolvedCaller{}, &Error{
+		e := &Error{
 			Guard:       "unauthenticated_rpc",
 			Reason:      "anonymous_mutating_rpc",
 			Remediation: "cd into a registered agent worktree and retry",
 		}
+		emitGuardFire(logger, cfg.UnauthenticatedRPC, "denied", e)
+		return ResolvedCaller{}, e
 	}
 	if err := G3(cfg.UnauthenticatedRPC, req.CallerAgentID, logger); err != nil {
 		return ResolvedCaller{}, err

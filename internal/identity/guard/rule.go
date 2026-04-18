@@ -171,14 +171,12 @@ func Rule(cc *CheckContext) error {
 				*cc.reclaimedPtr = true
 			}
 		}
-		if cc.DeadReclaimMode == ModeWarn && cc.warnLogger != nil {
-			cc.warnLogger.Warn("identity_guard_fire",
-				"guard", "dead_pid_auto_reclaim",
-				"reason", "dead_owner_reclaimed",
-				"expected_pid", cc.IdentityAgentPID,
-				"caller_pid", chainHead(cc.Chain),
-			)
-		}
+		emitGuardFire(cc.warnLogger, cc.DeadReclaimMode, "auto_reclaimed", &Error{
+			Guard:       "dead_pid_auto_reclaim",
+			Reason:      "dead_owner_reclaimed",
+			ExpectedPID: cc.IdentityAgentPID,
+			CallerPID:   chainHead(cc.Chain),
+		})
 		return nil
 	}
 
@@ -200,19 +198,13 @@ func Rule(cc *CheckContext) error {
 		Remediation:   "cd to the correct worktree or run 'thrum prime' to re-claim",
 	}
 	if cc.Mode == ModeWarn {
-		if cc.warnLogger != nil {
-			cc.warnLogger.Warn("identity_guard_fire",
-				"guard", e.Guard,
-				"reason", e.Reason,
-				"caller_pid", e.CallerPID,
-				"expected_pid", e.ExpectedPID,
-			)
-		}
+		emitGuardFire(cc.warnLogger, cc.Mode, "allowed", e)
 		if cc.warnLoggedPtr != nil {
 			*cc.warnLoggedPtr = true
 		}
 		return nil
 	}
+	emitGuardFire(cc.warnLogger, cc.Mode, "denied", e)
 	return e
 }
 

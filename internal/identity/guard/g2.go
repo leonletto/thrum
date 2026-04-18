@@ -35,15 +35,10 @@ func G2(mode Mode, dir string, force bool, warnLogger *slog.Logger) error {
 		Remediation: "run from a git-anchored directory, or pass --force for ephemeral non-anchored use",
 	}
 	if mode == ModeWarn {
-		if warnLogger != nil {
-			warnLogger.Warn("identity_guard_fire",
-				"guard", e.Guard,
-				"reason", e.Reason,
-				"cwd", e.CallerCWD,
-			)
-		}
+		emitGuardFire(warnLogger, mode, "allowed", e)
 		return nil
 	}
+	emitGuardFire(warnLogger, mode, "denied", e)
 	return e
 }
 

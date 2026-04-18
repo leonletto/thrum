@@ -80,16 +80,10 @@ func G1a(qc *QuickstartContext) error {
 		Remediation:   "use --force to rename the existing identity to .deleted and register fresh",
 	}
 	if qc.Mode == ModeWarn {
-		if qc.WarnLogger != nil {
-			qc.WarnLogger.Warn("identity_guard_fire",
-				"guard", e.Guard,
-				"reason", e.Reason,
-				"expected_agent", e.ExpectedAgent,
-				"caller_pid", e.CallerPID,
-			)
-		}
+		emitGuardFire(qc.WarnLogger, qc.Mode, "allowed", e)
 		return nil
 	}
+	emitGuardFire(qc.WarnLogger, qc.Mode, "denied", e)
 	return e
 }
 
@@ -136,17 +130,10 @@ func G1b(qc *QuickstartContext) error {
 		Remediation:   "choose another --name or pass --force to displace the existing identity",
 	}
 	if qc.Mode == ModeWarn {
-		if qc.WarnLogger != nil {
-			qc.WarnLogger.Warn("identity_guard_fire",
-				"guard", e.Guard,
-				"reason", e.Reason,
-				"expected_agent", e.ExpectedAgent,
-				"expected_pid", e.ExpectedPID,
-				"caller_pid", e.CallerPID,
-			)
-		}
+		emitGuardFire(qc.WarnLogger, qc.Mode, "allowed", e)
 		return nil
 	}
+	emitGuardFire(qc.WarnLogger, qc.Mode, "denied", e)
 	return e
 }
 

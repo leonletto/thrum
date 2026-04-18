@@ -30,13 +30,9 @@ func G3(mode Mode, callerAgentID string, warnLogger *slog.Logger) error {
 		Remediation: "run 'thrum quickstart' to register an identity; CLI callers must forward CallerAgentID on every RPC",
 	}
 	if mode == ModeWarn {
-		if warnLogger != nil {
-			warnLogger.Warn("identity_guard_fire",
-				"guard", e.Guard,
-				"reason", e.Reason,
-			)
-		}
+		emitGuardFire(warnLogger, mode, "allowed", e)
 		return nil
 	}
+	emitGuardFire(warnLogger, mode, "denied", e)
 	return e
 }

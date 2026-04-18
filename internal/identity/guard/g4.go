@@ -48,14 +48,9 @@ func G4(wc *WriterContext) error {
 		Remediation: "daemon refusing to write to dead agent's identity file",
 	}
 	if wc.Mode == ModeWarn {
-		if wc.WarnLogger != nil {
-			wc.WarnLogger.Warn("identity_guard_fire",
-				"guard", e.Guard,
-				"reason", e.Reason,
-				"expected_pid", e.ExpectedPID,
-			)
-		}
+		emitGuardFire(wc.WarnLogger, wc.Mode, "allowed", e)
 		return nil
 	}
+	emitGuardFire(wc.WarnLogger, wc.Mode, "denied", e)
 	return e
 }
