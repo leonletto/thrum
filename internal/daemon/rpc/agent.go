@@ -15,9 +15,11 @@ import (
 
 	"github.com/leonletto/thrum/internal/config"
 	agentcontext "github.com/leonletto/thrum/internal/context"
+	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/gitctx"
 	"github.com/leonletto/thrum/internal/identity"
+	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/jsonl"
 	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/types"
@@ -419,37 +421,38 @@ func (h *AgentHandler) HandleWhoami(ctx context.Context, params json.RawMessage)
 	var role, module, agentName string
 	source := "identity_file"
 
-	if req.CallerAgentID != "" {
-		// Use caller-provided identity (worktree-aware)
-		agentID = req.CallerAgentID
+	resolved, peercredRan := peercred.FromContext(ctx)
+	dreq := guard.DaemonResolveRequest{
+		CallerAgentID: req.CallerAgentID,
+		PeercredRan:   peercredRan,
+	}
+	if resolved != nil {
+		dreq.PeercredAgentID = resolved.AgentID
+	}
+	caller, err := guard.DaemonResolve(loadDaemonGuardConfig(h.state.RepoPath()), dreq, nil)
+	if err != nil {
+		return nil, fmt.Errorf("resolve identity: %w", err)
+	}
+	if caller.AgentID == "" {
+		return nil, fmt.Errorf("resolve identity: no CallerAgentID and no peercred identity")
+	}
+	agentID = caller.AgentID
+	if resolved != nil && resolved.AgentID == agentID {
+		source = "peercred"
+	} else if req.CallerAgentID != "" {
 		source = "caller"
+	}
 
-		// Look up role/module from the agents table
-		h.state.RLock()
-		var dbRole, dbModule sql.NullString
-		_ = h.state.DB().QueryRowContext(ctx, "SELECT role, module FROM agents WHERE agent_id = ?", agentID).Scan(&dbRole, &dbModule)
-		h.state.RUnlock()
-		if dbRole.Valid {
-			role = dbRole.String
-		}
-		if dbModule.Valid {
-			module = dbModule.String
-		}
-	} else {
-		// Fallback: resolve from daemon's config
-		log.Printf("WARNING: CallerAgentID not provided in whoami request, falling back to daemon repo path: %s (CLI should resolve identity)", h.state.RepoPath())
-		cfg, err := config.LoadWithPath(h.state.RepoPath(), "", "")
-		if err != nil {
-			return nil, fmt.Errorf("resolve identity: %w", err)
-		}
-		agentID = identity.GenerateAgentID(h.state.RepoID(), cfg.Agent.Role, cfg.Agent.Module, cfg.Agent.Name)
-		role = cfg.Agent.Role
-		module = cfg.Agent.Module
-		agentName = cfg.Agent.Name
-
-		if os.Getenv("THRUM_ROLE") != "" || os.Getenv("THRUM_MODULE") != "" {
-			source = "environment"
-		}
+	// Look up role/module from the agents table.
+	h.state.RLock()
+	var dbRole, dbModule sql.NullString
+	_ = h.state.DB().QueryRowContext(ctx, "SELECT role, module FROM agents WHERE agent_id = ?", agentID).Scan(&dbRole, &dbModule)
+	h.state.RUnlock()
+	if dbRole.Valid {
+		role = dbRole.String
+	}
+	if dbModule.Valid {
+		module = dbModule.String
 	}
 
 	// Check for active session for this agent

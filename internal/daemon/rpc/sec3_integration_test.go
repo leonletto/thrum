@@ -173,7 +173,7 @@ type rpcResponse struct {
 
 // TestSec3_ForgedCallerAgentID_Rejected proves that when peercred resolves
 // the connecting process to identity X, a message.send request that claims
-// caller_agent_id=Y is rejected with a clear "identity mismatch" error.
+// caller_agent_id=Y is rejected with a clear "identity_mismatch" error.
 // This is the central forgery-defense test.
 func TestSec3_ForgedCallerAgentID_Rejected(t *testing.T) {
 	resolver := &fakeResolver{
@@ -193,8 +193,8 @@ func TestSec3_ForgedCallerAgentID_Rejected(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp.Error, "forged caller_agent_id must be rejected")
-	require.Contains(t, resp.Error.Message, "identity mismatch",
-		"error message should say identity mismatch")
+	require.Contains(t, resp.Error.Message, "identity_mismatch",
+		"error message should say identity_mismatch")
 
 	// Prove nothing got written — the DB should have zero messages.
 	var count int

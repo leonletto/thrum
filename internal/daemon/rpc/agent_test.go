@@ -490,8 +490,29 @@ func TestAgentWhoami(t *testing.T) {
 
 	handler := NewAgentHandler(s)
 
+	// Register an agent up front so whoami has a real CallerAgentID to
+	// forward. The pre-guard whoami fallback ("load from daemon config
+	// and derive agent_id") was deleted in Epic 5 Task 4.3 — whoami
+	// callers now always supply CallerAgentID.
+	agentHandler := NewAgentHandler(s)
+	registerReq := RegisterRequest{Role: "implementer", Module: "test"}
+	registerReqJSON, _ := json.Marshal(registerReq)
+	registerResp, err := agentHandler.HandleRegister(context.Background(), registerReqJSON)
+	if err != nil {
+		t.Fatalf("register agent: %v", err)
+	}
+	regResp, ok := registerResp.(*RegisterResponse)
+	if !ok {
+		t.Fatalf("expected *RegisterResponse, got %T", registerResp)
+	}
+	agentID := regResp.AgentID
+
+	whoamiParams, _ := json.Marshal(struct {
+		CallerAgentID string `json:"caller_agent_id"`
+	}{CallerAgentID: agentID})
+
 	t.Run("whoami_without_session", func(t *testing.T) {
-		resp, err := handler.HandleWhoami(context.Background(), json.RawMessage("{}"))
+		resp, err := handler.HandleWhoami(context.Background(), whoamiParams)
 		if err != nil {
 			t.Fatalf("HandleWhoami() error = %v", err)
 		}
@@ -507,8 +528,8 @@ func TestAgentWhoami(t *testing.T) {
 		if whoamiResp.Module != "test" {
 			t.Errorf("Module = %s, want test", whoamiResp.Module)
 		}
-		if whoamiResp.Source != "environment" {
-			t.Errorf("Source = %s, want environment", whoamiResp.Source)
+		if whoamiResp.Source != "caller" {
+			t.Errorf("Source = %s, want caller", whoamiResp.Source)
 		}
 		if whoamiResp.SessionID != "" {
 			t.Error("SessionID should be empty when no active session")
@@ -516,23 +537,6 @@ func TestAgentWhoami(t *testing.T) {
 	})
 
 	t.Run("whoami_with_active_session", func(t *testing.T) {
-		// Register agent and start session
-		agentHandler := NewAgentHandler(s)
-		registerReq := RegisterRequest{
-			Role:   "implementer",
-			Module: "test",
-		}
-		registerReqJSON, _ := json.Marshal(registerReq)
-		registerResp, err := agentHandler.HandleRegister(context.Background(), registerReqJSON)
-		if err != nil {
-			t.Fatalf("register agent: %v", err)
-		}
-		regResp, ok := registerResp.(*RegisterResponse)
-		if !ok {
-			t.Fatalf("expected *RegisterResponse, got %T", registerResp)
-		}
-		agentID := regResp.AgentID
-
 		sessionHandler := NewSessionHandler(s)
 		startReq := SessionStartRequest{
 			AgentID: agentID,
@@ -549,7 +553,7 @@ func TestAgentWhoami(t *testing.T) {
 		sessionID := sessResp.SessionID
 
 		// Now call whoami
-		resp, err := handler.HandleWhoami(context.Background(), json.RawMessage("{}"))
+		resp, err := handler.HandleWhoami(context.Background(), whoamiParams)
 		if err != nil {
 			t.Fatalf("HandleWhoami() error = %v", err)
 		}
