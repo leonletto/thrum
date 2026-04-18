@@ -1234,20 +1234,24 @@ func (h *AgentHandler) HandleSetAgentStatus(ctx context.Context, params json.Raw
 	// G4: refuse writes targeting a dead agent's identity file.
 	// Mode is loaded from the agent's own .thrum/config.json (the
 	// worktree the identity lives under), matching where the agent's
-	// other guard decisions anchor.
+	// other guard decisions anchor. AgentPID=0 means the agent has not
+	// been primed yet; G4 applies to dead-after-alive transitions, not
+	// pre-prime, so skip the gate for zero PIDs.
 	idDir := filepath.Dir(idPath)
 	thrumDir := filepath.Dir(idDir) // identities dir is inside .thrum
-	repoDir := filepath.Dir(thrumDir)
-	mode := guard.LoadConfigFromDir(repoDir).DaemonWriterLiveness
-	if mode == "" {
-		mode = guard.ModeStrict
-	}
-	if gErr := guard.G4(&guard.WriterContext{
-		Mode:       mode,
-		SubjectPID: idFile.AgentPID,
-		IsPIDAlive: func(pid int) bool { return process.IsRunning(pid) },
-	}); gErr != nil {
-		return nil, fmt.Errorf("set-status refused for %s: %w", req.Agent, gErr)
+	if idFile.AgentPID != 0 {
+		repoDir := filepath.Dir(thrumDir)
+		mode := guard.LoadConfigFromDir(repoDir).DaemonWriterLiveness
+		if mode == "" {
+			mode = guard.ModeStrict
+		}
+		if gErr := guard.G4(&guard.WriterContext{
+			Mode:       mode,
+			SubjectPID: idFile.AgentPID,
+			IsPIDAlive: func(pid int) bool { return process.IsRunning(pid) },
+		}); gErr != nil {
+			return nil, fmt.Errorf("set-status refused for %s: %w", req.Agent, gErr)
+		}
 	}
 
 	idFile.AgentStatus = req.Status

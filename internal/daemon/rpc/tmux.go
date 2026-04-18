@@ -714,6 +714,12 @@ func (h *TmuxHandler) writeTmuxToIdentity(sessionName, target, runtime string) {
 // left unset (treated as "local") and liveness is always checked.
 // Returns nil to proceed, *guard.Error to abort.
 func (h *TmuxHandler) checkWriterLiveness(subjectPID int) error {
+	// AgentPID=0 means the agent has not been primed yet; G4 applies to
+	// dead-after-alive state transitions, not pre-prime. Skip the gate
+	// so first-launch tmux wire-up still works.
+	if subjectPID == 0 {
+		return nil
+	}
 	mode := guard.LoadConfigFromDir(filepath.Dir(h.thrumDir)).DaemonWriterLiveness
 	if mode == "" {
 		mode = guard.ModeStrict
