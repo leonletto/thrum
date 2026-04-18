@@ -136,16 +136,17 @@ func TestIdentityGuard_CrossWorktreeMismatch(t *testing.T) {
 		AgentPID: foreignPID, // different process — not us
 	})
 
-	// Matrix: strict → error; warn → nil + slog; off → nil + no slog.
+	// Matrix: strict → error + outcome=denied; warn → nil +
+	// outcome=allowed; off → nil + no event at all.
 	cases := []struct {
 		mode        guard.Mode
 		wantErr     bool
-		wantSlog    bool
+		wantOutcome string // substring-matched against `"outcome":"<value>"`
 		description string
 	}{
-		{guard.ModeStrict, true, true, "strict denies + emits"},
-		{guard.ModeWarn, false, true, "warn allows + emits"},
-		{guard.ModeOff, false, false, "off silently passes"},
+		{guard.ModeStrict, true, "denied", "strict denies + emits"},
+		{guard.ModeWarn, false, "allowed", "warn allows + emits"},
+		{guard.ModeOff, false, "", "off silently passes"},
 	}
 
 	for _, tc := range cases {
@@ -169,10 +170,19 @@ func TestIdentityGuard_CrossWorktreeMismatch(t *testing.T) {
 					t.Errorf("%s: want *guard.Error(cross_worktree), got %v", tc.description, err)
 				}
 			}
-			if tc.wantSlog && !strings.Contains(buf.String(), "identity_guard_fire") {
-				t.Errorf("%s: want slog event, got %q", tc.description, buf.String())
+			// Tight assertions: both guard name + exact outcome, so a
+			// stray substring collision (e.g. "denied" appearing in a
+			// reason or error message) can't spoof the test.
+			if tc.wantOutcome != "" {
+				if !strings.Contains(buf.String(), `"guard":"cross_worktree"`) {
+					t.Errorf("%s: want guard=cross_worktree in slog, got %q", tc.description, buf.String())
+				}
+				wantOutcome := `"outcome":"` + tc.wantOutcome + `"`
+				if !strings.Contains(buf.String(), wantOutcome) {
+					t.Errorf("%s: want %s in slog, got %q", tc.description, wantOutcome, buf.String())
+				}
 			}
-			if !tc.wantSlog && strings.Contains(buf.String(), "identity_guard_fire") {
+			if tc.wantOutcome == "" && strings.Contains(buf.String(), "identity_guard_fire") {
 				t.Errorf("%s: want no slog, got %q", tc.description, buf.String())
 			}
 		})
@@ -286,8 +296,13 @@ func TestIdentityGuard_Subagent_ChainAuthenticates(t *testing.T) {
 	identitiesDir := filepath.Join(repo, ".thrum", "identities")
 	// NOTE: this test requires the go test process to itself run under
 	// an AI-runtime ancestor (claude, codex, etc.) — resolveByChain's
-	// step-2 precondition rejects callers without one. That holds when
-	// the test is run inside a Claude session; skip otherwise.
+	// step-2 precondition rejects callers without one. That holds in
+	// session-local runs (`make test` under Claude) where the positive
+	// chain-walk path is exercised. In headless CI without an AI
+	// runtime ancestor we skip gracefully rather than false-negative;
+	// the negative path is still covered by
+	// TestDaemonResolve_ChainWalk_NoRuntimeAncestor_DeniesEvenWithPIDMatch
+	// in internal/identity/guard/daemon_resolve_chain_test.go.
 	if rt, _, _ := guard.ClosestRuntimeAncestor(context.Background(), os.Getpid()); rt == 0 {
 		t.Skip("test process has no AI-runtime ancestor; chain walk precondition would reject")
 	}
@@ -320,30 +335,33 @@ func TestIdentityGuard_Subagent_ChainAuthenticates(t *testing.T) {
 
 // ─── 6.4 ─── Dead-PID auto-reclaim ────────────────────────────────────
 // Rule step 3.3: when the identity's AgentPID is dead AND CWD+TMUX
-// corroborate ownership, treat the write as a silent reclaim (strict),
-// a logged reclaim (warn), or a fall-through to step 3.4 denial (off).
-// This verifies the outcome contract — actual file rewrite is a
-// separate responsibility of prime/quickstart via guard.WritePID.
+// corroborate ownership, Rule emits outcome=auto_reclaimed in strict
+// AND warn (both "allow, maybe write") or falls through to step 3.4
+// denial in off. This test covers the OUTCOME CONTRACT (what Rule
+// decides + emits) rather than the file-rewrite itself — in the
+// guard.Check production path reclaim is nil, so no PID is ever
+// written here. Actual PID writes are the domain of guard.WritePID
+// (prime / quickstart / refresh), unit-tested separately in Epic 5.
 
 func TestIdentityGuard_DeadPIDAutoReclaim(t *testing.T) {
 	repo := newGitTempDir(t)
 	dead := deadPID(t)
 	seedIdentity(t, repo, "impl_reclaim", config.IdentityFile{
 		Agent:    config.AgentConfig{Kind: "agent", Role: "impl"},
-		Worktree: repo,  // matches check path → CWDMatches
+		Worktree: repo, // matches check path → CWDMatches
 		AgentPID: dead,
 		// TmuxSession empty → tmuxMatches is true when caller also not in tmux
 	})
 
 	cases := []struct {
-		name            string
-		crossWorktree   guard.Mode
-		deadReclaim     guard.Mode
-		wantErr         bool
-		wantOutcome     string
+		name          string
+		crossWorktree guard.Mode
+		deadReclaim   guard.Mode
+		wantErr       bool
+		wantOutcome   string // matched as `"outcome":"<value>"` to avoid substring collisions
 	}{
-		{"strict_silent_reclaim", guard.ModeStrict, guard.ModeStrict, false, "auto_reclaimed"},
-		{"warn_logged_reclaim", guard.ModeStrict, guard.ModeWarn, false, "auto_reclaimed"},
+		{"strict_reclaim_outcome", guard.ModeStrict, guard.ModeStrict, false, "auto_reclaimed"},
+		{"warn_reclaim_outcome", guard.ModeStrict, guard.ModeWarn, false, "auto_reclaimed"},
 		{"off_falls_to_denial", guard.ModeStrict, guard.ModeOff, true, "denied"},
 	}
 	for _, tc := range cases {
@@ -364,8 +382,9 @@ func TestIdentityGuard_DeadPIDAutoReclaim(t *testing.T) {
 			if !tc.wantErr && err != nil {
 				t.Errorf("unexpected err: %v", err)
 			}
-			if !strings.Contains(buf.String(), tc.wantOutcome) {
-				t.Errorf("want outcome %q in slog, got %q", tc.wantOutcome, buf.String())
+			wantOutcome := `"outcome":"` + tc.wantOutcome + `"`
+			if !strings.Contains(buf.String(), wantOutcome) {
+				t.Errorf("want %s in slog, got %q", wantOutcome, buf.String())
 			}
 		})
 	}
