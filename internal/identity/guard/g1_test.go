@@ -1,9 +1,12 @@
 package guard
 
 import (
+	"bytes"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -49,28 +52,39 @@ func TestG1a_Force_RenamesExistingToDeleted(t *testing.T) {
 func TestG1a_OffMode_NoOp(t *testing.T) {
 	dir := t.TempDir()
 	writeIdentityFile(t, dir, "impl_foo", 100, "claude")
+	buf := &bytes.Buffer{}
 	err := G1a(&QuickstartContext{
 		Mode:          ModeOff,
 		IdentitiesDir: dir,
 		Chain:         []int{100, 200},
 		Force:         false,
+		WarnLogger:    slog.New(slog.NewJSONHandler(buf, nil)),
 	})
 	if err != nil {
 		t.Errorf("off mode should proceed, got %v", err)
 	}
+	if buf.Len() != 0 {
+		t.Errorf("off mode must not emit slog; got %q", buf.String())
+	}
 }
 
-func TestG1a_WarnMode_Proceeds(t *testing.T) {
+func TestG1a_WarnMode_LogsAndProceeds(t *testing.T) {
 	dir := t.TempDir()
 	writeIdentityFile(t, dir, "impl_foo", 100, "claude")
+	buf := &bytes.Buffer{}
+	log := slog.New(slog.NewJSONHandler(buf, nil))
 	err := G1a(&QuickstartContext{
 		Mode:          ModeWarn,
 		IdentitiesDir: dir,
 		Chain:         []int{100, 200},
 		Force:         false,
+		WarnLogger:    log,
 	})
 	if err != nil {
 		t.Errorf("warn mode should proceed without error, got %v", err)
+	}
+	if !strings.Contains(buf.String(), "quickstart_self_rename") {
+		t.Errorf("warn mode must emit slog with guard name; got %q", buf.String())
 	}
 }
 
@@ -165,15 +179,41 @@ func TestG1b_Force_RenamesExistingToDeleted(t *testing.T) {
 func TestG1b_OffMode_NoOp(t *testing.T) {
 	dir := t.TempDir()
 	writeIdentityFile(t, dir, "impl_foo", 999, "claude")
+	buf := &bytes.Buffer{}
 	err := G1b(&QuickstartContext{
 		Mode:          ModeOff,
 		IdentitiesDir: dir,
 		Chain:         []int{100},
 		RequestedName: "impl_foo",
 		IsPIDAlive:    func(int) bool { return true },
+		WarnLogger:    slog.New(slog.NewJSONHandler(buf, nil)),
 	})
 	if err != nil {
 		t.Errorf("off mode should proceed, got %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("off mode must not emit slog; got %q", buf.String())
+	}
+}
+
+func TestG1b_WarnMode_LogsAndProceeds(t *testing.T) {
+	dir := t.TempDir()
+	writeIdentityFile(t, dir, "impl_foo", 999, "claude")
+	buf := &bytes.Buffer{}
+	log := slog.New(slog.NewJSONHandler(buf, nil))
+	err := G1b(&QuickstartContext{
+		Mode:          ModeWarn,
+		IdentitiesDir: dir,
+		Chain:         []int{100},
+		RequestedName: "impl_foo",
+		IsPIDAlive:    func(int) bool { return true },
+		WarnLogger:    log,
+	})
+	if err != nil {
+		t.Errorf("warn mode should proceed, got %v", err)
+	}
+	if !strings.Contains(buf.String(), "quickstart_name_collision") {
+		t.Errorf("warn mode must emit slog with guard name; got %q", buf.String())
 	}
 }
 

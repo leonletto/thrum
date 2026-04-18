@@ -66,8 +66,8 @@ func newTestCtx(t *testing.T, opts ...ruleOpt) *testRuleCtx {
 		},
 	}
 	r.cc.warnLogger = slog.New(slog.NewJSONHandler(buf, nil))
-	// The reclaim hook flips the observable flag; real implementation
-	// will route through guard.WritePID in task 2.8.
+	// The reclaim hook flips the observable flag; production wires
+	// this to guard.WritePID via Epic 4 callers.
 	r.cc.reclaim = func() error {
 		r.reclaimed = true
 		return nil
@@ -166,7 +166,10 @@ func TestRule_WarnMode_LogsButProceeds(t *testing.T) {
 		t.Errorf("warn mode should proceed, got %v", err)
 	}
 	if !ctx.warnLogged {
-		t.Error("expected warn log")
+		t.Error("expected warnLogged tripwire to fire")
+	}
+	if !strings.Contains(ctx.warnBuf.String(), "cross_worktree") {
+		t.Errorf("warn mode must emit structured slog with guard name; got %q", ctx.warnBuf.String())
 	}
 }
 
@@ -245,6 +248,9 @@ func TestRule_OffMode_NoOp(t *testing.T) {
 		t.Errorf("off mode should proceed, got %v", err)
 	}
 	if ctx.warnLogged {
-		t.Error("off mode should not log")
+		t.Error("off mode should not trip warnLogged")
+	}
+	if ctx.warnBuf.Len() != 0 {
+		t.Errorf("off mode must not emit any slog events; got %q", ctx.warnBuf.String())
 	}
 }

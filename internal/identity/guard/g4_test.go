@@ -1,7 +1,10 @@
 package guard
 
 import (
+	"bytes"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 )
 
@@ -62,23 +65,34 @@ func TestG4_LocalOriginExplicit_Enforces(t *testing.T) {
 }
 
 func TestG4_WarnMode_LogsAndProceeds(t *testing.T) {
+	buf := &bytes.Buffer{}
+	log := slog.New(slog.NewJSONHandler(buf, nil))
 	err := G4(&WriterContext{
 		Mode:       ModeWarn,
 		SubjectPID: 100,
 		IsPIDAlive: func(int) bool { return false },
+		WarnLogger: log,
 	})
 	if err != nil {
 		t.Errorf("warn mode should proceed, got %v", err)
 	}
+	if !strings.Contains(buf.String(), "daemon_writer_liveness") {
+		t.Errorf("warn mode must emit slog with guard name; got %q", buf.String())
+	}
 }
 
 func TestG4_OffMode_NoOp(t *testing.T) {
+	buf := &bytes.Buffer{}
 	err := G4(&WriterContext{
 		Mode:       ModeOff,
 		SubjectPID: 100,
 		IsPIDAlive: func(int) bool { return false },
+		WarnLogger: slog.New(slog.NewJSONHandler(buf, nil)),
 	})
 	if err != nil {
 		t.Errorf("off mode should proceed, got %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("off mode must not emit slog; got %q", buf.String())
 	}
 }

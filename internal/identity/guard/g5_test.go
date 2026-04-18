@@ -1,8 +1,11 @@
 package guard
 
 import (
+	"bytes"
 	"errors"
+	"log/slog"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -71,30 +74,41 @@ func TestG5_ExistingPIDNotClosestRuntime_Refuses(t *testing.T) {
 	}
 }
 
-func TestG5_WarnMode_Proceeds(t *testing.T) {
+func TestG5_WarnMode_LogsAndProceeds(t *testing.T) {
 	dir := t.TempDir()
 	writeIdentityFile(t, dir, "impl_foo", 100, "claude")
+	buf := &bytes.Buffer{}
+	log := slog.New(slog.NewJSONHandler(buf, nil))
 	err := G5(&PrimeContext{
 		Mode:         ModeWarn,
 		IdentityPath: filepath.Join(dir, "impl_foo.json"),
 		ClosestRtPID: 200,
 		IsPIDAlive:   func(int) bool { return true },
+		WarnLogger:   log,
 	})
 	if err != nil {
 		t.Errorf("warn mode should proceed, got %v", err)
+	}
+	if !strings.Contains(buf.String(), "prime_ownership") {
+		t.Errorf("warn mode must emit slog with guard name; got %q", buf.String())
 	}
 }
 
 func TestG5_OffMode_NoOp(t *testing.T) {
 	dir := t.TempDir()
 	writeIdentityFile(t, dir, "impl_foo", 100, "claude")
+	buf := &bytes.Buffer{}
 	err := G5(&PrimeContext{
 		Mode:         ModeOff,
 		IdentityPath: filepath.Join(dir, "impl_foo.json"),
 		ClosestRtPID: 200,
 		IsPIDAlive:   func(int) bool { return true },
+		WarnLogger:   slog.New(slog.NewJSONHandler(buf, nil)),
 	})
 	if err != nil {
 		t.Errorf("off mode should proceed, got %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("off mode must not emit slog; got %q", buf.String())
 	}
 }
