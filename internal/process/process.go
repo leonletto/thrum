@@ -149,13 +149,26 @@ func processName(ctx context.Context, pid int) string {
 	return strings.TrimSpace(string(out))
 }
 
-// parentPID returns the parent PID of a process via ps.
-func parentPID(ctx context.Context, pid int) int {
+// ParentPID returns the parent PID of the given process. Errors from ps
+// (dead process, timeout, platform unsupported) are surfaced so callers
+// walking an ancestor chain can distinguish "reached init (ppid=1)" from
+// "lookup failed.".
+func ParentPID(ctx context.Context, pid int) (int, error) {
 	out, err := runPS(ctx, "-p", fmt.Sprintf("%d", pid), "-o", "ppid=")
 	if err != nil {
-		return 0
+		return 0, err
 	}
 	ppid, err := strconv.Atoi(strings.TrimSpace(string(out)))
+	if err != nil {
+		return 0, fmt.Errorf("parse ppid: %w", err)
+	}
+	return ppid, nil
+}
+
+// parentPID is the legacy, error-swallowing variant retained for
+// callers that treat lookup failures as "give up and return 0.".
+func parentPID(ctx context.Context, pid int) int {
+	ppid, err := ParentPID(ctx, pid)
 	if err != nil {
 		return 0
 	}
