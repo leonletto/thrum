@@ -236,27 +236,10 @@ func ParseConfigFromRaw(raw *json.RawMessage) (Config, error) {
 	return out, nil
 }
 
-// LoadConfigFromDir reads .thrum/config.json under dir and returns the
-// merged guard Config (DefaultConfig overlaid with repo modes).
-// Missing / malformed config falls back silently to defaults — guard
-// enforcement should default-on, not refuse on config errors. This is
-// the shared loader used by every CLI call site (refresh, prime,
-// quickstart, init, daemon wire-ups); Epic 6 adds the layered
-// daemon>repo>defaults precedence on top of this.
+// LoadConfigFromDir reads .thrum/config.json under dir and returns
+// the merged guard Config. Kept as a thin wrapper around LoadConfig
+// for callers that have a repo/worktree path rather than a thrumDir;
+// new code should prefer LoadConfig(thrumDir).
 func LoadConfigFromDir(dir string) Config {
-	cfgPath := filepath.Join(dir, ".thrum", "config.json")
-	// #nosec G304 -- cfgPath is derived from the caller-supplied
-	// repo / worktree dir, not external input.
-	data, err := os.ReadFile(cfgPath)
-	if err != nil {
-		return DefaultConfig()
-	}
-	var tc struct {
-		IdentityGuard *json.RawMessage `json:"identity_guard,omitempty"`
-	}
-	if err := json.Unmarshal(data, &tc); err != nil {
-		return DefaultConfig()
-	}
-	repoCfg, _ := ParseConfigFromRaw(tc.IdentityGuard)
-	return Merge(DefaultConfig(), repoCfg, Config{})
+	return LoadConfig(filepath.Join(dir, ".thrum"))
 }

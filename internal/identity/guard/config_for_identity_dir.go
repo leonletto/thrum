@@ -12,6 +12,6 @@ import "path/filepath"
 // permission.setAgentStatus — so the path-derivation style stays
 // identical across them.
 func ConfigForIdentityDir(idDir string) Config {
-	repoDir := filepath.Dir(filepath.Dir(idDir))
-	return LoadConfigFromDir(repoDir)
+	thrumDir := filepath.Dir(idDir)
+	return LoadConfig(thrumDir)
 }
