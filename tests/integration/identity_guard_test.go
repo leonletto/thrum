@@ -317,3 +317,56 @@ func TestIdentityGuard_Subagent_ChainAuthenticates(t *testing.T) {
 		t.Errorf("AgentID = %q, want impl_parent", got.AgentID)
 	}
 }
+
+// ─── 6.4 ─── Dead-PID auto-reclaim ────────────────────────────────────
+// Rule step 3.3: when the identity's AgentPID is dead AND CWD+TMUX
+// corroborate ownership, treat the write as a silent reclaim (strict),
+// a logged reclaim (warn), or a fall-through to step 3.4 denial (off).
+// This verifies the outcome contract — actual file rewrite is a
+// separate responsibility of prime/quickstart via guard.WritePID.
+
+func TestIdentityGuard_DeadPIDAutoReclaim(t *testing.T) {
+	repo := newGitTempDir(t)
+	dead := deadPID(t)
+	seedIdentity(t, repo, "impl_reclaim", config.IdentityFile{
+		Agent:    config.AgentConfig{Kind: "agent", Role: "impl"},
+		Worktree: repo,  // matches check path → CWDMatches
+		AgentPID: dead,
+		// TmuxSession empty → tmuxMatches is true when caller also not in tmux
+	})
+
+	cases := []struct {
+		name            string
+		crossWorktree   guard.Mode
+		deadReclaim     guard.Mode
+		wantErr         bool
+		wantOutcome     string
+	}{
+		{"strict_silent_reclaim", guard.ModeStrict, guard.ModeStrict, false, "auto_reclaimed"},
+		{"warn_logged_reclaim", guard.ModeStrict, guard.ModeWarn, false, "auto_reclaimed"},
+		{"off_falls_to_denial", guard.ModeStrict, guard.ModeOff, true, "denied"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Unset TMUX so the test's tmuxMatches check aligns with
+			// the identity's empty TmuxSession.
+			t.Setenv("TMUX", "")
+			buf := &bytes.Buffer{}
+			logger := slog.New(slog.NewJSONHandler(buf, nil))
+			cfg := guard.DefaultConfig()
+			cfg.CrossWorktree = tc.crossWorktree
+			cfg.DeadPIDAutoReclaim = tc.deadReclaim
+
+			err := guard.Check(context.Background(), repo, cfg, logger)
+			if tc.wantErr && err == nil {
+				t.Errorf("want error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("unexpected err: %v", err)
+			}
+			if !strings.Contains(buf.String(), tc.wantOutcome) {
+				t.Errorf("want outcome %q in slog, got %q", tc.wantOutcome, buf.String())
+			}
+		})
+	}
+}
