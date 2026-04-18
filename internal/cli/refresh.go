@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -9,10 +10,9 @@ import (
 	"strings"
 
 	"github.com/leonletto/thrum/internal/config"
-	"github.com/leonletto/thrum/internal/daemon/safecmd"
+	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/process"
-	ttmux "github.com/leonletto/thrum/internal/tmux"
 )
 
 // RefreshResult describes the outcome of a RefreshLocalIdentity call.
@@ -67,26 +67,25 @@ var detectAncestor = process.FindClaudeAncestor
 func RefreshLocalIdentity(client *Client, repoPath string) (*RefreshResult, error) {
 	ctx := context.Background()
 
-	// Step 1: DETECT
+	// Step 0: IDENTITY GUARD (Rule #4‴). Runs before any detection so
+	// ownership violations short-circuit the refresh. Non-PID drift
+	// reconciliation happens inside guard.Check; the remaining refresh
+	// steps below handle daemon re-registration and session resume.
+	if err := guard.Check(ctx, repoPath, loadGuardConfig(repoPath), nil); err != nil {
+		return nil, err
+	}
+
+	// Step 1: DETECT. Detection runs for RefreshResult reporting
+	// only — guard.Check above has already reconciled drift to disk,
+	// so we do not diff or write here. The detectAncestor stub seam
+	// is preserved for tests that want to pin the reported values.
 	detectedPID, detectedRuntime := detectAncestor(ctx)
 
-	tmuxTarget := ""
-	if ttmux.InTmux() {
-		if target, err := ttmux.PaneTarget(); err == nil {
-			tmuxTarget = target
-		}
-	}
-
-	branch := ""
-	effectiveRepo := paths.EffectiveRepoPath(repoPath)
-	if out, err := safecmd.Git(ctx, effectiveRepo, "rev-parse", "--abbrev-ref", "HEAD"); err == nil {
-		branch = trimNewline(string(out))
-	}
-
-	// Step 2: LOAD
+	// Step 2: LOAD the identity file (post-reconciliation) so the
+	// daemon reconcile step below sees the latest Runtime / Branch /
+	// TmuxSession written by guard.Check.
 	idFile, _, err := config.LoadIdentityWithPath(repoPath)
 	if err != nil {
-		// No identity file → (nil, nil). Any other error propagates.
 		if isNoIdentityFile(err) {
 			return nil, nil
 		}
@@ -96,54 +95,9 @@ func RefreshLocalIdentity(client *Client, repoPath string) (*RefreshResult, erro
 		return nil, nil
 	}
 
-	// Resolve the .thrum directory for SaveIdentityFile. Use the same
-	// effective repo path LoadIdentityWithPath uses so reads and writes
-	// always target the same location.
-	thrumDir := filepath.Join(effectiveRepo, ".thrum")
-
 	result := &RefreshResult{
 		DetectedPID:     detectedPID,
 		DetectedRuntime: detectedRuntime,
-	}
-
-	// Step 3: DIFF + mutate idFile in place.
-	//
-	// Runtime vs PreferredRuntime: the two fields are tracked independently
-	// because only PreferredRuntime is observed by the daemon-reconcile
-	// branch in Step 5. A `--runtime` flag override on `thrum quickstart`
-	// sets PreferredRuntime directly (user intent) without implying a
-	// matching process-tree Runtime. In the refresh path, however, we do
-	// want both to follow the detected runtime: if the agent's live
-	// ancestor is codex, both Runtime and PreferredRuntime should reflect
-	// that. The dual-update below keeps them in sync for detection-driven
-	// writes while leaving user-intent writes in quickstart untouched.
-	if detectedPID > 0 && idFile.AgentPID != detectedPID {
-		idFile.AgentPID = detectedPID
-		result.FileChanged = append(result.FileChanged, "agent_pid")
-	}
-	if detectedRuntime != "" && idFile.Runtime != detectedRuntime {
-		idFile.Runtime = detectedRuntime
-		result.FileChanged = append(result.FileChanged, "runtime")
-	}
-	if detectedRuntime != "" && idFile.PreferredRuntime != detectedRuntime {
-		idFile.PreferredRuntime = detectedRuntime
-		result.FileChanged = append(result.FileChanged, "preferred_runtime")
-	}
-	if tmuxTarget != "" && idFile.TmuxSession != tmuxTarget {
-		idFile.TmuxSession = tmuxTarget
-		result.FileChanged = append(result.FileChanged, "tmux_session")
-	}
-	if branch != "" && idFile.Branch != branch {
-		idFile.Branch = branch
-		result.FileChanged = append(result.FileChanged, "branch")
-	}
-
-	// Step 4: PERSIST FILE — must happen before Step 5 so the file is
-	// authoritative even if the daemon round-trip fails.
-	if len(result.FileChanged) > 0 {
-		if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
-			return result, fmt.Errorf("save identity: %w", err)
-		}
 	}
 
 	// Step 5: RECONCILE DAEMON
@@ -213,14 +167,27 @@ func RefreshLocalIdentity(client *Client, repoPath string) (*RefreshResult, erro
 	return result, nil
 }
 
-// trimNewline removes a single trailing newline without touching interior
-// whitespace. Used for git output cleanup where strings.TrimSpace would
-// be too aggressive.
-func trimNewline(s string) string {
-	if len(s) > 0 && s[len(s)-1] == '\n' {
-		return s[:len(s)-1]
+// loadGuardConfig reads .thrum/config.json's identity_guard block
+// from repoPath and merges it over guard.DefaultConfig(). Missing
+// config is a legitimate first-run state — fall back to defaults
+// silently rather than refusing. This is the client-side seed;
+// Epic 6 adds the daemon>repo>defaults layered precedence.
+func loadGuardConfig(repoPath string) guard.Config {
+	effective := paths.EffectiveRepoPath(repoPath)
+	cfgPath := filepath.Join(effective, ".thrum", "config.json")
+	// #nosec G304 -- cfgPath is derived from the repo's own .thrum/.
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		return guard.DefaultConfig()
 	}
-	return s
+	var tc struct {
+		IdentityGuard *json.RawMessage `json:"identity_guard,omitempty"`
+	}
+	if err := json.Unmarshal(data, &tc); err != nil {
+		return guard.DefaultConfig()
+	}
+	repoCfg, _ := guard.ParseConfigFromRaw(tc.IdentityGuard)
+	return guard.Merge(guard.DefaultConfig(), repoCfg, guard.Config{})
 }
 
 // isNoIdentityFile returns true when err indicates "no identity file was
