@@ -48,6 +48,13 @@ func TestAtomicWrite_ConcurrentSafe(t *testing.T) {
 	}
 }
 
+func TestAtomicWrite_ParentMissingErrors(t *testing.T) {
+	err := AtomicWrite("/definitely/does/not/exist/x.json", []byte("x"))
+	if err == nil {
+		t.Fatal("expected error for missing parent dir")
+	}
+}
+
 func TestAtomicWrite_CreatesFileWhenAbsent(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "new.json")
