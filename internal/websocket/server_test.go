@@ -21,9 +21,9 @@ func TestCheckOrigin(t *testing.T) {
 	allowedOrigins := ws.AllowedOriginsForPort(9999)
 
 	cases := []struct {
-		name    string
-		origin  string
-		want    bool
+		name   string
+		origin string
+		want   bool
 	}{
 		{"empty origin allowed (loopback-friendly)", "", true},
 		{"http localhost allowed", "http://localhost:9999", true},

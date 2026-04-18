@@ -189,7 +189,7 @@ func TestSec3_ForgedCallerAgentID_Rejected(t *testing.T) {
 	resp, err := h.sendRPC(t, "message.send", map[string]any{
 		"caller_agent_id": "impersonator_attacker", // forged
 		"to":              "impl_sec3_test",
-		"content":    "forged message",
+		"content":         "forged message",
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp.Error, "forged caller_agent_id must be rejected")
@@ -220,7 +220,7 @@ func TestSec3_OmittedCallerAgentID_ResolvedFromPeercred(t *testing.T) {
 
 	resp, err := h.sendRPC(t, "message.send", map[string]any{
 		// caller_agent_id deliberately omitted
-		"to":           "impl_sec3_test",
+		"to":      "impl_sec3_test",
 		"content": "legit message via peercred",
 	})
 	require.NoError(t, err)
@@ -249,7 +249,7 @@ func TestSec3_AnonymousCaller_MutatingRPC_Rejected(t *testing.T) {
 	resp, err := h.sendRPC(t, "message.send", map[string]any{
 		"caller_agent_id": "somebody",
 		"to":              "anyone",
-		"content":    "should be rejected",
+		"content":         "should be rejected",
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp.Error, "anonymous mutating RPC must be rejected")

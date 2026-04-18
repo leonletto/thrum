@@ -10,6 +10,7 @@ import (
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
+	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/sync"
 )
@@ -20,6 +21,27 @@ type InitOptions struct {
 	Force    bool
 	Stealth  bool // Use .git/info/exclude instead of .gitignore
 }
+
+// SyncReconciliation describes how Init should set up the sync branch and
+// config, based on the current state of refs/heads/a-sync and
+// refs/remotes/origin/a-sync. Produced by reconcileSyncBranch per the matrix
+// in dev-docs/specs/2026-04-17-thrum-init-attach-remote-a-sync-design.md.
+type SyncReconciliation struct {
+	// AttachToRemoteSHA, if non-empty, is the remote-tracking SHA that local
+	// refs/heads/a-sync should be pointed at. For rows 5 and 7 (local already
+	// exists, caller must overwrite), Init applies this via
+	// BranchManager.AttachToRemote after CreateSyncBranch's early-return.
+	// For row 3 (no local yet), CreateSyncBranch will attach on its own; the
+	// field is still set so Init knows to flip LocalOnly.
+	AttachToRemoteSHA string
+	// LocalOnlyOverride, if non-nil, is the value to stamp into
+	// config.Daemon.LocalOnly. nil means "leave whatever the caller's default
+	// was" (current behavior for rows 2 and 4).
+	LocalOnlyOverride *bool
+}
+
+// boolPtr returns a pointer to b, used for building LocalOnlyOverride.
+func boolPtr(b bool) *bool { return &b }
 
 // IsGitWorktree checks if repoPath is a git worktree (not the main working tree).
 // Returns (isWorktree, mainRepoRoot, error).
@@ -76,6 +98,19 @@ func Init(opts InitOptions) error {
 	if !opts.Force {
 		if _, err := os.Stat(thrumDir); err == nil {
 			return fmt.Errorf(".thrum/ already exists. Use --force to reinitialize")
+		}
+	}
+
+	// Row 1 short-circuit (spec: 2026-04-17-thrum-init-attach-remote-a-sync-design.md).
+	// If --force against an already-sync-configured install (LocalOnly=false),
+	// skip all sync-branch work and only refresh identity/strategy files.
+	//
+	// If config load fails (corrupt or unreadable), we intentionally fall
+	// through to the full init flow — it will overwrite a corrupt config on
+	// its way through, which is the correct recovery path.
+	if opts.Force {
+		if existing, loadErr := config.LoadThrumConfig(thrumDir); loadErr == nil && !existing.Daemon.LocalOnly {
+			return reinitIdentityOnly(opts)
 		}
 	}
 
@@ -148,12 +183,26 @@ func Init(opts InitOptions) error {
 		}
 	}
 
-	// 5. Write default config.json (local-only by default — user must opt in to remote sync)
+	// 5. Run sync-branch reconciliation matrix
+	// (spec: 2026-04-17-thrum-init-attach-remote-a-sync-design.md rows 2–8).
+	recon, reconErr := reconcileSyncBranch(stdcontext.Background(), opts.RepoPath)
+	if reconErr != nil {
+		retErr = reconErr
+		return retErr
+	}
+
+	// 6. Write default config.json (local-only by default — user must opt in to
+	// remote sync). The reconciliation result may flip LocalOnly to false when
+	// an existing origin/a-sync is detected.
 	configPath := filepath.Join(thrumDir, "config.json")
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		localOnly := true
+		if recon.LocalOnlyOverride != nil {
+			localOnly = *recon.LocalOnlyOverride
+		}
 		cfg := &config.ThrumConfig{
 			Daemon: config.DaemonConfig{
-				LocalOnly:    true,
+				LocalOnly:    localOnly,
 				SyncInterval: config.DefaultSyncInterval,
 				WSPort:       config.DefaultWSPort,
 			},
@@ -162,10 +211,29 @@ func Init(opts InitOptions) error {
 			retErr = fmt.Errorf("failed to write config.json: %w", err)
 			return retErr
 		}
+	} else if recon.LocalOnlyOverride != nil {
+		// --force reinit path: existing config.json; flip LocalOnly per matrix.
+		existing, err := config.LoadThrumConfig(thrumDir)
+		if err != nil {
+			retErr = fmt.Errorf("load config for override: %w", err)
+			return retErr
+		}
+		existing.Daemon.LocalOnly = *recon.LocalOnlyOverride
+		if err := config.SaveThrumConfig(thrumDir, existing); err != nil {
+			retErr = fmt.Errorf("save config with override: %w", err)
+			return retErr
+		}
 	}
 
-	// 6. Initialize a-sync branch
-	if err := initASyncBranch(opts.RepoPath); err != nil {
+	// 6b. Populate identity block (daemon_id, repo metadata) in config.json.
+	// Bootstrap is idempotent: re-init keeps the existing daemon_id.
+	if _, err := identity.Bootstrap(thrumDir, opts.RepoPath); err != nil {
+		retErr = fmt.Errorf("failed to bootstrap identity: %w", err)
+		return retErr
+	}
+
+	// 7. Initialize a-sync branch (applying attach directive from reconciliation)
+	if err := initASyncBranch(opts.RepoPath, recon); err != nil {
 		retErr = fmt.Errorf("failed to initialize a-sync branch: %w", err)
 		return retErr
 	}
@@ -342,14 +410,71 @@ func updateGitExclude(repoPath string) error {
 	return nil
 }
 
-// initASyncBranch creates the a-sync branch and worktree for message synchronization.
-func initASyncBranch(repoPath string) error {
+// reinitIdentityOnly refreshes identity and strategy files without touching
+// the sync branch or config. Used for row 1 of the behavior matrix (an
+// already-sync-configured install where the user is running `thrum init
+// --force` just to reset identities).
+func reinitIdentityOnly(opts InitOptions) error {
+	thrumDir := filepath.Join(opts.RepoPath, ".thrum")
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	if err := os.MkdirAll(identitiesDir, 0750); err != nil {
+		return fmt.Errorf("mkdir identities: %w", err)
+	}
+	if err := context.WriteStrategies(thrumDir); err != nil {
+		return fmt.Errorf("write strategies: %w", err)
+	}
+	if _, err := identity.Bootstrap(thrumDir, opts.RepoPath); err != nil {
+		return fmt.Errorf("bootstrap identity: %w", err)
+	}
+	return nil
+}
+
+// initASyncBranch creates the a-sync branch and worktree for message
+// synchronization. The recon argument (from reconcileSyncBranch) may direct
+// this function to attach an already-existing local a-sync to a remote SHA
+// (matrix rows 5 and 7 in the design spec).
+func initASyncBranch(repoPath string, recon SyncReconciliation) error {
 	ctx := stdcontext.Background()
 	bm := sync.NewBranchManager(repoPath, true)
 
-	// Create orphan a-sync branch (safe plumbing — no working tree touch)
+	// Create orphan or attach a-sync (rows 2 and 3 of the matrix are handled
+	// here via CreateSyncBranch's internal logic).
 	if err := bm.CreateSyncBranch(ctx); err != nil {
 		return fmt.Errorf("create sync branch: %w", err)
+	}
+
+	// Rows 5 and 7: local a-sync already existed before Init; CreateSyncBranch
+	// short-circuited. Apply the attach directive now to repoint local at the
+	// remote SHA.
+	if recon.AttachToRemoteSHA != "" && bm.BranchExists(ctx, sync.SyncBranchName) {
+		currentSHA, err := bm.GetSyncBranchRef(ctx)
+		if err != nil {
+			return fmt.Errorf("read current a-sync ref: %w", err)
+		}
+		if currentSHA != recon.AttachToRemoteSHA {
+			if err := bm.AttachToRemote(ctx, recon.AttachToRemoteSHA); err != nil {
+				return fmt.Errorf("attach to remote: %w", err)
+			}
+		}
+	}
+
+	// If a pre-existing sync worktree's working-tree content has diverged from
+	// refs/heads/a-sync (e.g. the branch was just attached to a remote SHA, or
+	// was updated externally between inits), force-reset it so the subsequent
+	// `git add .` + commit hits the "nothing to commit" path instead of
+	// staging stale content and creating an unwanted commit on top of the
+	// current tip. No-op when the worktree doesn't exist yet or already
+	// matches the branch tip.
+	//
+	// Reset errors are propagated because silent failure here would
+	// re-introduce the exact bug this change fixes: a commit added on top
+	// of the attached SHA, producing a disjoint history that can't push.
+	if syncDir, pathErr := paths.SyncWorktreePath(repoPath); pathErr == nil {
+		if _, statErr := os.Stat(syncDir); statErr == nil {
+			if _, err := safecmd.Git(ctx, syncDir, "reset", "--hard", "refs/heads/"+sync.SyncBranchName); err != nil {
+				return fmt.Errorf("reset sync worktree to current a-sync tip: %w", err)
+			}
+		}
 	}
 
 	// Create worktree at .git/thrum-sync/a-sync
@@ -391,4 +516,100 @@ func initASyncBranch(repoPath string) error {
 	}
 
 	return nil
+}
+
+// reconcileSyncBranch runs the behavior matrix from
+// dev-docs/specs/2026-04-17-thrum-init-attach-remote-a-sync-design.md for
+// matrix rows 2–8. Row 1 (skip branch work when already syncing) is handled
+// by Init itself before this function is called. This is pure decision logic —
+// does not mutate refs or config.
+// Returns an error only for row 8 (both local and remote have content).
+//
+// Invariant: rows 4–8 (local a-sync pre-exists) are only reachable with
+// --force, because Init's earlier `.thrum/` stat guard rejects a non-force
+// reinit against an existing install. If that guard is ever removed, this
+// function will need an explicit opts.Force check before the localExists
+// branches to preserve the spec's promise.
+func reconcileSyncBranch(ctx stdcontext.Context, repoPath string) (SyncReconciliation, error) {
+	bm := sync.NewBranchManager(repoPath, true)
+	localExists := bm.BranchExists(ctx, sync.SyncBranchName)
+	remoteSHA, remoteExists := bm.RemoteTrackingSyncSHA(ctx)
+
+	switch {
+	case !localExists && !remoteExists:
+		// Row 2: fresh, no remote. CreateSyncBranch will create an orphan. No override.
+		return SyncReconciliation{}, nil
+
+	case !localExists && remoteExists:
+		// Row 3: fresh, remote present. CreateSyncBranch will attach; flip LocalOnly.
+		return SyncReconciliation{
+			AttachToRemoteSHA: remoteSHA,
+			LocalOnlyOverride: boolPtr(false),
+		}, nil
+
+	case localExists && !remoteExists:
+		// Row 4: keep local as-is, no remote, no override.
+		return SyncReconciliation{}, nil
+
+	case localExists && remoteExists:
+		localHasContent, err := bm.BranchHasContent(ctx, "refs/heads/"+sync.SyncBranchName)
+		if err != nil {
+			return SyncReconciliation{}, fmt.Errorf("check local a-sync content: %w", err)
+		}
+		remoteHasContent, err := bm.BranchHasContent(ctx, "refs/remotes/origin/"+sync.SyncBranchName)
+		if err != nil {
+			return SyncReconciliation{}, fmt.Errorf("check remote a-sync content: %w", err)
+		}
+		switch {
+		case localHasContent && remoteHasContent:
+			// Row 8: conflict — refuse init with recovery commands.
+			return SyncReconciliation{}, row8ConflictError(ctx, repoPath)
+		case !localHasContent && remoteHasContent:
+			// Row 5: local is empty placeholder, remote has real data — attach.
+			return SyncReconciliation{
+				AttachToRemoteSHA: remoteSHA,
+				LocalOnlyOverride: boolPtr(false),
+			}, nil
+		case localHasContent && !remoteHasContent:
+			// Row 6: local has real data, remote empty — keep local, flip LocalOnly.
+			return SyncReconciliation{
+				LocalOnlyOverride: boolPtr(false),
+			}, nil
+		default:
+			// Row 7: both empty — attach to remote (equivalent histories).
+			return SyncReconciliation{
+				AttachToRemoteSHA: remoteSHA,
+				LocalOnlyOverride: boolPtr(false),
+			}, nil
+		}
+	}
+
+	return SyncReconciliation{}, nil
+}
+
+// row8ConflictError builds the row-8 error with recovery commands filled in.
+// Includes the remote URL (raw, so it works for HTTPS/SSH/file:// remotes)
+// if one is configured; otherwise omits that line.
+func row8ConflictError(ctx stdcontext.Context, repoPath string) error {
+	var remoteLine string
+	if out, err := safecmd.Git(ctx, repoPath, "config", "--get", "remote.origin.url"); err == nil {
+		if url := strings.TrimSpace(string(out)); url != "" {
+			remoteLine = fmt.Sprintf("  Remote origin: %s (a-sync branch)\n", url)
+		}
+	}
+	return fmt.Errorf(`local a-sync and origin/a-sync both contain data — cannot safely reconcile without manual intervention.
+
+Inspect each side before choosing:
+%s  Local:  .git/thrum-sync/a-sync/events.jsonl  (after one-time checkout)
+
+Then run ONE of the following, based on which side is authoritative:
+
+  # Keep local history (force-pushes over remote):
+  git push --force-with-lease origin a-sync
+
+  # Keep remote history (discards local a-sync, then re-run init):
+  git update-ref refs/heads/a-sync refs/remotes/origin/a-sync
+  thrum init --force
+
+A future 'thrum doctor --fix' will automate this (tracked as thrum-uvpp.1)`, remoteLine)
 }

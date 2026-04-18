@@ -59,9 +59,9 @@ thrum tmux create debug-session --cwd /path --no-agent
 ```
 
 Note: `thrum tmux launch` will hard-error on `--no-agent` sessions because
-there's no agent identity to determine the runtime. Either register an
-agent first with `thrum quickstart` inside the pane, or use `tmux create`
-without `--no-agent`.
+there's no agent identity to determine the runtime. Either register an agent
+first with `thrum quickstart` inside the pane, or use `tmux create` without
+`--no-agent`.
 
 ## Manual Setup (Quick Reference)
 

@@ -4651,14 +4651,12 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		fmt.Fprintf(os.Stderr, "Warning: failed to create peer registry: %v\n", err)
 	}
 
-	// Use persistent daemon_id from peers.json if available
-	var daemonID string
-	if peerRegistry != nil {
-		daemonID = peerRegistry.LocalDaemonID()
-	}
-
-	// Create state manager
-	st, err := state.NewState(thrumDir, syncDir, repoID, daemonID)
+	// Create state manager. Passing empty daemonID so state.NewState calls
+	// identity.Bootstrap against config.json (source of truth) and populates
+	// the full Identity block on the state. peer_registry.LocalDaemonID
+	// will match because Bootstrap is idempotent — both reads resolve to
+	// the same ULID in config.json.
+	st, err := state.NewState(thrumDir, syncDir, repoID, "")
 	if err != nil {
 		return fmt.Errorf("failed to create state: %w", err)
 	}
@@ -4722,26 +4720,19 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		fmt.Fprintf(os.Stderr, "  Mode:        local-only (remote sync disabled)\n")
 	}
 
-	// Resolve the project name once — used by both the supervisor
-	// registration and the Permission package constructor below.
+	// Resolve the project name once — used for the "Repo:" display
+	// line in nudge bodies via permission.New below.
 	projectName := permission.ResolveProjectName(thrumCfg, absPath)
 
-	// Register the reserved @supervisor_<project> pseudo-agent so permission
-	// nudges have a reply-capable sender. Idempotent at boot.
-	supervisorID, err := permission.RegisterSupervisor(context.Background(), thrumCfg, thrumDir, absPath)
-	if err != nil {
-		// Identity file write failed (NFS hiccup, permission issue,
-		// disk full, etc.). Keep the daemon alive and fall back to
-		// the deterministic ID. Without this fallback, supervisorID
-		// is the empty string and every nudge authored by this
-		// daemon carries agent_id="" — which either breaks event
-		// validation at sync time (best case, sync breaks loudly)
-		// or produces untraceable events (worst case). The next
-		// daemon boot will either succeed or re-warn.
-		fmt.Fprintf(os.Stderr, "Warning: failed to register supervisor pseudo-agent: %v\n", err)
-		supervisorID = permission.SupervisorAgentID(projectName)
-	}
-	log.Printf("daemon: supervisor registered as @%s", supervisorID)
+	// Synthesize the virtual supervisor pseudo-agent. Pure resolvers;
+	// never persisted to disk. Legacy identity files (from pre-v0.8.3
+	// installs that wrote supervisor_<project>.json) are swept here so
+	// the daemon presents a single source of truth for its identity set.
+	supervisorID := permission.ResolveSupervisorID(thrumCfg, absPath)
+	legacySupervisorID := permission.ResolveLegacySupervisorID(thrumCfg, absPath)
+	supervisorIdentity := permission.SupervisorIdentity(thrumCfg, absPath)
+	permission.CleanupLegacySupervisorFiles(thrumDir)
+	log.Printf("daemon: supervisor virtual identity @%s (legacy compat @%s)", supervisorID, legacySupervisorID)
 
 	// Construct the permission package. The reply interceptor (Task
 	// 6.2) is wired into the event-write hook further below; the
@@ -4811,6 +4802,20 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	// Health check
 	healthHandler := rpc.NewHealthHandler(startTime, version, repoID)
 	server.RegisterHandler("health", healthHandler.Handle)
+	healthHandler.SetIdentityProvider(func() *rpc.IdentityInfo {
+		ident := st.Identity()
+		if ident.DaemonID == "" {
+			return nil
+		}
+		return &rpc.IdentityInfo{
+			DaemonID:     ident.DaemonID,
+			RepoName:     ident.RepoName,
+			Hostname:     ident.Hostname,
+			RepoPath:     ident.RepoPath,
+			GitOriginURL: ident.GitOriginURL,
+			InitAt:       ident.InitAt,
+		}
+	})
 
 	// Agent management
 	agentHandler := rpc.NewAgentHandler(st)
@@ -4823,7 +4828,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("agent.set-status", agentHandler.HandleSetAgentStatus)
 
 	// Team management
-	teamHandler := rpc.NewTeamHandler(st, thrumDir)
+	teamHandler := rpc.NewTeamHandler(st, thrumDir, supervisorIdentity)
 	server.RegisterHandler("team.list", teamHandler.HandleList)
 
 	// Context management
@@ -4854,7 +4859,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("group.members", groupHandler.HandleMembers)
 
 	// Message management
-	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, thrumDir)
+	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, thrumDir, supervisorID, legacySupervisorID)
 	server.RegisterHandler("message.send", messageHandler.HandleSend)
 	server.RegisterHandler("message.get", messageHandler.HandleGet)
 	server.RegisterHandler("message.list", messageHandler.HandleList)
@@ -4992,7 +4997,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 
 	if syncManager != nil {
 		// Create pairing manager (used by both Unix socket and Tailscale handlers)
-		pairingMgr = daemon.NewPairingManager(syncManager.PeerRegistry(), st.DaemonID(), hostname)
+		pairingMgr = daemon.NewPairingManager(syncManager.PeerRegistry(), st.Identity(), hostname)
 
 		// Adapter: convert daemon.PeerStatusInfo → rpc.PeerStatus
 		listPeersFn := func() []rpc.PeerStatus {
@@ -5086,7 +5091,17 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			if localAddr == "" {
 				return "", "", fmt.Errorf("tailscale not configured or not started")
 			}
-			peer, err := syncManager.JoinPeer(peerAddr, code, st.DaemonID(), hostname, localAddr)
+			localIdent := st.Identity()
+			localMeta := daemon.PairMetadata{
+				DaemonID:     localIdent.DaemonID,
+				Name:         hostname,
+				Address:      localAddr,
+				RepoName:     localIdent.RepoName,
+				Hostname:     localIdent.Hostname,
+				RepoPath:     localIdent.RepoPath,
+				GitOriginURL: localIdent.GitOriginURL,
+			}
+			peer, err := syncManager.JoinPeer(peerAddr, code, localMeta)
 			if err != nil {
 				return "", "", err
 			}
@@ -5374,7 +5389,21 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			_ = syncRegistry.Register("sync.notify", syncNotifyHandler.Handle)
 		}
 		if pairingMgr != nil {
-			pairHandler := rpc.NewPairRequestHandler(pairingMgr.HandlePairRequest)
+			pairHandler := rpc.NewPairRequestHandler(func(
+				code, peerDaemonID, peerName, peerAddress string,
+				peerRepoName, peerHostname, peerRepoPath, peerGitOriginURL string,
+			) (string, string, string, string, string, string, string, error) {
+				token, local, err := pairingMgr.HandlePairRequest(code, daemon.PairMetadata{
+					DaemonID:     peerDaemonID,
+					Name:         peerName,
+					Address:      peerAddress,
+					RepoName:     peerRepoName,
+					Hostname:     peerHostname,
+					RepoPath:     peerRepoPath,
+					GitOriginURL: peerGitOriginURL,
+				})
+				return token, local.DaemonID, local.Name, local.RepoName, local.Hostname, local.RepoPath, local.GitOriginURL, err
+			})
 			_ = syncRegistry.Register("pair.request", pairHandler.Handle)
 		}
 

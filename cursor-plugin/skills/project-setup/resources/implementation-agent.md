@@ -154,16 +154,18 @@ role.
 notifications. Re-arm it every time it returns (both MESSAGES_RECEIVED and
 NO_MESSAGES_TIMEOUT).
 
-When your work is complete (Phase 4), send a completion message:
+When your work is complete (Phase 4), send a completion message prefixed with
+the appropriate **status token** (see Status Vocabulary at the start of Phase 4):
 
 ```bash
-thrum send "Completed {{EPIC_ID}}. All tasks done, tests passing." --to @{{SUPERVISOR_NAME}}
+thrum send "DONE: {{EPIC_ID}} complete. All tasks done, tests passing." --to @{{SUPERVISOR_NAME}}
 ```
 
-If you hit a blocker from another agent's work, escalate:
+If you hit a blocker from another agent's work, escalate with the `BLOCKED`
+token:
 
 ```bash
-thrum send "Blocked on {{TASK_ID}} by {{BLOCKER_ID}}" --to @{{SUPERVISOR_NAME}}
+thrum send "BLOCKED: {{TASK_ID}} waiting on {{BLOCKER_ID}}" --to @{{SUPERVISOR_NAME}}
 ```
 
 ---
@@ -474,10 +476,10 @@ If a task is blocked:
 # The message is delivered to @{{SUPERVISOR_NAME}}; the mention tag lets implementers
 # filter for messages that mention their role. To address a specific agent directly,
 # use --to @<agent-name> instead.
-thrum send "Blocked on {{TASK_ID}} — waiting for {{BLOCKER_ID}}. Can you prioritize?" --mention @implementer
+thrum send "BLOCKED: {{TASK_ID}} — waiting for {{BLOCKER_ID}}. Can you prioritize?" --mention @implementer
 
 # Or escalate to the coordinator
-thrum send "Blocked on {{TASK_ID}} by external dependency {{BLOCKER_ID}}" --to @{{SUPERVISOR_NAME}}
+thrum send "BLOCKED: {{TASK_ID}} by external dependency {{BLOCKER_ID}}" --to @{{SUPERVISOR_NAME}}
 ```
 
 ### Communicating During Work
@@ -512,7 +514,7 @@ Before proceeding to the next epic:
 1. Commit all work for this epic
 2. Run tests: verify all tests pass for changes in this epic
 3. Report completion via Thrum:
-   `thrum send "Epic {{EPIC_ID}} complete. Ready for review." --to @{{SUPERVISOR_NAME}}`
+   `thrum send "DONE: Epic {{EPIC_ID}} complete. Ready for review." --to @{{SUPERVISOR_NAME}}`
 4. Set status: `thrum agent set-status idle`
 5. **STOP.** Wait for review approval before continuing.
 <!-- REVIEW_GATE_TEMPLATE_END -->
@@ -524,6 +526,13 @@ Before proceeding to the next epic:
 **You MUST complete this phase before claiming the epic is done.** Do not skip
 or abbreviate it. The purpose is to catch issues before the coordinator reviews,
 reducing back-and-forth rounds.
+
+Use a **two-stage review** in this exact order: **spec compliance first, then
+code quality.** Rationale: there is no point polishing code quality on work
+that misses the spec. Fix missing scope and unmet acceptance criteria before
+fine-tuning naming, idioms, and error handling. Each stage has its own review
+loop — fix findings and re-review until the stage is clean before moving to
+the next stage.
 
 ### Step 1: Run Quality Gates
 
@@ -539,9 +548,66 @@ cd {{WORKTREE_PATH}}
 
 Fix any failures before proceeding. Do not submit broken code for review.
 
-### Step 2: Code Review Loop
+### Step 2: Spec Compliance Review (Stage 1)
 
-Compute the diff range for the full epic:
+Verify the implementation covers everything specified in the plan, design doc,
+and each task's acceptance criteria. No code-style judgments at this stage —
+only "does the code do what was asked?"
+
+Spawn a `general-purpose` sub-agent in **foreground**:
+
+```text
+Agent(subagent_type="general-purpose", model="sonnet",
+  prompt="Check spec compliance of the implementation on branch {{BRANCH_NAME}}
+  in {{WORKTREE_PATH}}.
+
+  ## Documents to Read
+  - Plan file: {{PLAN_FILE}}
+  - Design doc: {{DESIGN_DOC}}
+  - Epic and tasks: run `bd show {{EPIC_ID}}` then `bd show <task_id>` for each task
+
+  ## Instructions
+  1. Read the plan and design doc fully
+  2. Read every task description in the epic — extract acceptance criteria
+  3. Read the implemented source files (use `git --no-pager diff main...HEAD`
+     to find changed files, then read each one)
+  4. Produce a gap report covering:
+     - **Plan/design gaps:** requirements, interfaces, behaviors, config
+       options, or edge cases specified in either document but absent from
+       the code
+     - **Acceptance criteria gaps:** per-task criteria in beads that the code
+       does not satisfy
+     - **Scope creep:** code that implements things NOT requested by the spec
+  5. List only findings — do not include items that are covered
+
+  ## Output Format
+  If gaps exist, return a numbered list. For each gap:
+  - Source: plan section / design section / task <id> criterion / scope-creep
+  - What is missing (or what is extra for scope-creep items)
+  - Severity: CRITICAL (core requirement) / IMPORTANT (specified behavior) /
+    MINOR (nice-to-have detail)
+
+  End with: 'Spec compliant: Yes/No'
+
+  If no gaps: return 'Spec compliant: Yes — all requirements covered.'")
+```
+
+**When the spec compliance review returns:**
+
+- **If gaps exist:** For each CRITICAL or IMPORTANT gap, implement it using the
+  same TDD cycle from Phase 2 (write test → implement → verify). Commit each
+  fix: `git commit -m "feat: cover missing scope — <description>"`. For
+  scope-creep findings, remove the extra code. After fixes, **re-run the spec
+  compliance review** until it returns "Spec compliant: Yes" with no Critical
+  or Important gaps. MINOR gaps may be noted but do not block.
+- **If spec compliant:** Proceed to Step 3.
+
+**Maximum iterations:** 2 rounds. If gaps persist after 2 rounds, note them in
+the completion message to the coordinator with status `DONE_WITH_CONCERNS`.
+
+### Step 3: Code Quality Review (Stage 2)
+
+Only after spec compliance is clean. Compute the diff range for the full epic:
 
 ```bash
 BASE_SHA=$(git merge-base HEAD main)
@@ -554,13 +620,14 @@ influence its findings.
 
 ```text
 Agent(subagent_type="feature-dev:code-reviewer", model="sonnet",
-  prompt="Review the implementation on branch {{BRANCH_NAME}} in
-  {{WORKTREE_PATH}}.
+  prompt="Review code quality of the implementation on branch {{BRANCH_NAME}}
+  in {{WORKTREE_PATH}}. Spec compliance has already been verified separately —
+  do NOT re-check requirements coverage; focus only on quality of the code that
+  was written.
 
   ## What to Review
 
   Run `git --no-pager diff {BASE_SHA}...{HEAD_SHA}` to see all changes.
-  Run `bd show {{EPIC_ID}}` to see the epic and task descriptions.
 
   ## Review Criteria
 
@@ -576,12 +643,6 @@ Agent(subagent_type="feature-dev:code-reviewer", model="sonnet",
 
   Check every changed file against these rules. Grep for the red flags listed.
   Each violation is a finding.
-
-  ### 3. Task Acceptance Criteria
-
-  For each task in the epic, verify the acceptance criteria in the task
-  description are met by the implementation. Run `bd show <task_id>` for each
-  task and cross-reference against the code changes.
 
   ## Output Format
 
@@ -617,57 +678,13 @@ follow its response pattern:
    `HEAD_SHA`, `HEAD_SHA` = new HEAD). Repeat until the reviewer returns "Ready
    to merge: Yes" with no Critical or Important issues remaining.
 
+**If code-quality fixes introduce substantive new logic** (not just renames or
+reformatting), return to Step 2 (Spec Compliance) on the new code before
+re-running code quality. New logic can create new gaps.
+
 **Maximum iterations:** 3 review rounds. If issues persist after 3 rounds,
-proceed to Step 3 and note the unresolved findings in your completion message to
-the coordinator. Do not loop indefinitely.
-
-### Step 3: Scope Check
-
-After the code review passes, verify that the implementation covers everything
-specified in the plan and design documents.
-
-Spawn a `general-purpose` sub-agent in **foreground**:
-
-```text
-Agent(subagent_type="general-purpose", model="sonnet",
-  prompt="Cross-reference the implementation against the plan and design docs.
-
-  ## Documents to Read
-  - Plan file: {{PLAN_FILE}}
-  - Design doc: {{DESIGN_DOC}}
-  - Epic status: run `bd show {{EPIC_ID}}`
-
-  ## Instructions
-  1. Read both documents fully
-  2. Read the implemented source files (use `git --no-pager diff main...HEAD`
-     to find changed files, then read each one)
-  3. Produce a gap report: for every requirement, interface, behavior, config
-     option, or edge case specified in either document, check whether the code
-     implements it
-  4. List only MISSING items — things specified in the docs but absent from
-     the code
-
-  ## Output Format
-  If gaps exist, return a numbered list. For each gap:
-  - Document reference (which doc, which section)
-  - What's missing
-  - Severity: CRITICAL (core requirement) / IMPORTANT (specified behavior) /
-    MINOR (nice-to-have detail)
-
-  If no gaps: return 'SCOPE COMPLETE — all requirements covered.'")
-```
-
-**When the scope check returns:**
-
-- **If gaps exist:** For each CRITICAL or IMPORTANT gap, implement it using the
-  same TDD cycle from Phase 2 (write test → implement → verify). Commit each
-  fix: `git commit -m "feat: cover missing scope — <description>"`. After all
-  gaps are filled, return to **Step 2** (Code Review Loop) to review the new
-  code. MINOR gaps may be noted but do not block.
-- **If no gaps:** Proceed to Step 4.
-
-**Maximum iterations:** 2 scope check rounds. If gaps persist after 2 rounds,
-note them in the completion message to the coordinator.
+proceed to Step 4 and note the unresolved findings in your completion message
+with status `DONE_WITH_CONCERNS`. Do not loop indefinitely.
 
 ### Step 4: Final Verification
 
@@ -682,14 +699,31 @@ Before proceeding to Phase 4, confirm:
 
 - [ ] All tasks in the epic are closed: `bd show {{EPIC_ID}}`
 - [ ] All tests pass: `{{QUALITY_COMMANDS}}`
-- [ ] Code review returned "Ready to merge: Yes"
-- [ ] Scope check returned "SCOPE COMPLETE" (or only MINOR gaps remain)
+- [ ] Spec compliance returned "Spec compliant: Yes" (or only MINOR gaps remain)
+- [ ] Code quality returned "Ready to merge: Yes"
 - [ ] Commit history is clean and descriptive:
       `git --no-pager log --oneline -20`
 
 ---
 
 ## Phase 4: Complete & Land
+
+### Status Vocabulary (MANDATORY)
+
+Every completion or escalation message to your supervisor must start with one
+of these four status tokens. The coordinator's handler depends on the token —
+wrong token means wrong response.
+
+| Token                | Meaning                                                                 | Send When                                                          |
+| -------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `DONE`               | Epic complete, all tasks closed, tests pass, self-review clean          | Ready for coordinator review and merge                             |
+| `DONE_WITH_CONCERNS` | Work complete but with caveats the coordinator should see               | Unresolved review findings, architectural concerns, iteration caps hit |
+| `NEEDS_CONTEXT`      | Cannot proceed without more information                                 | Missing design decision, ambiguous spec, unclear scope             |
+| `BLOCKED`            | Cannot proceed — external dependency or tooling issue                   | Cross-epic dependency, test infra broken, auth problem             |
+
+Prefix every completion and escalation `thrum send` with the status token, for
+example:
+`thrum send "DONE: {{EPIC_ID}} complete. Branch pushed." --to @{{SUPERVISOR_NAME}}`
 
 ### Step 1: Close the Epic
 
@@ -721,7 +755,7 @@ git rebase origin/main
 git push origin {{BRANCH_NAME}}
 
 # Notify the coordinator
-thrum send "{{EPIC_ID}} complete. Branch {{BRANCH_NAME}} pushed, all tests passing. Ready for review/merge." --to @{{SUPERVISOR_NAME}}
+thrum send "DONE: {{EPIC_ID}} complete. Branch {{BRANCH_NAME}} pushed, all tests passing. Ready for review/merge." --to @{{SUPERVISOR_NAME}}
 ```
 
 The coordinator handles code review and merge to main. This ensures review gates

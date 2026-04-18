@@ -121,7 +121,7 @@ func TestNudgeDispatch_GuardSkipsNonMessageEvents(t *testing.T) {
 	// nudge-dispatch invocations (we observe via a flag set inside the
 	// guard branch, not via tmux side effects).
 	var (
-		mu             sync.Mutex
+		mu              sync.Mutex
 		nudgeDispatches int
 	)
 	st.SetOnEventWrite(func(_ string, _ int64, event []byte) {

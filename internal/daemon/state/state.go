@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/eventlog"
 	"github.com/leonletto/thrum/internal/daemon/safedb"
@@ -42,6 +43,7 @@ type State struct {
 	projector      *projection.Projector
 	repoID         string
 	daemonID       string                                             // Unique identifier for this daemon instance (for sync origin tracking)
+	identity       identity.Identity                                  // Full identity block when Bootstrap ran (zero-value in test paths)
 	sequence       atomic.Int64                                       // Monotonically increasing event sequence counter
 	repoPath       string                                             // Path to the repository root
 	thrumDir       string                                             // Path to .thrum directory (runtime: var/, identities/)
@@ -53,8 +55,10 @@ type State struct {
 }
 
 // NewState creates a new state manager for the given .thrum directory.
-// If daemonID is non-empty, it is used as the persistent daemon identifier;
-// otherwise a fresh one is generated from the machine hostname.
+// If daemonID is non-empty, it is used verbatim (test path — no config.json
+// or daemon_identity table mutation). If empty, identity.Bootstrap loads or
+// creates the identity from .thrum/config.json and mirrors it into the
+// daemon_identity SQLite table.
 func NewState(thrumDir string, syncDir string, repoID string, daemonID string) (*State, error) {
 	// Ensure var directory exists
 	varDir := filepath.Join(thrumDir, "var")
@@ -123,8 +127,33 @@ func NewState(thrumDir string, syncDir string, repoID string, daemonID string) (
 		return nil, fmt.Errorf("load max sequence: %w", err)
 	}
 
+	// Identity resolution:
+	//   - Caller-provided daemonID (non-empty) → honor verbatim. This is the
+	//     test path (sync_nudge, pid_identity, etc.). No config.json mutation.
+	//   - Empty daemonID → run identity.Bootstrap against config.json. This is
+	//     the production daemon path and also the common test path that
+	//     passes "" as daemonID.
+	var ident identity.Identity
 	if daemonID == "" {
-		daemonID = identity.GenerateDaemonID()
+		ident, err = identity.Bootstrap(thrumDir, repoPath)
+		if err != nil {
+			_ = eventsWriter.Close()
+			_ = db.Close()
+			return nil, fmt.Errorf("bootstrap identity: %w", err)
+		}
+		daemonID = ident.DaemonID
+
+		// Mirror identity into the daemon_identity table (single row).
+		now := time.Now().UTC().Format(time.RFC3339)
+		if _, err := safeDB.ExecContext(context.Background(), `INSERT OR REPLACE INTO daemon_identity
+            (daemon_id, repo_name, hostname, repo_path, git_origin_url, init_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			ident.DaemonID, ident.RepoName, ident.Hostname, ident.RepoPath,
+			ident.GitOriginURL, ident.InitAt, now); err != nil {
+			_ = eventsWriter.Close()
+			_ = db.Close()
+			return nil, fmt.Errorf("mirror identity to daemon_identity: %w", err)
+		}
 	}
 
 	s := &State{
@@ -134,6 +163,7 @@ func NewState(thrumDir string, syncDir string, repoID string, daemonID string) (
 		projector:      projector,
 		repoID:         repoID,
 		daemonID:       daemonID,
+		identity:       ident,
 		repoPath:       repoPath,
 		thrumDir:       thrumDir,
 		syncDir:        syncDir,
@@ -381,6 +411,12 @@ func (s *State) RepoID() string {
 // DaemonID returns the daemon's unique identifier for sync origin tracking.
 func (s *State) DaemonID() string {
 	return s.daemonID
+}
+
+// Identity returns the full identity block for this state.
+// Zero-valued when NewState was called with a non-empty daemonID (test path).
+func (s *State) Identity() identity.Identity {
+	return s.identity
 }
 
 // GetEventsSince returns events with sequence > afterSeq, up to limit.

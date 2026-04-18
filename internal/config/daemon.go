@@ -11,6 +11,7 @@ import (
 // ThrumConfig represents the top-level .thrum/config.json file.
 type ThrumConfig struct {
 	Runtime       RuntimeConfig       `json:"runtime"`
+	Identity      IdentityConfig      `json:"identity,omitempty"`
 	Daemon        DaemonConfig        `json:"daemon"`
 	Backup        BackupConfig        `json:"backup"`
 	Telegram      TelegramConfig      `json:"telegram"`
@@ -34,6 +35,20 @@ type ThrumConfig struct {
 	// the supervisor sender identity (@supervisor_<ProjectName>). Falls
 	// back to filepath.Base(repo_root) at daemon boot if empty.
 	ProjectName string `json:"project_name,omitempty"`
+}
+
+// IdentityConfig holds the daemon's per-repo identity.
+// Daemon_id is generated once at thrum init (or first daemon start of an
+// un-initialized repo) and persists forever. Other fields are refreshed on
+// each daemon start from current runtime values — they are informational
+// metadata, not keys. Git_origin_url is set once at init.
+type IdentityConfig struct {
+	DaemonID     string `json:"daemon_id,omitempty"`
+	RepoName     string `json:"repo_name,omitempty"`
+	Hostname     string `json:"hostname,omitempty"`
+	RepoPath     string `json:"repo_path,omitempty"`
+	GitOriginURL string `json:"git_origin_url,omitempty"`
+	InitAt       string `json:"init_at,omitempty"`
 }
 
 // WorktreesConfig holds worktree management settings.

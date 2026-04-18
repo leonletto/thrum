@@ -5,8 +5,8 @@ daemon and git-backed message storage.
 
 ## Setup
 
-Use `thrum worktree create` to create a worktree and register an agent in
-one step. This handles git, redirects, identity, and tmux session setup.
+Use `thrum worktree create` to create a worktree and register an agent in one
+step. This handles git, redirects, identity, and tmux session setup.
 
 ```bash
 # Two-step pattern (create + launch)
@@ -25,20 +25,21 @@ The worktree is created at `<base_path>/<name>` (default
 override with `-b <branch>`.
 
 `worktree create` automatically:
+
 - Creates the git worktree
 - Sets up the `.thrum/` redirect to the main repo
 - Creates a tmux session with the worktree as cwd
-- Runs quickstart inside the pane (PID-isolated, retries if shell init
-  swallows the command)
+- Runs quickstart inside the pane (PID-isolated, retries if shell init swallows
+  the command)
 - Reports the next-step `tmux launch` command
 
-The agent is **NOT running** until `thrum tmux launch <name>` is called.
-The launch step is what actually starts the AI runtime (claude/codex/etc).
+The agent is **NOT running** until `thrum tmux launch <name>` is called. The
+launch step is what actually starts the AI runtime (claude/codex/etc).
 
 ### Worktree without an agent
 
-If you want the worktree set up but no agent registered yet, omit the
-agent flags:
+If you want the worktree set up but no agent registered yet, omit the agent
+flags:
 
 ```bash
 thrum worktree create my-feature

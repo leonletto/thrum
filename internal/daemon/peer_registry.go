@@ -2,7 +2,9 @@ package daemon
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -14,17 +16,21 @@ import (
 
 // PeerInfo represents a paired sync peer.
 type PeerInfo struct {
-	Name         string    `json:"name"`
-	Address      string    `json:"address"`
-	DaemonID     string    `json:"daemon_id"`
-	Token        string    `json:"token,omitempty"`
-	PairedAt     time.Time `json:"paired_at"`
-	LastSync     time.Time `json:"last_sync"`
-	Transport    string    `json:"transport,omitempty"`     // "local", "tailscale", "network"
-	RepoPath     string    `json:"repo_path,omitempty"`     // Filesystem path for local peers
-	ProxyPrefix  string    `json:"proxy_prefix,omitempty"`  // Namespace prefix for proxy agents
-	RemoteAgents []string  `json:"remote_agents,omitempty"` // Agent names to proxy
-	Role         string    `json:"role,omitempty"`          // "listener" or "dialer"
+	Name               string    `json:"name"`
+	Address            string    `json:"address"`
+	DaemonID           string    `json:"daemon_id"`
+	Token              string    `json:"token,omitempty"`
+	PairedAt           time.Time `json:"paired_at"`
+	LastSync           time.Time `json:"last_sync"`
+	Transport          string    `json:"transport,omitempty"`             // "local", "tailscale", "network"
+	RepoPath           string    `json:"repo_path,omitempty"`             // Filesystem path for local peers
+	ProxyPrefix        string    `json:"proxy_prefix,omitempty"`          // Namespace prefix for proxy agents
+	RemoteAgents       []string  `json:"remote_agents,omitempty"`         // Agent names to proxy
+	RemoteRepoName     string    `json:"remote_repo_name,omitempty"`      // Peer's repository name
+	RemoteHostname     string    `json:"remote_hostname,omitempty"`       // Peer's hostname
+	RemoteRepoPath     string    `json:"remote_repo_path,omitempty"`      // Peer's repo filesystem path
+	RemoteGitOriginURL string    `json:"remote_git_origin_url,omitempty"` // Peer's git origin URL
+	Role               string    `json:"role,omitempty"`                  // "listener" or "dialer"
 }
 
 // Addr returns the network address for connecting to this peer.
@@ -54,10 +60,22 @@ type PeerRegistry struct {
 }
 
 // NewPeerRegistry creates a new peer registry. If filePath exists, peers are loaded from it.
+// FilePath is expected to be <thrumDir>/var/peers.json. The daemon_id is sourced from
+// <thrumDir>/config.json via identity.Bootstrap, making config.json the single source of truth.
 func NewPeerRegistry(filePath string) (*PeerRegistry, error) {
+	// peers.json lives at <thrumDir>/var/peers.json. Derive thrumDir and repoPath
+	// for identity.Bootstrap, which persists daemon_id to <thrumDir>/config.json.
+	thrumDir := filepath.Dir(filepath.Dir(filePath))
+	repoPath := filepath.Dir(thrumDir)
+
 	r := &PeerRegistry{
 		peers:    make(map[string]*PeerInfo),
 		filePath: filePath,
+	}
+
+	ident, err := identity.Bootstrap(thrumDir, repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap identity for peer registry: %w", err)
 	}
 
 	if _, err := os.Stat(filePath); err == nil {
@@ -65,9 +83,25 @@ func NewPeerRegistry(filePath string) (*PeerRegistry, error) {
 		if err := r.load(); err != nil {
 			return nil, fmt.Errorf("load peer registry: %w", err)
 		}
+		// config.json is the source of truth. If peers.json has a stale daemon_id
+		// (e.g. pre-upgrade file), back up peers.json then reconcile and persist.
+		if r.local.DaemonID != ident.DaemonID {
+			// Best-effort backup: log WARN on failure but don't abort.
+			// Same backup-once pattern as identity.backupConfigOnce.
+			if err := backupPeersOnce(filePath, filePath+".pre-rotation-bak"); err != nil {
+				log.Printf("[peer_registry] peers.json backup failed (reconciliation proceeding): %v", err)
+			}
+			r.mu.Lock()
+			r.local.DaemonID = ident.DaemonID
+			saveErr := r.saveLocked()
+			r.mu.Unlock()
+			if saveErr != nil {
+				return nil, fmt.Errorf("reconcile local daemon_id: %w", saveErr)
+			}
+		}
 	} else {
-		// No file — generate fresh local config
-		r.local.DaemonID = identity.GenerateDaemonID()
+		// No file — seed from identity.Bootstrap
+		r.local.DaemonID = ident.DaemonID
 	}
 
 	return r, nil
@@ -278,6 +312,28 @@ func (r *PeerRegistry) RemoveRemoteAgent(peerName, agentName string) error {
 	}
 	peer.RemoteAgents = filtered
 	return r.saveLocked()
+}
+
+// backupPeersOnce copies src to dst if src exists and dst does not.
+// Same backup-once pattern as identity.backupConfigOnce (duplicated at the
+// package boundary to avoid a circular import).
+// Returns nil if dst already exists or src does not exist; errors on copy failure.
+func backupPeersOnce(src, dst string) error {
+	if _, err := os.Stat(dst); err == nil {
+		return nil // backup already exists — don't overwrite pre-rotation state
+	}
+	data, err := os.ReadFile(src) // #nosec G304 -- src is peers.json path controlled by PeerRegistry
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("read for backup: %w", err)
+	}
+	if err := os.WriteFile(dst, data, 0o600); err != nil {
+		return fmt.Errorf("write backup: %w", err)
+	}
+	log.Printf("[peer_registry] backed up pre-rotation peers to %s", dst)
+	return nil
 }
 
 // load reads the peers.json file, auto-detecting old array or new object format.

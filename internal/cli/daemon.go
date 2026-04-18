@@ -14,14 +14,15 @@ import (
 
 // DaemonStatusResult contains daemon status information.
 type DaemonStatusResult struct {
-	Running       bool   `json:"running"`
-	Status        string `json:"status"`
-	PID           int    `json:"pid,omitempty"`
-	RepoPath      string `json:"repo_path,omitempty"`
-	Uptime        string `json:"uptime,omitempty"`
-	Version       string `json:"version,omitempty"`
-	SyncState     string `json:"sync_state,omitempty"`
-	WebSocketPort int    `json:"ws_port,omitempty"`
+	Running       bool          `json:"running"`
+	Status        string        `json:"status"`
+	PID           int           `json:"pid,omitempty"`
+	RepoPath      string        `json:"repo_path,omitempty"`
+	Uptime        string        `json:"uptime,omitempty"`
+	Version       string        `json:"version,omitempty"`
+	SyncState     string        `json:"sync_state,omitempty"`
+	WebSocketPort int           `json:"ws_port,omitempty"`
+	Identity      *IdentityInfo `json:"identity,omitempty"`
 }
 
 // DaemonStart starts the daemon in the background.
@@ -227,6 +228,7 @@ func DaemonStatus(repoPath string) (*DaemonStatusResult, error) {
 					result.Uptime = formatDuration(uptime)
 					result.Version = health.Version
 					result.SyncState = health.SyncState
+					result.Identity = health.Identity
 				}
 			}
 		}
@@ -279,6 +281,25 @@ func FormatDaemonStatus(result *DaemonStatusResult) string {
 	}
 	if result.WebSocketPort > 0 {
 		status += fmt.Sprintf("UI:       http://localhost:%d\n", result.WebSocketPort)
+	}
+	if result.Identity != nil && result.Identity.DaemonID != "" {
+		status += "\nIdentity:\n"
+		status += fmt.Sprintf("  daemon_id:  %s\n", result.Identity.DaemonID)
+		if result.Identity.RepoName != "" {
+			status += fmt.Sprintf("  repo_name:  %s\n", result.Identity.RepoName)
+		}
+		if result.Identity.Hostname != "" {
+			status += fmt.Sprintf("  hostname:   %s\n", result.Identity.Hostname)
+		}
+		if result.Identity.RepoPath != "" {
+			status += fmt.Sprintf("  repo_path:  %s\n", result.Identity.RepoPath)
+		}
+		if result.Identity.GitOriginURL != "" {
+			status += fmt.Sprintf("  git_origin: %s\n", result.Identity.GitOriginURL)
+		}
+		if result.Identity.InitAt != "" {
+			status += fmt.Sprintf("  init_at:    %s\n", result.Identity.InitAt)
+		}
 	}
 
 	return status

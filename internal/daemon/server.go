@@ -98,41 +98,41 @@ func (s *Server) SetIdentityResolver(r peercred.Resolver) {
 // is rejected with a clear error — it never reaches the handler.
 var anonymousAllowedMethods = map[string]bool{
 	// Observability / liveness
-	"health":               true,
-	"daemon.status":        true,
-	"sync.status":          true,
-	"tsync.peers.list":     true,
-	"peer.list":            true,
-	"peer.status":          true,
-	"telegram.status":      true,
+	"health":           true,
+	"daemon.status":    true,
+	"sync.status":      true,
+	"tsync.peers.list": true,
+	"peer.list":        true,
+	"peer.status":      true,
+	"telegram.status":  true,
 	// Read-only agent/team/session queries
-	"agent.list":           true,
-	"agent.whoami":         true,
-	"agent.listContext":    true,
-	"team.list":            true,
-	"session.list":         true,
+	"agent.list":        true,
+	"agent.whoami":      true,
+	"agent.listContext": true,
+	"team.list":         true,
+	"session.list":      true,
 	// Read-only context queries
-	"context.show":         true,
+	"context.show":          true,
 	"context.preamble.show": true,
 	// Read-only message/group queries
-	"message.get":          true,
-	"message.list":         true,
-	"message.outbox":       true,
-	"group.list":           true,
-	"group.info":           true,
-	"group.members":        true,
+	"message.get":    true,
+	"message.list":   true,
+	"message.outbox": true,
+	"group.list":     true,
+	"group.info":     true,
+	"group.members":  true,
 	// Read-only monitor queries
-	"monitor.list":         true,
-	"monitor.show":         true,
-	"monitor.logs":         true,
+	"monitor.list": true,
+	"monitor.show": true,
+	"monitor.logs": true,
 	// Read-only tmux queries
-	"tmux.status":          true,
-	"tmux.capture":         true,
-	"tmux.check-pane":      true,
-	"tmux.queue-status":    true,
-	"tmux.queue-wait":      true,
+	"tmux.status":       true,
+	"tmux.capture":      true,
+	"tmux.check-pane":   true,
+	"tmux.queue-status": true,
+	"tmux.queue-wait":   true,
 	// Git-config identity read (no auth)
-	"user.identify":        true,
+	"user.identify": true,
 	// Bootstrap: the quickstart flow calls register → session.start →
 	// session.setIntent on a single connection. Peercred identity is resolved
 	// once at connection accept time, so even after agent.register populates
@@ -140,9 +140,9 @@ var anonymousAllowedMethods = map[string]bool{
 	// All three bootstrap RPCs must be anonymous-allowed or daemon restart
 	// creates a chicken-and-egg. Socket is 0600 so only the owning user can
 	// reach these endpoints.
-	"agent.register":       true,
-	"session.start":        true,
-	"session.setIntent":    true,
+	"agent.register":    true,
+	"session.start":     true,
+	"session.setIntent": true,
 }
 
 // Start starts the server and begins accepting connections.

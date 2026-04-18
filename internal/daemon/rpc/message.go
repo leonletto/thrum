@@ -258,11 +258,13 @@ type WSBroadcaster interface {
 
 // MessageHandler handles message-related RPC methods.
 type MessageHandler struct {
-	state         *state.State
-	dispatcher    *subscriptions.Dispatcher
-	groupResolver *groups.Resolver
-	wsBroadcaster WSBroadcaster // optional; nil if not wired
-	thrumDir      string        // for tmux nudge resolution
+	state            *state.State
+	dispatcher       *subscriptions.Dispatcher
+	groupResolver    *groups.Resolver
+	wsBroadcaster    WSBroadcaster // optional; nil if not wired
+	thrumDir         string        // for tmux nudge resolution
+	supervisorID     string        // canonical virtual-supervisor ID, e.g. "supervisor_thrum_leon-letto"
+	supervisorLegacy string        // pre-upgrade form for receiver compat, e.g. "supervisor_thrum"
 }
 
 // SetWSBroadcaster configures a broadcaster that will be called after every
@@ -284,12 +286,17 @@ func NewMessageHandler(state *state.State) *MessageHandler {
 
 // NewMessageHandlerWithDispatcher creates a new message handler with a custom dispatcher.
 // The dispatcher should have the client notifier configured for push notifications.
-func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptions.Dispatcher, thrumDir string) *MessageHandler {
+// SupervisorID / supervisorLegacy are the canonical and pre-upgrade forms of the
+// virtual supervisor ID; both are consulted by isSupervisorRecipient on the
+// reply receiver path. Empty strings are safe (degrade to never-match).
+func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptions.Dispatcher, thrumDir, supervisorID, supervisorLegacy string) *MessageHandler {
 	return &MessageHandler{
-		state:         state,
-		dispatcher:    dispatcher,
-		groupResolver: groups.NewResolver(state.DB()),
-		thrumDir:      thrumDir,
+		state:            state,
+		dispatcher:       dispatcher,
+		groupResolver:    groups.NewResolver(state.DB()),
+		thrumDir:         thrumDir,
+		supervisorID:     supervisorID,
+		supervisorLegacy: supervisorLegacy,
 	}
 }
 
@@ -1650,43 +1657,51 @@ func (h *MessageHandler) queryAgentsByRecipient(ctx context.Context, recipient s
 		return nil, err
 	}
 
-	// Fallback: reserved pseudo-agents (e.g. @supervisor_<project>) live
-	// as identity files with Reserved=true but have no row in the agents
-	// table — they never register a session, by design. Without this
-	// fallback the regular send path rejects replies addressed to the
-	// permission supervisor with "unknown recipient", which breaks the
-	// Task 6.2 reply-interceptor chain end-to-end (supervisors can't
-	// reply `y`/`n` to a nudge).
+	// Fallback: the virtual supervisor pseudo-agent has no row in the
+	// agents table (it never registers a session, by design). Without
+	// this fallback the regular send path rejects replies addressed to
+	// the permission supervisor with "unknown recipient", which breaks
+	// the reply-interceptor chain end-to-end (supervisors can't reply
+	// `y`/`n` to a nudge).
 	//
-	// Kept targeted: only a name-for-name identity file lookup, and
-	// only when the agents-table query returned nothing. No directory
-	// walk, no reserved-catalog load — cost is one stat + one read on
-	// the slow path only.
-	if len(agentIDs) == 0 && h.thrumDir != "" && recipient != "" {
-		if isReservedIdentity(h.thrumDir, recipient) {
-			agentIDs = []string{recipient}
-		}
+	// Kept targeted: pure in-memory string compare against the two
+	// supervisor IDs (canonical + legacy). No I/O, no directory walk,
+	// no identity-file read.
+	if len(agentIDs) == 0 && recipient != "" && isSupervisorRecipient(h, recipient) {
+		agentIDs = []string{recipient}
 	}
 	return agentIDs, nil
 }
 
-// isReservedIdentity reports whether thrumDir/identities/<name>.json
-// exists and has Reserved=true. Used by queryAgentsByRecipient to
-// accept reply targets for reserved pseudo-agents that never appear
-// in the agents table. Returns false on any I/O or unmarshal error —
-// the caller treats that as "unknown recipient" and falls through to
-// the standard rejection path.
-func isReservedIdentity(thrumDir, name string) bool {
-	idPath := filepath.Join(thrumDir, "identities", name+".json")
-	data, err := os.ReadFile(idPath) // #nosec G304 — idPath is .thrum/identities/<name>.json, an internal config file
-	if err != nil {
+// isSupervisorRecipient reports whether the given recipient string
+// matches this daemon's canonical or legacy supervisor agent ID.
+// Used by queryAgentsByRecipient to accept reply targets for the
+// virtual supervisor pseudo-agent (never registered in the agents
+// table or written as an identity file).
+//
+// Debug-logs the branch that matched, or — if recipient has the
+// supervisor_ prefix but matches neither — logs the miss for
+// cross-repo-misrouting diagnostics.
+//
+// Empty supervisorLegacy cannot match empty recipient because the
+// call site guards on recipient != "".
+func isSupervisorRecipient(h *MessageHandler, recipient string) bool {
+	if recipient == "" {
 		return false
 	}
-	var idFile config.IdentityFile
-	if err := json.Unmarshal(data, &idFile); err != nil {
-		return false
+	if recipient == h.supervisorID {
+		log.Printf("[message] supervisor recipient matched canonical: %s", recipient)
+		return true
 	}
-	return idFile.Reserved
+	if h.supervisorLegacy != "" && recipient == h.supervisorLegacy {
+		log.Printf("[message] supervisor recipient matched legacy: %s (canonical=%s)", recipient, h.supervisorID)
+		return true
+	}
+	if strings.HasPrefix(recipient, "supervisor_") {
+		log.Printf("[message] supervisor-prefixed recipient did not match (canonical=%s legacy=%s recipient=%s)",
+			h.supervisorID, h.supervisorLegacy, recipient)
+	}
+	return false
 }
 
 // queryAgentByID checks if an agent with the exact agent_id exists.

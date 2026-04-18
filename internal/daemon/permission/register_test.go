@@ -2,175 +2,308 @@ package permission
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
+	"github.com/leonletto/thrum/internal/identity"
 )
 
-func TestResolveProjectName_PreferredConfigField(t *testing.T) {
-	cfg := &config.ThrumConfig{ProjectName: "awesome-thrum"}
-	got := ResolveProjectName(cfg, "/tmp/some-path")
-	if got != "awesome-thrum" {
-		t.Errorf("got %q, want awesome-thrum", got)
+func TestResolveSupervisorID_ProjectNameWins(t *testing.T) {
+	cfg := &config.ThrumConfig{ProjectName: "Acme Co"}
+	// Any repo path; won't be consulted because ProjectName is set.
+	got := ResolveSupervisorID(cfg, "/tmp/irrelevant")
+	// SanitizeAgentName lowercases and maps non-[a-z0-9_-] to "_", so
+	// "Acme Co" → "acme_co". User slug is machine-dependent but must
+	// follow after the sanitized repo slug.
+	if !strings.HasPrefix(got, "supervisor_acme_co_") {
+		t.Fatalf("got %q, want prefix supervisor_acme_co_", got)
 	}
 }
 
-func TestResolveProjectName_FallbackToBasename(t *testing.T) {
-	cfg := &config.ThrumConfig{}
-	got := ResolveProjectName(cfg, "/Users/leon/dev/opensource/thrum")
-	if got != "thrum" {
-		t.Errorf("got %q, want thrum", got)
-	}
-}
-
-func TestResolveProjectName_NilConfigFallsBack(t *testing.T) {
-	got := ResolveProjectName(nil, "/Users/leon/dev/opensource/thrum")
-	if got != "thrum" {
-		t.Errorf("got %q, want thrum", got)
-	}
-}
-
-func TestResolveProjectName_UltimateFallback(t *testing.T) {
-	if got := ResolveProjectName(nil, ""); got != "project" {
-		t.Errorf("got %q, want project", got)
-	}
-	if got := ResolveProjectName(nil, "/"); got != "project" {
-		t.Errorf("got %q for /, want project", got)
-	}
-	if got := ResolveProjectName(nil, "."); got != "project" {
-		t.Errorf("got %q for ., want project", got)
-	}
-}
-
-func TestSupervisorAgentID(t *testing.T) {
-	if got := SupervisorAgentID("thrum"); got != "supervisor_thrum" {
-		t.Errorf("got %q, want supervisor_thrum", got)
-	}
-}
-
-func TestRegisterSupervisor_WritesIdentityFile(t *testing.T) {
+func TestResolveSupervisorID_FallsBackToBasename(t *testing.T) {
+	cfg := &config.ThrumConfig{ProjectName: ""}
 	tmp := t.TempDir()
-	thrumDir := filepath.Join(tmp, ".thrum")
+	// t.TempDir() is not a git repo and has no origin — the basename
+	// fallback fires.
+	got := ResolveSupervisorID(cfg, tmp)
+	want := filepath.Base(tmp)
+	if !strings.HasPrefix(got, "supervisor_"+want+"_") {
+		t.Fatalf("got %q, want prefix supervisor_%s_", got, want)
+	}
+}
+
+// TestResolveSupervisorID_OriginHashBranch covers the middle rung of
+// resolveRepoSlug: no ProjectName, but git remote.origin.url is set →
+// the slug is the 12-char lowercase crockford-base32 hash from
+// identity.GenerateRepoID.
+func TestResolveSupervisorID_OriginHashBranch(t *testing.T) {
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+	gitRepo := t.TempDir()
+	ctx := context.Background()
+	if _, err := safecmd.Git(ctx, gitRepo, "init"); err != nil {
+		t.Skipf("git init unavailable: %v", err)
+	}
+	const origin = "git@github.com:leonletto/thrum.git"
+	if _, err := safecmd.Git(ctx, gitRepo, "config", "remote.origin.url", origin); err != nil {
+		t.Skipf("git config unavailable: %v", err)
+	}
+	cfg := &config.ThrumConfig{ProjectName: ""}
+	got := ResolveSupervisorID(cfg, gitRepo)
+
+	// Compute the expected hash the same way gitOriginHash does.
+	repoID, err := identity.GenerateRepoID(origin)
+	if err != nil {
+		t.Fatalf("GenerateRepoID: %v", err)
+	}
+	wantHash := strings.ToLower(strings.TrimPrefix(repoID, "r_"))
+	if len(wantHash) != 12 {
+		t.Fatalf("expected 12-char hash, got %q (%d chars)", wantHash, len(wantHash))
+	}
+	wantPrefix := "supervisor_" + wantHash + "_"
+	if !strings.HasPrefix(got, wantPrefix) {
+		t.Fatalf("got %q, want prefix %q", got, wantPrefix)
+	}
+	// The hashed repo slug must not look like a filesystem basename —
+	// guards against a future refactor accidentally hitting the
+	// basename branch first.
+	if strings.Contains(got, filepath.Base(gitRepo)) {
+		t.Errorf("got %q contains basename %q; origin-hash branch should win",
+			got, filepath.Base(gitRepo))
+	}
+}
+
+func TestSupervisorIdentity_Shape(t *testing.T) {
 	cfg := &config.ThrumConfig{ProjectName: "thrum"}
+	idFile := SupervisorIdentity(cfg, t.TempDir())
 
-	id, err := RegisterSupervisor(context.Background(), cfg, thrumDir, "")
-	if err != nil {
-		t.Fatalf("RegisterSupervisor: %v", err)
-	}
-	if id != "supervisor_thrum" {
-		t.Errorf("agent_id = %q, want supervisor_thrum", id)
-	}
-
-	// Verify the file exists at the expected path with the expected fields.
-	// Parse the JSON directly rather than going through LoadIdentityWithPath —
-	// that function honors THRUM_HOME, which the ambient agent session sets
-	// and which would otherwise redirect the test away from tmp.
-	idPath := filepath.Join(thrumDir, "identities", "supervisor_thrum.json")
-	data, err := os.ReadFile(idPath) //nolint:gosec // G304 - test fixture path
-	if err != nil {
-		t.Fatalf("read identity file: %v", err)
-	}
-	var idFile config.IdentityFile
-	if err := json.Unmarshal(data, &idFile); err != nil {
-		t.Fatalf("parse identity file: %v", err)
-	}
-	if idFile.Agent.Name != "supervisor_thrum" {
-		t.Errorf("Agent.Name = %q, want supervisor_thrum", idFile.Agent.Name)
-	}
 	if !idFile.Reserved {
-		t.Error("Reserved should be true")
-	}
-	if idFile.Agent.Role != "supervisor" {
-		t.Errorf("Agent.Role = %q, want supervisor", idFile.Agent.Role)
+		t.Fatalf("Reserved=false, want true")
 	}
 	if idFile.Agent.Kind != "agent" {
-		t.Errorf("Agent.Kind = %q, want agent", idFile.Agent.Kind)
+		t.Fatalf("Kind=%q, want agent", idFile.Agent.Kind)
+	}
+	if idFile.Agent.Role != "supervisor" {
+		t.Fatalf("Role=%q, want supervisor", idFile.Agent.Role)
 	}
 	if idFile.Agent.Module != "daemon" {
-		t.Errorf("Agent.Module = %q, want daemon", idFile.Agent.Module)
+		t.Fatalf("Module=%q, want daemon", idFile.Agent.Module)
+	}
+	if !strings.HasPrefix(idFile.Agent.Name, "supervisor_thrum_") {
+		t.Fatalf("Name=%q, want prefix supervisor_thrum_", idFile.Agent.Name)
+	}
+	if !strings.Contains(idFile.Agent.Display, "thrum") {
+		t.Fatalf("Display=%q, want to contain 'thrum'", idFile.Agent.Display)
 	}
 }
 
-func TestRegisterSupervisor_FallbackToBasename(t *testing.T) {
-	tmp := t.TempDir()
-	// Mimic a repo named after the tmp dir's basename.
-	thrumDir := filepath.Join(tmp, ".thrum")
-	// With nil ProjectName, ResolveProjectName uses filepath.Base(repoPath).
-	cfg := &config.ThrumConfig{}
-
-	id, err := RegisterSupervisor(context.Background(), cfg, thrumDir, "/workspace/my-project")
-	if err != nil {
-		t.Fatalf("RegisterSupervisor: %v", err)
-	}
-	if id != "supervisor_my-project" {
-		t.Errorf("agent_id = %q, want supervisor_my-project", id)
-	}
-	idPath := filepath.Join(thrumDir, "identities", "supervisor_my-project.json")
-	if _, err := os.Stat(idPath); err != nil {
-		t.Fatalf("identity file not at %s: %v", idPath, err)
-	}
-}
-
-// TestSupervisorAgentID_DeterministicFallback exercises the fallback
-// path used in cmd/thrum/main.go runDaemon when RegisterSupervisor
-// fails (NFS hiccup, permission issue, etc.). The daemon must not
-// end up with supervisorID="" — every nudge authored by this
-// daemon would then carry agent_id="", which either breaks sync
-// validation or produces untraceable events. This test asserts the
-// deterministic fallback produces a non-empty, well-formed ID for
-// every project-name resolution.
-func TestSupervisorAgentID_DeterministicFallback(t *testing.T) {
+func TestResolveLegacySupervisorID_MatchesOldBinaryFallbacks(t *testing.T) {
 	cases := []struct {
-		cfg     *config.ThrumConfig
-		repo    string
-		wantNon string
+		name     string
+		cfg      *config.ThrumConfig
+		repoPath string
+		want     string
 	}{
-		{&config.ThrumConfig{ProjectName: "thrum"}, "/whatever", "supervisor_thrum"},
-		{&config.ThrumConfig{}, "/Users/leon/dev/opensource/thrum", "supervisor_thrum"},
-		{nil, "", "supervisor_project"},
-		{nil, "/", "supervisor_project"},
+		{
+			name:     "ProjectName wins",
+			cfg:      &config.ThrumConfig{ProjectName: "ThrumRepo"},
+			repoPath: "/tmp/anywhere",
+			want:     "supervisor_ThrumRepo",
+		},
+		{
+			name:     "Falls back to basename",
+			cfg:      &config.ThrumConfig{},
+			repoPath: "/Users/leon/dev/opensource/thrum",
+			want:     "supervisor_thrum",
+		},
+		{
+			name:     "Falls back to 'project' when basename is unusable",
+			cfg:      &config.ThrumConfig{},
+			repoPath: "/",
+			want:     "supervisor_project",
+		},
 	}
 	for _, tc := range cases {
-		name := ResolveProjectName(tc.cfg, tc.repo)
-		got := SupervisorAgentID(name)
-		if got == "" {
-			t.Errorf("SupervisorAgentID returned empty for cfg=%v repo=%q", tc.cfg, tc.repo)
-		}
-		if got != tc.wantNon {
-			t.Errorf("cfg=%v repo=%q: got %q, want %q", tc.cfg, tc.repo, got, tc.wantNon)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			got := ResolveLegacySupervisorID(tc.cfg, tc.repoPath)
+			if got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
-func TestRegisterSupervisor_Idempotent(t *testing.T) {
+func TestCleanupLegacySupervisorFiles_RemovesSupervisorOnly(t *testing.T) {
 	tmp := t.TempDir()
 	thrumDir := filepath.Join(tmp, ".thrum")
-	cfg := &config.ThrumConfig{ProjectName: "thrum"}
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	if err := os.MkdirAll(identitiesDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
 
-	id1, err := RegisterSupervisor(context.Background(), cfg, thrumDir, "")
+	// Seed a supervisor file (should be removed).
+	supervisorJSON := `{"version":5,"agent":{"Kind":"agent","Name":"supervisor_old","Role":"supervisor","Module":"daemon","Display":"Supervisor (old)"},"reserved":true}`
+	supervisorPath := filepath.Join(identitiesDir, "supervisor_old.json")
+	if err := os.WriteFile(supervisorPath, []byte(supervisorJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Seed a coordinator file (should NOT be removed).
+	coordJSON := `{"version":5,"agent":{"Kind":"agent","Name":"coordinator_main","Role":"coordinator","Module":"main","Display":"Coordinator (main)"},"reserved":false}`
+	coordPath := filepath.Join(identitiesDir, "coordinator_main.json")
+	if err := os.WriteFile(coordPath, []byte(coordJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Seed a reserved-but-non-supervisor file (should NOT be removed —
+	// this guards against over-aggressive cleanup if a future pseudo-
+	// agent uses Reserved=true).
+	otherReservedJSON := `{"version":5,"agent":{"Kind":"agent","Name":"other_reserved","Role":"system","Module":"daemon","Display":"Other"},"reserved":true}`
+	otherReservedPath := filepath.Join(identitiesDir, "other_reserved.json")
+	if err := os.WriteFile(otherReservedPath, []byte(otherReservedJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	CleanupLegacySupervisorFiles(thrumDir)
+
+	if _, err := os.Stat(supervisorPath); !os.IsNotExist(err) {
+		t.Fatalf("supervisor file not removed: stat err = %v", err)
+	}
+	if _, err := os.Stat(coordPath); err != nil {
+		t.Fatalf("coordinator file should still exist: %v", err)
+	}
+	if _, err := os.Stat(otherReservedPath); err != nil {
+		t.Fatalf("non-supervisor reserved file should still exist: %v", err)
+	}
+}
+
+func TestCleanupLegacySupervisorFiles_NoIdentitiesDirIsNoop(t *testing.T) {
+	tmp := t.TempDir()
+	// Deliberately do not create .thrum/identities/.
+	// Should not panic or error.
+	CleanupLegacySupervisorFiles(tmp)
+}
+
+// TestCleanupLegacySupervisorFiles_IdempotentOnSeededBoot reproduces
+// the daemon-boot flow: a pre-seeded legacy supervisor_<project>.json
+// is swept on first boot, and a second boot is a no-op (no errors,
+// directory stays empty). This enforces the spec's "per-host,
+// per-upgrade" guarantee — every subsequent boot must not touch
+// state the first boot already cleaned.
+func TestCleanupLegacySupervisorFiles_IdempotentOnSeededBoot(t *testing.T) {
+	tmp := t.TempDir()
+	thrumDir := filepath.Join(tmp, ".thrum")
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	if err := os.MkdirAll(identitiesDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	legacyJSON := `{"version":5,"agent":{"Kind":"agent","Name":"supervisor_oldproject","Role":"supervisor","Module":"daemon","Display":"Supervisor (oldproject)"},"reserved":true}`
+	legacyPath := filepath.Join(identitiesDir, "supervisor_oldproject.json")
+	if err := os.WriteFile(legacyPath, []byte(legacyJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// First boot removes the seeded file.
+	CleanupLegacySupervisorFiles(thrumDir)
+	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+		t.Fatalf("legacy file not removed on first boot: stat err = %v", err)
+	}
+
+	// Second boot is a no-op — directory remains empty, no panic,
+	// no error return (the function signature has none, so we just
+	// assert no side effects).
+	CleanupLegacySupervisorFiles(thrumDir)
+	entries, err := os.ReadDir(identitiesDir)
 	if err != nil {
-		t.Fatalf("first call: %v", err)
+		t.Fatalf("ReadDir after second boot: %v", err)
 	}
-	id2, err := RegisterSupervisor(context.Background(), cfg, thrumDir, "")
-	if err != nil {
-		t.Fatalf("second call: %v", err)
-	}
-	if id1 != id2 {
-		t.Errorf("id drift: %q vs %q", id1, id2)
-	}
-	// Only one identity file should exist.
-	entries, err := os.ReadDir(filepath.Join(thrumDir, "identities"))
-	if err != nil {
-		t.Fatalf("read identities: %v", err)
-	}
-	if len(entries) != 1 {
+	if len(entries) != 0 {
 		names := make([]string, 0, len(entries))
 		for _, e := range entries {
 			names = append(names, e.Name())
 		}
-		t.Errorf("expected 1 identity file, got %d: %v", len(entries), names)
+		t.Fatalf("unexpected files after second cleanup: %v", names)
 	}
+}
+
+// TestResolveUserSlug_Fallbacks covers the three branches of
+// resolveUserSlug in isolation per the spec's Testing section:
+// git user.name → $USER → hostname.
+//
+// Each subtest sets GIT_CONFIG_GLOBAL and GIT_CONFIG_SYSTEM to /dev/null
+// so the host's real git config can't leak in and make the fallback
+// order nondeterministic. SanitizeAgentName lowercases and maps
+// non-[a-z0-9_-] to "_", so "Leon Letto" → "leon_letto".
+func TestResolveUserSlug_Fallbacks(t *testing.T) {
+	t.Run("git user.name branch", func(t *testing.T) {
+		t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+		t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+		gitRepo := t.TempDir()
+		ctx := context.Background()
+		if _, err := safecmd.Git(ctx, gitRepo, "init"); err != nil {
+			t.Skipf("git init unavailable: %v", err)
+		}
+		if _, err := safecmd.Git(ctx, gitRepo, "config", "user.name", "Leon Letto"); err != nil {
+			t.Skipf("git config unavailable: %v", err)
+		}
+		// $USER would otherwise win if the git branch returned "main";
+		// force a clearly-distinguishable value so a false positive is
+		// detectable.
+		t.Setenv("USER", "should-not-be-used")
+		if got := resolveUserSlug(gitRepo); got != "leon_letto" {
+			t.Errorf("git user.name branch: got %q, want leon_letto", got)
+		}
+	})
+
+	t.Run("$USER branch when no git user.name", func(t *testing.T) {
+		t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+		t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+		tmp := t.TempDir() // not a git repo → gitUserName returns ""
+		t.Setenv("USER", "jane")
+		if got := resolveUserSlug(tmp); got != "jane" {
+			t.Errorf("$USER branch: got %q, want jane", got)
+		}
+	})
+
+	t.Run("non-ASCII user.name that sanitizes to 'main' falls through", func(t *testing.T) {
+		t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+		t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+		gitRepo := t.TempDir()
+		ctx := context.Background()
+		if _, err := safecmd.Git(ctx, gitRepo, "init"); err != nil {
+			t.Skipf("git init unavailable: %v", err)
+		}
+		// "张伟" (Zhang Wei) is two CJK runes; SanitizeAgentName
+		// replaces each with "_", collapses to a single "_", strips
+		// trailing/leading, and returns its empty-input sentinel
+		// "main". The resolver must treat that as "no usable name"
+		// and fall through to $USER — not silently return "main".
+		if _, err := safecmd.Git(ctx, gitRepo, "config", "user.name", "张伟"); err != nil {
+			t.Skipf("git config unavailable: %v", err)
+		}
+		t.Setenv("USER", "jane")
+		if got := resolveUserSlug(gitRepo); got != "jane" {
+			t.Errorf("non-ASCII user.name branch: got %q, want jane (via $USER fallthrough)", got)
+		}
+	})
+
+	t.Run("hostname branch when no git user.name and no $USER", func(t *testing.T) {
+		t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+		t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+		tmp := t.TempDir()
+		t.Setenv("USER", "")
+		got := resolveUserSlug(tmp)
+		if got == "" {
+			t.Fatalf("hostname branch returned empty")
+		}
+		hostname, err := os.Hostname()
+		if err == nil && hostname != "" && got == "main" && hostname != "main" {
+			t.Errorf("hostname branch returned sentinel %q for host %q", got, hostname)
+		}
+	})
 }

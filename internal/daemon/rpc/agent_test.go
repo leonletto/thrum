@@ -1137,7 +1137,7 @@ func TestNewMessageHandlerWithDispatcher(t *testing.T) {
 	}
 	defer func() { _ = s.Close() }()
 
-	handler := NewMessageHandlerWithDispatcher(s, nil, "")
+	handler := NewMessageHandlerWithDispatcher(s, nil, "", "", "")
 	if handler == nil {
 		t.Fatal("Expected non-nil handler")
 	}
@@ -2145,4 +2145,3 @@ func TestAgentRegister_LocalConflictStillDetected(t *testing.T) {
 		t.Errorf("Conflict.ExistingAgentID = %v, want impl_alpha", regResp.Conflict)
 	}
 }
-

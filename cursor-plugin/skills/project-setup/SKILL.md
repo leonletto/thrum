@@ -762,3 +762,20 @@ When complete, you should have produced:
 After setup is complete, each epic is ready for an implementation agent. The
 filled prompt at `dev-docs/prompts/{feature}.md` is the session start prompt —
 give it directly to the implementing agent.
+
+### Implementer Status Reports
+
+Implementation agents prefix every completion or escalation message with one
+of four status tokens defined in `implementation-agent.md`'s Phase 4 Status
+Vocabulary. Your response depends on the token:
+
+| Token                | Coordinator Response                                                                                                                                                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DONE`               | Proceed to code review and merge for the epic's branch.                                                                                                                                                                        |
+| `DONE_WITH_CONCERNS` | Read the concerns before review. Address correctness/scope issues before merging; note architectural observations for follow-up. Do not merge blind.                                                                           |
+| `NEEDS_CONTEXT`      | Answer the question, then re-dispatch the implementer with the missing context.                                                                                                                                                |
+| `BLOCKED`            | Assess the blocker: context problem → re-dispatch with more context; task too large → split it; stronger reasoning needed → re-dispatch on a more capable model; plan wrong → escalate to the user. Never force the same model to retry without changes. |
+
+**Never ignore a status escalation or silently re-dispatch.** If the
+implementer reports `BLOCKED` or `NEEDS_CONTEXT`, something must change before
+retrying — provide missing context, split the task, switch models, or escalate.

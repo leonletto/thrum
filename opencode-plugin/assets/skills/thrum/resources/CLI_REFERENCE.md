@@ -757,13 +757,13 @@ thrum worktree list                            # List worktrees with agent info
 
 When `--name`, `--role`, and `--module` are all provided, a tmux session is
 created with the worktree as cwd and quickstart runs inside the pane (PID
-isolation). The agent identity is registered, but **the runtime is NOT
-started yet** — follow up with `thrum tmux launch <name>` to start the
-agent. The output explicitly shows the next-step launch command.
+isolation). The agent identity is registered, but **the runtime is NOT started
+yet** — follow up with `thrum tmux launch <name>` to start the agent. The output
+explicitly shows the next-step launch command.
 
-If the agent flags are omitted, the worktree is created with redirects
-only and the output shows the full `tmux create` command needed to
-register an agent later.
+If the agent flags are omitted, the worktree is created with redirects only and
+the output shows the full `tmux create` command needed to register an agent
+later.
 
 ---
 

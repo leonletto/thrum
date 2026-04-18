@@ -78,13 +78,21 @@ type TeamMember struct {
 
 // TeamHandler handles team-related RPC methods.
 type TeamHandler struct {
-	state    *state.State
-	thrumDir string
+	state              *state.State
+	thrumDir           string
+	supervisorIdentity *config.IdentityFile // synthesized virtual-supervisor identity; nil in tests
 }
 
 // NewTeamHandler creates a new team handler.
-func NewTeamHandler(state *state.State, thrumDir string) *TeamHandler {
-	return &TeamHandler{state: state, thrumDir: thrumDir}
+// SupervisorIdentity is the virtual-supervisor identity synthesized at
+// daemon boot; it is wired in here now and consumed by ListAgents in a
+// later task. Passing nil is safe — the injection path short-circuits.
+func NewTeamHandler(state *state.State, thrumDir string, supervisorIdentity *config.IdentityFile) *TeamHandler {
+	return &TeamHandler{
+		state:              state,
+		thrumDir:           thrumDir,
+		supervisorIdentity: supervisorIdentity,
+	}
 }
 
 // HandleList handles the team.list RPC method.
@@ -393,6 +401,29 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 			memberIndex = newIndex
 		}
 	}
+	// Inject the virtual supervisor pseudo-agent when IncludeSystem is
+	// set. After Task 7 (thrum-kqna.3) removed the Reserved=true
+	// identity file from disk, the file walk above cannot find a
+	// supervisor entry; the daemon carries its synthesized identity
+	// in-memory and injects it here. Injection runs outside the
+	// `h.thrumDir != ""` block so it works even when the file walk is
+	// disabled (e.g. unit-test fixtures).
+	if req.IncludeSystem && h.supervisorIdentity != nil {
+		name := h.supervisorIdentity.Agent.Name
+		if _, exists := memberIndex[name]; !exists {
+			// No memberIndex write here: the map is discarded below via
+			// `_ = memberIndex` so nothing downstream would read the entry.
+			members = append(members, TeamMember{
+				AgentID:  name,
+				Role:     h.supervisorIdentity.Agent.Role,
+				Module:   h.supervisorIdentity.Agent.Module,
+				Display:  h.supervisorIdentity.Agent.Display,
+				Status:   "reserved",
+				Reserved: true,
+			})
+		}
+	}
+
 	// memberIndex is used by downstream logic below and by the caller's
 	// dead-agent self-heal in HandleList, which keys off agent_id
 	// (still valid after the optional filter above).
