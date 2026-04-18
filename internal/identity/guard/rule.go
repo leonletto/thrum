@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 )
 
@@ -21,6 +22,16 @@ type CheckContext struct {
 	// (cross_worktree). Companion guards read their own modes off
 	// the caller's Config and do not consult this field.
 	Mode Mode
+
+	// DeadReclaimMode gates step 3.3's auto-reclaim path
+	// independently from Mode, so operators can turn reclaim off
+	// while leaving the cross_worktree check strict. When
+	// ModeOff, step 3.3 is skipped and dead-PID mismatches fall
+	// through to step 3.4's strict-or-warn handling. When
+	// ModeWarn, the reclaim still fires but the event is logged.
+	// When ModeStrict (the default), reclaim is silent on
+	// success.
+	DeadReclaimMode Mode
 
 	// Chain is the caller's process ancestor chain (self first,
 	// walking up toward PID 1). Empty chain means "unknown caller"
@@ -115,17 +126,35 @@ func Rule(cc *CheckContext) error {
 	// Step 3.3: recorded PID is dead. Treat as the original agent
 	// having exited; let the new caller reclaim the identity file
 	// iff CWD + TMUX agree the caller is the same logical session.
-	if cc.IdentityAgentPID != 0 && cc.IsPIDAlive != nil && !cc.IsPIDAlive(cc.IdentityAgentPID) {
-		if cc.CWDMatches && cc.TmuxMatches {
-			if cc.reclaim != nil {
-				if err := cc.reclaim(); err == nil {
-					if cc.reclaimedPtr != nil {
-						*cc.reclaimedPtr = true
-					}
-				}
+	// DeadReclaimMode gates this path — ModeOff falls through to
+	// 3.4 (strict/warn decide); ModeWarn logs and reclaims;
+	// ModeStrict (the default when unset) reclaims silently.
+	if cc.DeadReclaimMode != ModeOff &&
+		cc.IdentityAgentPID != 0 &&
+		cc.IsPIDAlive != nil &&
+		!cc.IsPIDAlive(cc.IdentityAgentPID) &&
+		cc.CWDMatches && cc.TmuxMatches {
+		if cc.reclaim != nil {
+			if err := cc.reclaim(); err != nil {
+				// Propagate: a failed reclaim must not be
+				// masked as "allow." Disk full / lock
+				// contention / perms are operational errors
+				// the caller needs to see.
+				return fmt.Errorf("auto-reclaim: %w", err)
 			}
-			return nil
+			if cc.reclaimedPtr != nil {
+				*cc.reclaimedPtr = true
+			}
 		}
+		if cc.DeadReclaimMode == ModeWarn && cc.warnLogger != nil {
+			cc.warnLogger.Warn("identity_guard_fire",
+				"guard", "dead_pid_auto_reclaim",
+				"reason", "dead_owner_reclaimed",
+				"expected_pid", cc.IdentityAgentPID,
+				"caller_pid", chainHead(cc.Chain),
+			)
+		}
+		return nil
 	}
 
 	// Step 3.4: no rescue clause matched. Either hard error
