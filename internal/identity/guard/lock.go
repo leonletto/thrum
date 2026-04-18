@@ -22,6 +22,9 @@ import (
 // writer routes through here.
 func AtomicWrite(path string, data []byte) (retErr error) {
 	dir := filepath.Dir(path)
+	// #nosec G304 -- AtomicWrite is an internal writer invoked only by
+	// thrum's own identity-file sites with paths derived from the repo
+	// layout, not from external input.
 	lock, err := os.Open(dir)
 	if err != nil {
 		return fmt.Errorf("open dir for lock: %w", err)
