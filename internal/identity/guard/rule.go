@@ -52,11 +52,23 @@ type CheckContext struct {
 	// process.IsRunning wrapper in production; tests inject a stub.
 	// Nil defaults to "assume alive" — the conservative branch, so
 	// a missing probe does not silently unlock auto-reclaim.
+	//
+	// Single-source liveness + PID recycling: kernel PIDs wrap, so a
+	// just-died agent's PID could theoretically be reassigned to a
+	// new unrelated process by the time step 3.3 fires. The
+	// CWD+TMUX match clause is the existing guard against this; a
+	// secondary liveness probe (procfs read, kqueue watcher) is
+	// tracked as a future hardening task (spec
+	// self-heal-cross-verify; see memory/project_state.md).
 	IsPIDAlive func(int) bool
 
 	// CWDMatches is true when the caller's working directory
 	// resolves to the same worktree the identity file was written
 	// for. False when the caller cd'd into a different worktree.
+	// Callers MUST realpath-canonicalize the compared paths before
+	// setting this field — symlink farms and worktree redirects
+	// produce string-level drift that would otherwise mis-flag
+	// legitimate owners (spec §Rule #4‴).
 	CWDMatches bool
 
 	// TmuxMatches is true when:
@@ -70,8 +82,8 @@ type CheckContext struct {
 
 	// reclaim is the side-effect hook invoked on the dead-PID
 	// reclaim path (step 3.3). Production wiring routes this
-	// through guard.WritePID (task 2.8); tests stub it to assert
-	// the reclaim fired.
+	// through guard.WritePID; tests stub it to assert the reclaim
+	// fired (or, via withReclaimFails, to assert error propagation).
 	reclaim func() error
 
 	// warnLogger receives structured events when a guard fires in

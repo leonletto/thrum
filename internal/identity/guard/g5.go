@@ -19,12 +19,23 @@ type PrimeContext struct {
 	IdentityPath string
 
 	// ClosestRtPID is the PID of the caller's closest runtime
-	// ancestor along the chain. Produced by
-	// guard.ClosestRuntimeAncestor in wire-up.
+	// ancestor along the chain. Callers MUST populate this by
+	// invoking guard.ClosestRuntimeAncestor(ctx, os.Getpid()) —
+	// passing a stale or wrong PID here silently defeats the
+	// ownership check. A dedicated wire-up wrapper is landing in
+	// Epic 4 (thrum-25gf) so CLI callers do not have to remember
+	// this discipline.
 	ClosestRtPID int
 
 	// IsPIDAlive probes whether a PID is still running. Nil
 	// defaults to "assume alive" — conservative.
+	//
+	// Same PID-recycling caveat as rule.go:IsPIDAlive applies: a
+	// single probe cannot distinguish "original owner exited" from
+	// "original owner's PID was reassigned to a fresh process." G5
+	// relies on the AgentPID==ClosestRtPID match being the
+	// exceptional path, not the fallthrough, to contain that risk;
+	// a secondary probe is tracked as future hardening.
 	IsPIDAlive func(int) bool
 
 	// WarnLogger receives structured events in ModeWarn.
