@@ -134,6 +134,7 @@ var knownRuntimes = []string{
 	"claude", "opencode", ".opencode", "aider", "codex",
 	"cursor-agent", "agent", // agent = Cursor
 	"gemini", "auggie", "amp",
+	"kiro-cli", // Amazon Kiro CLI; canonical display name "kiro"
 }
 
 // runtimeDisplayName maps ambiguous binary names to canonical runtime names.
@@ -141,6 +142,7 @@ var runtimeDisplayName = map[string]string{
 	"cursor-agent": "cursor",
 	"agent":        "cursor",
 	".opencode":    "opencode",
+	"kiro-cli":     "kiro",
 }
 
 // FindClaudeAncestor walks the process tree from the current process
