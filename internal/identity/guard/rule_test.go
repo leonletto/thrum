@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 )
 
@@ -30,6 +31,14 @@ func withIdentityAgentPID(pid int) ruleOpt {
 func withCWDMatch(b bool) ruleOpt   { return func(r *testRuleCtx) { r.cc.CWDMatches = b } }
 func withTmuxMatch(b bool) ruleOpt  { return func(r *testRuleCtx) { r.cc.TmuxMatches = b } }
 func withMode(m Mode) ruleOpt       { return func(r *testRuleCtx) { r.cc.Mode = m } }
+func withDeadReclaimMode(m Mode) ruleOpt {
+	return func(r *testRuleCtx) { r.cc.DeadReclaimMode = m }
+}
+func withReclaimFails(err error) ruleOpt {
+	return func(r *testRuleCtx) {
+		r.cc.reclaim = func() error { return err }
+	}
+}
 func withPIDAlive(pid int, alive bool) ruleOpt {
 	return func(r *testRuleCtx) {
 		prior := r.cc.IsPIDAlive
@@ -158,6 +167,69 @@ func TestRule_WarnMode_LogsButProceeds(t *testing.T) {
 	}
 	if !ctx.warnLogged {
 		t.Error("expected warn log")
+	}
+}
+
+func TestRule_DeadPIDAutoReclaimOff_FallsThroughToStrict(t *testing.T) {
+	// When dead_pid_auto_reclaim is disabled, a dead owner with
+	// CWD+TMUX match must NOT be auto-reclaimed — it falls through
+	// to step 3.4's strict hard error.
+	ctx := newTestCtx(t,
+		withClosestRuntime(100, "claude"),
+		withChain([]int{100}),
+		withIdentityAgentPID(999),
+		withPIDAlive(999, false),
+		withCWDMatch(true),
+		withTmuxMatch(true),
+		withDeadReclaimMode(ModeOff),
+	)
+	err := ctx.runRule()
+	if err == nil {
+		t.Fatal("want error (reclaim disabled → 3.4 strict)")
+	}
+	if ctx.reclaimed {
+		t.Error("reclaim must not fire when DeadReclaimMode=off")
+	}
+}
+
+func TestRule_DeadPIDAutoReclaimWarn_LogsAndReclaims(t *testing.T) {
+	ctx := newTestCtx(t,
+		withClosestRuntime(100, "claude"),
+		withChain([]int{100}),
+		withIdentityAgentPID(999),
+		withPIDAlive(999, false),
+		withCWDMatch(true),
+		withTmuxMatch(true),
+		withDeadReclaimMode(ModeWarn),
+	)
+	if err := ctx.runRule(); err != nil {
+		t.Fatalf("warn reclaim should proceed, got %v", err)
+	}
+	if !ctx.reclaimed {
+		t.Error("reclaim should still fire in warn mode")
+	}
+	if !strings.Contains(ctx.warnBuf.String(), "dead_pid_auto_reclaim") {
+		t.Errorf("warn mode should emit slog event; got %q", ctx.warnBuf.String())
+	}
+}
+
+func TestRule_ReclaimError_PropagatesUnderStrict(t *testing.T) {
+	// A failed reclaim (disk full, lock contention, perms) must
+	// not silently fall through to "allow." Propagate the error
+	// so the caller surfaces the failure rather than the agent
+	// running with a stale identity file.
+	ctx := newTestCtx(t,
+		withClosestRuntime(100, "claude"),
+		withChain([]int{100}),
+		withIdentityAgentPID(999),
+		withPIDAlive(999, false),
+		withCWDMatch(true),
+		withTmuxMatch(true),
+		withReclaimFails(errors.New("disk full")),
+	)
+	err := ctx.runRule()
+	if err == nil {
+		t.Fatal("want error when reclaim fails")
 	}
 }
 
