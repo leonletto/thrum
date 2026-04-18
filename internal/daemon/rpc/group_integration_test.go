@@ -28,6 +28,7 @@ func setupGroupIntegrationTest(t *testing.T) (
 	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
 		t.Fatalf("create .thrum dir: %v", err)
 	}
+	writeGuardOffConfig(t, tmpDir)
 
 	repoID := "r_GROUP_INTEG"
 	var err error

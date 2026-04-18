@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,9 +16,11 @@ import (
 
 	"github.com/leonletto/thrum/internal/config"
 	agentcontext "github.com/leonletto/thrum/internal/context"
+	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/gitctx"
 	"github.com/leonletto/thrum/internal/identity"
+	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/jsonl"
 	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/types"
@@ -419,37 +422,44 @@ func (h *AgentHandler) HandleWhoami(ctx context.Context, params json.RawMessage)
 	var role, module, agentName string
 	source := "identity_file"
 
-	if req.CallerAgentID != "" {
-		// Use caller-provided identity (worktree-aware)
-		agentID = req.CallerAgentID
+	resolved, peercredRan := peercred.FromContext(ctx)
+	dreq := guard.DaemonResolveRequest{
+		CallerAgentID: req.CallerAgentID,
+		PeercredRan:   peercredRan,
+	}
+	if resolved != nil {
+		dreq.PeercredAgentID = resolved.AgentID
+	}
+	connPID, _ := peercred.ConnectingPIDFromContext(ctx)
+	dreq.ConnectingPID = connPID
+	dreq.IdentitiesDir = identitiesDirFor(h.state.RepoPath())
+	caller, err := guard.DaemonResolve(ctx, loadDaemonGuardConfig(h.state.RepoPath()), dreq, slog.Default())
+	if err != nil {
+		return nil, fmt.Errorf("resolve identity: %w", err)
+	}
+	if caller.AgentID == "" {
+		return nil, fmt.Errorf("resolve identity: no CallerAgentID and no peercred identity")
+	}
+	agentID = caller.AgentID
+	if resolved != nil && resolved.AgentID == agentID {
+		source = "peercred"
+	} else if req.CallerAgentID != "" {
 		source = "caller"
+	}
 
-		// Look up role/module from the agents table
-		h.state.RLock()
-		var dbRole, dbModule sql.NullString
-		_ = h.state.DB().QueryRowContext(ctx, "SELECT role, module FROM agents WHERE agent_id = ?", agentID).Scan(&dbRole, &dbModule)
-		h.state.RUnlock()
-		if dbRole.Valid {
-			role = dbRole.String
-		}
-		if dbModule.Valid {
-			module = dbModule.String
-		}
-	} else {
-		// Fallback: resolve from daemon's config
-		log.Printf("WARNING: CallerAgentID not provided in whoami request, falling back to daemon repo path: %s (CLI should resolve identity)", h.state.RepoPath())
-		cfg, err := config.LoadWithPath(h.state.RepoPath(), "", "")
-		if err != nil {
-			return nil, fmt.Errorf("resolve identity: %w", err)
-		}
-		agentID = identity.GenerateAgentID(h.state.RepoID(), cfg.Agent.Role, cfg.Agent.Module, cfg.Agent.Name)
-		role = cfg.Agent.Role
-		module = cfg.Agent.Module
-		agentName = cfg.Agent.Name
-
-		if os.Getenv("THRUM_ROLE") != "" || os.Getenv("THRUM_MODULE") != "" {
-			source = "environment"
-		}
+	// Look up role/module/display from the agents table.
+	h.state.RLock()
+	var dbRole, dbModule, dbDisplay sql.NullString
+	_ = h.state.DB().QueryRowContext(ctx, "SELECT role, module, display FROM agents WHERE agent_id = ?", agentID).Scan(&dbRole, &dbModule, &dbDisplay)
+	h.state.RUnlock()
+	if dbRole.Valid {
+		role = dbRole.String
+	}
+	if dbModule.Valid {
+		module = dbModule.String
+	}
+	if dbDisplay.Valid {
+		agentName = dbDisplay.String
 	}
 
 	// Check for active session for this agent
@@ -1228,12 +1238,32 @@ func (h *AgentHandler) HandleSetAgentStatus(ctx context.Context, params json.Raw
 		return nil, fmt.Errorf("find agent %s: %w", req.Agent, err)
 	}
 
+	// G4: refuse writes targeting a dead agent's identity file.
+	// Mode is loaded from the agent's own .thrum/config.json (the
+	// worktree the identity lives under), matching where the agent's
+	// other guard decisions anchor. AgentPID=0 means the agent has not
+	// been primed yet; G4 applies to dead-after-alive transitions, not
+	// pre-prime, so skip the gate for zero PIDs.
+	idDir := filepath.Dir(idPath)
+	thrumDir := filepath.Dir(idDir) // identities dir is inside .thrum
+	if idFile.AgentPID != 0 {
+		mode := guard.ConfigForIdentityDir(idDir).DaemonWriterLiveness
+		if mode == "" {
+			mode = guard.ModeStrict
+		}
+		if gErr := guard.G4(&guard.WriterContext{
+			Mode:       mode,
+			SubjectPID: idFile.AgentPID,
+			IsPIDAlive: func(pid int) bool { return process.IsRunning(pid) },
+		}); gErr != nil {
+			return nil, fmt.Errorf("set-status refused for %s: %w", req.Agent, gErr)
+		}
+	}
+
 	idFile.AgentStatus = req.Status
 	idFile.AgentStatusUpdatedAt = time.Now().UTC()
 
 	// Save back to the same directory the file was found in
-	idDir := filepath.Dir(idPath)
-	thrumDir := filepath.Dir(idDir) // identities dir is inside .thrum
 	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
 		return nil, fmt.Errorf("save identity for %s: %w", req.Agent, err)
 	}

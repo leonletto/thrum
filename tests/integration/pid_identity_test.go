@@ -187,8 +187,8 @@ func TestPIDIdentity_RegisterWithPID(t *testing.T) {
 	if len(listResult.Agents) != 1 {
 		t.Fatalf("expected 1 agent, got %d", len(listResult.Agents))
 	}
-	if listResult.Agents[0].ClaudePID != os.Getpid() {
-		t.Errorf("expected claude_pid=%d, got %d", os.Getpid(), listResult.Agents[0].ClaudePID)
+	if listResult.Agents[0].AgentPID != os.Getpid() {
+		t.Errorf("expected claude_pid=%d, got %d", os.Getpid(), listResult.Agents[0].AgentPID)
 	}
 }
 
@@ -253,8 +253,8 @@ func TestPIDIdentity_ReRegisterUpdatesPID(t *testing.T) {
 	if len(listResult.Agents) != 1 {
 		t.Fatalf("expected 1 agent, got %d", len(listResult.Agents))
 	}
-	if listResult.Agents[0].ClaudePID != os.Getpid() {
-		t.Errorf("expected updated claude_pid=%d, got %d", os.Getpid(), listResult.Agents[0].ClaudePID)
+	if listResult.Agents[0].AgentPID != os.Getpid() {
+		t.Errorf("expected updated claude_pid=%d, got %d", os.Getpid(), listResult.Agents[0].AgentPID)
 	}
 }
 
@@ -295,8 +295,8 @@ func TestPIDIdentity_DeadPIDReclaim(t *testing.T) {
 	found := false
 	for _, agent := range listResult.Agents {
 		if agent.AgentID == result2.AgentID {
-			if agent.ClaudePID != os.Getpid() {
-				t.Errorf("expected updated claude_pid=%d, got %d", os.Getpid(), agent.ClaudePID)
+			if agent.AgentPID != os.Getpid() {
+				t.Errorf("expected updated claude_pid=%d, got %d", os.Getpid(), agent.AgentPID)
 			}
 			found = true
 			break

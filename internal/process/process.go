@@ -70,6 +70,30 @@ func IsClaudeProcess(ctx context.Context, pid int) bool {
 	return matchRuntimeName(processName(ctx, pid), "claude")
 }
 
+// RuntimeName returns the canonical runtime name for a given PID
+// (e.g. "claude", "codex", "cursor", "opencode"), or "" if the process
+// is not a known runtime. Canonicalization applies runtimeDisplayName
+// so both "cursor-agent" and "agent" collapse to "cursor", and
+// ".opencode" collapses to "opencode".
+func RuntimeName(ctx context.Context, pid int) string {
+	if pid <= 0 {
+		return ""
+	}
+	name := processName(ctx, pid)
+	if name == "" {
+		return ""
+	}
+	for _, rt := range knownRuntimes {
+		if matchRuntimeName(name, rt) {
+			if mapped, ok := runtimeDisplayName[rt]; ok {
+				return mapped
+			}
+			return rt
+		}
+	}
+	return ""
+}
+
 // IsRuntimeProcess checks if the given PID belongs to a process matching
 // the specified runtime binary name. If runtime is empty, checks all known runtimes.
 func IsRuntimeProcess(ctx context.Context, pid int, runtime string) bool {
@@ -110,6 +134,7 @@ var knownRuntimes = []string{
 	"claude", "opencode", ".opencode", "aider", "codex",
 	"cursor-agent", "agent", // agent = Cursor
 	"gemini", "auggie", "amp",
+	"kiro-cli", // Amazon Kiro CLI; canonical display name "kiro"
 }
 
 // runtimeDisplayName maps ambiguous binary names to canonical runtime names.
@@ -117,6 +142,7 @@ var runtimeDisplayName = map[string]string{
 	"cursor-agent": "cursor",
 	"agent":        "cursor",
 	".opencode":    "opencode",
+	"kiro-cli":     "kiro",
 }
 
 // FindClaudeAncestor walks the process tree from the current process
@@ -149,13 +175,26 @@ func processName(ctx context.Context, pid int) string {
 	return strings.TrimSpace(string(out))
 }
 
-// parentPID returns the parent PID of a process via ps.
-func parentPID(ctx context.Context, pid int) int {
+// ParentPID returns the parent PID of the given process. Errors from ps
+// (dead process, timeout, platform unsupported) are surfaced so callers
+// walking an ancestor chain can distinguish "reached init (ppid=1)" from
+// "lookup failed.".
+func ParentPID(ctx context.Context, pid int) (int, error) {
 	out, err := runPS(ctx, "-p", fmt.Sprintf("%d", pid), "-o", "ppid=")
 	if err != nil {
-		return 0
+		return 0, err
 	}
 	ppid, err := strconv.Atoi(strings.TrimSpace(string(out)))
+	if err != nil {
+		return 0, fmt.Errorf("parse ppid: %w", err)
+	}
+	return ppid, nil
+}
+
+// parentPID is the legacy, error-swallowing variant retained for
+// callers that treat lookup failures as "give up and return 0.".
+func parentPID(ctx context.Context, pid int) int {
+	ppid, err := ParentPID(ctx, pid)
 	if err != nil {
 		return 0
 	}

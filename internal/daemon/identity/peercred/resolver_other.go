@@ -18,3 +18,10 @@ func NewResolver(_ AgentLister) Resolver {
 func (r *stubResolver) Resolve(_ net.Conn) (*ResolvedIdentity, error) {
 	return nil, ErrAnonymous
 }
+
+// PIDFromConn is a stub on non-unix platforms where kernel peer credentials
+// are unavailable. Always returns (0, ErrAnonymous) so callers treat the
+// connection as anonymous.
+func PIDFromConn(_ net.Conn) (int, error) {
+	return 0, ErrAnonymous
+}

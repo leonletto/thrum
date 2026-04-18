@@ -5,12 +5,15 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
+	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/groups"
 	"github.com/leonletto/thrum/internal/identity"
+	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/types"
 )
 
@@ -139,6 +142,34 @@ type GroupMembersResponse struct {
 	Expanded []string      `json:"expanded,omitempty"`
 }
 
+// resolveGroupCaller authenticates the caller for group-mutation RPCs
+// via guard.DaemonResolve. In strict mode (default) the guard refuses
+// unauthenticated requests up front; in warn/off mode (explicit opt-out
+// or migration window) an empty AgentID is preserved as the legacy
+// "system" label so audit fields stay populated rather than aborting
+// the RPC — the enforcement decision was already made at the guard level.
+func (h *GroupHandler) resolveGroupCaller(ctx context.Context, callerAgentID string) (string, error) {
+	resolved, peercredRan := peercred.FromContext(ctx)
+	req := guard.DaemonResolveRequest{
+		CallerAgentID: callerAgentID,
+		PeercredRan:   peercredRan,
+	}
+	if resolved != nil {
+		req.PeercredAgentID = resolved.AgentID
+	}
+	connPID, _ := peercred.ConnectingPIDFromContext(ctx)
+	req.ConnectingPID = connPID
+	req.IdentitiesDir = identitiesDirFor(h.state.RepoPath())
+	caller, err := guard.DaemonResolve(ctx, loadDaemonGuardConfig(h.state.RepoPath()), req, slog.Default())
+	if err != nil {
+		return "", err
+	}
+	if caller.AgentID == "" {
+		return "system", nil
+	}
+	return caller.AgentID, nil
+}
+
 // -- Handlers --
 
 // HandleCreate handles the group.create RPC method.
@@ -163,12 +194,12 @@ func (h *GroupHandler) HandleCreate(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("group %q already exists", req.Name)
 	}
 
+	createdBy, err := h.resolveGroupCaller(ctx, req.CallerAgentID)
+	if err != nil {
+		return nil, err
+	}
 	groupID := identity.GenerateGroupID()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	createdBy := req.CallerAgentID
-	if createdBy == "" {
-		createdBy = "system"
-	}
 
 	event := types.GroupCreateEvent{
 		Type:        "group.create",
@@ -222,11 +253,11 @@ func (h *GroupHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("query group: %w", err)
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	deletedBy := req.CallerAgentID
-	if deletedBy == "" {
-		deletedBy = "system"
+	deletedBy, err := h.resolveGroupCaller(ctx, req.CallerAgentID)
+	if err != nil {
+		return nil, err
 	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	event := types.GroupDeleteEvent{
 		Type:      "group.delete",
@@ -366,11 +397,11 @@ func (h *GroupHandler) HandleMemberAdd(ctx context.Context, params json.RawMessa
 		h.state.RUnlock()
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	addedBy := req.CallerAgentID
-	if addedBy == "" {
-		addedBy = "system"
+	addedBy, err := h.resolveGroupCaller(ctx, req.CallerAgentID)
+	if err != nil {
+		return nil, err
 	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	event := types.GroupMemberAddEvent{
 		Type:        "group.member.add",
@@ -427,11 +458,11 @@ func (h *GroupHandler) HandleMemberRemove(ctx context.Context, params json.RawMe
 		return nil, fmt.Errorf("query group: %w", err)
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	removedBy := req.CallerAgentID
-	if removedBy == "" {
-		removedBy = "system"
+	removedBy, err := h.resolveGroupCaller(ctx, req.CallerAgentID)
+	if err != nil {
+		return nil, err
 	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	event := types.GroupMemberRemoveEvent{
 		Type:        "group.member.remove",

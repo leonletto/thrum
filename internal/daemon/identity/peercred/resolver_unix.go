@@ -77,6 +77,24 @@ func (r *unixResolver) Resolve(conn net.Conn) (*ResolvedIdentity, error) {
 	}, nil
 }
 
+// PIDFromConn extracts the connecting process PID via kernel peer
+// credentials, independent of identity resolution. Separated from Resolve
+// so the server can plumb the PID into the request context even when
+// Resolve returns ErrAnonymous — guard checks require the PID to walk the
+// ancestor chain, and waiting for identity resolution would lose that
+// information on anonymous callers.
+func PIDFromConn(conn net.Conn) (int, error) {
+	creds, err := tspeer.Get(conn)
+	if err != nil {
+		return 0, fmt.Errorf("peercred: get peer credentials: %w", err)
+	}
+	pid, ok := creds.PID()
+	if !ok || pid == 0 {
+		return 0, fmt.Errorf("%w: no PID in peer credentials", ErrAnonymous)
+	}
+	return pid, nil
+}
+
 // processCWD returns the current working directory of the process with the
 // given PID. Returns an error if the process no longer exists.
 func processCWD(pid int) (string, error) {

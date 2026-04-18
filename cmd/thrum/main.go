@@ -37,7 +37,9 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
+	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/paths"
+	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/restart"
 	"github.com/leonletto/thrum/internal/runtime"
 	"github.com/leonletto/thrum/internal/subscriptions"
@@ -67,6 +69,17 @@ var (
 )
 
 func main() {
+	rootCmd := buildRootCmd()
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// buildRootCmd assembles the full cobra command tree and returns the
+// root. Extracted from main() so tests (command_categories_test.go)
+// can walk the tree and enforce the guard-category taxonomy.
+func buildRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "thrum",
 		Short: "Git-backed agent messaging",
@@ -164,10 +177,13 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(restartCmd())
 	rootCmd.AddCommand(worktreeCmd())
 
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+	// Apply guard-category annotations to every leaf command under
+	// rootCmd. See command_categories.go for the per-path mapping +
+	// categorization rationale; command_categories_test.go walks this
+	// same tree in-test and fails if any leaf is missing a category.
+	tagGuardCategories(rootCmd)
+
+	return rootCmd
 }
 
 // Placeholder commands - will be implemented in subsequent tasks
@@ -205,6 +221,26 @@ Examples:
 			// Validate runtime flag if specified
 			if runtimeFlag != "" && !runtime.IsValidRuntime(runtimeFlag) {
 				return fmt.Errorf("unknown runtime %q; supported: %s", runtimeFlag, strings.Join(runtime.SupportedRuntimes(), ", "))
+			}
+
+			// Identity Guard G2: refuse `thrum init` from a non-git
+			// directory unless --force is set. This closes the footgun
+			// where `init` silently materialized .thrum/ under $HOME
+			// with nonsense supervisor slugs. We only fire the check in
+			// full-init mode (skipped for --skills-only, which does not
+			// create .thrum/).
+			if !skillsOnly {
+				initDir := flagRepo
+				if initDir == "" {
+					initDir = "."
+				}
+				resolvedDir, err := filepath.Abs(initDir)
+				if err != nil {
+					resolvedDir = initDir
+				}
+				if err := guard.G2(loadInitBootstrapMode(resolvedDir), resolvedDir, force, nil); err != nil {
+					return err
+				}
 			}
 
 			// Skills-only mode: install thrum skill without full init
@@ -411,7 +447,7 @@ Examples:
 
 			// Start daemon if not already running
 			if _, err := getClient(); err != nil {
-				if startErr := cli.DaemonStart(flagRepo, false); startErr != nil && !strings.Contains(startErr.Error(), "already running") {
+				if startErr := cli.DaemonStart(flagRepo, false, false); startErr != nil && !strings.Contains(startErr.Error(), "already running") {
 					fmt.Fprintf(os.Stderr, "Warning: could not auto-start daemon: %v\n", startErr)
 					fmt.Println("Start manually: thrum daemon start")
 				} else if !flagQuiet {
@@ -1211,6 +1247,7 @@ Exit codes:
 
 func daemonCmd() *cobra.Command {
 	var flagLocal bool
+	var flagForce bool
 
 	cmd := &cobra.Command{
 		Use:   "daemon",
@@ -1219,12 +1256,14 @@ func daemonCmd() *cobra.Command {
 
 	cmd.PersistentFlags().BoolVar(&flagLocal, "local", false,
 		"Local-only mode: skip git push/fetch in sync loop")
+	cmd.PersistentFlags().BoolVar(&flagForce, "force", false,
+		"Proceed even when the repo directory is not git-anchored (G2 override)")
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "start",
 		Short: "Start the daemon in the background",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := cli.DaemonStart(flagRepo, flagLocal); err != nil {
+			if err := cli.DaemonStart(flagRepo, flagLocal, flagForce); err != nil {
 				return err
 			}
 
@@ -1290,7 +1329,7 @@ func daemonCmd() *cobra.Command {
 		Use:   "restart",
 		Short: "Restart the daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := cli.DaemonRestart(flagRepo, flagLocal); err != nil {
+			if err := cli.DaemonRestart(flagRepo, flagLocal, flagForce); err != nil {
 				return err
 			}
 
@@ -1306,7 +1345,7 @@ func daemonCmd() *cobra.Command {
 		},
 	})
 
-	cmd.AddCommand(daemonRunCmd(&flagLocal))
+	cmd.AddCommand(daemonRunCmd(&flagLocal, &flagForce))
 	cmd.AddCommand(daemonLogsCmd())
 	// Old tsync/peers commands removed — replaced by top-level "thrum peer" commands
 
@@ -1351,13 +1390,13 @@ they are written. Use --since to filter by timestamp (e.g. "1h", "7d",
 	return cmd
 }
 
-func daemonRunCmd(flagLocal *bool) *cobra.Command {
+func daemonRunCmd(flagLocal *bool, flagForce *bool) *cobra.Command {
 	return &cobra.Command{
 		Use:    "run",
 		Short:  "Run the daemon in the foreground (internal use)",
 		Hidden: true, // Hidden from help - used internally by daemon start
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDaemon(flagRepo, *flagLocal)
+			return runDaemon(flagRepo, *flagLocal, *flagForce)
 		},
 	}
 }
@@ -3664,6 +3703,56 @@ Examples:
 	return cmd
 }
 
+// loadInitBootstrapMode returns the NonGitBootstrap guard mode for
+// the init dir, falling back to strict when config is absent or the
+// field is unset. In the non-git-bootstrap scenario the config file
+// typically doesn't exist yet, so the fallback path is the common
+// case.
+func loadInitBootstrapMode(dir string) guard.Mode {
+	m := guard.LoadConfigFromDir(dir).NonGitBootstrap
+	if m == "" {
+		return guard.ModeStrict
+	}
+	return m
+}
+
+// resolvePrimeIdentityPath resolves the on-disk identity file path for
+// the current agent and returns the closest-runtime PID plus the
+// stored AgentPID so the caller can compare before writing. Returns
+// ok=false when the agent has no identity file yet (first-prime) —
+// G5 + WritePID are no-ops in that case.
+func resolvePrimeIdentityPath(agentID string) (repoPath, idPath string, runtimePID, storedPID int, ok bool) {
+	repoPath = paths.EffectiveRepoPath(".")
+	idPath = filepath.Join(repoPath, ".thrum", "identities", agentID+".json")
+	// #nosec G304 -- idPath is derived from the agent's own identity dir.
+	data, err := os.ReadFile(idPath)
+	if err != nil {
+		return repoPath, "", 0, 0, false
+	}
+	var id config.IdentityFile
+	if err := json.Unmarshal(data, &id); err != nil {
+		// Corrupted file — let G5's own load path surface the error.
+		storedPID = 0
+	} else {
+		storedPID = id.AgentPID
+	}
+	ctx := context.Background()
+	rtPID, _, _ := guard.ClosestRuntimeAncestor(ctx, os.Getpid())
+	return repoPath, idPath, rtPID, storedPID, true
+}
+
+// loadPrimeOwnershipMode returns the PrimeOwnership guard mode for
+// repoPath, falling back to strict when config is absent or the field
+// is unset. Guard enforcement defaults on, not off, on malformed
+// config.
+func loadPrimeOwnershipMode(repoPath string) guard.Mode {
+	m := guard.LoadConfigFromDir(repoPath).PrimeOwnership
+	if m == "" {
+		return guard.ModeStrict
+	}
+	return m
+}
+
 func primeCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "prime",
@@ -3697,6 +3786,34 @@ Examples:
 			if err != nil {
 				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
 			}
+
+			// Identity Guard G5 (prime_ownership): refuse if the caller
+			// is not the topmost runtime that owns the identity file.
+			// Dead/absent owners pass through so a first-prime or an
+			// orphaned-agent reclaim can proceed. When the closest
+			// runtime differs from the stored PID and the stored PID is
+			// dead, guard.WritePID refreshes the identity atomically.
+			if repoPath, idPath, runtimePID, storedPID, ok := resolvePrimeIdentityPath(agentID); ok {
+				pc := &guard.PrimeContext{
+					Mode:         loadPrimeOwnershipMode(repoPath),
+					IdentityPath: idPath,
+					ClosestRtPID: runtimePID,
+					IsPIDAlive:   process.IsRunning,
+				}
+				if err := guard.G5(pc); err != nil {
+					return err
+				}
+				// Only write when the stored PID diverged from the
+				// current runtime — unconditional writes on every
+				// prime inflate mtime and risk lock contention with
+				// concurrent agents in the same repo.
+				if runtimePID > 0 && runtimePID != storedPID {
+					if err := guard.WritePID(idPath, runtimePID); err != nil {
+						fmt.Fprintf(os.Stderr, "thrum: prime WritePID failed: %v\n", err)
+					}
+				}
+			}
+
 			result := cli.ContextPrime(client, agentID)
 
 			// Wire SingleAgentMode from config
@@ -4578,11 +4695,21 @@ func resolveLocalMentionRole() (string, error) {
 }
 
 // runDaemon runs the daemon server in the foreground.
-func runDaemon(repoPath string, flagLocal bool) error {
+func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// Resolve to absolute path
 	absPath, err := filepath.Abs(repoPath)
 	if err != nil {
 		return fmt.Errorf("failed to resolve repo path: %w", err)
+	}
+
+	// Identity Guard G2: refuse to start the daemon from a non-git
+	// directory unless --force is set. Closes the same footgun as
+	// `thrum init` G2 — prevents the daemon from anchoring to an
+	// arbitrary cwd (e.g. $HOME) and materializing a .thrum/ there.
+	// Mode is loaded from the repo's identity_guard.non_git_bootstrap
+	// config; strict is the default when unset.
+	if err := guardDaemonBootstrap(absPath, flagForce, nil); err != nil {
+		return err
 	}
 
 	// Resolve effective .thrum/ directory (follows redirect if in feature worktree)
@@ -6211,7 +6338,7 @@ func runBackupRestore(dirOverride, archivePath string, skipConfirm bool) error {
 
 	// Restart daemon if it was running before restore
 	if daemonWasRunning {
-		if restartErr := cli.DaemonRestart(flagRepo, cfg.Daemon.LocalOnly); restartErr != nil {
+		if restartErr := cli.DaemonRestart(flagRepo, cfg.Daemon.LocalOnly, false); restartErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not restart daemon: %v\n", restartErr)
 			fmt.Println("Restart manually: thrum daemon start")
 		} else {
@@ -6533,7 +6660,7 @@ func runTelegramConfigure(token, target, userID string, skipConfirm bool, allowF
 
 	// Path 3: Auto-pair flow
 	fmt.Println("\nStarting daemon with new config...")
-	if err := cli.DaemonRestart(flagRepo, false); err != nil {
+	if err := cli.DaemonRestart(flagRepo, false, false); err != nil {
 		return fmt.Errorf("daemon restart: %w", err)
 	}
 	fmt.Println("Daemon restarted")

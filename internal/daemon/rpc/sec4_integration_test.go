@@ -164,7 +164,7 @@ func TestSec4_ForgedCallerOnDelete_Rejected(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, delResp.Error, "forged caller on delete must be rejected")
-	require.Contains(t, delResp.Error.Message, "identity mismatch",
+	require.Contains(t, delResp.Error.Message, "identity_mismatch",
 		"forged-claim rejection happens in resolveAgentAndSession before the author check")
 
 	// Prove the message survives.

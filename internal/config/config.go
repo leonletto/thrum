@@ -190,17 +190,18 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 		return nil, fmt.Errorf("no identity files found")
 	}
 
-	// Compute agent PID once for all resolution paths
+	// Compute agent PID once for PID-first resolution. We DO NOT
+	// mutate identity files from this load path anymore — PID writes
+	// now route exclusively through guard.WritePID on
+	// prime/quickstart/refresh (Rule #4‴ auto-reclaim). The former
+	// adoptIdentity helper was the second PID-write footgun because
+	// it silently rewrote files during a read-only lookup.
 	agentPID, _ := process.FindClaudeAncestor(context.Background())
 
 	// If exactly one identity file, load it (solo-agent worktree)
 	if len(jsonFiles) == 1 {
 		identityPath := filepath.Join(dirPath, jsonFiles[0])
-		id, err := loadIdentityFile(identityPath)
-		if err != nil {
-			return nil, err
-		}
-		return adoptIdentity(dirPath, id, agentPID), nil
+		return loadIdentityFile(identityPath)
 	}
 
 	// Load all identities for multi-pass resolution
@@ -219,7 +220,7 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 	if agentPID > 0 {
 		for _, id := range identities {
 			if id.AgentPID == agentPID && process.IsRunning(agentPID) {
-				return adoptIdentity(dirPath, id, agentPID), nil
+				return id, nil
 			}
 		}
 	}
@@ -234,7 +235,7 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 			}
 		}
 		if len(matches) == 1 {
-			return adoptIdentity(dirPath, matches[0], agentPID), nil
+			return matches[0], nil
 		}
 		if len(matches) > 1 {
 			best := matches[0]
@@ -243,32 +244,13 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 					best = m
 				}
 			}
-			return adoptIdentity(dirPath, best, agentPID), nil
+			return best, nil
 		}
 		// Zero matches: fall through to generic error
 	}
 
 	return nil, fmt.Errorf("cannot auto-select identity: %d identity files found in .thrum/identities/\n  Hint: set THRUM_NAME=<name> to select one, or run from the correct worktree\n  Available: %s",
 		len(jsonFiles), strings.Join(available, ", "))
-}
-
-// adoptIdentity updates the identity's AgentPID if the current session should claim it.
-// Returns the identity unchanged if no adoption is needed.
-func adoptIdentity(dirPath string, id *IdentityFile, agentPID int) *IdentityFile {
-	if agentPID <= 0 || id.AgentPID == agentPID {
-		return id // No adoption needed
-	}
-	if id.AgentPID == 0 || !process.IsRunning(id.AgentPID) {
-		// Dead or missing PID — silently adopt
-		id.AgentPID = agentPID
-		_ = SaveIdentityFile(filepath.Dir(dirPath), id) // best-effort rewrite; dirPath is identities dir, SaveIdentityFile expects .thrum dir
-	} else if !process.IsRuntimeProcess(context.Background(), id.AgentPID, id.Runtime) {
-		// Alive but not a known runtime — adopt
-		id.AgentPID = agentPID
-		_ = SaveIdentityFile(filepath.Dir(dirPath), id)
-	}
-	// If alive + runtime match + different PID → genuine conflict, don't adopt
-	return id
 }
 
 // detectCurrentWorktree returns the current git worktree name, or "" if detection fails.

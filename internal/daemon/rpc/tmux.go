@@ -16,6 +16,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/permission"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
+	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/restart"
 	trt "github.com/leonletto/thrum/internal/runtime"
@@ -678,6 +679,9 @@ func (h *TmuxHandler) writeTmuxToIdentity(sessionName, target, runtime string) {
 			if idFile.TmuxSession != "" {
 				sess, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
 				if sess == sessionName {
+					if gErr := h.checkWriterLiveness(idFile.AgentPID); gErr != nil {
+						return
+					}
 					idFile.TmuxSession = target
 					idFile.Runtime = runtime
 					_ = config.SaveIdentityFile(filepath.Dir(identitiesDir), &idFile)
@@ -694,10 +698,39 @@ func (h *TmuxHandler) writeTmuxToIdentity(sessionName, target, runtime string) {
 	}
 	// Fallback: match by agent name (first launch, no tmux_session yet)
 	if nameMatch != nil {
+		if gErr := h.checkWriterLiveness(nameMatch.AgentPID); gErr != nil {
+			return
+		}
 		nameMatch.TmuxSession = target
 		nameMatch.Runtime = runtime
 		_ = config.SaveIdentityFile(filepath.Dir(nameMatchDir), nameMatch)
 	}
+}
+
+// checkWriterLiveness gates a daemon-side identity mutation through G4.
+// Writes are refused when the subject agent's PID has exited. The daemon
+// only writes through this path for locally-managed agents; cross-daemon
+// mirror writes arrive via event replay elsewhere, so OriginDaemon is
+// left unset (treated as "local") and liveness is always checked.
+// Returns nil to proceed, *guard.Error to abort.
+func (h *TmuxHandler) checkWriterLiveness(subjectPID int) error {
+	// AgentPID=0 means the agent has not been primed yet; G4 applies to
+	// dead-after-alive state transitions, not pre-prime. Skip the gate
+	// so first-launch tmux wire-up still works.
+	if subjectPID == 0 {
+		return nil
+	}
+	// TmuxHandler.thrumDir is the .thrum directory itself; identitiesDir
+	// under it provides the anchor guardConfigForIdentityDir expects.
+	mode := guard.ConfigForIdentityDir(filepath.Join(h.thrumDir, "identities")).DaemonWriterLiveness
+	if mode == "" {
+		mode = guard.ModeStrict
+	}
+	return guard.G4(&guard.WriterContext{
+		Mode:       mode,
+		SubjectPID: subjectPID,
+		IsPIDAlive: func(pid int) bool { return process.IsRunning(pid) },
+	})
 }
 
 // clearTmuxFromIdentities removes tmux_session and runtime from identity files
