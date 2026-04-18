@@ -1231,12 +1231,29 @@ func (h *AgentHandler) HandleSetAgentStatus(ctx context.Context, params json.Raw
 		return nil, fmt.Errorf("find agent %s: %w", req.Agent, err)
 	}
 
+	// G4: refuse writes targeting a dead agent's identity file.
+	// Mode is loaded from the agent's own .thrum/config.json (the
+	// worktree the identity lives under), matching where the agent's
+	// other guard decisions anchor.
+	idDir := filepath.Dir(idPath)
+	thrumDir := filepath.Dir(idDir) // identities dir is inside .thrum
+	repoDir := filepath.Dir(thrumDir)
+	mode := guard.LoadConfigFromDir(repoDir).DaemonWriterLiveness
+	if mode == "" {
+		mode = guard.ModeStrict
+	}
+	if gErr := guard.G4(&guard.WriterContext{
+		Mode:       mode,
+		SubjectPID: idFile.AgentPID,
+		IsPIDAlive: func(pid int) bool { return process.IsRunning(pid) },
+	}); gErr != nil {
+		return nil, fmt.Errorf("set-status refused for %s: %w", req.Agent, gErr)
+	}
+
 	idFile.AgentStatus = req.Status
 	idFile.AgentStatusUpdatedAt = time.Now().UTC()
 
 	// Save back to the same directory the file was found in
-	idDir := filepath.Dir(idPath)
-	thrumDir := filepath.Dir(idDir) // identities dir is inside .thrum
 	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
 		return nil, fmt.Errorf("save identity for %s: %w", req.Agent, err)
 	}
