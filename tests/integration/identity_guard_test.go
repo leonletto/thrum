@@ -416,3 +416,58 @@ func TestIdentityGuard_RuntimeWithoutPID_WrongCWDStillDenies(t *testing.T) {
 		t.Errorf("want cross_worktree deny, got %v", err)
 	}
 }
+
+// ─── 6.6 ─── Non-git bootstrap refusal ────────────────────────────────
+// G2 refuses to bootstrap from a non-git directory unless --force is
+// set. Verify the refusal in strict, allow-with-slog in warn, bypass
+// in off, and that --force proceeds regardless of mode.
+
+func TestIdentityGuard_NonGitBootstrap(t *testing.T) {
+	nonGit := t.TempDir() // deliberately NOT git init
+
+	cases := []struct {
+		name     string
+		mode     guard.Mode
+		force    bool
+		wantErr  bool
+		wantSlog bool
+	}{
+		{"strict_refuses", guard.ModeStrict, false, true, true},
+		{"strict_force_bypasses", guard.ModeStrict, true, false, false},
+		{"warn_allows_with_slog", guard.ModeWarn, false, false, true},
+		{"off_silently_passes", guard.ModeOff, false, false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			logger := slog.New(slog.NewJSONHandler(buf, nil))
+			err := guard.G2(tc.mode, nonGit, tc.force, logger)
+			if tc.wantErr && err == nil {
+				t.Errorf("want error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("unexpected err: %v", err)
+			}
+			if tc.wantErr {
+				var gErr *guard.Error
+				if !errors.As(err, &gErr) || gErr.Guard != "non_git_bootstrap" {
+					t.Errorf("want non_git_bootstrap error, got %v", err)
+				}
+			}
+			gotSlog := strings.Contains(buf.String(), "non_git_bootstrap")
+			if tc.wantSlog != gotSlog {
+				t.Errorf("slog emission: want=%v, got=%v (buf: %q)", tc.wantSlog, gotSlog, buf.String())
+			}
+		})
+	}
+}
+
+// TestIdentityGuard_NonGitBootstrap_GitInitAllows confirms the git-init'd
+// sibling path proceeds without --force — the git anchor itself is
+// what G2 is checking for.
+func TestIdentityGuard_NonGitBootstrap_GitInitAllows(t *testing.T) {
+	gitDir := newGitTempDir(t)
+	if err := guard.G2(guard.ModeStrict, gitDir, false, nil); err != nil {
+		t.Fatalf("git-init'd dir should proceed without --force, got %v", err)
+	}
+}
