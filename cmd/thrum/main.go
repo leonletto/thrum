@@ -69,6 +69,17 @@ var (
 )
 
 func main() {
+	rootCmd := buildRootCmd()
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// buildRootCmd assembles the full cobra command tree and returns the
+// root. Extracted from main() so tests (command_categories_test.go)
+// can walk the tree and enforce the guard-category taxonomy.
+func buildRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "thrum",
 		Short: "Git-backed agent messaging",
@@ -166,10 +177,13 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(restartCmd())
 	rootCmd.AddCommand(worktreeCmd())
 
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+	// Apply guard-category annotations to every leaf command under
+	// rootCmd. See command_categories.go for the per-path mapping +
+	// categorization rationale; command_categories_test.go walks this
+	// same tree in-test and fails if any leaf is missing a category.
+	tagGuardCategories(rootCmd)
+
+	return rootCmd
 }
 
 // Placeholder commands - will be implemented in subsequent tasks
