@@ -4,9 +4,9 @@ import "github.com/spf13/cobra"
 
 // Guard category vocabulary. Every leaf cobra.Command under rootCmd
 // must carry one of these values under Annotations["guard_category"].
-// command_categories_test.go walks the tree in-test and fails if a
-// leaf is missing an assignment — so adding a new cobra command
-// without classifying it is a CI failure, not a silent regression.
+// The test in command_categories_test.go walks the tree in-test and
+// fails if a leaf is missing an assignment — so adding a new cobra
+// command without classifying it is a CI failure, not a silent regression.
 const (
 	// GuardCategoryBypass marks commands that do NOT touch identity
 	// state or require a daemon connection: help, version, shell
@@ -27,9 +27,8 @@ const (
 	// majority of commands fall here.
 	GuardCategoryGuarded = "guarded"
 
-	// guardCategoryKey is the cobra.Command.Annotations map key used
-	// across the codebase. Kept as an unexported constant so typos
-	// fail at compile time.
+	// The Annotations map key used by the audit across the codebase.
+	// Kept as an unexported constant so typos fail at compile time.
 	guardCategoryKey = "guard_category"
 )
 
