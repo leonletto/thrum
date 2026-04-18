@@ -35,6 +35,14 @@ type Error struct {
 	// daemon writer, etc.).
 	ExpectedAgent string
 
+	// DetectedAgent is the agent name inferred from the caller's
+	// environment (CWD + runtime + TMUX). It may differ from
+	// ExpectedAgent when a second agent cds into someone else's
+	// worktree — that delta is the whole reason cross_worktree
+	// fires. Blank when the caller environment does not resolve to
+	// a registered agent.
+	DetectedAgent string
+
 	// ExpectedPID is the PID currently recorded in the identity
 	// file. Zero omits the field from the rendered message.
 	ExpectedPID int
@@ -51,6 +59,9 @@ func (e *Error) Error() string {
 	fmt.Fprintf(&b, "identity guard %q fired: %s", e.Guard, e.Reason)
 	if e.ExpectedAgent != "" {
 		fmt.Fprintf(&b, "\n  expected agent: %s", e.ExpectedAgent)
+	}
+	if e.DetectedAgent != "" {
+		fmt.Fprintf(&b, "\n  detected agent: %s", e.DetectedAgent)
 	}
 	if e.ExpectedPID != 0 {
 		fmt.Fprintf(&b, "\n  expected pid: %d", e.ExpectedPID)
