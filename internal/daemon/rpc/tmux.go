@@ -720,7 +720,9 @@ func (h *TmuxHandler) checkWriterLiveness(subjectPID int) error {
 	if subjectPID == 0 {
 		return nil
 	}
-	mode := guard.LoadConfigFromDir(filepath.Dir(h.thrumDir)).DaemonWriterLiveness
+	// TmuxHandler.thrumDir is the .thrum directory itself; identitiesDir
+	// under it provides the anchor guardConfigForIdentityDir expects.
+	mode := guard.ConfigForIdentityDir(filepath.Join(h.thrumDir, "identities")).DaemonWriterLiveness
 	if mode == "" {
 		mode = guard.ModeStrict
 	}

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -1893,6 +1894,7 @@ func loadDaemonGuardConfig(repoPath string) guard.Config {
 	return guard.LoadConfigFromDir(repoPath)
 }
 
+
 // resolveAgentAndSession returns the current agent ID and session ID.
 // ResolveAgentAndSession resolves the caller's agent and active session.
 //
@@ -1920,7 +1922,7 @@ func (h *MessageHandler) resolveAgentAndSession(ctx context.Context, callerAgent
 	if resolved != nil {
 		req.PeercredAgentID = resolved.AgentID
 	}
-	caller, resolveErr := guard.DaemonResolve(loadDaemonGuardConfig(h.state.RepoPath()), req, nil)
+	caller, resolveErr := guard.DaemonResolve(loadDaemonGuardConfig(h.state.RepoPath()), req, slog.Default())
 	if resolveErr != nil {
 		return "", "", resolveErr
 	}
@@ -1976,7 +1978,7 @@ func (h *MessageHandler) resolveAgentOnly(ctx context.Context, callerAgentID str
 	if resolved != nil {
 		req.PeercredAgentID = resolved.AgentID
 	}
-	caller, err := guard.DaemonResolve(loadDaemonGuardConfig(h.state.RepoPath()), req, nil)
+	caller, err := guard.DaemonResolve(loadDaemonGuardConfig(h.state.RepoPath()), req, slog.Default())
 	if err != nil {
 		return ""
 	}

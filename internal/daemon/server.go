@@ -421,10 +421,13 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 		// — which is the same path as tests and browser/WS transport.
 		ctxWithIdentity := ctxWithTransport
 		if connPID > 0 {
-			// Inject the kernel-verified PID before the identity so handlers
-			// can populate guard CheckContext.Chain even on anonymous
-			// (peercred-ran, no-match) callers. Guard checks never trust a
-			// client-asserted agent_id when this PID is available.
+			// Inject the kernel-verified PID so future handler code can
+			// walk the caller's ancestor chain. As of Epic 5, no handler
+			// consumes this — guard.DaemonResolve authenticates via
+			// peercred.FromContext (CWD-based) only. Rule #4‴'s
+			// ancestor-chain clause wire-up is tracked in thrum-u5fk.4;
+			// the PID plumbing lives here so that epic can bolt the
+			// walk on without changing the accept loop.
 			ctxWithIdentity = peercred.WithConnectingPID(ctxWithIdentity, connPID)
 		}
 		if connResolved {

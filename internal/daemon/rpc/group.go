@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -156,7 +157,7 @@ func (h *GroupHandler) resolveGroupCaller(ctx context.Context, callerAgentID str
 	if resolved != nil {
 		req.PeercredAgentID = resolved.AgentID
 	}
-	caller, err := guard.DaemonResolve(loadDaemonGuardConfig(h.state.RepoPath()), req, nil)
+	caller, err := guard.DaemonResolve(loadDaemonGuardConfig(h.state.RepoPath()), req, slog.Default())
 	if err != nil {
 		return "", err
 	}

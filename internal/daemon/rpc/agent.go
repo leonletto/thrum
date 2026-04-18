@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -429,7 +430,7 @@ func (h *AgentHandler) HandleWhoami(ctx context.Context, params json.RawMessage)
 	if resolved != nil {
 		dreq.PeercredAgentID = resolved.AgentID
 	}
-	caller, err := guard.DaemonResolve(loadDaemonGuardConfig(h.state.RepoPath()), dreq, nil)
+	caller, err := guard.DaemonResolve(loadDaemonGuardConfig(h.state.RepoPath()), dreq, slog.Default())
 	if err != nil {
 		return nil, fmt.Errorf("resolve identity: %w", err)
 	}
@@ -443,16 +444,19 @@ func (h *AgentHandler) HandleWhoami(ctx context.Context, params json.RawMessage)
 		source = "caller"
 	}
 
-	// Look up role/module from the agents table.
+	// Look up role/module/display from the agents table.
 	h.state.RLock()
-	var dbRole, dbModule sql.NullString
-	_ = h.state.DB().QueryRowContext(ctx, "SELECT role, module FROM agents WHERE agent_id = ?", agentID).Scan(&dbRole, &dbModule)
+	var dbRole, dbModule, dbDisplay sql.NullString
+	_ = h.state.DB().QueryRowContext(ctx, "SELECT role, module, display FROM agents WHERE agent_id = ?", agentID).Scan(&dbRole, &dbModule, &dbDisplay)
 	h.state.RUnlock()
 	if dbRole.Valid {
 		role = dbRole.String
 	}
 	if dbModule.Valid {
 		module = dbModule.String
+	}
+	if dbDisplay.Valid {
+		agentName = dbDisplay.String
 	}
 
 	// Check for active session for this agent
@@ -1240,8 +1244,7 @@ func (h *AgentHandler) HandleSetAgentStatus(ctx context.Context, params json.Raw
 	idDir := filepath.Dir(idPath)
 	thrumDir := filepath.Dir(idDir) // identities dir is inside .thrum
 	if idFile.AgentPID != 0 {
-		repoDir := filepath.Dir(thrumDir)
-		mode := guard.LoadConfigFromDir(repoDir).DaemonWriterLiveness
+		mode := guard.ConfigForIdentityDir(idDir).DaemonWriterLiveness
 		if mode == "" {
 			mode = guard.ModeStrict
 		}

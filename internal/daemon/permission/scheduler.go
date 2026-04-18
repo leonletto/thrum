@@ -316,8 +316,7 @@ func (p *Permission) setAgentStatus(ctx context.Context, agentName, newStatus, o
 	// means the agent never primed a PID; G4 applies to dead-after-alive
 	// transitions only, so skip the gate in that case.
 	if idFile.AgentPID != 0 {
-		repoDir := filepath.Dir(p.thrumDir)
-		mode := guard.LoadConfigFromDir(repoDir).DaemonWriterLiveness
+		mode := guard.ConfigForIdentityDir(filepath.Join(p.thrumDir, "identities")).DaemonWriterLiveness
 		if mode == "" {
 			mode = guard.ModeStrict
 		}
