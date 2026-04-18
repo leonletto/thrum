@@ -42,6 +42,11 @@ func WalkAncestors(ctx context.Context, startPID int) ([]int, error) {
 // isRuntimeProcessFn and runtimeNameFn are test seams. Production code
 // delegates to internal/process; tests may swap them to simulate an
 // arbitrary process tree without actually spawning runtimes.
+//
+// WARNING: these are package-level mutable vars. Tests that swap them
+// MUST NOT call t.Parallel() anywhere in the guard package — a
+// concurrent test could observe a stubbed function intended for a
+// different case. Use t.Cleanup() to restore originals.
 var (
 	isRuntimeProcessFn = process.IsRuntimeProcess
 	runtimeNameFn      = process.RuntimeName
