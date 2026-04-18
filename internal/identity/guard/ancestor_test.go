@@ -32,6 +32,50 @@ func TestChainContains_PresentAndAbsent(t *testing.T) {
 	}
 }
 
+func TestClosestRuntimeAncestor_SelfIsRuntime(t *testing.T) {
+	origIsRuntime := isRuntimeProcessFn
+	origRuntimeName := runtimeNameFn
+	isRuntimeProcessFn = func(_ context.Context, pid int, _ string) bool { return pid == os.Getpid() }
+	runtimeNameFn = func(_ context.Context, pid int) string {
+		if pid == os.Getpid() {
+			return "claude"
+		}
+		return ""
+	}
+	t.Cleanup(func() {
+		isRuntimeProcessFn = origIsRuntime
+		runtimeNameFn = origRuntimeName
+	})
+
+	pid, runtime, err := ClosestRuntimeAncestor(context.Background(), os.Getpid())
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	if pid != os.Getpid() {
+		t.Errorf("want self pid, got %d", pid)
+	}
+	if runtime == "" {
+		t.Error("want runtime name, got empty")
+	}
+}
+
+func TestClosestRuntimeAncestor_NoRuntime(t *testing.T) {
+	origIsRuntime := isRuntimeProcessFn
+	isRuntimeProcessFn = func(_ context.Context, _ int, _ string) bool { return false }
+	t.Cleanup(func() { isRuntimeProcessFn = origIsRuntime })
+
+	pid, runtime, err := ClosestRuntimeAncestor(context.Background(), os.Getpid())
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	if pid != 0 {
+		t.Errorf("want 0, got %d", pid)
+	}
+	if runtime != "" {
+		t.Errorf("want empty runtime, got %q", runtime)
+	}
+}
+
 func TestChainContains_Empty(t *testing.T) {
 	if ChainContains(nil, 1) {
 		t.Error("nil chain should not contain anything")
