@@ -48,7 +48,7 @@ func G2(mode Mode, dir string, force bool, warnLogger *slog.Logger) error {
 }
 
 // isGitRepo walks from start toward the filesystem root looking for a
-// .git entry. filepath.Dir terminates at "/" on unix and the volume
+// .git entry. Filepath.Dir terminates at "/" on unix and the volume
 // root on windows; the explicit empty-string guard belt-and-braces
 // against any edge case that returns "" instead.
 func isGitRepo(start string) bool {

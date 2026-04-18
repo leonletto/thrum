@@ -35,7 +35,7 @@ type QuickstartContext struct {
 	// a live squatter.
 	RequestedName string
 
-	// Force is true when the caller passed --force. G1a honours
+	// Force is true when the caller passed --force. G1a honors
 	// this to rename the existing owned file to <name>.json.deleted
 	// instead of refusing.
 	Force bool

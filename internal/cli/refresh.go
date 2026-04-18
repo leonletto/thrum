@@ -2,11 +2,9 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/leonletto/thrum/internal/config"
@@ -167,27 +165,12 @@ func RefreshLocalIdentity(client *Client, repoPath string) (*RefreshResult, erro
 	return result, nil
 }
 
-// loadGuardConfig reads .thrum/config.json's identity_guard block
-// from repoPath and merges it over guard.DefaultConfig(). Missing
-// config is a legitimate first-run state — fall back to defaults
-// silently rather than refusing. This is the client-side seed;
-// Epic 6 adds the daemon>repo>defaults layered precedence.
+// loadGuardConfig is a thin adapter around guard.LoadConfigFromDir
+// that resolves the caller's repoPath to an effective path first.
+// Kept as a package-local helper so the resolution step is colocated
+// with every other refresh.go path-normalization.
 func loadGuardConfig(repoPath string) guard.Config {
-	effective := paths.EffectiveRepoPath(repoPath)
-	cfgPath := filepath.Join(effective, ".thrum", "config.json")
-	// #nosec G304 -- cfgPath is derived from the repo's own .thrum/.
-	data, err := os.ReadFile(cfgPath)
-	if err != nil {
-		return guard.DefaultConfig()
-	}
-	var tc struct {
-		IdentityGuard *json.RawMessage `json:"identity_guard,omitempty"`
-	}
-	if err := json.Unmarshal(data, &tc); err != nil {
-		return guard.DefaultConfig()
-	}
-	repoCfg, _ := guard.ParseConfigFromRaw(tc.IdentityGuard)
-	return guard.Merge(guard.DefaultConfig(), repoCfg, guard.Config{})
+	return guard.LoadConfigFromDir(paths.EffectiveRepoPath(repoPath))
 }
 
 // isNoIdentityFile returns true when err indicates "no identity file was

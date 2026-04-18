@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -58,27 +57,6 @@ type QuickstartResult struct {
 
 // Quickstart registers an agent, starts a session, optionally sets intent,
 // and optionally generates runtime-specific config files.
-// LoadQuickstartGuardConfig reads .thrum/config.json's identity_guard
-// block and overlays it over DefaultConfig. Missing / malformed config
-// falls back to defaults (strict on every guard), matching
-// refresh.go:loadGuardConfig's policy.
-func loadQuickstartGuardConfig(repoPath string) guard.Config {
-	effective := paths.EffectiveRepoPath(repoPath)
-	cfgPath := filepath.Join(effective, ".thrum", "config.json")
-	// #nosec G304 -- cfgPath is derived from the repo's own .thrum/.
-	data, err := os.ReadFile(cfgPath)
-	if err != nil {
-		return guard.DefaultConfig()
-	}
-	var tc struct {
-		IdentityGuard *json.RawMessage `json:"identity_guard,omitempty"`
-	}
-	if json.Unmarshal(data, &tc) != nil {
-		return guard.DefaultConfig()
-	}
-	repoCfg, _ := guard.ParseConfigFromRaw(tc.IdentityGuard)
-	return guard.Merge(guard.DefaultConfig(), repoCfg, guard.Config{})
-}
 
 func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, error) {
 	result := &QuickstartResult{}
@@ -95,7 +73,7 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 	}
 	idsDir := filepath.Join(paths.EffectiveRepoPath(qsRepoPath), ".thrum", "identities")
 	qsChain, _ := guard.WalkAncestors(context.Background(), os.Getpid())
-	gcfg := loadQuickstartGuardConfig(qsRepoPath)
+	gcfg := guard.LoadConfigFromDir(paths.EffectiveRepoPath(qsRepoPath))
 	qc := &guard.QuickstartContext{
 		Mode:          gcfg.QuickstartSelfRename,
 		IdentitiesDir: idsDir,

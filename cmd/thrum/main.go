@@ -3686,29 +3686,17 @@ Examples:
 	return cmd
 }
 
-// loadInitBootstrapMode reads .thrum/config.json's
-// identity_guard.non_git_bootstrap mode. Missing config → strict
-// default, matching loadPrimeOwnershipMode's conventions. Note that
-// in the non-git-bootstrap scenario the config file itself typically
-// does not exist yet; the fallback path is the common case.
+// loadInitBootstrapMode returns the NonGitBootstrap guard mode for
+// the init dir, falling back to strict when config is absent or the
+// field is unset. In the non-git-bootstrap scenario the config file
+// typically doesn't exist yet, so the fallback path is the common
+// case.
 func loadInitBootstrapMode(dir string) guard.Mode {
-	cfgPath := filepath.Join(dir, ".thrum", "config.json")
-	// #nosec G304 -- cfgPath is derived from the caller-supplied init dir.
-	data, err := os.ReadFile(cfgPath)
-	if err != nil {
+	m := guard.LoadConfigFromDir(dir).NonGitBootstrap
+	if m == "" {
 		return guard.ModeStrict
 	}
-	var tc struct {
-		IdentityGuard *json.RawMessage `json:"identity_guard,omitempty"`
-	}
-	if json.Unmarshal(data, &tc) != nil {
-		return guard.ModeStrict
-	}
-	cfg, _ := guard.ParseConfigFromRaw(tc.IdentityGuard)
-	if cfg.NonGitBootstrap == "" {
-		return guard.ModeStrict
-	}
-	return cfg.NonGitBootstrap
+	return m
 }
 
 // resolvePrimeIdentityPath resolves the on-disk identity file path for
@@ -3726,29 +3714,16 @@ func resolvePrimeIdentityPath(agentID string) (repoPath, idPath string, runtimeP
 	return repoPath, idPath, rtPID, true
 }
 
-// loadPrimeOwnershipMode reads .thrum/config.json's
-// identity_guard.prime_ownership mode. Missing config → defaults
-// (strict). Parse errors also fall back to defaults rather than
-// refusing — the guard enforcement should default-on, not
-// default-off, on malformed config.
+// loadPrimeOwnershipMode returns the PrimeOwnership guard mode for
+// repoPath, falling back to strict when config is absent or the field
+// is unset. Guard enforcement defaults on, not off, on malformed
+// config.
 func loadPrimeOwnershipMode(repoPath string) guard.Mode {
-	cfgPath := filepath.Join(repoPath, ".thrum", "config.json")
-	// #nosec G304 -- cfgPath is derived from the repo's own .thrum/.
-	data, err := os.ReadFile(cfgPath)
-	if err != nil {
+	m := guard.LoadConfigFromDir(repoPath).PrimeOwnership
+	if m == "" {
 		return guard.ModeStrict
 	}
-	var tc struct {
-		IdentityGuard *json.RawMessage `json:"identity_guard,omitempty"`
-	}
-	if json.Unmarshal(data, &tc) != nil {
-		return guard.ModeStrict
-	}
-	cfg, _ := guard.ParseConfigFromRaw(tc.IdentityGuard)
-	if cfg.PrimeOwnership == "" {
-		return guard.ModeStrict
-	}
-	return cfg.PrimeOwnership
+	return m
 }
 
 func primeCmd() *cobra.Command {

@@ -27,7 +27,7 @@ import (
 //
 // The cfg parameter carries the per-guard enforcement matrix; callers
 // typically build it as Merge(DefaultConfig(), repoConfig, daemonConfig).
-// logger receives structured warn-mode events; nil is tolerated.
+// Logger receives structured warn-mode events; nil is tolerated.
 //
 // Returns nil on proceed. Returns a *Error on strict-mode refusal.
 // Any other error is a wrapped I/O failure.
@@ -54,7 +54,7 @@ func Check(ctx context.Context, repoPath string, cfg Config, logger *slog.Logger
 // buildCheckContext assembles the CheckContext shared by Rule + the
 // companion guards. It walks the caller's process ancestry, resolves
 // the closest runtime ancestor, loads the identity file (if any),
-// realpath-canonicalizes the CWD vs. the file's worktree, and compares
+// realpath-canonicalizes the CWD vs. The file's worktree, and compares
 // TMUX state. The identity file + its disk path are returned so
 // reconcileDrift can mutate and re-persist the non-PID fields without
 // re-loading.
@@ -105,7 +105,7 @@ func buildCheckContext(ctx context.Context, repoPath string, cfg Config, logger 
 
 // cwdMatches returns true when the caller's realpath'd effective repo
 // path and the identity file's realpath'd worktree resolve to the same
-// location. macOS /var/folders → /private/var/folders aliasing and
+// location. MacOS /var/folders → /private/var/folders aliasing and
 // symlink farms both produce string-level drift that would otherwise
 // mis-flag legitimate owners (spec §Rule #4‴ MINOR 10).
 func cwdMatches(cwd, worktree string) bool {
@@ -195,8 +195,8 @@ func reconcileDrift(ctx context.Context, repoPath, idPath string, idFile *config
 }
 
 // isNoIdentityFile mirrors internal/cli/refresh.go's sentinel check.
-// loadIdentityFromDir signals "no identity file" via either a wrapped
-// os.ErrNotExist or an error containing "no identity files found."
+// LoadIdentityFromDir signals "no identity file" via either a wrapped
+// os.ErrNotExist or an error containing "no identity files found.".
 func isNoIdentityFile(err error) bool {
 	if err == nil {
 		return false
@@ -221,4 +221,29 @@ func ParseConfigFromRaw(raw *json.RawMessage) (Config, error) {
 		return out, fmt.Errorf("unmarshal identity_guard config: %w", err)
 	}
 	return out, nil
+}
+
+// LoadConfigFromDir reads .thrum/config.json under dir and returns the
+// merged guard Config (DefaultConfig overlaid with repo modes).
+// Missing / malformed config falls back silently to defaults — guard
+// enforcement should default-on, not refuse on config errors. This is
+// the shared loader used by every CLI call site (refresh, prime,
+// quickstart, init, daemon wire-ups); Epic 6 adds the layered
+// daemon>repo>defaults precedence on top of this.
+func LoadConfigFromDir(dir string) Config {
+	cfgPath := filepath.Join(dir, ".thrum", "config.json")
+	// #nosec G304 -- cfgPath is derived from the caller-supplied
+	// repo / worktree dir, not external input.
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		return DefaultConfig()
+	}
+	var tc struct {
+		IdentityGuard *json.RawMessage `json:"identity_guard,omitempty"`
+	}
+	if err := json.Unmarshal(data, &tc); err != nil {
+		return DefaultConfig()
+	}
+	repoCfg, _ := ParseConfigFromRaw(tc.IdentityGuard)
+	return Merge(DefaultConfig(), repoCfg, Config{})
 }
