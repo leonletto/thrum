@@ -370,3 +370,49 @@ func TestIdentityGuard_DeadPIDAutoReclaim(t *testing.T) {
 		})
 	}
 }
+
+// ─── 6.5 ─── Runtime-without-PID (kiro / auggie) ──────────────────────
+// Runtimes like kiro and auggie don't expose a stable PID on the
+// agent's side, so identity files record AgentPID=0. Rule step 3.2
+// authenticates via CWD+TMUX match instead of PID-in-chain. Verify
+// the guard accepts an AgentPID=0 identity when the caller's CWD and
+// TMUX both corroborate ownership.
+
+func TestIdentityGuard_RuntimeWithoutPID(t *testing.T) {
+	repo := newGitTempDir(t)
+	seedIdentity(t, repo, "impl_kiro", config.IdentityFile{
+		Agent:    config.AgentConfig{Kind: "agent", Role: "impl"},
+		Worktree: repo, // CWDMatches
+		AgentPID: 0,    // runtime-without-PID
+	})
+	t.Setenv("TMUX", "") // tmuxMatches via empty-on-both
+
+	cfg := guard.DefaultConfig()
+	if err := guard.Check(context.Background(), repo, cfg, nil); err != nil {
+		t.Fatalf("Rule step 3.2 should authenticate PID=0 runtime via CWD+TMUX, got %v", err)
+	}
+}
+
+// TestIdentityGuard_RuntimeWithoutPID_WrongCWDStillDenies confirms that
+// step 3.2 isn't a free pass: an AgentPID=0 identity whose Worktree
+// differs from the caller's repoPath must still fire step 3.4.
+func TestIdentityGuard_RuntimeWithoutPID_WrongCWDStillDenies(t *testing.T) {
+	repo := newGitTempDir(t)
+	otherRepo := newGitTempDir(t)
+	seedIdentity(t, repo, "impl_kiro", config.IdentityFile{
+		Agent:    config.AgentConfig{Kind: "agent", Role: "impl"},
+		Worktree: otherRepo, // different repo → CWD mismatch
+		AgentPID: 0,
+	})
+	t.Setenv("TMUX", "")
+
+	cfg := guard.DefaultConfig()
+	err := guard.Check(context.Background(), repo, cfg, nil)
+	if err == nil {
+		t.Fatal("CWD mismatch should fail step 3.2, fall through to step 3.4 denial")
+	}
+	var gErr *guard.Error
+	if !errors.As(err, &gErr) || gErr.Guard != "cross_worktree" {
+		t.Errorf("want cross_worktree deny, got %v", err)
+	}
+}
