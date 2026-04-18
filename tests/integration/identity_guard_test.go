@@ -77,6 +77,25 @@ func deadPID(t *testing.T) int {
 	return pid
 }
 
+// liveChildPID spawns a short-lived child process parented to the
+// test binary and returns its PID. Used by the subagent test: the
+// child inherits the test's ancestor chain, so walking up from the
+// child will hit the test process and then any AI runtime that
+// spawned the test. Caller must ensure the child is still alive when
+// the PID is read — use a sleep long enough to cover the assertion.
+func liveChildPID(t *testing.T) int {
+	t.Helper()
+	cmd := exec.Command("sleep", "30") //nolint:gosec // test fixture
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("spawn child: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+	return cmd.Process.Pid
+}
+
 // liveSleeperPID spawns a long-running sleep subprocess and registers
 // cleanup. Returns its PID. The process stays alive for the test's
 // lifetime so guard.G1b's IsPIDAlive probe returns true.
@@ -253,4 +272,48 @@ func TestIdentityGuard_SameDirMultiAgent(t *testing.T) {
 			t.Errorf(".deleted sidekick missing: %v", statErr)
 		}
 	})
+}
+
+// ─── 6.3 ─── Subagent ────────────────────────────────────────────────
+// A child process forked from a registered agent's runtime inherits
+// that agent's ancestor chain. DaemonResolve's chain-walk must
+// authenticate the child as the parent agent (spec §Rule #4‴
+// ancestor-chain clause). Verifies the Epic 6 runtime-ancestor
+// precondition doesn't regress the happy path.
+
+func TestIdentityGuard_Subagent_ChainAuthenticates(t *testing.T) {
+	repo := newGitTempDir(t)
+	identitiesDir := filepath.Join(repo, ".thrum", "identities")
+	// NOTE: this test requires the go test process to itself run under
+	// an AI-runtime ancestor (claude, codex, etc.) — resolveByChain's
+	// step-2 precondition rejects callers without one. That holds when
+	// the test is run inside a Claude session; skip otherwise.
+	if rt, _, _ := guard.ClosestRuntimeAncestor(context.Background(), os.Getpid()); rt == 0 {
+		t.Skip("test process has no AI-runtime ancestor; chain walk precondition would reject")
+	}
+
+	// Seed parent agent's identity: its AgentPID is the test process
+	// itself. The child forked from exec.Command will have the test
+	// process as a chain ancestor, so ChainContains(childChain, os.Getpid())
+	// should be true.
+	seedIdentity(t, repo, "impl_parent", config.IdentityFile{
+		Agent:    config.AgentConfig{Kind: "agent", Role: "impl"},
+		Worktree: repo,
+		AgentPID: os.Getpid(),
+	})
+
+	childPID := liveChildPID(t)
+
+	cfg := guard.DefaultConfig()
+	got, err := guard.DaemonResolve(context.Background(), cfg, guard.DaemonResolveRequest{
+		PeercredRan:   true, // anonymous branch: CWD-based match missed
+		ConnectingPID: childPID,
+		IdentitiesDir: identitiesDir,
+	}, nil)
+	if err != nil {
+		t.Fatalf("subagent chain walk should authenticate, got %v", err)
+	}
+	if got.AgentID != "impl_parent" {
+		t.Errorf("AgentID = %q, want impl_parent", got.AgentID)
+	}
 }
