@@ -1850,6 +1850,7 @@ func TestHandleSend_GroupScope(t *testing.T) {
 	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
 		t.Fatalf("create .thrum dir: %v", err)
 	}
+	writeGuardOffConfig(t, tmpDir)
 
 	repoID := "r_GROUPSCOPE_TEST"
 	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
@@ -2010,6 +2011,7 @@ func TestInboxGroupMembership(t *testing.T) {
 	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
 		t.Fatalf("create .thrum dir: %v", err)
 	}
+	writeGuardOffConfig(t, tmpDir)
 
 	repoID := "r_INBOX_GROUP_TEST"
 	st, err := state.NewState(thrumDir, thrumDir, repoID, "")

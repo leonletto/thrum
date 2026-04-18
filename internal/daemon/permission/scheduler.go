@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/identity/guard"
+	"github.com/leonletto/thrum/internal/process"
 )
 
 // reminderSchedule encodes the exponential backoff for reminders
@@ -306,6 +308,25 @@ func (p *Permission) setAgentStatus(ctx context.Context, agentName, newStatus, o
 	}
 	if onlyIf != "" && idFile.AgentStatus != onlyIf {
 		return nil // no-op — we don't own the current status
+	}
+	// G4: refuse to mutate agent_status on a dead agent's identity file.
+	// The scheduler's status writes race against agent lifecycle: if an
+	// agent crashes between OnDetection and the reminder that flips it
+	// to "stuck", we must not silently label a dead owner. AgentPID=0
+	// means the agent never primed a PID; G4 applies to dead-after-alive
+	// transitions only, so skip the gate in that case.
+	if idFile.AgentPID != 0 {
+		mode := guard.ConfigForIdentityDir(filepath.Join(p.thrumDir, "identities")).DaemonWriterLiveness
+		if mode == "" {
+			mode = guard.ModeStrict
+		}
+		if gErr := guard.G4(&guard.WriterContext{
+			Mode:       mode,
+			SubjectPID: idFile.AgentPID,
+			IsPIDAlive: func(pid int) bool { return process.IsRunning(pid) },
+		}); gErr != nil {
+			return fmt.Errorf("setAgentStatus refused for %s: %w", agentName, gErr)
+		}
 	}
 	idFile.AgentStatus = newStatus
 	idFile.AgentStatusUpdatedAt = time.Now().UTC()

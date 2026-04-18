@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -19,6 +20,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/groups"
 	"github.com/leonletto/thrum/internal/identity"
+	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/subscriptions"
 	"github.com/leonletto/thrum/internal/types"
 )
@@ -1884,6 +1886,15 @@ func (h *MessageHandler) loadRecipientsForMessages(ctx context.Context, messageI
 	return result, rows.Err()
 }
 
+// loadDaemonGuardConfig reads the identity_guard config block from the
+// daemon's repo. Re-read per-call to pick up operator-side mode changes
+// without a daemon restart; Phase 5 Task 5.1 will layer in daemon-level
+// overrides and cache.
+func loadDaemonGuardConfig(repoPath string) guard.Config {
+	return guard.LoadConfigFromDir(repoPath)
+}
+
+
 // resolveAgentAndSession returns the current agent ID and session ID.
 // ResolveAgentAndSession resolves the caller's agent and active session.
 //
@@ -1904,27 +1915,27 @@ func (h *MessageHandler) loadRecipientsForMessages(ctx context.Context, messageI
 // point with an anonymous ctx, something is wrong.
 func (h *MessageHandler) resolveAgentAndSession(ctx context.Context, callerAgentID string) (agentID string, sessionID string, err error) {
 	resolved, peercredRan := peercred.FromContext(ctx)
-	switch {
-	case peercredRan && resolved != nil:
-		// Trusted identity from kernel peercred. Reject mismatched claim.
-		if callerAgentID != "" && callerAgentID != resolved.AgentID {
-			return "", "", fmt.Errorf("caller identity mismatch: claimed %q but unix-socket peer credentials resolve to %q", callerAgentID, resolved.AgentID)
-		}
-		agentID = resolved.AgentID
-	case peercredRan && resolved == nil:
-		// Anonymous caller reached a mutating handler. The dispatcher should
-		// have rejected this request at the read-only allowlist; reaching
-		// here is a policy bug worth surfacing clearly.
-		return "", "", fmt.Errorf("anonymous caller cannot perform mutating RPC: cd into a registered agent worktree and retry")
-	case callerAgentID != "":
-		// Legacy path: peercred never ran (tests, non-unix transport). Trust
-		// the claim. This preserves existing test harness behavior and does
-		// NOT weaken security because the only way ctx lacks peercred is
-		// via a non-unix-socket code path or a test that explicitly opted out.
-		agentID = callerAgentID
-	default:
-		// Fallback: load identity from daemon's config (single-worktree backward compat)
-		log.Printf("WARNING: CallerAgentID not provided in message RPC, falling back to daemon repo path: %s (CLI should resolve identity)", h.state.RepoPath())
+	req := guard.DaemonResolveRequest{
+		CallerAgentID: callerAgentID,
+		PeercredRan:   peercredRan,
+	}
+	if resolved != nil {
+		req.PeercredAgentID = resolved.AgentID
+	}
+	connPID, _ := peercred.ConnectingPIDFromContext(ctx)
+	req.ConnectingPID = connPID
+	req.IdentitiesDir = identitiesDirFor(h.state.RepoPath())
+	caller, resolveErr := guard.DaemonResolve(ctx, loadDaemonGuardConfig(h.state.RepoPath()), req, slog.Default())
+	if resolveErr != nil {
+		return "", "", resolveErr
+	}
+	agentID = caller.AgentID
+	if agentID == "" {
+		// Warn/off G3 fall-through: the guard let an empty claim pass
+		// (explicit opt-out or migration window). Fall back to deriving
+		// the agent ID from the daemon's own config so the RPC can
+		// still complete — strict mode errored earlier in DaemonResolve,
+		// so only opted-out deployments reach this path.
 		cfg, loadErr := config.LoadWithPath(h.state.RepoPath(), "", "")
 		if loadErr != nil {
 			return "", "", fmt.Errorf("load config: %w", loadErr)
@@ -1958,32 +1969,34 @@ func (h *MessageHandler) resolveAgentAndSession(ctx context.Context, callerAgent
 //
 // Unlike resolveAgentAndSession this helper is called from read-only handlers
 // and returns an empty string on anonymous/unknown identity (caller treats
-// empty as "no filter" and returns unfiltered results).
+// empty as "no filter" and returns unfiltered results). DaemonResolve errors
+// are absorbed into empty-string fallthrough — read-only handlers never fail
+// the RPC on identity concerns; they simply drop the per-caller filter.
 func (h *MessageHandler) resolveAgentOnly(ctx context.Context, callerAgentID string) string {
 	resolved, peercredRan := peercred.FromContext(ctx)
-	switch {
-	case peercredRan && resolved != nil:
-		// Trusted identity from peercred. Reject mismatched claim even on
-		// read-only paths — the alternative is allowing a forged claim to
-		// distort the filter and silently return someone else's data.
-		if callerAgentID != "" && callerAgentID != resolved.AgentID {
-			return ""
-		}
-		return resolved.AgentID
-	case peercredRan && resolved == nil:
-		// Anonymous caller on a read-only handler: no identity, no filter.
-		return ""
-	case callerAgentID != "":
-		// Legacy path: trust the claim.
-		return callerAgentID
-	default:
-		// Fallback: load identity from daemon's config
-		cfg, err := config.LoadWithPath(h.state.RepoPath(), "", "")
-		if err != nil {
-			return ""
-		}
-		return identity.GenerateAgentID(h.state.RepoID(), cfg.Agent.Role, cfg.Agent.Module, cfg.Agent.Name)
+	req := guard.DaemonResolveRequest{
+		CallerAgentID: callerAgentID,
+		PeercredRan:   peercredRan,
 	}
+	if resolved != nil {
+		req.PeercredAgentID = resolved.AgentID
+	}
+	connPID, _ := peercred.ConnectingPIDFromContext(ctx)
+	req.ConnectingPID = connPID
+	req.IdentitiesDir = identitiesDirFor(h.state.RepoPath())
+	caller, err := guard.DaemonResolve(ctx, loadDaemonGuardConfig(h.state.RepoPath()), req, slog.Default())
+	if err != nil {
+		return ""
+	}
+	return caller.AgentID
+}
+
+// identitiesDirFor returns the absolute identities-directory path a
+// repo resolves to. Centralized so every DaemonResolve call site
+// computes it the same way — the chain walk enumerates files under
+// this dir.
+func identitiesDirFor(repoPath string) string {
+	return filepath.Join(repoPath, ".thrum", "identities")
 }
 
 // validateImpersonation validates that the caller is authorized to impersonate the target identity.

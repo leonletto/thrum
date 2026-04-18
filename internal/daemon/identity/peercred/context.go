@@ -33,3 +33,34 @@ func FromContext(ctx context.Context) (*ResolvedIdentity, bool) {
 	id, ok := v.(*ResolvedIdentity)
 	return id, ok
 }
+
+// connectingPIDCtxKey is a separate unexported key from identityCtxKey so
+// the connecting-process PID can be injected independently of identity
+// resolution. The PID must remain available to handlers even when
+// peercred.Resolve returned ErrAnonymous — guard checks (Rule #4‴) use the
+// PID directly to walk the ancestor chain, without trusting any
+// client-asserted agent_id.
+type connectingPIDCtxKey struct{}
+
+// WithConnectingPID returns a new context carrying the kernel-verified PID
+// of the connecting process. The server extracts this PID via SO_PEERCRED
+// (Linux) / LOCAL_PEERPID (macOS) before attempting identity resolution,
+// so the PID is available to handlers regardless of whether the process
+// was matched to a registered agent.
+func WithConnectingPID(ctx context.Context, pid int) context.Context {
+	return context.WithValue(ctx, connectingPIDCtxKey{}, pid)
+}
+
+// ConnectingPIDFromContext returns the connecting-process PID previously
+// stored via WithConnectingPID, or (0, false) if none was injected.
+// Handlers MUST treat ok=false as "no kernel-verified PID available" and
+// fall back to per-method policy (e.g. reject mutating RPCs, allow
+// read-only bootstrap calls).
+func ConnectingPIDFromContext(ctx context.Context) (int, bool) {
+	v := ctx.Value(connectingPIDCtxKey{})
+	if v == nil {
+		return 0, false
+	}
+	pid, ok := v.(int)
+	return pid, ok
+}
