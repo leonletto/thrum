@@ -10,13 +10,19 @@ import (
 )
 
 // AtomicWrite writes data to path atomically and race-free across
-// concurrent writers. It acquires an exclusive fcntl advisory lock on
-// the parent directory for the duration of the write, then emits the
-// new content via a tmpfile + rename so an interrupted write can never
-// leave a partially populated identity file on disk.
+// concurrent writers. It acquires an exclusive BSD flock(2) advisory
+// lock on the parent directory for the duration of the write, then
+// emits the new content via a tmpfile + rename so an interrupted write
+// can never leave a partially populated identity file on disk.
+//
+// Flock(2) was chosen over fcntl(2) byte-range locks because BSD flock
+// locks the open file description (inherited across fork, not tied to
+// per-process state), which matches our "serialize identity-file
+// writers, not writer PIDs" intent and avoids the POSIX quirk where
+// any close() by the holding process releases the lock.
 //
 // Callers must ensure the parent directory of path exists; AtomicWrite
-// will not create it. The lock is advisory (fcntl), so only cooperating
+// will not create it. The lock is advisory, so only cooperating
 // processes using this function or a compatible locking discipline are
 // serialized — which is the design: inside thrum every identity-file
 // writer routes through here.
@@ -27,7 +33,7 @@ func AtomicWrite(path string, data []byte) (retErr error) {
 	// layout, not from external input.
 	lock, err := os.Open(dir)
 	if err != nil {
-		return fmt.Errorf("open dir for lock: %w", err)
+		return fmt.Errorf("open lock dir %s: %w", dir, err)
 	}
 	defer func() {
 		if cerr := lock.Close(); cerr != nil && retErr == nil {
@@ -43,9 +49,12 @@ func AtomicWrite(path string, data []byte) (retErr error) {
 		}
 	}()
 
+	// os.CreateTemp creates the file with mode 0600, matching the
+	// identity-file permission convention — no explicit chmod needed.
+	// #nosec G304 -- same rationale as the lock-dir open above.
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp.*")
 	if err != nil {
-		return fmt.Errorf("create tmp: %w", err)
+		return fmt.Errorf("create tmp in %s: %w", dir, err)
 	}
 	tmpName := tmp.Name()
 	cleanup := func() {
@@ -71,4 +80,3 @@ func AtomicWrite(path string, data []byte) (retErr error) {
 	}
 	return nil
 }
-

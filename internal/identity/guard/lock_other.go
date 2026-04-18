@@ -10,10 +10,11 @@ import "errors"
 var ErrUnsupportedPlatform = errors.New("atomic identity writes require a unix platform (fcntl/flock)")
 
 // AtomicWrite is not supported on non-unix build targets — thrum's
-// identity-file discipline depends on fcntl advisory locking, which has
-// no portable equivalent on Windows. Shipping a best-effort fallback
-// would silently weaken Rule #4‴; callers instead receive
-// ErrUnsupportedPlatform so the failure surfaces loudly.
+// identity-file discipline depends on BSD flock(2) advisory locking,
+// which has no portable equivalent on Windows. Shipping a best-effort
+// fallback (plain tmpfile + rename without a lock) would permit
+// concurrent writers to corrupt identity files, so callers receive
+// ErrUnsupportedPlatform and the failure surfaces loudly.
 func AtomicWrite(_ string, _ []byte) error {
 	return ErrUnsupportedPlatform
 }
