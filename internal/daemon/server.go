@@ -290,10 +290,19 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 	//   - transport error          → connIdentity stays nil, connResolved=false
 	var connIdentity *peercred.ResolvedIdentity
 	var connResolved bool
+	var connPID int
 	s.mu.RLock()
 	resolver := s.identityResolver
 	s.mu.RUnlock()
 	if resolver != nil {
+		// Extract the kernel-verified PID first so it's available to handlers
+		// regardless of whether the identity resolution below succeeds. Guard
+		// checks (Rule #4‴) rely on the PID to walk the ancestor chain and
+		// must never trust a client-asserted agent_id in its place.
+		if pid, err := peercred.PIDFromConn(conn); err == nil {
+			connPID = pid
+		}
+
 		id, err := resolver.Resolve(conn)
 		if err == nil {
 			connIdentity = id
@@ -411,8 +420,15 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 		// returns (nil, false) and handlers fall back to legacy behavior
 		// — which is the same path as tests and browser/WS transport.
 		ctxWithIdentity := ctxWithTransport
+		if connPID > 0 {
+			// Inject the kernel-verified PID before the identity so handlers
+			// can populate guard CheckContext.Chain even on anonymous
+			// (peercred-ran, no-match) callers. Guard checks never trust a
+			// client-asserted agent_id when this PID is available.
+			ctxWithIdentity = peercred.WithConnectingPID(ctxWithIdentity, connPID)
+		}
 		if connResolved {
-			ctxWithIdentity = peercred.WithIdentity(ctxWithTransport, connIdentity)
+			ctxWithIdentity = peercred.WithIdentity(ctxWithIdentity, connIdentity)
 
 			// Read-only allowlist enforcement: an anonymous caller (peercred
 			// ran, no match) may only invoke methods on the allowlist.
