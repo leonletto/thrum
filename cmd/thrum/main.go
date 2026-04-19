@@ -470,6 +470,22 @@ Examples:
 
 			fmt.Println("\nDone. Run 'thrum quickstart --name <name> --role <role> --module <module>' to register an agent.")
 
+			// Post-action hint: tip the operator to register via quickstart
+			// when this machine has no identity yet. Runs only on the
+			// full-init success path (the worktree-redirect branch at
+			// main.go line ~285 returns earlier by design — spec §4 point 6).
+			// Skip in dry-run: nothing actually got initialized.
+			if !dryRun && !alreadyInitialized {
+				state := cli.NewFSOnlyStateAccessor()
+				postCtx := cli.HintCtx{
+					Command: "init",
+					Flags:   map[string]any{"repo": flagRepo},
+					Post:    true,
+					State:   state,
+				}
+				cli.EmitStderr(cli.Collect(postCtx), flagQuiet, flagJSON)
+			}
+
 			return nil
 		},
 	}
