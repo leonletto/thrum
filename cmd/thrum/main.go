@@ -5285,6 +5285,13 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	var tsLocalAddr string           // set when Tailscale listener starts
 	var tsnetMu sync.Mutex           // protects tsLocalAddr and tsnetStarted
 	var startTsnetFn func(int) error // lazy tsnet start, assigned later
+	// wsPort is resolved later (line ~5631) but the peer.start_pairing /
+	// peer.join closures need to read it at RPC time for the --type local
+	// loopback peercode. Declared here so the closures capture it by
+	// reference; the assignment happens before any peer RPC can fire (the
+	// closures are wired into the daemon server below, which itself only
+	// starts accepting connections once the WS server is up).
+	var wsPort string
 	hostname, _ := os.Hostname()
 
 	getTsLocalAddr := func() string {
@@ -5405,9 +5412,32 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		}(evt)
 	})
 
+	// pairHandler is created once, registered on multiple WS registries:
+	//   - syncRegistry (tsnet listener) for cross-host Tailscale pairing
+	//   - wsRegistry (localhost listener) for same-host loopback pairing
+	//     under --type local (xir.27 sub-component 1)
+	var pairHandler *rpc.PairRequestHandler
+
 	if syncManager != nil {
 		// Create pairing manager (used by both Unix socket and Tailscale handlers)
 		pairingMgr = daemon.NewPairingManager(syncManager.PeerRegistry(), st.Identity(), hostname)
+
+		// Build the shared pair.request handler.
+		pairHandler = rpc.NewPairRequestHandler(func(
+			code, peerDaemonID, peerName, peerAddress string,
+			peerRepoName, peerHostname, peerRepoPath, peerGitOriginURL string,
+		) (string, string, string, string, string, string, string, error) {
+			token, local, err := pairingMgr.HandlePairRequest(code, daemon.PairMetadata{
+				DaemonID:     peerDaemonID,
+				Name:         peerName,
+				Address:      peerAddress,
+				RepoName:     peerRepoName,
+				Hostname:     peerHostname,
+				RepoPath:     peerRepoPath,
+				GitOriginURL: peerGitOriginURL,
+			})
+			return token, local.DaemonID, local.Name, local.RepoName, local.Hostname, local.RepoPath, local.GitOriginURL, err
+		})
 
 		// Adapter: convert daemon.PeerStatusInfo → rpc.PeerStatus
 		listPeersFn := func() []rpc.PeerStatus {
@@ -5470,7 +5500,18 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				return code, getTsLocalAddr(), "tailscale", err
 
 			case "local":
-				return "", "", "", fmt.Errorf("--type local: handshake wiring lands in xir.27 sub-component 1 (next commit)")
+				// xir.27 sub-1: emit a loopback peercode anchored at the
+				// daemon's own WS port. The peer.join side dials
+				// ws://127.0.0.1:<wsPort>/ws?pairing_code=<code> directly,
+				// hitting pair.request on wsRegistry — no tsnet bring-up.
+				if wsPort == "" {
+					return "", "", "", fmt.Errorf("--type local: daemon ws port not yet resolved")
+				}
+				code, err := pairingMgr.StartPairing(timeout)
+				if err != nil {
+					return "", "", "", err
+				}
+				return code, net.JoinHostPort("127.0.0.1", wsPort), "local", nil
 
 			case "network":
 				return "", "", "", fmt.Errorf("--type network: handshake wiring lands in xir.27 sub-component 2")
@@ -5548,7 +5589,39 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				return peer.Name, peer.DaemonID, nil
 
 			case "local":
-				return "", "", fmt.Errorf("--type local: join handshake wiring lands in xir.27 sub-component 1 (next commit)")
+				// xir.27 sub-1: dial the loopback peercode address directly.
+				// No tsnet — RequestPairing builds ws://<peerAddr>/ws?pairing_code=
+				// which routes to wsRegistry's pair.request via the localhost
+				// WS server on the listener side. localMeta.Address advertises
+				// our own loopback WS so post-pair sync (sync.notify) reaches
+				// us back on the right port.
+				if wsPort == "" {
+					return "", "", fmt.Errorf("--type local: daemon ws port not yet resolved")
+				}
+				localAddr := net.JoinHostPort("127.0.0.1", wsPort)
+				localIdent := st.Identity()
+				localMeta := daemon.PairMetadata{
+					DaemonID:     localIdent.DaemonID,
+					Name:         hostname,
+					Address:      localAddr,
+					RepoName:     localIdent.RepoName,
+					Hostname:     localIdent.Hostname,
+					RepoPath:     localIdent.RepoPath,
+					GitOriginURL: localIdent.GitOriginURL,
+				}
+				peer, err := syncManager.JoinPeer(peerAddr, code, localMeta)
+				if err != nil {
+					return "", "", err
+				}
+				peer.Role = "dialer"
+				peer.Transport = "local"
+				if repoPath != "" {
+					peer.RepoPath = repoPath
+				}
+				if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
+					fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
+				}
+				return peer.Name, peer.DaemonID, nil
 
 			case "network":
 				return "", "", fmt.Errorf("--type network: join handshake wiring lands in xir.27 sub-component 2")
@@ -5651,7 +5724,7 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	server.RegisterHandler("purge.execute", purgeHandler.Handle)
 
 	// Resolve WS port: env var > config.json > default ("auto" = find free port)
-	wsPort := os.Getenv("THRUM_WS_PORT")
+	wsPort = os.Getenv("THRUM_WS_PORT")
 	if wsPort == "" {
 		wsPort = thrumCfg.Daemon.WSPort
 	}
@@ -5730,6 +5803,15 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		wsRegistry.Register("sync.status", websocket.Handler(syncStatusHandler.Handle))
 	}
 
+	// xir.27 sub-1: pair.request on the localhost WS so --type local peers
+	// can complete the handshake without going through tsnet. Same handler
+	// instance as the tsnet-side registration; the pairing-code-active gate
+	// in WithPairingValidator below ensures only an active pairing session
+	// accepts pair-code connections, mirroring the tsnet-side gate.
+	if pairHandler != nil {
+		wsRegistry.Register("pair.request", websocket.Handler(pairHandler.Handle))
+	}
+
 	// Resolve UI filesystem (embedded or dev mode)
 	var uiFS fs.FS
 	if devPath := os.Getenv("THRUM_UI_DEV"); devPath != "" {
@@ -5758,6 +5840,17 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			if p != nil {
 				peerManager.AcceptPeer(ctx, p)
 			}
+		}))
+	}
+
+	// xir.27 sub-1: localhost WS accepts pair-code connections (?pairing_code=)
+	// without a token while a pairing session is active. Same gate semantics
+	// as the tsnet-side validator. Without this, --type local peer.join calls
+	// would be rejected at the WS handshake before ever reaching the
+	// pair.request handler.
+	if pairingMgr != nil {
+		wsOpts = append(wsOpts, websocket.WithPairingValidator(func(code string) bool {
+			return pairingMgr.HasActiveSession()
 		}))
 	}
 
@@ -5833,22 +5926,7 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			syncNotifyHandler := rpc.NewSyncNotifyHandler(syncManager.SyncFromPeerByID)
 			_ = syncRegistry.Register("sync.notify", syncNotifyHandler.Handle)
 		}
-		if pairingMgr != nil {
-			pairHandler := rpc.NewPairRequestHandler(func(
-				code, peerDaemonID, peerName, peerAddress string,
-				peerRepoName, peerHostname, peerRepoPath, peerGitOriginURL string,
-			) (string, string, string, string, string, string, string, error) {
-				token, local, err := pairingMgr.HandlePairRequest(code, daemon.PairMetadata{
-					DaemonID:     peerDaemonID,
-					Name:         peerName,
-					Address:      peerAddress,
-					RepoName:     peerRepoName,
-					Hostname:     peerHostname,
-					RepoPath:     peerRepoPath,
-					GitOriginURL: peerGitOriginURL,
-				})
-				return token, local.DaemonID, local.Name, local.RepoName, local.Hostname, local.RepoPath, local.GitOriginURL, err
-			})
+		if pairHandler != nil {
 			_ = syncRegistry.Register("pair.request", pairHandler.Handle)
 		}
 

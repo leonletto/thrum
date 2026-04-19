@@ -180,13 +180,18 @@ func (pm *PairingManager) HandlePairRequest(code string, peer PairMetadata) (tok
 		return "", PairMetadata{}, fmt.Errorf("already paired with %s", existing.Name)
 	}
 
-	// Store the peer (listener side — we accepted the incoming pair request)
+	// Store the peer (listener side — we accepted the incoming pair request).
+	// Infer Transport from the dialer's reach-back address: loopback ⇒ "local",
+	// CGNAT ⇒ "tailscale", anything else ⇒ "network". Mirrors the dialer-side
+	// transport stamping in cmd/thrum/main.go peer.join. xir.27 sub-1 hooks
+	// the loopback class to enable same-host sibling pairing without tsnet.
 	err = pm.peers.AddPeer(&PeerInfo{
 		Name:               peer.Name,
 		Address:            peer.Address,
 		DaemonID:           peer.DaemonID,
 		Token:              pm.session.Token,
 		Role:               "listener",
+		Transport:          DetectTransport(peer.Address),
 		RemoteRepoName:     peer.RepoName,
 		RemoteHostname:     peer.Hostname,
 		RemoteRepoPath:     peer.RepoPath,
