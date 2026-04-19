@@ -132,14 +132,26 @@ func (pm *PeerManager) startBridge(parentCtx context.Context, cfg peer.BridgeCon
 				return
 			}
 			pm.logger.Printf("peer %s disconnected: %v, reconnecting in %s", cfg.PeerName, err, backoff)
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(backoff):
+			// xir.29: give OnDialError first refusal. If it returns true,
+			// skip backoff and retry immediately (auto-reconcile has taken
+			// corrective action). Otherwise fall through to exponential
+			// backoff as usual.
+			immediate := false
+			if cfg.OnDialError != nil {
+				immediate = cfg.OnDialError(cfg.PeerName, err)
 			}
-			backoff *= 2
-			if backoff > maxBackoff {
-				backoff = maxBackoff
+			if !immediate {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(backoff):
+				}
+				backoff *= 2
+				if backoff > maxBackoff {
+					backoff = maxBackoff
+				}
+			} else {
+				backoff = time.Second // reset on immediate retry
 			}
 		}
 	}()
