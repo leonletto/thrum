@@ -75,6 +75,11 @@ type runningBridge struct {
 // NewPeerManager creates a PeerManager that reads peer registry and manages bridges.
 // A nil logger is replaced with log.Default() so the xir.29 OnDialError
 // hook can safely emit diagnostics without risking a nil-pointer panic.
+//
+// localWSPort MAY be "" at construction when the daemon hasn't bound its ws
+// listener yet (thrum-1f4y: early construction lets handlers capture the
+// manager before wsPort resolves). Use SetLocalWSPort once the port binds;
+// bridges can only start after it is populated.
 func NewPeerManager(registry *PeerRegistry, localWSPort string, logger *log.Logger) *PeerManager {
 	if logger == nil {
 		logger = log.Default()
@@ -85,6 +90,16 @@ func NewPeerManager(registry *PeerRegistry, localWSPort string, logger *log.Logg
 		logger:      logger,
 		bridges:     make(map[string]*runningBridge),
 	}
+}
+
+// SetLocalWSPort updates the daemon's WS port. Must be called once during
+// daemon boot after the WS listener binds, BEFORE any goroutine can read
+// pm.localWSPort (i.e. before ConnectAll / AcceptPeer / ConnectPeer ever
+// fire). The happens-before established by goroutine creation (or by the
+// handler-registration ordering of the RPC server) makes the subsequent
+// lock-free reads safe.
+func (pm *PeerManager) SetLocalWSPort(port string) {
+	pm.localWSPort = port
 }
 
 // BuildConfigs generates BridgeConfig for each dialer-role peer.
@@ -104,25 +119,37 @@ func (pm *PeerManager) BuildConfigs() []peer.BridgeConfig {
 		if p.Role != "dialer" {
 			continue
 		}
-		cfg := peer.BridgeConfig{
-			LocalWSPort:  pm.localWSPort,
-			PeerName:     p.Name,
-			PeerToken:    p.Token,
-			BridgeUserID: fmt.Sprintf("user:peer-%s", p.Name),
-			ProxyPrefix:  p.ProxyPrefix,
-			RemoteAgents: p.RemoteAgents,
-		}
-		if p.Transport == "local" && p.RepoPath != "" {
-			cfg.PeerRepoPath = p.RepoPath
-		} else {
-			cfg.PeerAddress = p.Address
-		}
+		cfg := pm.buildConfigForPeer(p)
 		if hook != nil {
 			cfg.OnDialError = pm.makeOnDialError(hook, p.Name)
 		}
 		configs = append(configs, cfg)
 	}
 	return configs
+}
+
+// buildConfigForPeer produces the BridgeConfig for a single peer. Shared
+// by BuildConfigs, ConnectPeer, and AcceptPeer so the address/repo-path
+// selection stays in one place. xir.29's OnDialError hook is attached
+// by BuildConfigs (dialer-only) and is intentionally NOT set here;
+// AcceptPeer and the ConnectPeer path into peer.join do not need the
+// reconcile callback (listener-side reverse bridges and newly-paired
+// dialers both rely on the first dial succeeding via stored secrets).
+func (pm *PeerManager) buildConfigForPeer(p *PeerInfo) peer.BridgeConfig {
+	cfg := peer.BridgeConfig{
+		LocalWSPort:  pm.localWSPort,
+		PeerName:     p.Name,
+		PeerToken:    p.Token,
+		BridgeUserID: fmt.Sprintf("user:peer-%s", p.Name),
+		ProxyPrefix:  p.ProxyPrefix,
+		RemoteAgents: p.RemoteAgents,
+	}
+	if p.Transport == "local" && p.RepoPath != "" {
+		cfg.PeerRepoPath = p.RepoPath
+	} else {
+		cfg.PeerAddress = p.Address
+	}
+	return cfg
 }
 
 // makeOnDialError returns the xir.29 OnDialError callback for a single
@@ -225,6 +252,21 @@ func (pm *PeerManager) ConnectAll(ctx context.Context) {
 	}
 }
 
+// ConnectPeer spawns a PeerBridge for a single peer immediately. Used by
+// peer.join (and future peer.add dialer paths) so newly-paired peers do
+// not wait for the next daemon restart to come online (thrum-1f4y).
+// Idempotent — the underlying startBridge is a no-op if a bridge for
+// this peer name is already running. The OnDialError reconcile hook is
+// intentionally NOT attached here: a freshly paired peer's first dial
+// should succeed with the stored secrets; any drift that surfaces
+// afterward lands on ConnectAll's normal path at the next daemon boot.
+func (pm *PeerManager) ConnectPeer(ctx context.Context, p *PeerInfo) {
+	if p == nil || p.Role != "dialer" {
+		return
+	}
+	pm.startBridge(ctx, pm.buildConfigForPeer(p))
+}
+
 // startBridge spawns a managed PeerBridge goroutine with exponential-backoff reconnection.
 // Idempotent — calling again for an already-running peer is a no-op.
 func (pm *PeerManager) startBridge(parentCtx context.Context, cfg peer.BridgeConfig) {
@@ -275,16 +317,10 @@ func (pm *PeerManager) startBridge(parentCtx context.Context, cfg peer.BridgeCon
 // AcceptPeer handles listener-side acceptance: when a remote peer connects to our WS,
 // the daemon can call this to spawn a reverse bridge if not already running.
 func (pm *PeerManager) AcceptPeer(ctx context.Context, peerInfo *PeerInfo) {
-	cfg := peer.BridgeConfig{
-		LocalWSPort:  pm.localWSPort,
-		PeerName:     peerInfo.Name,
-		PeerAddress:  peerInfo.Address,
-		PeerToken:    peerInfo.Token,
-		BridgeUserID: fmt.Sprintf("user:peer-%s", peerInfo.Name),
-		ProxyPrefix:  peerInfo.ProxyPrefix,
-		RemoteAgents: peerInfo.RemoteAgents,
+	if peerInfo == nil {
+		return
 	}
-	pm.startBridge(ctx, cfg)
+	pm.startBridge(ctx, pm.buildConfigForPeer(peerInfo))
 }
 
 // SetReconcileManager installs an xir.29 ReconcileHook. Must be called

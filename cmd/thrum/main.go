@@ -5348,6 +5348,12 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// "ip:port" address string. Per-IP idempotent: subsequent calls with
 	// the same IP return the existing listener's port.
 	var ensureNetworkListenerFn func(addrIP string) (string, error)
+	// spawnPeerBridgeFn is wired once peerManager exists (~line 6030+). Called
+	// by the peer.join RPC closure immediately after AddPeer so a freshly
+	// paired dialer peer gets its bridge without waiting for the next daemon
+	// restart (thrum-1f4y). Nil until wired; nil-check at every call site so
+	// a restart-only code path still works when hooks are absent.
+	var spawnPeerBridgeFn func(*daemon.PeerInfo)
 	hostname, _ := os.Hostname()
 
 	getTsLocalAddr := func() string {
@@ -5690,6 +5696,12 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
 					fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
 				}
+				// thrum-1f4y: spawn the bridge for this new peer immediately;
+				// previously a daemon restart was required for ConnectAll to
+				// pick it up.
+				if spawnPeerBridgeFn != nil {
+					spawnPeerBridgeFn(peer)
+				}
 				return peer.Name, peer.DaemonID, nil
 
 			case "local":
@@ -5724,6 +5736,12 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				}
 				if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
 					fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
+				}
+				// thrum-1f4y: spawn the bridge for this new peer immediately;
+				// previously a daemon restart was required for ConnectAll to
+				// pick it up.
+				if spawnPeerBridgeFn != nil {
+					spawnPeerBridgeFn(peer)
 				}
 				return peer.Name, peer.DaemonID, nil
 
@@ -5768,6 +5786,12 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				peer.Transport = "network"
 				if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
 					fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
+				}
+				// thrum-1f4y: spawn the bridge for this new peer immediately;
+				// previously a daemon restart was required for ConnectAll to
+				// pick it up.
+				if spawnPeerBridgeFn != nil {
+					spawnPeerBridgeFn(peer)
 				}
 				return peer.Name, peer.DaemonID, nil
 
@@ -6148,6 +6172,13 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				peerManager.AcceptPeer(ctx, p)
 			}
 		}))
+		// thrum-1f4y: wire the peer.join post-AddPeer hook now that
+		// peerManager exists. ConnectPeer is idempotent and filters
+		// out non-dialer roles, so it is safe to call from any peer.join
+		// transport branch.
+		spawnPeerBridgeFn = func(p *daemon.PeerInfo) {
+			peerManager.ConnectPeer(ctx, p)
+		}
 	}
 
 	// xir.27 sub-1: localhost WS accepts pair-code connections (?pairing_code=)
