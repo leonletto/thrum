@@ -193,3 +193,64 @@ func TestReconcileAll_ParallelDispatchForDifferentPeers(t *testing.T) {
 		t.Errorf("wall clock %v suggests serial execution (want < 700ms)", elapsed)
 	}
 }
+
+// I5 (plan-reviewer) Option A: unit-style replacement for the two-daemon
+// resilience scenario. Verifies the boot-time ReconcileAll success path
+// end-to-end through the real PeerRegistry (save/load) without needing
+// a second in-process daemon. The two-daemon scenario is deferred to
+// tests/resilience/ (Task 7.1/7.2) where the full wire path is
+// exercised.
+func TestReconcileAll_BootTimeDaemonIDRotationHealsRegistry(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "peers.json")
+	r, err := daemon.NewPeerRegistry(tmp)
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	// Pre-rotation state: we believe B's daemon_id is 01OLD.
+	if err := r.AddPeer(&daemon.PeerInfo{
+		Name:      "B",
+		DaemonID:  "01OLD",
+		Address:   "1.2.3.4:7731",
+		Token:     "tok-B",
+		Transport: "network",
+	}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+
+	// Fake B returns a rotated daemon_id on peer.repair — simulating B
+	// having been restarted with a fresh identity but the same address.
+	fake := func(ctx context.Context, addr, tok string, local DialerIdentity) (RepairResponse, error) {
+		if tok != "tok-B" {
+			return RepairResponse{}, ErrTokenRejected
+		}
+		return RepairResponse{DaemonID: "01NEW", Name: "B"}, nil
+	}
+	mgr := NewManager(r, fake, DialerIdentity{DaemonID: "01SELF"})
+	results := mgr.ReconcileAll(context.Background())
+
+	if len(results) != 1 || !results[0].OK {
+		t.Fatalf("ReconcileAll results: %+v", results)
+	}
+
+	// The registry has been re-keyed under the new daemon_id.
+	got := r.FindPeerByToken("tok-B")
+	if got == nil {
+		t.Fatalf("peer lookup by token failed after reconcile")
+	}
+	if got.DaemonID != "01NEW" {
+		t.Errorf("DaemonID = %q, want 01NEW", got.DaemonID)
+	}
+	if got.ReconcileStatus != "" {
+		t.Errorf("ReconcileStatus not cleared after successful reconcile: %q", got.ReconcileStatus)
+	}
+
+	// Verify re-key persists through a registry reload — simulates a
+	// daemon restart picking up the reconciled state.
+	r2, err := daemon.NewPeerRegistry(tmp)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if got2 := r2.FindPeerByToken("tok-B"); got2 == nil || got2.DaemonID != "01NEW" {
+		t.Errorf("re-keyed state did not persist across registry reload: %+v", got2)
+	}
+}
