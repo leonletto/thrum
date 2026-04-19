@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
@@ -91,12 +92,80 @@ func ResolveTarget(thrumDir, agentName string) string {
 	return ""
 }
 
+// HasLocalIdentity reports whether the named agent has an identity
+// file reachable from this daemon (main identities dir OR any worktree
+// identities dir). True means "local recipient" for the purpose of
+// local-only operations like spool writes.
+func HasLocalIdentity(thrumDir, agentName string) bool {
+	if identityPath(filepath.Join(thrumDir, "identities"), agentName) != "" {
+		return true
+	}
+	repoDir := filepath.Dir(thrumDir)
+	for _, wtPath := range safecmd.WorktreePaths(context.Background(), repoDir) {
+		if wtPath == repoDir {
+			continue
+		}
+		if identityPath(filepath.Join(wtPath, ".thrum", "identities"), agentName) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// LocalAgentNames returns every agent whose identity file is reachable
+// from this daemon's filesystem (main identities dir + any worktree
+// identities dir). Used by the inbox janitor to enumerate local
+// agents without a hostname comparison.
+func LocalAgentNames(thrumDir string) []string {
+	seen := map[string]struct{}{}
+	scan := func(dir string) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return
+		}
+		for _, e := range entries {
+			if base, ok := strings.CutSuffix(e.Name(), ".json"); ok {
+				seen[base] = struct{}{}
+			}
+		}
+	}
+	scan(filepath.Join(thrumDir, "identities"))
+	repoDir := filepath.Dir(thrumDir)
+	for _, wtPath := range safecmd.WorktreePaths(context.Background(), repoDir) {
+		if wtPath == repoDir {
+			continue
+		}
+		scan(filepath.Join(wtPath, ".thrum", "identities"))
+	}
+	out := make([]string, 0, len(seen))
+	for name := range seen {
+		out = append(out, name)
+	}
+	return out
+}
+
+// identityPath returns the full path to <dir>/<agentName>.json if the
+// file exists, else "". Factored out so ResolveTarget's existing
+// worktree-walk and HasLocalIdentity share one source of truth for
+// the per-dir existence probe.
+func identityPath(dir, agentName string) string {
+	p := filepath.Join(dir, agentName+".json") // #nosec G304 -- path is .thrum/identities/<name>.json
+	if _, err := os.Stat(p); err == nil {
+		return p
+	}
+	return ""
+}
+
 // readTmuxFromIdentity loads <identitiesDir>/<agentName>.json and
 // returns the TmuxSession field, or "" on any error (including
 // file-not-found, which is the common case when an agent isn't
 // registered in this particular worktree).
 func readTmuxFromIdentity(identitiesDir, agentName string) string {
-	data, err := os.ReadFile(filepath.Join(identitiesDir, agentName+".json")) // #nosec G304 -- path is .thrum/identities/<name>.json
+	p := identityPath(identitiesDir, agentName)
+	if p == "" {
+		return ""
+	}
+	data, err := os.ReadFile(p) // #nosec G304 -- path is .thrum/identities/<name>.json
 	if err != nil {
 		return ""
 	}

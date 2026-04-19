@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/types"
 )
@@ -2147,5 +2148,85 @@ func TestAgentRegister_LocalConflictStillDetected(t *testing.T) {
 	}
 	if regResp.Conflict == nil || regResp.Conflict.ExistingAgentID != "impl_alpha" {
 		t.Errorf("Conflict.ExistingAgentID = %v, want impl_alpha", regResp.Conflict)
+	}
+}
+
+func TestAgentWhoami_TmuxAliveReflectsSessionState(t *testing.T) {
+	// Mirror the TestAgentWhoami setup exactly.
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_tmux_alive", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	t.Setenv("THRUM_ROLE", "implementer")
+	t.Setenv("THRUM_MODULE", "tmuxtest")
+
+	agentHandler := NewAgentHandler(s)
+	registerReq := RegisterRequest{Role: "implementer", Module: "tmuxtest"}
+	registerReqJSON, _ := json.Marshal(registerReq)
+	registerResp, err := agentHandler.HandleRegister(context.Background(), registerReqJSON)
+	if err != nil {
+		t.Fatalf("register agent: %v", err)
+	}
+	regResp, ok := registerResp.(*RegisterResponse)
+	if !ok {
+		t.Fatalf("expected *RegisterResponse, got %T", registerResp)
+	}
+	agentID := regResp.AgentID
+
+	// Write a synthetic identity file with a TmuxSession that definitely
+	// does not exist. The daemon must compute TmuxAlive=false without error.
+	idsDir := filepath.Join(tmpDir, ".thrum", "identities")
+	if err := os.MkdirAll(idsDir, 0o755); err != nil {
+		t.Fatalf("mkdir identities: %v", err)
+	}
+	idFile := config.IdentityFile{
+		Version:     1,
+		AgentPID:    12345,
+		TmuxSession: "thrum-nonexistent-session-xyzzy:0.0",
+	}
+	idFileJSON, _ := json.Marshal(idFile)
+	idFilePath := filepath.Join(idsDir, agentID+".json")
+	if err := os.WriteFile(idFilePath, idFileJSON, 0o600); err != nil {
+		t.Fatalf("write identity file: %v", err)
+	}
+
+	whoamiParams, _ := json.Marshal(struct {
+		CallerAgentID string `json:"caller_agent_id"`
+	}{CallerAgentID: agentID})
+
+	resp, err := agentHandler.HandleWhoami(context.Background(), whoamiParams)
+	if err != nil {
+		t.Fatalf("HandleWhoami() error = %v", err)
+	}
+
+	whoamiResp, ok := resp.(*WhoamiResponse)
+	if !ok {
+		t.Fatalf("response is not *WhoamiResponse, got %T", resp)
+	}
+
+	// AgentPID and TmuxSession should come straight from the identity file.
+	if whoamiResp.AgentPID != 12345 {
+		t.Errorf("AgentPID = %d, want 12345", whoamiResp.AgentPID)
+	}
+	if whoamiResp.TmuxSession != "thrum-nonexistent-session-xyzzy:0.0" {
+		t.Errorf("TmuxSession = %q, want %q", whoamiResp.TmuxSession, "thrum-nonexistent-session-xyzzy:0.0")
+	}
+
+	// The session does not exist, so TmuxAlive must be false regardless of
+	// whether tmux is installed (binary not found also returns false).
+	if whoamiResp.TmuxAlive {
+		t.Errorf("TmuxAlive = true for a non-existent session, want false")
+	}
+
+	// Host should be populated (non-empty; exact value is machine-dependent).
+	if whoamiResp.Host == "" {
+		t.Error("Host should be non-empty")
 	}
 }

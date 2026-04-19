@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net"
 	"testing"
+
+	"github.com/leonletto/thrum/internal/config"
 )
 
 func TestAgentRegister(t *testing.T) {
@@ -418,5 +420,34 @@ func TestFormatPing(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAgentSummary_IncludesHookDeliveryFields(t *testing.T) {
+	idFile := &config.IdentityFile{
+		Agent:       config.AgentConfig{Name: "bob", Role: "impl", Module: "mod"},
+		AgentPID:    12345,
+		TmuxSession: "bob:0.0",
+	}
+	daemonInfo := &WhoamiResult{
+		TmuxAlive: true,
+		Host:      "laptop.local",
+	}
+	s := BuildAgentSummary(idFile, "/p/bob.json", daemonInfo)
+	if s.Host != "laptop.local" || s.PID != 12345 || s.TmuxSession != "bob:0.0" || !s.TmuxAlive {
+		t.Fatalf("missing hook-delivery fields: %+v", s)
+	}
+	data, err := json.Marshal(s)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for _, key := range []string{"host", "pid", "tmux_session", "tmux_alive"} {
+		if _, ok := got[key]; !ok {
+			t.Errorf("missing JSON key %q in %s", key, string(data))
+		}
 	}
 }

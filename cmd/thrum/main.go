@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,6 +30,7 @@ import (
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
+	"github.com/leonletto/thrum/internal/daemon/inbox"
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
 	"github.com/leonletto/thrum/internal/daemon/monitor"
 	"github.com/leonletto/thrum/internal/daemon/nudge"
@@ -138,6 +140,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(whoamiCmd())
 	rootCmd.AddCommand(versionCmd())
 	rootCmd.AddCommand(waitCmd())
+	rootCmd.AddCommand(cronCmd())
 
 	// Composite commands
 	rootCmd.AddCommand(primeCmd())
@@ -1044,6 +1047,114 @@ func versionCmd() *cobra.Command {
 	return cmd
 }
 
+// cronCmd is the root of the `thrum cron` subtree. Currently houses
+// only install-inbox-poll. Subcommands here emit runtime-specific
+// scheduling instructions for the calling agent to execute — they do
+// not schedule anything directly; the daemon has no cron primitive.
+func cronCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "cron",
+		Short: "Manage cron-style scheduled tasks (runtime-specific emitters)",
+	}
+	cmd.AddCommand(cronInstallInboxPollCmd())
+	return cmd
+}
+
+// cronInstallInboxPollCmd emits an instruction block that the
+// SessionStart hook forwards to Claude Code, which reads it and calls
+// CronCreate to schedule the 15-minute inbox-check poll. The command
+// itself prints to stdout and exits — it does NOT call the daemon,
+// touch identity, or invoke any runtime API directly. That's why it's
+// classified as bypass.
+func cronInstallInboxPollCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "install-inbox-poll",
+		Short: "Emit a CronCreate instruction to schedule the 15-minute inbox-check poll",
+		Long: `Prints an instruction block for the running runtime agent to schedule
+the 15-minute inbox-check cron. Emitted to stdout; the SessionStart hook
+forwards it into the agent's context, where the runtime acts on it.
+
+This command is print-only. It does NOT call the daemon, touch identity
+state, or invoke any runtime scheduling API directly.`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			_, err := fmt.Fprintln(cmd.OutOrStdout(), inboxPollCronInstruction)
+			return err
+		},
+	}
+}
+
+// inboxPollCronInstruction is the instruction block consumed by
+// Claude Code's SessionStart hook → context-injection pipeline.
+// The format intentionally mirrors other hook-output instructions:
+// a delimited banner, explicit kv lines, and a closing banner so
+// the runtime can parse it unambiguously.
+const inboxPollCronInstruction = `===== SCHEDULE CRON (hook-inbox-delivery) =====
+Please call CronCreate with the following parameters:
+  cron: "7,22,37,52 * * * *"
+  prompt: "Background inbox check. Run ` + "`thrum inbox --unread`" + ` once. If messages are present, process them; if not, return to idle without further action."
+  recurring: true
+  durable: false
+===============================================`
+
+// printAgentSummaryField emits the bare value of a single field from
+// AgentSummary, newline-terminated. Unknown fields return an error so
+// scripts fail loudly rather than silently consuming the empty string.
+func printAgentSummaryField(w io.Writer, s *cli.AgentSummary, field string) error {
+	value, ok := agentSummaryField(s, field)
+	if !ok {
+		return fmt.Errorf("unknown field %q (known: agent_id, role, module, display, branch, worktree, intent, repo_id, session_id, session_start, identity_file, updated_at, source, status, host, pid, tmux_session, tmux_alive)", field)
+	}
+	_, err := fmt.Fprintln(w, value)
+	return err
+}
+
+// agentSummaryField returns the stringified value of a named field on
+// AgentSummary, plus a boolean ok flag. Booleans render as "true"/"false".
+// Zero integers render as "0". Empty strings render as the empty string
+// (the newline from Fprintln is still emitted so callers can | xargs etc.).
+func agentSummaryField(s *cli.AgentSummary, field string) (string, bool) {
+	switch field {
+	case "agent_id":
+		return s.AgentID, true
+	case "role":
+		return s.Role, true
+	case "module":
+		return s.Module, true
+	case "display":
+		return s.Display, true
+	case "branch":
+		return s.Branch, true
+	case "worktree":
+		return s.Worktree, true
+	case "intent":
+		return s.Intent, true
+	case "repo_id":
+		return s.RepoID, true
+	case "session_id":
+		return s.SessionID, true
+	case "session_start":
+		return s.SessionStart, true
+	case "identity_file":
+		return s.IdentityFile, true
+	case "updated_at":
+		return s.UpdatedAt, true
+	case "source":
+		return s.Source, true
+	case "status":
+		return s.Status, true
+	case "host":
+		return s.Host, true
+	case "pid":
+		return strconv.Itoa(s.PID), true
+	case "tmux_session":
+		return s.TmuxSession, true
+	case "tmux_alive":
+		return strconv.FormatBool(s.TmuxAlive), true
+	default:
+		return "", false
+	}
+}
+
 // runWhoami is the shared implementation for both top-level `thrum whoami`
 // and `thrum agent whoami`. It loads identity, optionally enriches from the
 // daemon, then prints the result.
@@ -1071,6 +1182,10 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 	}
 
 	summary := cli.BuildAgentSummary(identityFile, identityPath, daemonInfo)
+
+	if field, _ := cmd.Flags().GetString("field"); field != "" {
+		return printAgentSummaryField(cmd.OutOrStdout(), summary, field)
+	}
 
 	if flagJSON {
 		output, err := json.MarshalIndent(summary, "", "  ")
@@ -1100,6 +1215,8 @@ Examples:
   THRUM_NAME=alice thrum whoami`,
 		RunE: runWhoami,
 	}
+
+	cmd.Flags().String("field", "", "Print a single field's value (e.g. agent_id, tmux_alive) and exit")
 
 	return cmd
 }
@@ -2069,7 +2186,7 @@ Use --context to show work context (branch, commits, intent) for each agent.`,
 	listCmd.Flags().Bool("context", false, "Show work context (branch, commits, intent)")
 	cmd.AddCommand(listCmd)
 
-	cmd.AddCommand(&cobra.Command{
+	agentWhoamiCmd := &cobra.Command{
 		Use:   "whoami",
 		Short: "Show current agent identity",
 		Long: `Show the current agent identity and active session.
@@ -2079,7 +2196,9 @@ Identity is resolved from:
 2. Environment variables (THRUM_ROLE, THRUM_MODULE, THRUM_NAME)
 3. Identity files in .thrum/identities/ directory`,
 		RunE: runWhoami,
-	})
+	}
+	agentWhoamiCmd.Flags().String("field", "", "Print a single field's value (e.g. agent_id, tmux_alive) and exit")
+	cmd.AddCommand(agentWhoamiCmd)
 
 	deleteCmd := &cobra.Command{
 		Use:   "delete <name>",
@@ -5120,6 +5239,44 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		// get exclusively. nudge.DispatchTmux is fire-and-forget; failures
 		// are intentionally swallowed because nudges are advisory.
 		nudge.DispatchTmux(thrumDir, evt.Recipients, evt.AgentID)
+
+		// hook-inbox-delivery: write a spool file for every LOCAL recipient.
+		// "Local" means the recipient has an identity file reachable from
+		// this daemon (matching the implicit rule in nudge.DispatchTmux —
+		// cross-machine recipients are a no-op because their identity file
+		// isn't on this daemon's disk). The agent-side check-inbox hook
+		// reads the spool and decides whether to surface a nudge (tmux dead)
+		// or silently consume (tmux alive — tmux path already handled it).
+		//
+		// Dispatched on its own goroutine (same async pattern as
+		// nudge.DispatchTmux) so the SetOnEventWrite writer goroutine
+		// doesn't block on the per-recipient git-worktree walk inside
+		// HasLocalIdentity. The hook contract is "synchronous but must not
+		// block" — a git subprocess per recipient on the hot write path
+		// violates that on busy daemons.
+		go func(evt types.MessageCreateEvent) {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("[inbox] spool dispatch panic", "panic", r)
+				}
+			}()
+			for _, recipient := range evt.Recipients {
+				if !nudge.HasLocalIdentity(thrumDir, recipient) {
+					continue
+				}
+				env := inbox.Envelope{
+					MsgID:      evt.MessageID,
+					From:       "@" + evt.AgentID,
+					ReceivedAt: time.Now().UTC(),
+				}
+				if err := inbox.WriteSpool(thrumDir, recipient, env); err != nil {
+					slog.Warn("[inbox] spool write failed",
+						"agent", recipient, "msg_id", evt.MessageID, "err", err)
+					// Continue — DB is authoritative; cron backstop surfaces
+					// unread messages regardless of spool state.
+				}
+			}
+		}(evt)
 	})
 
 	if syncManager != nil {
@@ -5681,6 +5838,17 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	monitorHandler.EnsureAllMonitorSenders(ctx)
 	go monitorSupervisor.Start(ctx)
 
+	// hook-inbox-delivery: reconcile spool files against DB read-state hourly.
+	// Pattern mirrors PeriodicSyncScheduler — own goroutine, own ticker.
+	spoolJanitor := inbox.NewSpoolJanitor(
+		thrumDir,
+		func() []string { return nudge.LocalAgentNames(thrumDir) },
+		func(msgID, agentID string) inbox.ReadState {
+			return queryMessageReadState(ctx, st, msgID, agentID)
+		},
+	)
+	go spoolJanitor.Start(ctx)
+
 	// Telegram bridge RPC handlers + goroutine
 	telegramHandler := rpc.NewTelegramHandler(absPath)
 	server.RegisterHandler("telegram.configure", telegramHandler.HandleConfigure)
@@ -5732,6 +5900,46 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	}
 
 	return lifecycle.Run(ctx)
+}
+
+// queryMessageReadState checks whether a message is read by a specific
+// recipient agent, missing entirely, or still unread. Used by the
+// SpoolJanitor to reconcile per-agent spool files against DB state.
+//
+// Semantics (derived from the unread-filter clause in
+// internal/daemon/rpc/message.go): a message is "read by agent A"
+// when a row exists in message_deliveries with recipient_agent_id=A
+// and read_at IS NOT NULL. "Missing" means no row in messages.
+func queryMessageReadState(ctx context.Context, st *state.State, msgID, agentID string) inbox.ReadState {
+	var exists int
+	err := st.DB().QueryRowContext(ctx,
+		`SELECT 1 FROM messages WHERE message_id = ?`,
+		msgID,
+	).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return inbox.StateMissing
+	}
+	if err != nil {
+		// On DB error, be conservative — keep the file.
+		return inbox.StateUnread
+	}
+
+	var readExists int
+	err = st.DB().QueryRowContext(ctx,
+		`SELECT 1 FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ? AND read_at IS NOT NULL LIMIT 1`,
+		msgID, agentID,
+	).Scan(&readExists)
+	if err == nil {
+		return inbox.StateRead
+	}
+	if err != sql.ErrNoRows {
+		// Unexpected DB error on the read-state probe. Keep the file
+		// (conservative default) but surface the error so persistent
+		// DB trouble is visible in the janitor logs.
+		slog.Warn("[inbox_janitor] message_deliveries probe failed",
+			"agent", agentID, "msg_id", msgID, "err", err)
+	}
+	return inbox.StateUnread
 }
 
 func rolesCmd() *cobra.Command {

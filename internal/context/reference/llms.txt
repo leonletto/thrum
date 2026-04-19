@@ -97,8 +97,11 @@ All commands accept these flags:
   thrum overview [--json]
     Show combined status: identity, work context, team, inbox, sync.
 
-  thrum whoami [--json]
+  thrum whoami [--json] [--field <name>]
     Show current agent identity (lightweight, no daemon required).
+    --field <name>  Print a single field (e.g. agent_id, tmux_alive, host, pid,
+                    tmux_session) newline-terminated. Script-friendly alternative
+                    to jq on --json output.
 
   thrum version
     Show version, build hash, repository URL, and documentation URL.
@@ -223,6 +226,18 @@ All commands accept these flags:
 
   thrum context sync [--agent NAME]
     Copy context to the a-sync branch for sharing across worktrees.
+
+### Cron
+
+  thrum cron
+    Manage cron-style scheduled tasks (runtime-specific emitters).
+
+  thrum cron install-inbox-poll
+    Emit a CronCreate instruction block for the SessionStart hook to
+    forward to the runtime. The runtime (Claude Code) reads the block
+    and schedules a 15-minute inbox-check poll via its internal cron
+    primitive. This command is print-only — no daemon calls, no
+    identity touch. Classified as bypass in command_categories.go.
 
 ### Coordination
 

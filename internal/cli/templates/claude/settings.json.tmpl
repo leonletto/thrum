@@ -5,6 +5,30 @@
         "type": "command",
         "command": "bash scripts/thrum-startup.sh"
       }]
+    }],
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "HOOK_EVENT=Stop bash scripts/thrum-check-inbox.sh"
+      }]
+    }],
+    "PostToolUse": [{
+      "hooks": [{
+        "type": "command",
+        "command": "HOOK_EVENT=PostToolUse bash scripts/thrum-check-inbox.sh"
+      }]
+    }],
+    "UserPromptSubmit": [{
+      "hooks": [{
+        "type": "command",
+        "command": "HOOK_EVENT=UserPromptSubmit bash scripts/thrum-check-inbox.sh"
+      }]
+    }],
+    "PreCompact": [{
+      "hooks": [{
+        "type": "command",
+        "command": "HOOK_EVENT=PreCompact bash scripts/thrum-check-inbox.sh"
+      }]
     }]
   }
 }

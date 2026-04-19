@@ -26,6 +26,11 @@ type AgentSummary struct {
 	UpdatedAt    string `json:"updated_at,omitempty"`
 	Source       string `json:"source"`
 	Status       string `json:"status,omitempty"`
+	// Hook-delivery fields (hook-inbox-delivery design)
+	Host        string `json:"host,omitempty"`
+	PID         int    `json:"pid,omitempty"`
+	TmuxSession string `json:"tmux_session,omitempty"`
+	TmuxAlive   bool   `json:"tmux_alive,omitempty"`
 }
 
 // BuildAgentSummary constructs an AgentSummary from an identity file and
@@ -50,6 +55,11 @@ func BuildAgentSummary(idFile *config.IdentityFile, idPath string, daemonInfo *W
 		s.UpdatedAt = idFile.UpdatedAt.Format(time.RFC3339)
 	}
 
+	// Hook-delivery fields from identity file.
+	s.PID = idFile.AgentPID
+	s.TmuxSession = idFile.TmuxSession
+	// Host is daemon-only (not in identity file); populated below if daemonInfo is available.
+
 	// Enrich from daemon if available
 	if daemonInfo != nil {
 		s.Source = "daemon"
@@ -67,6 +77,14 @@ func BuildAgentSummary(idFile *config.IdentityFile, idPath string, daemonInfo *W
 		}
 		if daemonInfo.Intent != "" {
 			s.Intent = daemonInfo.Intent
+		}
+		s.Host = daemonInfo.Host
+		s.TmuxAlive = daemonInfo.TmuxAlive
+		if daemonInfo.TmuxSession != "" {
+			s.TmuxSession = daemonInfo.TmuxSession
+		}
+		if daemonInfo.AgentPID != 0 {
+			s.PID = daemonInfo.AgentPID
 		}
 	}
 

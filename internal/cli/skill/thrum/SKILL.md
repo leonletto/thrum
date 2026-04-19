@@ -85,6 +85,32 @@ thrum <cmd> --help                       Detailed command usage
 **Critical:** `@coordinator` is a role, not an agent name. Use `thrum team` to
 find agent names, then send `--to @<name>` for direct messages.
 
+## Notification Delivery
+
+Agents get message nudges via three converging paths on supported runtimes —
+you don't need to run a background listener. All three paths lead you back to
+the same action: run `thrum inbox --unread` when you see a nudge.
+
+1. **Tmux nudge** — if you're running in a tmux-managed session (e.g.,
+   `thrum tmux start`), the daemon types a notification directly into your
+   pane.
+2. **Hook injection** — `thrum init` installs runtime lifecycle hooks that
+   read a per-agent spool directory and surface the nudge as injected context
+   when the runtime fires events on tool completion, user prompts, turn end,
+   or before a context-summarize.
+3. **Scheduled backstop** — a periodic scheduled task runs
+   `thrum inbox --unread` directly while the runtime is idle, catching
+   anything the hooks missed.
+
+All three paths emit the same nudge text:
+
+> New message from @sender -- run `thrum inbox --unread` to read
+
+Always act by running `thrum inbox --unread`. The previous `thrum wait`
+listener pattern (see `references/LISTENER_PATTERN.md`) is deprecated for
+newly initialized agents — it still works but burns context tokens for the
+entire session.
+
 ## Background Listener Pattern
 
 Launch a background listener to monitor for messages:

@@ -51,6 +51,7 @@ type TeamMember struct {
 	Module          string             `json:"module"`
 	Display         string             `json:"display,omitempty"`
 	Hostname        string             `json:"hostname,omitempty"`
+	OriginDaemon    string             `json:"origin_daemon,omitempty"`
 	AgentPID        int                `json:"agent_pid,omitempty"`
 	Runtime         string             `json:"runtime,omitempty"`
 	WorktreePath    string             `json:"worktree,omitempty"`
@@ -128,11 +129,21 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 	}
 
 	var deadAgents []deadAgent
+	localDaemonID := h.state.DaemonID()
 	for _, m := range members {
 		if m.Status != "active" ||
 			m.AgentPID <= 0 ||
 			process.IsRunning(m.AgentPID) ||
 			m.SessionID == "" {
+			continue
+		}
+
+		// Skip self-heal for cross-daemon agents. Their PID lives on a
+		// remote host, so a local IsRunning check is meaningless and
+		// would false-positive every synced agent into "offline".
+		// Authoritative liveness for remote agents comes from sync
+		// events, not local PID checks. See thrum-pxz.14.
+		if m.OriginDaemon != "" && m.OriginDaemon != localDaemonID {
 			continue
 		}
 
@@ -206,7 +217,7 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListRequest) ([]TeamMember, *SharedMessages, map[string]*config.IdentityFile, error) {
 	// Query 1: Agents + sessions + work contexts
 	query := `SELECT
-		a.agent_id, a.role, a.module, a.display, a.hostname, a.agent_pid,
+		a.agent_id, a.role, a.module, a.display, a.hostname, a.origin_daemon, a.agent_pid,
 		s.session_id, s.started_at, s.last_seen_at,
 		wc.branch, wc.worktree_path, wc.intent, wc.current_task,
 		wc.unmerged_commits, wc.file_changes
@@ -232,13 +243,13 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 
 	for rows.Next() {
 		var m TeamMember
-		var display, hostname sql.NullString
+		var display, hostname, originDaemon sql.NullString
 		var sessionID, sessionStart, lastSeen sql.NullString
 		var branch, worktreePath, intent, currentTask sql.NullString
 		var unmergedCommitsJSON, fileChangesJSON sql.NullString
 
 		if err := rows.Scan(
-			&m.AgentID, &m.Role, &m.Module, &display, &hostname, &m.AgentPID,
+			&m.AgentID, &m.Role, &m.Module, &display, &hostname, &originDaemon, &m.AgentPID,
 			&sessionID, &sessionStart, &lastSeen,
 			&branch, &worktreePath, &intent, &currentTask,
 			&unmergedCommitsJSON, &fileChangesJSON,
@@ -251,6 +262,9 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 		}
 		if hostname.Valid {
 			m.Hostname = hostname.String
+		}
+		if originDaemon.Valid {
+			m.OriginDaemon = originDaemon.String
 		}
 		if sessionID.Valid {
 			m.SessionID = sessionID.String

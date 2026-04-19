@@ -60,6 +60,11 @@ type WhoamiResult struct {
 	SessionStart string `json:"session_start,omitempty"`
 	Branch       string `json:"branch,omitempty"`
 	Intent       string `json:"intent,omitempty"`
+	// Hook-delivery fields (hook-inbox-delivery design)
+	Host        string `json:"host,omitempty"`
+	AgentPID    int    `json:"pid,omitempty"`
+	TmuxSession string `json:"tmux_session,omitempty"`
+	TmuxAlive   bool   `json:"tmux_alive,omitempty"`
 }
 
 // ContextInfo contains agent context file metadata for status display.

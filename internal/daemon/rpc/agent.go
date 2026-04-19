@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"log"
 	"log/slog"
 	"os"
@@ -17,12 +16,14 @@ import (
 	"github.com/leonletto/thrum/internal/config"
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/gitctx"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/jsonl"
 	"github.com/leonletto/thrum/internal/process"
+	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
 )
 
@@ -88,6 +89,11 @@ type WhoamiResponse struct {
 	SessionStart string `json:"session_start,omitempty"`
 	Branch       string `json:"branch,omitempty"`
 	Intent       string `json:"intent,omitempty"`
+	// Hook-delivery fields (hook-inbox-delivery design).
+	Host        string `json:"host,omitempty"`
+	AgentPID    int    `json:"pid,omitempty"`
+	TmuxSession string `json:"tmux_session,omitempty"`
+	TmuxAlive   bool   `json:"tmux_alive,omitempty"`
 }
 
 // ListContextRequest represents the request for agent.listContext RPC.
@@ -495,6 +501,22 @@ func (h *AgentHandler) HandleWhoami(ctx context.Context, params json.RawMessage)
 		Module:  module,
 		Display: agentName,
 		Source:  source,
+	}
+
+	// hook-inbox-delivery: populate host + identity-file-backed fields.
+	response.Host = resolveHostname()
+
+	idsDir := identitiesDirFor(h.state.RepoPath())
+	if data, err := os.ReadFile(filepath.Join(idsDir, agentID+".json")); err == nil { // #nosec G304 -- path is .thrum/identities/<agentID>.json
+		var idFile config.IdentityFile
+		if jsonErr := json.Unmarshal(data, &idFile); jsonErr == nil {
+			response.AgentPID = idFile.AgentPID
+			response.TmuxSession = idFile.TmuxSession
+			if idFile.TmuxSession != "" {
+				session, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
+				response.TmuxAlive = ttmux.HasSession(session)
+			}
+		}
 	}
 
 	if sessionID.Valid {

@@ -2,6 +2,7 @@ package nudge_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -106,4 +107,59 @@ func TestDispatchTmux_SkipsUnresolvableRecipients(t *testing.T) {
 	// but the test passes if no panic / no goroutine leak.
 	nudge.DispatchTmux(thrumDir, []string{"ghost1", "ghost2"}, "alice")
 	// No assertion needed — completing without panic is the test.
+}
+
+func TestHasLocalIdentity(t *testing.T) {
+	dir := t.TempDir()
+	thrumDir := filepath.Join(dir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeIdentity := func(name string) {
+		body := fmt.Sprintf(`{"version":1,"agent":{"name":%q}}`, name)
+		_ = os.WriteFile(
+			filepath.Join(thrumDir, "identities", name+".json"),
+			[]byte(body),
+			0o644,
+		)
+	}
+	writeIdentity("bob")
+
+	if !nudge.HasLocalIdentity(thrumDir, "bob") {
+		t.Fatal("bob should be local")
+	}
+	if nudge.HasLocalIdentity(thrumDir, "nobody") {
+		t.Fatal("nobody should not be local")
+	}
+}
+
+func TestLocalAgentNames(t *testing.T) {
+	dir := t.TempDir()
+	thrumDir := filepath.Join(dir, ".thrum")
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	if err := os.MkdirAll(identitiesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"alice", "bob"} {
+		body := fmt.Sprintf(`{"version":1,"agent":{"name":%q}}`, name)
+		if err := os.WriteFile(filepath.Join(identitiesDir, name+".json"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Also drop a non-json file that should be ignored.
+	if err := os.WriteFile(filepath.Join(identitiesDir, "README.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := nudge.LocalAgentNames(thrumDir)
+	if len(got) != 2 {
+		t.Fatalf("want 2 agents, got %d: %v", len(got), got)
+	}
+	found := map[string]bool{}
+	for _, n := range got {
+		found[n] = true
+	}
+	if !found["alice"] || !found["bob"] {
+		t.Errorf("missing expected agents: %v", got)
+	}
 }
