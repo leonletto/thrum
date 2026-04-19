@@ -111,6 +111,12 @@ func (p *Permission) firstDetect(
 	if err != nil {
 		slog.Error("[permission] resolve supervisors failed", "err", err)
 	}
+	slog.Info("[permission] firstDetect",
+		"session", session,
+		"runtime", runtime,
+		"pattern", matched.Name,
+		"supers_count", len(supers),
+		"agent_name", agentName)
 
 	row := &NudgeRow{
 		Session:       session,
@@ -130,6 +136,10 @@ func (p *Permission) firstDetect(
 		// No live supervisors — still persist a row so recovery can
 		// clean it up. MessageID is a stable synthetic so a second
 		// orphan first-detect on the same session+time doesn't conflict.
+		slog.Info("[permission] orphan insert (no live supervisors)",
+			"session", session,
+			"runtime", runtime,
+			"pattern", matched.Name)
 		row.MessageID = "perm_orphan_" + session + "_" + now.Format("20060102T150405")
 		return p.store.InsertPendingNudge(ctx, row)
 	}
@@ -145,6 +155,7 @@ func (p *Permission) firstDetect(
 			slog.Error("[permission] send nudge failed", "to", to, "err", err)
 			continue
 		}
+		slog.Info("[permission] nudge sent", "to", to, "msg_id", msgID, "session", session)
 		if i == 0 {
 			firstMsgID = msgID
 		}
