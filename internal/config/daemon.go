@@ -313,9 +313,12 @@ func applyDefaults(cfg *ThrumConfig) {
 	if cfg.Backup.Retention.Monthly == nil {
 		cfg.Backup.Retention.Monthly = IntPtr(DefaultRetentionMonthly)
 	}
-	// Apply peers defaults for missing fields.
+	// Apply peers defaults for missing fields. PairingCodeLength==0 is
+	// our "stanza absent" signal because zero is never a valid code length;
+	// in that case the user could not have intentionally set AutoConnect
+	// either, so restore the full DefaultPeersConfig() (thrum-1k00).
 	if cfg.Peers.PairingCodeLength == 0 {
-		cfg.Peers.PairingCodeLength = DefaultPeersConfig().PairingCodeLength
+		cfg.Peers = DefaultPeersConfig()
 	}
 	if cfg.Daemon.PeerPort == "" {
 		cfg.Daemon.PeerPort = "auto"
