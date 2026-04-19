@@ -591,3 +591,36 @@ func TestNewPeerRegistry_ReconcilesStalePeersJSONWithConfig(t *testing.T) {
 		t.Fatalf("peers.json still contains stale id: %s", data)
 	}
 }
+
+// xir.29: ReconcileStatus persists across save/load and survives registry
+// reopen. The field is written in lowercase snake_case per the JSON
+// convention used throughout PeerInfo.
+func TestPeerInfo_ReconcileStatusPersistence(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "peers.json")
+	r, err := NewPeerRegistry(tmp)
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	p := &PeerInfo{
+		Name:            "alpha",
+		DaemonID:        "01TESTDAEMON",
+		Address:         "192.168.1.5:7731",
+		Token:           "tok-123",
+		Transport:       "network",
+		ReconcileStatus: "drift_reconcile_failed",
+	}
+	if err := r.AddPeer(p); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	r2, err := NewPeerRegistry(tmp)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	got := r2.FindPeerByToken("tok-123")
+	if got == nil {
+		t.Fatalf("peer not found after reload")
+	}
+	if got.ReconcileStatus != "drift_reconcile_failed" {
+		t.Errorf("ReconcileStatus = %q, want drift_reconcile_failed", got.ReconcileStatus)
+	}
+}

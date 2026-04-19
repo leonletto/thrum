@@ -31,6 +31,11 @@ type PeerInfo struct {
 	RemoteRepoPath     string    `json:"remote_repo_path,omitempty"`      // Peer's repo filesystem path
 	RemoteGitOriginURL string    `json:"remote_git_origin_url,omitempty"` // Peer's git origin URL
 	Role               string    `json:"role,omitempty"`                  // "listener" or "dialer"
+	// ReconcileStatus flags the peer's xir.29 auto-reconcile state.
+	// Empty = healthy. "drift_reconcile_failed" = auto-reconcile attempted
+	// and failed (unreachable or stored token rejected); user should run
+	// 'thrum peer join --type repair <name>' to re-pair.
+	ReconcileStatus string `json:"reconcile_status,omitempty"` // xir.29
 }
 
 // Addr returns the network address for connecting to this peer.
