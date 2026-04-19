@@ -228,6 +228,24 @@ func (r *PeerRegistry) RemovePeer(daemonID string) error {
 	return r.saveLocked()
 }
 
+// SetReconcileStatus updates the xir.29 auto-reconcile status of a peer
+// by daemon_id and persists atomically. Empty status clears the drift
+// marker; "drift_reconcile_failed" flags the peer for manual --type repair.
+// Used by the reconcile manager (internal/daemon/reconcile) on both
+// success (clear) and failure (set) paths.
+func (r *PeerRegistry) SetReconcileStatus(daemonID, status string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p, ok := r.peers[daemonID]
+	if !ok {
+		return fmt.Errorf("peer %s not found", daemonID)
+	}
+
+	p.ReconcileStatus = status
+	return r.saveLocked()
+}
+
 // UpdateLastSync updates the last sync timestamp for a peer.
 func (r *PeerRegistry) UpdateLastSync(daemonID string) error {
 	r.mu.Lock()
