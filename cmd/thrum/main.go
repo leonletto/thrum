@@ -5693,6 +5693,8 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				} else {
 					peer.Transport = daemon.DetectTransport(peerAddr)
 				}
+				// thrum-b6yv: stamp proxy_prefix before persisting.
+				peer.ProxyPrefix = daemon.DeriveProxyPrefix(peer)
 				if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
 					fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
 				}
@@ -5734,6 +5736,8 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				if repoPath != "" {
 					peer.RepoPath = repoPath
 				}
+				// thrum-b6yv: stamp proxy_prefix before persisting.
+				peer.ProxyPrefix = daemon.DeriveProxyPrefix(peer)
 				if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
 					fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
 				}
@@ -5784,6 +5788,8 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				}
 				peer.Role = "dialer"
 				peer.Transport = "network"
+				// thrum-b6yv: stamp proxy_prefix before persisting.
+				peer.ProxyPrefix = daemon.DeriveProxyPrefix(peer)
 				if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
 					fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
 				}

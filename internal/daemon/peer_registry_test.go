@@ -665,3 +665,100 @@ func TestPeerRegistry_SetReconcileStatus(t *testing.T) {
 		t.Errorf("cleared status not persisted: %q", got.ReconcileStatus)
 	}
 }
+
+// TestSanitizeProxyPrefix covers thrum-b6yv character-class rules.
+func TestSanitizeProxyPrefix(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"mock-salesforce", "mock-salesforce"},
+		{"my.repo", "my-repo"},
+		{"path/to/repo", "path-to-repo"},
+		{"foo\\bar", "foo-bar"},
+		{"name with spaces", "name-with-spaces"},
+		{"plain_snake", "plain_snake"},
+		{"UPPER123", "UPPER123"},
+		{"mix.of/weird chars!", "mix-of-weird-chars"}, // '!' is dropped
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := SanitizeProxyPrefix(c.in); got != c.want {
+			t.Errorf("SanitizeProxyPrefix(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestDeriveProxyPrefix covers the fallback order (remote_repo_name →
+// peer name → empty) plus nil guard.
+func TestDeriveProxyPrefix(t *testing.T) {
+	if got := DeriveProxyPrefix(nil); got != "" {
+		t.Errorf("DeriveProxyPrefix(nil) = %q, want \"\"", got)
+	}
+	if got := DeriveProxyPrefix(&PeerInfo{RemoteRepoName: "mock-salesforce", Name: "host"}); got != "mock-salesforce" {
+		t.Errorf("RemoteRepoName preferred: got %q", got)
+	}
+	if got := DeriveProxyPrefix(&PeerInfo{Name: "leonsmacm1pro.local"}); got != "leonsmacm1pro-local" {
+		t.Errorf("peer name fallback sanitized: got %q", got)
+	}
+	if got := DeriveProxyPrefix(&PeerInfo{}); got != "" {
+		t.Errorf("empty peer → empty prefix, got %q", got)
+	}
+}
+
+// TestPeerRegistry_ProxyPrefixMigration covers the load-time retroactive
+// stamp: a legacy peers.json with proxy_prefix="" on pre-existing entries
+// is migrated to a derived prefix (and persisted back to disk).
+func TestPeerRegistry_ProxyPrefixMigration(t *testing.T) {
+	dir := t.TempDir()
+	thrumDir := filepath.Join(dir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "var"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	peersPath := filepath.Join(thrumDir, "var", "peers.json")
+
+	// Write a legacy peers.json: one entry with RemoteRepoName, one without,
+	// and one that already has proxy_prefix (must be left alone).
+	body := `{
+  "local": {"daemon_id": "d_local", "port": 9100},
+  "peers": [
+    {"name": "host-a", "daemon_id": "d_a", "remote_repo_name": "mock-salesforce"},
+    {"name": "leonsmacm1pro.local", "daemon_id": "d_b"},
+    {"name": "kept", "daemon_id": "d_c", "proxy_prefix": "already-set"}
+  ]
+}`
+	if err := os.WriteFile(peersPath, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	reg, err := NewPeerRegistry(peersPath)
+	if err != nil {
+		t.Fatalf("NewPeerRegistry: %v", err)
+	}
+
+	peers := reg.ListPeers()
+	byID := make(map[string]*PeerInfo, len(peers))
+	for _, p := range peers {
+		byID[p.DaemonID] = p
+	}
+	if got := byID["d_a"].ProxyPrefix; got != "mock-salesforce" {
+		t.Errorf("d_a ProxyPrefix = %q, want %q", got, "mock-salesforce")
+	}
+	if got := byID["d_b"].ProxyPrefix; got != "leonsmacm1pro-local" {
+		t.Errorf("d_b ProxyPrefix = %q, want %q", got, "leonsmacm1pro-local")
+	}
+	if got := byID["d_c"].ProxyPrefix; got != "already-set" {
+		t.Errorf("d_c ProxyPrefix = %q, want %q (pre-set must be preserved)", got, "already-set")
+	}
+
+	// Verify the migration was persisted to disk.
+	data, err := os.ReadFile(peersPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"proxy_prefix": "mock-salesforce"`) {
+		t.Errorf("peers.json missing migrated mock-salesforce prefix; got: %s", data)
+	}
+	if !strings.Contains(string(data), `"proxy_prefix": "leonsmacm1pro-local"`) {
+		t.Errorf("peers.json missing migrated fallback prefix; got: %s", data)
+	}
+}
