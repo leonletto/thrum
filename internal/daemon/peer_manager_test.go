@@ -103,6 +103,98 @@ func TestPeerManager_BuildConfigs_LocalPeer(t *testing.T) {
 	}
 }
 
+// TestPeerManager_ConnectPeer_Dialer verifies that ConnectPeer on a dialer
+// peer registers a running bridge without waiting for ConnectAll.
+// Covers thrum-1f4y: peer.join must spawn a bridge immediately, not wait
+// for the next daemon restart.
+func TestPeerManager_ConnectPeer_Dialer(t *testing.T) {
+	pm, reg := newTestPeerManager(t)
+
+	local := &PeerInfo{
+		Name:      "sibling",
+		DaemonID:  "daemon-sibling",
+		Token:     "tok-sibling",
+		Role:      "dialer",
+		Transport: "local",
+		RepoPath:  t.TempDir(),
+		PairedAt:  time.Now(),
+		LastSync:  time.Now(),
+	}
+	if err := reg.AddPeer(local); err != nil {
+		t.Fatalf("AddPeer: %v", err)
+	}
+
+	if pm.ActiveCount() != 0 {
+		t.Fatalf("pre-ConnectPeer ActiveCount = %d, want 0", pm.ActiveCount())
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pm.ConnectPeer(ctx, local)
+
+	if pm.ActiveCount() != 1 {
+		t.Errorf("post-ConnectPeer ActiveCount = %d, want 1", pm.ActiveCount())
+	}
+	pm.StopAll()
+}
+
+// TestPeerManager_ConnectPeer_Idempotent verifies that calling ConnectPeer
+// twice for the same peer only registers one bridge. Required because the
+// caller in peer.join RPC may race with an initial daemon-boot ConnectAll.
+func TestPeerManager_ConnectPeer_Idempotent(t *testing.T) {
+	pm, reg := newTestPeerManager(t)
+
+	local := &PeerInfo{
+		Name:      "sibling",
+		DaemonID:  "daemon-sibling",
+		Token:     "tok-sibling",
+		Role:      "dialer",
+		Transport: "local",
+		RepoPath:  t.TempDir(),
+		PairedAt:  time.Now(),
+		LastSync:  time.Now(),
+	}
+	if err := reg.AddPeer(local); err != nil {
+		t.Fatalf("AddPeer: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pm.ConnectPeer(ctx, local)
+	pm.ConnectPeer(ctx, local)
+
+	if got := pm.ActiveCount(); got != 1 {
+		t.Errorf("ActiveCount after duplicate ConnectPeer = %d, want 1", got)
+	}
+	pm.StopAll()
+}
+
+// TestPeerManager_ConnectPeer_ListenerIgnored verifies that ConnectPeer
+// refuses to spawn a bridge for a listener-role peer. The reverse bridge
+// on the listener side is spawned reactively via AcceptPeer when the
+// dialer connects, not proactively via peer.join.
+func TestPeerManager_ConnectPeer_ListenerIgnored(t *testing.T) {
+	pm, _ := newTestPeerManager(t)
+
+	listener := &PeerInfo{
+		Name:     "inbound",
+		DaemonID: "daemon-inbound",
+		Token:    "tok-inbound",
+		Role:     "listener",
+		Address:  "127.0.0.1:12345",
+		PairedAt: time.Now(),
+		LastSync: time.Now(),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pm.ConnectPeer(ctx, listener)
+
+	if got := pm.ActiveCount(); got != 0 {
+		t.Errorf("ActiveCount for listener ConnectPeer = %d, want 0", got)
+	}
+}
+
 // TestPeerManager_ActiveCount verifies the count starts at 0.
 func TestPeerManager_ActiveCount(t *testing.T) {
 	pm, _ := newTestPeerManager(t)

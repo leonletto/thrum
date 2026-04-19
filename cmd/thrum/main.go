@@ -5326,8 +5326,17 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 
 	// Tailscale peer sync management
 	var syncManager *daemon.DaemonSyncManager
+	var peerManager *daemon.PeerManager
 	if peerRegistry != nil {
 		syncManager = daemon.NewDaemonSyncManager(st, peerRegistry)
+		// Create the PeerManager up front so peer.join's post-AddPeer hook
+		// can bind to ConnectPeer before the peer.join RPC handler is
+		// registered below. wsPort is still unresolved here; we call
+		// SetLocalWSPort once it binds (see the WS server setup further
+		// down). Without this ordering, peer.join would silently fall
+		// through the nil-guard on the hook and the original thrum-1f4y
+		// bug would quietly regress on any future WS-start reshuffle.
+		peerManager = daemon.NewPeerManager(peerRegistry, "", nil)
 	}
 
 	var pairingMgr *daemon.PairingManager
@@ -5348,6 +5357,18 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// "ip:port" address string. Per-IP idempotent: subsequent calls with
 	// the same IP return the existing listener's port.
 	var ensureNetworkListenerFn func(addrIP string) (string, error)
+	// spawnPeerBridgeFn is called by peer.join immediately after AddPeer so a
+	// freshly paired dialer peer's bridge starts without waiting for the next
+	// daemon restart (thrum-1f4y). Wired here (before the peer.join RPC
+	// handler registers) so a future reshuffle that starts the WS server
+	// earlier cannot race past a nil hook. nil-case means peerRegistry is
+	// nil; peer.join is not registered in that mode either.
+	var spawnPeerBridgeFn func(*daemon.PeerInfo)
+	if peerManager != nil {
+		spawnPeerBridgeFn = func(p *daemon.PeerInfo) {
+			peerManager.ConnectPeer(ctx, p)
+		}
+	}
 	hostname, _ := os.Hostname()
 
 	getTsLocalAddr := func() string {
@@ -5687,8 +5708,19 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				} else {
 					peer.Transport = daemon.DetectTransport(peerAddr)
 				}
+				// thrum-b6yv: stamp proxy_prefix before persisting.
+				// RemoteRepoName is already populated on `peer` by
+				// syncManager.JoinPeer above; DeriveProxyPrefix reads
+				// it (fallback to Name) and sanitizes.
+				peer.ProxyPrefix = daemon.DeriveProxyPrefix(peer)
 				if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
 					fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
+				}
+				// thrum-1f4y: spawn the bridge for this new peer immediately;
+				// previously a daemon restart was required for ConnectAll to
+				// pick it up.
+				if spawnPeerBridgeFn != nil {
+					spawnPeerBridgeFn(peer)
 				}
 				return peer.Name, peer.DaemonID, nil
 
@@ -5722,8 +5754,19 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				if repoPath != "" {
 					peer.RepoPath = repoPath
 				}
+				// thrum-b6yv: stamp proxy_prefix before persisting.
+				// RemoteRepoName is already populated on `peer` by
+				// syncManager.JoinPeer above; DeriveProxyPrefix reads
+				// it (fallback to Name) and sanitizes.
+				peer.ProxyPrefix = daemon.DeriveProxyPrefix(peer)
 				if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
 					fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
+				}
+				// thrum-1f4y: spawn the bridge for this new peer immediately;
+				// previously a daemon restart was required for ConnectAll to
+				// pick it up.
+				if spawnPeerBridgeFn != nil {
+					spawnPeerBridgeFn(peer)
 				}
 				return peer.Name, peer.DaemonID, nil
 
@@ -5766,8 +5809,19 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				}
 				peer.Role = "dialer"
 				peer.Transport = "network"
+				// thrum-b6yv: stamp proxy_prefix before persisting.
+				// RemoteRepoName is already populated on `peer` by
+				// syncManager.JoinPeer above; DeriveProxyPrefix reads
+				// it (fallback to Name) and sanitizes.
+				peer.ProxyPrefix = daemon.DeriveProxyPrefix(peer)
 				if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
 					fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
+				}
+				// thrum-1f4y: spawn the bridge for this new peer immediately;
+				// previously a daemon restart was required for ConnectAll to
+				// pick it up.
+				if spawnPeerBridgeFn != nil {
+					spawnPeerBridgeFn(peer)
 				}
 				return peer.Name, peer.DaemonID, nil
 
@@ -6136,11 +6190,11 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		}
 	}
 
-	// Create PeerManager before the WS server so we can wire the accept handler.
-	var peerManager *daemon.PeerManager
+	// PeerManager was created up-front (line ~5278); now that wsPort is
+	// resolved, finish wiring it and register the WS accept handler.
 	var wsOpts []websocket.ServerOption
-	if peerRegistry != nil {
-		peerManager = daemon.NewPeerManager(peerRegistry, wsPort, nil)
+	if peerManager != nil {
+		peerManager.SetLocalWSPort(wsPort)
 		defer peerManager.StopAll()
 		wsOpts = append(wsOpts, websocket.WithPeerAcceptHandler(func(token string) {
 			p := peerRegistry.FindPeerByToken(token)

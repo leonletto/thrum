@@ -185,7 +185,7 @@ func (pm *PairingManager) HandlePairRequest(code string, peer PairMetadata) (tok
 	// CGNAT ⇒ "tailscale", anything else ⇒ "network". Mirrors the dialer-side
 	// transport stamping in cmd/thrum/main.go peer.join. xir.27 sub-1 hooks
 	// the loopback class to enable same-host sibling pairing without tsnet.
-	err = pm.peers.AddPeer(&PeerInfo{
+	listenerPeer := &PeerInfo{
 		Name:               peer.Name,
 		Address:            peer.Address,
 		DaemonID:           peer.DaemonID,
@@ -196,7 +196,12 @@ func (pm *PairingManager) HandlePairRequest(code string, peer PairMetadata) (tok
 		RemoteHostname:     peer.Hostname,
 		RemoteRepoPath:     peer.RepoPath,
 		RemoteGitOriginURL: peer.GitOriginURL,
-	})
+	}
+	// thrum-b6yv: derive proxy_prefix from remote_repo_name (fallback
+	// to peer name). Listener-side reverse-bridge register path needs
+	// a non-empty prefix so proxy agent names round-trip cleanly.
+	listenerPeer.ProxyPrefix = DeriveProxyPrefix(listenerPeer)
+	err = pm.peers.AddPeer(listenerPeer)
 	if err != nil {
 		return "", PairMetadata{}, fmt.Errorf("store peer: %w", err)
 	}

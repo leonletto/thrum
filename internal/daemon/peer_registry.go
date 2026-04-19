@@ -8,11 +8,64 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/leonletto/thrum/internal/identity"
 )
+
+// SanitizeProxyPrefix reduces a free-form name to a safe proxy-agent prefix.
+// Contract: output contains only [a-zA-Z0-9_-]. Dots and slashes are
+// replaced with '-' (so "my.repo" → "my-repo", "path/to/repo" → "path-to-repo").
+// Other unexpected characters — including non-ASCII runes like accented
+// letters — are DROPPED silently. This means "léon-mac" collapses to
+// "lon-mac", and two inputs that differ only in their dropped runes can
+// collide on the same sanitized output.
+//
+// The silent-drop behavior is deliberate for now: repo names in the wild
+// are overwhelmingly ASCII, agent-mention syntax expects a narrow character
+// class, and any transliteration step (golang.org/x/text/unicode/norm) is
+// heavier than the current scope justifies. Revisit if non-ASCII repo
+// names surface in practice; follow-up tracked as future work on
+// thrum-b6yv.
+//
+// Used by peer.join, peer.add, and the peers.json load-time migration to
+// keep proxy agent names parseable by the mention/recipient parser.
+func SanitizeProxyPrefix(s string) string {
+	if s == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case (r >= 'a' && r <= 'z') ||
+			(r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') ||
+			r == '_' || r == '-':
+			b.WriteRune(r)
+		case r == '.' || r == '/' || r == '\\' || r == ' ':
+			b.WriteRune('-')
+		}
+	}
+	return b.String()
+}
+
+// DeriveProxyPrefix picks the default proxy prefix for a peer: its
+// remote_repo_name if set, else the peer name. The result is sanitized.
+// Returns "" only if both sources are empty (caller should log and skip
+// rather than register a proxy with an empty prefix).
+func DeriveProxyPrefix(p *PeerInfo) string {
+	if p == nil {
+		return ""
+	}
+	source := p.RemoteRepoName
+	if source == "" {
+		source = p.Name
+	}
+	return SanitizeProxyPrefix(source)
+}
 
 // PeerInfo represents a paired sync peer.
 type PeerInfo struct {
@@ -148,6 +201,13 @@ func (r *PeerRegistry) AddPeer(info *PeerInfo) error {
 	}
 	if info.LastSync.IsZero() {
 		info.LastSync = time.Now()
+	}
+	// thrum-b6yv: auto-sanitize the prefix at the boundary so legacy
+	// callers or tests that pass a raw "my.repo" / "remote." value end
+	// up with a valid proxy-agent prefix on disk. Idempotent — an
+	// already-sanitized string round-trips unchanged.
+	if info.ProxyPrefix != "" {
+		info.ProxyPrefix = SanitizeProxyPrefix(info.ProxyPrefix)
 	}
 
 	r.peers[info.DaemonID] = info
@@ -360,7 +420,12 @@ func backupPeersOnce(src, dst string) error {
 }
 
 // load reads the peers.json file, auto-detecting old array or new object format.
+// Takes r.mu for the whole call so the saveLocked invocation at the bottom
+// respects its "caller must hold mu" contract, even though today's only caller
+// (NewPeerRegistry) has not yet published the registry.
 func (r *PeerRegistry) load() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	data, err := os.ReadFile(r.filePath)
 	if err != nil {
 		return fmt.Errorf("read peers file: %w", err)
@@ -370,8 +435,29 @@ func (r *PeerRegistry) load() error {
 	var pf peersFile
 	if err := json.Unmarshal(data, &pf); err == nil && pf.Local.DaemonID != "" {
 		r.local = pf.Local
+		migrated := false
 		for _, p := range pf.Peers {
+			// thrum-b6yv: retroactively stamp proxy_prefix on entries
+			// that predate the fix. Idempotent — a pre-filled prefix
+			// is left alone. When the derive path produces an empty
+			// result (neither RemoteRepoName nor Name is set, which
+			// should not happen for a persisted peer) we skip the
+			// write so the save below stays a no-op.
+			if p.ProxyPrefix == "" {
+				derived := DeriveProxyPrefix(p)
+				if derived != "" {
+					p.ProxyPrefix = derived
+					migrated = true
+				}
+			}
 			r.peers[p.DaemonID] = p
+		}
+		if migrated {
+			// Best-effort: if the write fails the in-memory state is
+			// still corrected for this process lifetime.
+			if err := r.saveLocked(); err != nil {
+				log.Printf("[peer_registry] proxy_prefix migration write failed: %v", err)
+			}
 		}
 		return nil
 	}
