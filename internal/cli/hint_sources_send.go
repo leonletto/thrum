@@ -11,7 +11,7 @@ func init() {
 }
 
 // sendHints emits `send.recipient-stale` when a single named recipient has
-// been inactive beyond RecipientStaleMinutes. info severity (never blocks);
+// been inactive beyond RecipientStaleMinutes. Info severity (never blocks);
 // pilot has no post-action send hints.
 func sendHints(ctx HintCtx) []Hint {
 	if ctx.Post {

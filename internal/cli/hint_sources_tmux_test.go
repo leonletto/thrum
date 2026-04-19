@@ -216,7 +216,7 @@ func Test_tmuxCreateHints_nilState_silent(t *testing.T) {
 	}
 }
 
-// Helpers
+// Helpers.
 func containsCode(hs []Hint, code string) bool {
 	for _, h := range hs {
 		if h.Code == code {

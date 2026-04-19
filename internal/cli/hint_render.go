@@ -28,12 +28,15 @@ func RenderText(hints []Hint, w io.Writer) {
 	sort.SliceStable(ordered, func(i, j int) bool {
 		return severityRank(ordered[i].Severity) < severityRank(ordered[j].Severity)
 	})
-	fmt.Fprintln(w) // leading blank line separates from command stdout
+	// Writes to w ignore errors — we're rendering hints to a terminal/pipe;
+	// if the writer is broken the command itself is in bigger trouble and
+	// there's nothing the hint system can do about it.
+	_, _ = fmt.Fprintln(w) // leading blank line separates from command stdout
 	for i, h := range ordered {
 		if i > 0 {
-			fmt.Fprintln(w)
+			_, _ = fmt.Fprintln(w)
 		}
-		fmt.Fprintf(w, "  %s [%s]: %s\n", h.Severity, h.Code, h.Message)
+		_, _ = fmt.Fprintf(w, "  %s [%s]: %s\n", h.Severity, h.Code, h.Message)
 		// Compute label-width so colons line up across option rows.
 		// NOTE: uses len() (byte count) rather than utf8.RuneCountInString
 		// because all pilot-catalog labels are ASCII ("attach", "replace",
@@ -51,7 +54,7 @@ func RenderText(hints []Hint, w io.Writer) {
 				note = "    (" + o.Note + ")"
 			}
 			// "%-*s" pads right to width+1 so the trailing colon aligns.
-			fmt.Fprintf(w, "    %-*s %s%s\n", width+1, o.Label+":", o.Cmd, note)
+			_, _ = fmt.Fprintf(w, "    %-*s %s%s\n", width+1, o.Label+":", o.Cmd, note)
 		}
 	}
 }

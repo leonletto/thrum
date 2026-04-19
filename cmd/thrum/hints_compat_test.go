@@ -11,7 +11,7 @@ import (
 // etc. — must still emit a random "Tip:" line in text mode. Protects the
 // fallback path from regression as the new hint mechanism evolves.
 //
-// Uses 'overview' because it reaches the cli.LegacyHint("overview", ...) call
+// Uses 'overview' because it reaches the cli.LegacyHint("overview", ...) Call
 // at main.go line ~4633 without requiring a live daemon session.
 func TestLegacyHintTipStillEmits(t *testing.T) {
 	if testing.Short() {

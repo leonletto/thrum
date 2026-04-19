@@ -32,7 +32,7 @@ func TestIdentityStatus_NoIdentitiesDir(t *testing.T) {
 // TestIdentityStatus_EmptyIdentitiesDir — dir exists but no .json files → IdentityNone.
 func TestIdentityStatus_EmptyIdentitiesDir(t *testing.T) {
 	tmp := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(tmp, ".thrum", "identities"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, ".thrum", "identities"), 0o750); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	s := &LiveStateAccessor{}
@@ -50,7 +50,7 @@ func TestIdentityStatus_EmptyIdentitiesDir(t *testing.T) {
 func TestIdentityStatus_IdentityPresentButSessionDead(t *testing.T) {
 	tmp := t.TempDir()
 	dir := filepath.Join(tmp, ".thrum", "identities")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	// Identity file with a session name that should NOT exist on the host.
@@ -64,7 +64,7 @@ func TestIdentityStatus_IdentityPresentButSessionDead(t *testing.T) {
   },
   "tmux_session": "thrum-test-noexist-xyz123"
 }`
-	if err := os.WriteFile(filepath.Join(dir, "thrum-test-noexist-xyz123.json"), []byte(id), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "thrum-test-noexist-xyz123.json"), []byte(id), 0o600); err != nil {
 		t.Fatalf("write identity: %v", err)
 	}
 
@@ -129,11 +129,11 @@ func TestFSOnlyAccessor_IdentityStatusMirrorsLive(t *testing.T) {
 
 	// Set up an identity file with a dead session → IdentityStale.
 	dir := filepath.Join(tmp, ".thrum", "identities")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	id := `{"version":3,"agent":{"name":"fsonly-test-abc","role":"test","module":"u"},"tmux_session":"fsonly-test-abc"}`
-	if err := os.WriteFile(filepath.Join(dir, "fsonly-test-abc.json"), []byte(id), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "fsonly-test-abc.json"), []byte(id), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	status, agent, err = s.IdentityStatus(tmp)

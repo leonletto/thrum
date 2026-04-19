@@ -9,11 +9,11 @@ import (
 
 // resetHintRegistry clears the package-level registry. Test-only helper.
 //
-// init() calls in hint_sources_*.go register tmux.create, send, and init
+// Init() calls in hint_sources_*.go register tmux.create, send, and init
 // at package load time. Those registrations are visible to integration-style
 // tests that rely on Collect() returning the real hint sources. A test that
 // simply zeroed the map would leak an empty registry into later tests.
-// t.Cleanup re-registers the production sources when the calling test ends,
+// T.Cleanup re-registers the production sources when the calling test ends,
 // restoring the original state for any subsequent test in the same package.
 func resetHintRegistry(t *testing.T) {
 	t.Helper()
@@ -140,4 +140,3 @@ func TestHintAbortErrorMessageListsCodes(t *testing.T) {
 		}
 	}
 }
-

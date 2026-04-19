@@ -30,21 +30,21 @@ const HintTmuxCreateIdentityExistsAlive = "tmux.create.identity-exists-alive"
 const HintTmuxCreateIdentityExistsStale = "tmux.create.identity-exists-stale"
 
 // HintTmuxCreateNextLaunch — post-success next-step tip after tmux create.
-// Origin: R-15 steps 3–4, R-16 (kiro/auggie no auto-prime). info severity.
+// Origin: R-15 steps 3–4, R-16 (kiro/auggie no auto-prime). Info severity.
 const HintTmuxCreateNextLaunch = "tmux.create.next-launch"
 
 // HintTmuxCreateIdentityReplaced — audit trail after --force stale-identity
 // replacement. Fires only when --force was passed AND the pre-action state was
-// IdentityStale. info severity.
+// IdentityStale. Info severity.
 const HintTmuxCreateIdentityReplaced = "tmux.create.identity-replaced"
 
 // HintSendRecipientStale — recipient's last activity is beyond the stale
-// threshold. Origin: Cluster 4 lifecycle (empirical, no single rule). info.
+// threshold. Origin: Cluster 4 lifecycle (empirical, no single rule). Info.
 const HintSendRecipientStale = "send.recipient-stale"
 
 // HintInitNextQuickstart — post-success next-step tip after thrum init when
 // no agent identity is registered yet. Origin: R-15 step 2 + implicit
-// init→quickstart sequence. info.
+// init→quickstart sequence. Info.
 const HintInitNextQuickstart = "init.next-quickstart"
 
 // RecipientStaleThreshold is the send-side stale cutoff. Exported per
