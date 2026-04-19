@@ -5888,8 +5888,13 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		)
 		server.RegisterHandler("peer.configure", peerConfigureHandler.Handle)
 
-		// peer.address_changed — receive address change notifications from peers
-		addressChangedHandler := rpc.NewPeerAddressChangedHandler(func(peerToken, newIP, newPort string) error {
+		// peer.address_changed — receive address change notifications from peers.
+		// xir.29: wrap with a SubnetGuard so cross-subnet address changes
+		// are rejected (they indicate a topology shift, not a same-network
+		// reshuffle) and escalated to manual `thrum peer join --type repair`.
+		// Transport=="local" skips the guard entirely — loopback peers
+		// are strictly stronger than same-subnet (I6 review finding).
+		addrChangedUpdate := func(peerToken, newIP, newPort string) error {
 			p := peerRegistry.FindPeerByToken(peerToken)
 			if p == nil {
 				return fmt.Errorf("unknown peer token")
@@ -5900,7 +5905,54 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			}
 			p.Address = newAddr
 			return peerRegistry.AddPeer(p)
-		})
+		}
+		subnetGuard := func(transport, oldAddr, newAddr string) error {
+			// Local transport: same-host is a stronger property than
+			// same-subnet; no check needed (coordinator 2026-04-19 +
+			// I6 review finding).
+			if transport == "local" {
+				return nil
+			}
+			// Empty oldAddr means "no cached address" (first-boot or
+			// lookup-disabled path). Cannot evaluate — accept per M11.
+			if oldAddr == "" {
+				return nil
+			}
+			oldIPStr, _, err := net.SplitHostPort(oldAddr)
+			if err != nil {
+				return nil
+			}
+			newIPStr, _, err := net.SplitHostPort(newAddr)
+			if err != nil {
+				return fmt.Errorf("invalid new address %q: %w", newAddr, err)
+			}
+			oldIP := net.ParseIP(oldIPStr)
+			newIP := net.ParseIP(newIPStr)
+			if oldIP == nil || newIP == nil {
+				return nil
+			}
+			subnet, err := netdetect.SubnetForLocalAddress(oldIP)
+			if err != nil {
+				// Old address no longer on any local NIC; cannot
+				// evaluate subnet equality → accept (the peer has
+				// already moved off this host's LAN).
+				return nil
+			}
+			if !netdetect.SameSubnet(oldIP, newIP, subnet.CIDR) {
+				return fmt.Errorf("peer moved from %s to %s (different subnets)",
+					oldIP, newIP)
+			}
+			return nil
+		}
+		lookupPeer := func(token string) (oldAddr, transport string, err error) {
+			p := peerRegistry.FindPeerByToken(token)
+			if p == nil {
+				return "", "", fmt.Errorf("unknown peer token")
+			}
+			return p.Address, p.Transport, nil
+		}
+		addressChangedHandler := rpc.NewPeerAddressChangedHandlerWithGuard(
+			addrChangedUpdate, subnetGuard, lookupPeer)
 		server.RegisterHandler("peer.address_changed", addressChangedHandler.Handle)
 	}
 
