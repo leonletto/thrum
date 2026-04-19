@@ -329,6 +329,9 @@ func TestScheduler_OrphanPathMarksAgentStuck(t *testing.T) {
 	if row == nil {
 		t.Fatal("orphan row missing after OnDetection")
 	}
+	if row.NudgeCount != 1 {
+		t.Errorf("NudgeCount = %d, want 1 (orphan insert is still a first-detect)", row.NudgeCount)
+	}
 
 	// Agent must be flagged stuck — the key regression signal.
 	reloaded := readIdentityFile(t, thrumDir, "researcher_cursor")
