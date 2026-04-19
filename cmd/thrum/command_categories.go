@@ -52,7 +52,8 @@ var primePathLeaves = map[string]bool{
 // name-match rather than a full path key so upstream cobra renames
 // do not break the taxonomy.
 var bypassLeaves = map[string]bool{
-	"thrum version": true,
+	"thrum cron install-inbox-poll": true, // print-only, no daemon I/O
+	"thrum version":                 true,
 }
 
 // tagGuardCategories walks the entire tree rooted at root and

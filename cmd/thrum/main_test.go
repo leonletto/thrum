@@ -46,3 +46,24 @@ func TestPrintAgentSummaryField(t *testing.T) {
 		t.Errorf("error message should mention 'unknown field': got %q", err.Error())
 	}
 }
+
+func TestCronInstallInboxPoll_EmitsInstruction(t *testing.T) {
+	var buf bytes.Buffer
+	cmd := cronInstallInboxPollCmd()
+	cmd.SetOut(&buf)
+	if err := cmd.RunE(cmd, nil); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+	out := buf.String()
+	for _, needle := range []string{"CronCreate", "7,22,37,52", "thrum inbox --unread", "durable: false"} {
+		if !strings.Contains(out, needle) {
+			t.Errorf("output missing %q:\n%s", needle, out)
+		}
+	}
+	// Sanity: no trailing daemon call paths — the output should be pure text.
+	for _, forbidden := range []string{"panic", "error:", "daemon"} {
+		if strings.Contains(strings.ToLower(out), forbidden) {
+			t.Errorf("unexpected %q in output:\n%s", forbidden, out)
+		}
+	}
+}
