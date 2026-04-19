@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -178,6 +179,66 @@ func TestHandleRepairRequest_IdempotentWhenNothingChanged(t *testing.T) {
 	}
 	if reg.GetPeer("d_gamma") == nil {
 		t.Errorf("entry disappeared after idempotent repair")
+	}
+}
+
+func TestHandleRepairRequest_ConcurrentCallsAreSerialized(t *testing.T) {
+	// Two repair goroutines using the same token must not race between
+	// FindPeerByToken → RemovePeer → AddPeer. Without the repair
+	// manager's internal mutex, the second goroutine's RemovePeer may
+	// target a stale daemon_id and the final state becomes unpredictable.
+	// With the mutex, both calls succeed and the registry lands in a
+	// single-entry consistent state.
+	reg := newRepairTestRegistry(t)
+	seedPeer(t, reg, &PeerInfo{
+		Name:      "epsilon",
+		DaemonID:  "d_epsilon_old",
+		Token:     "tok-epsilon",
+		Address:   "127.0.0.1:5000",
+		Transport: "local",
+	})
+	mgr := NewPeerRepairManager(reg, identity.Identity{DaemonID: "d_local"}, "localhost")
+
+	dialer := PairMetadata{
+		DaemonID: "d_epsilon_new",
+		Name:     "epsilon",
+		Address:  "127.0.0.1:5001",
+	}
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := mgr.HandleRepairRequest("tok-epsilon", dialer); err != nil {
+				errCh <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		t.Errorf("unexpected repair error: %v", err)
+	}
+
+	// Final state: exactly one entry at d_epsilon_new, no stale d_epsilon_old.
+	if reg.GetPeer("d_epsilon_old") != nil {
+		t.Errorf("stale d_epsilon_old entry still present")
+	}
+	got := reg.GetPeer("d_epsilon_new")
+	if got == nil {
+		t.Fatalf("no entry at d_epsilon_new after concurrent repairs")
+	}
+	if got.Name != "epsilon" || got.Token != "tok-epsilon" {
+		t.Errorf("refreshed entry lost Name/Token: name=%q token=%q", got.Name, got.Token)
+	}
+	if got.Address != "127.0.0.1:5001" {
+		t.Errorf("Address not refreshed: got %q", got.Address)
+	}
+	// Registry must have a single peer — not duplicates under both keys.
+	if len(reg.ListPeers()) != 1 {
+		t.Errorf("expected exactly 1 peer after concurrent repair, got %d", len(reg.ListPeers()))
 	}
 }
 

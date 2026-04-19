@@ -1551,8 +1551,14 @@ list of transports and a one-line "when to use" for each.`,
 				return errors.New("--type repair is not valid for 'peer add'.\n" +
 					"Use 'thrum peer join --type repair <peer-name>' to reconcile an existing peer.")
 			}
-			if peerType == cli.PeerTypeNetwork && strings.TrimSpace(addAddress) == "" {
-				return errors.New("--type network requires --address <ip>")
+			if peerType == cli.PeerTypeNetwork {
+				trimmed := strings.TrimSpace(addAddress)
+				if trimmed == "" {
+					return errors.New("--type network requires --address <ip>")
+				}
+				if net.ParseIP(trimmed) == nil {
+					return fmt.Errorf("--type network --address %q: not a valid IP address", trimmed)
+				}
 			}
 
 			client, err := getClient()
@@ -5413,7 +5419,6 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	//     under --type local (xir.27 sub-component 1)
 	var pairHandler *rpc.PairRequestHandler
 	var repairHandler *rpc.PeerRepairHandler
-	var repairMgr *daemon.PeerRepairManager
 
 	if syncManager != nil {
 		// Create pairing manager (used by both Unix socket and Tailscale handlers)
@@ -5439,7 +5444,9 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		// xir.27 sub-4: build the peer.repair manager + handler (dedicated
 		// RPC; intentionally separate from pair.request because verify-
 		// stored-token and mint-from-code have opposite trust models).
-		repairMgr = daemon.NewPeerRepairManager(syncManager.PeerRegistry(), st.Identity(), hostname)
+		// repairMgr is captured by the handler closure — no need for a
+		// package-scoped var.
+		repairMgr := daemon.NewPeerRepairManager(syncManager.PeerRegistry(), st.Identity(), hostname)
 		repairHandler = rpc.NewPeerRepairHandler(func(
 			token, dialerDaemonID, dialerName, dialerAddress string,
 			dialerRepoName, dialerHostname, dialerRepoPath, dialerGitOriginURL string,

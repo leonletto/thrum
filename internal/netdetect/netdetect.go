@@ -20,6 +20,23 @@ import (
 	"strings"
 )
 
+// Pre-parsed CIDR ranges used by isFilteredAddress. Parsing these on every
+// address-eligibility check showed up in review as wasted work; hoisting to
+// package-level init ensures the parse happens once.
+var (
+	// cgnatCIDR is the Tailscale CGNAT range (100.64.0.0/10). Addresses in
+	// this range belong to the tailscale transport, not "network".
+	cgnatCIDR *net.IPNet
+	// ulaCIDR is the IPv6 unique-local range (fc00::/7). Not a normal LAN
+	// class for direct peer pairing.
+	ulaCIDR *net.IPNet
+)
+
+func init() {
+	_, cgnatCIDR, _ = net.ParseCIDR("100.64.0.0/10")
+	_, ulaCIDR, _ = net.ParseCIDR("fc00::/7")
+}
+
 // Subnet describes an NIC subnet usable for direct-TCP peer transport.
 type Subnet struct {
 	// Interface is the NIC name (e.g., "en0").
@@ -130,16 +147,14 @@ func isFilteredAddress(ip net.IP) bool {
 	}
 	// Tailscale CGNAT range — peer transport is "tailscale", not "network".
 	if ip.To4() != nil {
-		_, cgnat, _ := net.ParseCIDR("100.64.0.0/10")
-		if cgnat != nil && cgnat.Contains(ip) {
+		if cgnatCIDR != nil && cgnatCIDR.Contains(ip) {
 			return true
 		}
 	}
 	// IPv6 ULA — fc00::/7 is unique-local, treat as filtered (not a normal
 	// LAN class for peer pairing). Standard IPv6 GUA addresses pass through.
 	if ip.To4() == nil {
-		_, ula, _ := net.ParseCIDR("fc00::/7")
-		if ula != nil && ula.Contains(ip) {
+		if ulaCIDR != nil && ulaCIDR.Contains(ip) {
 			return true
 		}
 	}

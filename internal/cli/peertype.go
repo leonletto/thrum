@@ -42,7 +42,7 @@ const (
 var ErrPeerTypeMissing = errors.New("--type is required")
 
 // ErrPeerTypeUnknown is returned when --type is set but does not match
-// any of the five supported values.
+// any of the four supported values.
 var ErrPeerTypeUnknown = errors.New("--type value is not recognized")
 
 // MissingTypeMessage is the exact text printed when --type is missing.

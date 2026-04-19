@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/leonletto/thrum/internal/identity"
@@ -25,7 +26,14 @@ import (
 // PeerRepairManager handles incoming peer.repair requests. It wraps the peer
 // registry (for lookup + update) and carries the local identity metadata
 // that is returned to the dialer after a successful repair.
+//
+// The internal mutex serializes repair calls across goroutines so the
+// FindByToken → mutate → Remove → Add sequence is atomic with respect to
+// other repair requests. Two concurrent repair calls presenting the same
+// stored token would otherwise race between the RemovePeer of the old key
+// and the AddPeer of the new key, producing divergent state.
 type PeerRepairManager struct {
+	mu            sync.Mutex
 	peers         *PeerRegistry
 	localIdentity identity.Identity
 	localName     string
@@ -60,6 +68,13 @@ func (m *PeerRepairManager) HandleRepairRequest(token string, dialer PairMetadat
 	if token == "" {
 		return PairMetadata{}, fmt.Errorf("peer.repair: token is required")
 	}
+
+	// Serialize repair calls so FindByToken → RemovePeer → AddPeer is
+	// atomic against other repair goroutines. Without this lock, two
+	// concurrent calls on the same token can interleave RemovePeer and
+	// AddPeer and leave the registry with a stale key or duplicate entry.
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	existing := m.peers.FindPeerByToken(token)
 	if existing == nil {
