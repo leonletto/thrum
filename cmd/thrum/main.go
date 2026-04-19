@@ -1045,6 +1045,65 @@ func versionCmd() *cobra.Command {
 	return cmd
 }
 
+// printAgentSummaryField emits the bare value of a single field from
+// AgentSummary, newline-terminated. Unknown fields return an error so
+// scripts fail loudly rather than silently consuming the empty string.
+func printAgentSummaryField(w io.Writer, s *cli.AgentSummary, field string) error {
+	value, ok := agentSummaryField(s, field)
+	if !ok {
+		return fmt.Errorf("unknown field %q (known: agent_id, role, module, display, branch, worktree, intent, repo_id, session_id, session_start, identity_file, updated_at, source, status, host, pid, tmux_session, tmux_alive)", field)
+	}
+	_, err := fmt.Fprintln(w, value)
+	return err
+}
+
+// agentSummaryField returns the stringified value of a named field on
+// AgentSummary, plus a boolean ok flag. Booleans render as "true"/"false".
+// Zero integers render as "0". Empty strings render as the empty string
+// (the newline from Fprintln is still emitted so callers can | xargs etc.).
+func agentSummaryField(s *cli.AgentSummary, field string) (string, bool) {
+	switch field {
+	case "agent_id":
+		return s.AgentID, true
+	case "role":
+		return s.Role, true
+	case "module":
+		return s.Module, true
+	case "display":
+		return s.Display, true
+	case "branch":
+		return s.Branch, true
+	case "worktree":
+		return s.Worktree, true
+	case "intent":
+		return s.Intent, true
+	case "repo_id":
+		return s.RepoID, true
+	case "session_id":
+		return s.SessionID, true
+	case "session_start":
+		return s.SessionStart, true
+	case "identity_file":
+		return s.IdentityFile, true
+	case "updated_at":
+		return s.UpdatedAt, true
+	case "source":
+		return s.Source, true
+	case "status":
+		return s.Status, true
+	case "host":
+		return s.Host, true
+	case "pid":
+		return strconv.Itoa(s.PID), true
+	case "tmux_session":
+		return s.TmuxSession, true
+	case "tmux_alive":
+		return strconv.FormatBool(s.TmuxAlive), true
+	default:
+		return "", false
+	}
+}
+
 // runWhoami is the shared implementation for both top-level `thrum whoami`
 // and `thrum agent whoami`. It loads identity, optionally enriches from the
 // daemon, then prints the result.
@@ -1072,6 +1131,10 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 	}
 
 	summary := cli.BuildAgentSummary(identityFile, identityPath, daemonInfo)
+
+	if field, _ := cmd.Flags().GetString("field"); field != "" {
+		return printAgentSummaryField(cmd.OutOrStdout(), summary, field)
+	}
 
 	if flagJSON {
 		output, err := json.MarshalIndent(summary, "", "  ")
@@ -1101,6 +1164,8 @@ Examples:
   THRUM_NAME=alice thrum whoami`,
 		RunE: runWhoami,
 	}
+
+	cmd.Flags().String("field", "", "Print a single field's value (e.g. agent_id, tmux_alive) and exit")
 
 	return cmd
 }
