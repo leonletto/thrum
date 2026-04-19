@@ -1,45 +1,51 @@
 #!/usr/bin/env bash
-# thrum-check-inbox.sh — prototype hook script for listener-free message
-# delivery. Reads pending spool files from .thrum/spool/ and emits a
-# nudge-style prompt directing the agent to run `thrum inbox --unread`.
+# thrum-check-inbox.sh — hook script for listener-free message
+# delivery. Reads pending spool files from
+# <THRUM_DIR>/spool/<AGENT_ID>/ and emits a nudge-style notification
+# directing the agent to run `thrum inbox --unread`.
 #
-# Output format mirrors the tmux nudge so behavior is identical across
-# both delivery paths. We do NOT inject message bodies — the daemon
-# remains the canonical message store, and the agent reads via
-# `thrum inbox` which also handles mark-read correctly.
+# If the agent's tmux session is alive (reported by the daemon via
+# `thrum whoami --field tmux_alive`), the hook SILENTLY consumes the
+# spool because the tmux nudge path already notified the agent. This
+# prevents duplicate notifications when both paths fire.
 #
-# Behavior depends on the calling event (set via HOOK_EVENT env from
-# settings.json):
-#   HOOK_EVENT=Stop  → emit {"decision":"block","reason":"<nudge>"}
-#                      so the Stop is countermanded and the agent sees
-#                      the nudge as the next prompt.
-#   else             → emit {"hookSpecificOutput":{"hookEventName":"<event>",
-#                            "additionalContext":"<nudge>"}}
-#                      so the runtime injects the nudge as added context.
+# Output envelope depends on HOOK_EVENT env var set from settings.json:
+#   HOOK_EVENT=Stop  → {"decision":"block","reason":"<nudge>"}
+#   else             → {"hookSpecificOutput":{"hookEventName":"<event>","additionalContext":"<nudge>"}}
 #
-# Spool envelope (one file per message, written by daemon — prototype
-# files are dropped by hand for now):
-#   { "msg_id": "...", "from": "@sender", "body": "...",
-#     "received_at": "ISO-8601" }
-#
-# Idempotent: each spool file is deleted after it's surfaced.
+# Dependencies: thrum binary, bash 4+. No jq, no ps, no tmux.
 
 set -euo pipefail
 
 HOOK_EVENT="${HOOK_EVENT:-PostToolUse}"
+THRUM_DIR="${THRUM_DIR:-.thrum}"
 
-thrum_dir="${THRUM_DIR:-.thrum}"
-spool_dir="$thrum_dir/spool"
+agent_id="$(thrum whoami --field agent_id 2>/dev/null || true)"
+[[ -z "$agent_id" ]] && exit 0
+
+spool_dir="$THRUM_DIR/spool/$agent_id"
 [[ -d "$spool_dir" ]] || exit 0
 
 shopt -s nullglob
 files=("$spool_dir"/*.json)
 [[ ${#files[@]} -eq 0 ]] && exit 0
 
-# Build the nudge text. Mirror tmux nudge format closely so agents
-# learn one phrase, not two.
+# If tmux is alive, tmux nudge already delivered. Silently consume
+# spool files and exit with no output.
+tmux_alive="$(thrum whoami --field tmux_alive 2>/dev/null || echo false)"
+if [[ "$tmux_alive" == "true" ]]; then
+  for f in "${files[@]}"; do rm -f "$f"; done
+  exit 0
+fi
+
+# Build the nudge text. Parse senders using POSIX tools (no jq).
+# Envelope shape: {"msg_id":"...","from":"@sender","received_at":"..."}
 count=${#files[@]}
-senders="$(for f in "${files[@]}"; do jq -r '.from // "?"' "$f"; done | sort -u | paste -sd ',' -)"
+senders="$(
+  for f in "${files[@]}"; do
+    sed -n 's/.*"from"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$f"
+  done | sort -u | paste -sd ',' -
+)"
 
 if [[ $count -eq 1 ]]; then
   nudge="New message from $senders -- run \`thrum inbox --unread\` to read"
@@ -47,17 +53,27 @@ else
   nudge="$count new messages from $senders -- run \`thrum inbox --unread\` to read"
 fi
 
-if [[ "$HOOK_EVENT" == "Stop" ]]; then
-  out="$(jq -nc --arg r "$nudge" '{decision:"block",reason:$r}')"
-else
-  out="$(jq -nc --arg e "$HOOK_EVENT" --arg c "$nudge" \
-    '{hookSpecificOutput:{hookEventName:$e,additionalContext:$c}}')"
-fi
-printf '%s' "$out"
+# Escape user-controlled strings for embedding in JSON output.
+# Only backslash and double-quote need escaping; newlines don't appear
+# in the nudge text by construction.
+escape_json() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  printf '%s' "$s"
+}
 
-# Consume: delete spool files so the same nudge isn't re-emitted on the
-# next hook fire. (Real implementation: daemon-side cleanup keyed off
-# `thrum message read` would replace this.)
+nudge_escaped="$(escape_json "$nudge")"
+
+if [[ "$HOOK_EVENT" == "Stop" ]]; then
+  printf '{"decision":"block","reason":"%s"}' "$nudge_escaped"
+else
+  event_escaped="$(escape_json "$HOOK_EVENT")"
+  printf '{"hookSpecificOutput":{"hookEventName":"%s","additionalContext":"%s"}}' "$event_escaped" "$nudge_escaped"
+fi
+
+# Consume: delete spool files so the same nudge isn't re-emitted on
+# the next hook fire.
 for f in "${files[@]}"; do
   rm -f "$f"
 done
