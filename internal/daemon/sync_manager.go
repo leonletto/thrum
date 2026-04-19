@@ -90,6 +90,11 @@ type PeerStatusInfo struct {
 	Address  string
 	LastSync string
 	LastSeq  int64
+	// ReconcileStatus surfaces the xir.29 auto-reconcile marker so
+	// `thrum peer list` can render a drift warning for peers where
+	// auto-reconcile gave up and the user needs to run
+	// `thrum peer join --type repair <name>`.
+	ReconcileStatus string
 }
 
 // ListPeers returns the status of all known peers.
@@ -111,11 +116,12 @@ func (m *DaemonSyncManager) ListPeers() []PeerStatusInfo {
 		}
 
 		statuses = append(statuses, PeerStatusInfo{
-			DaemonID: p.DaemonID,
-			Name:     p.Name,
-			Address:  p.Address,
-			LastSync: lastSync,
-			LastSeq:  lastSeq,
+			DaemonID:        p.DaemonID,
+			Name:            p.Name,
+			Address:         p.Address,
+			LastSync:        lastSync,
+			LastSeq:         lastSeq,
+			ReconcileStatus: p.ReconcileStatus,
 		})
 	}
 
@@ -227,11 +233,12 @@ func (m *DaemonSyncManager) TailscaleSyncStatus(hostname string) (int, []PeerSta
 		}
 
 		statuses = append(statuses, PeerStatusInfo{
-			DaemonID: p.DaemonID,
-			Name:     p.Name,
-			Address:  p.Address,
-			LastSync: lastSync,
-			LastSeq:  lastSeq,
+			DaemonID:        p.DaemonID,
+			Name:            p.Name,
+			Address:         p.Address,
+			LastSync:        lastSync,
+			LastSeq:         lastSeq,
+			ReconcileStatus: p.ReconcileStatus,
 		})
 	}
 

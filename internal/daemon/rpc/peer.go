@@ -136,6 +136,9 @@ type PeerListEntry struct {
 	Address  string `json:"address"`
 	LastSync string `json:"last_sync"`
 	LastSeq  int64  `json:"last_synced_seq"`
+	// ReconcileStatus mirrors PeerInfo.ReconcileStatus (xir.29). Non-empty
+	// means auto-reconcile flagged the peer for manual --type repair.
+	ReconcileStatus string `json:"reconcile_status,omitempty"`
 }
 
 // --- Handlers ---

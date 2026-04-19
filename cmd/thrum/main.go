@@ -5829,17 +5829,19 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		server.RegisterHandler("peer.join",
 			rpc.NewPeerJoinHandler(joinFn).Handle)
 
-		// peer.list — compact peer list
+		// peer.list — compact peer list. xir.29: propagate ReconcileStatus
+		// so the CLI can render drift markers.
 		peerListFn := func() []rpc.PeerListEntry {
 			infos := syncManager.ListPeers()
 			entries := make([]rpc.PeerListEntry, len(infos))
 			for i, p := range infos {
 				entries[i] = rpc.PeerListEntry{
-					DaemonID: p.DaemonID,
-					Name:     p.Name,
-					Address:  p.Address,
-					LastSync: p.LastSync,
-					LastSeq:  p.LastSeq,
+					DaemonID:        p.DaemonID,
+					Name:            p.Name,
+					Address:         p.Address,
+					LastSync:        p.LastSync,
+					LastSeq:         p.LastSeq,
+					ReconcileStatus: p.ReconcileStatus,
 				}
 			}
 			return entries

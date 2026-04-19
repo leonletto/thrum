@@ -42,6 +42,10 @@ type PeerListEntry struct {
 	Address  string `json:"address"`
 	LastSync string `json:"last_sync"`
 	LastSeq  int64  `json:"last_synced_seq"`
+	// ReconcileStatus surfaces the xir.29 auto-reconcile marker. Non-empty
+	// ("drift_reconcile_failed") means FormatPeerList renders a hint
+	// pointing at `thrum peer join --type repair <name>`.
+	ReconcileStatus string `json:"reconcile_status,omitempty"`
 }
 
 // PeerDetailedStatusEntry is the detailed status of a single peer.
