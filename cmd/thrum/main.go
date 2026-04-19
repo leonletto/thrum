@@ -32,8 +32,8 @@ import (
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
-	"github.com/leonletto/thrum/internal/daemon/inbox"
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
+	"github.com/leonletto/thrum/internal/daemon/inbox"
 	"github.com/leonletto/thrum/internal/daemon/monitor"
 	"github.com/leonletto/thrum/internal/daemon/nudge"
 	"github.com/leonletto/thrum/internal/daemon/permission"
@@ -42,8 +42,8 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
-	"github.com/leonletto/thrum/internal/netdetect"
 	"github.com/leonletto/thrum/internal/identity/guard"
+	"github.com/leonletto/thrum/internal/netdetect"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/restart"
@@ -92,7 +92,11 @@ func buildRootCmd() *cobra.Command {
 		Long: `Thrum is a Git-backed messaging system for agent coordination.
 
 It enables agents and humans to communicate persistently across
-sessions, worktrees, and machines using Git as the sync layer.`,
+sessions, worktrees, and machines using Git as the sync layer.
+
+Environment variables:
+  THRUM_NO_HINTS=1   Suppress all CLI hints (both stderr trailers and JSON
+                     'hints' field). Useful in CI or scripted pipelines.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
@@ -470,6 +474,22 @@ Examples:
 
 			fmt.Println("\nDone. Run 'thrum quickstart --name <name> --role <role> --module <module>' to register an agent.")
 
+			// Post-action hint: tip the operator to register via quickstart
+			// when this machine has no identity yet. Runs only on the
+			// full-init success path (the worktree-redirect branch at
+			// main.go line ~285 returns earlier by design — spec §4 point 6).
+			// Skip in dry-run: nothing actually got initialized.
+			if !dryRun && !alreadyInitialized {
+				state := cli.NewFSOnlyStateAccessor()
+				postCtx := cli.HintCtx{
+					Command: "init",
+					Flags:   map[string]any{"repo": flagRepo},
+					Post:    true,
+					State:   state,
+				}
+				cli.EmitStderr(cli.Collect(postCtx), flagQuiet, flagJSON)
+			}
+
 			return nil
 		},
 	}
@@ -802,15 +822,48 @@ The daemon must be running and you must have an active session.`,
 			}
 			defer func() { _ = client.Close() }()
 
+			// Hint pipeline: pre-action collection only. Send has no
+			// post-action hints in the pilot; recipient-stale is info
+			// severity so HandlePreAction never blocks — but collecting
+			// through the gate keeps the wiring symmetric with tmux.create.
+			state := cli.NewLiveStateAccessor(client)
+			preCtx := cli.HintCtx{
+				Command: "send",
+				Flags:   map[string]any{"to": to},
+				Post:    false,
+				State:   state,
+			}
+			preHints := cli.Collect(preCtx)
+			if abortErr := cli.HandlePreAction(preHints, false); abortErr != nil {
+				return cli.EmitAbort(abortErr, flagQuiet, flagJSON)
+			}
+
 			result, err := cli.Send(client, opts)
 			if err != nil {
 				return err
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
+				// Output as JSON with hints grafted onto the top-level body.
+				raw, merr := json.Marshal(result)
+				if merr != nil {
+					return merr
+				}
+				var body map[string]any
+				if uerr := json.Unmarshal(raw, &body); uerr != nil {
+					return uerr
+				}
+				if body == nil {
+					body = map[string]any{}
+				}
+				if hs := cli.RenderJSONForEmit(preHints); hs != nil {
+					body["hints"] = hs
+				}
+				data, mErr := json.MarshalIndent(body, "", "  ")
+				if mErr != nil {
+					return fmt.Errorf("render send response: %w", mErr)
+				}
+				fmt.Println(string(data))
 			} else if !flagQuiet {
 				// Human-readable output
 				fmt.Printf("✓ Message sent: %s\n", result.MessageID)
@@ -835,6 +888,7 @@ The daemon must be running and you must have an active session.`,
 				for _, w := range result.Warnings {
 					fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 				}
+				cli.EmitStderr(preHints, flagQuiet, flagJSON)
 			}
 
 			return nil
@@ -988,7 +1042,7 @@ The daemon must be running and you must have an active session.`,
 				}
 				fmt.Print(cli.FormatInboxWithOptions(result, fmtOpts))
 				if !flagQuiet {
-					fmt.Print(cli.Hint("inbox", flagQuiet, flagJSON))
+					fmt.Print(cli.LegacyHint("inbox", flagQuiet, flagJSON))
 				}
 			}
 
@@ -2183,7 +2237,7 @@ The agent identity is determined from:
 				// Human-readable formatted output
 				fmt.Print(cli.FormatRegisterResponse(result))
 				if result.Status == "registered" || result.Status == "updated" {
-					fmt.Print(cli.Hint("agent.register", flagQuiet, flagJSON))
+					fmt.Print(cli.LegacyHint("agent.register", flagQuiet, flagJSON))
 				}
 			}
 
@@ -4573,7 +4627,7 @@ Examples:
 			} else {
 				fmt.Print(cli.FormatQuickstart(result))
 				if !flagQuiet {
-					fmt.Print(cli.Hint("quickstart", flagQuiet, flagJSON))
+					fmt.Print(cli.LegacyHint("quickstart", flagQuiet, flagJSON))
 				}
 			}
 
@@ -4630,7 +4684,7 @@ Examples:
 			} else {
 				fmt.Print(cli.FormatOverview(result))
 				if !flagQuiet {
-					fmt.Print(cli.Hint("overview", flagQuiet, flagJSON))
+					fmt.Print(cli.LegacyHint("overview", flagQuiet, flagJSON))
 				}
 			}
 
@@ -4722,7 +4776,7 @@ Examples:
 			} else {
 				fmt.Print(cli.FormatWhoHas(file, result))
 				if !flagQuiet {
-					fmt.Print(cli.Hint("who-has", flagQuiet, flagJSON))
+					fmt.Print(cli.LegacyHint("who-has", flagQuiet, flagJSON))
 				}
 			}
 
@@ -4777,7 +4831,7 @@ Examples:
 			} else {
 				fmt.Print(cli.FormatPing(name, agents, contexts))
 				if !flagQuiet {
-					fmt.Print(cli.Hint("ping", flagQuiet, flagJSON))
+					fmt.Print(cli.LegacyHint("ping", flagQuiet, flagJSON))
 				}
 			}
 
@@ -4860,7 +4914,7 @@ func sessionHeartbeatRunE(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Print(cli.FormatHeartbeat(result))
 		if !flagQuiet {
-			fmt.Print(cli.Hint("session.heartbeat", flagQuiet, flagJSON))
+			fmt.Print(cli.LegacyHint("session.heartbeat", flagQuiet, flagJSON))
 		}
 	}
 
@@ -7859,6 +7913,59 @@ func tmuxCmd() *cobra.Command {
 			}
 			defer func() { _ = client.Close() }()
 
+			// Hint pipeline: pre-action collection + gating.
+			state := cli.NewLiveStateAccessor(client)
+			hintFlags := map[string]any{"cwd": cwd, "force": force}
+			preCtx := cli.HintCtx{
+				Command: "tmux.create",
+				Args:    args,
+				Flags:   hintFlags,
+				Post:    false,
+				State:   state,
+			}
+			preHints := cli.Collect(preCtx)
+			if abortErr := cli.HandlePreAction(preHints, force); abortErr != nil {
+				if flagJSON {
+					// Emit abort body to stdout so agents can parse it,
+					// then return a terse error for the exit code. Render
+					// only the blocking hints for symmetry with the text
+					// path (EmitAbort) — non-blocking info hints, if any,
+					// aren't what caused the abort.
+					var he *cli.HintAbortError
+					var blockers []cli.Hint
+					if errors.As(abortErr, &he) {
+						blockers = he.Hints
+					}
+					body := map[string]any{
+						"error":   "aborted by hint",
+						"aborted": true,
+					}
+					if hs := cli.RenderJSONForEmit(blockers); hs != nil {
+						body["hints"] = hs
+					}
+					data, mErr := json.MarshalIndent(body, "", "  ")
+					if mErr != nil {
+						return fmt.Errorf("render abort body: %w", mErr)
+					}
+					fmt.Println(string(data))
+					return fmt.Errorf("aborted")
+				}
+				return cli.EmitAbort(abortErr, flagQuiet, flagJSON)
+			}
+
+			// Snapshot pre-state for the identity-replaced audit marker. Done
+			// BEFORE the mutation so we can detect whether --force overwrote
+			// a stale identity without re-reading (now-mutated) FS state.
+			var replaceMarker cli.TmuxCreateResultMarker
+			if force && cwd != "" {
+				if status, preAgent, serr := state.IdentityStatus(cwd); serr == nil && status == cli.IdentityStale && preAgent != nil {
+					replaceMarker = cli.TmuxCreateResultMarker{
+						ReplacedStaleIdentity: true,
+						ReplacedAgentName:     preAgent.AgentID,
+					}
+				}
+			}
+
 			result, err := cli.TmuxCreate(client, cli.TmuxCreateOptions{
 				Name:      args[0],
 				Cwd:       cwd,
@@ -7873,11 +7980,46 @@ func tmuxCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			// Post-action hint collection. preHints are also re-emitted at
+			// this point — a warn+AllowForce=true hint that was force-cleared
+			// is still useful context (e.g. 'session was replaced, FYI').
+			postCtx := cli.HintCtx{
+				Command: "tmux.create",
+				Args:    args,
+				Flags:   hintFlags,
+				Post:    true,
+				Result:  replaceMarker,
+				State:   state,
+			}
+			postHints := cli.Collect(postCtx)
+			allHints := append(preHints, postHints...) //nolint:gocritic // appendAssign: intentionally combining into new slice
+
 			if flagJSON {
-				out, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(out))
+				// Marshal the result, then graft the hints array onto the
+				// top-level object (if suppression rules allow).
+				raw, merr := json.Marshal(result)
+				if merr != nil {
+					return merr
+				}
+				var body map[string]any
+				if uerr := json.Unmarshal(raw, &body); uerr != nil {
+					return uerr
+				}
+				if body == nil {
+					body = map[string]any{}
+				}
+				if hs := cli.RenderJSONForEmit(allHints); hs != nil {
+					body["hints"] = hs
+				}
+				data, mErr := json.MarshalIndent(body, "", "  ")
+				if mErr != nil {
+					return fmt.Errorf("render tmux create response: %w", mErr)
+				}
+				fmt.Println(string(data))
 			} else {
 				fmt.Print(cli.FormatTmuxCreate(result))
+				cli.EmitStderr(allHints, flagQuiet, flagJSON)
 			}
 			return nil
 		},

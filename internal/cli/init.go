@@ -2,6 +2,7 @@ package cli
 
 import (
 	stdcontext "context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,12 @@ import (
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/sync"
 )
+
+// ErrNotGitRepo is returned by IsGitWorktree when the target path is not
+// inside a git repository at all. Exported as a typed sentinel so callers
+// (e.g. the hint system's LiveStateAccessor) can use errors.Is instead of
+// matching on the error message string.
+var ErrNotGitRepo = errors.New("not a git repository")
 
 // InitOptions contains options for initializing a Thrum repository.
 type InitOptions struct {
@@ -51,7 +58,7 @@ func IsGitWorktree(repoPath string) (bool, string, error) {
 	// Get the repo toplevel (current working tree root)
 	topLevelOut, err := safecmd.Git(ctx, repoPath, "rev-parse", "--show-toplevel")
 	if err != nil {
-		return false, "", fmt.Errorf("not a git repository")
+		return false, "", ErrNotGitRepo
 	}
 	topLevel := strings.TrimSpace(string(topLevelOut))
 

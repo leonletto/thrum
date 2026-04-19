@@ -2,17 +2,19 @@ package cli
 
 import (
 	"math/rand"
-	"time"
 )
 
-var (
-	// Random source for hint rotation (not security-sensitive, just UI hint selection).
-	hintRandom = rand.New(rand.NewSource(time.Now().UnixNano())) // #nosec G404 -- non-security RNG used only for UI hint rotation, not crypto //nolint:gosec
-)
+// Random hint rotation uses the global math/rand source, which became
+// concurrency-safe in Go 1.20. Not security-sensitive — just UI rotation.
 
-// Hint returns a contextual hint for the given command.
+// LegacyHint returns a contextual hint for the given command using the
+// legacy random-rotation flat-map model. Kept as the fallback path for
+// commands that haven't migrated to the per-command HintSource model
+// (see hint_types.go, hint_registry.go). Package-level identifier freed
+// up so that the new `Hint` struct type can use it.
+//
 // Returns empty string if hints should be suppressed (quiet/JSON mode).
-func Hint(command string, quiet, jsonMode bool) string {
+func LegacyHint(command string, quiet, jsonMode bool) string {
 	if quiet || jsonMode {
 		return ""
 	}
@@ -22,8 +24,9 @@ func Hint(command string, quiet, jsonMode bool) string {
 		return ""
 	}
 
-	// Select a random hint from the available options
-	idx := hintRandom.Intn(len(hints))
+	// Select a random hint from the available options. rand.Intn
+	// uses the concurrency-safe global source (Go 1.20+).
+	idx := rand.Intn(len(hints)) //nolint:gosec // G404: UI hint rotation, not security-sensitive
 	return "  " + hints[idx] + "\n"
 }
 

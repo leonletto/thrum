@@ -130,7 +130,7 @@ func FormatInboxWithOptions(result *InboxResult, opts InboxFormatOptions) string
 			fmt.Fprintf(&output, "No messages matching filter --scope %s\n", opts.ActiveScope)
 			fmt.Fprintf(&output, "  Showing 0 of %d total messages (filter: scope=%s)\n", result.Total, opts.ActiveScope)
 			if !opts.Quiet && !opts.JSON {
-				output.WriteString(Hint("inbox.empty", opts.Quiet, opts.JSON))
+				output.WriteString(LegacyHint("inbox.empty", opts.Quiet, opts.JSON))
 			}
 		} else if opts.ForAgent != "" {
 			fmt.Fprintf(&output, "No messages for @%s.\n", opts.ForAgent)
@@ -140,7 +140,7 @@ func FormatInboxWithOptions(result *InboxResult, opts InboxFormatOptions) string
 		} else {
 			output.WriteString("No messages in inbox.\n")
 			if !opts.Quiet && !opts.JSON {
-				output.WriteString(Hint("inbox.empty", opts.Quiet, opts.JSON))
+				output.WriteString(LegacyHint("inbox.empty", opts.Quiet, opts.JSON))
 			}
 		}
 		return output.String()
