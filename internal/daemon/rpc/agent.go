@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"log"
 	"log/slog"
 	"os"
@@ -16,14 +15,15 @@ import (
 
 	"github.com/leonletto/thrum/internal/config"
 	agentcontext "github.com/leonletto/thrum/internal/context"
-	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/gitctx"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/jsonl"
 	"github.com/leonletto/thrum/internal/process"
+	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
 )
 
