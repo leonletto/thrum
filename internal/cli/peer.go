@@ -58,6 +58,26 @@ type PeerStartPairingParams struct {
 	AuthKey string `json:"auth_key,omitempty"`
 }
 
+// IsTsnetActive reports whether the daemon's Tailscale tsnet listener is
+// already initialized. tsnet only registers a TailscaleSyncInfo provider
+// after a successful startTsnet, so a populated, Enabled provider response
+// means the daemon already holds a working tsnet node and a fresh auth key
+// is not required for further peer pairing on this side.
+func IsTsnetActive(health *HealthResult) bool {
+	return health != nil && health.Tailscale != nil && health.Tailscale.Enabled
+}
+
+// AuthKeyPromptNeeded reports whether `thrum peer add` should prompt the user
+// for THRUM_TS_AUTHKEY. It returns false when an auth key is already in the
+// caller's environment, or when the local daemon's tsnet is already up
+// (in which case the daemon will reuse its cached node credentials).
+func AuthKeyPromptNeeded(envAuthKey string, health *HealthResult) bool {
+	if envAuthKey != "" {
+		return false
+	}
+	return !IsTsnetActive(health)
+}
+
 // PeerStartPairing starts a pairing session on the local daemon.
 func PeerStartPairing(client *Client, params *PeerStartPairingParams) (*PeerStartPairingResult, error) {
 	var reqParams any = struct{}{}

@@ -1533,10 +1533,24 @@ func peerCmd() *cobra.Command {
 Share this code with the person running 'thrum peer join' on the other machine.
 Blocks until a peer connects or the session times out (5 minutes).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Ensure auth key is available — prompt if missing
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			// Ensure auth key is available — prompt only when both the env is
+			// empty AND the daemon's tsnet is not already initialized. A daemon
+			// with a healthy tsnet has cached node credentials in its state dir
+			// and does not need a fresh auth key for further pairing.
 			var pairingParams *cli.PeerStartPairingParams
 			authKey := os.Getenv("THRUM_TS_AUTHKEY")
-			if authKey == "" {
+			var health cli.HealthResult
+			var healthPtr *cli.HealthResult
+			if err := client.Call("health", map[string]any{}, &health); err == nil {
+				healthPtr = &health
+			}
+			if cli.AuthKeyPromptNeeded(authKey, healthPtr) {
 				fmt.Print("Enter Tailscale auth key: ")
 				if _, err := fmt.Scanln(&authKey); err != nil {
 					return fmt.Errorf("failed to read auth key: %w", err)
@@ -1554,12 +1568,6 @@ Blocks until a peer connects or the session times out (5 minutes).`,
 				}
 				pairingParams = &cli.PeerStartPairingParams{AuthKey: authKey}
 			}
-
-			client, err := getClient()
-			if err != nil {
-				return fmt.Errorf("failed to connect to daemon: %w", err)
-			}
-			defer func() { _ = client.Close() }()
 
 			result, err := cli.PeerStartPairing(client, pairingParams)
 			if err != nil {
