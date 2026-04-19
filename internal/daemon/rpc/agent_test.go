@@ -12,6 +12,7 @@ import (
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/types"
+	"github.com/leonletto/thrum/internal/worktree"
 )
 
 func TestAgentRegister(t *testing.T) {
@@ -2148,6 +2149,155 @@ func TestAgentRegister_LocalConflictStillDetected(t *testing.T) {
 	}
 	if regResp.Conflict == nil || regResp.Conflict.ExistingAgentID != "impl_alpha" {
 		t.Errorf("Conflict.ExistingAgentID = %v, want impl_alpha", regResp.Conflict)
+	}
+}
+
+// TestRegister_TwoProxiesSameRoleModule covers thrum-iw42: after dropping
+// the role+module uniqueness check (Option C), two distinct proxy names
+// with the same (role, module) must BOTH succeed. Mirrors the real
+// scenario where Telegram registers @thrum:coordinator_main and the peer
+// bridge registers @thrum:impl_mocksf_s2 — both use role=remote,
+// module=thrum but carry different names.
+func TestRegister_TwoProxiesSameRoleModule(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_iw42", "local_daemon_id")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	handler := NewAgentHandler(s)
+
+	// First proxy: Telegram-bridge-style thrum:coordinator_main.
+	first := RegisterRequest{
+		Name:   "thrum:coordinator_main",
+		Role:   "remote",
+		Module: "thrum",
+	}
+	reqJSON, _ := json.Marshal(first)
+	resp, err := handler.HandleRegister(context.Background(), reqJSON)
+	if err != nil {
+		t.Fatalf("first HandleRegister: %v", err)
+	}
+	if got := resp.(*RegisterResponse).Status; got != "registered" {
+		t.Fatalf("first Status = %q, want registered", got)
+	}
+
+	// Second proxy: peer-bridge-style thrum:impl_mocksf_s2, SAME role + module.
+	second := RegisterRequest{
+		Name:   "thrum:impl_mocksf_s2",
+		Role:   "remote",
+		Module: "thrum",
+	}
+	reqJSON, _ = json.Marshal(second)
+	resp, err = handler.HandleRegister(context.Background(), reqJSON)
+	if err != nil {
+		t.Fatalf("second HandleRegister: %v", err)
+	}
+	regResp := resp.(*RegisterResponse)
+	if regResp.Status != "registered" {
+		t.Errorf("second Status = %q, want registered (role+module uniqueness removed per iw42)", regResp.Status)
+	}
+	if regResp.Conflict != nil {
+		t.Errorf("second Conflict = %+v, want nil (no role+module collision any more)", regResp.Conflict)
+	}
+
+	// Verify both rows coexist in the agents table.
+	var count int
+	if err := s.RawDB().QueryRow("SELECT COUNT(*) FROM agents WHERE role='remote' AND module='thrum'").Scan(&count); err != nil {
+		t.Fatalf("count agents: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("agents with role=remote/module=thrum = %d, want 2", count)
+	}
+}
+
+// TestRegister_SameAgentIDStillRejected preserves the existing
+// same-agent-returning semantics after the role+module check removal.
+// A second registration for the SAME agent_id with a DIFFERENT PID must
+// PID-self-heal (status "updated"), not spawn a duplicate.
+func TestRegister_SameAgentIDStillRejected(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_same_id", "local_daemon_id")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	handler := NewAgentHandler(s)
+
+	first := RegisterRequest{
+		Name:     "alice",
+		Role:     "implementer",
+		Module:   "auth",
+		AgentPID: 100,
+	}
+	reqJSON, _ := json.Marshal(first)
+	if _, err := handler.HandleRegister(context.Background(), reqJSON); err != nil {
+		t.Fatalf("first HandleRegister: %v", err)
+	}
+
+	// Same agent_id (name), different PID → PID self-heal, status "updated".
+	second := RegisterRequest{
+		Name:     "alice",
+		Role:     "implementer",
+		Module:   "auth",
+		AgentPID: 200,
+	}
+	reqJSON, _ = json.Marshal(second)
+	resp, err := handler.HandleRegister(context.Background(), reqJSON)
+	if err != nil {
+		t.Fatalf("second HandleRegister: %v", err)
+	}
+	regResp := resp.(*RegisterResponse)
+	if regResp.Status != "updated" {
+		t.Errorf("Status = %q, want updated (PID self-heal path)", regResp.Status)
+	}
+
+	// Exactly one row, updated PID.
+	var count, pid int
+	if err := s.RawDB().QueryRow("SELECT COUNT(*), MAX(agent_pid) FROM agents WHERE agent_id='alice'").Scan(&count, &pid); err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("agents count = %d, want 1 (same-id should dedupe)", count)
+	}
+	if pid != 200 {
+		t.Errorf("agent_pid = %d, want 200 (self-heal replaces stale)", pid)
+	}
+}
+
+// TestRegister_SameWorktreeStillRejected proves the worktree-layer
+// enforcement (EnforceOneIdentity) continues to reject a second identity
+// file in the same worktree, which is the real one-agent-per-worktree
+// invariant. agent.register itself no longer gatekeeps that — it trusts
+// the worktree layer to drop the older identity file before a second
+// agent ever reaches the RPC with a fresh name.
+func TestRegister_SameWorktreeStillRejected(t *testing.T) {
+	dir := t.TempDir()
+	idDir := filepath.Join(dir, ".thrum", "identities")
+	if err := os.MkdirAll(idDir, 0o755); err != nil {
+		t.Fatalf("mkdir identities: %v", err)
+	}
+	// Seed two identity files to represent the pre-enforcement state.
+	for _, name := range []string{"impl_alpha.json", "impl_beta.json"} {
+		if err := os.WriteFile(filepath.Join(idDir, name), []byte(`{"agent_id":"x"}`), 0o600); err != nil {
+			t.Fatalf("seed %s: %v", name, err)
+		}
+	}
+
+	deleted := worktree.EnforceOneIdentity(dir, "impl_beta")
+	// impl_beta kept, impl_alpha removed.
+	if len(deleted) != 1 || deleted[0] != "impl_alpha" {
+		t.Errorf("EnforceOneIdentity deleted=%v, want [impl_alpha]", deleted)
+	}
+	if _, err := os.Stat(filepath.Join(idDir, "impl_alpha.json")); !os.IsNotExist(err) {
+		t.Errorf("impl_alpha.json still exists; enforcement did not run")
+	}
+	if _, err := os.Stat(filepath.Join(idDir, "impl_beta.json")); err != nil {
+		t.Errorf("impl_beta.json missing; winner identity was wrongly deleted: %v", err)
 	}
 }
 
