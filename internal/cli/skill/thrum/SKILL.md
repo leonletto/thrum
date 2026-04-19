@@ -85,6 +85,29 @@ thrum <cmd> --help                       Detailed command usage
 **Critical:** `@coordinator` is a role, not an agent name. Use `thrum team` to
 find agent names, then send `--to @<name>` for direct messages.
 
+## Notification Delivery
+
+Claude-runtime agents get message nudges via three converging paths — you
+don't need to run a background listener. All three paths lead you back to
+the same action: run `thrum inbox --unread` when you see a nudge.
+
+1. **Tmux nudge** — if you're running in a tmux-managed session (e.g.,
+   `thrum tmux start`), the daemon types a notification directly into your
+   pane.
+2. **Hook injection** — `thrum init --runtime claude` installs runtime
+   lifecycle hooks (stop, post-tool, prompt-submit, and context-compact events)
+   that read a per-agent spool dir and surface the nudge as context when
+   lifecycle events fire.
+3. **Cron backstop** — a 15-minute `CronCreate` cron runs
+   `thrum inbox --unread` directly while the REPL is idle, catching
+   anything the hook missed.
+
+All three paths emit the same nudge text: `New message from @sender -- run
+`thrum inbox --unread` to read`. Always act by running `thrum inbox --unread`.
+The previous `thrum wait` listener pattern (see
+`references/LISTENER_PATTERN.md`) is deprecated for new Claude agents —
+it still works but burns context tokens for the entire session.
+
 ## Background Listener Pattern
 
 Launch a background listener to monitor for messages:
