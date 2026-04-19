@@ -40,7 +40,10 @@ type WaitForPairingFunc func(ctx context.Context) (peerName, peerAddress, peerDa
 //   - peerName — required when peerType=="repair"; identifies the existing
 //     peer entry to reconcile.
 //   - remote — required when peerType=="a-sync"; the git URL.
-type JoinPeerFunc func(peerAddr, code, repoPath, peerType, peerName, remote string) (peerName_, peerDaemonID string, err error)
+//   - localAddress — required when peerType=="network"; THIS daemon's LAN
+//     IP (must be assigned to a local NIC) where a WS listener will be
+//     bound and used as localMeta.Address.
+type JoinPeerFunc func(peerAddr, code, repoPath, peerType, peerName, remote, localAddress string) (peerName_, peerDaemonID string, err error)
 
 // RemovePeerFunc removes a peer by daemon ID.
 type RemovePeerFunc func(daemonID string) error
@@ -102,6 +105,12 @@ type PeerJoinRequest struct {
 	PeerName string `json:"peer_name,omitempty"`
 	// Remote is the user-supplied git URL when Type=="a-sync".
 	Remote string `json:"remote,omitempty"`
+	// LocalAddress is THIS daemon's LAN IP for Type=="network". The daemon
+	// validates it via internal/netdetect, binds a WS listener at
+	// LocalAddress:<port>, and uses that listener address as
+	// localMeta.Address so the listener-side daemon can reach us back for
+	// post-pair sync. Required for network; ignored for other types.
+	LocalAddress string `json:"local_address,omitempty"`
 }
 
 // PeerJoinResponse is the result of peer.join.
@@ -241,7 +250,7 @@ func (h *PeerJoinHandler) Handle(_ context.Context, params json.RawMessage) (any
 		}
 	}
 
-	peerName, peerDaemonID, err := h.joinPeer(req.Address, req.Code, req.RepoPath, req.Type, req.PeerName, req.Remote)
+	peerName, peerDaemonID, err := h.joinPeer(req.Address, req.Code, req.RepoPath, req.Type, req.PeerName, req.Remote, req.LocalAddress)
 	if err != nil {
 		return PeerJoinResponse{
 			Status:  "error",

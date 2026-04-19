@@ -98,6 +98,13 @@ type PeerJoinParams struct {
 	// Remote is the user-supplied git URL for --type a-sync. Empty for
 	// other types.
 	Remote string `json:"remote,omitempty"`
+	// LocalAddress is THIS daemon's LAN IP for --type network. The daemon
+	// validates the IP via internal/netdetect, binds a WS listener on
+	// LocalAddress:<port>, and uses that listener address as
+	// localMeta.Address so the listener-side daemon can reach us back for
+	// post-pair sync.notify. Required for --type network; ignored for
+	// other types.
+	LocalAddress string `json:"local_address,omitempty"`
 }
 
 // IsTsnetActive reports whether the daemon's Tailscale tsnet listener is
@@ -155,19 +162,21 @@ func PeerJoin(client *Client, params *PeerJoinParams) (*PeerJoinResult, error) {
 		return nil, fmt.Errorf("peer join: params required")
 	}
 	req := struct {
-		Address  string `json:"address,omitempty"`
-		Code     string `json:"code,omitempty"`
-		RepoPath string `json:"repo_path,omitempty"`
-		Type     string `json:"type,omitempty"`
-		PeerName string `json:"peer_name,omitempty"`
-		Remote   string `json:"remote,omitempty"`
+		Address      string `json:"address,omitempty"`
+		Code         string `json:"code,omitempty"`
+		RepoPath     string `json:"repo_path,omitempty"`
+		Type         string `json:"type,omitempty"`
+		PeerName     string `json:"peer_name,omitempty"`
+		Remote       string `json:"remote,omitempty"`
+		LocalAddress string `json:"local_address,omitempty"`
 	}{
-		Address:  params.Address,
-		Code:     params.Code,
-		RepoPath: params.RepoPath,
-		Type:     params.Type,
-		PeerName: params.PeerName,
-		Remote:   params.Remote,
+		Address:      params.Address,
+		Code:         params.Code,
+		RepoPath:     params.RepoPath,
+		Type:         params.Type,
+		PeerName:     params.PeerName,
+		Remote:       params.Remote,
+		LocalAddress: params.LocalAddress,
 	}
 
 	var result PeerJoinResult

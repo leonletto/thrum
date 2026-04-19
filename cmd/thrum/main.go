@@ -12,6 +12,7 @@ import (
 	"log"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,6 +41,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
+	"github.com/leonletto/thrum/internal/netdetect"
 	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/process"
@@ -1650,6 +1652,7 @@ list of transports and a one-line "when to use" for each.`,
 	var joinType string
 	var joinPeerName string
 	var joinRemote string
+	var joinAddress string
 	joinCmd := &cobra.Command{
 		Use:   "join [peercode]",
 		Short: "Join a remote peer (or repair an existing one)",
@@ -1737,16 +1740,23 @@ stored secrets in peers.json to re-handshake without minting a new token.`,
 				params.Address = fmt.Sprintf("%s:%d", ip, port)
 				params.Code = pairCode
 				params.RepoPath = repoPath
+				params.LocalAddress = strings.TrimSpace(joinAddress)
 
 				if peerType == cli.PeerTypeLocal && daemon.DetectTransport(params.Address) != "local" {
 					fmt.Fprintf(os.Stderr,
 						"warning: --type local but peercode address %s is not loopback; "+
 							"the peer add side likely emitted a non-local peercode\n", params.Address)
 				}
-				if peerType == cli.PeerTypeNetwork && daemon.DetectTransport(params.Address) == "local" {
-					fmt.Fprintf(os.Stderr,
-						"warning: --type network but peercode address %s is loopback; "+
-							"did you mean --type local?\n", params.Address)
+				if peerType == cli.PeerTypeNetwork {
+					if daemon.DetectTransport(params.Address) == "local" {
+						fmt.Fprintf(os.Stderr,
+							"warning: --type network but peercode address %s is loopback; "+
+								"did you mean --type local?\n", params.Address)
+					}
+					if params.LocalAddress == "" {
+						return errors.New("--type network requires --address <ip> on this side too " +
+							"(the LAN IP this daemon should bind for sync reach-back)")
+					}
 				}
 			}
 
@@ -1775,6 +1785,7 @@ stored secrets in peers.json to re-handshake without minting a new token.`,
 	joinCmd.Flags().StringVar(&repoPath, "repo-path", "", "Filesystem path to the peer's repo (legacy hint; --type local preferred)")
 	joinCmd.Flags().StringVar(&joinPeerName, "peer-name", "", "Existing peer name for --type repair")
 	joinCmd.Flags().StringVar(&joinRemote, "remote", "", "Git URL for --type a-sync")
+	joinCmd.Flags().StringVar(&joinAddress, "address", "", "LAN IP for --type network (this daemon's reach-back address)")
 	cmd.AddCommand(joinCmd)
 
 	// thrum peer list — show all peers
@@ -5292,6 +5303,13 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// closures are wired into the daemon server below, which itself only
 	// starts accepting connections once the WS server is up).
 	var wsPort string
+	// ensureNetworkListenerFn is wired below once wsServer is built. It
+	// lazily binds an additional WS listener on a user-supplied LAN IP so
+	// `--type network` peers (xir.27 sub-2) can dial a non-loopback address
+	// without rebinding the main wsServer to 0.0.0.0. Returns the bound
+	// "ip:port" address string. Per-IP idempotent: subsequent calls with
+	// the same IP return the existing listener's port.
+	var ensureNetworkListenerFn func(addrIP string) (string, error)
 	hostname, _ := os.Hostname()
 
 	getTsLocalAddr := func() string {
@@ -5514,7 +5532,35 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				return code, net.JoinHostPort("127.0.0.1", wsPort), "local", nil
 
 			case "network":
-				return "", "", "", fmt.Errorf("--type network: handshake wiring lands in xir.27 sub-component 2")
+				// xir.27 sub-2: anchor the peercode at the user-supplied
+				// LAN IP. The daemon validates that the IP is assigned to a
+				// local NIC eligible for direct-TCP peer transport (filters
+				// loopback / link-local / tsnet / docker / utun / etc.) via
+				// internal/netdetect, then binds a SECONDARY WS listener on
+				// addressHint:<port>. Per coordinator: scoped second listener
+				// (NOT a 0.0.0.0 rebind) keeps blast radius narrow.
+				if strings.TrimSpace(addressHint) == "" {
+					return "", "", "", fmt.Errorf("--type network requires --address <ip>")
+				}
+				ip := net.ParseIP(strings.TrimSpace(addressHint))
+				if ip == nil {
+					return "", "", "", fmt.Errorf("--type network --address %q: not a valid IP", addressHint)
+				}
+				if _, err := netdetect.SubnetForLocalAddress(ip); err != nil {
+					return "", "", "", fmt.Errorf("--type network --address %s: %w", addressHint, err)
+				}
+				if ensureNetworkListenerFn == nil {
+					return "", "", "", fmt.Errorf("--type network: secondary listener helper not initialized")
+				}
+				bound, err := ensureNetworkListenerFn(ip.String())
+				if err != nil {
+					return "", "", "", fmt.Errorf("--type network: bind listener on %s: %w", ip, err)
+				}
+				code, err := pairingMgr.StartPairing(timeout)
+				if err != nil {
+					return "", "", "", err
+				}
+				return code, bound, "network", nil
 
 			case "a-sync":
 				return "", "", "", fmt.Errorf("--type a-sync: git-remote configuration lands in xir.27 sub-component 3")
@@ -5541,7 +5587,7 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			rpc.NewPeerWaitPairingHandler(waitFn).Handle)
 
 		// peer.join — dispatch on the user-selected transport (xir.27).
-		joinFn := func(peerAddr, code, repoPath, peerType, peerName, remote string) (string, string, error) {
+		joinFn := func(peerAddr, code, repoPath, peerType, peerName, remote, localAddress string) (string, string, error) {
 			switch peerType {
 			case "", "tailscale":
 				if startTsnetFn != nil && getTsLocalAddr() == "" {
@@ -5624,7 +5670,48 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				return peer.Name, peer.DaemonID, nil
 
 			case "network":
-				return "", "", fmt.Errorf("--type network: join handshake wiring lands in xir.27 sub-component 2")
+				// xir.27 sub-2: dial the peercode address directly (no tsnet),
+				// and bind a SECONDARY WS listener on this daemon's user-
+				// supplied --address so the listener-side daemon can reach
+				// us back for post-pair sync.notify. Symmetric to the add
+				// side: both sides must explicitly opt into a LAN address.
+				if strings.TrimSpace(localAddress) == "" {
+					return "", "", fmt.Errorf("--type network requires --address <ip> on this side too (the LAN IP this daemon should bind for sync reach-back)")
+				}
+				ip := net.ParseIP(strings.TrimSpace(localAddress))
+				if ip == nil {
+					return "", "", fmt.Errorf("--type network --address %q: not a valid IP", localAddress)
+				}
+				if _, err := netdetect.SubnetForLocalAddress(ip); err != nil {
+					return "", "", fmt.Errorf("--type network --address %s: %w", localAddress, err)
+				}
+				if ensureNetworkListenerFn == nil {
+					return "", "", fmt.Errorf("--type network: secondary listener helper not initialized")
+				}
+				localAddr, err := ensureNetworkListenerFn(ip.String())
+				if err != nil {
+					return "", "", fmt.Errorf("--type network: bind listener on %s: %w", ip, err)
+				}
+				localIdent := st.Identity()
+				localMeta := daemon.PairMetadata{
+					DaemonID:     localIdent.DaemonID,
+					Name:         hostname,
+					Address:      localAddr,
+					RepoName:     localIdent.RepoName,
+					Hostname:     localIdent.Hostname,
+					RepoPath:     localIdent.RepoPath,
+					GitOriginURL: localIdent.GitOriginURL,
+				}
+				peer, err := syncManager.JoinPeer(peerAddr, code, localMeta)
+				if err != nil {
+					return "", "", err
+				}
+				peer.Role = "dialer"
+				peer.Transport = "network"
+				if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
+					fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
+				}
+				return peer.Name, peer.DaemonID, nil
 
 			case "a-sync":
 				return "", "", fmt.Errorf("--type a-sync: peer join is a no-op for a-sync; configure with 'thrum peer add --type a-sync --remote <git-url>'")
@@ -5855,6 +5942,44 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	}
 
 	wsServer := websocket.NewServer(wsAddr, wsRegistry, uiFS, wsOpts...)
+
+	// xir.27 sub-2: lazy per-IP secondary WS listener for --type network.
+	// Reuses wsServer.HTTPHandler() so all RPC handlers + the pairing /
+	// peer-accept gates are identical to the localhost listener; only the
+	// bind address differs. Per-IP idempotent — multiple --type network
+	// pairs anchored at the same LAN IP share one listener.
+	//
+	// NOT a 0.0.0.0 rebind by design: the user explicitly types the LAN IP
+	// they want to expose; binding to that specific IP keeps the blast
+	// radius narrow and auditable. Other interfaces on the host (vpn,
+	// docker, secondary NICs) stay invisible from this daemon's pairing
+	// surface unless the user opts each one in.
+	var (
+		networkListenersMu sync.Mutex
+		networkListeners   = map[string]string{} // ip → "ip:port"
+	)
+	ensureNetworkListenerFn = func(addrIP string) (string, error) {
+		networkListenersMu.Lock()
+		defer networkListenersMu.Unlock()
+		if existing, ok := networkListeners[addrIP]; ok {
+			return existing, nil
+		}
+		ln, err := net.Listen("tcp", net.JoinHostPort(addrIP, "0"))
+		if err != nil {
+			return "", fmt.Errorf("listen on %s: %w", addrIP, err)
+		}
+		bound := ln.Addr().String()
+		// Serve the same handler the main wsServer uses so all RPCs +
+		// validators are reachable on the LAN listener too.
+		go func() { // #nosec G114 -- intentional fire-and-forget; lifecycle ends with daemon process
+			if serveErr := http.Serve(ln, wsServer.HTTPHandler()); serveErr != nil && serveErr != http.ErrServerClosed {
+				slog.Warn("[network-listener] serve ended", "addr", bound, "err", serveErr)
+			}
+		}()
+		networkListeners[addrIP] = bound
+		slog.Info("[network-listener] bound", "addr", bound)
+		return bound, nil
+	}
 
 	// Wire the WebSocket client registry into the message handler so it can
 	// broadcast notification.message to ALL connected clients (including the
