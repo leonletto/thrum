@@ -133,13 +133,25 @@ func (p *Permission) firstDetect(
 	}
 
 	if len(supers) == 0 {
-		// No live supervisors — still persist a row so recovery can
-		// clean it up. MessageID is a stable synthetic so a second
-		// orphan first-detect on the same session+time doesn't conflict.
-		slog.Info("[permission] orphan insert (no live supervisors)",
+		// No live supervisors — the give-up cadence path will never fire
+		// for this agent (reminders require a recipient), so this is a
+		// terminal silent-failure unless surfaced. Warn loudly with the
+		// configured entries so operators can see what was tried, then
+		// mark the affected agent stuck immediately to mirror the state
+		// visible in thrum team / UI. The orphan row is still persisted
+		// so OnRecovery can clean it up and clearAgentStuck runs when the
+		// pane resumes. markAgentStuck errors are non-fatal: dropping the
+		// stuck flag when the identity file is missing is preferable to
+		// losing the orphan row.
+		slog.Warn("[permission] orphan insert — no live supervisors resolved; nudge dropped",
 			"session", session,
 			"runtime", runtime,
-			"pattern", matched.Name)
+			"pattern", matched.Name,
+			"configured_entries", p.loadSupervisorEntries())
+		if stuckErr := p.markAgentStuck(ctx, agentName); stuckErr != nil {
+			slog.Warn("[permission] markAgentStuck failed in orphan path",
+				"agent", agentName, "err", stuckErr)
+		}
 		row.MessageID = "perm_orphan_" + session + "_" + now.Format("20060102T150405")
 		return p.store.InsertPendingNudge(ctx, row)
 	}
