@@ -122,29 +122,6 @@ func TestHandleRepairRequest_EmptyToken(t *testing.T) {
 	}
 }
 
-func TestHandleRepairRequest_RejectsASyncEntry(t *testing.T) {
-	// a-sync peer entries have no Token in production, but we set one here
-	// to exercise the Transport-guard path explicitly. The guard must
-	// reject even when a token happens to match.
-	reg := newRepairTestRegistry(t)
-	seedPeer(t, reg, &PeerInfo{
-		Name:        "async-peer",
-		DaemonID:    "async:abc",
-		Token:       "tok-async",
-		Transport:   "a-sync",
-		ASyncRemote: "git@example.com:shared/repo.git",
-	})
-	mgr := NewPeerRepairManager(reg, identity.Identity{DaemonID: "d_local"}, "localhost")
-
-	_, err := mgr.HandleRepairRequest("tok-async", PairMetadata{DaemonID: "d_whatever"})
-	if err == nil {
-		t.Fatalf("expected rejection for a-sync entry")
-	}
-	if !strings.Contains(err.Error(), "a-sync") {
-		t.Errorf("error should mention a-sync: %q", err.Error())
-	}
-}
-
 func TestHandleRepairRequest_PreservesTokenAndName(t *testing.T) {
 	reg := newRepairTestRegistry(t)
 	seedPeer(t, reg, &PeerInfo{

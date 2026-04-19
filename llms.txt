@@ -244,22 +244,21 @@ All commands accept these flags:
 
   thrum peer add --type <transport>
     Start a pairing session. Displays a peercode and blocks until peer connects (5min timeout).
-    --type is REQUIRED — no default. Missing flag errors with a help block listing all 5 values.
+    --type is REQUIRED — no default. Missing flag errors with a help block listing all 4 values.
     Values:
       --type tailscale                       Cross-host via Tailscale. Requires THRUM_TS_AUTHKEY.
                                              (Skipped automatically if daemon's tsnet is already up.)
       --type local                           Same-host sibling repos. Loopback peercode, no tsnet.
       --type network --address <ip>          Same-LAN, no Tailscale. Subnet inferred from the NIC
                                              that owns the supplied IP. Direct TCP.
-      --type a-sync --remote <git-url>       Asynchronous git-mediated peer. No live handshake;
-                                             messages flow via git push/fetch. For offline/periodic peers.
       --type repair                          Rejected on peer add (use peer join --type repair instead).
 
   thrum peer join --type <transport> [peercode] [--peercode CODE] [--repo-path PATH]
     Connect to a remote peer. --type is REQUIRED.
     Peercode format: name:ip:port:code. Accepts positional arg, --peercode flag, stdin pipe, or interactive prompt.
-    Values match `peer add`. --type repair operates on an existing paired peer using stored secrets
-    in peers.json — does NOT create new pairings; refuses if the peer is not already in peers.json.
+    Values: tailscale | local | network | repair. --type repair operates on an existing paired peer
+    using stored secrets in peers.json — does NOT create new pairings; refuses if the peer is not
+    already in peers.json.
 
   thrum peer list [--json]
     List paired peers with address, last sync, sequence number.
@@ -508,7 +507,7 @@ All commands accept these flags:
 
   thrum overview
 
-### Cross-repo peer communication (transports: tailscale | local | network | a-sync, v0.7.0+)
+### Cross-repo peer communication (transports: tailscale | local | network, v0.7.0+)
 
   # Cross-host via Tailscale (xir.27 default replacement for the old no-flag form)
   thrum peer add  --type tailscale                          # Machine A
@@ -522,10 +521,6 @@ All commands accept these flags:
   # Same-LAN, no Tailscale (user supplies an IP that's on a NIC of this host)
   thrum peer add  --type network --address 192.168.1.42     # Machine A
   thrum peer join --type network --peercode alice:192.168.1.42:9100:1234567890123456   # Machine B
-
-  # Asynchronous git-mediated (e.g., CI runner that pushes nightly)
-  thrum peer add  --type a-sync --remote git@github.com:user/repo.git
-  # No `peer join` — the peer entry is stamped immediately; messages flow via git remote.
 
   # Both daemons now route messages bidirectionally
   thrum peer configure alice add-agent planner

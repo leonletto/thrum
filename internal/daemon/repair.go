@@ -66,13 +66,6 @@ func (m *PeerRepairManager) HandleRepairRequest(token string, dialer PairMetadat
 		return PairMetadata{}, fmt.Errorf("peer.repair: no matching peer")
 	}
 
-	// Refuse to repair a-sync directory entries. They carry no token today,
-	// so FindPeerByToken should never return one; this is a belt-and-braces
-	// check to keep the invariant explicit.
-	if existing.Transport == "a-sync" {
-		return PairMetadata{}, fmt.Errorf("peer.repair: a-sync peer entries are not repairable (they carry no live credential)")
-	}
-
 	// If the dialer's daemon_id rotated, the old entry's key becomes stale.
 	// RemovePeer the old key before AddPeer stores under the new one;
 	// otherwise both keys would survive and drift further. Preserve the

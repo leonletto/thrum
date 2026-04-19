@@ -13,8 +13,8 @@ type PeerStartPairingResult struct {
 	Code    string `json:"code"`
 	Address string `json:"address,omitempty"` // local peer address (ip:port) — class depends on Type
 	// Transport echoes the daemon's chosen transport label. From xir.27
-	// onwards: tailscale | local | network | a-sync. Used by the CLI to
-	// surface "Pairing code (transport=X): ..." consistently.
+	// onwards: tailscale | local | network. Used by the CLI to surface
+	// "Pairing code (transport=X): ..." consistently.
 	Transport string `json:"transport,omitempty"`
 }
 
@@ -60,7 +60,7 @@ type PeerDetailedStatusEntry struct {
 // PeerStartPairingParams are optional parameters for starting pairing.
 type PeerStartPairingParams struct {
 	AuthKey string `json:"auth_key,omitempty"`
-	// Type is the user-selected transport (tailscale|local|network|a-sync).
+	// Type is the user-selected transport (tailscale|local|network).
 	// Required from xir.27 onwards. The daemon dispatches peercode emission
 	// and listener choice based on this value. "repair" is rejected here
 	// (peer add cannot reconcile an existing peer); use PeerJoinParams.Type
@@ -69,9 +69,6 @@ type PeerStartPairingParams struct {
 	// Address is the user-supplied LAN IP for --type network. Empty for
 	// other types.
 	Address string `json:"address,omitempty"`
-	// Remote is the user-supplied git URL for --type a-sync. Empty for
-	// other types.
-	Remote string `json:"remote,omitempty"`
 }
 
 // PeerJoinParams holds the per-call parameters for `thrum peer join`.
@@ -79,14 +76,14 @@ type PeerStartPairingParams struct {
 // pair handshake. Address resolution and stored-secret reuse are derived
 // from Type.
 type PeerJoinParams struct {
-	// Type is the user-selected transport (tailscale|local|network|a-sync|repair).
+	// Type is the user-selected transport (tailscale|local|network|repair).
 	Type string `json:"type"`
 	// Address is the dial target, "ip:port", parsed from the peercode by the
 	// CLI before this struct is built. Required for tailscale/local/network.
-	// Empty for a-sync (no live handshake) and repair (uses stored secrets).
+	// Empty for repair (uses stored secrets).
 	Address string `json:"address,omitempty"`
 	// Code is the pair-code component of the peercode. Required for
-	// tailscale/local/network; empty for a-sync and repair.
+	// tailscale/local/network; empty for repair.
 	Code string `json:"code,omitempty"`
 	// RepoPath is the legacy local-peer hint. Retained for compatibility
 	// with the existing `--repo-path` flag; the new `--type local` is the
@@ -95,9 +92,6 @@ type PeerJoinParams struct {
 	// PeerName identifies the existing peer when Type=="repair". Required
 	// for repair, ignored for other types.
 	PeerName string `json:"peer_name,omitempty"`
-	// Remote is the user-supplied git URL for --type a-sync. Empty for
-	// other types.
-	Remote string `json:"remote,omitempty"`
 	// LocalAddress is THIS daemon's LAN IP for --type network. The daemon
 	// validates the IP via internal/netdetect, binds a WS listener on
 	// LocalAddress:<port>, and uses that listener address as
@@ -153,10 +147,10 @@ func PeerWaitPairing(client *Client) (*PeerWaitPairingResult, error) {
 
 // PeerJoin sends a pair-handshake request to a remote peer using the
 // supplied params. From xir.27 onwards Params.Type controls dispatch:
-// tailscale/local/network use Address+Code; a-sync uses Remote; repair
-// uses PeerName + stored secrets in peers.json. The CLI is responsible
-// for parsing the user-supplied peercode into Address+Code and ensuring
-// required fields are set per Type.
+// tailscale/local/network use Address+Code; repair uses PeerName +
+// stored secrets in peers.json. The CLI is responsible for parsing the
+// user-supplied peercode into Address+Code and ensuring required fields
+// are set per Type.
 func PeerJoin(client *Client, params *PeerJoinParams) (*PeerJoinResult, error) {
 	if params == nil {
 		return nil, fmt.Errorf("peer join: params required")
@@ -167,7 +161,6 @@ func PeerJoin(client *Client, params *PeerJoinParams) (*PeerJoinResult, error) {
 		RepoPath     string `json:"repo_path,omitempty"`
 		Type         string `json:"type,omitempty"`
 		PeerName     string `json:"peer_name,omitempty"`
-		Remote       string `json:"remote,omitempty"`
 		LocalAddress string `json:"local_address,omitempty"`
 	}{
 		Address:      params.Address,
@@ -175,7 +168,6 @@ func PeerJoin(client *Client, params *PeerJoinParams) (*PeerJoinResult, error) {
 		RepoPath:     params.RepoPath,
 		Type:         params.Type,
 		PeerName:     params.PeerName,
-		Remote:       params.Remote,
 		LocalAddress: params.LocalAddress,
 	}
 

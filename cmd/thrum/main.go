@@ -1529,7 +1529,7 @@ func peerCmd() *cobra.Command {
 	}
 
 	// thrum peer add — start pairing on this machine
-	var addType, addAddress, addRemote string
+	var addType, addAddress string
 	addCmd := &cobra.Command{
 		Use:   "add",
 		Short: "Start pairing and wait for a peer to connect",
@@ -1554,9 +1554,6 @@ list of transports and a one-line "when to use" for each.`,
 			if peerType == cli.PeerTypeNetwork && strings.TrimSpace(addAddress) == "" {
 				return errors.New("--type network requires --address <ip>")
 			}
-			if peerType == cli.PeerTypeASync && strings.TrimSpace(addRemote) == "" {
-				return errors.New("--type a-sync requires --remote <git-url>")
-			}
 
 			client, err := getClient()
 			if err != nil {
@@ -1570,7 +1567,6 @@ list of transports and a one-line "when to use" for each.`,
 			pairingParams := &cli.PeerStartPairingParams{
 				Type:    string(peerType),
 				Address: strings.TrimSpace(addAddress),
-				Remote:  strings.TrimSpace(addRemote),
 			}
 			if peerType == cli.PeerTypeTailscale {
 				authKey := os.Getenv("THRUM_TS_AUTHKEY")
@@ -1603,14 +1599,6 @@ list of transports and a one-line "when to use" for each.`,
 				return err
 			}
 
-			// a-sync emits no peercode; the peer entry is stamped immediately
-			// and there is no live handshake to wait for.
-			if peerType == cli.PeerTypeASync {
-				fmt.Printf("Async peer configured (transport=a-sync, remote=%s).\n", strings.TrimSpace(addRemote))
-				fmt.Println("Messages will be exchanged via git push/fetch.")
-				return nil
-			}
-
 			localHostname, _ := os.Hostname()
 			if result.Address != "" {
 				connStr := daemon.FormatPeercode(localHostname, result.Address, result.Code)
@@ -1640,9 +1628,8 @@ list of transports and a one-line "when to use" for each.`,
 			return nil
 		},
 	}
-	addCmd.Flags().StringVar(&addType, "type", "", "Transport: tailscale | local | network | a-sync (REQUIRED)")
+	addCmd.Flags().StringVar(&addType, "type", "", "Transport: tailscale | local | network (REQUIRED)")
 	addCmd.Flags().StringVar(&addAddress, "address", "", "LAN IP for --type network (must be assigned to a local NIC)")
-	addCmd.Flags().StringVar(&addRemote, "remote", "", "Git URL for --type a-sync")
 	cmd.AddCommand(addCmd)
 
 	// thrum peer join — connect to a remote peer using a peercode (or
@@ -1651,7 +1638,6 @@ list of transports and a one-line "when to use" for each.`,
 	var repoPath string
 	var joinType string
 	var joinPeerName string
-	var joinRemote string
 	var joinAddress string
 	joinCmd := &cobra.Command{
 		Use:   "join [peercode]",
@@ -1668,7 +1654,6 @@ Peercode input methods (for --type tailscale|local|network):
   thrum peer join --type T --peercode -                   (pipe via stdin flag)
   thrum peer join --type T                                 (interactive prompt)
 
---type a-sync requires --remote <git-url> and emits no peercode.
 --type repair requires <peer-name> (positional or --peer-name) — uses
 stored secrets in peers.json to re-handshake without minting a new token.`,
 		Args: cobra.MaximumNArgs(1),
@@ -1699,13 +1684,6 @@ stored secrets in peers.json to re-handshake without minting a new token.`,
 					return errors.New("--type repair requires a peer name (positional arg or --peer-name)")
 				}
 				params.PeerName = name
-
-			case cli.PeerTypeASync:
-				remote := strings.TrimSpace(joinRemote)
-				if remote == "" {
-					return errors.New("--type a-sync requires --remote <git-url>")
-				}
-				params.Remote = remote
 
 			default: // tailscale, local, network — peercode-based
 				code := peerCode
@@ -1780,11 +1758,10 @@ stored secrets in peers.json to re-handshake without minting a new token.`,
 			return nil
 		},
 	}
-	joinCmd.Flags().StringVar(&joinType, "type", "", "Transport: tailscale | local | network | a-sync | repair (REQUIRED)")
+	joinCmd.Flags().StringVar(&joinType, "type", "", "Transport: tailscale | local | network | repair (REQUIRED)")
 	joinCmd.Flags().StringVar(&peerCode, "peercode", "", "Connection string from 'thrum peer add' (peercode-based types)")
 	joinCmd.Flags().StringVar(&repoPath, "repo-path", "", "Filesystem path to the peer's repo (legacy hint; --type local preferred)")
 	joinCmd.Flags().StringVar(&joinPeerName, "peer-name", "", "Existing peer name for --type repair")
-	joinCmd.Flags().StringVar(&joinRemote, "remote", "", "Git URL for --type a-sync")
 	joinCmd.Flags().StringVar(&joinAddress, "address", "", "LAN IP for --type network (this daemon's reach-back address)")
 	cmd.AddCommand(joinCmd)
 
@@ -5507,7 +5484,7 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 
 		// peer.start_pairing — begin pairing, return code
 		// Wrap to ensure port is selected before pairing starts.
-		startPairingFn := func(timeout time.Duration, peerType, addressHint, remote string) (string, string, string, error) {
+		startPairingFn := func(timeout time.Duration, peerType, addressHint string) (string, string, string, error) {
 			// xir.27: dispatch on the user-selected transport. An empty Type
 			// preserves the legacy implicit-tailscale path for any caller
 			// invoking the RPC directly without going through the new CLI
@@ -5584,51 +5561,6 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				}
 				return code, bound, "network", nil
 
-			case "a-sync":
-				// xir.27 sub-3: configure the repo's 'origin' remote to point
-				// at the shared git URL, stamp a directory-only peer entry
-				// (Transport=a-sync, no Address/Token), and emit a
-				// daemon.identity event so other daemons fetching the
-				// remote's a-sync branch discover this daemon. The existing
-				// internal/sync/ loop handles the branch creation + push on
-				// its next tick (manually triggered below for responsiveness).
-				//
-				// No peercode is emitted; the CLI's peer-add flow (main.go
-				// peer add RunE) short-circuits wait_pairing on --type a-sync
-				// and surfaces success directly.
-				if syncLoop == nil {
-					return "", "", "", fmt.Errorf("--type a-sync: sync is not enabled on this daemon")
-				}
-				if err := daemon.ConfigureASyncRemote(ctx, absPath, remote); err != nil {
-					return "", "", "", err
-				}
-				if err := daemon.VerifyASyncRemoteReachable(ctx, absPath, remote); err != nil {
-					return "", "", "", err
-				}
-				ident := st.Identity()
-				identityEvent := map[string]any{
-					"type":           "daemon.identity",
-					"hostname":       ident.Hostname,
-					"repo_name":      ident.RepoName,
-					"repo_path":      ident.RepoPath,
-					"git_origin_url": ident.GitOriginURL,
-				}
-				if err := st.WriteEvent(ctx, identityEvent); err != nil {
-					return "", "", "", fmt.Errorf("--type a-sync: emit daemon.identity event: %w", err)
-				}
-				peer := &daemon.PeerInfo{
-					Name:        daemon.ASyncPeerName(remote),
-					DaemonID:    daemon.ASyncPeerDaemonID(remote),
-					Transport:   "a-sync",
-					ASyncRemote: strings.TrimSpace(remote),
-					Role:        "async",
-				}
-				if err := peerRegistry.AddPeer(peer); err != nil {
-					return "", "", "", fmt.Errorf("--type a-sync: stamp peer entry: %w", err)
-				}
-				syncLoop.TriggerSync()
-				return "", "", "a-sync", nil
-
 			case "repair":
 				return "", "", "", fmt.Errorf("--type repair is not valid for peer add (use 'thrum peer join --type repair <name>')")
 
@@ -5651,7 +5583,7 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			rpc.NewPeerWaitPairingHandler(waitFn).Handle)
 
 		// peer.join — dispatch on the user-selected transport (xir.27).
-		joinFn := func(peerAddr, code, repoPath, peerType, peerName, remote, localAddress string) (string, string, error) {
+		joinFn := func(peerAddr, code, repoPath, peerType, peerName, localAddress string) (string, string, error) {
 			switch peerType {
 			case "", "tailscale":
 				if startTsnetFn != nil && getTsLocalAddr() == "" {
@@ -5777,9 +5709,6 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				}
 				return peer.Name, peer.DaemonID, nil
 
-			case "a-sync":
-				return "", "", fmt.Errorf("--type a-sync: peer join is a no-op for a-sync; configure with 'thrum peer add --type a-sync --remote <git-url>'")
-
 			case "repair":
 				// xir.27 sub-4: reconcile an existing peer entry using its
 				// stored Token as the trust anchor. peerName comes from the
@@ -5798,9 +5727,6 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				}
 				if existing.Token == "" {
 					return "", "", fmt.Errorf("--type repair: peer %q has no stored token (directory-only entry cannot be repaired)", name)
-				}
-				if existing.Transport == "a-sync" {
-					return "", "", fmt.Errorf("--type repair: peer %q is transport=a-sync (directory-only; no live handshake to repair)", name)
 				}
 				if existing.Address == "" {
 					return "", "", fmt.Errorf("--type repair: peer %q has no stored address", name)

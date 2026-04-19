@@ -55,7 +55,7 @@ and this project adheres to
 
 - **`thrum peer add` and `thrum peer join` now require `--type <transport>`
   (xir.27).** The previously-implicit `tailscale` default has been removed.
-  Five values are accepted, each gates both the peercode emission and the
+  Four values are accepted, each gates both the peercode emission and the
   handshake dial:
     - `--type tailscale` — current behavior (tsnet peercode, Tailscale dial,
       requires `THRUM_TS_AUTHKEY`).
@@ -64,18 +64,6 @@ and this project adheres to
     - `--type network` — same-LAN, no Tailscale. Requires `--address <ip>`;
       the subnet is inferred from the NIC that owns the supplied IP. Direct
       TCP, no tsnet.
-    - `--type a-sync` — asynchronous git-mediated peer. Requires
-      `--remote <git-url>`. No live handshake; messages flow through git
-      push/fetch. Suitable for peers that are not always online (CI, periodic
-      laptops, air-gapped review). On first add, configures the repo's
-      `origin` remote (idempotent; errors if `origin` is already set to a
-      different URL), verifies reachability via `git ls-remote`, and emits a
-      `daemon.identity` event on the `a-sync` branch so future joiners
-      discover this daemon's metadata. Peer identity uses a deterministic
-      `async:<hash>` placeholder until discovery refines it. Only
-      `https://`, `http://`, `ssh://`, `git://`, and SSH shorthand
-      (`user@host:path`) URLs are accepted; `file://` is rejected. Error
-      messages strip embedded credentials before surfacing URLs.
     - `--type repair` — re-verify and reconcile an EXISTING peer entry
       using stored secrets in `peers.json`. Valid only on `peer join`;
       rejected on `peer add`. Used to recover from drift (e.g., after a peer
@@ -86,11 +74,10 @@ and this project adheres to
       `peer.repair` with its current identity, and receives the listener's
       refreshed metadata in return. Both sides re-key the peer entry if
       the daemon_id has rotated; `Name` and `Token` are preserved. Works
-      for `local`, `network`, and `tailscale` transports. Rejects
-      `a-sync` peer entries (no live credential to authenticate).
+      for `local`, `network`, and `tailscale` transports.
   Migration: any script calling `thrum peer add` (no flag) must add an
   explicit `--type tailscale` for the same behavior. Missing `--type` errors
-  with a help block listing all five options and a one-line "when to use"
+  with a help block listing all four options and a one-line "when to use"
   for each — the canonical instance of the CLI-hint pattern.
 
 ### Security

@@ -9,7 +9,7 @@ import (
 // PeerType is the explicit transport / operation choice for `thrum peer add`
 // and `thrum peer join`. Per Leon (xir.27, 2026-04-19), `--type` is
 // MANDATORY: there is no default. Missing-flag is a hard error that lists
-// all five values with a one-line "when to use" each — the canonical
+// all four values with a one-line "when to use" each — the canonical
 // instance of the Phase 2 CLI-hint pattern.
 type PeerType string
 
@@ -29,13 +29,6 @@ const (
 	// the corresponding peercode. No tsnet bring-up.
 	PeerTypeNetwork PeerType = "network"
 
-	// PeerTypeASync configures a peer for asynchronous push/fetch over a
-	// shared git remote. The user supplies --remote <git-url>; no peercode
-	// is emitted, no live handshake is dialed. Suitable for peers that are
-	// not online simultaneously (CI runners, periodically-online laptops,
-	// air-gapped review workflows).
-	PeerTypeASync PeerType = "a-sync"
-
 	// PeerTypeRepair re-verifies and reconciles an EXISTING peer entry
 	// using the secrets stored in peers.json. Refuses to create new
 	// pairings; the target peer must already be paired via one of the
@@ -53,7 +46,7 @@ var ErrPeerTypeMissing = errors.New("--type is required")
 var ErrPeerTypeUnknown = errors.New("--type value is not recognized")
 
 // MissingTypeMessage is the exact text printed when --type is missing.
-// Lists all five values with a one-line "when to use" each. Phase 2
+// Lists all four values with a one-line "when to use" each. Phase 2
 // CLI-hint pattern: error teaches the right next step.
 const MissingTypeMessage = `--type is required. Choose one:
 
@@ -68,10 +61,6 @@ const MissingTypeMessage = `--type is required. Choose one:
   --type network     Same-LAN, no Tailscale. Requires --address <ip>.
                      Use when both daemons are on the same network
                      segment and you want direct TCP without tsnet.
-
-  --type a-sync      Asynchronous git-mediated peer. Requires --remote <git-url>.
-                     Use when the peer is not always online (CI, periodic
-                     laptops, air-gapped review). No live handshake.
 
   --type repair      Re-verify an existing peer entry.
                      Use when peers.json has drifted (e.g. after a
@@ -90,7 +79,7 @@ func ParsePeerType(raw string) (PeerType, error) {
 	}
 	pt := PeerType(strings.ToLower(trimmed))
 	switch pt {
-	case PeerTypeTailscale, PeerTypeLocal, PeerTypeNetwork, PeerTypeASync, PeerTypeRepair:
+	case PeerTypeTailscale, PeerTypeLocal, PeerTypeNetwork, PeerTypeRepair:
 		return pt, nil
 	}
 	return "", fmt.Errorf("%w: %q", ErrPeerTypeUnknown, raw)

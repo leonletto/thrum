@@ -22,7 +22,7 @@ type PeerInfo struct {
 	Token              string    `json:"token,omitempty"`
 	PairedAt           time.Time `json:"paired_at"`
 	LastSync           time.Time `json:"last_sync"`
-	Transport          string    `json:"transport,omitempty"`             // "local", "tailscale", "network", "a-sync"
+	Transport          string    `json:"transport,omitempty"`             // "local", "tailscale", "network"
 	RepoPath           string    `json:"repo_path,omitempty"`             // Filesystem path for local peers
 	ProxyPrefix        string    `json:"proxy_prefix,omitempty"`          // Namespace prefix for proxy agents
 	RemoteAgents       []string  `json:"remote_agents,omitempty"`         // Agent names to proxy
@@ -30,7 +30,6 @@ type PeerInfo struct {
 	RemoteHostname     string    `json:"remote_hostname,omitempty"`       // Peer's hostname
 	RemoteRepoPath     string    `json:"remote_repo_path,omitempty"`      // Peer's repo filesystem path
 	RemoteGitOriginURL string    `json:"remote_git_origin_url,omitempty"` // Peer's git origin URL
-	ASyncRemote        string    `json:"async_remote,omitempty"`          // Shared git remote URL for transport=a-sync (xir.27 sub-3)
 	Role               string    `json:"role,omitempty"`                  // "listener" or "dialer"
 }
 
