@@ -281,6 +281,65 @@ func TestScheduler_FirstDetectWithoutSupervisors_InsertsOrphanRow(t *testing.T) 
 	}
 }
 
+// TestScheduler_OrphanPathMarksAgentStuck asserts the thrum-enlw.8 fix:
+// when ResolveSupervisors returns zero recipients, the scheduler must
+// mark the affected agent stuck immediately — the reminder cadence
+// never runs without a recipient, so the give-up path is unreachable.
+// Stuck is the observable signal that surfaces the silent-failure state
+// in thrum team / UI.
+func TestScheduler_OrphanPathMarksAgentStuck(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatalf("create thrum dir: %v", err)
+	}
+	st, err := state.NewState(thrumDir, thrumDir, "r_ORPHAN_STUCK", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	// Seed an identity file for the nudged agent so markAgentStuck has
+	// a file to mutate. No supervisor is registered, so ResolveSupervisors
+	// via the default ["coordinator"] role broadcast returns empty.
+	researcherID := &config.IdentityFile{
+		Agent: config.AgentConfig{
+			Kind:   "agent",
+			Name:   "researcher_cursor",
+			Role:   "researcher",
+			Module: "cursor-test",
+		},
+	}
+	if err := config.SaveIdentityFile(thrumDir, researcherID); err != nil {
+		t.Fatalf("save researcher identity: %v", err)
+	}
+
+	p := New(st, st.RawDB(), "supervisor_thrum", "thrum", thrumDir)
+	fixedNow := time.Date(2026, 4, 14, 10, 0, 0, 0, time.UTC)
+	p.SetClock(func() time.Time { return fixedNow })
+
+	ctx := context.Background()
+	if err := p.OnDetection(ctx, "cursor-test", "cursor", "cursor-test:0.0",
+		"researcher_cursor", testPattern(), "pane X"); err != nil {
+		t.Fatalf("OnDetection: %v", err)
+	}
+
+	// Orphan row must still exist (contract preserved).
+	row, _ := p.store.LookupPendingNudgeBySession(ctx, "cursor-test")
+	if row == nil {
+		t.Fatal("orphan row missing after OnDetection")
+	}
+
+	// Agent must be flagged stuck — the key regression signal.
+	reloaded := readIdentityFile(t, thrumDir, "researcher_cursor")
+	if reloaded.AgentStatus != "stuck" {
+		t.Errorf("AgentStatus = %q, want stuck (orphan path should mark stuck immediately since give-up cadence is unreachable)", reloaded.AgentStatus)
+	}
+	if reloaded.AgentStatusUpdatedAt.IsZero() {
+		t.Error("AgentStatusUpdatedAt should be set when orphan path marks stuck")
+	}
+}
+
 func TestScheduler_GiveUp(t *testing.T) {
 	// At count==6, the scheduler must (a) stop sending further nudges
 	// and (b) mark the agent stuck via markAgentStuck — which Task 5.6
