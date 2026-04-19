@@ -6432,8 +6432,13 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	var reconcileMgr *reconcile.Manager
 	if peerManager != nil && peerRegistry != nil {
 		localIdent := st.Identity()
+		// I7 review finding: Address was previously empty here, so the
+		// peer.repair request sent an empty address field and the
+		// listener could not update its cached view of us. Supply the
+		// WS port (same format peers store as PeerInfo.Address).
 		localDialer := reconcile.DialerIdentity{
 			DaemonID:     peerRegistry.LocalDaemonID(),
+			Address:      ":" + wsPort,
 			RepoName:     localIdent.RepoName,
 			Hostname:     localIdent.Hostname,
 			RepoPath:     localIdent.RepoPath,
@@ -6476,11 +6481,24 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 					succeeded++
 				} else {
 					failed++
-					log.Printf("[reconcile][debug] %s: %v (category=%d)", r.PeerName, r.Err, r.Category)
+					// Emit per-peer detail at DEBUG only when a
+					// plumbing failure surfaced (r.Err != nil). Known
+					// categories (CatUnreachable / CatTokenRejected)
+					// without r.Err are already reflected in the
+					// registry's ReconcileStatus marker — no need to
+					// double-report at log level (M8 review finding).
+					if r.Err != nil {
+						slog.Debug("reconcile peer failed",
+							"peer", r.PeerName,
+							"category", int(r.Category),
+							"err", r.Err)
+					}
 				}
 			}
-			log.Printf("[reconcile] boot scan: %d peers attempted, %d succeeded, %d failed",
-				attempted, succeeded, failed)
+			slog.Info("reconcile boot scan complete",
+				"attempted", attempted,
+				"succeeded", succeeded,
+				"failed", failed)
 		}()
 	}
 

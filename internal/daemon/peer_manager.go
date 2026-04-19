@@ -53,6 +53,11 @@ type PeerManager struct {
 	// lifetime (AcceptPeer path) and we do not want the counter to
 	// reset mid-drift (N2 review finding).
 	attemptStates sync.Map // map[string]*peerAttemptState
+
+	// reconcileDelayFn overrides the 2s/8s/30s backoff schedule. Used
+	// by tests to drive the real reset-on-success path without a 2s
+	// sleep (I5 review finding). Production leaves this nil.
+	reconcileDelayFn func(attempt int) time.Duration
 }
 
 // peerAttemptState is the per-peer reconcile attempt counter state
@@ -123,31 +128,30 @@ func (pm *PeerManager) BuildConfigs() []peer.BridgeConfig {
 // makeOnDialError returns the xir.29 OnDialError callback for a single
 // peer. The callback:
 //
-//   - Classifies the dial error via reconcile.CategorizeErr (int codes:
-//     1=CatUnreachable, 2=CatTokenRejected, 3=CatOther).
-//   - Skips reconcile on CatTokenRejected (auth failure → terminal,
-//     let drift_reconcile_failed marker + manual --type repair handle
-//     recovery).
 //   - Honors a 3-attempt cap with 2s / 8s / 30s backoff per coordinator
 //     guidance (2026-04-19). Counter resets on successful reconcile.
-//   - Cancellable at every sleep via ctx.Done so daemon shutdown does
-//     not leak a 30s-waiting goroutine (N1 review finding).
+//   - Calls ReconcileOneHook; the hook returns a category code that
+//     classifies the failure. CatTokenRejected (code 2) = auth failure
+//     → terminal, do not retry; reconcile has already flagged the
+//     peer drift_reconcile_failed on the path to returning.
+//   - Cancellable at every sleep via the bridge-supplied ctx.Done so
+//     daemon shutdown does not leak a 30s-waiting goroutine (B2 + N1
+//     review findings). ctx comes from the bridge reconnect loop,
+//     which cancels on StopAll / ctx.Done.
 //   - Returns true iff reconcile actually re-keyed the peer (daemon_id
 //     rotated), signaling the bridge to retry immediately rather than
 //     fall into its own backoff.
-func (pm *PeerManager) makeOnDialError(hook ReconcileHook, _ string) func(string, error) bool {
-	return func(name string, err error) bool {
-		// Classify by well-known category codes (kept in sync with
-		// reconcile.ErrCategory). Code 2 = CatTokenRejected.
+//
+// Pre-gates on error string markers (401/403/unauthorized/forbidden)
+// were dropped in favor of the single-source-of-truth category gate
+// (I3 review finding) — one extra one-shot WSDial is a small cost for
+// eliminating the gap where a wrapped ErrTokenRejected from peer.repair
+// (no "401" in its error text) slipped past the pre-gate.
+func (pm *PeerManager) makeOnDialError(hook ReconcileHook, _ string) func(context.Context, string, error) bool {
+	return func(ctx context.Context, name string, err error) bool {
+		// Category codes kept in sync with reconcile.ErrCategory:
+		// 1=CatUnreachable, 2=CatTokenRejected, 3=CatOther.
 		const catTokenRejected = 2
-
-		// Approximate category from error text — the bridge layer
-		// does not have direct access to reconcile.CategorizeErr.
-		// Auth failures surface as "401"/"unauthorized" in the
-		// gorilla WS handshake response.
-		if err != nil && isAuthError(err) {
-			return false
-		}
 
 		// Per-peer attempt state. Allocate on first use.
 		rawSt, _ := pm.attemptStates.LoadOrStore(name, &peerAttemptState{})
@@ -162,41 +166,24 @@ func (pm *PeerManager) makeOnDialError(hook ReconcileHook, _ string) func(string
 			return false
 		}
 
-		var delay time.Duration
-		switch attempt {
-		case 1:
-			delay = 2 * time.Second
-		case 2:
-			delay = 8 * time.Second
-		case 3:
-			delay = 30 * time.Second
+		delay := pm.reconcileDelayForAttempt(attempt)
+		if delay > 0 {
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return false
+			}
 		}
 
-		// Use a bounded, ctx-aware background context. The caller
-		// (bridge reconnect goroutine) runs under a long-lived
-		// parent ctx we do not have direct access to here; bound
-		// the reconcile + sleep with a derived ctx so shutdown
-		// interrupts us.
-		//
-		// 35s covers the 30s max-backoff plus a 5s reconcile dial
-		// timeout. Shorter parent-cancellation unblocks instantly.
-		hookCtx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
-		defer cancel()
-
-		select {
-		case <-time.After(delay):
-		case <-hookCtx.Done():
-			return false
-		}
-
-		dialCtx, dialCancel := context.WithTimeout(hookCtx, 10*time.Second)
+		// Reconcile dial bounded to 10s; inherits parent ctx cancel.
+		dialCtx, dialCancel := context.WithTimeout(ctx, 10*time.Second)
 		defer dialCancel()
 		ok, daemonIDChanged, cat, herr := hook.ReconcileOneHook(dialCtx, name)
 		if herr != nil {
 			pm.logger.Printf("peer %s: reconcile: %v", name, herr)
 			return false
 		}
-		// Auth failure surfaced via the hook's category — still suppress retry.
+		// Auth failure (I3 unified gate): terminal, do not retry.
 		if cat == catTokenRejected {
 			return false
 		}
@@ -210,58 +197,24 @@ func (pm *PeerManager) makeOnDialError(hook ReconcileHook, _ string) func(string
 	}
 }
 
-// isAuthError returns true for errors that indicate the peer rejected
-// our stored credentials (token mismatch, forbidden). These are
-// terminal; auto-reconcile cannot fix them via re-key.
-func isAuthError(err error) bool {
-	if err == nil {
-		return false
+// reconcileDelayForAttempt returns the 2s/8s/30s backoff schedule for
+// the xir.29 OnDialError retry cap. Extracted as a method so tests can
+// override via setReconcileDelayFunc to keep unit-test runtime low
+// without sacrificing the production-path exercise (I5 review finding).
+func (pm *PeerManager) reconcileDelayForAttempt(attempt int) time.Duration {
+	if pm.reconcileDelayFn != nil {
+		return pm.reconcileDelayFn(attempt)
 	}
-	msg := err.Error()
-	// gorilla/websocket embeds HTTP status codes in the dial error:
-	// "websocket: bad handshake" + the response body. We match loosely
-	// since exact text varies across gorilla versions.
-	for _, marker := range []string{"401", "403", "unauthorized", "forbidden"} {
-		if containsFold(msg, marker) {
-			return true
-		}
+	switch attempt {
+	case 1:
+		return 2 * time.Second
+	case 2:
+		return 8 * time.Second
+	case 3:
+		return 30 * time.Second
+	default:
+		return 0
 	}
-	return false
-}
-
-// containsFold is a case-insensitive substring check used by isAuthError.
-// Pulled out so it's unit-testable without exporting strings helpers.
-func containsFold(s, sub string) bool {
-	// Short inline implementation — avoids importing strings for one use.
-	if len(sub) == 0 {
-		return true
-	}
-	ls := len(s)
-	lsub := len(sub)
-	if lsub > ls {
-		return false
-	}
-	for i := 0; i+lsub <= ls; i++ {
-		match := true
-		for j := 0; j < lsub; j++ {
-			a := s[i+j]
-			b := sub[j]
-			if a >= 'A' && a <= 'Z' {
-				a += 32
-			}
-			if b >= 'A' && b <= 'Z' {
-				b += 32
-			}
-			if a != b {
-				match = false
-				break
-			}
-		}
-		if match {
-			return true
-		}
-	}
-	return false
 }
 
 // ConnectAll spawns a PeerBridge for each dialer-role peer.
@@ -296,10 +249,11 @@ func (pm *PeerManager) startBridge(parentCtx context.Context, cfg peer.BridgeCon
 			// xir.29: give OnDialError first refusal. If it returns true,
 			// skip backoff and retry immediately (auto-reconcile has taken
 			// corrective action). Otherwise fall through to exponential
-			// backoff as usual.
+			// backoff as usual. Pass ctx so shutdown cancels any reconcile
+			// + backoff sleep inside the hook (B2 review finding).
 			immediate := false
 			if cfg.OnDialError != nil {
-				immediate = cfg.OnDialError(cfg.PeerName, err)
+				immediate = cfg.OnDialError(ctx, cfg.PeerName, err)
 			}
 			if !immediate {
 				select {

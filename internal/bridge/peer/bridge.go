@@ -28,9 +28,11 @@ type BridgeConfig struct {
 	// reconnect loop (peer_manager) when a dial/auth attempt fails.
 	// Return true to request an immediate retry (the caller has taken
 	// corrective action, e.g., auto-reconcile re-keyed the peer
-	// entry). Return false to back off as usual. Called with the peer
-	// name and the underlying error.
-	OnDialError func(peerName string, err error) bool
+	// entry). Return false to back off as usual. Called with the
+	// bridge's parent ctx so shutdown cancellation propagates into
+	// any reconcile + backoff sleep the hook performs (B2 review
+	// finding).
+	OnDialError func(ctx context.Context, peerName string, err error) bool
 }
 
 // Bridge orchestrates the peer↔Thrum bridge lifecycle.

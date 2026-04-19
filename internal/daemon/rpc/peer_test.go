@@ -56,16 +56,9 @@ func TestPeerListEntry_ReconcileStatusRoundTrip(t *testing.T) {
 		t.Errorf("bravo ReconcileStatus = %q, want empty", got[1].ReconcileStatus)
 	}
 
-	// Verify omitempty actually elided the empty field on the wire.
-	if containsAll(string(wire), `"reconcile_status":"drift_reconcile_failed"`) &&
-		!containsAll(string(wire), `"bravo".*reconcile_status`) {
-		// OK: alpha has the field, bravo does not (regex-free check).
-		// If both were present, the test regresses to "field always
-		// emitted" — we would catch that via the omitempty assertion
-		// below.
-	}
-	// Quick substring check: there must be at most ONE occurrence of
-	// "reconcile_status" in the wire payload (alpha only).
+	// omitempty must elide the empty ReconcileStatus on bravo — so the
+	// wire payload carries exactly one "reconcile_status" occurrence
+	// (alpha's drift marker).
 	if countOccurrences(string(wire), `"reconcile_status"`) != 1 {
 		t.Errorf("expected exactly one reconcile_status on the wire; got payload: %s", wire)
 	}

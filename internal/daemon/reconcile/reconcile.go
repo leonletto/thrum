@@ -104,6 +104,25 @@ func (m *Manager) ReconcileOne(ctx context.Context, peerName string) (Result, er
 		OldDaemonID: p.DaemonID,
 	}
 
+	// I6 review finding: Transport="local" peers resolve address from
+	// <repoPath>/.thrum/var/ws.port at dial time (internal/bridge/peer/
+	// transport.go:55-62) — PeerInfo.Address is typically empty for
+	// these entries. Same-host is strictly stronger than same-subnet
+	// per coordinator 2026-04-19; auto-reconcile is trivially safe but
+	// has nothing to do beyond marking as OK.
+	if p.Transport == "local" {
+		res.OK = true
+		res.NewDaemonID = p.DaemonID
+		// Clear any stale drift marker inherited from a transport
+		// change earlier in this peer's life.
+		if p.ReconcileStatus == StatusDriftReconcileFailed {
+			if err := m.registry.SetReconcileStatus(p.DaemonID, StatusHealthy); err != nil {
+				m.logger.Printf("reconcile: clear drift status for local peer %s: %v", peerName, err)
+			}
+		}
+		return res, nil
+	}
+
 	resp, err := m.dial(ctx, p.Address, p.Token, m.local)
 	res.Category = CategorizeErr(err)
 	res.Err = err
@@ -115,6 +134,19 @@ func (m *Manager) ReconcileOne(ctx context.Context, peerName string) (Result, er
 			}
 		}
 		return res, nil
+	}
+
+	// B1 review finding: a malformed or partial peer.repair response
+	// with an empty daemon_id would otherwise satisfy the re-key guard
+	// below (OldDaemonID != "" && OldDaemonID != "") and drop the old
+	// registry entry before AddPeer rejects the empty key, leaving the
+	// registry silently corrupted. Refuse early and surface as a
+	// CatOther plumbing error so the caller does not treat res.OK=true
+	// as a success signal.
+	if resp.DaemonID == "" {
+		res.Category = CatOther
+		res.Err = fmt.Errorf("peer.repair returned empty daemon_id")
+		return res, res.Err
 	}
 
 	res.NewDaemonID = resp.DaemonID

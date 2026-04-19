@@ -140,38 +140,33 @@ func TestPeerManager_StopAll(t *testing.T) {
 	}
 }
 
-// xir.29 B2: OnDialError must skip reconcile on auth errors — they are
-// terminal failures, not transient drift.
-func TestOnDialError_AuthErrorSkipsReconcile(t *testing.T) {
+// xir.29 B2: auth errors surface via the hook's category gate (I3
+// review finding: pre-gate removed). When reconcile returns
+// category=CatTokenRejected, the hook returns false without retry.
+func TestOnDialError_AuthCategorySkipsRetry(t *testing.T) {
 	pm, _ := newTestPeerManager(t)
-	called := false
+	pm.reconcileDelayFn = func(int) time.Duration { return 0 }
+	var calls int32
 	hook := &fakeHook{reconcileOne: func(ctx context.Context, name string) (bool, bool, int, error) {
-		called = true
-		return true, false, 0, nil
+		calls++
+		return false, false, 2, nil // CatTokenRejected
 	}}
 	pm.SetReconcileManager(hook)
 	fn := pm.makeOnDialError(hook, "peer-x")
 
-	// 401/unauthorized errors must short-circuit before reconcile fires.
-	for _, e := range []error{
-		errString("websocket: bad handshake: 401 Unauthorized"),
-		errString("dial: 403 Forbidden"),
-		errString("unauthorized"),
-	} {
-		if got := fn("peer-x", e); got {
-			t.Errorf("auth error %q wrongly signaled immediate retry", e)
-		}
+	if got := fn(context.Background(), "peer-x", errString("websocket: 401 Unauthorized")); got {
+		t.Errorf("auth category wrongly signaled immediate retry")
 	}
-	if called {
-		t.Errorf("ReconcileOneHook was invoked on auth-error path")
+	if calls != 1 {
+		t.Errorf("ReconcileOneHook call count = %d, want 1 (unified gate)", calls)
 	}
 }
 
-// xir.29 B2: 3-attempt cap with 2s/8s/30s backoff. Using a very short
-// sleep to keep the test fast — we monkey-patch the attempt counter
-// to skip the delays by pre-populating st.count.
+// xir.29 B2: 3-attempt cap with 2s/8s/30s backoff. Uses the injected
+// delay function to skip real sleeps; tests only the cap logic.
 func TestOnDialError_RetryCapAtThree(t *testing.T) {
 	pm, _ := newTestPeerManager(t)
+	pm.reconcileDelayFn = func(int) time.Duration { return 0 }
 	var calls int32
 	hook := &fakeHook{reconcileOne: func(ctx context.Context, name string) (bool, bool, int, error) {
 		calls++
@@ -186,7 +181,7 @@ func TestOnDialError_RetryCapAtThree(t *testing.T) {
 
 	// Attempt #4 must exceed cap and log "cap exceeded" without firing
 	// the hook.
-	if got := fn("peer-x", errString("transient")); got {
+	if got := fn(context.Background(), "peer-x", errString("transient")); got {
 		t.Errorf("attempt past cap wrongly returned true")
 	}
 	if calls != 0 {
@@ -194,34 +189,62 @@ func TestOnDialError_RetryCapAtThree(t *testing.T) {
 	}
 }
 
-// xir.29 B2: successful reconcile resets the attempt counter so a later
-// drift can use the full 3-attempt budget again.
+// I5 (dual-review): exercises the actual production reset path —
+// calls fn with a success-returning hook and asserts the counter is
+// zeroed afterwards. Previous version poked state directly; this
+// version would catch regression if the `st.count = 0` line inside
+// makeOnDialError were deleted.
 func TestOnDialError_CounterResetsOnSuccess(t *testing.T) {
 	pm, _ := newTestPeerManager(t)
-	// Pre-populate at count=2 so the first call (which becomes #3)
-	// still fits in the cap and incurs the 30s delay — but we use a
-	// success path that should reset.
-	//
-	// To avoid the 30s sleep, we instead validate the reset via a
-	// direct state poke: simulate a successful call by forcing the
-	// hook to return ok=true, peek the counter, and confirm it's 0.
+	pm.reconcileDelayFn = func(int) time.Duration { return 0 } // no sleep
 	hook := &fakeHook{reconcileOne: func(ctx context.Context, name string) (bool, bool, int, error) {
+		return true, true, 0, nil // ok + daemonIDChanged
+	}}
+	pm.SetReconcileManager(hook)
+
+	// Pre-populate count=2 so the upcoming call becomes attempt #3
+	// (still inside the cap).
+	pm.attemptStates.Store("peer-x", &peerAttemptState{count: 2})
+	fn := pm.makeOnDialError(hook, "peer-x")
+
+	got := fn(context.Background(), "peer-x", errString("transient drift"))
+	if !got {
+		t.Errorf("success + daemonIDChanged should signal immediate retry")
+	}
+	if after := pm.peerAttemptCount(t, "peer-x"); after != 0 {
+		t.Errorf("counter not reset on production success path: got %d", after)
+	}
+}
+
+// B2 (dual-review): ctx cancellation during backoff must return false
+// promptly without calling the hook. Exercises the ctx.Done arm of
+// the select inside makeOnDialError's sleep.
+func TestOnDialError_CtxCancelInterruptsBackoff(t *testing.T) {
+	pm, _ := newTestPeerManager(t)
+	pm.reconcileDelayFn = func(int) time.Duration { return 5 * time.Second }
+	var called int32
+	hook := &fakeHook{reconcileOne: func(ctx context.Context, name string) (bool, bool, int, error) {
+		called++
 		return true, true, 0, nil
 	}}
 	pm.SetReconcileManager(hook)
-	pm.attemptStates.Store("peer-x", &peerAttemptState{count: 0})
+	fn := pm.makeOnDialError(hook, "peer-x")
 
-	// Directly exercise the reset logic by mimicking the internal
-	// sequence the closure runs on success.
-	st := &peerAttemptState{count: 2}
-	pm.attemptStates.Store("peer-x", st)
-	// Simulate the closure-internal reset after a successful hook.
-	st.mu.Lock()
-	st.count = 0
-	st.mu.Unlock()
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { time.Sleep(50 * time.Millisecond); cancel() }()
 
-	if got := pm.peerAttemptCount(t, "peer-x"); got != 0 {
-		t.Errorf("counter not reset on success: got %d", got)
+	start := time.Now()
+	got := fn(ctx, "peer-x", errString("transient"))
+	elapsed := time.Since(start)
+
+	if got {
+		t.Errorf("cancelled ctx wrongly signaled immediate retry")
+	}
+	if called != 0 {
+		t.Errorf("hook wrongly invoked after ctx cancel")
+	}
+	if elapsed > 1*time.Second {
+		t.Errorf("ctx cancel did not short-circuit 5s backoff; elapsed=%v", elapsed)
 	}
 }
 

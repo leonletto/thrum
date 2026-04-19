@@ -254,3 +254,73 @@ func TestReconcileAll_BootTimeDaemonIDRotationHealsRegistry(t *testing.T) {
 		t.Errorf("re-keyed state did not persist across registry reload: %+v", got2)
 	}
 }
+
+// B1 (dual-review): an empty daemon_id in the peer.repair response
+// previously slipped past the re-key guard, RemovePeer dropped the
+// old entry, AddPeer rejected the empty key, and the caller saw
+// OK=true with a ghost registry. This verifies the explicit guard
+// refuses the response and preserves the old entry.
+func TestReconcileOne_EmptyDaemonIDInResponseDoesNotCorruptRegistry(t *testing.T) {
+	r := mkRegistry(t)
+	if err := r.AddPeer(&daemon.PeerInfo{
+		Name:     "alpha",
+		DaemonID: "01OLD",
+		Address:  "1.2.3.4:7731",
+		Token:    "tok",
+	}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	fake := func(ctx context.Context, addr, tok string, local DialerIdentity) (RepairResponse, error) {
+		return RepairResponse{DaemonID: "", Name: "alpha"}, nil
+	}
+	mgr := NewManager(r, fake, DialerIdentity{DaemonID: "self"})
+	res, err := mgr.ReconcileOne(context.Background(), "alpha")
+	if err == nil {
+		t.Fatalf("expected error for empty daemon_id response")
+	}
+	if res.OK {
+		t.Errorf("res.OK wrongly true after empty daemon_id response")
+	}
+	// Old entry must still exist — the re-key must not have fired.
+	if got := r.FindPeerByToken("tok"); got == nil || got.DaemonID != "01OLD" {
+		t.Errorf("registry corrupted after empty-response rejection: got=%+v", got)
+	}
+}
+
+// I6 (dual-review): Transport="local" peers skip the dial entirely;
+// same-host is strictly stronger than same-subnet. Reconcile should
+// short-circuit to OK=true without invoking the DialFunc.
+func TestReconcileOne_LocalTransportSkipsDial(t *testing.T) {
+	r := mkRegistry(t)
+	if err := r.AddPeer(&daemon.PeerInfo{
+		Name:            "local-twin",
+		DaemonID:        "01LOCAL",
+		Transport:       "local",
+		RepoPath:        "/tmp/local",
+		Token:           "t",
+		ReconcileStatus: StatusDriftReconcileFailed, // stale marker
+	}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	dialCalled := false
+	fake := func(ctx context.Context, addr, tok string, local DialerIdentity) (RepairResponse, error) {
+		dialCalled = true
+		return RepairResponse{}, nil
+	}
+	mgr := NewManager(r, fake, DialerIdentity{})
+	res, err := mgr.ReconcileOne(context.Background(), "local-twin")
+	if err != nil {
+		t.Fatalf("ReconcileOne: %v", err)
+	}
+	if !res.OK {
+		t.Errorf("local-transport peer should report OK=true; got %+v", res)
+	}
+	if dialCalled {
+		t.Errorf("DialFunc invoked for local-transport peer (should short-circuit)")
+	}
+	// Stale drift marker must be cleared on the local-short-circuit
+	// path so `thrum peer list` doesn't falsely flag a healthy peer.
+	if got := r.FindPeerByToken("t").ReconcileStatus; got != StatusHealthy {
+		t.Errorf("stale drift marker not cleared for local peer: %q", got)
+	}
+}

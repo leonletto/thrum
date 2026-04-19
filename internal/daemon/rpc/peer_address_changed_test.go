@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/daemon/rpc"
@@ -133,7 +134,7 @@ func TestPeerAddressChanged_CrossSubnetRejectedWithRepairHint(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected cross-subnet rejection")
 	}
-	if !containsAll(err.Error(), "--type repair") {
+	if !strings.Contains(err.Error(), "--type repair") {
 		t.Errorf("rejection missing --type repair hint: %v", err)
 	}
 	if updated {
@@ -191,22 +192,3 @@ func TestPeerAddressChanged_GuardSetButLookupNil_AcceptsFirstChange(t *testing.T
 	}
 }
 
-func containsAll(s string, subs ...string) bool {
-	for _, sub := range subs {
-		if !contains(s, sub) {
-			return false
-		}
-	}
-	return true
-}
-
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && func() bool {
-		for i := 0; i+len(sub) <= len(s); i++ {
-			if s[i:i+len(sub)] == sub {
-				return true
-			}
-		}
-		return false
-	}()
-}
