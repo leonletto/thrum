@@ -51,6 +51,32 @@ and this project adheres to
   `@supervisor_<project>` pseudo-agent. Falls back to `filepath.Base` of the
   repo path.
 
+### Breaking changes
+
+- **`thrum peer add` and `thrum peer join` now require `--type <transport>`
+  (xir.27).** The previously-implicit `tailscale` default has been removed.
+  Five values are accepted, each gates both the peercode emission and the
+  handshake dial:
+    - `--type tailscale` — current behavior (tsnet peercode, Tailscale dial,
+      requires `THRUM_TS_AUTHKEY`).
+    - `--type local` — same-host loopback (`127.0.0.1` peercode, direct
+      localhost dial, no tsnet). Use for sibling-repo bridges on one host.
+    - `--type network` — same-LAN, no Tailscale. Requires `--address <ip>`;
+      the subnet is inferred from the NIC that owns the supplied IP. Direct
+      TCP, no tsnet.
+    - `--type a-sync` — asynchronous git-mediated peer. Requires
+      `--remote <git-url>`. No live handshake; messages flow through git
+      push/fetch. Suitable for peers that are not always online (CI, periodic
+      laptops, air-gapped review).
+    - `--type repair` — re-verify and reconcile an EXISTING peer entry
+      using stored secrets in `peers.json`. Valid only on `peer join`;
+      rejected on `peer add`. Used to recover from drift (e.g., after a peer
+      `daemon_id` rotation).
+  Migration: any script calling `thrum peer add` (no flag) must add an
+  explicit `--type tailscale` for the same behavior. Missing `--type` errors
+  with a help block listing all five options and a one-line "when to use"
+  for each — the canonical instance of the CLI-hint pattern.
+
 ### Security
 
 - **WebSocket origin allowlist (sec.1)** — `CheckOrigin` now restricts browser
@@ -87,6 +113,12 @@ and this project adheres to
 
 ### Fixed
 
+- **`thrum peer add` no longer prompts for `THRUM_TS_AUTHKEY` when the daemon's
+  tsnet is already up (xir.26).** The CLI now queries `health` before
+  prompting; if `health.tailscale.enabled` is `true` the daemon already has a
+  tsnet node with cached credentials and the prompt is skipped. The prompt
+  still fires when env is empty AND the daemon's tsnet is missing or
+  unreachable.
 - **`thrum init` now correctly attaches to existing `origin/a-sync` on fresh
   clones.** Previously, running `thrum init` in a freshly-cloned repo whose
   remote already had an `a-sync` branch would create a disjoint local orphan

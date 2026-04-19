@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -1526,47 +1527,73 @@ func peerCmd() *cobra.Command {
 	}
 
 	// thrum peer add — start pairing on this machine
-	cmd.AddCommand(&cobra.Command{
+	var addType, addAddress, addRemote string
+	addCmd := &cobra.Command{
 		Use:   "add",
 		Short: "Start pairing and wait for a peer to connect",
-		Long: `Starts a pairing session and displays a 4-digit code.
-Share this code with the person running 'thrum peer join' on the other machine.
-Blocks until a peer connects or the session times out (5 minutes).`,
+		Long: `Starts a pairing session and displays a peercode.
+Share this code with the person running 'thrum peer join' on the other side.
+Blocks until a peer connects or the session times out (5 minutes).
+
+--type is required. Run 'thrum peer add' with no flags to see the full
+list of transports and a one-line "when to use" for each.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			peerType, parseErr := cli.ParsePeerType(addType)
+			if parseErr != nil {
+				if errors.Is(parseErr, cli.ErrPeerTypeMissing) {
+					return errors.New(cli.MissingTypeMessage)
+				}
+				return parseErr
+			}
+			if peerType == cli.PeerTypeRepair {
+				return errors.New("--type repair is not valid for 'peer add'.\n" +
+					"Use 'thrum peer join --type repair <peer-name>' to reconcile an existing peer.")
+			}
+			if peerType == cli.PeerTypeNetwork && strings.TrimSpace(addAddress) == "" {
+				return errors.New("--type network requires --address <ip>")
+			}
+			if peerType == cli.PeerTypeASync && strings.TrimSpace(addRemote) == "" {
+				return errors.New("--type a-sync requires --remote <git-url>")
+			}
+
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("failed to connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
 
-			// Ensure auth key is available — prompt only when both the env is
-			// empty AND the daemon's tsnet is not already initialized. A daemon
-			// with a healthy tsnet has cached node credentials in its state dir
-			// and does not need a fresh auth key for further pairing.
-			var pairingParams *cli.PeerStartPairingParams
-			authKey := os.Getenv("THRUM_TS_AUTHKEY")
-			var health cli.HealthResult
-			var healthPtr *cli.HealthResult
-			if err := client.Call("health", map[string]any{}, &health); err == nil {
-				healthPtr = &health
+			// For tailscale: ensure auth key is available unless the daemon
+			// already has a healthy tsnet node (xir.26 fix). Other transports
+			// never need an auth key.
+			pairingParams := &cli.PeerStartPairingParams{
+				Type:    string(peerType),
+				Address: strings.TrimSpace(addAddress),
+				Remote:  strings.TrimSpace(addRemote),
 			}
-			if cli.AuthKeyPromptNeeded(authKey, healthPtr) {
-				fmt.Print("Enter Tailscale auth key: ")
-				if _, err := fmt.Scanln(&authKey); err != nil {
-					return fmt.Errorf("failed to read auth key: %w", err)
+			if peerType == cli.PeerTypeTailscale {
+				authKey := os.Getenv("THRUM_TS_AUTHKEY")
+				var health cli.HealthResult
+				var healthPtr *cli.HealthResult
+				if hErr := client.Call("health", map[string]any{}, &health); hErr == nil {
+					healthPtr = &health
 				}
-				authKey = strings.TrimSpace(authKey)
-				if authKey == "" {
-					return fmt.Errorf("auth key is required for Tailscale sync")
-				}
-				// Save to .thrum/.env for persistence
-				if flagRepo != "" {
-					thrumDir := filepath.Join(flagRepo, ".thrum")
-					if err := config.SaveAuthKeyToEnvFile(thrumDir, authKey); err != nil {
-						fmt.Fprintf(os.Stderr, "Warning: could not save auth key to .env: %v\n", err)
+				if cli.AuthKeyPromptNeeded(authKey, healthPtr) {
+					fmt.Print("Enter Tailscale auth key: ")
+					if _, scanErr := fmt.Scanln(&authKey); scanErr != nil {
+						return fmt.Errorf("failed to read auth key: %w", scanErr)
 					}
+					authKey = strings.TrimSpace(authKey)
+					if authKey == "" {
+						return errors.New("auth key is required for --type tailscale")
+					}
+					if flagRepo != "" {
+						thrumDir := filepath.Join(flagRepo, ".thrum")
+						if saveErr := config.SaveAuthKeyToEnvFile(thrumDir, authKey); saveErr != nil {
+							fmt.Fprintf(os.Stderr, "Warning: could not save auth key to .env: %v\n", saveErr)
+						}
+					}
+					pairingParams.AuthKey = authKey
 				}
-				pairingParams = &cli.PeerStartPairingParams{AuthKey: authKey}
 			}
 
 			result, err := cli.PeerStartPairing(client, pairingParams)
@@ -1574,11 +1601,23 @@ Blocks until a peer connects or the session times out (5 minutes).`,
 				return err
 			}
 
+			// a-sync emits no peercode; the peer entry is stamped immediately
+			// and there is no live handshake to wait for.
+			if peerType == cli.PeerTypeASync {
+				fmt.Printf("Async peer configured (transport=a-sync, remote=%s).\n", strings.TrimSpace(addRemote))
+				fmt.Println("Messages will be exchanged via git push/fetch.")
+				return nil
+			}
+
 			localHostname, _ := os.Hostname()
 			if result.Address != "" {
 				connStr := daemon.FormatPeercode(localHostname, result.Address, result.Code)
-				fmt.Printf("Waiting for connection...\nPairing code: %s\n\n", connStr)
-				fmt.Printf("Share this with the other machine:\n  thrum peer join --peercode %s\n\n", connStr)
+				transportTag := result.Transport
+				if transportTag == "" {
+					transportTag = string(peerType)
+				}
+				fmt.Printf("Waiting for connection...\nPairing code (transport=%s): %s\n\n", transportTag, connStr)
+				fmt.Printf("Share this with the other side:\n  thrum peer join --type %s --peercode %s\n\n", peerType, connStr)
 			} else {
 				fmt.Printf("Waiting for connection... Pairing code: %s\n", result.Code)
 			}
@@ -1593,67 +1632,50 @@ Blocks until a peer connects or the session times out (5 minutes).`,
 				fmt.Println("\nTo enable message routing for an agent on this peer:")
 				fmt.Println("  thrum peer configure <peer-name> add-agent <agent-name>")
 			} else {
-				fmt.Println("Pairing timed out. Run 'thrum peer add' again.")
+				fmt.Println("Pairing timed out. Run 'thrum peer add --type <transport>' again.")
 			}
 
 			return nil
 		},
-	})
+	}
+	addCmd.Flags().StringVar(&addType, "type", "", "Transport: tailscale | local | network | a-sync (REQUIRED)")
+	addCmd.Flags().StringVar(&addAddress, "address", "", "LAN IP for --type network (must be assigned to a local NIC)")
+	addCmd.Flags().StringVar(&addRemote, "remote", "", "Git URL for --type a-sync")
+	cmd.AddCommand(addCmd)
 
-	// thrum peer join --peercode — connect to a remote peer using a connection string
+	// thrum peer join — connect to a remote peer using a peercode (or
+	// reconcile an existing peer entry via --type repair).
 	var peerCode string
 	var repoPath string
+	var joinType string
+	var joinPeerName string
+	var joinRemote string
 	joinCmd := &cobra.Command{
 		Use:   "join [peercode]",
-		Short: "Join a remote peer using a peercode",
+		Short: "Join a remote peer (or repair an existing one)",
 		Long: `Connects to a remote peer using the peercode from 'thrum peer add'.
 
-Five input methods:
-  thrum peer join name:ip:port:code              (positional argument)
-  thrum peer join --peercode name:ip:port:code   (flag)
-  echo "name:ip:port:code" | thrum peer join     (pipe, no flag)
-  thrum peer join --peercode -                   (pipe via stdin flag)
-  thrum peer join                                 (interactive prompt)`,
+--type is required. Run 'thrum peer join' with no flags to see the full
+list of transports and a one-line "when to use" for each.
+
+Peercode input methods (for --type tailscale|local|network):
+  thrum peer join --type T name:ip:port:code              (positional argument)
+  thrum peer join --type T --peercode name:ip:port:code   (flag)
+  echo "name:ip:port:code" | thrum peer join --type T     (pipe, no flag)
+  thrum peer join --type T --peercode -                   (pipe via stdin flag)
+  thrum peer join --type T                                 (interactive prompt)
+
+--type a-sync requires --remote <git-url> and emits no peercode.
+--type repair requires <peer-name> (positional or --peer-name) — uses
+stored secrets in peers.json to re-handshake without minting a new token.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Resolve peercode: flag > positional arg > stdin > prompt
-			code := peerCode
-			// Treat "--peercode -" as "read from stdin" (Unix convention)
-			if code == "-" {
-				code = ""
-			}
-			if code == "" && len(args) > 0 {
-				code = strings.TrimSpace(args[0])
-			}
-			if code == "" {
-				stat, _ := os.Stdin.Stat()
-				if (stat.Mode() & os.ModeCharDevice) == 0 {
-					scanner := bufio.NewScanner(os.Stdin)
-					if scanner.Scan() {
-						code = strings.TrimSpace(scanner.Text())
-					}
+			peerType, parseErr := cli.ParsePeerType(joinType)
+			if parseErr != nil {
+				if errors.Is(parseErr, cli.ErrPeerTypeMissing) {
+					return errors.New(cli.MissingTypeMessage)
 				}
-			}
-			if code == "" {
-				fmt.Print("Enter peercode: ")
-				var input string
-				if _, err := fmt.Scanln(&input); err != nil {
-					return fmt.Errorf("failed to read peercode: %w", err)
-				}
-				code = strings.TrimSpace(input)
-			}
-
-			name, ip, port, pairCode, err := daemon.ParseConnectionString(code)
-			if err != nil {
-				return err
-			}
-			_ = name // used by ParseConnectionString output only
-
-			address := fmt.Sprintf("%s:%d", ip, port)
-
-			// Warn if connecting via loopback without --repo-path
-			if repoPath == "" && daemon.DetectTransport(address) == "local" {
-				fmt.Fprintf(os.Stderr, "warning: connecting to loopback address; consider using --repo-path for local peers\n")
+				return parseErr
 			}
 
 			client, err := getClient()
@@ -1662,12 +1684,82 @@ Five input methods:
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.PeerJoin(client, address, pairCode, repoPath)
+			params := &cli.PeerJoinParams{Type: string(peerType)}
+
+			switch peerType {
+			case cli.PeerTypeRepair:
+				name := strings.TrimSpace(joinPeerName)
+				if name == "" && len(args) > 0 {
+					name = strings.TrimSpace(args[0])
+				}
+				if name == "" {
+					return errors.New("--type repair requires a peer name (positional arg or --peer-name)")
+				}
+				params.PeerName = name
+
+			case cli.PeerTypeASync:
+				remote := strings.TrimSpace(joinRemote)
+				if remote == "" {
+					return errors.New("--type a-sync requires --remote <git-url>")
+				}
+				params.Remote = remote
+
+			default: // tailscale, local, network — peercode-based
+				code := peerCode
+				if code == "-" {
+					code = ""
+				}
+				if code == "" && len(args) > 0 {
+					code = strings.TrimSpace(args[0])
+				}
+				if code == "" {
+					stat, _ := os.Stdin.Stat()
+					if (stat.Mode() & os.ModeCharDevice) == 0 {
+						scanner := bufio.NewScanner(os.Stdin)
+						if scanner.Scan() {
+							code = strings.TrimSpace(scanner.Text())
+						}
+					}
+				}
+				if code == "" {
+					fmt.Print("Enter peercode: ")
+					var input string
+					if _, scanErr := fmt.Scanln(&input); scanErr != nil {
+						return fmt.Errorf("failed to read peercode: %w", scanErr)
+					}
+					code = strings.TrimSpace(input)
+				}
+
+				_, ip, port, pairCode, parseErr := daemon.ParseConnectionString(code)
+				if parseErr != nil {
+					return parseErr
+				}
+				params.Address = fmt.Sprintf("%s:%d", ip, port)
+				params.Code = pairCode
+				params.RepoPath = repoPath
+
+				if peerType == cli.PeerTypeLocal && daemon.DetectTransport(params.Address) != "local" {
+					fmt.Fprintf(os.Stderr,
+						"warning: --type local but peercode address %s is not loopback; "+
+							"the peer add side likely emitted a non-local peercode\n", params.Address)
+				}
+				if peerType == cli.PeerTypeNetwork && daemon.DetectTransport(params.Address) == "local" {
+					fmt.Fprintf(os.Stderr,
+						"warning: --type network but peercode address %s is loopback; "+
+							"did you mean --type local?\n", params.Address)
+				}
+			}
+
+			result, err := cli.PeerJoin(client, params)
 			if err != nil {
 				return err
 			}
 
 			if result.Status == "paired" {
+				name := result.PeerName
+				if name == "" {
+					name = "<peer>"
+				}
 				fmt.Printf("Paired with %q. Syncing started.\n", name)
 				fmt.Println("\nTo enable message routing for an agent on this peer:")
 				fmt.Println("  thrum peer configure <peer-name> add-agent <agent-name>")
@@ -1678,8 +1770,11 @@ Five input methods:
 			return nil
 		},
 	}
-	joinCmd.Flags().StringVar(&peerCode, "peercode", "", "Connection string from 'thrum peer add'")
-	joinCmd.Flags().StringVar(&repoPath, "repo-path", "", "Filesystem path to the peer's repo (sets transport=local)")
+	joinCmd.Flags().StringVar(&joinType, "type", "", "Transport: tailscale | local | network | a-sync | repair (REQUIRED)")
+	joinCmd.Flags().StringVar(&peerCode, "peercode", "", "Connection string from 'thrum peer add' (peercode-based types)")
+	joinCmd.Flags().StringVar(&repoPath, "repo-path", "", "Filesystem path to the peer's repo (legacy hint; --type local preferred)")
+	joinCmd.Flags().StringVar(&joinPeerName, "peer-name", "", "Existing peer name for --type repair")
+	joinCmd.Flags().StringVar(&joinRemote, "remote", "", "Git URL for --type a-sync")
 	cmd.AddCommand(joinCmd)
 
 	// thrum peer list — show all peers
@@ -5342,34 +5437,53 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 
 		// peer.start_pairing — begin pairing, return code
 		// Wrap to ensure port is selected before pairing starts.
-		startPairingFn := func(timeout time.Duration) (string, string, error) {
-			// Lazy port selection: pick a random port on first peer add
-			if peerRegistry.LocalPort() == 0 {
-				// THRUM_TS_PORT env override takes precedence
-				if p := os.Getenv("THRUM_TS_PORT"); p != "" {
-					if port, err := strconv.Atoi(p); err == nil {
+		startPairingFn := func(timeout time.Duration, peerType, addressHint, remote string) (string, string, string, error) {
+			// xir.27: dispatch on the user-selected transport. An empty Type
+			// preserves the legacy implicit-tailscale path for any caller
+			// invoking the RPC directly without going through the new CLI
+			// surface (which would have errored earlier on missing --type).
+			switch peerType {
+			case "", "tailscale":
+				if peerRegistry.LocalPort() == 0 {
+					if p := os.Getenv("THRUM_TS_PORT"); p != "" {
+						if port, err := strconv.Atoi(p); err == nil {
+							if err := peerRegistry.SetLocalPort(port); err != nil {
+								return "", "", "", fmt.Errorf("set local port from env: %w", err)
+							}
+						}
+					} else {
+						port, err := daemon.FindRandomAvailablePort(daemon.TsnetPortRangeMin, daemon.TsnetPortRangeMax)
+						if err != nil {
+							return "", "", "", fmt.Errorf("find available tsnet port: %w", err)
+						}
 						if err := peerRegistry.SetLocalPort(port); err != nil {
-							return "", "", fmt.Errorf("set local port from env: %w", err)
+							return "", "", "", fmt.Errorf("set local port: %w", err)
 						}
 					}
-				} else {
-					port, err := daemon.FindRandomAvailablePort(daemon.TsnetPortRangeMin, daemon.TsnetPortRangeMax)
-					if err != nil {
-						return "", "", fmt.Errorf("find available tsnet port: %w", err)
-					}
-					if err := peerRegistry.SetLocalPort(port); err != nil {
-						return "", "", fmt.Errorf("set local port: %w", err)
+				}
+				if startTsnetFn != nil {
+					if err := startTsnetFn(peerRegistry.LocalPort()); err != nil {
+						return "", "", "", fmt.Errorf("start tailscale for peer add: %w", err)
 					}
 				}
+				code, err := pairingMgr.StartPairing(timeout)
+				return code, getTsLocalAddr(), "tailscale", err
+
+			case "local":
+				return "", "", "", fmt.Errorf("--type local: handshake wiring lands in xir.27 sub-component 1 (next commit)")
+
+			case "network":
+				return "", "", "", fmt.Errorf("--type network: handshake wiring lands in xir.27 sub-component 2")
+
+			case "a-sync":
+				return "", "", "", fmt.Errorf("--type a-sync: git-remote configuration lands in xir.27 sub-component 3")
+
+			case "repair":
+				return "", "", "", fmt.Errorf("--type repair is not valid for peer add (use 'thrum peer join --type repair <name>')")
+
+			default:
+				return "", "", "", fmt.Errorf("unknown peer type %q", peerType)
 			}
-			// Lazy tsnet start: start tsnet after port selection — fail if it can't start
-			if startTsnetFn != nil {
-				if err := startTsnetFn(peerRegistry.LocalPort()); err != nil {
-					return "", "", fmt.Errorf("start tailscale for peer add: %w", err)
-				}
-			}
-			code, err := pairingMgr.StartPairing(timeout)
-			return code, getTsLocalAddr(), err
 		}
 		server.RegisterHandler("peer.start_pairing",
 			rpc.NewPeerStartPairingHandler(startPairingFn).Handle)
@@ -5385,53 +5499,69 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		server.RegisterLongPollHandler("peer.wait_pairing",
 			rpc.NewPeerWaitPairingHandler(waitFn).Handle)
 
-		// peer.join — send pairing code to remote peer
-		joinFn := func(peerAddr, code, repoPath string) (peerName, peerDaemonID string, err error) {
-			// Lazy tsnet start for peer join (machine B may not have run peer add)
-			if startTsnetFn != nil && getTsLocalAddr() == "" {
-				if peerRegistry.LocalPort() == 0 {
-					port, portErr := daemon.FindRandomAvailablePort(daemon.TsnetPortRangeMin, daemon.TsnetPortRangeMax)
-					if portErr != nil {
-						return "", "", fmt.Errorf("find available tsnet port: %w", portErr)
+		// peer.join — dispatch on the user-selected transport (xir.27).
+		joinFn := func(peerAddr, code, repoPath, peerType, peerName, remote string) (string, string, error) {
+			switch peerType {
+			case "", "tailscale":
+				if startTsnetFn != nil && getTsLocalAddr() == "" {
+					if peerRegistry.LocalPort() == 0 {
+						port, portErr := daemon.FindRandomAvailablePort(daemon.TsnetPortRangeMin, daemon.TsnetPortRangeMax)
+						if portErr != nil {
+							return "", "", fmt.Errorf("find available tsnet port: %w", portErr)
+						}
+						if portErr := peerRegistry.SetLocalPort(port); portErr != nil {
+							return "", "", fmt.Errorf("set local port: %w", portErr)
+						}
 					}
-					if portErr := peerRegistry.SetLocalPort(port); portErr != nil {
-						return "", "", fmt.Errorf("set local port: %w", portErr)
+					if tsErr := startTsnetFn(peerRegistry.LocalPort()); tsErr != nil {
+						return "", "", fmt.Errorf("start tailscale for peer join: %w", tsErr)
 					}
 				}
-				if tsErr := startTsnetFn(peerRegistry.LocalPort()); tsErr != nil {
-					return "", "", fmt.Errorf("start tailscale for peer join: %w", tsErr)
+				localAddr := getTsLocalAddr()
+				if localAddr == "" {
+					return "", "", fmt.Errorf("tailscale not configured or not started")
 				}
+				localIdent := st.Identity()
+				localMeta := daemon.PairMetadata{
+					DaemonID:     localIdent.DaemonID,
+					Name:         hostname,
+					Address:      localAddr,
+					RepoName:     localIdent.RepoName,
+					Hostname:     localIdent.Hostname,
+					RepoPath:     localIdent.RepoPath,
+					GitOriginURL: localIdent.GitOriginURL,
+				}
+				peer, err := syncManager.JoinPeer(peerAddr, code, localMeta)
+				if err != nil {
+					return "", "", err
+				}
+				peer.Role = "dialer"
+				if repoPath != "" {
+					peer.RepoPath = repoPath
+					peer.Transport = "local"
+				} else {
+					peer.Transport = daemon.DetectTransport(peerAddr)
+				}
+				if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
+					fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
+				}
+				return peer.Name, peer.DaemonID, nil
+
+			case "local":
+				return "", "", fmt.Errorf("--type local: join handshake wiring lands in xir.27 sub-component 1 (next commit)")
+
+			case "network":
+				return "", "", fmt.Errorf("--type network: join handshake wiring lands in xir.27 sub-component 2")
+
+			case "a-sync":
+				return "", "", fmt.Errorf("--type a-sync: peer join is a no-op for a-sync; configure with 'thrum peer add --type a-sync --remote <git-url>'")
+
+			case "repair":
+				return "", "", fmt.Errorf("--type repair: stored-secret reconciliation lands in xir.27 sub-component 4")
+
+			default:
+				return "", "", fmt.Errorf("unknown peer type %q", peerType)
 			}
-			localAddr := getTsLocalAddr()
-			if localAddr == "" {
-				return "", "", fmt.Errorf("tailscale not configured or not started")
-			}
-			localIdent := st.Identity()
-			localMeta := daemon.PairMetadata{
-				DaemonID:     localIdent.DaemonID,
-				Name:         hostname,
-				Address:      localAddr,
-				RepoName:     localIdent.RepoName,
-				Hostname:     localIdent.Hostname,
-				RepoPath:     localIdent.RepoPath,
-				GitOriginURL: localIdent.GitOriginURL,
-			}
-			peer, err := syncManager.JoinPeer(peerAddr, code, localMeta)
-			if err != nil {
-				return "", "", err
-			}
-			// Set role and transport on the dialer side
-			peer.Role = "dialer"
-			if repoPath != "" {
-				peer.RepoPath = repoPath
-				peer.Transport = "local"
-			} else {
-				peer.Transport = daemon.DetectTransport(peerAddr)
-			}
-			if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
-				fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
-			}
-			return peer.Name, peer.DaemonID, nil
 		}
 		server.RegisterHandler("peer.join",
 			rpc.NewPeerJoinHandler(joinFn).Handle)

@@ -97,11 +97,8 @@ All commands accept these flags:
   thrum overview [--json]
     Show combined status: identity, work context, team, inbox, sync.
 
-  thrum whoami [--json] [--field <name>]
+  thrum whoami [--json]
     Show current agent identity (lightweight, no daemon required).
-    --field <name>  Print a single field (e.g. agent_id, tmux_alive, host, pid,
-                    tmux_session) newline-terminated. Script-friendly alternative
-                    to jq on --json output.
 
   thrum version
     Show version, build hash, repository URL, and documentation URL.
@@ -227,18 +224,6 @@ All commands accept these flags:
   thrum context sync [--agent NAME]
     Copy context to the a-sync branch for sharing across worktrees.
 
-### Cron
-
-  thrum cron
-    Manage cron-style scheduled tasks (runtime-specific emitters).
-
-  thrum cron install-inbox-poll
-    Emit a CronCreate instruction block for the SessionStart hook to
-    forward to the runtime. The runtime (Claude Code) reads the block
-    and schedules a 15-minute inbox-check poll via its internal cron
-    primitive. This command is print-only — no daemon calls, no
-    identity touch. Classified as bypass in command_categories.go.
-
 ### Coordination
 
   thrum who-has FILE
@@ -255,16 +240,26 @@ All commands accept these flags:
   thrum sync force
     Trigger immediate sync (non-blocking).
 
-### Peer Management (Cross-Repo, v0.7.0)
+### Peer Management (Cross-Repo, v0.7.0+)
 
-  thrum peer add
-    Start a Tailscale pairing session. Displays a 16-digit peercode. Blocks until peer connects (5min timeout).
-    Prompts for THRUM_TS_AUTHKEY if not set.
+  thrum peer add --type <transport>
+    Start a pairing session. Displays a peercode and blocks until peer connects (5min timeout).
+    --type is REQUIRED — no default. Missing flag errors with a help block listing all 5 values.
+    Values:
+      --type tailscale                       Cross-host via Tailscale. Requires THRUM_TS_AUTHKEY.
+                                             (Skipped automatically if daemon's tsnet is already up.)
+      --type local                           Same-host sibling repos. Loopback peercode, no tsnet.
+      --type network --address <ip>          Same-LAN, no Tailscale. Subnet inferred from the NIC
+                                             that owns the supplied IP. Direct TCP.
+      --type a-sync --remote <git-url>       Asynchronous git-mediated peer. No live handshake;
+                                             messages flow via git push/fetch. For offline/periodic peers.
+      --type repair                          Rejected on peer add (use peer join --type repair instead).
 
-  thrum peer join [peercode] [--peercode CODE] [--repo-path PATH]
-    Connect to a remote peer using the peercode from `peer add`.
+  thrum peer join --type <transport> [peercode] [--peercode CODE] [--repo-path PATH]
+    Connect to a remote peer. --type is REQUIRED.
     Peercode format: name:ip:port:code. Accepts positional arg, --peercode flag, stdin pipe, or interactive prompt.
-    Use --repo-path for local same-machine peers (sets transport to "local").
+    Values match `peer add`. --type repair operates on an existing paired peer using stored secrets
+    in peers.json — does NOT create new pairings; refuses if the peer is not already in peers.json.
 
   thrum peer list [--json]
     List paired peers with address, last sync, sequence number.
@@ -513,17 +508,31 @@ All commands accept these flags:
 
   thrum overview
 
-### Cross-repo peer communication (Tailscale, v0.7.0)
+### Cross-repo peer communication (transports: tailscale | local | network | a-sync, v0.7.0+)
 
-  # Machine A
-  thrum peer add                    # Displays 16-digit peercode, blocks 5min
-  # Machine B
-  thrum peer join --peercode alice:100.64.1.5:44123:7392168401234567
+  # Cross-host via Tailscale (xir.27 default replacement for the old no-flag form)
+  thrum peer add  --type tailscale                          # Machine A
+  thrum peer join --type tailscale --peercode alice:100.64.1.5:44123:7392168401234567   # Machine B
+
+  # Same-host sibling-repo bridge (no auth key needed)
+  thrum peer add  --type local                              # daemon X (in repo X's worktree)
+  thrum peer join --type local --peercode hostname:127.0.0.1:62921:1234567890123456 \
+    --repo-path /path/to/repo-X                             # daemon Y (in repo Y's worktree)
+
+  # Same-LAN, no Tailscale (user supplies an IP that's on a NIC of this host)
+  thrum peer add  --type network --address 192.168.1.42     # Machine A
+  thrum peer join --type network --peercode alice:192.168.1.42:9100:1234567890123456   # Machine B
+
+  # Asynchronous git-mediated (e.g., CI runner that pushes nightly)
+  thrum peer add  --type a-sync --remote git@github.com:user/repo.git
+  # No `peer join` — the peer entry is stamped immediately; messages flow via git remote.
+
   # Both daemons now route messages bidirectionally
-
-  # Configure proxy agents so remote agents are addressable locally
   thrum peer configure alice add-agent planner
   thrum send "Ready for review" --to @alice:planner
+
+  # Recovery: re-verify and reconcile an existing peer entry without re-pairing
+  thrum peer join --type repair <peer-name>                 # uses stored token + daemon_id
 
 ### Launch agents in tmux sessions (v0.7.1+)
 
