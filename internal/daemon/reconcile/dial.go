@@ -2,7 +2,12 @@ package reconcile
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/leonletto/thrum/internal/bridge"
 )
 
 // DialerIdentity is the local identity payload sent in the peer.repair
@@ -73,6 +78,49 @@ var (
 	// peer.repair ("no matching peer"). Wrap with fmt.Errorf "%w".
 	ErrTokenRejected = errors.New("reconcile: stored token rejected by peer")
 )
+
+// WSDial is the production DialFunc. It opens a one-shot WS connection
+// to the peer's `/ws` endpoint, presents the stored bearer token, issues
+// a single peer.repair RPC, and closes. Does NOT maintain a persistent
+// bridge — the caller (reconcile.Manager) only needs the one-shot
+// identity-verification side-effect.
+//
+// Error handling:
+//   - Dial failure (TCP/WS) → wrapped ErrUnreachable (→ CatUnreachable).
+//   - peer.repair returning "no matching peer" → wrapped ErrTokenRejected
+//     (→ CatTokenRejected). The listener's terse error message is
+//     documented in internal/daemon/repair.go:81.
+//   - Any other RPC failure → wrapped plain error (→ CatOther).
+func WSDial(ctx context.Context, address, token string, local DialerIdentity) (RepairResponse, error) {
+	url := "ws://" + address + "/ws"
+	ws := bridge.NewWSClient(url, bridge.WithBearerToken(token))
+	if err := ws.Connect(ctx); err != nil {
+		return RepairResponse{}, fmt.Errorf("%w: %v", ErrUnreachable, err)
+	}
+	defer func() { _ = ws.Close() }()
+
+	params := map[string]any{
+		"token":          token,
+		"daemon_id":      local.DaemonID,
+		"address":        local.Address,
+		"repo_name":      local.RepoName,
+		"hostname":       local.Hostname,
+		"repo_path":      local.RepoPath,
+		"git_origin_url": local.GitOriginURL,
+	}
+	raw, err := ws.Call(ctx, "peer.repair", params)
+	if err != nil {
+		if strings.Contains(err.Error(), "no matching peer") {
+			return RepairResponse{}, fmt.Errorf("%w: %v", ErrTokenRejected, err)
+		}
+		return RepairResponse{}, fmt.Errorf("peer.repair call: %w", err)
+	}
+	var resp RepairResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return RepairResponse{}, fmt.Errorf("unmarshal peer.repair response: %w", err)
+	}
+	return resp, nil
+}
 
 // CategorizeErr maps a dial error to an ErrCategory using errors.Is so
 // wrapped errors classify correctly.
