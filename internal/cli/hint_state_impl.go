@@ -68,11 +68,21 @@ func (s *LiveStateAccessor) TmuxSessionExists(name string) (bool, error) {
 
 // IsGitWorktree wraps the existing cli.IsGitWorktree helper and drops the
 // mainRepoRoot return (StateAccessor only cares about the yes/no answer).
+//
+// Normalizes one quirk of the underlying helper: when the path is not a git
+// repository at all (e.g. /tmp), cli.IsGitWorktree returns
+// (false, "", errors.New("not a git repository")). That error is actually a
+// *definitive* answer — the path is not a worktree — so we flatten it to
+// (false, nil). Other errors (safecmd failures, unexpected git output)
+// propagate so hint sources can silently skip.
 func (s *LiveStateAccessor) IsGitWorktree(path string) (bool, error) {
 	if path == "" {
 		return false, nil
 	}
 	ok, _, err := IsGitWorktree(path)
+	if err != nil && strings.Contains(err.Error(), "not a git repository") {
+		return false, nil
+	}
 	return ok, err
 }
 
@@ -169,6 +179,9 @@ func (FSOnlyStateAccessor) IsGitWorktree(path string) (bool, error) {
 		return false, nil
 	}
 	ok, _, err := IsGitWorktree(path)
+	if err != nil && strings.Contains(err.Error(), "not a git repository") {
+		return false, nil
+	}
 	return ok, err
 }
 func (f FSOnlyStateAccessor) IdentityStatus(path string) (IdentityStatus, *AgentSummary, error) {

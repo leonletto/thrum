@@ -81,16 +81,19 @@ func TestIdentityStatus_IdentityPresentButSessionDead(t *testing.T) {
 	}
 }
 
-func TestIsGitWorktree_NonRepoPath(t *testing.T) {
+// A non-repo path must return a DEFINITIVE (false, nil) — not a propagated
+// "not a git repository" error, since the error IS the answer. This is the
+// signal the tmux.create.not-a-worktree hint relies on.
+func TestIsGitWorktree_NonRepoPathDefinitiveFalse(t *testing.T) {
 	s := &LiveStateAccessor{}
 	tmp := t.TempDir()
 	ok, err := s.IsGitWorktree(tmp)
 	if ok {
 		t.Errorf("tmpdir incorrectly classified as worktree")
 	}
-	// err may be non-nil (not a git repo); that's fine — the hint source
-	// treats it as "unknowable" and stays silent. We just assert the bool.
-	_ = err
+	if err != nil {
+		t.Errorf("non-repo path must return (false, nil) so hint sources can act on it; got err=%v", err)
+	}
 }
 
 func TestTmuxSessionExists_Empty(t *testing.T) {

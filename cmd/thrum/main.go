@@ -7859,6 +7859,48 @@ func tmuxCmd() *cobra.Command {
 			}
 			defer func() { _ = client.Close() }()
 
+			// Hint pipeline: pre-action collection + gating.
+			state := cli.NewLiveStateAccessor(client)
+			hintFlags := map[string]any{"cwd": cwd, "force": force}
+			preCtx := cli.HintCtx{
+				Command: "tmux.create",
+				Args:    args,
+				Flags:   hintFlags,
+				Post:    false,
+				State:   state,
+			}
+			preHints := cli.Collect(preCtx)
+			if abortErr := cli.HandlePreAction(preHints, force); abortErr != nil {
+				if flagJSON {
+					// Emit abort body to stdout so agents can parse it,
+					// then return a terse error for the exit code.
+					body := map[string]any{
+						"error":   "aborted by hint",
+						"aborted": true,
+					}
+					if hs := cli.RenderJSONForEmit(preHints); hs != nil {
+						body["hints"] = hs
+					}
+					data, _ := json.MarshalIndent(body, "", "  ")
+					fmt.Println(string(data))
+					return fmt.Errorf("aborted")
+				}
+				return cli.EmitAbort(abortErr, flagQuiet, flagJSON)
+			}
+
+			// Snapshot pre-state for the identity-replaced audit marker. Done
+			// BEFORE the mutation so we can detect whether --force overwrote
+			// a stale identity without re-reading (now-mutated) FS state.
+			var replaceMarker cli.TmuxCreateResultMarker
+			if force && cwd != "" {
+				if status, preAgent, serr := state.IdentityStatus(cwd); serr == nil && status == cli.IdentityStale && preAgent != nil {
+					replaceMarker = cli.TmuxCreateResultMarker{
+						ReplacedStaleIdentity: true,
+						ReplacedAgentName:     preAgent.AgentID,
+					}
+				}
+			}
+
 			result, err := cli.TmuxCreate(client, cli.TmuxCreateOptions{
 				Name:      args[0],
 				Cwd:       cwd,
@@ -7873,11 +7915,43 @@ func tmuxCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			// Post-action hint collection. preHints are also re-emitted at
+			// this point — a warn+AllowForce=true hint that was force-cleared
+			// is still useful context (e.g. 'session was replaced, FYI').
+			postCtx := cli.HintCtx{
+				Command: "tmux.create",
+				Args:    args,
+				Flags:   hintFlags,
+				Post:    true,
+				Result:  replaceMarker,
+				State:   state,
+			}
+			postHints := cli.Collect(postCtx)
+			allHints := append(preHints, postHints...) //nolint:gocritic // appendAssign: intentionally combining into new slice
+
 			if flagJSON {
-				out, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(out))
+				// Marshal the result, then graft the hints array onto the
+				// top-level object (if suppression rules allow).
+				raw, merr := json.Marshal(result)
+				if merr != nil {
+					return merr
+				}
+				var body map[string]any
+				if uerr := json.Unmarshal(raw, &body); uerr != nil {
+					return uerr
+				}
+				if body == nil {
+					body = map[string]any{}
+				}
+				if hs := cli.RenderJSONForEmit(allHints); hs != nil {
+					body["hints"] = hs
+				}
+				data, _ := json.MarshalIndent(body, "", "  ")
+				fmt.Println(string(data))
 			} else {
 				fmt.Print(cli.FormatTmuxCreate(result))
+				cli.EmitStderr(allHints, flagQuiet, flagJSON)
 			}
 			return nil
 		},
