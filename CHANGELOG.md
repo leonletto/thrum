@@ -79,7 +79,15 @@ and this project adheres to
     - `--type repair` — re-verify and reconcile an EXISTING peer entry
       using stored secrets in `peers.json`. Valid only on `peer join`;
       rejected on `peer add`. Used to recover from drift (e.g., after a peer
-      `daemon_id` rotation).
+      `daemon_id` rotation). Implemented as a dedicated `peer.repair` RPC
+      (token-authenticated, NOT an extension of `pair.request`): the dialer
+      looks up the stored `Token`, `Address`, and `Transport`, dials the
+      peer's WebSocket with `Authorization: Bearer <token>`, calls
+      `peer.repair` with its current identity, and receives the listener's
+      refreshed metadata in return. Both sides re-key the peer entry if
+      the daemon_id has rotated; `Name` and `Token` are preserved. Works
+      for `local`, `network`, and `tailscale` transports. Rejects
+      `a-sync` peer entries (no live credential to authenticate).
   Migration: any script calling `thrum peer add` (no flag) must add an
   explicit `--type tailscale` for the same behavior. Missing `--type` errors
   with a help block listing all five options and a one-line "when to use"

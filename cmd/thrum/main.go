@@ -5435,6 +5435,8 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	//   - wsRegistry (localhost listener) for same-host loopback pairing
 	//     under --type local (xir.27 sub-component 1)
 	var pairHandler *rpc.PairRequestHandler
+	var repairHandler *rpc.PeerRepairHandler
+	var repairMgr *daemon.PeerRepairManager
 
 	if syncManager != nil {
 		// Create pairing manager (used by both Unix socket and Tailscale handlers)
@@ -5455,6 +5457,26 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				GitOriginURL: peerGitOriginURL,
 			})
 			return token, local.DaemonID, local.Name, local.RepoName, local.Hostname, local.RepoPath, local.GitOriginURL, err
+		})
+
+		// xir.27 sub-4: build the peer.repair manager + handler (dedicated
+		// RPC; intentionally separate from pair.request because verify-
+		// stored-token and mint-from-code have opposite trust models).
+		repairMgr = daemon.NewPeerRepairManager(syncManager.PeerRegistry(), st.Identity(), hostname)
+		repairHandler = rpc.NewPeerRepairHandler(func(
+			token, dialerDaemonID, dialerName, dialerAddress string,
+			dialerRepoName, dialerHostname, dialerRepoPath, dialerGitOriginURL string,
+		) (string, string, string, string, string, string, error) {
+			local, err := repairMgr.HandleRepairRequest(token, daemon.PairMetadata{
+				DaemonID:     dialerDaemonID,
+				Name:         dialerName,
+				Address:      dialerAddress,
+				RepoName:     dialerRepoName,
+				Hostname:     dialerHostname,
+				RepoPath:     dialerRepoPath,
+				GitOriginURL: dialerGitOriginURL,
+			})
+			return local.DaemonID, local.Name, local.RepoName, local.Hostname, local.RepoPath, local.GitOriginURL, err
 		})
 
 		// Adapter: convert daemon.PeerStatusInfo → rpc.PeerStatus
@@ -5759,7 +5781,112 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				return "", "", fmt.Errorf("--type a-sync: peer join is a no-op for a-sync; configure with 'thrum peer add --type a-sync --remote <git-url>'")
 
 			case "repair":
-				return "", "", fmt.Errorf("--type repair: stored-secret reconciliation lands in xir.27 sub-component 4")
+				// xir.27 sub-4: reconcile an existing peer entry using its
+				// stored Token as the trust anchor. peerName comes from the
+				// CLI (positional arg or --peer-name). We look up the
+				// entry, dial via its stored Transport/Address, send
+				// peer.repair with the stored token + our current
+				// identity, then refresh the entry with the listener's
+				// returned metadata.
+				name := strings.TrimSpace(peerName)
+				if name == "" {
+					return "", "", fmt.Errorf("--type repair requires a peer name")
+				}
+				existing := peerRegistry.FindPeerByName(name)
+				if existing == nil {
+					return "", "", fmt.Errorf("--type repair: no peer named %q in peers.json", name)
+				}
+				if existing.Token == "" {
+					return "", "", fmt.Errorf("--type repair: peer %q has no stored token (directory-only entry cannot be repaired)", name)
+				}
+				if existing.Transport == "a-sync" {
+					return "", "", fmt.Errorf("--type repair: peer %q is transport=a-sync (directory-only; no live handshake to repair)", name)
+				}
+				if existing.Address == "" {
+					return "", "", fmt.Errorf("--type repair: peer %q has no stored address", name)
+				}
+
+				// Tailscale repair: bring up tsnet if not already started.
+				// Symmetric to the JoinPeer path so a dialer coming out of
+				// a cold start can still reconcile a tailscale peer.
+				if existing.Transport == "tailscale" && startTsnetFn != nil && getTsLocalAddr() == "" {
+					if peerRegistry.LocalPort() == 0 {
+						port, portErr := daemon.FindRandomAvailablePort(daemon.TsnetPortRangeMin, daemon.TsnetPortRangeMax)
+						if portErr != nil {
+							return "", "", fmt.Errorf("--type repair: find available tsnet port: %w", portErr)
+						}
+						if portErr := peerRegistry.SetLocalPort(port); portErr != nil {
+							return "", "", fmt.Errorf("--type repair: set local port: %w", portErr)
+						}
+					}
+					if tsErr := startTsnetFn(peerRegistry.LocalPort()); tsErr != nil {
+						return "", "", fmt.Errorf("--type repair: start tailscale: %w", tsErr)
+					}
+				}
+
+				localIdent := st.Identity()
+				localAddr := ""
+				switch existing.Transport {
+				case "tailscale":
+					localAddr = getTsLocalAddr()
+				case "local":
+					if wsPort != "" {
+						localAddr = net.JoinHostPort("127.0.0.1", wsPort)
+					}
+				case "network":
+					// For network repair the local address comes from the
+					// secondary listener. The dialer may need --address to
+					// rebind an ephemeral listener; if unset, we advertise
+					// whatever the existing entry carries (best-effort).
+					localAddr = existing.Address
+				}
+				localMeta := daemon.PairMetadata{
+					DaemonID:     localIdent.DaemonID,
+					Name:         hostname,
+					Address:      localAddr,
+					RepoName:     localIdent.RepoName,
+					Hostname:     localIdent.Hostname,
+					RepoPath:     localIdent.RepoPath,
+					GitOriginURL: localIdent.GitOriginURL,
+				}
+
+				client := daemon.NewSyncClient()
+				result, err := client.RequestRepair(existing.Address, existing.Token, localMeta)
+				if err != nil {
+					return "", "", fmt.Errorf("--type repair: %w", err)
+				}
+				if result.Status != "repaired" {
+					return "", "", fmt.Errorf("--type repair: unexpected status %q", result.Status)
+				}
+
+				// Refresh local entry with the listener's current metadata.
+				// If the listener's daemon_id rotated, the entry's key
+				// changes too: RemovePeer the old key first so both sides
+				// settle on the same DaemonID.
+				refreshed := *existing
+				oldKey := refreshed.DaemonID
+				refreshed.DaemonID = result.DaemonID
+				if result.RepoName != "" {
+					refreshed.RemoteRepoName = result.RepoName
+				}
+				if result.Hostname != "" {
+					refreshed.RemoteHostname = result.Hostname
+				}
+				if result.RepoPath != "" {
+					refreshed.RemoteRepoPath = result.RepoPath
+				}
+				if result.GitOriginURL != "" {
+					refreshed.RemoteGitOriginURL = result.GitOriginURL
+				}
+				if oldKey != result.DaemonID && oldKey != "" {
+					if rmErr := peerRegistry.RemovePeer(oldKey); rmErr != nil {
+						fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to remove stale peer entry %s: %v\n", oldKey, rmErr)
+					}
+				}
+				if addErr := peerRegistry.AddPeer(&refreshed); addErr != nil {
+					return "", "", fmt.Errorf("--type repair: update local entry: %w", addErr)
+				}
+				return refreshed.Name, refreshed.DaemonID, nil
 
 			default:
 				return "", "", fmt.Errorf("unknown peer type %q", peerType)
@@ -5941,6 +6068,15 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		wsRegistry.Register("pair.request", websocket.Handler(pairHandler.Handle))
 	}
 
+	// xir.27 sub-4: peer.repair on the localhost WS so --type repair flows
+	// for local/network peers complete without requiring tsnet. The RPC is
+	// token-authenticated via Bearer header (existing post-pair auth path);
+	// no pairing-code validator is required because repair reuses the
+	// trust anchor established during the original pair.
+	if repairHandler != nil {
+		wsRegistry.Register("peer.repair", websocket.Handler(repairHandler.Handle))
+	}
+
 	// Resolve UI filesystem (embedded or dev mode)
 	var uiFS fs.FS
 	if devPath := os.Getenv("THRUM_UI_DEV"); devPath != "" {
@@ -6095,6 +6231,9 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		}
 		if pairHandler != nil {
 			_ = syncRegistry.Register("pair.request", pairHandler.Handle)
+		}
+		if repairHandler != nil {
+			_ = syncRegistry.Register("peer.repair", repairHandler.Handle)
 		}
 
 		// Build WebSocket server options for the Tailscale sync endpoint.
