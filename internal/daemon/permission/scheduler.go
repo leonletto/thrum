@@ -107,7 +107,12 @@ func (p *Permission) firstDetect(
 	paneHash [32]byte,
 	now time.Time,
 ) error {
-	supers, err := p.ResolveSupervisors(ctx, p.loadSupervisorEntries())
+	// Read the configured entries once — both ResolveSupervisors and the
+	// orphan-path slog.Warn reference them. Caching also closes a
+	// theoretical consistency gap where a mid-resolution config reload
+	// could make the logged entries differ from the resolved ones.
+	configuredEntries := p.loadSupervisorEntries()
+	supers, err := p.ResolveSupervisors(ctx, configuredEntries)
 	if err != nil {
 		slog.Error("[permission] resolve supervisors failed", "err", err)
 	}
@@ -147,7 +152,7 @@ func (p *Permission) firstDetect(
 			"session", session,
 			"runtime", runtime,
 			"pattern", matched.Name,
-			"configured_entries", p.loadSupervisorEntries())
+			"configured_entries", configuredEntries)
 		if stuckErr := p.markAgentStuck(ctx, agentName); stuckErr != nil {
 			slog.Warn("[permission] markAgentStuck failed in orphan path",
 				"agent", agentName, "err", stuckErr)

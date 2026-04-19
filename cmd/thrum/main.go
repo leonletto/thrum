@@ -4438,7 +4438,7 @@ Examples:
 				// and the next `thrum` CLI call that would trigger guard.Check
 				// → reconcileDrift (thrum-enlw.8).
 				if ttmux.InTmux() {
-					if target, err := ttmux.PaneTarget(); err == nil && target != "" {
+					if target, err := ttmux.PaneTarget(); err == nil && target != "" && idFile.TmuxSession != target {
 						idFile.TmuxSession = target
 					}
 				}

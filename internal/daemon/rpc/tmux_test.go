@@ -625,21 +625,23 @@ func TestHandleCheckPane_DetectionFromContent_NoMatch(t *testing.T) {
 	}
 }
 
-// TestHandleCheckPane_IdentityMissingTmuxSession_SilentlyIdles documents
-// the thrum-enlw.8 bug: findIdentityForSession in tmux.go matches on
-// idFile.TmuxSession, so an identity file with an empty tmux_session
-// field is unreachable by session name — even when the runtime field
-// is present and pane content clearly contains a permission prompt.
-// HandleCheckPane silently returns state=idle with no reason, no
-// DetectPaneState invocation, no nudge. This was the failure mode
-// observed for newly-created agents whose identity was written before
-// guard.Check's drift-reconciliation had a chance to populate
-// tmux_session (fixed in cmd/thrum/main.go quickstart cobra handler).
+// TestHandleCheckPane_IdentityMissingTmuxSession_SilentlyIdles is a
+// NEGATIVE-SPACE CONTRACT test for thrum-enlw.8. The assertion below
+// asserts the pre-fix BROKEN behavior on purpose — findIdentityForSession
+// in tmux.go matches on idFile.TmuxSession, so an identity file with an
+// empty tmux_session field MUST NOT match a session lookup, even when
+// runtime is populated and the pane content would match a pattern. That
+// non-match is the invariant that makes the quickstart-side fix
+// (cmd/thrum/main.go populates tmux_session before first SaveIdentityFile)
+// the sole source of truth for session-identity mapping.
 //
-// The fix is in a different package; this test is a contract guard that
-// future refactoring of findIdentityForSession doesn't silently restore
-// the silent-idle mode by accepting empty-tmux_session identities as
-// session-matches.
+// If someone adds a fallback match path in findIdentityForSession — for
+// example matching by Worktree or by a cross-reference to the tmux
+// server's session list when TmuxSession is empty — this test will fail,
+// forcing a revisit of the contract: either accept that fallback as the
+// new design (and rewrite this test to match), or recognize that the
+// fallback re-introduces the silent-idle failure mode on ANY identity
+// that happens to have TmuxSession unset for unrelated reasons.
 func TestHandleCheckPane_IdentityMissingTmuxSession_SilentlyIdles(t *testing.T) {
 	t.Setenv("THRUM_HOME", "")
 
