@@ -2135,7 +2135,7 @@ Use --context to show work context (branch, commits, intent) for each agent.`,
 	listCmd.Flags().Bool("context", false, "Show work context (branch, commits, intent)")
 	cmd.AddCommand(listCmd)
 
-	cmd.AddCommand(&cobra.Command{
+	agentWhoamiCmd := &cobra.Command{
 		Use:   "whoami",
 		Short: "Show current agent identity",
 		Long: `Show the current agent identity and active session.
@@ -2145,7 +2145,9 @@ Identity is resolved from:
 2. Environment variables (THRUM_ROLE, THRUM_MODULE, THRUM_NAME)
 3. Identity files in .thrum/identities/ directory`,
 		RunE: runWhoami,
-	})
+	}
+	agentWhoamiCmd.Flags().String("field", "", "Print a single field's value (e.g. agent_id, tmux_alive) and exit")
+	cmd.AddCommand(agentWhoamiCmd)
 
 	deleteCmd := &cobra.Command{
 		Use:   "delete <name>",
