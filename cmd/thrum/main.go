@@ -5868,6 +5868,12 @@ func queryMessageReadState(ctx context.Context, st *state.State, msgID, agentID 
 	if err == nil {
 		return inbox.StateRead
 	}
+	if err != sql.ErrNoRows {
+		// Unexpected DB error on the read-state probe. Keep the file
+		// (conservative default) but surface the error so persistent
+		// DB trouble is visible in the janitor logs.
+		log.Printf("inbox_janitor: message_deliveries probe for %s/%s: %v", agentID, msgID, err)
+	}
 	return inbox.StateUnread
 }
 

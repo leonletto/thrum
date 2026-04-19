@@ -124,9 +124,8 @@ func LocalAgentNames(thrumDir string) []string {
 			return
 		}
 		for _, e := range entries {
-			name := e.Name()
-			if strings.HasSuffix(name, ".json") {
-				seen[strings.TrimSuffix(name, ".json")] = struct{}{}
+			if base, ok := strings.CutSuffix(e.Name(), ".json"); ok {
+				seen[base] = struct{}{}
 			}
 		}
 	}
