@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
@@ -109,6 +110,39 @@ func HasLocalIdentity(thrumDir, agentName string) bool {
 		}
 	}
 	return false
+}
+
+// LocalAgentNames returns every agent whose identity file is reachable
+// from this daemon's filesystem (main identities dir + any worktree
+// identities dir). Used by the inbox janitor to enumerate local
+// agents without a hostname comparison.
+func LocalAgentNames(thrumDir string) []string {
+	seen := map[string]struct{}{}
+	scan := func(dir string) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return
+		}
+		for _, e := range entries {
+			name := e.Name()
+			if strings.HasSuffix(name, ".json") {
+				seen[strings.TrimSuffix(name, ".json")] = struct{}{}
+			}
+		}
+	}
+	scan(filepath.Join(thrumDir, "identities"))
+	repoDir := filepath.Dir(thrumDir)
+	for _, wtPath := range safecmd.WorktreePaths(context.Background(), repoDir) {
+		if wtPath == repoDir {
+			continue
+		}
+		scan(filepath.Join(wtPath, ".thrum", "identities"))
+	}
+	out := make([]string, 0, len(seen))
+	for name := range seen {
+		out = append(out, name)
+	}
+	return out
 }
 
 // identityPath returns the full path to <dir>/<agentName>.json if the

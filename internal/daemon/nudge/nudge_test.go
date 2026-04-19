@@ -132,3 +132,34 @@ func TestHasLocalIdentity(t *testing.T) {
 		t.Fatal("nobody should not be local")
 	}
 }
+
+func TestLocalAgentNames(t *testing.T) {
+	dir := t.TempDir()
+	thrumDir := filepath.Join(dir, ".thrum")
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	if err := os.MkdirAll(identitiesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"alice", "bob"} {
+		body := fmt.Sprintf(`{"version":1,"agent":{"name":%q}}`, name)
+		if err := os.WriteFile(filepath.Join(identitiesDir, name+".json"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Also drop a non-json file that should be ignored.
+	if err := os.WriteFile(filepath.Join(identitiesDir, "README.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := nudge.LocalAgentNames(thrumDir)
+	if len(got) != 2 {
+		t.Fatalf("want 2 agents, got %d: %v", len(got), got)
+	}
+	found := map[string]bool{}
+	for _, n := range got {
+		found[n] = true
+	}
+	if !found["alice"] || !found["bob"] {
+		t.Errorf("missing expected agents: %v", got)
+	}
+}

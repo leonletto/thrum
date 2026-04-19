@@ -14,7 +14,7 @@ type fakeReadState struct {
 	missing map[string]bool
 }
 
-func (f *fakeReadState) State(msgID string) ReadState {
+func (f *fakeReadState) State(msgID, agentID string) ReadState {
 	if f.missing[msgID] {
 		return StateMissing
 	}

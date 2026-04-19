@@ -28,9 +28,10 @@ const DefaultJanitorInterval = 1 * time.Hour
 // LocalAgentsFunc returns the list of agent IDs owned by this daemon's host.
 type LocalAgentsFunc func() []string
 
-// MessageReadStateFunc reports a message's read-state. Implementations
-// typically query the daemon's message store (SQLite).
-type MessageReadStateFunc func(msgID string) ReadState
+// MessageReadStateFunc reports the read-state of a message for a specific
+// recipient agent. Implementations typically query the daemon's SQLite
+// message store, joining the messages and message_deliveries tables.
+type MessageReadStateFunc func(msgID, agentID string) ReadState
 
 // SpoolJanitor reconciles <thrum_dir>/spool/<agent_id>/*.json entries
 // against the daemon's SQLite read-state. Entries whose msg_id is
@@ -95,7 +96,7 @@ func (j *SpoolJanitor) Reconcile() {
 				continue
 			}
 			msgID := strings.TrimSuffix(name, ".json")
-			switch j.readState(msgID) {
+			switch j.readState(msgID, agentID) {
 			case StateRead, StateMissing:
 				if err := os.Remove(filepath.Join(spoolDir, name)); err != nil && !os.IsNotExist(err) {
 					log.Printf("inbox_janitor: remove %s: %v", name, err)

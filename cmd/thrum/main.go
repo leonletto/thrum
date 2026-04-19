@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -5773,6 +5774,17 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	monitorHandler.EnsureAllMonitorSenders(ctx)
 	go monitorSupervisor.Start(ctx)
 
+	// hook-inbox-delivery: reconcile spool files against DB read-state hourly.
+	// Pattern mirrors PeriodicSyncScheduler — own goroutine, own ticker.
+	spoolJanitor := inbox.NewSpoolJanitor(
+		thrumDir,
+		func() []string { return nudge.LocalAgentNames(thrumDir) },
+		func(msgID, agentID string) inbox.ReadState {
+			return queryMessageReadState(ctx, st, msgID, agentID)
+		},
+	)
+	go spoolJanitor.Start(ctx)
+
 	// Telegram bridge RPC handlers + goroutine
 	telegramHandler := rpc.NewTelegramHandler(absPath)
 	server.RegisterHandler("telegram.configure", telegramHandler.HandleConfigure)
@@ -5824,6 +5836,39 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	}
 
 	return lifecycle.Run(ctx)
+}
+
+// queryMessageReadState checks whether a message is read by a specific
+// recipient agent, missing entirely, or still unread. Used by the
+// SpoolJanitor to reconcile per-agent spool files against DB state.
+//
+// Semantics (derived from the unread-filter clause in
+// internal/daemon/rpc/message.go): a message is "read by agent A"
+// when a row exists in message_deliveries with recipient_agent_id=A
+// and read_at IS NOT NULL. "Missing" means no row in messages.
+func queryMessageReadState(ctx context.Context, st *state.State, msgID, agentID string) inbox.ReadState {
+	var exists int
+	err := st.DB().QueryRowContext(ctx,
+		`SELECT 1 FROM messages WHERE message_id = ?`,
+		msgID,
+	).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return inbox.StateMissing
+	}
+	if err != nil {
+		// On DB error, be conservative — keep the file.
+		return inbox.StateUnread
+	}
+
+	var readExists int
+	err = st.DB().QueryRowContext(ctx,
+		`SELECT 1 FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ? AND read_at IS NOT NULL LIMIT 1`,
+		msgID, agentID,
+	).Scan(&readExists)
+	if err == nil {
+		return inbox.StateRead
+	}
+	return inbox.StateUnread
 }
 
 func rolesCmd() *cobra.Command {
