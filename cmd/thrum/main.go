@@ -7873,12 +7873,20 @@ func tmuxCmd() *cobra.Command {
 			if abortErr := cli.HandlePreAction(preHints, force); abortErr != nil {
 				if flagJSON {
 					// Emit abort body to stdout so agents can parse it,
-					// then return a terse error for the exit code.
+					// then return a terse error for the exit code. Render
+					// only the blocking hints for symmetry with the text
+					// path (EmitAbort) — non-blocking info hints, if any,
+					// aren't what caused the abort.
+					var he *cli.HintAbortError
+					var blockers []cli.Hint
+					if errors.As(abortErr, &he) {
+						blockers = he.Hints
+					}
 					body := map[string]any{
 						"error":   "aborted by hint",
 						"aborted": true,
 					}
-					if hs := cli.RenderJSONForEmit(preHints); hs != nil {
+					if hs := cli.RenderJSONForEmit(blockers); hs != nil {
 						body["hints"] = hs
 					}
 					data, _ := json.MarshalIndent(body, "", "  ")

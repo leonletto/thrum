@@ -26,11 +26,11 @@ func Test_sendHints_recipientStale_fires(t *testing.T) {
 	}
 }
 
-// Just under the threshold must be silent. Using RecipientStaleMinutes-1
-// avoids the nanosecond-drift race of testing the exact boundary.
+// Just under the threshold must be silent. Subtracting 1 minute avoids
+// the nanosecond-drift race of testing the exact boundary.
 func Test_sendHints_justUnderThreshold_silent(t *testing.T) {
 	state := &MockState{Agents: map[string]*AgentSummary{
-		"target": {AgentID: "target", UpdatedAt: time.Now().Add(-time.Duration(RecipientStaleMinutes-1) * time.Minute).Format(time.RFC3339)},
+		"target": {AgentID: "target", UpdatedAt: time.Now().Add(-(RecipientStaleThreshold - time.Minute)).Format(time.RFC3339)},
 	}}
 	ctx := HintCtx{Command: "send", Flags: map[string]any{"to": "@target"}, State: state}
 	if hs := sendHints(ctx); len(hs) != 0 {
@@ -41,7 +41,7 @@ func Test_sendHints_justUnderThreshold_silent(t *testing.T) {
 // Well past the threshold fires.
 func Test_sendHints_wellPastThreshold_fires(t *testing.T) {
 	state := &MockState{Agents: map[string]*AgentSummary{
-		"target": {AgentID: "target", UpdatedAt: time.Now().Add(-time.Duration(RecipientStaleMinutes+5) * time.Minute).Format(time.RFC3339)},
+		"target": {AgentID: "target", UpdatedAt: time.Now().Add(-(RecipientStaleThreshold + 5*time.Minute)).Format(time.RFC3339)},
 	}}
 	ctx := HintCtx{Command: "send", Flags: map[string]any{"to": "@target"}, State: state}
 	if hs := sendHints(ctx); !containsCode(hs, HintSendRecipientStale) {

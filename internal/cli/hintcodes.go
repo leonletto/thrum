@@ -1,5 +1,7 @@
 package cli
 
+import "time"
+
 // Hint code constants. Each code is a stable dotted slug (command.subcommand.slug)
 // used as the machine-readable identifier in Shape B (text) and Shape C (JSON)
 // output. Doc comments cite the institutional-memory rule the code encodes so
@@ -45,10 +47,10 @@ const HintSendRecipientStale = "send.recipient-stale"
 // init→quickstart sequence. info.
 const HintInitNextQuickstart = "init.next-quickstart"
 
-// RecipientStaleMinutes is the send-side stale cutoff in minutes. Tunable
-// here; becomes a config key in Phase C if the pilot signals that 30 minutes
-// is the wrong threshold.
-const RecipientStaleMinutes = 30
+// RecipientStaleThreshold is the send-side stale cutoff. Exported per
+// spec §4 as a tunable; becomes a config key in Phase C if the pilot
+// signals that 30 minutes is the wrong threshold.
+const RecipientStaleThreshold = 30 * time.Minute
 
 // AllHintCodes is the canonical list of codes. L3 tests scan it for format
 // and uniqueness; renderer tests use it as a reference set.

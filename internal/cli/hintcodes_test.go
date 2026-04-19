@@ -42,9 +42,9 @@ func TestCatalogSize(t *testing.T) {
 	}
 }
 
-// TestRecipientStaleMinutesIsPositive guards against an accidental zero-threshold.
-func TestRecipientStaleMinutesIsPositive(t *testing.T) {
-	if RecipientStaleMinutes <= 0 {
-		t.Errorf("RecipientStaleMinutes = %d, want > 0", RecipientStaleMinutes)
+// TestRecipientStaleThresholdIsPositive guards against an accidental zero-threshold.
+func TestRecipientStaleThresholdIsPositive(t *testing.T) {
+	if RecipientStaleThreshold <= 0 {
+		t.Errorf("RecipientStaleThreshold = %v, want > 0", RecipientStaleThreshold)
 	}
 }

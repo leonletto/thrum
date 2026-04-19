@@ -43,12 +43,19 @@ func sendHints(ctx HintCtx) []Hint {
 	if err != nil {
 		return nil // best-effort
 	}
-	threshold := time.Duration(RecipientStaleMinutes) * time.Minute
 	since := time.Since(last)
-	if since <= threshold {
+	if since <= RecipientStaleThreshold {
 		return nil
 	}
 
+	// Prefer the agent's real tmux session name when the daemon gave it to
+	// us; fall back to the angle-bracket template (spec §4 example shape)
+	// so the hint is still actionable for operators who don't have the
+	// session name handy.
+	sessionArg := fmt.Sprintf("<%s-session>", name)
+	if agent.TmuxSession != "" {
+		sessionArg = agent.TmuxSession
+	}
 	minutes := int(since.Minutes())
 	return []Hint{{
 		Code:     HintSendRecipientStale,
@@ -56,7 +63,7 @@ func sendHints(ctx HintCtx) []Hint {
 		Message:  fmt.Sprintf("@%s last seen %dm ago — may be idle", name, minutes),
 		Options: []Option{
 			{Label: "nudge", Cmd: fmt.Sprintf("thrum ping @%s", name)},
-			{Label: "reprime", Cmd: fmt.Sprintf("thrum tmux send <%s-session> '/thrum:prime'", name)},
+			{Label: "reprime", Cmd: fmt.Sprintf("thrum tmux send %s '/thrum:prime'", sessionArg)},
 		},
 	}}
 }

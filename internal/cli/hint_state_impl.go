@@ -29,6 +29,11 @@ func NewLiveStateAccessor(c *Client) *LiveStateAccessor {
 // AgentByName looks up a registered agent by name via the agent.list RPC.
 // Returns (nil, nil) when the agent is not registered (not an error — a
 // legitimate "no such agent" answer). Returns (nil, err) when the RPC fails.
+//
+// NOTE: fetches the full agent list on every call (agent.list has no name
+// filter in the current RPC surface). Pilot-acceptable — hint sources call
+// this at most once per command invocation. Add a server-side name filter
+// if this becomes hot.
 func (s *LiveStateAccessor) AgentByName(name string) (*AgentSummary, error) {
 	if s == nil || s.Client == nil {
 		return nil, nil
@@ -71,19 +76,12 @@ func (s *LiveStateAccessor) TmuxSessionExists(name string) (bool, error) {
 //
 // Normalizes one quirk of the underlying helper: when the path is not a git
 // repository at all (e.g. /tmp), cli.IsGitWorktree returns
-// (false, "", errors.New("not a git repository")). That error is actually a
-// *definitive* answer — the path is not a worktree — so we flatten it to
-// (false, nil). Other errors (safecmd failures, unexpected git output)
-// propagate so hint sources can silently skip.
+// (false, "", ErrNotGitRepo). That error is actually a *definitive* answer
+// — the path is not a worktree — so we flatten it to (false, nil). Other
+// errors (safecmd failures, unexpected git output) propagate so hint sources
+// can silently skip.
 func (s *LiveStateAccessor) IsGitWorktree(path string) (bool, error) {
-	if path == "" {
-		return false, nil
-	}
-	ok, _, err := IsGitWorktree(path)
-	if err != nil && strings.Contains(err.Error(), "not a git repository") {
-		return false, nil
-	}
-	return ok, err
+	return normalizedIsGitWorktree(path)
 }
 
 // IdentityStatus inspects <worktreePath>/.thrum/identities/ and classifies
@@ -98,15 +96,25 @@ func (s *LiveStateAccessor) IsGitWorktree(path string) (bool, error) {
 // The returned *AgentSummary, when non-nil, carries the agent's name (from
 // the identity file) and its tmux session name, so hint Options can render
 // correct `thrum tmux connect <name>` suggestions.
+//
+// Uses only FS access — no daemon RPC — so the logic is shared with
+// FSOnlyStateAccessor via identityStatusFromPath.
 func (s *LiveStateAccessor) IdentityStatus(worktreePath string) (IdentityStatus, *AgentSummary, error) {
+	return identityStatusFromPath(worktreePath)
+}
+
+// identityStatusFromPath is the FS-only identity-status implementation
+// shared by LiveStateAccessor and FSOnlyStateAccessor. Kept package-private
+// so neither accessor can accidentally invoke the other's IdentityStatus
+// through a freshly-allocated zero value (which previously relied on nil-
+// Client tolerance in AgentByName — brittle coupling).
+func identityStatusFromPath(worktreePath string) (IdentityStatus, *AgentSummary, error) {
 	if worktreePath == "" {
 		return IdentityNone, nil, nil
 	}
 
 	idFile, err := config.LoadIdentityFromWorktree(worktreePath)
 	if err != nil {
-		// No identities dir or no .json files → IdentityNone. The loader
-		// returns a wrapped error in both cases; surface as "no identity".
 		if errIsNoIdentity(err) {
 			return IdentityNone, nil, nil
 		}
@@ -125,7 +133,7 @@ func (s *LiveStateAccessor) IdentityStatus(worktreePath string) (IdentityStatus,
 
 	alive := false
 	if sessionName != "" {
-		alive, _ = s.TmuxSessionExists(sessionName)
+		alive = tmux.HasSession(sessionName)
 	}
 
 	agent := &AgentSummary{
@@ -142,6 +150,28 @@ func (s *LiveStateAccessor) IdentityStatus(worktreePath string) (IdentityStatus,
 		return IdentityLive, agent, nil
 	}
 	return IdentityStale, agent, nil
+}
+
+// normalizedIsGitWorktree is the FS-only IsGitWorktree shared by both
+// accessors. Flattens ErrNotGitRepo to (false, nil) — a non-repo path is a
+// definitive "not a worktree" answer, not an "unknowable" error.
+func normalizedIsGitWorktree(path string) (bool, error) {
+	if path == "" {
+		return false, nil
+	}
+	ok, _, err := IsGitWorktree(path)
+	if err == nil {
+		return ok, nil
+	}
+	if errors.Is(err, ErrNotGitRepo) {
+		return false, nil
+	}
+	// Fallback string match for any wrapped-err path we don't see today
+	// (defense in depth until the whole codebase uses the typed sentinel).
+	if strings.Contains(err.Error(), "not a git repository") {
+		return false, nil
+	}
+	return ok, err
 }
 
 // errIsNoIdentity reports whether err from LoadIdentityFromWorktree means
@@ -175,17 +205,8 @@ func (FSOnlyStateAccessor) TmuxSessionExists(name string) (bool, error) {
 	return tmux.HasSession(name), nil
 }
 func (FSOnlyStateAccessor) IsGitWorktree(path string) (bool, error) {
-	if path == "" {
-		return false, nil
-	}
-	ok, _, err := IsGitWorktree(path)
-	if err != nil && strings.Contains(err.Error(), "not a git repository") {
-		return false, nil
-	}
-	return ok, err
+	return normalizedIsGitWorktree(path)
 }
-func (f FSOnlyStateAccessor) IdentityStatus(path string) (IdentityStatus, *AgentSummary, error) {
-	// Reuse the LiveStateAccessor logic — it only needs FS access.
-	live := &LiveStateAccessor{}
-	return live.IdentityStatus(path)
+func (FSOnlyStateAccessor) IdentityStatus(path string) (IdentityStatus, *AgentSummary, error) {
+	return identityStatusFromPath(path)
 }

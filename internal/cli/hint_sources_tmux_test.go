@@ -170,6 +170,52 @@ func Test_tmuxCreateHints_stateAccessorError_silent(t *testing.T) {
 	}
 }
 
+// TmuxSessionExists error must not fire session-exists.
+func Test_tmuxCreateHints_tmuxSessionExistsError_silent(t *testing.T) {
+	state := &MockState{
+		GitWorktrees:     map[string]bool{"/w": true},
+		IdentityStatuses: map[string]MockIdentity{"/w": {Status: IdentityNone}},
+		Errs:             MockErrs{TmuxSessionExists: errBoom},
+	}
+	hs := tmuxCreateHints(tmuxCtx(false, "/w", false, state))
+	if containsCode(hs, HintTmuxCreateSessionExists) {
+		t.Error("TmuxSessionExists error must not fire session-exists (best-effort)")
+	}
+}
+
+// IdentityStatus error must not fire either identity-exists-* hint.
+func Test_tmuxCreateHints_identityStatusError_silent(t *testing.T) {
+	state := &MockState{
+		GitWorktrees: map[string]bool{"/w": true},
+		Errs:         MockErrs{IdentityStatus: errBoom},
+	}
+	hs := tmuxCreateHints(tmuxCtx(false, "/w", false, state))
+	if containsCode(hs, HintTmuxCreateIdentityExistsAlive) ||
+		containsCode(hs, HintTmuxCreateIdentityExistsStale) {
+		t.Errorf("IdentityStatus error must not fire identity-exists-* (best-effort), got %+v", codes(hs))
+	}
+}
+
+// nil ctx.State must not panic; all state-dependent checks skip silently.
+func Test_tmuxCreateHints_nilState_silent(t *testing.T) {
+	ctx := HintCtx{
+		Command: "tmux.create",
+		Args:    []string{"foo"},
+		Flags:   map[string]any{"cwd": "/w", "force": false},
+		Post:    false,
+		State:   nil,
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("nil State panicked: %v", r)
+		}
+	}()
+	hs := tmuxCreateHints(ctx)
+	if len(hs) != 0 {
+		t.Errorf("nil State: expected zero hints, got %+v", codes(hs))
+	}
+}
+
 // Helpers
 func containsCode(hs []Hint, code string) bool {
 	for _, h := range hs {

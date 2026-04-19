@@ -2,17 +2,33 @@ package cli
 
 import (
 	"errors"
+	"maps"
 	"strings"
 	"testing"
 )
 
 // resetHintRegistry clears the package-level registry. Test-only helper.
-// Exported by lowercase name so it stays inside the test binary.
+//
+// init() calls in hint_sources_*.go register tmux.create, send, and init
+// at package load time. Those registrations are visible to integration-style
+// tests that rely on Collect() returning the real hint sources. A test that
+// simply zeroed the map would leak an empty registry into later tests.
+// t.Cleanup re-registers the production sources when the calling test ends,
+// restoring the original state for any subsequent test in the same package.
 func resetHintRegistry(t *testing.T) {
 	t.Helper()
 	hintRegistryMu.Lock()
-	defer hintRegistryMu.Unlock()
+	// Snapshot before zeroing so Cleanup can put them back.
+	previous := make(map[string]HintSource, len(hintRegistry))
+	maps.Copy(previous, hintRegistry)
 	hintRegistry = map[string]HintSource{}
+	hintRegistryMu.Unlock()
+
+	t.Cleanup(func() {
+		hintRegistryMu.Lock()
+		defer hintRegistryMu.Unlock()
+		hintRegistry = previous
+	})
 }
 
 func TestRegisterAndCollect(t *testing.T) {

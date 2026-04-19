@@ -35,6 +35,10 @@ func RenderText(hints []Hint, w io.Writer) {
 		}
 		fmt.Fprintf(w, "  %s [%s]: %s\n", h.Severity, h.Code, h.Message)
 		// Compute label-width so colons line up across option rows.
+		// NOTE: uses len() (byte count) rather than utf8.RuneCountInString
+		// because all pilot-catalog labels are ASCII ("attach", "replace",
+		// "rename", etc.). Multi-byte labels would misalign. Revisit if
+		// a future hint introduces non-ASCII labels.
 		width := 0
 		for _, o := range h.Options {
 			if len(o.Label) > width {
