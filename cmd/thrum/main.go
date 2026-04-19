@@ -859,7 +859,10 @@ The daemon must be running and you must have an active session.`,
 				if hs := cli.RenderJSONForEmit(preHints); hs != nil {
 					body["hints"] = hs
 				}
-				data, _ := json.MarshalIndent(body, "", "  ")
+				data, mErr := json.MarshalIndent(body, "", "  ")
+				if mErr != nil {
+					return fmt.Errorf("render send response: %w", mErr)
+				}
 				fmt.Println(string(data))
 			} else if !flagQuiet {
 				// Human-readable output
@@ -7940,7 +7943,10 @@ func tmuxCmd() *cobra.Command {
 					if hs := cli.RenderJSONForEmit(blockers); hs != nil {
 						body["hints"] = hs
 					}
-					data, _ := json.MarshalIndent(body, "", "  ")
+					data, mErr := json.MarshalIndent(body, "", "  ")
+					if mErr != nil {
+						return fmt.Errorf("render abort body: %w", mErr)
+					}
 					fmt.Println(string(data))
 					return fmt.Errorf("aborted")
 				}
@@ -8006,7 +8012,10 @@ func tmuxCmd() *cobra.Command {
 				if hs := cli.RenderJSONForEmit(allHints); hs != nil {
 					body["hints"] = hs
 				}
-				data, _ := json.MarshalIndent(body, "", "  ")
+				data, mErr := json.MarshalIndent(body, "", "  ")
+				if mErr != nil {
+					return fmt.Errorf("render tmux create response: %w", mErr)
+				}
 				fmt.Println(string(data))
 			} else {
 				fmt.Print(cli.FormatTmuxCreate(result))

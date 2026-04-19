@@ -2,10 +2,55 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
 )
+
+// L4 integration test coverage for the 8-code pilot catalog.
+//
+// Catalog coverage matrix:
+//
+//   tmux.create.not-a-worktree       — COVERED (4 cases: text/json/env/quiet)
+//   tmux.create.session-exists       — CARVE-OUT: requires a pre-existing
+//                                       tmux session in a fresh temp worktree.
+//                                       Host fixture fragility + daemon
+//                                       coupling (thrum tmux create calls
+//                                       getClient() before reaching the
+//                                       hint). L1 covers it deterministically
+//                                       via MockState.
+//   tmux.create.identity-exists-alive — CARVE-OUT: requires a live registered
+//                                        agent on a fresh worktree fixture.
+//                                        Tight daemon + tmux + identity-file
+//                                        coupling. L1 covers.
+//   tmux.create.identity-exists-stale — CARVE-OUT: same as above, minus live
+//                                        session. FS fixture is buildable
+//                                        but the success path still runs the
+//                                        RPC. L1 covers.
+//   tmux.create.next-launch          — CARVE-OUT: requires tmux.create to
+//                                       succeed end-to-end, which needs a
+//                                       real worktree + running daemon + live
+//                                       tmux backend. L1 covers (post=true,
+//                                       Result marker shape assertion).
+//   tmux.create.identity-replaced    — CARVE-OUT: requires --force on a
+//                                       pre-existing stale-identity worktree.
+//                                       Depends on next-launch success path.
+//                                       L1 covers via Result marker.
+//   send.recipient-stale             — CARVE-OUT (documented in plan Task
+//                                       13.2): requires daemon fixture with
+//                                       an agent whose last_seen is backdated.
+//                                       Tight RPC coupling. L1 covers all
+//                                       threshold variants + bare-name +
+//                                       at-prefix parsing.
+//   init.next-quickstart             — COVERED below (init uses
+//                                       FSOnlyStateAccessor; daemon-free).
+//
+// The carved-out cases are structurally daemon-or-fixture coupled. The L1
+// tier exercises each with MockState so firing semantics are verified
+// deterministically. The L4 tier here validates the rendering pipeline
+// end-to-end (Shape B stderr, Shape C JSON, suppression) using the codes
+// that CAN be driven without a daemon-shaped fixture.
 
 // TestIntegration_NotAWorktree_TextMode verifies the canonical
 // tmux.create.not-a-worktree hint lands on stderr and the command exits
@@ -110,3 +155,56 @@ func TestIntegration_NotAWorktree_QuietSuppressesText(t *testing.T) {
 		t.Errorf("--quiet must suppress hint text, got stderr:\n%s", stderr)
 	}
 }
+
+// TestIntegration_InitNextQuickstart_TextMode verifies init.next-quickstart
+// fires on stderr after a successful `thrum init` in a fresh temp git repo
+// where no agent identity is registered yet.
+//
+// Daemon-free: thrum init uses FSOnlyStateAccessor, which doesn't touch the
+// daemon for identity-status checks. We still avoid --runtime selection by
+// passing --runtime cli-only which writes no config.
+func TestIntegration_InitNextQuickstart_TextMode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration tests skipped in -short")
+	}
+	bin := buildTestBinary(t)
+
+	// Set up a throwaway git repo (isolated from any real .thrum state via
+	// THRUM_HOME pointing at a temp dir).
+	repoDir := t.TempDir()
+	thrumHome := t.TempDir()
+	if err := runInDir(t, repoDir, "git", "init", "-q"); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+	if err := runInDir(t, repoDir, "git", "commit", "--allow-empty", "-m", "init", "--quiet"); err != nil {
+		// commit may need config user.* — tolerate; most CI envs have it
+		t.Logf("git commit failed (tolerating): %v", err)
+	}
+
+	cmd := exec.Command(bin, "--repo", repoDir, "init", "--runtime", "cli-only", "--force")
+	cmd.Env = append(cmd.Environ(), "THRUM_HOME="+thrumHome)
+	_, errBuf := captureOut(cmd)
+	_ = cmd.Run()
+
+	stderr := errBuf.String()
+	if !strings.Contains(stderr, "[init.next-quickstart]") {
+		t.Errorf("stderr missing hint code [init.next-quickstart], got:\n%s", stderr)
+	}
+	// Verify the stderr trailer points at quickstart.
+	if !strings.Contains(stderr, "thrum quickstart") {
+		t.Errorf("stderr missing 'thrum quickstart' suggestion, got:\n%s", stderr)
+	}
+}
+
+// runInDir runs a command in a specific working directory. Test helper
+// for fixture setup (git init etc).
+func runInDir(t *testing.T, dir, name string, args ...string) error {
+	t.Helper()
+	c := exec.Command(name, args...)
+	c.Dir = dir
+	c.Env = os.Environ()
+	c.Stdout = nil
+	c.Stderr = nil
+	return c.Run()
+}
+

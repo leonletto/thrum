@@ -26,33 +26,48 @@ func NewLiveStateAccessor(c *Client) *LiveStateAccessor {
 	return &LiveStateAccessor{Client: c}
 }
 
-// AgentByName looks up a registered agent by name via the agent.list RPC.
+// AgentByName looks up a registered agent by name via the team.list RPC.
 // Returns (nil, nil) when the agent is not registered (not an error — a
 // legitimate "no such agent" answer). Returns (nil, err) when the RPC fails.
 //
-// NOTE: fetches the full agent list on every call (agent.list has no name
-// filter in the current RPC surface). Pilot-acceptable — hint sources call
-// this at most once per command invocation. Add a server-side name filter
-// if this becomes hot.
+// Uses team.list rather than agent.list because team.list includes
+// TmuxSession and TmuxState — both are required for send.recipient-stale's
+// "reprime" option to render an actionable command. Include offline agents
+// so stale recipients (the exact case this lookup exists to serve) are
+// discoverable.
+//
+// NOTE: fetches the full team list on every call. Pilot-acceptable — hint
+// sources call this at most once per command invocation. Add a server-side
+// name filter if this becomes hot.
 func (s *LiveStateAccessor) AgentByName(name string) (*AgentSummary, error) {
 	if s == nil || s.Client == nil {
 		return nil, nil
 	}
-	resp, err := AgentList(s.Client, AgentListOptions{})
-	if err != nil {
+	req := TeamListRequest{IncludeOffline: true, IncludeSystem: false}
+	var resp TeamListResponse
+	if err := s.Client.Call("team.list", req, &resp); err != nil {
 		return nil, err
 	}
-	for i := range resp.Agents {
-		a := &resp.Agents[i]
-		if a.AgentID == name {
+	for i := range resp.Members {
+		m := &resp.Members[i]
+		if m.AgentID == name {
+			alive := m.TmuxState == "alive"
 			return &AgentSummary{
-				AgentID:   a.AgentID,
-				Role:      a.Role,
-				Module:    a.Module,
-				Display:   a.Display,
-				UpdatedAt: a.LastSeenAt,
-				Source:    "daemon",
-				PID:       a.AgentPID,
+				AgentID:     m.AgentID,
+				Role:        m.Role,
+				Module:      m.Module,
+				Display:     m.Display,
+				Worktree:    m.WorktreePath,
+				Branch:      m.Branch,
+				Intent:      m.Intent,
+				SessionID:   m.SessionID,
+				UpdatedAt:   m.LastSeen,
+				Source:      "daemon",
+				Status:      m.Status,
+				Host:        m.Hostname,
+				PID:         m.AgentPID,
+				TmuxSession: m.TmuxSession,
+				TmuxAlive:   alive,
 			}, nil
 		}
 	}
@@ -155,6 +170,12 @@ func identityStatusFromPath(worktreePath string) (IdentityStatus, *AgentSummary,
 // normalizedIsGitWorktree is the FS-only IsGitWorktree shared by both
 // accessors. Flattens ErrNotGitRepo to (false, nil) — a non-repo path is a
 // definitive "not a worktree" answer, not an "unknowable" error.
+//
+// Only accepts errors.Is(err, ErrNotGitRepo). If a code path wraps the
+// "not a git repository" message without using the typed sentinel, the
+// hint won't fire — the TestIsGitWorktreeErrorAlwaysWrapsSentinel test
+// below catches the class of drift where internal/cli/init.go stops
+// using the sentinel.
 func normalizedIsGitWorktree(path string) (bool, error) {
 	if path == "" {
 		return false, nil
@@ -164,11 +185,6 @@ func normalizedIsGitWorktree(path string) (bool, error) {
 		return ok, nil
 	}
 	if errors.Is(err, ErrNotGitRepo) {
-		return false, nil
-	}
-	// Fallback string match for any wrapped-err path we don't see today
-	// (defense in depth until the whole codebase uses the typed sentinel).
-	if strings.Contains(err.Error(), "not a git repository") {
 		return false, nil
 	}
 	return ok, err
