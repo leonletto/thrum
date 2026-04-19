@@ -1042,7 +1042,11 @@ The daemon must be running and you must have an active session.`,
 				}
 				fmt.Print(cli.FormatInboxWithOptions(result, fmtOpts))
 				if !flagQuiet {
-					fmt.Print(cli.LegacyHint("inbox", flagQuiet, flagJSON))
+					hintGroup := "inbox"
+					if unread && len(result.Messages) > 0 {
+						hintGroup = "inbox.unread"
+					}
+					fmt.Print(cli.LegacyHint(hintGroup, flagQuiet, flagJSON))
 				}
 			}
 

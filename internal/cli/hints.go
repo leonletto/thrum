@@ -63,6 +63,9 @@ var commandHints = map[string][]string{
 		"Tip: Reply to a message with 'thrum reply msg_id \"text\"'",
 		"Tip: Use 'thrum message read --all' to mark all messages as read",
 	},
+	"inbox.unread": {
+		"ACTION: After processing, mark these messages read so they don't keep reappearing:\n  thrum message read --all\n  (or: thrum message read <msg_id> [<msg_id>...] for specific messages)",
+	},
 	"agent.list": {
 		"Tip: See work contexts with 'thrum agent list --context'",
 		"Tip: View agent details with 'thrum agent context @role'",
