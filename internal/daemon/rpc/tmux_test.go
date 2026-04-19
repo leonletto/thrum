@@ -624,3 +624,81 @@ func TestHandleCheckPane_DetectionFromContent_NoMatch(t *testing.T) {
 		t.Error("no-match content should not insert a nudge row")
 	}
 }
+
+// TestHandleCheckPane_IdentityMissingTmuxSession_SilentlyIdles documents
+// the thrum-enlw.8 bug: findIdentityForSession in tmux.go matches on
+// idFile.TmuxSession, so an identity file with an empty tmux_session
+// field is unreachable by session name — even when the runtime field
+// is present and pane content clearly contains a permission prompt.
+// HandleCheckPane silently returns state=idle with no reason, no
+// DetectPaneState invocation, no nudge. This was the failure mode
+// observed for newly-created agents whose identity was written before
+// guard.Check's drift-reconciliation had a chance to populate
+// tmux_session (fixed in cmd/thrum/main.go quickstart cobra handler).
+//
+// The fix is in a different package; this test is a contract guard that
+// future refactoring of findIdentityForSession doesn't silently restore
+// the silent-idle mode by accepting empty-tmux_session identities as
+// session-matches.
+func TestHandleCheckPane_IdentityMissingTmuxSession_SilentlyIdles(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	st, err := state.NewState(thrumDir, thrumDir, "r_MISSINGTMUX", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	// Seed an identity WITHOUT TmuxSession — the exact state a
+	// newly-quickstarted agent would have before the thrum-enlw.8 fix.
+	// Runtime IS set, which is necessary to isolate the TmuxSession-
+	// lookup gap as the culprit (not a missing-runtime short-circuit).
+	idFile := &config.IdentityFile{
+		Agent: config.AgentConfig{
+			Kind:   "agent",
+			Name:   "impl_buggy",
+			Role:   "implementer",
+			Module: "buggy",
+		},
+		Runtime: "cursor",
+	}
+	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
+		t.Fatalf("save identity: %v", err)
+	}
+
+	p := permission.New(st, st.RawDB(), "supervisor_test", "test", thrumDir)
+	handler := NewTmuxHandler(thrumDir, st)
+	handler.SetPermission(p)
+
+	req := CheckPaneRequest{
+		Session: "cursor-test",
+		Reason:  "",
+		Content: "Run this command?\n  Not in allowlist: curl https://example.com\n → Run (once) (y)",
+	}
+	params, _ := json.Marshal(req)
+	resp, err := handler.HandleCheckPane(context.Background(), params)
+	if err != nil {
+		t.Fatalf("HandleCheckPane: %v", err)
+	}
+	checkResp := resp.(*CheckPaneResponse)
+
+	// Contract: with TmuxSession empty on the only identity file,
+	// findIdentityForSession cannot match "cursor-test" and the guard
+	// at tmux.go:549 skips DetectPaneState. The handler returns idle
+	// with no reason despite the pane content matching a pattern.
+	if checkResp.State != "idle" {
+		t.Errorf("State = %q, want idle (identity has empty tmux_session; session-match should fail)", checkResp.State)
+	}
+	if checkResp.Reason != "" {
+		t.Errorf("Reason = %q, want empty (detection should be skipped, not fallthrough)", checkResp.Reason)
+	}
+	row, _ := p.Store().LookupPendingNudgeBySession(context.Background(), "cursor-test")
+	if row != nil {
+		t.Error("no nudge row should be created when identity lookup fails")
+	}
+}

@@ -4374,13 +4374,19 @@ Examples:
 
 				thrumDir := filepath.Join(flagRepo, ".thrum")
 
-				// Load the identity file that cli.Quickstart's enrichment block
-				// already wrote — it contains AgentPID, TmuxSession, and other
-				// fields set during enrichment. Building a fresh struct here would
-				// overwrite those fields.
-				// Only use the loaded identity if the agent name matches — a stale
-				// identity from `thrum init` (e.g. implementer_main) must not
-				// prevent creation of the correct identity file.
+				// Prefer an existing identity file when its name matches — the
+				// library's enrichment block (internal/cli/quickstart.go Step 2.5)
+				// only runs when LoadIdentityWithPath succeeds, so on a pre-
+				// existing file it will have populated AgentPID and other
+				// drift-prone fields we don't want to clobber. For first-time
+				// quickstart the load returns "no identity file" and we build
+				// a fresh struct below, then the TmuxSession block further down
+				// backfills the tmux target (thrum-enlw.8 — without that
+				// backfill, findIdentityForSession can't match the session to
+				// this identity and the permission-prompt pipeline is silent).
+				// Name-mismatch case: a stale identity from `thrum init`
+				// (e.g. implementer_main) must not prevent creation of the
+				// correct identity file.
 				idFile, _, loadErr := config.LoadIdentityWithPath(flagRepo)
 				if loadErr != nil || idFile == nil || idFile.Agent.Name != savedName {
 					// Create a new identity file: no existing file, or name mismatch
@@ -4418,6 +4424,23 @@ Examples:
 				}
 				if runtimeFlag != "" && idFile.PreferredRuntime != runtimeFlag {
 					idFile.PreferredRuntime = runtimeFlag
+				}
+
+				// Populate TmuxSession from live tmux state when we're running
+				// inside a tmux pane. Mirrors guard.reconcileDrift's contract:
+				// only writes when a target is resolvable, never clears an
+				// existing value. Without this, the FIRST identity-file write
+				// on a fresh quickstart (library enrichment skipped because
+				// the file didn't exist yet) is missing tmux_session entirely,
+				// and findIdentityForSession in daemon/rpc/tmux.go can't match
+				// the session name back to this identity. That silently breaks
+				// permission-prompt detection for the window between quickstart
+				// and the next `thrum` CLI call that would trigger guard.Check
+				// → reconcileDrift (thrum-enlw.8).
+				if ttmux.InTmux() {
+					if target, err := ttmux.PaneTarget(); err == nil && target != "" {
+						idFile.TmuxSession = target
+					}
 				}
 
 				if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
