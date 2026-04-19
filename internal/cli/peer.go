@@ -235,6 +235,12 @@ func FormatPeerList(peers []PeerListEntry) string {
 		}
 
 		fmt.Fprintf(&b, "%-20s %-22s %-18s %d\n", name, addr, p.LastSync, p.LastSeq)
+		// xir.29: surface the auto-reconcile drift marker so operators
+		// see the cue to run manual repair without consulting external
+		// docs. Indented under the peer row it belongs to.
+		if p.ReconcileStatus == "drift_reconcile_failed" {
+			fmt.Fprintf(&b, "  └─ drift detected — run: thrum peer join --type repair %s\n", p.Name)
+		}
 	}
 
 	return b.String()

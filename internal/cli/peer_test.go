@@ -1,6 +1,53 @@
 package cli
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+// xir.29: FormatPeerList renders a drift hint under any peer whose
+// ReconcileStatus is "drift_reconcile_failed". The hint must name
+// `--type repair` so a user reading `thrum peer list` knows the next
+// step without consulting external docs.
+func TestFormatPeerList_DriftStatusRendered(t *testing.T) {
+	peers := []PeerListEntry{
+		{
+			Name:            "alpha",
+			Address:         "1.2.3.4:7731",
+			LastSync:        "1s ago",
+			ReconcileStatus: "drift_reconcile_failed",
+		},
+		{
+			Name:    "bravo",
+			Address: "5.6.7.8:7731",
+			// No drift status — healthy.
+		},
+	}
+	out := FormatPeerList(peers)
+
+	// Alpha must surface both the drift keyword and the --type repair hint.
+	if !strings.Contains(out, "drift") {
+		t.Errorf("output missing 'drift' marker:\n%s", out)
+	}
+	if !strings.Contains(out, "--type repair alpha") {
+		t.Errorf("output missing targeted repair hint for alpha:\n%s", out)
+	}
+
+	// Bravo (healthy) must NOT show a drift marker.
+	bravoTail := out[strings.Index(out, "bravo"):]
+	if strings.Contains(bravoTail, "drift") {
+		t.Errorf("bravo wrongly shows drift marker:\n%s", out)
+	}
+}
+
+func TestFormatPeerList_Healthy_NoDriftSection(t *testing.T) {
+	out := FormatPeerList([]PeerListEntry{
+		{Name: "alpha", Address: "1.2.3.4:7731"},
+	})
+	if strings.Contains(out, "drift") || strings.Contains(out, "--type repair") {
+		t.Errorf("healthy peer list should not contain drift/repair text:\n%s", out)
+	}
+}
 
 func TestIsTsnetActive(t *testing.T) {
 	tests := []struct {
