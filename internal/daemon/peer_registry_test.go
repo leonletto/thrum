@@ -591,3 +591,77 @@ func TestNewPeerRegistry_ReconcilesStalePeersJSONWithConfig(t *testing.T) {
 		t.Fatalf("peers.json still contains stale id: %s", data)
 	}
 }
+
+// xir.29: ReconcileStatus persists across save/load and survives registry
+// reopen. The field is written in lowercase snake_case per the JSON
+// convention used throughout PeerInfo.
+func TestPeerInfo_ReconcileStatusPersistence(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "peers.json")
+	r, err := NewPeerRegistry(tmp)
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	p := &PeerInfo{
+		Name:            "alpha",
+		DaemonID:        "01TESTDAEMON",
+		Address:         "192.168.1.5:7731",
+		Token:           "tok-123",
+		Transport:       "network",
+		ReconcileStatus: "drift_reconcile_failed",
+	}
+	if err := r.AddPeer(p); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	r2, err := NewPeerRegistry(tmp)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	got := r2.FindPeerByToken("tok-123")
+	if got == nil {
+		t.Fatalf("peer not found after reload")
+	}
+	if got.ReconcileStatus != "drift_reconcile_failed" {
+		t.Errorf("ReconcileStatus = %q, want drift_reconcile_failed", got.ReconcileStatus)
+	}
+}
+
+// xir.29: SetReconcileStatus updates the reconcile-status marker on a
+// peer by daemon_id, persists atomically, and handles both set-and-clear
+// plus unknown-peer rejection.
+func TestPeerRegistry_SetReconcileStatus(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "peers.json")
+	r, err := NewPeerRegistry(tmp)
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	if err := r.AddPeer(&PeerInfo{Name: "a", DaemonID: "01DID", Token: "t"}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+
+	if err := r.SetReconcileStatus("01DID", "drift_reconcile_failed"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	if got := r.FindPeerByToken("t"); got.ReconcileStatus != "drift_reconcile_failed" {
+		t.Errorf("status = %q", got.ReconcileStatus)
+	}
+
+	if err := r.SetReconcileStatus("01DID", ""); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if got := r.FindPeerByToken("t"); got.ReconcileStatus != "" {
+		t.Errorf("cleared status = %q", got.ReconcileStatus)
+	}
+
+	if err := r.SetReconcileStatus("01UNKNOWN", "drift_reconcile_failed"); err == nil {
+		t.Errorf("expected error for unknown daemon_id")
+	}
+
+	// Reopen registry and verify the cleared status survives.
+	r2, err := NewPeerRegistry(tmp)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if got := r2.FindPeerByToken("t"); got.ReconcileStatus != "" {
+		t.Errorf("cleared status not persisted: %q", got.ReconcileStatus)
+	}
+}

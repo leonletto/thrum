@@ -31,6 +31,11 @@ type PeerInfo struct {
 	RemoteRepoPath     string    `json:"remote_repo_path,omitempty"`      // Peer's repo filesystem path
 	RemoteGitOriginURL string    `json:"remote_git_origin_url,omitempty"` // Peer's git origin URL
 	Role               string    `json:"role,omitempty"`                  // "listener" or "dialer"
+	// ReconcileStatus flags the peer's xir.29 auto-reconcile state.
+	// Empty = healthy. "drift_reconcile_failed" = auto-reconcile attempted
+	// and failed (unreachable or stored token rejected); user should run
+	// 'thrum peer join --type repair <name>' to re-pair.
+	ReconcileStatus string `json:"reconcile_status,omitempty"` // xir.29
 }
 
 // Addr returns the network address for connecting to this peer.
@@ -220,6 +225,24 @@ func (r *PeerRegistry) RemovePeer(daemonID string) error {
 	defer r.mu.Unlock()
 
 	delete(r.peers, daemonID)
+	return r.saveLocked()
+}
+
+// SetReconcileStatus updates the xir.29 auto-reconcile status of a peer
+// by daemon_id and persists atomically. Empty status clears the drift
+// marker; "drift_reconcile_failed" flags the peer for manual --type repair.
+// Used by the reconcile manager (internal/daemon/reconcile) on both
+// success (clear) and failure (set) paths.
+func (r *PeerRegistry) SetReconcileStatus(daemonID, status string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p, ok := r.peers[daemonID]
+	if !ok {
+		return fmt.Errorf("peer %s not found", daemonID)
+	}
+
+	p.ReconcileStatus = status
 	return r.saveLocked()
 }
 

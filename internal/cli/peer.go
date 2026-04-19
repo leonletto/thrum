@@ -42,7 +42,18 @@ type PeerListEntry struct {
 	Address  string `json:"address"`
 	LastSync string `json:"last_sync"`
 	LastSeq  int64  `json:"last_synced_seq"`
+	// ReconcileStatus surfaces the xir.29 auto-reconcile marker. Non-empty
+	// (DriftReconcileFailedStatus) means FormatPeerList renders a hint
+	// pointing at `thrum peer join --type repair <name>`.
+	ReconcileStatus string `json:"reconcile_status,omitempty"`
 }
+
+// DriftReconcileFailedStatus is the PeerListEntry.ReconcileStatus value
+// that triggers the drift-warning render in FormatPeerList. Kept in
+// sync with reconcile.StatusDriftReconcileFailed (the daemon-side
+// authority); extracted here to avoid a cli→daemon import and to
+// prevent a silent regression if the literal ever drifts (M10 review).
+const DriftReconcileFailedStatus = "drift_reconcile_failed"
 
 // PeerDetailedStatusEntry is the detailed status of a single peer.
 type PeerDetailedStatusEntry struct {
@@ -231,6 +242,12 @@ func FormatPeerList(peers []PeerListEntry) string {
 		}
 
 		fmt.Fprintf(&b, "%-20s %-22s %-18s %d\n", name, addr, p.LastSync, p.LastSeq)
+		// xir.29: surface the auto-reconcile drift marker so operators
+		// see the cue to run manual repair without consulting external
+		// docs. Indented under the peer row it belongs to.
+		if p.ReconcileStatus == DriftReconcileFailedStatus {
+			fmt.Fprintf(&b, "  └─ drift detected — run: thrum peer join --type repair %s\n", p.Name)
+		}
 	}
 
 	return b.String()

@@ -37,6 +37,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/monitor"
 	"github.com/leonletto/thrum/internal/daemon/nudge"
 	"github.com/leonletto/thrum/internal/daemon/permission"
+	"github.com/leonletto/thrum/internal/daemon/reconcile"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
@@ -5828,17 +5829,19 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		server.RegisterHandler("peer.join",
 			rpc.NewPeerJoinHandler(joinFn).Handle)
 
-		// peer.list — compact peer list
+		// peer.list — compact peer list. xir.29: propagate ReconcileStatus
+		// so the CLI can render drift markers.
 		peerListFn := func() []rpc.PeerListEntry {
 			infos := syncManager.ListPeers()
 			entries := make([]rpc.PeerListEntry, len(infos))
 			for i, p := range infos {
 				entries[i] = rpc.PeerListEntry{
-					DaemonID: p.DaemonID,
-					Name:     p.Name,
-					Address:  p.Address,
-					LastSync: p.LastSync,
-					LastSeq:  p.LastSeq,
+					DaemonID:        p.DaemonID,
+					Name:            p.Name,
+					Address:         p.Address,
+					LastSync:        p.LastSync,
+					LastSeq:         p.LastSeq,
+					ReconcileStatus: p.ReconcileStatus,
 				}
 			}
 			return entries
@@ -5887,8 +5890,13 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		)
 		server.RegisterHandler("peer.configure", peerConfigureHandler.Handle)
 
-		// peer.address_changed — receive address change notifications from peers
-		addressChangedHandler := rpc.NewPeerAddressChangedHandler(func(peerToken, newIP, newPort string) error {
+		// peer.address_changed — receive address change notifications from peers.
+		// xir.29: wrap with a SubnetGuard so cross-subnet address changes
+		// are rejected (they indicate a topology shift, not a same-network
+		// reshuffle) and escalated to manual `thrum peer join --type repair`.
+		// Transport=="local" skips the guard entirely — loopback peers
+		// are strictly stronger than same-subnet (I6 review finding).
+		addrChangedUpdate := func(peerToken, newIP, newPort string) error {
 			p := peerRegistry.FindPeerByToken(peerToken)
 			if p == nil {
 				return fmt.Errorf("unknown peer token")
@@ -5899,7 +5907,54 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			}
 			p.Address = newAddr
 			return peerRegistry.AddPeer(p)
-		})
+		}
+		subnetGuard := func(transport, oldAddr, newAddr string) error {
+			// Local transport: same-host is a stronger property than
+			// same-subnet; no check needed (coordinator 2026-04-19 +
+			// I6 review finding).
+			if transport == "local" {
+				return nil
+			}
+			// Empty oldAddr means "no cached address" (first-boot or
+			// lookup-disabled path). Cannot evaluate — accept per M11.
+			if oldAddr == "" {
+				return nil
+			}
+			oldIPStr, _, err := net.SplitHostPort(oldAddr)
+			if err != nil {
+				return nil
+			}
+			newIPStr, _, err := net.SplitHostPort(newAddr)
+			if err != nil {
+				return fmt.Errorf("invalid new address %q: %w", newAddr, err)
+			}
+			oldIP := net.ParseIP(oldIPStr)
+			newIP := net.ParseIP(newIPStr)
+			if oldIP == nil || newIP == nil {
+				return nil
+			}
+			subnet, err := netdetect.SubnetForLocalAddress(oldIP)
+			if err != nil {
+				// Old address no longer on any local NIC; cannot
+				// evaluate subnet equality → accept (the peer has
+				// already moved off this host's LAN).
+				return nil
+			}
+			if !netdetect.SameSubnet(oldIP, newIP, subnet.CIDR) {
+				return fmt.Errorf("peer moved from %s to %s (different subnets)",
+					oldIP, newIP)
+			}
+			return nil
+		}
+		lookupPeer := func(token string) (oldAddr, transport string, err error) {
+			p := peerRegistry.FindPeerByToken(token)
+			if p == nil {
+				return "", "", fmt.Errorf("unknown peer token")
+			}
+			return p.Address, p.Transport, nil
+		}
+		addressChangedHandler := rpc.NewPeerAddressChangedHandlerWithGuard(
+			addrChangedUpdate, subnetGuard, lookupPeer)
 		server.RegisterHandler("peer.address_changed", addressChangedHandler.Handle)
 	}
 
@@ -6370,10 +6425,80 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	}
 
 	// Auto-connect to dialer-role peers after the WS server is ready.
+	// xir.29: build a single reconcile.Manager shared by the boot-time
+	// scan below and the send-time OnDialError hook wired via
+	// peerManager.SetReconcileManager (Phase 5). Defined here so both
+	// consumers observe the same attempt/lock state.
+	var reconcileMgr *reconcile.Manager
+	if peerManager != nil && peerRegistry != nil {
+		localIdent := st.Identity()
+		// I7 review finding: Address was previously empty here, so the
+		// peer.repair request sent an empty address field and the
+		// listener could not update its cached view of us. Supply the
+		// WS port (same format peers store as PeerInfo.Address).
+		localDialer := reconcile.DialerIdentity{
+			DaemonID:     peerRegistry.LocalDaemonID(),
+			Address:      ":" + wsPort,
+			RepoName:     localIdent.RepoName,
+			Hostname:     localIdent.Hostname,
+			RepoPath:     localIdent.RepoPath,
+			GitOriginURL: localIdent.GitOriginURL,
+		}
+		reconcileMgr = reconcile.NewManager(peerRegistry, reconcile.WSDial, localDialer)
+		peerManager.SetReconcileManager(reconcileMgr)
+	}
+
 	if peerManager != nil && thrumCfg.Peers.AutoConnect {
 		go func() {
 			time.Sleep(500 * time.Millisecond) // Wait for WS server to start
 			peerManager.ConnectAll(ctx)
+		}()
+	}
+
+	// xir.29: one-shot boot-time reconcile scan. NOT periodic — fires
+	// once after bridges have had a chance to attempt their initial
+	// dial via ConnectAll, then exits. Per-peer drift is surfaced via
+	// PeerInfo.ReconcileStatus → `thrum peer list`.
+	//
+	// The 2s settling window gives bridge.ConnectAll (scheduled at
+	// 500ms) time to complete its first dial round; any drift indicators
+	// (daemon_id rotation, etc.) surface before reconcile kicks in.
+	// peer.repair is registered statically before lifecycle.Run (see
+	// the tsnet+WS registration sites above) so there is no handler-
+	// registration race.
+	if reconcileMgr != nil {
+		go func() {
+			select {
+			case <-time.After(2 * time.Second):
+			case <-ctx.Done():
+				return
+			}
+			results := reconcileMgr.ReconcileAll(ctx)
+			var attempted, succeeded, failed int
+			for _, r := range results {
+				attempted++
+				if r.OK {
+					succeeded++
+				} else {
+					failed++
+					// Emit per-peer detail at DEBUG only when a
+					// plumbing failure surfaced (r.Err != nil). Known
+					// categories (CatUnreachable / CatTokenRejected)
+					// without r.Err are already reflected in the
+					// registry's ReconcileStatus marker — no need to
+					// double-report at log level (M8 review finding).
+					if r.Err != nil {
+						slog.Debug("reconcile peer failed",
+							"peer", r.PeerName,
+							"category", int(r.Category),
+							"err", r.Err)
+					}
+				}
+			}
+			slog.Info("reconcile boot scan complete",
+				"attempted", attempted,
+				"succeeded", succeeded,
+				"failed", failed)
 		}()
 	}
 
