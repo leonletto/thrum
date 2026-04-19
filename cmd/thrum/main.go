@@ -802,15 +802,45 @@ The daemon must be running and you must have an active session.`,
 			}
 			defer func() { _ = client.Close() }()
 
+			// Hint pipeline: pre-action collection only. Send has no
+			// post-action hints in the pilot; recipient-stale is info
+			// severity so HandlePreAction never blocks — but collecting
+			// through the gate keeps the wiring symmetric with tmux.create.
+			state := cli.NewLiveStateAccessor(client)
+			preCtx := cli.HintCtx{
+				Command: "send",
+				Flags:   map[string]any{"to": to},
+				Post:    false,
+				State:   state,
+			}
+			preHints := cli.Collect(preCtx)
+			if abortErr := cli.HandlePreAction(preHints, false); abortErr != nil {
+				return cli.EmitAbort(abortErr, flagQuiet, flagJSON)
+			}
+
 			result, err := cli.Send(client, opts)
 			if err != nil {
 				return err
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
+				// Output as JSON with hints grafted onto the top-level body.
+				raw, merr := json.Marshal(result)
+				if merr != nil {
+					return merr
+				}
+				var body map[string]any
+				if uerr := json.Unmarshal(raw, &body); uerr != nil {
+					return uerr
+				}
+				if body == nil {
+					body = map[string]any{}
+				}
+				if hs := cli.RenderJSONForEmit(preHints); hs != nil {
+					body["hints"] = hs
+				}
+				data, _ := json.MarshalIndent(body, "", "  ")
+				fmt.Println(string(data))
 			} else if !flagQuiet {
 				// Human-readable output
 				fmt.Printf("✓ Message sent: %s\n", result.MessageID)
@@ -835,6 +865,7 @@ The daemon must be running and you must have an active session.`,
 				for _, w := range result.Warnings {
 					fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 				}
+				cli.EmitStderr(preHints, flagQuiet, flagJSON)
 			}
 
 			return nil
