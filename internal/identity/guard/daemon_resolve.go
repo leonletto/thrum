@@ -93,11 +93,13 @@ func DaemonResolve(ctx context.Context, cfg Config, req DaemonResolveRequest, lo
 		if req.PeercredAgentID != "" {
 			if req.CallerAgentID != "" && req.CallerAgentID != req.PeercredAgentID {
 				e := &Error{
-					Guard:  "unauthenticated_rpc",
-					Reason: "identity_mismatch",
+					Guard:         "unauthenticated_rpc",
+					Reason:        "identity_mismatch",
+					ExpectedAgent: req.CallerAgentID,
+					DetectedAgent: req.PeercredAgentID,
 					Remediation: fmt.Sprintf(
-						"caller claimed %q but unix-socket peer credentials resolve to %q",
-						req.CallerAgentID, req.PeercredAgentID,
+						"your current directory is inside %q's worktree. cd into %q's worktree and retry, or drop the identity claim to act as %q.",
+						req.PeercredAgentID, req.CallerAgentID, req.PeercredAgentID,
 					),
 				}
 				// Forgery rejection is unconditional (fires regardless
@@ -116,11 +118,13 @@ func DaemonResolve(ctx context.Context, cfg Config, req DaemonResolveRequest, lo
 		if agentID := resolveByChain(ctx, req); agentID != "" {
 			if req.CallerAgentID != "" && req.CallerAgentID != agentID {
 				e := &Error{
-					Guard:  "unauthenticated_rpc",
-					Reason: "identity_mismatch",
+					Guard:         "unauthenticated_rpc",
+					Reason:        "identity_mismatch",
+					ExpectedAgent: req.CallerAgentID,
+					DetectedAgent: agentID,
 					Remediation: fmt.Sprintf(
-						"caller claimed %q but ancestor-chain walk resolves to %q",
-						req.CallerAgentID, agentID,
+						"your process ancestor chain belongs to %q. retry from %q's worktree or tmux pane, or drop the identity claim to act as %q.",
+						agentID, req.CallerAgentID, agentID,
 					),
 				}
 				emitGuardFire(logger, cfg.UnauthenticatedRPC, "denied", e)
