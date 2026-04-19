@@ -67,7 +67,15 @@ and this project adheres to
     - `--type a-sync` — asynchronous git-mediated peer. Requires
       `--remote <git-url>`. No live handshake; messages flow through git
       push/fetch. Suitable for peers that are not always online (CI, periodic
-      laptops, air-gapped review).
+      laptops, air-gapped review). On first add, configures the repo's
+      `origin` remote (idempotent; errors if `origin` is already set to a
+      different URL), verifies reachability via `git ls-remote`, and emits a
+      `daemon.identity` event on the `a-sync` branch so future joiners
+      discover this daemon's metadata. Peer identity uses a deterministic
+      `async:<hash>` placeholder until discovery refines it. Only
+      `https://`, `http://`, `ssh://`, `git://`, and SSH shorthand
+      (`user@host:path`) URLs are accepted; `file://` is rejected. Error
+      messages strip embedded credentials before surfacing URLs.
     - `--type repair` — re-verify and reconcile an EXISTING peer entry
       using stored secrets in `peers.json`. Valid only on `peer join`;
       rejected on `peer add`. Used to recover from drift (e.g., after a peer

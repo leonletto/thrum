@@ -5563,7 +5563,49 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				return code, bound, "network", nil
 
 			case "a-sync":
-				return "", "", "", fmt.Errorf("--type a-sync: git-remote configuration lands in xir.27 sub-component 3")
+				// xir.27 sub-3: configure the repo's 'origin' remote to point
+				// at the shared git URL, stamp a directory-only peer entry
+				// (Transport=a-sync, no Address/Token), and emit a
+				// daemon.identity event so other daemons fetching the
+				// remote's a-sync branch discover this daemon. The existing
+				// internal/sync/ loop handles the branch creation + push on
+				// its next tick (manually triggered below for responsiveness).
+				//
+				// No peercode is emitted; the CLI's peer-add flow (main.go
+				// peer add RunE) short-circuits wait_pairing on --type a-sync
+				// and surfaces success directly.
+				if syncLoop == nil {
+					return "", "", "", fmt.Errorf("--type a-sync: sync is not enabled on this daemon")
+				}
+				if err := daemon.ConfigureASyncRemote(ctx, absPath, remote); err != nil {
+					return "", "", "", err
+				}
+				if err := daemon.VerifyASyncRemoteReachable(ctx, absPath, remote); err != nil {
+					return "", "", "", err
+				}
+				ident := st.Identity()
+				identityEvent := map[string]any{
+					"type":           "daemon.identity",
+					"hostname":       ident.Hostname,
+					"repo_name":      ident.RepoName,
+					"repo_path":      ident.RepoPath,
+					"git_origin_url": ident.GitOriginURL,
+				}
+				if err := st.WriteEvent(ctx, identityEvent); err != nil {
+					return "", "", "", fmt.Errorf("--type a-sync: emit daemon.identity event: %w", err)
+				}
+				peer := &daemon.PeerInfo{
+					Name:        daemon.ASyncPeerName(remote),
+					DaemonID:    daemon.ASyncPeerDaemonID(remote),
+					Transport:   "a-sync",
+					ASyncRemote: strings.TrimSpace(remote),
+					Role:        "async",
+				}
+				if err := peerRegistry.AddPeer(peer); err != nil {
+					return "", "", "", fmt.Errorf("--type a-sync: stamp peer entry: %w", err)
+				}
+				syncLoop.TriggerSync()
+				return "", "", "a-sync", nil
 
 			case "repair":
 				return "", "", "", fmt.Errorf("--type repair is not valid for peer add (use 'thrum peer join --type repair <name>')")
