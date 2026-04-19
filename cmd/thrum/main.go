@@ -92,7 +92,11 @@ func buildRootCmd() *cobra.Command {
 		Long: `Thrum is a Git-backed messaging system for agent coordination.
 
 It enables agents and humans to communicate persistently across
-sessions, worktrees, and machines using Git as the sync layer.`,
+sessions, worktrees, and machines using Git as the sync layer.
+
+Environment variables:
+  THRUM_NO_HINTS=1   Suppress all CLI hints (both stderr trailers and JSON
+                     'hints' field). Useful in CI or scripted pipelines.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
