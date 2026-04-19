@@ -18,7 +18,18 @@
 set -euo pipefail
 
 HOOK_EVENT="${HOOK_EVENT:-PostToolUse}"
-THRUM_DIR="${THRUM_DIR:-.thrum}"
+
+# Derive THRUM_DIR from the script's own location (same pattern as
+# thrum-startup.sh). This makes the hook CWD-independent: Claude Code
+# may fire lifecycle hooks with a CWD that isn't the repo root (e.g.
+# subagent workflows, manually-cd'd tmux sessions). Using BASH_SOURCE
+# rather than a relative ".thrum" keeps the spool dir correctly
+# anchored regardless.
+if [[ -z "${THRUM_DIR:-}" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  DEFAULT_THRUM_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
+  THRUM_DIR="${THRUM_HOME:-$DEFAULT_THRUM_HOME}/.thrum"
+fi
 
 agent_id="$(thrum whoami --field agent_id 2>/dev/null || true)"
 [[ -z "$agent_id" ]] && exit 0

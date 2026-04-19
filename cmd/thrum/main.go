@@ -5247,22 +5247,36 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		// isn't on this daemon's disk). The agent-side check-inbox hook
 		// reads the spool and decides whether to surface a nudge (tmux dead)
 		// or silently consume (tmux alive — tmux path already handled it).
-		for _, recipient := range evt.Recipients {
-			if !nudge.HasLocalIdentity(thrumDir, recipient) {
-				continue
+		//
+		// Dispatched on its own goroutine (same async pattern as
+		// nudge.DispatchTmux) so the SetOnEventWrite writer goroutine
+		// doesn't block on the per-recipient git-worktree walk inside
+		// HasLocalIdentity. The hook contract is "synchronous but must not
+		// block" — a git subprocess per recipient on the hot write path
+		// violates that on busy daemons.
+		go func(evt types.MessageCreateEvent) {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("[inbox] spool dispatch panic", "panic", r)
+				}
+			}()
+			for _, recipient := range evt.Recipients {
+				if !nudge.HasLocalIdentity(thrumDir, recipient) {
+					continue
+				}
+				env := inbox.Envelope{
+					MsgID:      evt.MessageID,
+					From:       "@" + evt.AgentID,
+					ReceivedAt: time.Now().UTC(),
+				}
+				if err := inbox.WriteSpool(thrumDir, recipient, env); err != nil {
+					slog.Warn("[inbox] spool write failed",
+						"agent", recipient, "msg_id", evt.MessageID, "err", err)
+					// Continue — DB is authoritative; cron backstop surfaces
+					// unread messages regardless of spool state.
+				}
 			}
-			env := inbox.Envelope{
-				MsgID:      evt.MessageID,
-				From:       "@" + evt.AgentID,
-				ReceivedAt: time.Now().UTC(),
-			}
-			if err := inbox.WriteSpool(thrumDir, recipient, env); err != nil {
-				slog.Warn("[inbox] spool write failed",
-					"agent", recipient, "msg_id", evt.MessageID, "err", err)
-				// Continue — DB is authoritative; cron backstop surfaces
-				// unread messages regardless of spool state.
-			}
-		}
+		}(evt)
 	})
 
 	if syncManager != nil {
@@ -5922,7 +5936,8 @@ func queryMessageReadState(ctx context.Context, st *state.State, msgID, agentID 
 		// Unexpected DB error on the read-state probe. Keep the file
 		// (conservative default) but surface the error so persistent
 		// DB trouble is visible in the janitor logs.
-		log.Printf("inbox_janitor: message_deliveries probe for %s/%s: %v", agentID, msgID, err)
+		slog.Warn("[inbox_janitor] message_deliveries probe failed",
+			"agent", agentID, "msg_id", msgID, "err", err)
 	}
 	return inbox.StateUnread
 }
