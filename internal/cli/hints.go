@@ -10,9 +10,14 @@ var (
 	hintRandom = rand.New(rand.NewSource(time.Now().UnixNano())) // #nosec G404 -- non-security RNG used only for UI hint rotation, not crypto //nolint:gosec
 )
 
-// Hint returns a contextual hint for the given command.
+// LegacyHint returns a contextual hint for the given command using the
+// legacy random-rotation flat-map model. Kept as the fallback path for
+// commands that haven't migrated to the per-command HintSource model
+// (see hint_types.go, hint_registry.go). Package-level identifier freed
+// up so that the new `Hint` struct type can use it.
+//
 // Returns empty string if hints should be suppressed (quiet/JSON mode).
-func Hint(command string, quiet, jsonMode bool) string {
+func LegacyHint(command string, quiet, jsonMode bool) string {
 	if quiet || jsonMode {
 		return ""
 	}

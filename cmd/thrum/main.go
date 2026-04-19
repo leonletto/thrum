@@ -988,7 +988,7 @@ The daemon must be running and you must have an active session.`,
 				}
 				fmt.Print(cli.FormatInboxWithOptions(result, fmtOpts))
 				if !flagQuiet {
-					fmt.Print(cli.Hint("inbox", flagQuiet, flagJSON))
+					fmt.Print(cli.LegacyHint("inbox", flagQuiet, flagJSON))
 				}
 			}
 
@@ -2183,7 +2183,7 @@ The agent identity is determined from:
 				// Human-readable formatted output
 				fmt.Print(cli.FormatRegisterResponse(result))
 				if result.Status == "registered" || result.Status == "updated" {
-					fmt.Print(cli.Hint("agent.register", flagQuiet, flagJSON))
+					fmt.Print(cli.LegacyHint("agent.register", flagQuiet, flagJSON))
 				}
 			}
 
@@ -4573,7 +4573,7 @@ Examples:
 			} else {
 				fmt.Print(cli.FormatQuickstart(result))
 				if !flagQuiet {
-					fmt.Print(cli.Hint("quickstart", flagQuiet, flagJSON))
+					fmt.Print(cli.LegacyHint("quickstart", flagQuiet, flagJSON))
 				}
 			}
 
@@ -4630,7 +4630,7 @@ Examples:
 			} else {
 				fmt.Print(cli.FormatOverview(result))
 				if !flagQuiet {
-					fmt.Print(cli.Hint("overview", flagQuiet, flagJSON))
+					fmt.Print(cli.LegacyHint("overview", flagQuiet, flagJSON))
 				}
 			}
 
@@ -4722,7 +4722,7 @@ Examples:
 			} else {
 				fmt.Print(cli.FormatWhoHas(file, result))
 				if !flagQuiet {
-					fmt.Print(cli.Hint("who-has", flagQuiet, flagJSON))
+					fmt.Print(cli.LegacyHint("who-has", flagQuiet, flagJSON))
 				}
 			}
 
@@ -4777,7 +4777,7 @@ Examples:
 			} else {
 				fmt.Print(cli.FormatPing(name, agents, contexts))
 				if !flagQuiet {
-					fmt.Print(cli.Hint("ping", flagQuiet, flagJSON))
+					fmt.Print(cli.LegacyHint("ping", flagQuiet, flagJSON))
 				}
 			}
 
@@ -4860,7 +4860,7 @@ func sessionHeartbeatRunE(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Print(cli.FormatHeartbeat(result))
 		if !flagQuiet {
-			fmt.Print(cli.Hint("session.heartbeat", flagQuiet, flagJSON))
+			fmt.Print(cli.LegacyHint("session.heartbeat", flagQuiet, flagJSON))
 		}
 	}
 
