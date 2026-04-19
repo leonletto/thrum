@@ -345,6 +345,8 @@ func TestPeerInfo_NewFields_Persist(t *testing.T) {
 		Address:      "peer.example.com:9100",
 		Transport:    "tailscale",
 		RepoPath:     "/home/user/project",
+		// thrum-b6yv: pass an unclean prefix to assert the AddPeer
+		// boundary sanitizes it. "remote." → "remote-".
 		ProxyPrefix:  "remote.",
 		RemoteAgents: []string{"agent-a", "agent-b"},
 		Role:         "listener",
@@ -369,8 +371,8 @@ func TestPeerInfo_NewFields_Persist(t *testing.T) {
 	if got.RepoPath != "/home/user/project" {
 		t.Errorf("RepoPath = %q, want %q", got.RepoPath, "/home/user/project")
 	}
-	if got.ProxyPrefix != "remote." {
-		t.Errorf("ProxyPrefix = %q, want %q", got.ProxyPrefix, "remote.")
+	if got.ProxyPrefix != "remote-" {
+		t.Errorf("ProxyPrefix = %q, want %q (auto-sanitized at AddPeer boundary)", got.ProxyPrefix, "remote-")
 	}
 	if len(got.RemoteAgents) != 2 || got.RemoteAgents[0] != "agent-a" || got.RemoteAgents[1] != "agent-b" {
 		t.Errorf("RemoteAgents = %v, want [agent-a agent-b]", got.RemoteAgents)
@@ -667,6 +669,8 @@ func TestPeerRegistry_SetReconcileStatus(t *testing.T) {
 }
 
 // TestSanitizeProxyPrefix covers thrum-b6yv character-class rules.
+// TestSanitizeProxyPrefix covers thrum-b6yv character-class rules,
+// including the documented silent-drop behavior for non-ASCII runes.
 func TestSanitizeProxyPrefix(t *testing.T) {
 	cases := []struct {
 		in, want string
@@ -680,6 +684,12 @@ func TestSanitizeProxyPrefix(t *testing.T) {
 		{"UPPER123", "UPPER123"},
 		{"mix.of/weird chars!", "mix-of-weird-chars"}, // '!' is dropped
 		{"", ""},
+		// Documented silent-drop of non-ASCII runes. Intentional for
+		// now; see SanitizeProxyPrefix's doc comment for the rationale
+		// and deferred follow-up (transliteration).
+		{"léon-mac", "lon-mac"},
+		{"café", "caf"},
+		{"北京", ""},
 	}
 	for _, c := range cases {
 		if got := SanitizeProxyPrefix(c.in); got != c.want {
@@ -702,6 +712,118 @@ func TestDeriveProxyPrefix(t *testing.T) {
 	}
 	if got := DeriveProxyPrefix(&PeerInfo{}); got != "" {
 		t.Errorf("empty peer → empty prefix, got %q", got)
+	}
+}
+
+// TestPeerRegistry_FreshJoin_StampsFromRemoteRepoName exercises the
+// peer.join code path at the registry/derive level: construct a peer
+// the way the RPC handler does (JoinPeer returns PeerInfo with
+// RemoteRepoName populated), derive + stamp ProxyPrefix, persist, and
+// verify the stored entry has the expected prefix.
+func TestPeerRegistry_FreshJoin_StampsFromRemoteRepoName(t *testing.T) {
+	dir := t.TempDir()
+	reg, err := NewPeerRegistry(filepath.Join(dir, "peers.json"))
+	if err != nil {
+		t.Fatalf("NewPeerRegistry: %v", err)
+	}
+	// Shape mirrors peer.join --type local after syncManager.JoinPeer:
+	// Role=dialer, Transport=local, RemoteRepoName exchanged via pair.
+	p := &PeerInfo{
+		Name:           "leonsmacm1pro.local",
+		DaemonID:       "d_sf_01",
+		Token:          "tok-sf",
+		Role:           "dialer",
+		Transport:      "local",
+		RepoPath:       "/tmp/sibling",
+		RemoteRepoName: "mock-salesforce",
+	}
+	p.ProxyPrefix = DeriveProxyPrefix(p)
+	if err := reg.AddPeer(p); err != nil {
+		t.Fatalf("AddPeer: %v", err)
+	}
+	got := reg.GetPeer("d_sf_01")
+	if got == nil {
+		t.Fatalf("GetPeer(d_sf_01) = nil")
+	}
+	if got.ProxyPrefix != "mock-salesforce" {
+		t.Errorf("ProxyPrefix = %q, want %q", got.ProxyPrefix, "mock-salesforce")
+	}
+}
+
+// TestPeerRegistry_FreshJoin_FallsBackToPeerName covers the case where
+// RemoteRepoName is empty at peer.join time (older listener not emitting
+// repo metadata, or a legacy path). DeriveProxyPrefix must fall back to
+// the peer name and the stamped value must persist through AddPeer.
+func TestPeerRegistry_FreshJoin_FallsBackToPeerName(t *testing.T) {
+	dir := t.TempDir()
+	reg, err := NewPeerRegistry(filepath.Join(dir, "peers.json"))
+	if err != nil {
+		t.Fatalf("NewPeerRegistry: %v", err)
+	}
+	p := &PeerInfo{
+		Name:      "leonsmacm1pro.local",
+		DaemonID:  "d_sf_02",
+		Token:     "tok-sf2",
+		Role:      "dialer",
+		Transport: "local",
+		// RemoteRepoName deliberately empty
+	}
+	p.ProxyPrefix = DeriveProxyPrefix(p)
+	if err := reg.AddPeer(p); err != nil {
+		t.Fatalf("AddPeer: %v", err)
+	}
+	got := reg.GetPeer("d_sf_02")
+	if got == nil {
+		t.Fatalf("GetPeer(d_sf_02) = nil")
+	}
+	if got.ProxyPrefix != "leonsmacm1pro-local" {
+		t.Errorf("ProxyPrefix = %q, want %q (peer-name fallback, sanitized)", got.ProxyPrefix, "leonsmacm1pro-local")
+	}
+}
+
+// TestPeerRegistry_TwoPairsSameRepoName documents the actual uniqueness
+// boundary: AddPeer keys on DaemonID, NOT peer name. Two pairs with the
+// same remote_repo_name but distinct daemon_ids therefore both persist
+// and produce identical ProxyPrefix values. Proxy-prefix collision is
+// ultimately bounded by the `agents` table's agent_id uniqueness at
+// Relay-start time, not at peer-registry time. This test captures the
+// status-quo so future refactors do not silently change it.
+func TestPeerRegistry_TwoPairsSameRepoName(t *testing.T) {
+	dir := t.TempDir()
+	reg, err := NewPeerRegistry(filepath.Join(dir, "peers.json"))
+	if err != nil {
+		t.Fatalf("NewPeerRegistry: %v", err)
+	}
+	first := &PeerInfo{
+		Name:           "host-a",
+		DaemonID:       "d_a",
+		Token:          "tok-a",
+		Role:           "dialer",
+		RemoteRepoName: "mock-salesforce",
+	}
+	first.ProxyPrefix = DeriveProxyPrefix(first)
+	if err := reg.AddPeer(first); err != nil {
+		t.Fatalf("AddPeer(first): %v", err)
+	}
+
+	second := &PeerInfo{
+		Name:           "host-a", // same name, different daemon_id
+		DaemonID:       "d_b",
+		Token:          "tok-b",
+		Role:           "dialer",
+		RemoteRepoName: "mock-salesforce",
+	}
+	second.ProxyPrefix = DeriveProxyPrefix(second)
+	if err := reg.AddPeer(second); err != nil {
+		t.Fatalf("AddPeer(second): %v (expected success — name is not the uniqueness key)", err)
+	}
+
+	if len(reg.ListPeers()) != 2 {
+		t.Fatalf("ListPeers() = %d, want 2 (both stored — keyed by DaemonID)", len(reg.ListPeers()))
+	}
+	if reg.GetPeer("d_a").ProxyPrefix != "mock-salesforce" ||
+		reg.GetPeer("d_b").ProxyPrefix != "mock-salesforce" {
+		t.Error("both peers must keep their derived prefix; collision resolves later at agent.register")
 	}
 }
 

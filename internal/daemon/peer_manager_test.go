@@ -116,7 +116,7 @@ func TestPeerManager_ConnectPeer_Dialer(t *testing.T) {
 		Token:     "tok-sibling",
 		Role:      "dialer",
 		Transport: "local",
-		RepoPath:  "/tmp/sibling-repo",
+		RepoPath:  t.TempDir(),
 		PairedAt:  time.Now(),
 		LastSync:  time.Now(),
 	}
@@ -150,7 +150,7 @@ func TestPeerManager_ConnectPeer_Idempotent(t *testing.T) {
 		Token:     "tok-sibling",
 		Role:      "dialer",
 		Transport: "local",
-		RepoPath:  "/tmp/sibling-repo",
+		RepoPath:  t.TempDir(),
 		PairedAt:  time.Now(),
 		LastSync:  time.Now(),
 	}

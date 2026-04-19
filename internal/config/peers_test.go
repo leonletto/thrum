@@ -52,7 +52,7 @@ func TestLoadThrumConfig_PeersDefaults(t *testing.T) {
 
 // TestLoadThrumConfig_ExistingFileWithoutPeersStanza covers thrum-1k00:
 // configs written before the peers stanza existed leave cfg.Peers at its
-// Go zero-value after json.Unmarshal. applyDefaults must still fill
+// Go zero-value after json.Unmarshal. ApplyDefaults must still fill
 // AutoConnect=true in that case, otherwise auto-connect silently disables
 // on every pre-existing install.
 func TestLoadThrumConfig_ExistingFileWithoutPeersStanza(t *testing.T) {
@@ -97,5 +97,32 @@ func TestLoadThrumConfig_ExplicitAutoConnectFalse(t *testing.T) {
 	}
 	if cfg.Peers.PairingCodeLength != 16 {
 		t.Fatalf("Peers.PairingCodeLength = %d, want 16", cfg.Peers.PairingCodeLength)
+	}
+}
+
+// TestLoadThrumConfig_ExplicitAutoConnectFalseZeroLength regression-guards
+// the sentinel-decoupling fix: a user who writes
+// `{"peers": {"auto_connect": false, "pairing_code_length": 0}}` (or
+// simply `{"peers": {"auto_connect": false}}`) must keep AutoConnect=false
+// even though cfg.Peers ends up at the Go zero-value after JSON unmarshal.
+// The stanza-presence check via raw JSON is what preserves the explicit
+// choice; PairingCodeLength still receives its defaulted 16 separately.
+func TestLoadThrumConfig_ExplicitAutoConnectFalseZeroLength(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	body := `{"peers": {"auto_connect": false, "pairing_code_length": 0}}`
+	if err := os.WriteFile(configPath, []byte(body), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadThrumConfig: %v", err)
+	}
+	if cfg.Peers.AutoConnect {
+		t.Fatal("Peers.AutoConnect must remain false even with zero pairing_code_length")
+	}
+	if cfg.Peers.PairingCodeLength != 16 {
+		t.Fatalf("Peers.PairingCodeLength = %d, want 16 (field-level default)", cfg.Peers.PairingCodeLength)
 	}
 }

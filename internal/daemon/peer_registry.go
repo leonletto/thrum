@@ -18,9 +18,20 @@ import (
 // SanitizeProxyPrefix reduces a free-form name to a safe proxy-agent prefix.
 // Contract: output contains only [a-zA-Z0-9_-]. Dots and slashes are
 // replaced with '-' (so "my.repo" → "my-repo", "path/to/repo" → "path-to-repo").
-// Other unexpected characters are dropped entirely. Used by peer.join,
-// peer.add, and the peers.json load-time migration to keep proxy agent
-// names parseable by the mention/recipient parser (thrum-b6yv).
+// Other unexpected characters — including non-ASCII runes like accented
+// letters — are DROPPED silently. This means "léon-mac" collapses to
+// "lon-mac", and two inputs that differ only in their dropped runes can
+// collide on the same sanitized output.
+//
+// The silent-drop behavior is deliberate for now: repo names in the wild
+// are overwhelmingly ASCII, agent-mention syntax expects a narrow character
+// class, and any transliteration step (golang.org/x/text/unicode/norm) is
+// heavier than the current scope justifies. Revisit if non-ASCII repo
+// names surface in practice; follow-up tracked as future work on
+// thrum-b6yv.
+//
+// Used by peer.join, peer.add, and the peers.json load-time migration to
+// keep proxy agent names parseable by the mention/recipient parser.
 func SanitizeProxyPrefix(s string) string {
 	if s == "" {
 		return ""
@@ -190,6 +201,13 @@ func (r *PeerRegistry) AddPeer(info *PeerInfo) error {
 	}
 	if info.LastSync.IsZero() {
 		info.LastSync = time.Now()
+	}
+	// thrum-b6yv: auto-sanitize the prefix at the boundary so legacy
+	// callers or tests that pass a raw "my.repo" / "remote." value end
+	// up with a valid proxy-agent prefix on disk. Idempotent — an
+	// already-sanitized string round-trips unchanged.
+	if info.ProxyPrefix != "" {
+		info.ProxyPrefix = SanitizeProxyPrefix(info.ProxyPrefix)
 	}
 
 	r.peers[info.DaemonID] = info
@@ -402,7 +420,12 @@ func backupPeersOnce(src, dst string) error {
 }
 
 // load reads the peers.json file, auto-detecting old array or new object format.
+// Takes r.mu for the whole call so the saveLocked invocation at the bottom
+// respects its "caller must hold mu" contract, even though today's only caller
+// (NewPeerRegistry) has not yet published the registry.
 func (r *PeerRegistry) load() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	data, err := os.ReadFile(r.filePath)
 	if err != nil {
 		return fmt.Errorf("read peers file: %w", err)

@@ -282,9 +282,22 @@ func LoadThrumConfig(thrumDir string) (*ThrumConfig, error) {
 		return nil, err
 	}
 
+	// thrum-1k00: detect whether the "peers" key is present in the raw
+	// JSON. A stanza present with zero-values is distinguishable from
+	// an absent stanza only at the raw JSON level — json.Unmarshal
+	// leaves cfg.Peers at its Go zero-value in both cases. Without this
+	// distinction, defaulting AutoConnect on a zero-valued struct would
+	// clobber an explicit `auto_connect: false`.
+	var raw map[string]json.RawMessage
+	_ = json.Unmarshal(data, &raw) // best-effort; Unmarshal below reports real errors
+
 	var cfg ThrumConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err
+	}
+
+	if _, peersPresent := raw["peers"]; !peersPresent {
+		cfg.Peers = DefaultPeersConfig()
 	}
 
 	applyDefaults(&cfg)
@@ -313,12 +326,12 @@ func applyDefaults(cfg *ThrumConfig) {
 	if cfg.Backup.Retention.Monthly == nil {
 		cfg.Backup.Retention.Monthly = IntPtr(DefaultRetentionMonthly)
 	}
-	// Apply peers defaults for missing fields. PairingCodeLength==0 is
-	// our "stanza absent" signal because zero is never a valid code length;
-	// in that case the user could not have intentionally set AutoConnect
-	// either, so restore the full DefaultPeersConfig() (thrum-1k00).
+	// Stanza-present-but-partial defaults. When the whole peers stanza
+	// is absent LoadThrumConfig has already substituted DefaultPeersConfig()
+	// (thrum-1k00), so here we only fill individual fields that remained
+	// at zero-value after a partial user-supplied stanza.
 	if cfg.Peers.PairingCodeLength == 0 {
-		cfg.Peers = DefaultPeersConfig()
+		cfg.Peers.PairingCodeLength = DefaultPeersConfig().PairingCodeLength
 	}
 	if cfg.Daemon.PeerPort == "" {
 		cfg.Daemon.PeerPort = "auto"
