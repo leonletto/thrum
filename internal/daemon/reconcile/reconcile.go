@@ -161,6 +161,23 @@ func (m *Manager) ReconcileOne(ctx context.Context, peerName string) (Result, er
 	return res, nil
 }
 
+// ReconcileOneHook is the daemon.ReconcileHook-compatible entry point.
+// It runs the same ReconcileOne logic but returns a flattened tuple
+// (ok, daemonIDChanged, category, err) to avoid forcing the daemon
+// package to import reconcile.Result (which would cycle, since
+// reconcile already imports daemon for PeerRegistry).
+//
+// The int category mirrors ErrCategory: 0=CatOK, 1=CatUnreachable,
+// 2=CatTokenRejected, 3=CatOther. Kept in sync with dial.go's ErrCategory
+// constants.
+func (m *Manager) ReconcileOneHook(ctx context.Context, peerName string) (ok bool, daemonIDChanged bool, category int, err error) {
+	res, e := m.ReconcileOne(ctx, peerName)
+	if e != nil {
+		return false, false, int(res.Category), e
+	}
+	return res.OK, res.OldDaemonID != res.NewDaemonID && res.OK, int(res.Category), nil
+}
+
 // ReconcileAll reconciles every peer in the registry, bounded to 4
 // concurrent dials. Per-peer locking (see Manager.locks) means
 // different peers proceed in parallel; same-peer is serialized.

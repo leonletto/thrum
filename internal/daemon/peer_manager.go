@@ -11,6 +11,27 @@ import (
 	"github.com/leonletto/thrum/internal/bridge/peer"
 )
 
+// ReconcileHook is the xir.29 interface PeerManager consumes to invoke
+// auto-reconcile from the bridge reconnect loop (OnDialError). The real
+// implementation lives in internal/daemon/reconcile; interface lives
+// here to keep the daemon→reconcile dependency one-way (reconcile
+// already imports daemon for PeerRegistry — a reverse import would
+// cycle).
+//
+// Contract:
+//   - err is non-nil only for unexpected plumbing failures (peer not
+//     found, internal mutex issues). Dial/auth failures surface via
+//     (ok=false, category=<CatUnreachable|CatTokenRejected|CatOther>).
+//   - daemonIDChanged=true iff a successful reconcile re-keyed the
+//     peer (daemon_id rotation healed); signals the caller that an
+//     immediate retry is worthwhile.
+//   - category matches reconcile.ErrCategory values; 0 = CatOK, 1 =
+//     CatUnreachable, 2 = CatTokenRejected, 3 = CatOther. Duplicated
+//     as plain ints here to avoid the import cycle.
+type ReconcileHook interface {
+	ReconcileOneHook(ctx context.Context, peerName string) (ok bool, daemonIDChanged bool, category int, err error)
+}
+
 // PeerManager manages outbound PeerBridge connections (dialer role) and
 // handles listener-side acceptance when remote peers connect to us.
 type PeerManager struct {
@@ -19,6 +40,27 @@ type PeerManager struct {
 	logger      *log.Logger
 	mu          sync.Mutex
 	bridges     map[string]*runningBridge
+
+	// reconcileHook is the xir.29 auto-reconcile entry point invoked
+	// from the OnDialError hook on each bridge. nil disables reconcile
+	// (pre-xir.29 behavior preserved for tests and for deployments
+	// that skip wiring reconcile at boot).
+	reconcileHook ReconcileHook
+	// attemptStates tracks per-peer reconcile attempt counts for the
+	// xir.29 3-attempt cap. Hoisted onto PeerManager (not the
+	// OnDialError closure) so counters persist across BuildConfigs
+	// calls — a single peer's bridge can be rebuilt during its
+	// lifetime (AcceptPeer path) and we do not want the counter to
+	// reset mid-drift (N2 review finding).
+	attemptStates sync.Map // map[string]*peerAttemptState
+}
+
+// peerAttemptState is the per-peer reconcile attempt counter state
+// consumed by the OnDialError hook (xir.29). Protected by its own
+// mutex; accessed from the bridge goroutine via a sync.Map lookup.
+type peerAttemptState struct {
+	mu    sync.Mutex
+	count int
 }
 
 type runningBridge struct {
@@ -116,6 +158,15 @@ func (pm *PeerManager) AcceptPeer(ctx context.Context, peerInfo *PeerInfo) {
 		RemoteAgents: peerInfo.RemoteAgents,
 	}
 	pm.startBridge(ctx, cfg)
+}
+
+// SetReconcileManager installs an xir.29 ReconcileHook. Must be called
+// before ConnectAll for newly-built bridges to carry the OnDialError
+// hook. Safe to call with nil to disable reconcile.
+func (pm *PeerManager) SetReconcileManager(h ReconcileHook) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	pm.reconcileHook = h
 }
 
 // ActiveCount returns the number of currently-managed bridges.

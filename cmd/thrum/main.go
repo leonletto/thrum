@@ -37,6 +37,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/monitor"
 	"github.com/leonletto/thrum/internal/daemon/nudge"
 	"github.com/leonletto/thrum/internal/daemon/permission"
+	"github.com/leonletto/thrum/internal/daemon/reconcile"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
@@ -6370,10 +6371,62 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	}
 
 	// Auto-connect to dialer-role peers after the WS server is ready.
+	// xir.29: build a single reconcile.Manager shared by the boot-time
+	// scan below and the send-time OnDialError hook wired via
+	// peerManager.SetReconcileManager (Phase 5). Defined here so both
+	// consumers observe the same attempt/lock state.
+	var reconcileMgr *reconcile.Manager
+	if peerManager != nil && peerRegistry != nil {
+		localIdent := st.Identity()
+		localDialer := reconcile.DialerIdentity{
+			DaemonID:     peerRegistry.LocalDaemonID(),
+			RepoName:     localIdent.RepoName,
+			Hostname:     localIdent.Hostname,
+			RepoPath:     localIdent.RepoPath,
+			GitOriginURL: localIdent.GitOriginURL,
+		}
+		reconcileMgr = reconcile.NewManager(peerRegistry, reconcile.WSDial, localDialer)
+		peerManager.SetReconcileManager(reconcileMgr)
+	}
+
 	if peerManager != nil && thrumCfg.Peers.AutoConnect {
 		go func() {
 			time.Sleep(500 * time.Millisecond) // Wait for WS server to start
 			peerManager.ConnectAll(ctx)
+		}()
+	}
+
+	// xir.29: one-shot boot-time reconcile scan. NOT periodic — fires
+	// once after bridges have had a chance to attempt their initial
+	// dial via ConnectAll, then exits. Per-peer drift is surfaced via
+	// PeerInfo.ReconcileStatus → `thrum peer list`.
+	//
+	// The 2s settling window gives bridge.ConnectAll (scheduled at
+	// 500ms) time to complete its first dial round; any drift indicators
+	// (daemon_id rotation, etc.) surface before reconcile kicks in.
+	// peer.repair is registered statically before lifecycle.Run (see
+	// the tsnet+WS registration sites above) so there is no handler-
+	// registration race.
+	if reconcileMgr != nil {
+		go func() {
+			select {
+			case <-time.After(2 * time.Second):
+			case <-ctx.Done():
+				return
+			}
+			results := reconcileMgr.ReconcileAll(ctx)
+			var attempted, succeeded, failed int
+			for _, r := range results {
+				attempted++
+				if r.OK {
+					succeeded++
+				} else {
+					failed++
+					log.Printf("[reconcile][debug] %s: %v (category=%d)", r.PeerName, r.Err, r.Category)
+				}
+			}
+			log.Printf("[reconcile] boot scan: %d peers attempted, %d succeeded, %d failed",
+				attempted, succeeded, failed)
 		}()
 	}
 
