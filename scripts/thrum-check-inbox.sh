@@ -13,7 +13,7 @@
 #   HOOK_EVENT=Stop  → {"decision":"block","reason":"<nudge>"}
 #   else             → {"hookSpecificOutput":{"hookEventName":"<event>","additionalContext":"<nudge>"}}
 #
-# Dependencies: thrum binary, bash 4+. No jq, no ps, no tmux.
+# Dependencies: thrum binary, bash 3.2+. No jq, no ps, no tmux.
 
 set -euo pipefail
 
