@@ -136,11 +136,16 @@ func (pm *PeerManager) BuildConfigs() []peer.BridgeConfig {
 // reconcile callback (listener-side reverse bridges and newly-paired
 // dialers both rely on the first dial succeeding via stored secrets).
 func (pm *PeerManager) buildConfigForPeer(p *PeerInfo) peer.BridgeConfig {
+	// thrum-bew3: sanitize p.Name before folding into BridgeUserID. The
+	// peer name is typically a hostname (dots) or similar free-form
+	// identifier, but the daemon's user.register validator rejects
+	// anything outside [a-zA-Z0-9_-]. Without this, the bridge handshake
+	// fails on user.register and reconnect-loops forever.
 	cfg := peer.BridgeConfig{
 		LocalWSPort:  pm.localWSPort,
 		PeerName:     p.Name,
 		PeerToken:    p.Token,
-		BridgeUserID: fmt.Sprintf("user:peer-%s", p.Name),
+		BridgeUserID: "user:peer-" + SanitizeProxyPrefix(p.Name),
 		ProxyPrefix:  p.ProxyPrefix,
 		RemoteAgents: p.RemoteAgents,
 	}

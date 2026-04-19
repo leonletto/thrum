@@ -103,6 +103,42 @@ func TestPeerManager_BuildConfigs_LocalPeer(t *testing.T) {
 	}
 }
 
+// TestPeerManager_BuildConfigs_SanitizesBridgeUserID covers thrum-bew3:
+// peer names derived from hostnames routinely contain dots, but the
+// daemon's user.register validator rejects any character outside
+// [a-zA-Z0-9_-]. buildConfigForPeer must therefore sanitize the peer
+// name before folding it into BridgeUserID, otherwise the bridge
+// handshake fails in a tight reconnect loop.
+func TestPeerManager_BuildConfigs_SanitizesBridgeUserID(t *testing.T) {
+	pm, reg := newTestPeerManager(t)
+
+	dotted := &PeerInfo{
+		Name:     "foo.bar.local",
+		DaemonID: "daemon-dotted",
+		Address:  "100.64.1.9:9100",
+		Token:    "tok-dotted",
+		Role:     "dialer",
+		PairedAt: time.Now(),
+		LastSync: time.Now(),
+	}
+	if err := reg.AddPeer(dotted); err != nil {
+		t.Fatalf("AddPeer: %v", err)
+	}
+
+	configs := pm.BuildConfigs()
+	if len(configs) != 1 {
+		t.Fatalf("BuildConfigs() = %d, want 1", len(configs))
+	}
+	if got := configs[0].BridgeUserID; got != "user:peer-foo-bar-local" {
+		t.Errorf("BridgeUserID = %q, want %q", got, "user:peer-foo-bar-local")
+	}
+	// PeerName itself should remain unchanged on the config (used for
+	// logging and address lookup). Only the user identifier is sanitized.
+	if got := configs[0].PeerName; got != "foo.bar.local" {
+		t.Errorf("PeerName = %q, want %q (raw peer name preserved)", got, "foo.bar.local")
+	}
+}
+
 // TestPeerManager_ConnectPeer_Dialer verifies that ConnectPeer on a dialer
 // peer registers a running bridge without waiting for ConnectAll.
 // Covers thrum-1f4y: peer.join must spawn a bridge immediately, not wait
