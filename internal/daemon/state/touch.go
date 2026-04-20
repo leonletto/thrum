@@ -3,6 +3,7 @@ package state
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 )
 
@@ -12,6 +13,14 @@ import (
 // worrying about SQLite churn. 30s granularity is well under the
 // RecipientStaleThreshold (30m) that consumes last_seen.
 const touchDebounceWindow = 30 * time.Second
+
+// touchCacheEvictAt triggers an opportunistic prune of stale entries
+// in the touchTimes map. Bounds memory growth in long-running daemons
+// with agent churn: every distinct agent_id that touches the daemon
+// creates an entry, and nothing else evicts deregistered agents.
+// Picked so the map stays cache-line-friendly for the common case of
+// a small team while still giving headroom before eviction runs.
+const touchCacheEvictAt = 256
 
 // TouchAgentLastSeen advances the agent's last_seen_at column to the
 // current wall clock, debounced to touchDebounceWindow per agent_id.
@@ -57,6 +66,17 @@ func (s *State) touchAgentLastSeenAt(ctx context.Context, agentID string, now ti
 		return nil
 	}
 	s.touchTimes[agentID] = now
+	if len(s.touchTimes) > touchCacheEvictAt {
+		// Opportunistic prune: drop entries older than the debounce
+		// window. Any future touch for a pruned agent_id will be
+		// treated as "first touch" and correctly write through, so
+		// eviction is safe to run at any time.
+		for id, t := range s.touchTimes {
+			if now.Sub(t) >= touchDebounceWindow {
+				delete(s.touchTimes, id)
+			}
+		}
+	}
 	s.touchMu.Unlock()
 
 	timestamp := now.Format(time.RFC3339Nano)
@@ -67,11 +87,16 @@ func (s *State) touchAgentLastSeenAt(ctx context.Context, agentID string, now ti
 		return fmt.Errorf("touch agent last_seen: %w", err)
 	}
 	// Best-effort: also advance the agent's active session so team.list
-	// and the send.recipient-stale hint see the fresh timestamp. Ignore
-	// the error — no active session is a common case (no-op UPDATE).
-	_, _ = s.DB().ExecContext(ctx,
+	// and the send.recipient-stale hint see the fresh timestamp. A
+	// no-op update (no active session for this agent) is not an error,
+	// but a real DB failure is worth surfacing at debug level so a
+	// future schema migration that drops sessions.last_seen_at doesn't
+	// fail silently.
+	if _, err := s.DB().ExecContext(ctx,
 		`UPDATE sessions SET last_seen_at = ? WHERE agent_id = ? AND ended_at IS NULL`,
 		timestamp, agentID,
-	)
+	); err != nil {
+		slog.Debug("touch session last_seen failed", "agent_id", agentID, "err", err)
+	}
 	return nil
 }

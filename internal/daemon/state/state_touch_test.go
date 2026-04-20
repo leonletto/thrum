@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -161,6 +162,48 @@ func TestTouchAgentLastSeen_EndedSessionNotTouched(t *testing.T) {
 	}
 	if sessLastSeen != "2026-01-01T00:00:00Z" {
 		t.Errorf("sessions.last_seen_at = %q, want seed value preserved (ended session)", sessLastSeen)
+	}
+}
+
+// TestTouchAgentLastSeen_EvictsStaleEntries pins the opportunistic
+// prune that bounds the touchTimes map. After more than
+// touchCacheEvictAt entries accumulate, a fresh touch drops entries
+// older than the debounce window. Prevents unbounded memory growth in
+// long-running daemons with agent churn.
+func TestTouchAgentLastSeen_EvictsStaleEntries(t *testing.T) {
+	s := newTestStateForTouch(t)
+
+	base := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	stale := base
+
+	// Push the map past the eviction threshold with entries that will
+	// all qualify as "stale" when the next touch fires.
+	for i := 0; i <= touchCacheEvictAt; i++ {
+		id := fmt.Sprintf("stale_agent_%04d", i)
+		seedAgent(t, s, id, "2026-01-01T00:00:00Z")
+		if err := s.touchAgentLastSeenAt(context.Background(), id, stale); err != nil {
+			t.Fatalf("touch %s: %v", id, err)
+		}
+	}
+
+	// Live touch well past the debounce window should trigger prune.
+	live := base.Add(10 * time.Minute)
+	liveID := "live_agent"
+	seedAgent(t, s, liveID, "2026-01-01T00:00:00Z")
+	if err := s.touchAgentLastSeenAt(context.Background(), liveID, live); err != nil {
+		t.Fatalf("live touch: %v", err)
+	}
+
+	s.touchMu.Lock()
+	size := len(s.touchTimes)
+	_, liveStillPresent := s.touchTimes[liveID]
+	s.touchMu.Unlock()
+
+	if size > touchCacheEvictAt {
+		t.Errorf("touchTimes size = %d after prune, want ≤ %d", size, touchCacheEvictAt)
+	}
+	if !liveStillPresent {
+		t.Errorf("live agent was evicted; prune should keep recent entries")
 	}
 }
 

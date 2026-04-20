@@ -774,17 +774,21 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	h.state.RLock()
 	defer h.state.RUnlock()
 
-	// Resolve current agent ID once — used for exclude_self, is_read, and unread count.
-	// Use resolveAgentOnly (not resolveAgentAndSession) so the unread count works
-	// even when the caller has no active session (e.g., thrum prime on startup).
-	var currentAgentID string
-	if req.ExcludeSelf || req.Unread || req.UnreadForAgent != "" {
-		currentAgentID = h.resolveAgentOnly(ctx, req.CallerAgentID)
-	}
+	// Resolve current agent ID once — used for exclude_self, is_read,
+	// unread count, AND thrum-7nuj last_seen touch. Resolve
+	// unconditionally so bare message.list (UI full-inbox view, or
+	// `thrum inbox` without flags) still signals liveness; the state
+	// layer debounces so the extra resolve work is not amplified into
+	// DB churn.
+	//
+	// resolveAgentOnly returns "" on failure, which naturally skips the
+	// touch for anonymous callers — no extra gate needed.
+	currentAgentID := h.resolveAgentOnly(ctx, req.CallerAgentID)
 
-	// thrum-7nuj: message.list with a resolved caller is a liveness
-	// signal — `thrum inbox --unread` is the most common coordinator
-	// poll loop. Debounced in the state layer; safe with the RLock held.
+	// Safe with the RLock held — TouchAgentLastSeen acquires touchMu
+	// (independent of state.mu) and writes directly via the DB()
+	// accessor. If a future refactor grows touchAgentLastSeenAt to
+	// acquire state.mu, revisit this call site.
 	if currentAgentID != "" {
 		_ = h.state.TouchAgentLastSeen(ctx, currentAgentID)
 	}

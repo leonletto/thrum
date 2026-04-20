@@ -13,7 +13,7 @@ import (
 // registered agent must advance that agent's last_seen_at timestamp.
 func TestMessageSend_TouchesLastSeen(t *testing.T) {
 	st, senderID, targetID, handler := setupTwoAgents(t, "sender", "target")
-	defer func() { _ = st.Close() }()
+	t.Cleanup(func() { _ = st.Close() })
 
 	// Freeze last_seen_at to a known past value so the assertion is
 	// unambiguous (bypass session.heartbeat's own write).
@@ -50,7 +50,7 @@ func TestMessageSend_TouchesLastSeen(t *testing.T) {
 // is a liveness signal for the reader.
 func TestMessageMarkRead_TouchesLastSeen(t *testing.T) {
 	st, senderID, targetID, handler := setupTwoAgents(t, "sender", "target")
-	defer func() { _ = st.Close() }()
+	t.Cleanup(func() { _ = st.Close() })
 
 	// Send a message so there's something to mark read.
 	sendParams, _ := json.Marshal(SendRequest{
@@ -89,7 +89,7 @@ func TestMessageMarkRead_TouchesLastSeen(t *testing.T) {
 // constantly. This must advance last_seen for the listing agent.
 func TestMessageList_TouchesLastSeen(t *testing.T) {
 	st, senderID, _, handler := setupTwoAgents(t, "sender", "target")
-	defer func() { _ = st.Close() }()
+	t.Cleanup(func() { _ = st.Close() })
 
 	stalePast := "2026-01-01T00:00:00Z"
 	if _, err := st.RawDB().Exec(`UPDATE agents SET last_seen_at = ? WHERE agent_id = ?`, stalePast, senderID); err != nil {
@@ -115,7 +115,7 @@ func TestMessageList_TouchesLastSeen(t *testing.T) {
 // single last_seen_at update. Prevents SQLite write storms on hot loops.
 func TestMessageSend_DebouncesRapidCalls(t *testing.T) {
 	st, senderID, targetID, handler := setupTwoAgents(t, "sender", "target")
-	defer func() { _ = st.Close() }()
+	t.Cleanup(func() { _ = st.Close() })
 
 	stalePast := "2026-01-01T00:00:00Z"
 	if _, err := st.RawDB().Exec(`UPDATE agents SET last_seen_at = ? WHERE agent_id = ?`, stalePast, senderID); err != nil {
@@ -145,11 +145,148 @@ func TestMessageSend_DebouncesRapidCalls(t *testing.T) {
 	}
 }
 
+// TestMessageSend_ReplyTouchesLastSeen exercises the reply path
+// explicitly (SendRequest.ReplyTo set) to pin that thrum-7nuj covers
+// `thrum reply` in addition to bare send. The current handler shares
+// the touch call site across both, but the dispatch called the reply
+// case out explicitly so we pin it.
+func TestMessageSend_ReplyTouchesLastSeen(t *testing.T) {
+	st, senderID, targetID, handler := setupTwoAgents(t, "sender", "target")
+	t.Cleanup(func() { _ = st.Close() })
+
+	// First message from sender so the reply has a parent to point at.
+	parentReq, _ := json.Marshal(SendRequest{
+		Content:       "parent",
+		To:            "@" + targetID,
+		CallerAgentID: senderID,
+	})
+	parentResp, err := handler.HandleSend(context.Background(), parentReq)
+	if err != nil {
+		t.Fatalf("HandleSend(parent): %v", err)
+	}
+	parentID := parentResp.(*SendResponse).MessageID
+
+	// Reset target's last_seen so the reply's touch is the only
+	// source of change on this assertion.
+	stalePast := "2026-01-01T00:00:00Z"
+	if _, err := st.RawDB().Exec(`UPDATE agents SET last_seen_at = ? WHERE agent_id = ?`, stalePast, targetID); err != nil {
+		t.Fatalf("seed stale last_seen for target: %v", err)
+	}
+
+	// Target replies — this hits HandleSend with ReplyTo populated.
+	replyReq, _ := json.Marshal(SendRequest{
+		Content:       "reply body",
+		ReplyTo:       parentID,
+		CallerAgentID: targetID,
+	})
+	if _, err := handler.HandleSend(context.Background(), replyReq); err != nil {
+		t.Fatalf("HandleSend(reply): %v", err)
+	}
+
+	got := readLastSeen(t, st, targetID)
+	if got == stalePast {
+		t.Errorf("target last_seen_at unchanged after reply; want advanced from %q", stalePast)
+	}
+}
+
+// TestMessageList_BareFormTouchesLastSeen covers the dual-review
+// finding: bare message.list (no ExcludeSelf/Unread/UnreadForAgent
+// flags) must still advance last_seen. The UI's full-inbox view and
+// `thrum inbox` (unflagged) hit this path.
+func TestMessageList_BareFormTouchesLastSeen(t *testing.T) {
+	st, senderID, _, handler := setupTwoAgents(t, "sender", "target")
+	t.Cleanup(func() { _ = st.Close() })
+
+	stalePast := "2026-01-01T00:00:00Z"
+	if _, err := st.RawDB().Exec(`UPDATE agents SET last_seen_at = ? WHERE agent_id = ?`, stalePast, senderID); err != nil {
+		t.Fatalf("seed stale last_seen: %v", err)
+	}
+
+	// No flags — bare list.
+	listParams, _ := json.Marshal(ListMessagesRequest{
+		CallerAgentID: senderID,
+	})
+	if _, err := handler.HandleList(context.Background(), listParams); err != nil {
+		t.Fatalf("HandleList: %v", err)
+	}
+
+	got := readLastSeen(t, st, senderID)
+	if got == stalePast {
+		t.Errorf("last_seen_at unchanged after bare message.list; want advanced from %q", stalePast)
+	}
+}
+
+// TestSessionSetIntent_TouchesLastSeen pins the session.setIntent wire.
+func TestSessionSetIntent_TouchesLastSeen(t *testing.T) {
+	st, senderID, _, _ := setupTwoAgents(t, "sender", "target")
+	t.Cleanup(func() { _ = st.Close() })
+
+	var senderSessionID string
+	if err := st.RawDB().QueryRow(
+		`SELECT session_id FROM sessions WHERE agent_id = ? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
+		senderID,
+	).Scan(&senderSessionID); err != nil {
+		t.Fatalf("look up sender session: %v", err)
+	}
+
+	stalePast := "2026-01-01T00:00:00Z"
+	if _, err := st.RawDB().Exec(`UPDATE agents SET last_seen_at = ? WHERE agent_id = ?`, stalePast, senderID); err != nil {
+		t.Fatalf("seed stale last_seen: %v", err)
+	}
+
+	sessionHandler := NewSessionHandler(st)
+	params, _ := json.Marshal(SetIntentRequest{
+		SessionID: senderSessionID,
+		Intent:    "shipping 7nuj",
+	})
+	if _, err := sessionHandler.HandleSetIntent(context.Background(), params); err != nil {
+		t.Fatalf("HandleSetIntent: %v", err)
+	}
+
+	got := readLastSeen(t, st, senderID)
+	if got == stalePast {
+		t.Errorf("last_seen_at unchanged after session.setIntent; want advanced from %q", stalePast)
+	}
+}
+
+// TestSessionSetTask_TouchesLastSeen pins the session.setTask wire.
+func TestSessionSetTask_TouchesLastSeen(t *testing.T) {
+	st, senderID, _, _ := setupTwoAgents(t, "sender", "target")
+	t.Cleanup(func() { _ = st.Close() })
+
+	var senderSessionID string
+	if err := st.RawDB().QueryRow(
+		`SELECT session_id FROM sessions WHERE agent_id = ? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
+		senderID,
+	).Scan(&senderSessionID); err != nil {
+		t.Fatalf("look up sender session: %v", err)
+	}
+
+	stalePast := "2026-01-01T00:00:00Z"
+	if _, err := st.RawDB().Exec(`UPDATE agents SET last_seen_at = ? WHERE agent_id = ?`, stalePast, senderID); err != nil {
+		t.Fatalf("seed stale last_seen: %v", err)
+	}
+
+	sessionHandler := NewSessionHandler(st)
+	params, _ := json.Marshal(SetTaskRequest{
+		SessionID:   senderSessionID,
+		CurrentTask: "7nuj review fixes",
+	})
+	if _, err := sessionHandler.HandleSetTask(context.Background(), params); err != nil {
+		t.Fatalf("HandleSetTask: %v", err)
+	}
+
+	got := readLastSeen(t, st, senderID)
+	if got == stalePast {
+		t.Errorf("last_seen_at unchanged after session.setTask; want advanced from %q", stalePast)
+	}
+}
+
 // TestAgentWhoami_TouchesLastSeen: agent.whoami is the bare liveness
 // signal — an agent invoking it from its own session must bump the row.
 func TestAgentWhoami_TouchesLastSeen(t *testing.T) {
 	st, senderID, _, _ := setupTwoAgents(t, "sender", "target")
-	defer func() { _ = st.Close() }()
+	t.Cleanup(func() { _ = st.Close() })
 
 	stalePast := "2026-01-01T00:00:00Z"
 	if _, err := st.RawDB().Exec(`UPDATE agents SET last_seen_at = ? WHERE agent_id = ?`, stalePast, senderID); err != nil {
