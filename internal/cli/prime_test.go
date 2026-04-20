@@ -744,6 +744,11 @@ func TestFormatPrimeContext_ProjectStateFollowsRedirect(t *testing.T) {
 		t.Fatalf("write redirect: %v", err)
 	}
 
+	// Pin THRUM_HOME to the synthetic worktree so paths.EffectiveRepoPath
+	// doesn't override ctx.RepoPath with the real repo in CI/dev shells
+	// (same pattern as TestContextPrime_RuntimePrefersProcessTree).
+	t.Setenv("THRUM_HOME", worktree)
+
 	// Sanity-check: before the fix this same setup would have the
 	// worktree's .thrum/context/project_state.md missing — prove it by
 	// confirming no such file exists. If this assertion ever fails,
@@ -787,6 +792,10 @@ func TestFormatPrimeContext_ProjectStateLocalMainRepo(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(contextDir, "project_state.md"), []byte(body), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
+
+	// Pin THRUM_HOME so paths.EffectiveRepoPath doesn't override with a
+	// real repo path from the ambient environment.
+	t.Setenv("THRUM_HOME", tmpDir)
 
 	oldWd, err := os.Getwd()
 	if err != nil {
