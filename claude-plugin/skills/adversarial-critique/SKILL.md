@@ -90,7 +90,7 @@ Sub-agents will cite file:line evidence in R2 and R3. Before accepting a synthes
 
 ## Output artifact
 
-Write the full transcript to `docs/superpowers/brainstorms/YYYY-MM-DD-<topic>-debate.md`:
+Write the full transcript to `dev-docs/brainstorms/YYYY-MM-DD-<topic>-debate.md`:
 
 ```markdown
 # <Topic> — Adversarial Debate
