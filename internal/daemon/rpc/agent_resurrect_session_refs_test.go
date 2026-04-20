@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -186,20 +187,88 @@ func TestHandleRegister_Resurrect_DeadPIDNoResurrectNoRef(t *testing.T) {
 	}
 }
 
-// Case 3: HandleRegister's resurrect path with a live PID but that PID's
-// CWD is not under a git repo — ResolveCallerWorktree returns an error,
-// and the resurrect still succeeds but logs at debug level. No worktree
-// session_ref is written (graceful degradation per design).
-//
-// This case is tricky to exercise without chdir-ing the test process.
-// Skipping the positive/negative chdir dance and documenting the
-// expected behavior via a narrow unit test against the peercred helper
-// directly. The integration-level behavior is: if Pid→CWD→gitRoot
-// yields "", no session_ref row is written — which is equivalent to the
-// pre-fix behavior for that narrow case (still anonymous, but no worse).
-//
-// Covered in peercred unit tests (resolver_test.go's findGitRoot coverage);
-// intentional skip here to avoid cross-process chdir races.
+// Case 3 (resolver-injection fallback test): ensureActiveSession succeeds
+// (live PID → session created), but the CWD resolver is injected to fail
+// — triggers the fallback-to-prior-session-worktree branch. Verifies the
+// stale-fallback graceful-degradation path writes the correct ref and
+// emits the debug log distinguishing it from fresh resolution.
+func TestHandleRegister_Resurrect_FallbackToPriorSessionRef(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_2b2t_fallback", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	agentHandler := NewAgentHandler(s)
+
+	t.Setenv("THRUM_ROLE", "implementer")
+	t.Setenv("THRUM_MODULE", "2b2t-fallback")
+
+	// Step 1: establish the agent with a worktree session_ref from a
+	// prior session, then end that session.
+	initialReq := RegisterRequest{Role: "implementer", Module: "2b2t-fallback", AgentPID: os.Getpid()}
+	initialParams, _ := json.Marshal(initialReq)
+	initialResp, err := agentHandler.HandleRegister(context.Background(), initialParams)
+	if err != nil {
+		t.Fatalf("initial register: %v", err)
+	}
+	agentID := initialResp.(*RegisterResponse).AgentID
+
+	// Get the active session and seed a worktree ref for it.
+	var priorSessionID string
+	_ = s.RawDB().QueryRow(`SELECT session_id FROM sessions WHERE agent_id = ? AND ended_at IS NULL`,
+		agentID).Scan(&priorSessionID)
+	if priorSessionID == "" {
+		priorSessionID = "ses_prior_2b2t_fallback"
+		seedSessionRow(t, s, priorSessionID, agentID, "")
+	}
+	_, err = s.RawDB().Exec(`
+		INSERT OR IGNORE INTO session_refs (session_id, ref_type, ref_value, added_at)
+		VALUES (?, 'worktree', ?, ?)
+	`, priorSessionID, "/prior/worktree/path", time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		t.Fatalf("seed prior session_ref: %v", err)
+	}
+
+	// End the prior session so the next register resurrects.
+	s.RawDB().Exec(`UPDATE sessions SET ended_at = ? WHERE session_id = ?`,
+		time.Now().UTC().Format(time.RFC3339Nano), priorSessionID)
+
+	// Step 2: swap the resolver to fail — simulates the PID being alive
+	// for ensureActiveSession's process.IsRunning check but unreachable
+	// for CWD inspection (race window between the two).
+	origResolver := resolveCallerWorktreeFn
+	resolveCallerWorktreeFn = func(_ int) (string, error) {
+		return "", fmt.Errorf("injected: PID CWD unreachable")
+	}
+	t.Cleanup(func() { resolveCallerWorktreeFn = origResolver })
+
+	// Step 3: re-register with live PID → resurrect fires, primary
+	// resolver fails, fallback copies /prior/worktree/path.
+	reRegReq := RegisterRequest{Role: "implementer", Module: "2b2t-fallback", AgentPID: os.Getpid()}
+	reRegParams, _ := json.Marshal(reRegReq)
+	reRegResp, err := agentHandler.HandleRegister(context.Background(), reRegParams)
+	if err != nil {
+		t.Fatalf("re-register: %v", err)
+	}
+	resp := reRegResp.(*RegisterResponse)
+
+	if !resp.SessionResumed || resp.SessionID == "" {
+		t.Fatal("expected resurrect to succeed even with injected resolver failure")
+	}
+
+	got := getSessionRefValue(t, s, resp.SessionID, "worktree")
+	if got != "/prior/worktree/path" {
+		t.Errorf("fallback should have copied prior worktree ref; got %q, want %q",
+			got, "/prior/worktree/path")
+	}
+
+	if gotCtx := getAgentWorkContextsWorktree(t, s, resp.SessionID); gotCtx != "/prior/worktree/path" {
+		t.Errorf("agent_work_contexts fallback seed = %q, want %q", gotCtx, "/prior/worktree/path")
+	}
+}
 
 // Case 4: HandleRegister on an already-active session must NOT write a
 // duplicate session_ref. The existing session's refs are authoritative;

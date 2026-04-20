@@ -621,6 +621,12 @@ func (h *AgentHandler) ensureActiveSession(ctx context.Context, agentID string, 
 }
 
 
+// resolveCallerWorktreeFn indirects peercred.ResolveCallerWorktree so tests
+// can inject a fault into the primary-resolution path without standing up a
+// real /proc entry. Defaults to the production helper. Tests must swap
+// back under t.Cleanup.
+var resolveCallerWorktreeFn = peercred.ResolveCallerWorktree
+
 // persistResurrectWorktreeRef (thrum-2b2t) resolves the caller's worktree
 // via their PID and writes a worktree session_ref + agent_work_contexts
 // seed for the resurrected session. Mirrors the rows HandleStart writes
@@ -634,18 +640,40 @@ func (h *AgentHandler) ensureActiveSession(ctx context.Context, agentID string, 
 // Logged at debug level when used so future debugging can distinguish
 // "fresh PID-based resolution" from "stale fallback-to-prior" (the latter
 // is correct graceful degradation when the PID is unreachable, but observably
-// different).
+// different). Known limitation: if the agent has historically lived in
+// multiple worktrees, the fallback returns the most-recent one — which may
+// no longer match the agent's current location. Pre-fix the agent was
+// always anonymous; post-fix + stale-fallback it may resolve to the wrong
+// worktree. Acceptable graceful degradation; the debug log captures the
+// divergence.
 //
 // Failure is best-effort — mirrors the resurrect path's own "log and
 // continue" discipline (breaking register because a worktree ref can't
 // be resolved is worse than leaving the agent briefly anonymous).
+//
+// Trust boundary: pid is supplied in the RegisterRequest JSON payload,
+// not extracted from kernel peer credentials. The daemon listens only on
+// the local Unix socket, so only same-user processes can connect — the
+// existing G4 liveness check uses this same trusted PID. A malicious local
+// caller could supply an arbitrary live PID and get this helper to return
+// the git root of another process's CWD, but that discloses only the
+// ancestor directory of a same-user process, which is already readable via
+// standard POSIX APIs. No privilege escalation.
+//
+// Concurrency: must be called with h.state.Lock() held (matches
+// ensureActiveSession's contract — the two DB writes are performed
+// atomically relative to other register/session mutations on the same
+// agent). INSERT OR IGNORE + ON CONFLICT DO UPDATE are additionally safe
+// against cross-process races via the peer daemon sync layer.
 func (h *AgentHandler) persistResurrectWorktreeRef(ctx context.Context, agentID, sessionID string, pid int) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	// Primary: resolve from caller's live CWD via their PID.
-	worktreePath, err := peercred.ResolveCallerWorktree(pid)
+	worktreePath, err := resolveCallerWorktreeFn(pid)
 	if err != nil || worktreePath == "" {
 		// Fallback: most-recent prior session's worktree ref for this agent.
+		// The JOIN + ref_value filter naturally excludes the newly-created
+		// resurrected session (no session_refs row for it yet).
 		var prior string
 		qErr := h.state.DB().QueryRowContext(ctx, `
 			SELECT sr.ref_value
