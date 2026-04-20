@@ -1,9 +1,12 @@
 package worktree
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,10 +26,51 @@ type EnforceOpts struct {
 	// if the caller's keeper list did not include them. The keeper
 	// list can be incomplete — peercred may mis-resolve the caller
 	// (thrum-0pos), or the daemon's session_refs projection may be
-	// stale — but a live kernel PID is ground truth. Pre-prime files
+	// stale.
+	//
+	// Best-effort, not atomic: there is a TOCTOU window between
+	// readAgentPID (filesystem read) and IsPIDAlive (kernel probe).
+	// On a busy kernel the original process may exit and the PID may
+	// be reused in between, producing a false-positive "alive"
+	// verdict that causes a legitimately stale file to survive one
+	// enforcement cycle. The legitimately stale file will be cleaned
+	// up on the next enforcement pass once the PID's next owner is
+	// observed to differ or exit. macOS allocates PIDs sequentially
+	// with a large ceiling (kern.maxproc default 99999), keeping
+	// reuse rare; Linux systems with low pid_max (default 32768) and
+	// high process churn are the realistic exposure. Pre-prime files
 	// (AgentPID == 0) are not protected by this gate, matching G4's
 	// pre-prime carveout.
 	IsPIDAlive func(pid int) bool
+
+	// CallerCwd is the caller's own working directory. When set, and
+	// when AllowCrossWorktree is false, EnforceOneIdentityWith runs
+	// a CWD-match check: both CallerCwd and worktreePath are resolved
+	// to their git worktree root via `git rev-parse --show-toplevel`.
+	// If the roots do not match, the whole enforcement call is
+	// refused with a warning — no file is touched.
+	//
+	// This is the thrum-182j static invariant: a caller may only
+	// enforce identity inside its own worktree. The liveness gate
+	// (IsPIDAlive) has a temporal blind spot during agent restart
+	// (old PID dead, new claude not yet written the new identity);
+	// during that window a caller with an arbitrary worktreePath
+	// could still quarantine an innocent file. The CWD-match closes
+	// that window statically: by the time enforcement runs, the
+	// caller's kernel-verified CWD must already point at the target
+	// worktree.
+	//
+	// Empty CallerCwd means "no assertion"; CWD-match is skipped.
+	// This preserves the legacy EnforceOneIdentity(path, keep...)
+	// signature for callers that never opt in.
+	CallerCwd string
+
+	// AllowCrossWorktree, when true, disables the CWD-match check
+	// even if CallerCwd is populated. Legitimate callers whose own
+	// CWD differs from the target worktree by design (e.g. daemon
+	// RPCs that register agents into fresh worktrees) set this to
+	// true to bypass the guard.
+	AllowCrossWorktree bool
 }
 
 // EnsureRedirects verifies and creates .thrum/ and .beads/ redirects
@@ -106,7 +150,7 @@ func EnsureRedirects(worktreePath, mainRepo string) error {
 // identity file (thrum-dw06). Empty names in the keep list are
 // silently ignored.
 //
-// thrum-ajmd design: the original behaviour was os.Remove, which had no
+// thrum-ajmd design: the original behavior was os.Remove, which had no
 // recourse when it fired on the wrong dir (a non-coordinator agent's
 // refresh running with cwd resolving to the main repo path wiped
 // coordinator_main.json as a "stale sibling"). Quarantine preserves the
@@ -121,8 +165,44 @@ func EnforceOneIdentity(worktreePath string, keep ...string) []string {
 // EnforceOneIdentity. The zero-value EnforceOpts matches the legacy
 // keeper-only behavior; non-nil opts.IsPIDAlive adds the thrum-182j
 // defense-in-depth gate that refuses to quarantine a file whose
-// owning agent is currently alive.
+// owning agent is currently alive, and a non-empty opts.CallerCwd
+// (with opts.AllowCrossWorktree == false) adds the static CWD-match
+// invariant that refuses the whole call when the caller's worktree
+// differs from the target.
 func EnforceOneIdentityWith(worktreePath string, opts EnforceOpts, keep ...string) []string {
+	// CWD-match gate (thrum-182j static invariant). Runs before any
+	// filesystem read so a cross-worktree call is rejected outright —
+	// no identity file is read, no .quarantine/ dir is created. The
+	// legacy EnforceOneIdentity wrapper passes an empty CallerCwd and
+	// skips this gate; production daemon callers populate CallerCwd
+	// from peercred-verified state.
+	if !opts.AllowCrossWorktree && opts.CallerCwd != "" {
+		callerRoot, err := gitToplevel(opts.CallerCwd)
+		if err != nil {
+			slog.Warn("worktree.EnforceOneIdentity refused: cannot resolve caller cwd to git toplevel",
+				slog.String("caller_cwd", opts.CallerCwd),
+				slog.String("target", worktreePath),
+				slog.String("error", err.Error()))
+			return nil
+		}
+		targetRoot, err := gitToplevel(worktreePath)
+		if err != nil {
+			slog.Warn("worktree.EnforceOneIdentity refused: cannot resolve target path to git toplevel",
+				slog.String("caller_cwd", opts.CallerCwd),
+				slog.String("target", worktreePath),
+				slog.String("error", err.Error()))
+			return nil
+		}
+		if callerRoot != targetRoot {
+			slog.Warn("worktree.EnforceOneIdentity refused: cross-worktree enforcement not permitted",
+				slog.String("caller_cwd", opts.CallerCwd),
+				slog.String("caller_root", callerRoot),
+				slog.String("target", worktreePath),
+				slog.String("target_root", targetRoot))
+			return nil
+		}
+	}
+
 	idDir := filepath.Join(worktreePath, ".thrum", "identities")
 	entries, err := os.ReadDir(idDir)
 	if err != nil {
@@ -156,7 +236,10 @@ func EnforceOneIdentityWith(worktreePath string, opts EnforceOpts, keep ...strin
 		// treated as ordinary stale siblings.
 		if opts.IsPIDAlive != nil {
 			if pid := readAgentPID(src); pid > 0 && opts.IsPIDAlive(pid) {
-				fmt.Fprintf(os.Stderr, "Warning: refusing to quarantine live identity %s (pid %d)\n", entry.Name(), pid)
+				slog.Warn("worktree.EnforceOneIdentity refusing to quarantine live identity",
+					slog.String("file", entry.Name()),
+					slog.Int("pid", pid),
+					slog.String("target", worktreePath))
 				continue
 			}
 		}
@@ -164,21 +247,54 @@ func EnforceOneIdentityWith(worktreePath string, opts EnforceOpts, keep ...strin
 		if quarantineDir == "" {
 			quarantineDir = filepath.Join(idDir, ".quarantine")
 			if err := os.MkdirAll(quarantineDir, 0o750); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: could not create identity quarantine dir: %v\n", err)
+				slog.Warn("worktree.EnforceOneIdentity could not create quarantine dir",
+					slog.String("target", worktreePath),
+					slog.String("error", err.Error()))
 				continue
 			}
 		}
 		dst := filepath.Join(quarantineDir, entry.Name()+"."+ts)
 		if err := os.Rename(src, dst); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not quarantine stale identity %s: %v\n", entry.Name(), err)
+			slog.Warn("worktree.EnforceOneIdentity could not quarantine stale identity",
+				slog.String("file", entry.Name()),
+				slog.String("error", err.Error()))
 			continue
 		}
 		name := strings.TrimSuffix(entry.Name(), ".json")
-		fmt.Fprintf(os.Stderr, "Quarantined stale identity: %s → %s\n", name, dst)
+		slog.Info("worktree.EnforceOneIdentity quarantined stale identity",
+			slog.String("agent", name),
+			slog.String("dst", dst))
 		quarantined = append(quarantined, name)
 	}
 
 	return quarantined
+}
+
+// gitToplevel resolves a directory to its canonical git worktree root
+// via `git rev-parse --show-toplevel`. Used by the CWD-match gate so a
+// caller passing a subdirectory still resolves to the worktree root
+// that can be compared against the enforcement target.
+//
+// The 2s timeout matches the internal/daemon/safecmd convention for
+// daemon-initiated git invocations. Returns an error if the path is
+// not a git worktree, git is missing, or the command times out.
+func gitToplevel(path string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "-C", path, "rev-parse", "--show-toplevel").Output() // #nosec G204 -- args are fixed; path is caller-asserted and already used to locate identities
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse --show-toplevel: %w", err)
+	}
+	root := strings.TrimSpace(string(out))
+	if root == "" {
+		return "", fmt.Errorf("git rev-parse returned empty toplevel")
+	}
+	// Canonicalize the same way state_query.canonWorktreePath does so
+	// /tmp/... and /private/tmp/... aliases on macOS compare equal.
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		return resolved, nil
+	}
+	return filepath.Clean(root), nil
 }
 
 // readAgentPID extracts the agent_pid field from an identity file

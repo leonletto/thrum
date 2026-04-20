@@ -350,16 +350,16 @@ func agentIdentityName(name, agentID string) string {
 // this cleans up residual identity files left by prior registrations
 // under the same worktree. See thrum-33dt.
 //
-// thrum-dw06 / thrum-0pos: enforcement only fires when the CALLER is
+// Thrum-dw06 / thrum-0pos: enforcement only fires when the CALLER is
 // registering themselves (resolved.AgentID == keepName) AND it
 // preserves every agent registered in the caller's worktree (not
 // just keepName), so co-located multi-agent scenarios survive.
 // A caller that bootstraps a differently named agent — test
-// harnesses, peer-bridge proxies — is NOT authorised to scrub
+// harnesses, peer-bridge proxies — is NOT authorized to scrub
 // siblings in this worktree, because those siblings may be other
 // legitimately registered agents co-located with the caller. The
 // single-keeper form of thrum-33dt treated every non-keepName
-// sibling as stale, including other live agents. ajmd softened the
+// sibling as stale, including other live agents. Ajmd softened the
 // blast radius from delete→quarantine; dw06 narrowed the firing
 // condition so bootstrap calls leave other files alone; 0pos
 // finishes the job by preserving every co-located registered agent
@@ -399,16 +399,28 @@ func (h *AgentHandler) enforceWorktreeIdentity(ctx context.Context, keepName str
 	if resolved.AgentID != keepName {
 		return
 	}
-	keepers := []string{keepName, resolved.AgentID}
+	// Self-rename only (enforced by the guard above): resolved.AgentID
+	// and keepName are the same string on this path, so listing both
+	// in keepers would duplicate an entry with no semantic gain.
+	// ListAgentsInWorktree covers every co-located agent including the
+	// caller.
+	keepers := []string{keepName}
 	if h.state != nil {
 		keepers = append(keepers, h.state.ListAgentsInWorktree(ctx, resolved.Worktree)...)
 	}
-	// thrum-182j: defense-in-depth — even if the keeper list is stale
-	// or peercred mis-resolved, never quarantine a file whose owning
-	// agent is actively running. The kernel-verified liveness check is
-	// the backstop for the entire cascade that elevated 182j to P0.
+	// thrum-182j defenses:
+	//   (a) IsPIDAlive — refuse to quarantine a file whose AgentPID
+	//       is currently running. Backstops a stale keeper list.
+	//   (b) CallerCwd + !AllowCrossWorktree — CWD-match gate. The
+	//       self-rename path's caller and target are the same
+	//       worktree by construction (both are resolved.Worktree
+	//       from the same peercred resolution), so the match
+	//       passes naturally. Populating CallerCwd makes that an
+	//       active invariant: any future refactor that lets the
+	//       two diverge will hit the gate and refuse.
 	wtpkg.EnforceOneIdentityWith(resolved.Worktree, wtpkg.EnforceOpts{
 		IsPIDAlive: func(pid int) bool { return process.IsRunning(pid) },
+		CallerCwd:  resolved.Worktree,
 	}, keepers...)
 }
 
@@ -718,7 +730,6 @@ func (h *AgentHandler) ensureActiveSession(ctx context.Context, agentID string, 
 	}
 	return sessionID, nil
 }
-
 
 // resolveCallerWorktreeFn indirects peercred.ResolveCallerWorktree so tests
 // can inject a fault into the primary-resolution path without standing up a

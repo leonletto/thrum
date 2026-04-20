@@ -2,6 +2,7 @@ package worktree
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -427,6 +428,174 @@ func TestEnforceOneIdentityWith_NilCallbackLegacyBehavior(t *testing.T) {
 	if len(quarantined) != 1 || quarantined[0] != "with_pid" {
 		t.Errorf("quarantined = %v, want [with_pid] (nil callback = legacy semantics)", quarantined)
 	}
+}
+
+// TestEnforceOneIdentityWith_CWDMismatchRefuses — thrum-182j static
+// CWD-match invariant (Leon's design rule: "that script should never
+// operate outside of its own work tree"). When CallerCwd resolves to
+// a different git worktree than the target, EnforceOneIdentityWith
+// refuses the whole call — no identity file is touched, no
+// .quarantine/ dir is created. This closes the temporal blind spot
+// in the liveness gate (old PID dead, new claude not yet written)
+// through which a caller with an arbitrary target worktree could
+// still quarantine a victim.
+func TestEnforceOneIdentityWith_CWDMismatchRefuses(t *testing.T) {
+	callerWT := initGitWorktree(t)
+	targetWT := initGitWorktree(t)
+
+	targetIDs := filepath.Join(targetWT, ".thrum", "identities")
+	if err := os.MkdirAll(targetIDs, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(targetIDs, "stale.json")
+	if err := os.WriteFile(stale, []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	quarantined := EnforceOneIdentityWith(targetWT, EnforceOpts{
+		CallerCwd: callerWT,
+	}, "new_agent")
+
+	if len(quarantined) != 0 {
+		t.Errorf("cross-worktree enforcement must refuse; got quarantined=%v", quarantined)
+	}
+	if _, err := os.Stat(stale); err != nil {
+		t.Errorf("stale.json must NOT be touched when CWD mismatch refused: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(targetIDs, ".quarantine")); err == nil {
+		t.Errorf(".quarantine/ must NOT be created when CWD mismatch refused")
+	}
+}
+
+// TestEnforceOneIdentityWith_CWDMatchProceeds — when CallerCwd and
+// target resolve to the same git worktree root, enforcement proceeds
+// normally. CallerCwd may be a SUBDIRECTORY within the worktree;
+// `git rev-parse --show-toplevel` walks up to the worktree root for
+// the comparison.
+func TestEnforceOneIdentityWith_CWDMatchProceeds(t *testing.T) {
+	wt := initGitWorktree(t)
+	sub := filepath.Join(wt, "sub", "dir")
+	if err := os.MkdirAll(sub, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	idDir := filepath.Join(wt, ".thrum", "identities")
+	if err := os.MkdirAll(idDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(idDir, "stale.json"), []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(idDir, "new_agent.json"), []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	quarantined := EnforceOneIdentityWith(wt, EnforceOpts{
+		CallerCwd: sub, // subdir of the same worktree — must resolve to same toplevel
+	}, "new_agent")
+
+	if len(quarantined) != 1 || quarantined[0] != "stale" {
+		t.Errorf("quarantined = %v, want [stale]", quarantined)
+	}
+}
+
+// TestEnforceOneIdentityWith_AllowCrossWorktreeBypassesCheck — the
+// escape hatch for legitimate cross-worktree callers. HandleCreate
+// in daemon/rpc/tmux.go legitimately operates on a target worktree
+// that differs from the caller's own cwd; AllowCrossWorktree=true
+// disables the gate while preserving keeper-list + liveness defenses.
+func TestEnforceOneIdentityWith_AllowCrossWorktreeBypassesCheck(t *testing.T) {
+	callerWT := initGitWorktree(t)
+	targetWT := initGitWorktree(t)
+
+	targetIDs := filepath.Join(targetWT, ".thrum", "identities")
+	if err := os.MkdirAll(targetIDs, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(targetIDs, "stale.json"), []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	quarantined := EnforceOneIdentityWith(targetWT, EnforceOpts{
+		CallerCwd:          callerWT, // different worktree
+		AllowCrossWorktree: true,     // explicit bypass
+	}, "new_agent")
+
+	if len(quarantined) != 1 || quarantined[0] != "stale" {
+		t.Errorf("quarantined = %v, want [stale] (AllowCrossWorktree=true must bypass gate)", quarantined)
+	}
+}
+
+// TestEnforceOneIdentityWith_EmptyCallerCwdSkipsGate — legacy-friendly
+// behavior: callers that never populate CallerCwd (the old
+// EnforceOneIdentity(path, keep...) wrapper passes zero-value opts)
+// are NOT subjected to the CWD-match gate. This preserves the
+// existing API for tests and any future non-daemon callers.
+func TestEnforceOneIdentityWith_EmptyCallerCwdSkipsGate(t *testing.T) {
+	targetWT := initGitWorktree(t)
+	targetIDs := filepath.Join(targetWT, ".thrum", "identities")
+	if err := os.MkdirAll(targetIDs, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(targetIDs, "stale.json"), []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	quarantined := EnforceOneIdentityWith(targetWT, EnforceOpts{
+		// CallerCwd deliberately empty.
+	}, "new_agent")
+
+	if len(quarantined) != 1 || quarantined[0] != "stale" {
+		t.Errorf("empty CallerCwd must skip gate; want [stale], got %v", quarantined)
+	}
+}
+
+// TestEnforceOneIdentityWith_NonGitCallerCwdRefuses — if CallerCwd is
+// populated but does not resolve to a git worktree (git rev-parse
+// fails), enforcement must refuse. Better to warn-and-noop than to
+// proceed under an unverifiable assertion.
+func TestEnforceOneIdentityWith_NonGitCallerCwdRefuses(t *testing.T) {
+	targetWT := initGitWorktree(t)
+	targetIDs := filepath.Join(targetWT, ".thrum", "identities")
+	if err := os.MkdirAll(targetIDs, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(targetIDs, "stale.json")
+	if err := os.WriteFile(stale, []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// TempDir is not inside a git repo here.
+	nonGit := t.TempDir()
+
+	quarantined := EnforceOneIdentityWith(targetWT, EnforceOpts{
+		CallerCwd: nonGit,
+	}, "new_agent")
+
+	if len(quarantined) != 0 {
+		t.Errorf("non-git CallerCwd must refuse; got %v", quarantined)
+	}
+	if _, err := os.Stat(stale); err != nil {
+		t.Errorf("stale.json must NOT be touched when caller-cwd cannot be resolved: %v", err)
+	}
+}
+
+// initGitWorktree creates a temp directory that is a real minimal git
+// repository so `git rev-parse --show-toplevel` succeeds on it. Used
+// by the CWD-match tests — they need real worktree roots to compare.
+// Returns the canonicalized path (EvalSymlinks-resolved) so
+// comparisons against the function-under-test's canonicalized output
+// match on macOS where /tmp → /private/tmp.
+func initGitWorktree(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v (%s)", err, out)
+	}
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		return resolved
+	}
+	return dir
 }
 
 // TestEnforceOneIdentity_QuarantineSkipped — the .quarantine/ dir
