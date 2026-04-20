@@ -1400,7 +1400,10 @@ func TestMigrate_V20_WithAgentsAndEvents_BackfillsOriginDaemon(t *testing.T) {
 			"module":        "test",
 			"origin_daemon": a.originDaemon,
 		}
-		raw, _ := json.Marshal(payload)
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal event for %s: %v", a.agentID, err)
+		}
 		if _, err := db.Exec(`INSERT INTO events (event_id, sequence, type, timestamp, origin_daemon, event_json)
 			VALUES (?, ?, 'agent.register', '2026-04-15T00:00:00Z', ?, ?)`,
 			"evt_"+a.agentID, a.sequence, a.originDaemon, string(raw)); err != nil {
