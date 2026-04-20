@@ -28,16 +28,15 @@ func TestFormatNudge_FirstDetect(t *testing.T) {
 			t.Errorf("body missing %q:\n%s", substr, body)
 		}
 	}
-	assertContains("⚠ Permission prompt")
-	assertContains("@researcher_cursor (cursor-test)")
-	assertContains("Repo:    thrum")
-	assertContains("Runtime: cursor")
-	assertContains("Pattern: cursor.not_in_allowlist")
-	assertContains("First detected:")
-	assertContains(`thrum tmux send cursor-test "y"`)
-	assertContains(`thrum tmux send cursor-test "Escape"`)
-	assertContains("reply to this message with")
-	assertContains("Reminder #1 of 6")
+	// Header: agent · session (runtime)
+	assertContains("⚠ @researcher_cursor · cursor-test (cursor)")
+	// Pane content retained (indented by 2 spaces)
+	assertContains("  Run this command?")
+	assertContains("  Not in allowlist: curl https://example.com")
+	// One-line reply hint with both keys
+	assertContains(`Reply: y (approve) · n (deny) · or thrum tmux send cursor-test "y"|"Escape"`)
+	// Footer collapses reminder / repo / pattern / first-seen
+	assertContains("(reminder 1/6 · thrum · cursor.not_in_allowlist · 2m ago)")
 }
 
 func TestFormatNudge_Reminder(t *testing.T) {
@@ -51,8 +50,8 @@ func TestFormatNudge_Reminder(t *testing.T) {
 		NudgeCount:    3,
 	}
 	body := FormatNudge(row, "pane", "cursor", "thrum", time.Date(2026, 4, 14, 10, 48, 12, 0, time.UTC))
-	if !strings.Contains(body, "Reminder #3 of 6") {
-		t.Errorf("body should show 'Reminder #3 of 6':\n%s", body)
+	if !strings.Contains(body, "reminder 3/6") {
+		t.Errorf("body should show 'reminder 3/6':\n%s", body)
 	}
 }
 
@@ -66,12 +65,42 @@ func TestFormatNudge_NoDenyKey(t *testing.T) {
 		NudgeCount: 1,
 	}
 	body := FormatNudge(row, "pane", "opencode", "thrum", time.Now())
-	if !strings.Contains(body, "press Ctrl+C") {
+	if !strings.Contains(body, "Ctrl+C in pane to interrupt") {
 		t.Errorf("body should show Ctrl+C fallback when DenyKey is empty:\n%s", body)
 	}
 	// Ensure we did NOT render a tmux send command for an empty deny key.
 	if strings.Contains(body, `thrum tmux send opencode-test ""`) {
 		t.Errorf("body must not render an empty deny keystroke:\n%s", body)
+	}
+}
+
+func TestFormatNudge_LineBudget(t *testing.T) {
+	// Regression for thrum-7khf acceptance: typical nudges stay ≤10 lines.
+	// The current boundary is tight — this sample renders at exactly the
+	// budget, so adding any footer field must re-verify the budget holds.
+	row := &NudgeRow{
+		Session:       "plugin-skills-slate",
+		AgentName:     "impl_skills",
+		PatternKey:    "claude.tool_confirmation",
+		ApproveKey:    "1",
+		DenyKey:       "3",
+		FirstDetected: time.Date(2026, 4, 20, 4, 1, 35, 0, time.UTC),
+		NudgeCount:    1,
+	}
+	paneTail := `Bash command
+rm -rf /Users/leon/.workspaces/thrum/plugin-skills-slate/dev-docs/toy-philosophy
+Clean toy artifacts
+Permission rule Bash(rm -rf *) requires confirmation for this command.
+/permissions to update rules
+Do you want to proceed?
+❯ 1. Yes
+2. No
+Esc to cancel · Tab to amend · ctrl+e to explain`
+	body := FormatNudge(row, paneTail, "claude", "permission-prompts",
+		time.Date(2026, 4, 20, 4, 1, 35, 0, time.UTC))
+	lineCount := strings.Count(body, "\n")
+	if lineCount > 10 {
+		t.Errorf("nudge body exceeds 10-line budget: %d lines\n%s", lineCount, body)
 	}
 }
 
@@ -119,7 +148,10 @@ func TestFormatNudge_PaneTailTruncatedMidRune(t *testing.T) {
 }
 
 func TestFormatNudge_PaneTailLineCap(t *testing.T) {
-	// 30 distinct lines — we expect only the last 15 in the body.
+	// 30 distinct lines — we expect only the first 5 in the body
+	// (thrum-7khf: cap tightened from 15 → 5 AND head-biased to keep
+	// the command + reason at the top of a prompt capture, dropping
+	// selector/shortcut chrome from the bottom).
 	var lines []string
 	for i := 0; i < 30; i++ {
 		lines = append(lines, fmt.Sprintf("ROW%02d", i))
@@ -133,17 +165,17 @@ func TestFormatNudge_PaneTailLineCap(t *testing.T) {
 		NudgeCount: 1,
 	}
 	body := FormatNudge(row, tail, "cursor", "thrum", time.Now())
-	// The first 15 rows (ROW00..ROW14) must be stripped; ROW15..ROW29 kept.
-	for i := 0; i < 15; i++ {
-		dropped := fmt.Sprintf("ROW%02d", i)
-		if strings.Contains(body, dropped) {
-			t.Errorf("%s should have been truncated:\n%s", dropped, body)
-		}
-	}
-	for i := 15; i < 30; i++ {
+	// ROW00..ROW04 kept, ROW05..ROW29 dropped.
+	for i := 0; i < 5; i++ {
 		kept := fmt.Sprintf("ROW%02d", i)
 		if !strings.Contains(body, kept) {
 			t.Errorf("%s should be present:\n%s", kept, body)
+		}
+	}
+	for i := 5; i < 30; i++ {
+		dropped := fmt.Sprintf("ROW%02d", i)
+		if strings.Contains(body, dropped) {
+			t.Errorf("%s should have been truncated:\n%s", dropped, body)
 		}
 	}
 }

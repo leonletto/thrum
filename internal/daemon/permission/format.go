@@ -8,94 +8,130 @@ import (
 )
 
 const (
-	// MaxPaneTailLines caps how many lines of pane content we include in a
-	// nudge. Balances context-richness against Telegram's ~4KB DM limit.
-	maxPaneTailLines = 15
+	// maxPaneTailLines caps how many lines of pane content we include in
+	// the nudge body. thrum-7khf trimmed this from 15 → 5: the previous
+	// cap captured approval-irrelevant UI chrome (separators, shortcut
+	// hints, "❯ 1. Yes / 2. No" selector lines) that buried the actual
+	// command. Five lines is enough for "<command>\n<reason>" plus a
+	// little context without being mobile-hostile on Telegram.
+	maxPaneTailLines = 5
 
-	// MaxPaneTailBytes is a hard byte cap to keep the final body under
-	// ~3KB of text with room for headers.
+	// maxPaneTailBytes is a hard byte cap. Still 2KB — a single
+	// multi-arg bash line can exceed the line cap in bytes.
 	maxPaneTailBytes = 2_000
 
-	// MaxReminderCount is the total number of nudges (first-detect + 5
+	// maxReminderCount is the total number of nudges (first-detect + 5
 	// reminders) before the scheduler gives up and marks the agent stuck.
-	// Surfaced here so the rendered "Reminder #N of 6" header stays in
-	// sync with the scheduler cadence.
+	// Surfaced here so the rendered "reminder N/6" footer stays in sync
+	// with the scheduler cadence.
 	maxReminderCount = 6
 )
 
-// FormatNudge renders the rich nudge body described in spec §5. It is a
-// pure function — no I/O, safe to test with golden fixtures.
+// FormatNudge renders a compact nudge body (thrum-7khf). Structure:
+//
+//	⚠ @<agent> · <session> (<runtime>)
+//
+//	  <pane tail, max 5 lines, indented>
+//
+//	Reply: y (approve) · n (deny) · or thrum tmux send <session> "<a>"|"<d>"
+//	(reminder N/6 · <repo> · <pattern> · <N> ago)
+//
+// Design goals:
+//   - Glanceable on Telegram mobile (≤10 lines for typical prompts)
+//   - Decision-first: command + reply hint above the fold
+//   - Operator-debugging fields (repo / pattern / first-seen / reminder
+//     count) collapsed into a single trailing footer line
+//   - Backwards-compatible: the y/n reply path, tmux keystroke command,
+//     and msgMap keys are unchanged.
+//
+// Pure function — no I/O, safe to test with golden fixtures.
 //
 // Parameters:
 //   - row         snapshot of the permission_nudges row being announced.
 //   - paneTail    raw captured pane content; this function truncates.
-//   - runtime     displayed on the "Runtime:" line (e.g. "cursor"). Kept
-//     separate because row.PatternKey is "runtime.name" and
-//     the runtime alone reads better in the header.
-//   - projectName displayed on the "Repo:" line.
+//   - runtime     runtime name (e.g. "cursor") for the header parens.
+//   - projectName repo name for the footer metadata.
 //   - now         injected current time so tests can pin "N ago" output.
 func FormatNudge(row *NudgeRow, paneTail, runtime, projectName string, now time.Time) string {
 	var b strings.Builder
 
-	// Subject
-	fmt.Fprintf(&b, "⚠ Permission prompt — @%s (%s)\n\n",
-		row.AgentName, row.Session)
+	// Header: agent · session (runtime)
+	fmt.Fprintf(&b, "⚠ @%s · %s (%s)\n\n", row.AgentName, row.Session, runtime)
 
-	// Metadata block
-	fmt.Fprintf(&b, "Repo:    %s\n", projectName)
-	fmt.Fprintf(&b, "Runtime: %s\n", runtime)
-	fmt.Fprintf(&b, "Pattern: %s\n", row.PatternKey)
-	fmt.Fprintf(&b, "First detected: %s (%s ago)\n",
-		row.FirstDetected.Format("2006-01-02 15:04:05"),
-		friendlyDuration(now.Sub(row.FirstDetected)))
+	// Pane tail (indented for visual grouping, max 5 lines)
+	trimmed := truncatePaneTail(paneTail)
+	if trimmed != "" {
+		b.WriteString(indentLines(trimmed, "  "))
+		b.WriteString("\n\n")
+	}
 
+	// Reply line: one-line action hint covering reply-text, tmux-send,
+	// and (when no deny key) Ctrl+C interrupt.
+	if row.DenyKey != "" {
+		fmt.Fprintf(&b,
+			"Reply: y (approve) · n (deny) · or thrum tmux send %s %q|%q\n",
+			row.Session, row.ApproveKey, row.DenyKey)
+	} else {
+		fmt.Fprintf(&b,
+			"Reply: y (approve) · or thrum tmux send %s %q (Ctrl+C in pane to interrupt)\n",
+			row.Session, row.ApproveKey)
+	}
+
+	// Footer: metadata the approver rarely needs to read, kept inline
+	// for debugging / audit.
 	reminder := row.NudgeCount
 	if reminder < 1 {
 		reminder = 1
 	}
-	fmt.Fprintf(&b, "Reminder #%d of %d\n\n", reminder, maxReminderCount)
-
-	// Pane tail
-	b.WriteString("Pane tail (last 15 lines):\n")
-	b.WriteString(indentLines(truncatePaneTail(paneTail), "  "))
-	b.WriteString("\n\n")
-
-	// Separator + copy-paste actions
-	b.WriteString("─────────────────────────\n")
-	fmt.Fprintf(&b, "To approve:  thrum tmux send %s %q\n", row.Session, row.ApproveKey)
-	if row.DenyKey != "" {
-		fmt.Fprintf(&b, "To deny:     thrum tmux send %s %q\n", row.Session, row.DenyKey)
-	} else {
-		b.WriteString("To interrupt: press Ctrl+C in the pane\n")
-	}
-	b.WriteString("\nOr reply to this message with `y` / `n` — works from CLI, web UI, and Telegram.\n")
+	fmt.Fprintf(&b, "(reminder %d/%d · %s · %s · %s ago)\n",
+		reminder, maxReminderCount,
+		projectName, row.PatternKey,
+		friendlyDuration(now.Sub(row.FirstDetected)))
 
 	return b.String()
 }
 
 // truncatePaneTail caps the pane content at maxPaneTailLines lines AND
-// maxPaneTailBytes bytes, preferring the tail (most recent output).
+// maxPaneTailBytes bytes, preferring the HEAD of the capture.
 //
-// The byte-cap branch walks past any UTF-8 continuation bytes left
-// over from a mid-rune split before applying the newline rescue, so
-// a single >2KB line containing multi-byte runes (e.g. a long URL
-// with arrows, a base64 blob with Unicode punctuation) cannot emit
-// invalid UTF-8 into the nudge body.
+// thrum-7khf: the daemon hands us the last ~30 lines of the tmux pane
+// (permission.SessionPollerConfig.CaptureLines), which for a typical
+// permission prompt contains (top→bottom):
+// command, reason, permission-rule noise, "Do you want to proceed?",
+// the selector ("❯ 1. Yes / 2. No"), and shortcut hints. The approval-
+// relevant content (command + reason) sits at the top; the selector +
+// chrome sits at the bottom. Keeping the HEAD N lines therefore surfaces
+// the decision info and drops the chrome. For shorter prompts (cursor,
+// opencode) the capture fits within the cap and no truncation occurs.
+//
+// The byte-cap branch keeps the HEAD bytes and walks back to the
+// previous rune boundary if a mid-rune split lands there, so a single
+// >2KB line containing multi-byte runes (e.g. a long URL with arrows,
+// a base64 blob with Unicode punctuation) cannot emit invalid UTF-8
+// into the nudge body.
 func truncatePaneTail(pane string) string {
 	lines := strings.Split(strings.TrimRight(pane, "\n"), "\n")
 	if len(lines) > maxPaneTailLines {
-		lines = lines[len(lines)-maxPaneTailLines:]
+		lines = lines[:maxPaneTailLines]
 	}
 	out := strings.Join(lines, "\n")
 	if len(out) > maxPaneTailBytes {
-		out = out[len(out)-maxPaneTailBytes:]
-		// Walk past any UTF-8 continuation bytes from a mid-rune split.
-		for len(out) > 0 && !utf8.RuneStart(out[0]) {
-			out = out[1:]
+		out = out[:maxPaneTailBytes]
+		// Drop any trailing bytes that form an incomplete UTF-8 rune
+		// (mid-rune split at the tail of the retained prefix). A valid
+		// rune at the end decodes cleanly; an incomplete one surfaces
+		// as RuneError with size=1, so we can pop bytes until the
+		// trailing rune decodes.
+		for len(out) > 0 {
+			r, sz := utf8.DecodeLastRuneInString(out)
+			if r != utf8.RuneError || sz != 1 {
+				break
+			}
+			out = out[:len(out)-1]
 		}
-		// Trim to the next newline so we don't start mid-line.
-		if nl := strings.IndexByte(out, '\n'); nl > -1 {
-			out = out[nl+1:]
+		// Trim back to the previous newline so we don't end mid-line.
+		if nl := strings.LastIndexByte(out, '\n'); nl > -1 {
+			out = out[:nl]
 		}
 	}
 	return out
