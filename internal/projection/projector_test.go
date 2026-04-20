@@ -1039,6 +1039,35 @@ func TestProjector_ApplyMessageReceipt_GroupMemberCreatesRow(t *testing.T) {
 	}
 }
 
+func TestProjector_ApplyMessageReceipt_GroupRoleMemberCreatesRow(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	// Register an agent whose role matches a role-type group member.
+	insertAgent(t, db, "alice", "reviewer")
+
+	_, err := db.Exec(`INSERT INTO groups (group_id, name, created_at, created_by) VALUES ('grp_r','reviewers','2026-01-01T00:00:00Z','sender_test')`)
+	if err != nil {
+		t.Fatalf("insert group: %v", err)
+	}
+	// Group member stored by role, not by agent_id — exercises the role
+	// lookup branch in the legitimacy gate.
+	_, err = db.Exec(`INSERT INTO group_members (group_id, member_type, member_value, added_at) VALUES ('grp_r','role','reviewer','2026-01-01T00:00:00Z')`)
+	if err != nil {
+		t.Fatalf("insert group role member: %v", err)
+	}
+
+	insertMessageWithScope(t, p, "msg_grp_role", "group", "reviewers", nil)
+
+	applyReceipt(t, p, "msg_grp_role", "alice", "read", "2026-01-01T00:00:05Z")
+
+	if got := deliveryCount(t, db, "msg_grp_role", "alice"); got != 1 {
+		t.Fatalf("agent with matching role in role-type group member should create a delivery row, got %d", got)
+	}
+}
+
 func TestProjector_ApplyMessageReceipt_NonGroupMemberDoesNotCreateRow(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
