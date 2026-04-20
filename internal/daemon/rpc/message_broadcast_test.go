@@ -349,8 +349,11 @@ func TestMessageHandler_TwoDaemons_OnlyOriginBroadcasts(t *testing.T) {
 	handlerB.SetWSBroadcaster(bcB)
 
 	// Wire both hooks with the same policy main.go uses. Synchronous
-	// dispatch so assertions are deterministic; production path runs
-	// NotifyMessageCreate on a goroutine.
+	// dispatch so assertions are deterministic; production wraps the
+	// NotifyMessageCreate call in `go func(evt)` (see cmd/thrum/main.go
+	// SetOnEventWrite closure) to avoid blocking the state.WriteEvent
+	// writer. That goroutine path is covered separately — here we need
+	// determinism so call-count assertions don't race the scheduler.
 	hookFor := func(h *MessageHandler) state.EventWriteHook {
 		return func(_ string, _ int64, event []byte) {
 			var head struct {
@@ -392,16 +395,30 @@ func TestMessageHandler_TwoDaemons_OnlyOriginBroadcasts(t *testing.T) {
 	}
 	stA.Unlock()
 
-	// WriteEvent enriches the event with origin_daemon=d_A (the writer's
-	// daemonID). Re-read the enriched JSON from A's event log so daemon B
-	// ingests the exact payload a peer-sync replica would have.
-	// For this test we synthesise the enriched event ourselves using A's
-	// DaemonID, which is the identical enrichment WriteEvent performs.
-	enriched := evt
-	enriched.OriginDaemon = stA.DaemonID()
-	enrichedBytes, err := json.Marshal(enriched)
+	// Read the enriched event back from A's event log. WriteEvent stamps
+	// origin_daemon=stA.DaemonID() into the stored JSON, so this is the
+	// exact byte payload daemon B would receive over sync_apply. Doing a
+	// real round-trip (rather than synthesising the enriched struct in
+	// memory) pins the contract: if WriteEvent ever stops stamping
+	// origin_daemon, this test flips — which is what we want, because
+	// the whole xfsb filter depends on that stamp being present.
+	events, _, _, err := stA.GetEventsSince(context.Background(), 0, 100)
 	if err != nil {
-		t.Fatalf("marshal enriched: %v", err)
+		t.Fatalf("daemon A GetEventsSince: %v", err)
+	}
+	var enrichedBytes []byte
+	for _, e := range events {
+		if e.Type == "message.create" {
+			enrichedBytes = e.EventJSON
+			if e.OriginDaemon != stA.DaemonID() {
+				t.Fatalf("stored event origin_daemon = %q, want %q (WriteEvent enrichment contract broken)",
+					e.OriginDaemon, stA.DaemonID())
+			}
+			break
+		}
+	}
+	if enrichedBytes == nil {
+		t.Fatal("no message.create event found in daemon A's log")
 	}
 
 	// Daemon B ingests the replicated event. IngestSyncedEvent fires B's

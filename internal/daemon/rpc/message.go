@@ -331,8 +331,13 @@ func (h *MessageHandler) NotifyMessageCreate(evt types.MessageCreateEvent) {
 	//
 	// Empty OriginDaemon is treated as local: test fixtures and legacy
 	// callers that construct events without passing through WriteEvent
-	// do not set it, and they expect the broadcast to fire.
-	if h.state != nil && evt.OriginDaemon != "" && evt.OriginDaemon != h.state.DaemonID() {
+	// do not set it, and they expect the broadcast to fire. h.state is
+	// always non-nil in production (constructor contract) — no nil guard
+	// because every other method on this handler deferences it unguarded
+	// (HandleSend, HandleGet, etc.). A nil-state test path would panic
+	// here the same way it panics on HandleSend, which is the intended
+	// early failure.
+	if evt.OriginDaemon != "" && evt.OriginDaemon != h.state.DaemonID() {
 		return
 	}
 	bc := h.loadBroadcaster()
