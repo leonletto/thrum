@@ -355,13 +355,69 @@ func (p *Projector) applyMessageReceipt(ctx context.Context, data json.RawMessag
 		return fmt.Errorf("check message exists: %w", err)
 	}
 
-	// Ensure a delivery row exists even for pre-v14 messages that are marked read later.
+	// thrum-qb62: gate the INSERT on recipient legitimacy to prevent phantom
+	// delivery rows. Previously any receipt event unconditionally inserted a
+	// delivery row, which let `thrum message read --all` fabricate rows for
+	// messages the agent was never targeted for — making send targeting look
+	// like it had fanned out. The row is now only created when the agent is a
+	// legitimate recipient: mentioned by agent_id or role, in a targeted
+	// group, or on a broadcast-scoped message. Pre-v14 messages with legitimate
+	// recipients still get their row created the first time they read.
+	//
+	// Note: if the delivery row already exists (the normal post-v14 path), the
+	// INSERT is a no-op via OR IGNORE and the subsequent UPDATE sets seen_at /
+	// read_at as usual. If no row exists and the agent is not a legitimate
+	// recipient, no row is created and the UPDATE below is also a no-op —
+	// the receipt event is still stored in JSONL + events for auditability.
 	_, err = tx.Exec(`
-		INSERT OR IGNORE INTO message_deliveries (
-			message_id, recipient_agent_id, delivered_at
+		INSERT OR IGNORE INTO message_deliveries (message_id, recipient_agent_id, delivered_at)
+		SELECT ?, ?, ?
+		WHERE EXISTS (
+			SELECT 1 FROM message_refs mr
+			WHERE mr.message_id = ?
+			  AND mr.ref_type = 'mention'
+			  AND (
+			    mr.ref_value = ?
+			    OR mr.ref_value = (SELECT role FROM agents WHERE agent_id = ? LIMIT 1)
+			  )
+		) OR EXISTS (
+			SELECT 1 FROM message_scopes ms
+			WHERE ms.message_id = ?
+			  AND ms.scope_type = 'broadcast'
+		) OR EXISTS (
+			SELECT 1 FROM message_scopes ms
+			JOIN groups g ON g.name = ms.scope_value
+			JOIN group_members gm ON g.group_id = gm.group_id
+			WHERE ms.message_id = ?
+			  AND ms.scope_type = 'group'
+			  AND (
+			    (gm.member_type = 'agent' AND gm.member_value = ?)
+			    OR (gm.member_type = 'role' AND gm.member_value = (SELECT role FROM agents WHERE agent_id = ? LIMIT 1))
+			  )
+		) OR (
+			-- Legacy-broadcast: the message has no targeting whatsoever
+			-- (no mention refs, no broadcast/group scopes). Any agent can
+			-- mark it read. Mirrors the legacy-broadcast branch in
+			-- buildForAgentClause (message.go) so inbox visibility and
+			-- delivery-gate semantics stay aligned.
+			NOT EXISTS (
+				SELECT 1 FROM message_refs mr_lb
+				WHERE mr_lb.message_id = ?
+				  AND mr_lb.ref_type IN ('mention', 'group', 'broadcast')
+			)
+			AND NOT EXISTS (
+				SELECT 1 FROM message_scopes ms_lb
+				WHERE ms_lb.message_id = ?
+				  AND ms_lb.scope_type IN ('group', 'broadcast')
+			)
 		)
-		VALUES (?, ?, ?)
-	`, event.MessageID, event.AgentID, event.Timestamp)
+	`,
+		event.MessageID, event.AgentID, event.Timestamp,
+		event.MessageID, event.AgentID, event.AgentID,
+		event.MessageID,
+		event.MessageID, event.AgentID, event.AgentID,
+		event.MessageID, event.MessageID,
+	)
 	if err != nil {
 		return fmt.Errorf("ensure message delivery: %w", err)
 	}
