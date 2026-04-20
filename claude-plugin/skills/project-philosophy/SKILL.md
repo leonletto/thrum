@@ -133,4 +133,74 @@ If at least one check reports "differs", transition to the re-run-evolved flow (
 
 Idempotency invariant: re-running `/project-philosophy` on an unchanged project must never modify any file. Tests for this mode should use `stat -c %Y .thrum/philosophy.md` or equivalent to confirm mtime is untouched.
 
-<!-- Body continued in tasks 4-5 -->
+## Re-run-evolved mode
+
+Triggered when `.thrum/philosophy.md` exists AND the unchanged-mode sanity check flagged drift. This is the load-bearing idempotency path — philosophy docs accumulate learned anti-patterns over time, so silent overwrites destroy context. The merge-proposal shape is the only correct shape.
+
+> **Never silently overwrite.** Philosophy docs are not regenerated — they are evolved. If the user has added hand-written anti-patterns, post-mortem references, or team-specific notes, those must survive every re-run. A write without explicit user confirmation is a bug.
+
+### Step 1: Read the existing doc
+
+Same as re-run-unchanged Step 1. Keep the parsed sections in memory so the diff proposal can cite them.
+
+### Step 2: Detect drift
+
+Four drift categories, conservative on purpose:
+
+- **Language/framework version change.** `go.mod`'s `go 1.X` differs from the doc's stated version; `package.json` lists `next@15.x` but doc says `next@14.x`.
+- **New test patterns in codebase.** `ginkgo` imports appear but the doc lists only `stdlib testing`. New `playwright.config.ts` exists but doc doesn't mention E2E.
+- **New anti-patterns recorded in CLAUDE.md since last run.** Compare anti-pattern bullets in CLAUDE.md against the doc's `{{ANTI_PATTERNS}}` section; anything new in CLAUDE.md is a drift candidate.
+- **New linters or code-quality tooling added.** `.golangci.yml`, `eslint.config.js`, `ruff.toml` that weren't mentioned in the doc.
+
+Start conservative. Expand the detector list only based on real-use feedback — over-eager drift detection pesters users and erodes trust in the skill.
+
+### Step 3: Compute a proposed diff (sectional)
+
+Present drift as a readable sectional diff, one item per drift category. Each item should have:
+
+- The detected change in plain language
+- A proposed edit (insertion / replacement / addition at the bottom of a section)
+- A one-line rationale
+
+Example shape:
+
+```markdown
+### Proposed updates to `.thrum/philosophy.md`
+
+**1. Framework version bump**
+- Current: "Next.js 14"
+- Proposed: "Next.js 15"
+- Rationale: `package.json` lists `"next": "^15.0.0"`
+
+**2. New anti-pattern from CLAUDE.md**
+- Proposed addition under "## Anti-patterns":
+  > - Never run migrations from an agent session — always via the release pipeline.
+- Rationale: Added to CLAUDE.md in commit abc1234 after the 2026-03 incident.
+```
+
+### Step 4: Present via `AskUserQuestion`
+
+Use `AskUserQuestion` with:
+
+- A concise summary question: "3 drifts detected against `.thrum/philosophy.md`. Apply all, select, or decline?"
+- Options: `Apply all`, `Select items to apply`, `Decline (keep doc as-is)`
+- Include the full sectional diff from Step 3 in the question context so the user can see what they're approving
+
+If the user picks `Select items`, fire a follow-up `AskUserQuestion` with per-item yes/no choices.
+
+### Step 5: Write only on confirmation
+
+Apply approved edits in-place. For each applied edit:
+
+- Preserve surrounding content (don't re-render the whole template)
+- Append a provenance comment near the change: `<!-- updated YYYY-MM-DD via project-philosophy re-run-evolved -->`
+
+Write the file once, at the end. Announce the applied items in the final message.
+
+### Step 6: On decline — no write + log
+
+If the user declines (or selects zero items), do NOT write to the file. Record the skipped proposal in `.thrum/philosophy-skipped.jsonl` (append-only, one JSON line per decline) with the timestamp and the drift items proposed. Future runs can re-surface the same items without re-computing drift from scratch.
+
+Skipped-proposal log is advisory — its absence is not an error.
+
+<!-- Body continued in task 5 -->
