@@ -49,8 +49,8 @@ When filling this template to create an implementation prompt:
 - `{{PROJECT_ROOT}}` — Absolute path to the project root
 - `{{ANTI_PATTERNS}}` — Epic-specific implementation standards. Injected by
   project-setup Phase 4. If empty, the generic verifier pattern still applies
-  but without domain-specific checks. See `project-philosophy` for the format
-  spec.
+  but without domain-specific checks. Refer to the `project-philosophy` skill
+  for the format spec.
 - `{{CROSS_EPIC_DEPS}}` — Cross-epic dependency table showing which tasks in
   this epic are blocked by tasks in other epics. Injected by project-setup
   Phase 4. If empty (no cross-epic deps), this section is omitted.
@@ -465,7 +465,7 @@ thrum send "BLOCKED: {{TASK_ID}} by external dependency {{BLOCKER_ID}}" --to @{{
 
 ### When you hit a design fork
 
-**If you're blocked on a genuine 2-3 way design fork** — a real tradeoff where "just pick one" would likely be regretted — invoke `adversarial-critique` with the options, constraints, and the decision you need made. See that skill for cost, threshold, and the audit artifact path.
+**If you're blocked on a genuine 2-3 way design fork** — a real tradeoff where "just pick one" would likely be regretted — invoke `adversarial-critique` with the options, constraints, and the decision you need made. The `adversarial-critique` skill documents cost, threshold, and the audit artifact path.
 
 **If you're investigating N > 6 items** (function call sites, pattern
 audits, multi-file reviews), invoke the
@@ -547,7 +547,8 @@ Fix any failures before proceeding. Do not submit broken code for review.
 ### Step 2: Spec Compliance Review (Stage 1)
 
 Verify the implementation covers everything specified in the plan, design doc,
-and each task's acceptance criteria.
+and each task's acceptance criteria. No code-style judgments at this stage —
+only "does the code do what was asked?"
 
 Invoke `verify-against-plan` with these inputs:
 

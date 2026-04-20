@@ -91,7 +91,7 @@ If the file does not exist, stop and tell the user:
 
 Do not proceed without the philosophy doc. Do not inline-create.
 
-If the doc exists, read it and extract the anti-patterns for injection in Phase 4. See `project-philosophy` for the doc contents and the anti-pattern format.
+If the doc exists, read it and extract the anti-patterns for injection in Phase 4. Refer to the `project-philosophy` skill for the doc contents and the anti-pattern format.
 
 ## Inputs
 
@@ -538,7 +538,7 @@ For each epic's prompt, derive the `{{ANTI_PATTERNS}}` content by combining two 
 
 Present the derived anti-patterns to the user for approval via `AskUserQuestion` before injecting into the prompt.
 
-See `project-philosophy` for the anti-pattern format spec (rule count, grep-ability, positive + negative pair structure).
+Refer to the `project-philosophy` skill for the anti-pattern format spec (rule count, grep-ability, positive + negative pair structure).
 
 **Why this matters:** The verifier sub-agent pattern in the implementation
 template uses these red flags to check each task. Generic "tests pass"
@@ -563,7 +563,7 @@ worktree-related values come from the Phase 3 assignments:
 | `{{COVERAGE_TARGET}}`  | Coverage threshold (e.g., `>80%`)                                                                                                                                                                                           |
 | `{{AGENT_NAME}}`       | **From Phase 3 agent registration**                                                                                                                                                                                         |
 | `{{PLAN_FILE}}`        | **Absolute path** to the plan file (primary input)                                                                                                                                                                          |
-| `{{ANTI_PATTERNS}}`    | Generated in Step 1.5; see `project-philosophy` for the anti-pattern format spec.                                                                                                                                           |
+| `{{ANTI_PATTERNS}}`    | Generated in Step 1.5; refer to the `project-philosophy` skill for the anti-pattern format spec.                                                                                                                            |
 | `{{SUPERVISOR_NAME}}`  | From `thrum team` — first agent with role=orchestrator; if none, first with role=coordinator; if none, ask user                                                                                                             |
 | `{{CROSS_EPIC_DEPS}}`  | From Phase 2 cross-epic dependency map. If no cross-epic deps, replace with "No cross-epic dependencies."                                                                                                                   |
 
