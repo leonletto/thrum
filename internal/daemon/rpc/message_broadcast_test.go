@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/daemon/state"
@@ -15,24 +14,29 @@ import (
 )
 
 // countingBroadcaster is a test double for WSBroadcaster that records
-// how many times BroadcastAll was called and the last payload.
+// how many times BroadcastAll was called and the last payload. Both
+// fields are protected by mu so Calls() and LastPayload() are observed
+// consistently (a prior version mixed atomic + mutex, which could let
+// Calls() return 1 while LastPayload() still showed nil).
 type countingBroadcaster struct {
-	mu        sync.Mutex
-	calls     atomic.Int64
+	mu          sync.Mutex
+	calls       int64
 	lastPayload map[string]any
 }
 
 func (c *countingBroadcaster) BroadcastAll(notification any) {
-	c.calls.Add(1)
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.calls++
 	if m, ok := notification.(map[string]any); ok {
 		c.lastPayload = m
 	}
 }
 
 func (c *countingBroadcaster) Calls() int64 {
-	return c.calls.Load()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.calls
 }
 
 func (c *countingBroadcaster) LastPayload() map[string]any {
@@ -151,7 +155,12 @@ func TestMessageHandler_HookDispatch_FiresBroadcastOncePerMessage(t *testing.T) 
 
 	// Wire the hook to mirror cmd/thrum/main.go SetOnEventWrite —
 	// we invoke synchronously (not go func) so the test can observe
-	// the call count deterministically without sleep loops.
+	// the call count deterministically without sleep loops. Production
+	// dispatches NotifyMessageCreate on a goroutine (see main.go hook
+	// body) to avoid blocking the state.WriteEvent writer. This test
+	// does not exercise that goroutine directly; if a future refactor
+	// changes the captured-evt semantics, add a -race dispatching
+	// variant that exercises the async path.
 	st.SetOnEventWrite(func(_ string, _ int64, event []byte) {
 		var head struct {
 			Type string `json:"type"`
