@@ -67,6 +67,14 @@ func setupRepoWithRemote(t *testing.T) (string, string) {
 // and pushes. Returns the appended event line so callers can assert it
 // surfaces locally after merge.
 func pushFromSecondClone(t *testing.T, bareDir, extraEvent string) {
+	pushFromSecondCloneWithMessage(t, bareDir, extraEvent, "", "")
+}
+
+// pushFromSecondCloneWithMessage is the extended variant that also writes a
+// messages/<msgFile> file with msgContent, exercising the messages/ merge
+// path (merge.go:131-183) through to the reset-at-end step. messageFile
+// and messageContent may be empty to skip the messages write.
+func pushFromSecondCloneWithMessage(t *testing.T, bareDir, extraEvent, messageFile, messageContent string) {
 	t.Helper()
 
 	peerDir := t.TempDir()
@@ -74,16 +82,28 @@ func pushFromSecondClone(t *testing.T, bareDir, extraEvent string) {
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("clone peer: %v", err)
 	}
-	// Peer doesn't have the full thrum scaffold; just write events.jsonl.
-	eventsPath := filepath.Join(peerDir, "events.jsonl")
-	existing, _ := os.ReadFile(eventsPath) //nolint:gosec
-	out := string(existing)
-	if len(out) > 0 && !strings.HasSuffix(out, "\n") {
-		out += "\n"
+
+	if extraEvent != "" {
+		eventsPath := filepath.Join(peerDir, "events.jsonl")
+		existing, _ := os.ReadFile(eventsPath) //nolint:gosec
+		out := string(existing)
+		if len(out) > 0 && !strings.HasSuffix(out, "\n") {
+			out += "\n"
+		}
+		out += extraEvent + "\n"
+		if err := os.WriteFile(eventsPath, []byte(out), 0600); err != nil {
+			t.Fatalf("peer write events.jsonl: %v", err)
+		}
 	}
-	out += extraEvent + "\n"
-	if err := os.WriteFile(eventsPath, []byte(out), 0600); err != nil {
-		t.Fatalf("peer write events.jsonl: %v", err)
+
+	if messageFile != "" {
+		messagesDir := filepath.Join(peerDir, "messages")
+		if err := os.MkdirAll(messagesDir, 0750); err != nil {
+			t.Fatalf("peer mkdir messages: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(messagesDir, messageFile), []byte(messageContent+"\n"), 0600); err != nil {
+			t.Fatalf("peer write messages/%s: %v", messageFile, err)
+		}
 	}
 
 	cmd = exec.Command("git", "-c", "user.email=peer@test", "-c", "user.name=peer", "add", ".")
@@ -194,6 +214,63 @@ func TestSyncer_CommitAndPush_SucceedsAfterConcurrentRemoteAdvance(t *testing.T)
 	}
 	if !strings.Contains(finalStr, "msg_local_001") {
 		t.Errorf("bare remote missing local event after push; events:\n%s", finalStr)
+	}
+}
+
+// Coverage for the messages/ merge path through the reset: a peer pushes
+// both an events.jsonl entry AND a messages/*.jsonl file; local has a
+// different messages file. After MergeAll, both message files should be
+// present locally and HEAD should be at origin/a-sync. Protects against
+// regressions in the messages-dedup code path interacting with the reset.
+func TestMerger_MergeAll_WithMessagesDir_ResetsAndCopiesRemote(t *testing.T) {
+	repoPath, bareDir := setupRepoWithRemote(t)
+	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
+
+	// Local has its own messages file.
+	localMsgDir := filepath.Join(syncDir, "messages")
+	if err := os.MkdirAll(localMsgDir, 0750); err != nil {
+		t.Fatalf("local mkdir messages: %v", err)
+	}
+	localMsgEvent := `{"type":"message.create","timestamp":"2026-02-03T00:00:10Z","message_id":"msg_local_X","event_id":"evt_local_X"}`
+	if err := os.WriteFile(filepath.Join(localMsgDir, "msg_local_X.jsonl"), []byte(localMsgEvent+"\n"), 0600); err != nil {
+		t.Fatalf("write local message file: %v", err)
+	}
+
+	// Peer pushes a different messages file + events.jsonl entry.
+	peerMsgEvent := `{"type":"message.create","timestamp":"2026-02-03T00:00:11Z","message_id":"msg_peer_X","event_id":"evt_peer_X"}`
+	pushFromSecondCloneWithMessage(t, bareDir,
+		`{"type":"message.create","timestamp":"2026-02-03T00:00:12Z","message_id":"msg_peer_Y","event_id":"evt_peer_Y"}`,
+		"msg_peer_X.jsonl", peerMsgEvent)
+
+	m := NewMerger(repoPath, syncDir, false)
+	ctx := context.Background()
+	if err := m.Fetch(ctx); err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if _, err := m.MergeAll(ctx); err != nil {
+		t.Fatalf("mergeAll: %v", err)
+	}
+
+	// Structural invariant: HEAD == origin/a-sync.
+	localTip := getBranchSHA(t, syncDir, "HEAD")
+	remoteTip := getBranchSHA(t, syncDir, "origin/a-sync")
+	if localTip != remoteTip {
+		t.Errorf("HEAD (%s) != origin/a-sync (%s) after messages-path MergeAll", localTip, remoteTip)
+	}
+
+	// Peer's message file must be present locally after the merge copied it.
+	peerMsgPath := filepath.Join(localMsgDir, "msg_peer_X.jsonl")
+	data, err := os.ReadFile(peerMsgPath) //nolint:gosec
+	if err != nil {
+		t.Fatalf("peer message file should be copied to local after merge: %v", err)
+	}
+	if !strings.Contains(string(data), "msg_peer_X") {
+		t.Errorf("peer messages file content unexpected: %s", string(data))
+	}
+
+	// Local's message file must survive the reset (working tree preserved).
+	if _, err := os.Stat(filepath.Join(localMsgDir, "msg_local_X.jsonl")); err != nil {
+		t.Errorf("local message file should survive reset: %v", err)
 	}
 }
 
