@@ -2255,16 +2255,24 @@ func TestHandleRegister_EnforceOneIdentityOnSelfRename(t *testing.T) {
 		t.Fatalf("mkdir identities: %v", err)
 	}
 
-	// Seed a stale identity file with a dead-looking PID. The
+	// Seed a stale identity file with a reliably-dead PID. The
 	// self-registering caller ("new_agent") will trigger enforcement
 	// because peercred resolves the caller to "new_agent" (matching
 	// keepName below).
+	//
+	// AgentPID must be outside any plausible kernel PID range so the
+	// thrum-182j defense-in-depth liveness check inside
+	// EnforceOneIdentityWith correctly classifies it as dead. PID 1 is
+	// init (always alive) and would be preserved, masking the
+	// legitimate quarantine under test. 99999999 is well above the
+	// macOS default kern.maxproc ceiling (99999) and comfortably
+	// above the common Linux pid_max default (4194304).
 	stale := &config.IdentityFile{
 		Version: 5,
 		Agent: config.AgentConfig{
 			Kind: "agent", Name: "old_agent", Role: "implementer", Module: "legacy",
 		},
-		AgentPID: 1,
+		AgentPID: 99999999,
 	}
 	if err := config.SaveIdentityFile(thrumDir, stale); err != nil {
 		t.Fatalf("seed stale identity: %v", err)

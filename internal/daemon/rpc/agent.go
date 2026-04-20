@@ -403,7 +403,13 @@ func (h *AgentHandler) enforceWorktreeIdentity(ctx context.Context, keepName str
 	if h.state != nil {
 		keepers = append(keepers, h.state.ListAgentsInWorktree(ctx, resolved.Worktree)...)
 	}
-	wtpkg.EnforceOneIdentity(resolved.Worktree, keepers...)
+	// thrum-182j: defense-in-depth — even if the keeper list is stale
+	// or peercred mis-resolved, never quarantine a file whose owning
+	// agent is actively running. The kernel-verified liveness check is
+	// the backstop for the entire cascade that elevated 182j to P0.
+	wtpkg.EnforceOneIdentityWith(resolved.Worktree, wtpkg.EnforceOpts{
+		IsPIDAlive: func(pid int) bool { return process.IsRunning(pid) },
+	}, keepers...)
 }
 
 // HandleList handles the agent.list RPC method.

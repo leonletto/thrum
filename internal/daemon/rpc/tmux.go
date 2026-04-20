@@ -303,7 +303,22 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 		// Enforce single identity AFTER quickstart command is sent successfully.
 		// Quickstart runs asynchronously in the pane — this cleans pre-existing
 		// stale identities. The new identity will be written by quickstart.
-		worktree.EnforceOneIdentity(req.Cwd, req.AgentName)
+		//
+		// thrum-182j: mirror agent.go:406's keeper-list expansion so every
+		// agent registered against this worktree in session_refs survives
+		// enforcement. Without this, creating a tmux session for agent A
+		// in a worktree where agent B is already registered would
+		// quarantine agent B's identity file. Defense-in-depth: an
+		// IsPIDAlive callback refuses quarantine for any file whose
+		// AgentPID is currently alive — the kernel-verified backstop when
+		// the keeper list itself is stale or incomplete.
+		keepers := []string{req.AgentName}
+		if h.state != nil {
+			keepers = append(keepers, h.state.ListAgentsInWorktree(ctx, req.Cwd)...)
+		}
+		worktree.EnforceOneIdentityWith(req.Cwd, worktree.EnforceOpts{
+			IsPIDAlive: func(pid int) bool { return process.IsRunning(pid) },
+		}, keepers...)
 
 		// Shell init (oh-my-zsh, etc.) can swallow the first command.
 		// Poll for the identity file; if it doesn't appear, re-send quickstart.

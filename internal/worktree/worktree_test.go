@@ -286,6 +286,149 @@ func TestEnforceOneIdentity_EmptyKeeperIgnored(t *testing.T) {
 	}
 }
 
+// TestEnforceOneIdentityWith_LiveAgentPreserved — thrum-182j defensive
+// invariant. When a sibling identity file is NOT in the keeper list
+// BUT its AgentPID is alive per the injected IsPIDAlive callback,
+// quarantine must be refused. This models the peercred-mis-resolution
+// cascade: the caller's keeper list is incomplete (daemon DB is stale
+// or peercred resolved the wrong caller), so a live agent's identity
+// file would otherwise be quarantined as a "stale sibling". The
+// callback-verified liveness check is the defense-in-depth gate that
+// keeps the file intact.
+func TestEnforceOneIdentityWith_LiveAgentPreserved(t *testing.T) {
+	dir := t.TempDir()
+	idDir := filepath.Join(dir, ".thrum", "identities")
+	if err := os.MkdirAll(idDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	// Victim: a live agent's identity file — NOT in the keeper list
+	// below, but its PID is reported alive.
+	victim := filepath.Join(idDir, "victim.json")
+	if err := os.WriteFile(victim, []byte(`{"agent":{"name":"victim"},"agent_pid":4242}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// A truly stale sibling with a dead PID — should still be quarantined.
+	stale := filepath.Join(idDir, "stale.json")
+	if err := os.WriteFile(stale, []byte(`{"agent":{"name":"stale"},"agent_pid":9999}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// The registrant we are keeping.
+	keeper := filepath.Join(idDir, "new_agent.json")
+	if err := os.WriteFile(keeper, []byte(`{"agent":{"name":"new_agent"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := EnforceOpts{
+		IsPIDAlive: func(pid int) bool { return pid == 4242 }, // victim alive, stale dead
+	}
+	quarantined := EnforceOneIdentityWith(dir, opts, "new_agent")
+
+	// Victim must survive (live agent, even though not in keep list).
+	if _, err := os.Stat(victim); err != nil {
+		t.Errorf("victim.json must survive live-PID check: %v", err)
+	}
+	// Stale must be quarantined.
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Errorf("stale.json should be quarantined, still at top level")
+	}
+	// Keeper must survive.
+	if _, err := os.Stat(keeper); err != nil {
+		t.Errorf("new_agent.json must survive: %v", err)
+	}
+	if len(quarantined) != 1 || quarantined[0] != "stale" {
+		t.Errorf("quarantined = %v, want [stale]", quarantined)
+	}
+}
+
+// TestEnforceOneIdentityWith_ZeroPIDStillQuarantined — pre-prime
+// identity files (AgentPID == 0) are not protected by liveness. G4
+// has the same pre-prime carveout because a zero PID means "no live
+// process asserted this file yet"; it is safe to quarantine.
+func TestEnforceOneIdentityWith_ZeroPIDStillQuarantined(t *testing.T) {
+	dir := t.TempDir()
+	idDir := filepath.Join(dir, ".thrum", "identities")
+	if err := os.MkdirAll(idDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(idDir, "pre_prime.json"), []byte(`{"agent":{"name":"pre_prime"},"agent_pid":0}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(idDir, "new_agent.json"), []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// IsPIDAlive would return true if called with a live PID, but we
+	// never want it consulted for zero: assert by failing the test if
+	// it's called with pid == 0.
+	opts := EnforceOpts{
+		IsPIDAlive: func(pid int) bool {
+			if pid == 0 {
+				t.Errorf("IsPIDAlive called with pid=0 — the implementation should short-circuit")
+			}
+			return true
+		},
+	}
+	quarantined := EnforceOneIdentityWith(dir, opts, "new_agent")
+
+	if len(quarantined) != 1 || quarantined[0] != "pre_prime" {
+		t.Errorf("quarantined = %v, want [pre_prime]", quarantined)
+	}
+}
+
+// TestEnforceOneIdentityWith_UnreadableFileQuarantined — if a sibling
+// file cannot be parsed for AgentPID (corrupt JSON, missing field),
+// treat as PID=0 and fall through to the normal keeper check. This
+// keeps the function deterministic: liveness protection applies only
+// to files that positively assert a live owner.
+func TestEnforceOneIdentityWith_UnreadableFileQuarantined(t *testing.T) {
+	dir := t.TempDir()
+	idDir := filepath.Join(dir, ".thrum", "identities")
+	if err := os.MkdirAll(idDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(idDir, "corrupt.json"), []byte(`{not valid json`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(idDir, "new_agent.json"), []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := EnforceOpts{IsPIDAlive: func(pid int) bool { return true }}
+	quarantined := EnforceOneIdentityWith(dir, opts, "new_agent")
+
+	if len(quarantined) != 1 || quarantined[0] != "corrupt" {
+		t.Errorf("quarantined = %v, want [corrupt] (unreadable files fall through)", quarantined)
+	}
+}
+
+// TestEnforceOneIdentityWith_NilCallbackLegacyBehavior — zero-value
+// opts (no IsPIDAlive) is equivalent to the legacy EnforceOneIdentity
+// behavior. EnforceOneIdentity itself calls into EnforceOneIdentityWith
+// with EnforceOpts{}, so this is also a regression guard against a
+// future where the thin wrapper diverges.
+func TestEnforceOneIdentityWith_NilCallbackLegacyBehavior(t *testing.T) {
+	dir := t.TempDir()
+	idDir := filepath.Join(dir, ".thrum", "identities")
+	if err := os.MkdirAll(idDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	// Even a file asserting a PID must be quarantined when the callback
+	// is nil — callers that don't opt into liveness get legacy semantics.
+	if err := os.WriteFile(filepath.Join(idDir, "with_pid.json"), []byte(`{"agent_pid":4242}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(idDir, "new_agent.json"), []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	quarantined := EnforceOneIdentityWith(dir, EnforceOpts{}, "new_agent")
+
+	if len(quarantined) != 1 || quarantined[0] != "with_pid" {
+		t.Errorf("quarantined = %v, want [with_pid] (nil callback = legacy semantics)", quarantined)
+	}
+}
+
 // TestEnforceOneIdentity_QuarantineSkipped — the .quarantine/ dir
 // itself must never be scanned as an identity file. Files already
 // inside .quarantine/ stay there.

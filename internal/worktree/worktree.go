@@ -1,12 +1,33 @@
 package worktree
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 )
+
+// EnforceOpts configures defense-in-depth checks for
+// EnforceOneIdentityWith. The zero value yields legacy keeper-only
+// behavior (equivalent to calling EnforceOneIdentity directly).
+type EnforceOpts struct {
+	// IsPIDAlive, when non-nil, is consulted before quarantining a
+	// sibling identity file. If the sibling file has a non-zero
+	// AgentPID and this callback returns true for it, quarantine is
+	// refused and a warning is logged.
+	//
+	// This is the thrum-182j defense-in-depth invariant: never
+	// quarantine a file whose owning agent is actively running, even
+	// if the caller's keeper list did not include them. The keeper
+	// list can be incomplete — peercred may mis-resolve the caller
+	// (thrum-0pos), or the daemon's session_refs projection may be
+	// stale — but a live kernel PID is ground truth. Pre-prime files
+	// (AgentPID == 0) are not protected by this gate, matching G4's
+	// pre-prime carveout.
+	IsPIDAlive func(pid int) bool
+}
 
 // EnsureRedirects verifies and creates .thrum/ and .beads/ redirects
 // in a worktree, pointing back to the main repo. Creates identities/ and
@@ -93,6 +114,15 @@ func EnsureRedirects(worktreePath, mainRepo string) error {
 // the caller (0o750) and timestamped so repeated enforcement does not
 // overwrite previous quarantined copies.
 func EnforceOneIdentity(worktreePath string, keep ...string) []string {
+	return EnforceOneIdentityWith(worktreePath, EnforceOpts{}, keep...)
+}
+
+// EnforceOneIdentityWith is the explicit-options variant of
+// EnforceOneIdentity. The zero-value EnforceOpts matches the legacy
+// keeper-only behavior; non-nil opts.IsPIDAlive adds the thrum-182j
+// defense-in-depth gate that refuses to quarantine a file whose
+// owning agent is currently alive.
+func EnforceOneIdentityWith(worktreePath string, opts EnforceOpts, keep ...string) []string {
 	idDir := filepath.Join(worktreePath, ".thrum", "identities")
 	entries, err := os.ReadDir(idDir)
 	if err != nil {
@@ -120,6 +150,17 @@ func EnforceOneIdentity(worktreePath string, keep ...string) []string {
 		}
 		src := filepath.Join(idDir, entry.Name())
 
+		// Defense-in-depth (thrum-182j): if the candidate file
+		// asserts a live agent PID, refuse to quarantine it.
+		// Pre-prime files (pid == 0) bypass this gate and are
+		// treated as ordinary stale siblings.
+		if opts.IsPIDAlive != nil {
+			if pid := readAgentPID(src); pid > 0 && opts.IsPIDAlive(pid) {
+				fmt.Fprintf(os.Stderr, "Warning: refusing to quarantine live identity %s (pid %d)\n", entry.Name(), pid)
+				continue
+			}
+		}
+
 		if quarantineDir == "" {
 			quarantineDir = filepath.Join(idDir, ".quarantine")
 			if err := os.MkdirAll(quarantineDir, 0o750); err != nil {
@@ -138,6 +179,26 @@ func EnforceOneIdentity(worktreePath string, keep ...string) []string {
 	}
 
 	return quarantined
+}
+
+// readAgentPID extracts the agent_pid field from an identity file
+// without pulling in the config package (which would create an import
+// cycle: config → worktree already exists in other directions). Returns
+// 0 when the file is unreadable, malformed, or does not declare a PID.
+// The caller treats a zero return as "no live assertion, fall through
+// to normal quarantine".
+func readAgentPID(path string) int {
+	data, err := os.ReadFile(path) // #nosec G304 -- path is .thrum/identities/<name>.json under caller's worktree
+	if err != nil {
+		return 0
+	}
+	var probe struct {
+		AgentPID int `json:"agent_pid"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return 0
+	}
+	return probe.AgentPID
 }
 
 // BuildQuickstartCmd constructs a shell-safe thrum quickstart command string
