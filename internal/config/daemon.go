@@ -347,8 +347,10 @@ func applyDefaults(cfg *ThrumConfig) {
 //
 // A config satisfies the invariant when the list contains one of:
 //   - the bare role "coordinator"
-//   - an "@coordinator_*" or "@coordinator-*" agent name (naming convention
-//     for coordinator agents in this codebase)
+//   - an "@coordinator_*" or "@coordinator-*" agent name (any name with
+//     that prefix is treated as a coordinator-role entry by this check,
+//     matching the codebase convention that coordinator agents are named
+//     @coordinator_<module>)
 //
 // Returns a human-readable warning describing the problem, or "" when the
 // config is valid. An empty / nil list is considered valid — the resolver
