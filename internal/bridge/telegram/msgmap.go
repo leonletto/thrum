@@ -72,7 +72,9 @@ func (m *MessageMap) Store(chatID int64, teleMsgID int, thrumMsgID string) {
 			// functional. Only a restart-window's worth of mappings risks
 			// loss from a DB write error; log and continue.
 			slog.Warn("[telegram.msgmap] DB write failed",
-				"external_key", key, "err", err)
+				"external_key", key,
+				"thrum_msg_id", thrumMsgID,
+				"err", err)
 		}
 	}
 }

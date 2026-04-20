@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -180,6 +181,15 @@ func TestMessageMap_LRUEvictionDoesntLoseFromDB(t *testing.T) {
 	if !ok || id != keyFor(5) {
 		t.Errorf("cached (500,5) ThrumID = (%q, %v); want (%s, true)", id, ok, keyFor(5))
 	}
+
+	// Reverse lookup on evicted entries must also resolve via DB fallback
+	// — proves the DB-hit cache-warm populates both directions of the
+	// in-memory bridge.MessageMap (forward and reverse), not just one.
+	chatID, teleID, ok := mm.TeleID(keyFor(1))
+	if !ok || chatID != 500 || teleID != 1 {
+		t.Errorf("evicted TeleID(%s) = (%d, %d, %v); want (500, 1, true)",
+			keyFor(1), chatID, teleID, ok)
+	}
 }
 
 // TestMessageMap_StoreOverwrite verifies the INSERT OR REPLACE semantics:
@@ -210,5 +220,5 @@ func TestMessageMap_StoreOverwrite(t *testing.T) {
 }
 
 func keyFor(i int) string {
-	return "msg_id_" + string(rune('A'+i-1))
+	return fmt.Sprintf("msg_id_%d", i)
 }

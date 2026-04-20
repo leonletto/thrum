@@ -53,10 +53,13 @@ type Bridge struct {
 	lastError    string
 	inboundCount atomic.Int64
 	// db optionally backs MessageMap with SQLite so Telegram↔Thrum
-	// message ID mappings survive daemon restart (thrum-48kt.2). Nil in
-	// tests and in legacy construction sites — falls back to in-memory
-	// LRU only.
-	db *sql.DB
+	// message ID mappings survive daemon restart (thrum-48kt.2). Nil
+	// pointer (or pointer holding nil *sql.DB) in tests and in legacy
+	// construction sites — falls back to in-memory LRU only.
+	// Stored as atomic.Pointer to match the b.bot pattern above and
+	// to document that SetDB vs. run's read are safe even under a
+	// hypothetical future Restart-time reconfigure.
+	db atomic.Pointer[sql.DB]
 }
 
 // New creates a new Bridge. The token is read from cfg but not stored
@@ -69,11 +72,13 @@ func New(cfg config.TelegramConfig, wsPort string) *Bridge {
 	}
 }
 
-// SetDB wires a SQLite handle for MessageMap persistence. Safe to call
-// once, after New, before Run. Nil handle keeps in-memory-only behavior.
-// Production daemon bootstrap wires this from state.DB(); tests omit it.
+// SetDB wires a SQLite handle for MessageMap persistence. Typically
+// called once at bootstrap before Run — but storing via atomic.Pointer
+// makes later reconfigure-time calls race-free as well.
+// Nil handle keeps in-memory-only behavior. Production daemon bootstrap
+// wires this from state.DB(); tests omit it.
 func (b *Bridge) SetDB(db *sql.DB) {
-	b.db = db
+	b.db.Store(db)
 }
 
 // Status returns the current bridge runtime state.
@@ -260,7 +265,7 @@ func (b *Bridge) run(ctx context.Context) error {
 	// survive a daemon restart. Nil b.db falls back to pre-48kt.2
 	// in-memory-only behavior — kept for tests and for accidentally-
 	// unwired installs.
-	msgMap := NewMessageMapWithDB(10000, b.db)
+	msgMap := NewMessageMapWithDB(10000, b.db.Load())
 	inbound := NewInboundRelay(ws, msgMap, userID, b.cfg.Target, b.cfg.Groups, bot.BotUsername())
 	outbound := NewOutboundRelay(ws, bot, msgMap, userID, b.cfg.ChatID, b.cfg.Groups)
 
