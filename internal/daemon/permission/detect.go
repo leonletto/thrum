@@ -48,16 +48,34 @@ func DetectPaneState(runtime, paneContent string) string {
 }
 
 // bottomLines returns the last n lines of content. If content has
-// n or fewer lines it is returned unchanged. A trailing newline is
-// preserved if present in the original so multi-line regex anchors
-// (`(?m)^...`) behave identically to the full-content path.
+// n or fewer lines it is returned unchanged. CRLF is normalized to LF
+// before counting so a pane captured with Windows-style line endings
+// (rare but possible via remote ssh transports) doesn't silently
+// double the line count and under-slice.
+//
+// A single trailing newline on the input is stripped before counting
+// so a tmux capture that happens to end with "\n" doesn't waste a
+// slot on the phantom empty element produced by strings.Split —
+// ensuring the window is exactly n lines of real content. If the
+// input had a trailing newline we preserve it on output too, so
+// multi-line regex anchors (`(?m)^...$`) behave identically to the
+// full-content path.
 func bottomLines(content string, n int) string {
 	if n <= 0 {
 		return content
 	}
-	lines := strings.Split(content, "\n")
-	if len(lines) <= n {
-		return content
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	trailingNL := strings.HasSuffix(content, "\n")
+	if trailingNL {
+		content = content[:len(content)-1]
 	}
-	return strings.Join(lines[len(lines)-n:], "\n")
+	lines := strings.Split(content, "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	out := strings.Join(lines, "\n")
+	if trailingNL {
+		out += "\n"
+	}
+	return out
 }

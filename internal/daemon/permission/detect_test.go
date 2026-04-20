@@ -82,6 +82,11 @@ func TestDetectPaneState_ClaudePromptInUpperScrollback_DoesNotMatch(t *testing.T
 		"     2. Yes, and don't ask again for Bash(curl)",
 		"     3. No, and tell Claude what to do differently (Esc)",
 	)
+	// 20 post-approval lines > paneBottomMatchLines (15). The minimum
+	// for this test to exercise the upper-scrollback case is `N - (prompt lines)
+	// + 1`, currently 15 - 5 + 1 = 11. Oversized on purpose so the
+	// assertion still holds if the prompt regex grows a line or if
+	// paneBottomMatchLines is tuned slightly upward.
 	for range 20 {
 		builder = append(builder, "⏺ [post-approval output line]")
 	}
@@ -136,4 +141,76 @@ func TestDetectPaneState_ClaudePromptShortPane_StillMatches(t *testing.T) {
 // (tmux capture-pane does not emit one).
 func joinLines(lines []string) string {
 	return strings.Join(lines, "\n")
+}
+
+// TestBottomLines_TrailingNewlinePreservesWindow covers the IMPORTANT
+// review finding from the k4wf first-pass: a trailing "\n" on the
+// input used to consume one slot of the N-line window via the phantom
+// empty element produced by strings.Split. The helper now strips the
+// trailing newline before counting and re-appends it after slicing,
+// so the effective content window stays at exactly N lines.
+func TestBottomLines_TrailingNewlinePreservesWindow(t *testing.T) {
+	// 20 distinct lines, each of the form "line-NN".
+	lines := make([]string, 0, 20)
+	for i := 1; i <= 20; i++ {
+		lines = append(lines, "line-" + itoa(i))
+	}
+	// Trailing newline on the input (matches what some tmux / capture
+	// wrappers emit).
+	content := strings.Join(lines, "\n") + "\n"
+
+	got := bottomLines(content, 15)
+	gotLines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
+	if len(gotLines) != 15 {
+		t.Fatalf("bottomLines returned %d content lines, want 15", len(gotLines))
+	}
+	// Expect last 15 lines of original (line-6 .. line-20).
+	if gotLines[0] != "line-6" || gotLines[14] != "line-20" {
+		t.Errorf("bottomLines returned wrong slice: first=%q last=%q, want first=%q last=%q",
+			gotLines[0], gotLines[14], "line-6", "line-20")
+	}
+	if !strings.HasSuffix(got, "\n") {
+		t.Error("bottomLines dropped the trailing newline from input that had one")
+	}
+}
+
+// TestBottomLines_CRLFNormalization verifies the defense against
+// CRLF-terminated pane captures (rare but possible via remote ssh
+// transports). Without the normalization, "\r" would become part of
+// line content and inflate the effective line count to 2x.
+func TestBottomLines_CRLFNormalization(t *testing.T) {
+	// 3 lines joined with \r\n. Without CRLF normalization, bottomLines
+	// would treat this as one big line containing embedded "\r\n"
+	// (since strings.Split on "\n" leaves "\r" trailing on each line,
+	// not relevant for count) — but more importantly, downstream
+	// multi-line regex anchors work on LF-separated content.
+	content := "a\r\nb\r\nc"
+	got := bottomLines(content, 15)
+	if strings.Contains(got, "\r") {
+		t.Errorf("bottomLines did not strip \\r: %q", got)
+	}
+}
+
+// itoa is a tiny helper to keep the test free of a fmt import for one
+// int conversion.
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	var buf [20]byte
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
 }
