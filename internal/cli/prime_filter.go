@@ -41,7 +41,7 @@ func filterProjectStateSections(data []byte, role string) []byte {
 	out.Grow(len(data))
 
 	scanner := bufio.NewScanner(bytes.NewReader(data))
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 
 	seenH2 := false
 	include := true
@@ -50,7 +50,10 @@ func filterProjectStateSections(data []byte, role string) []byte {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "## ") {
 			seenH2 = true
-			include = projectStateAllowedH2[strings.TrimRight(line, " \t")]
+			// Strip \r for CRLF-terminated files and trailing
+			// whitespace so the allowlist lookup is tolerant of
+			// stylistic variance in the source doc.
+			include = projectStateAllowedH2[strings.TrimRight(line, " \t\r")]
 		}
 		if !seenH2 || include {
 			out.WriteString(line)

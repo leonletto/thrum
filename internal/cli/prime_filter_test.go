@@ -198,24 +198,60 @@ func TestFilterProjectStateSections_PreambleOnly(t *testing.T) {
 }
 
 func TestFilterProjectStateSections_TrailingNewlineBehavior(t *testing.T) {
+	tail := func(b []byte) string {
+		if len(b) <= 8 {
+			return string(b)
+		}
+		return string(b[len(b)-8:])
+	}
+
 	// Input without trailing newline should not gain one.
 	input := "# Project State — Thrum\n\n## Current State Summary\n\nBody"
 	got := filterProjectStateSections([]byte(input), "implementer")
 	if len(got) == 0 || got[len(got)-1] == '\n' {
-		t.Errorf("expected no trailing newline preserved; got tail %q", tail(got))
+		t.Errorf("output should not end with newline when input lacks one; got tail %q", tail(got))
 	}
 
 	// Input WITH trailing newline should keep exactly one.
 	input2 := "# Project State — Thrum\n\n## Current State Summary\n\nBody\n"
 	got2 := filterProjectStateSections([]byte(input2), "implementer")
 	if len(got2) == 0 || got2[len(got2)-1] != '\n' {
-		t.Errorf("expected trailing newline preserved; got tail %q", tail(got2))
+		t.Errorf("output should end with single newline when input has one; got tail %q", tail(got2))
 	}
 }
 
-func tail(b []byte) string {
-	if len(b) <= 8 {
-		return string(b)
+func TestFilterProjectStateSections_CRLFLineEndings(t *testing.T) {
+	// Defensive: Windows/CRLF inputs must still match allowlist keys.
+	// Without \r stripping, every heading becomes "## Current State Summary\r"
+	// and the allowlist lookup misses, producing only the H1 preamble.
+	input := "# Project State — Thrum\r\n\r\n## Current State Summary\r\n\r\nBody\r\n## Recent Sessions\r\n\r\nDrop me\r\n"
+	got := string(filterProjectStateSections([]byte(input), "implementer"))
+	if !strings.Contains(got, "## Current State Summary") {
+		t.Error("CRLF-terminated allowlisted H2 should survive filter")
 	}
-	return string(b[len(b)-8:])
+	if !strings.Contains(got, "Body") {
+		t.Error("CRLF-terminated allowlisted body should survive filter")
+	}
+	if strings.Contains(got, "## Recent Sessions") {
+		t.Error("CRLF-terminated non-allowlisted H2 should be dropped")
+	}
+	if strings.Contains(got, "Drop me") {
+		t.Error("CRLF-terminated non-allowlisted body should be dropped")
+	}
+}
+
+func TestFilterProjectStateSections_TrailingWhitespaceInHeading(t *testing.T) {
+	// Trailing spaces/tabs after an H2 heading should not defeat the
+	// allowlist match. Normalization happens via strings.TrimRight.
+	input := "# Project State — Thrum\n\n## Current State Summary   \t\n\nBody\n## Recent Sessions  \n\nDrop me\n"
+	got := string(filterProjectStateSections([]byte(input), "implementer"))
+	if !strings.Contains(got, "## Current State Summary") {
+		t.Error("whitespace-trailed allowlisted H2 should survive filter")
+	}
+	if !strings.Contains(got, "Body") {
+		t.Error("allowlisted body should survive filter even when heading has trailing whitespace")
+	}
+	if strings.Contains(got, "Drop me") {
+		t.Error("whitespace-trailed non-allowlisted body should be dropped")
+	}
 }

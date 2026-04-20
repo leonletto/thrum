@@ -386,6 +386,10 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 					role = ctx.Identity.Role
 				}
 				data = filterProjectStateSections(data, role)
+				// If the filter returned empty bytes (e.g. a file with
+				// only non-allowlisted sections for a non-coordinator
+				// role), silently skip the Project State block — an
+				// empty header with no body would be worse than nothing.
 				if len(data) > 0 {
 					out.WriteString("\n# Project State\n\n")
 					out.WriteString("The following is the current project state that is being maintained ")
