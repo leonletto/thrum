@@ -497,7 +497,7 @@ it for real forks; overkill for minor ambiguity. Skip it when:
 - You can answer the question with a grep or a skim
 - Time pressure demands a best-guess now and a retry later
 
-Output artifact lands at `dev-docs/brainstorms/…` for audit.
+Output artifact lands at `dev-docs/brainstorms/YYYY-MM-DD-<topic>-debate.md` for audit.
 
 ### Communicating During Work
 

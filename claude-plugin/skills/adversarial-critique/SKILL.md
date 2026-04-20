@@ -18,10 +18,10 @@ Stress-test a mid-implementation design fork by dispatching sub-agents that argu
 
 ## When NOT to use
 
-- Upfront design before implementation starts — use `brainstorming` instead
+- Upfront design before implementation starts — use `superpowers:brainstorming` instead
 - Obvious choices where any option works — just pick and continue
 - Emergencies where speed beats rigor
-- Pure research questions — use `efficient-multi-agent-research`
+- Pure research questions — use `superpowers:efficient-multi-agent-research`
 - 4+ options — decompose the decision or narrow first
 
 ## Inputs
@@ -91,7 +91,7 @@ If R1 agents converge on the same answer (e.g., both concede the opposite option
 
 ## Verifying sub-agent claims
 
-Sub-agents will cite file:line evidence in R2 and R3. Before accepting a synthesis, verify any load-bearing citation against actual source. Misreads happen — synthesizing from a wrong-premise debate produces a wrong decision. If a core argument rests on a misread, re-dispatch that agent's round with the correction. See `verification-before-completion` for the general discipline.
+Sub-agents will cite file:line evidence in R2 and R3. Before accepting a synthesis, verify any load-bearing citation against actual source. Misreads happen — synthesizing from a wrong-premise debate produces a wrong decision. If a core argument rests on a misread, re-dispatch that agent's round with the correction. See `superpowers:verification-before-completion` for the general discipline.
 
 ## Output artifact
 
@@ -163,8 +163,8 @@ Sonnet for all dispatches. See `~/.claude/CLAUDE.md § Sub-Agent Model Selection
 
 ## See also
 
-- `brainstorming` — upfront design dialogue with the user (used before implementation starts; complements this skill, which handles mid-implementation blockers)
-- `writing-plans` — turns the resolution into an implementation plan if the blocker requires re-planning
-- `efficient-multi-agent-research` — sister pattern for research questions
-- `verification-before-completion` — verification discipline for sub-agent claims
-- `dispatching-parallel-agents` — general pattern for parallel sub-agent work
+- `superpowers:brainstorming` — upfront design dialogue with the user (used before implementation starts; complements this skill, which handles mid-implementation blockers)
+- `superpowers:writing-plans` — turns the resolution into an implementation plan if the blocker requires re-planning
+- `superpowers:efficient-multi-agent-research` — sister pattern for research questions
+- `superpowers:verification-before-completion` — verification discipline for sub-agent claims
+- `superpowers:dispatching-parallel-agents` — general pattern for parallel sub-agent work
