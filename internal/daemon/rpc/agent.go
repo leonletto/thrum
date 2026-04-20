@@ -301,6 +301,15 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		if resumeErr != nil {
 			log.Printf("agent.register: session resurrect failed: agent=%s err=%v", agentID, resumeErr)
 		} else if resumedID != "" {
+			// thrum-2b2t: ensureActiveSession deliberately keeps the
+			// resurrect path minimal (no scope/orphan handling) to stay
+			// out of the explicit session.start semantics used by
+			// quickstart. That minimalism leaves session_refs empty for
+			// resurrected sessions, which breaks peercred's
+			// worktree→agent match for mutating RPCs (the session
+			// exists but has no worktree ref). Persist a worktree ref
+			// here so peercred can resolve this agent on the next RPC.
+			h.persistResurrectWorktreeRef(ctx, agentID, resumedID, req.AgentPID)
 			resp.SessionID = resumedID
 			resp.SessionResumed = true
 		}
@@ -611,6 +620,73 @@ func (h *AgentHandler) ensureActiveSession(ctx context.Context, agentID string, 
 	return sessionID, nil
 }
 
+
+// persistResurrectWorktreeRef (thrum-2b2t) resolves the caller's worktree
+// via their PID and writes a worktree session_ref + agent_work_contexts
+// seed for the resurrected session. Mirrors the rows HandleStart writes
+// during the quickstart path.
+//
+// Primary source: peercred.ResolveCallerWorktree(pid) — walks /proc/<pid>/cwd
+// upward to a git root. Most accurate; self-correcting when the agent moves
+// worktrees.
+//
+// Fallback: the most-recent prior session's worktree ref for this agent.
+// Logged at debug level when used so future debugging can distinguish
+// "fresh PID-based resolution" from "stale fallback-to-prior" (the latter
+// is correct graceful degradation when the PID is unreachable, but observably
+// different).
+//
+// Failure is best-effort — mirrors the resurrect path's own "log and
+// continue" discipline (breaking register because a worktree ref can't
+// be resolved is worse than leaving the agent briefly anonymous).
+func (h *AgentHandler) persistResurrectWorktreeRef(ctx context.Context, agentID, sessionID string, pid int) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+
+	// Primary: resolve from caller's live CWD via their PID.
+	worktreePath, err := peercred.ResolveCallerWorktree(pid)
+	if err != nil || worktreePath == "" {
+		// Fallback: most-recent prior session's worktree ref for this agent.
+		var prior string
+		qErr := h.state.DB().QueryRowContext(ctx, `
+			SELECT sr.ref_value
+			FROM session_refs sr
+			JOIN sessions s ON s.session_id = sr.session_id
+			WHERE s.agent_id = ? AND sr.ref_type = 'worktree' AND sr.ref_value != ''
+			ORDER BY s.started_at DESC
+			LIMIT 1
+		`, agentID).Scan(&prior)
+		if qErr != nil || prior == "" {
+			slog.Debug("thrum-2b2t: worktree ref resolution failed, no fallback",
+				"agent", agentID, "session", sessionID, "pid", pid, "primary_err", err, "fallback_err", qErr)
+			return
+		}
+		slog.Debug("thrum-2b2t: using prior-session worktree as fallback",
+			"agent", agentID, "session", sessionID, "pid", pid, "fallback_worktree", prior, "primary_err", err)
+		worktreePath = prior
+	}
+
+	// Persist the worktree session_ref. INSERT OR IGNORE keeps this
+	// idempotent if a concurrent caller raced us to the same ref.
+	if _, werr := h.state.DB().ExecContext(ctx, `
+		INSERT OR IGNORE INTO session_refs (session_id, ref_type, ref_value, added_at)
+		VALUES (?, 'worktree', ?, ?)
+	`, sessionID, worktreePath, now); werr != nil {
+		log.Printf("thrum-2b2t: write session_refs failed: agent=%s session=%s err=%v",
+			agentID, sessionID, werr)
+		return
+	}
+
+	// Seed agent_work_contexts for immediate peercred matching. Mirrors
+	// HandleStart at session.go:186-199.
+	if _, werr := h.state.DB().ExecContext(ctx, `
+		INSERT INTO agent_work_contexts (session_id, agent_id, worktree_path)
+		VALUES (?, ?, ?)
+		ON CONFLICT(session_id) DO UPDATE SET worktree_path = excluded.worktree_path
+	`, sessionID, agentID, worktreePath); werr != nil {
+		log.Printf("thrum-2b2t: seed agent_work_contexts failed: agent=%s session=%s err=%v",
+			agentID, sessionID, werr)
+	}
+}
 
 // getAgentByID queries for an existing agent with the given agent ID.
 func (h *AgentHandler) getAgentByID(ctx context.Context, agentID string) (*AgentInfo, error) {
