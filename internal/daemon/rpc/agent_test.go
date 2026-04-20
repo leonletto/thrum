@@ -10,9 +10,23 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/types"
 )
+
+// peercredCtxForWorktree returns a context carrying a peercred
+// ResolvedIdentity whose Worktree matches the given path. Used by
+// thrum-33dt tests that need the daemon-side enforcement hook to pick
+// up a caller's worktree without going through the real unix-socket
+// peercred resolver.
+func peercredCtxForWorktree(worktree string) context.Context {
+	return peercred.WithIdentity(context.Background(), &peercred.ResolvedIdentity{
+		AgentID:  "test_caller",
+		Worktree: worktree,
+		PID:      os.Getpid(),
+	})
+}
 
 func TestAgentRegister(t *testing.T) {
 	tests := []struct {
@@ -2230,5 +2244,87 @@ func TestAgentWhoami_TmuxAliveReflectsSessionState(t *testing.T) {
 	// Host should be populated (non-empty; exact value is machine-dependent).
 	if whoamiResp.Host == "" {
 		t.Error("Host should be non-empty")
+	}
+}
+
+// TestHandleRegister_EnforceOneIdentityQuarantinesStale — thrum-33dt
+// regression. Registering a NEW agent name in a worktree that already
+// has a stale identity file (mismatched PID, different name) must
+// quarantine the stale file via EnforceOneIdentity so the
+// "one identity file per worktree" invariant holds after the direct
+// agent.register RPC path, not just the tmux.create path.
+func TestHandleRegister_EnforceOneIdentityQuarantinesStale(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	idsDir := filepath.Join(thrumDir, "identities")
+	if err := os.MkdirAll(idsDir, 0o750); err != nil {
+		t.Fatalf("mkdir identities: %v", err)
+	}
+
+	// Seed a stale identity file: different --name than the upcoming
+	// register call, and a PID that isn't in the caller's ancestor chain
+	// (we pick 1 here which is a low, always-present PID that differs
+	// from the new registration's PID = 77777).
+	stale := &config.IdentityFile{
+		Version: 5,
+		Agent: config.AgentConfig{
+			Kind: "agent", Name: "old_agent", Role: "implementer", Module: "legacy",
+		},
+		AgentPID: 1,
+	}
+	if err := config.SaveIdentityFile(thrumDir, stale); err != nil {
+		t.Fatalf("seed stale identity: %v", err)
+	}
+	stalePath := filepath.Join(idsDir, "old_agent.json")
+	if _, err := os.Stat(stalePath); err != nil {
+		t.Fatalf("stale identity file missing before register: %v", err)
+	}
+
+	s, err := state.NewState(thrumDir, thrumDir, "repo_33dt", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	handler := NewAgentHandler(s)
+
+	// Inject a peercred identity whose Worktree points at the tmpDir so
+	// the daemon-side enforcement call (enforceWorktreeIdentity) picks
+	// up the caller's worktree. Anonymous callers legitimately skip
+	// enforcement; that path is covered by the CLI-side tests in
+	// quickstart/refresh.
+	ctx := peercredCtxForWorktree(tmpDir)
+
+	req := RegisterRequest{
+		Name:     "new_agent",
+		Role:     "implementer",
+		Module:   "active",
+		AgentPID: 77777,
+	}
+	reqJSON, _ := json.Marshal(req)
+	resp, err := handler.HandleRegister(ctx, reqJSON)
+	if err != nil {
+		t.Fatalf("HandleRegister: %v", err)
+	}
+	regResp, ok := resp.(*RegisterResponse)
+	if !ok || regResp.Status != "registered" {
+		t.Fatalf("Register Status = %v (resp=%+v), want registered", regResp, resp)
+	}
+
+	// Stale sibling identity must be gone (quarantined via
+	// EnforceOneIdentity's delete semantics).
+	if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
+		t.Errorf("stale identity old_agent.json should be removed after register (err=%v); the worktree invariant was not enforced", err)
+	}
+
+	// The new agent's identity file is not written by the daemon (CLI
+	// writes it), so we don't assert on its presence here. The invariant
+	// we're regressing on is "only one identity remains after register";
+	// the CLI-side follow-up will write new_agent.json.
+	remaining, _ := os.ReadDir(idsDir)
+	for _, e := range remaining {
+		if e.Name() == "old_agent.json" {
+			t.Errorf("expected old_agent.json gone, directory still contains: %s", e.Name())
+		}
 	}
 }

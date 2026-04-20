@@ -16,6 +16,7 @@ import (
 	"github.com/leonletto/thrum/internal/runtime"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
+	"github.com/leonletto/thrum/internal/worktree"
 )
 
 // detectTmuxSession returns the current tmux pane target if running inside tmux,
@@ -246,6 +247,16 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 		if changed {
 			idFile.UpdatedAt = time.Now().UTC()
 			_ = config.SaveIdentityFile(thrumDir, idFile)
+		}
+
+		// thrum-33dt: enforce the worktree-layer single-identity invariant
+		// on the quickstart path. G1a/G1b above already refused live
+		// foreign-owned collisions; any residual identity files here are
+		// stale siblings from prior registrations that never got cleaned
+		// up. EnforceOneIdentity deletes them so the worktree satisfies
+		// "one identity per worktree" after every successful quickstart.
+		if idFile.Agent.Name != "" {
+			worktree.EnforceOneIdentity(repoPath, idFile.Agent.Name)
 		}
 	}
 
