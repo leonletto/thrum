@@ -111,6 +111,12 @@ type TmuxHandler struct {
 	// through NewTmuxHandler. HandleCheckPane guards every use with
 	// a nil-check so tests without permission wiring still pass.
 	permission *permission.Permission
+
+	// poller is the optional silence-hash poller that bypasses tmux's
+	// unreliable alert-silence hook for detached sessions (tmux issue
+	// #1384). Wired via SetPoller in daemon bootstrap. HandleLaunch
+	// enrolls sessions; HandleKill unenrolls. Nil-safe for tests.
+	poller *permission.SessionPoller
 }
 
 // NewTmuxHandler creates a new TmuxHandler.
@@ -131,6 +137,15 @@ func NewTmuxHandler(thrumDir string, st *state.State) *TmuxHandler {
 // will treat the permission path as a no-op.
 func (h *TmuxHandler) SetPermission(p *permission.Permission) {
 	h.permission = p
+}
+
+// SetPoller installs the silence-hash poller that bypasses tmux's
+// alert-silence hook. Production daemon boot calls this so HandleLaunch
+// can enroll new sessions and HandleKill can unenroll terminated ones.
+// Tests that don't exercise the poller can skip this call — all
+// enroll/unenroll sites guard with a nil-check.
+func (h *TmuxHandler) SetPoller(p *permission.SessionPoller) {
+	h.poller = p
 }
 
 // ensureSession checks whether a tmux session exists and auto-creates it
@@ -374,6 +389,14 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 	// Write tmux_session and runtime to the agent's identity file
 	h.writeTmuxToIdentity(name, target, runtime)
 
+	// Enroll the session in the silence-hash poller. Runs detached from
+	// tmux's alert-silence hook (which is unreliable on detached
+	// sessions — tmux issue #1384). Nil-safe: tests without poller
+	// wiring proceed unchanged.
+	if h.poller != nil {
+		h.poller.Enroll(name, runtime, target)
+	}
+
 	return &TmuxLaunchResponse{Session: name, Runtime: runtime}, nil
 }
 
@@ -395,6 +418,12 @@ func (h *TmuxHandler) HandleKill(ctx context.Context, params json.RawMessage) (a
 	}
 	delete(h.sessionCwds, name)
 	h.sessionMu.Unlock()
+
+	// Remove from the silence-hash poller. Safe if never enrolled or
+	// if the poller isn't wired (tests).
+	if h.poller != nil {
+		h.poller.Unenroll(name)
+	}
 
 	return nil, ttmux.KillSession(name)
 }
@@ -892,6 +921,15 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 	// Write tmux_session and runtime to the agent's identity file
 	h.writeTmuxToIdentity(name, target, runtime)
 
+	// Re-enroll the session in the silence-hash poller. HandleKill
+	// earlier in the restart sequence unenrolled the old session; the
+	// new session needs a fresh enrollment to resume polling. Without
+	// this, any thrum tmux restart silently disables permission-prompt
+	// detection until the daemon next restarts. Nil-safe for tests.
+	if h.poller != nil {
+		h.poller.Enroll(name, runtime, target)
+	}
+
 	return &TmuxRestartResponse{
 		Session:       name,
 		SnapshotLines: snapshotLines,
@@ -958,6 +996,51 @@ func resolveWorktreePath(ctx context.Context, repoDir, worktreeName string) stri
 		}
 	}
 	return ""
+}
+
+// ReconcilePoller enrolls all currently-live thrum-managed tmux
+// sessions in the silence-hash poller. Called by daemon bootstrap
+// after SetPoller so the poller picks up sessions that existed across
+// daemon restart. Safe to call with nil poller (tests).
+//
+// Enrolls any identity file where: tmux_session is non-empty AND
+// runtime is non-empty AND the tmux session exists on this host. Other
+// identity files are skipped.
+func (h *TmuxHandler) ReconcilePoller(ctx context.Context) int {
+	if h.poller == nil {
+		return 0
+	}
+	count := 0
+	for _, idDir := range AllIdentityDirs(ctx, h.thrumDir) {
+		entries, _ := os.ReadDir(idDir)
+		for _, entry := range entries {
+			if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+				continue
+			}
+			path := filepath.Join(idDir, entry.Name())
+			data, err := os.ReadFile(path) // #nosec G304
+			if err != nil {
+				continue
+			}
+			var idFile config.IdentityFile
+			if err := json.Unmarshal(data, &idFile); err != nil {
+				continue
+			}
+			if idFile.TmuxSession == "" || idFile.Runtime == "" {
+				continue
+			}
+			sess, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
+			if sess == "" {
+				continue
+			}
+			if !ttmux.HasSession(sess) {
+				continue
+			}
+			h.poller.Enroll(sess, idFile.Runtime, idFile.TmuxSession)
+			count++
+		}
+	}
+	return count
 }
 
 // findIdentityForSession searches all worktree identity dirs for an agent

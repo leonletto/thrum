@@ -6518,6 +6518,42 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// to OnDetection / OnRecovery. Without this, the permission
 	// branch of HandleCheckPane is a no-op and nudges never fire.
 	tmuxHandler.SetPermission(permPkg)
+
+	// Wire the silence-hash poller. tmux's alert-silence hook is
+	// unreliable on detached sessions (tmux issue #1384 — alerts are
+	// processed per-session-per-client; a detached session typically
+	// does not fire the hook). Thrum agents run detached by design, so
+	// the daemon polls enrolled sessions directly, hashes the pane
+	// tail (excluding runtime-specific volatile lines like codex's
+	// "Working (Ns)" timer), and dispatches HandleCheckPane when the
+	// hash stabilizes. This is the direct-control replacement for the
+	// unreliable tmux hook.
+	paneSilencePoller := permission.NewSessionPoller(permission.SessionPollerConfig{
+		CaptureLines:   30,
+		StabilityCount: 2, // 2 consecutive unchanged polls at 10s = 20s silence window
+		Capture:        ttmux.CapturePane,
+		OnStable: func(ctx context.Context, session, content string) error {
+			params, err := json.Marshal(rpc.CheckPaneRequest{
+				Session: session,
+				Content: content,
+			})
+			if err != nil {
+				return fmt.Errorf("marshal CheckPaneRequest: %w", err)
+			}
+			_, err = tmuxHandler.HandleCheckPane(ctx, params)
+			return err
+		},
+	})
+	tmuxHandler.SetPoller(paneSilencePoller)
+	// Cold-start reconciliation: enroll any currently-live thrum-managed
+	// tmux sessions that existed before daemon restart.
+	if n := tmuxHandler.ReconcilePoller(ctx); n > 0 {
+		slog.Info("[poller] cold-start reconciliation complete", "enrolled", n)
+	}
+	// Start the poll loop. Stops when ctx is canceled by the daemon
+	// shutdown sequence.
+	go paneSilencePoller.Run(ctx, 10*time.Second)
+
 	server.RegisterHandler("tmux.create", tmuxHandler.HandleCreate)
 	server.RegisterHandler("tmux.launch", tmuxHandler.HandleLaunch)
 	server.RegisterHandler("tmux.status", tmuxHandler.HandleStatus)
