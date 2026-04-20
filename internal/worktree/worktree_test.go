@@ -217,6 +217,75 @@ func TestEnforceOneIdentity_NoIdentitiesDir(t *testing.T) {
 	}
 }
 
+// TestEnforceOneIdentity_MultipleKeepers — thrum-dw06. Variadic keep
+// list must preserve every named identity, not just the first. The
+// daemon-side enforceWorktreeIdentity hook passes both the newly
+// registered agent's name AND the peercred-resolved caller's name so
+// neither gets quarantined. Without this, registering a differently
+// named agent from an existing agent's cwd (e.g. the E2E harness
+// registering short-lived test agents from the coordinator dir)
+// quarantines the caller's own identity file.
+func TestEnforceOneIdentity_MultipleKeepers(t *testing.T) {
+	dir := t.TempDir()
+	idDir := filepath.Join(dir, ".thrum", "identities")
+	if err := os.MkdirAll(idDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(idDir, "caller.json"), []byte(`{"agent":{"name":"caller"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(idDir, "new_agent.json"), []byte(`{"agent":{"name":"new_agent"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(idDir, "stale.json"), []byte(`{"agent":{"name":"stale"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	quarantined := EnforceOneIdentity(dir, "new_agent", "caller")
+
+	// Both named keepers survive.
+	if _, err := os.Stat(filepath.Join(idDir, "new_agent.json")); err != nil {
+		t.Errorf("new_agent.json must survive: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(idDir, "caller.json")); err != nil {
+		t.Errorf("caller.json must survive (regression: caller's own identity was quarantined): %v", err)
+	}
+	// Unkept sibling is quarantined.
+	if _, err := os.Stat(filepath.Join(idDir, "stale.json")); !os.IsNotExist(err) {
+		t.Errorf("stale.json should be quarantined, still at top level")
+	}
+	if len(quarantined) != 1 || quarantined[0] != "stale" {
+		t.Errorf("quarantined = %v, want [stale]", quarantined)
+	}
+}
+
+// TestEnforceOneIdentity_EmptyKeeperIgnored — a zero-length keep arg
+// (e.g. peercred resolved.AgentID is "" for anonymous callers) must be
+// skipped, not matched against unnamed sibling files.
+func TestEnforceOneIdentity_EmptyKeeperIgnored(t *testing.T) {
+	dir := t.TempDir()
+	idDir := filepath.Join(dir, ".thrum", "identities")
+	if err := os.MkdirAll(idDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(idDir, "new_agent.json"), []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(idDir, "stale.json"), []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	quarantined := EnforceOneIdentity(dir, "new_agent", "")
+
+	if _, err := os.Stat(filepath.Join(idDir, "stale.json")); !os.IsNotExist(err) {
+		t.Errorf("stale.json should be quarantined even with empty second keeper")
+	}
+	if len(quarantined) != 1 {
+		t.Errorf("want 1 quarantined, got %v", quarantined)
+	}
+}
+
 // TestEnforceOneIdentity_QuarantineSkipped — the .quarantine/ dir
 // itself must never be scanned as an identity file. Files already
 // inside .quarantine/ stay there.

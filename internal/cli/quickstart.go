@@ -16,7 +16,6 @@ import (
 	"github.com/leonletto/thrum/internal/runtime"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
-	"github.com/leonletto/thrum/internal/worktree"
 )
 
 // detectTmuxSession returns the current tmux pane target if running inside tmux,
@@ -249,22 +248,28 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 			_ = config.SaveIdentityFile(thrumDir, idFile)
 		}
 
-		// thrum-33dt: enforce the worktree-layer single-identity invariant
-		// on the quickstart path. G1a/G1b above already refused live
-		// foreign-owned collisions; any residual identity files here are
-		// stale siblings from prior registrations that never got cleaned
-		// up. EnforceOneIdentity deletes them so the worktree satisfies
-		// "one identity per worktree" after every successful quickstart.
+		// thrum-dw06: the CLI-side quickstart no longer calls
+		// worktree.EnforceOneIdentity here. G1a/G1b above already
+		// handled legitimate stale-sibling cases (caller-owned files
+		// via --force, live name-collisions). The remaining sibling
+		// files are not necessarily stale — they may belong to
+		// co-located agents legitimately registered in the same
+		// worktree (E2E harnesses, multi-agent test scenarios). A blind
+		// invariant sweep here quarantines those siblings alongside
+		// the new registration, breaking any caller that shares the
+		// worktree with another registered agent.
 		//
-		// Note: RefreshLocalIdentity in Step 2.6 below also invokes
-		// EnforceOneIdentity. The double-call is intentional and
-		// idempotent — once the first pass removes siblings, the second
-		// pass is a no-op. Both call sites stay so neither can be dropped
-		// in isolation when only one path runs (quickstart-without-refresh
-		// or refresh-without-quickstart).
-		if idFile.Agent.Name != "" {
-			worktree.EnforceOneIdentity(repoPath, idFile.Agent.Name)
-		}
+		// The daemon-side enforceWorktreeIdentity (agent.go) still
+		// fires on the self-rename path (resolved.AgentID == keepName)
+		// for stale cleanup; tmux.create continues to enforce on the
+		// tmux-managed path. refresh.go enforcement was removed by
+		// thrum-ajmd for the same reason as this one.
+		//
+		// Historical note: thrum-33dt's original design coupled the
+		// quickstart and refresh enforcement sites as intentionally
+		// idempotent doubles. Both are now removed — ajmd took out the
+		// refresh site; dw06 takes out this one. The daemon-side path
+		// retains a narrower, self-rename-only enforcement.
 	}
 
 	// Step 2.6: Refresh drift-prone fields from live process/tmux/git state.

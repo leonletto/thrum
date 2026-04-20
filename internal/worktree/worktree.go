@@ -78,6 +78,13 @@ func EnsureRedirects(worktreePath, mainRepo string) error {
 // deleting them. Returns the names of quarantined agents. Context files
 // are preserved. Errors are logged but non-fatal.
 //
+// Accepts one or more agent names to preserve. The first is typically
+// the agent being registered; additional names let callers keep the
+// peercred-resolved caller's identity too so a bootstrap/test harness
+// that registers a differently named agent does not quarantine its own
+// identity file (thrum-dw06). Empty names in the keep list are
+// silently ignored.
+//
 // thrum-ajmd design: the original behaviour was os.Remove, which had no
 // recourse when it fired on the wrong dir (a non-coordinator agent's
 // refresh running with cwd resolving to the main repo path wiped
@@ -85,14 +92,21 @@ func EnsureRedirects(worktreePath, mainRepo string) error {
 // file so an operator can recover it. The quarantine dir is owned by
 // the caller (0o750) and timestamped so repeated enforcement does not
 // overwrite previous quarantined copies.
-func EnforceOneIdentity(worktreePath, newAgentName string) []string {
+func EnforceOneIdentity(worktreePath string, keep ...string) []string {
 	idDir := filepath.Join(worktreePath, ".thrum", "identities")
 	entries, err := os.ReadDir(idDir)
 	if err != nil {
 		return nil
 	}
 
-	keepFile := newAgentName + ".json"
+	keepFiles := make(map[string]struct{}, len(keep))
+	for _, name := range keep {
+		if name == "" {
+			continue
+		}
+		keepFiles[name+".json"] = struct{}{}
+	}
+
 	var quarantined []string
 	var quarantineDir string // lazily created on first quarantine
 	ts := time.Now().UTC().Format("20060102T150405Z")
@@ -101,7 +115,7 @@ func EnforceOneIdentity(worktreePath, newAgentName string) []string {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue
 		}
-		if entry.Name() == keepFile {
+		if _, ok := keepFiles[entry.Name()]; ok {
 			continue
 		}
 		src := filepath.Join(idDir, entry.Name())
