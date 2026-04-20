@@ -646,12 +646,15 @@ events              # Sequence-ordered, deduplicated event log (for sync)
 sync_checkpoints    # Per-peer sync progress tracking
 command_queue       # Queue dispatch for tmux sessions
 monitors            # Persisted monitor job specs (v20)
+permission_nudges   # Pending permission-prompt nudges (v21)
+daemon_identity     # Local daemon identity cache (v23)
+telegram_msg_map    # Telegram ↔ Thrum message ID map (v24)
 schema_version      # Migration tracking
 ```
 
 ### Schema Version
 
-Current version: **20**
+Current version: **24**
 
 Key migrations:
 
@@ -682,6 +685,10 @@ Key migrations:
 - v18 -> v19: `silence_ms` and `notify_on_complete` columns added to
   `command_queue`
 - v19 -> v20: `monitors` table added (monitor job specs for supervisor respawn)
+- v20 -> v21: `permission_nudges` table added (persistent permission-prompt nudge state for restart resilience)
+- v21 -> v22: `origin_daemon TEXT` column added to `agents` table with backfill (cross-daemon registration scoping; see `thrum-mm3l`)
+- v22 -> v23: `daemon_identity` table added (single-row local cache of the daemon's identity block, mirrored from `.thrum/config.json`)
+- v23 -> v24: `telegram_msg_map` table added (durable Telegram message ID ↔ Thrum message ID mapping; survives daemon restart so in-flight permission approvals route correctly)
 
 ### Initialization
 

@@ -73,7 +73,7 @@ thrum/
 │   ├── mcp/                 # MCP stdio server (4 tools, WebSocket waiter)
 │   ├── paths/               # Path resolution, .thrum/redirect, sync worktree path
 │   ├── projection/          # JSONL to SQLite event replay (projector)
-│   ├── schema/              # SQLite schema, DDL, and migrations (v19)
+│   ├── schema/              # SQLite schema, DDL, and migrations (v24)
 │   ├── subscriptions/       # Notification dispatcher and subscription service
 │   ├── sync/                # Sync engine (loop, merge, push, dedup, branch management)
 │   ├── tmux/                # Tmux operations, nudge delivery, session management (v0.7.1)

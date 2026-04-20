@@ -1758,12 +1758,19 @@ Unknown event types are silently ignored (forward compatibility).
                       debounce_ms, env, status, pid, started_at, stopped_at, exit_code)
   events              Sequence-ordered deduplicated event log for daemon-to-daemon sync
   sync_checkpoints    Per-peer sync progress tracking
+  permission_nudges   Pending permission-prompt nudges (v21)
+  daemon_identity     Local daemon identity cache (v23)
+  telegram_msg_map    Telegram ↔ Thrum message ID map (v24)
   schema_version      Migration tracking
 
-  Current schema version: 20 (as of v0.9.0)
+  Current schema version: 24 (as of v0.9.0)
   Key migrations since v0.7.0:
     v15 -> v16  `claude_pid INTEGER NOT NULL DEFAULT 0` added to `agents`
     v16 -> v17  `claude_pid` renamed to `agent_pid` (multi-runtime support)
     v17 -> v18  `command_queue` table added
     v18 -> v19  `silence_ms` and `notify_on_complete` columns added to command_queue
     v19 -> v20  `monitors` table added
+    v20 -> v21  `permission_nudges` table added (restart-resilient permission-prompt nudges)
+    v21 -> v22  `origin_daemon TEXT` column added to `agents` (cross-daemon registration scoping)
+    v22 -> v23  `daemon_identity` table added (single-row local cache mirrored from config.json)
+    v23 -> v24  `telegram_msg_map` table added (durable Telegram ↔ Thrum message ID map)
