@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -136,11 +137,31 @@ func (pm *PeerManager) BuildConfigs() []peer.BridgeConfig {
 // reconcile callback (listener-side reverse bridges and newly-paired
 // dialers both rely on the first dial succeeding via stored secrets).
 func (pm *PeerManager) buildConfigForPeer(p *PeerInfo) peer.BridgeConfig {
+	// thrum-bew3: sanitize p.Name before folding into BridgeUserID. The
+	// peer name is typically a hostname (dots) or similar free-form
+	// identifier, but the daemon's user.register validator rejects
+	// anything outside [a-zA-Z0-9_-] and caps length at 32. Without this,
+	// the bridge handshake fails on user.register and reconnect-loops
+	// forever.
+	//
+	// Non-ASCII peer names (e.g. "北京") sanitize to empty and would
+	// reproduce the same "user:peer-" (empty-suffix) rejection path.
+	// Fall back to the peer's DaemonID ULID body (d_ prefix stripped —
+	// redundant in a peer-derived context). The resulting username is
+	// "peer-<suffix>" which must fit inside the 32-char usernameRegex
+	// cap; 27 chars of suffix leaves 5 for the "peer-" prefix.
+	suffix := SanitizeProxyPrefix(p.Name)
+	if suffix == "" {
+		suffix = strings.TrimPrefix(p.DaemonID, "d_")
+	}
+	if len(suffix) > 27 {
+		suffix = suffix[:27]
+	}
 	cfg := peer.BridgeConfig{
 		LocalWSPort:  pm.localWSPort,
 		PeerName:     p.Name,
 		PeerToken:    p.Token,
-		BridgeUserID: fmt.Sprintf("user:peer-%s", p.Name),
+		BridgeUserID: "user:peer-" + suffix,
 		ProxyPrefix:  p.ProxyPrefix,
 		RemoteAgents: p.RemoteAgents,
 	}
@@ -226,8 +247,9 @@ func (pm *PeerManager) makeOnDialError(hook ReconcileHook, _ string) func(contex
 
 // reconcileDelayForAttempt returns the 2s/8s/30s backoff schedule for
 // the xir.29 OnDialError retry cap. Extracted as a method so tests can
-// override via setReconcileDelayFunc to keep unit-test runtime low
-// without sacrificing the production-path exercise (I5 review finding).
+// override via pm.reconcileDelayFn (test-only, unexported field) to
+// keep unit-test runtime low without sacrificing the production-path
+// exercise (I5 review finding).
 func (pm *PeerManager) reconcileDelayForAttempt(attempt int) time.Duration {
 	if pm.reconcileDelayFn != nil {
 		return pm.reconcileDelayFn(attempt)

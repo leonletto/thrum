@@ -134,7 +134,7 @@ func TestGroupDelete_ProtectedEveryone(t *testing.T) {
 func registerTestAgent(t *testing.T, st *state.State, name string) {
 	t.Helper()
 	agentHandler := NewAgentHandler(st)
-	params, _ := json.Marshal(RegisterRequest{Name: name, Role: name + "_role", Module: name + "_mod", Force: true})
+	params, _ := json.Marshal(RegisterRequest{Name: name, Role: name + "_role", Module: name + "_mod"})
 	if _, err := agentHandler.HandleRegister(context.Background(), params); err != nil {
 		t.Fatalf("register agent %q: %v", name, err)
 	}

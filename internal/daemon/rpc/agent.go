@@ -33,7 +33,6 @@ type RegisterRequest struct {
 	Role       string `json:"role"`
 	Module     string `json:"module"`
 	Display    string `json:"display,omitempty"`
-	Force      bool   `json:"force,omitempty"`       // Override existing
 	ReRegister bool   `json:"re_register,omitempty"` // Same agent returning
 	AgentPID   int    `json:"agent_pid,omitempty"`   // Claude process PID for identity resolution
 }
@@ -240,112 +239,75 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		}
 	}
 
-	// Check for duplicate agent name (name must be unique across all agents)
-	if req.Name != "" {
-		existingByName, err := h.getAgentByID(ctx, req.Name)
-		if err != nil && err != sql.ErrNoRows {
-			return nil, fmt.Errorf("check for existing agent by name: %w", err)
-		}
-		if existingByName != nil && existingByName.AgentID != agentID {
-			// Another agent already has this name
-			return &RegisterResponse{
-				AgentID: "",
-				Status:  "conflict",
-				Conflict: &ConflictInfo{
-					ExistingAgentID: existingByName.AgentID,
-					RegisteredAt:    existingByName.RegisteredAt,
-					LastSeenAt:      existingByName.LastSeenAt,
-					ConflictPID:     existingByName.AgentPID,
-				},
-			}, fmt.Errorf("agent name '%s' already in use by %s", req.Name, existingByName.AgentID)
-		}
-	}
-
-	// Check for existing agent with same role+module
-	existingAgent, err := h.getAgentByRoleModule(ctx, req.Role, req.Module)
+	// thrum-iw42: look up by agent_id (not by role+module). The old
+	// role+module uniqueness guard was removed because it rejected every
+	// peer-bridge proxy that shared a prefix with a pre-existing proxy
+	// (e.g. Telegram's thrum:coordinator_main collided with the peer
+	// bridge's thrum:impl_mocksf_s2). Proxy uniqueness is structurally
+	// bounded by peer-derived prefix plus remote agent name, so DB-level
+	// (role, module) enforcement was redundant.
+	//
+	// Identity-file enforcement coverage:
+	//   - tmux.create path: calls worktree.EnforceOneIdentity (tmux.go:286)
+	//   - quickstart path: G1a/G1b pre-flight guards (internal/identity/guard)
+	//   - refresh / direct agent.register: neither of the above
+	//
+	// This leaves a narrow same-(role, module)-different-name regression on
+	// paths that bypass tmux-create AND fall through G1a/G1b (e.g. stale
+	// identity file with PID mismatched from caller chain). Tracked as
+	// thrum-33dt (P2, Identity Guard backstop catches the common cases).
+	existingAgent, err := h.getAgentByID(ctx, agentID)
 	if err != nil && err != sql.ErrNoRows {
-		return nil, fmt.Errorf("check for existing agent: %w", err)
+		return nil, fmt.Errorf("check for existing agent by id: %w", err)
 	}
 
-	// Handle conflicts
 	if existingAgent != nil {
-		// Same agent returning (ID matches)
-		if existingAgent.AgentID == agentID {
-			// PID self-heal: if the caller provides a PID that differs
-			// from the stored one, update the registration even without
-			// an explicit ReRegister flag. This lets quickstart and
-			// RefreshLocalIdentity correct stale DB state without
-			// requiring --force. Without this branch, the first thrum
-			// command after a daemon rebuild would fire false-positive
-			// dead-agent self-heals on every pre-existing agent whose
-			// DB PID predates the refresh feature (thrum-pxz.14 Fix A).
-			var resp *RegisterResponse
-			var regErr error
-			switch {
-			case req.AgentPID > 0 && existingAgent.AgentPID != req.AgentPID:
-				resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
-			case req.ReRegister:
-				// Update registration
-				resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
-			default:
-				// Same agent, same PID (or no PID provided) — no-op return
-				resp = &RegisterResponse{
-					AgentID: agentID,
-					Status:  "registered",
-				}
+		// Same agent returning (agent_id matches by construction).
+		// PID self-heal: if the caller provides a PID that differs from
+		// the stored one, update the registration even without an
+		// explicit ReRegister flag. This lets quickstart and
+		// RefreshLocalIdentity correct stale DB state without requiring
+		// --force. Without this branch, the first thrum command after a
+		// daemon rebuild would fire false-positive dead-agent self-heals
+		// on every pre-existing agent whose DB PID predates the refresh
+		// feature (thrum-pxz.14 Fix A).
+		var resp *RegisterResponse
+		var regErr error
+		switch {
+		case req.AgentPID > 0 && existingAgent.AgentPID != req.AgentPID:
+			resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
+		case req.ReRegister:
+			resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
+		default:
+			// Same agent, same PID (or no PID provided) — no-op return.
+			resp = &RegisterResponse{
+				AgentID: agentID,
+				Status:  "registered",
 			}
-			if regErr != nil {
-				return nil, regErr
-			}
-
-			// Auto-resurrect (thrum-xir.18): if the agent has no active
-			// session and the caller's PID is alive, emit a fresh
-			// agent.session.start inline. Best-effort — log and continue
-			// on error so the register RPC stays resilient. Failing
-			// register because resurrection failed would break every
-			// agent on every command, which is worse than the bug we are
-			// fixing. ensureActiveSession runs under the same write
-			// lock taken at the top of this method.
-			resumedID, resumeErr := h.ensureActiveSession(ctx, agentID, req.AgentPID)
-			if resumeErr != nil {
-				log.Printf("agent.register: session resurrect failed: agent=%s err=%v", agentID, resumeErr)
-			} else if resumedID != "" {
-				resp.SessionID = resumedID
-				resp.SessionResumed = true
-			}
-			return resp, nil
+		}
+		if regErr != nil {
+			return nil, regErr
 		}
 
-		// Different agent, same role+module
-		if !req.Force && !req.ReRegister {
-			// Return conflict info
-			return &RegisterResponse{
-				AgentID: "",
-				Status:  "conflict",
-				Conflict: &ConflictInfo{
-					ExistingAgentID: existingAgent.AgentID,
-					RegisteredAt:    existingAgent.RegisteredAt,
-					LastSeenAt:      existingAgent.LastSeenAt,
-					ConflictPID:     existingAgent.AgentPID,
-				},
-			}, nil
+		// Auto-resurrect (thrum-xir.18): if the agent has no active
+		// session and the caller's PID is alive, emit a fresh
+		// agent.session.start inline. Best-effort — log and continue
+		// on error so the register RPC stays resilient. Failing
+		// register because resurrection failed would break every agent
+		// on every command, which is worse than the bug we are fixing.
+		// ensureActiveSession runs under the same write lock taken at
+		// the top of this method.
+		resumedID, resumeErr := h.ensureActiveSession(ctx, agentID, req.AgentPID)
+		if resumeErr != nil {
+			log.Printf("agent.register: session resurrect failed: agent=%s err=%v", agentID, resumeErr)
+		} else if resumedID != "" {
+			resp.SessionID = resumedID
+			resp.SessionResumed = true
 		}
-
-		// Force override - remove old agent entry to prevent duplicates.
-		// Defense-in-depth: scope the DELETE to local-origin rows only.
-		// getAgentByRoleModule already filters to local agents, but guarding
-		// here too keeps any future caller that reuses this DELETE from
-		// wiping a synced-from-remote agent silently (thrum-mm3l).
-		localDaemon := h.state.DaemonID()
-		_, _ = h.state.DB().ExecContext(ctx,
-			`DELETE FROM agents WHERE agent_id = ? AND (origin_daemon = ? OR origin_daemon = '')`,
-			existingAgent.AgentID, localDaemon)
-
-		// Force override - register new agent
-		return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered", req.AgentPID)
+		return resp, nil
 	}
 
-	// No conflict - register new agent
+	// Fresh agent — no existing row for this agent_id.
 	return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered", req.AgentPID)
 }
 
@@ -637,50 +599,6 @@ func (h *AgentHandler) ensureActiveSession(ctx context.Context, agentID string, 
 	return sessionID, nil
 }
 
-// getAgentByRoleModule queries for an existing LOCAL agent with the given
-// role and module. Cross-daemon agents with overlapping (role, module) are
-// deliberately excluded — they're not local conflicts, they're peers on
-// different machines doing the same thing (thrum-mm3l).
-//
-// The filter `origin_daemon IN (local, ”)` also matches legacy rows that
-// predate the origin_daemon column (migration 21→22 backfills known rows
-// from the events table; rows with no events tail end with ”) so the
-// conflict check stays conservative for those.
-func (h *AgentHandler) getAgentByRoleModule(ctx context.Context, role, module string) (*AgentInfo, error) {
-	localDaemon := h.state.DaemonID()
-	query := `SELECT agent_id, kind, role, module, display, registered_at, last_seen_at, agent_pid
-	          FROM agents
-	          WHERE role = ? AND module = ?
-	            AND (origin_daemon = ? OR origin_daemon = '')
-	          LIMIT 1`
-
-	var agent AgentInfo
-	var display, lastSeenAt sql.NullString
-
-	err := h.state.DB().QueryRowContext(ctx, query, role, module, localDaemon).Scan(
-		&agent.AgentID,
-		&agent.Kind,
-		&agent.Role,
-		&agent.Module,
-		&display,
-		&agent.RegisteredAt,
-		&lastSeenAt,
-		&agent.AgentPID,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if display.Valid {
-		agent.Display = display.String
-	}
-	if lastSeenAt.Valid {
-		agent.LastSeenAt = lastSeenAt.String
-	}
-
-	return &agent, nil
-}
 
 // getAgentByID queries for an existing agent with the given agent ID.
 func (h *AgentHandler) getAgentByID(ctx context.Context, agentID string) (*AgentInfo, error) {

@@ -80,31 +80,23 @@ func TestAgentRegister(t *testing.T) {
 			},
 		},
 		{
-			name: "conflict_different_agent_same_role_module",
+			// thrum-iw42: role+module uniqueness was dropped. Two distinct
+			// agent_ids sharing (role, module) must both register — the
+			// "one agent per worktree" invariant is enforced at the
+			// worktree/identity layer, not the DB.
+			name: "different_agent_same_role_module_succeeds_iw42",
 			request: RegisterRequest{
 				Role:    "implementer",
 				Module:  "auth",
 				Display: "Different Agent",
 			},
-			wantStatus:   "conflict",
-			wantConflict: true,
+			wantStatus:   "registered",
+			wantConflict: false,
 			wantErr:      false,
 			setupFunc: func(s *state.State) error {
-				// Register different module first to create different agent
-				h := NewAgentHandler(s)
-				req := RegisterRequest{
-					Role:   "implementer",
-					Module: "other",
-				}
-				reqJSON, _ := json.Marshal(req)
-				_, err := h.HandleRegister(context.Background(), reqJSON)
-				if err != nil {
-					return err
-				}
-
-				// Now manually insert a conflicting agent (different agent_id, same role+module)
-				// This simulates the conflict scenario
-				_, err = s.RawDB().Exec(`
+				// Pre-seed a DB row with a different agent_id but same role+module.
+				// Before iw42 this triggered a conflict; now both coexist.
+				_, err := s.RawDB().Exec(`
 					INSERT INTO agents (agent_id, kind, role, module, display, registered_at)
 					VALUES (?, ?, ?, ?, ?, ?)
 				`, "agent:implementer:CONFLICT00", "agent", "implementer", "auth", "", "2026-01-01T00:00:00Z")
@@ -112,18 +104,24 @@ func TestAgentRegister(t *testing.T) {
 			},
 		},
 		{
-			name: "force_override_conflict",
+			// thrum-iw42: the Force field was removed alongside the
+			// role+module conflict branch. This case used to exercise
+			// Force=true overriding a DB conflict; with Option C there
+			// is no DB conflict to override — the pre-seeded row has a
+			// different agent_id, so registration proceeds as a fresh
+			// (different-name) agent. Kept to pin the post-removal
+			// behavior: different agent_id with same (role, module)
+			// coexists.
+			name: "different_agent_id_same_role_module_coexists",
 			request: RegisterRequest{
 				Role:    "implementer",
 				Module:  "auth",
 				Display: "New Agent",
-				Force:   true,
 			},
 			wantStatus:   "registered",
 			wantConflict: false,
 			wantErr:      false,
 			setupFunc: func(s *state.State) error {
-				// Insert conflicting agent
 				_, err := s.RawDB().Exec(`
 					INSERT INTO agents (agent_id, kind, role, module, display, registered_at)
 					VALUES (?, ?, ?, ?, ?, ?)
@@ -1343,67 +1341,6 @@ func TestHandleRegister_StoresAgentPID(t *testing.T) {
 	}
 }
 
-func TestHandleRegister_RoleModuleConflictWithPID(t *testing.T) {
-	tmpDir := t.TempDir()
-	thrumDir := filepath.Join(tmpDir, ".thrum")
-
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_pid_conflict", "")
-	if err != nil {
-		t.Fatalf("create state: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	// Insert an existing agent with a known agent_pid directly into the DB.
-	// Using a hash-style agent_id so it differs from the name-based ID the second
-	// registration will generate.
-	_, err = s.RawDB().Exec(`
-		INSERT INTO agents (agent_id, kind, role, module, display, hostname, agent_pid, registered_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, "existing_agent_pid", "agent", "implementer", "auth", "", "", 111, "2026-01-01T00:00:00Z")
-	if err != nil {
-		t.Fatalf("insert existing agent: %v", err)
-	}
-
-	handler := NewAgentHandler(s)
-
-	// Register a different agent with the same role+module but different name,
-	// so GenerateAgentID produces a different agent_id → role+module conflict path.
-	req := RegisterRequest{
-		Name:     "different_agent",
-		Role:     "implementer",
-		Module:   "auth",
-		AgentPID: 222,
-	}
-	reqJSON, _ := json.Marshal(req)
-	resp, err := handler.HandleRegister(context.Background(), reqJSON)
-
-	// The role+module conflict returns a response with nil error.
-	if err != nil {
-		t.Logf("HandleRegister returned error (unexpected): %v", err)
-	}
-	if resp == nil {
-		t.Fatalf("expected response, got nil (err: %v)", err)
-	}
-
-	regResp, ok := resp.(*RegisterResponse)
-	if !ok {
-		t.Fatalf("response type = %T, want *RegisterResponse", resp)
-	}
-
-	if regResp.Status != "conflict" {
-		t.Errorf("Status = %s, want conflict", regResp.Status)
-	}
-	if regResp.Conflict == nil {
-		t.Fatal("Conflict info should be populated")
-	}
-	if regResp.Conflict.ConflictPID != 111 {
-		t.Errorf("ConflictPID = %d, want 111", regResp.Conflict.ConflictPID)
-	}
-	if regResp.Conflict.ExistingAgentID != "existing_agent_pid" {
-		t.Errorf("ExistingAgentID = %s, want existing_agent_pid", regResp.Conflict.ExistingAgentID)
-	}
-}
-
 func TestHandleRegister_SamePID_Idempotent(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
@@ -2099,16 +2036,16 @@ func TestAgentRegister_CrossDaemonCoexistence(t *testing.T) {
 	}
 }
 
-// TestAgentRegister_LocalConflictStillDetected guards the inverse case —
-// two LOCAL agents with the same (role, module) but different agent_ids
-// should still produce a conflict response (not Force) or replace the
-// older row (with Force). The scoping fix must not weaken legitimate
-// same-daemon collision detection.
-func TestAgentRegister_LocalConflictStillDetected(t *testing.T) {
+// TestRegister_TwoProxiesSameRoleModule covers thrum-iw42: after dropping
+// the role+module uniqueness check (Option C), two distinct proxy names
+// with the same (role, module) must BOTH succeed. Mirrors the real
+// scenario where Telegram registers @thrum:coordinator_main and the peer
+// bridge registers @thrum:impl_mocksf_s2 — both use role=remote,
+// module=thrum but carry different names.
+func TestRegister_TwoProxiesSameRoleModule(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
-
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "local_daemon_id")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_iw42", "local_daemon_id")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -2116,26 +2053,82 @@ func TestAgentRegister_LocalConflictStillDetected(t *testing.T) {
 
 	handler := NewAgentHandler(s)
 
-	// Register the first local agent.
+	// First proxy: Telegram-bridge-style thrum:coordinator_main.
 	first := RegisterRequest{
-		Name:     "impl_alpha",
-		Role:     "implementer",
-		Module:   "payments",
-		AgentPID: 1001,
+		Name:   "thrum:coordinator_main",
+		Role:   "remote",
+		Module: "thrum",
 	}
 	reqJSON, _ := json.Marshal(first)
-	_, err = handler.HandleRegister(context.Background(), reqJSON)
+	resp, err := handler.HandleRegister(context.Background(), reqJSON)
 	if err != nil {
 		t.Fatalf("first HandleRegister: %v", err)
 	}
+	if got := resp.(*RegisterResponse).Status; got != "registered" {
+		t.Fatalf("first Status = %q, want registered", got)
+	}
 
-	// Attempt to register a SECOND local agent with the same role+module
-	// but a different name. Without Force, this must return a conflict.
+	// Second proxy: peer-bridge-style thrum:impl_mocksf_s2, SAME role + module.
 	second := RegisterRequest{
-		Name:     "impl_beta",
+		Name:   "thrum:impl_mocksf_s2",
+		Role:   "remote",
+		Module: "thrum",
+	}
+	reqJSON, _ = json.Marshal(second)
+	resp, err = handler.HandleRegister(context.Background(), reqJSON)
+	if err != nil {
+		t.Fatalf("second HandleRegister: %v", err)
+	}
+	regResp := resp.(*RegisterResponse)
+	if regResp.Status != "registered" {
+		t.Errorf("second Status = %q, want registered (role+module uniqueness removed per iw42)", regResp.Status)
+	}
+	if regResp.Conflict != nil {
+		t.Errorf("second Conflict = %+v, want nil (no role+module collision any more)", regResp.Conflict)
+	}
+
+	// Verify both rows coexist in the agents table.
+	var count int
+	if err := s.RawDB().QueryRow("SELECT COUNT(*) FROM agents WHERE role='remote' AND module='thrum'").Scan(&count); err != nil {
+		t.Fatalf("count agents: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("agents with role=remote/module=thrum = %d, want 2", count)
+	}
+}
+
+// TestRegister_SameAgentIDStillRejected preserves the existing
+// same-agent-returning semantics after the role+module check removal.
+// A second registration for the SAME agent_id with a DIFFERENT PID must
+// PID-self-heal (status "updated"), not spawn a duplicate.
+func TestRegister_SameAgentIDStillRejected(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_same_id", "local_daemon_id")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	handler := NewAgentHandler(s)
+
+	first := RegisterRequest{
+		Name:     "alice",
 		Role:     "implementer",
-		Module:   "payments",
-		AgentPID: 1002,
+		Module:   "auth",
+		AgentPID: 100,
+	}
+	reqJSON, _ := json.Marshal(first)
+	if _, err := handler.HandleRegister(context.Background(), reqJSON); err != nil {
+		t.Fatalf("first HandleRegister: %v", err)
+	}
+
+	// Same agent_id (name), different PID → PID self-heal, status "updated".
+	second := RegisterRequest{
+		Name:     "alice",
+		Role:     "implementer",
+		Module:   "auth",
+		AgentPID: 200,
 	}
 	reqJSON, _ = json.Marshal(second)
 	resp, err := handler.HandleRegister(context.Background(), reqJSON)
@@ -2143,11 +2136,20 @@ func TestAgentRegister_LocalConflictStillDetected(t *testing.T) {
 		t.Fatalf("second HandleRegister: %v", err)
 	}
 	regResp := resp.(*RegisterResponse)
-	if regResp.Status != "conflict" {
-		t.Errorf("Status = %s, want conflict (same-daemon role+module collision)", regResp.Status)
+	if regResp.Status != "updated" {
+		t.Errorf("Status = %q, want updated (PID self-heal path)", regResp.Status)
 	}
-	if regResp.Conflict == nil || regResp.Conflict.ExistingAgentID != "impl_alpha" {
-		t.Errorf("Conflict.ExistingAgentID = %v, want impl_alpha", regResp.Conflict)
+
+	// Exactly one row, updated PID.
+	var count, pid int
+	if err := s.RawDB().QueryRow("SELECT COUNT(*), MAX(agent_pid) FROM agents WHERE agent_id='alice'").Scan(&count, &pid); err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("agents count = %d, want 1 (same-id should dedupe)", count)
+	}
+	if pid != 200 {
+		t.Errorf("agent_pid = %d, want 200 (self-heal replaces stale)", pid)
 	}
 }
 
