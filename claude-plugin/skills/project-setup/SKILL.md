@@ -130,27 +130,23 @@ leaves ambiguous — constraints, scope boundaries, patterns to follow.
 
 ### Check for Implementation Philosophy Doc
 
-After reading the plan and design doc, check if the project has an
-implementation philosophy doc — a file defining anti-patterns, red flags, and
-non-negotiable criteria:
+Before reading the plan, verify the project has an implementation
+philosophy doc at the canonical path:
 
-1. Check if the design doc references a philosophy doc (look for "philosophy",
-   "anti-patterns", "implementation standards" keywords)
-2. Search for existing files:
+```bash
+test -f .thrum/philosophy.md
+```
 
-   ```bash
-   find . -name "*philosophy*" -o -name "*anti-pattern*" -o -name "*implementation-standards*" | head
-   ```
+If the file does not exist, stop and tell the user:
 
-3. **If found:** Read it and extract the key anti-patterns. These will be
-   injected into each epic's prompt in Phase 4.
-4. **If not found:** Offer to create one from the `philosophy-template.md` file
-   in this skill's `resources/` directory. Use `AskUserQuestion` to ask whether
-   to create it now or skip.
+> project-setup requires a philosophy doc at `.thrum/philosophy.md`.
+> Run the `project-philosophy` skill first to generate or locate one,
+> then re-invoke project-setup.
 
-This is the project's "rules of engagement" for implementation agents. Without
-it, agents can only verify "tests pass" — they can't verify architectural
-compliance.
+Do not proceed without the philosophy doc. Do not inline-create.
+
+If the doc exists, read it and extract the key anti-patterns — these
+will be injected into each epic's prompt in Phase 4.
 
 ## Phase 2: Decompose into Epics & Tasks
 
