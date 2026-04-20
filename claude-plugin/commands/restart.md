@@ -13,15 +13,17 @@ anchor.
 
 ## Steps
 
-### 1. Compose and print a Resume Plan
+### 1. Compose a Resume Plan and write it to a temp file
 
-**Before saving the snapshot**, compose a structured Resume Plan and print
-it to the terminal so the operator can read the hand-off at a glance. Fill
-every field with concrete content — don't leave placeholders.
+Fill every field with concrete content — no placeholders. This exact text
+will be (a) printed to the terminal in step 2 for the operator to read, and
+(c) appended to the snapshot file in step 4. Writing it to a temp file first
+guarantees those two copies stay in sync.
 
-Use this template verbatim:
+```bash
+PLAN=$(mktemp -t resume_plan.XXXXXX)
+cat > "$PLAN" <<'RESUME_PLAN_EOF'
 
-```
 ## Resume Plan
 
 **Shipped this session:**
@@ -41,58 +43,61 @@ Use this template verbatim:
 2. <second step>
 3. ...
    (4–8 numbered steps total)
+RESUME_PLAN_EOF
 ```
 
-Print the filled-in block to the terminal **before** running any save
-command. Keep the exact text — you will reuse it in step 3.
+Fill every `<...>` placeholder with real content before running the
+heredoc. The `'RESUME_PLAN_EOF'` delimiter is single-quoted so nothing
+inside is expanded — paste your content as literal text. Keep the
+leading blank line and the `## Resume Plan` heading exactly; they are
+the deterministic anchor for the next session.
 
-### 2. Save the conversation snapshot
+### 2. Print the Resume Plan to the terminal
+
+**Before** saving the snapshot, show the plan so the operator can read
+the hand-off at a glance:
+
+```bash
+cat "$PLAN"
+```
+
+### 3. Save the conversation snapshot
 
 ```bash
 thrum tmux snapshot save
 ```
 
 This captures the conversation tail to
-`.thrum/restart/<agent-name>.md`.
+`.thrum/restart/<agent_id>.md` in the current worktree.
 
-### 3. Append the Resume Plan to the snapshot file
+### 4. Append the Resume Plan to the snapshot file
 
-Append the same Resume Plan block you printed in step 1 to the snapshot
-file, under a `## Resume Plan` heading. This gives the next-session reader
-a predictable anchor independent of the lossy conversation-tail capture.
+The snapshot file now has the conversation tail. Append the same Resume
+Plan text (from the temp file) so the next-session reader has a
+predictable anchor independent of the lossy tail capture.
 
 ```bash
-REPO=$(git rev-parse --show-toplevel)
-AGENT=$(thrum whoami --field agent_id)
-cat >> "${REPO}/.thrum/restart/${AGENT}.md" <<'EOF'
-
-## Resume Plan
-
-**Shipped this session:**
-- …(paste the exact same content you printed in step 1)…
-
-**In-flight work:**
-- …
-
-**Blockers / open questions:**
-- …
-
-**Resume plan:**
-1. …
-EOF
+REPO=$(git rev-parse --show-toplevel) || { echo "ERROR: not in a git worktree"; exit 1; }
+AGENT=$(thrum whoami --field agent_id) || { echo "ERROR: agent not registered"; exit 1; }
+[ -n "$AGENT" ] || { echo "ERROR: empty agent_id"; exit 1; }
+SNAP="${REPO}/.thrum/restart/${AGENT}.md"
+cat "$PLAN" >> "$SNAP"
+rm -f "$PLAN"
 ```
 
-Replace the `…` lines with your actual content before running the
-heredoc. Preserve the `## Resume Plan` heading exactly — it is the
-deterministic anchor.
+Verify the last section of the snapshot contains your plan:
 
-### 4. Check if you are in a tmux-managed session
+```bash
+tail -20 "$SNAP"
+```
+
+### 5. Check if you are in a tmux-managed session
 
 ```bash
 thrum whoami --field tmux_session
 ```
 
-### 5. If in tmux (non-empty output), notify the coordinator
+### 6. If in tmux (non-empty output), notify the coordinator
 
 ```bash
 thrum send "Restart snapshot saved. Please run: thrum tmux restart <session-name> --force" --to @coordinator_main
@@ -102,7 +107,7 @@ Then wait up to 5 minutes for the coordinator to restart you. Do not exit
 on your own. If no restart occurs within 5 minutes, fall back to the
 non-tmux instructions below.
 
-### 6. If NOT in tmux (empty output), print these instructions for the operator
+### 7. If NOT in tmux (empty output), print these instructions for the operator
 
 > Restart snapshot saved. To continue in a new session:
 >
