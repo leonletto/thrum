@@ -6581,6 +6581,16 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	wsRegistry.Register("telegram.status", websocket.Handler(telegramHandler.HandleStatus))
 	wsRegistry.Register("telegram.pair", websocket.Handler(telegramHandler.HandlePair))
 
+	// thrum-48kt.6: periodically reap telegram_msg_map rows that have
+	// aged past the TTL and are not pinned by a live permission_nudges
+	// row. Runs regardless of whether the Telegram bridge is enabled
+	// in this session — the durable table persists across restarts,
+	// so a daemon booted without the bridge should still compact any
+	// leftover rows rather than letting them accumulate until the
+	// next bridge-enabled boot. SweepLoop runs one leading sweep
+	// immediately, then once per interval, until ctx is canceled.
+	go telegram.SweepLoop(ctx, st.RawDB(), telegram.DefaultMapTTL, telegram.DefaultSweepInterval)
+
 	if thrumCfg.Telegram.TelegramEnabled() {
 		tgBridge := telegram.New(thrumCfg.Telegram, wsPort)
 		// Wire the SQLite handle so telegram.MessageMap persists the
