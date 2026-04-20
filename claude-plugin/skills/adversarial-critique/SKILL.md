@@ -32,7 +32,12 @@ Stress-test a mid-implementation design fork by dispatching sub-agents that argu
 
 **Strongly recommended:**
 - Context block: relevant file excerpts, prior art, schema snippets, constraints
-- Engagement axes: cross-cutting concerns the debate MUST address (e.g. "cross-daemon semantics", "schema impact", "test strategy", "blast radius")
+- Engagement axes: cross-cutting concerns the debate MUST address. Example axes that worked on a real debate (the enlw.9 role-query-hardening debate — pick analogues for your domain):
+  - cross-daemon semantics
+  - schema impact
+  - test strategy
+  - API surface
+  - blast radius
 
 Without these, sub-agents re-grep the codebase and produce generic arguments. Pre-assembled context is the difference between a real debate and a shallow one.
 
@@ -137,6 +142,14 @@ Write the full transcript to `dev-docs/brainstorms/YYYY-MM-DD-<topic>-debate.md`
 
 **Return to caller:** one-line summary (picked option + rationale) plus file path. Keeps the caller's context lean.
 
+## Post-resolution
+
+Once the debate resolves, the decision only unblocks the work if it lands in your working context in an actionable shape:
+
+- **Update your working plan/context with the invariants.** Paste the IF/THEN invariants into the task prompt or plan that will carry forward, so the next implementer sees them alongside the code to write. A decision that only lives in the debate transcript is decide-shaped, not unblock-shaped.
+- **Sketch one acceptance test before implementing.** Write a single test — even just a skeleton — that would fail if the invariants are violated. If you can't write one, the invariants are under-specified; re-open R3 rather than implementing against fuzzy constraints. Writing surfaces blind spots that reading never catches.
+- **Optional audit-trail enhancement:** when the decision affects multiple future tasks or will be referenced in a PR description, record it with `bd decision` so the rationale is queryable from the beads graph (not just from the brainstorm markdown).
+
 ## Anti-patterns
 
 - **R2 identical to R1** — agent wrote a performative concession. Reject and re-prompt with "what specifically did the opponent land?"
@@ -146,7 +159,7 @@ Write the full transcript to `dev-docs/brainstorms/YYYY-MM-DD-<topic>-debate.md`
 
 ## Model and cost
 
-Sonnet for all dispatches (see the "Sub-Agent Model Selection" guidance in project / global instructions). Roughly ~100k tokens for 2 options, ~150k for 3 options. This is an investment that buys a reviewer-ready decision an implementer can execute in a fresh session without re-hashing the design.
+Sonnet for all dispatches. See `~/.claude/CLAUDE.md § Sub-Agent Model Selection` — the project-wide rule that every `Agent` dispatch must pass `model` explicitly (never inherit parent Opus by default). Roughly ~100k tokens for 2 options, ~150k for 3 options. This is an investment that buys a reviewer-ready decision an implementer can execute in a fresh session without re-hashing the design.
 
 ## See also
 
