@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 )
 
 // EnforceOpts configures defense-in-depth checks for
@@ -150,7 +151,7 @@ func EnsureRedirects(worktreePath, mainRepo string) error {
 // identity file (thrum-dw06). Empty names in the keep list are
 // silently ignored.
 //
-// thrum-ajmd design: the original behavior was os.Remove, which had no
+// Thrum-ajmd design: the original behavior was os.Remove, which had no
 // recourse when it fired on the wrong dir (a non-coordinator agent's
 // refresh running with cwd resolving to the main repo path wiped
 // coordinator_main.json as a "stale sibling"). Quarantine preserves the
@@ -275,13 +276,17 @@ func EnforceOneIdentityWith(worktreePath string, opts EnforceOpts, keep ...strin
 // caller passing a subdirectory still resolves to the worktree root
 // that can be compared against the enforcement target.
 //
-// The 2s timeout matches the internal/daemon/safecmd convention for
-// daemon-initiated git invocations. Returns an error if the path is
-// not a git worktree, git is missing, or the command times out.
+// Routed through internal/daemon/safecmd.Git per the project-wide
+// convention for daemon-reachable git invocations (5s timeout, injected
+// user.name/user.email for commit paths — harmless for rev-parse,
+// consistent shape for review). There is no import cycle: safecmd's
+// own imports are stdlib-only and no file under internal/daemon/safecmd
+// references internal/worktree.
+//
+// Returns an error if the path is not a git worktree, git is missing,
+// or the command times out.
 func gitToplevel(path string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, "git", "-C", path, "rev-parse", "--show-toplevel").Output() // #nosec G204 -- args are fixed; path is caller-asserted and already used to locate identities
+	out, err := safecmd.Git(context.Background(), path, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return "", fmt.Errorf("git rev-parse --show-toplevel: %w", err)
 	}
