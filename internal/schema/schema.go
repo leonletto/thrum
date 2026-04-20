@@ -547,9 +547,17 @@ func Migrate(db *sql.DB) error {
 
 	// Run migrations
 	if currentVersion < CurrentVersion {
+		// Emit start + completion logs so operators can confirm from daemon
+		// logs that a migration actually ran on post-deploy restart.
+		// Pre-thrum-rchj the function logged only backup errors, so a
+		// bug report of "schema stayed at vX after restart" had no log
+		// evidence to distinguish "daemon didn't pick up the new binary"
+		// from "migration silently failed".
+		log.Printf("[schema] migrating DB from v%d to v%d", currentVersion, CurrentVersion)
 		if err := runMigrations(db, currentVersion, CurrentVersion); err != nil {
 			return fmt.Errorf("run migrations: %w", err)
 		}
+		log.Printf("[schema] migration complete: v%d", CurrentVersion)
 	}
 
 	return nil
