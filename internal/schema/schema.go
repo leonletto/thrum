@@ -20,7 +20,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 23
+const CurrentVersion = 24
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -358,6 +358,17 @@ func createTables(tx *sql.Tx) error {
 			init_at        TEXT NOT NULL,
 			updated_at     TEXT NOT NULL
 		)`,
+
+		// Telegram↔Thrum message ID map (v24, thrum-48kt.2). Durable
+		// backing for the in-memory LRU in internal/bridge/telegram/msgmap.go
+		// so supervisor replies that arrive after a daemon restart still
+		// resolve to the originating nudge. Keys are the telegram
+		// "chatID:msgID" format produced by teleKey().
+		`CREATE TABLE IF NOT EXISTS telegram_msg_map (
+			external_key TEXT PRIMARY KEY,
+			thrum_msg_id TEXT NOT NULL,
+			created_at   INTEGER NOT NULL
+		)`,
 	}
 
 	for _, sql := range tables {
@@ -425,6 +436,9 @@ func createIndexes(tx *sql.Tx) error {
 		// Permission nudges indexes (v21)
 		"CREATE INDEX IF NOT EXISTS idx_permission_nudges_session ON permission_nudges(session)",
 		"CREATE INDEX IF NOT EXISTS idx_permission_nudges_expires ON permission_nudges(expires_at)",
+
+		// Telegram msg map reverse-lookup index (v24, thrum-48kt.2)
+		"CREATE INDEX IF NOT EXISTS idx_telegram_msg_map_thrum ON telegram_msg_map(thrum_msg_id)",
 	}
 
 	for _, sql := range indexes {
@@ -1031,6 +1045,28 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		`)
 		if err != nil {
 			return fmt.Errorf("migration 22→23: create daemon_identity table: %w", err)
+		}
+	}
+
+	// Migration from version 23 to 24: Add telegram_msg_map table for
+	// durable Telegram↔Thrum message ID mapping (thrum-48kt.2).
+	// Prior state: in-memory LRU only, daemon restart lost pending-nudge
+	// mappings → supervisor replies after restart landed as top-level
+	// DMs with no reply_to ref → TryResolve never fired.
+	if startVersion < 24 && endVersion >= 24 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS telegram_msg_map (
+				external_key TEXT PRIMARY KEY,
+				thrum_msg_id TEXT NOT NULL,
+				created_at   INTEGER NOT NULL
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 23→24: create telegram_msg_map table: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_telegram_msg_map_thrum ON telegram_msg_map(thrum_msg_id)`)
+		if err != nil {
+			return fmt.Errorf("migration 23→24: create idx_telegram_msg_map_thrum: %w", err)
 		}
 	}
 

@@ -1049,9 +1049,9 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	}
 }
 
-func TestSchema_V23_CurrentVersion(t *testing.T) {
-	if schema.CurrentVersion != 23 {
-		t.Errorf("CurrentVersion = %d, want 23", schema.CurrentVersion)
+func TestSchema_V24_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 24 {
+		t.Errorf("CurrentVersion = %d, want 24", schema.CurrentVersion)
 	}
 }
 
