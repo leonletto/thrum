@@ -334,6 +334,11 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("resolve agent and session: %w", err)
 	}
 
+	// thrum-7nuj: advance last_seen_at for the caller so the
+	// send.recipient-stale hint doesn't false-positive on actively
+	// coordinating agents. Debounced in the state layer.
+	_ = h.state.TouchAgentLastSeen(ctx, callerID)
+
 	// Handle impersonation (users can impersonate agents)
 	agentID := callerID
 	var authoredBy string
@@ -775,6 +780,13 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	var currentAgentID string
 	if req.ExcludeSelf || req.Unread || req.UnreadForAgent != "" {
 		currentAgentID = h.resolveAgentOnly(ctx, req.CallerAgentID)
+	}
+
+	// thrum-7nuj: message.list with a resolved caller is a liveness
+	// signal — `thrum inbox --unread` is the most common coordinator
+	// poll loop. Debounced in the state layer; safe with the RLock held.
+	if currentAgentID != "" {
+		_ = h.state.TouchAgentLastSeen(ctx, currentAgentID)
 	}
 
 	// Determine which identity to use for the is_read correlated subquery.
@@ -2048,6 +2060,10 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 	if err != nil {
 		return nil, fmt.Errorf("resolve agent and session: %w", err)
 	}
+
+	// thrum-7nuj: advance last_seen_at — mark-read is a liveness signal
+	// for the reader.
+	_ = h.state.TouchAgentLastSeen(ctx, agentID)
 
 	// Prepare timestamp
 	now := time.Now().UTC().Format(time.RFC3339Nano)

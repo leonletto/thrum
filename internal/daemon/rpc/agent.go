@@ -415,6 +415,10 @@ func (h *AgentHandler) HandleWhoami(ctx context.Context, params json.RawMessage)
 		source = "caller"
 	}
 
+	// thrum-7nuj: whoami is an explicit liveness probe — advance
+	// last_seen so send.recipient-stale hints don't false-positive.
+	_ = h.state.TouchAgentLastSeen(ctx, agentID)
+
 	// Look up role/module/display from the agents table.
 	h.state.RLock()
 	var dbRole, dbModule, dbDisplay sql.NullString
