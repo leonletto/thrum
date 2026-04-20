@@ -653,10 +653,27 @@ func parsePermissionReason(reason string) (runtime, name string, ok bool) {
 
 // writeTmuxToIdentity writes tmux_session and runtime to the identity file
 // for the agent whose session matches the given name, scanning all worktrees.
+//
+// thrum-51cg: a new worktree-path pass runs first when HandleCreate stored
+// the session→cwd mapping in sessionCwds. Post-γ-reset, the identity file's
+// stale TmuxSession value may point at a dead session and the agent name
+// often doesn't sanitize to the new session name — so Pass 1 and Pass 2
+// both fail to match and the stale value persists. The worktree-path pass
+// fixes that by binding the session to the identity file colocated in the
+// session's cwd, which is the user's mental model (worktree IS the binding).
+// EnforceOneIdentity guarantees a single identity per worktree; if that
+// invariant is violated at runtime, the new pass logs a warning and falls
+// back to Pass 1/2 so we don't mass-flap mis-registered files.
+//
+// Legacy passes preserved:
+//   Pass 1: match by existing tmux_session association.
+//   Pass 2: match by agent name (first launch, no tmux_session yet).
 func (h *TmuxHandler) writeTmuxToIdentity(sessionName, target, runtime string) {
-	// Two-pass across all identity dirs (main repo + worktrees):
-	// Pass 1: match by existing tmux_session association.
-	// Pass 2: match by agent name (first launch, no tmux_session yet).
+	// Pass 0 (thrum-51cg): worktree-path pass via sessionCwds.
+	if h.writeTmuxByWorktreeCwd(sessionName, target, runtime) {
+		return
+	}
+
 	var nameMatch *config.IdentityFile
 	var nameMatchDir string
 
@@ -705,6 +722,104 @@ func (h *TmuxHandler) writeTmuxToIdentity(sessionName, target, runtime string) {
 		nameMatch.Runtime = runtime
 		_ = config.SaveIdentityFile(filepath.Dir(nameMatchDir), nameMatch)
 	}
+}
+
+// writeTmuxByWorktreeCwd (thrum-51cg Pass 0) binds a tmux session to the
+// single identity file in the session's cwd when sessionCwds has that
+// mapping. Returns true if a write happened (caller should stop); false on
+// any fallback condition (no cwd mapping, empty identities dir, >1 file in
+// the dir, or G4 refusal) so the caller proceeds to Pass 1/2.
+func (h *TmuxHandler) writeTmuxByWorktreeCwd(sessionName, target, runtime string) bool {
+	h.sessionMu.RLock()
+	cwd, ok := h.sessionCwds[sessionName]
+	h.sessionMu.RUnlock()
+	if !ok || cwd == "" {
+		return false
+	}
+
+	idDir := filepath.Join(cwd, ".thrum", "identities")
+	entries, err := os.ReadDir(idDir)
+	if err != nil {
+		return false
+	}
+
+	// Collect .json identity files in this worktree. EnforceOneIdentity
+	// (worktree package, invoked at HandleCreate quickstart path) guarantees
+	// a single identity per worktree. The slice below is cautious wording
+	// for an expected-to-be-one set.
+	var identityFiles []string
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		identityFiles = append(identityFiles, filepath.Join(idDir, entry.Name()))
+	}
+	if len(identityFiles) == 0 {
+		return false
+	}
+	if len(identityFiles) > 1 {
+		// EnforceOneIdentity invariant violated. Fall back to Pass 1/2 to
+		// avoid overwriting multiple files with the same session target.
+		log.Printf("[tmux 51cg] multiple identity files in worktree %s — falling back to name/session match (files: %v)",
+			cwd, identityFiles)
+		return false
+	}
+
+	path := identityFiles[0]
+	data, err := os.ReadFile(path) // #nosec G304 -- path is .thrum/identities/<name>.json under a cwd we already trust
+	if err != nil {
+		return false
+	}
+	var idFile config.IdentityFile
+	if err := json.Unmarshal(data, &idFile); err != nil {
+		return false
+	}
+	if gErr := h.checkWriterLiveness(idFile.AgentPID); gErr != nil {
+		// G4 refusal: dead PID. Treat as no-write and don't fall through
+		// to Pass 1/2 — the subject agent isn't alive to receive this
+		// binding, and Pass 1/2 would hit the same gate.
+		return true
+	}
+	idFile.TmuxSession = target
+	idFile.Runtime = runtime
+	_ = config.SaveIdentityFile(filepath.Dir(idDir), &idFile)
+	return true
+}
+
+// clearDeadTmuxSessionInIdentity (thrum-51cg Option B) clears the
+// TmuxSession and Runtime fields from the identity file at path when the
+// TmuxSession points at a dead (non-existent) tmux session. Idempotent —
+// a file whose TmuxSession is already empty is a no-op.
+//
+// Used by team.list enrichment as defense-in-depth self-heal: external
+// kills (γ reset via raw `tmux kill-session`, or a pane exit) bypass
+// HandleKill's clearTmuxFromIdentities, leaving stale bindings in the
+// identity file. Self-healing on the next team.list read catches those
+// without requiring an explicit reconciliation RPC.
+//
+// Does NOT run the G4 liveness gate — the subject agent may still be
+// alive (the session died underneath them), and we want to unstick that
+// scenario. The write scope is intentionally narrow (two tmux fields);
+// no other identity data is mutated.
+func clearDeadTmuxSessionInIdentity(path string) error {
+	data, err := os.ReadFile(path) // #nosec G304 -- path is a discovered identity file
+	if err != nil {
+		return err
+	}
+	var idFile config.IdentityFile
+	if err := json.Unmarshal(data, &idFile); err != nil {
+		return err
+	}
+	if idFile.TmuxSession == "" && idFile.Runtime == "" {
+		return nil
+	}
+	idFile.TmuxSession = ""
+	idFile.Runtime = ""
+	updated, err := json.MarshalIndent(idFile, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, updated, 0o600) // #nosec G306
 }
 
 // checkWriterLiveness gates a daemon-side identity mutation through G4.
