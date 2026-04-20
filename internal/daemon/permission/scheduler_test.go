@@ -303,6 +303,64 @@ func TestScheduler_PaneHashStableAcrossVolatileLines(t *testing.T) {
 	}
 }
 
+// TestScheduler_PaneHashDistinctPromptsStillReset is the inverse of
+// TestScheduler_PaneHashStableAcrossVolatileLines — guards against an
+// over-broad stripVolatileLines pattern that would collapse
+// semantically distinct prompts into the same hash. Two different
+// codex commands (distinct Reason + $ lines) MUST still produce a new
+// firstDetect so the scheduler correctly recognizes the prompt change.
+func TestScheduler_PaneHashDistinctPromptsStillReset(t *testing.T) {
+	p, clock := newSchedulerFixture(t)
+	ctx := context.Background()
+
+	promptMkdir := `Would you like to run the following command?
+  Reason: Allow creating /tmp/foo outside the workspace?
+  $ mkdir -p /tmp/foo
+› 1. Yes, proceed (y)
+• Working (5s • esc to interrupt)`
+
+	promptRm := `Would you like to run the following command?
+  Reason: Allow deleting /tmp/bar?
+  $ rm -rf /tmp/bar
+› 1. Yes, proceed (y)
+• Working (5s • esc to interrupt)`
+
+	if err := p.OnDetection(ctx, "codex-test", "codex", "codex-test:0.0",
+		"researcher_codex", testPattern(), promptMkdir); err != nil {
+		t.Fatalf("first detect: %v", err)
+	}
+	row1, _ := p.store.LookupPendingNudgeBySession(ctx, "codex-test")
+	if row1 == nil {
+		t.Fatal("expected pending row after first detect")
+	}
+	firstMsgID := row1.MessageID
+
+	*clock = clock.Add(30 * time.Second)
+	p.SetClock(func() time.Time { return *clock })
+
+	// Different prompt — different command, different Reason. Must
+	// produce a fresh firstDetect (new MessageID) even though both
+	// panes share the same volatile "Working (5s)" line.
+	if err := p.OnDetection(ctx, "codex-test", "codex", "codex-test:0.0",
+		"researcher_codex", testPattern(), promptRm); err != nil {
+		t.Fatalf("second detect with different prompt: %v", err)
+	}
+	row2, _ := p.store.LookupPendingNudgeBySession(ctx, "codex-test")
+	if row2 == nil {
+		t.Fatal("expected pending row after second detect")
+	}
+	if row2.MessageID == firstMsgID {
+		t.Errorf("different prompt should have produced new MessageID; got same %s", firstMsgID)
+	}
+	if row2.NudgeCount != 1 {
+		t.Errorf("new prompt: NudgeCount = %d, want 1", row2.NudgeCount)
+	}
+	// The old row must be gone (deleted on pane-hash change).
+	if gone, _ := p.store.LookupPendingNudgeByMessageID(ctx, firstMsgID); gone != nil {
+		t.Error("old row should have been deleted on pane-hash change")
+	}
+}
+
 func TestScheduler_FirstDetectWithoutSupervisors_InsertsOrphanRow(t *testing.T) {
 	// No supervisor registered — only the permission agent itself, via
 	// a minimal State fixture. We still want a row so a later recovery
