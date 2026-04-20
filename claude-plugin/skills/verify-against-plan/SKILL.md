@@ -59,4 +59,54 @@ Before producing any findings, run these three checks. If any fails, bail with a
 
 Only when all three checks pass should the comparison pass begin.
 
+## Output format
+
+Findings go to stdout in this exact shape so the coordinator can consolidate the dual-review batch without reformatting.
+
+```markdown
+## Verify-Against-Plan Findings
+
+**Plan:** <path>
+**Implementation:** <branch> (<N> commits, <M> files changed)
+**Summary:** <N> BLOCKING, <N> IMPORTANT, <N> MINOR
+
+---
+
+### BLOCKING #1 — <short descriptor>
+- **Plan reference:** <plan file>:<line> — "<verbatim requirement>"
+- **Implementation state:** <code path>:<line> or "absent"
+- **Why it matters:** <link back to acceptance criterion / invariant>
+- **Suggested resolution:** <add code, update plan, or flag for coordinator>
+
+### IMPORTANT #1 — …
+### MINOR #1 — …
+```
+
+Every finding must include all four fields:
+
+- **Plan reference** — exact `<file>:<line>` with the verbatim quote from the plan. No paraphrase.
+- **Implementation state** — what's in the code now, or the literal string `absent` if the requirement has no corresponding code.
+- **Why it matters** — the acceptance criterion or invariant this finding ties back to. Prevents findings drifting into style opinions.
+- **Suggested resolution** — concrete next action (add the missing code, update the plan, or flag for coordinator judgment). "Review this" is not a resolution.
+
+If there are no findings in a severity bucket, omit that bucket entirely — do not write "### BLOCKING #0 — none".
+
+## Severity criteria
+
+- **BLOCKING** — a named acceptance criterion is unmet, or the implementation contradicts a stated invariant. Must be fixed before merge. Examples: AC #3 says "all writes go through the store" but a direct-file-write path exists; plan's File Structure claims `internal/auth/session.go` exists but no such file was added.
+- **IMPORTANT** — a plan requirement is implemented but with silent deviation (different file path, different function name, different public shape) that is likely intentional but unverified. Should be fixed, or the deviation explicitly acknowledged by the implementer. Example: plan says `ResolveAgentID()` but code has `GetAgentID()` with the same behavior — probably fine, but nobody said so.
+- **MINOR** — missing documentation reference, commit-message format drift, or stylistic plan deviation that does not affect behavior. Example: plan calls for `Refs thrum-s9q9.3` in commit body, commit just has the title.
+
+When choosing between BLOCKING and IMPORTANT, apply the test: *would a reader of the merged code be surprised by this?* BLOCKING = yes, definitely; IMPORTANT = maybe, needs explanation.
+
+## Invariant: stdout only, no inline edits
+
+Findings go to stdout only. Do NOT:
+
+- Create TodoWrite entries, beads issues, or worklog files inline — consolidation into the dual-review batch is the coordinator's job.
+- Edit the code or the plan in response to findings — that is the implementer's next step after receiving the consolidated review.
+- Modify git state (no commits, no stashes, no checkouts).
+
+The skill reports; the coordinator decides; the implementer fixes. Keep those three roles separate or the dual-review batch stops composing cleanly with `feature-dev:code-reviewer`.
+
 <!-- Body filled in tasks 3-4 -->
