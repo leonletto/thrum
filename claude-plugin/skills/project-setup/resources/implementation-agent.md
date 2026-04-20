@@ -47,10 +47,10 @@ When filling this template to create an implementation prompt:
   orchestrator (from `thrum team`). Use for direct messages, not the role name.
 - `{{PLAN_FILE}}` — **Absolute path** to the implementation plan file
 - `{{PROJECT_ROOT}}` — Absolute path to the project root
-- `{{ANTI_PATTERNS}}` — Epic-specific implementation standards: non-negotiable
-  rules and red flags extracted from the design doc and philosophy doc. Injected
-  by project-setup Phase 4. If empty, the generic verifier pattern still applies
-  but without domain-specific checks.
+- `{{ANTI_PATTERNS}}` — Epic-specific implementation standards. Injected by
+  project-setup Phase 4. If empty, the generic verifier pattern still applies
+  but without domain-specific checks. See `project-philosophy` for the format
+  spec.
 - `{{CROSS_EPIC_DEPS}}` — Cross-epic dependency table showing which tasks in
   this epic are blocked by tasks in other epics. Injected by project-setup
   Phase 4. If empty (no cross-epic deps), this section is omitted.
@@ -80,6 +80,8 @@ cross-cutting decisions.
 4. **Focused prompts** — Give each sub-agent the full task description, worktree
    path, quality commands, and expected deliverables
 
+Full dispatch mechanics (partition, parallel launch, findings-to-disk, consolidate): invoke `efficient-multi-agent-research` § Core Pattern.
+
 ### Agent Selection
 
 | Task                        | Agent Type                  | Model  | Background? |
@@ -92,7 +94,7 @@ cross-cutting decisions.
 | Doc updates / config tweaks | `general-purpose`           | haiku  | yes         |
 
 \*Use foreground when you need the result before proceeding. Use background when
-you can continue other work while they run.
+you can continue other work while they run. For research across N > 6 items, invoke `efficient-multi-agent-research` instead of bespoke dispatch.
 
 ### When to Parallelize vs. Work Sequentially
 
@@ -245,9 +247,9 @@ history. Pick up from exactly where the previous session stopped.
 
 {{ANTI_PATTERNS}}
 
-<!-- STRIP: Replace {{ANTI_PATTERNS}} with the generated anti-patterns content
-     (3-5 rules + red flags). Then remove this comment. The self-review gate
-     in Phase 3 passes these to the code-reviewer sub-agent. -->
+<!-- STRIP: Replace {{ANTI_PATTERNS}} with content generated per the
+     project-philosophy anti-pattern format. Then remove this comment. The
+     self-review gate in Phase 3 passes these to the code-reviewer sub-agent. -->
 
 ---
 
@@ -348,30 +350,9 @@ depend on each other's output.
 
 #### Launch Pattern
 
-Give each sub-agent everything it needs to work autonomously:
+Give each sub-agent everything it needs to work autonomously. Each prompt must include: worktree path, branch name, the full `bd show <task_id>` output as the source of truth, the quality commands for the verify step, and the commit-message format (`{{EPIC_TITLE}}: <task summary>`). Each sub-agent returns what was built, test results, and the commit hash.
 
-```text
-# Launched in ONE message for parallel execution
-Task(subagent_type="general-purpose", model="sonnet",
-  prompt="Implement a task in {{WORKTREE_PATH}} on branch {{BRANCH_NAME}}.
-
-  ## Task Details
-  <paste full bd show output for task A>
-
-  ## Instructions
-  1. Read the task description — it is the source of truth
-  2. Implement following existing code patterns
-  3. Run tests: {{QUALITY_COMMANDS}}
-  4. Commit: git commit -m '{{EPIC_TITLE}}: <task summary>'
-  5. Return: what was built, test results, commit hash")
-
-Task(subagent_type="general-purpose", model="sonnet",
-  prompt="Implement a task in {{WORKTREE_PATH}} ...
-
-  ## Task Details
-  <paste full bd show output for task B>
-  ...")
-```
+Invoke `efficient-multi-agent-research` § Core Pattern for the launch-and-wait mechanics (dispatch all agents in ONE message, `run_in_background=true`, wait for all completions before consolidating).
 
 #### After Sub-Agents Complete
 
@@ -484,20 +465,7 @@ thrum send "BLOCKED: {{TASK_ID}} by external dependency {{BLOCKER_ID}}" --to @{{
 
 ### When you hit a design fork
 
-**If you're blocked on a genuine 2-3 way design fork** — a real
-tradeoff where "just pick one" would likely be regretted — invoke the
-`adversarial-critique` skill. It dispatches 2-3 sub-agents on sonnet
-across three structured rounds and produces a defended pick with
-invariants and acceptance tests.
-
-Cost: ~100k tokens per 2-option debate (~150k for 3 options). Worth
-it for real forks; overkill for minor ambiguity. Skip it when:
-
-- Any option works and the decision is reversible
-- You can answer the question with a grep or a skim
-- Time pressure demands a best-guess now and a retry later
-
-Output artifact lands at `dev-docs/brainstorms/YYYY-MM-DD-<topic>-debate.md` for audit.
+**If you're blocked on a genuine 2-3 way design fork** — a real tradeoff where "just pick one" would likely be regretted — invoke `adversarial-critique` with the options, constraints, and the decision you need made. See that skill for cost, threshold, and the audit artifact path.
 
 **If you're investigating N > 6 items** (function call sites, pattern
 audits, multi-file reviews), invoke the
@@ -560,12 +528,7 @@ Before proceeding to the next epic:
 or abbreviate it. The purpose is to catch issues before the coordinator reviews,
 reducing back-and-forth rounds.
 
-Use a **two-stage review** in this exact order: **spec compliance first, then
-code quality.** Rationale: there is no point polishing code quality on work
-that misses the spec. Fix missing scope and unmet acceptance criteria before
-fine-tuning naming, idioms, and error handling. Each stage has its own review
-loop — fix findings and re-review until the stage is clean before moving to
-the next stage.
+Use a **two-stage review** in this exact order: **spec compliance first, then code quality.** Run `verify-against-plan` before `feature-dev:code-reviewer`; fix each stage's findings before moving to the next.
 
 ### Step 1: Run Quality Gates
 
@@ -584,59 +547,29 @@ Fix any failures before proceeding. Do not submit broken code for review.
 ### Step 2: Spec Compliance Review (Stage 1)
 
 Verify the implementation covers everything specified in the plan, design doc,
-and each task's acceptance criteria. No code-style judgments at this stage —
-only "does the code do what was asked?"
+and each task's acceptance criteria.
 
-Spawn a `general-purpose` sub-agent in **foreground**:
+Invoke `verify-against-plan` with these inputs:
 
-```text
-Agent(subagent_type="general-purpose", model="sonnet",
-  prompt="Check spec compliance of the implementation on branch {{BRANCH_NAME}}
-  in {{WORKTREE_PATH}}.
-
-  ## Documents to Read
-  - Plan file: {{PLAN_FILE}}
-  - Design doc: {{DESIGN_DOC}}
-  - Epic and tasks: run `bd show {{EPIC_ID}}` then `bd show <task_id>` for each task
-
-  ## Instructions
-  1. Read the plan and design doc fully
-  2. Read every task description in the epic — extract acceptance criteria
-  3. Read the implemented source files (use `git --no-pager diff main...HEAD`
-     to find changed files, then read each one)
-  4. Produce a gap report covering:
-     - **Plan/design gaps:** requirements, interfaces, behaviors, config
-       options, or edge cases specified in either document but absent from
-       the code
-     - **Acceptance criteria gaps:** per-task criteria in beads that the code
-       does not satisfy
-     - **Scope creep:** code that implements things NOT requested by the spec
-  5. List only findings — do not include items that are covered
-
-  ## Output Format
-  If gaps exist, return a numbered list. For each gap:
-  - Source: plan section / design section / task <id> criterion / scope-creep
-  - What is missing (or what is extra for scope-creep items)
-  - Severity: CRITICAL (core requirement) / IMPORTANT (specified behavior) /
-    MINOR (nice-to-have detail)
-
-  End with: 'Spec compliant: Yes/No'
-
-  If no gaps: return 'Spec compliant: Yes — all requirements covered.'")
+```
+/verify-against-plan plan={{PLAN_FILE}} branch={{BRANCH_NAME}}
 ```
 
-**When the spec compliance review returns:**
+The skill produces structured `BLOCKING` / `IMPORTANT` / `MINOR` findings with
+plan-reference + file:line evidence.
 
-- **If gaps exist:** For each CRITICAL or IMPORTANT gap, implement it using the
-  same TDD cycle from Phase 2 (write test → implement → verify). Commit each
-  fix: `git commit -m "feat: cover missing scope — <description>"`. For
-  scope-creep findings, remove the extra code. After fixes, **re-run the spec
-  compliance review** until it returns "Spec compliant: Yes" with no Critical
-  or Important gaps. MINOR gaps may be noted but do not block.
-- **If spec compliant:** Proceed to Step 3.
+**When findings come back:**
 
-**Maximum iterations:** 2 rounds. If gaps persist after 2 rounds, note them in
-the completion message to the coordinator with status `DONE_WITH_CONCERNS`.
+- For each `BLOCKING` or `IMPORTANT` finding, apply the `Suggested resolution`
+  from the finding using the same TDD cycle from Phase 2. Commit each fix:
+  `git commit -m "feat: cover missing scope — <description>"`. Re-run
+  `verify-against-plan` until no `BLOCKING` or `IMPORTANT` findings remain.
+  `MINOR` findings may be noted but do not block.
+- When the skill returns with no `BLOCKING` or `IMPORTANT` findings, proceed to
+  Step 3.
+
+**Maximum iterations:** 2 rounds. If findings persist after 2 rounds, note them
+in the completion message to the coordinator with status `DONE_WITH_CONCERNS`.
 
 ### Step 3: Code Quality Review (Stage 2)
 
@@ -654,9 +587,8 @@ influence its findings.
 ```text
 Agent(subagent_type="feature-dev:code-reviewer", model="sonnet",
   prompt="Review code quality of the implementation on branch {{BRANCH_NAME}}
-  in {{WORKTREE_PATH}}. Spec compliance has already been verified separately —
-  do NOT re-check requirements coverage; focus only on quality of the code that
-  was written.
+  in {{WORKTREE_PATH}}. Focus only on quality of the code that was written —
+  spec compliance is covered separately by verify-against-plan.
 
   ## What to Review
 
@@ -732,7 +664,7 @@ Before proceeding to Phase 4, confirm:
 
 - [ ] All tasks in the epic are closed: `bd show {{EPIC_ID}}`
 - [ ] All tests pass: `{{QUALITY_COMMANDS}}`
-- [ ] Spec compliance returned "Spec compliant: Yes" (or only MINOR gaps remain)
+- [ ] `verify-against-plan` returned no `BLOCKING` or `IMPORTANT` findings
 - [ ] Code quality returned "Ready to merge: Yes"
 - [ ] Commit history is clean and descriptive:
       `git --no-pager log --oneline -20`

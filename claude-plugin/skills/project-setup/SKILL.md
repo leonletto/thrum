@@ -91,8 +91,7 @@ If the file does not exist, stop and tell the user:
 
 Do not proceed without the philosophy doc. Do not inline-create.
 
-If the doc exists, read it and extract the key anti-patterns — these
-will be injected into each epic's prompt in Phase 4.
+If the doc exists, read it and extract the anti-patterns for injection in Phase 4. See `project-philosophy` for the doc contents and the anti-pattern format.
 
 ## Inputs
 
@@ -131,23 +130,12 @@ get there).
 enough to stand alone.** Flag any plan tasks with vague or missing
 implementation code during this phase.
 
-Use sub-agents to explore the codebase in parallel:
+Explore the codebase and recent beads state in parallel. Partition the work so:
 
-```text
-# All launched in ONE message for parallel execution
-Task(subagent_type="Explore", run_in_background=true,
-  prompt="Explore {{PROJECT_ROOT}}. Map packages, interfaces, and patterns
-  relevant to: {{FEATURE_DESCRIPTION}}.
-  Write findings to output/planning/codebase-scan.md")
+- One sub-agent maps packages, interfaces, and patterns relevant to `{{FEATURE_DESCRIPTION}}` — output: `output/planning/codebase-scan.md`.
+- One sub-agent runs `bd list --status=open`, `bd ready`, and `bd blocked` and identifies work related to `{{FEATURE_DESCRIPTION}}` — output: `output/planning/beads-context.md`.
 
-Task(subagent_type="general-purpose", model="haiku", run_in_background=true,
-  prompt="Run: bd list --status=open, bd ready, bd blocked.
-  Identify work related to {{FEATURE_DESCRIPTION}}.
-  Write to output/planning/beads-context.md")
-```
-
-After agents complete, read the output files. Check `bd list` / `bd ready` /
-`bd blocked` for related or overlapping work.
+Invoke `efficient-multi-agent-research` for the launch-and-wait mechanics. After agents complete, read the two output files — do not fan-read individual beads entries into your main context.
 
 Ask the user focused questions (prefer multiple choice) about anything the plan
 leaves ambiguous — constraints, scope boundaries, patterns to follow.
@@ -181,20 +169,7 @@ bd dep add <later-epic-id> <earlier-epic-id>
 
 ### Create Tasks
 
-When creating > 6 tasks, delegate to parallel sub-agents — one per epic:
-
-```text
-Task(subagent_type="general-purpose", model="haiku",
-  prompt="Create these beads tasks under epic {{EPIC_1_ID}}:
-  1. bd create --title='...' --type=task --priority=2 --description='...'
-  2. bd create --title='...' --type=task --priority=1 --description='...'
-  Then set ordering: bd dep add <later_id> <earlier_id>
-  Return the created task IDs and their titles.")
-
-Task(subagent_type="general-purpose", model="haiku",
-  prompt="Create these beads tasks under epic {{EPIC_2_ID}}:
-  ...")
-```
+When creating > 6 tasks, delegate to parallel sub-agents — one per epic. Each sub-agent (haiku is sufficient — the work is mechanical) gets the epic ID, the list of `bd create --title=... --type=task --priority=N --description=...` commands to run, the within-epic `bd dep add <later_id> <earlier_id>` ordering commands, and instructions to return the created task IDs and titles. Invoke `efficient-multi-agent-research` § Core Pattern for launch-and-wait mechanics.
 
 After sub-agents return IDs, set cross-epic dependencies directly (requires IDs
 from multiple sub-agents):
@@ -556,19 +531,14 @@ every time.
 
 ### Step 1.5: Generate Anti-Patterns for Each Epic
 
-For each epic's prompt, generate the `{{ANTI_PATTERNS}}` content:
+For each epic's prompt, derive the `{{ANTI_PATTERNS}}` content by combining two sources:
 
-1. Read the design doc's **Key Decisions** section — extract decisions that
-   constrain implementation (e.g., "full page reload, not HTMX", "real service
-   calls, not hardcoded")
-2. Read the philosophy doc's **Anti-Patterns** and **Red Flags** sections
-   (identified in Phase 1)
-3. Generate 3-5 epic-specific rules and red flags:
-   - State what MUST happen (positive requirement)
-   - State what MUST NOT happen (anti-pattern)
-   - Make rules grep-able where possible (e.g., "grep for `display:none`")
-4. Present the generated anti-patterns to the user for approval via
-   `AskUserQuestion` before injecting into the prompt
+1. The design doc's **Key Decisions** section — implementation-constraining decisions (e.g., "full page reload, not HTMX", "real service calls, not hardcoded").
+2. The philosophy doc's **Anti-Patterns** and **Red Flags** sections (already read during the Prerequisites check).
+
+Present the derived anti-patterns to the user for approval via `AskUserQuestion` before injecting into the prompt.
+
+See `project-philosophy` for the anti-pattern format spec (rule count, grep-ability, positive + negative pair structure).
 
 **Why this matters:** The verifier sub-agent pattern in the implementation
 template uses these red flags to check each task. Generic "tests pass"
@@ -593,7 +563,7 @@ worktree-related values come from the Phase 3 assignments:
 | `{{COVERAGE_TARGET}}`  | Coverage threshold (e.g., `>80%`)                                                                                                                                                                                           |
 | `{{AGENT_NAME}}`       | **From Phase 3 agent registration**                                                                                                                                                                                         |
 | `{{PLAN_FILE}}`        | **Absolute path** to the plan file (primary input)                                                                                                                                                                          |
-| `{{ANTI_PATTERNS}}`    | Generated in Step 1.5 from design doc + philosophy doc                                                                                                                                                                      |
+| `{{ANTI_PATTERNS}}`    | Generated in Step 1.5; see `project-philosophy` for the anti-pattern format spec.                                                                                                                                           |
 | `{{SUPERVISOR_NAME}}`  | From `thrum team` — first agent with role=orchestrator; if none, first with role=coordinator; if none, ask user                                                                                                             |
 | `{{CROSS_EPIC_DEPS}}`  | From Phase 2 cross-epic dependency map. If no cross-epic deps, replace with "No cross-epic dependencies."                                                                                                                   |
 
