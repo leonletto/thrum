@@ -247,6 +247,62 @@ func TestScheduler_PaneHashChange(t *testing.T) {
 	}
 }
 
+// TestScheduler_PaneHashStableAcrossVolatileLines verifies that a
+// volatile-line change (e.g., codex's "Working (Ns)" timer ticking)
+// does NOT reset the reminder cadence. Without volatile-line stripping
+// in the cadence hash, each poll on the same semantic prompt would
+// look like a new prompt → fresh firstDetect → perpetual "Reminder #1"
+// spam (observed in thrum-48kt.4 E2E against plugin-skills-slate).
+func TestScheduler_PaneHashStableAcrossVolatileLines(t *testing.T) {
+	p, clock := newSchedulerFixture(t)
+	ctx := context.Background()
+
+	paneA := `Would you like to run the following command?
+  $ mkdir -p /tmp/foo
+› 1. Yes, proceed (y)
+• Working (3s • esc to interrupt)`
+
+	paneB := `Would you like to run the following command?
+  $ mkdir -p /tmp/foo
+› 1. Yes, proceed (y)
+• Working (42s • esc to interrupt)`
+
+	// First detect with paneA (timer at 3s).
+	if err := p.OnDetection(ctx, "codex-test", "codex", "codex-test:0.0",
+		"researcher_codex", testPattern(), paneA); err != nil {
+		t.Fatalf("first detect: %v", err)
+	}
+	row1, _ := p.store.LookupPendingNudgeBySession(ctx, "codex-test")
+	if row1 == nil {
+		t.Fatal("expected a pending row after first detect")
+	}
+	firstMsgID := row1.MessageID
+
+	// Advance time less than the first reminder cadence (5 minutes) to
+	// avoid the cadence path taking over.
+	*clock = clock.Add(30 * time.Second)
+	p.SetClock(func() time.Time { return *clock })
+
+	// Same prompt, volatile timer has ticked (42s). Should be treated as
+	// the SAME prompt — no firstDetect, no row delete, NudgeCount stays 1.
+	if err := p.OnDetection(ctx, "codex-test", "codex", "codex-test:0.0",
+		"researcher_codex", testPattern(), paneB); err != nil {
+		t.Fatalf("second detect with volatile-only change: %v", err)
+	}
+	row2, _ := p.store.LookupPendingNudgeBySession(ctx, "codex-test")
+	if row2 == nil {
+		t.Fatal("expected pending row still present")
+	}
+	if row2.MessageID != firstMsgID {
+		t.Errorf("expected same MessageID (same prompt), got %s vs %s",
+			row2.MessageID, firstMsgID)
+	}
+	if row2.NudgeCount != 1 {
+		t.Errorf("NudgeCount = %d, want 1 (no cadence advance before threshold)",
+			row2.NudgeCount)
+	}
+}
+
 func TestScheduler_FirstDetectWithoutSupervisors_InsertsOrphanRow(t *testing.T) {
 	// No supervisor registered — only the permission agent itself, via
 	// a minimal State fixture. We still want a row so a later recovery

@@ -56,7 +56,15 @@ const (
 // does not re-read the identity file and re-run detection.
 func (p *Permission) OnDetection(ctx context.Context, session, runtime, tmuxTarget, agentName string, matched *Pattern, paneTail string) error {
 	now := p.now()
-	paneHash := sha256.Sum256([]byte(paneTail))
+	// Hash over volatile-line-stripped content so cadence tracking is
+	// stable across cosmetic pane updates (codex "Working (Ns)" timer,
+	// Claude spinner animations, cursor blinks). Without this, every
+	// poll on the same semantic prompt would look like a new prompt,
+	// reset the reminder counter, and re-fire firstDetect. stripVolatileLines
+	// is a no-op for runtimes with no registered patterns (unknown,
+	// empty string), so downstream behavior is preserved for pre-poller
+	// call sites.
+	paneHash := sha256.Sum256([]byte(stripVolatileLines(runtime, paneTail)))
 
 	row, err := p.store.LookupPendingNudgeBySession(ctx, session)
 	if err != nil {
