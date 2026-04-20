@@ -320,8 +320,9 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 	// caller so Phase 1's dead-agent cross-check can reuse it without a
 	// second worktree scan.
 	var identityMap map[string]*config.IdentityFile
+	var identityPaths map[string]string
 	if h.thrumDir != "" {
-		identityMap = ReadIdentitiesAcrossWorktrees(ctx, h.thrumDir)
+		identityMap, identityPaths = readIdentitiesAndPaths(ctx, h.thrumDir)
 		for i := range members {
 			m := &members[i]
 			idFile := identityMap[m.AgentID]
@@ -338,6 +339,15 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 				m.TmuxState = ""
 			case !ttmux.HasSession(parseSessionName(idFile.TmuxSession)):
 				m.TmuxState = "dead"
+				// thrum-51cg Option B: self-heal stale TmuxSession when
+				// the bound tmux session no longer exists (external kill,
+				// γ reset, pane exit). Idempotent; best-effort.
+				if path := identityPaths[m.AgentID]; path != "" {
+					if cerr := clearDeadTmuxSessionInIdentity(path); cerr == nil {
+						m.TmuxSession = ""
+						m.Runtime = ""
+					}
+				}
 			case m.AgentPID > 0 && !process.IsRunning(m.AgentPID):
 				m.TmuxState = "stale"
 			default:
