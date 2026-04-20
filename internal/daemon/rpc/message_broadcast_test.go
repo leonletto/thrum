@@ -99,6 +99,98 @@ func TestMessageHandler_NotifyMessageCreate_CallsBroadcaster(t *testing.T) {
 	}
 }
 
+// TestMessageHandler_NotifyMessageCreate_SkipsPeerOriginatedEvent — thrum-xfsb
+// regression guard. An event whose OriginDaemon points at a PEER daemon arrived
+// here via State.IngestSyncedEvent (sync_apply replica), not because we
+// authored it. If this daemon broadcasts the notification to its Telegram
+// bridge, the message fans out to bot B in addition to bot A — exactly the
+// duplicate delivery symptom Leon reported (one nudge → two Telegram bots).
+//
+// Contract: NotifyMessageCreate must no-op when evt.OriginDaemon is non-empty
+// and != this daemon's DaemonID. Matches the "owning daemon_id filter"
+// requested by coordinator in the xfsb dispatch.
+func TestMessageHandler_NotifyMessageCreate_SkipsPeerOriginatedEvent(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// Explicit daemonID so we can compose a peer-origin event below.
+	st, err := state.NewState(thrumDir, thrumDir, "r_XFSB", "d_LOCAL")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	handler := NewMessageHandler(st)
+	bc := &countingBroadcaster{}
+	handler.SetWSBroadcaster(bc)
+
+	peerEvt := types.MessageCreateEvent{
+		Type:         "message.create",
+		Timestamp:    "2026-04-20T05:40:00Z",
+		EventID:      identity.GenerateEventID(),
+		OriginDaemon: "d_PEER", // authored on a different daemon
+		MessageID:    "msg_peer_origin",
+		AgentID:      "sender_on_peer",
+		SessionID:    "ses_peer",
+		Body: types.MessageBody{
+			Format:  "markdown",
+			Content: "nudge authored on peer, synced here",
+		},
+		Recipients: []string{"user:leon-letto"},
+	}
+
+	handler.NotifyMessageCreate(peerEvt)
+
+	if got := bc.Calls(); got != 0 {
+		t.Errorf("peer-origin event triggered %d broadcasts, want 0 (would fan out to local Telegram bridge)", got)
+	}
+
+	// Positive control: a local-origin event DOES broadcast.
+	localEvt := peerEvt
+	localEvt.OriginDaemon = "d_LOCAL"
+	localEvt.MessageID = "msg_local_origin"
+	handler.NotifyMessageCreate(localEvt)
+	if got := bc.Calls(); got != 1 {
+		t.Errorf("local-origin event triggered %d broadcasts, want 1", got)
+	}
+}
+
+// TestMessageHandler_NotifyMessageCreate_EmptyOriginDaemonBroadcasts covers
+// legacy/test paths where an event arrives without OriginDaemon populated
+// (e.g. a hand-crafted event that never passed through State.WriteEvent).
+// The xfsb filter must not block these: empty origin is treated as local.
+// This also protects the existing TestMessageHandler_NotifyMessageCreate_CallsBroadcaster
+// fixture, which builds events without OriginDaemon.
+func TestMessageHandler_NotifyMessageCreate_EmptyOriginDaemonBroadcasts(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	st, err := state.NewState(thrumDir, thrumDir, "r_XFSB_EMPTY", "d_LOCAL")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	handler := NewMessageHandler(st)
+	bc := &countingBroadcaster{}
+	handler.SetWSBroadcaster(bc)
+
+	evt := types.MessageCreateEvent{
+		Type:      "message.create",
+		Timestamp: "2026-04-20T05:41:00Z",
+		MessageID: "msg_empty_origin",
+		Body:      types.MessageBody{Format: "markdown", Content: "legacy"},
+	}
+	handler.NotifyMessageCreate(evt)
+	if got := bc.Calls(); got != 1 {
+		t.Errorf("empty-origin event triggered %d broadcasts, want 1 (treated as local)", got)
+	}
+}
+
 // TestMessageHandler_NotifyMessageCreate_NilBroadcasterSafe — nil wiring
 // must not panic (matches pattern of every other nil-safe Set-style
 // broadcaster/permission hook in this codebase).
@@ -211,5 +303,118 @@ func TestMessageHandler_HookDispatch_FiresBroadcastOncePerMessage(t *testing.T) 
 	st.Unlock()
 	if got := bc.Calls(); got != 2 {
 		t.Errorf("after direct WriteEvent, BroadcastAll calls = %d, want 2", got)
+	}
+}
+
+// TestMessageHandler_TwoDaemons_OnlyOriginBroadcasts — thrum-xfsb integration
+// guard simulating the coordinator's acceptance criterion: two daemons each
+// with a Telegram bridge, one permission nudge, exactly one bridge delivery.
+//
+// Daemon A authors the message locally (WriteEvent). Its hook must fire
+// BroadcastAll on A's registry — that's how A's bridge forwards to its bot.
+// Daemon B receives the same event via IngestSyncedEvent (the peer-sync
+// replica path). B's hook must NOT fire BroadcastAll — otherwise B's bridge
+// would also forward the nudge to its own bot, which is the duplicate-delivery
+// symptom Leon saw (@impl_skills nudges in BOTH thrum-bot AND fm_mock_sf_bot).
+func TestMessageHandler_TwoDaemons_OnlyOriginBroadcasts(t *testing.T) {
+	// Daemon A: owning/origin.
+	tmpA := t.TempDir()
+	thrumA := filepath.Join(tmpA, ".thrum")
+	if err := os.MkdirAll(thrumA, 0o750); err != nil {
+		t.Fatalf("mkdir A: %v", err)
+	}
+	stA, err := state.NewState(thrumA, thrumA, "r_A", "d_A")
+	if err != nil {
+		t.Fatalf("NewState A: %v", err)
+	}
+	defer func() { _ = stA.Close() }()
+
+	// Daemon B: peer receiver.
+	tmpB := t.TempDir()
+	thrumB := filepath.Join(tmpB, ".thrum")
+	if err := os.MkdirAll(thrumB, 0o750); err != nil {
+		t.Fatalf("mkdir B: %v", err)
+	}
+	stB, err := state.NewState(thrumB, thrumB, "r_B", "d_B")
+	if err != nil {
+		t.Fatalf("NewState B: %v", err)
+	}
+	defer func() { _ = stB.Close() }()
+
+	handlerA := NewMessageHandler(stA)
+	handlerB := NewMessageHandler(stB)
+	bcA := &countingBroadcaster{}
+	bcB := &countingBroadcaster{}
+	handlerA.SetWSBroadcaster(bcA)
+	handlerB.SetWSBroadcaster(bcB)
+
+	// Wire both hooks with the same policy main.go uses. Synchronous
+	// dispatch so assertions are deterministic; production path runs
+	// NotifyMessageCreate on a goroutine.
+	hookFor := func(h *MessageHandler) state.EventWriteHook {
+		return func(_ string, _ int64, event []byte) {
+			var head struct {
+				Type string `json:"type"`
+			}
+			if err := json.Unmarshal(event, &head); err != nil {
+				return
+			}
+			if head.Type != "message.create" {
+				return
+			}
+			var evt types.MessageCreateEvent
+			if err := json.Unmarshal(event, &evt); err != nil {
+				return
+			}
+			h.NotifyMessageCreate(evt)
+		}
+	}
+	stA.SetOnEventWrite(hookFor(handlerA))
+	stB.SetOnEventWrite(hookFor(handlerB))
+
+	// Simulate permission.SendSupervisorMessage on daemon A — direct
+	// WriteEvent bypassing HandleSend (the path that 48kt.1 originally
+	// unblocked for Telegram forwarding).
+	evt := types.MessageCreateEvent{
+		Type:      "message.create",
+		Timestamp: "2026-04-20T05:45:00Z",
+		EventID:   identity.GenerateEventID(),
+		MessageID: identity.GenerateMessageID(),
+		AgentID:   "supervisor_on_A",
+		SessionID: "ses_supervisor_A",
+		Body:      types.MessageBody{Format: "markdown", Content: "[Permission] Allow tool use? y/n"},
+		Recipients: []string{"user:leon-letto"},
+	}
+	stA.Lock()
+	if err := stA.WriteEvent(context.Background(), evt); err != nil {
+		stA.Unlock()
+		t.Fatalf("daemon A WriteEvent: %v", err)
+	}
+	stA.Unlock()
+
+	// WriteEvent enriches the event with origin_daemon=d_A (the writer's
+	// daemonID). Re-read the enriched JSON from A's event log so daemon B
+	// ingests the exact payload a peer-sync replica would have.
+	// For this test we synthesise the enriched event ourselves using A's
+	// DaemonID, which is the identical enrichment WriteEvent performs.
+	enriched := evt
+	enriched.OriginDaemon = stA.DaemonID()
+	enrichedBytes, err := json.Marshal(enriched)
+	if err != nil {
+		t.Fatalf("marshal enriched: %v", err)
+	}
+
+	// Daemon B ingests the replicated event. IngestSyncedEvent fires B's
+	// hook; under the fix the NotifyMessageCreate call short-circuits
+	// because evt.OriginDaemon != stB.DaemonID().
+	if err := stB.IngestSyncedEvent(context.Background(), enrichedBytes); err != nil {
+		t.Fatalf("daemon B IngestSyncedEvent: %v", err)
+	}
+
+	if got := bcA.Calls(); got != 1 {
+		t.Errorf("daemon A BroadcastAll = %d, want 1 (origin daemon must forward to its bridge)", got)
+	}
+	if got := bcB.Calls(); got != 0 {
+		t.Errorf("daemon B BroadcastAll = %d, want 0 (peer-received event must not fan out to local bridge)", got)
 	}
 }

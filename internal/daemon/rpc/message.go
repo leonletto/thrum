@@ -320,6 +320,21 @@ func (h *MessageHandler) loadBroadcaster() WSBroadcaster {
 // Intended to be called from a goroutine — BroadcastAll does per-client
 // network sends that should not block the WriteEvent writer path.
 func (h *MessageHandler) NotifyMessageCreate(evt types.MessageCreateEvent) {
+	// thrum-xfsb: broadcast only for events this daemon authored. Peer-
+	// synced events reach the hook via State.IngestSyncedEvent (the
+	// sync_apply replica path) with OriginDaemon set to the authoring
+	// peer. Firing BroadcastAll here would fan the notification out to
+	// THIS daemon's local Telegram bridge as well — in multi-daemon
+	// setups (thrum-lgv9 --type local pairings) that caused duplicate
+	// delivery: one nudge landed in both the originating daemon's bot
+	// and every peer daemon's bot.
+	//
+	// Empty OriginDaemon is treated as local: test fixtures and legacy
+	// callers that construct events without passing through WriteEvent
+	// do not set it, and they expect the broadcast to fire.
+	if h.state != nil && evt.OriginDaemon != "" && evt.OriginDaemon != h.state.DaemonID() {
+		return
+	}
 	bc := h.loadBroadcaster()
 	if bc == nil {
 		return
