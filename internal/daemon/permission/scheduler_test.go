@@ -361,6 +361,64 @@ func TestScheduler_PaneHashDistinctPromptsStillReset(t *testing.T) {
 	}
 }
 
+// TestScheduler_PaneHashStableAcrossClaudeStatusLine verifies that
+// Claude's ccstatusline drift (Ctx size growing, Block countdown
+// decrementing) does NOT reset the cadence hash for a semantically
+// identical prompt. Mirrors TestScheduler_PaneHashStableAcrossVolatileLines
+// but for thrum-ptcj's Claude-specific bug: three firstDetects fired in
+// ~80s on plugin-skills-slate during the thrum-48kt.2 E2E setup because
+// stripVolatileLines had no pattern for the Claude status line.
+func TestScheduler_PaneHashStableAcrossClaudeStatusLine(t *testing.T) {
+	p, clock := newSchedulerFixture(t)
+	ctx := context.Background()
+
+	paneA := `Would you like to run this command?
+  $ rm -rf /tmp/foo
+› 1. Yes, proceed (y)
+  Model: Opus 4.7 (1M context) | Ctx: 697.2k | Block: 38m | Ctx: 70.0%`
+
+	paneB := `Would you like to run this command?
+  $ rm -rf /tmp/foo
+› 1. Yes, proceed (y)
+  Model: Opus 4.7 (1M context) | Ctx: 712.8k | Block: 36m | Ctx: 71.2%`
+
+	// First detect with status-line values A.
+	if err := p.OnDetection(ctx, "claude-test", "claude", "claude-test:0.0",
+		"researcher_cursor", testPattern(), paneA); err != nil {
+		t.Fatalf("first detect: %v", err)
+	}
+	row1, _ := p.store.LookupPendingNudgeBySession(ctx, "claude-test")
+	if row1 == nil {
+		t.Fatal("expected a pending row after first detect")
+	}
+	firstMsgID := row1.MessageID
+
+	// Advance well under the first reminder cadence to stay in the
+	// stability-hash path.
+	*clock = clock.Add(40 * time.Second)
+	p.SetClock(func() time.Time { return *clock })
+
+	// Same prompt, status line has drifted (Ctx grew, Block counted
+	// down). Must be treated as the SAME prompt — no firstDetect, same
+	// MessageID, no NudgeCount advance.
+	if err := p.OnDetection(ctx, "claude-test", "claude", "claude-test:0.0",
+		"researcher_cursor", testPattern(), paneB); err != nil {
+		t.Fatalf("second detect with status-line drift: %v", err)
+	}
+	row2, _ := p.store.LookupPendingNudgeBySession(ctx, "claude-test")
+	if row2 == nil {
+		t.Fatal("expected pending row still present")
+	}
+	if row2.MessageID != firstMsgID {
+		t.Errorf("expected same MessageID across Claude status-line drift, got %s vs %s",
+			row2.MessageID, firstMsgID)
+	}
+	if row2.NudgeCount != 1 {
+		t.Errorf("NudgeCount = %d, want 1 (no cadence advance before threshold)",
+			row2.NudgeCount)
+	}
+}
+
 func TestScheduler_FirstDetectWithoutSupervisors_InsertsOrphanRow(t *testing.T) {
 	// No supervisor registered — only the permission agent itself, via
 	// a minimal State fixture. We still want a row so a later recovery
