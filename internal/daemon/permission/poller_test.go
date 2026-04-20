@@ -444,6 +444,22 @@ $ grep 'Ctx:' logs.txt
 	}
 }
 
+// TestStripVolatileLines_ClaudeStatusLineUserTextBothTokensNoPipe guards
+// against the less-obvious false-positive: a user line containing BOTH
+// "Ctx:" and "Block:" without the pipe-separated statusline structure
+// (e.g., pasted documentation, log output, prose explaining the terms).
+// The pipe anchor in the regex prevents this from matching.
+func TestStripVolatileLines_ClaudeStatusLineUserTextBothTokensNoPipe(t *testing.T) {
+	input := `Would you like to run this command?
+$ echo "Ctx: describes the context and Block: marks the blocking call"
+> 1. Yes, proceed (y)`
+
+	stripped := stripVolatileLines("claude", input)
+	if !strings.Contains(stripped, "Ctx: describes the context and Block:") {
+		t.Errorf("expected user-text with both tokens (no pipe) preserved, got:\n%s", stripped)
+	}
+}
+
 // TestStripVolatileLines_UnknownRuntime returns input unchanged.
 func TestStripVolatileLines_UnknownRuntime(t *testing.T) {
 	input := "• Working (5s)\nother line"

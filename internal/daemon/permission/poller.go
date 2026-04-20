@@ -267,12 +267,16 @@ var volatileLinePatterns = map[string][]*regexp.Regexp{
 	// Without stripping, the cadence hash destabilizes for unchanged
 	// prompts and fires duplicate nudges (observed 3x in ~80s during
 	// thrum-48kt.2 E2E setup — tracked as thrum-ptcj). The regex
-	// requires BOTH "Ctx:" AND "Block:" markers in order so that user
-	// text containing either token in isolation passes through.
+	// requires the "Ctx: ... | Block:" pipe-separated pair, which is
+	// highly specific to the statusline (user text containing either
+	// token in isolation, OR both tokens without a pipe between them,
+	// passes through unmolested). Assumes the current field order
+	// (Ctx before Block); if ccstatusline reorders fields in a future
+	// release, extend with a second regex rather than loosening this one.
 	"claude": {
 		regexp.MustCompile(`^[\s*✻✽✾✿✢]*(?:Cogitat|Workin|Think|Plann|Analyz)`),
 		regexp.MustCompile(`\(\d+s\s*·\s*(?:esc|⚒)`),
-		regexp.MustCompile(`\bCtx:\s\S.*\bBlock:\s\S`),
+		regexp.MustCompile(`\bCtx:\s\S[^|]*\|\s*Block:\s\S`),
 	},
 }
 
