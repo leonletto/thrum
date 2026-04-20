@@ -52,6 +52,8 @@ type State struct {
 	onEventWrite   EventWriteHook                                     // Optional hook called after successful event write
 	signingKey     ed25519.PrivateKey                                 // Optional Ed25519 key for signing events
 	signEvent      func(event map[string]any, key ed25519.PrivateKey) // Injected signing function
+	touchMu        sync.Mutex                                         // Protects touchTimes (thrum-7nuj: agent last_seen debounce)
+	touchTimes     map[string]time.Time                               // Per-agent most-recent TouchAgentLastSeen timestamp
 }
 
 // NewState creates a new state manager for the given .thrum directory.

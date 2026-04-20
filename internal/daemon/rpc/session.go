@@ -676,6 +676,10 @@ func (h *SessionHandler) HandleSetIntent(ctx context.Context, params json.RawMes
 		return nil, fmt.Errorf("update intent: %w", err)
 	}
 
+	// thrum-7nuj: set-intent is a deliberate agent-self action; advance
+	// last_seen so the hint doesn't false-positive.
+	_ = h.state.TouchAgentLastSeen(ctx, session.AgentID)
+
 	return &SetIntentResponse{
 		SessionID:       req.SessionID,
 		Intent:          req.Intent,
@@ -720,6 +724,10 @@ func (h *SessionHandler) HandleSetTask(ctx context.Context, params json.RawMessa
 	if err != nil {
 		return nil, fmt.Errorf("update task: %w", err)
 	}
+
+	// thrum-7nuj: set-task is a deliberate agent-self action; advance
+	// last_seen so the hint doesn't false-positive.
+	_ = h.state.TouchAgentLastSeen(ctx, session.AgentID)
 
 	return &SetTaskResponse{
 		SessionID:     req.SessionID,

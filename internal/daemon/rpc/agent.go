@@ -318,6 +318,14 @@ func (h *AgentHandler) HandleList(ctx context.Context, params json.RawMessage) (
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
+	// thrum-7nuj: agent.list is on the hot path for `thrum team` and
+	// other agent-invoked lookups. Touch last_seen if we can resolve
+	// the caller from peercred; silently skip if not (anonymous /
+	// synthetic callers don't signal liveness).
+	if resolved, _ := peercred.FromContext(ctx); resolved != nil && resolved.AgentID != "" {
+		_ = h.state.TouchAgentLastSeen(ctx, resolved.AgentID)
+	}
+
 	h.state.RLock()
 	defer h.state.RUnlock()
 
@@ -414,6 +422,10 @@ func (h *AgentHandler) HandleWhoami(ctx context.Context, params json.RawMessage)
 	} else if req.CallerAgentID != "" {
 		source = "caller"
 	}
+
+	// thrum-7nuj: whoami is an explicit liveness probe — advance
+	// last_seen so send.recipient-stale hints don't false-positive.
+	_ = h.state.TouchAgentLastSeen(ctx, agentID)
 
 	// Look up role/module/display from the agents table.
 	h.state.RLock()

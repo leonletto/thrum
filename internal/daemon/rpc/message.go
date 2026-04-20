@@ -334,6 +334,11 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("resolve agent and session: %w", err)
 	}
 
+	// thrum-7nuj: advance last_seen_at for the caller so the
+	// send.recipient-stale hint doesn't false-positive on actively
+	// coordinating agents. Debounced in the state layer.
+	_ = h.state.TouchAgentLastSeen(ctx, callerID)
+
 	// Handle impersonation (users can impersonate agents)
 	agentID := callerID
 	var authoredBy string
@@ -769,12 +774,23 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	h.state.RLock()
 	defer h.state.RUnlock()
 
-	// Resolve current agent ID once — used for exclude_self, is_read, and unread count.
-	// Use resolveAgentOnly (not resolveAgentAndSession) so the unread count works
-	// even when the caller has no active session (e.g., thrum prime on startup).
-	var currentAgentID string
-	if req.ExcludeSelf || req.Unread || req.UnreadForAgent != "" {
-		currentAgentID = h.resolveAgentOnly(ctx, req.CallerAgentID)
+	// Resolve current agent ID once — used for exclude_self, is_read,
+	// unread count, AND thrum-7nuj last_seen touch. Resolve
+	// unconditionally so bare message.list (UI full-inbox view, or
+	// `thrum inbox` without flags) still signals liveness; the state
+	// layer debounces so the extra resolve work is not amplified into
+	// DB churn.
+	//
+	// resolveAgentOnly returns "" on failure, which naturally skips the
+	// touch for anonymous callers — no extra gate needed.
+	currentAgentID := h.resolveAgentOnly(ctx, req.CallerAgentID)
+
+	// Safe with the RLock held — TouchAgentLastSeen acquires touchMu
+	// (independent of state.mu) and writes directly via the DB()
+	// accessor. If a future refactor grows touchAgentLastSeenAt to
+	// acquire state.mu, revisit this call site.
+	if currentAgentID != "" {
+		_ = h.state.TouchAgentLastSeen(ctx, currentAgentID)
 	}
 
 	// Determine which identity to use for the is_read correlated subquery.
@@ -2048,6 +2064,10 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 	if err != nil {
 		return nil, fmt.Errorf("resolve agent and session: %w", err)
 	}
+
+	// thrum-7nuj: advance last_seen_at — mark-read is a liveness signal
+	// for the reader.
+	_ = h.state.TouchAgentLastSeen(ctx, agentID)
 
 	// Prepare timestamp
 	now := time.Now().UTC().Format(time.RFC3339Nano)
