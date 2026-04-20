@@ -67,6 +67,12 @@ When investigating N items (N > 6), reading everything into the main agent's con
 | Output | `dev-docs/<topic>/findings_N.md` per agent |
 | Consolidation | Always a dedicated agent writing `consolidated_report.md` |
 
+## Model Selection
+
+Research dispatches almost always want `sonnet` (sometimes `haiku` for pure mechanical gather-and-tabulate work). Opus is rarely justified for research — the investigation prompts are narrow and the output is tabular, so frontier reasoning buys nothing.
+
+Every `Agent` dispatch must pass `model` explicitly; never let sub-agents inherit the parent (often Opus) by default. See `~/.claude/CLAUDE.md § Sub-Agent Model Selection` for the full tier table and decision rule.
+
 ## Common Mistakes
 
 **Skipping consolidation** - Reading 4 separate findings files into main context defeats the entire purpose. Always launch a consolidation agent.
@@ -101,3 +107,7 @@ When investigating N items (N > 6), reading everything into the main agent's con
 | **Quick** | Items are independent, output is small | Lightweight consolidation: brief merged summary instead of full synthesis |
 | **Deep** | Very large N (50+) | Multi-level: 8 agents > 2 meta-agents > 1 final report |
 | **Iterative** | Need to refine criteria | Run first pass, update prompts based on patterns, re-run |
+
+## See Also
+
+- `adversarial-critique` — decision-shaped sister pattern. Use this skill when investigating *what's there* across N>6 items; use `adversarial-critique` when deciding *which option wins* among 2-3 design forks.
