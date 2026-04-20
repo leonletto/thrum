@@ -5514,8 +5514,17 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	//   - syncRegistry (tsnet listener) for cross-host Tailscale pairing
 	//   - wsRegistry (localhost listener) for same-host loopback pairing
 	//     under --type local (xir.27 sub-component 1)
+	//
+	// thrum-lgv9: sync.pull / sync.peer_info / sync.notify follow the same
+	// pattern — must be reachable on wsRegistry for --type local peers so
+	// post-pair sync and periodic event-log replication can reach each other
+	// over loopback WS. Before lgv9 only the tsnet syncRegistry had them,
+	// so local peers saw persistent "Method not found" and never synced.
 	var pairHandler *rpc.PairRequestHandler
 	var repairHandler *rpc.PeerRepairHandler
+	var syncPullHandler *rpc.SyncPullHandler
+	var syncPeerInfoHandler *rpc.PeerInfoHandler
+	var syncNotifyHandler *rpc.SyncNotifyHandler
 
 	if syncManager != nil {
 		// Create pairing manager (used by both Unix socket and Tailscale handlers)
@@ -5559,6 +5568,13 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			})
 			return local.DaemonID, local.Name, local.RepoName, local.Hostname, local.RepoPath, local.GitOriginURL, err
 		})
+
+		// thrum-lgv9: build sync handlers once so they can be registered on
+		// both wsRegistry (for --type local loopback reach-back) and
+		// syncRegistry (for tsnet cross-host).
+		syncPullHandler = rpc.NewSyncPullHandler(st)
+		syncPeerInfoHandler = rpc.NewPeerInfoHandler(st.DaemonID(), hostname)
+		syncNotifyHandler = rpc.NewSyncNotifyHandler(syncManager.SyncFromPeerByID)
 
 		// Adapter: convert daemon.PeerStatusInfo → rpc.PeerStatus
 		listPeersFn := func() []rpc.PeerStatus {
@@ -6194,6 +6210,22 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		wsRegistry.Register("peer.repair", websocket.Handler(repairHandler.Handle))
 	}
 
+	// thrum-lgv9: sync.pull / sync.peer_info / sync.notify on the localhost
+	// WS so --type local peers can complete post-pair sync over loopback.
+	// Previously these were registered only on the tsnet syncRegistry, so
+	// local peers got "RPC error -32601: Method not found" on every periodic
+	// sync and sync.notify push, leaving event-log replication silently
+	// broken even after the handshake succeeded.
+	if syncPullHandler != nil {
+		wsRegistry.Register("sync.pull", websocket.Handler(syncPullHandler.Handle))
+	}
+	if syncPeerInfoHandler != nil {
+		wsRegistry.Register("sync.peer_info", websocket.Handler(syncPeerInfoHandler.Handle))
+	}
+	if syncNotifyHandler != nil {
+		wsRegistry.Register("sync.notify", websocket.Handler(syncNotifyHandler.Handle))
+	}
+
 	// Resolve UI filesystem (embedded or dev mode)
 	var uiFS fs.FS
 	if devPath := os.Getenv("THRUM_UI_DEV"); devPath != "" {
@@ -6336,14 +6368,16 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		tsHost := tsListener.ReachableAddr(tsCfg.Hostname)
 		tsLocalAddr = fmt.Sprintf("%s:%d", tsHost, tsCfg.Port)
 
-		// Register sync handlers
-		syncPullHandler := rpc.NewSyncPullHandler(st)
-		syncPeerInfoHandler := rpc.NewPeerInfoHandler(st.DaemonID(), hostname)
-		_ = syncRegistry.Register("sync.pull", syncPullHandler.Handle)
-		_ = syncRegistry.Register("sync.peer_info", syncPeerInfoHandler.Handle)
-
-		if syncManager != nil {
-			syncNotifyHandler := rpc.NewSyncNotifyHandler(syncManager.SyncFromPeerByID)
+		// Register sync handlers on syncRegistry (tsnet). Handler instances
+		// were created up-front (thrum-lgv9) so they can be shared with the
+		// localhost wsRegistry; we just register them here too.
+		if syncPullHandler != nil {
+			_ = syncRegistry.Register("sync.pull", syncPullHandler.Handle)
+		}
+		if syncPeerInfoHandler != nil {
+			_ = syncRegistry.Register("sync.peer_info", syncPeerInfoHandler.Handle)
+		}
+		if syncNotifyHandler != nil {
 			_ = syncRegistry.Register("sync.notify", syncNotifyHandler.Handle)
 		}
 		if pairHandler != nil {
