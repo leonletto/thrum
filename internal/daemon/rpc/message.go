@@ -2102,10 +2102,12 @@ func (h *MessageHandler) resolveAgentAndSession(ctx context.Context, callerAgent
 	}
 	if resolved != nil {
 		req.PeercredAgentID = resolved.AgentID
+		req.PeercredWorktree = resolved.Worktree
 	}
 	connPID, _ := peercred.ConnectingPIDFromContext(ctx)
 	req.ConnectingPID = connPID
 	req.IdentitiesDir = identitiesDirFor(h.state.RepoPath())
+	req.IsAgentInWorktree = h.sharedWorktreeChecker()
 	caller, resolveErr := guard.DaemonResolve(ctx, loadDaemonGuardConfig(h.state.RepoPath()), req, slog.Default())
 	if resolveErr != nil {
 		return "", "", resolveErr
@@ -2161,15 +2163,34 @@ func (h *MessageHandler) resolveAgentOnly(ctx context.Context, callerAgentID str
 	}
 	if resolved != nil {
 		req.PeercredAgentID = resolved.AgentID
+		req.PeercredWorktree = resolved.Worktree
 	}
 	connPID, _ := peercred.ConnectingPIDFromContext(ctx)
 	req.ConnectingPID = connPID
 	req.IdentitiesDir = identitiesDirFor(h.state.RepoPath())
+	req.IsAgentInWorktree = h.sharedWorktreeChecker()
 	caller, err := guard.DaemonResolve(ctx, loadDaemonGuardConfig(h.state.RepoPath()), req, slog.Default())
 	if err != nil {
 		return ""
 	}
 	return caller.AgentID
+}
+
+// sharedWorktreeChecker returns a closure that DaemonResolve uses to
+// disambiguate a shared-worktree identity mismatch (thrum-0pos). It
+// reports whether the given agent_id has an active session mapping
+// it to the given worktree path. Kept as a per-handler method so the
+// closure binds to the handler's state snapshot — the checker is
+// called inside guard.DaemonResolve where the state.State isn't
+// available directly.
+func (h *MessageHandler) sharedWorktreeChecker() func(string, string) bool {
+	st := h.state
+	if st == nil {
+		return nil
+	}
+	return func(agentID, worktree string) bool {
+		return st.IsAgentInWorktree(context.Background(), agentID, worktree)
+	}
 }
 
 // identitiesDirFor returns the absolute identities-directory path a

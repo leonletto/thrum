@@ -317,14 +317,14 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 			resp.SessionID = resumedID
 			resp.SessionResumed = true
 		}
-		enforceWorktreeIdentity(ctx, agentIdentityName(req.Name, agentID))
+		h.enforceWorktreeIdentity(ctx, agentIdentityName(req.Name, agentID))
 		return resp, nil
 	}
 
 	// Fresh agent — no existing row for this agent_id.
 	resp, err := h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered", req.AgentPID)
 	if err == nil {
-		enforceWorktreeIdentity(ctx, agentIdentityName(req.Name, agentID))
+		h.enforceWorktreeIdentity(ctx, agentIdentityName(req.Name, agentID))
 	}
 	return resp, err
 }
@@ -350,22 +350,29 @@ func agentIdentityName(name, agentID string) string {
 // this cleans up residual identity files left by prior registrations
 // under the same worktree. See thrum-33dt.
 //
-// thrum-dw06: enforcement only fires when the CALLER is registering
-// themselves (resolved.AgentID == keepName). A caller that bootstraps
-// a differently named agent — test harnesses, multi-agent worktrees,
-// peer-bridge proxies — is NOT authorised to scrub siblings in this
-// worktree, because those siblings may be other legitimately
-// registered agents co-located with the caller. The single-keeper
-// form of thrum-33dt treated every non-keepName sibling as stale,
-// including other live agents. ajmd softened the blast radius from
-// delete→quarantine; dw06 narrows the firing condition so other
-// agents' files are left alone entirely.
+// thrum-dw06 / thrum-0pos: enforcement only fires when the CALLER is
+// registering themselves (resolved.AgentID == keepName) AND it
+// preserves every agent registered in the caller's worktree (not
+// just keepName), so co-located multi-agent scenarios survive.
+// A caller that bootstraps a differently named agent — test
+// harnesses, peer-bridge proxies — is NOT authorised to scrub
+// siblings in this worktree, because those siblings may be other
+// legitimately registered agents co-located with the caller. The
+// single-keeper form of thrum-33dt treated every non-keepName
+// sibling as stale, including other live agents. ajmd softened the
+// blast radius from delete→quarantine; dw06 narrowed the firing
+// condition so bootstrap calls leave other files alone; 0pos
+// finishes the job by preserving every co-located registered agent
+// in the self-rename case too.
 //
-// Self-rename case (caller renames themselves via direct RPC) still
-// goes through enforcement — that is the legitimate stale-sibling
-// cleanup surface for this path. CLI-side quickstart (G1a/G1b) and
-// tmux.create paths continue to enforce on their own terms.
-func enforceWorktreeIdentity(ctx context.Context, keepName string) {
+// Self-rename + stale cleanup: when the caller renames themselves
+// via direct RPC, enforcement still runs but the keeper set now
+// includes keepName + resolved.AgentID + every agent registered in
+// this worktree. Only .json files whose agent_id is NOT registered
+// in this worktree at all (truly stale — abandoned prior
+// registrations) get quarantined. This preserves production
+// housekeeping while letting multi-agent test harnesses coexist.
+func (h *AgentHandler) enforceWorktreeIdentity(ctx context.Context, keepName string) {
 	if keepName == "" {
 		return
 	}
@@ -392,13 +399,11 @@ func enforceWorktreeIdentity(ctx context.Context, keepName string) {
 	if resolved.AgentID != keepName {
 		return
 	}
-	// Pass resolved.AgentID as a second keeper too. In the self-rename
-	// path it collapses to the same value as keepName (no-op), but it
-	// keeps the daemon-side caller aligned with the variadic
-	// EnforceOneIdentity contract so a future change that loosens the
-	// self-rename gate does not accidentally re-introduce the dw06
-	// footgun where the caller's own file gets swept.
-	wtpkg.EnforceOneIdentity(resolved.Worktree, keepName, resolved.AgentID)
+	keepers := []string{keepName, resolved.AgentID}
+	if h.state != nil {
+		keepers = append(keepers, h.state.ListAgentsInWorktree(ctx, resolved.Worktree)...)
+	}
+	wtpkg.EnforceOneIdentity(resolved.Worktree, keepers...)
 }
 
 // HandleList handles the agent.list RPC method.
@@ -495,10 +500,17 @@ func (h *AgentHandler) HandleWhoami(ctx context.Context, params json.RawMessage)
 	}
 	if resolved != nil {
 		dreq.PeercredAgentID = resolved.AgentID
+		dreq.PeercredWorktree = resolved.Worktree
 	}
 	connPID, _ := peercred.ConnectingPIDFromContext(ctx)
 	dreq.ConnectingPID = connPID
 	dreq.IdentitiesDir = identitiesDirFor(h.state.RepoPath())
+	if h.state != nil {
+		st := h.state
+		dreq.IsAgentInWorktree = func(agentID, worktree string) bool {
+			return st.IsAgentInWorktree(context.Background(), agentID, worktree)
+		}
+	}
 	caller, err := guard.DaemonResolve(ctx, loadDaemonGuardConfig(h.state.RepoPath()), dreq, slog.Default())
 	if err != nil {
 		return nil, fmt.Errorf("resolve identity: %w", err)
