@@ -51,17 +51,26 @@ type DaemonResolveRequest struct {
 	// disambiguate callers in shared worktrees.
 	PeercredWorktree string
 
-	// IsAgentInWorktree reports whether the given agent_id is
-	// registered with an active session in the given worktree. When
-	// set AND the caller's claim mismatches the peercred-resolved
-	// agent AND both agents share the caller's worktree, DaemonResolve
-	// trusts the claim. This is the thrum-0pos shared-worktree
-	// disambiguation fallback: peercred cannot distinguish multiple
-	// agents co-located in the same worktree (E2E harnesses,
-	// multi-agent test scenarios), so a matching CLI claim is the
-	// only reliable signal the daemon has. Nil disables the fallback
-	// and preserves strict per-CWD enforcement (tests, non-unix
-	// transports).
+	// IsAgentInWorktree reports whether the given agent_id was ever
+	// registered in the given worktree — the concrete implementation
+	// in state.IsAgentInWorktree looks at historical session_refs
+	// (no ended_at IS NULL filter) plus the identity-file fallback.
+	// Active-session filtering is deliberately not applied: an agent
+	// whose session is temporarily ended (between session.end and the
+	// next session.start) is still a legitimate co-located agent, and
+	// an agent that just ran `thrum agent register` has no session_ref
+	// yet but does have a .thrum/identities/<name>.json at the
+	// peercred-verified worktree.
+	//
+	// When set AND the caller's claim mismatches the peercred-resolved
+	// agent AND the claimed agent satisfies this predicate for the
+	// peercred-resolved worktree, DaemonResolve trusts the claim. This
+	// is the thrum-0pos shared-worktree disambiguation fallback:
+	// peercred cannot distinguish multiple agents co-located in the
+	// same worktree (E2E harnesses, multi-agent test scenarios), so a
+	// matching CLI claim is the only reliable signal the daemon has.
+	// Nil disables the fallback and preserves strict per-CWD
+	// enforcement (tests, non-unix transports).
 	IsAgentInWorktree func(agentID, worktree string) bool
 }
 

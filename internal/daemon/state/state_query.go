@@ -72,10 +72,16 @@ func (s *State) ListAgentsInWorktree(ctx context.Context, worktree string) []str
 	}
 	target := canonWorktreePath(worktree)
 
-	// No locking: callers (HandleRegister's enforceWorktreeIdentity hook)
-	// already hold s.Lock() by the time this runs, and RLock would
-	// deadlock against the queued writer. Convention matches the other
-	// state_query.go methods (IsAgentActive, ListActiveAgentsByRole).
+	// No lock taken here. The *State read-helpers in this file
+	// (IsAgentActive, ListActiveAgentsByRole) follow the same
+	// convention: callers may or may not already hold s.Lock(), and
+	// taking RLock here would deadlock HandleRegister's
+	// enforceWorktreeIdentity hook (which runs under the outer write
+	// lock). Serialization against writers comes from the
+	// single-connection pool — NewState opens the DB with
+	// SetMaxOpenConns(1) (see internal/schema/db.go), so SQLite
+	// operations are linearised by the pool regardless of Go-level
+	// locking.
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT DISTINCT s.agent_id, sr.ref_value
 		  FROM session_refs sr
@@ -98,6 +104,13 @@ func (s *State) ListAgentsInWorktree(ctx context.Context, worktree string) []str
 			continue
 		}
 		seen[agentID] = struct{}{}
+	}
+	// Matches the rows.Err() convention in sibling helpers
+	// (ListActiveAgentsByRole): silently drop the partial result on
+	// driver error so HandleRegister's enforcement path stays safe
+	// rather than preserving nothing.
+	if err := rows.Err(); err != nil {
+		return nil
 	}
 	out := make([]string, 0, len(seen))
 	for id := range seen {
@@ -139,11 +152,14 @@ func (s *State) IsAgentInWorktree(ctx context.Context, agentID, worktree string)
 	}
 	target := canonWorktreePath(worktree)
 
-	// No locking here — DaemonResolve invokes this predicate from a
-	// path that may or may not hold a write lock; taking RLock would
-	// deadlock against queued writers. SQLite's journaling handles
-	// concurrent readers/writers at the driver level. Matches the
-	// convention used by the other state_query.go read-only helpers
+	// No lock taken here. DaemonResolve invokes this predicate from
+	// both lock-free and write-locked paths; an RLock here would
+	// deadlock against queued writers on the write-locked path.
+	// Serialization against writers comes from the single-connection
+	// pool — NewState opens the DB with SetMaxOpenConns(1) (see
+	// internal/schema/db.go), so SQLite operations are linearised
+	// by the pool regardless of Go-level locking. Matches the
+	// convention used by the other state_query.go read helpers
 	// (IsAgentActive, ListActiveAgentsByRole).
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT DISTINCT sr.ref_value
@@ -177,6 +193,16 @@ func (s *State) IsAgentInWorktree(ctx context.Context, agentID, worktree string)
 	// the caller's kernel-verified CWD corroborates it. This closes
 	// the AN-10-style gap where a fresh register is immediately
 	// followed by session.start before any session_ref exists.
+	//
+	// Limitation: this assumes named agents (agentID is the filename
+	// base). For unnamed agents, SaveIdentityFile writes
+	// role_module.json and the identity-file fallback will not match.
+	// In practice every agent this predicate authenticates is named —
+	// unnamed agents never call into the shared-worktree fallback
+	// because the CLI only forwards CallerAgentID when the identity
+	// file has a Name. Named-only coverage is acceptable for the
+	// short-term 0pos fix; the enlw.9 ListActiveAgentRows rewrite
+	// will replace this whole helper.
 	idPath := filepath.Join(worktree, ".thrum", "identities", agentID+".json")
 	if _, err := os.Stat(idPath); err == nil {
 		return true
