@@ -315,6 +315,156 @@ func TestStore_SweepExpired(t *testing.T) {
 	}
 }
 
+// seedDelivery inserts a minimal message + message_deliveries row so
+// tests of LookupMostRecentPendingNudgeByRecipient have a recipient
+// linked to a permission_nudges row.
+func seedDelivery(t *testing.T, db *sql.DB, messageID, recipientID string) {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC().Format(time.RFC3339)
+	// The messages row is required by the FK on message_deliveries; the
+	// body content is irrelevant for this test suite.
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO messages (message_id, agent_id, session_id, created_at,
+			body_format, body_content)
+		VALUES (?, 'supervisor_thrum', 'ses_test', ?, 'text', 'nudge body')`,
+		messageID, now); err != nil {
+		t.Fatalf("seed message: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO message_deliveries (message_id, recipient_agent_id, delivered_at)
+		VALUES (?, ?, ?)`, messageID, recipientID, now); err != nil {
+		t.Fatalf("seed delivery: %v", err)
+	}
+}
+
+// TestStore_LookupMostRecentPendingNudgeByRecipient_Single verifies a
+// single pending nudge delivered to a supervisor is returned.
+func TestStore_LookupMostRecentPendingNudgeByRecipient_Single(t *testing.T) {
+	db := openTestDB(t)
+	s := NewStore(db)
+	ctx := context.Background()
+
+	row := fixtureRow()
+	if err := s.InsertPendingNudge(ctx, row); err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+	seedDelivery(t, db, row.MessageID, "user:leon-letto")
+
+	got, err := s.LookupMostRecentPendingNudgeByRecipient(ctx, "user:leon-letto")
+	if err != nil {
+		t.Fatalf("LookupMostRecent: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected row, got nil")
+	}
+	if got.MessageID != row.MessageID {
+		t.Errorf("MessageID = %q, want %q", got.MessageID, row.MessageID)
+	}
+}
+
+// TestStore_LookupMostRecentPendingNudgeByRecipient_NotFound returns
+// (nil, nil) when no pending nudge is delivered to this recipient.
+func TestStore_LookupMostRecentPendingNudgeByRecipient_NotFound(t *testing.T) {
+	db := openTestDB(t)
+	s := NewStore(db)
+	ctx := context.Background()
+
+	got, err := s.LookupMostRecentPendingNudgeByRecipient(ctx, "user:nobody")
+	if err != nil {
+		t.Fatalf("LookupMostRecent: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil, got %+v", got)
+	}
+}
+
+// TestStore_LookupMostRecentPendingNudgeByRecipient_MultiMostRecent
+// verifies ORDER BY last_nudge_at DESC — when a recipient has multiple
+// pending nudges (distinct sessions), the most recently nudged wins.
+func TestStore_LookupMostRecentPendingNudgeByRecipient_MultiMostRecent(t *testing.T) {
+	db := openTestDB(t)
+	s := NewStore(db)
+	ctx := context.Background()
+
+	older := fixtureRow()
+	older.MessageID = "msg_older"
+	older.Session = "sess_A"
+	older.LastNudgeAt = time.Now().UTC().Add(-10 * time.Minute).Truncate(time.Second)
+
+	newer := fixtureRow()
+	newer.MessageID = "msg_newer"
+	newer.Session = "sess_B"
+	newer.LastNudgeAt = time.Now().UTC().Add(-1 * time.Minute).Truncate(time.Second)
+
+	if err := s.InsertPendingNudge(ctx, older); err != nil {
+		t.Fatalf("Insert older: %v", err)
+	}
+	if err := s.InsertPendingNudge(ctx, newer); err != nil {
+		t.Fatalf("Insert newer: %v", err)
+	}
+	seedDelivery(t, db, older.MessageID, "user:leon-letto")
+	seedDelivery(t, db, newer.MessageID, "user:leon-letto")
+
+	got, err := s.LookupMostRecentPendingNudgeByRecipient(ctx, "user:leon-letto")
+	if err != nil {
+		t.Fatalf("LookupMostRecent: %v", err)
+	}
+	if got == nil || got.MessageID != newer.MessageID {
+		t.Errorf("expected newer (%s), got %+v", newer.MessageID, got)
+	}
+}
+
+// TestStore_LookupMostRecentPendingNudgeByRecipient_ExcludesExpired
+// guards against returning an expired nudge — only pending (non-expired)
+// rows should match.
+func TestStore_LookupMostRecentPendingNudgeByRecipient_ExcludesExpired(t *testing.T) {
+	db := openTestDB(t)
+	s := NewStore(db)
+	ctx := context.Background()
+
+	row := fixtureRow()
+	row.ExpiresAt = time.Now().UTC().Add(-1 * time.Hour) // already expired
+	if err := s.InsertPendingNudge(ctx, row); err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+	seedDelivery(t, db, row.MessageID, "user:leon-letto")
+
+	got, err := s.LookupMostRecentPendingNudgeByRecipient(ctx, "user:leon-letto")
+	if err != nil {
+		t.Fatalf("LookupMostRecent: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil (expired row excluded), got %+v", got)
+	}
+}
+
+// TestStore_LookupMostRecentPendingNudgeByRecipient_DifferentRecipient
+// guards against cross-supervisor routing — a pending nudge for Leon
+// must NOT be returned for a lookup keyed on a different supervisor.
+// This is the direct test for the thrum-48kt.3 "supervisor mismatch"
+// scenario: if Bob sends 'y' while Leon has a pending prompt, Bob's
+// lookup returns empty and his 'y' is not routed to Leon's nudge.
+func TestStore_LookupMostRecentPendingNudgeByRecipient_DifferentRecipient(t *testing.T) {
+	db := openTestDB(t)
+	s := NewStore(db)
+	ctx := context.Background()
+
+	row := fixtureRow()
+	if err := s.InsertPendingNudge(ctx, row); err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+	seedDelivery(t, db, row.MessageID, "user:leon-letto")
+
+	got, err := s.LookupMostRecentPendingNudgeByRecipient(ctx, "user:bob")
+	if err != nil {
+		t.Fatalf("LookupMostRecent: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil for different recipient, got %+v", got)
+	}
+}
+
 func TestStore_EmptyDenyKey(t *testing.T) {
 	db := openTestDB(t)
 	s := NewStore(db)
