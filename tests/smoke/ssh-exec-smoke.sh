@@ -37,9 +37,10 @@ rc=0
 [ "$rc" = "255" ] || fail "ssh layer failure: got $rc"
 pass "ssh layer failure → 255"
 
-# 5. Timeout → 255
+# 5. Timeout → 255 (keep stderr so the `[ssh-exec] timed out after 2s`
+# diagnostic is visible when this check fails unexpectedly).
 rc=0
-"$SSH_EXEC" exec --host "$HOST" --timeout 2 -- sleep 10 2>/dev/null || rc=$?
+"$SSH_EXEC" exec --host "$HOST" --timeout 2 -- sleep 10 || rc=$?
 [ "$rc" = "255" ] || fail "timeout: got $rc"
 pass "timeout → 255"
 
@@ -60,8 +61,8 @@ pass "copy subcommand"
 
 # 8. logs
 "$SSH_EXEC" exec --host "$HOST" --timeout 5 -- sh -c "echo log-line > /tmp/ssh-exec-smoke.log"
-log_out=$("$SSH_EXEC" logs --host "$HOST" /tmp/ssh-exec-smoke.log)
-[ "$log_out" = "log-line" ] || fail "logs: got '$log_out'"
+logs_out=$("$SSH_EXEC" logs --host "$HOST" /tmp/ssh-exec-smoke.log)
+[ "$logs_out" = "log-line" ] || fail "logs: got '$logs_out'"
 "$SSH_EXEC" exec --host "$HOST" --timeout 5 -- rm -f /tmp/ssh-exec-smoke.log
 pass "logs subcommand"
 
@@ -71,4 +72,15 @@ out=$("$SSH_EXEC" exec --host "$HOST" --timeout 5 --env "FOO=bar-baz" -- \
 [ "$out" = "bar-baz" ] || fail "env passthrough: got '$out'"
 pass "env passthrough"
 
-echo "--- all 9 checks passed ---"
+# 10. CLI surface: --help exits 0 and prints usage (no SSH required).
+out=$("$SSH_EXEC" exec --help 2>&1 >/dev/null)
+echo "$out" | grep -q "ssh-exec" || fail "--help: expected 'ssh-exec' in output"
+pass "exec --help"
+
+# 11. CLI surface: no-subcommand prints usage + exits 2.
+rc=0
+"$SSH_EXEC" >/dev/null 2>&1 || rc=$?
+[ "$rc" = "2" ] || fail "no-subcommand: expected exit 2, got $rc"
+pass "no-subcommand → exit 2"
+
+echo "--- all 11 checks passed ---"
