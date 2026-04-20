@@ -101,4 +101,36 @@ For any placeholder with no detected or provided value, leave a commented `<!-- 
 
 `mkdir -p .thrum/` then write the rendered content. Announce the path in the final message so the user knows where to edit it manually later.
 
-<!-- Body continued in tasks 3-5 -->
+## Re-run-unchanged mode
+
+Triggered when `.thrum/philosophy.md` exists. The goal is a fast, side-effect-free sanity check that confirms the doc is still accurate for the current project state.
+
+### Step 1: Read the existing doc
+
+Read `.thrum/philosophy.md` in full. Parse its sections — at minimum the language/framework line, the test harness line, and the anti-patterns list.
+
+### Step 2: Sanity-check against current project state
+
+Walk the same detection steps as first-run, but compare rather than write:
+
+- Language / framework / test harness — do the current manifest files agree with what the doc claims?
+- Anti-patterns in `CLAUDE.md` (or equivalent) — is every anti-pattern in CLAUDE.md reflected in the doc?
+- Linters or test configs recently added — are they acknowledged?
+
+Each check is a boolean "matches" vs. "differs". Keep the comparison narrow; this mode should not do deep inspection.
+
+### Step 3: If nothing differs — no-op exit
+
+Print:
+
+> `.thrum/philosophy.md` is current; no changes needed.
+
+Do NOT write to the file. Do NOT update mtime. Do NOT create backups. Exit cleanly.
+
+### Step 4: If anything differs — hand off to evolved mode
+
+If at least one check reports "differs", transition to the re-run-evolved flow (below). The drift detection from Step 2 becomes the input to the diff proposal.
+
+Idempotency invariant: re-running `/project-philosophy` on an unchanged project must never modify any file. Tests for this mode should use `stat -c %Y .thrum/philosophy.md` or equivalent to confirm mtime is untouched.
+
+<!-- Body continued in tasks 4-5 -->
