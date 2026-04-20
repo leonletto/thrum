@@ -44,6 +44,7 @@ type TeamMember struct {
 	Module          string       `json:"module"`
 	Display         string       `json:"display,omitempty"`
 	Hostname        string       `json:"hostname,omitempty"`
+	OriginDaemon    string       `json:"origin_daemon,omitempty"`
 	AgentPID        int          `json:"agent_pid,omitempty"`
 	Runtime         string       `json:"runtime,omitempty"`
 	WorktreePath    string       `json:"worktree,omitempty"`

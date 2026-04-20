@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -382,5 +383,72 @@ func TestFormatTeam_OmitsRuntimeWhenEmpty(t *testing.T) {
 	out := FormatTeam(resp)
 	if strings.Contains(out, "Runtime:") {
 		t.Errorf("FormatTeam output should not contain 'Runtime:' when field is empty:\n%s", out)
+	}
+}
+
+// TestTeamMember_JSONRoundtripPreservesOriginDaemon verifies that the CLI
+// TeamMember struct carries origin_daemon across an unmarshal → marshal
+// roundtrip. Regression for thrum-ti9e: the daemon's team.list response
+// emitted origin_daemon, but the CLI's TeamMember struct had no such
+// field, so json.Unmarshal silently dropped it and the re-marshaled JSON
+// output (`thrum team --all --json`) never surfaced it to consumers. The
+// fix added the field; this test pins it.
+func TestTeamMember_JSONRoundtripPreservesOriginDaemon(t *testing.T) {
+	daemonResponse := []byte(`{
+		"members": [{
+			"agent_id": "test_a",
+			"role": "implementer",
+			"module": "auth",
+			"origin_daemon": "d_local_01",
+			"worktree": "/tmp/a",
+			"status": "active",
+			"unmerged_commits": 0,
+			"inbox_total": 0,
+			"inbox_unread": 0
+		}, {
+			"agent_id": "test_b",
+			"role": "reviewer",
+			"module": "all",
+			"origin_daemon": "d_peer_02",
+			"status": "active",
+			"unmerged_commits": 0,
+			"inbox_total": 0,
+			"inbox_unread": 0
+		}]
+	}`)
+
+	var resp TeamListResponse
+	if err := json.Unmarshal(daemonResponse, &resp); err != nil {
+		t.Fatalf("unmarshal daemon response: %v", err)
+	}
+	if len(resp.Members) != 2 {
+		t.Fatalf("expected 2 members, got %d", len(resp.Members))
+	}
+
+	// Struct-level: fields must be populated, not silently dropped.
+	if resp.Members[0].OriginDaemon != "d_local_01" {
+		t.Errorf("member[0].OriginDaemon = %q, want d_local_01", resp.Members[0].OriginDaemon)
+	}
+	if resp.Members[1].OriginDaemon != "d_peer_02" {
+		t.Errorf("member[1].OriginDaemon = %q, want d_peer_02", resp.Members[1].OriginDaemon)
+	}
+
+	// Re-marshal (what `thrum team --all --json` actually outputs).
+	out, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("re-marshal: %v", err)
+	}
+	var raw struct {
+		Members []map[string]any `json:"members"`
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
+		t.Fatalf("unmarshal re-serialized: %v", err)
+	}
+	for i, want := range []string{"d_local_01", "d_peer_02"} {
+		got, ok := raw.Members[i]["origin_daemon"]
+		if !ok || got != want {
+			t.Errorf("re-marshaled member[%d].origin_daemon = %v (present=%v), want %q",
+				i, got, ok, want)
+		}
 	}
 }

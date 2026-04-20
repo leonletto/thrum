@@ -9,6 +9,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/state"
+	"github.com/leonletto/thrum/internal/types"
 )
 
 func TestTeamHandleList(t *testing.T) {
@@ -647,5 +648,175 @@ func TestHandleList_HidesSupervisorWhenIncludeSystemFalse(t *testing.T) {
 		if m.AgentID == "supervisor_test_user" {
 			t.Fatalf("supervisor leaked into default listing: %+v", resp.Members)
 		}
+	}
+}
+
+// TestHandleList_WorktreeFallbackFromSessionRefs verifies that when a
+// session has a `worktree` row in session_refs but no matching row in
+// agent_work_contexts, HandleList still returns the worktree via the
+// scalar-subquery fallback. Regression for thrum-naak: live daemons
+// observed coordinator_main missing `worktree` from `team --json` even
+// though its session_ref carried the value, because the team.list SQL
+// read worktree_path exclusively from agent_work_contexts and omitempty
+// dropped the empty string.
+func TestHandleList_WorktreeFallbackFromSessionRefs(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	syncDir := filepath.Join(thrumDir, "sync")
+	messagesDir := filepath.Join(syncDir, "messages")
+	if err := os.MkdirAll(messagesDir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	s, err := state.NewState(thrumDir, syncDir, "test_repo_wt_fallback", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	agentHandler := NewAgentHandler(s)
+	sessionHandler := NewSessionHandler(s)
+	teamHandler := NewTeamHandler(s, "", nil)
+
+	const wantWorktree = "/tmp/test-worktree-fallback"
+
+	reg := RegisterRequest{Role: "implementer", Module: "fallback"}
+	regJSON, _ := json.Marshal(reg)
+	regResp, err := agentHandler.HandleRegister(ctx, regJSON)
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	agentID := regResp.(*RegisterResponse).AgentID
+
+	start := SessionStartRequest{
+		AgentID: agentID,
+		Refs:    []types.Ref{{Type: "worktree", Value: wantWorktree}},
+	}
+	startJSON, _ := json.Marshal(start)
+	startResp, err := sessionHandler.HandleStart(ctx, startJSON)
+	if err != nil {
+		t.Fatalf("session.start: %v", err)
+	}
+	sessionID := startResp.(*SessionStartResponse).SessionID
+
+	// Simulate the observed bug state: session_refs has the worktree row
+	// (populated by HandleStart) but agent_work_contexts has no row
+	// (e.g. a later code path cleared it, or a daemon-resurrect path
+	// populated session_refs without seeding agent_work_contexts).
+	if _, err := s.RawDB().ExecContext(ctx,
+		`DELETE FROM agent_work_contexts WHERE session_id = ?`, sessionID); err != nil {
+		t.Fatalf("delete agent_work_contexts row: %v", err)
+	}
+
+	reqJSON, _ := json.Marshal(TeamListRequest{})
+	rawResp, err := teamHandler.HandleList(ctx, reqJSON)
+	if err != nil {
+		t.Fatalf("HandleList: %v", err)
+	}
+	resp := rawResp.(*TeamListResponse)
+
+	var got *TeamMember
+	for i := range resp.Members {
+		if resp.Members[i].AgentID == agentID {
+			got = &resp.Members[i]
+			break
+		}
+	}
+	if got == nil {
+		t.Fatalf("agent %q not returned by team.list; got %+v", agentID, resp.Members)
+	}
+	if got.WorktreePath != wantWorktree {
+		t.Errorf("WorktreePath = %q, want %q (fallback to session_refs should populate it when agent_work_contexts has no row)",
+			got.WorktreePath, wantWorktree)
+	}
+
+	// JSON roundtrip check — the whole point of the fix is that the
+	// `worktree` key survives marshaling for this shape of DB state.
+	out, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal member: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(out, &raw); err != nil {
+		t.Fatalf("unmarshal member: %v", err)
+	}
+	if v, ok := raw["worktree"]; !ok || v != wantWorktree {
+		t.Errorf("json output missing or wrong worktree: got %v (present=%v), want %q", v, ok, wantWorktree)
+	}
+}
+
+// TestHandleList_WorktreeAgentWorkContextsWins verifies that when both
+// agent_work_contexts.worktree_path AND session_refs carry a worktree
+// value, the agent_work_contexts row wins. agent_work_contexts is the
+// authoritative source — session_refs is only a fallback.
+func TestHandleList_WorktreeAgentWorkContextsWins(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	syncDir := filepath.Join(thrumDir, "sync")
+	messagesDir := filepath.Join(syncDir, "messages")
+	if err := os.MkdirAll(messagesDir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	s, err := state.NewState(thrumDir, syncDir, "test_repo_wt_precedence", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	agentHandler := NewAgentHandler(s)
+	sessionHandler := NewSessionHandler(s)
+	teamHandler := NewTeamHandler(s, "", nil)
+
+	const refWorktree = "/tmp/from-session-ref"
+	const authoritative = "/tmp/from-work-context"
+
+	reg := RegisterRequest{Role: "implementer", Module: "precedence"}
+	regJSON, _ := json.Marshal(reg)
+	regResp, err := agentHandler.HandleRegister(ctx, regJSON)
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	agentID := regResp.(*RegisterResponse).AgentID
+
+	start := SessionStartRequest{
+		AgentID: agentID,
+		Refs:    []types.Ref{{Type: "worktree", Value: refWorktree}},
+	}
+	startJSON, _ := json.Marshal(start)
+	startResp, err := sessionHandler.HandleStart(ctx, startJSON)
+	if err != nil {
+		t.Fatalf("session.start: %v", err)
+	}
+	sessionID := startResp.(*SessionStartResponse).SessionID
+
+	// Overwrite agent_work_contexts.worktree_path with a distinct value
+	// to verify precedence over the session_refs fallback.
+	if _, err := s.RawDB().ExecContext(ctx,
+		`UPDATE agent_work_contexts SET worktree_path = ? WHERE session_id = ?`,
+		authoritative, sessionID); err != nil {
+		t.Fatalf("update agent_work_contexts: %v", err)
+	}
+
+	reqJSON, _ := json.Marshal(TeamListRequest{})
+	rawResp, err := teamHandler.HandleList(ctx, reqJSON)
+	if err != nil {
+		t.Fatalf("HandleList: %v", err)
+	}
+	resp := rawResp.(*TeamListResponse)
+
+	var got *TeamMember
+	for i := range resp.Members {
+		if resp.Members[i].AgentID == agentID {
+			got = &resp.Members[i]
+			break
+		}
+	}
+	if got == nil {
+		t.Fatalf("agent %q not returned by team.list; got %+v", agentID, resp.Members)
+	}
+	if got.WorktreePath != authoritative {
+		t.Errorf("WorktreePath = %q, want %q (agent_work_contexts must win over session_refs fallback)",
+			got.WorktreePath, authoritative)
 	}
 }
