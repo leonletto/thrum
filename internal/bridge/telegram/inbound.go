@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 
 	"github.com/leonletto/thrum/internal/config"
 )
@@ -32,7 +33,14 @@ type InboundRelay struct {
 	// as a fresh DM (no Telegram reply-thread), this lookup returns
 	// the most-recent pending nudge for the supervisor so reply_to can
 	// be set on the relayed message and TryResolve still fires.
-	lookupPendingNudge PendingNudgeLookup
+	//
+	// Stored as atomic.Pointer so SetPendingNudgeLookup and relay() are
+	// race-safe regardless of call ordering — matches the b.db /
+	// b.pendingNudgeLookup pattern in bridge.go. Defensive rather than
+	// load-bearing in current code (bootstrap sets once before Run),
+	// but eliminates a latent race if a future reconfigure path ever
+	// rewires it live.
+	lookupPendingNudge atomic.Pointer[PendingNudgeLookup]
 }
 
 // NewInboundRelay creates a relay that sends Telegram messages to Thrum.
@@ -40,11 +48,12 @@ func NewInboundRelay(ws *WSClient, msgMap *MessageMap, userID, target string, gr
 	return &InboundRelay{ws: ws, msgMap: msgMap, userID: userID, target: target, groups: groups, botName: botName}
 }
 
-// SetPendingNudgeLookup wires the fresh-DM fallback. Safe to call once
-// between construction and Run. Nil lookup (the zero value) keeps the
-// pre-thrum-48kt.3 behavior where a fresh DM never sets reply_to.
+// SetPendingNudgeLookup wires the fresh-DM fallback. Typically called
+// once at bootstrap before Run; atomic.Pointer storage makes concurrent
+// calls safe. A nil fn (the zero value) keeps the pre-thrum-48kt.3
+// behavior where a fresh DM never sets reply_to.
 func (r *InboundRelay) SetPendingNudgeLookup(fn PendingNudgeLookup) {
-	r.lookupPendingNudge = fn
+	r.lookupPendingNudge.Store(&fn)
 }
 
 // permissionResponseTokens are the set of body strings that trigger the
@@ -222,12 +231,14 @@ func (r *InboundRelay) relay(ctx context.Context, msg InboundMessage) error {
 	// rather than a Telegram reply, look up their most-recent pending
 	// nudge and route to it. Keyed on r.userID so one human's fresh 'y'
 	// cannot resolve a different human's pending nudge.
-	if replyToThrumID == "" && r.lookupPendingNudge != nil && isPermissionResponse(msg.Text) {
-		if thrumID, err := r.lookupPendingNudge(ctx, r.userID); err != nil {
-			slog.Warn("telegram inbound: pending-nudge lookup failed — proceeding without reply_to",
-				"supervisor", r.userID, "err", err)
-		} else if thrumID != "" {
-			replyToThrumID = thrumID
+	if replyToThrumID == "" && isPermissionResponse(msg.Text) {
+		if lookup := r.lookupPendingNudge.Load(); lookup != nil {
+			if thrumID, err := (*lookup)(ctx, r.userID); err != nil {
+				slog.Warn("telegram inbound: pending-nudge lookup failed — proceeding without reply_to",
+					"supervisor", r.userID, "err", err)
+			} else if thrumID != "" {
+				replyToThrumID = thrumID
+			}
 		}
 	}
 

@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -719,6 +720,42 @@ func TestInboundRelay_FreshDMNoPendingNudge(t *testing.T) {
 	// Content still relays normally
 	if params["content"] != "y" {
 		t.Errorf("content = %v, want y", params["content"])
+	}
+}
+
+// TestInboundRelay_FreshDMLookupErrorFallsThrough covers the error
+// branch: if the lookup callback returns an error, relay must log and
+// continue — no reply_to set, but the message still relays successfully.
+// Locks in the degradation behavior documented at inbound.go:SetPendingNudgeLookup.
+func TestInboundRelay_FreshDMLookupErrorFallsThrough(t *testing.T) {
+	var sendReq map[string]any
+	client, cleanup := mockRPCServer(t, func(req map[string]any) map[string]any {
+		if req["method"] == "message.send" {
+			sendReq = req
+		}
+		return map[string]any{"result": map[string]any{"message_id": "msg_x"}}
+	})
+	defer cleanup()
+
+	relay := NewInboundRelay(client, NewMessageMap(100), "user:leon-letto",
+		"@coordinator_main", nil, "")
+	relay.SetPendingNudgeLookup(func(ctx context.Context, s string) (string, error) {
+		return "", fmt.Errorf("synthetic store failure")
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := relay.relay(ctx, InboundMessage{Text: "y", ChatID: 1, MessageID: 1})
+	if err != nil {
+		t.Fatalf("relay should log-and-continue on lookup error, got err: %v", err)
+	}
+
+	params := sendReq["params"].(map[string]any)
+	if _, exists := params["reply_to"]; exists {
+		t.Errorf("error branch: reply_to must NOT be set, got %v", params["reply_to"])
+	}
+	if params["content"] != "y" {
+		t.Errorf("content = %v, want y (message still relayed)", params["content"])
 	}
 }
 
