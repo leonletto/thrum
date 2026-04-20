@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 )
 
 // ThrumConfig represents the top-level .thrum/config.json file.
@@ -336,6 +337,38 @@ func applyDefaults(cfg *ThrumConfig) {
 	if cfg.Daemon.PeerPort == "" {
 		cfg.Daemon.PeerPort = "auto"
 	}
+}
+
+// ValidatePermissionSupervisors checks whether the configured supervisor
+// list contains at least one coordinator-role recipient. The permission
+// nudge pipeline uses this array as the authoritative routing list
+// (thrum-zmsk); if an operator forgets to include a coordinator, prompts
+// can land in dead mailboxes.
+//
+// A config satisfies the invariant when the list contains one of:
+//   - the bare role "coordinator"
+//   - an "@coordinator_*" or "@coordinator-*" agent name (naming convention
+//     for coordinator agents in this codebase)
+//
+// Returns a human-readable warning describing the problem, or "" when the
+// config is valid. An empty / nil list is considered valid — the resolver
+// falls back to ["coordinator"] at dispatch time in that case.
+func ValidatePermissionSupervisors(entries []string) string {
+	if len(entries) == 0 {
+		return ""
+	}
+	for _, e := range entries {
+		if e == "coordinator" {
+			return ""
+		}
+		if strings.HasPrefix(e, "@coordinator_") || strings.HasPrefix(e, "@coordinator-") {
+			return ""
+		}
+	}
+	return "permission_supervisors is set but contains no coordinator-role entry (" +
+		strings.Join(entries, ", ") +
+		"); permission prompts may go undelivered if listed agents are offline. " +
+		"Add \"coordinator\" or an @coordinator_<name> agent to .thrum/config.json."
 }
 
 // SaveThrumConfig writes .thrum/config.json, merging with any existing content.

@@ -5122,6 +5122,15 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	daemon.ConfigureSlog(logWriter, thrumCfg.Daemon.LogLevel)
 	log.Printf("daemon: log level=%s", thrumCfg.Daemon.LogLevel)
 
+	// Validate permission_supervisors invariant: the array is authoritative
+	// routing for permission-prompt nudges (thrum-zmsk). If an operator
+	// sets the array but forgets a coordinator-role recipient, prompts
+	// can land in dead mailboxes — warn loudly so they see it on boot.
+	if warn := config.ValidatePermissionSupervisors(thrumCfg.PermissionSupervisors); warn != "" {
+		fmt.Fprintf(os.Stderr, "Warning: %s\n", warn)
+		slog.Warn("[config] permission_supervisors validation", "issue", warn)
+	}
+
 	// Resolve local-only mode: CLI flag > env var > config file > default
 	localOnly := flagLocal
 	localOnlyFromExplicit := flagLocal // track if set via flag or env (not config)

@@ -719,3 +719,33 @@ func TestThrumConfig_IdentityRoundTrip(t *testing.T) {
 		t.Fatalf("identity mismatch:\n  got  = %+v\n  want = %+v", round.Identity, original.Identity)
 	}
 }
+
+func TestValidatePermissionSupervisors(t *testing.T) {
+	tests := []struct {
+		name    string
+		entries []string
+		wantOK  bool
+	}{
+		{"empty list is valid (resolver defaults to coordinator)", nil, true},
+		{"zero-length list is valid", []string{}, true},
+		{"bare coordinator role is valid", []string{"coordinator"}, true},
+		{"coordinator alongside user is valid", []string{"coordinator", "@user:leon-letto"}, true},
+		{"@coordinator_main named agent is valid", []string{"@coordinator_main"}, true},
+		{"@coordinator-main hyphen variant is valid", []string{"@coordinator-main"}, true},
+		{"mixed entries with a coordinator are valid", []string{"@user:leon-letto", "@coordinator_main"}, true},
+		{"only user (no coordinator) is invalid", []string{"@user:leon-letto"}, false},
+		{"only non-coordinator agent is invalid", []string{"@impl_x"}, false},
+		{"orchestrator role alone is invalid", []string{"orchestrator"}, false},
+		{"multiple non-coordinator entries are invalid", []string{"@impl_x", "@user:leon-letto"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := config.ValidatePermissionSupervisors(tt.entries)
+			ok := got == ""
+			if ok != tt.wantOK {
+				t.Errorf("ValidatePermissionSupervisors(%v): got warning=%q, wantOK=%v",
+					tt.entries, got, tt.wantOK)
+			}
+		})
+	}
+}
