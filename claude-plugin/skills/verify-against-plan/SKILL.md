@@ -109,4 +109,26 @@ Findings go to stdout only. Do NOT:
 
 The skill reports; the coordinator decides; the implementer fixes. Keep those three roles separate or the dual-review batch stops composing cleanly with `feature-dev:code-reviewer`.
 
-<!-- Body filled in tasks 3-4 -->
+## Scope discipline
+
+This skill has ONE job: does the code match what the plan said it
+would do?
+
+It does NOT:
+
+- **Judge code quality** — that's `feature-dev:code-reviewer`.
+  Error handling, idioms, dead code, security patterns — not this
+  skill's problem.
+- **Perform security review** — that's `security-review`. SQL
+  injection, XSS, auth bypass, secret handling — not this skill's
+  problem.
+- **Analyze test coverage** — coverage tools exist for that; this
+  skill reports whether the plan's named test paths exist and pass,
+  not whether they hit every branch.
+- **Review the plan itself** — pre-implementation plan review is
+  handled by `superpowers:writing-plans` (built-in reviewer). If the
+  plan is wrong, that's a separate workflow.
+
+If a finding would belong in any of the above categories, omit it
+from verify-against-plan output. Coordinator will pick up quality /
+security / coverage gaps via the other skills running in parallel.
