@@ -5902,6 +5902,11 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 
 	if thrumCfg.Telegram.TelegramEnabled() {
 		tgBridge := telegram.New(thrumCfg.Telegram, wsPort)
+		// Wire the SQLite handle so telegram.MessageMap persists the
+		// Telegram↔Thrum mapping across daemon restarts (thrum-48kt.2).
+		// Without this, supervisor replies after restart silently
+		// drop reply_to and TryResolve never fires.
+		tgBridge.SetDB(st.RawDB())
 		telegramHandler.SetBridge(tgBridge)
 		go tgBridge.Run(ctx)
 		fmt.Fprintf(os.Stderr, "  Telegram:    bridge enabled (target: %s)\n", thrumCfg.Telegram.Target)
