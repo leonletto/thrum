@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // EnsureRedirects verifies and creates .thrum/ and .beads/ redirects
@@ -71,10 +72,19 @@ func EnsureRedirects(worktreePath, mainRepo string) error {
 	return nil
 }
 
-// EnforceOneIdentity removes all identity files from the worktree's
-// .thrum/identities/ directory except the one matching newAgentName.
-// Returns the names of deleted agents. Context files are preserved.
-// Errors during deletion are logged but non-fatal.
+// EnforceOneIdentity enforces the one-identity-per-worktree invariant
+// by QUARANTINING sibling identity files to
+// .thrum/identities/.quarantine/<name>.json.<RFC3339-ts> instead of
+// deleting them. Returns the names of quarantined agents. Context files
+// are preserved. Errors are logged but non-fatal.
+//
+// thrum-ajmd design: the original behaviour was os.Remove, which had no
+// recourse when it fired on the wrong dir (a non-coordinator agent's
+// refresh running with cwd resolving to the main repo path wiped
+// coordinator_main.json as a "stale sibling"). Quarantine preserves the
+// file so an operator can recover it. The quarantine dir is owned by
+// the caller (0o750) and timestamped so repeated enforcement does not
+// overwrite previous quarantined copies.
 func EnforceOneIdentity(worktreePath, newAgentName string) []string {
 	idDir := filepath.Join(worktreePath, ".thrum", "identities")
 	entries, err := os.ReadDir(idDir)
@@ -83,7 +93,9 @@ func EnforceOneIdentity(worktreePath, newAgentName string) []string {
 	}
 
 	keepFile := newAgentName + ".json"
-	var deleted []string
+	var quarantined []string
+	var quarantineDir string // lazily created on first quarantine
+	ts := time.Now().UTC().Format("20060102T150405Z")
 
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
@@ -92,17 +104,26 @@ func EnforceOneIdentity(worktreePath, newAgentName string) []string {
 		if entry.Name() == keepFile {
 			continue
 		}
-		path := filepath.Join(idDir, entry.Name())
-		if err := os.Remove(path); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not remove stale identity %s: %v\n", entry.Name(), err)
+		src := filepath.Join(idDir, entry.Name())
+
+		if quarantineDir == "" {
+			quarantineDir = filepath.Join(idDir, ".quarantine")
+			if err := os.MkdirAll(quarantineDir, 0o750); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not create identity quarantine dir: %v\n", err)
+				continue
+			}
+		}
+		dst := filepath.Join(quarantineDir, entry.Name()+"."+ts)
+		if err := os.Rename(src, dst); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not quarantine stale identity %s: %v\n", entry.Name(), err)
 			continue
 		}
 		name := strings.TrimSuffix(entry.Name(), ".json")
-		fmt.Fprintf(os.Stderr, "Removed stale identity: %s\n", name)
-		deleted = append(deleted, name)
+		fmt.Fprintf(os.Stderr, "Quarantined stale identity: %s → %s\n", name, dst)
+		quarantined = append(quarantined, name)
 	}
 
-	return deleted
+	return quarantined
 }
 
 // BuildQuickstartCmd constructs a shell-safe thrum quickstart command string

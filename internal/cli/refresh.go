@@ -11,7 +11,6 @@ import (
 	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/process"
-	"github.com/leonletto/thrum/internal/worktree"
 )
 
 // RefreshResult describes the outcome of a RefreshLocalIdentity call.
@@ -163,14 +162,25 @@ func RefreshLocalIdentity(client *Client, repoPath string) (*RefreshResult, erro
 		}
 	}
 
-	// thrum-33dt: enforce the worktree-layer single-identity invariant on
-	// the refresh path. Any identity files sharing this worktree other
-	// than the loaded agent's are stale siblings (the identity guard
-	// upstream refuses live foreign owners); deleting them keeps the
-	// worktree at one identity file even when quickstart was skipped.
-	if idFile.Agent.Name != "" {
-		worktree.EnforceOneIdentity(paths.EffectiveRepoPath(repoPath), idFile.Agent.Name)
-	}
+	// thrum-ajmd: refresh does NOT enforce the single-identity invariant.
+	//
+	// Previously this path called worktree.EnforceOneIdentity with
+	// paths.EffectiveRepoPath(repoPath), which deletes every sibling
+	// identity file in the target .thrum/identities/ dir. Because
+	// refresh accepts an arbitrary repoPath (the caller's cwd, or
+	// THRUM_HOME), a non-coordinator agent running refresh with a cwd
+	// that resolved to the main-repo path would delete
+	// coordinator_main.json as a "stale sibling" — a P0 regression
+	// that silently broke supervisor routing and every other
+	// identity-file-dependent lookup.
+	//
+	// The correct enforcement points are the registration paths
+	// (quickstart, tmux.create, agent.register via peercred-resolved
+	// worktree). Those are narrowly scoped to the worktree being
+	// registered INTO and are authorised to scrub siblings. Refresh is
+	// read-mostly; when it writes, it writes only to its own identity
+	// file. Any stale-sibling cleanup should happen at the next
+	// registration, not at every refresh.
 
 	return result, nil
 }

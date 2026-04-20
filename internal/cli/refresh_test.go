@@ -598,13 +598,22 @@ func TestRefreshLocalIdentity_NoSessionResumedWhenAlreadyActive(t *testing.T) {
 	}
 }
 
-// TestRefreshLocalIdentity_EnforceOneIdentityQuarantinesStale — thrum-33dt
-// regression. The refresh path must enforce the "one identity per
-// worktree" invariant. Seed a worktree with the current agent's
-// identity PLUS a stale sibling identity from a prior agent; after
-// refresh the stale file must be gone while the current one is
-// preserved.
-func TestRefreshLocalIdentity_EnforceOneIdentityQuarantinesStale(t *testing.T) {
+// TestRefreshLocalIdentity_PreservesSiblingIdentities — thrum-ajmd
+// regression. The refresh path MUST NOT delete identity files belonging
+// to other agents sharing the same .thrum/identities/ directory.
+//
+// Prior to thrum-ajmd, refresh.go called
+// worktree.EnforceOneIdentity(paths.EffectiveRepoPath(repoPath), ...)
+// which deletes every sibling .json. Because repoPath in refresh is
+// the caller's cwd (or THRUM_HOME), a non-coordinator agent running
+// refresh with cwd resolving to the main repo path would silently
+// delete coordinator_main.json — a P0 that broke supervisor routing
+// and identity-file-dependent tmux lookups.
+//
+// The invariant is enforced at REGISTRATION time (quickstart,
+// tmux.create, agent.register) — not on every refresh. Refresh is
+// read-mostly and must leave unrelated identities alone.
+func TestRefreshLocalIdentity_PreservesSiblingIdentities(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 	idsDir := filepath.Join(thrumDir, "identities")
@@ -615,7 +624,7 @@ func TestRefreshLocalIdentity_EnforceOneIdentityQuarantinesStale(t *testing.T) {
 	t.Setenv("THRUM_HOME", tmpDir)
 	t.Setenv("THRUM_NAME", "current_agent")
 
-	// Current agent's identity (the one the refresh picks up).
+	// Current agent's identity (the one refresh picks up).
 	current := &config.IdentityFile{
 		Version: 5,
 		Agent: config.AgentConfig{
@@ -628,23 +637,25 @@ func TestRefreshLocalIdentity_EnforceOneIdentityQuarantinesStale(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Stale sibling identity that a prior agent left behind in this
-	// worktree. Pre-fix, refresh would leave this file in place,
-	// violating the one-identity-per-worktree invariant.
-	stale := &config.IdentityFile{
+	// Sibling identity from another agent. In a legitimate shared-dir
+	// scenario (e.g. the main repo's .thrum/identities/ hosting the
+	// coordinator while an implementer's cwd happens to resolve here),
+	// refresh must NOT delete this file — it belongs to a different
+	// agent.
+	sibling := &config.IdentityFile{
 		Version: 5,
 		Agent: config.AgentConfig{
-			Kind: "agent", Name: "old_agent", Role: "implementer", Module: "legacy",
+			Kind: "agent", Name: "coordinator_main", Role: "coordinator", Module: "main",
 		},
 		AgentPID: 1,
 	}
-	if err := config.SaveIdentityFile(thrumDir, stale); err != nil {
+	if err := config.SaveIdentityFile(thrumDir, sibling); err != nil {
 		t.Fatal(err)
 	}
 	currentPath := filepath.Join(idsDir, "current_agent.json")
-	stalePath := filepath.Join(idsDir, "old_agent.json")
-	if _, err := os.Stat(stalePath); err != nil {
-		t.Fatalf("stale identity missing before refresh: %v", err)
+	siblingPath := filepath.Join(idsDir, "coordinator_main.json")
+	if _, err := os.Stat(siblingPath); err != nil {
+		t.Fatalf("sibling identity missing before refresh: %v", err)
 	}
 
 	// Detector returns no-runtime so no PID/runtime churn interferes.
@@ -656,8 +667,8 @@ func TestRefreshLocalIdentity_EnforceOneIdentityQuarantinesStale(t *testing.T) {
 		t.Fatalf("RefreshLocalIdentity: %v", err)
 	}
 
-	if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
-		t.Errorf("stale identity old_agent.json should be deleted after refresh (err=%v); worktree invariant not enforced", err)
+	if _, err := os.Stat(siblingPath); err != nil {
+		t.Errorf("sibling identity coordinator_main.json must NOT be deleted by refresh (err=%v); refresh is read-mostly", err)
 	}
 	if _, err := os.Stat(currentPath); err != nil {
 		t.Errorf("current identity file was deleted unexpectedly: %v", err)

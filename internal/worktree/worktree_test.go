@@ -144,7 +144,10 @@ func TestEnsureRedirects_Idempotent(t *testing.T) {
 
 // --- EnforceOneIdentity tests ---
 
-func TestEnforceOneIdentity_DeletesOthers(t *testing.T) {
+// TestEnforceOneIdentity_QuarantinesOthers — thrum-ajmd. Sibling
+// identities are MOVED to .thrum/identities/.quarantine/, not deleted.
+// This preserves recourse when EnforceOneIdentity fires incorrectly.
+func TestEnforceOneIdentity_QuarantinesOthers(t *testing.T) {
 	dir := t.TempDir()
 	idDir := filepath.Join(dir, ".thrum", "identities")
 	os.MkdirAll(idDir, 0750)
@@ -152,16 +155,37 @@ func TestEnforceOneIdentity_DeletesOthers(t *testing.T) {
 	os.WriteFile(filepath.Join(idDir, "old_agent.json"), []byte(`{"agent":{"name":"old_agent"}}`), 0600)
 	os.WriteFile(filepath.Join(idDir, "new_agent.json"), []byte(`{"agent":{"name":"new_agent"}}`), 0600)
 
-	deleted := EnforceOneIdentity(dir, "new_agent")
+	quarantined := EnforceOneIdentity(dir, "new_agent")
 
 	if _, err := os.Stat(filepath.Join(idDir, "old_agent.json")); !os.IsNotExist(err) {
-		t.Error("old_agent.json should be deleted")
+		t.Error("old_agent.json should no longer be at top level")
 	}
 	if _, err := os.Stat(filepath.Join(idDir, "new_agent.json")); err != nil {
 		t.Error("new_agent.json should survive")
 	}
-	if len(deleted) != 1 || deleted[0] != "old_agent" {
-		t.Errorf("deleted = %v, want [old_agent]", deleted)
+	if len(quarantined) != 1 || quarantined[0] != "old_agent" {
+		t.Errorf("quarantined = %v, want [old_agent]", quarantined)
+	}
+
+	// Quarantine directory exists and holds a timestamped copy of the
+	// original file — not a delete, so recovery is possible.
+	qDir := filepath.Join(idDir, ".quarantine")
+	entries, err := os.ReadDir(qDir)
+	if err != nil {
+		t.Fatalf("quarantine dir should exist: %v", err)
+	}
+	found := false
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "old_agent.json.") {
+			found = true
+			data, _ := os.ReadFile(filepath.Join(qDir, e.Name()))
+			if !strings.Contains(string(data), "old_agent") {
+				t.Errorf("quarantined file contents missing: %s", data)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("quarantined file not found in %s (entries: %v)", qDir, entries)
 	}
 }
 
@@ -178,7 +202,7 @@ func TestEnforceOneIdentity_PreservesContext(t *testing.T) {
 	EnforceOneIdentity(dir, "new_agent")
 
 	if _, err := os.Stat(filepath.Join(idDir, "old_agent.json")); !os.IsNotExist(err) {
-		t.Error("old identity should be deleted")
+		t.Error("old identity should no longer be at top level (it's in .quarantine/)")
 	}
 	if _, err := os.Stat(filepath.Join(ctxDir, "old_agent.md")); err != nil {
 		t.Error("context file should be preserved")
@@ -187,9 +211,30 @@ func TestEnforceOneIdentity_PreservesContext(t *testing.T) {
 
 func TestEnforceOneIdentity_NoIdentitiesDir(t *testing.T) {
 	dir := t.TempDir()
-	deleted := EnforceOneIdentity(dir, "agent")
-	if len(deleted) != 0 {
-		t.Error("expected no deletions")
+	quarantined := EnforceOneIdentity(dir, "agent")
+	if len(quarantined) != 0 {
+		t.Error("expected no quarantines")
+	}
+}
+
+// TestEnforceOneIdentity_QuarantineSkipped — the .quarantine/ dir
+// itself must never be scanned as an identity file. Files already
+// inside .quarantine/ stay there.
+func TestEnforceOneIdentity_QuarantineSkipped(t *testing.T) {
+	dir := t.TempDir()
+	idDir := filepath.Join(dir, ".thrum", "identities")
+	qDir := filepath.Join(idDir, ".quarantine")
+	os.MkdirAll(qDir, 0o750)
+
+	os.WriteFile(filepath.Join(idDir, "new_agent.json"), []byte(`{}`), 0600)
+	os.WriteFile(filepath.Join(qDir, "ancient.json.20260101T000000Z"), []byte(`{}`), 0600)
+
+	quarantined := EnforceOneIdentity(dir, "new_agent")
+	if len(quarantined) != 0 {
+		t.Errorf("quarantine dir contents must not be re-quarantined, got %v", quarantined)
+	}
+	if _, err := os.Stat(filepath.Join(qDir, "ancient.json.20260101T000000Z")); err != nil {
+		t.Errorf("existing quarantine file must remain: %v", err)
 	}
 }
 
