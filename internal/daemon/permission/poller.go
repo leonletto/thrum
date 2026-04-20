@@ -260,9 +260,23 @@ var volatileLinePatterns = map[string][]*regexp.Regexp{
 	// claude-code does similar with "✻ Cogitated for Ns" and similar
 	// spinner lines. Patterns observed empirically; extend as new
 	// spinner formats surface.
+	//
+	// Claude's ccstatusline adds a volatile bottom-of-pane status line
+	// of the form "Model: <name> | Ctx: <size> | Block: <timer> | Ctx:
+	// <pct>" whose Ctx size and Block countdown drift every 30-60s.
+	// Without stripping, the cadence hash destabilizes for unchanged
+	// prompts and fires duplicate nudges (observed 3x in ~80s during
+	// thrum-48kt.2 E2E setup — tracked as thrum-ptcj). The regex
+	// requires the "Ctx: ... | Block:" pipe-separated pair, which is
+	// highly specific to the statusline (user text containing either
+	// token in isolation, OR both tokens without a pipe between them,
+	// passes through unmolested). Assumes the current field order
+	// (Ctx before Block); if ccstatusline reorders fields in a future
+	// release, extend with a second regex rather than loosening this one.
 	"claude": {
 		regexp.MustCompile(`^[\s*✻✽✾✿✢]*(?:Cogitat|Workin|Think|Plann|Analyz)`),
 		regexp.MustCompile(`\(\d+s\s*·\s*(?:esc|⚒)`),
+		regexp.MustCompile(`\bCtx:\s\S[^|]*\|\s*Block:\s\S`),
 	},
 }
 

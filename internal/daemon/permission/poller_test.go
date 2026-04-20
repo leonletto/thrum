@@ -380,6 +380,86 @@ assistant response
 	}
 }
 
+// TestStripVolatileLines_ClaudeStatusLine ensures the runtime-specific
+// filter removes Claude's ccstatusline "Model: ... | Ctx: ... | Block:
+// ... | Ctx: N%" status line. Without stripping, the Ctx size and Block
+// countdown drift every 30-60s, destabilizing the cadence hash and
+// firing a fresh firstDetect for the same unchanged prompt (observed
+// during the thrum-48kt.2 E2E setup where three nudges fired in ~80s
+// for one pending prompt on plugin-skills-slate).
+func TestStripVolatileLines_ClaudeStatusLine(t *testing.T) {
+	input := `Would you like to run this command?
+$ rm -rf /tmp/foo
+> 1. Yes, proceed (y)
+  Model: Opus 4.7 (1M context) | Ctx: 697.2k | Block: 38m | Ctx: 70.0%`
+
+	stripped := stripVolatileLines("claude", input)
+	if strings.Contains(stripped, "Ctx:") {
+		t.Errorf("expected status line stripped, still contains 'Ctx:':\n%s", stripped)
+	}
+	if strings.Contains(stripped, "Block:") {
+		t.Errorf("expected status line stripped, still contains 'Block:':\n%s", stripped)
+	}
+	if !strings.Contains(stripped, "Would you like to run") {
+		t.Errorf("expected prompt preamble kept, got:\n%s", stripped)
+	}
+	if !strings.Contains(stripped, "rm -rf /tmp/foo") {
+		t.Errorf("expected command line kept, got:\n%s", stripped)
+	}
+}
+
+// TestStripVolatileLines_ClaudeStatusLineDrift proves that two distinct
+// Ctx/Block drift values on the same semantic prompt produce identical
+// stripped output — the direct precondition for a stable cadence hash.
+func TestStripVolatileLines_ClaudeStatusLineDrift(t *testing.T) {
+	paneA := `Would you like to run this command?
+$ rm -rf /tmp/foo
+> 1. Yes, proceed (y)
+  Model: Opus 4.7 (1M context) | Ctx: 697.2k | Block: 38m | Ctx: 70.0%`
+
+	paneB := `Would you like to run this command?
+$ rm -rf /tmp/foo
+> 1. Yes, proceed (y)
+  Model: Opus 4.7 (1M context) | Ctx: 712.8k | Block: 36m | Ctx: 71.2%`
+
+	if stripVolatileLines("claude", paneA) != stripVolatileLines("claude", paneB) {
+		t.Errorf("expected identical stripped output for two Ctx/Block drift values;\nA: %q\nB: %q",
+			stripVolatileLines("claude", paneA), stripVolatileLines("claude", paneB))
+	}
+}
+
+// TestStripVolatileLines_ClaudeStatusLineDoesNotMatchUserText guards
+// against false-positive stripping of user prompts that coincidentally
+// contain the tokens "Ctx:" or "Block:" but are NOT the status line.
+// The regex requires both markers AND the pipe-separated structure, so
+// lone tokens in user text must pass through.
+func TestStripVolatileLines_ClaudeStatusLineDoesNotMatchUserText(t *testing.T) {
+	input := `Would you like to run this command?
+$ grep 'Ctx:' logs.txt
+> 1. Yes, proceed (y)`
+
+	stripped := stripVolatileLines("claude", input)
+	if !strings.Contains(stripped, "grep 'Ctx:' logs.txt") {
+		t.Errorf("expected user-text 'Ctx:' preserved, got:\n%s", stripped)
+	}
+}
+
+// TestStripVolatileLines_ClaudeStatusLineUserTextBothTokensNoPipe guards
+// against the less-obvious false-positive: a user line containing BOTH
+// "Ctx:" and "Block:" without the pipe-separated statusline structure
+// (e.g., pasted documentation, log output, prose explaining the terms).
+// The pipe anchor in the regex prevents this from matching.
+func TestStripVolatileLines_ClaudeStatusLineUserTextBothTokensNoPipe(t *testing.T) {
+	input := `Would you like to run this command?
+$ echo "Ctx: describes the context and Block: marks the blocking call"
+> 1. Yes, proceed (y)`
+
+	stripped := stripVolatileLines("claude", input)
+	if !strings.Contains(stripped, "Ctx: describes the context and Block:") {
+		t.Errorf("expected user-text with both tokens (no pipe) preserved, got:\n%s", stripped)
+	}
+}
+
 // TestStripVolatileLines_UnknownRuntime returns input unchanged.
 func TestStripVolatileLines_UnknownRuntime(t *testing.T) {
 	input := "• Working (5s)\nother line"
