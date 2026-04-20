@@ -6,7 +6,7 @@ description:
 category: "orchestration"
 order: 2
 tags: ["tmux", "sessions", "multi-agent", "nudge", "coordinator"]
-last_updated: "2026-04-09"
+last_updated: "2026-04-19"
 ---
 
 ## What This Is
@@ -260,7 +260,7 @@ and is the Claude PID alive?
 | no             | —         | `tmux:dead`  | Session is gone                   |
 | —              | —         | `no-tmux`    | Agent not in tmux (legacy/remote) |
 
-Two additional states come from silence monitoring:
+Two additional states come from the daemon's pane poller:
 
 | State          | What it means              |
 | -------------- | -------------------------- |
@@ -291,28 +291,47 @@ Running agents in unrestricted mode is dangerous. But agents that need
 permission approval block on the prompt until a human notices. Tmux sessions
 solve this.
 
-The daemon uses tmux's native `monitor-silence` hooks — event-driven, not
-polling:
+### Daemon-Side SessionPoller (v0.9.0)
 
-1. When the session produces no output for 60 seconds, tmux fires an
-   `alert-silence` hook
-2. The hook runs `thrum tmux check-pane`, which captures the last 5 lines of the
-   pane
-3. If those lines match a permission prompt pattern, the daemon notifies the
-   coordinator: "Agent @impl_api needs permission: Write to src/handler.go"
-4. The coordinator reviews and responds
+Detection runs entirely inside the daemon via a `SessionPoller`
+(`internal/daemon/permission/poller.go`). There is no reliance on tmux's
+`alert-silence` hook — that hook does not fire reliably on detached sessions
+(tmux issue #1384: alerts are processed per-session-per-client; detached
+sessions typically have no attached client). If you have `alert-silence`
+configured in your `.tmux.conf`, it's harmless but inert for permission
+detection.
 
-If the pane has been silent for >2 minutes with no permission prompt, the
-coordinator gets an idle notification instead: "Agent @impl_api has been idle
-for 3m42s"
+Here's how the poller works:
 
-The daemon deduplicates notifications — same reason doesn't trigger a repeat.
-After 5 minutes with no change, it escalates ("agent still blocked/idle").
-Notifications clear when the session produces output again.
+1. **Enrollment** — `HandleLaunch` and `HandleRestart` enroll each session with
+   the poller. `HandleKill` unenrolls it.
+2. **Polling** — every 10 seconds, the daemon captures pane content, strips
+   volatile lines specific to each runtime (spinners, statuslines, progress
+   timers), and SHA-256 hashes the result.
+3. **Stability threshold** — two consecutive identical hashes trigger `OnStable`.
+   That's roughly 20 seconds of detection latency from when the prompt appears.
+4. **`OnStable`** synthesizes a `CheckPaneRequest → HandleCheckPane` call. You
+   can also invoke `thrum tmux check-pane` directly from the CLI, but that's
+   unusual — the poller handles it automatically.
+5. **`ReconcilePoller`** — at daemon boot, all active sessions are re-enrolled.
+   In-flight detection survives a daemon restart cleanly.
 
-> **Note:** Automated approve/deny is deferred. v0.7.1 surfaces blocked agents
-> to the coordinator; approval is manual. Programmatic approval will follow once
-> Claude Code's permission prompt format is stable.
+When `HandleCheckPane` detects a permission prompt, the daemon routes a nudge to
+the configured `permission_supervisors`, deduplicates repeat fires, and escalates
+on backoff if the prompt goes unanswered.
+
+The full detection and response workflow — supervisor configuration, nudge
+format, reply channels (CLI / web UI / Telegram), and stuck-state recovery — is
+documented in [Permission Prompt Detection](permission-prompts.md).
+
+### CWD-Pinned Session Binding
+
+The daemon's `writeTmuxToIdentity` uses the worktree CWD — not the tmux server
+CWD — to locate the correct identity file when binding a pane to an agent. This
+fixed a class of bugs where panes were attached to the wrong agent identity. The
+G4 guard gates the write: if the CWD doesn't resolve to a known worktree, the
+bind is refused. `team.list` self-heals dead sessions on every call, so stale
+bindings clear automatically without manual cleanup.
 
 ---
 

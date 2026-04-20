@@ -6,7 +6,7 @@ description:
 category: "infrastructure"
 order: 1
 tags: ["daemon", "background-service", "rpc", "websocket", "lifecycle", "sync"]
-last_updated: "2026-02-10"
+last_updated: "2026-04-19"
 ---
 
 ## Thrum Daemon Architecture
@@ -55,6 +55,8 @@ the central coordinator for all Thrum clients (CLI, Web UI, and MCP server).
       └── {agent_name}.jsonl
 
   .thrum/
+  ├── config.json            (daemon configuration + identity block)
+  ├── config.json.pre-identity-bak  (one-time backup on first daemon_id rotation)
   ├── var/
   │   ├── thrum.sock         (Unix socket)
   │   ├── thrum.pid          (JSON PID file)
@@ -184,11 +186,25 @@ defense-in-depth cleanup.
 2. Pre-startup validation: check for existing daemon (repo affinity)
 3. Write JSON PID file with metadata
 4. Register defer safety net (catches panics, early returns)
-5. Start Unix socket server
-6. Start WebSocket server (if configured), write port file
-7. Start monitor supervisor (respawns persisted monitor jobs from DB)
-8. Start signal handler goroutine
-9. Wait for shutdown signal
+5. `identity.Bootstrap(thrumDir, repoPath)` — load or create the daemon's
+   persistent identity (ULID-based `daemon_id`, repo metadata); atomically
+   rewrites `.thrum/config.json`; writes `.thrum/config.json.pre-identity-bak`
+   on first rotation (backup-once, never overwritten)
+6. Populate `daemon_identity` SQLite table via `state.NewState` — single-row
+   mirror of the `config.json` identity block; written on every startup via
+   `INSERT OR REPLACE`
+7. Register `@supervisor_<project>` pseudo-agent (idempotent)
+8. `ReloadOnBoot` — re-enqueue any pending permission nudges that survived a
+   daemon restart
+9. Backfill `runtime` field in all identity files where it is missing
+10. Start Unix socket server
+11. Start WebSocket server (if configured), write port file
+12. Start monitor supervisor (respawns persisted monitor jobs from DB)
+13. `ConnectAll` peers, then `ReconcileAll` (2-second settling window,
+    up to 4 peers in parallel) — attempts `peer.repair` for any peer whose
+    address may have drifted since last shutdown
+14. Start signal handler goroutine
+15. Wait for shutdown signal
 
 **Signal handling:**
 
@@ -233,6 +249,26 @@ on both the Unix socket and WebSocket servers unless noted.
 
 See [RPC API Reference](rpc-api.md) for full documentation.
 
+**Caller Identity Enforcement (v0.9.0):**
+
+Every RPC request on the Unix socket goes through a two-stage identity check:
+
+1. **Peercred resolution** — the accept loop extracts the connecting process's
+   kernel-verified PID via `SO_PEERCRED` (Linux) or `LOCAL_PEERPID` (macOS),
+   resolves the PID's working directory, walks to the git root, and matches
+   against registered agent worktrees. Matched callers get a verified identity;
+   unmatched callers are classified as **anonymous**.
+
+2. **Anonymous allowlist** — anonymous callers may only invoke a hardcoded set
+   of ~30 read-only methods (observability, team/session/message queries, tmux
+   status reads, and the bootstrap RPCs `agent.register`, `session.start`,
+   `session.setIntent`). All mutating RPCs are rejected before the handler runs.
+   See [Security Model](security-model.md) for the full allowlist.
+
+The G4 liveness gate additionally guards all daemon-side writes to identity
+files: if the target agent's PID is no longer alive, the write is refused and
+an `identity_guard_fire` slog event is emitted. See below for the event schema.
+
 **Health check response:**
 
 ```json
@@ -275,6 +311,20 @@ web UI on a single port.
 - Uses `//go:embed all:dist` to bundle the React UI into the Go binary
 - Build pipeline: `pnpm build` -> copy to `internal/web/dist/` -> `go build`
 - Dev mode: set `THRUM_UI_DEV=./ui/packages/web-app/dist` to serve from disk
+
+**WebSocket Origin Restriction (v0.9.0):**
+
+The WebSocket upgrade handler validates the browser `Origin` header against a
+localhost allowlist before completing the handshake:
+
+- `http://localhost:<port>` and `ws://localhost:<port>`
+- `http://127.0.0.1:<port>` and `ws://127.0.0.1:<port>`
+
+Connections from any other origin receive `HTTP 403 Forbidden` at the upgrade
+handshake and are dropped before any RPC can execute. This prevents
+cross-origin WebSocket hijacking (CSRF via a remote page). Pre-v0.9.0 the
+`CheckOrigin` callback returned `true` unconditionally. See
+[Security Model](security-model.md) for the full local trust stack.
 
 **Browser auto-registration:**
 
@@ -357,6 +407,30 @@ Extracts git-derived work context from a worktree path:
   - Rule 3: Contexts where git data was never collected
 - `FilterStaleContexts(contexts, now)` - In-memory filter (same rules, for sync)
 - Runs at daemon startup and before sync
+
+## Observability
+
+### `identity_guard_fire` Slog Event
+
+Every identity guard outcome (whether the guard fires and denies, fires and
+allows, auto-reclaims, or is skipped) emits a structured slog event with the
+key `identity_guard_fire`. Operators and monitoring pipelines can subscribe to
+this event for identity violation alerts.
+
+**Event fields:**
+
+| Field            | Type   | Description                                                                         |
+| ---------------- | ------ | ----------------------------------------------------------------------------------- |
+| `guard`          | string | Guard key that fired (e.g., `cross_worktree`, `daemon_writer_liveness`, `unauthenticated_rpc`) |
+| `mode`           | string | Enforcement mode at fire time: `strict`, `warn`, or `off`                           |
+| `outcome`        | string | `denied`, `allowed`, `auto_reclaimed`, or `skipped`                                 |
+| `reason`         | string | Machine-readable reason code (e.g., `subject_pid_dead`, `identity_mismatch`)        |
+| `caller_pid`     | integer| PID of the connecting process (when available via peercred)                         |
+| `target_pid`     | integer| PID of the identity file's recorded `agent_pid` (when relevant)                    |
+
+The `identity_guard_fire` event is emitted on every outcome — including
+successful passes — so operators can audit both denials and auto-reclaims
+without separate event types.
 
 ## Local-Only Mode
 
@@ -576,6 +650,9 @@ kill <pid>
     └── {agent_name}.jsonl
 
 .thrum/                         # Gitignored entirely
+├── config.json                 # Daemon configuration (includes identity block)
+├── config.json.pre-identity-bak  # One-time backup created on first daemon_id rotation
+│                               #   (backup-once: never overwritten after creation)
 ├── var/                        # Runtime files
 │   ├── thrum.sock              # Unix socket for CLI/RPC
 │   ├── thrum.pid               # JSON PID file (PID, RepoPath, StartedAt, SocketPath)

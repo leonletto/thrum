@@ -4,7 +4,7 @@ description: "Cross-repo and cross-machine messaging between Thrum daemons"
 category: "messaging"
 order: 2
 tags: ["peers", "cross-repo", "tailscale", "pairing", "sync"]
-last_updated: "2026-04-09"
+last_updated: "2026-04-19"
 ---
 
 ## What a Peer Is
@@ -77,17 +77,18 @@ Pairing happens once. After that, peers reconnect automatically.
 **On the first machine** (the listener):
 
 ```bash
-thrum peer add
+thrum peer add --type tailscale
 ```
 
-The daemon generates a 16-digit numeric pairing code and blocks waiting for the
-other side. It prints the full peercode:
+The `--type` flag is **mandatory** (v0.9.0+). The daemon generates a 16-digit
+numeric pairing code and blocks waiting for the other side. It prints the full
+peercode:
 
 ```text
 Waiting for connection...
 
 Share this with the other machine:
-  thrum peer join --peercode alice:100.64.1.5:44123:4829175036284719
+  thrum peer join --type tailscale --peercode alice:100.64.1.5:44123:4829175036284719
 
 Paired with "bob" (100.64.1.9:44123). Syncing started.
 ```
@@ -95,13 +96,13 @@ Paired with "bob" (100.64.1.9:44123). Syncing started.
 **On the second machine** (the joiner):
 
 ```bash
-thrum peer join --peercode alice:100.64.1.5:44123:4829175036284719
+thrum peer join --type tailscale --peercode alice:100.64.1.5:44123:4829175036284719
 ```
 
-For a local peer on the same machine, add `--repo-path`:
+For a local peer on the same machine, use `--type local` and add `--repo-path`:
 
 ```bash
-thrum peer join --peercode alice:127.0.0.1:44123:4829175036284719 \
+thrum peer join --type local --peercode alice:127.0.0.1:44123:4829175036284719 \
   --repo-path /path/to/other/repo
 ```
 
@@ -286,14 +287,33 @@ The peer registry is managed automatically by the pairing flow. It's stored at
       "transport": "local",
       "proxy_prefix": "mock-sf",
       "remote_agents": ["coordinator_main"],
-      "paired_at": "2026-04-05T20:00:00Z"
+      "paired_at": "2026-04-05T20:00:00Z",
+      "remote_repo_name": "mock-salesforce",
+      "remote_hostname": "leon-macbook",
+      "remote_repo_path": "/Users/leon/dev/falcondev/mock-salesforce",
+      "remote_git_origin_url": "git@github.com:falcondev/mock-salesforce.git"
     }
   ]
 }
 ```
 
+The four `remote_*` fields (`remote_repo_name`, `remote_hostname`,
+`remote_repo_path`, `remote_git_origin_url`) were added in v0.9.0. They are
+exchanged at pairing time and stored locally for future routing logic. All four
+are `omitempty` — peers paired before v0.9.0 will have empty strings for these
+fields and do not need to re-pair. These fields are not currently surfaced in
+`thrum peer list` or `thrum peer status` output (display gap tracked
+separately).
+
 The `token` field is the long-lived auth token exchanged during pairing. Guard
 this file — it grants access to the peer connection. Don't commit it to git.
+
+**`peers.json.pre-rotation-bak`:** On the first daemon start after a peer
+schema rotation, a one-time backup of the pre-rotation `peers.json` is written
+to `.thrum/var/peers.json.pre-rotation-bak`. This is a defensive snapshot
+using the same backup-once semantics as `config.json.pre-identity-bak` — the
+file is never overwritten after creation. Rename it back if a schema migration
+goes wrong.
 
 See [Configuration](configuration.md) for the full config reference.
 
@@ -306,49 +326,79 @@ All peer commands live under `thrum peer`. Full reference:
 
 ### Quick Reference
 
-| Command                                    | Description                                              |
-| ------------------------------------------ | -------------------------------------------------------- |
-| `thrum peer add`                           | Start a pairing session, display peercode, wait for join |
-| `thrum peer join --peercode <code>`        | Join a peer using the peercode from `peer add`           |
-| `thrum peer list`                          | List all paired peers with address and last sync time    |
-| `thrum peer status`                        | Detailed per-peer health, auth status, and pairing time  |
-| `thrum peer remove <name>`                 | Remove a peer, stop syncing immediately                  |
-| `thrum peer configure <name> add-agent`    | Register a remote agent as a proxy locally               |
-| `thrum peer configure <name> remove-agent` | Unregister a proxy agent                                 |
+| Command                                          | Description                                              |
+| ------------------------------------------------ | -------------------------------------------------------- |
+| `thrum peer add --type <type>`                   | Start a pairing session, display peercode, wait for join |
+| `thrum peer join --type <type> --peercode <code>`| Join a peer using the peercode from `peer add`           |
+| `thrum peer join --type repair <name>`           | Re-establish a broken peer using stored secrets          |
+| `thrum peer list`                                | List all paired peers with address and last sync time    |
+| `thrum peer status`                              | Detailed per-peer health, auth status, and pairing time  |
+| `thrum peer remove <name>`                       | Remove a peer, stop syncing immediately                  |
+| `thrum peer configure <name> add-agent`          | Register a remote agent as a proxy locally               |
+| `thrum peer configure <name> remove-agent`       | Unregister a proxy agent                                 |
 
 ### `thrum peer add`
+
+> **Breaking change (v0.9.0):** `--type` is now **mandatory**. The previously
+> implicit `tailscale` default has been removed. Running `thrum peer add`
+> without `--type` prints a structured help block listing all four values and
+> exits. Any script calling `thrum peer add` without a type flag must add
+> `--type tailscale` for equivalent behavior.
 
 Blocks for up to 5 minutes waiting for the other side. Prints the full peercode
 to share:
 
 ```text
-$ thrum peer add
+$ thrum peer add --type tailscale
 Waiting for connection...
 
 Share this with the other machine:
-  thrum peer join --peercode alice:100.64.1.5:44123:7392031846291057
+  thrum peer join --type tailscale --peercode alice:100.64.1.5:44123:7392031846291057
 
 Paired with "bob" (100.64.1.9:44123). Syncing started.
 ```
 
+**`--type` values:**
+
+| `--type`    | When to use                                      | Required flags / constraints                                        |
+| ----------- | ------------------------------------------------ | ------------------------------------------------------------------- |
+| `tailscale` | Cross-host via Tailscale CGNAT                   | `--auth-key` or `THRUM_TS_AUTHKEY` env; Tailscale must be running on both ends |
+| `local`     | Same-host, different repo                        | None; loopback only, no LAN exposure                                |
+| `network`   | Cross-host without Tailscale                     | `--address <ip>` on both sides; no NAT traversal                    |
+
+`repair` is only valid on `peer join`, not `peer add`. See `thrum peer join`
+below.
+
 ### `thrum peer join`
+
+> **Breaking change (v0.9.0):** `--type` is now **mandatory**. See `thrum peer
+> add` above.
 
 Pass the peercode as a flag, a positional argument, or pipe it from stdin:
 
 ```bash
-# Flag
-thrum peer join --peercode alice:100.64.1.5:44123:7392031846291057
+# Tailscale peer (cross-host)
+thrum peer join --type tailscale --peercode alice:100.64.1.5:44123:7392031846291057
 
-# Positional
-thrum peer join alice:100.64.1.5:44123:7392031846291057
-
-# Stdin
-echo "alice:100.64.1.5:44123:7392031846291057" | thrum peer join --peercode -
-
-# Local peer (same machine)
-thrum peer join --peercode alice:127.0.0.1:9342:7392031846291057 \
+# Local peer (same machine, different repo)
+thrum peer join --type local --peercode alice:127.0.0.1:9342:7392031846291057 \
   --repo-path /path/to/alice-repo
+
+# Network peer (direct TCP, no Tailscale)
+thrum peer join --type network --peercode alice:192.168.1.10:44123:7392031846291057
+
+# Re-establish a broken peer using stored secrets (no new peercode needed)
+thrum peer join --type repair alice
 ```
+
+**`--type` values for `peer join`:**
+
+| `--type`    | When to use                                      | Required flags / constraints                                                    |
+| ----------- | ------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `tailscale` | Cross-host via Tailscale CGNAT                   | `--auth-key` or `THRUM_TS_AUTHKEY` env; Tailscale must be running on both ends  |
+| `local`     | Same-host, different repo                        | `--repo-path` for the other repo's path                                         |
+| `network`   | Cross-host without Tailscale                     | Reachable address + port; no NAT traversal                                      |
+| `repair`    | Re-establish a broken peer using stored secrets  | Peer name (positional or `--peer-name`); only valid on `peer join`, not `peer add` |
 
 ### `thrum peer list`
 
@@ -375,6 +425,71 @@ thrum peer configure mock-salesforce add-agent coordinator_main
 
 # Remove it
 thrum peer configure mock-salesforce remove-agent coordinator_main
+```
+
+---
+
+## Automatic Drift Recovery
+
+When a peer's address changes (IP reassignment, port change, daemon restart on
+a different port), Thrum attempts to re-establish the connection automatically
+using the stored bearer token — no re-pairing required.
+
+### Two Triggers
+
+**Boot-time `ReconcileAll`:** After `ConnectAll` completes on daemon startup,
+the daemon waits 2 seconds (settling window) and then issues `peer.repair`
+against each peer that failed to connect. Up to 4 peers are reconciled in
+parallel; per-peer serialization prevents duplicate reconciles.
+
+**Inline `OnDialError`:** When the bridge reconnect loop fails to reach a
+peer, it triggers a reconcile attempt after 3 consecutive failures. Backoff
+between attempts: 2 s → 8 s → 30 s. Auth failures (`CatTokenRejected`) are
+not retried — they bypass the backoff loop immediately and set
+`drift_reconcile_failed`.
+
+### `peer.repair` RPC
+
+Drift recovery uses `peer.repair`, which is distinct from `pair.request`:
+
+- Uses the stored bearer token as the trust anchor — no peercode exchange, no
+  `THRUM_TS_AUTHKEY` required.
+- Valid for `tailscale`, `local`, and `network` transports.
+- On success, updates the peer's address and `daemon_id` in the local registry.
+  If the remote's `daemon_id` has rotated, the registry entry is re-keyed.
+- On token rejection (`CatTokenRejected`), sets
+  `ReconcileStatus = "drift_reconcile_failed"` and stops retrying.
+
+### `drift_reconcile_failed` Status
+
+When auto-reconciliation cannot resolve drift, `thrum peer list` renders an
+inline hint row under the affected peer:
+
+```text
+NAME                 ADDRESS                LAST SYNC          LAST SEQ
+alice                100.64.1.5:44123       48 minutes ago     1042
+  └─ drift detected — run: thrum peer join --type repair alice
+```
+
+The `└─` row appears only when `ReconcileStatus == "drift_reconcile_failed"`.
+A successful reconcile (or a manual `thrum peer join --type repair`) resets the
+status to healthy and removes the hint row.
+
+**Manual recovery:**
+
+```bash
+thrum peer join --type repair alice
+```
+
+If the stored token has been invalidated (the remote daemon was wiped and
+re-initialized), you must re-pair:
+
+```bash
+# On the remote machine
+thrum peer add --type tailscale   # (or local/network)
+
+# On your machine
+thrum peer join --type tailscale --peercode alice:...
 ```
 
 ---
