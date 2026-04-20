@@ -96,6 +96,13 @@ var patterns = map[string][]Pattern{
 			//  - "No, and tell Claude what to do differently" — Variant
 			//    A option 3 text. Long and distinctive enough to be
 			//    safe as a sole anchor.
+			//    TODO: if tool_confirmation stops firing on Variant A,
+			//    this string is the first thing to re-capture from a
+			//    live Claude pane — it's Anthropic UI copy, not spec.
+			//
+			// (?ms) = multiline + dotall; the 's' flag is what lets
+			// .{0,500} span newlines so the marker can live on a later
+			// line of the captured pane tail.
 			//
 			// See dev-docs/plans/2026-04-14-permission-prompt-samples.md
 			// for the raw captures.

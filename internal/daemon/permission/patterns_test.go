@@ -453,11 +453,12 @@ Do you want to proceed?`
 }
 
 // TestMatch_Claude_NoFalsePositiveFromProseWithOneOption guards the
-// bound on the "multiple markers required" check. A plan summary that
-// happens to contain a single numbered item (e.g. "1. first step")
-// alongside the interrogative must still NOT match — the real UI has
-// a `❯` selector, the distinctive option 3 text, or the footer, none
-// of which appear in organic prose with incidental enumeration.
+// bound on the "multiple markers required" check. A plan summary
+// whose list items precede the interrogative (organic prose shape)
+// must not match: the tightened regex requires a structural marker
+// WITHIN 500 chars AFTER the question, so incidental numbering above
+// the interrogative is correctly ignored. This documents that the
+// ordering matters — the `.{0,500}` window only looks forward.
 func TestMatch_Claude_NoFalsePositiveFromProseWithOneOption(t *testing.T) {
 	pane := `Recap of what changed this session:
 
