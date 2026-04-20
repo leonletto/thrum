@@ -330,7 +330,8 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 // file's base name — the human-readable agent name when provided,
 // otherwise the generated agent_id. Matches the naming convention used
 // by config.SaveIdentityFile so EnforceOneIdentity preserves the right
-// file.
+// file. The agentID fallback is only reached for anonymous
+// registrations (no --name supplied).
 func agentIdentityName(name, agentID string) string {
 	if name != "" {
 		return name
@@ -349,7 +350,14 @@ func enforceWorktreeIdentity(ctx context.Context, keepName string) {
 	if keepName == "" {
 		return
 	}
+	// ok dropped: both (nil, true) [peercred ran, anonymous] and
+	// (nil, false) [peercred did not run — tests / non-unix stubs]
+	// correctly skip enforcement, so discriminating between them
+	// would produce identical branches.
 	resolved, _ := peercred.FromContext(ctx)
+	// The Worktree == "" guard also covers resolved identities coming
+	// from non-unix stub platforms (where the resolver returns an
+	// AgentID but leaves Worktree unpopulated).
 	if resolved == nil || resolved.Worktree == "" {
 		return
 	}

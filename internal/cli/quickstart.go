@@ -255,6 +255,13 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 		// stale siblings from prior registrations that never got cleaned
 		// up. EnforceOneIdentity deletes them so the worktree satisfies
 		// "one identity per worktree" after every successful quickstart.
+		//
+		// Note: RefreshLocalIdentity in Step 2.6 below also invokes
+		// EnforceOneIdentity. The double-call is intentional and
+		// idempotent — once the first pass removes siblings, the second
+		// pass is a no-op. Both call sites stay so neither can be dropped
+		// in isolation when only one path runs (quickstart-without-refresh
+		// or refresh-without-quickstart).
 		if idFile.Agent.Name != "" {
 			worktree.EnforceOneIdentity(repoPath, idFile.Agent.Name)
 		}
