@@ -3,6 +3,8 @@ package daemon
 import (
 	"context"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 )
@@ -145,13 +147,20 @@ func TestPeerManager_BuildConfigs_SanitizesBridgeUserID(t *testing.T) {
 // "北京") sanitizes to the empty string. Without a fallback, the
 // resulting BridgeUserID would be "user:peer-" — the same empty-suffix
 // failure thrum-bew3 was fixing, just via a different code path.
-// Guard by falling back to DaemonID hex when sanitize is empty.
+//
+// Guard: fall back to DaemonID's ULID body (d_ prefix stripped) and
+// cap suffix at 27 chars so "peer-<suffix>" fits inside user.register's
+// 32-char usernameRegex.
 func TestPeerManager_BuildConfigs_NonASCIIPeerNameFallback(t *testing.T) {
 	pm, reg := newTestPeerManager(t)
 
+	// Realistic DaemonID format: "d_" + 26-char ULID = 28 chars total.
+	// With the d_ prefix stripped the ULID body is 26 chars, which fits
+	// inside the 27-char cap with headroom.
+	const daemonID = "d_01ABCDEFGHIJKLMNPQRSTVWXYZ"
 	nonASCII := &PeerInfo{
 		Name:     "北京",
-		DaemonID: "a1b2c3d4e5f6",
+		DaemonID: daemonID,
 		Address:  "100.64.1.10:9100",
 		Token:    "tok-non-ascii",
 		Role:     "dialer",
@@ -166,14 +175,59 @@ func TestPeerManager_BuildConfigs_NonASCIIPeerNameFallback(t *testing.T) {
 	if len(configs) != 1 {
 		t.Fatalf("BuildConfigs() = %d, want 1", len(configs))
 	}
-	// Sanitize drops all non-ASCII; fallback uses DaemonID.
-	wantUserID := "user:peer-a1b2c3d4e5f6"
+	wantUserID := "user:peer-01ABCDEFGHIJKLMNPQRSTVWXYZ"
 	if got := configs[0].BridgeUserID; got != wantUserID {
-		t.Errorf("BridgeUserID = %q, want %q (DaemonID fallback)", got, wantUserID)
+		t.Errorf("BridgeUserID = %q, want %q (DaemonID-body fallback, d_ stripped)", got, wantUserID)
 	}
-	// Raw PeerName preserved.
+	// Must validate against the same regex user.register enforces.
+	username := strings.TrimPrefix(configs[0].BridgeUserID, "user:")
+	if len(username) > 32 {
+		t.Errorf("username %q is %d chars, exceeds user.register's 32-char cap", username, len(username))
+	}
+	userRegex := regexp.MustCompile(`^[a-zA-Z0-9_-]{1,32}$`)
+	if !userRegex.MatchString(username) {
+		t.Errorf("username %q does not match user.register regex %s", username, userRegex)
+	}
+	// Raw PeerName preserved (used for logging / peer-address lookup).
 	if got := configs[0].PeerName; got != "北京" {
 		t.Errorf("PeerName = %q, want raw %q", got, "北京")
+	}
+}
+
+// TestPeerManager_BuildConfigs_LongDaemonIDTruncates pins the 27-char
+// suffix cap that keeps the username inside user.register's 32-char
+// limit even if a future DaemonID format grows past the current 26-char
+// ULID body. Guards against the boundary bug the iw42 review caught.
+func TestPeerManager_BuildConfigs_LongDaemonIDTruncates(t *testing.T) {
+	pm, reg := newTestPeerManager(t)
+
+	// Deliberately oversize (50-char body) to force truncation.
+	longDaemonID := "d_" + strings.Repeat("a", 50)
+	peer := &PeerInfo{
+		Name:     "北京",
+		DaemonID: longDaemonID,
+		Address:  "100.64.1.11:9100",
+		Token:    "tok-long",
+		Role:     "dialer",
+		PairedAt: time.Now(),
+		LastSync: time.Now(),
+	}
+	if err := reg.AddPeer(peer); err != nil {
+		t.Fatalf("AddPeer: %v", err)
+	}
+
+	configs := pm.BuildConfigs()
+	if len(configs) != 1 {
+		t.Fatalf("BuildConfigs() = %d, want 1", len(configs))
+	}
+	username := strings.TrimPrefix(configs[0].BridgeUserID, "user:")
+	if len(username) > 32 {
+		t.Errorf("username %q is %d chars, exceeds 32-char cap", username, len(username))
+	}
+	// Expect exactly "peer-" + 27 chars of truncated body.
+	wantUser := "peer-" + strings.Repeat("a", 27)
+	if username != wantUser {
+		t.Errorf("username = %q, want %q (truncated to 27-char suffix)", username, wantUser)
 	}
 }
 

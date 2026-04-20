@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -139,16 +140,22 @@ func (pm *PeerManager) buildConfigForPeer(p *PeerInfo) peer.BridgeConfig {
 	// thrum-bew3: sanitize p.Name before folding into BridgeUserID. The
 	// peer name is typically a hostname (dots) or similar free-form
 	// identifier, but the daemon's user.register validator rejects
-	// anything outside [a-zA-Z0-9_-]. Without this, the bridge handshake
-	// fails on user.register and reconnect-loops forever.
+	// anything outside [a-zA-Z0-9_-] and caps length at 32. Without this,
+	// the bridge handshake fails on user.register and reconnect-loops
+	// forever.
 	//
 	// Non-ASCII peer names (e.g. "北京") sanitize to empty and would
 	// reproduce the same "user:peer-" (empty-suffix) rejection path.
-	// Fall back to the peer's DaemonID hex prefix when sanitize yields
-	// an empty string so user.register still gets a valid username.
+	// Fall back to the peer's DaemonID ULID body (d_ prefix stripped —
+	// redundant in a peer-derived context). The resulting username is
+	// "peer-<suffix>" which must fit inside the 32-char usernameRegex
+	// cap; 27 chars of suffix leaves 5 for the "peer-" prefix.
 	suffix := SanitizeProxyPrefix(p.Name)
 	if suffix == "" {
-		suffix = p.DaemonID
+		suffix = strings.TrimPrefix(p.DaemonID, "d_")
+	}
+	if len(suffix) > 27 {
+		suffix = suffix[:27]
 	}
 	cfg := peer.BridgeConfig{
 		LocalWSPort:  pm.localWSPort,
