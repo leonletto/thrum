@@ -499,6 +499,22 @@ it for real forks; overkill for minor ambiguity. Skip it when:
 
 Output artifact lands at `dev-docs/brainstorms/YYYY-MM-DD-<topic>-debate.md` for audit.
 
+**If you're investigating N>6 items** (function call sites, pattern
+audits, multi-file reviews), invoke the
+`efficient-multi-agent-research` skill *instead of* reading files
+into this context. It partitions the work across parallel sub-agents
+that write findings to disk, then consolidates into one report.
+
+Cost: ~50-100k tokens depending on item count. Worth it to keep
+decision-making context clean and produce an auditable research
+trail at `dev-docs/<topic>/`. Skip it when:
+
+- Fewer than ~6 items — just use Grep/Glob
+- Items are deeply interdependent and can't be partitioned
+
+These two gates are sister patterns: critique decides *which option
+wins*; research uncovers *what's there*.
+
 ### Communicating During Work
 
 Use Thrum to stay coordinated:
