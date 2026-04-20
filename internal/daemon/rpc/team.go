@@ -216,10 +216,31 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 // file-vs-DB state without re-walking worktrees.
 func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListRequest) ([]TeamMember, *SharedMessages, map[string]*config.IdentityFile, error) {
 	// Query 1: Agents + sessions + work contexts
+	//
+	// worktree_path comes from agent_work_contexts first, with a fallback to
+	// the session's worktree session_ref. Without this fallback, agents whose
+	// agent_work_contexts row is missing (e.g. dormant-resurrect paths, or
+	// heartbeats that added a worktree ref without a subsequent git context
+	// extraction) would drop the `worktree` field entirely via `omitempty`
+	// on TeamMember.WorktreePath. thrum-naak.
+	//
+	// A scalar subquery is used for the session_refs fallback (rather than a
+	// LEFT JOIN) because session_refs has PK (session_id, ref_type, ref_value):
+	// a session can legitimately carry multiple 'worktree' rows with different
+	// values, and a LEFT JOIN on that would multiply team-member rows.
+	// ORDER BY added_at DESC picks the most recently added worktree so a
+	// moved worktree beats a stale historical value.
 	query := `SELECT
 		a.agent_id, a.role, a.module, a.display, a.hostname, a.origin_daemon, a.agent_pid,
 		s.session_id, s.started_at, s.last_seen_at,
-		wc.branch, wc.worktree_path, wc.intent, wc.current_task,
+		wc.branch,
+		COALESCE(NULLIF(wc.worktree_path, ''), (
+			SELECT ref_value FROM session_refs
+			WHERE session_id = s.session_id AND ref_type = 'worktree'
+			ORDER BY added_at DESC
+			LIMIT 1
+		)) AS worktree_path,
+		wc.intent, wc.current_task,
 		wc.unmerged_commits, wc.file_changes
 	FROM agents a
 	LEFT JOIN sessions s ON s.agent_id = a.agent_id AND s.ended_at IS NULL
