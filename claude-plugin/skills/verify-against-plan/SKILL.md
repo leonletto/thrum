@@ -1,6 +1,6 @@
 ---
 name: verify-against-plan
-description: Use after implementation is complete to verify the code covers every requirement from the plan / design spec — runs alongside code-review as the second pass in the Code Review Protocol. Outputs structured findings (BLOCKING/IMPORTANT/MINOR) with file:line evidence, not code-quality opinions.
+description: Use after implementation is complete to verify the code covers every requirement from the plan / design spec — runs alongside code-review as the second pass in the Code Review Protocol. Outputs structured findings: missing scope, unmet acceptance criteria, silent deviations from the spec, newly-introduced surprises.
 ---
 
 # Verify Against Plan
@@ -36,13 +36,13 @@ When the caller supplies no explicit scope, infer:
 **Explicit args:**
 
 ```
-/verify-against-plan plan=dev-docs/plans/2026-04-19-verify-against-plan-skill-plan.md branch=feat/plugin-skills-slate
+/verify-against-plan plan=dev-docs/plans/YYYY-MM-DD-topic-plan.md branch=feat/plugin-skills-slate
 ```
 
 **Context-inferred (from current worktree):**
 
 ```
-/verify-against-plan plan=dev-docs/plans/2026-04-19-verify-against-plan-skill-plan.md
+/verify-against-plan plan=dev-docs/plans/YYYY-MM-DD-topic-plan.md
 ```
 
 The second form uses the current branch as the implementation scope.
@@ -93,8 +93,8 @@ If there are no findings in a severity bucket, omit that bucket entirely — do 
 
 ## Severity criteria
 
-- **BLOCKING** — a named acceptance criterion is unmet, or the implementation contradicts a stated invariant. Must be fixed before merge. Examples: AC #3 says "all writes go through the store" but a direct-file-write path exists; plan's File Structure claims `internal/auth/session.go` exists but no such file was added.
-- **IMPORTANT** — a plan requirement is implemented but with silent deviation (different file path, different function name, different public shape) that is likely intentional but unverified. Should be fixed, or the deviation explicitly acknowledged by the implementer. Example: plan says `ResolveAgentID()` but code has `GetAgentID()` with the same behavior — probably fine, but nobody said so.
+- **BLOCKING** — a named acceptance criterion is unmet, or the implementation contradicts a stated invariant. Must be fixed before merge. Example: plan's File Structure claims `internal/auth/session.go` exists but no such file was added; plan's Test plan names a test that isn't present in the diff.
+- **IMPORTANT** — a plan requirement is implemented but with silent deviation (different file path, different function name, different public shape) that is likely intentional but unverified. Should be fixed, or the deviation explicitly acknowledged by the implementer. Example: plan says `ResolveAgentID()` but code has `GetAgentID()` with the same behavior — probably fine, but nobody said so. Also: files or behavior present in the implementation diff with no corresponding entry in the plan's File Structure table — unplanned additions the coordinator should review for scope creep.
 - **MINOR** — missing documentation reference, commit-message format drift, or stylistic plan deviation that does not affect behavior. Example: plan calls for `Refs thrum-s9q9.3` in commit body, commit just has the title.
 
 When choosing between BLOCKING and IMPORTANT, apply the test: *would a reader of the merged code be surprised by this?* BLOCKING = yes, definitely; IMPORTANT = maybe, needs explanation.
@@ -108,6 +108,10 @@ Findings go to stdout only. Do NOT:
 - Modify git state (no commits, no stashes, no checkouts).
 
 The skill reports; the coordinator decides; the implementer fixes. Keep those three roles separate or the dual-review batch stops composing cleanly with `feature-dev:code-reviewer`.
+
+## Integration
+
+When an implementer pushes back on a finding from this skill, apply the pushback-and-verify protocol from `~/.claude/CLAUDE.md § Verification Discipline` — re-read the cited file at the cited lines, confirm the quoted plan requirement is verbatim, and confirm the implementation state claim is accurate. Findings that don't survive that check must be withdrawn or downgraded before the coordinator consolidates the dual-review batch. Trace-corrections from the implementer are welcome signal, not insubordination.
 
 ## Scope discipline
 
