@@ -33,17 +33,17 @@ When a client connects to the Unix socket, the daemon's accept loop runs these
 steps before dispatching to any handler:
 
 1. **Peercred PID extraction** — the kernel provides the connecting process's
-   PID via `SO_PEERCRED` (Linux) or `LOCAL_PEERCRED` (macOS). No trust is
-   placed in any client-supplied identity at this stage.
-2. **DaemonResolve — 3-priority chain** — the daemon resolves the caller's
-   agent identity in priority order:
+   PID via `SO_PEERCRED` (Linux) or `LOCAL_PEERCRED` (macOS). No trust is placed
+   in any client-supplied identity at this stage.
+2. **DaemonResolve — 3-priority chain** — the daemon resolves the caller's agent
+   identity in priority order:
    - PID match: walk the process tree from the peercred PID; if it matches an
      `agent_pid` in a registered identity file, that agent is the caller.
    - Worktree match: derive the calling process's worktree from its CWD; if
      exactly one identity file belongs to that worktree, use it.
-   - `caller_agent_id` field: fall back to the agent ID supplied in the
-     JSON-RPC request (honored only when peercred resolution is unavailable,
-     e.g., in tests or non-Unix-socket contexts).
+   - `caller_agent_id` field: fall back to the agent ID supplied in the JSON-RPC
+     request (honored only when peercred resolution is unavailable, e.g., in
+     tests or non-Unix-socket contexts).
 3. **Guard enforcement** — before the handler runs, the identity guard layer
    checks whether the resolved caller is permitted to execute the requested
    method. Mutating RPCs require a resolved, registered identity. Anonymous
@@ -515,17 +515,17 @@ cfg, err := config.LoadWithPath(repoPath, flagRole, flagModule)
 
 ### ID Formats
 
-| Type                   | Format                            | Example                  |
-| ---------------------- | --------------------------------- | ------------------------ |
+| Type                   | Format                            | Example                    |
+| ---------------------- | --------------------------------- | -------------------------- |
 | **Daemon ID**          | `d_` + 26-char ULID               | `d_01HXE8Z7R9K3Q6M2W8F4VY` |
-| **Repo ID**            | `r_` + base32(sha256(url))\[:12\] | `r_7K2Q1X9M3P0B`         |
-| **Agent ID (named)**   | name directly                     | `furiosa`                |
-| **Agent ID (unnamed)** | role + `_` + base32(hash)\[:10\]  | `implementer_9F2K3M1Q8Z` |
-| **User ID**            | `user:` + username                | `user:leon`              |
-| **Session ID**         | `ses_` + ulid()                   | `ses_01HXF2A9Y1Q0P8...`  |
-| **Session Token**      | `tok_` + ulid()                   | `tok_01HXF2A9Y1Q0P8...`  |
-| **Message ID**         | `msg_` + ulid()                   | `msg_01HXF2A9Y1Q0P8...`  |
-| **Event ID**           | `evt_` + ulid()                   | `evt_01HXF2A9Y1Q0P8...`  |
+| **Repo ID**            | `r_` + base32(sha256(url))\[:12\] | `r_7K2Q1X9M3P0B`           |
+| **Agent ID (named)**   | name directly                     | `furiosa`                  |
+| **Agent ID (unnamed)** | role + `_` + base32(hash)\[:10\]  | `implementer_9F2K3M1Q8Z`   |
+| **User ID**            | `user:` + username                | `user:leon`                |
+| **Session ID**         | `ses_` + ulid()                   | `ses_01HXF2A9Y1Q0P8...`    |
+| **Session Token**      | `tok_` + ulid()                   | `tok_01HXF2A9Y1Q0P8...`    |
+| **Message ID**         | `msg_` + ulid()                   | `msg_01HXF2A9Y1Q0P8...`    |
+| **Event ID**           | `evt_` + ulid()                   | `evt_01HXF2A9Y1Q0P8...`    |
 
 ### Deterministic IDs
 
@@ -734,10 +734,15 @@ Key migrations:
 - v18 -> v19: `silence_ms` and `notify_on_complete` columns added to
   `command_queue`
 - v19 -> v20: `monitors` table added (monitor job specs for supervisor respawn)
-- v20 -> v21: `permission_nudges` table added (persistent permission-prompt nudge state for restart resilience)
-- v21 -> v22: `origin_daemon TEXT` column added to `agents` table with backfill (cross-daemon registration scoping; see `thrum-mm3l`)
-- v22 -> v23: `daemon_identity` table added (single-row local cache of the daemon's identity block, mirrored from `.thrum/config.json`)
-- v23 -> v24: `telegram_msg_map` table added (durable Telegram message ID ↔ Thrum message ID mapping; survives daemon restart so in-flight permission approvals route correctly)
+- v20 -> v21: `permission_nudges` table added (persistent permission-prompt
+  nudge state for restart resilience)
+- v21 -> v22: `origin_daemon TEXT` column added to `agents` table with backfill
+  (cross-daemon registration scoping; see `thrum-mm3l`)
+- v22 -> v23: `daemon_identity` table added (single-row local cache of the
+  daemon's identity block, mirrored from `.thrum/config.json`)
+- v23 -> v24: `telegram_msg_map` table added (durable Telegram message ID ↔
+  Thrum message ID mapping; survives daemon restart so in-flight permission
+  approvals route correctly)
 
 ### Initialization
 
@@ -939,11 +944,11 @@ safety nets.
 Three backup files are written (backup-once pattern: never overwritten on
 subsequent restarts after the first successful upgrade):
 
-| Trigger | Backup file | Location |
-| ------- | ----------- | -------- |
-| `identity.Bootstrap` detects a daemon_id rotation (e.g., legacy hostname-derived ID) | `config.json.pre-identity-bak` | `.thrum/config.json.pre-identity-bak` |
-| `PeerRegistry` detects a stale daemon_id in peers.json | `peers.json.pre-rotation-bak` | `.thrum/var/peers.json.pre-rotation-bak` |
-| `schema.Migrate` runs any migration step | `thrum.db.pre-migration-v<N>-bak` (plus `-shm` and `-wal` sidecars) | same directory as `thrum.db` |
+| Trigger                                                                              | Backup file                                                         | Location                                 |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------- | ---------------------------------------- |
+| `identity.Bootstrap` detects a daemon_id rotation (e.g., legacy hostname-derived ID) | `config.json.pre-identity-bak`                                      | `.thrum/config.json.pre-identity-bak`    |
+| `PeerRegistry` detects a stale daemon_id in peers.json                               | `peers.json.pre-rotation-bak`                                       | `.thrum/var/peers.json.pre-rotation-bak` |
+| `schema.Migrate` runs any migration step                                             | `thrum.db.pre-migration-v<N>-bak` (plus `-shm` and `-wal` sidecars) | same directory as `thrum.db`             |
 
 You can delete these files after a successful upgrade. If something goes wrong
 mid-migration, they're how you get back.
@@ -953,14 +958,14 @@ mid-migration, they're how you get back.
 `Migrate()` refuses to start if the database schema version exceeds the binary's
 `CurrentVersion`. Error text:
 
-```
+```text
 database schema is version N, this binary supports up to M — cannot downgrade;
 use a newer binary or delete the database to start fresh
 ```
 
-This is the first hard stop Thrum has ever had for schema mismatches. Previously,
-running an older binary against a migrated database would silently corrupt state.
-Now it fails loudly before touching anything.
+This is the first hard stop Thrum has ever had for schema mismatches.
+Previously, running an older binary against a migrated database would silently
+corrupt state. Now it fails loudly before touching anything.
 
 ### Recovering from a Failed Upgrade
 

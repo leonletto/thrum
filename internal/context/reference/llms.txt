@@ -1,4 +1,4 @@
-# Thrum v0.8.2
+# Thrum v0.9.0
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -68,7 +68,7 @@ New in v0.8.2:
   `RefreshLocalIdentity` wired into `getClient()`, so no manual action is
   needed after `thrum purge`.
 
-New in v0.9.0 (upcoming):
+New in v0.9.0:
 - Safe agent registration — `thrum tmux create` now requires quickstart flags
   (`--name`, `--role`, `--module`) or `--no-agent`; runs quickstart inside the
   pane automatically. New alias: `thrum tmux quickstart`.
@@ -80,6 +80,28 @@ New in v0.9.0 (upcoming):
   synthetic Thrum messages to a target agent. (`thrum monitor add` is an alias
   for `thrum monitor start`.) Leading-edge debounce (default 60s).
   Local-only, max 100 monitors.
+- Permission prompt detection — daemon-side silence-hash poller (~20s detection
+  latency). Polls every 10s; stable on 2 identical hashes. Permission nudges
+  auto-forward to Telegram when bridge is configured and bridge user is a
+  `permission_supervisors` entry. Reply via threaded reply (y/yes/approve/a or
+  n/no/deny/d) OR fresh DM (y/n/yes/no/allow/deny — note `approve` and `a`
+  don't trigger fresh-DM path).
+- Identity guards — 8 named enforcement checkpoints (cross_worktree, G1a/G1b
+  quickstart guards, non_git_bootstrap, unauthenticated_rpc,
+  daemon_writer_liveness, prime_ownership, dead_pid_auto_reclaim).
+  3 modes: strict / warn / off.
+- Schema v24 (permission_nudges v21, origin_daemon col v22, daemon_identity v23,
+  telegram_msg_map v24).
+- CLI hints (Phase B) — contextual hints wired on `thrum init`, `thrum send`,
+  `thrum tmux create`. 8 stable codes. Shape B = stderr trailer; Shape C = JSON
+  `hints` array. Suppress with --quiet, --json, or THRUM_NO_HINTS=1.
+  Full catalog: docs/cli-hints.md.
+- Peer drift reconciliation — `peer join --type repair` for in-place re-pairing
+  without new peercode. `drift_reconcile_failed` shown as inline hint in peer list.
+- Permission supervisors — configure via `permission_supervisors` config key
+  (array of role/agent/user names; default ["coordinator"]) and `project_name`
+  (owner of @supervisor_<project> pseudo-agent). Full reference: docs/permission-prompts.md.
+- BREAKING: `peer add --type` and `peer join --type` now MANDATORY.
 
 ## Quick Start
 
@@ -108,6 +130,8 @@ All commands accept these flags:
   thrum init [--force] [--stealth] [--runtime claude|codex|cursor|gemini|opencode|auggie|cli-only|all] [--dry-run] [--skills] [--agent-name NAME] [--agent-role ROLE] [--agent-module MODULE]
     Initialize Thrum in the current repository. Optionally generate runtime-specific configs.
     --skills installs just the thrum skill without full runtime configuration.
+    Populates the `identity` block in config.json (daemon_id generated once via Bootstrap; idempotent).
+    G2 guard: refuses non-git CWD; --force bypasses.
 
   thrum worktree setup WORKTREE_NAME
     Configure a feature worktree with .thrum/redirect to share the main issue database. Alias for `thrum worktree create`.
@@ -116,6 +140,8 @@ All commands accept these flags:
     Register agent, start session, generate runtime config, and set intent in one step.
     Runtime presets: claude, codex, cursor, gemini, opencode, auggie, cli-only.
     --runtime writes `preferred_runtime` to the identity file (used by `thrum tmux launch`).
+    G1a guard: refuses self-rename (caller already owns an identity in this worktree); --force bypasses.
+    G1b guard: refuses name collision with a live foreign PID; --force bypasses.
 
   thrum overview [--json]
     Show combined status: identity, work context, team, inbox, sync.
@@ -129,6 +155,7 @@ All commands accept these flags:
   thrum prime [--json]
     Gather comprehensive session context for agent initialization or context recovery.
     Shows: identity, session, team, inbox summary, branch, daemon status, commands, listener instruction.
+    G5 guard: must be called from the topmost runtime process, not from inside another agent's process tree.
 
   thrum completion [bash|fish|powershell|zsh]
     Generate shell autocompletion scripts.
@@ -226,9 +253,10 @@ All commands accept these flags:
 
 ### Team Overview
 
-  thrum team [--all] [--json]
+  thrum team [--all] [--system] [--json]
     Show rich status for all active agents (sessions, context, inbox, branches).
-    Use --all to include offline agents.
+    Use --all to include offline agents. --system includes reserved pseudo-agents.
+    ⊙ glyph marks reserved pseudo-agents (e.g. @supervisor_<project>).
 
 ### Context Management
 
@@ -265,17 +293,21 @@ All commands accept these flags:
 
 ### Peer Management (Cross-Repo, v0.7.0)
 
-  thrum peer add
-    Start a Tailscale pairing session. Displays a 16-digit peercode. Blocks until peer connects (5min timeout).
+  thrum peer add --type TYPE [--name NAME]
+    Start a pairing session. Displays a 16-digit peercode. Blocks until peer connects (5min timeout).
     Prompts for THRUM_TS_AUTHKEY if not set.
+    --type is MANDATORY (BREAKING in v0.9.0). Values: tailscale, local, network, repair.
 
-  thrum peer join [peercode] [--peercode CODE] [--repo-path PATH]
+  thrum peer join [peercode] [--peercode CODE] [--repo-path PATH] --type TYPE
     Connect to a remote peer using the peercode from `peer add`.
     Peercode format: name:ip:port:code. Accepts positional arg, --peercode flag, stdin pipe, or interactive prompt.
     Use --repo-path for local same-machine peers (sets transport to "local").
+    --type is MANDATORY (BREAKING in v0.9.0). Values: tailscale, local, network, repair.
+    repair type is peer join only; used for drift reconciliation without a new peercode.
 
   thrum peer list [--json]
     List paired peers with address, last sync, sequence number.
+    drift_reconcile_failed peers show an inline └─ hint row with remediation command.
 
   thrum peer remove <name>
     Remove a paired peer. Stops syncing immediately.
@@ -298,7 +330,7 @@ All commands accept these flags:
 ### Runtime Presets
 
   thrum runtime list
-    List all runtime presets (claude, codex, cursor, gemini, auggie, amp, cli-only).
+    List all runtime presets (claude, codex, cursor, gemini, auggie, amp, kiro-cli, cli-only).
 
   thrum runtime show <name>
     Show details for a runtime preset.
@@ -330,8 +362,9 @@ All commands accept these flags:
   thrum tmux quickstart <name> --cwd <path> --name <agent-name> --role ROLE --module MODULE [...]
     Alias for `thrum tmux create`.
 
-  thrum tmux launch <name> [--runtime claude|opencode|shell]
+  thrum tmux launch <name> [--runtime PRESET]
     Start an AI tool inside an existing tmux session. Default runtime: claude.
+    PRESET: claude, opencode, codex, cursor, kiro-cli, auggie, shell, etc.
 
   thrum tmux status
     Show all tmux-managed sessions with agent info, state, runtime, and branch.
@@ -464,12 +497,14 @@ All commands accept these flags:
 
   thrum daemon start [--local]
     Start daemon in background. --local disables remote git sync.
+    G2 guard: refuses non-git CWD; --force bypasses.
 
   thrum daemon stop
     Stop daemon gracefully.
 
   thrum daemon status
     Show daemon running state, PID, uptime, version.
+    Shows Identity block: daemon_id, repo_name, hostname, repo_path, git_origin_url, init_at.
 
   thrum daemon restart
     Stop and restart daemon.
@@ -523,9 +558,9 @@ All commands accept these flags:
 ### Cross-repo peer communication (Tailscale, v0.7.0)
 
   # Machine A
-  thrum peer add                    # Displays 16-digit peercode, blocks 5min
+  thrum peer add --type tailscale   # Displays 16-digit peercode, blocks 5min
   # Machine B
-  thrum peer join --peercode alice:100.64.1.5:44123:7392168401234567
+  thrum peer join --type tailscale --peercode alice:100.64.1.5:44123:7392168401234567
   # Both daemons now route messages bidirectionally
 
   # Configure proxy agents so remote agents are addressable locally
@@ -652,6 +687,7 @@ All commands accept these flags:
   THRUM_TS_HOSTNAME   tsnet hostname override
   THRUM_TS_STATE_DIR  tsnet state directory
   THRUM_TS_ENABLED    (deprecated) Tailscale auto-starts when peers are configured
+  THRUM_NO_HINTS=1    Suppress CLI hints (Shape B stderr trailers). Truthy: any non-empty value except "0" or "false". Also suppressed by --quiet and --json.
 
 ## Local-Only Mode
 
@@ -696,7 +732,7 @@ All commands accept these flags:
       "default_autonomy": "end_only"         // "per_epic" (approve each epic) | "end_only"
     },
     "restart": {
-      "max_lines": 1000,                     // max lines in restart snapshot
+      "max_lines": 200,                      // max lines in restart snapshot (default 200)
       "auto_threshold": 0,                   // 0-100 context % trigger for auto-restart; 0 = off
       "graceful_timeout": 30                 // seconds to wait for graceful save before JSONL fallback
     },
@@ -710,7 +746,20 @@ All commands accept these flags:
       },
       "post_backup": "",                     // shell command to run after each backup
       "plugins": []                          // third-party backup plugin definitions
+    },
+    "identity_guard": {                      // v0.9.0: named enforcement checkpoints; 3 modes each
+      "cross_worktree": "strict",            // PID from wrong worktree
+      "quickstart_self_rename": "strict",    // caller re-registering under new name
+      "quickstart_name_collision": "strict", // requested name held by live foreign PID
+      "non_git_bootstrap": "strict",         // thrum init / daemon start outside git repo
+      "unauthenticated_rpc": "strict",       // mutating RPC with no resolvable identity
+      "daemon_writer_liveness": "strict",    // daemon writing to dead agent's identity file
+      "prime_ownership": "strict",           // thrum prime called from sub-agent
+      "dead_pid_auto_reclaim": "warn"        // informational; dead PID reclaimed automatically
     }
+    // Modes: "strict" (hard error) | "warn" (log + allow) | "off" (skip)
+    // unauthenticated_rpc/identity_mismatch (forgery) is unconditional regardless of mode.
+    // Runtime override (no repo commit): .thrum/var/guard-daemon.json (same keys; daemon-level wins).
   }
 
   Config key for worktree base directory: `worktrees.base_path` (NOT `worktree_dir`).

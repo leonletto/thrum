@@ -371,9 +371,9 @@ Session restart settings for context snapshot behavior. See
 
 ### `restart.max_lines`
 
-Maximum lines in a restart snapshot. The snapshot now appends a brief
-`git log` / `git status` / `bd ready` / `thrum inbox` summary at the tail, so
-the effective context delivered on restart is richer per line. The default was
+Maximum lines in a restart snapshot. The snapshot now appends a brief `git log`
+/ `git status` / `bd ready` / `thrum inbox` summary at the tail, so the
+effective context delivered on restart is richer per line. The default was
 reduced from `1000` to `200` in v0.9.0 to reflect this.
 
 - **Type:** integer
@@ -428,14 +428,14 @@ pre-v0.9.0 install that upgrades). You never need to edit this block manually.
 }
 ```
 
-| Field | Set once or refreshed | Description |
-| --- | --- | --- |
-| `daemon_id` | Set once | ULID-based (`d_` + 26 chars). Generated at `thrum init`; rotated only when migrating from a legacy hostname-derived id. Never changes on re-init. |
-| `repo_name` | Refreshed | `filepath.Base(repo_root)`. Updated on every Bootstrap call (daemon start or `thrum init`). |
-| `hostname` | Refreshed | `os.Hostname()` result. Updated on every Bootstrap call. |
-| `repo_path` | Refreshed | Absolute repo path. Updated on every Bootstrap call. |
-| `git_origin_url` | Set once | Output of `git config --get remote.origin.url`. Set at init; not updated if already non-empty. |
-| `init_at` | Set once | RFC 3339 UTC timestamp of `daemon_id` creation or rotation. Not changed on re-init of an existing valid ULID. |
+| Field            | Set once or refreshed | Description                                                                                                                                       |
+| ---------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `daemon_id`      | Set once              | ULID-based (`d_` + 26 chars). Generated at `thrum init`; rotated only when migrating from a legacy hostname-derived id. Never changes on re-init. |
+| `repo_name`      | Refreshed             | `filepath.Base(repo_root)`. Updated on every Bootstrap call (daemon start or `thrum init`).                                                       |
+| `hostname`       | Refreshed             | `os.Hostname()` result. Updated on every Bootstrap call.                                                                                          |
+| `repo_path`      | Refreshed             | Absolute repo path. Updated on every Bootstrap call.                                                                                              |
+| `git_origin_url` | Set once              | Output of `git config --get remote.origin.url`. Set at init; not updated if already non-empty.                                                    |
+| `init_at`        | Set once              | RFC 3339 UTC timestamp of `daemon_id` creation or rotation. Not changed on re-init of an existing valid ULID.                                     |
 
 The "set once" fields are the stable identity keys. The "refreshed" fields are
 informational metadata that keeps the block current across hostname changes,
@@ -467,24 +467,24 @@ block is absent.
 
 **Enforcement modes:**
 
-| Mode | Behavior |
-| --- | --- |
-| `strict` | Guard fires; RPC or command is refused. The default for all guards. |
-| `warn` | Guard fires; the violation is logged but the action proceeds. Useful for incident diagnosis. |
-| `off` | Guard check is skipped entirely. Use only when you understand why it is firing. |
+| Mode     | Behavior                                                                                     |
+| -------- | -------------------------------------------------------------------------------------------- |
+| `strict` | Guard fires; RPC or command is refused. The default for all guards.                          |
+| `warn`   | Guard fires; the violation is logged but the action proceeds. Useful for incident diagnosis. |
+| `off`    | Guard check is skipped entirely. Use only when you understand why it is firing.              |
 
 **Guard keys:**
 
-| Key | What it checks |
-| --- | --- |
-| `cross_worktree` | Caller's ancestor PID chain does not contain the identity file's `agent_pid`. The central ownership enforcement rule. |
-| `quickstart_self_rename` | Caller already owns an identity in this directory and is attempting to re-register under a new name (G1a). |
-| `quickstart_name_collision` | Requested agent name is already held by a live foreign process (G1b). |
-| `non_git_bootstrap` | `thrum daemon start` or `thrum init` was called from outside a git-anchored directory (G2). |
-| `unauthenticated_rpc` | Mutating RPC with no verifiable caller identity, or a caller asserting an identity the daemon cannot corroborate (G3). The `identity_mismatch` sub-case (forgery) is unconditional and fires regardless of this mode setting. |
-| `daemon_writer_liveness` | Daemon attempted to write to an identity file whose recorded agent PID is no longer alive (G4). |
-| `prime_ownership` | `thrum prime` was called from inside a sub-agent whose closest runtime ancestor is not the identity file's owner (G5). |
-| `dead_pid_auto_reclaim` | Dead owner's identity was reclaimed by a new caller. Informational; defaults to `warn` to log reclaims without blocking them. |
+| Key                         | What it checks                                                                                                                                                                                                                |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cross_worktree`            | Caller's ancestor PID chain does not contain the identity file's `agent_pid`. The central ownership enforcement rule.                                                                                                         |
+| `quickstart_self_rename`    | Caller already owns an identity in this directory and is attempting to re-register under a new name (G1a).                                                                                                                    |
+| `quickstart_name_collision` | Requested agent name is already held by a live foreign process (G1b).                                                                                                                                                         |
+| `non_git_bootstrap`         | `thrum daemon start` or `thrum init` was called from outside a git-anchored directory (G2).                                                                                                                                   |
+| `unauthenticated_rpc`       | Mutating RPC with no verifiable caller identity, or a caller asserting an identity the daemon cannot corroborate (G3). The `identity_mismatch` sub-case (forgery) is unconditional and fires regardless of this mode setting. |
+| `daemon_writer_liveness`    | Daemon attempted to write to an identity file whose recorded agent PID is no longer alive (G4).                                                                                                                               |
+| `prime_ownership`           | `thrum prime` was called from inside a sub-agent whose closest runtime ancestor is not the identity file's owner (G5).                                                                                                        |
+| `dead_pid_auto_reclaim`     | Dead owner's identity was reclaimed by a new caller. Informational; defaults to `warn` to log reclaims without blocking them.                                                                                                 |
 
 **Daemon-level overrides:** `.thrum/var/guard-daemon.json` accepts the same key
 shape as `identity_guard` and is merged on top of the repo-level config. Use

@@ -32,8 +32,9 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <strong>Session Restart & Context Recovery</strong><br>
-<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <strong>Session Restart & Context Recovery</strong><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
 <h2>Two Ways to Use This</h2>
@@ -86,7 +87,7 @@ blocks, no subagent sidechains. Just the conversation you&#39;d see in the termi
 <li>Parse the JSONL and extract <code>user</code> + <code>assistant</code> text entries</li>
 <li>Skip <code>isSidechain: true</code> entries (subagent transcripts)</li>
 <li>Skip <code>tool_use</code>, <code>tool_result</code>, and <code>thinking</code> content blocks</li>
-<li>Truncate to the configured line limit (default 1000 lines, oldest removed
+<li>Truncate to the configured line limit (default 200 lines, oldest removed
 first)</li>
 <li>Save to <code>.thrum/restart/&lt;agent&gt;.md</code></li>
 </ol>
@@ -122,6 +123,40 @@ rate limits, or it&#39;s stuck. It runs the <code>/thrum:restart</code> skill, w
 </ol>
 <p>The agent doesn&#39;t kill itself. It lets the coordinator (or operator) orchestrate
 the restart.</p>
+<h4>Resume Plan</h4>
+<p>The <code>/thrum:restart</code> skill appends a structured <code>## Resume Plan</code> block to the
+snapshot file as its final step. This block is the deterministic tail anchor —
+when the next session loads the snapshot via <code>thrum prime</code>, it can locate the
+Resume Plan reliably regardless of how much conversation was truncated.</p>
+<p>The format:</p>
+<pre><code>## Resume Plan
+
+**Shipped this session:**
+
+- &lt;brief bullet per merged/closed item, with bead/PR/SHA where relevant&gt;
+
+**In-flight work:**
+
+- Branch: &lt;branch name&gt;
+- Last commit: &lt;short SHA + subject&gt;
+- Uncommitted files: &lt;paths, or &quot;none&quot;&gt;
+- Next concrete step: &lt;one sentence&gt;
+
+**Blockers / open questions:**
+
+- &lt;bullets, or &quot;none&quot;&gt;
+
+**Resume plan:**
+
+1. &lt;first step the next session should take&gt;
+2. &lt;second step&gt;
+3. ... (4–8 numbered steps total)</code></pre>
+<p><strong>Single source of truth via mktemp</strong>: the skill writes the Resume Plan once to
+a temp file (<code>mktemp -t resume_plan.XXXXXX</code>), then <code>cat</code>s it twice — once to the
+terminal for the operator to read, once appended to the snapshot file. This
+guarantees the printed copy and the snapshot copy cannot drift from each other.
+The 4-step flow is: write to temp file → print to terminal → save snapshot →
+append to snapshot → remove temp file.</p>
 <h3>External</h3>
 <p>The coordinator decides an agent needs a fresh session:</p>
 <pre><code>thrum tmux restart implementer-api</code></pre>
@@ -187,12 +222,14 @@ thrum tmux restart implementer-api --runtime opencode</code></pre>
 <hr>
 <h2>Configuration</h2>
 <pre><code>restart:
-  max_lines: 1000 # Max lines in snapshot (default: 1000)
+  max_lines: 200 # Max lines in snapshot (default: 200)
   auto_threshold: 0 # Context % trigger, 0 = disabled (default: 0)
   graceful_timeout: 30 # Seconds to wait for graceful save (default: 30)</code></pre>
-<p><code>max_lines</code> controls how much conversation history to keep. 1000 lines is
-usually enough to capture the last 20-30 exchanges. Increase it if your agents
-have long conversations with lots of context.</p>
+<p><code>max_lines</code> controls how much conversation history to keep. 200 lines captures
+the recent conversation tail; older context is covered by the appended git and
+Thrum hints (<code>git log</code>, <code>git status</code>, <code>bd ready</code>, <code>thrum inbox</code>) that the
+snapshot now includes at the tail. Increase it if your agents have long
+conversations and need more raw history.</p>
 <p><code>auto_threshold</code> is the percentage of context window usage that triggers an
 automatic restart. Set to 0 to disable (the default). A value like 80 means
 &quot;restart when 80% of the context window is used.&quot;</p>

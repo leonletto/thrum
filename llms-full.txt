@@ -1,4 +1,4 @@
-# Thrum v0.8.2 -- Complete Agent Reference
+# Thrum v0.9.0 -- Complete Agent Reference
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -558,10 +558,12 @@ All commands accept:
 
 ### thrum team
 
-  Usage:    thrum team [--all] [--json]
-  Flags:    --all    Include offline agents
+  Usage:    thrum team [--all] [--system] [--json]
+  Flags:    --all      Include offline agents
+            --system   Surface reserved pseudo-agents (displayed with ⊙ glyph)
   Action:   Shows rich, multi-line status for every active agent. Displays session info,
             work context, inbox counts, branch status, and per-file change details.
+            Status glyphs: ● active  ○ offline  ⊙ reserved (pseudo-agent)
   Requires: Daemon running.
 
 ### thrum context save
@@ -665,15 +667,26 @@ All commands accept:
 
 ### thrum peer add
 
-  Usage:    thrum peer add
-  Action:   Starts a Tailscale pairing session and displays a 4-digit code.
+  Usage:    thrum peer add --type TYPE [flags]
+  Flags:    --type STRING   Transport type: tailscale | local | network | repair
+                            MANDATORY in v0.9.0 (BREAKING: no longer defaults to tailscale)
+  Action:   Starts a pairing session for the given transport type and displays a code.
             Blocks until a peer connects or the session times out (5 minutes).
+  Types:    tailscale — cross-machine via Tailscale DERP/direct
+            local     — same machine, different repo/worktree (loopback)
+            network   — same LAN (same /24 subnet)
 
 ### thrum peer join
 
-  Usage:    thrum peer join <address>
-  Action:   Connects to a remote daemon at the given Tailscale address.
+  Usage:    thrum peer join --type TYPE <address> [flags]
+  Flags:    --type STRING   Transport type: tailscale | local | network | repair
+                            MANDATORY in v0.9.0 (BREAKING: no longer defaults to tailscale)
+  Action:   Connects to a remote daemon at the given address.
             Prompts for the 4-digit pairing code displayed on the other machine.
+  Types:    tailscale — cross-machine via Tailscale
+            local     — same machine, different path
+            network   — same LAN
+            repair    — re-establish drifted peer without re-pairing (no new peercode needed)
 
 ### thrum peer list
 
@@ -887,8 +900,10 @@ All methods use JSON-RPC 2.0 protocol.
 ### health
 
   Request:   {} (no params)
-  Response:  { status, uptime_ms, version, repo_id, sync_state }
+  Response:  { status, uptime_ms, version, repo_id, sync_state, identity? }
   Notes:     sync_state is "ok", "synced", "pending", or "error".
+             identity sub-object (v0.9.0): { daemon_id, repo_name, hostname,
+             repo_path, git_origin_url, init_at }
 
 ### agent.register
 
@@ -1078,10 +1093,25 @@ All methods use JSON-RPC 2.0 protocol.
 
 ### peer.join
 
-  Request:   { address, code, repo_path? }
-  Response:  { status, peer_name, peer_daemon_id, message }
-  Notes:     Connects to a remote peer using the peercode.
+  Request:   { address, code, type, repo_path? }
+  Response:  { status, peer_name, peer_daemon_id, message,
+               repo_name?, hostname?, repo_path?, git_origin_url? }
+  Notes:     Connects to a remote peer using the peercode. type is required (v0.9.0).
              repo_path sets transport to "local" for same-machine peers.
+             4 identity fields (omitempty, v0.9.0): exchanged at handshake;
+             stored in peers.json as remote_repo_name, remote_hostname,
+             remote_repo_path, remote_git_origin_url.
+
+### peer.repair
+
+  Request:   { token, daemon_id, address, repo_name?, hostname?, repo_path?, git_origin_url? }
+  Response:  { status, peer_name, peer_daemon_id, reconcile_status }
+  Auth:      Bearer token (distinct from pairing peercode — issued at original pair time)
+  Notes:     Re-establishes a peer after address drift without a new peercode.
+             Use when `peer list` shows drift_reconcile_failed status.
+             Manual trigger: `thrum peer join --type repair <name>`
+  Errors:    CatTokenRejected — token invalid or expired
+             CatOther — general failure
 
 ### peer.list
 
@@ -1174,8 +1204,10 @@ All methods use JSON-RPC 2.0 protocol.
 ### tmux.check-pane
 
   Request:   { session, reason?, content? }
-  Response:  null
-  Notes:     Called by tmux alert-silence hook, not typically user-facing.
+  Response:  { session: string, state: string, reason: string }
+  States:    idle | permission | working | command_completed | working_but_idle
+  Notes:     Synthesized by daemon SessionPoller on stable pane content (10s poll,
+             2-hash stability, ~20s detection latency); rarely invoked directly.
 
 ### tmux.restart
 
@@ -1512,7 +1544,7 @@ Unknown event types are silently ignored (forward compatibility).
       "default_autonomy": "end_only"         // "per_epic" (approve each epic) | "end_only"
     },
     "restart": {
-      "max_lines": 1000,                     // max lines in restart snapshot
+      "max_lines": 200,                      // max lines in restart snapshot (default: 200; appends git/bd/inbox hint)
       "auto_threshold": 0,                   // 0-100 context % trigger for auto-restart; 0 = off
       "graceful_timeout": 30                 // seconds to wait for graceful save before JSONL fallback
     },
@@ -1526,7 +1558,33 @@ Unknown event types are silently ignored (forward compatibility).
       },
       "post_backup": "",                     // shell command to run after each backup
       "plugins": []                          // third-party backup plugin definitions
+    },
+    "permission_supervisors": ["coordinator"],  // v0.9.0: agents to nudge on permission prompts
+                                               // values: role names, @name, @user:name
+    "project_name": "",                        // v0.9.0: owner ID for @supervisor_<project> pseudo-agent
+                                               // defaults to filepath.Base(repo_root)
+    "identity": {                              // v0.9.0: daemon identity (managed automatically)
+      "daemon_id": "d_01HYTESTULID...",        // set once; rotated only on legacy migration
+      "repo_name": "thrum",                    // refreshed each Bootstrap
+      "hostname": "mymachine",                 // refreshed each Bootstrap
+      "repo_path": "/path/to/repo",            // refreshed each Bootstrap
+      "git_origin_url": "https://github.com/...", // set once
+      "init_at": "2026-04-17T06:30:00Z"       // set on creation/rotation; not refreshed
+    },
+    "identity_guard": {                        // v0.9.0: enforcement checkpoints (strict|warn|off)
+      "cross_worktree": "strict",              // caller PID in wrong worktree
+      "quickstart_self_rename": "strict",      // caller already owns an identity here
+      "quickstart_name_collision": "strict",   // requested name held by live foreign PID
+      "non_git_bootstrap": "strict",           // thrum init/daemon start outside git repo
+      "unauthenticated_rpc": "strict",         // forged caller_agent_id or missing identity
+      "daemon_writer_liveness": "strict",      // daemon write to dead agent's identity file
+      "prime_ownership": "strict",             // thrum prime called from sub-agent
+      "dead_pid_auto_reclaim": "warn"          // stale PID auto-reclaimed (informational)
     }
+                                               // daemon-level override: .thrum/var/guard-daemon.json
+                                               // (same keys; daemon-level wins over repo-level wins over strict default)
+                                               // unauthenticated_rpc/identity_mismatch (forgery rejection)
+                                               // is unconditional regardless of mode
   }
 
   Config key for worktree base directory: `worktrees.base_path` (NOT `worktree_dir`).
@@ -1550,6 +1608,9 @@ Unknown event types are silently ignored (forward compatibility).
   THRUM_TS_HOSTNAME   tsnet hostname override
   THRUM_TS_STATE_DIR  tsnet state directory
   THRUM_TS_ENABLED    (deprecated) Tailscale auto-starts when peers are configured
+  THRUM_NO_HINTS      v0.9.0: suppress CLI hint output (Shape B stderr trailers)
+                      Truthy: any non-empty value except "0" or "false"
+                      Also suppressed by --quiet or --json flags
 
 ### Identity Resolution Chain (v0.7.0+)
 
@@ -1596,6 +1657,7 @@ Unknown event types are silently ignored (forward compatibility).
     "tmux_session": "implementer-auth:0.0",
     "agent_status": "working",
     "agent_status_updated_at": "2026-04-10T18:05:00.000Z",
+    "reserved": false,
     "confirmed_by": "human:leon",
     "updated_at": "2026-04-10T18:02:10.000Z"
   }
@@ -1607,10 +1669,15 @@ Unknown event types are silently ignored (forward compatibility).
   Field reference:
     agent_pid          v0.8.0 (renamed from claude_pid): PID of runtime process
     preferred_runtime  v0.8.0: set by `thrum quickstart --runtime`; used at launch
-    runtime            v0.7.1: auto-detected runtime (claude, codex, opencode, ...)
+    runtime            v0.7.1: auto-populated from preferred_runtime; backfilled at
+                       boot for legacy files that predate this field
     tmux_session       v0.7.1: full pane target for daemon nudge delivery
-    agent_status       v0.8.0: working | idle | blocked (set via `thrum agent set-status`)
+    agent_status       v0.8.0: working | idle | blocked | stuck
+                       stuck: set after 6 unanswered permission nudges; cleared on pane recovery
+                       (set via `thrum agent set-status`; stuck is daemon-only)
     agent_status_updated_at  v0.8.0: UTC timestamp of last status change
+    reserved           v0.9.0: bool (omitempty); true for daemon-internal pseudo-agents
+                       (e.g., @supervisor_<project>); hidden from `thrum team` unless --system
 
   `thrum prime` refreshes `tmux_session`, `preferred_runtime`, and `branch`
   on every run — matters when agents relaunch under a different runtime or
@@ -1758,12 +1825,151 @@ Unknown event types are silently ignored (forward compatibility).
                       debounce_ms, env, status, pid, started_at, stopped_at, exit_code)
   events              Sequence-ordered deduplicated event log for daemon-to-daemon sync
   sync_checkpoints    Per-peer sync progress tracking
+  permission_nudges   Pending permission-prompt nudges (v21)
+  daemon_identity     Local daemon identity cache (v23)
+  telegram_msg_map    Telegram ↔ Thrum message ID map (v24)
   schema_version      Migration tracking
 
-  Current schema version: 20 (as of v0.9.0)
+  Current schema version: 24 (as of v0.9.0)
   Key migrations since v0.7.0:
     v15 -> v16  `claude_pid INTEGER NOT NULL DEFAULT 0` added to `agents`
     v16 -> v17  `claude_pid` renamed to `agent_pid` (multi-runtime support)
     v17 -> v18  `command_queue` table added
     v18 -> v19  `silence_ms` and `notify_on_complete` columns added to command_queue
     v19 -> v20  `monitors` table added
+    v20 -> v21  `permission_nudges` table added (restart-resilient permission-prompt nudges)
+    v21 -> v22  `origin_daemon TEXT` column added to `agents` (cross-daemon registration scoping)
+    v22 -> v23  `daemon_identity` table added (single-row local cache mirrored from config.json)
+    v23 -> v24  `telegram_msg_map` table added (durable Telegram ↔ Thrum message ID map)
+
+## Daemon RPC Flow (v0.9.0)
+
+Every unix-socket RPC goes through a 3-step pipeline before the handler runs:
+
+  Step 1: Peercred PID extraction
+    Linux: SO_PEERCRED syscall
+    macOS: LOCAL_PEERPID getsockopt
+    Result: caller OS PID (kernel-verified; cannot be spoofed)
+
+  Step 2: DaemonResolve — 3-priority identity chain
+    1. PID match:       caller PID matches agent_pid in an identity file (highest trust)
+    2. Worktree match:  caller PID's CWD maps to a known worktree path
+    3. caller_agent_id: client-asserted fallback (honored only when peercred absent,
+                        e.g., tests or WebSocket callers)
+    On unix socket: client-asserted caller_agent_id is cross-checked against
+    peercred resolution; mismatch fires unauthenticated_rpc/identity_mismatch
+    (unconditional — not guard-mode-gated).
+
+  Step 3: Identity guard enforcement
+    guard.Check() runs the applicable guard for the RPC type.
+    In strict mode: returns error, blocks handler.
+    In warn mode: logs identity_guard_fire slog event, allows through.
+    In off mode: skips check entirely.
+    30 methods are on the anonymous allowlist (observability, bootstrap, etc.)
+    and skip identity resolution entirely.
+
+## Identity Guard Fire Event (v0.9.0)
+
+Slog event key: `identity_guard_fire`
+Emitted at: warn level (strict mode also returns error to caller)
+
+  Fields:
+    guard        string   Guard key (e.g., "cross_worktree")
+    mode         string   "strict" | "warn" | "off"
+    outcome      string   "denied" | "allowed" | "auto_reclaimed" | "skipped"
+    reason       string   Error sub-code (see Guard Error Vocabulary below)
+    caller_pid   int      OS PID of the calling process
+    target_pid   int      PID from the identity file (if applicable)
+
+  Operators can subscribe to this log event for identity-violation alerts.
+
+## Guard Error Vocabulary (v0.9.0)
+
+  Guard key                    Reason code                      Trigger
+  ---                          ---                              ---
+  cross_worktree               pid_mismatch                     Caller PID owner ≠ identity owner
+  unauthenticated_rpc          identity_mismatch                Forged caller_agent_id (unconditional)
+  unauthenticated_rpc          anonymous_mutating_rpc           Mutating RPC outside any worktree
+  unauthenticated_rpc          no_caller_agent_id               Non-peercred transport missing CallerAgentID
+  non_git_bootstrap            not_a_git_repo                   thrum init/daemon start outside git repo
+  daemon_writer_liveness       subject_pid_dead                 Daemon refused write to dead agent identity
+  prime_ownership              caller_not_topmost_runtime       thrum prime called from sub-agent
+  quickstart_self_rename       caller_already_owns_identity     Caller already registered in this directory
+  quickstart_name_collision    name_held_by_live_foreign_pid    Requested name held by different live PID
+
+  Note: identity_mismatch fires unconditionally regardless of guard mode setting.
+  All others respect strict/warn/off from identity_guard config block.
+
+## CLI Hints Architecture (v0.9.0)
+
+Pre/post-action contextual hints on wired commands. Phase B pilot: `thrum init`,
+`thrum send`, `thrum tmux create`.
+
+  Two output shapes:
+    Shape B: stderr trailer text (human-readable; default on wired commands)
+    Shape C: JSON `hints` array in --json output (scripting-friendly)
+
+  Suppression: --quiet, --json (converts B→C), or THRUM_NO_HINTS=1
+
+  8 stable hint codes (Phase B):
+
+  Code                                  Severity  AllowForce  Command
+  ---                                   ---       ---         ---
+  tmux.create.not-a-worktree            warn      false       tmux create
+  tmux.create.session-exists            warn      true        tmux create
+  tmux.create.identity-exists-alive     warn      false       tmux create
+  tmux.create.identity-exists-stale     warn      true        tmux create
+  tmux.create.next-launch               info      n/a         tmux create
+  tmux.create.identity-replaced         info      n/a         tmux create
+  send.recipient-stale                  info      n/a         send
+  init.next-quickstart                  info      n/a         init
+
+  AllowForce semantics: warn hints with AllowForce=true accept --force to proceed.
+  AllowForce=false is a hard refusal — --force has no effect.
+  Pre-action blocking: when a warn hint fires with AllowForce=false, execution
+  is aborted before the RPC is dispatched.
+
+## Snapshot Resume Plan Format (v0.9.0)
+
+`/thrum:restart` skill writes a structured `## Resume Plan` block as the tail
+anchor of the snapshot file. `thrum prime` reads back from this heading.
+
+  mktemp single-source-of-truth: write to tempfile → cat to terminal → cat
+  appended to snapshot → remove tempfile. Printed and appended copies cannot drift.
+
+  Format (appended to snapshot file):
+
+    ## Resume Plan
+
+    **In flight:** <what was actively being worked on>
+
+    **Next step:** <first concrete action on resume>
+
+    **Open questions / blockers:**
+    - <item>
+
+## Telegram Permission Routing (v0.9.0)
+
+Permission nudges auto-forward to Telegram when:
+  - The Telegram bridge is configured
+  - The bridge user is listed in `permission_supervisors`
+
+  Reply paths:
+    Path 1 — Threaded reply: tap Reply on the nudge message → type a token
+      Accepted tokens (TryResolve set): y, yes, approve, a (approve) | n, no, deny, d (deny)
+
+    Path 2 — Fresh DM (v0.9.0): send a new DM containing only a token
+      Accepted tokens (fresh-DM set): y, yes, allow, n, no, deny
+      Note: approve and a do NOT trigger fresh-DM resolution (threaded only)
+      Resolves the most-recent pending nudge for that sender's Telegram user ID
+
+  Routing table (additions):
+
+    Source                                    Action
+    ---                                       ---
+    Threaded reply with TryResolve token      Resolves the linked nudge
+    Fresh DM with y/n/yes/no/allow/deny       Resolves most-recent pending nudge for sender
+
+  Restart resilience: `telegram_msg_map` SQLite table (schema v24) persists the
+  Telegram ↔ Thrum message ID mapping across daemon restarts. In-flight approvals
+  are not lost when the daemon restarts between nudge send and reply.

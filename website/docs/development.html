@@ -32,8 +32,9 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <strong>Development Guide</strong> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <strong>Development Guide</strong> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
 <h2>Thrum Development Guide</h2>
@@ -73,9 +74,12 @@ thrum daemon status</code></pre>
 │       └── mcp.go           # MCP server command
 ├── internal/                # Private packages
 │   ├── cli/                 # CLI business logic (one file per command)
+│   │   └── hints/           # CLI hint and suggestion output
 │   ├── config/              # Configuration loading and identity files
 │   ├── daemon/              # Daemon core
 │   │   ├── cleanup/         # Agent work context cleanup
+│   │   ├── permission/      # Permission prompt detection and keystroke delivery
+│   │   ├── reconcile/       # Agent state reconciliation
 │   │   ├── rpc/             # JSON-RPC 2.0 method handlers
 │   │   ├── state/           # Persistent state (JSONL + SQLite)
 │   │   ├── server.go        # Unix socket server
@@ -88,11 +92,12 @@ thrum daemon status</code></pre>
 │   │   └── testutil_test.go # StartTestDaemon() helper
 │   ├── gitctx/              # Git-derived work context (branch, uncommitted files)
 │   ├── identity/            # ID generation (ULID-based: repo, agent, session, message, event)
+│   │   └── guard/           # Cross-worktree identity guards, WritePID enforcement
 │   ├── jsonl/               # JSONL reader/writer with file locking
 │   ├── mcp/                 # MCP stdio server (4 tools, WebSocket waiter)
 │   ├── paths/               # Path resolution, .thrum/redirect, sync worktree path
 │   ├── projection/          # JSONL to SQLite event replay (projector)
-│   ├── schema/              # SQLite schema, DDL, and migrations (v19)
+│   ├── schema/              # SQLite schema, DDL, and migrations (v24)
 │   ├── subscriptions/       # Notification dispatcher and subscription service
 │   ├── sync/                # Sync engine (loop, merge, push, dedup, branch management)
 │   ├── tmux/                # Tmux operations, nudge delivery, session management (v0.7.1)
@@ -262,6 +267,10 @@ even when the UI has not been built.</p>
 <td>Show all available targets (default)</td>
 </tr>
 <tr>
+<td><code>make dev</code></td>
+<td>Build + sign, restart only the worktree-scoped daemon. Does NOT touch <code>~/.local/bin/thrum</code>. Safe for multi-agent machines — other agents on the host keep running their existing binary.</td>
+</tr>
+<tr>
 <td><code>make build</code></td>
 <td>Full build: UI + Go binary</td>
 </tr>
@@ -403,7 +412,7 @@ case &quot;my.new&quot;:
 <h3>Modifying Database Schema</h3>
 <ol>
 <li>Update table definitions in <code>internal/schema/schema.go</code></li>
-<li>Increment <code>CurrentVersion</code> constant (currently v19)</li>
+<li>Increment <code>CurrentVersion</code> constant (currently v24)</li>
 <li>Add migration logic in the <code>Migrate()</code> function</li>
 <li>Write tests for the new schema</li>
 <li>Update <code>docs/architecture.md</code></li>
@@ -538,7 +547,9 @@ socket, with a WebSocket server and embedded SPA all on a single port (default
 safety net, flock-based process detection</li>
 <li><strong>PID file</strong> (<code>internal/daemon/pidfile.go</code>): JSON format with <code>PIDInfo</code> struct
 (PID, repo path, socket path, started at). Backward-compatible reader falls
-back to plain integer format.</li>
+back to plain integer format. All <code>agent_pid</code> writes into identity files must
+go through <code>internal/identity/guard.WritePID</code>. All legacy direct-write
+callsites have been removed; CI guards against re-introduction.</li>
 <li><strong>File lock</strong> (<code>internal/daemon/flock.go</code>, <code>flock_unix.go</code>): OS-level
 <code>flock()</code> on socket file. Auto-released on process death (even SIGKILL). No-op
 stubs for non-Unix platforms.</li>

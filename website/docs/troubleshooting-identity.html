@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Troubleshooting Identity Issues — Thrum</title>
+<meta name="description" content="Identity guard error messages and how to fix them — cross_worktree pid_mismatch, anonymous_mutating_rpc, non_git_bootstrap, and the rest of the v0.9.0 guard catalog with remediation steps.">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#troubleshooting-identity.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; troubleshooting &rsaquo; Troubleshooting Identity Issues
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+<strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
+<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <strong>Troubleshooting Identity Issues</strong><br>
+</nav>
+<main>
+<h2>Troubleshooting Identity Issues</h2>
+<h3>How to use this page</h3>
+<p>Paste your error string into your browser&#39;s Find (Cmd-F / Ctrl-F). Jump to the
+matching section. Each section starts with the verbatim error text, explains
+what the daemon was protecting against, and gives the fix.</p>
+<p>If you&#39;ve never seen identity guards before, start with the
+<a href="identity.html#identity-guards">Identity Guards</a> section in the main identity doc
+for the conceptual model. This page is purely operational — cause and fix for
+each error, nothing more.</p>
+<hr>
+<h3><code>cross_worktree</code> — pid_mismatch</h3>
+<h4>Error</h4>
+<pre><code>identity guard &quot;cross_worktree&quot; fired: pid_mismatch
+  expected agent: furiosa
+  detected agent: coord_main
+  expected pid: 98412
+  caller pid: 12050
+  caller cwd: /Users/leon/.workspaces/thrum/coord
+  remediation: cd to the correct worktree or run &#39;thrum prime&#39; to re-claim</code></pre>
+<h4>What happened</h4>
+<p>This is the most common guard. Before the RPC went out, Thrum walked your
+calling process&#39;s ancestor PID chain looking for the agent PID recorded in the
+identity file. The PID wasn&#39;t there. Your shell is inside one worktree but the
+identity it resolved belongs to a different one — the two names in the error
+message are the expected owner versus the agent your CWD actually belongs to.</p>
+<p>This used to be a silent misattribution: the send or write went through under
+the wrong agent&#39;s name. Now it&#39;s a loud error you can act on.</p>
+<h4>Fix</h4>
+<ol>
+<li>Check which worktree you&#39;re in: <code>pwd</code> and compare to the <code>caller cwd</code> in the
+error.</li>
+<li><code>cd</code> to the correct worktree for the agent you meant to act as.</li>
+<li>Retry the command.</li>
+</ol>
+<p>If you genuinely want to act as the agent in your current worktree (not the one
+in <code>expected agent</code>), run <code>thrum prime</code> from your current directory to
+re-register identity here.</p>
+<p>If you&#39;re running a script that <code>cd</code>s between worktrees mid-session, set
+<code>THRUM_HOME</code> to pin the repo path:</p>
+<pre><code>export THRUM_HOME=/path/to/your/repo</code></pre>
+<hr>
+<h3><code>unauthenticated_rpc</code> — identity_mismatch (peercred path)</h3>
+<h4>Error</h4>
+<pre><code>identity guard &quot;unauthenticated_rpc&quot; fired: identity_mismatch
+  expected agent: furiosa
+  detected agent: coord_main
+  remediation: your current directory is inside &quot;coord_main&quot;&#39;s worktree. cd into &quot;furiosa&quot;&#39;s worktree and retry, or drop the identity claim to act as &quot;coord_main&quot;.</code></pre>
+<h4>What happened</h4>
+<p>The daemon connected to your process via <code>SO_PEERCRED</code> (on Linux) or
+<code>LOCAL_PEERPID</code> (on macOS) and got a kernel-verified identity. That identity
+doesn&#39;t match the <code>CallerAgentID</code> your client sent in the RPC frame. This is a
+forgery detection — the daemon refuses to trust a client-supplied claim that
+contradicts what the kernel says.</p>
+<p>Most of the time this isn&#39;t intentional forgery. It&#39;s a stale credential: a tool
+or wrapper sent an old <code>CallerAgentID</code> from a previous session.</p>
+<h4>Fix</h4>
+<ol>
+<li>If you didn&#39;t set <code>CallerAgentID</code> manually, the offending tool is sending
+stale credentials. Restart it.</li>
+<li>If you&#39;re writing a client, stop sending a hardcoded <code>CallerAgentID</code>. Let the
+daemon resolve identity from peercred.</li>
+<li>To act as <code>coord_main</code> (the agent your CWD actually belongs to), drop the
+explicit identity claim entirely and retry from your current directory.</li>
+</ol>
+<p><strong>This guard fires unconditionally.</strong> It doesn&#39;t respect the
+<code>unauthenticated_rpc</code> mode setting in config. Forgery rejection is foundational
+— lowering the mode doesn&#39;t help here. See
+<a href="#guard-mode-downgrade-incident-diagnosis">Guard mode downgrade</a> for what you
+can and can&#39;t configure.</p>
+<hr>
+<h3><code>unauthenticated_rpc</code> — identity_mismatch (ancestor-chain path)</h3>
+<h4>Error</h4>
+<pre><code>identity guard &quot;unauthenticated_rpc&quot; fired: identity_mismatch
+  expected agent: furiosa
+  detected agent: coord_main
+  remediation: your process ancestor chain belongs to &quot;coord_main&quot;. retry from &quot;coord_main&quot;&#39;s worktree or tmux pane, or drop the identity claim to act as &quot;coord_main&quot;.</code></pre>
+<h4>What happened</h4>
+<p>CWD-based peercred didn&#39;t match any registered worktree, so the daemon walked
+your process&#39;s ancestor chain instead. It found a registered agent PID in that
+chain — but it was <code>coord_main</code>, not the <code>furiosa</code> your client claimed. Same
+outcome as the peercred path: kernel-level evidence contradicts the claim.</p>
+<p>This usually happens when you&#39;ve changed directory into another worktree during
+a session and then issued a thrum command without re-priming.</p>
+<h4>Fix</h4>
+<ol>
+<li><code>cd</code> back to the worktree you intended to act from and retry.</li>
+<li>Or drop the <code>CallerAgentID</code> claim and let the daemon use <code>coord_main</code> — the
+agent your ancestor chain actually belongs to.</li>
+</ol>
+<p><strong>Also unconditional.</strong> See the note in the previous section.</p>
+<hr>
+<h3><code>unauthenticated_rpc</code> — anonymous_mutating_rpc</h3>
+<h4>Error</h4>
+<pre><code>identity guard &quot;unauthenticated_rpc&quot; fired: anonymous_mutating_rpc
+  remediation: cd into a registered agent worktree and retry</code></pre>
+<h4>What happened</h4>
+<p>Peercred ran and resolved your PID. Your CWD didn&#39;t map to any registered
+agent&#39;s worktree, and the ancestor-chain walk also came up empty. You&#39;re calling
+a mutating RPC from outside any known agent context — typically from <code>~</code> or a
+directory that has no <code>.thrum/identities/</code> associated with it.</p>
+<h4>Fix</h4>
+<ol>
+<li><p><code>cd</code> into a worktree that has a registered agent:</p>
+<pre><code>cd /path/to/your/repo
+thrum quickstart --name myagent --role implementer --module mymodule</code></pre>
+</li>
+<li><p>Retry your original command.</p>
+</li>
+</ol>
+<p>If you&#39;re starting fresh in a new repo, run <code>thrum init</code> first to initialize the
+<code>.thrum/</code> directory, then <code>thrum quickstart</code> to register.</p>
+<hr>
+<h3><code>unauthenticated_rpc</code> — no_caller_agent_id</h3>
+<h4>Error</h4>
+<pre><code>identity guard &quot;unauthenticated_rpc&quot; fired: no_caller_agent_id
+  remediation: run &#39;thrum quickstart&#39; to register an identity; CLI callers must forward CallerAgentID on every RPC</code></pre>
+<h4>What happened</h4>
+<p>You&#39;re on a non-peercred transport — typically a WebSocket client or a
+browser-based tool — and the RPC payload didn&#39;t include <code>CallerAgentID</code>.
+Peercred isn&#39;t available on these transports, so G3 falls back to trusting the
+<code>CallerAgentID</code> field. Without it, there&#39;s nothing to trust.</p>
+<h4>Fix</h4>
+<ol>
+<li><p>If you&#39;re using the CLI, this shouldn&#39;t happen. Run <code>thrum quickstart</code> in the
+current directory to register an agent and retry:</p>
+<pre><code>thrum quickstart --name myagent --role implementer --module mymodule</code></pre>
+</li>
+<li><p>If you&#39;re a client developer sending RPCs over WebSocket, include a non-empty
+<code>CallerAgentID</code> in every mutating RPC frame.</p>
+</li>
+</ol>
+<hr>
+<h3><code>non_git_bootstrap</code> — not_a_git_repo</h3>
+<h4>Error</h4>
+<pre><code>identity guard &quot;non_git_bootstrap&quot; fired: not_a_git_repo
+  caller cwd: /Users/leon
+  remediation: run from a git-anchored directory, or pass --force for ephemeral non-anchored use</code></pre>
+<h4>What happened</h4>
+<p>You ran <code>thrum daemon start</code> or <code>thrum init</code> from a directory with no <code>.git</code>
+ancestor. Thrum walks up from your CWD looking for <code>.git</code> — if it doesn&#39;t find
+one, G2 refuses to bootstrap. Identity files derive their repo scope and
+supervisor slugs from git state. Without a git root, those fields are
+meaningless.</p>
+<p>Before v0.9.0, this silently created a <code>.thrum/</code> with nonsense values in <code>~</code> or
+wherever you happened to be. Now it fails loudly.</p>
+<h4>Fix</h4>
+<ol>
+<li><p><code>cd</code> to your git repo first, then run the command:</p>
+<pre><code>cd /path/to/your/repo
+thrum daemon start</code></pre>
+</li>
+<li><p>If you genuinely need a non-git bootstrap (ephemeral testing, one-off
+tooling), pass <code>--force</code>:</p>
+<pre><code>thrum daemon start --force</code></pre>
+<p>This is rare and usually a mistake. Prefer using a git-anchored directory.</p>
+</li>
+</ol>
+<hr>
+<h3><code>daemon_writer_liveness</code> — subject_pid_dead</h3>
+<h4>Error</h4>
+<pre><code>identity guard &quot;daemon_writer_liveness&quot; fired: subject_pid_dead
+  expected pid: 98412
+  remediation: daemon refusing to write to dead agent&#39;s identity file</code></pre>
+<h4>What happened</h4>
+<p>The daemon was about to write to an identity file on behalf of an agent whose
+PID is no longer running. G4 blocks the write. This prevents ghost state: a
+crashed agent&#39;s stale RPC shouldn&#39;t be able to update the identity file after
+the agent has already exited.</p>
+<p>In normal operation this auto-heals: on the next daemon boot the dead-PID
+auto-reclaim path fires and cleans up the stale file. You&#39;ll see this in logs
+after a crashed runtime restarts.</p>
+<h4>Fix</h4>
+<p>If it persists after a daemon restart:</p>
+<pre><code>thrum daemon restart</code></pre>
+<p>If the stale file is blocking a fresh registration and the daemon restart didn&#39;t
+clear it, manually retire the file:</p>
+<pre><code>mv .thrum/identities/&lt;agentname&gt;.json .thrum/identities/&lt;agentname&gt;.json.deleted</code></pre>
+<p>Then run <code>thrum quickstart</code> again to register fresh. The <code>.deleted</code> file is left
+on disk but ignored by all guard scans.</p>
+<hr>
+<h3><code>prime_ownership</code> — caller_not_topmost_runtime</h3>
+<h4>Error</h4>
+<pre><code>identity guard &quot;prime_ownership&quot; fired: caller_not_topmost_runtime
+  expected pid: 20981
+  caller pid: 21049
+  remediation: you appear to be running inside a sub-agent; the parent runtime owns this identity — run prime from the top-level runtime instead</code></pre>
+<h4>What happened</h4>
+<p>You called <code>thrum prime</code> from inside a sub-agent — a tool call running under a
+Claude Code session that already has a different runtime as the outermost
+process. G5 checks whether your closest runtime ancestor matches the PID
+recorded in the identity file. If it doesn&#39;t, the guard refuses because the
+sub-agent doesn&#39;t own this identity.</p>
+<p>The typical scenario: a coordinator&#39;s tool call tries to run <code>thrum prime</code> to
+orient itself. The coordinator&#39;s parent Claude process owns the identity. The
+tool call&#39;s process tree is a descendant, not the owner.</p>
+<h4>Fix</h4>
+<p>Run <code>thrum prime</code> from the top-level runtime — the actual <code>claude</code> or <code>codex</code>
+process that owns the session — not from a tool call inside it.</p>
+<p>If you&#39;re building automation that needs to prime inside a sub-agent, use
+<code>--force</code> to bypass G5:</p>
+<pre><code>thrum prime --force</code></pre>
+<p>Use <code>--force</code> only when you&#39;re sure the sub-agent is intentionally taking over
+the session, not just checking context mid-task.</p>
+<hr>
+<h3><code>quickstart_self_rename</code> — caller_already_owns_identity</h3>
+<h4>Error</h4>
+<pre><code>identity guard &quot;quickstart_self_rename&quot; fired: caller_already_owns_identity
+  expected agent: furiosa
+  caller pid: 12050
+  remediation: use --force to rename the existing identity to .deleted and register fresh</code></pre>
+<h4>What happened</h4>
+<p>You called <code>thrum quickstart</code> but your ancestor PID chain already owns an
+identity file in this directory — registered under the name <code>furiosa</code>. G1a
+refuses to silently overwrite or re-register under a new name because that would
+abandon the existing identity without any record.</p>
+<p>This often happens when an orchestrator calls <code>thrum quickstart</code> multiple times
+with different <code>--name</code> values, rotating agent names.</p>
+<h4>Fix</h4>
+<p>If you want to rename (replace the old identity with a fresh one):</p>
+<pre><code>thrum quickstart --force --name &lt;newname&gt; --role &lt;role&gt; --module &lt;module&gt;</code></pre>
+<p><code>--force</code> renames the old identity file to <code>.deleted</code> first, then registers
+fresh. The old file is retained on disk as a <code>.deleted</code> sidekick in case you
+need to inspect it.</p>
+<p>If you want to keep the existing identity and just re-prime, run:</p>
+<pre><code>thrum prime</code></pre>
+<hr>
+<h3><code>quickstart_name_collision</code> — name_held_by_live_foreign_pid</h3>
+<h4>Error</h4>
+<pre><code>identity guard &quot;quickstart_name_collision&quot; fired: name_held_by_live_foreign_pid
+  expected agent: nux
+  expected pid: 33812
+  caller pid: 34001
+  remediation: choose another --name or pass --force to displace the existing identity</code></pre>
+<h4>What happened</h4>
+<p>The name you passed to <code>--name</code> is already registered to a different process
+that&#39;s still alive. G1b refuses because overwriting a live agent&#39;s identity file
+is a data-integrity problem — that other agent is still running and owns the
+file.</p>
+<p>Before v0.9.0 this was a silent overwrite. Now it fails so you can decide what
+to do.</p>
+<h4>Fix</h4>
+<p><strong>Option A — wait.</strong> If the other process exits on its own, the next
+<code>thrum quickstart</code> attempt will auto-reclaim the name. Dead agent files are
+reclaimable without <code>--force</code>.</p>
+<p><strong>Option B — pick a different name:</strong></p>
+<pre><code>thrum quickstart --name &lt;differentname&gt; --role &lt;role&gt; --module &lt;module&gt;</code></pre>
+<p><strong>Option C — force-displace</strong> (only if you&#39;re certain the other process is hung
+and won&#39;t recover):</p>
+<pre><code>thrum quickstart --force --name nux --role &lt;role&gt; --module &lt;module&gt;</code></pre>
+<p><code>--force</code> renames the existing file to <code>.deleted</code> and takes the name. If the
+other process was still alive and recovers after this, it&#39;ll get a
+<code>cross_worktree</code> error on its next RPC — it will need to re-register.</p>
+<hr>
+<h2>Guard mode downgrade (incident diagnosis)</h2>
+<p>Each guard is independently configurable in <code>.thrum/config.json</code> under the
+<code>identity_guard</code> block. Three modes are available:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>strict</code></td>
+<td>Guard fires and the RPC or command fails. This is the default for all guards.</td>
+</tr>
+<tr>
+<td><code>warn</code></td>
+<td>Guard fires, logs a structured <code>identity_guard_fire</code> event, and allows the operation through.</td>
+</tr>
+<tr>
+<td><code>off</code></td>
+<td>Guard is skipped entirely.</td>
+</tr>
+</tbody></table>
+<p>Example — downgrade <code>cross_worktree</code> to <code>warn</code> for incident diagnosis:</p>
+<pre><code>{
+  &quot;identity_guard&quot;: {
+    &quot;cross_worktree&quot;: &quot;warn&quot;,
+    &quot;non_git_bootstrap&quot;: &quot;strict&quot;
+  }
+}</code></pre>
+<p>Any guard you don&#39;t list keeps the strict default. The full set of config keys:</p>
+<pre><code>{
+  &quot;identity_guard&quot;: {
+    &quot;cross_worktree&quot;: &quot;strict&quot;,
+    &quot;dead_pid_auto_reclaim&quot;: &quot;strict&quot;,
+    &quot;quickstart_self_rename&quot;: &quot;strict&quot;,
+    &quot;quickstart_name_collision&quot;: &quot;strict&quot;,
+    &quot;non_git_bootstrap&quot;: &quot;strict&quot;,
+    &quot;unauthenticated_rpc&quot;: &quot;strict&quot;,
+    &quot;daemon_writer_liveness&quot;: &quot;strict&quot;,
+    &quot;prime_ownership&quot;: &quot;strict&quot;
+  }
+}</code></pre>
+<p>For runtime overrides without a repo commit, write to
+<code>.thrum/var/guard-daemon.json</code> instead. The daemon checks this file every cycle
+and merges it on top of the repo config. This lets you temporarily loosen a
+guard on a running daemon without touching the committed config.</p>
+<p><strong><code>unauthenticated_rpc</code> / <code>identity_mismatch</code> cannot be downgraded.</strong> The
+forgery rejection — where a client-asserted <code>CallerAgentID</code> contradicts the
+kernel-verified identity — fires unconditionally regardless of what the
+<code>unauthenticated_rpc</code> mode is set to. This is a deliberate security decision.
+Disabling it would re-open the v0.8.x impersonation hole where any caller could
+claim any agent&#39;s identity. Every other guard is configurable; this one isn&#39;t.</p>
+<hr>
+<h2>auto_reclaim: dead_pid_auto_reclaim (informational)</h2>
+<p>Not an error. When <code>thrum quickstart</code> or the cross_worktree check encounters a
+name or identity file registered to a PID that is no longer alive, it
+auto-reclaims: overwrites the stale file with the new caller&#39;s registration and
+logs a <code>warn</code>-level <code>identity_guard_fire</code> event with <code>outcome=auto_reclaimed</code>.</p>
+<p>You&#39;ll see this in daemon logs after a crashed runtime restarts and re-registers
+in the same worktree. The reclaim is silent on success in strict mode; in warn
+mode it logs and then proceeds.</p>
+<p>If you want to monitor for reclaim events in your logging pipeline, bind on:</p>
+<pre><code>identity_guard_fire where guard=dead_pid_auto_reclaim and outcome=auto_reclaimed</code></pre>
+<p>The <code>dead_pid_auto_reclaim</code> guard mode in config controls the reclaim path
+independently from the main <code>cross_worktree</code> check. Setting it to <code>off</code> disables
+auto-reclaim, which means dead-PID mismatches always fall through to the
+<code>cross_worktree</code> strict/warn handling instead of self-healing. Leave it at
+<code>strict</code> (the default) unless you have a specific reason not to.</p>
+<hr>
+<h2>See also</h2>
+<ul>
+<li><a href="identity.html">Identity</a> — conceptual model for identity files, PID resolution,
+and what identity guards are</li>
+<li><a href="configuration.html">Configuration</a> — full <code>identity_guard</code> config block schema
+and the daemon-override precedence order</li>
+</ul>
+
+</main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#troubleshooting-identity.html')}</script>
+</body>
+</html>

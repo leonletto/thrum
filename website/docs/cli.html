@@ -32,8 +32,9 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <strong>CLI Reference</strong> | <a href="rpc-api.html">RPC API</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <strong>CLI Reference</strong> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
 <h2>Thrum CLI Reference</h2>
@@ -459,7 +460,14 @@ for AI agent coordination.</p>
 <h3>thrum init</h3>
 <p>Initialize Thrum in the current repository. Creates the <code>.thrum/</code> directory
 structure, sets up the <code>a-sync</code> branch for message synchronization, and updates
-<code>.gitignore</code>. Detects installed AI runtimes and prompts you to select one.</p>
+<code>.gitignore</code>. Detects installed AI runtimes and prompts you to select one.
+Populates the <code>identity</code> block in <code>config.json</code> (a fresh <code>daemon_id</code> is
+generated once and persists; re-init is idempotent on <code>daemon_id</code>). See
+<a href="identity.html">Identity System — Daemon Identity</a> for details.</p>
+<p><strong>G2 guard:</strong> <code>thrum init</code> hard-errors if the current working directory is not
+inside a git repository. Pass <code>--force</code> to override for non-git environments
+(uncommon; the daemon cannot anchor identity without a git root).</p>
+<p>This command emits contextual hints — see <a href="cli-hints.html">CLI Hints</a>.</p>
 <pre><code>thrum init [--stealth] [flags]</code></pre>
 <table>
 <thead>
@@ -614,10 +622,55 @@ thrum setup claude-md --apply --force  # Replace existing Thrum section</code></
 </ul>
 <p>The instructions are automatically injected by <code>thrum prime</code> when agents start
 sessions, providing immediate context on how to use Thrum for coordination.</p>
+<h3>thrum prime</h3>
+<p>Load AI-optimized session context for the current agent. Reads the identity
+file, active session state, saved context, and any pending restart snapshot,
+then assembles a consolidated prompt block that is printed to stdout for the
+agent to consume.</p>
+<pre><code>thrum prime [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--force</code></td>
+<td>Bypass G5 ownership guard (use with care)</td>
+<td><code>false</code></td>
+</tr>
+<tr>
+<td><code>--quiet</code></td>
+<td>Suppress hint output</td>
+<td><code>false</code></td>
+</tr>
+</tbody></table>
+<p><strong>G5 guard (prime_ownership):</strong> <code>thrum prime</code> must be run from the top-level AI
+runtime process, not from inside a sub-agent (a tool call spawned within a
+Claude Code session). If a sub-agent invokes <code>thrum prime</code>, the guard detects
+that the closest runtime ancestor in the caller&#39;s PID chain is not the owner
+recorded in the identity file and refuses the call. Run <code>thrum prime</code> from the
+outermost runtime session. Pass <code>--force</code> only when you understand the ownership
+model and are intentionally bypassing this check.</p>
+<p>Example:</p>
+<pre><code>$ thrum prime
+# Outputs session context block to stdout
+# Agent reads this at session start via /thrum:prime skill</code></pre>
+<p>See also: <a href="identity.html">Identity System</a>, <a href="session-restart.html">Session Restart</a>.</p>
 <h3>thrum quickstart</h3>
 <p>Register, start a session, and set an initial intent in one step. If the agent
 is already registered, it re-registers automatically. Supports agent naming via
 the <code>--name</code> flag or <code>THRUM_NAME</code> environment variable.</p>
+<p><strong>G1a guard (quickstart_self_rename):</strong> If the caller&#39;s ancestor PID chain
+already owns an identity in this directory (i.e., this runtime has already
+registered), attempting to quickstart under a different name is refused. Pass
+<code>--force</code> to rename the existing identity to <code>.deleted</code> and register fresh.</p>
+<p><strong>G1b guard (quickstart_name_collision):</strong> If the requested <code>--name</code> is held by
+a live process in a different worktree, the registration is refused. Pass
+<code>--force</code> to displace the existing identity (use only when you are certain the
+other process has exited), or choose a different name.</p>
 <pre><code>thrum quickstart --name AGENT_NAME --role ROLE --module MODULE [flags]</code></pre>
 <table>
 <thead>
@@ -664,7 +717,7 @@ the <code>--name</code> flag or <code>THRUM_NAME</code> environment variable.</p
 </tr>
 <tr>
 <td><code>--force</code></td>
-<td>Overwrite existing identity</td>
+<td>Overwrite existing identity (bypasses G1a and G1b guards)</td>
 <td><code>false</code></td>
 </tr>
 </tbody></table>
@@ -722,7 +775,15 @@ ahead of the default branch, and the list of changed files on each heartbeat.</p
 <td>Include offline agents</td>
 <td><code>false</code></td>
 </tr>
+<tr>
+<td><code>--system</code></td>
+<td>Include system/reserved pseudo-agents</td>
+<td><code>false</code></td>
+</tr>
 </tbody></table>
+<p>The <code>--system</code> flag surfaces reserved pseudo-agents such as
+<code>@supervisor_&lt;project&gt;</code>. Status glyphs: <code>●</code> active, <code>○</code> offline, <code>⊙</code> reserved
+(system pseudo-agent).</p>
 <p>Example:</p>
 <pre><code>$ thrum team
 @implementer [active]
@@ -789,6 +850,7 @@ have an active session.</p>
 <p>The <code>--to</code> flag adds the recipient as a mention, making it a directed message.
 Recipients can be agents (<code>@alice</code>), roles (<code>@reviewer</code>), or <code>@everyone</code> for
 broadcast.</p>
+<p>This command emits contextual hints — see <a href="cli-hints.html">CLI Hints</a>.</p>
 <p>Example:</p>
 <pre><code>$ thrum send &quot;PR ready for review&quot; --to @reviewer --scope module:auth --ref pr:42
 ✓ Message sent: msg_01HXE8Z7...
@@ -1607,6 +1669,9 @@ fi</code></pre>
 <p>Start the daemon in the background. Uses <code>thrum daemon run</code> internally to run
 the daemon in a detached process. The daemon serves both a Unix socket (for CLI
 RPC) and a combined WebSocket + SPA server on port 9999.</p>
+<p><strong>G2 guard:</strong> <code>thrum daemon start</code> hard-errors if the current working directory
+is not inside a git repository. Pass <code>--force</code> to override for ephemeral non-git
+environments.</p>
 <pre><code>thrum daemon start [flags]</code></pre>
 <table>
 <thead>
@@ -1621,6 +1686,11 @@ RPC) and a combined WebSocket + SPA server on port 9999.</p>
 <td>Disable remote git sync (local-only mode)</td>
 <td><code>false</code></td>
 </tr>
+<tr>
+<td><code>--force</code></td>
+<td>Allow start outside a git repository (G2 guard bypass)</td>
+<td><code>false</code></td>
+</tr>
 </tbody></table>
 <p>The daemon performs pre-startup duplicate detection by checking if another
 daemon is already serving this repository (via JSON PID files and <code>flock()</code>).</p>
@@ -1631,9 +1701,23 @@ thrum daemon start --local</code></pre>
 <p>Stop the daemon gracefully by sending SIGTERM.</p>
 <pre><code>thrum daemon stop</code></pre>
 <h3>thrum daemon status</h3>
-<p>Show daemon status including PID, uptime, version, and the repository path being
-served.</p>
+<p>Show daemon status including PID, uptime, version, repository path, and (when
+the daemon is running) the daemon identity block.</p>
 <pre><code>thrum daemon status</code></pre>
+<p>Example:</p>
+<pre><code>$ thrum daemon status
+Daemon: running (PID 7718, uptime 3h24m)
+  Version:  v0.9.0
+  Socket:   .thrum/var/thrum.sock
+  Repo:     /Users/leon/dev/opensource/thrum
+
+Identity:
+  daemon_id:  d_01HYTESTULID01234567890AB
+  repo_name:  thrum
+  hostname:   leonsmacm1pro
+  repo_path:  /Users/leon/dev/opensource/thrum
+  git_origin: https://github.com/leonletto/thrum
+  init_at:    2026-04-17T06:30:00Z</code></pre>
 <h3>thrum daemon restart</h3>
 <p>Restart the daemon (stop + start).</p>
 <pre><code>thrum daemon restart</code></pre>
@@ -1900,56 +1984,148 @@ $ thrum roles deploy --agent alice
 ✓ Deployed preamble for alice (implementer)</code></pre>
 <h2>Peer Management</h2>
 <h3>thrum peer add</h3>
-<p>Start a Tailscale pairing session on the local machine. Displays a peercode and
-blocks until the remote machine connects or the session times out (5 minutes).</p>
-<pre><code>thrum peer add</code></pre>
-<p>If <code>THRUM_TS_AUTHKEY</code> is not set, the command prompts for a Tailscale auth key
-and saves it to <code>.thrum/.env</code>.</p>
-<p>Example:</p>
-<pre><code>$ thrum peer add
-Waiting for connection...
-Pairing code: alice:100.64.1.5:44123:7392
-
-Share this with the other machine:
-  thrum peer join --peercode alice:100.64.1.5:44123:7392
-
-Paired with &quot;bob&quot; (100.64.1.9:44123). Syncing started.</code></pre>
-<h3>thrum peer join</h3>
-<p>Connect to a remote peer using the peercode from <code>thrum peer add</code>.</p>
-<pre><code>thrum peer join [peercode] [flags]</code></pre>
+<p>Start a pairing session on the local machine. Displays a peercode and blocks
+until the remote machine connects or the session times out (5 minutes).</p>
+<blockquote>
+<p><strong>BREAKING CHANGE (v0.9.0):</strong> <code>--type</code> is now mandatory. The previous implicit
+<code>tailscale</code> default has been removed. Any script calling <code>thrum peer add</code>
+without <code>--type</code> must add <code>--type tailscale</code> (or another value) to restore
+equivalent behavior.</p>
+</blockquote>
+<pre><code>thrum peer add --type TYPE [flags]</code></pre>
 <table>
 <thead>
 <tr>
 <th>Flag</th>
 <th>Description</th>
+<th>Required</th>
 </tr>
 </thead>
 <tbody><tr>
+<td><code>--type</code></td>
+<td>Transport type (see table below)</td>
+<td>yes</td>
+</tr>
+<tr>
 <td><code>--peercode</code></td>
 <td>Connection string (pass <code>-</code> to read from stdin)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--address</code></td>
+<td>LAN IP for <code>--type network</code></td>
+<td></td>
+</tr>
+</tbody></table>
+<p><strong>Transport types:</strong></p>
+<table>
+<thead>
+<tr>
+<th><code>--type</code></th>
+<th>When to use</th>
+<th>Required additional flags</th>
+<th>Constraints</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>tailscale</code></td>
+<td>Cross-host via Tailscale CGNAT</td>
+<td><code>THRUM_TS_AUTHKEY</code> env var (or prompted)</td>
+<td>Requires Tailscale running on both ends</td>
+</tr>
+<tr>
+<td><code>local</code></td>
+<td>Same-host, different repo or worktree</td>
+<td>(none)</td>
+<td>Both daemons on the same machine; loopback only</td>
+</tr>
+<tr>
+<td><code>network</code></td>
+<td>Cross-host without Tailscale</td>
+<td><code>--address &lt;ip&gt;</code> on both sides</td>
+<td>No NAT traversal; requires reachable LAN address</td>
+</tr>
+<tr>
+<td><code>repair</code></td>
+<td>Re-establish a broken peer (drift recovery)</td>
+<td>Existing peer name (positional)</td>
+<td>Valid on <code>peer join</code> only, not <code>peer add</code></td>
+</tr>
+</tbody></table>
+<p>If <code>THRUM_TS_AUTHKEY</code> is not set and <code>--type tailscale</code> is used, the command
+prompts for a Tailscale auth key and saves it to <code>.thrum/.env</code>.</p>
+<p>Example:</p>
+<pre><code>$ thrum peer add --type tailscale
+Waiting for connection...
+Pairing code: alice:100.64.1.5:44123:7392
+
+Share this with the other machine:
+  thrum peer join --type tailscale --peercode alice:100.64.1.5:44123:7392
+
+Paired with &quot;bob&quot; (100.64.1.9:44123). Syncing started.
+
+# Same-host peer
+$ thrum peer add --type local
+Pairing code: alice:127.0.0.1:44123:7392</code></pre>
+<h3>thrum peer join</h3>
+<p>Connect to a remote peer using the peercode from <code>thrum peer add</code>.</p>
+<blockquote>
+<p><strong>BREAKING CHANGE (v0.9.0):</strong> <code>--type</code> is now mandatory. See the transport
+type table above (<code>thrum peer add</code>) for valid values and when to use each.</p>
+</blockquote>
+<pre><code>thrum peer join --type TYPE [peercode] [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Required</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--type</code></td>
+<td>Transport type (see table above)</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><code>--peercode</code></td>
+<td>Connection string (pass <code>-</code> to read from stdin)</td>
+<td></td>
 </tr>
 <tr>
 <td><code>--repo-path</code></td>
-<td>Filesystem path to peer&#39;s repo (sets transport to <code>local</code>)</td>
+<td>Filesystem path to peer&#39;s repo (used with <code>--type local</code>)</td>
+<td></td>
 </tr>
 </tbody></table>
 <p>The peercode can be passed as a positional argument, via <code>--peercode</code>, piped
 through stdin, or entered interactively.</p>
 <p><strong>Peercode format:</strong> <code>name:ip:port:code</code></p>
 <p>Example:</p>
-<pre><code>$ thrum peer join --peercode alice:100.64.1.5:44123:7392
+<pre><code>$ thrum peer join --type tailscale --peercode alice:100.64.1.5:44123:7392
 Paired with &quot;alice&quot;. Syncing started.
 
 # Local same-machine peer
-$ thrum peer join --peercode alice:127.0.0.1:44123:7392 --repo-path /path/to/other/repo</code></pre>
+$ thrum peer join --type local --peercode alice:127.0.0.1:44123:7392 --repo-path /path/to/other/repo
+
+# Re-establish a broken peer (drift recovery — no new peercode needed)
+$ thrum peer join --type repair alice
+Re-paired with &quot;alice&quot;. Syncing resumed.</code></pre>
 <h3>thrum peer list</h3>
-<p>List all paired peers with address, last sync time, and sequence number.</p>
+<p>List all paired peers with address, last sync time, and sequence number. When
+auto-reconciliation cannot resolve a peer&#39;s address drift, an inline hint row
+appears under that peer.</p>
 <pre><code>thrum peer list [--json]</code></pre>
 <p>Example:</p>
 <pre><code>$ thrum peer list
 NAME                 ADDRESS                LAST SYNC          LAST SEQ
-alice                100.64.1.5:44123       2 minutes ago      1042
+alice                100.64.1.5:44123       48 minutes ago     1042
+  └─ drift detected — run: thrum peer join --type repair alice
 bob                  100.64.1.9:44123       5 seconds ago      1087</code></pre>
+<p>The <code>└─</code> row appears only when <code>ReconcileStatus == &quot;drift_reconcile_failed&quot;</code>.
+Running <code>thrum peer join --type repair alice</code> re-establishes the connection
+using the stored bearer token in <code>peers.json</code> — no new peercode required. A
+successful repair resets the status to healthy and the hint row disappears.</p>
 <h3>thrum peer status</h3>
 <p>Show detailed per-peer health including pairing time and authentication status.</p>
 <pre><code>thrum peer status [--json]</code></pre>
@@ -2111,6 +2287,7 @@ quickstart runs, any old identity files in the session&#39;s worktree are cleane
 </tbody></table>
 <p>Without <code>--no-agent</code>, the command errors if <code>--name</code>, <code>--role</code>, and <code>--module</code>
 are all missing.</p>
+<p>This command emits contextual hints — see <a href="cli-hints.html">CLI Hints</a>.</p>
 <p>Example:</p>
 <pre><code>$ thrum tmux create implementer-api --cwd ../worktrees/api-feature \
     --name impl_api --role implementer --module api
@@ -2147,12 +2324,12 @@ Launched claude in session implementer-api
 
 $ thrum tmux launch implementer-api --runtime opencode
 Launched opencode in session implementer-api</code></pre>
-<p><strong>Hard-errors when no agent identity is registered.</strong> <code>thrum tmux launch</code>
-needs an agent identity in the target worktree to determine the runtime. If
-the session was created with <code>--no-agent</code>, or if there&#39;s no identity file in
-the worktree, launch returns an error and tells you to run <code>thrum quickstart</code>
-(or recreate the session with <code>--name</code>/<code>--role</code>/<code>--module</code>) first. Launching
-a runtime without an identity is a no-op — the agent has no way to register
+<p><strong>Hard-errors when no agent identity is registered.</strong> <code>thrum tmux launch</code> needs
+an agent identity in the target worktree to determine the runtime. If the
+session was created with <code>--no-agent</code>, or if there&#39;s no identity file in the
+worktree, launch returns an error and tells you to run <code>thrum quickstart</code> (or
+recreate the session with <code>--name</code>/<code>--role</code>/<code>--module</code>) first. Launching a
+runtime without an identity is a no-op — the agent has no way to register
 itself.</p>
 <h3>thrum tmux status</h3>
 <p>Show all tmux-managed sessions with agent info, liveness state, runtime, and
@@ -2302,15 +2479,15 @@ Canceled cmd_01KNTF2A9 (state: cancelled)</code></pre>
 <code>.thrum/identities/</code> so the new worktree shares the daemon with the main repo.
 Optionally sets up <code>.beads/redirect</code> if Beads is enabled.</p>
 <p>Quickstart flags (<code>--name</code>, <code>--role</code>, <code>--module</code>) are optional. When all three
-are provided, the command creates a real tmux session with the worktree as
-<code>cwd</code> and runs <code>thrum quickstart</code> inside the pane via SendKeys (PID-isolated).
-The daemon retries quickstart at 5s if the shell init swallows the first
-attempt, and the CLI captures pane content if the identity file still hasn&#39;t
-appeared after 12s. Old identity files in the worktree are cleaned up after
-quickstart runs — one identity per worktree is enforced.</p>
+are provided, the command creates a real tmux session with the worktree as <code>cwd</code>
+and runs <code>thrum quickstart</code> inside the pane via SendKeys (PID-isolated). The
+daemon retries quickstart at 5s if the shell init swallows the first attempt,
+and the CLI captures pane content if the identity file still hasn&#39;t appeared
+after 12s. Old identity files in the worktree are cleaned up after quickstart
+runs — one identity per worktree is enforced.</p>
 <p>The agent runtime is <strong>not</strong> started by <code>worktree create</code> — the output prints
-the next-step <code>thrum tmux launch &lt;name&gt;</code> command. The agent isn&#39;t running
-until you run that command.</p>
+the next-step <code>thrum tmux launch &lt;name&gt;</code> command. The agent isn&#39;t running until
+you run that command.</p>
 <p><strong>Repo-root guard:</strong> the command errors out if the resolved worktree path or
 <code>worktrees.base_path</code> is the repo root itself, to prevent accidentally turning
 the main worktree into a &quot;feature&quot; worktree.</p>

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CLI Hints — Thrum</title>
+<meta name="description" content="Inline contextual hints from Thrum CLI commands — pre-action warnings, post-action next steps, and JSON output for tooling. Covers Phase B (thrum send / tmux create / init) and the THRUM_NO_HINTS opt-out.">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#cli-hints.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Reference &rsaquo; CLI Hints
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+<strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
+<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <strong>CLI Hints</strong> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
+</nav>
+<main>
+<h2>CLI Hints</h2>
+<h3>Overview</h3>
+<p>When you run a Thrum command, you don&#39;t always know what&#39;s about to happen — or
+what you should do next. This is true for humans and for agents running Thrum
+commands inside scripts.</p>
+<p>CLI hints fill that gap. There are two kinds:</p>
+<ul>
+<li><strong>Pre-action hints</strong> fire before the command runs. A <code>warn</code> hint flags a risky
+condition — maybe the session name already exists, or the directory you&#39;re
+pointing at isn&#39;t a git worktree. If the condition is bad enough, the command
+aborts before touching anything.</li>
+<li><strong>Post-action hints</strong> fire after success. An <code>info</code> hint suggests the natural
+next step — usually the exact command you&#39;d want to run.</li>
+</ul>
+<p>By default, hints appear as a text trailer on stderr (Shape B). If you&#39;re
+running with <code>--json</code>, they move into the JSON body (Shape C). Either way, the
+success output on stdout stays clean so pipes work.</p>
+<p>Phase B (v0.9.0) wires hints to three commands: <code>thrum send</code>,
+<code>thrum tmux create</code>, and <code>thrum init</code>. Those commands have 8 stable hint codes.
+All other commands still use the legacy <code>LegacyHint()</code> flat-map (random tips,
+not codes), until they&#39;re retrofitted in a later phase.</p>
+<hr>
+<h3>Suppression</h3>
+<p>Three ways to silence hints:</p>
+<ul>
+<li><code>--quiet</code> — suppresses hints <strong>and</strong> the human-readable success line. Use when
+you want silent success/failure with no extra output.</li>
+<li><code>--json</code> — doesn&#39;t suppress hints. It moves them into the <code>hints</code> array in the
+JSON output instead. Tooling reads them there.</li>
+<li><code>THRUM_NO_HINTS=1</code> — suppresses hints entirely in both text and JSON mode.
+Truthy: any non-empty value except <code>&quot;0&quot;</code> or <code>&quot;false&quot;</code> (case-insensitive).</li>
+</ul>
+<pre><code># Suppress hints for this one call
+THRUM_NO_HINTS=1 thrum tmux create --session impl --runtime claude --cwd /repos/impl
+
+# Or export it for the whole shell session
+export THRUM_NO_HINTS=1</code></pre>
+<p><code>--quiet</code> and <code>--json</code> are per-call flags. <code>THRUM_NO_HINTS</code> is an environment
+variable — useful in CI, scripts, or agent sessions where you never want hint
+noise.</p>
+<hr>
+<h3>Shape B: text trailer (default)</h3>
+<p>When you run a command without <code>--json</code>, hints render as a stderr trailer after
+the success line. The success line itself goes to stdout.</p>
+<pre><code>$ thrum tmux create --session impl_demo --runtime claude --cwd /tmp/foo
+
+✓ session created: impl_demo
+
+  warn [tmux.create.not-a-worktree]: --cwd &#39;/tmp/foo&#39; is not a git worktree
+    fix:  git worktree add /tmp/foo &lt;branch&gt;
+    or:   thrum worktree create &lt;name&gt;    (creates + wires a fresh worktree)
+
+  info [tmux.create.next-launch]: session created — agent is NOT running yet
+    start:  thrum tmux launch impl_demo
+    prime:  thrum tmux send impl_demo &#39;/thrum:prime&#39;    (after launch, for non-claude runtimes)</code></pre>
+<p>A few things to notice:</p>
+<ul>
+<li>The success line (<code>✓ session created: impl_demo</code>) goes to stdout. The hints go
+to stderr. Piping the output to <code>jq</code> or another tool won&#39;t get contaminated.</li>
+<li><code>warn</code> hints appear before <code>info</code> hints, regardless of the order they fired.</li>
+<li>Each hint can have option rows below it — suggested commands with short
+labels. Label widths align across rows within a hint.</li>
+<li>A leading blank line separates hints from the command&#39;s stdout.</li>
+</ul>
+<p>When a <code>warn</code> hint blocks execution, the command exits non-zero and only the
+blocking hints appear. The success line never prints because nothing succeeded.</p>
+<hr>
+<h3>Shape C: JSON output</h3>
+<p>Pass <code>--json</code> to get machine-readable output. Hints move into a <code>hints</code> array
+inside the JSON body.</p>
+<pre><code>thrum tmux create --session impl_demo --runtime claude --cwd /tmp/foo --json</code></pre>
+<pre><code>{
+  &quot;status&quot;: &quot;ok&quot;,
+  &quot;session&quot;: &quot;impl_demo&quot;,
+  &quot;runtime&quot;: &quot;claude&quot;,
+  &quot;hints&quot;: [
+    {
+      &quot;code&quot;: &quot;tmux.create.not-a-worktree&quot;,
+      &quot;severity&quot;: &quot;warn&quot;,
+      &quot;message&quot;: &quot;--cwd &#39;/tmp/foo&#39; is not a git worktree&quot;,
+      &quot;options&quot;: [
+        { &quot;label&quot;: &quot;fix&quot;, &quot;cmd&quot;: &quot;git worktree add /tmp/foo &lt;branch&gt;&quot; },
+        {
+          &quot;label&quot;: &quot;or&quot;,
+          &quot;cmd&quot;: &quot;thrum worktree create &lt;name&gt;&quot;,
+          &quot;note&quot;: &quot;creates + wires a fresh worktree&quot;
+        }
+      ]
+    },
+    {
+      &quot;code&quot;: &quot;tmux.create.next-launch&quot;,
+      &quot;severity&quot;: &quot;info&quot;,
+      &quot;message&quot;: &quot;session created — agent is NOT running yet&quot;,
+      &quot;options&quot;: [
+        { &quot;label&quot;: &quot;start&quot;, &quot;cmd&quot;: &quot;thrum tmux launch impl_demo&quot; },
+        {
+          &quot;label&quot;: &quot;prime&quot;,
+          &quot;cmd&quot;: &quot;thrum tmux send impl_demo &#39;/thrum:prime&#39;&quot;,
+          &quot;note&quot;: &quot;after launch, for non-claude runtimes&quot;
+        }
+      ]
+    }
+  ]
+}</code></pre>
+<p>The <code>hints</code> key is omitted entirely when there are no hints, so you don&#39;t need
+to handle <code>&quot;hints&quot;: null</code>. If <code>THRUM_NO_HINTS</code> is set, the key is also omitted
+even in JSON mode.</p>
+<p>Each hint object has:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>code</code></td>
+<td>string</td>
+<td>Stable dotted slug (see catalog below)</td>
+</tr>
+<tr>
+<td><code>severity</code></td>
+<td>string</td>
+<td><code>&quot;warn&quot;</code> or <code>&quot;info&quot;</code></td>
+</tr>
+<tr>
+<td><code>message</code></td>
+<td>string</td>
+<td>Human-readable description</td>
+</tr>
+<tr>
+<td><code>options</code></td>
+<td>array</td>
+<td>Zero or more suggested next steps</td>
+</tr>
+</tbody></table>
+<p>Each option object has <code>label</code> (short identifier), <code>cmd</code> (exact command string),
+and optionally <code>note</code> (parenthetical caveat).</p>
+<hr>
+<h3>Hint code catalog (Phase B — pilot commands)</h3>
+<p>All 8 codes are stable. They won&#39;t be renamed once published; new codes get
+added to the catalog in later phases.</p>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Severity</th>
+<th>Trigger</th>
+<th>AllowForce</th>
+<th>Commands</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>tmux.create.not-a-worktree</code></td>
+<td>warn</td>
+<td><code>--cwd</code> path is not a git worktree</td>
+<td>false</td>
+<td><code>tmux create</code></td>
+</tr>
+<tr>
+<td><code>tmux.create.session-exists</code></td>
+<td>warn</td>
+<td>tmux session name already running</td>
+<td>true</td>
+<td><code>tmux create</code></td>
+</tr>
+<tr>
+<td><code>tmux.create.identity-exists-alive</code></td>
+<td>warn</td>
+<td>worktree has a live registered agent</td>
+<td>false</td>
+<td><code>tmux create</code></td>
+</tr>
+<tr>
+<td><code>tmux.create.identity-exists-stale</code></td>
+<td>warn</td>
+<td>worktree has a stale identity file (no live session)</td>
+<td>true</td>
+<td><code>tmux create</code></td>
+</tr>
+<tr>
+<td><code>tmux.create.next-launch</code></td>
+<td>info</td>
+<td>post-success: session created, agent not running yet</td>
+<td>n/a</td>
+<td><code>tmux create</code></td>
+</tr>
+<tr>
+<td><code>tmux.create.identity-replaced</code></td>
+<td>info</td>
+<td>post-success: <code>--force</code> replaced a stale identity</td>
+<td>n/a</td>
+<td><code>tmux create</code></td>
+</tr>
+<tr>
+<td><code>send.recipient-stale</code></td>
+<td>info</td>
+<td>recipient&#39;s last activity exceeds 30 minutes</td>
+<td>n/a</td>
+<td><code>send</code></td>
+</tr>
+<tr>
+<td><code>init.next-quickstart</code></td>
+<td>info</td>
+<td>post-success: no agent identity registered yet</td>
+<td>n/a</td>
+<td><code>init</code></td>
+</tr>
+</tbody></table>
+<p>Severity column uses <code>warn</code> and <code>info</code> as they appear in the actual output.
+<code>n/a</code> in AllowForce means the hint is informational and never blocks execution.</p>
+<hr>
+<h3>AllowForce semantics</h3>
+<p><code>AllowForce</code> only matters for <code>warn</code> hints. It controls whether <code>--force</code> can
+override the block.</p>
+<p><strong><code>AllowForce=true</code> (recoverable):</strong> The condition is risky but the operator can
+knowingly proceed. Without <code>--force</code>, the command aborts and prints the hint.
+With <code>--force</code>, the hint is logged but execution continues.</p>
+<p>Examples: a session name that already exists (<code>tmux.create.session-exists</code>), or
+a stale identity file in the worktree (<code>tmux.create.identity-exists-stale</code>).
+Both cases have a clear recovery path where overwriting the existing state is
+the right call.</p>
+<p><strong><code>AllowForce=false</code> (hard refusal):</strong> Even <code>--force</code> won&#39;t help. The operation
+can&#39;t be safely completed because proceeding would cause worse problems than
+aborting.</p>
+<p>Examples: <code>--cwd</code> isn&#39;t a git worktree (<code>tmux.create.not-a-worktree</code>) — there&#39;s
+nothing useful to do with a non-worktree path. A live agent is registered in the
+target worktree (<code>tmux.create.identity-exists-alive</code>) — overwriting a live
+session&#39;s identity file would orphan a running agent. In both cases, the right
+answer is to fix the input, not to force through.</p>
+<p><strong><code>info</code> hints:</strong> Never block, regardless of <code>AllowForce</code>. They&#39;re post-action
+observations. The field isn&#39;t applicable to them.</p>
+<hr>
+<h3>Pre-action blocking</h3>
+<p>Here&#39;s the execution sequence for a command with wired hint sources:</p>
+<ol>
+<li>Collect pre-action hints (<code>Post=false</code>).</li>
+<li>Call <code>HandlePreAction</code>. If any <code>warn</code> hint blocks (either <code>AllowForce=false</code>,
+or <code>AllowForce=true</code> and <code>--force</code> wasn&#39;t passed), execution stops. The
+blocking hints render to stderr and the CLI exits non-zero. The underlying
+RPC is never called.</li>
+<li>If no hints block, the command runs.</li>
+<li>On success, collect post-action hints (<code>Post=true</code>) and emit them.</li>
+</ol>
+<p>When a hard-refusal hint fires (<code>AllowForce=false</code>), the abort message is:</p>
+<pre><code>aborted — see hint above for next steps</code></pre>
+<p>When a recoverable hint fires without <code>--force</code>:</p>
+<pre><code>aborted (pass --force to override recoverable conditions)</code></pre>
+<p>The distinction matters if you&#39;re parsing exit messages in a script. Both exit
+non-zero.</p>
+<hr>
+<h3>Phase roadmap</h3>
+<p><strong>Phase B (shipped in v0.9.0):</strong> <code>thrum send</code>, <code>thrum tmux create</code>,
+<code>thrum init</code>. Eight hint codes. Stable dotted slugs you can match in scripts and
+tooling.</p>
+<p><strong>Phases C–E (planned, tracked under <code>thrum-rqkf</code>):</strong></p>
+<ul>
+<li>Phase C: retrofit the hint pipeline to remaining commands (currently on the
+legacy <code>LegacyHint()</code> flat-map).</li>
+<li>Phase D: daemon-side anti-pattern detection — hints that fire based on runtime
+state the daemon observes, not just command inputs.</li>
+<li>Phase E: docs and <code>llms.txt</code> updates to cover the expanded catalog.</li>
+</ul>
+<p>The hint code namespace is append-only. Codes published in Phase B won&#39;t change.</p>
+<hr>
+<h3>See Also</h3>
+<ul>
+<li><a href="configuration.html">Configuration</a> — <code>THRUM_NO_HINTS</code> env var and full
+environment variable reference</li>
+<li><a href="cli.html">CLI Reference</a> — full command reference for <code>thrum send</code>,
+<code>thrum tmux create</code>, and <code>thrum init</code></li>
+<li><a href="tmux-sessions.html">Tmux Sessions</a> — worktree-anchored session workflow that
+the <code>tmux.create.*</code> hints assume</li>
+</ul>
+
+</main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#cli-hints.html')}</script>
+</body>
+</html>

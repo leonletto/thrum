@@ -221,6 +221,56 @@ A prompt without gates won't run — the orchestrator bounces it back.
 
 ---
 
+## Implementer Status Vocabulary
+
+Implementers use a four-value status vocabulary when reporting back to the
+coordinator or orchestrator. Without it, every "done-ish" status reads the same
+and coordinators miss latent issues. With it, you can triage a batch of
+completion messages at a glance.
+
+| Status               | Meaning                                               | Coordinator action                                                                   |
+| -------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `DONE`               | Work complete, no concerns.                           | Mark closed and continue.                                                            |
+| `DONE_WITH_CONCERNS` | Work complete, but specific issues need attention.    | Read the listed concerns. Close, file a follow-up, or push back — don't ignore them. |
+| `NEEDS_CONTEXT`      | Blocked on coordinator clarification.                 | Answer the specific questions before the agent resumes.                              |
+| `BLOCKED`            | Cannot proceed until an external dependency resolves. | Decide whether to redirect work or wait out the blocker.                             |
+
+**DONE_WITH_CONCERNS** requires the implementer to list each concern explicitly.
+The orchestrator treats an unaddressed `DONE_WITH_CONCERNS` the same as an
+unresolved review blocker — it doesn't clear the agent to continue until the
+coordinator has responded.
+
+**BLOCKED** requires the implementer to name the blocker (for example: "waiting
+on team-fix sec.8 to land"). The orchestrator surfaces this to you and pauses
+that workstream rather than letting the agent spin.
+
+---
+
+## Two-Stage Review
+
+When you review implementer work — whether as the orchestrator dispatching a
+code review sub-agent or as a coordinator reviewing directly — run the two
+stages in this order:
+
+**Stage 1 — Spec Compliance Review**: did the implementation cover every
+requirement in the plan or spec? Run this first. Catching a scope miss early
+costs nothing. Catching it after a clean code quality pass means the implementer
+has to go back anyway.
+
+**Stage 2 — Code Quality Review**: standards, error handling, idioms, dead code.
+Only meaningful once compliance is confirmed.
+
+Running both reviewers in parallel is fine for speed — but consolidate all
+findings into **one numbered list** before forwarding to the implementer.
+Sending partial findings is one of the most reliable ways to leave issues
+permanently unfixed: the implementer fixes batch 1, reports `DONE`, and batch 2
+disappears into the conversation history.
+
+The orchestrator follows this discipline when dispatching code review sub-agents
+at each review gate. If you're running reviews manually, it applies equally.
+
+---
+
 ## Escalation
 
 The orchestrator stops and messages you when it hits something it can't resolve:

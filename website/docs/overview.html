@@ -32,8 +32,9 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
 <h2>Thrum</h2>
@@ -87,8 +88,19 @@ need it.</p>
   </a>
 </div>
 
-<h2>What&#39;s New (upcoming)</h2>
+<h2>What&#39;s New in v0.9.0</h2>
 <ul>
+<li><strong>Permission-prompt detection</strong> — the daemon detects when a tmux-managed agent
+hits a blocking permission prompt and routes an actionable nudge to configured
+supervisors. Approve or deny from the CLI, web UI, or Telegram. See
+<a href="permission-prompts.html">Permission Prompt Detection</a>.</li>
+<li><strong>Identity guards</strong> — cross-worktree CWD enforcement hard-errors on CWD drift
+instead of silently misattributing actions to the wrong agent. See
+<a href="troubleshooting-identity.html">Troubleshooting: Identity</a>.</li>
+<li><strong>CLI hints (Phase B)</strong> — contextual guidance printed before and after
+destructive or multi-step commands. See <a href="cli-hints.html">CLI Hints</a>.</li>
+<li><strong>Drift reconciliation</strong> — peers self-heal address drift automatically without
+re-pairing. See <a href="peers.html">Peers</a>.</li>
 <li><strong><code>thrum tmux quickstart</code></strong> — alias for <code>thrum tmux create</code>. Same command,
 clearer name. <code>thrum tmux create</code> now requires <code>--name</code>, <code>--role</code>, <code>--module</code>
 (or <code>--no-agent</code>) and runs quickstart inside the new pane automatically.</li>
@@ -96,23 +108,70 @@ clearer name. <code>thrum tmux create</code> now requires <code>--name</code>, <
 now accept optional quickstart flags (<code>--name</code>, <code>--role</code>, <code>--module</code>,
 <code>--intent</code>, <code>--runtime</code>). Provide all three required flags and it creates a
 real tmux session, runs quickstart inside it, and prints the next-step
-<code>thrum tmux launch &lt;name&gt;</code> command. The agent identity is registered, but
-the runtime is not started until <code>tmux launch</code> runs — a clean two-step
-pattern with no manual <code>thrum quickstart</code>.</li>
+<code>thrum tmux launch &lt;name&gt;</code> command. The agent identity is registered, but the
+runtime is not started until <code>tmux launch</code> runs — a clean two-step pattern
+with no manual <code>thrum quickstart</code>.</li>
 <li><strong>Single identity per worktree</strong> — quickstart cleans up old identity files
 after writing the new one. You can&#39;t end up with a stale identity causing
 auto-select errors.</li>
 <li><strong><code>thrum tmux launch</code> hard-errors on missing identity</strong> — launch needs an
 agent identity to determine the runtime. Sessions created with <code>--no-agent</code>
-(or worktrees with no identity file) cannot be launched until you register
-an agent first.</li>
-<li><strong>Next-step guard messages</strong> — <code>agent register</code>, <code>worktree create</code> (no
-agent), <code>purge --confirm</code>, <code>daemon stop</code>, <code>tmux restart</code>, and <code>tmux launch</code>
-now print explicit hints about what to do next (or what just broke).</li>
+(or worktrees with no identity file) cannot be launched until you register an
+agent first.</li>
+<li><strong>Next-step guard messages</strong> — <code>agent register</code>, <code>worktree create</code> (no agent),
+<code>purge --confirm</code>, <code>daemon stop</code>, <code>tmux restart</code>, and <code>tmux launch</code> now print
+explicit hints about what to do next (or what just broke).</li>
 <li><strong>Monitor Jobs v1</strong> — <code>thrum monitor start/list/show/stop/logs/restart</code>.
 Attach a monitor to any long-running process and it emits matches as synthetic
 Thrum messages. Leading-edge debounce (default 60s, min 30s), auto-persist,
 local-socket-only.</li>
+</ul>
+<h2>Breaking Changes (v0.9.0)</h2>
+<p>If you&#39;re upgrading from v0.8.x, read this section before starting the daemon.</p>
+<ul>
+<li><strong>Forged <code>caller_agent_id</code> rejected</strong> — pre-v0.9.0 callers could pass any
+<code>caller_agent_id</code> and it was accepted at face value. Now cross-checked against
+kernel-verified PID resolution. Mismatches get &quot;identity mismatch&quot; and are
+dropped.</li>
+<li><strong>WebSocket non-localhost origin → HTTP 403</strong> — pre-v0.9.0, <code>CheckOrigin</code>
+returned <code>true</code> for all origins. Browser pages on non-loopback origins can no
+longer upgrade to WebSocket.</li>
+<li><strong><code>message.delete</code> by non-author rejected</strong> — only the original author can
+soft-delete their own messages.</li>
+<li><strong><code>message.deleteByAgent</code> requires caller == target</strong> — agents can only
+bulk-delete their own messages.</li>
+<li><strong><code>message.deleteByScope</code> is daemon-internal only</strong> — no longer callable from
+any external client (CLI, browser, or unix socket).</li>
+<li><strong>Legacy daemon_id auto-rotated</strong> — first v0.9.0 daemon start rotates
+pre-existing hostname-derived daemon IDs to ULID format. Existing peer pairs
+must be re-paired: <code>thrum peer remove &lt;name&gt;</code> then
+<code>thrum peer add --type tailscale &lt;name&gt;</code> on each peer.</li>
+<li><strong>Downgrade blocked by migration guard</strong> — running a v0.8.x binary against a
+database migrated to schema v24 fails with a clear error. Recovery: stop
+daemon → restore <code>thrum.db.pre-migration-v&lt;N&gt;-bak</code> → run the older binary.</li>
+<li><strong><code>~/.thrum/runtimes.json</code> replaces the old platform config path</strong> — silently
+dropped on upgrade; custom runtimes disappear. Move the file manually: Linux:
+<code>~/.config/thrum/runtimes.json</code> → <code>~/.thrum/runtimes.json</code>; macOS:
+<code>~/Library/Application Support/thrum/runtimes.json</code> →
+<code>~/.thrum/runtimes.json</code>.</li>
+<li><strong><code>peer add --type</code> and <code>peer join --type</code> are now mandatory</strong> — the
+previously implicit <code>tailscale</code> default is gone. Add <code>--type tailscale</code> to any
+existing scripts that omit it.</li>
+<li><strong><code>alert-silence</code> hook no longer triggers permission-prompt detection</strong> —
+daemon-side poller replaces it (~20s detection latency). Existing
+<code>alert-silence</code> config in <code>.tmux.conf</code> is inert for this purpose.</li>
+<li><strong>Identity guards hard-error on CWD drift</strong> — running thrum from the wrong CWD
+fails with <code>identity guard &quot;cross_worktree&quot; fired: pid_mismatch</code> instead of
+silently misattributing. Use <code>THRUM_HOME</code> to pin repo path. See
+<a href="troubleshooting-identity.html">Troubleshooting: Identity</a>.</li>
+<li><strong><code>thrum daemon start</code> and <code>thrum init</code> refuse non-git directories</strong> — pass
+<code>--force</code> for non-anchored use.</li>
+<li><strong><code>thrum quickstart</code> refuses self-rename / name collision</strong> — without
+<code>--force</code>. Previously a silent overwrite.</li>
+<li><strong>Telegram fresh-DM <code>y</code> resolves a pending nudge instead of routing to
+<code>--target</code></strong> — if the sender has a pending permission nudge, a bare
+<code>y</code>/<code>n</code>/<code>yes</code>/<code>no</code>/<code>allow</code>/<code>deny</code> DM resolves that nudge rather than
+delivering to the configured target agent.</li>
 </ul>
 <h2>What&#39;s New in v0.7.x</h2>
 <ul>
@@ -155,6 +214,15 @@ what&#39;s for agents, and what you run once at setup</li>
 projection, sync protocol, and peer transport</li>
 <li><a href="agent-coordination.html">Agent Coordination</a> — practical patterns for running
 multiple agents in parallel and integrating with Beads for task tracking</li>
+<li><a href="permission-prompts.html">Permission Prompt Detection</a> — how the daemon detects
+blocked agents, routes supervisor nudges, and accepts approvals from CLI, web,
+or Telegram</li>
+<li><a href="security-model.html">Security Model</a> — local trust stack, identity guards,
+WebSocket origin enforcement, and message author controls</li>
+<li><a href="cli-hints.html">CLI Hints</a> — contextual guidance printed around destructive and
+multi-step commands; how to suppress them</li>
+<li><a href="troubleshooting-identity.html">Troubleshooting: Identity</a> — diagnosing and
+recovering from identity guard errors, CWD drift, and name collision failures</li>
 </ul>
 
 </main>

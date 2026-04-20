@@ -308,12 +308,11 @@ separately).
 The `token` field is the long-lived auth token exchanged during pairing. Guard
 this file — it grants access to the peer connection. Don't commit it to git.
 
-**`peers.json.pre-rotation-bak`:** On the first daemon start after a peer
-schema rotation, a one-time backup of the pre-rotation `peers.json` is written
-to `.thrum/var/peers.json.pre-rotation-bak`. This is a defensive snapshot
-using the same backup-once semantics as `config.json.pre-identity-bak` — the
-file is never overwritten after creation. Rename it back if a schema migration
-goes wrong.
+**`peers.json.pre-rotation-bak`:** On the first daemon start after a peer schema
+rotation, a one-time backup of the pre-rotation `peers.json` is written to
+`.thrum/var/peers.json.pre-rotation-bak`. This is a defensive snapshot using the
+same backup-once semantics as `config.json.pre-identity-bak` — the file is never
+overwritten after creation. Rename it back if a schema migration goes wrong.
 
 See [Configuration](configuration.md) for the full config reference.
 
@@ -326,16 +325,16 @@ All peer commands live under `thrum peer`. Full reference:
 
 ### Quick Reference
 
-| Command                                          | Description                                              |
-| ------------------------------------------------ | -------------------------------------------------------- |
-| `thrum peer add --type <type>`                   | Start a pairing session, display peercode, wait for join |
-| `thrum peer join --type <type> --peercode <code>`| Join a peer using the peercode from `peer add`           |
-| `thrum peer join --type repair <name>`           | Re-establish a broken peer using stored secrets          |
-| `thrum peer list`                                | List all paired peers with address and last sync time    |
-| `thrum peer status`                              | Detailed per-peer health, auth status, and pairing time  |
-| `thrum peer remove <name>`                       | Remove a peer, stop syncing immediately                  |
-| `thrum peer configure <name> add-agent`          | Register a remote agent as a proxy locally               |
-| `thrum peer configure <name> remove-agent`       | Unregister a proxy agent                                 |
+| Command                                           | Description                                              |
+| ------------------------------------------------- | -------------------------------------------------------- |
+| `thrum peer add --type <type>`                    | Start a pairing session, display peercode, wait for join |
+| `thrum peer join --type <type> --peercode <code>` | Join a peer using the peercode from `peer add`           |
+| `thrum peer join --type repair <name>`            | Re-establish a broken peer using stored secrets          |
+| `thrum peer list`                                 | List all paired peers with address and last sync time    |
+| `thrum peer status`                               | Detailed per-peer health, auth status, and pairing time  |
+| `thrum peer remove <name>`                        | Remove a peer, stop syncing immediately                  |
+| `thrum peer configure <name> add-agent`           | Register a remote agent as a proxy locally               |
+| `thrum peer configure <name> remove-agent`        | Unregister a proxy agent                                 |
 
 ### `thrum peer add`
 
@@ -360,19 +359,19 @@ Paired with "bob" (100.64.1.9:44123). Syncing started.
 
 **`--type` values:**
 
-| `--type`    | When to use                                      | Required flags / constraints                                        |
-| ----------- | ------------------------------------------------ | ------------------------------------------------------------------- |
-| `tailscale` | Cross-host via Tailscale CGNAT                   | `--auth-key` or `THRUM_TS_AUTHKEY` env; Tailscale must be running on both ends |
-| `local`     | Same-host, different repo                        | None; loopback only, no LAN exposure                                |
-| `network`   | Cross-host without Tailscale                     | `--address <ip>` on both sides; no NAT traversal                    |
+| `--type`    | When to use                    | Required flags / constraints                                                   |
+| ----------- | ------------------------------ | ------------------------------------------------------------------------------ |
+| `tailscale` | Cross-host via Tailscale CGNAT | `--auth-key` or `THRUM_TS_AUTHKEY` env; Tailscale must be running on both ends |
+| `local`     | Same-host, different repo      | None; loopback only, no LAN exposure                                           |
+| `network`   | Cross-host without Tailscale   | `--address <ip>` on both sides; no NAT traversal                               |
 
 `repair` is only valid on `peer join`, not `peer add`. See `thrum peer join`
 below.
 
 ### `thrum peer join`
 
-> **Breaking change (v0.9.0):** `--type` is now **mandatory**. See `thrum peer
-> add` above.
+> **Breaking change (v0.9.0):** `--type` is now **mandatory**. See
+> `thrum peer add` above.
 
 Pass the peercode as a flag, a positional argument, or pipe it from stdin:
 
@@ -393,12 +392,12 @@ thrum peer join --type repair alice
 
 **`--type` values for `peer join`:**
 
-| `--type`    | When to use                                      | Required flags / constraints                                                    |
-| ----------- | ------------------------------------------------ | ------------------------------------------------------------------------------- |
-| `tailscale` | Cross-host via Tailscale CGNAT                   | `--auth-key` or `THRUM_TS_AUTHKEY` env; Tailscale must be running on both ends  |
-| `local`     | Same-host, different repo                        | `--repo-path` for the other repo's path                                         |
-| `network`   | Cross-host without Tailscale                     | Reachable address + port; no NAT traversal                                      |
-| `repair`    | Re-establish a broken peer using stored secrets  | Peer name (positional or `--peer-name`); only valid on `peer join`, not `peer add` |
+| `--type`    | When to use                                     | Required flags / constraints                                                       |
+| ----------- | ----------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `tailscale` | Cross-host via Tailscale CGNAT                  | `--auth-key` or `THRUM_TS_AUTHKEY` env; Tailscale must be running on both ends     |
+| `local`     | Same-host, different repo                       | `--repo-path` for the other repo's path                                            |
+| `network`   | Cross-host without Tailscale                    | Reachable address + port; no NAT traversal                                         |
+| `repair`    | Re-establish a broken peer using stored secrets | Peer name (positional or `--peer-name`); only valid on `peer join`, not `peer add` |
 
 ### `thrum peer list`
 
@@ -431,8 +430,8 @@ thrum peer configure mock-salesforce remove-agent coordinator_main
 
 ## Automatic Drift Recovery
 
-When a peer's address changes (IP reassignment, port change, daemon restart on
-a different port), Thrum attempts to re-establish the connection automatically
+When a peer's address changes (IP reassignment, port change, daemon restart on a
+different port), Thrum attempts to re-establish the connection automatically
 using the stored bearer token — no re-pairing required.
 
 ### Two Triggers
@@ -442,11 +441,10 @@ the daemon waits 2 seconds (settling window) and then issues `peer.repair`
 against each peer that failed to connect. Up to 4 peers are reconciled in
 parallel; per-peer serialization prevents duplicate reconciles.
 
-**Inline `OnDialError`:** When the bridge reconnect loop fails to reach a
-peer, it triggers a reconcile attempt after 3 consecutive failures. Backoff
-between attempts: 2 s → 8 s → 30 s. Auth failures (`CatTokenRejected`) are
-not retried — they bypass the backoff loop immediately and set
-`drift_reconcile_failed`.
+**Inline `OnDialError`:** When the bridge reconnect loop fails to reach a peer,
+it triggers a reconcile attempt after 3 consecutive failures. Backoff between
+attempts: 2 s → 8 s → 30 s. Auth failures (`CatTokenRejected`) are not retried —
+they bypass the backoff loop immediately and set `drift_reconcile_failed`.
 
 ### `peer.repair` RPC
 
@@ -471,8 +469,8 @@ alice                100.64.1.5:44123       48 minutes ago     1042
   └─ drift detected — run: thrum peer join --type repair alice
 ```
 
-The `└─` row appears only when `ReconcileStatus == "drift_reconcile_failed"`.
-A successful reconcile (or a manual `thrum peer join --type repair`) resets the
+The `└─` row appears only when `ReconcileStatus == "drift_reconcile_failed"`. A
+successful reconcile (or a manual `thrum peer join --type repair`) resets the
 status to healthy and removes the hint row.
 
 **Manual recovery:**

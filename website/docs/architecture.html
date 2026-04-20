@@ -32,8 +32,9 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <strong>Architecture</strong> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <strong>Architecture</strong> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
 <h2>System Architecture</h2>
@@ -77,6 +78,30 @@ server all go through it.</p>
 <td>Persistence + fast queries</td>
 </tr>
 </tbody></table>
+<h3>RPC Accept Loop</h3>
+<p>When a client connects to the Unix socket, the daemon&#39;s accept loop runs these
+steps before dispatching to any handler:</p>
+<ol>
+<li><strong>Peercred PID extraction</strong> — the kernel provides the connecting process&#39;s
+PID via <code>SO_PEERCRED</code> (Linux) or <code>LOCAL_PEERCRED</code> (macOS). No trust is placed
+in any client-supplied identity at this stage.</li>
+<li><strong>DaemonResolve — 3-priority chain</strong> — the daemon resolves the caller&#39;s agent
+identity in priority order:<ul>
+<li>PID match: walk the process tree from the peercred PID; if it matches an
+<code>agent_pid</code> in a registered identity file, that agent is the caller.</li>
+<li>Worktree match: derive the calling process&#39;s worktree from its CWD; if
+exactly one identity file belongs to that worktree, use it.</li>
+<li><code>caller_agent_id</code> field: fall back to the agent ID supplied in the JSON-RPC
+request (honored only when peercred resolution is unavailable, e.g., in
+tests or non-Unix-socket contexts).</li>
+</ul>
+</li>
+<li><strong>Guard enforcement</strong> — before the handler runs, the identity guard layer
+checks whether the resolved caller is permitted to execute the requested
+method. Mutating RPCs require a resolved, registered identity. Anonymous
+methods (health, agent.whoami, and ~28 others) pass through without
+resolution.</li>
+</ol>
 <h3>Everything Depends on the Daemon</h3>
 <pre><code>┌─────────────────────────────────────────────────────────────┐
 │                     CLIENTS (Depend on Daemon)               │
@@ -403,11 +428,15 @@ architecture above.</p>
 ├── tmux/        # Tmux session operations, nudge delivery, per-session mutex (v0.7.1)
 ├── restart/     # JSONL conversation extraction, snapshot formatting (v0.7.1)
 ├── daemon/
-│   └── monitor/ # Monitor job supervisor: spawn, line-read, debounce, delivery
+│   ├── monitor/     # Monitor job supervisor: spawn, line-read, debounce, delivery
+│   ├── permission/  # Permission-prompt detection, poller, nudge state (v0.9.0)
+│   └── reconcile/   # Peer drift auto-reconciliation engine (v0.9.0)
 ├── cli/
-│   └── worktree.go  # ensureWorktreeRedirects, enforceOneIdentity, buildQuickstartCmd
+│   ├── worktree.go  # ensureWorktreeRedirects, enforceOneIdentity, buildQuickstartCmd
+│   └── hints/       # Hint pipeline: HintSource, StateAccessor, Shape B/C rendering (v0.9.0)
+├── identity/
+│   └── guard/       # Identity guard enforcement: 8 guards, 3 modes, WritePID (v0.9.0)
 ├── config/      # Configuration loading, identity files, agent naming
-├── identity/    # ID generation (repo, agent, session, message, event)
 ├── jsonl/       # JSONL reader/writer with file locking
 ├── projection/  # SQLite projection engine (multi-file rebuild)
 ├── schema/      # SQLite schema, migrations, JSONL sharding migration
@@ -454,6 +483,23 @@ adoption logic.</p>
   &quot;confirmed_by&quot;: &quot;human:leon&quot;,
   &quot;updated_at&quot;: &quot;2026-02-03T18:02:10.000Z&quot;
 }</code></pre>
+<p>Reserved pseudo-agents (such as <code>@supervisor_&lt;project&gt;</code>) use the same format
+with a <code>reserved: true</code> field (omitempty — absent on normal agents). Reserved
+agents are hidden from <code>thrum team</code> output by default.</p>
+<pre><code>{
+  &quot;version&quot;: 5,
+  &quot;repo_id&quot;: &quot;r_7K2Q1X9M3P0B&quot;,
+  &quot;agent&quot;: {
+    &quot;kind&quot;: &quot;agent&quot;,
+    &quot;name&quot;: &quot;supervisor_thrum&quot;,
+    &quot;role&quot;: &quot;supervisor&quot;,
+    &quot;module&quot;: &quot;&quot;,
+    &quot;display&quot;: &quot;Thrum Supervisor&quot;
+  },
+  &quot;reserved&quot;: true,
+  &quot;worktree&quot;: &quot;main&quot;,
+  &quot;updated_at&quot;: &quot;2026-04-19T10:00:00.000Z&quot;
+}</code></pre>
 <h3>Agent Naming</h3>
 <p>Agents support human-readable names:</p>
 <ul>
@@ -496,6 +542,11 @@ cfg, err := config.LoadWithPath(repoPath, flagRole, flagModule)</code></pre>
 </tr>
 </thead>
 <tbody><tr>
+<td><strong>Daemon ID</strong></td>
+<td><code>d_</code> + 26-char ULID</td>
+<td><code>d_01HXE8Z7R9K3Q6M2W8F4VY</code></td>
+</tr>
+<tr>
 <td><strong>Repo ID</strong></td>
 <td><code>r_</code> + base32(sha256(url))[:12]</td>
 <td><code>r_7K2Q1X9M3P0B</code></td>
@@ -688,9 +739,12 @@ events              # Sequence-ordered, deduplicated event log (for sync)
 sync_checkpoints    # Per-peer sync progress tracking
 command_queue       # Queue dispatch for tmux sessions
 monitors            # Persisted monitor job specs (v20)
+permission_nudges   # Pending permission-prompt nudges (v21)
+daemon_identity     # Local daemon identity cache (v23)
+telegram_msg_map    # Telegram ↔ Thrum message ID map (v24)
 schema_version      # Migration tracking</code></pre>
 <h3>Schema Version</h3>
-<p>Current version: <strong>20</strong></p>
+<p>Current version: <strong>24</strong></p>
 <p>Key migrations:</p>
 <ul>
 <li>v3 -&gt; v4: Impersonation support (<code>authored_by</code>, <code>disclosed</code> columns)</li>
@@ -720,6 +774,15 @@ filtering)</li>
 <li>v18 -&gt; v19: <code>silence_ms</code> and <code>notify_on_complete</code> columns added to
 <code>command_queue</code></li>
 <li>v19 -&gt; v20: <code>monitors</code> table added (monitor job specs for supervisor respawn)</li>
+<li>v20 -&gt; v21: <code>permission_nudges</code> table added (persistent permission-prompt
+nudge state for restart resilience)</li>
+<li>v21 -&gt; v22: <code>origin_daemon TEXT</code> column added to <code>agents</code> table with backfill
+(cross-daemon registration scoping; see <code>thrum-mm3l</code>)</li>
+<li>v22 -&gt; v23: <code>daemon_identity</code> table added (single-row local cache of the
+daemon&#39;s identity block, mirrored from <code>.thrum/config.json</code>)</li>
+<li>v23 -&gt; v24: <code>telegram_msg_map</code> table added (durable Telegram message ID ↔
+Thrum message ID mapping; survives daemon restart so in-flight permission
+approvals route correctly)</li>
 </ul>
 <h3>Initialization</h3>
 <pre><code>db, _ := schema.OpenDB(&quot;thrum.db&quot;)
@@ -903,6 +966,60 @@ backup and receives <code>THRUM_BACKUP_DIR</code>, <code>THRUM_BACKUP_REPO</code
 back to the sync worktree, imports local tables into SQLite, and removes
 <code>messages.db</code> so the projector rebuilds from JSONL on the next daemon start.
 Plugin restore commands run after the core restore.</p>
+<h2>Upgrade Safety</h2>
+<p>Starting with v0.9.0, the daemon writes defensive backup files automatically on
+the first start after an upgrade. No user action needed — the files are silent
+safety nets.</p>
+<h3>Automatic Backup Files</h3>
+<p>Three backup files are written (backup-once pattern: never overwritten on
+subsequent restarts after the first successful upgrade):</p>
+<table>
+<thead>
+<tr>
+<th>Trigger</th>
+<th>Backup file</th>
+<th>Location</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>identity.Bootstrap</code> detects a daemon_id rotation (e.g., legacy hostname-derived ID)</td>
+<td><code>config.json.pre-identity-bak</code></td>
+<td><code>.thrum/config.json.pre-identity-bak</code></td>
+</tr>
+<tr>
+<td><code>PeerRegistry</code> detects a stale daemon_id in peers.json</td>
+<td><code>peers.json.pre-rotation-bak</code></td>
+<td><code>.thrum/var/peers.json.pre-rotation-bak</code></td>
+</tr>
+<tr>
+<td><code>schema.Migrate</code> runs any migration step</td>
+<td><code>thrum.db.pre-migration-v&lt;N&gt;-bak</code> (plus <code>-shm</code> and <code>-wal</code> sidecars)</td>
+<td>same directory as <code>thrum.db</code></td>
+</tr>
+</tbody></table>
+<p>You can delete these files after a successful upgrade. If something goes wrong
+mid-migration, they&#39;re how you get back.</p>
+<h3>Downgrade Guard</h3>
+<p><code>Migrate()</code> refuses to start if the database schema version exceeds the binary&#39;s
+<code>CurrentVersion</code>. Error text:</p>
+<pre><code>database schema is version N, this binary supports up to M — cannot downgrade;
+use a newer binary or delete the database to start fresh</code></pre>
+<p>This is the first hard stop Thrum has ever had for schema mismatches.
+Previously, running an older binary against a migrated database would silently
+corrupt state. Now it fails loudly before touching anything.</p>
+<h3>Recovering from a Failed Upgrade</h3>
+<p>If a migration goes wrong:</p>
+<ol>
+<li>Stop the daemon.</li>
+<li>Rename <code>thrum.db.pre-migration-v&lt;N&gt;-bak</code> back to <code>thrum.db</code> (and the <code>-shm</code>
+and <code>-wal</code> sidecars if they exist).</li>
+<li>Run the older binary.</li>
+</ol>
+<p>The downgrade guard will fire on the older binary if the migration already
+partially ran and bumped the version. In that case, delete <code>thrum.db</code> entirely
+(the JSONL source of truth is unaffected) and let the older daemon rebuild the
+projection from scratch.</p>
+<hr>
 <h2>Cross-Repo Peer System (v0.7.0)</h2>
 <p>Two Thrum daemons — different repos, different machines, same machine in
 different worktrees — can exchange messages bidirectionally via Tailscale. Pair

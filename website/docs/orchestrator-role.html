@@ -32,8 +32,9 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <strong>Orchestrator Role</strong> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>orchestration</strong>: <strong>Orchestrator Role</strong> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
 <h2>What the Orchestrator Is</h2>
@@ -213,6 +214,66 @@ clears the agent to continue or sends findings back for fixes.</p>
 before proceeding. At <code>end_only</code>, it continues automatically if review passes.</p>
 <p>The orchestrator validates that <code>## Review Gate:</code> headings exist during Phase 1.
 A prompt without gates won&#39;t run — the orchestrator bounces it back.</p>
+<hr>
+<h2>Implementer Status Vocabulary</h2>
+<p>Implementers use a four-value status vocabulary when reporting back to the
+coordinator or orchestrator. Without it, every &quot;done-ish&quot; status reads the same
+and coordinators miss latent issues. With it, you can triage a batch of
+completion messages at a glance.</p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Meaning</th>
+<th>Coordinator action</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>DONE</code></td>
+<td>Work complete, no concerns.</td>
+<td>Mark closed and continue.</td>
+</tr>
+<tr>
+<td><code>DONE_WITH_CONCERNS</code></td>
+<td>Work complete, but specific issues need attention.</td>
+<td>Read the listed concerns. Close, file a follow-up, or push back — don&#39;t ignore them.</td>
+</tr>
+<tr>
+<td><code>NEEDS_CONTEXT</code></td>
+<td>Blocked on coordinator clarification.</td>
+<td>Answer the specific questions before the agent resumes.</td>
+</tr>
+<tr>
+<td><code>BLOCKED</code></td>
+<td>Cannot proceed until an external dependency resolves.</td>
+<td>Decide whether to redirect work or wait out the blocker.</td>
+</tr>
+</tbody></table>
+<p><strong>DONE_WITH_CONCERNS</strong> requires the implementer to list each concern explicitly.
+The orchestrator treats an unaddressed <code>DONE_WITH_CONCERNS</code> the same as an
+unresolved review blocker — it doesn&#39;t clear the agent to continue until the
+coordinator has responded.</p>
+<p><strong>BLOCKED</strong> requires the implementer to name the blocker (for example: &quot;waiting
+on team-fix sec.8 to land&quot;). The orchestrator surfaces this to you and pauses
+that workstream rather than letting the agent spin.</p>
+<hr>
+<h2>Two-Stage Review</h2>
+<p>When you review implementer work — whether as the orchestrator dispatching a
+code review sub-agent or as a coordinator reviewing directly — run the two
+stages in this order:</p>
+<p><strong>Stage 1 — Spec Compliance Review</strong>: did the implementation cover every
+requirement in the plan or spec? Run this first. Catching a scope miss early
+costs nothing. Catching it after a clean code quality pass means the implementer
+has to go back anyway.</p>
+<p><strong>Stage 2 — Code Quality Review</strong>: standards, error handling, idioms, dead code.
+Only meaningful once compliance is confirmed.</p>
+<p>Running both reviewers in parallel is fine for speed — but consolidate all
+findings into <strong>one numbered list</strong> before forwarding to the implementer.
+Sending partial findings is one of the most reliable ways to leave issues
+permanently unfixed: the implementer fixes batch 1, reports <code>DONE</code>, and batch 2
+disappears into the conversation history.</p>
+<p>The orchestrator follows this discipline when dispatching code review sub-agents
+at each review gate. If you&#39;re running reviews manually, it applies equally.</p>
 <hr>
 <h2>Escalation</h2>
 <p>The orchestrator stops and messages you when it hits something it can&#39;t resolve:</p>

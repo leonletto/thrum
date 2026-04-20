@@ -786,8 +786,8 @@ write (new or rotated), it backs up the pre-existing config to
 `.thrum/config.json.pre-identity-bak`. The backup-once rule means an existing
 backup is never overwritten — you can always revert by renaming it back.
 
-Bootstrap is idempotent: calling it on a repo that already has a valid ULID
-just refreshes metadata.
+Bootstrap is idempotent: calling it on a repo that already has a valid ULID just
+refreshes metadata.
 
 **Callers:** `thrum init` (explicit), `state.NewState` at daemon start (lazy
 backfill for pre-identity installs), and `peer_registry.NewPeerRegistry`
@@ -832,8 +832,8 @@ Identity:
 ### Legacy Migration
 
 If your daemon was initialized before v0.9.0, Bootstrap rotates the old
-hostname-derived id automatically on the first v0.9.0 daemon start. Three
-things happen:
+hostname-derived id automatically on the first v0.9.0 daemon start. Three things
+happen:
 
 - A `config.json.pre-identity-bak` file is created in `.thrum/`.
 - The rotation warning is printed to the daemon log.
@@ -856,13 +856,13 @@ ULIDs provide globally unique, lexicographically sortable identifiers with
 embedded timestamps. They are generated using monotonic entropy with mutex
 protection for thread safety.
 
-| ID Type       | Format        | Example                      | Purpose                      |
-| ------------- | ------------- | ---------------------------- | ---------------------------- |
-| Daemon ID     | `d_` + ULID   | `d_01HXE8Z7R9K3Q6M2W8F4VY`  | Per-repo daemon fingerprint (set once at init) |
-| Session ID    | `ses_` + ULID | `ses_01HXE8Z7R9K3Q6M2W8F4VY` | Track agent work periods     |
-| Session Token | `tok_` + ULID | `tok_01HXE8Z7R9K3Q6M2W8F4VY` | WebSocket reconnection       |
-| Message ID    | `msg_` + ULID | `msg_01HXE8Z7R9K3Q6M2W8F4VY` | Identify messages            |
-| Event ID      | `evt_` + ULID | `evt_01HXE8Z7R9K3Q6M2W8F4VY` | Deduplication in JSONL merge |
+| ID Type       | Format        | Example                      | Purpose                                        |
+| ------------- | ------------- | ---------------------------- | ---------------------------------------------- |
+| Daemon ID     | `d_` + ULID   | `d_01HXE8Z7R9K3Q6M2W8F4VY`   | Per-repo daemon fingerprint (set once at init) |
+| Session ID    | `ses_` + ULID | `ses_01HXE8Z7R9K3Q6M2W8F4VY` | Track agent work periods                       |
+| Session Token | `tok_` + ULID | `tok_01HXE8Z7R9K3Q6M2W8F4VY` | WebSocket reconnection                         |
+| Message ID    | `msg_` + ULID | `msg_01HXE8Z7R9K3Q6M2W8F4VY` | Identify messages                              |
+| Event ID      | `evt_` + ULID | `evt_01HXE8Z7R9K3Q6M2W8F4VY` | Deduplication in JSONL merge                   |
 
 ULID timestamps can be extracted with `ParseULID()` or `ULIDTimestamp()` for
 time-based queries.
@@ -891,16 +891,16 @@ suffixes and converts to lowercase HTTPS format.
 
 ## Identity Guards
 
-Identity guards are named enforcement checkpoints that fire when Thrum detects
-a mismatch between who is making a call and who owns the identity being acted
-on. The guard system lives in `internal/identity/guard/` and covers eight
-distinct failure modes.
+Identity guards are named enforcement checkpoints that fire when Thrum detects a
+mismatch between who is making a call and who owns the identity being acted on.
+The guard system lives in `internal/identity/guard/` and covers eight distinct
+failure modes.
 
 ### Why Guards Exist
 
 Before identity guards, CWD drift was the main way multi-agent sessions went
 wrong silently. If an agent's runtime process changed directory into another
-worktree, the next `thrum send` or `thrum prime` resolved to the *other* agent's
+worktree, the next `thrum send` or `thrum prime` resolved to the _other_ agent's
 identity file. The send went to the wrong agent. The prime overwrote the wrong
 identity's PID. Neither the operator nor the affected agent got any indication
 that a misattribution happened.
@@ -953,16 +953,16 @@ fields: `guard`, `mode`, `outcome` (`denied`, `allowed`, `auto_reclaimed`, or
 
 ### Guard Table
 
-| Guard key | Trigger | Default mode | `--force` bypass |
-| --- | --- | --- | --- |
-| `cross_worktree` | Caller's ancestor PID chain doesn't contain the identity file's `agent_pid` | strict | No — fix by `cd` to correct worktree or run `thrum prime` |
-| `unauthenticated_rpc` | Mutating RPC from anonymous caller, forged `caller_agent_id`, or no `CallerAgentID` on non-peercred transport | strict | No |
-| `non_git_bootstrap` | `thrum init` or `thrum daemon start` from a non-git directory | strict | Yes (`--force`) |
-| `daemon_writer_liveness` | Daemon tries to write an identity file for an agent whose PID is dead | strict | No |
-| `prime_ownership` | `thrum prime` called from a sub-agent whose closest runtime ancestor is not the identity file's owner | strict | No |
-| `quickstart_self_rename` | Caller already owns an identity in this directory and tries to register under a new name | strict | Yes (`--force`) |
-| `quickstart_name_collision` | Requested name is held by a different agent with a live PID | strict | Yes (`--force`) |
-| `dead_pid_auto_reclaim` | Informational: dead owner's identity auto-reclaimed by new caller | warn | n/a |
+| Guard key                   | Trigger                                                                                                       | Default mode | `--force` bypass                                          |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------- |
+| `cross_worktree`            | Caller's ancestor PID chain doesn't contain the identity file's `agent_pid`                                   | strict       | No — fix by `cd` to correct worktree or run `thrum prime` |
+| `unauthenticated_rpc`       | Mutating RPC from anonymous caller, forged `caller_agent_id`, or no `CallerAgentID` on non-peercred transport | strict       | No                                                        |
+| `non_git_bootstrap`         | `thrum init` or `thrum daemon start` from a non-git directory                                                 | strict       | Yes (`--force`)                                           |
+| `daemon_writer_liveness`    | Daemon tries to write an identity file for an agent whose PID is dead                                         | strict       | No                                                        |
+| `prime_ownership`           | `thrum prime` called from a sub-agent whose closest runtime ancestor is not the identity file's owner         | strict       | No                                                        |
+| `quickstart_self_rename`    | Caller already owns an identity in this directory and tries to register under a new name                      | strict       | Yes (`--force`)                                           |
+| `quickstart_name_collision` | Requested name is held by a different agent with a live PID                                                   | strict       | Yes (`--force`)                                           |
+| `dead_pid_auto_reclaim`     | Informational: dead owner's identity auto-reclaimed by new caller                                             | warn         | n/a                                                       |
 
 **Note on `unauthenticated_rpc`:** The `identity_mismatch` reason (forgery
 rejection) fires unconditionally regardless of the configured mode. You can't
@@ -980,10 +980,10 @@ all other fields.
 ### Cross-Reference: CLI vs. Daemon Resolution
 
 CLI-side identity resolution (which identity file to load) is covered in the
-[Identity Resolution](#identity-resolution) section above. Daemon-side resolution
-uses kernel-verified peer credentials (`SO_PEERCRED` / `LOCAL_PEERPID`) to
-identify the connecting process. That trust model is covered in
-`security-model.md`. For verbatim error text and step-by-step remediation for
+[Identity Resolution](#identity-resolution) section above. Daemon-side
+resolution uses kernel-verified peer credentials (`SO_PEERCRED` /
+`LOCAL_PEERPID`) to identify the connecting process. That trust model is covered
+in `security-model.md`. For verbatim error text and step-by-step remediation for
 each guard, see `troubleshooting-identity.md`.
 
 ## Troubleshooting

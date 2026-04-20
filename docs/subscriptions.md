@@ -27,7 +27,11 @@ when messages match their interests. Agents can subscribe to:
 
 Subscriptions are automatically deleted when a session ends (added in v0.4.3).
 Subscription identity resolution now correctly uses the caller's agent ID for
-filtering (caller_agent_id resolution fix in v0.4.3).
+filtering (caller_agent_id resolution fix in v0.4.3). v0.9.0 sec.3 hardening
+adds server-side peercred verification on top of this client-asserted identity.
+The behavior described here is preserved for non-unix-socket callers (notably
+WebSocket); unix-socket callers are now resolved via kernel peer credentials.
+See [Local Security Model](security-model.md).
 
 When a new message matches a subscription, the daemon:
 

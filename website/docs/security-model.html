@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Local Security Model — Thrum</title>
+<meta name="description" content="How Thrum's daemon decides who's calling — kernel-verified peer credentials, anonymous-caller read-only allowlist, author-only message operations, and WebSocket origin restriction. Covers the v0.9.0 sec.1–sec.8 hardening.">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#security-model.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Reference &rsaquo; Local Security Model
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+<strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
+<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <strong>Local Security Model</strong> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
+</nav>
+<main>
+<h2>Local Security Model</h2>
+<h3>Overview</h3>
+<p>Before v0.9.0, the daemon trusted the <code>caller_agent_id</code> field in every RPC
+request at face value. Your client said &quot;I&#39;m agent X&quot; and the daemon believed
+it. Any process on your machine that could reach the unix socket — and the
+socket was <code>0600</code>, so that meant any process you owned — could impersonate any
+registered agent, delete anyone&#39;s messages, or bulk-wipe entire scopes.</p>
+<p>Concretely: a script running from <code>/tmp</code> could pass
+<code>&quot;caller_agent_id&quot;: &quot;my-coordinator&quot;</code> in a JSON-RPC payload and call
+<code>message.deleteByScope(&quot;project:main&quot;)</code>, erasing the coordinator&#39;s entire
+message history. No identity check. No ownership requirement. Just a raw socket
+write.</p>
+<p>v0.9.0 replaces that with a three-layer trust stack:</p>
+<ol>
+<li><strong>Socket permissions</strong> — the unix socket is <code>0600</code>. Only the user who started
+the daemon can connect at all.</li>
+<li><strong>Kernel peer credentials</strong> — on every accepted connection the daemon reads
+the connecting process&#39;s PID from the kernel (<code>SO_PEERCRED</code> on Linux,
+<code>LOCAL_PEERPID</code> on macOS), walks <code>PID → CWD → git root</code>, and matches against
+registered agent worktrees. Callers that match get a kernel-verified
+identity. Callers that don&#39;t are &quot;anonymous.&quot;</li>
+<li><strong>Handler-level checks</strong> — after dispatch, write handlers re-verify.
+<code>message.delete</code> and <code>message.edit</code> require caller == author.
+<code>message.deleteByAgent</code> requires caller == target agent.</li>
+</ol>
+<p>The client cannot influence layers 2 or 3. They run entirely server-side.</p>
+<hr>
+<h3>How the daemon resolves your identity</h3>
+<p>When you run a thrum CLI command, here&#39;s what happens server-side from the
+moment your connection is accepted:</p>
+<ol>
+<li>The daemon calls <code>peercred.PIDFromConn(conn)</code> — this is a thin wrapper around
+<code>tailscale/peercred</code> that extracts the connecting process PID from the kernel
+without any client cooperation.</li>
+<li><code>gopsutil/v3</code> resolves <code>PID → CWD</code> — the absolute path your process was in
+when it connected.</li>
+<li>The resolver walks the CWD upward looking for a <code>.git</code> directory or <code>.git</code>
+file (the git worktree case). That gives it the git root.</li>
+<li>Both the git root and every registered worktree path are canonicalized via
+<code>filepath.EvalSymlinks</code> — this handles the macOS <code>/var → /private/var</code> rename
+and similar symlink mismatches.</li>
+<li>The canonicalized git root is matched against <code>session_refs</code>, the table of
+registered agent worktree paths in the state DB.</li>
+<li>If a match is found: <code>ResolvedIdentity{AgentID, Worktree, PID}</code> is injected
+into the request context. If not: <code>ErrAnonymous</code> — the caller is anonymous.</li>
+</ol>
+<p>The resolution runs once per connection, not once per request. Your process&#39;s
+CWD doesn&#39;t change within a single unix-socket connection&#39;s lifetime, so doing
+it per-request would be wasted work.</p>
+<p>A &quot;registered worktree&quot; is any git root that was recorded in <code>session_refs</code> when
+an agent ran <code>agent.register</code> and <code>session.start</code> from that directory. If you&#39;ve
+run <code>thrum quickstart</code> in a repo, that repo&#39;s root is registered. A plain git
+repo you&#39;ve never quickstarted in won&#39;t match — running thrum from there makes
+you anonymous. This is intentional: the daemon only knows about agents it&#39;s been
+introduced to.</p>
+<p>Subdirectory depth doesn&#39;t matter. If your agent is registered at
+<code>/Users/you/projects/myapp</code> and you run a thrum command from
+<code>/Users/you/projects/myapp/internal/daemon/rpc</code>, the resolver walks up through
+<code>.git</code> to <code>myapp</code>, matches it, and you&#39;re authenticated. You don&#39;t need to be at
+the repo root.</p>
+<p>If the resolver is absent — early boot, or the state DB isn&#39;t ready yet — the
+daemon falls back to legacy behavior (client-asserted <code>caller_agent_id</code>). Tests
+also skip the resolver. Both paths keep working as before; the new enforcement
+only activates when the resolver is wired in.</p>
+<hr>
+<h3>Anonymous caller policy (sec.3)</h3>
+<p>A caller without a resolved identity is &quot;anonymous.&quot; This covers the normal case
+of running <code>thrum team</code> from your home directory, or from any path that isn&#39;t
+under a registered agent worktree.</p>
+<p>Anonymous callers can invoke these 32 methods. Everything else is rejected at
+the dispatcher with a clear error before the handler runs.</p>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Methods</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Observability / liveness</td>
+<td><code>health</code>, <code>daemon.status</code>, <code>sync.status</code>, <code>tsync.peers.list</code>, <code>peer.list</code>, <code>peer.status</code>, <code>telegram.status</code></td>
+</tr>
+<tr>
+<td>Agent / team / session reads</td>
+<td><code>agent.list</code>, <code>agent.whoami</code>, <code>agent.listContext</code>, <code>team.list</code>, <code>session.list</code></td>
+</tr>
+<tr>
+<td>Context reads</td>
+<td><code>context.show</code>, <code>context.preamble.show</code></td>
+</tr>
+<tr>
+<td>Message / group reads</td>
+<td><code>message.get</code>, <code>message.list</code>, <code>message.outbox</code>, <code>group.list</code>, <code>group.info</code>, <code>group.members</code></td>
+</tr>
+<tr>
+<td>Monitor reads</td>
+<td><code>monitor.list</code>, <code>monitor.show</code>, <code>monitor.logs</code></td>
+</tr>
+<tr>
+<td>Tmux reads</td>
+<td><code>tmux.status</code>, <code>tmux.capture</code>, <code>tmux.check-pane</code>, <code>tmux.queue-status</code>, <code>tmux.queue-wait</code></td>
+</tr>
+<tr>
+<td>User identify</td>
+<td><code>user.identify</code></td>
+</tr>
+<tr>
+<td>Bootstrap</td>
+<td><code>agent.register</code>, <code>session.start</code>, <code>session.setIntent</code></td>
+</tr>
+</tbody></table>
+<p>The list is defined in <code>internal/daemon/server.go</code> as <code>anonymousAllowedMethods</code>.</p>
+<p>When an anonymous caller tries a mutating RPC, the error looks like this:</p>
+<pre><code>anonymous caller cannot invoke &quot;message.send&quot;: cd into a registered agent worktree and retry</code></pre>
+<p>The intent here was to err on the side of more access for reads, not less.
+<code>cd ~ &amp;&amp; thrum team</code> works. <code>cd ~ &amp;&amp; thrum send</code> doesn&#39;t.</p>
+<hr>
+<h3>Forged caller_agent_id rejected</h3>
+<p>The <code>caller_agent_id</code> field in request payloads still exists for backward
+compatibility. Clients that don&#39;t set a resolver (tests, non-unix-socket
+transports) still use it. But when the peercred resolver is active, the daemon
+cross-checks the client-asserted <code>caller_agent_id</code> against the kernel-resolved
+identity. Mismatch → the request is rejected with &quot;identity mismatch.&quot;</p>
+<p>This is unconditional. There&#39;s no config flag to disable it. It applies to every
+RPC on every unix-socket connection where the resolver is active.</p>
+<p>In practice this mainly affects scripts. If you had a script that ran from
+<code>/tmp/some-tool</code> and passed <code>caller_agent_id: &quot;agent-in-some-repo&quot;</code> to send
+messages on behalf of that agent, that script now gets rejected. The fix is to
+run the script from the agent&#39;s worktree.</p>
+<hr>
+<h3>WebSocket origin restriction (sec.1)</h3>
+<p>The daemon&#39;s WebSocket server (used by the web UI and browser clients) now
+validates the <code>Origin</code> header on every upgrade handshake. Accepted origins:</p>
+<ul>
+<li><code>http://localhost:&lt;port&gt;</code></li>
+<li><code>http://127.0.0.1:&lt;port&gt;</code></li>
+<li><code>ws://localhost:&lt;port&gt;</code></li>
+<li><code>ws://127.0.0.1:&lt;port&gt;</code></li>
+</ul>
+<p>Any other origin gets HTTP 403 before the handshake completes.</p>
+<p>Pre-v0.9.0, <code>CheckOrigin</code> returned <code>true</code> unconditionally. That meant any
+website you had open in your browser could open a WebSocket connection to your
+local daemon and call RPCs. This is a standard CSRF vector for locally-running
+services. v0.9.0 closes it.</p>
+<p>If you&#39;re developing a custom client that connects to the daemon over WebSocket
+from a non-localhost origin, it won&#39;t work anymore. Use the unix socket instead,
+or proxy through localhost.</p>
+<hr>
+<h3>Author-only message operations (sec.4)</h3>
+<p><code>message.delete</code> (soft-delete) now resolves the caller&#39;s identity and checks
+that the caller is the message&#39;s author. Non-author → rejected.</p>
+<p><code>message.edit</code> already had this check. sec.4 brings <code>message.delete</code> into parity
+with it.</p>
+<p>If you&#39;re calling <code>message.delete</code> on a message you didn&#39;t author, you&#39;ll get an
+error like <code>&quot;only message author can delete&quot;</code>. There&#39;s no override.</p>
+<hr>
+<h3>Bulk hard-delete restrictions (sec.8)</h3>
+<p>Two RPCs had no identity check at all pre-v0.9.0:</p>
+<p><strong><code>message.deleteByAgent(agent_id)</code></strong> — hard-deletes all messages by the named
+agent across 5+ FK-linked tables. Now requires <code>caller == agent_id</code>. You can
+bulk-delete your own messages. You can&#39;t bulk-delete another agent&#39;s.</p>
+<p><strong><code>message.deleteByScope(scope)</code></strong> — hard-deletes all messages in a scope. Now
+restricted to daemon-internal callers only. It&#39;s not reachable from the unix
+socket, the CLI, or the WebSocket transport. A structural test guards against
+re-registration on WebSocket.</p>
+<p>Both operations being callable by any local process was the worst pre-v0.9.0
+exposure: one command could wipe another agent&#39;s entire message history with no
+audit trail and no identity requirement.</p>
+<hr>
+<h3>Bootstrap exception</h3>
+<p>Three RPCs are on the anonymous allowlist even though they mutate state:
+<code>agent.register</code>, <code>session.start</code>, and <code>session.setIntent</code>.</p>
+<p>They have to be. A brand-new agent has no identity yet — that&#39;s exactly what
+these calls create. The peercred resolver resolves identity by looking up the
+connecting process&#39;s worktree against <code>session_refs</code>. Before <code>agent.register</code>
+runs, there&#39;s nothing to look up.</p>
+<p>There&#39;s also a subtler issue: peercred identity is resolved once per connection,
+at accept time. Even if <code>agent.register</code> populates <code>session_refs</code>
+mid-connection, the current connection stays tagged as anonymous for its
+lifetime. That&#39;s why all three bootstrap RPCs need the anonymous exception — the
+quickstart flow calls them in sequence on a single connection.</p>
+<p>The <code>0600</code> socket permission is the only access control on these three calls.
+Only the owning user can reach them.</p>
+<hr>
+<h3>Breaking changes from v0.8.x</h3>
+<p>These behaviors changed in v0.9.0. If you have scripts or tooling that relied on
+the old behavior, they&#39;ll need updating.</p>
+<ul>
+<li><strong>Forged <code>caller_agent_id</code> rejected.</strong> Previously any process could claim any
+agent ID. Now mismatches on unix-socket connections with the resolver active
+are rejected with &quot;identity mismatch.&quot;</li>
+<li><strong><code>message.delete</code> by non-author rejected.</strong> Previously any caller could
+soft-delete any message by ID. Now only the author can.</li>
+<li><strong><code>message.deleteByAgent</code> requires caller == target.</strong> Previously callable by
+any local process. Now you can only bulk-delete your own messages.</li>
+<li><strong><code>message.deleteByScope</code> is daemon-internal only.</strong> Previously callable from
+the CLI and WebSocket. Now unreachable from any external client.</li>
+<li><strong>WebSocket from non-localhost origin: HTTP 403.</strong> Previously <code>CheckOrigin</code>
+returned <code>true</code> for everything. Now foreign origins are blocked at the upgrade
+handshake.</li>
+</ul>
+<hr>
+<h3>Identity guards vs. the security model</h3>
+<p>The security model answers &quot;who is calling?&quot; — that&#39;s peercred, the allowlist,
+and the author checks described above.</p>
+<p>Identity guards answer a different question: &quot;given the resolved caller, are
+they allowed to do this specific thing right now?&quot; Guards run after identity
+resolution and add extra invariants, like cross-worktree CWD checks that verify
+the caller is actually operating from within the expected agent worktree.</p>
+<p>If you&#39;re getting guard errors rather than the authentication errors described
+here, see <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a> for the
+specific error messages and recovery steps.</p>
+
+</main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#security-model.html')}</script>
+</body>
+</html>

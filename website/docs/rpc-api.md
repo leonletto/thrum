@@ -92,12 +92,13 @@ semantics depend on the transport:
   credentials (`SO_PEERCRED` on Linux, `LOCAL_PEERPID` on macOS). If
   `caller_agent_id` is also provided, the daemon cross-checks it against the
   kernel-verified identity. A mismatch returns
-  `unauthenticated_rpc/identity_mismatch`. Forged claims cannot succeed.
-  See [Security Model](security-model.md) for the full trust stack.
+  `unauthenticated_rpc/identity_mismatch`. Forged claims cannot succeed. See
+  [Security Model](security-model.md) for the full trust stack.
 - **WebSocket:** Peercred is not available. Mutating RPCs require a non-empty
-  `caller_agent_id`. Strict mode returns `unauthenticated_rpc/no_caller_agent_id`
-  when it is absent. See [Troubleshooting Identity](troubleshooting-identity.md)
-  for remediation steps. (G3 note)
+  `caller_agent_id`. Strict mode returns
+  `unauthenticated_rpc/no_caller_agent_id` when it is absent. See
+  [Troubleshooting Identity](troubleshooting-identity.md) for remediation steps.
+  (G3 note)
 
 **Anonymous callers** (callers whose CWD does not resolve to a registered agent
 worktree) may only invoke a hardcoded read-only allowlist of ~30 methods.
@@ -118,20 +119,20 @@ Health check and daemon status.
 
 **Response:**
 
-| Field                          | Type    | Description                                                       |
-| ------------------------------ | ------- | ----------------------------------------------------------------- |
-| `status`                       | string  | `"ok"` or `"degraded"`                                            |
-| `uptime_ms`                    | integer | Daemon uptime in milliseconds                                     |
-| `version`                      | string  | Daemon version (e.g., `"0.1.0"`)                                  |
-| `repo_id`                      | string  | Repository identifier                                             |
-| `sync_state`                   | string  | `"synced"`, `"pending"`, or `"error"` (requires active sync loop) |
-| `identity`                     | object  | Daemon identity fields (omitted when identity is not initialized) |
-| `identity.daemon_id`           | string  | ULID-based daemon identifier (e.g., `"d_01J..."`)                 |
-| `identity.repo_name`           | string  | Repository name (e.g., `"falcon-backend"`)                        |
-| `identity.hostname`            | string  | Machine hostname                                                  |
-| `identity.repo_path`           | string  | Absolute path to the repository root                              |
-| `identity.git_origin_url`      | string  | Git remote URL (omitted when not set)                             |
-| `identity.init_at`             | string  | ISO 8601 timestamp when this daemon_id was first generated        |
+| Field                     | Type    | Description                                                       |
+| ------------------------- | ------- | ----------------------------------------------------------------- |
+| `status`                  | string  | `"ok"` or `"degraded"`                                            |
+| `uptime_ms`               | integer | Daemon uptime in milliseconds                                     |
+| `version`                 | string  | Daemon version (e.g., `"0.1.0"`)                                  |
+| `repo_id`                 | string  | Repository identifier                                             |
+| `sync_state`              | string  | `"synced"`, `"pending"`, or `"error"` (requires active sync loop) |
+| `identity`                | object  | Daemon identity fields (omitted when identity is not initialized) |
+| `identity.daemon_id`      | string  | ULID-based daemon identifier (e.g., `"d_01J..."`)                 |
+| `identity.repo_name`      | string  | Repository name (e.g., `"falcon-backend"`)                        |
+| `identity.hostname`       | string  | Machine hostname                                                  |
+| `identity.repo_path`      | string  | Absolute path to the repository root                              |
+| `identity.git_origin_url` | string  | Git remote URL (omitted when not set)                             |
+| `identity.init_at`        | string  | ISO 8601 timestamp when this daemon_id was first generated        |
 
 **Errors:**
 
@@ -705,27 +706,27 @@ registration on the WebSocket transport).
 
 **Request:**
 
-| Parameter  | Type   | Required | Description                               |
-| ---------- | ------ | -------- | ----------------------------------------- |
-| `agent_id` | string | yes      | Agent ID whose messages to delete         |
+| Parameter  | Type   | Required | Description                       |
+| ---------- | ------ | -------- | --------------------------------- |
+| `agent_id` | string | yes      | Agent ID whose messages to delete |
 
 **Response:**
 
-| Field           | Type    | Description                        |
-| --------------- | ------- | ---------------------------------- |
-| `deleted_count` | integer | Number of messages hard-deleted    |
+| Field           | Type    | Description                     |
+| --------------- | ------- | ------------------------------- |
+| `deleted_count` | integer | Number of messages hard-deleted |
 
 **Errors:**
 
 - `agent_id is required`: Missing `agent_id` field
-- `unauthorized`: Caller identity does not match the target `agent_id`. Only
-  the agent itself may invoke this method.
+- `unauthorized`: Caller identity does not match the target `agent_id`. Only the
+  agent itself may invoke this method.
 
 ### message.deleteByScope
 
-> **Daemon-internal only.** This method is not callable from external clients
-> — not from the CLI, WebSocket connections, or external unix-socket callers.
-> It is reserved for internal daemon housekeeping operations. The method is not
+> **Daemon-internal only.** This method is not callable from external clients —
+> not from the CLI, WebSocket connections, or external unix-socket callers. It
+> is reserved for internal daemon housekeeping operations. The method is not
 > registered on the WebSocket transport at all.
 
 **Errors:**
@@ -1211,29 +1212,29 @@ existing peers.
 
 **Request:**
 
-| Parameter        | Type   | Required | Description                                   |
-| ---------------- | ------ | -------- | --------------------------------------------- |
-| `code`           | string | yes      | 16-digit numeric pairing code                 |
-| `daemon_id`      | string | yes      | Caller's daemon ID                            |
-| `name`           | string | no       | Caller's repo name (used as peer name)        |
-| `address`        | string | no       | Caller's `ip:port`                            |
-| `repo_name`      | string | no       | Caller's repository name                      |
-| `hostname`       | string | no       | Caller's machine hostname                     |
-| `repo_path`      | string | no       | Caller's absolute repo path                   |
-| `git_origin_url` | string | no       | Caller's git remote URL                       |
+| Parameter        | Type   | Required | Description                            |
+| ---------------- | ------ | -------- | -------------------------------------- |
+| `code`           | string | yes      | 16-digit numeric pairing code          |
+| `daemon_id`      | string | yes      | Caller's daemon ID                     |
+| `name`           | string | no       | Caller's repo name (used as peer name) |
+| `address`        | string | no       | Caller's `ip:port`                     |
+| `repo_name`      | string | no       | Caller's repository name               |
+| `hostname`       | string | no       | Caller's machine hostname              |
+| `repo_path`      | string | no       | Caller's absolute repo path            |
+| `git_origin_url` | string | no       | Caller's git remote URL                |
 
 **Response:**
 
-| Field            | Type   | Description                                               |
-| ---------------- | ------ | --------------------------------------------------------- |
-| `status`         | string | `"paired"`                                                |
-| `token`          | string | Long-lived shared auth token stored in `peers.json`       |
-| `daemon_id`      | string | Listener's daemon ID                                      |
-| `name`           | string | Listener's peer name                                      |
-| `repo_name`      | string | Listener's repo name (omitted when not set)               |
-| `hostname`       | string | Listener's machine hostname (omitted when not set)        |
-| `repo_path`      | string | Listener's absolute repo path (omitted when not set)      |
-| `git_origin_url` | string | Listener's git remote URL (omitted when not set)          |
+| Field            | Type   | Description                                          |
+| ---------------- | ------ | ---------------------------------------------------- |
+| `status`         | string | `"paired"`                                           |
+| `token`          | string | Long-lived shared auth token stored in `peers.json`  |
+| `daemon_id`      | string | Listener's daemon ID                                 |
+| `name`           | string | Listener's peer name                                 |
+| `repo_name`      | string | Listener's repo name (omitted when not set)          |
+| `hostname`       | string | Listener's machine hostname (omitted when not set)   |
+| `repo_path`      | string | Listener's absolute repo path (omitted when not set) |
+| `git_origin_url` | string | Listener's git remote URL (omitted when not set)     |
 
 ### peer.join
 
@@ -1349,8 +1350,8 @@ Notify this daemon that a remote peer's address has changed.
 
 Re-establish a known peer relationship after address drift, without re-pairing.
 Uses the stored bearer token from `peers.json` as the trust anchor — no new
-peercode is required. This RPC is distinct from `pair.request`: it does not
-mint a new token and does not require an active pairing session.
+peercode is required. This RPC is distinct from `pair.request`: it does not mint
+a new token and does not require an active pairing session.
 
 Invoked automatically by the `reconcile` package on boot (`ReconcileAll`) and
 inline on dial failure (`OnDialError`). Can also be triggered manually via
@@ -1361,39 +1362,39 @@ entry). Distinct from the peercode used in `pair.request`.
 
 **Request:**
 
-| Parameter        | Type   | Required | Description                                              |
-| ---------------- | ------ | -------- | -------------------------------------------------------- |
-| `token`          | string | yes      | Stored bearer token from `peers.json`                    |
-| `daemon_id`      | string | yes      | Caller's current daemon ID                               |
-| `address`        | string | no       | Caller's current `ip:port`                               |
-| `repo_name`      | string | no       | Caller's repository name                                 |
-| `hostname`       | string | no       | Caller's machine hostname                                |
-| `repo_path`      | string | no       | Caller's absolute repo path                              |
-| `git_origin_url` | string | no       | Caller's git remote URL                                  |
+| Parameter        | Type   | Required | Description                           |
+| ---------------- | ------ | -------- | ------------------------------------- |
+| `token`          | string | yes      | Stored bearer token from `peers.json` |
+| `daemon_id`      | string | yes      | Caller's current daemon ID            |
+| `address`        | string | no       | Caller's current `ip:port`            |
+| `repo_name`      | string | no       | Caller's repository name              |
+| `hostname`       | string | no       | Caller's machine hostname             |
+| `repo_path`      | string | no       | Caller's absolute repo path           |
+| `git_origin_url` | string | no       | Caller's git remote URL               |
 
 **Response** (`RepairResponse`):
 
-| Field            | Type   | Description                                                                |
-| ---------------- | ------ | -------------------------------------------------------------------------- |
-| `status`         | string | `"repaired"`                                                               |
-| `daemon_id`      | string | Listener's current daemon ID (used to detect daemon_id rotation)           |
-| `name`           | string | Peer name (never rotated — stable across daemon_id changes)                |
-| `repo_name`      | string | Listener's repo name (omitted when not set)                                |
-| `hostname`       | string | Listener's machine hostname (omitted when not set)                         |
-| `repo_path`      | string | Listener's absolute repo path (omitted when not set)                       |
-| `git_origin_url` | string | Listener's git remote URL (omitted when not set)                           |
+| Field            | Type   | Description                                                      |
+| ---------------- | ------ | ---------------------------------------------------------------- |
+| `status`         | string | `"repaired"`                                                     |
+| `daemon_id`      | string | Listener's current daemon ID (used to detect daemon_id rotation) |
+| `name`           | string | Peer name (never rotated — stable across daemon_id changes)      |
+| `repo_name`      | string | Listener's repo name (omitted when not set)                      |
+| `hostname`       | string | Listener's machine hostname (omitted when not set)               |
+| `repo_path`      | string | Listener's absolute repo path (omitted when not set)             |
+| `git_origin_url` | string | Listener's git remote URL (omitted when not set)                 |
 
 **Error codes:**
 
-| Condition                    | Code              | Description                                                      |
-| ---------------------------- | ----------------- | ---------------------------------------------------------------- |
-| Token not found in registry  | `CatTokenRejected`| No peer entry matches the presented token; re-pair required       |
-| Empty `daemon_id` in response| `CatOther`        | Response is malformed; reconcile manager does not re-key registry |
+| Condition                     | Code               | Description                                                       |
+| ----------------------------- | ------------------ | ----------------------------------------------------------------- |
+| Token not found in registry   | `CatTokenRejected` | No peer entry matches the presented token; re-pair required       |
+| Empty `daemon_id` in response | `CatOther`         | Response is malformed; reconcile manager does not re-key registry |
 
 **When to use:** After a peer's address drifts (IP change, port reassignment,
-daemon restart on a different port) and automatic reconciliation has failed.
-Use `thrum peer join --type repair <name>` to trigger manually. This RPC is
-**not** valid for `peer add` — only for `peer join`.
+daemon restart on a different port) and automatic reconciliation has failed. Use
+`thrum peer join --type repair <name>` to trigger manually. This RPC is **not**
+valid for `peer add` — only for `peer join`.
 
 ## Agent Methods (v0.8.0)
 
@@ -1542,31 +1543,31 @@ rather than invoking this RPC manually.
 
 **Request:**
 
-| Parameter | Type   | Required | Description                                                                        |
-| --------- | ------ | -------- | ---------------------------------------------------------------------------------- |
-| `session` | string | yes      | Session name                                                                       |
-| `content` | string | no       | Captured pane content (last 5 lines). When omitted the daemon captures it itself.  |
+| Parameter | Type   | Required | Description                                                                       |
+| --------- | ------ | -------- | --------------------------------------------------------------------------------- |
+| `session` | string | yes      | Session name                                                                      |
+| `content` | string | no       | Captured pane content (last 5 lines). When omitted the daemon captures it itself. |
 
 **Note:** The `reason` field accepted by older clients is now daemon-computed,
 not client-supplied. Clients that send `reason` will have it ignored.
 
 **Response:**
 
-| Field     | Type   | Description                                                                                  |
-| --------- | ------ | -------------------------------------------------------------------------------------------- |
-| `session` | string | Session name                                                                                 |
+| Field     | Type   | Description                                                                                 |
+| --------- | ------ | ------------------------------------------------------------------------------------------- |
+| `session` | string | Session name                                                                                |
 | `state`   | string | Detected state: `idle`, `permission`, `working`, `command_completed`, or `working_but_idle` |
-| `reason`  | string | Human-readable reason string computed by the daemon                                          |
+| `reason`  | string | Human-readable reason string computed by the daemon                                         |
 
 **State values:**
 
-| State              | Meaning                                                         |
-| ------------------ | --------------------------------------------------------------- |
-| `idle`             | Pane is at a shell prompt, no active process                    |
-| `permission`       | A permission prompt was detected (awaiting user approval)       |
-| `working`          | AI runtime is actively generating output                        |
-| `command_completed`| A queued command has completed                                  |
-| `working_but_idle` | Pane is technically idle but heuristics suggest work in progress |
+| State               | Meaning                                                          |
+| ------------------- | ---------------------------------------------------------------- |
+| `idle`              | Pane is at a shell prompt, no active process                     |
+| `permission`        | A permission prompt was detected (awaiting user approval)        |
+| `working`           | AI runtime is actively generating output                         |
+| `command_completed` | A queued command has completed                                   |
+| `working_but_idle`  | Pane is technically idle but heuristics suggest work in progress |
 
 ### tmux.restart
 

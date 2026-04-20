@@ -1,15 +1,3 @@
----
-title: "CLI Hints"
-description:
-  "Inline contextual hints from Thrum CLI commands — pre-action warnings,
-  post-action next steps, and JSON output for tooling. Covers Phase B (thrum
-  send / tmux create / init) and the THRUM_NO_HINTS opt-out."
-category: "reference"
-order: 3
-tags: ["cli", "hints", "ux", "thrum-no-hints"]
-last_updated: "2026-04-19"
----
-
 ## CLI Hints
 
 ### Overview

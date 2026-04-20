@@ -308,8 +308,9 @@ Here's how the poller works:
 2. **Polling** — every 10 seconds, the daemon captures pane content, strips
    volatile lines specific to each runtime (spinners, statuslines, progress
    timers), and SHA-256 hashes the result.
-3. **Stability threshold** — two consecutive identical hashes trigger `OnStable`.
-   That's roughly 20 seconds of detection latency from when the prompt appears.
+3. **Stability threshold** — two consecutive identical hashes trigger
+   `OnStable`. That's roughly 20 seconds of detection latency from when the
+   prompt appears.
 4. **`OnStable`** synthesizes a `CheckPaneRequest → HandleCheckPane` call. You
    can also invoke `thrum tmux check-pane` directly from the CLI, but that's
    unusual — the poller handles it automatically.
@@ -317,8 +318,8 @@ Here's how the poller works:
    In-flight detection survives a daemon restart cleanly.
 
 When `HandleCheckPane` detects a permission prompt, the daemon routes a nudge to
-the configured `permission_supervisors`, deduplicates repeat fires, and escalates
-on backoff if the prompt goes unanswered.
+the configured `permission_supervisors`, deduplicates repeat fires, and
+escalates on backoff if the prompt goes unanswered.
 
 The full detection and response workflow — supervisor configuration, nudge
 format, reply channels (CLI / web UI / Telegram), and stuck-state recovery — is

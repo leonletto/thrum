@@ -32,8 +32,9 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
 <h2>Multi-Agent Support</h2>
@@ -260,7 +261,7 @@ daemon or writing files:</p>
 <pre><code>thrum quickstart --runtime cursor --dry-run
 # Shows .cursorrules content and MCP config that would be created</code></pre>
 <h3>Custom Runtimes</h3>
-<p>Add custom runtime presets via <code>~/.config/thrum/runtimes.json</code> (XDG-aware):</p>
+<p>Add custom runtime presets via <code>~/.thrum/runtimes.json</code>:</p>
 <pre><code>{
   &quot;default_runtime&quot;: &quot;claude&quot;,
   &quot;custom_runtimes&quot;: {
@@ -276,6 +277,13 @@ daemon or writing files:</p>
     }
   }
 }</code></pre>
+<blockquote>
+<p><strong>Migration note (v0.9.0):</strong> If you have an existing
+<code>~/.config/thrum/runtimes.json</code> (Linux) or
+<code>~/Library/Application Support/thrum/runtimes.json</code> (macOS), move it to
+<code>~/.thrum/runtimes.json</code>. The old paths are no longer read; custom runtimes
+silently disappear if not migrated.</p>
+</blockquote>
 <p>Custom runtimes appear alongside built-in presets in <code>thrum runtime list</code>.</p>
 <hr>
 <h2>Context Prime</h2>
@@ -332,8 +340,8 @@ thrum tmux launch auth</code></pre>
 <p>The worktree path is <code>worktrees.base_path/&lt;name&gt;</code> (default
 <code>~/.workspaces/&lt;repo&gt;/&lt;name&gt;</code>). When you pass <code>--name</code>, <code>--role</code>, and
 <code>--module</code>, the command creates a real tmux session and registers the agent
-identity inside it, then prints the next-step <code>thrum tmux launch</code> command.
-The agent runtime is not started until you run <code>tmux launch</code>.</p>
+identity inside it, then prints the next-step <code>thrum tmux launch</code> command. The
+agent runtime is not started until you run <code>tmux launch</code>.</p>
 <p>If you need to wire up an existing worktree manually:</p>
 <pre><code># Create the worktree
 git worktree add ~/.workspaces/repo/auth -b feature/auth
@@ -385,6 +393,12 @@ file in <code>.thrum/identities/</code>:</p>
 <p>Use <code>THRUM_NAME</code> to select which identity to use:</p>
 <pre><code>THRUM_NAME=furiosa thrum send &quot;Implementation complete&quot;
 THRUM_NAME=reviewer thrum send &quot;LGTM, approved&quot;</code></pre>
+<h3>CWD Discipline</h3>
+<p>Agents that <code>cd</code> into another worktree mid-session will trigger the
+<code>cross_worktree</code> identity guard. Use <code>THRUM_HOME=/path/to/worktree</code> to pin the
+repo path when crossing worktrees, or run <code>thrum prime</code> from the new worktree to
+refresh identity. See <a href="troubleshooting-identity.html">Troubleshooting Identity</a>
+for the full guard catalog.</p>
 <hr>
 <h2>Coordination Tools</h2>
 <h3>who-has: File Ownership</h3>

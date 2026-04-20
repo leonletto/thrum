@@ -32,8 +32,9 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <strong>RPC API</strong><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <strong>RPC API</strong><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
 <h2>Thrum Daemon RPC API</h2>
@@ -127,6 +128,26 @@ exception:</p>
 <li><code>user.register</code> is only available over WebSocket (returns <code>-32001</code> on Unix
 socket)</li>
 </ul>
+<h3>Caller Identity</h3>
+<p>Most RPC fields in this document include a <code>caller_agent_id</code> parameter. Its
+semantics depend on the transport:</p>
+<ul>
+<li><strong>Unix socket (v0.9.0+):</strong> The daemon resolves caller identity via kernel peer
+credentials (<code>SO_PEERCRED</code> on Linux, <code>LOCAL_PEERPID</code> on macOS). If
+<code>caller_agent_id</code> is also provided, the daemon cross-checks it against the
+kernel-verified identity. A mismatch returns
+<code>unauthenticated_rpc/identity_mismatch</code>. Forged claims cannot succeed. See
+<a href="security-model.html">Security Model</a> for the full trust stack.</li>
+<li><strong>WebSocket:</strong> Peercred is not available. Mutating RPCs require a non-empty
+<code>caller_agent_id</code>. Strict mode returns
+<code>unauthenticated_rpc/no_caller_agent_id</code> when it is absent. See
+<a href="troubleshooting-identity.html">Troubleshooting Identity</a> for remediation steps.
+(G3 note)</li>
+</ul>
+<p><strong>Anonymous callers</strong> (callers whose CWD does not resolve to a registered agent
+worktree) may only invoke a hardcoded read-only allowlist of ~30 methods.
+Mutating RPCs are rejected at the dispatcher before the handler runs. See
+<a href="security-model.html">Security Model</a> for the full allowlist.</p>
 <h2>Method Reference</h2>
 <h3>health</h3>
 <p>Health check and daemon status.</p>
@@ -180,6 +201,41 @@ socket)</li>
 <td><code>sync_state</code></td>
 <td>string</td>
 <td><code>&quot;synced&quot;</code>, <code>&quot;pending&quot;</code>, or <code>&quot;error&quot;</code> (requires active sync loop)</td>
+</tr>
+<tr>
+<td><code>identity</code></td>
+<td>object</td>
+<td>Daemon identity fields (omitted when identity is not initialized)</td>
+</tr>
+<tr>
+<td><code>identity.daemon_id</code></td>
+<td>string</td>
+<td>ULID-based daemon identifier (e.g., <code>&quot;d_01J...&quot;</code>)</td>
+</tr>
+<tr>
+<td><code>identity.repo_name</code></td>
+<td>string</td>
+<td>Repository name (e.g., <code>&quot;falcon-backend&quot;</code>)</td>
+</tr>
+<tr>
+<td><code>identity.hostname</code></td>
+<td>string</td>
+<td>Machine hostname</td>
+</tr>
+<tr>
+<td><code>identity.repo_path</code></td>
+<td>string</td>
+<td>Absolute path to the repository root</td>
+</tr>
+<tr>
+<td><code>identity.git_origin_url</code></td>
+<td>string</td>
+<td>Git remote URL (omitted when not set)</td>
+</tr>
+<tr>
+<td><code>identity.init_at</code></td>
+<td>string</td>
+<td>ISO 8601 timestamp when this daemon_id was first generated</td>
 </tr>
 </tbody></table>
 <p><strong>Errors:</strong></p>
@@ -280,6 +336,14 @@ socket)</li>
 <li><code>invalid request</code>: Malformed JSON params</li>
 <li><code>role is required</code>: Missing <code>role</code> field</li>
 <li><code>module is required</code>: Missing <code>module</code> field</li>
+</ul>
+<p><strong>Notes:</strong></p>
+<ul>
+<li>The role+module conflict check is scoped to the <strong>local daemon only</strong>. Agents
+that were registered on a remote daemon and synced into the local DB via
+<code>origin_daemon</code> are not treated as conflicts — two daemons in a peer mesh can
+have agents with identical role+module without triggering this error. This
+fixes the cross-daemon force-delete bug tracked as thrum-mm3l.</li>
 </ul>
 <h3>agent.list</h3>
 <p>List registered agents with optional filters.</p>
@@ -1662,6 +1726,9 @@ marked as deleted.</p>
 <li><code>message_id is required</code>: Missing <code>message_id</code> field</li>
 <li><code>message not found</code>: No message with given ID</li>
 <li><code>message already deleted</code>: Message was already soft-deleted</li>
+<li><code>only message author can delete</code>: Caller is not the message author; only the
+agent that sent the message may delete it. Non-author callers receive this
+error regardless of transport.</li>
 </ul>
 <h3>message.markRead</h3>
 <p>Batch mark messages as read for the current agent and session. Returns
@@ -1708,6 +1775,62 @@ collaboration info (other agents who also read the messages).</p>
 <li><code>message_ids is required and must not be empty</code>: Missing or empty
 <code>message_ids</code> array</li>
 <li><code>no active session found</code>: Agent does not have an active session</li>
+</ul>
+<h3>message.deleteByAgent</h3>
+<p>Hard-delete all messages authored by a specific agent. The caller must be the
+same agent as the target — this method cannot be used to delete another agent&#39;s
+messages.</p>
+<p><strong>Unix socket only.</strong> Not available over WebSocket (structural guard prevents
+registration on the WebSocket transport).</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>agent_id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Agent ID whose messages to delete</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>deleted_count</code></td>
+<td>integer</td>
+<td>Number of messages hard-deleted</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>agent_id is required</code>: Missing <code>agent_id</code> field</li>
+<li><code>unauthorized</code>: Caller identity does not match the target <code>agent_id</code>. Only the
+agent itself may invoke this method.</li>
+</ul>
+<h3>message.deleteByScope</h3>
+<blockquote>
+<p><strong>Daemon-internal only.</strong> This method is not callable from external clients —
+not from the CLI, WebSocket connections, or external unix-socket callers. It
+is reserved for internal daemon housekeeping operations. The method is not
+registered on the WebSocket transport at all.</p>
+</blockquote>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>-32601</code> (Method not found): Returned to any external caller attempting to
+invoke this method.</li>
 </ul>
 <h3>group.create</h3>
 <p>Create a named group for targeted messaging. Groups can contain agents and
@@ -2698,6 +2821,123 @@ otherwise.</li>
 <td>Human-readable status message</td>
 </tr>
 </tbody></table>
+<h3>pair.request</h3>
+<p>Low-level handshake RPC invoked by the joining peer against the listener during
+<code>thrum peer join</code>. Both sides exchange identity metadata at pairing time so the
+remote&#39;s repo name, hostname, repo path, and git origin URL are stored in
+<code>peers.json</code> for future routing.</p>
+<p>All four identity fields are <code>omitempty</code> — an older peer that does not send them
+produces empty strings in the remote registry. No re-pairing is required for
+existing peers.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>code</code></td>
+<td>string</td>
+<td>yes</td>
+<td>16-digit numeric pairing code</td>
+</tr>
+<tr>
+<td><code>daemon_id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Caller&#39;s daemon ID</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>no</td>
+<td>Caller&#39;s repo name (used as peer name)</td>
+</tr>
+<tr>
+<td><code>address</code></td>
+<td>string</td>
+<td>no</td>
+<td>Caller&#39;s <code>ip:port</code></td>
+</tr>
+<tr>
+<td><code>repo_name</code></td>
+<td>string</td>
+<td>no</td>
+<td>Caller&#39;s repository name</td>
+</tr>
+<tr>
+<td><code>hostname</code></td>
+<td>string</td>
+<td>no</td>
+<td>Caller&#39;s machine hostname</td>
+</tr>
+<tr>
+<td><code>repo_path</code></td>
+<td>string</td>
+<td>no</td>
+<td>Caller&#39;s absolute repo path</td>
+</tr>
+<tr>
+<td><code>git_origin_url</code></td>
+<td>string</td>
+<td>no</td>
+<td>Caller&#39;s git remote URL</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>&quot;paired&quot;</code></td>
+</tr>
+<tr>
+<td><code>token</code></td>
+<td>string</td>
+<td>Long-lived shared auth token stored in <code>peers.json</code></td>
+</tr>
+<tr>
+<td><code>daemon_id</code></td>
+<td>string</td>
+<td>Listener&#39;s daemon ID</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>Listener&#39;s peer name</td>
+</tr>
+<tr>
+<td><code>repo_name</code></td>
+<td>string</td>
+<td>Listener&#39;s repo name (omitted when not set)</td>
+</tr>
+<tr>
+<td><code>hostname</code></td>
+<td>string</td>
+<td>Listener&#39;s machine hostname (omitted when not set)</td>
+</tr>
+<tr>
+<td><code>repo_path</code></td>
+<td>string</td>
+<td>Listener&#39;s absolute repo path (omitted when not set)</td>
+</tr>
+<tr>
+<td><code>git_origin_url</code></td>
+<td>string</td>
+<td>Listener&#39;s git remote URL (omitted when not set)</td>
+</tr>
+</tbody></table>
 <h3>peer.join</h3>
 <p>Connect to a remote peer using a pairing code.</p>
 <p><strong>Request:</strong></p>
@@ -2987,6 +3227,138 @@ otherwise.</li>
 <td>Success indicator</td>
 </tr>
 </tbody></table>
+<h3>peer.repair</h3>
+<p>Re-establish a known peer relationship after address drift, without re-pairing.
+Uses the stored bearer token from <code>peers.json</code> as the trust anchor — no new
+peercode is required. This RPC is distinct from <code>pair.request</code>: it does not mint
+a new token and does not require an active pairing session.</p>
+<p>Invoked automatically by the <code>reconcile</code> package on boot (<code>ReconcileAll</code>) and
+inline on dial failure (<code>OnDialError</code>). Can also be triggered manually via
+<code>thrum peer join --type repair &lt;name&gt;</code>.</p>
+<p><strong>Auth:</strong> Bearer token in the <code>token</code> field (from the stored <code>peers.json</code>
+entry). Distinct from the peercode used in <code>pair.request</code>.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>token</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Stored bearer token from <code>peers.json</code></td>
+</tr>
+<tr>
+<td><code>daemon_id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Caller&#39;s current daemon ID</td>
+</tr>
+<tr>
+<td><code>address</code></td>
+<td>string</td>
+<td>no</td>
+<td>Caller&#39;s current <code>ip:port</code></td>
+</tr>
+<tr>
+<td><code>repo_name</code></td>
+<td>string</td>
+<td>no</td>
+<td>Caller&#39;s repository name</td>
+</tr>
+<tr>
+<td><code>hostname</code></td>
+<td>string</td>
+<td>no</td>
+<td>Caller&#39;s machine hostname</td>
+</tr>
+<tr>
+<td><code>repo_path</code></td>
+<td>string</td>
+<td>no</td>
+<td>Caller&#39;s absolute repo path</td>
+</tr>
+<tr>
+<td><code>git_origin_url</code></td>
+<td>string</td>
+<td>no</td>
+<td>Caller&#39;s git remote URL</td>
+</tr>
+</tbody></table>
+<p><strong>Response</strong> (<code>RepairResponse</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>&quot;repaired&quot;</code></td>
+</tr>
+<tr>
+<td><code>daemon_id</code></td>
+<td>string</td>
+<td>Listener&#39;s current daemon ID (used to detect daemon_id rotation)</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>Peer name (never rotated — stable across daemon_id changes)</td>
+</tr>
+<tr>
+<td><code>repo_name</code></td>
+<td>string</td>
+<td>Listener&#39;s repo name (omitted when not set)</td>
+</tr>
+<tr>
+<td><code>hostname</code></td>
+<td>string</td>
+<td>Listener&#39;s machine hostname (omitted when not set)</td>
+</tr>
+<tr>
+<td><code>repo_path</code></td>
+<td>string</td>
+<td>Listener&#39;s absolute repo path (omitted when not set)</td>
+</tr>
+<tr>
+<td><code>git_origin_url</code></td>
+<td>string</td>
+<td>Listener&#39;s git remote URL (omitted when not set)</td>
+</tr>
+</tbody></table>
+<p><strong>Error codes:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>Code</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Token not found in registry</td>
+<td><code>CatTokenRejected</code></td>
+<td>No peer entry matches the presented token; re-pair required</td>
+</tr>
+<tr>
+<td>Empty <code>daemon_id</code> in response</td>
+<td><code>CatOther</code></td>
+<td>Response is malformed; reconcile manager does not re-key registry</td>
+</tr>
+</tbody></table>
+<p><strong>When to use:</strong> After a peer&#39;s address drifts (IP change, port reassignment,
+daemon restart on a different port) and automatic reconciliation has failed. Use
+<code>thrum peer join --type repair &lt;name&gt;</code> to trigger manually. This RPC is <strong>not</strong>
+valid for <code>peer add</code> — only for <code>peer join</code>.</p>
 <h2>Agent Methods (v0.8.0)</h2>
 <h3>agent.set-status</h3>
 <p>Set an agent&#39;s operational status. The daemon locates the agent&#39;s identity file
@@ -3318,8 +3690,10 @@ files.</p>
 </tr>
 </tbody></table>
 <h3>tmux.check-pane</h3>
-<p>Check a tmux pane for permission prompts or idle state. Called by the
-<code>alert-silence</code> tmux hook — not typically called by users.</p>
+<p>Check a tmux pane state. The daemon&#39;s <code>SessionPoller</code> calls this internally
+every ~10 seconds (2-hash stability window) to classify pane state. Direct
+invocation is supported but unusual — most callers rely on the poller result
+rather than invoking this RPC manually.</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -3337,19 +3711,68 @@ files.</p>
 <td>Session name</td>
 </tr>
 <tr>
-<td><code>reason</code></td>
-<td>string</td>
-<td>no</td>
-<td>Detected state reason</td>
-</tr>
-<tr>
 <td><code>content</code></td>
 <td>string</td>
 <td>no</td>
-<td>Captured pane content (last 5 lines)</td>
+<td>Captured pane content (last 5 lines). When omitted the daemon captures it itself.</td>
 </tr>
 </tbody></table>
-<p><strong>Response:</strong> <code>null</code></p>
+<p><strong>Note:</strong> The <code>reason</code> field accepted by older clients is now daemon-computed,
+not client-supplied. Clients that send <code>reason</code> will have it ignored.</p>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>session</code></td>
+<td>string</td>
+<td>Session name</td>
+</tr>
+<tr>
+<td><code>state</code></td>
+<td>string</td>
+<td>Detected state: <code>idle</code>, <code>permission</code>, <code>working</code>, <code>command_completed</code>, or <code>working_but_idle</code></td>
+</tr>
+<tr>
+<td><code>reason</code></td>
+<td>string</td>
+<td>Human-readable reason string computed by the daemon</td>
+</tr>
+</tbody></table>
+<p><strong>State values:</strong></p>
+<table>
+<thead>
+<tr>
+<th>State</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>idle</code></td>
+<td>Pane is at a shell prompt, no active process</td>
+</tr>
+<tr>
+<td><code>permission</code></td>
+<td>A permission prompt was detected (awaiting user approval)</td>
+</tr>
+<tr>
+<td><code>working</code></td>
+<td>AI runtime is actively generating output</td>
+</tr>
+<tr>
+<td><code>command_completed</code></td>
+<td>A queued command has completed</td>
+</tr>
+<tr>
+<td><code>working_but_idle</code></td>
+<td>Pane is technically idle but heuristics suggest work in progress</td>
+</tr>
+</tbody></table>
 <h3>tmux.restart</h3>
 <p>Restart a tmux-managed agent session with a context snapshot. The daemon picks
 between two flows based on <code>force</code>:</p>

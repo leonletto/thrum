@@ -1,15 +1,3 @@
----
-title: "Permission Prompts"
-description:
-  "How Thrum detects when an agent is stuck on a permission prompt and routes it
-  to a supervisor — silence-hash poller, supervisor reply paths (CLI, web UI,
-  Telegram), reminder cadence, restart resilience"
-category: "orchestration"
-order: 4
-tags: ["permission-prompts", "supervisor", "tmux", "telegram", "approvals"]
-last_updated: "2026-04-19"
----
-
 ## What This Does
 
 Your agent hits a permission prompt in the middle of a long run. You're not

@@ -200,9 +200,9 @@ defense-in-depth cleanup.
 10. Start Unix socket server
 11. Start WebSocket server (if configured), write port file
 12. Start monitor supervisor (respawns persisted monitor jobs from DB)
-13. `ConnectAll` peers, then `ReconcileAll` (2-second settling window,
-    up to 4 peers in parallel) — attempts `peer.repair` for any peer whose
-    address may have drifted since last shutdown
+13. `ConnectAll` peers, then `ReconcileAll` (2-second settling window, up to 4
+    peers in parallel) — attempts `peer.repair` for any peer whose address may
+    have drifted since last shutdown
 14. Start signal handler goroutine
 15. Wait for shutdown signal
 
@@ -266,8 +266,8 @@ Every RPC request on the Unix socket goes through a two-stage identity check:
    See [Security Model](security-model.md) for the full allowlist.
 
 The G4 liveness gate additionally guards all daemon-side writes to identity
-files: if the target agent's PID is no longer alive, the write is refused and
-an `identity_guard_fire` slog event is emitted. See below for the event schema.
+files: if the target agent's PID is no longer alive, the write is refused and an
+`identity_guard_fire` slog event is emitted. See below for the event schema.
 
 **Health check response:**
 
@@ -321,9 +321,9 @@ localhost allowlist before completing the handshake:
 - `http://127.0.0.1:<port>` and `ws://127.0.0.1:<port>`
 
 Connections from any other origin receive `HTTP 403 Forbidden` at the upgrade
-handshake and are dropped before any RPC can execute. This prevents
-cross-origin WebSocket hijacking (CSRF via a remote page). Pre-v0.9.0 the
-`CheckOrigin` callback returned `true` unconditionally. See
+handshake and are dropped before any RPC can execute. This prevents cross-origin
+WebSocket hijacking (CSRF via a remote page). Pre-v0.9.0 the `CheckOrigin`
+callback returned `true` unconditionally. See
 [Security Model](security-model.md) for the full local trust stack.
 
 **Browser auto-registration:**
@@ -413,20 +413,20 @@ Extracts git-derived work context from a worktree path:
 ### `identity_guard_fire` Slog Event
 
 Every identity guard outcome (whether the guard fires and denies, fires and
-allows, auto-reclaims, or is skipped) emits a structured slog event with the
-key `identity_guard_fire`. Operators and monitoring pipelines can subscribe to
-this event for identity violation alerts.
+allows, auto-reclaims, or is skipped) emits a structured slog event with the key
+`identity_guard_fire`. Operators and monitoring pipelines can subscribe to this
+event for identity violation alerts.
 
 **Event fields:**
 
-| Field            | Type   | Description                                                                         |
-| ---------------- | ------ | ----------------------------------------------------------------------------------- |
-| `guard`          | string | Guard key that fired (e.g., `cross_worktree`, `daemon_writer_liveness`, `unauthenticated_rpc`) |
-| `mode`           | string | Enforcement mode at fire time: `strict`, `warn`, or `off`                           |
-| `outcome`        | string | `denied`, `allowed`, `auto_reclaimed`, or `skipped`                                 |
-| `reason`         | string | Machine-readable reason code (e.g., `subject_pid_dead`, `identity_mismatch`)        |
-| `caller_pid`     | integer| PID of the connecting process (when available via peercred)                         |
-| `target_pid`     | integer| PID of the identity file's recorded `agent_pid` (when relevant)                    |
+| Field        | Type    | Description                                                                                    |
+| ------------ | ------- | ---------------------------------------------------------------------------------------------- |
+| `guard`      | string  | Guard key that fired (e.g., `cross_worktree`, `daemon_writer_liveness`, `unauthenticated_rpc`) |
+| `mode`       | string  | Enforcement mode at fire time: `strict`, `warn`, or `off`                                      |
+| `outcome`    | string  | `denied`, `allowed`, `auto_reclaimed`, or `skipped`                                            |
+| `reason`     | string  | Machine-readable reason code (e.g., `subject_pid_dead`, `identity_mismatch`)                   |
+| `caller_pid` | integer | PID of the connecting process (when available via peercred)                                    |
+| `target_pid` | integer | PID of the identity file's recorded `agent_pid` (when relevant)                                |
 
 The `identity_guard_fire` event is emitted on every outcome — including
 successful passes — so operators can audit both denials and auto-reclaims

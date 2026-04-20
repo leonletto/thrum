@@ -97,7 +97,7 @@
       "teams",
       "prime"
     ],
-    "lastUpdated": "2026-04-09"
+    "lastUpdated": "2026-04-19"
   },
   {
     "path": "context.html",
@@ -160,7 +160,7 @@
       "conflicts",
       "resolution"
     ],
-    "lastUpdated": "2026-04-06"
+    "lastUpdated": "2026-04-19"
   },
   {
     "path": "agent-configs.html",
@@ -209,7 +209,7 @@
       "lifecycle",
       "sync"
     ],
-    "lastUpdated": "2026-02-10"
+    "lastUpdated": "2026-04-19"
   },
   {
     "path": "sync.html",
@@ -257,7 +257,7 @@
       "settings",
       "config-show"
     ],
-    "lastUpdated": "2026-04-06"
+    "lastUpdated": "2026-04-19"
   },
   {
     "path": "guides/cross-machine-sync.html",
@@ -306,7 +306,7 @@
       "live-feed",
       "inbox"
     ],
-    "lastUpdated": "2026-02-23"
+    "lastUpdated": "2026-04-19"
   },
   {
     "path": "claude-code-plugin.html",
@@ -394,7 +394,7 @@
       "pairing",
       "sync"
     ],
-    "lastUpdated": "2026-04-09"
+    "lastUpdated": "2026-04-19"
   },
   {
     "path": "subscriptions.html",
@@ -410,7 +410,7 @@
       "dispatcher",
       "broadcaster"
     ],
-    "lastUpdated": "2026-02-10"
+    "lastUpdated": "2026-04-19"
   },
   {
     "path": "inbox-query-methods.html",
@@ -442,7 +442,7 @@
       "notifications",
       "integration"
     ],
-    "lastUpdated": "2026-04-09"
+    "lastUpdated": "2026-04-19"
   },
   {
     "path": "telegram-groups.html",
@@ -537,7 +537,7 @@
       "automation",
       "plans"
     ],
-    "lastUpdated": "2026-04-09"
+    "lastUpdated": "2026-04-19"
   },
   {
     "path": "tmux-sessions.html",
@@ -552,7 +552,7 @@
       "nudge",
       "coordinator"
     ],
-    "lastUpdated": "2026-04-09"
+    "lastUpdated": "2026-04-19"
   },
   {
     "path": "monitor-jobs.html",
@@ -584,7 +584,7 @@
       "gemini",
       "claude"
     ],
-    "lastUpdated": "2026-04-09"
+    "lastUpdated": "2026-04-19"
   },
   {
     "path": "single-agent-mode.html",
@@ -616,6 +616,21 @@
     "lastUpdated": "2026-03-03"
   },
   {
+    "path": "permission-prompts.html",
+    "title": "Permission Prompts",
+    "description": "How Thrum detects when an agent is stuck on a permission prompt and routes it to a supervisor — silence-hash poller, supervisor reply paths (CLI, web UI, Telegram), reminder cadence, restart resilience",
+    "category": "orchestration",
+    "order": 4,
+    "tags": [
+      "permission-prompts",
+      "supervisor",
+      "tmux",
+      "telegram",
+      "approvals"
+    ],
+    "lastUpdated": "2026-04-19"
+  },
+  {
     "path": "session-restart.html",
     "title": "Session Restart & Context Recovery",
     "description": "Save conversation history and resume where you left off — from daily shutdown to automated mid-task restarts",
@@ -628,7 +643,7 @@
       "recovery",
       "session"
     ],
-    "lastUpdated": "2026-04-07"
+    "lastUpdated": "2026-04-19"
   },
   {
     "path": "philosophy.html",
@@ -654,7 +669,7 @@
       "overview",
       "landing"
     ],
-    "lastUpdated": "2026-04-09"
+    "lastUpdated": "2026-04-19"
   },
   {
     "path": "quickstart.html",
@@ -685,7 +700,21 @@
       "makefile",
       "go"
     ],
-    "lastUpdated": "2026-04-06"
+    "lastUpdated": "2026-04-19"
+  },
+  {
+    "path": "cli-hints.html",
+    "title": "CLI Hints",
+    "description": "Inline contextual hints from Thrum CLI commands — pre-action warnings, post-action next steps, and JSON output for tooling. Covers Phase B (thrum send / tmux create / init) and the THRUM_NO_HINTS opt-out.",
+    "category": "reference",
+    "order": 3,
+    "tags": [
+      "cli",
+      "hints",
+      "ux",
+      "thrum-no-hints"
+    ],
+    "lastUpdated": "2026-04-19"
   },
   {
     "path": "security-cicd.html",
@@ -704,13 +733,28 @@
     "lastUpdated": "2026-02-10"
   },
   {
+    "path": "security-model.html",
+    "title": "Local Security Model",
+    "description": "How Thrum's daemon decides who's calling — kernel-verified peer credentials, anonymous-caller read-only allowlist, author-only message operations, and WebSocket origin restriction. Covers the v0.9.0 sec.1–sec.8 hardening.",
+    "category": "reference",
+    "order": 4,
+    "tags": [
+      "security",
+      "peercred",
+      "trust-model",
+      "daemon",
+      "rpc"
+    ],
+    "lastUpdated": "2026-04-19"
+  },
+  {
     "path": "architecture.html",
     "title": "Architecture",
     "description": "Thrum architecture — daemon design, storage, sync engine, transport layer, key features, and foundation packages",
     "category": "reference",
     "order": 999,
     "tags": [],
-    "lastUpdated": "2026-04-06"
+    "lastUpdated": "2026-04-19"
   },
   {
     "path": "cli.html",
@@ -719,7 +763,7 @@
     "category": "reference",
     "order": 999,
     "tags": [],
-    "lastUpdated": ""
+    "lastUpdated": "2026-04-19"
   },
   {
     "path": "rpc-api.html",
@@ -728,7 +772,7 @@
     "category": "reference",
     "order": 999,
     "tags": [],
-    "lastUpdated": ""
+    "lastUpdated": "2026-04-19"
   },
   {
     "path": "guides/recommended-tools.html",
@@ -808,5 +852,20 @@
       "guide"
     ],
     "lastUpdated": "2026-02-27"
+  },
+  {
+    "path": "troubleshooting-identity.html",
+    "title": "Troubleshooting Identity Issues",
+    "description": "Identity guard error messages and how to fix them — cross_worktree pid_mismatch, anonymous_mutating_rpc, non_git_bootstrap, and the rest of the v0.9.0 guard catalog with remediation steps.",
+    "category": "troubleshooting",
+    "order": 1,
+    "tags": [
+      "troubleshooting",
+      "identity",
+      "guards",
+      "errors",
+      "peercred"
+    ],
+    "lastUpdated": "2026-04-19"
   }
 ]

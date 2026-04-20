@@ -32,8 +32,9 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <strong>Multi-Runtime Support</strong> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <strong>Multi-Runtime Support</strong> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
 <h2>What &quot;Runtime&quot; Means in Thrum</h2>
@@ -45,7 +46,10 @@ of these:</p>
 <li><strong>Open Code</strong> — <code>opencode</code>, cheaper for parallel grunt work</li>
 <li><strong>Codex</strong> — <code>codex</code>, OpenAI&#39;s CLI agent</li>
 <li><strong>Aider</strong> — <code>aider</code>, terminal-based with git-native editing</li>
-<li><strong>Cursor</strong> — <code>cursor-agent</code> / <code>agent</code>, Cursor&#39;s headless mode</li>
+<li><strong>Cursor</strong> — <code>agent</code> (primary) / <code>cursor-agent</code> (legacy, still detected),
+Cursor&#39;s headless mode</li>
+<li><strong>Kiro</strong> — <code>kiro-cli</code>, runtime preset only in v0.9.0; no dedicated plugin yet.
+Manual <code>thrum prime</code> required after restart.</li>
 <li><strong>Gemini</strong> — <code>gemini</code>, Google&#39;s CLI agent</li>
 <li><strong>Auggie</strong> — <code>auggie</code></li>
 <li><strong>Amp</strong> — <code>amp</code></li>
@@ -88,6 +92,10 @@ use in this order:</p>
 daemon — there&#39;s no ambiguity at the server side.</p>
 <p>If you set <code>preferred_runtime</code> in the identity file once, you never need to pass
 <code>--runtime</code> again for that worktree. The resolution chain just finds it.</p>
+<p><strong>Note:</strong> <code>thrum tmux launch &lt;name&gt;</code> reads the target worktree&#39;s identity file
+directly, bypassing the caller&#39;s <code>THRUM_HOME</code> / <code>THRUM_NAME</code> env vars. This
+fixes a class of bugs where launching from one worktree to another carried the
+wrong identity into the new session.</p>
 <hr>
 <h2>Setting <code>preferred_runtime</code> at Init</h2>
 <p>Pass <code>--runtime</code> when you first set up a worktree. Thrum writes the value to the
@@ -122,15 +130,20 @@ worktree.</p>
 <hr>
 <h2>Process Detection Across Runtimes</h2>
 <p>When Thrum needs to find the agent process in a tmux pane, it walks the process
-tree from the pane&#39;s shell upward, looking for any of the eight known runtime
+tree from the pane&#39;s shell upward, looking for any of the nine known runtime
 binaries:</p>
-<pre><code>claude  opencode  aider  codex  cursor-agent  agent  gemini  auggie  amp</code></pre>
-<p><code>cursor-agent</code> and <code>agent</code> both map to the <code>cursor</code> runtime name. If another
-runtime ever claims the <code>agent</code> binary name, we handle it then.</p>
+<pre><code>claude  opencode  aider  codex  cursor-agent  agent  gemini  auggie  amp  kiro-cli</code></pre>
+<p><code>cursor-agent</code> and <code>agent</code> both map to the <code>cursor</code> runtime name. <code>agent</code> is the
+preferred binary name as of v0.9.0; <code>cursor-agent</code> is the legacy name, still
+detected for backward compatibility. If another runtime ever claims the <code>agent</code>
+binary name, we handle it then.</p>
 <p>This powers two things:</p>
 <p><strong>Status checks.</strong> The <code>tmux:alive</code> vs <code>tmux:stale</code> state in <code>thrum team</code> and
 <code>thrum tmux status</code> comes from checking whether the stored <code>agent_pid</code> is still
-a running process. That check now works for any runtime, not just Claude.</p>
+a running process. That check now works for any runtime, not just Claude. When a
+runtime pauses for a permission prompt, the process is still running but the
+session is effectively blocked. See <a href="permission-prompts.html">Permission Prompts</a>
+for the full detection workflow.</p>
 <p><strong>Auto-detection at prime time.</strong> When <code>thrum prime</code> or <code>thrum quickstart</code> runs
 inside a session, it calls the process walker, finds the actual running runtime,
 and writes it to the <code>runtime</code> field in the identity file. This is the <em>what&#39;s
@@ -243,6 +256,9 @@ cleanup will rename it. Don&#39;t rely on the function name as documentation.</p
 <p><strong>Cursor&#39;s <code>agent</code> binary.</strong> The process name <code>agent</code> maps to Cursor. If a
 different runtime ships a binary named <code>agent</code> in the future, detection will
 misattribute. This hasn&#39;t happened yet.</p>
+<p><strong><code>.opencode</code> shim detection (v0.9.0).</strong> The <code>.opencode</code> dot-prefix shim binary
+is now detected in the ancestor walk. Before v0.9.0 it was invisible to the
+process scan, and opencode panes were misattributed to the parent shell.</p>
 <hr>
 <h2>Full Setup Example</h2>
 <p>Here&#39;s what a coordinator does to spin up a mixed-runtime team:</p>

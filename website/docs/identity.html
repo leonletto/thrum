@@ -32,8 +32,9 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
 <h2>Agent Identity &amp; Registration</h2>
@@ -278,14 +279,21 @@ logic described above.</li>
 <li><code>preferred_runtime</code> (v0.8.0) — Runtime set via <code>--runtime</code> on <code>quickstart</code>.
 Used in the runtime resolution chain when launching via <code>thrum tmux launch</code>.</li>
 <li><code>runtime</code> (v0.7.1) — Auto-detected runtime (<code>claude</code>, <code>codex</code>, <code>opencode</code>,
-<code>gemini</code>, etc.).</li>
+<code>gemini</code>, etc.). Auto-populated from <code>preferred_runtime</code> at quickstart when
+the field is blank. A one-shot self-heal at daemon boot also scans all
+identity files and backfills <code>runtime</code> from <code>preferred_runtime</code> wherever
+missing.</li>
 <li><code>tmux_session</code> (v0.7.1) — Full pane target (e.g., <code>implementer-auth:0.0</code>) used
 by the daemon to route nudge notifications.</li>
-<li><code>agent_status</code> (v0.8.0) — Operational status: <code>working</code>, <code>idle</code>, or <code>blocked</code>.
-Set via <code>thrum agent set-status</code>. The daemon uses this for auto-nudge
+<li><code>agent_status</code> (v0.8.0) — Operational status: <code>working</code>, <code>idle</code>, <code>blocked</code>, or
+<code>stuck</code>. Set via <code>thrum agent set-status</code>. The daemon uses this for auto-nudge
 detection — if a tmux pane is silent but <code>agent_status</code> is <code>&quot;working&quot;</code>, the
-daemon fires a nudge.</li>
+daemon fires a nudge. <code>stuck</code> is set automatically after 6 unanswered
+permission nudges and cleared when the pane recovers.</li>
 <li><code>agent_status_updated_at</code> (v0.8.0) — UTC timestamp of the last status change.</li>
+<li><code>reserved</code> (v0.9.0) — When <code>true</code>, marks a daemon-internal pseudo-agent (like
+<code>@supervisor_&lt;project&gt;</code>) that is hidden from <code>thrum team</code> output. Pass
+<code>--system</code> to <code>thrum team</code> to surface reserved agents.</li>
 </ul>
 <p>The <code>tmux_session</code> and <code>runtime</code> fields are <code>omitempty</code> — legacy agents without
 tmux sessions won&#39;t have them.</p>
@@ -410,11 +418,11 @@ re-register.</p>
 commands. <code>thrum tmux create</code> (alias: <code>thrum tmux quickstart</code>) requires
 <code>--name</code>, <code>--role</code>, and <code>--module</code> and runs quickstart inside the new pane.
 <code>thrum worktree create</code> (alias: <code>thrum worktree setup</code>) accepts the same
-optional quickstart flags and, when all three are provided, creates the
-worktree plus a real tmux session and registers the agent identity inside it
+optional quickstart flags and, when all three are provided, creates the worktree
+plus a real tmux session and registers the agent identity inside it
 (PID-isolated, with a daemon-side retry if the shell init swallows the first
-attempt). The agent runtime is <strong>not</strong> started automatically — the output
-prints the next-step <code>thrum tmux launch &lt;name&gt;</code> command to start it.</p>
+attempt). The agent runtime is <strong>not</strong> started automatically — the output prints
+the next-step <code>thrum tmux launch &lt;name&gt;</code> command to start it.</p>
 <pre><code># Quickstart via tmux — runs inside the new pane
 thrum tmux create implementer-auth --cwd /path/to/worktree \
   --name furiosa --role implementer --module auth
@@ -606,6 +614,76 @@ in the Web UI (via <code>user.register</code>) and to associate the WebSocket se
 a human identity. The git username is read at connection time — no separate
 configuration is needed beyond having a valid <code>git config user.name</code> set in your
 environment.</p>
+<h2>Daemon Identity</h2>
+<p>Every Thrum repo gets a single daemon identity stored in <code>.thrum/config.json</code>
+under the <code>&quot;identity&quot;</code> key. This is distinct from the per-agent identity files
+in <code>.thrum/identities/</code> — it&#39;s the daemon&#39;s own per-repo fingerprint, not an
+agent registration.</p>
+<h3>Bootstrap</h3>
+<p><code>identity.Bootstrap(thrumDir, repoPath string)</code> is the single entry point for
+loading, creating, or migrating the daemon identity. It handles three cases:</p>
+<ol>
+<li><p><strong>Empty <code>daemon_id</code></strong> — generates a fresh ULID, records <code>init_at</code>, captures
+<code>git_origin_url</code> from the repo&#39;s remote.</p>
+</li>
+<li><p><strong>Legacy hostname-derived <code>daemon_id</code></strong> — rotates to a new ULID, updates
+<code>init_at</code>, and logs a warning instructing paired peers to re-pair:</p>
+<pre><code>[identity] daemon_id rotated: d_abc123... -&gt; d_01HY... (reason: legacy hostname-derived)
+[identity] Paired peers must be re-paired manually. On each peer host:
+[identity]   thrum peer remove &lt;this-hostname&gt;
+[identity]   thrum peer add &lt;this-hostname&gt; ...</code></pre>
+</li>
+<li><p><strong>Valid ULID</strong> — refreshes mutable metadata (<code>hostname</code>, <code>repo_path</code>,
+<code>repo_name</code>) in-place. The <code>daemon_id</code> and <code>init_at</code> are untouched.</p>
+</li>
+</ol>
+<p>Bootstrap writes config.json atomically via temp-file rename. On the first id
+write (new or rotated), it backs up the pre-existing config to
+<code>.thrum/config.json.pre-identity-bak</code>. The backup-once rule means an existing
+backup is never overwritten — you can always revert by renaming it back.</p>
+<p>Bootstrap is idempotent: calling it on a repo that already has a valid ULID just
+refreshes metadata.</p>
+<p><strong>Callers:</strong> <code>thrum init</code> (explicit), <code>state.NewState</code> at daemon start (lazy
+backfill for pre-identity installs), and <code>peer_registry.NewPeerRegistry</code>
+(sourcing <code>LocalDaemonID</code> for peer.list / peer.join RPCs).</p>
+<h3>Why ULID</h3>
+<p>The previous scheme derived <code>daemon_id</code> deterministically from
+<code>sha256(hostname)</code>. That broke when a machine was renamed or reused — two
+installations on the same hostname silently shared the same id. ULIDs are
+globally unique, lexicographically sortable, and embed a creation-time signal
+(the 48-bit millisecond timestamp in the high bits). Each <code>thrum init</code> now gets
+a distinct, time-ordered id you can sort and compare without an external clock.
+Format: <code>d_</code> + 26-character ULID.</p>
+<h3><code>daemon_identity</code> SQLite Table</h3>
+<p>Schema v23 adds a <code>daemon_identity</code> table in <code>.thrum/var/messages.db</code>. It&#39;s a
+single-row local mirror of the identity block from config.json, populated at
+daemon startup via <code>INSERT OR REPLACE</code>. Columns: <code>daemon_id</code> (primary key),
+<code>repo_name</code>, <code>hostname</code>, <code>repo_path</code>, <code>git_origin_url</code>, <code>init_at</code>, <code>updated_at</code>.</p>
+<p>The table is local-only — it&#39;s not synced to remote peers. Its purpose is to
+make the daemon&#39;s own identity queryable via SQL alongside session, message, and
+event data, and to let health and status RPC handlers return identity fields
+without re-reading config.json on every call.</p>
+<h3><code>thrum daemon status</code> Identity Block</h3>
+<p>When the daemon is running, <code>thrum daemon status</code> shows an Identity section:</p>
+<pre><code>Identity:
+  daemon_id:  d_01HYTESTULID01234567890AB
+  repo_name:  thrum
+  hostname:   leonsmacm1pro
+  repo_path:  /Users/leon/dev/opensource/thrum
+  git_origin: https://github.com/leonletto/thrum
+  init_at:    2026-04-17T06:30:00Z</code></pre>
+<h3>Legacy Migration</h3>
+<p>If your daemon was initialized before v0.9.0, Bootstrap rotates the old
+hostname-derived id automatically on the first v0.9.0 daemon start. Three things
+happen:</p>
+<ul>
+<li>A <code>config.json.pre-identity-bak</code> file is created in <code>.thrum/</code>.</li>
+<li>The rotation warning is printed to the daemon log.</li>
+<li>Any paired remote peers still have the old id in their <code>peers.json</code>. Run
+<code>thrum peer remove</code> + <code>thrum peer add</code> on each peer to re-pair.</li>
+</ul>
+<p>Cross-repo sync (the a-sync branch) is keyed by <code>repo_id</code> derived from the git
+origin URL, not <code>daemon_id</code>, so sync continuity is unaffected by rotation.</p>
 <h2>ID Generation Functions</h2>
 <p>All ID generation is in <code>internal/identity/identity.go</code>. Thrum uses
 <a href="https://github.com/ulid/spec">ULID</a> (Universally Unique Lexicographically
@@ -625,6 +703,12 @@ protection for thread safety.</p>
 </tr>
 </thead>
 <tbody><tr>
+<td>Daemon ID</td>
+<td><code>d_</code> + ULID</td>
+<td><code>d_01HXE8Z7R9K3Q6M2W8F4VY</code></td>
+<td>Per-repo daemon fingerprint (set once at init)</td>
+</tr>
+<tr>
 <td>Session ID</td>
 <td><code>ses_</code> + ULID</td>
 <td><code>ses_01HXE8Z7R9K3Q6M2W8F4VY</code></td>
@@ -714,6 +798,131 @@ suffixes and converts to lowercase HTTPS format.</p>
 <td>Extracts <code>@mention</code>-style display name from agent ID</td>
 </tr>
 </tbody></table>
+<h2>Identity Guards</h2>
+<p>Identity guards are named enforcement checkpoints that fire when Thrum detects a
+mismatch between who is making a call and who owns the identity being acted on.
+The guard system lives in <code>internal/identity/guard/</code> and covers eight distinct
+failure modes.</p>
+<h3>Why Guards Exist</h3>
+<p>Before identity guards, CWD drift was the main way multi-agent sessions went
+wrong silently. If an agent&#39;s runtime process changed directory into another
+worktree, the next <code>thrum send</code> or <code>thrum prime</code> resolved to the <em>other</em> agent&#39;s
+identity file. The send went to the wrong agent. The prime overwrote the wrong
+identity&#39;s PID. Neither the operator nor the affected agent got any indication
+that a misattribution happened.</p>
+<p>Guards close all of these. Every CLI invocation runs a pre-flight cross_worktree
+check before making any daemon RPC. Every mutating daemon RPC goes through
+<code>guard.DaemonResolve</code>, which re-validates the caller&#39;s kernel-verified identity
+and refuses mismatches. What was previously a silent misattribution is now a
+loud, actionable error pointing at the concrete fix.</p>
+<h3>Three Modes</h3>
+<p>Each guard has an independent enforcement mode:</p>
+<ul>
+<li><strong><code>strict</code></strong> (default) — Hard error. The RPC fails and Thrum prints a
+remediation message.</li>
+<li><strong><code>warn</code></strong> — Structured log event is emitted, then the call proceeds. Useful
+for debugging suspected false-positives without disabling enforcement.</li>
+<li><strong><code>off</code></strong> — Guard is skipped entirely.</li>
+</ul>
+<h3>Config</h3>
+<p>Set modes in <code>.thrum/config.json</code> under the <code>identity_guard</code> key:</p>
+<pre><code>{
+  &quot;identity_guard&quot;: {
+    &quot;cross_worktree&quot;: &quot;strict&quot;,
+    &quot;dead_pid_auto_reclaim&quot;: &quot;strict&quot;,
+    &quot;quickstart_self_rename&quot;: &quot;strict&quot;,
+    &quot;quickstart_name_collision&quot;: &quot;strict&quot;,
+    &quot;non_git_bootstrap&quot;: &quot;strict&quot;,
+    &quot;unauthenticated_rpc&quot;: &quot;strict&quot;,
+    &quot;daemon_writer_liveness&quot;: &quot;strict&quot;,
+    &quot;prime_ownership&quot;: &quot;strict&quot;
+  }
+}</code></pre>
+<p>Omitting a key leaves it at the strict default. The daemon-level override at
+<code>.thrum/var/guard-daemon.json</code> takes precedence over the repo-level config,
+which takes precedence over the strict default. Use the daemon-level file for
+incident diagnosis without touching committed config.</p>
+<p>Every guard fire emits an <code>identity_guard_fire</code> slog event with consistent
+fields: <code>guard</code>, <code>mode</code>, <code>outcome</code> (<code>denied</code>, <code>allowed</code>, <code>auto_reclaimed</code>, or
+<code>skipped</code>), <code>reason</code>, <code>caller_pid</code>, <code>caller_cwd</code>, <code>expected_agent</code>,
+<code>detected_agent</code>, <code>expected_pid</code>. Monitoring pipelines should alert on
+<code>outcome=&quot;denied&quot;</code> across all guard keys.</p>
+<h3>Guard Table</h3>
+<table>
+<thead>
+<tr>
+<th>Guard key</th>
+<th>Trigger</th>
+<th>Default mode</th>
+<th><code>--force</code> bypass</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>cross_worktree</code></td>
+<td>Caller&#39;s ancestor PID chain doesn&#39;t contain the identity file&#39;s <code>agent_pid</code></td>
+<td>strict</td>
+<td>No — fix by <code>cd</code> to correct worktree or run <code>thrum prime</code></td>
+</tr>
+<tr>
+<td><code>unauthenticated_rpc</code></td>
+<td>Mutating RPC from anonymous caller, forged <code>caller_agent_id</code>, or no <code>CallerAgentID</code> on non-peercred transport</td>
+<td>strict</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>non_git_bootstrap</code></td>
+<td><code>thrum init</code> or <code>thrum daemon start</code> from a non-git directory</td>
+<td>strict</td>
+<td>Yes (<code>--force</code>)</td>
+</tr>
+<tr>
+<td><code>daemon_writer_liveness</code></td>
+<td>Daemon tries to write an identity file for an agent whose PID is dead</td>
+<td>strict</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>prime_ownership</code></td>
+<td><code>thrum prime</code> called from a sub-agent whose closest runtime ancestor is not the identity file&#39;s owner</td>
+<td>strict</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>quickstart_self_rename</code></td>
+<td>Caller already owns an identity in this directory and tries to register under a new name</td>
+<td>strict</td>
+<td>Yes (<code>--force</code>)</td>
+</tr>
+<tr>
+<td><code>quickstart_name_collision</code></td>
+<td>Requested name is held by a different agent with a live PID</td>
+<td>strict</td>
+<td>Yes (<code>--force</code>)</td>
+</tr>
+<tr>
+<td><code>dead_pid_auto_reclaim</code></td>
+<td>Informational: dead owner&#39;s identity auto-reclaimed by new caller</td>
+<td>warn</td>
+<td>n/a</td>
+</tr>
+</tbody></table>
+<p><strong>Note on <code>unauthenticated_rpc</code>:</strong> The <code>identity_mismatch</code> reason (forgery
+rejection) fires unconditionally regardless of the configured mode. You can&#39;t
+warn-mode or off-mode a forgery — it always returns a hard error. This is a
+deliberate security decision.</p>
+<h3><code>guard.WritePID</code> Discipline</h3>
+<p>The only function that writes <code>agent_pid</code> into an identity file is
+<code>guard.WritePID</code>. All previous inline PID-write callsites have been removed. If
+you&#39;re reading the source and wondering where PID writes happen — they all route
+through this one primitive, which handles the atomic write and the round-trip of
+all other fields.</p>
+<h3>Cross-Reference: CLI vs. Daemon Resolution</h3>
+<p>CLI-side identity resolution (which identity file to load) is covered in the
+<a href="#identity-resolution">Identity Resolution</a> section above. Daemon-side
+resolution uses kernel-verified peer credentials (<code>SO_PEERCRED</code> /
+<code>LOCAL_PEERPID</code>) to identify the connecting process. That trust model is covered
+in <code>security-model.md</code>. For verbatim error text and step-by-step remediation for
+each guard, see <code>troubleshooting-identity.md</code>.</p>
 <h2>Troubleshooting</h2>
 <h3>&quot;Role not specified&quot; Error</h3>
 <p><strong>Cause:</strong> No identity source available.</p>

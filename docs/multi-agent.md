@@ -152,7 +152,7 @@ thrum quickstart --runtime cursor --dry-run
 
 ### Custom Runtimes
 
-Add custom runtime presets via `~/.config/thrum/runtimes.json` (XDG-aware):
+Add custom runtime presets via `~/.thrum/runtimes.json`:
 
 ```json
 {
@@ -171,6 +171,12 @@ Add custom runtime presets via `~/.config/thrum/runtimes.json` (XDG-aware):
   }
 }
 ```
+
+> **Migration note (v0.9.0):** If you have an existing
+> `~/.config/thrum/runtimes.json` (Linux) or
+> `~/Library/Application Support/thrum/runtimes.json` (macOS), move it to
+> `~/.thrum/runtimes.json`. The old paths are no longer read; custom runtimes
+> silently disappear if not migrated.
 
 Custom runtimes appear alongside built-in presets in `thrum runtime list`.
 
@@ -326,6 +332,14 @@ Use `THRUM_NAME` to select which identity to use:
 THRUM_NAME=furiosa thrum send "Implementation complete"
 THRUM_NAME=reviewer thrum send "LGTM, approved"
 ```
+
+### CWD Discipline
+
+Agents that `cd` into another worktree mid-session will trigger the
+`cross_worktree` identity guard. Use `THRUM_HOME=/path/to/worktree` to pin the
+repo path when crossing worktrees, or run `thrum prime` from the new worktree to
+refresh identity. See [Troubleshooting Identity](troubleshooting-identity.md)
+for the full guard catalog.
 
 ---
 

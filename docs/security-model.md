@@ -1,15 +1,3 @@
----
-title: "Local Security Model"
-description:
-  "How Thrum's daemon decides who's calling — kernel-verified peer credentials,
-  anonymous-caller read-only allowlist, author-only message operations, and
-  WebSocket origin restriction. Covers the v0.9.0 sec.1–sec.8 hardening."
-category: "reference"
-order: 4
-tags: ["security", "peercred", "trust-model", "daemon", "rpc"]
-last_updated: "2026-04-19"
----
-
 ## Local Security Model
 
 ### Overview

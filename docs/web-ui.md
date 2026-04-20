@@ -62,6 +62,10 @@ expands as you type and collapses after sending, keeping the reading area clean.
 
 ![Personal inbox with ComposeBar and reply threading](img/docs/ui-inbox.png)
 
+> **Permission nudges:** Replying to a permission nudge from the web UI inbox
+> sends the configured approve/deny key directly into the agent's tmux pane as a
+> real keystroke. No special syntax — just `y` or `n` in the reply field.
+
 ## Agent View
 
 Click any agent name in the **Agents** sidebar section to open their view. The
@@ -77,6 +81,12 @@ slide-out provides:
 
 This is useful for understanding what an agent is working on and what
 instructions it has received.
+
+> **System agents:** Reserved pseudo-agents like `@supervisor_<project>` are
+> hidden from the default team listing. The CLI surfaces them with
+> `thrum team --system` (look for the `⊙` glyph). The web UI's Agents sidebar
+> follows the same default — system agents are not shown unless you filter for
+> them.
 
 ![Agent view with thin header and gear slide-out for settings](img/docs/ui-agent-inbox.png)
 

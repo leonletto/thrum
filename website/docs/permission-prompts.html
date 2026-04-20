@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Permission Prompts — Thrum</title>
+<meta name="description" content="How Thrum detects when an agent is stuck on a permission prompt and routes it to a supervisor — silence-hash poller, supervisor reply paths (CLI, web UI, Telegram), reminder cadence, restart resilience">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#permission-prompts.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; orchestration &rsaquo; Permission Prompts
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+<strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
+<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <strong>Permission Prompts</strong> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
+</nav>
+<main>
+<h2>What This Does</h2>
+<p>Your agent hits a permission prompt in the middle of a long run. You&#39;re not
+watching the pane. The agent sits there silently — blocked — until you notice.
+Depending on when you check, that could be minutes or hours of wasted time.</p>
+<p>Thrum detects this. The daemon watches every enrolled tmux session, notices when
+the pane content stops changing in a way that looks like a stuck prompt, and
+sends you an actionable message: here&#39;s what the agent is waiting on, here&#39;s the
+session, here are the commands to approve or deny. You reply <code>y</code> or <code>n</code> from
+wherever you are — CLI, web UI, or Telegram on your phone — and Thrum replays
+the correct keystroke directly into the pane.</p>
+<hr>
+<h2>How Detection Works</h2>
+<h3>Why we replaced the alert-silence hook</h3>
+<p>The first version of this feature used tmux&#39;s <code>alert-silence</code> hook as the
+trigger. That turned out to be the wrong approach. tmux documents this in issue
+1384: alerts are processed per-session-per-client, and detached sessions
+(sessions with no currently attached client) typically don&#39;t fire the hook at
+all. Thrum agents run detached by design. So <code>alert-silence</code> was unreliable
+exactly when you most needed it.</p>
+<p>We replaced it with a daemon-side poller that doesn&#39;t depend on tmux hooks.</p>
+<h3>The silence-hash poller</h3>
+<p>The daemon runs a <code>SessionPoller</code> (<code>internal/daemon/permission/poller.go</code>) that
+polls every enrolled session every 10 seconds. Each poll captures the pane
+content, strips runtime-specific volatile lines (more on that below), and hashes
+the result with SHA-256. Two consecutive polls with the same hash — stable for
+~20 seconds — trigger <code>HandleCheckPane</code>, which runs the runtime-specific pattern
+library against the raw pane content and, on a match, calls <code>OnDetection</code> to
+start the nudge flow.</p>
+<p>Detection latency is about 20 seconds from when the prompt appears to when the
+first nudge goes out.</p>
+<p>Sessions are enrolled automatically when the daemon launches or restarts a
+session. <code>ReconcilePoller</code> runs at daemon boot and re-enrolls every active
+session, so sessions that were tracked before a daemon restart resume polling
+without re-registration.</p>
+<h3>Restart safety</h3>
+<p>The <code>permission_nudges</code> SQLite table (schema v21) persists in-flight nudges
+across daemon restarts. <code>ReloadOnBoot</code> reads all non-expired rows at startup and
+resumes the reminder cadence at the right step. If there are any, you&#39;ll see
+this in the daemon log:</p>
+<pre><code>permission found N pending nudge(s) still in flight</code></pre>
+<p>The Telegram message-ID mapping is also persisted — in <code>telegram_msg_map</code>
+(schema v24) — so a supervisor&#39;s reply to a nudge that was sent before the
+daemon restarted still routes correctly. Before this, the mapping lived in an
+in-memory LRU cache and a restart between sending the nudge and receiving the
+reply silently broke the routing.</p>
+<hr>
+<h2>Volatile-Line Catalog</h2>
+<p>Before hashing, the poller strips runtime-specific lines that change every few
+seconds for cosmetic reasons — spinners, timers, statuslines. Without stripping,
+the hash never stabilizes on an unchanged pane, so the poller never fires.</p>
+<table>
+<thead>
+<tr>
+<th>Runtime</th>
+<th>Stripped lines</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>codex</code></td>
+<td><code>• Working (Ns • esc to interrupt)</code> progress line</td>
+<td>Per-second activity timer</td>
+</tr>
+<tr>
+<td><code>claude</code></td>
+<td>Cogitation spinner lines (<code>✻ Cogitated for Ns</code>, etc.)</td>
+<td>Animated spinner</td>
+</tr>
+<tr>
+<td><code>claude</code></td>
+<td>ccstatusline <code>Ctx: ... | Block: ...</code> markers</td>
+<td>Context size and block countdown drift every 30–60s</td>
+</tr>
+</tbody></table>
+<p>The ccstatusline strip was added after observing three spurious nudges in ~80
+seconds for a single unchanged Claude Code prompt. The Ctx counter and Block
+countdown were resetting the hash on every drift.</p>
+<p>Unknown runtimes pass through unstripped. That&#39;s the conservative default:
+better to have the poller not fire (false-not-stable) than to fire on a pane
+that&#39;s still actively running (false-stable).</p>
+<p>To add stripping for a new runtime, add patterns to
+<code>internal/daemon/permission/poller.go</code> in the <code>volatileLinePatterns</code> map. The
+key is the canonical runtime name from the agent identity file.</p>
+<hr>
+<h2>Supported Runtimes</h2>
+<p>The pattern library covers six runtimes. Each has one or more patterns with an
+<code>approve_key</code> and an optional <code>deny_key</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Runtime</th>
+<th>Pattern</th>
+<th>Approve key</th>
+<th>Deny key</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>claude</code></td>
+<td><code>Do you want to proceed?</code> tool confirmation</td>
+<td><code>1</code> (Yes, once)</td>
+<td><code>3</code> (Variant A) / <code>Escape</code> (Variant B)</td>
+</tr>
+<tr>
+<td><code>codex</code></td>
+<td><code>Would you like to run the following command?</code></td>
+<td><code>1</code> (Yes, proceed)</td>
+<td><code>3</code> (No)</td>
+</tr>
+<tr>
+<td><code>cursor</code></td>
+<td><code>Not in allowlist:</code></td>
+<td><code>y</code> (Run once)</td>
+<td><code>Escape</code></td>
+</tr>
+<tr>
+<td><code>opencode</code></td>
+<td><code>△ Permission required</code></td>
+<td><code>Enter</code> (Allow once, default)</td>
+<td><code>End,Enter</code> (Reject)</td>
+</tr>
+<tr>
+<td><code>kiro-cli</code></td>
+<td><code>shell requires approval</code></td>
+<td><code>Enter</code> (Yes, single permission)</td>
+<td><code>Escape</code></td>
+</tr>
+<tr>
+<td><code>auggie</code></td>
+<td><code>Always index this workspace</code> indexing consent</td>
+<td><code>3</code> (Session-only)</td>
+<td><code>Escape</code></td>
+</tr>
+<tr>
+<td><code>auggie</code></td>
+<td><code>| Tool Approval Required |</code> per-tool approval</td>
+<td><code>A</code> (Allow)</td>
+<td><code>D</code> (Deny)</td>
+</tr>
+</tbody></table>
+<p>The CI guard <code>TestApproveKeyNeverForeverAllow</code> enforces a safety invariant: no
+runtime&#39;s <code>approve_key</code> can ever map to a &quot;don&#39;t ask again&quot;, &quot;add to allowlist&quot;,
+or &quot;auto-run everything&quot; option. A supervisor&#39;s approval must always grant
+single-invocation permission only. For auggie specifically, <code>approve_key = &quot;3&quot;</code>
+because the default-highlighted option on the indexing consent prompt is
+<code>[1] &quot;Always index this workspace&quot;</code> — a forever-allow that writes to
+<code>~/.augment/settings.json</code>. Sending <code>Enter</code> there would be a safety bug.</p>
+<hr>
+<h2>Configuration</h2>
+<p>Two new keys in <code>.thrum/config.json</code> control the feature:</p>
+<pre><code>{
+  &quot;project_name&quot;: &quot;thrum&quot;,
+  &quot;permission_supervisors&quot;: [&quot;coordinator&quot;, &quot;@leon-letto&quot;]
+}</code></pre>
+<p><strong><code>project_name</code></strong> — used to name the <code>@supervisor_&lt;project&gt;</code> pseudo-agent that
+authors nudges. Defaults to <code>filepath.Base</code> of the repo root if unset.</p>
+<p><strong><code>permission_supervisors</code></strong> — list of recipients for nudges. Accepts:</p>
+<ul>
+<li>A role name (<code>&quot;coordinator&quot;</code>) — broadcasts to all active agents with that role</li>
+<li>An agent name (<code>&quot;@implementer_api&quot;</code>) — delivers to a specific agent</li>
+<li>A user name (<code>&quot;@leon-letto&quot;</code>) — auto-forwards to Telegram if the bridge is
+configured for that user</li>
+</ul>
+<p>Defaults to <code>[&quot;coordinator&quot;]</code> when the key is absent.</p>
+<p>The config is re-read on every nudge, so you can change the supervisor list
+without a daemon restart.</p>
+<p>At daemon boot, Thrum registers <code>@supervisor_&lt;project&gt;</code> as a reserved
+pseudo-agent. It&#39;s the canonical author of all permission nudges. Unlike
+<code>@system</code>, it accepts replies — that&#39;s the entire point. You can see it with:</p>
+<pre><code>thrum team --system</code></pre>
+<p>Reserved agents show with the <code>⊙</code> glyph in compact output. Regular agents use
+<code>●</code> (active) or <code>○</code> (offline).</p>
+<hr>
+<h2>What a Nudge Looks Like</h2>
+<p>The first time a prompt is detected, you receive a message like this:</p>
+<pre><code>⚠ Permission prompt — @implementer_api (thrum-main)
+
+Repo:    thrum
+Runtime: claude
+Pattern: claude.tool_confirmation
+First detected: 2026-04-16 14:32:11 (0s ago)
+Reminder #1 of 6
+
+Pane tail (last 15 lines):
+  ...
+  ╭──────────────────────────────────────────╮
+  │ Do you want to proceed?                  │
+  │                                          │
+  │ 1. Yes                                   │
+  │ 2. Yes, and don&#39;t ask again for ...      │
+  │ 3. No, and tell Claude what to ...       │
+  ╰──────────────────────────────────────────╯
+
+─────────────────────────
+To approve:  thrum tmux send thrum-main &quot;1&quot;
+To deny:     thrum tmux send thrum-main &quot;3&quot;
+
+Or reply to this message with `y` / `n` — works from CLI, web UI, and Telegram.</code></pre>
+<p>Reminder messages have the same body but with <code>Reminder #N of 6</code> incremented.</p>
+<p><strong>Reminder cadence</strong> — all offsets are measured from when the prompt was first
+detected:</p>
+<table>
+<thead>
+<tr>
+<th>Reminder</th>
+<th>Sent at (from first detection)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>immediately</td>
+</tr>
+<tr>
+<td>2</td>
+<td>+5m</td>
+</tr>
+<tr>
+<td>3</td>
+<td>+15m</td>
+</tr>
+<tr>
+<td>4</td>
+<td>+45m</td>
+</tr>
+<tr>
+<td>5</td>
+<td>+2h</td>
+</tr>
+<tr>
+<td>6</td>
+<td>+4h</td>
+</tr>
+</tbody></table>
+<p>After 6 reminders with no supervisor response, the scheduler marks the agent
+<code>stuck</code> (see below) and stops sending.</p>
+<hr>
+<h2>Stuck State</h2>
+<p>When the 6-nudge cadence runs out, the agent&#39;s identity file gets
+<code>agent_status: stuck</code>. This is visible in <code>thrum team</code> output and the web UI&#39;s
+agent list.</p>
+<p>Stuck clears automatically. When the poller next sees the pane return to a
+healthy state — any state that isn&#39;t a recognized permission prompt —
+<code>OnRecovery</code> runs, deletes the nudge row, and resets <code>agent_status</code>.</p>
+<p>If you manually resolve the prompt in the pane (by attaching to the session and
+pressing a key yourself), the next poll cycle will see the changed pane content
+and trigger recovery automatically. You don&#39;t need to do anything else.</p>
+<hr>
+<h2>Replying to a Nudge</h2>
+<h3>From the CLI</h3>
+<pre><code># Reply to the nudge message directly
+thrum reply &lt;msg_id&gt; y
+
+# Or send the keystroke directly into the pane
+thrum tmux send &lt;session&gt; &quot;1&quot;</code></pre>
+<p>Both work. The <code>thrum reply</code> path goes through <code>TryResolve</code> and fires the
+correct runtime-specific keystroke. The <code>thrum tmux send</code> path sends a literal
+keystroke to the pane and bypasses the nudge system — use it if the pattern
+matching got something wrong and you want to type a different key.</p>
+<h3>From the web UI</h3>
+<p>Open the inbox, find the nudge message, and use the reply button. Typing <code>y</code> or
+<code>n</code> in the reply field routes through the same <code>TryResolve</code> path.</p>
+<h3>From Telegram</h3>
+<p>Two ways to reply:</p>
+<p><strong>Threaded reply</strong> — tap Reply on the nudge message in your Telegram DM with the
+bot, type a token, send it. The bot&#39;s <code>InboundRelay</code> reads the <code>ReplyToMsgID</code>,
+looks up the corresponding Thrum message ID, and routes the reply through
+<code>TryResolve</code>. This is the most explicit path — you&#39;re replying to the specific
+nudge.</p>
+<p><strong>Fresh DM</strong> — if you dismissed the notification or can&#39;t find the thread, send
+a new DM to the bot with just the approval token. The bot looks up your
+most-recent non-expired pending nudge and routes the reply there. This only
+works if the body is an exact match for one of the accepted tokens.</p>
+<p>Token sets by path:</p>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Approve tokens</th>
+<th>Deny tokens</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>CLI, web UI, threaded Telegram reply</td>
+<td><code>y</code>, <code>yes</code>, <code>approve</code>, <code>a</code></td>
+<td><code>n</code>, <code>no</code>, <code>deny</code>, <code>d</code></td>
+</tr>
+<tr>
+<td>Telegram fresh DM</td>
+<td><code>y</code>, <code>yes</code>, <code>allow</code></td>
+<td><code>n</code>, <code>no</code>, <code>deny</code></td>
+</tr>
+</tbody></table>
+<p>The fresh-DM set is intentionally narrower. <code>approve</code> and <code>a</code> aren&#39;t in it —
+they&#39;re unlikely to be a fresh-DM typo and excluding them keeps the trigger
+tight. If you need to send <code>approve</code>, use a threaded reply.</p>
+<p>Prose messages (<code>&quot;yeah sure&quot;</code>, <code>&quot;y please&quot;</code>) don&#39;t trigger either path — both
+require an exact match after lowercasing and trimming whitespace.</p>
+<p>You can reply to any message in the reminder thread, not just the first nudge.
+The <code>TryResolve</code> thread-ID fallback walks reminder messages back to their root
+nudge row, so replying to Reminder #4 works the same as replying to Reminder #1.</p>
+<hr>
+<h2>Surviving Daemon Restart</h2>
+<p>Two tables keep in-flight approvals alive across a daemon restart:</p>
+<p><strong><code>permission_nudges</code></strong> (schema v21) — stores the pending nudge state: session,
+tmux target, agent name, pattern key, approve/deny keys, detected time, nudge
+count, last pane hash, and an 8-hour expiry. <code>ReloadOnBoot</code> reads all
+non-expired rows at startup and resumes the reminder cadence automatically.</p>
+<p><strong><code>telegram_msg_map</code></strong> (schema v24) — maps Telegram message IDs to Thrum message
+IDs. Without this, a supervisor&#39;s reply to a nudge sent before a daemon restart
+would arrive as an unrouted DM with no <code>reply_to</code> reference, and <code>TryResolve</code>
+would never fire. The table persists the mapping with SQLite write-through and
+falls back to it on a cache miss.</p>
+<p>Together, these two tables mean a daemon restart mid-flow is invisible to the
+supervisor. They reply <code>y</code>, the keystroke fires, the agent unblocks.</p>
+<hr>
+<h2>Cross-Repo Workflow via Telegram</h2>
+<p>Here&#39;s what the full end-to-end looks like when the supervisor is on their
+phone:</p>
+<ol>
+<li>Agent in repo-A hits a permission prompt.</li>
+<li>Daemon-A&#39;s poller detects stable pane content matching a pattern.</li>
+<li>Daemon-A sends a nudge to <code>@supervisor_thrum</code>, which is configured with
+<code>@leon-letto</code> as a recipient.</li>
+<li>The <code>wsBroadcaster</code> fires a <code>notification.message</code> WebSocket event.</li>
+<li><code>OutboundRelay</code> picks it up and forwards it to the Telegram bridge.</li>
+<li>The supervisor&#39;s phone receives a DM from the bot.</li>
+<li>Supervisor taps Reply, types <code>y</code>, sends.</li>
+<li><code>InboundRelay</code> reads <code>ReplyToMsgID</code>, looks up the Thrum message ID in
+<code>telegram_msg_map</code>, fires a <code>message.send</code> RPC with <code>reply_to</code>.</li>
+<li><code>AfterMessageCreate</code> fires → <code>TryResolve</code> → atomic <code>DELETE ... RETURNING</code>
+claims the nudge row → <code>sendKeystroke</code> fires <code>&quot;1&quot;</code> into the pane.</li>
+<li>Agent proceeds.</li>
+</ol>
+<p>This works automatically when the Telegram bridge user is listed in
+<code>permission_supervisors</code>. No additional routing config is needed.</p>
+<hr>
+<h2>Observability</h2>
+<p><strong>Daemon log traces</strong> — the <code>firstDetect</code> path logs at <code>INFO</code> level:</p>
+<pre><code>[permission] firstDetect  session=thrum-main runtime=claude pattern=tool_confirmation supers_count=2 agent_name=implementer_api
+[permission] nudge sent   to=coordinator msg_id=perm_abc123 session=thrum-main</code></pre>
+<p>On restart with in-flight nudges:</p>
+<pre><code>permission found 2 pending nudge(s) still in flight</code></pre>
+<p><strong>Identity guard G4</strong> — permission writes (marking an agent stuck, clearing
+stuck) are blocked if the agent process is not running. This prevents the
+scheduler from labeling a dead agent&#39;s identity file during race conditions
+between agent crash and reminder cadence.</p>
+<p><strong><code>thrum team --system</code></strong> — shows the <code>@supervisor_&lt;project&gt;</code> pseudo-agent with
+the <code>⊙</code> glyph. If it&#39;s missing, the daemon didn&#39;t register it at boot, which
+means permission nudges won&#39;t have a sender identity and will fail silently.</p>
+<hr>
+<h2>Safety Invariant</h2>
+<p><code>TestApproveKeyNeverForeverAllow</code> is a CI test in
+<code>internal/daemon/permission/patterns_test.go</code> that iterates every pattern in the
+library and asserts that the <code>ApproveKey</code> is not any of the known forever-allow
+tokens (<code>2</code>, <code>Tab</code>, <code>Enter</code> for auggie&#39;s indexing prompt, etc.).</p>
+<p>This prevents a class of bug where approving a permission prompt from Thrum
+would actually grant the agent permanent or session-wide permission for an
+action class — broader than the human consented to. If you&#39;re adding a new
+runtime pattern and the CI guard rejects your <code>ApproveKey</code>, the fix is to change
+the key to the single-invocation option, not to relax the test.</p>
+<hr>
+<h2>See Also</h2>
+<ul>
+<li><a href="tmux-sessions.html">tmux Sessions</a> — pane lifecycle, session enrollment</li>
+<li><a href="multi-runtime.html">Multi-Runtime</a> — supported runtimes and their capabilities</li>
+<li><a href="telegram-bridge.html">Telegram Bridge</a> — supervisor reply via Telegram</li>
+<li><a href="configuration.html">Configuration</a> — <code>permission_supervisors</code> and
+<code>project_name</code> schema</li>
+</ul>
+
+</main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#permission-prompts.html')}</script>
+</body>
+</html>

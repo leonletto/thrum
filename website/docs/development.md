@@ -277,35 +277,35 @@ even when the UI has not been built.
 
 ## Makefile Targets
 
-| Target                  | Description                                            |
-| ----------------------- | ------------------------------------------------------ |
-| `make help`             | Show all available targets (default)                   |
+| Target                  | Description                                                                                                                                                                              |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `make help`             | Show all available targets (default)                                                                                                                                                     |
 | `make dev`              | Build + sign, restart only the worktree-scoped daemon. Does NOT touch `~/.local/bin/thrum`. Safe for multi-agent machines — other agents on the host keep running their existing binary. |
-| `make build`            | Full build: UI + Go binary                             |
-| `make build-ui`         | Build UI and copy to embed location                    |
-| `make build-go`         | Build Go binary only (skip UI rebuild)                 |
-| `make install`          | Full build and install to `~/.local/bin`               |
-| `make test`             | Run all Go tests                                       |
-| `make test-unit`        | Run unit tests only (fast)                             |
-| `make test-integration` | Run integration tests                                  |
-| `make test-coverage`    | Generate coverage report to `output/`                  |
-| `make test-verbose`     | Run tests with verbose output                          |
-| `make fmt`              | Format Go code                                         |
-| `make fmt-md`           | Format Markdown files with prettier                    |
-| `make fmt-all`          | Format all files (Go + Markdown)                       |
-| `make lint`             | Run golangci-lint                                      |
-| `make lint-fix`         | Run golangci-lint with auto-fix                        |
-| `make lint-md`          | Run markdownlint                                       |
-| `make lint-md-fix`      | Run markdownlint with auto-fix                         |
-| `make lint-all`         | Run all linters (Go + Markdown)                        |
-| `make vet`              | Run `go vet`                                           |
-| `make tidy`             | Tidy Go dependencies                                   |
-| `make clean`            | Remove build artifacts (`output/`, `bin/`, `dist/`)    |
-| `make install-tools`    | Install dev tools (golangci-lint, markdownlint-cli)    |
-| `make quick-check`      | Fast pre-commit checks: format, vet, test, build       |
-| `make ci`               | Full CI checks: format-all, lint-all, vet, test, build |
-| `make pre-commit`       | Alias for `quick-check`                                |
-| `make pre-push`         | Alias for `ci`                                         |
+| `make build`            | Full build: UI + Go binary                                                                                                                                                               |
+| `make build-ui`         | Build UI and copy to embed location                                                                                                                                                      |
+| `make build-go`         | Build Go binary only (skip UI rebuild)                                                                                                                                                   |
+| `make install`          | Full build and install to `~/.local/bin`                                                                                                                                                 |
+| `make test`             | Run all Go tests                                                                                                                                                                         |
+| `make test-unit`        | Run unit tests only (fast)                                                                                                                                                               |
+| `make test-integration` | Run integration tests                                                                                                                                                                    |
+| `make test-coverage`    | Generate coverage report to `output/`                                                                                                                                                    |
+| `make test-verbose`     | Run tests with verbose output                                                                                                                                                            |
+| `make fmt`              | Format Go code                                                                                                                                                                           |
+| `make fmt-md`           | Format Markdown files with prettier                                                                                                                                                      |
+| `make fmt-all`          | Format all files (Go + Markdown)                                                                                                                                                         |
+| `make lint`             | Run golangci-lint                                                                                                                                                                        |
+| `make lint-fix`         | Run golangci-lint with auto-fix                                                                                                                                                          |
+| `make lint-md`          | Run markdownlint                                                                                                                                                                         |
+| `make lint-md-fix`      | Run markdownlint with auto-fix                                                                                                                                                           |
+| `make lint-all`         | Run all linters (Go + Markdown)                                                                                                                                                          |
+| `make vet`              | Run `go vet`                                                                                                                                                                             |
+| `make tidy`             | Tidy Go dependencies                                                                                                                                                                     |
+| `make clean`            | Remove build artifacts (`output/`, `bin/`, `dist/`)                                                                                                                                      |
+| `make install-tools`    | Install dev tools (golangci-lint, markdownlint-cli)                                                                                                                                      |
+| `make quick-check`      | Fast pre-commit checks: format, vet, test, build                                                                                                                                         |
+| `make ci`               | Full CI checks: format-all, lint-all, vet, test, build                                                                                                                                   |
+| `make pre-commit`       | Alias for `quick-check`                                                                                                                                                                  |
+| `make pre-push`         | Alias for `ci`                                                                                                                                                                           |
 
 ## Common Tasks
 

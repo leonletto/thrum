@@ -53,8 +53,19 @@ need it.
   </a>
 </div>
 
-## What's New (upcoming)
+## What's New in v0.9.0
 
+- **Permission-prompt detection** — the daemon detects when a tmux-managed agent
+  hits a blocking permission prompt and routes an actionable nudge to configured
+  supervisors. Approve or deny from the CLI, web UI, or Telegram. See
+  [Permission Prompt Detection](permission-prompts.md).
+- **Identity guards** — cross-worktree CWD enforcement hard-errors on CWD drift
+  instead of silently misattributing actions to the wrong agent. See
+  [Troubleshooting: Identity](troubleshooting-identity.md).
+- **CLI hints (Phase B)** — contextual guidance printed before and after
+  destructive or multi-step commands. See [CLI Hints](cli-hints.md).
+- **Drift reconciliation** — peers self-heal address drift automatically without
+  re-pairing. See [Peers](peers.md).
 - **`thrum tmux quickstart`** — alias for `thrum tmux create`. Same command,
   clearer name. `thrum tmux create` now requires `--name`, `--role`, `--module`
   (or `--no-agent`) and runs quickstart inside the new pane automatically.
@@ -79,6 +90,54 @@ need it.
   Attach a monitor to any long-running process and it emits matches as synthetic
   Thrum messages. Leading-edge debounce (default 60s, min 30s), auto-persist,
   local-socket-only.
+
+## Breaking Changes (v0.9.0)
+
+If you're upgrading from v0.8.x, read this section before starting the daemon.
+
+- **Forged `caller_agent_id` rejected** — pre-v0.9.0 callers could pass any
+  `caller_agent_id` and it was accepted at face value. Now cross-checked against
+  kernel-verified PID resolution. Mismatches get "identity mismatch" and are
+  dropped.
+- **WebSocket non-localhost origin → HTTP 403** — pre-v0.9.0, `CheckOrigin`
+  returned `true` for all origins. Browser pages on non-loopback origins can no
+  longer upgrade to WebSocket.
+- **`message.delete` by non-author rejected** — only the original author can
+  soft-delete their own messages.
+- **`message.deleteByAgent` requires caller == target** — agents can only
+  bulk-delete their own messages.
+- **`message.deleteByScope` is daemon-internal only** — no longer callable from
+  any external client (CLI, browser, or unix socket).
+- **Legacy daemon_id auto-rotated** — first v0.9.0 daemon start rotates
+  pre-existing hostname-derived daemon IDs to ULID format. Existing peer pairs
+  must be re-paired: `thrum peer remove <name>` then
+  `thrum peer add --type tailscale <name>` on each peer.
+- **Downgrade blocked by migration guard** — running a v0.8.x binary against a
+  database migrated to schema v24 fails with a clear error. Recovery: stop
+  daemon → restore `thrum.db.pre-migration-v<N>-bak` → run the older binary.
+- **`~/.thrum/runtimes.json` replaces the old platform config path** — silently
+  dropped on upgrade; custom runtimes disappear. Move the file manually: Linux:
+  `~/.config/thrum/runtimes.json` → `~/.thrum/runtimes.json`; macOS:
+  `~/Library/Application Support/thrum/runtimes.json` →
+  `~/.thrum/runtimes.json`.
+- **`peer add --type` and `peer join --type` are now mandatory** — the
+  previously implicit `tailscale` default is gone. Add `--type tailscale` to any
+  existing scripts that omit it.
+- **`alert-silence` hook no longer triggers permission-prompt detection** —
+  daemon-side poller replaces it (~20s detection latency). Existing
+  `alert-silence` config in `.tmux.conf` is inert for this purpose.
+- **Identity guards hard-error on CWD drift** — running thrum from the wrong CWD
+  fails with `identity guard "cross_worktree" fired: pid_mismatch` instead of
+  silently misattributing. Use `THRUM_HOME` to pin repo path. See
+  [Troubleshooting: Identity](troubleshooting-identity.md).
+- **`thrum daemon start` and `thrum init` refuse non-git directories** — pass
+  `--force` for non-anchored use.
+- **`thrum quickstart` refuses self-rename / name collision** — without
+  `--force`. Previously a silent overwrite.
+- **Telegram fresh-DM `y` resolves a pending nudge instead of routing to
+  `--target`** — if the sender has a pending permission nudge, a bare
+  `y`/`n`/`yes`/`no`/`allow`/`deny` DM resolves that nudge rather than
+  delivering to the configured target agent.
 
 ## What's New in v0.7.x
 
@@ -121,3 +180,12 @@ need it.
   projection, sync protocol, and peer transport
 - [Agent Coordination](agent-coordination.md) — practical patterns for running
   multiple agents in parallel and integrating with Beads for task tracking
+- [Permission Prompt Detection](permission-prompts.md) — how the daemon detects
+  blocked agents, routes supervisor nudges, and accepts approvals from CLI, web,
+  or Telegram
+- [Security Model](security-model.md) — local trust stack, identity guards,
+  WebSocket origin enforcement, and message author controls
+- [CLI Hints](cli-hints.md) — contextual guidance printed around destructive and
+  multi-step commands; how to suppress them
+- [Troubleshooting: Identity](troubleshooting-identity.md) — diagnosing and
+  recovering from identity guard errors, CWD drift, and name collision failures

@@ -32,8 +32,9 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <strong>Web UI</strong> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
 <h2>Web UI</h2>
@@ -85,6 +86,11 @@ sidebar. It shows all messages addressed to you with three tabs across the top:<
 autocomplete — type <code>@</code> to see available agents and groups. The ComposeBar
 expands as you type and collapses after sending, keeping the reading area clean.</p>
 <p><img src="img/docs/ui-inbox.png" alt="Personal inbox with ComposeBar and reply threading"></p>
+<blockquote>
+<p><strong>Permission nudges:</strong> Replying to a permission nudge from the web UI inbox
+sends the configured approve/deny key directly into the agent&#39;s tmux pane as a
+real keystroke. No special syntax — just <code>y</code> or <code>n</code> in the reply field.</p>
+</blockquote>
 <h2>Agent View</h2>
 <p>Click any agent name in the <strong>Agents</strong> sidebar section to open their view. The
 agent view uses a compact thin header at the top showing the agent name, role,
@@ -98,6 +104,13 @@ slide-out provides:</p>
 </ul>
 <p>This is useful for understanding what an agent is working on and what
 instructions it has received.</p>
+<blockquote>
+<p><strong>System agents:</strong> Reserved pseudo-agents like <code>@supervisor_&lt;project&gt;</code> are
+hidden from the default team listing. The CLI surfaces them with
+<code>thrum team --system</code> (look for the <code>⊙</code> glyph). The web UI&#39;s Agents sidebar
+follows the same default — system agents are not shown unless you filter for
+them.</p>
+</blockquote>
 <p><img src="img/docs/ui-agent-inbox.png" alt="Agent view with thin header and gear slide-out for settings"></p>
 <h2>Who Has?</h2>
 <p>The <strong>Who Has?</strong> tool under the Tools section answers: &quot;which agent is editing

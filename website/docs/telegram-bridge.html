@@ -32,8 +32,9 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
 <h2>Telegram Bridge</h2>
@@ -93,12 +94,68 @@ chat.</p>
 <td>Reply to one of your own messages (edge case)</td>
 <td>Falls back to the configured <code>--target</code></td>
 </tr>
+<tr>
+<td>Fresh DM containing only <code>y</code>/<code>n</code>/<code>yes</code>/<code>no</code>/<code>allow</code>/<code>deny</code></td>
+<td>Resolves the most-recent pending permission nudge for the sender</td>
+</tr>
 </tbody></table>
 <p><strong>Threading:</strong> Telegram replies map to Thrum <code>reply_to</code> on the matching thread,
 so the agent sees your reply as a continuation of the original conversation, not
 a new thread.</p>
 <p>The bridge is isolated — it connects via the public WebSocket RPC interface and
 never imports internal daemon packages.</p>
+<h2>Permission Prompt Approvals via Telegram</h2>
+<p>When an agent hits a blocking permission prompt in tmux, the daemon detects it
+and routes a supervisor nudge to your configured <code>permission_supervisors</code>. If
+the Telegram bridge user is one of those supervisors, the nudge lands in your
+Telegram DM automatically — no extra configuration needed. See
+<a href="permission-prompts.html">Permission Prompt Detection</a> for the full feature.</p>
+<h3>Replying from Telegram</h3>
+<p>Two paths work, with different token sets:</p>
+<p><strong>Path 1 — Reply-thread.</strong> Tap Telegram&#39;s Reply on the bot&#39;s nudge message, then
+type one of the approve or deny tokens. The bridge resolves the approval via the
+Telegram reply thread ID.</p>
+<p><strong>Path 2 — Fresh DM (new in v0.9.0).</strong> If the notification was dismissed or the
+thread is buried, open a new DM to the bot and type one of the strict fresh-DM
+tokens. The bridge looks up the sender&#39;s most-recent non-expired pending nudge
+and routes accordingly. One sender&#39;s fresh DM cannot resolve another
+supervisor&#39;s pending nudge — lookups are keyed on Telegram user ID.</p>
+<p>The accepted tokens differ by path:</p>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Approve tokens</th>
+<th>Deny tokens</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Reply-thread</td>
+<td><code>y</code>, <code>yes</code>, <code>approve</code>, <code>a</code></td>
+<td><code>n</code>, <code>no</code>, <code>deny</code>, <code>d</code></td>
+</tr>
+<tr>
+<td>Fresh DM</td>
+<td><code>y</code>, <code>yes</code>, <code>allow</code></td>
+<td><code>n</code>, <code>no</code>, <code>deny</code></td>
+</tr>
+</tbody></table>
+<p>Note the asymmetry: <code>approve</code> and <code>a</code> work via threaded reply but do NOT trigger
+fresh-DM resolution. If you want to approve without a thread, use <code>allow</code> or
+<code>yes</code>.</p>
+<p>Prose messages (&quot;yeah go ahead&quot;, &quot;y please&quot;) do not trigger either path — the
+match requires an exact token after whitespace-trimming. A non-matching fresh DM
+routes normally to the configured <code>--target</code> agent.</p>
+<h3>Restart Resilience</h3>
+<p>Before v0.9.0, the Telegram↔Thrum message-ID mapping lived in an in-memory
+cache. A daemon restart between sending a nudge and receiving the supervisor&#39;s
+reply dropped the mapping, so the reply had no <code>reply_to</code> reference and could
+never resolve.</p>
+<p>In v0.9.0 the mapping is written through to SQLite (<code>telegram_msg_map</code> table,
+schema v24) as a durable fallback. If the cache misses on reply, the daemon
+reads the SQLite row and routing continues as normal. Daemon restarts during an
+in-flight approval flow no longer silently fail.</p>
+<hr>
 <h3>Setup</h3>
 <h4>1. Create a Telegram Bot</h4>
 <ol>

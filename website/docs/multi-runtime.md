@@ -19,8 +19,10 @@ of these:
 - **Open Code** — `opencode`, cheaper for parallel grunt work
 - **Codex** — `codex`, OpenAI's CLI agent
 - **Aider** — `aider`, terminal-based with git-native editing
-- **Cursor** — `agent` (primary) / `cursor-agent` (legacy, still detected), Cursor's headless mode
-- **Kiro** — `kiro-cli`, runtime preset only in v0.9.0; no dedicated plugin yet. Manual `thrum prime` required after restart.
+- **Cursor** — `agent` (primary) / `cursor-agent` (legacy, still detected),
+  Cursor's headless mode
+- **Kiro** — `kiro-cli`, runtime preset only in v0.9.0; no dedicated plugin yet.
+  Manual `thrum prime` required after restart.
 - **Gemini** — `gemini`, Google's CLI agent
 - **Auggie** — `auggie`
 - **Amp** — `amp`
@@ -136,8 +138,8 @@ binaries:
 claude  opencode  aider  codex  cursor-agent  agent  gemini  auggie  amp  kiro-cli
 ```
 
-`cursor-agent` and `agent` both map to the `cursor` runtime name. `agent` is
-the preferred binary name as of v0.9.0; `cursor-agent` is the legacy name, still
+`cursor-agent` and `agent` both map to the `cursor` runtime name. `agent` is the
+preferred binary name as of v0.9.0; `cursor-agent` is the legacy name, still
 detected for backward compatibility. If another runtime ever claims the `agent`
 binary name, we handle it then.
 
@@ -145,8 +147,8 @@ This powers two things:
 
 **Status checks.** The `tmux:alive` vs `tmux:stale` state in `thrum team` and
 `thrum tmux status` comes from checking whether the stored `agent_pid` is still
-a running process. That check now works for any runtime, not just Claude. When
-a runtime pauses for a permission prompt, the process is still running but the
+a running process. That check now works for any runtime, not just Claude. When a
+runtime pauses for a permission prompt, the process is still running but the
 session is effectively blocked. See [Permission Prompts](permission-prompts.md)
 for the full detection workflow.
 

@@ -47,11 +47,12 @@ chat.
 
 **Inbound (Telegram → Thrum)** routes by context:
 
-| What you send from Telegram                   | Where it lands                           |
-| --------------------------------------------- | ---------------------------------------- |
-| Fresh message (no Telegram reply-to)          | The configured `--target` agent          |
-| Reply to a message an agent sent you          | The agent that sent the original message |
-| Reply to one of your own messages (edge case) | Falls back to the configured `--target`  |
+| What you send from Telegram                                | Where it lands                                                   |
+| ---------------------------------------------------------- | ---------------------------------------------------------------- |
+| Fresh message (no Telegram reply-to)                       | The configured `--target` agent                                  |
+| Reply to a message an agent sent you                       | The agent that sent the original message                         |
+| Reply to one of your own messages (edge case)              | Falls back to the configured `--target`                          |
+| Fresh DM containing only `y`/`n`/`yes`/`no`/`allow`/`deny` | Resolves the most-recent pending permission nudge for the sender |
 
 **Threading:** Telegram replies map to Thrum `reply_to` on the matching thread,
 so the agent sees your reply as a continuation of the original conversation, not
@@ -59,6 +60,57 @@ a new thread.
 
 The bridge is isolated — it connects via the public WebSocket RPC interface and
 never imports internal daemon packages.
+
+## Permission Prompt Approvals via Telegram
+
+When an agent hits a blocking permission prompt in tmux, the daemon detects it
+and routes a supervisor nudge to your configured `permission_supervisors`. If
+the Telegram bridge user is one of those supervisors, the nudge lands in your
+Telegram DM automatically — no extra configuration needed. See
+[Permission Prompt Detection](permission-prompts.md) for the full feature.
+
+### Replying from Telegram
+
+Two paths work, with different token sets:
+
+**Path 1 — Reply-thread.** Tap Telegram's Reply on the bot's nudge message, then
+type one of the approve or deny tokens. The bridge resolves the approval via the
+Telegram reply thread ID.
+
+**Path 2 — Fresh DM (new in v0.9.0).** If the notification was dismissed or the
+thread is buried, open a new DM to the bot and type one of the strict fresh-DM
+tokens. The bridge looks up the sender's most-recent non-expired pending nudge
+and routes accordingly. One sender's fresh DM cannot resolve another
+supervisor's pending nudge — lookups are keyed on Telegram user ID.
+
+The accepted tokens differ by path:
+
+| Path         | Approve tokens             | Deny tokens            |
+| ------------ | -------------------------- | ---------------------- |
+| Reply-thread | `y`, `yes`, `approve`, `a` | `n`, `no`, `deny`, `d` |
+| Fresh DM     | `y`, `yes`, `allow`        | `n`, `no`, `deny`      |
+
+Note the asymmetry: `approve` and `a` work via threaded reply but do NOT trigger
+fresh-DM resolution. If you want to approve without a thread, use `allow` or
+`yes`.
+
+Prose messages ("yeah go ahead", "y please") do not trigger either path — the
+match requires an exact token after whitespace-trimming. A non-matching fresh DM
+routes normally to the configured `--target` agent.
+
+### Restart Resilience
+
+Before v0.9.0, the Telegram↔Thrum message-ID mapping lived in an in-memory
+cache. A daemon restart between sending a nudge and receiving the supervisor's
+reply dropped the mapping, so the reply had no `reply_to` reference and could
+never resolve.
+
+In v0.9.0 the mapping is written through to SQLite (`telegram_msg_map` table,
+schema v24) as a durable fallback. If the cache misses on reply, the daemon
+reads the SQLite row and routing continues as normal. Daemon restarts during an
+in-flight approval flow no longer silently fail.
+
+---
 
 ### Setup
 

@@ -123,6 +123,15 @@ Available on all commands:
 Initialize Thrum in the current repository. Creates the `.thrum/` directory
 structure, sets up the `a-sync` branch for message synchronization, and updates
 `.gitignore`. Detects installed AI runtimes and prompts you to select one.
+Populates the `identity` block in `config.json` (a fresh `daemon_id` is
+generated once and persists; re-init is idempotent on `daemon_id`). See
+[Identity System — Daemon Identity](identity.md) for details.
+
+**G2 guard:** `thrum init` hard-errors if the current working directory is not
+inside a git repository. Pass `--force` to override for non-git environments
+(uncommon; the daemon cannot anchor identity without a git root).
+
+This command emits contextual hints — see [CLI Hints](cli-hints.md).
 
 ```text
 thrum init [--stealth] [flags]
@@ -257,11 +266,55 @@ This command generates comprehensive agent coordination instructions including:
 The instructions are automatically injected by `thrum prime` when agents start
 sessions, providing immediate context on how to use Thrum for coordination.
 
+### thrum prime
+
+Load AI-optimized session context for the current agent. Reads the identity
+file, active session state, saved context, and any pending restart snapshot,
+then assembles a consolidated prompt block that is printed to stdout for the
+agent to consume.
+
+```text
+thrum prime [flags]
+```
+
+| Flag      | Description                               | Default |
+| --------- | ----------------------------------------- | ------- |
+| `--force` | Bypass G5 ownership guard (use with care) | `false` |
+| `--quiet` | Suppress hint output                      | `false` |
+
+**G5 guard (prime_ownership):** `thrum prime` must be run from the top-level AI
+runtime process, not from inside a sub-agent (a tool call spawned within a
+Claude Code session). If a sub-agent invokes `thrum prime`, the guard detects
+that the closest runtime ancestor in the caller's PID chain is not the owner
+recorded in the identity file and refuses the call. Run `thrum prime` from the
+outermost runtime session. Pass `--force` only when you understand the ownership
+model and are intentionally bypassing this check.
+
+Example:
+
+```text
+$ thrum prime
+# Outputs session context block to stdout
+# Agent reads this at session start via /thrum:prime skill
+```
+
+See also: [Identity System](identity.md), [Session Restart](session-restart.md).
+
 ### thrum quickstart
 
 Register, start a session, and set an initial intent in one step. If the agent
 is already registered, it re-registers automatically. Supports agent naming via
 the `--name` flag or `THRUM_NAME` environment variable.
+
+**G1a guard (quickstart_self_rename):** If the caller's ancestor PID chain
+already owns an identity in this directory (i.e., this runtime has already
+registered), attempting to quickstart under a different name is refused. Pass
+`--force` to rename the existing identity to `.deleted` and register fresh.
+
+**G1b guard (quickstart_name_collision):** If the requested `--name` is held by
+a live process in a different worktree, the registration is refused. Pass
+`--force` to displace the existing identity (use only when you are certain the
+other process has exited), or choose a different name.
 
 ```text
 thrum quickstart --name AGENT_NAME --role ROLE --module MODULE [flags]
@@ -276,7 +329,7 @@ thrum quickstart --name AGENT_NAME --role ROLE --module MODULE [flags]
 | `--preamble-file` | Path to custom preamble file                                                             |         |
 | `--dry-run`       | Preview without writing                                                                  | `false` |
 | `--no-init`       | Skip config file generation                                                              | `false` |
-| `--force`         | Overwrite existing identity                                                              | `false` |
+| `--force`         | Overwrite existing identity (bypasses G1a and G1b guards)                                | `false` |
 
 Requires `--role` and `--module` (via flags or `THRUM_ROLE`/`THRUM_MODULE` env
 vars). The `--runtime` value is written to `preferred_runtime` in the identity
@@ -340,9 +393,14 @@ ahead of the default branch, and the list of changed files on each heartbeat.
 thrum team [flags]
 ```
 
-| Flag    | Description            | Default |
-| ------- | ---------------------- | ------- |
-| `--all` | Include offline agents | `false` |
+| Flag       | Description                           | Default |
+| ---------- | ------------------------------------- | ------- |
+| `--all`    | Include offline agents                | `false` |
+| `--system` | Include system/reserved pseudo-agents | `false` |
+
+The `--system` flag surfaces reserved pseudo-agents such as
+`@supervisor_<project>`. Status glyphs: `●` active, `○` offline, `⊙` reserved
+(system pseudo-agent).
 
 Example:
 
@@ -391,6 +449,8 @@ thrum send MESSAGE [flags]
 The `--to` flag adds the recipient as a mention, making it a directed message.
 Recipients can be agents (`@alice`), roles (`@reviewer`), or `@everyone` for
 broadcast.
+
+This command emits contextual hints — see [CLI Hints](cli-hints.md).
 
 Example:
 
@@ -1210,13 +1270,18 @@ Start the daemon in the background. Uses `thrum daemon run` internally to run
 the daemon in a detached process. The daemon serves both a Unix socket (for CLI
 RPC) and a combined WebSocket + SPA server on port 9999.
 
+**G2 guard:** `thrum daemon start` hard-errors if the current working directory
+is not inside a git repository. Pass `--force` to override for ephemeral non-git
+environments.
+
 ```text
 thrum daemon start [flags]
 ```
 
-| Flag      | Description                               | Default |
-| --------- | ----------------------------------------- | ------- |
-| `--local` | Disable remote git sync (local-only mode) | `false` |
+| Flag      | Description                                            | Default |
+| --------- | ------------------------------------------------------ | ------- |
+| `--local` | Disable remote git sync (local-only mode)              | `false` |
+| `--force` | Allow start outside a git repository (G2 guard bypass) | `false` |
 
 The daemon performs pre-startup duplicate detection by checking if another
 daemon is already serving this repository (via JSON PID files and `flock()`).
@@ -1238,11 +1303,29 @@ thrum daemon stop
 
 ### thrum daemon status
 
-Show daemon status including PID, uptime, version, and the repository path being
-served.
+Show daemon status including PID, uptime, version, repository path, and (when
+the daemon is running) the daemon identity block.
 
 ```text
 thrum daemon status
+```
+
+Example:
+
+```text
+$ thrum daemon status
+Daemon: running (PID 7718, uptime 3h24m)
+  Version:  v0.9.0
+  Socket:   .thrum/var/thrum.sock
+  Repo:     /Users/leon/dev/opensource/thrum
+
+Identity:
+  daemon_id:  d_01HYTESTULID01234567890AB
+  repo_name:  thrum
+  hostname:   leonsmacm1pro
+  repo_path:  /Users/leon/dev/opensource/thrum
+  git_origin: https://github.com/leonletto/thrum
+  init_at:    2026-04-17T06:30:00Z
 ```
 
 ### thrum daemon restart
@@ -1542,41 +1625,69 @@ $ thrum roles deploy --agent alice
 
 ### thrum peer add
 
-Start a Tailscale pairing session on the local machine. Displays a peercode and
-blocks until the remote machine connects or the session times out (5 minutes).
+Start a pairing session on the local machine. Displays a peercode and blocks
+until the remote machine connects or the session times out (5 minutes).
+
+> **BREAKING CHANGE (v0.9.0):** `--type` is now mandatory. The previous implicit
+> `tailscale` default has been removed. Any script calling `thrum peer add`
+> without `--type` must add `--type tailscale` (or another value) to restore
+> equivalent behavior.
 
 ```text
-thrum peer add
+thrum peer add --type TYPE [flags]
 ```
 
-If `THRUM_TS_AUTHKEY` is not set, the command prompts for a Tailscale auth key
-and saves it to `.thrum/.env`.
+| Flag         | Description                                     | Required |
+| ------------ | ----------------------------------------------- | -------- |
+| `--type`     | Transport type (see table below)                | yes      |
+| `--peercode` | Connection string (pass `-` to read from stdin) |          |
+| `--address`  | LAN IP for `--type network`                     |          |
+
+**Transport types:**
+
+| `--type`    | When to use                                 | Required additional flags                | Constraints                                      |
+| ----------- | ------------------------------------------- | ---------------------------------------- | ------------------------------------------------ |
+| `tailscale` | Cross-host via Tailscale CGNAT              | `THRUM_TS_AUTHKEY` env var (or prompted) | Requires Tailscale running on both ends          |
+| `local`     | Same-host, different repo or worktree       | (none)                                   | Both daemons on the same machine; loopback only  |
+| `network`   | Cross-host without Tailscale                | `--address <ip>` on both sides           | No NAT traversal; requires reachable LAN address |
+| `repair`    | Re-establish a broken peer (drift recovery) | Existing peer name (positional)          | Valid on `peer join` only, not `peer add`        |
+
+If `THRUM_TS_AUTHKEY` is not set and `--type tailscale` is used, the command
+prompts for a Tailscale auth key and saves it to `.thrum/.env`.
 
 Example:
 
 ```text
-$ thrum peer add
+$ thrum peer add --type tailscale
 Waiting for connection...
 Pairing code: alice:100.64.1.5:44123:7392
 
 Share this with the other machine:
-  thrum peer join --peercode alice:100.64.1.5:44123:7392
+  thrum peer join --type tailscale --peercode alice:100.64.1.5:44123:7392
 
 Paired with "bob" (100.64.1.9:44123). Syncing started.
+
+# Same-host peer
+$ thrum peer add --type local
+Pairing code: alice:127.0.0.1:44123:7392
 ```
 
 ### thrum peer join
 
 Connect to a remote peer using the peercode from `thrum peer add`.
 
+> **BREAKING CHANGE (v0.9.0):** `--type` is now mandatory. See the transport
+> type table above (`thrum peer add`) for valid values and when to use each.
+
 ```text
-thrum peer join [peercode] [flags]
+thrum peer join --type TYPE [peercode] [flags]
 ```
 
-| Flag          | Description                                                |
-| ------------- | ---------------------------------------------------------- |
-| `--peercode`  | Connection string (pass `-` to read from stdin)            |
-| `--repo-path` | Filesystem path to peer's repo (sets transport to `local`) |
+| Flag          | Description                                               | Required |
+| ------------- | --------------------------------------------------------- | -------- |
+| `--type`      | Transport type (see table above)                          | yes      |
+| `--peercode`  | Connection string (pass `-` to read from stdin)           |          |
+| `--repo-path` | Filesystem path to peer's repo (used with `--type local`) |          |
 
 The peercode can be passed as a positional argument, via `--peercode`, piped
 through stdin, or entered interactively.
@@ -1586,16 +1697,22 @@ through stdin, or entered interactively.
 Example:
 
 ```text
-$ thrum peer join --peercode alice:100.64.1.5:44123:7392
+$ thrum peer join --type tailscale --peercode alice:100.64.1.5:44123:7392
 Paired with "alice". Syncing started.
 
 # Local same-machine peer
-$ thrum peer join --peercode alice:127.0.0.1:44123:7392 --repo-path /path/to/other/repo
+$ thrum peer join --type local --peercode alice:127.0.0.1:44123:7392 --repo-path /path/to/other/repo
+
+# Re-establish a broken peer (drift recovery — no new peercode needed)
+$ thrum peer join --type repair alice
+Re-paired with "alice". Syncing resumed.
 ```
 
 ### thrum peer list
 
-List all paired peers with address, last sync time, and sequence number.
+List all paired peers with address, last sync time, and sequence number. When
+auto-reconciliation cannot resolve a peer's address drift, an inline hint row
+appears under that peer.
 
 ```text
 thrum peer list [--json]
@@ -1606,9 +1723,15 @@ Example:
 ```text
 $ thrum peer list
 NAME                 ADDRESS                LAST SYNC          LAST SEQ
-alice                100.64.1.5:44123       2 minutes ago      1042
+alice                100.64.1.5:44123       48 minutes ago     1042
+  └─ drift detected — run: thrum peer join --type repair alice
 bob                  100.64.1.9:44123       5 seconds ago      1087
 ```
+
+The `└─` row appears only when `ReconcileStatus == "drift_reconcile_failed"`.
+Running `thrum peer join --type repair alice` re-establishes the connection
+using the stored bearer token in `peers.json` — no new peercode required. A
+successful repair resets the status to healthy and the hint row disappears.
 
 ### thrum peer status
 
@@ -1754,6 +1877,8 @@ thrum tmux create <name> --cwd <path> --name <agent-name> --role <role> --module
 
 Without `--no-agent`, the command errors if `--name`, `--role`, and `--module`
 are all missing.
+
+This command emits contextual hints — see [CLI Hints](cli-hints.md).
 
 Example:
 

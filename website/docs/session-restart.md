@@ -134,27 +134,30 @@ The format:
 ## Resume Plan
 
 **Shipped this session:**
+
 - <brief bullet per merged/closed item, with bead/PR/SHA where relevant>
 
 **In-flight work:**
+
 - Branch: <branch name>
 - Last commit: <short SHA + subject>
 - Uncommitted files: <paths, or "none">
 - Next concrete step: <one sentence>
 
 **Blockers / open questions:**
+
 - <bullets, or "none">
 
 **Resume plan:**
+
 1. <first step the next session should take>
 2. <second step>
-3. ...
-   (4–8 numbered steps total)
+3. ... (4–8 numbered steps total)
 ```
 
 **Single source of truth via mktemp**: the skill writes the Resume Plan once to
-a temp file (`mktemp -t resume_plan.XXXXXX`), then `cat`s it twice — once to
-the terminal for the operator to read, once appended to the snapshot file. This
+a temp file (`mktemp -t resume_plan.XXXXXX`), then `cat`s it twice — once to the
+terminal for the operator to read, once appended to the snapshot file. This
 guarantees the printed copy and the snapshot copy cannot drift from each other.
 The 4-step flow is: write to temp file → print to terminal → save snapshot →
 append to snapshot → remove temp file.
@@ -272,7 +275,7 @@ thrum tmux restart implementer-api --runtime opencode
 
 ```yaml
 restart:
-  max_lines: 200  # Max lines in snapshot (default: 200)
+  max_lines: 200 # Max lines in snapshot (default: 200)
   auto_threshold: 0 # Context % trigger, 0 = disabled (default: 0)
   graceful_timeout: 30 # Seconds to wait for graceful save (default: 30)
 ```

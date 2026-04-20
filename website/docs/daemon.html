@@ -32,8 +32,9 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <strong>Daemon Architecture</strong> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
 <h2>Thrum Daemon Architecture</h2>
@@ -77,6 +78,8 @@ the central coordinator for all Thrum clients (CLI, Web UI, and MCP server).</p>
       └── {agent_name}.jsonl
 
   .thrum/
+  ├── config.json            (daemon configuration + identity block)
+  ├── config.json.pre-identity-bak  (one-time backup on first daemon_id rotation)
   ├── var/
   │   ├── thrum.sock         (Unix socket)
   │   ├── thrum.pid          (JSON PID file)
@@ -182,9 +185,23 @@ defense-in-depth cleanup.</p>
 <li>Pre-startup validation: check for existing daemon (repo affinity)</li>
 <li>Write JSON PID file with metadata</li>
 <li>Register defer safety net (catches panics, early returns)</li>
+<li><code>identity.Bootstrap(thrumDir, repoPath)</code> — load or create the daemon&#39;s
+persistent identity (ULID-based <code>daemon_id</code>, repo metadata); atomically
+rewrites <code>.thrum/config.json</code>; writes <code>.thrum/config.json.pre-identity-bak</code>
+on first rotation (backup-once, never overwritten)</li>
+<li>Populate <code>daemon_identity</code> SQLite table via <code>state.NewState</code> — single-row
+mirror of the <code>config.json</code> identity block; written on every startup via
+<code>INSERT OR REPLACE</code></li>
+<li>Register <code>@supervisor_&lt;project&gt;</code> pseudo-agent (idempotent)</li>
+<li><code>ReloadOnBoot</code> — re-enqueue any pending permission nudges that survived a
+daemon restart</li>
+<li>Backfill <code>runtime</code> field in all identity files where it is missing</li>
 <li>Start Unix socket server</li>
 <li>Start WebSocket server (if configured), write port file</li>
 <li>Start monitor supervisor (respawns persisted monitor jobs from DB)</li>
+<li><code>ConnectAll</code> peers, then <code>ReconcileAll</code> (2-second settling window, up to 4
+peers in parallel) — attempts <code>peer.repair</code> for any peer whose address may
+have drifted since last shutdown</li>
 <li>Start signal handler goroutine</li>
 <li>Wait for shutdown signal</li>
 </ol>
@@ -264,6 +281,25 @@ on both the Unix socket and WebSocket servers unless noted.</p>
 </tr>
 </tbody></table>
 <p>See <a href="rpc-api.html">RPC API Reference</a> for full documentation.</p>
+<p><strong>Caller Identity Enforcement (v0.9.0):</strong></p>
+<p>Every RPC request on the Unix socket goes through a two-stage identity check:</p>
+<ol>
+<li><p><strong>Peercred resolution</strong> — the accept loop extracts the connecting process&#39;s
+kernel-verified PID via <code>SO_PEERCRED</code> (Linux) or <code>LOCAL_PEERPID</code> (macOS),
+resolves the PID&#39;s working directory, walks to the git root, and matches
+against registered agent worktrees. Matched callers get a verified identity;
+unmatched callers are classified as <strong>anonymous</strong>.</p>
+</li>
+<li><p><strong>Anonymous allowlist</strong> — anonymous callers may only invoke a hardcoded set
+of ~30 read-only methods (observability, team/session/message queries, tmux
+status reads, and the bootstrap RPCs <code>agent.register</code>, <code>session.start</code>,
+<code>session.setIntent</code>). All mutating RPCs are rejected before the handler runs.
+See <a href="security-model.html">Security Model</a> for the full allowlist.</p>
+</li>
+</ol>
+<p>The G4 liveness gate additionally guards all daemon-side writes to identity
+files: if the target agent&#39;s PID is no longer alive, the write is refused and an
+<code>identity_guard_fire</code> slog event is emitted. See below for the event schema.</p>
 <p><strong>Health check response:</strong></p>
 <pre><code>{
   &quot;status&quot;: &quot;ok&quot;,
@@ -300,6 +336,18 @@ web UI on a single port.</p>
 <li>Build pipeline: <code>pnpm build</code> -&gt; copy to <code>internal/web/dist/</code> -&gt; <code>go build</code></li>
 <li>Dev mode: set <code>THRUM_UI_DEV=./ui/packages/web-app/dist</code> to serve from disk</li>
 </ul>
+<p><strong>WebSocket Origin Restriction (v0.9.0):</strong></p>
+<p>The WebSocket upgrade handler validates the browser <code>Origin</code> header against a
+localhost allowlist before completing the handshake:</p>
+<ul>
+<li><code>http://localhost:&lt;port&gt;</code> and <code>ws://localhost:&lt;port&gt;</code></li>
+<li><code>http://127.0.0.1:&lt;port&gt;</code> and <code>ws://127.0.0.1:&lt;port&gt;</code></li>
+</ul>
+<p>Connections from any other origin receive <code>HTTP 403 Forbidden</code> at the upgrade
+handshake and are dropped before any RPC can execute. This prevents cross-origin
+WebSocket hijacking (CSRF via a remote page). Pre-v0.9.0 the <code>CheckOrigin</code>
+callback returned <code>true</code> unconditionally. See
+<a href="security-model.html">Security Model</a> for the full local trust stack.</p>
 <p><strong>Browser auto-registration:</strong></p>
 <ul>
 <li><code>user.identify</code> RPC extracts git config <code>user.name</code> and <code>user.email</code> for the
@@ -379,6 +427,55 @@ origin/master</li>
 <li><code>FilterStaleContexts(contexts, now)</code> - In-memory filter (same rules, for sync)</li>
 <li>Runs at daemon startup and before sync</li>
 </ul>
+<h2>Observability</h2>
+<h3><code>identity_guard_fire</code> Slog Event</h3>
+<p>Every identity guard outcome (whether the guard fires and denies, fires and
+allows, auto-reclaims, or is skipped) emits a structured slog event with the key
+<code>identity_guard_fire</code>. Operators and monitoring pipelines can subscribe to this
+event for identity violation alerts.</p>
+<p><strong>Event fields:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>guard</code></td>
+<td>string</td>
+<td>Guard key that fired (e.g., <code>cross_worktree</code>, <code>daemon_writer_liveness</code>, <code>unauthenticated_rpc</code>)</td>
+</tr>
+<tr>
+<td><code>mode</code></td>
+<td>string</td>
+<td>Enforcement mode at fire time: <code>strict</code>, <code>warn</code>, or <code>off</code></td>
+</tr>
+<tr>
+<td><code>outcome</code></td>
+<td>string</td>
+<td><code>denied</code>, <code>allowed</code>, <code>auto_reclaimed</code>, or <code>skipped</code></td>
+</tr>
+<tr>
+<td><code>reason</code></td>
+<td>string</td>
+<td>Machine-readable reason code (e.g., <code>subject_pid_dead</code>, <code>identity_mismatch</code>)</td>
+</tr>
+<tr>
+<td><code>caller_pid</code></td>
+<td>integer</td>
+<td>PID of the connecting process (when available via peercred)</td>
+</tr>
+<tr>
+<td><code>target_pid</code></td>
+<td>integer</td>
+<td>PID of the identity file&#39;s recorded <code>agent_pid</code> (when relevant)</td>
+</tr>
+</tbody></table>
+<p>The <code>identity_guard_fire</code> event is emitted on every outcome — including
+successful passes — so operators can audit both denials and auto-reclaims
+without separate event types.</p>
 <h2>Local-Only Mode</h2>
 <p>When your repository is public, the daemon&#39;s sync loop pushes the <code>a-sync</code>
 branch to <code>origin</code>, which would expose private agent messages. Local-only mode
@@ -637,6 +734,9 @@ kill &lt;pid&gt;
     └── {agent_name}.jsonl
 
 .thrum/                         # Gitignored entirely
+├── config.json                 # Daemon configuration (includes identity block)
+├── config.json.pre-identity-bak  # One-time backup created on first daemon_id rotation
+│                               #   (backup-once: never overwritten after creation)
 ├── var/                        # Runtime files
 │   ├── thrum.sock              # Unix socket for CLI/RPC
 │   ├── thrum.pid               # JSON PID file (PID, RepoPath, StartedAt, SocketPath)

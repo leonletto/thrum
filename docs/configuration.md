@@ -31,8 +31,28 @@ Located at `.thrum/config.json` in your repository:
     "merge_target": "main",
     "default_autonomy": "end_only"
   },
+  "permission_supervisors": ["coordinator"],
+  "project_name": "myproject",
+  "identity": {
+    "daemon_id": "d_01HYTESTULID01234567890AB",
+    "repo_name": "myproject",
+    "hostname": "mymachine",
+    "repo_path": "/Users/me/dev/myproject",
+    "git_origin_url": "https://github.com/me/myproject",
+    "init_at": "2026-04-17T06:30:00Z"
+  },
+  "identity_guard": {
+    "cross_worktree": "strict",
+    "quickstart_self_rename": "strict",
+    "quickstart_name_collision": "strict",
+    "non_git_bootstrap": "strict",
+    "unauthenticated_rpc": "strict",
+    "daemon_writer_liveness": "strict",
+    "prime_ownership": "strict",
+    "dead_pid_auto_reclaim": "warn"
+  },
   "restart": {
-    "max_lines": 1000,
+    "max_lines": 200,
     "auto_threshold": 0,
     "graceful_timeout": 30
   },
@@ -179,6 +199,43 @@ When to request human approval during plan execution.
 - **Values:** `"per_epic"` (approve after each epic) or `"end_only"` (approve
   only at the end)
 
+## Permission Supervisors
+
+### `permission_supervisors`
+
+List of recipients for permission-prompt nudges from tmux-managed agents. When a
+tmux agent pauses waiting for a permission confirmation, the daemon delivers a
+nudge message to every entry in this list.
+
+- **Type:** array of strings
+- **Default:** `["coordinator"]` (applied at nudge-dispatch time)
+
+Each entry is one of:
+
+- A role name (`"coordinator"`, `"orchestrator"`) — broadcasts to every active
+  agent with that role
+- A specific agent name (`"@impl_team_fix"`) — direct delivery to that agent
+- A specific user (`"@user:leon-letto"`) — direct delivery; auto-forwarded to
+  Telegram if the bridge is configured for that user
+
+Example:
+
+```json
+{
+  "permission_supervisors": ["coordinator", "@user:leon-letto"]
+}
+```
+
+### `project_name`
+
+Short human-readable identifier used to form the `@supervisor_<project>`
+pseudo-agent sender identity on permission-prompt nudges. Falls back to
+`filepath.Base(repo_root)` at daemon boot if empty or absent.
+
+- **Type:** string
+- **Default:** (none — derived from repo root directory name)
+- **Example:** `"thrum"` → nudges appear from `@supervisor_thrum`
+
 ## Peers
 
 Settings for cross-repo peer connections. See
@@ -302,10 +359,13 @@ Session restart settings for context snapshot behavior. See
 
 ### `restart.max_lines`
 
-Maximum lines in a restart snapshot.
+Maximum lines in a restart snapshot. The snapshot now appends a brief `git log`
+/ `git status` / `bd ready` / `thrum inbox` summary at the tail, so the
+effective context delivered on restart is richer per line. The default was
+reduced from `1000` to `200` in v0.9.0 to reflect this.
 
 - **Type:** integer
-- **Default:** `1000`
+- **Default:** `200`
 
 ### `restart.auto_threshold`
 
@@ -328,12 +388,100 @@ Example config with restart enabled:
 ```json
 {
   "restart": {
-    "max_lines": 1000,
+    "max_lines": 200,
     "auto_threshold": 80,
     "graceful_timeout": 30
   }
 }
 ```
+
+## Daemon Identity
+
+The `identity` block stores the daemon's per-repo fingerprint. It is populated
+automatically by `thrum init` (and by the first `thrum daemon start` on a
+pre-v0.9.0 install that upgrades). You never need to edit this block manually.
+
+### `identity` block
+
+```json
+{
+  "identity": {
+    "daemon_id": "d_01HYTESTULID01234567890AB",
+    "repo_name": "thrum",
+    "hostname": "leonsmacm1pro",
+    "repo_path": "/Users/leon/dev/opensource/thrum",
+    "git_origin_url": "https://github.com/leonletto/thrum",
+    "init_at": "2026-04-17T06:30:00Z"
+  }
+}
+```
+
+| Field            | Set once or refreshed | Description                                                                                                                                       |
+| ---------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `daemon_id`      | Set once              | ULID-based (`d_` + 26 chars). Generated at `thrum init`; rotated only when migrating from a legacy hostname-derived id. Never changes on re-init. |
+| `repo_name`      | Refreshed             | `filepath.Base(repo_root)`. Updated on every Bootstrap call (daemon start or `thrum init`).                                                       |
+| `hostname`       | Refreshed             | `os.Hostname()` result. Updated on every Bootstrap call.                                                                                          |
+| `repo_path`      | Refreshed             | Absolute repo path. Updated on every Bootstrap call.                                                                                              |
+| `git_origin_url` | Set once              | Output of `git config --get remote.origin.url`. Set at init; not updated if already non-empty.                                                    |
+| `init_at`        | Set once              | RFC 3339 UTC timestamp of `daemon_id` creation or rotation. Not changed on re-init of an existing valid ULID.                                     |
+
+The "set once" fields are the stable identity keys. The "refreshed" fields are
+informational metadata that keeps the block current across hostname changes,
+path moves, and re-clones. See [Identity System](identity.md) for the full
+daemon identity lifecycle.
+
+## Identity Guards
+
+The `identity_guard` block configures the enforcement mode for each of Thrum's
+eight identity ownership checkpoints. Every guard defaults to `strict` if the
+block is absent.
+
+### `identity_guard` block
+
+```json
+{
+  "identity_guard": {
+    "cross_worktree": "strict",
+    "quickstart_self_rename": "strict",
+    "quickstart_name_collision": "strict",
+    "non_git_bootstrap": "strict",
+    "unauthenticated_rpc": "strict",
+    "daemon_writer_liveness": "strict",
+    "prime_ownership": "strict",
+    "dead_pid_auto_reclaim": "warn"
+  }
+}
+```
+
+**Enforcement modes:**
+
+| Mode     | Behavior                                                                                     |
+| -------- | -------------------------------------------------------------------------------------------- |
+| `strict` | Guard fires; RPC or command is refused. The default for all guards.                          |
+| `warn`   | Guard fires; the violation is logged but the action proceeds. Useful for incident diagnosis. |
+| `off`    | Guard check is skipped entirely. Use only when you understand why it is firing.              |
+
+**Guard keys:**
+
+| Key                         | What it checks                                                                                                                                                                                                                |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cross_worktree`            | Caller's ancestor PID chain does not contain the identity file's `agent_pid`. The central ownership enforcement rule.                                                                                                         |
+| `quickstart_self_rename`    | Caller already owns an identity in this directory and is attempting to re-register under a new name (G1a).                                                                                                                    |
+| `quickstart_name_collision` | Requested agent name is already held by a live foreign process (G1b).                                                                                                                                                         |
+| `non_git_bootstrap`         | `thrum daemon start` or `thrum init` was called from outside a git-anchored directory (G2).                                                                                                                                   |
+| `unauthenticated_rpc`       | Mutating RPC with no verifiable caller identity, or a caller asserting an identity the daemon cannot corroborate (G3). The `identity_mismatch` sub-case (forgery) is unconditional and fires regardless of this mode setting. |
+| `daemon_writer_liveness`    | Daemon attempted to write to an identity file whose recorded agent PID is no longer alive (G4).                                                                                                                               |
+| `prime_ownership`           | `thrum prime` was called from inside a sub-agent whose closest runtime ancestor is not the identity file's owner (G5).                                                                                                        |
+| `dead_pid_auto_reclaim`     | Dead owner's identity was reclaimed by a new caller. Informational; defaults to `warn` to log reclaims without blocking them.                                                                                                 |
+
+**Daemon-level overrides:** `.thrum/var/guard-daemon.json` accepts the same key
+shape as `identity_guard` and is merged on top of the repo-level config. Use
+this to change a single guard mode without editing the tracked `config.json`.
+Daemon-level values take precedence over repo-level values; both layers take
+precedence over the built-in `strict` defaults.
+
+For per-error remediation steps, see
+[Troubleshooting — Identity Guards](troubleshooting-identity.md).
 
 ## Tmux Configuration
 
@@ -377,6 +525,14 @@ configuration. For day-to-day use, edit `config.json`.
 | `THRUM_TS_HOSTNAME`   | tsnet hostname override         | `THRUM_TS_HOSTNAME=myhost` |
 | `THRUM_TS_STATE_DIR`  | tsnet state directory           | `THRUM_TS_STATE_DIR=…`     |
 | `THRUM_TS_ENABLED`    | _(deprecated)_ Tailscale toggle | `THRUM_TS_ENABLED=true`    |
+| `THRUM_NO_HINTS`      | Suppress Shape B stderr hints   | `THRUM_NO_HINTS=1`         |
+
+`THRUM_NO_HINTS` suppresses the contextual hint lines that some commands emit to
+stderr after execution (`thrum send`, `thrum tmux create`, `thrum init`). Truthy
+semantics: any non-empty value except `"0"` or `"false"` (case-insensitive)
+disables hints. The `--quiet` flag and `--json` flag also suppress hints (with
+`--json`, hints move into the JSON output `hints` array instead of being dropped
+entirely). See [CLI Hints](cli-hints.md) for the full hint system reference.
 
 `THRUM_HOME` pins all thrum commands to the specified repo path regardless of
 the current working directory. This is set automatically by `thrum-startup.sh`

@@ -1,15 +1,3 @@
----
-title: "Troubleshooting Identity Issues"
-description:
-  "Identity guard error messages and how to fix them — cross_worktree
-  pid_mismatch, anonymous_mutating_rpc, non_git_bootstrap, and the rest of the
-  v0.9.0 guard catalog with remediation steps."
-category: "troubleshooting"
-order: 1
-tags: ["troubleshooting", "identity", "guards", "errors", "peercred"]
-last_updated: "2026-04-19"
----
-
 ## Troubleshooting Identity Issues
 
 ### How to use this page
