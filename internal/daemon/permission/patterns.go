@@ -75,11 +75,31 @@ var patterns = map[string][]Pattern{
 			//
 			// approve_key='1' and forbidden={'2','Tab'} apply uniformly.
 			Name: "tool_confirmation",
-			// Anchor at start-of-line (with optional leading whitespace
-			// and prompt chrome like '⎿ ') so arbitrary stdout echoing
-			// the phrase cannot trigger a spurious keystroke dispatch
-			// into the user's pane. `(?m)` alone is a no-op without `^`.
-			Regex:      regexp.MustCompile(`(?m)^\s*(?:⎿\s+)?Do you want to proceed\?`),
+			// Anchor requires BOTH the question and a structural marker
+			// unique to the real Claude UI dialog. Pre-thrum-48kt.7 the
+			// pattern only anchored on "Do you want to proceed?" at
+			// start-of-line, so coordinator-agent plan summaries ending
+			// with that conversational phrase were matched as real
+			// tool-confirmation prompts and routed to the supervisor
+			// (false nudge observed 2026-04-20 04:42 UTC).
+			//
+			// Accepted structural markers (any one of three, within 500
+			// chars after the question so panes containing the phrase in
+			// prose with an unrelated permission dialog far below don't
+			// transitively match):
+			//
+			//  - "❯ <digit>." — the arrow selector on a numbered option
+			//    line (Variant B / Read prompt).
+			//  - "Esc to cancel · Tab to amend" — Variant B footer. The
+			//    middle dot (U+00B7) is unique to the Claude UI and
+			//    essentially never appears in plain prose.
+			//  - "No, and tell Claude what to do differently" — Variant
+			//    A option 3 text. Long and distinctive enough to be
+			//    safe as a sole anchor.
+			//
+			// See dev-docs/plans/2026-04-14-permission-prompt-samples.md
+			// for the raw captures.
+			Regex: regexp.MustCompile(`(?ms)^\s*(?:⎿\s+)?Do you want to proceed\?.{0,500}(?:^\s*❯\s+\d+\.\s|Esc to cancel · Tab to amend|No,\s+and tell Claude what to do differently)`),
 			ApproveKey: "1", // Yes (once) — NEVER "2" (don't ask again)
 			DenyKey:    "3", // Variant A default; dispatch overrides to Escape for Variant B
 			Comment:    "Claude Code tool-use confirmation (two variants — dispatch disambiguates)",

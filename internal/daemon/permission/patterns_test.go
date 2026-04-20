@@ -419,6 +419,57 @@ $ `
 	}
 }
 
+// TestMatch_Claude_NoFalsePositiveFromConversationalProse regresses
+// thrum-48kt.7. At 2026-04-20 04:42 UTC the coordinator's own Claude
+// pane wrote a plan summary ending with the conversational phrase
+// "Do you want to proceed?"; the pre-fix tool_confirmation regex only
+// required start-of-line anchoring and matched the prose as a real UI
+// prompt — the detector created a permission_nudge and routed it to
+// the configured supervisor, interrupting the session. The tightened
+// pattern requires a structural marker unique to the actual dialog
+// (❯ selector line, the "Esc to cancel · Tab to amend" footer, or
+// Variant A's distinctive option 3 text). Plain prose has none of
+// these and must not match.
+func TestMatch_Claude_NoFalsePositiveFromConversationalProse(t *testing.T) {
+	// Representative of the 04:42 UTC capture: a multi-section plan
+	// summary whose final line is the interrogative. No numbered
+	// options, no ❯ selector, no footer line.
+	pane := `Here's the full plan for the release cut, ready for your review.
+
+## Phase 1 — merge outstanding fixes
+Land thrum-rchj + thrum-92mj onto thrum-dev, run the full suite,
+verify no sync regressions in the peer bridge.
+
+## Phase 2 — cut the tag
+Tag v0.9.0-rc2, push, watch CI for the release workflow.
+
+## Phase 3 — smoke test
+Run the E2E harness against the new tag, verify on both macminis.
+
+Do you want to proceed?`
+	if m := Match("claude", pane); m != nil {
+		t.Errorf("claude regex matched conversational prose (thrum-48kt.7 regression): %+v", m)
+	}
+}
+
+// TestMatch_Claude_NoFalsePositiveFromProseWithOneOption guards the
+// bound on the "multiple markers required" check. A plan summary that
+// happens to contain a single numbered item (e.g. "1. first step")
+// alongside the interrogative must still NOT match — the real UI has
+// a `❯` selector, the distinctive option 3 text, or the footer, none
+// of which appear in organic prose with incidental enumeration.
+func TestMatch_Claude_NoFalsePositiveFromProseWithOneOption(t *testing.T) {
+	pane := `Recap of what changed this session:
+
+1. We merged the three P2 fixes into thrum-dev.
+2. The tests all passed.
+
+Do you want to proceed?`
+	if m := Match("claude", pane); m != nil {
+		t.Errorf("claude regex matched prose with incidental numbered list: %+v", m)
+	}
+}
+
 func TestMatch_Auggie_ToolApproval_NoFalsePositiveFromBarePhrase(t *testing.T) {
 	// A log line or status bar that merely contains "Tool Approval
 	// Required" (no box chrome) must NOT match. The old unanchored

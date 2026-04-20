@@ -12,7 +12,13 @@ func TestDetectPaneState_CursorMatch(t *testing.T) {
 }
 
 func TestDetectPaneState_ClaudeMatch(t *testing.T) {
-	pane := "⏺ Bash(curl)\n  ⎿  Do you want to proceed?\n     1. Yes\n"
+	// Full Variant A option list — the tightened tool_confirmation
+	// regex (thrum-48kt.7) requires a structural marker alongside
+	// "Do you want to proceed?" so conversational prose ending with
+	// the same question doesn't match. Option 3's distinctive
+	// "No, and tell Claude what to do differently" text is the
+	// marker here.
+	pane := "⏺ Bash(curl)\n  ⎿  Do you want to proceed?\n     1. Yes\n     2. Yes, and don't ask again for Bash(curl)\n     3. No, and tell Claude what to do differently (Esc)\n"
 	got := DetectPaneState("claude", pane)
 	want := "permission:claude.tool_confirmation"
 	if got != want {
