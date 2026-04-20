@@ -792,3 +792,277 @@ func TestProjector_AgentUpdateUnknownSession(t *testing.T) {
 		t.Errorf("expected 0 rows for unknown session, got %d", unknownCount)
 	}
 }
+
+// thrum-qb62: ensure receipt events from non-recipients do not create phantom
+// delivery rows. The INSERT OR IGNORE at projector line 360 previously created
+// a delivery row for any agent that marked a message read, even if the agent
+// was never a legitimate recipient (e.g. a directly-targeted @impl_skills
+// send was phantom-delivered to impl_permission_prompts because impl_permission_prompts
+// ran `thrum message read --all` and the projector blindly inserted a row).
+
+// insertMessageWithRef inserts a message row with a single mention ref and the
+// given recipients (as message_deliveries rows).
+func insertMessageWithRef(t *testing.T, p *projection.Projector, id string, mention string, recipients []string) {
+	t.Helper()
+	var refs []types.Ref
+	if mention != "" {
+		refs = []types.Ref{{Type: "mention", Value: mention}}
+	}
+	ev := types.MessageCreateEvent{
+		Type:       "message.create",
+		Timestamp:  "2026-01-01T00:00:00Z",
+		MessageID:  id,
+		AgentID:    "sender_test",
+		SessionID:  "ses_sender",
+		Body:       types.MessageBody{Format: "markdown", Content: "hi"},
+		Refs:       refs,
+		Recipients: recipients,
+	}
+	data, _ := json.Marshal(ev)
+	if err := p.Apply(context.Background(), data); err != nil {
+		t.Fatalf("apply create %s: %v", id, err)
+	}
+}
+
+func insertMessageWithScope(t *testing.T, p *projection.Projector, id string, scopeType, scopeValue string, recipients []string) {
+	t.Helper()
+	ev := types.MessageCreateEvent{
+		Type:       "message.create",
+		Timestamp:  "2026-01-01T00:00:00Z",
+		MessageID:  id,
+		AgentID:    "sender_test",
+		SessionID:  "ses_sender",
+		Body:       types.MessageBody{Format: "markdown", Content: "hi"},
+		Scopes:     []types.Scope{{Type: scopeType, Value: scopeValue}},
+		Recipients: recipients,
+	}
+	data, _ := json.Marshal(ev)
+	if err := p.Apply(context.Background(), data); err != nil {
+		t.Fatalf("apply create %s: %v", id, err)
+	}
+}
+
+func insertAgent(t *testing.T, db *sql.DB, agentID, role string) {
+	t.Helper()
+	_, err := db.Exec(`INSERT INTO agents (agent_id, kind, role, module, registered_at) VALUES (?, 'named', ?, 'test', '2026-01-01T00:00:00Z')`,
+		agentID, role)
+	if err != nil {
+		t.Fatalf("insert agent %s: %v", agentID, err)
+	}
+}
+
+func applyReceipt(t *testing.T, p *projection.Projector, messageID, agentID, receiptType, timestamp string) {
+	t.Helper()
+	ev := types.MessageReceiptEvent{
+		Type:        "message.receipt",
+		Timestamp:   timestamp,
+		MessageID:   messageID,
+		AgentID:     agentID,
+		ReceiptType: receiptType,
+	}
+	data, _ := json.Marshal(ev)
+	if err := p.Apply(context.Background(), data); err != nil {
+		t.Fatalf("apply receipt for %s by %s: %v", messageID, agentID, err)
+	}
+}
+
+func deliveryCount(t *testing.T, db *sql.DB, messageID, agentID string) int {
+	t.Helper()
+	var n int
+	err := db.QueryRow(`SELECT COUNT(*) FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ?`,
+		messageID, agentID).Scan(&n)
+	if err != nil {
+		t.Fatalf("count deliveries: %v", err)
+	}
+	return n
+}
+
+func readAtOf(t *testing.T, db *sql.DB, messageID, agentID string) sql.NullString {
+	t.Helper()
+	var readAt sql.NullString
+	err := db.QueryRow(`SELECT read_at FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ?`,
+		messageID, agentID).Scan(&readAt)
+	if err == sql.ErrNoRows {
+		return sql.NullString{}
+	}
+	if err != nil {
+		t.Fatalf("query read_at: %v", err)
+	}
+	return readAt
+}
+
+func TestProjector_ApplyMessageReceipt_NonRecipientDoesNotCreatePhantomRow(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	// Register agents — "alice" is targeted; "bob" is NOT a recipient.
+	insertAgent(t, db, "alice", "implementer")
+	insertAgent(t, db, "bob", "implementer")
+
+	// Message targets alice via direct mention, not bob.
+	insertMessageWithRef(t, p, "msg_phantom", "alice", []string{"alice"})
+
+	// Bob sends a read receipt — simulating `thrum message read --all`.
+	applyReceipt(t, p, "msg_phantom", "bob", "read", "2026-01-01T00:00:05Z")
+
+	if got := deliveryCount(t, db, "msg_phantom", "bob"); got != 0 {
+		t.Fatalf("bob is not a recipient — expected 0 delivery rows, got %d", got)
+	}
+	// Alice's legitimate row should remain intact.
+	if got := deliveryCount(t, db, "msg_phantom", "alice"); got != 1 {
+		t.Fatalf("alice is the recipient — expected 1 delivery row, got %d", got)
+	}
+}
+
+func TestProjector_ApplyMessageReceipt_ExistingRecipientRowIsUpdated(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	insertAgent(t, db, "alice", "implementer")
+	insertMessageWithRef(t, p, "msg_ok", "alice", []string{"alice"})
+
+	// Normal post-v14 path: legitimate recipient has a delivery row; read updates it.
+	applyReceipt(t, p, "msg_ok", "alice", "read", "2026-01-01T00:00:05Z")
+
+	if got := deliveryCount(t, db, "msg_ok", "alice"); got != 1 {
+		t.Fatalf("alice has existing delivery row — expected 1 row, got %d", got)
+	}
+	readAt := readAtOf(t, db, "msg_ok", "alice")
+	if !readAt.Valid || readAt.String != "2026-01-01T00:00:05Z" {
+		t.Fatalf("alice's read_at should be set to receipt timestamp, got %v", readAt)
+	}
+}
+
+func TestProjector_ApplyMessageReceipt_MentionedAgentCreatesRowForPreV14(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	insertAgent(t, db, "alice", "implementer")
+	// Pre-v14 simulation: message has mention ref for alice but NO delivery row
+	// (empty Recipients). A legitimate recipient reading it should still create
+	// their own delivery row on receipt.
+	insertMessageWithRef(t, p, "msg_prev14", "alice", nil)
+
+	applyReceipt(t, p, "msg_prev14", "alice", "read", "2026-01-01T00:00:05Z")
+
+	if got := deliveryCount(t, db, "msg_prev14", "alice"); got != 1 {
+		t.Fatalf("mentioned agent alice should create a delivery row on receipt, got %d", got)
+	}
+	readAt := readAtOf(t, db, "msg_prev14", "alice")
+	if !readAt.Valid {
+		t.Fatalf("alice's read_at should be populated")
+	}
+}
+
+func TestProjector_ApplyMessageReceipt_RoleMentionCreatesRow(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	insertAgent(t, db, "alice", "reviewer")
+	// Message mentions @reviewer (role), not @alice directly. Alice fills that role.
+	insertMessageWithRef(t, p, "msg_role", "reviewer", nil)
+
+	applyReceipt(t, p, "msg_role", "alice", "read", "2026-01-01T00:00:05Z")
+
+	if got := deliveryCount(t, db, "msg_role", "alice"); got != 1 {
+		t.Fatalf("agent with matching role should create a delivery row, got %d", got)
+	}
+}
+
+func TestProjector_ApplyMessageReceipt_RoleMentionDoesNotMatchOtherRole(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	insertAgent(t, db, "alice", "reviewer")
+	insertAgent(t, db, "bob", "implementer")
+	insertMessageWithRef(t, p, "msg_role_other", "reviewer", nil)
+
+	// Bob is an implementer — the @reviewer mention does not include him.
+	applyReceipt(t, p, "msg_role_other", "bob", "read", "2026-01-01T00:00:05Z")
+
+	if got := deliveryCount(t, db, "msg_role_other", "bob"); got != 0 {
+		t.Fatalf("bob's role does not match — expected 0 delivery rows, got %d", got)
+	}
+}
+
+func TestProjector_ApplyMessageReceipt_BroadcastCreatesRow(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	insertAgent(t, db, "alice", "implementer")
+	insertAgent(t, db, "bob", "implementer")
+	insertMessageWithScope(t, p, "msg_bcast", "broadcast", "everyone", nil)
+
+	applyReceipt(t, p, "msg_bcast", "bob", "read", "2026-01-01T00:00:05Z")
+
+	if got := deliveryCount(t, db, "msg_bcast", "bob"); got != 1 {
+		t.Fatalf("broadcast scope should accept any agent, got %d rows for bob", got)
+	}
+}
+
+func TestProjector_ApplyMessageReceipt_GroupMemberCreatesRow(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	insertAgent(t, db, "alice", "implementer")
+
+	// Create a group with alice as a member.
+	_, err := db.Exec(`INSERT INTO groups (group_id, name, created_at, created_by) VALUES ('grp_1','team_a','2026-01-01T00:00:00Z','sender_test')`)
+	if err != nil {
+		t.Fatalf("insert group: %v", err)
+	}
+	_, err = db.Exec(`INSERT INTO group_members (group_id, member_type, member_value, added_at) VALUES ('grp_1','agent','alice','2026-01-01T00:00:00Z')`)
+	if err != nil {
+		t.Fatalf("insert group member: %v", err)
+	}
+
+	insertMessageWithScope(t, p, "msg_grp", "group", "team_a", nil)
+
+	applyReceipt(t, p, "msg_grp", "alice", "read", "2026-01-01T00:00:05Z")
+
+	if got := deliveryCount(t, db, "msg_grp", "alice"); got != 1 {
+		t.Fatalf("group member alice should create a delivery row, got %d", got)
+	}
+}
+
+func TestProjector_ApplyMessageReceipt_NonGroupMemberDoesNotCreateRow(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	insertAgent(t, db, "alice", "implementer")
+	insertAgent(t, db, "carol", "implementer")
+
+	_, err := db.Exec(`INSERT INTO groups (group_id, name, created_at, created_by) VALUES ('grp_a','team_a','2026-01-01T00:00:00Z','sender_test')`)
+	if err != nil {
+		t.Fatalf("insert group: %v", err)
+	}
+	_, err = db.Exec(`INSERT INTO group_members (group_id, member_type, member_value, added_at) VALUES ('grp_a','agent','alice','2026-01-01T00:00:00Z')`)
+	if err != nil {
+		t.Fatalf("insert group member: %v", err)
+	}
+
+	insertMessageWithScope(t, p, "msg_grp_no", "group", "team_a", nil)
+
+	// carol is not in team_a — her receipt must not create a delivery row.
+	applyReceipt(t, p, "msg_grp_no", "carol", "read", "2026-01-01T00:00:05Z")
+
+	if got := deliveryCount(t, db, "msg_grp_no", "carol"); got != 0 {
+		t.Fatalf("carol is not a group member — expected 0 rows, got %d", got)
+	}
+}

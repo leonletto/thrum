@@ -724,7 +724,17 @@ func (h *MessageHandler) HandleGet(ctx context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("iterate refs: %w", err)
 	}
 
-	msg.Audiences = extractAudiences(msg.Refs, msg.Scopes)
+	mentionValues := make([]string, 0, len(msg.Refs))
+	for _, ref := range msg.Refs {
+		if ref.Type == "mention" {
+			mentionValues = append(mentionValues, ref.Value)
+		}
+	}
+	knownAgents, err := h.resolveKnownAgents(ctx, mentionValues)
+	if err != nil {
+		return nil, fmt.Errorf("resolve known agents: %w", err)
+	}
+	msg.Audiences = extractAudiences(msg.Refs, msg.Scopes, knownAgents)
 	recipients, err := h.loadRecipientsForMessages(ctx, []string{req.MessageID})
 	if err != nil {
 		return nil, fmt.Errorf("query message recipients: %w", err)
@@ -1767,12 +1777,27 @@ func buildDeliveredRecipients(agentIDs []string, deliveredAt string) []MessageRe
 	return recipients
 }
 
-func extractAudiences(refs []types.Ref, scopes []types.Scope) []MessageAudience {
+// extractAudiences rebuilds the audience list for a persisted message from its
+// refs and scopes. The ref table stores all mentions as ref_type="mention", but
+// send-time recorded whether the target was an exact agent_id (Type="agent")
+// or a role/name mention (Type="mention") — that distinction lives in the
+// agents table, which the caller supplies via knownAgents. A ref.value that
+// matches an agent_id produces Type="agent"; otherwise it stays "mention".
+//
+// thrum-qb62 Bug 1: passing a nil knownAgents preserves the pre-fix behavior
+// (all mentions reported as Type="mention"). Callers that can cheaply reach
+// the agents table should populate the map so the CLI/UI display matches the
+// send-time audience type.
+func extractAudiences(refs []types.Ref, scopes []types.Scope, knownAgents map[string]struct{}) []MessageAudience {
 	audiences := make([]MessageAudience, 0, len(refs)+len(scopes))
 	for _, ref := range refs {
 		switch ref.Type {
 		case "mention":
-			audiences = append(audiences, MessageAudience{Type: "mention", Value: ref.Value})
+			audType := "mention"
+			if _, ok := knownAgents[ref.Value]; ok {
+				audType = "agent"
+			}
+			audiences = append(audiences, MessageAudience{Type: audType, Value: ref.Value})
 		case "group":
 			audiences = append(audiences, MessageAudience{Type: "group", Value: ref.Value})
 		}
@@ -1786,6 +1811,47 @@ func extractAudiences(refs []types.Ref, scopes []types.Scope) []MessageAudience 
 		audiences = append(audiences, MessageAudience{Type: "broadcast", Value: "everyone"})
 	}
 	return dedupeAudiences(audiences)
+}
+
+// resolveKnownAgents returns the subset of the given names that exist in the
+// agents table. Used by audience-building paths to distinguish direct agent
+// mentions from role/name mentions.
+func (h *MessageHandler) resolveKnownAgents(ctx context.Context, names []string) (map[string]struct{}, error) {
+	out := make(map[string]struct{}, len(names))
+	if len(names) == 0 {
+		return out, nil
+	}
+	// De-dup input so the IN() list stays small on messages that repeat a mention.
+	uniq := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		if n == "" {
+			continue
+		}
+		uniq[n] = struct{}{}
+	}
+	if len(uniq) == 0 {
+		return out, nil
+	}
+	placeholders := make([]string, 0, len(uniq))
+	args := make([]any, 0, len(uniq))
+	for n := range uniq {
+		placeholders = append(placeholders, "?")
+		args = append(args, n)
+	}
+	query := `SELECT agent_id FROM agents WHERE agent_id IN (` + strings.Join(placeholders, ",") + `)`
+	rows, err := h.state.DB().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = struct{}{}
+	}
+	return out, rows.Err()
 }
 
 func normalizeAudienceTarget(target string) string {
@@ -1857,7 +1923,17 @@ func (h *MessageHandler) loadMessageAudiences(ctx context.Context, messageID str
 	}
 	_ = scopeRows.Close()
 
-	return extractAudiences(refs, scopes), nil
+	mentionValues := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		if ref.Type == "mention" {
+			mentionValues = append(mentionValues, ref.Value)
+		}
+	}
+	knownAgents, err := h.resolveKnownAgents(ctx, mentionValues)
+	if err != nil {
+		return nil, err
+	}
+	return extractAudiences(refs, scopes, knownAgents), nil
 }
 
 func (h *MessageHandler) loadRecipientsForMessages(ctx context.Context, messageIDs []string) (map[string][]MessageRecipientState, error) {
