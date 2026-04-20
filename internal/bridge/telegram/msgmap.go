@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -9,6 +10,24 @@ import (
 
 	"github.com/leonletto/thrum/internal/bridge"
 )
+
+// DefaultMapTTL is the default retention window for telegram_msg_map
+// rows used by the periodic sweep (thrum-48kt.6). 30 days is an
+// intentional over-estimate: a Telegram↔Thrum mapping is only
+// functionally needed for the lifetime of its pending supervisor
+// nudge (seconds to hours), so the TTL is a backstop that catches
+// rows abandoned by daemon crashes or bridge reconfigs. The
+// pending-nudge cross-check inside SweepStale means a row that IS
+// still live survives regardless of age — TTL is just the cadence
+// of the orphan reap, not a hard expiry on live state.
+const DefaultMapTTL = 30 * 24 * time.Hour
+
+// DefaultSweepInterval is the cadence between periodic sweeps once
+// the daemon has started. A 24h interval matches the coordinator's
+// dispatch ("once at daemon start + every 24h") and is small relative
+// to the TTL so no row lingers for more than TTL + 24h past its
+// creation in steady state.
+const DefaultSweepInterval = 24 * time.Hour
 
 // MessageMap wraps the shared bridge.MessageMap with Telegram-specific
 // int64/int key formatting, and optionally persists entries to SQLite
@@ -147,3 +166,103 @@ func (m *MessageMap) TeleID(thrumMsgID string) (chatID int64, msgID int, ok bool
 // wired, the persisted table may hold additional entries that haven't
 // been loaded into the cache on this process's lifetime yet.
 func (m *MessageMap) Len() int { return m.inner.Len() }
+
+// SweepStale deletes telegram_msg_map rows that are older than ttl
+// AND not referenced by any live row in permission_nudges. Returns
+// the number of rows deleted.
+//
+// # Safety
+//
+// The SQL is a single DELETE ... WHERE with an age predicate on
+// created_at plus a NOT EXISTS subquery against permission_nudges.
+// Both predicates must be true for a row to be removed:
+//
+//  1. created_at < now - ttl (age cutoff)
+//  2. thrum_msg_id ∉ permission_nudges.message_id (not pinned by a live nudge)
+//
+// This satisfies the thrum-48kt.6 acceptance criterion that the sweep
+// "does not delete mappings for nudges that are still pending" — even
+// if the mapping itself has aged past the TTL, the cross-check pins
+// it until the pending_nudges row resolves (i.e. is deleted by
+// TryResolve). The inverse risk — a nudge resolves concurrently mid-
+// sweep and we delete its mapping — is harmless because post-resolve
+// the mapping is no longer needed.
+//
+// # Concurrency
+//
+// Callers do not need to serialise this against bridge traffic.
+// Concurrent Store writes race with the DELETE at the SQL layer; the
+// INSERT OR REPLACE in Store timestamps created_at to the current
+// clock, which by construction is newer than (now - ttl), so a
+// freshly-stored mapping cannot be caught by the age predicate.
+//
+// # Nil-db
+//
+// A nil db handle is a no-op. This matches the defensive pattern
+// elsewhere in this file (Store, ThrumID, TeleID all nil-guard before
+// touching the DB) and means the daemon boot wiring can call
+// SweepStale unconditionally without having to know whether the
+// persistent backing was configured.
+func SweepStale(ctx context.Context, db *sql.DB, ttl time.Duration) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	cutoff := time.Now().Add(-ttl).Unix()
+	res, err := db.ExecContext(ctx, `
+		DELETE FROM telegram_msg_map
+		WHERE created_at < ?
+		  AND NOT EXISTS (
+		    SELECT 1 FROM permission_nudges
+		    WHERE permission_nudges.message_id = telegram_msg_map.thrum_msg_id
+		  )
+	`, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("telegram msgmap sweep: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		// RowsAffected only fails on drivers that don't support it;
+		// SQLite does. Return 0 + err so callers can log without
+		// losing the signal that the DELETE itself succeeded.
+		return 0, fmt.Errorf("telegram msgmap sweep rows affected: %w", err)
+	}
+	return n, nil
+}
+
+// SweepLoop runs SweepStale once immediately, then on every tick of
+// the given interval, until ctx is canceled. Intended to be launched
+// as a goroutine from daemon boot:
+//
+//	go telegram.SweepLoop(ctx, db, telegram.DefaultMapTTL, telegram.DefaultSweepInterval)
+//
+// Errors are logged but do not stop the loop; a transient SQLite
+// hiccup should not permanently disable the sweeper. The one-shot
+// leading sweep matches the coordinator's dispatch ("once at daemon
+// start + every 24h") and guarantees that rows which aged while the
+// daemon was stopped get reaped promptly on the next boot rather
+// than waiting out a full interval.
+func SweepLoop(ctx context.Context, db *sql.DB, ttl, interval time.Duration) {
+	runOnce := func() {
+		n, err := SweepStale(ctx, db, ttl)
+		if err != nil {
+			slog.Warn("[telegram.msgmap] sweep failed", "err", err)
+			return
+		}
+		if n > 0 {
+			slog.Info("[telegram.msgmap] sweep deleted rows", "count", n, "ttl", ttl)
+		}
+	}
+
+	runOnce()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			runOnce()
+		}
+	}
+}
