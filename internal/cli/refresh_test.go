@@ -597,3 +597,69 @@ func TestRefreshLocalIdentity_NoSessionResumedWhenAlreadyActive(t *testing.T) {
 		t.Errorf("ResumedSessionID = %q, want empty", result.ResumedSessionID)
 	}
 }
+
+// TestRefreshLocalIdentity_EnforceOneIdentityQuarantinesStale — thrum-33dt
+// regression. The refresh path must enforce the "one identity per
+// worktree" invariant. Seed a worktree with the current agent's
+// identity PLUS a stale sibling identity from a prior agent; after
+// refresh the stale file must be gone while the current one is
+// preserved.
+func TestRefreshLocalIdentity_EnforceOneIdentityQuarantinesStale(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	idsDir := filepath.Join(thrumDir, "identities")
+	if err := os.MkdirAll(idsDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	disableGuardForTest(t, thrumDir)
+	t.Setenv("THRUM_HOME", tmpDir)
+	t.Setenv("THRUM_NAME", "current_agent")
+
+	// Current agent's identity (the one the refresh picks up).
+	current := &config.IdentityFile{
+		Version: 5,
+		Agent: config.AgentConfig{
+			Kind: "agent", Name: "current_agent", Role: "implementer", Module: "active",
+		},
+		AgentPID: os.Getpid(),
+		Runtime:  "claude",
+	}
+	if err := config.SaveIdentityFile(thrumDir, current); err != nil {
+		t.Fatal(err)
+	}
+
+	// Stale sibling identity that a prior agent left behind in this
+	// worktree. Pre-fix, refresh would leave this file in place,
+	// violating the one-identity-per-worktree invariant.
+	stale := &config.IdentityFile{
+		Version: 5,
+		Agent: config.AgentConfig{
+			Kind: "agent", Name: "old_agent", Role: "implementer", Module: "legacy",
+		},
+		AgentPID: 1,
+	}
+	if err := config.SaveIdentityFile(thrumDir, stale); err != nil {
+		t.Fatal(err)
+	}
+	currentPath := filepath.Join(idsDir, "current_agent.json")
+	stalePath := filepath.Join(idsDir, "old_agent.json")
+	if _, err := os.Stat(stalePath); err != nil {
+		t.Fatalf("stale identity missing before refresh: %v", err)
+	}
+
+	// Detector returns no-runtime so no PID/runtime churn interferes.
+	orig := detectAncestor
+	detectAncestor = func(_ context.Context) (int, string) { return 0, "" }
+	t.Cleanup(func() { detectAncestor = orig })
+
+	if _, err := RefreshLocalIdentity(nil, tmpDir); err != nil {
+		t.Fatalf("RefreshLocalIdentity: %v", err)
+	}
+
+	if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
+		t.Errorf("stale identity old_agent.json should be deleted after refresh (err=%v); worktree invariant not enforced", err)
+	}
+	if _, err := os.Stat(currentPath); err != nil {
+		t.Errorf("current identity file was deleted unexpectedly: %v", err)
+	}
+}

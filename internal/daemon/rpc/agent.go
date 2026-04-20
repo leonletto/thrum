@@ -25,6 +25,7 @@ import (
 	"github.com/leonletto/thrum/internal/process"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
+	wtpkg "github.com/leonletto/thrum/internal/worktree"
 )
 
 // RegisterRequest represents the request for agent.register RPC.
@@ -247,15 +248,15 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 	// bounded by peer-derived prefix plus remote agent name, so DB-level
 	// (role, module) enforcement was redundant.
 	//
-	// Identity-file enforcement coverage:
+	// Identity-file enforcement coverage (thrum-33dt):
 	//   - tmux.create path: calls worktree.EnforceOneIdentity (tmux.go:286)
-	//   - quickstart path: G1a/G1b pre-flight guards (internal/identity/guard)
-	//   - refresh / direct agent.register: neither of the above
-	//
-	// This leaves a narrow same-(role, module)-different-name regression on
-	// paths that bypass tmux-create AND fall through G1a/G1b (e.g. stale
-	// identity file with PID mismatched from caller chain). Tracked as
-	// thrum-33dt (P2, Identity Guard backstop catches the common cases).
+	//   - quickstart path: G1a/G1b pre-flight + EnforceOneIdentity post-save
+	//     (internal/cli/quickstart.go)
+	//   - refresh path: EnforceOneIdentity after identity load
+	//     (internal/cli/refresh.go)
+	//   - direct agent.register RPC: enforceWorktreeIdentity below, gated
+	//     on peercred.Worktree so anonymous bootstraps skip cleanly
+	//     (the CLI paths cover them instead).
 	existingAgent, err := h.getAgentByID(ctx, agentID)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("check for existing agent by id: %w", err)
@@ -313,11 +314,54 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 			resp.SessionID = resumedID
 			resp.SessionResumed = true
 		}
+		enforceWorktreeIdentity(ctx, agentIdentityName(req.Name, agentID))
 		return resp, nil
 	}
 
 	// Fresh agent — no existing row for this agent_id.
-	return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered", req.AgentPID)
+	resp, err := h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered", req.AgentPID)
+	if err == nil {
+		enforceWorktreeIdentity(ctx, agentIdentityName(req.Name, agentID))
+	}
+	return resp, err
+}
+
+// agentIdentityName returns the string used as the per-worktree identity
+// file's base name — the human-readable agent name when provided,
+// otherwise the generated agent_id. Matches the naming convention used
+// by config.SaveIdentityFile so EnforceOneIdentity preserves the right
+// file. The agentID fallback is only reached for anonymous
+// registrations (no --name supplied).
+func agentIdentityName(name, agentID string) string {
+	if name != "" {
+		return name
+	}
+	return agentID
+}
+
+// enforceWorktreeIdentity applies the "one identity per worktree"
+// invariant for the caller's worktree when peercred resolved a caller.
+// Anonymous bootstraps (resolved==nil) are skipped — the CLI-side
+// quickstart path enforces the invariant at identity-write time for
+// those. For direct agent.register RPCs from a registered caller,
+// this cleans up residual identity files left by prior registrations
+// under the same worktree. See thrum-33dt.
+func enforceWorktreeIdentity(ctx context.Context, keepName string) {
+	if keepName == "" {
+		return
+	}
+	// ok dropped: both (nil, true) [peercred ran, anonymous] and
+	// (nil, false) [peercred did not run — tests / non-unix stubs]
+	// correctly skip enforcement, so discriminating between them
+	// would produce identical branches.
+	resolved, _ := peercred.FromContext(ctx)
+	// The Worktree == "" guard also covers resolved identities coming
+	// from non-unix stub platforms (where the resolver returns an
+	// AgentID but leaves Worktree unpopulated).
+	if resolved == nil || resolved.Worktree == "" {
+		return
+	}
+	wtpkg.EnforceOneIdentity(resolved.Worktree, keepName)
 }
 
 // HandleList handles the agent.list RPC method.

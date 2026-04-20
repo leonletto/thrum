@@ -11,6 +11,7 @@ import (
 	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/process"
+	"github.com/leonletto/thrum/internal/worktree"
 )
 
 // RefreshResult describes the outcome of a RefreshLocalIdentity call.
@@ -160,6 +161,15 @@ func RefreshLocalIdentity(client *Client, repoPath string) (*RefreshResult, erro
 				break
 			}
 		}
+	}
+
+	// thrum-33dt: enforce the worktree-layer single-identity invariant on
+	// the refresh path. Any identity files sharing this worktree other
+	// than the loaded agent's are stale siblings (the identity guard
+	// upstream refuses live foreign owners); deleting them keeps the
+	// worktree at one identity file even when quickstart was skipped.
+	if idFile.Agent.Name != "" {
+		worktree.EnforceOneIdentity(paths.EffectiveRepoPath(repoPath), idFile.Agent.Name)
 	}
 
 	return result, nil
