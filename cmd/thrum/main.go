@@ -5446,6 +5446,23 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			permPkg.AfterMessageCreate(context.Background(), evt)
 		}(evt)
 
+		// thrum-48kt.1: broadcast notification.message to connected
+		// WebSocket clients (including OutboundRelay → Telegram). Moved
+		// here from HandleSend so the broadcast covers writers that
+		// bypass the RPC layer (permission.SendSupervisorMessage,
+		// peer-synced events via sync_apply). Without this move, nudges
+		// stayed DB-only and never forwarded to Telegram.
+		// Async because BroadcastAll does per-client network sends;
+		// must not block the state.WriteEvent writer.
+		go func(evt types.MessageCreateEvent) {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("[rpc] NotifyMessageCreate panic", "panic", r)
+				}
+			}()
+			messageHandler.NotifyMessageCreate(evt)
+		}(evt)
+
 		// thrum-wvpv: nudge tmux-managed recipients. This branch fires for
 		// BOTH local writes (HandleSend) and synced writes (sync_apply →
 		// State.WriteEvent), giving cross-machine and cross-repo recipients

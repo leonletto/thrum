@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
@@ -259,22 +260,89 @@ type WSBroadcaster interface {
 }
 
 // MessageHandler handles message-related RPC methods.
+//
+// # Concurrency
+//
+// wsBroadcaster is stored as an atomic.Value because it is set ONCE
+// at daemon startup (via SetWSBroadcaster) but read from multiple
+// goroutines: the SetOnEventWrite hook dispatches NotifyMessageCreate
+// on its own goroutine for every message.create event, which reads
+// wsBroadcaster while main.go's startup goroutine writes it. A plain
+// field would be a data race per Go's memory model even though the
+// write-before-read ordering is guaranteed in practice by daemon
+// startup sequencing. atomic.Value is the minimal-overhead fix for
+// this set-once-read-many pattern.
 type MessageHandler struct {
 	state            *state.State
 	dispatcher       *subscriptions.Dispatcher
 	groupResolver    *groups.Resolver
-	wsBroadcaster    WSBroadcaster // optional; nil if not wired
-	thrumDir         string        // for tmux nudge resolution
-	supervisorID     string        // canonical virtual-supervisor ID, e.g. "supervisor_thrum_leon-letto"
-	supervisorLegacy string        // pre-upgrade form for receiver compat, e.g. "supervisor_thrum"
+	wsBroadcaster    atomic.Value // holds WSBroadcaster; Load() returns nil until SetWSBroadcaster is called
+	thrumDir         string       // for tmux nudge resolution
+	supervisorID     string       // canonical virtual-supervisor ID, e.g. "supervisor_thrum_leon-letto"
+	supervisorLegacy string       // pre-upgrade form for receiver compat, e.g. "supervisor_thrum"
 }
 
 // SetWSBroadcaster configures a broadcaster that will be called after every
 // message write to push real-time events to all connected WebSocket clients.
 // This is required for the browser UI live feed to work because the UI never
 // creates a subscription row in the DB.
+//
+// Safe to call concurrently with loadBroadcaster reads because the
+// underlying atomic.Value handles the memory barrier. In practice this
+// is invoked once during daemon startup — see "Concurrency" note on
+// MessageHandler.
 func (h *MessageHandler) SetWSBroadcaster(b WSBroadcaster) {
-	h.wsBroadcaster = b
+	if b == nil {
+		return
+	}
+	h.wsBroadcaster.Store(b)
+}
+
+// loadBroadcaster returns the currently-wired broadcaster, or nil if
+// SetWSBroadcaster has not been called yet. Safe across goroutines.
+func (h *MessageHandler) loadBroadcaster() WSBroadcaster {
+	v := h.wsBroadcaster.Load()
+	if v == nil {
+		return nil
+	}
+	return v.(WSBroadcaster)
+}
+
+// NotifyMessageCreate fires the WebSocket notification.message broadcast
+// for a persisted message.create event. Called from the daemon's
+// SetOnEventWrite hook so the broadcast fires for ALL message writers,
+// not just HandleSend — previously, writers that bypassed HandleSend
+// (permission.SendSupervisorMessage, peer-synced events) did not trigger
+// outbound forwarding (e.g. to Telegram via OutboundRelay) because the
+// broadcast lived inline in HandleSend. See thrum-48kt.1.
+//
+// Nil-safe: returns immediately if the broadcaster isn't wired (test path).
+// Intended to be called from a goroutine — BroadcastAll does per-client
+// network sends that should not block the WriteEvent writer path.
+func (h *MessageHandler) NotifyMessageCreate(evt types.MessageCreateEvent) {
+	bc := h.loadBroadcaster()
+	if bc == nil {
+		return
+	}
+	ts := evt.Timestamp
+	if ts == "" {
+		ts = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	preview := evt.Body.Content
+	if len(preview) > 100 {
+		preview = preview[:100]
+	}
+	msgInfo := &subscriptions.MessageInfo{
+		MessageID: evt.MessageID,
+		ThreadID:  evt.ThreadID,
+		AgentID:   evt.AgentID,
+		SessionID: evt.SessionID,
+		Scopes:    evt.Scopes,
+		Refs:      evt.Refs,
+		Timestamp: ts,
+		Preview:   preview,
+	}
+	bc.BroadcastAll(buildWSNotification(msgInfo))
 }
 
 // NewMessageHandler creates a new message handler.
@@ -594,11 +662,12 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	// recipients list, and calls nudge.DispatchTmux. Removing the inline
 	// block here prevents double-nudging on the local path.
 
-	// Broadcast to ALL connected WebSocket clients so the browser UI live feed
-	// receives events even though it never registers a subscription row in the DB.
-	if h.wsBroadcaster != nil {
-		h.wsBroadcaster.BroadcastAll(buildWSNotification(msgInfo))
-	}
+	// thrum-48kt.1: WebSocket notification.message broadcast MOVED into
+	// the SetOnEventWrite hook so writers that bypass HandleSend
+	// (permission.SendSupervisorMessage, peer-synced events) also trigger
+	// OutboundRelay → Telegram forwarding. Keeping it inline here would
+	// double-fire on the HandleSend path. Hook location:
+	// cmd/thrum/main.go SetOnEventWrite closure → messageHandler.NotifyMessageCreate.
 
 	// Emit thread.updated event for real-time updates
 	if threadID != "" {
@@ -1523,8 +1592,8 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 	_, _ = h.dispatcher.DispatchForMessage(ctx, msgInfo)
 
 	// Broadcast to all connected WebSocket clients for browser UI live feed.
-	if h.wsBroadcaster != nil {
-		h.wsBroadcaster.BroadcastAll(buildWSNotification(msgInfo))
+	if bc := h.loadBroadcaster(); bc != nil {
+		bc.BroadcastAll(buildWSNotification(msgInfo))
 	}
 
 	// Count edits for version number (count includes the edit we just applied)
