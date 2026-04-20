@@ -21,6 +21,7 @@ package nudge
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,18 +49,40 @@ import (
 // pipeline on a slow tmux is not.
 func DispatchTmux(thrumDir string, recipients []string, senderName string) {
 	if thrumDir == "" || len(recipients) == 0 {
+		slog.Info("[nudge] nudge.DispatchTmux skip empty",
+			"sender", senderName,
+			"thrum_dir_empty", thrumDir == "",
+			"recipient_count", len(recipients),
+		)
 		return
 	}
 	for _, recipientName := range recipients {
 		go func(name string) {
 			target := ResolveTarget(thrumDir, name)
 			if target == "" {
+				slog.Info("[nudge] nudge.DispatchTmux no-target",
+					"sender", senderName,
+					"recipient", name,
+				)
 				return
 			}
 			session, _, _ := ttmux.ParseTarget(target)
 			if !ttmux.HasSession(session) {
+				slog.Info("[nudge] nudge.DispatchTmux dead-session",
+					"sender", senderName,
+					"recipient", name,
+					"target", target,
+					"session", session,
+				)
 				return
 			}
+			slog.Info("[nudge] nudge.DispatchTmux fire",
+				"sender", senderName,
+				"recipient", name,
+				"target", target,
+				"session", session,
+				"self_echo", name == senderName,
+			)
 			_ = ttmux.Nudge(target, senderName)
 		}(recipientName)
 	}

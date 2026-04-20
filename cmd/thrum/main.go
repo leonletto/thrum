@@ -5513,6 +5513,18 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		// the same tmux pane notification that local recipients used to
 		// get exclusively. nudge.DispatchTmux is fire-and-forget; failures
 		// are intentionally swallowed because nudges are advisory.
+		//
+		// kfn3 instrumentation: capture every dispatch attempt so phantom
+		// self-echoes show up in slog with sender + recipients + origin.
+		slog.Info("[nudge] nudge.dispatch entry",
+			"site", "main.go:SetOnEventWrite",
+			"msg_id", evt.MessageID,
+			"sender", evt.AgentID,
+			"recipients", evt.Recipients,
+			"origin_daemon", evt.OriginDaemon,
+			"session_id", evt.SessionID,
+			"thrum_dir", thrumDir,
+		)
 		nudge.DispatchTmux(thrumDir, evt.Recipients, evt.AgentID)
 
 		// hook-inbox-delivery: write a spool file for every LOCAL recipient.
@@ -5537,6 +5549,13 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			}()
 			for _, recipient := range evt.Recipients {
 				if !nudge.HasLocalIdentity(thrumDir, recipient) {
+					slog.Info("[nudge] spool.skip non-local",
+						"site", "main.go:WriteSpool",
+						"msg_id", evt.MessageID,
+						"sender", evt.AgentID,
+						"recipient", recipient,
+						"origin_daemon", evt.OriginDaemon,
+					)
 					continue
 				}
 				env := inbox.Envelope{
@@ -5544,6 +5563,14 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 					From:       "@" + evt.AgentID,
 					ReceivedAt: time.Now().UTC(),
 				}
+				slog.Info("[nudge] spool.write attempt",
+					"site", "main.go:WriteSpool",
+					"msg_id", evt.MessageID,
+					"sender", evt.AgentID,
+					"recipient", recipient,
+					"origin_daemon", evt.OriginDaemon,
+					"session_id", evt.SessionID,
+				)
 				if err := inbox.WriteSpool(thrumDir, recipient, env); err != nil {
 					slog.Warn("[inbox] spool write failed",
 						"agent", recipient, "msg_id", evt.MessageID, "err", err)
