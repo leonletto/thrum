@@ -3511,7 +3511,11 @@ Examples:
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.MessageDelete(client, args[0])
+			// Pass caller's claimed identity so the daemon's
+			// shared-worktree disambiguation (thrum-0pos) can accept
+			// the claim when peercred picks a co-located sibling.
+			callerID, _ := resolveLocalAgentID()
+			result, err := cli.MessageDelete(client, args[0], callerID)
 			if err != nil {
 				return err
 			}

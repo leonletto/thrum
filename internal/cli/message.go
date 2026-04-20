@@ -157,9 +157,16 @@ type MessageDeleteResponse struct {
 	DeletedAt string `json:"deleted_at"`
 }
 
-// MessageDelete deletes a message.
-func MessageDelete(client *Client, messageID string) (*MessageDeleteResponse, error) {
+// MessageDelete deletes a message. callerAgentID is the caller's
+// claimed identity (from THRUM_NAME / loaded identity file); the
+// daemon verifies it against peercred + the shared-worktree
+// disambiguation (thrum-0pos) before accepting. Empty string
+// preserves legacy no-claim behavior.
+func MessageDelete(client *Client, messageID, callerAgentID string) (*MessageDeleteResponse, error) {
 	req := map[string]string{"message_id": messageID}
+	if callerAgentID != "" {
+		req["caller_agent_id"] = callerAgentID
+	}
 	var resp MessageDeleteResponse
 	if err := client.Call("message.delete", req, &resp); err != nil {
 		return nil, fmt.Errorf("message.delete RPC failed: %w", err)
