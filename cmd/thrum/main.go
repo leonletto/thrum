@@ -1037,11 +1037,13 @@ The daemon must be running and you must have an active session.`,
 				fmtOpts := cli.InboxFormatOptions{
 					ActiveScope: scope,
 					ForAgent:    opts.ForAgent,
+					Unread:      unread,
 					Quiet:       flagQuiet,
 					JSON:        flagJSON,
 				}
 				fmt.Print(cli.FormatInboxWithOptions(result, fmtOpts))
-				if !flagQuiet {
+				// Suppress hint for --unread + empty (silent polling).
+				if !flagQuiet && !(unread && len(result.Messages) == 0) {
 					hintGroup := "inbox"
 					if unread && len(result.Messages) > 0 {
 						hintGroup = "inbox.unread"
