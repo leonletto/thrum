@@ -12,7 +12,6 @@ import (
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/types"
-	"github.com/leonletto/thrum/internal/worktree"
 )
 
 func TestAgentRegister(t *testing.T) {
@@ -105,18 +104,24 @@ func TestAgentRegister(t *testing.T) {
 			},
 		},
 		{
-			name: "force_override_conflict",
+			// thrum-iw42: the Force field was removed alongside the
+			// role+module conflict branch. This case used to exercise
+			// Force=true overriding a DB conflict; with Option C there
+			// is no DB conflict to override — the pre-seeded row has a
+			// different agent_id, so registration proceeds as a fresh
+			// (different-name) agent. Kept to pin the post-removal
+			// behavior: different agent_id with same (role, module)
+			// coexists.
+			name: "different_agent_id_same_role_module_coexists",
 			request: RegisterRequest{
 				Role:    "implementer",
 				Module:  "auth",
 				Display: "New Agent",
-				Force:   true,
 			},
 			wantStatus:   "registered",
 			wantConflict: false,
 			wantErr:      false,
 			setupFunc: func(s *state.State) error {
-				// Insert conflicting agent
 				_, err := s.RawDB().Exec(`
 					INSERT INTO agents (agent_id, kind, role, module, display, registered_at)
 					VALUES (?, ?, ?, ?, ?, ?)
@@ -2145,38 +2150,6 @@ func TestRegister_SameAgentIDStillRejected(t *testing.T) {
 	}
 	if pid != 200 {
 		t.Errorf("agent_pid = %d, want 200 (self-heal replaces stale)", pid)
-	}
-}
-
-// TestRegister_SameWorktreeStillRejected proves the worktree-layer
-// enforcement (EnforceOneIdentity) continues to reject a second identity
-// file in the same worktree, which is the real one-agent-per-worktree
-// invariant. agent.register itself no longer gatekeeps that — it trusts
-// the worktree layer to drop the older identity file before a second
-// agent ever reaches the RPC with a fresh name.
-func TestRegister_SameWorktreeStillRejected(t *testing.T) {
-	dir := t.TempDir()
-	idDir := filepath.Join(dir, ".thrum", "identities")
-	if err := os.MkdirAll(idDir, 0o755); err != nil {
-		t.Fatalf("mkdir identities: %v", err)
-	}
-	// Seed two identity files to represent the pre-enforcement state.
-	for _, name := range []string{"impl_alpha.json", "impl_beta.json"} {
-		if err := os.WriteFile(filepath.Join(idDir, name), []byte(`{"agent_id":"x"}`), 0o600); err != nil {
-			t.Fatalf("seed %s: %v", name, err)
-		}
-	}
-
-	deleted := worktree.EnforceOneIdentity(dir, "impl_beta")
-	// impl_beta kept, impl_alpha removed.
-	if len(deleted) != 1 || deleted[0] != "impl_alpha" {
-		t.Errorf("EnforceOneIdentity deleted=%v, want [impl_alpha]", deleted)
-	}
-	if _, err := os.Stat(filepath.Join(idDir, "impl_alpha.json")); !os.IsNotExist(err) {
-		t.Errorf("impl_alpha.json still exists; enforcement did not run")
-	}
-	if _, err := os.Stat(filepath.Join(idDir, "impl_beta.json")); err != nil {
-		t.Errorf("impl_beta.json missing; winner identity was wrongly deleted: %v", err)
 	}
 }
 

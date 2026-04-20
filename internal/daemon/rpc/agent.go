@@ -33,7 +33,6 @@ type RegisterRequest struct {
 	Role       string `json:"role"`
 	Module     string `json:"module"`
 	Display    string `json:"display,omitempty"`
-	Force      bool   `json:"force,omitempty"`       // Override existing
 	ReRegister bool   `json:"re_register,omitempty"` // Same agent returning
 	AgentPID   int    `json:"agent_pid,omitempty"`   // Claude process PID for identity resolution
 }
@@ -244,11 +243,19 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 	// role+module uniqueness guard was removed because it rejected every
 	// peer-bridge proxy that shared a prefix with a pre-existing proxy
 	// (e.g. Telegram's thrum:coordinator_main collided with the peer
-	// bridge's thrum:impl_mocksf_s2). The real "one agent per worktree"
-	// invariant lives at the identity-file layer (worktree.EnforceOneIdentity);
-	// proxy uniqueness is structurally bounded by peer-derived prefix
-	// plus remote agent name. Neither needs DB-level (role, module)
-	// enforcement.
+	// bridge's thrum:impl_mocksf_s2). Proxy uniqueness is structurally
+	// bounded by peer-derived prefix plus remote agent name, so DB-level
+	// (role, module) enforcement was redundant.
+	//
+	// Identity-file enforcement coverage:
+	//   - tmux.create path: calls worktree.EnforceOneIdentity (tmux.go:286)
+	//   - quickstart path: G1a/G1b pre-flight guards (internal/identity/guard)
+	//   - refresh / direct agent.register: neither of the above
+	//
+	// This leaves a narrow same-(role, module)-different-name regression on
+	// paths that bypass tmux-create AND fall through G1a/G1b (e.g. stale
+	// identity file with PID mismatched from caller chain). Tracked as
+	// thrum-33dt (P2, Identity Guard backstop catches the common cases).
 	existingAgent, err := h.getAgentByID(ctx, agentID)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("check for existing agent by id: %w", err)

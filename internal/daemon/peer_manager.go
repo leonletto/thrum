@@ -141,11 +141,20 @@ func (pm *PeerManager) buildConfigForPeer(p *PeerInfo) peer.BridgeConfig {
 	// identifier, but the daemon's user.register validator rejects
 	// anything outside [a-zA-Z0-9_-]. Without this, the bridge handshake
 	// fails on user.register and reconnect-loops forever.
+	//
+	// Non-ASCII peer names (e.g. "北京") sanitize to empty and would
+	// reproduce the same "user:peer-" (empty-suffix) rejection path.
+	// Fall back to the peer's DaemonID hex prefix when sanitize yields
+	// an empty string so user.register still gets a valid username.
+	suffix := SanitizeProxyPrefix(p.Name)
+	if suffix == "" {
+		suffix = p.DaemonID
+	}
 	cfg := peer.BridgeConfig{
 		LocalWSPort:  pm.localWSPort,
 		PeerName:     p.Name,
 		PeerToken:    p.Token,
-		BridgeUserID: "user:peer-" + SanitizeProxyPrefix(p.Name),
+		BridgeUserID: "user:peer-" + suffix,
 		ProxyPrefix:  p.ProxyPrefix,
 		RemoteAgents: p.RemoteAgents,
 	}
@@ -231,8 +240,9 @@ func (pm *PeerManager) makeOnDialError(hook ReconcileHook, _ string) func(contex
 
 // reconcileDelayForAttempt returns the 2s/8s/30s backoff schedule for
 // the xir.29 OnDialError retry cap. Extracted as a method so tests can
-// override via setReconcileDelayFunc to keep unit-test runtime low
-// without sacrificing the production-path exercise (I5 review finding).
+// override via pm.reconcileDelayFn (test-only, unexported field) to
+// keep unit-test runtime low without sacrificing the production-path
+// exercise (I5 review finding).
 func (pm *PeerManager) reconcileDelayForAttempt(attempt int) time.Duration {
 	if pm.reconcileDelayFn != nil {
 		return pm.reconcileDelayFn(attempt)

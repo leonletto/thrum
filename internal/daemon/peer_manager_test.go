@@ -139,6 +139,44 @@ func TestPeerManager_BuildConfigs_SanitizesBridgeUserID(t *testing.T) {
 	}
 }
 
+// TestPeerManager_BuildConfigs_NonASCIIPeerNameFallback covers the
+// follow-up finding from thrum-iw42 dual-review: a peer name whose
+// characters all lie outside SanitizeProxyPrefix's allowed set (e.g.
+// "北京") sanitizes to the empty string. Without a fallback, the
+// resulting BridgeUserID would be "user:peer-" — the same empty-suffix
+// failure thrum-bew3 was fixing, just via a different code path.
+// Guard by falling back to DaemonID hex when sanitize is empty.
+func TestPeerManager_BuildConfigs_NonASCIIPeerNameFallback(t *testing.T) {
+	pm, reg := newTestPeerManager(t)
+
+	nonASCII := &PeerInfo{
+		Name:     "北京",
+		DaemonID: "a1b2c3d4e5f6",
+		Address:  "100.64.1.10:9100",
+		Token:    "tok-non-ascii",
+		Role:     "dialer",
+		PairedAt: time.Now(),
+		LastSync: time.Now(),
+	}
+	if err := reg.AddPeer(nonASCII); err != nil {
+		t.Fatalf("AddPeer: %v", err)
+	}
+
+	configs := pm.BuildConfigs()
+	if len(configs) != 1 {
+		t.Fatalf("BuildConfigs() = %d, want 1", len(configs))
+	}
+	// Sanitize drops all non-ASCII; fallback uses DaemonID.
+	wantUserID := "user:peer-a1b2c3d4e5f6"
+	if got := configs[0].BridgeUserID; got != wantUserID {
+		t.Errorf("BridgeUserID = %q, want %q (DaemonID fallback)", got, wantUserID)
+	}
+	// Raw PeerName preserved.
+	if got := configs[0].PeerName; got != "北京" {
+		t.Errorf("PeerName = %q, want raw %q", got, "北京")
+	}
+}
+
 // TestPeerManager_ConnectPeer_Dialer verifies that ConnectPeer on a dialer
 // peer registers a running bridge without waiting for ConnectAll.
 // Covers thrum-1f4y: peer.join must spawn a bridge immediately, not wait
