@@ -81,31 +81,23 @@ func TestAgentRegister(t *testing.T) {
 			},
 		},
 		{
-			name: "conflict_different_agent_same_role_module",
+			// thrum-iw42: role+module uniqueness was dropped. Two distinct
+			// agent_ids sharing (role, module) must both register — the
+			// "one agent per worktree" invariant is enforced at the
+			// worktree/identity layer, not the DB.
+			name: "different_agent_same_role_module_succeeds_iw42",
 			request: RegisterRequest{
 				Role:    "implementer",
 				Module:  "auth",
 				Display: "Different Agent",
 			},
-			wantStatus:   "conflict",
-			wantConflict: true,
+			wantStatus:   "registered",
+			wantConflict: false,
 			wantErr:      false,
 			setupFunc: func(s *state.State) error {
-				// Register different module first to create different agent
-				h := NewAgentHandler(s)
-				req := RegisterRequest{
-					Role:   "implementer",
-					Module: "other",
-				}
-				reqJSON, _ := json.Marshal(req)
-				_, err := h.HandleRegister(context.Background(), reqJSON)
-				if err != nil {
-					return err
-				}
-
-				// Now manually insert a conflicting agent (different agent_id, same role+module)
-				// This simulates the conflict scenario
-				_, err = s.RawDB().Exec(`
+				// Pre-seed a DB row with a different agent_id but same role+module.
+				// Before iw42 this triggered a conflict; now both coexist.
+				_, err := s.RawDB().Exec(`
 					INSERT INTO agents (agent_id, kind, role, module, display, registered_at)
 					VALUES (?, ?, ?, ?, ?, ?)
 				`, "agent:implementer:CONFLICT00", "agent", "implementer", "auth", "", "2026-01-01T00:00:00Z")
@@ -1344,67 +1336,6 @@ func TestHandleRegister_StoresAgentPID(t *testing.T) {
 	}
 }
 
-func TestHandleRegister_RoleModuleConflictWithPID(t *testing.T) {
-	tmpDir := t.TempDir()
-	thrumDir := filepath.Join(tmpDir, ".thrum")
-
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_pid_conflict", "")
-	if err != nil {
-		t.Fatalf("create state: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	// Insert an existing agent with a known agent_pid directly into the DB.
-	// Using a hash-style agent_id so it differs from the name-based ID the second
-	// registration will generate.
-	_, err = s.RawDB().Exec(`
-		INSERT INTO agents (agent_id, kind, role, module, display, hostname, agent_pid, registered_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, "existing_agent_pid", "agent", "implementer", "auth", "", "", 111, "2026-01-01T00:00:00Z")
-	if err != nil {
-		t.Fatalf("insert existing agent: %v", err)
-	}
-
-	handler := NewAgentHandler(s)
-
-	// Register a different agent with the same role+module but different name,
-	// so GenerateAgentID produces a different agent_id → role+module conflict path.
-	req := RegisterRequest{
-		Name:     "different_agent",
-		Role:     "implementer",
-		Module:   "auth",
-		AgentPID: 222,
-	}
-	reqJSON, _ := json.Marshal(req)
-	resp, err := handler.HandleRegister(context.Background(), reqJSON)
-
-	// The role+module conflict returns a response with nil error.
-	if err != nil {
-		t.Logf("HandleRegister returned error (unexpected): %v", err)
-	}
-	if resp == nil {
-		t.Fatalf("expected response, got nil (err: %v)", err)
-	}
-
-	regResp, ok := resp.(*RegisterResponse)
-	if !ok {
-		t.Fatalf("response type = %T, want *RegisterResponse", resp)
-	}
-
-	if regResp.Status != "conflict" {
-		t.Errorf("Status = %s, want conflict", regResp.Status)
-	}
-	if regResp.Conflict == nil {
-		t.Fatal("Conflict info should be populated")
-	}
-	if regResp.Conflict.ConflictPID != 111 {
-		t.Errorf("ConflictPID = %d, want 111", regResp.Conflict.ConflictPID)
-	}
-	if regResp.Conflict.ExistingAgentID != "existing_agent_pid" {
-		t.Errorf("ExistingAgentID = %s, want existing_agent_pid", regResp.Conflict.ExistingAgentID)
-	}
-}
-
 func TestHandleRegister_SamePID_Idempotent(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
@@ -2097,58 +2028,6 @@ func TestAgentRegister_CrossDaemonCoexistence(t *testing.T) {
 	}
 	if localOrigin != "local_daemon_id" {
 		t.Errorf("local agent origin_daemon = %q, want local_daemon_id", localOrigin)
-	}
-}
-
-// TestAgentRegister_LocalConflictStillDetected guards the inverse case —
-// two LOCAL agents with the same (role, module) but different agent_ids
-// should still produce a conflict response (not Force) or replace the
-// older row (with Force). The scoping fix must not weaken legitimate
-// same-daemon collision detection.
-func TestAgentRegister_LocalConflictStillDetected(t *testing.T) {
-	tmpDir := t.TempDir()
-	thrumDir := filepath.Join(tmpDir, ".thrum")
-
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "local_daemon_id")
-	if err != nil {
-		t.Fatalf("create state: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	handler := NewAgentHandler(s)
-
-	// Register the first local agent.
-	first := RegisterRequest{
-		Name:     "impl_alpha",
-		Role:     "implementer",
-		Module:   "payments",
-		AgentPID: 1001,
-	}
-	reqJSON, _ := json.Marshal(first)
-	_, err = handler.HandleRegister(context.Background(), reqJSON)
-	if err != nil {
-		t.Fatalf("first HandleRegister: %v", err)
-	}
-
-	// Attempt to register a SECOND local agent with the same role+module
-	// but a different name. Without Force, this must return a conflict.
-	second := RegisterRequest{
-		Name:     "impl_beta",
-		Role:     "implementer",
-		Module:   "payments",
-		AgentPID: 1002,
-	}
-	reqJSON, _ = json.Marshal(second)
-	resp, err := handler.HandleRegister(context.Background(), reqJSON)
-	if err != nil {
-		t.Fatalf("second HandleRegister: %v", err)
-	}
-	regResp := resp.(*RegisterResponse)
-	if regResp.Status != "conflict" {
-		t.Errorf("Status = %s, want conflict (same-daemon role+module collision)", regResp.Status)
-	}
-	if regResp.Conflict == nil || regResp.Conflict.ExistingAgentID != "impl_alpha" {
-		t.Errorf("Conflict.ExistingAgentID = %v, want impl_alpha", regResp.Conflict)
 	}
 }
 
