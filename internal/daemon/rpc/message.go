@@ -277,6 +277,42 @@ func (h *MessageHandler) SetWSBroadcaster(b WSBroadcaster) {
 	h.wsBroadcaster = b
 }
 
+// NotifyMessageCreate fires the WebSocket notification.message broadcast
+// for a persisted message.create event. Called from the daemon's
+// SetOnEventWrite hook so the broadcast fires for ALL message writers,
+// not just HandleSend — previously, writers that bypassed HandleSend
+// (permission.SendSupervisorMessage, peer-synced events) did not trigger
+// outbound forwarding (e.g. to Telegram via OutboundRelay) because the
+// broadcast lived inline in HandleSend. See thrum-48kt.1.
+//
+// Nil-safe: returns immediately if the broadcaster isn't wired (test path).
+// Intended to be called from a goroutine — BroadcastAll does per-client
+// network sends that should not block the WriteEvent writer path.
+func (h *MessageHandler) NotifyMessageCreate(evt types.MessageCreateEvent) {
+	if h.wsBroadcaster == nil {
+		return
+	}
+	ts := evt.Timestamp
+	if ts == "" {
+		ts = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	preview := evt.Body.Content
+	if len(preview) > 100 {
+		preview = preview[:100]
+	}
+	msgInfo := &subscriptions.MessageInfo{
+		MessageID: evt.MessageID,
+		ThreadID:  evt.ThreadID,
+		AgentID:   evt.AgentID,
+		SessionID: evt.SessionID,
+		Scopes:    evt.Scopes,
+		Refs:      evt.Refs,
+		Timestamp: ts,
+		Preview:   preview,
+	}
+	h.wsBroadcaster.BroadcastAll(buildWSNotification(msgInfo))
+}
+
 // NewMessageHandler creates a new message handler.
 func NewMessageHandler(state *state.State) *MessageHandler {
 	return &MessageHandler{
@@ -589,11 +625,12 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	// recipients list, and calls nudge.DispatchTmux. Removing the inline
 	// block here prevents double-nudging on the local path.
 
-	// Broadcast to ALL connected WebSocket clients so the browser UI live feed
-	// receives events even though it never registers a subscription row in the DB.
-	if h.wsBroadcaster != nil {
-		h.wsBroadcaster.BroadcastAll(buildWSNotification(msgInfo))
-	}
+	// thrum-48kt.1: WebSocket notification.message broadcast MOVED into
+	// the SetOnEventWrite hook so writers that bypass HandleSend
+	// (permission.SendSupervisorMessage, peer-synced events) also trigger
+	// OutboundRelay → Telegram forwarding. Keeping it inline here would
+	// double-fire on the HandleSend path. Hook location:
+	// cmd/thrum/main.go SetOnEventWrite closure → messageHandler.NotifyMessageCreate.
 
 	// Emit thread.updated event for real-time updates
 	if threadID != "" {
