@@ -64,7 +64,15 @@ func (p *Permission) OnDetection(ctx context.Context, session, runtime, tmuxTarg
 	// is a no-op for runtimes with no registered patterns (unknown,
 	// empty string), so downstream behavior is preserved for pre-poller
 	// call sites.
-	paneHash := sha256.Sum256([]byte(stripVolatileLines(runtime, paneTail)))
+	//
+	// Scope the hash to the same bottom-window the DetectPaneState gate
+	// uses (thrum-k4wf). Single source of truth for "what counts as the
+	// active prompt": upper-scrollback drift never reaches the detector
+	// (so OnDetection won't fire for scroll-out prompts), so hashing the
+	// full paneTail would sometimes differ between polls on content the
+	// detector already declared irrelevant and cause spurious
+	// new-prompt resets.
+	paneHash := sha256.Sum256([]byte(stripVolatileLines(runtime, bottomLines(paneTail, paneBottomMatchLines))))
 
 	row, err := p.store.LookupPendingNudgeBySession(ctx, session)
 	if err != nil {

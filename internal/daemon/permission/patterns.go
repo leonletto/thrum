@@ -13,9 +13,13 @@ type Pattern struct {
 	// Convention: lowercase, underscores, no whitespace.
 	Name string
 
-	// Regex matches against the captured pane tail (last ~20 lines).
-	// Patterns should be anchored and precise — a false positive here
-	// sends a spurious keystroke into a user's pane.
+	// Regex matches against the bottom `paneBottomMatchLines` lines of
+	// the captured pane tail (currently 15 — see detect.go). DetectPaneState
+	// slices to that window before invoking Match, so patterns only need
+	// to recognize prompts as they appear at the ACTIVE bottom of the
+	// terminal; scrolled-up / already-resolved text is out of scope
+	// (thrum-k4wf). Patterns should be anchored and precise — a false
+	// positive here sends a spurious keystroke into a user's pane.
 	Regex *regexp.Regexp
 
 	// ApproveKey is the keystroke that grants single-invocation approval.
