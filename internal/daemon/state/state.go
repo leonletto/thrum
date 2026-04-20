@@ -444,8 +444,13 @@ func (s *State) GetEventsSince(ctx context.Context, afterSeq int64, limit int) (
 // permission intercept fires.
 //
 // The hook sees sequence == 0 as a sentinel for "synced from peer,
-// not locally authored". The daemon_id argument is still our own so
-// downstream consumers can tell which process is handling the event.
+// not locally authored". The daemon_id argument is still our own (the
+// handling daemon's ID). Consumers that need to know where the event
+// ORIGINATED should read event.origin_daemon from the JSON payload, not
+// the hook's daemonID argument — the latter is always "this process"
+// regardless of origin. thrum-xfsb uses the payload field to suppress
+// peer-replicated broadcasts that would otherwise fan out to this
+// daemon's local Telegram bridge.
 func (s *State) IngestSyncedEvent(ctx context.Context, event []byte) error {
 	// Apply to projector — same work the previous direct call did.
 	if err := s.projector.Apply(ctx, event); err != nil {

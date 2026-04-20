@@ -5437,6 +5437,18 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		// and a panic recover so a reply-dispatcher bug can't crash
 		// the event pipeline. evt is already a value copy — safe
 		// to capture.
+		//
+		// NO origin_daemon filter here (unlike NotifyMessageCreate
+		// below — see thrum-xfsb). Cross-repo reply delivery depends on
+		// this interceptor firing for peer-synced events: when a user
+		// replies to a nudge on daemon B, the reply message syncs to
+		// daemon A, and daemon A's IngestSyncedEvent hook must invoke
+		// AfterMessageCreate so daemon A's pending_nudges row gets
+		// resolved. The AC2 guarantee "reply resolves against the
+		// owning daemon's pending-nudge map only" is preserved
+		// structurally: pending_nudges is per-daemon SQLite state that
+		// does not replicate, so a peer daemon's AfterMessageCreate
+		// call finds no matching row and silently no-ops.
 		go func(evt types.MessageCreateEvent) {
 			defer func() {
 				if r := recover(); r != nil {
@@ -5449,9 +5461,13 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		// thrum-48kt.1: broadcast notification.message to connected
 		// WebSocket clients (including OutboundRelay → Telegram). Moved
 		// here from HandleSend so the broadcast covers writers that
-		// bypass the RPC layer (permission.SendSupervisorMessage,
-		// peer-synced events via sync_apply). Without this move, nudges
-		// stayed DB-only and never forwarded to Telegram.
+		// bypass the RPC layer (permission.SendSupervisorMessage).
+		// Without this move, nudges stayed DB-only and never forwarded
+		// to Telegram. thrum-xfsb refines the policy: NotifyMessageCreate
+		// itself short-circuits when evt.OriginDaemon points at a peer,
+		// so synced-in replicas don't fan out to THIS daemon's local
+		// bridge (which caused duplicate bot delivery in multi-daemon
+		// setups).
 		// Async because BroadcastAll does per-client network sends;
 		// must not block the state.WriteEvent writer.
 		go func(evt types.MessageCreateEvent) {
