@@ -23,7 +23,7 @@ When investigating N items (N > 6), reading everything into the main agent's con
 
 **Don't use when:**
 - Simple searches (just use Grep/Glob)
-- Tasks with < 6 items (single agent is fine)
+- Tasks with 6 or fewer items (single agent is fine)
 - Deeply interdependent items that can't be partitioned cleanly
 
 ## Core Pattern
@@ -77,7 +77,7 @@ Every `Agent` dispatch must pass `model` explicitly; never let sub-agents inheri
 
 **Skipping consolidation** - Reading 4 separate findings files into main context defeats the entire purpose. Always launch a consolidation agent.
 
-**Groups too large** - More than 6 items per agent gives diminishing returns. Partition further.
+**Groups too large** - More than 5 items per agent gives diminishing returns. Partition further.
 
 **Using foreground agents** - Blocks the main agent and loses parallelism. Always use `run_in_background=true`.
 

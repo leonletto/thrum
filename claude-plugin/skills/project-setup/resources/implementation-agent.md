@@ -499,7 +499,7 @@ it for real forks; overkill for minor ambiguity. Skip it when:
 
 Output artifact lands at `dev-docs/brainstorms/YYYY-MM-DD-<topic>-debate.md` for audit.
 
-**If you're investigating N>6 items** (function call sites, pattern
+**If you're investigating N > 6 items** (function call sites, pattern
 audits, multi-file reviews), invoke the
 `efficient-multi-agent-research` skill *instead of* reading files
 into this context. It partitions the work across parallel sub-agents
