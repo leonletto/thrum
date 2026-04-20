@@ -232,9 +232,15 @@ func TestEnforceOneIdentity_MultipleKeepers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	os.WriteFile(filepath.Join(idDir, "caller.json"), []byte(`{"agent":{"name":"caller"}}`), 0600)
-	os.WriteFile(filepath.Join(idDir, "new_agent.json"), []byte(`{"agent":{"name":"new_agent"}}`), 0600)
-	os.WriteFile(filepath.Join(idDir, "stale.json"), []byte(`{"agent":{"name":"stale"}}`), 0600)
+	if err := os.WriteFile(filepath.Join(idDir, "caller.json"), []byte(`{"agent":{"name":"caller"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(idDir, "new_agent.json"), []byte(`{"agent":{"name":"new_agent"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(idDir, "stale.json"), []byte(`{"agent":{"name":"stale"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	quarantined := EnforceOneIdentity(dir, "new_agent", "caller")
 
@@ -263,8 +269,12 @@ func TestEnforceOneIdentity_EmptyKeeperIgnored(t *testing.T) {
 	if err := os.MkdirAll(idDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	os.WriteFile(filepath.Join(idDir, "new_agent.json"), []byte(`{}`), 0600)
-	os.WriteFile(filepath.Join(idDir, "stale.json"), []byte(`{}`), 0600)
+	if err := os.WriteFile(filepath.Join(idDir, "new_agent.json"), []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(idDir, "stale.json"), []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	quarantined := EnforceOneIdentity(dir, "new_agent", "")
 

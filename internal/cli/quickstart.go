@@ -264,6 +264,12 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 		// for stale cleanup; tmux.create continues to enforce on the
 		// tmux-managed path. refresh.go enforcement was removed by
 		// thrum-ajmd for the same reason as this one.
+		//
+		// Historical note: thrum-33dt's original design coupled the
+		// quickstart and refresh enforcement sites as intentionally
+		// idempotent doubles. Both are now removed — ajmd took out the
+		// refresh site; dw06 takes out this one. The daemon-side path
+		// retains a narrower, self-rename-only enforcement.
 	}
 
 	// Step 2.6: Refresh drift-prone fields from live process/tmux/git state.

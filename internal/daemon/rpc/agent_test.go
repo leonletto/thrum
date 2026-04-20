@@ -15,18 +15,6 @@ import (
 	"github.com/leonletto/thrum/internal/types"
 )
 
-// peercredCtxForWorktree returns a context carrying a peercred
-// ResolvedIdentity whose Worktree matches the given path. Used by
-// thrum-33dt tests that need the daemon-side enforcement hook to pick
-// up a caller's worktree without going through the real unix-socket
-// peercred resolver.
-func peercredCtxForWorktree(worktree string) context.Context {
-	return peercred.WithIdentity(context.Background(), &peercred.ResolvedIdentity{
-		AgentID:  "test_caller",
-		Worktree: worktree,
-		PID:      os.Getpid(),
-	})
-}
 
 func TestAgentRegister(t *testing.T) {
 	tests := []struct {
@@ -2355,20 +2343,20 @@ func TestHandleRegister_PreservesCallerIdentity(t *testing.T) {
 		t.Fatalf("mkdir identities: %v", err)
 	}
 
-	// Seed the caller's own identity file. peercredCtxForWorktree below
-	// injects AgentID="test_caller"; that identity is the worktree's
-	// legitimate owner.
+	// Seed the caller's own identity file. The injected peercred
+	// identity below names this caller as the worktree's legitimate
+	// owner; the newly registered name will differ.
 	caller := &config.IdentityFile{
 		Version: 5,
 		Agent: config.AgentConfig{
-			Kind: "agent", Name: "test_caller", Role: "coordinator", Module: "main",
+			Kind: "agent", Name: "caller_agent", Role: "coordinator", Module: "main",
 		},
 		AgentPID: os.Getpid(),
 	}
 	if err := config.SaveIdentityFile(thrumDir, caller); err != nil {
 		t.Fatalf("seed caller identity: %v", err)
 	}
-	callerPath := filepath.Join(idsDir, "test_caller.json")
+	callerPath := filepath.Join(idsDir, "caller_agent.json")
 	if _, err := os.Stat(callerPath); err != nil {
 		t.Fatalf("caller identity missing before register: %v", err)
 	}
@@ -2380,7 +2368,15 @@ func TestHandleRegister_PreservesCallerIdentity(t *testing.T) {
 	defer func() { _ = s.Close() }()
 
 	handler := NewAgentHandler(s)
-	ctx := peercredCtxForWorktree(tmpDir)
+	// Explicit peercred.WithIdentity so the test's caller AgentID is
+	// colocated with the seeded identity file name (not the helper's
+	// hardcoded "test_caller") and a future helper refactor cannot
+	// silently change test semantics. (review finding #2)
+	ctx := peercred.WithIdentity(context.Background(), &peercred.ResolvedIdentity{
+		AgentID:  "caller_agent",
+		Worktree: tmpDir,
+		PID:      os.Getpid(),
+	})
 
 	// Register a DIFFERENT agent name from the caller's context — the
 	// E2E-harness pattern that regressed under thrum-33dt.
@@ -2405,14 +2401,14 @@ func TestHandleRegister_PreservesCallerIdentity(t *testing.T) {
 	// quarantined because keepName ("short_lived_target") did not match
 	// the caller's filename.
 	if _, err := os.Stat(callerPath); err != nil {
-		t.Fatalf("caller identity test_caller.json must survive register of differently named agent: %v", err)
+		t.Fatalf("caller identity caller_agent.json must survive register of differently named agent: %v", err)
 	}
 
 	// And the quarantine dir must not contain the caller's identity.
 	qDir := filepath.Join(idsDir, ".quarantine")
 	if entries, err := os.ReadDir(qDir); err == nil {
 		for _, e := range entries {
-			if strings.HasPrefix(e.Name(), "test_caller.json.") {
+			if strings.HasPrefix(e.Name(), "caller_agent.json.") {
 				t.Errorf("caller identity should not be in quarantine, found: %s", e.Name())
 			}
 		}

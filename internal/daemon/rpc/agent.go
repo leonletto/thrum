@@ -380,14 +380,25 @@ func enforceWorktreeIdentity(ctx context.Context, keepName string) {
 	if resolved == nil || resolved.Worktree == "" {
 		return
 	}
-	// Bootstrap / multi-agent-worktree case: caller is registering a
-	// different agent. Skip enforcement so the caller's own identity
-	// file AND any other co-located registered agents' files are
-	// preserved.
-	if resolved.AgentID != "" && resolved.AgentID != keepName {
+	// Self-rename only. Collapses three cases correctly:
+	//   - AgentID == "" (anonymous + populated Worktree, rare but
+	//     possible from future non-unix stubs): skip — no caller to
+	//     self-rename against, so no authorization to scrub siblings.
+	//   - AgentID != keepName (bootstrap / multi-agent worktree):
+	//     skip — caller is registering a different agent; the
+	//     sibling .json files may belong to other co-located agents.
+	//   - AgentID == keepName (self-rename): enforce — legitimate
+	//     stale-sibling cleanup on the caller's own identity.
+	if resolved.AgentID != keepName {
 		return
 	}
-	wtpkg.EnforceOneIdentity(resolved.Worktree, keepName)
+	// Pass resolved.AgentID as a second keeper too. In the self-rename
+	// path it collapses to the same value as keepName (no-op), but it
+	// keeps the daemon-side caller aligned with the variadic
+	// EnforceOneIdentity contract so a future change that loosens the
+	// self-rename gate does not accidentally re-introduce the dw06
+	// footgun where the caller's own file gets swept.
+	wtpkg.EnforceOneIdentity(resolved.Worktree, keepName, resolved.AgentID)
 }
 
 // HandleList handles the agent.list RPC method.
