@@ -482,6 +482,23 @@ thrum send "BLOCKED: {{TASK_ID}} — waiting for {{BLOCKER_ID}}. Can you priorit
 thrum send "BLOCKED: {{TASK_ID}} by external dependency {{BLOCKER_ID}}" --to @{{SUPERVISOR_NAME}}
 ```
 
+### When you hit a design fork
+
+**If you're blocked on a genuine 2-3 way design fork** — a real
+tradeoff where "just pick one" would likely be regretted — invoke the
+`adversarial-critique` skill. It dispatches 2-3 sub-agents on sonnet
+across three structured rounds and produces a defended pick with
+invariants and acceptance tests.
+
+Cost: ~100k tokens per 2-option debate (~150k for 3 options). Worth
+it for real forks; overkill for minor ambiguity. Skip it when:
+
+- Any option works and the decision is reversible
+- You can answer the question with a grep or a skim
+- Time pressure demands a best-guess now and a retry later
+
+Output artifact lands at `dev-docs/brainstorms/…` for audit.
+
 ### Communicating During Work
 
 Use Thrum to stay coordinated:
