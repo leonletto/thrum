@@ -47,7 +47,12 @@ digraph when_to_use {
 
 ## Prerequisites
 
-Before starting, verify beads is installed:
+Two prereqs must be satisfied before project-setup proceeds. Bail on either
+rather than trying to work around it.
+
+### Beads (bd) installed
+
+Verify beads is installed:
 
 ```bash
 bd version
@@ -69,6 +74,25 @@ If `bd` is not found, stop and tell the user:
 
 Do not proceed without beads. Do not fall back to markdown task lists or
 TodoWrite.
+
+### Implementation Philosophy Doc
+
+Verify the project has an implementation philosophy doc at the canonical path:
+
+```bash
+test -f .thrum/philosophy.md
+```
+
+If the file does not exist, stop and tell the user:
+
+> project-setup requires a philosophy doc at `.thrum/philosophy.md`.
+> Run the `project-philosophy` skill first to generate or locate one,
+> then re-invoke project-setup.
+
+Do not proceed without the philosophy doc. Do not inline-create.
+
+If the doc exists, read it and extract the key anti-patterns — these
+will be injected into each epic's prompt in Phase 4.
 
 ## Inputs
 
@@ -127,26 +151,6 @@ After agents complete, read the output files. Check `bd list` / `bd ready` /
 
 Ask the user focused questions (prefer multiple choice) about anything the plan
 leaves ambiguous — constraints, scope boundaries, patterns to follow.
-
-### Check for Implementation Philosophy Doc
-
-Before reading the plan, verify the project has an implementation
-philosophy doc at the canonical path:
-
-```bash
-test -f .thrum/philosophy.md
-```
-
-If the file does not exist, stop and tell the user:
-
-> project-setup requires a philosophy doc at `.thrum/philosophy.md`.
-> Run the `project-philosophy` skill first to generate or locate one,
-> then re-invoke project-setup.
-
-Do not proceed without the philosophy doc. Do not inline-create.
-
-If the doc exists, read it and extract the key anti-patterns — these
-will be injected into each epic's prompt in Phase 4.
 
 ## Phase 2: Decompose into Epics & Tasks
 

@@ -9,17 +9,18 @@ description: Use when a project needs its implementation philosophy established 
 
 `.thrum/philosophy.md` — the single authoritative location. `project-setup` and every implementation-agent prompt read from this path only. Non-standard paths are handled by the fallback migration (documented below), not by moving the canonical target.
 
-## Three run modes
+## Run modes and dispatch order
 
-On every invocation, dispatch by inspecting `.thrum/philosophy.md`:
+On every invocation, dispatch in this order. Earlier branches short-circuit later ones.
 
-1. **Absent** → **First-run**. Generate a new doc from project inspection + interactive prompts (documented below).
-2. **Present and matches current project state** → **No-op exit**. Report "philosophy.md is current; no changes needed" and exit without writing.
-3. **Present but project has drifted** → **Diff proposal**. Compute a sectional diff, present via `AskUserQuestion`, write only on confirmation.
+0. **Fallback migration** — runs first when `.thrum/philosophy.md` is absent. If a legacy philosophy doc exists elsewhere in the repo, offer move/link/fresh before generating anything new. If no legacy doc is found, fall through to branch 1.
+1. **First-run** (doc absent, no legacy doc or "fresh" chosen above) — generate a new `.thrum/philosophy.md` from project inspection + interactive prompts (documented below).
+2. **Re-run-unchanged** (doc present, matches current project state) — report "philosophy.md is current; no changes needed" and exit without writing.
+3. **Re-run-evolved** (doc present, project has drifted) — compute a sectional diff, present via `AskUserQuestion`, write only on confirmation.
 
 The modes are idempotent — running the skill repeatedly on a stable project should produce no file changes after the first run.
 
-A fourth path, **fallback migration**, runs before the First-run branch: if `.thrum/philosophy.md` is absent but a non-standard philosophy doc exists elsewhere in the repo, offer move/link/fresh before generating fresh.
+> **Note: human-in-the-loop required.** This skill uses `AskUserQuestion` for first-run project-specific prompts, re-run-evolved diff approval, and fallback-migration three-way choice. It cannot run unattended in CI or any other non-interactive automation context. Invoke it only from a session that can answer prompts.
 
 ## Fallback migration
 
@@ -28,7 +29,7 @@ Runs before the First-run branch when `.thrum/philosophy.md` is absent. If the u
 ### Step 1: Search for legacy philosophy docs
 
 ```bash
-find . -type f \( -name "*philosophy*" -o -name "*anti-pattern*" -o -name "*implementation-standards*" \) \
+find . -type f \( -name "*philosophy*" -o -name "*anti-pattern*" -o -name "*implementation-standards*" -o -name "CONTRIBUTING.md" \) \
   -not -path '*/node_modules/*' \
   -not -path '*/.git/*' \
   -not -path '*/dist/*' \
@@ -186,7 +187,7 @@ Do NOT write to the file. Do NOT update mtime. Do NOT create backups. Exit clean
 
 If at least one check reports "differs", transition to the re-run-evolved flow (below). The drift detection from Step 2 becomes the input to the diff proposal.
 
-Idempotency invariant: re-running `/project-philosophy` on an unchanged project must never modify any file. Tests for this mode should use `stat -c %Y .thrum/philosophy.md` or equivalent to confirm mtime is untouched.
+Idempotency invariant: re-running `/project-philosophy` on an unchanged project must never modify any file. Tests for this mode should confirm mtime is untouched — `stat -c %Y .thrum/philosophy.md` on Linux, `stat -f %m .thrum/philosophy.md` on macOS.
 
 ## Re-run-evolved mode
 
@@ -257,5 +258,3 @@ Write the file once, at the end. Announce the applied items in the final message
 If the user declines (or selects zero items), do NOT write to the file. Record the skipped proposal in `.thrum/philosophy-skipped.jsonl` (append-only, one JSON line per decline) with the timestamp and the drift items proposed. Future runs can re-surface the same items without re-computing drift from scratch.
 
 Skipped-proposal log is advisory — its absence is not an error.
-
-<!-- Body continued in task 5 -->
