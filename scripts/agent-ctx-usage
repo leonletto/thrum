@@ -19,12 +19,14 @@
 set -euo pipefail
 
 AGENT=""
+WORKTREE=""
 WINDOW=1000000
 THRESHOLD=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --agent)     AGENT="$2"; shift 2;;
+    --worktree)  WORKTREE="$2"; shift 2;;
     --window)    WINDOW="$2"; shift 2;;
     --threshold) THRESHOLD="$2"; shift 2;;
     -h|--help)
@@ -36,15 +38,20 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$AGENT" ]]; then
-  echo "usage: $0 --agent <name> [--window <tokens>] [--threshold <pct>]" >&2
+  echo "usage: $0 --agent <name> [--worktree <path>] [--window <tokens>] [--threshold <pct>]" >&2
   exit 1
 fi
 
-WORKTREE=$(thrum team --json | jq -r --arg a "$AGENT" \
-  '.members[] | select(.agent_id == $a) | .worktree // empty')
+# Resolve worktree: --worktree flag wins, else look up via thrum team --json.
+# As of 2026-04-19 the daemon's team-list output dropped the worktree field
+# (regression tracked separately); --worktree flag is the durable workaround.
+if [[ -z "$WORKTREE" ]]; then
+  WORKTREE=$(thrum team --json | jq -r --arg a "$AGENT" \
+    '.members[] | select(.agent_id == $a) | .worktree // empty')
+fi
 
 if [[ -z "$WORKTREE" ]]; then
-  echo "agent '$AGENT' not found in thrum team" >&2
+  echo "no worktree for agent '$AGENT' (pass --worktree explicitly if team-list lookup fails)" >&2
   exit 1
 fi
 
