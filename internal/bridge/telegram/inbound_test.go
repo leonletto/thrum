@@ -563,3 +563,256 @@ func TestInboundRelay_DMStillRoutesThroughRelayMethod(t *testing.T) {
 		t.Error("DM path: unexpected 'group' field in params")
 	}
 }
+
+// TestInboundRelay_FreshDMResolvesPendingNudge covers the thrum-48kt.3
+// happy path: supervisor sends a fresh 'y' DM (no ReplyToMsgID), the
+// lookup returns a pending nudge's thrumID, reply_to is set on the
+// relayed message so TryResolve fires downstream.
+func TestInboundRelay_FreshDMResolvesPendingNudge(t *testing.T) {
+	var sendReq map[string]any
+
+	client, cleanup := mockRPCServer(t, func(req map[string]any) map[string]any {
+		method, _ := req["method"].(string)
+		switch method {
+		case "message.send":
+			sendReq = req
+			return map[string]any{
+				"result": map[string]any{"message_id": "msg_relay_fresh_y"},
+			}
+		}
+		return map[string]any{"result": map[string]any{}}
+	})
+	defer cleanup()
+
+	relay := NewInboundRelay(client, NewMessageMap(100), "user:leon-letto",
+		"@coordinator_main", nil, "")
+	relay.SetPendingNudgeLookup(func(ctx context.Context, supervisor string) (string, error) {
+		if supervisor != "user:leon-letto" {
+			t.Errorf("lookup called with wrong supervisor: %q", supervisor)
+		}
+		return "msg_pending_nudge_01", nil
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := relay.relay(ctx, InboundMessage{
+		Text: "y", ChatID: 42, MessageID: 100, Username: "leon", UserID: 999,
+		// ReplyToMsgID is nil — fresh DM, not a reply
+	}); err != nil {
+		t.Fatalf("relay: %v", err)
+	}
+
+	params := sendReq["params"].(map[string]any)
+	if got := params["reply_to"]; got != "msg_pending_nudge_01" {
+		t.Errorf("reply_to = %v, want msg_pending_nudge_01", got)
+	}
+}
+
+// TestInboundRelay_FreshDMTokenVariants covers the full token set that
+// the fresh-DM fallback accepts (y/n/yes/no/allow/deny, case-insensitive,
+// whitespace-trimmed). Each triggers the lookup.
+func TestInboundRelay_FreshDMTokenVariants(t *testing.T) {
+	variants := []string{"y", "Y", "n", " N ", "yes", "YES", "no", "No",
+		"allow", "Allow", "deny", "DENY"}
+
+	for _, body := range variants {
+		t.Run(body, func(t *testing.T) {
+			var sendReq map[string]any
+			client, cleanup := mockRPCServer(t, func(req map[string]any) map[string]any {
+				if req["method"] == "message.send" {
+					sendReq = req
+				}
+				return map[string]any{"result": map[string]any{"message_id": "msg_x"}}
+			})
+			defer cleanup()
+
+			relay := NewInboundRelay(client, NewMessageMap(100), "user:leon-letto",
+				"@coordinator_main", nil, "")
+			relay.SetPendingNudgeLookup(func(ctx context.Context, s string) (string, error) {
+				return "msg_pending", nil
+			})
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := relay.relay(ctx, InboundMessage{Text: body, ChatID: 1, MessageID: 1}); err != nil {
+				t.Fatalf("relay: %v", err)
+			}
+
+			params := sendReq["params"].(map[string]any)
+			if got := params["reply_to"]; got != "msg_pending" {
+				t.Errorf("variant %q: reply_to = %v, want msg_pending", body, got)
+			}
+		})
+	}
+}
+
+// TestInboundRelay_FreshDMProseDoesNotTrigger guards against loose
+// matching: "yeah sure let me think" or "nope, hold off" must NOT
+// trigger the fallback.
+func TestInboundRelay_FreshDMProseDoesNotTrigger(t *testing.T) {
+	prose := []string{"yeah sure", "nope, hold off", "y please", "can you deny this?"}
+	for _, body := range prose {
+		t.Run(body, func(t *testing.T) {
+			var sendReq map[string]any
+			client, cleanup := mockRPCServer(t, func(req map[string]any) map[string]any {
+				if req["method"] == "message.send" {
+					sendReq = req
+				}
+				return map[string]any{"result": map[string]any{"message_id": "msg_x"}}
+			})
+			defer cleanup()
+
+			lookupCalls := 0
+			relay := NewInboundRelay(client, NewMessageMap(100), "user:leon-letto",
+				"@coordinator_main", nil, "")
+			relay.SetPendingNudgeLookup(func(ctx context.Context, s string) (string, error) {
+				lookupCalls++
+				return "msg_pending_DO_NOT_USE", nil
+			})
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := relay.relay(ctx, InboundMessage{Text: body, ChatID: 1, MessageID: 1}); err != nil {
+				t.Fatalf("relay: %v", err)
+			}
+			if lookupCalls != 0 {
+				t.Errorf("variant %q: lookup should not have been called, got %d calls", body, lookupCalls)
+			}
+			params := sendReq["params"].(map[string]any)
+			if _, exists := params["reply_to"]; exists {
+				t.Errorf("variant %q: prose should not set reply_to, got %v", body, params["reply_to"])
+			}
+		})
+	}
+}
+
+// TestInboundRelay_FreshDMNoPendingNudge covers the no-pending case:
+// matching token but the lookup returns empty — relay must fall through
+// to normal DM behavior (no reply_to, message still sent).
+func TestInboundRelay_FreshDMNoPendingNudge(t *testing.T) {
+	var sendReq map[string]any
+	client, cleanup := mockRPCServer(t, func(req map[string]any) map[string]any {
+		if req["method"] == "message.send" {
+			sendReq = req
+		}
+		return map[string]any{"result": map[string]any{"message_id": "msg_x"}}
+	})
+	defer cleanup()
+
+	relay := NewInboundRelay(client, NewMessageMap(100), "user:leon-letto",
+		"@coordinator_main", nil, "")
+	relay.SetPendingNudgeLookup(func(ctx context.Context, s string) (string, error) {
+		return "", nil // no pending nudge for this supervisor
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := relay.relay(ctx, InboundMessage{Text: "y", ChatID: 1, MessageID: 1}); err != nil {
+		t.Fatalf("relay: %v", err)
+	}
+
+	params := sendReq["params"].(map[string]any)
+	if _, exists := params["reply_to"]; exists {
+		t.Errorf("no-pending case: reply_to should not be set, got %v", params["reply_to"])
+	}
+	// Content still relays normally
+	if params["content"] != "y" {
+		t.Errorf("content = %v, want y", params["content"])
+	}
+}
+
+// TestInboundRelay_FreshDMSupervisorMismatch is the direct test for the
+// scenario coordinator flagged: if a DIFFERENT human DMs the bot with
+// 'y' while Leon has a pending nudge, the lookup is keyed on the OTHER
+// human's r.userID — which returns empty — so Leon's nudge is not
+// inadvertently resolved. r.userID naturally enforces this, but the
+// test locks the behavior in.
+func TestInboundRelay_FreshDMSupervisorMismatch(t *testing.T) {
+	var sendReq map[string]any
+	client, cleanup := mockRPCServer(t, func(req map[string]any) map[string]any {
+		if req["method"] == "message.send" {
+			sendReq = req
+		}
+		return map[string]any{"result": map[string]any{"message_id": "msg_x"}}
+	})
+	defer cleanup()
+
+	// Bob's bridge instance — r.userID is Bob, not Leon.
+	relay := NewInboundRelay(client, NewMessageMap(100), "user:bob",
+		"@coordinator_main", nil, "")
+	relay.SetPendingNudgeLookup(func(ctx context.Context, supervisor string) (string, error) {
+		// The lookup should see Bob, not Leon.
+		if supervisor != "user:bob" {
+			t.Errorf("lookup called with %q, want user:bob", supervisor)
+		}
+		// No pending nudge for Bob, even though Leon has one. Realistic
+		// store query keyed on recipient_agent_id returns empty here.
+		return "", nil
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := relay.relay(ctx, InboundMessage{Text: "y", ChatID: 1, MessageID: 1}); err != nil {
+		t.Fatalf("relay: %v", err)
+	}
+
+	params := sendReq["params"].(map[string]any)
+	if _, exists := params["reply_to"]; exists {
+		t.Errorf("mismatched supervisor: reply_to must NOT be set, got %v", params["reply_to"])
+	}
+}
+
+// TestInboundRelay_FreshDMReplyThreadedStillTakesExistingPath is the
+// regression guard: when ReplyToMsgID IS set, the fresh-DM lookup is
+// bypassed entirely and the existing threading path controls reply_to.
+func TestInboundRelay_FreshDMReplyThreadedStillTakesExistingPath(t *testing.T) {
+	var sendReq map[string]any
+
+	client, cleanup := mockRPCServer(t, func(req map[string]any) map[string]any {
+		method, _ := req["method"].(string)
+		switch method {
+		case "message.get":
+			return map[string]any{
+				"result": map[string]any{
+					"message": map[string]any{
+						"message_id": "msg_threaded_parent",
+						"author":     map[string]any{"agent_id": "coordinator_main"},
+					},
+				},
+			}
+		case "message.send":
+			sendReq = req
+		}
+		return map[string]any{"result": map[string]any{"message_id": "msg_relay"}}
+	})
+	defer cleanup()
+
+	msgMap := NewMessageMap(100)
+	msgMap.Store(42, 10, "msg_threaded_parent")
+
+	relay := NewInboundRelay(client, msgMap, "user:leon-letto",
+		"@coordinator_main", nil, "")
+	lookupCalls := 0
+	relay.SetPendingNudgeLookup(func(ctx context.Context, s string) (string, error) {
+		lookupCalls++
+		return "msg_SHOULD_NOT_BE_USED", nil
+	})
+
+	replyID := 10
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := relay.relay(ctx, InboundMessage{
+		Text: "y", ChatID: 42, MessageID: 100, ReplyToMsgID: &replyID,
+	}); err != nil {
+		t.Fatalf("relay: %v", err)
+	}
+
+	params := sendReq["params"].(map[string]any)
+	if got := params["reply_to"]; got != "msg_threaded_parent" {
+		t.Errorf("reply_to = %v, want msg_threaded_parent (existing path)", got)
+	}
+	if lookupCalls != 0 {
+		t.Errorf("threaded path should not invoke fresh-DM lookup, got %d calls", lookupCalls)
+	}
+}

@@ -5907,6 +5907,20 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		// Without this, supervisor replies after restart silently
 		// drop reply_to and TryResolve never fires.
 		tgBridge.SetDB(st.RawDB())
+		// Wire the pending-nudge lookup so fresh Telegram DMs
+		// (y/n/yes/no/allow/deny not reply-threaded to the nudge) still
+		// resolve the supervisor's most-recent pending nudge
+		// (thrum-48kt.3). Keyed on the relay's userID inside the
+		// InboundRelay, so a fresh 'y' from a DIFFERENT human cannot
+		// inadvertently resolve someone else's pending nudge.
+		pStore := permPkg.Store()
+		tgBridge.SetPendingNudgeLookup(func(ctx context.Context, supervisorAgentID string) (string, error) {
+			row, err := pStore.LookupMostRecentPendingNudgeByRecipient(ctx, supervisorAgentID)
+			if err != nil || row == nil {
+				return "", err
+			}
+			return row.MessageID, nil
+		})
 		telegramHandler.SetBridge(tgBridge)
 		go tgBridge.Run(ctx)
 		fmt.Fprintf(os.Stderr, "  Telegram:    bridge enabled (target: %s)\n", thrumCfg.Telegram.Target)

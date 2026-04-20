@@ -5,9 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/leonletto/thrum/internal/config"
 )
+
+// PendingNudgeLookup resolves the supervisor's most-recent pending
+// permission nudge so a fresh DM ('y'/'n'/etc, no reply_to) can still
+// drive TryResolve. Returns the Thrum firstDetect message_id of the
+// pending nudge, or empty string if none match. Implementations should
+// return an error only on storage failures — "no pending nudge" is the
+// ordinary (empty, nil) case.
+type PendingNudgeLookup func(ctx context.Context, supervisorAgentID string) (thrumMsgID string, err error)
 
 // InboundRelay converts Telegram messages to Thrum messages via WebSocket RPC.
 type InboundRelay struct {
@@ -17,11 +26,40 @@ type InboundRelay struct {
 	target  string // "@coordinator_main" — mention target for messages
 	groups  []config.TelegramGroup
 	botName string // our bot's username (without @)
+
+	// lookupPendingNudge, if non-nil, enables the fresh-DM fallback
+	// added in thrum-48kt.3: when a supervisor replies with y/n/etc
+	// as a fresh DM (no Telegram reply-thread), this lookup returns
+	// the most-recent pending nudge for the supervisor so reply_to can
+	// be set on the relayed message and TryResolve still fires.
+	lookupPendingNudge PendingNudgeLookup
 }
 
 // NewInboundRelay creates a relay that sends Telegram messages to Thrum.
 func NewInboundRelay(ws *WSClient, msgMap *MessageMap, userID, target string, groups []config.TelegramGroup, botName string) *InboundRelay {
 	return &InboundRelay{ws: ws, msgMap: msgMap, userID: userID, target: target, groups: groups, botName: botName}
+}
+
+// SetPendingNudgeLookup wires the fresh-DM fallback. Safe to call once
+// between construction and Run. Nil lookup (the zero value) keeps the
+// pre-thrum-48kt.3 behavior where a fresh DM never sets reply_to.
+func (r *InboundRelay) SetPendingNudgeLookup(fn PendingNudgeLookup) {
+	r.lookupPendingNudge = fn
+}
+
+// permissionResponseTokens are the set of body strings that trigger the
+// fresh-DM fallback. Match is case-insensitive after trimming. Kept
+// deliberately tight: longer utterances ("yeah I think so", "nope")
+// fall through to normal DM handling.
+var permissionResponseTokens = map[string]struct{}{
+	"y": {}, "n": {}, "yes": {}, "no": {}, "allow": {}, "deny": {},
+}
+
+// isPermissionResponse reports whether body is one of the tight
+// permission-response tokens (case-insensitive, whitespace-trimmed).
+func isPermissionResponse(body string) bool {
+	_, ok := permissionResponseTokens[strings.ToLower(strings.TrimSpace(body))]
+	return ok
 }
 
 // Run reads from the bot's message channel and relays each to Thrum.
@@ -176,6 +214,20 @@ func (r *InboundRelay) relay(ctx context.Context, msg InboundMessage) error {
 			} else if author != "" && author != r.userID {
 				mentionTarget = "@" + author
 			}
+		}
+	}
+
+	// Fresh-DM fallback (thrum-48kt.3): if the supervisor sent a bare
+	// permission-response token (y/n/yes/no/allow/deny) as a NEW DM
+	// rather than a Telegram reply, look up their most-recent pending
+	// nudge and route to it. Keyed on r.userID so one human's fresh 'y'
+	// cannot resolve a different human's pending nudge.
+	if replyToThrumID == "" && r.lookupPendingNudge != nil && isPermissionResponse(msg.Text) {
+		if thrumID, err := r.lookupPendingNudge(ctx, r.userID); err != nil {
+			slog.Warn("telegram inbound: pending-nudge lookup failed — proceeding without reply_to",
+				"supervisor", r.userID, "err", err)
+		} else if thrumID != "" {
+			replyToThrumID = thrumID
 		}
 	}
 

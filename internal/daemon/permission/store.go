@@ -154,6 +154,36 @@ func (s *Store) DeleteAndReturnPendingNudge(ctx context.Context, msgID string) (
 	return scanSingleRow(row)
 }
 
+// LookupMostRecentPendingNudgeByRecipient returns the non-expired
+// pending nudge most recently delivered to the given recipient (by
+// agent_id, e.g. "user:leon-letto"), or (nil, nil) if none match.
+//
+// Joins permission_nudges against message_deliveries on the firstDetect
+// message_id — the PK of permission_nudges. Reminder messages share
+// the same thread_id as the firstDetect but have distinct message_ids
+// that are NOT in permission_nudges; this is fine because firstDetect
+// is always delivered to every supervisor, so the delivery row for the
+// firstDetect is guaranteed to exist whenever a nudge is pending.
+//
+// Used by the Telegram bridge's fresh-DM fallback (thrum-48kt.3): when
+// a supervisor replies with a permission-response token on a fresh DM
+// (no reply_to), this query finds the nudge to resolve.
+func (s *Store) LookupMostRecentPendingNudgeByRecipient(ctx context.Context, recipientAgentID string) (*NudgeRow, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT pn.message_id, pn.session, pn.tmux_target, pn.agent_name,
+		       pn.pattern_key, pn.approve_key, pn.deny_key,
+		       pn.first_detected, pn.last_nudge_at, pn.nudge_count,
+		       pn.last_pane_hash, pn.expires_at
+		  FROM permission_nudges pn
+		  JOIN message_deliveries md ON md.message_id = pn.message_id
+		 WHERE md.recipient_agent_id = ?
+		   AND pn.expires_at > ?
+		 ORDER BY pn.last_nudge_at DESC
+		 LIMIT 1`,
+		recipientAgentID, time.Now().UTC())
+	return scanSingleRow(row)
+}
+
 // LookupThreadIDForMessage returns the thread_id stored on the given
 // message row, or "" if the row does not exist or has no thread_id.
 // Used by TryResolve's fallback path: when a supervisor replies to a
