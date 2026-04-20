@@ -28,9 +28,12 @@ import (
 // # Concurrency
 //
 // Safe for concurrent Enroll/Unenroll with PollOnce. PollOnce captures
-// a snapshot of enrolled sessions under a read lock, then releases the
-// lock before invoking Capture and OnStable (which may block on I/O or
-// other daemon paths). Per-session state updates re-acquire the lock.
+// a snapshot of enrolled sessions under the poller's mutex, then
+// releases it before invoking Capture and OnStable (which may block on
+// I/O or other daemon paths). Per-session state updates re-acquire the
+// lock. A full sync.Mutex (not RWMutex) is used — read/write mix is
+// balanced at current scale and a single lock type is simpler to
+// reason about.
 type SessionPoller struct {
 	cfg SessionPollerConfig
 
@@ -203,6 +206,8 @@ func (p *SessionPoller) pollSession(ctx context.Context, session, runtime, tmuxT
 	p.mu.Unlock()
 
 	if shouldFire {
+		slog.Debug("[poller] stable: firing OnStable",
+			"session", session, "runtime", runtime)
 		if err := p.cfg.OnStable(ctx, session, content); err != nil {
 			slog.Warn("[poller] OnStable callback failed",
 				"session", session, "err", err)
@@ -211,7 +216,7 @@ func (p *SessionPoller) pollSession(ctx context.Context, session, runtime, tmuxT
 }
 
 // Run drives PollOnce on a ticker until ctx is done. Returns when ctx
-// is cancelled; graceful shutdown requires nothing beyond ctx.Done().
+// is canceled; graceful shutdown requires nothing beyond ctx.Done().
 func (p *SessionPoller) Run(ctx context.Context, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -233,6 +238,19 @@ func (p *SessionPoller) Run(ctx context.Context, interval time.Duration) {
 // whose content is irrelevant to pane-state detection. Stripping them
 // before hashing lets the poller see "semantic silence" on runtimes
 // that update cosmetic lines (spinners, elapsed timers) continuously.
+//
+// # Adding a new runtime
+//
+// Key is the runtime identifier as written to the agent identity file
+// (see internal/config.IdentityFile.Runtime — canonical values include
+// "claude", "codex", "opencode", "kiro-cli", "auggie", "cursor").
+// Value is a slice of compiled regexes; a pane line matches ANY of the
+// regexes to be stripped.
+//
+// Runtimes not present in this map pass through unstripped — a
+// conservative default. Prefer false-not-stable (poller never fires
+// for a chatty runtime with no entry) over false-stable (poller fires
+// on a mid-working pane because its spinner wasn't recognized).
 var volatileLinePatterns = map[string][]*regexp.Regexp{
 	// codex v0.121+ displays "• Working (Ns • esc to interrupt)" while
 	// an agent run is in flight. The timer updates roughly per second.

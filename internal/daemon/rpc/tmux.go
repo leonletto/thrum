@@ -921,6 +921,15 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 	// Write tmux_session and runtime to the agent's identity file
 	h.writeTmuxToIdentity(name, target, runtime)
 
+	// Re-enroll the session in the silence-hash poller. HandleKill
+	// earlier in the restart sequence unenrolled the old session; the
+	// new session needs a fresh enrollment to resume polling. Without
+	// this, any thrum tmux restart silently disables permission-prompt
+	// detection until the daemon next restarts. Nil-safe for tests.
+	if h.poller != nil {
+		h.poller.Enroll(name, runtime, target)
+	}
+
 	return &TmuxRestartResponse{
 		Session:       name,
 		SnapshotLines: snapshotLines,

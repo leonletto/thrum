@@ -30,8 +30,8 @@ import (
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
-	"github.com/leonletto/thrum/internal/daemon/inbox"
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
+	"github.com/leonletto/thrum/internal/daemon/inbox"
 	"github.com/leonletto/thrum/internal/daemon/monitor"
 	"github.com/leonletto/thrum/internal/daemon/nudge"
 	"github.com/leonletto/thrum/internal/daemon/permission"
@@ -5928,7 +5928,7 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	if n := tmuxHandler.ReconcilePoller(ctx); n > 0 {
 		slog.Info("[poller] cold-start reconciliation complete", "enrolled", n)
 	}
-	// Start the poll loop. Stops when ctx is cancelled by the daemon
+	// Start the poll loop. Stops when ctx is canceled by the daemon
 	// shutdown sequence.
 	go paneSilencePoller.Run(ctx, 10*time.Second)
 

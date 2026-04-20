@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // TestPoller_FiresOnStable verifies the core debounce behavior: fire
@@ -367,13 +369,13 @@ assistant response
 › Implement {feature}`
 
 	stripped := stripVolatileLines("codex", input)
-	if containsLine(stripped, "Working (42s") {
+	if strings.Contains(stripped, "Working (42s") {
 		t.Errorf("expected Working line stripped, got:\n%s", stripped)
 	}
-	if !containsLine(stripped, "> prompt text") {
+	if !strings.Contains(stripped, "> prompt text") {
 		t.Errorf("expected prompt line kept, got:\n%s", stripped)
 	}
-	if !containsLine(stripped, "assistant response") {
+	if !strings.Contains(stripped, "assistant response") {
 		t.Errorf("expected assistant line kept, got:\n%s", stripped)
 	}
 }
@@ -387,34 +389,39 @@ func TestStripVolatileLines_UnknownRuntime(t *testing.T) {
 	}
 }
 
-// containsLine returns true if content contains line as a whole-line match.
-func containsLine(content, line string) bool {
-	for _, l := range splitLines(content) {
-		if l == line {
-			return true
-		}
-	}
-	// Also allow partial matches for flexibility in tests (the "Working"
-	// line's exact text includes the timer, so test asserts on a prefix).
-	for _, l := range splitLines(content) {
-		if len(line) <= len(l) && l[:len(line)] == line {
-			return true
-		}
-	}
-	return false
-}
+// TestPoller_Run_RespectsContextCancellation verifies Run exits
+// promptly when its context is cancelled — required for graceful
+// daemon shutdown. Without this, a select-ordering bug could deadlock
+// the daemon's shutdown sequence.
+func TestPoller_Run_RespectsContextCancellation(t *testing.T) {
+	p := NewSessionPoller(SessionPollerConfig{
+		CaptureLines:   30,
+		StabilityCount: 2,
+		Capture: func(target string, lines int) (string, error) {
+			return "content", nil
+		},
+		OnStable: func(ctx context.Context, session, content string) error {
+			return nil
+		},
+	})
 
-func splitLines(s string) []string {
-	var out []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			out = append(out, s[start:i])
-			start = i + 1
-		}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		p.Run(ctx, 10*time.Millisecond)
+		close(done)
+	}()
+
+	// Let Run tick at least once to prove the goroutine is live before
+	// we cancel — a select-ordering bug could otherwise be masked by
+	// ctx already being done when Run first evaluates its select.
+	time.Sleep(25 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+		// Expected: Run returned promptly after cancel.
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Run did not exit within 200ms of ctx cancellation")
 	}
-	if start < len(s) {
-		out = append(out, s[start:])
-	}
-	return out
 }
