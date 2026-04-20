@@ -21,6 +21,61 @@ The modes are idempotent — running the skill repeatedly on a stable project sh
 
 A fourth path, **fallback migration**, runs before the First-run branch: if `.thrum/philosophy.md` is absent but a non-standard philosophy doc exists elsewhere in the repo, offer move/link/fresh before generating fresh.
 
+## Fallback migration
+
+Runs before the First-run branch when `.thrum/philosophy.md` is absent. If the user has a philosophy doc at a legacy path, offer a three-way choice rather than ignoring it and generating a parallel doc.
+
+### Step 1: Search for legacy philosophy docs
+
+```bash
+find . -type f \( -name "*philosophy*" -o -name "*anti-pattern*" -o -name "*implementation-standards*" \) \
+  -not -path '*/node_modules/*' \
+  -not -path '*/.git/*' \
+  -not -path '*/dist/*' \
+  -not -path '*/build/*' \
+  2>/dev/null | head
+```
+
+Common legacy locations: `dev-docs/implementation-philosophy.md`, `docs/anti-patterns.md`, `CONTRIBUTING.md` with an anti-patterns section.
+
+If zero candidates: fall through to First-run. If one or more candidates: present the choice.
+
+### Step 2: Present three-way choice via `AskUserQuestion`
+
+Question: "Found existing philosophy doc at `<path>`. What should I do?"
+
+Options:
+
+- **Move** — `git mv <path> .thrum/philosophy.md`. Preserves history via rename; the file moves to the canonical location and the legacy path stops existing.
+- **Link** — Create `.thrum/philosophy.md` with a single line: `See: <path>`. The legacy doc stays in place; the canonical path becomes a pointer. Useful when the legacy path is load-bearing (e.g., referenced from a `CONTRIBUTING.md` that can't be retargeted cheaply).
+- **Fresh** — Ignore the legacy doc; generate a new `.thrum/philosophy.md` via the First-run flow. The legacy doc stays unmodified. Useful when the legacy doc is stale or incomplete.
+
+If multiple candidates were found, ask which one first (separate `AskUserQuestion`) before offering move/link/fresh.
+
+### Step 3: Execute the chosen option
+
+**Move path:**
+
+```bash
+mkdir -p .thrum/
+git mv <legacy-path> .thrum/philosophy.md
+```
+
+`git mv` requires the repo to be initialized with at least one commit on the current branch. If the repo has no commits (fresh `git init`), fall back to a plain `mv` + `git add`, and note in the final message that rename history is not preserved.
+
+**Link path:**
+
+```bash
+mkdir -p .thrum/
+printf 'See: %s\n' "<legacy-path>" > .thrum/philosophy.md
+```
+
+**Fresh path:** Drop into First-run mode without touching the legacy file.
+
+### Step 4: Announce and continue
+
+Tell the user what was done and where the canonical doc now lives. If `move` or `link` was chosen, exit (the doc is materialized — no further generation needed). If `fresh` was chosen, continue into First-run Step 1.
+
 ## First-run mode
 
 Triggered when `.thrum/philosophy.md` does not exist AND no non-standard philosophy doc is found (or the fallback migration is skipped via the "fresh" option).
