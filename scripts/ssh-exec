@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+#
+# ssh-exec — Run commands, copy files, and tail logs over SSH.
+#
+# Sibling to scripts/tmux-exec. Provides a single consistent interface for
+# remote operations with explicit timeouts, structured error propagation, and
+# clear distinction between SSH-layer failures (exit 255) and remote command
+# failures (pass-through 0–254).
+#
+# Usage:
+#   ssh-exec exec --host <user@host> --timeout <sec> [--stdin] [--env KEY=VAL]... -- <cmd> [args...]
+#   ssh-exec copy --host <user@host> <local-path> <remote-path>
+#   ssh-exec logs --host <user@host> [--follow] <remote-path>
+#
+# Options:
+#   --host <user@host>   SSH target (required)
+#   --timeout <sec>      Command timeout (default: 30)
+#   --stdin              Pipe caller's stdin into the remote command
+#   --env KEY=VAL        Set KEY=VAL in the remote command's environment (repeatable)
+#   --follow             (logs only) equivalent to `tail -f`
+#
+# Exit codes:
+#   0-254: remote command's actual exit code
+#   255:   SSH layer failure (connection refused, auth, timeout)
+set -euo pipefail
+
+SCRIPT_NAME="ssh-exec"
+log() { printf '[%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
+die() { log "error: $*"; exit 255; }
+
+subcommand="${1:-}"
+if [ -z "$subcommand" ]; then
+  cat <<EOF >&2
+Usage: ssh-exec <exec|copy|logs> [flags]
+Run 'ssh-exec <subcommand> --help' for details.
+EOF
+  exit 2
+fi
+shift
+
+case "$subcommand" in
+  exec)
+    host=""
+    cmd_timeout=30
+    use_stdin=false
+    env_vars=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --host) host="$2"; shift 2 ;;
+        --timeout) cmd_timeout="$2"; shift 2 ;;
+        --stdin) use_stdin=true; shift ;;
+        --env) env_vars+=("$2"); shift 2 ;;
+        --) shift; break ;;
+        -h|--help) sed -n '3,23p' "$0" >&2; exit 0 ;;
+        *) die "unknown flag: $1" ;;
+      esac
+    done
+    [ -z "$host" ] && die "--host is required"
+    [ $# -eq 0 ] && die "no command given (expected: -- <cmd> [args...])"
+
+    # Build the env prefix: for each --env KEY=VAL, prepend to remote command.
+    # We wrap in `env` so the KEY=VAL syntax works regardless of remote shell.
+    env_prefix=""
+    if [ ${#env_vars[@]} -gt 0 ]; then
+      env_prefix="env"
+      for kv in "${env_vars[@]}"; do
+        env_prefix="$env_prefix $(printf '%q' "$kv")"
+      done
+      env_prefix="$env_prefix "
+    fi
+
+    # -o options: ConnectTimeout limits SSH dial; ServerAliveInterval + CountMax
+    # enforce heartbeat; BatchMode=yes fails instead of prompting for password.
+    ssh_opts=(-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3)
+
+    # Build the full remote command string
+    remote_cmd=""
+    for arg in "$@"; do
+      remote_cmd="$remote_cmd $(printf '%q' "$arg")"
+    done
+    remote_cmd="${env_prefix}${remote_cmd# }"
+
+    # timeout command wraps the ssh invocation. SIGTERM after timeout, SIGKILL
+    # 5s later. Exit 124 from timeout means timed out; we normalize to 255.
+    # `|| rc=$?` captures the exit code without tripping `set -e`.
+    rc=0
+    if [ "$use_stdin" = true ]; then
+      timeout --kill-after=5 "$cmd_timeout" ssh "${ssh_opts[@]}" "$host" "$remote_cmd" <&0 || rc=$?
+    else
+      timeout --kill-after=5 "$cmd_timeout" ssh "${ssh_opts[@]}" "$host" "$remote_cmd" || rc=$?
+    fi
+    if [ $rc -eq 124 ] || [ $rc -eq 137 ]; then
+      log "timed out after ${cmd_timeout}s"
+      exit 255
+    fi
+    # SSH's own failures (255) propagate as-is; remote cmd exits 0-254 pass through.
+    exit $rc
+    ;;
+
+  copy)
+    host=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --host) host="$2"; shift 2 ;;
+        -h|--help) sed -n '3,23p' "$0" >&2; exit 0 ;;
+        *) break ;;
+      esac
+    done
+    [ -z "$host" ] && die "--host is required"
+    [ $# -ne 2 ] && die "usage: ssh-exec copy --host <host> <local> <remote>"
+    local_path="$1"
+    remote_path="$2"
+    scp_opts=(-o BatchMode=yes -o ConnectTimeout=10)
+    # scp exits non-zero on SSH failure; no clear layer distinction available — surface as-is.
+    scp "${scp_opts[@]}" "$local_path" "$host:$remote_path"
+    ;;
+
+  logs)
+    host=""
+    follow=false
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --host) host="$2"; shift 2 ;;
+        --follow) follow=true; shift ;;
+        -h|--help) sed -n '3,23p' "$0" >&2; exit 0 ;;
+        *) break ;;
+      esac
+    done
+    [ -z "$host" ] && die "--host is required"
+    [ $# -ne 1 ] && die "usage: ssh-exec logs --host <host> [--follow] <remote-path>"
+    remote_path="$1"
+    ssh_opts=(-o BatchMode=yes -o ConnectTimeout=10)
+    if [ "$follow" = true ]; then
+      ssh "${ssh_opts[@]}" "$host" "tail -f \"$remote_path\""
+    else
+      ssh "${ssh_opts[@]}" "$host" "cat \"$remote_path\""
+    fi
+    ;;
+
+  *)
+    die "unknown subcommand: $subcommand (expected exec|copy|logs)"
+    ;;
+esac
