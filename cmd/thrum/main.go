@@ -381,8 +381,21 @@ Examples:
 					}
 				}
 				if cfg.Orchestration.MergeTarget == "" {
+					// Detect the repo's current branch rather than
+					// hardcoding "main". Agents need to merge back into
+					// the branch active work is happening on — in this
+					// repo that's thrum-dev, but for generic users it's
+					// whatever the repo's default is. Falls back to
+					// "main" only when detection fails (bare repo,
+					// detached HEAD, etc.).
+					mergeTarget := "main"
+					if out, err := safecmd.Git(cmd.Context(), flagRepo, "symbolic-ref", "--short", "HEAD"); err == nil {
+						if branch := strings.TrimSpace(string(out)); branch != "" && branch != "HEAD" {
+							mergeTarget = branch
+						}
+					}
 					cfg.Orchestration = config.OrchestrationConfig{
-						MergeTarget:     "main",
+						MergeTarget:     mergeTarget,
 						DefaultAutonomy: "end_only",
 					}
 				}
