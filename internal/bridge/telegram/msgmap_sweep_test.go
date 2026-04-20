@@ -247,6 +247,9 @@ func TestSweepStale_MixedOutcome(t *testing.T) {
 		}
 		survivors[id] = true
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows iteration: %v", err)
+	}
 	if !survivors["msg_old_pending"] {
 		t.Error("msg_old_pending was deleted; pending-nudge cross-check broken")
 	}

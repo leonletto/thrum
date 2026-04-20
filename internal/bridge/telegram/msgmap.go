@@ -188,6 +188,21 @@ func (m *MessageMap) Len() int { return m.inner.Len() }
 // sweep and we delete its mapping — is harmless because post-resolve
 // the mapping is no longer needed.
 //
+// permission_nudges.message_id is declared TEXT PRIMARY KEY (see
+// internal/schema/schema.go), which in SQLite is implicitly NOT NULL.
+// The NOT EXISTS subquery therefore does not exhibit three-valued-
+// logic NULL-matching surprises. If that schema changes, revisit.
+//
+// # TTL edge cases
+//
+// Callers should pass a positive ttl. ttl == 0 makes cutoff == now,
+// which means any row whose created_at is earlier than "right now"
+// is eligible — effectively delete-all-except-pinned. ttl < 0 makes
+// cutoff a future timestamp, so every row with a past created_at is
+// eligible — same practical effect. Neither is a crash, but neither
+// is the intended use; DefaultMapTTL is positive and callers should
+// prefer it unless they have a reason to sweep aggressively.
+//
 // # Concurrency
 //
 // Callers do not need to serialise this against bridge traffic.
@@ -230,17 +245,27 @@ func SweepStale(ctx context.Context, db *sql.DB, ttl time.Duration) (int64, erro
 }
 
 // SweepLoop runs SweepStale once immediately, then on every tick of
-// the given interval, until ctx is canceled. Intended to be launched
-// as a goroutine from daemon boot:
+// the given interval, returning when ctx is canceled. Intended to be
+// launched as a goroutine from daemon boot:
 //
 //	go telegram.SweepLoop(ctx, db, telegram.DefaultMapTTL, telegram.DefaultSweepInterval)
 //
 // Errors are logged but do not stop the loop; a transient SQLite
-// hiccup should not permanently disable the sweeper. The one-shot
-// leading sweep matches the coordinator's dispatch ("once at daemon
-// start + every 24h") and guarantees that rows which aged while the
-// daemon was stopped get reaped promptly on the next boot rather
-// than waiting out a full interval.
+// hiccup (or a context cancellation racing the next Exec) should not
+// permanently disable the sweeper. The leading sweep matches the
+// coordinator's dispatch ("once at daemon start + every 24h") and
+// guarantees that rows which aged while the daemon was stopped get
+// reaped promptly on the next boot rather than waiting out a full
+// interval.
+//
+// Ctx-cancellation note: runDaemon today uses context.Background()
+// for the long-lived ctx (cmd/thrum/main.go), so in production the
+// select on ctx.Done() is effectively unreachable — the loop
+// terminates via OS process exit rather than graceful cancellation.
+// That matches every other long-running goroutine launched from
+// runDaemon. If runDaemon is ever rewired to a cancellable ctx
+// (SIGTERM-aware shutdown), SweepLoop will participate without
+// change.
 func SweepLoop(ctx context.Context, db *sql.DB, ttl, interval time.Duration) {
 	runOnce := func() {
 		n, err := SweepStale(ctx, db, ttl)
@@ -249,7 +274,8 @@ func SweepLoop(ctx context.Context, db *sql.DB, ttl, interval time.Duration) {
 			return
 		}
 		if n > 0 {
-			slog.Info("[telegram.msgmap] sweep deleted rows", "count", n, "ttl", ttl)
+			slog.Info("[telegram.msgmap] sweep deleted rows",
+				"count", n, "ttl", ttl, "interval", interval)
 		}
 	}
 
