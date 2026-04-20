@@ -25,3 +25,9 @@ func (r *stubResolver) Resolve(_ net.Conn) (*ResolvedIdentity, error) {
 func PIDFromConn(_ net.Conn) (int, error) {
 	return 0, ErrAnonymous
 }
+
+// ResolveCallerWorktree is a stub on non-unix platforms. Always returns
+// ErrAnonymous so callers fall through to their non-peercred code path.
+func ResolveCallerWorktree(_ int) (string, error) {
+	return "", ErrAnonymous
+}

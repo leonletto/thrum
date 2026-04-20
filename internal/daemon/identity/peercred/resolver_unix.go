@@ -108,3 +108,27 @@ func processCWD(pid int) (string, error) {
 	}
 	return cwd, nil
 }
+
+// ResolveCallerWorktree returns the git root containing the given PID's
+// current working directory, or an error wrapped around ErrAnonymous when
+// the PID is unreachable or not under a git repo. Used by HandleRegister
+// (thrum-2b2t) to persist a worktree session_ref when the auto-resurrect
+// path creates a fresh session without the explicit session.start RPC.
+//
+// Trust boundary: pid is caller-supplied (from req.AgentPID in the
+// register flow). The same trust applies here as for the existing G4
+// liveness check that reads pid from the same request field.
+func ResolveCallerWorktree(pid int) (string, error) {
+	if pid <= 0 {
+		return "", fmt.Errorf("%w: invalid PID %d", ErrAnonymous, pid)
+	}
+	cwd, err := processCWD(pid)
+	if err != nil {
+		return "", fmt.Errorf("%w: cannot read CWD for PID %d: %v", ErrAnonymous, pid, err)
+	}
+	root := findGitRoot(cwd)
+	if root == "" {
+		return "", fmt.Errorf("%w: PID %d CWD %q is not under any git repository", ErrAnonymous, pid, cwd)
+	}
+	return root, nil
+}
