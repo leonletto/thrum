@@ -6,7 +6,7 @@ description:
 category: "orchestration"
 order: 3
 tags: ["runtime", "tmux", "codex", "aider", "gemini", "claude"]
-last_updated: "2026-04-09"
+last_updated: "2026-04-19"
 ---
 
 ## What "Runtime" Means in Thrum
@@ -19,7 +19,8 @@ of these:
 - **Open Code** — `opencode`, cheaper for parallel grunt work
 - **Codex** — `codex`, OpenAI's CLI agent
 - **Aider** — `aider`, terminal-based with git-native editing
-- **Cursor** — `cursor-agent` / `agent`, Cursor's headless mode
+- **Cursor** — `agent` (primary) / `cursor-agent` (legacy, still detected), Cursor's headless mode
+- **Kiro** — `kiro-cli`, runtime preset only in v0.9.0; no dedicated plugin yet. Manual `thrum prime` required after restart.
 - **Gemini** — `gemini`, Google's CLI agent
 - **Auggie** — `auggie`
 - **Amp** — `amp`
@@ -76,6 +77,11 @@ daemon — there's no ambiguity at the server side.
 If you set `preferred_runtime` in the identity file once, you never need to pass
 `--runtime` again for that worktree. The resolution chain just finds it.
 
+**Note:** `thrum tmux launch <name>` reads the target worktree's identity file
+directly, bypassing the caller's `THRUM_HOME` / `THRUM_NAME` env vars. This
+fixes a class of bugs where launching from one worktree to another carried the
+wrong identity into the new session.
+
 ---
 
 ## Setting `preferred_runtime` at Init
@@ -123,21 +129,26 @@ worktree.
 ## Process Detection Across Runtimes
 
 When Thrum needs to find the agent process in a tmux pane, it walks the process
-tree from the pane's shell upward, looking for any of the eight known runtime
+tree from the pane's shell upward, looking for any of the nine known runtime
 binaries:
 
 ```text
-claude  opencode  aider  codex  cursor-agent  agent  gemini  auggie  amp
+claude  opencode  aider  codex  cursor-agent  agent  gemini  auggie  amp  kiro-cli
 ```
 
-`cursor-agent` and `agent` both map to the `cursor` runtime name. If another
-runtime ever claims the `agent` binary name, we handle it then.
+`cursor-agent` and `agent` both map to the `cursor` runtime name. `agent` is
+the preferred binary name as of v0.9.0; `cursor-agent` is the legacy name, still
+detected for backward compatibility. If another runtime ever claims the `agent`
+binary name, we handle it then.
 
 This powers two things:
 
 **Status checks.** The `tmux:alive` vs `tmux:stale` state in `thrum team` and
 `thrum tmux status` comes from checking whether the stored `agent_pid` is still
-a running process. That check now works for any runtime, not just Claude.
+a running process. That check now works for any runtime, not just Claude. When
+a runtime pauses for a permission prompt, the process is still running but the
+session is effectively blocked. See [Permission Prompts](permission-prompts.md)
+for the full detection workflow.
 
 **Auto-detection at prime time.** When `thrum prime` or `thrum quickstart` runs
 inside a session, it calls the process walker, finds the actual running runtime,
@@ -278,6 +289,10 @@ cleanup will rename it. Don't rely on the function name as documentation.
 **Cursor's `agent` binary.** The process name `agent` maps to Cursor. If a
 different runtime ships a binary named `agent` in the future, detection will
 misattribute. This hasn't happened yet.
+
+**`.opencode` shim detection (v0.9.0).** The `.opencode` dot-prefix shim binary
+is now detected in the ancestor walk. Before v0.9.0 it was invisible to the
+process scan, and opencode panes were misattributed to the parent shell.
 
 ---
 

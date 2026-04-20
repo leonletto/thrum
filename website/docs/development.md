@@ -6,7 +6,7 @@ description:
 category: "reference"
 order: 2
 tags: ["development", "contributing", "testing", "building", "makefile", "go"]
-last_updated: "2026-04-06"
+last_updated: "2026-04-19"
 ---
 
 ## Thrum Development Guide
@@ -54,9 +54,12 @@ thrum/
 │       └── mcp.go           # MCP server command
 ├── internal/                # Private packages
 │   ├── cli/                 # CLI business logic (one file per command)
+│   │   └── hints/           # CLI hint and suggestion output
 │   ├── config/              # Configuration loading and identity files
 │   ├── daemon/              # Daemon core
 │   │   ├── cleanup/         # Agent work context cleanup
+│   │   ├── permission/      # Permission prompt detection and keystroke delivery
+│   │   ├── reconcile/       # Agent state reconciliation
 │   │   ├── rpc/             # JSON-RPC 2.0 method handlers
 │   │   ├── state/           # Persistent state (JSONL + SQLite)
 │   │   ├── server.go        # Unix socket server
@@ -69,6 +72,7 @@ thrum/
 │   │   └── testutil_test.go # StartTestDaemon() helper
 │   ├── gitctx/              # Git-derived work context (branch, uncommitted files)
 │   ├── identity/            # ID generation (ULID-based: repo, agent, session, message, event)
+│   │   └── guard/           # Cross-worktree identity guards, WritePID enforcement
 │   ├── jsonl/               # JSONL reader/writer with file locking
 │   ├── mcp/                 # MCP stdio server (4 tools, WebSocket waiter)
 │   ├── paths/               # Path resolution, .thrum/redirect, sync worktree path
@@ -276,6 +280,7 @@ even when the UI has not been built.
 | Target                  | Description                                            |
 | ----------------------- | ------------------------------------------------------ |
 | `make help`             | Show all available targets (default)                   |
+| `make dev`              | Build + sign, restart only the worktree-scoped daemon. Does NOT touch `~/.local/bin/thrum`. Safe for multi-agent machines — other agents on the host keep running their existing binary. |
 | `make build`            | Full build: UI + Go binary                             |
 | `make build-ui`         | Build UI and copy to embed location                    |
 | `make build-go`         | Build Go binary only (skip UI rebuild)                 |
@@ -348,7 +353,7 @@ case "my.new":
 ### Modifying Database Schema
 
 1. Update table definitions in `internal/schema/schema.go`
-2. Increment `CurrentVersion` constant (currently v19)
+2. Increment `CurrentVersion` constant (currently v24)
 3. Add migration logic in the `Migrate()` function
 4. Write tests for the new schema
 5. Update `docs/architecture.md`
@@ -511,7 +516,9 @@ socket, with a WebSocket server and embedded SPA all on a single port (default
   safety net, flock-based process detection
 - **PID file** (`internal/daemon/pidfile.go`): JSON format with `PIDInfo` struct
   (PID, repo path, socket path, started at). Backward-compatible reader falls
-  back to plain integer format.
+  back to plain integer format. All `agent_pid` writes into identity files must
+  go through `internal/identity/guard.WritePID`. All legacy direct-write
+  callsites have been removed; CI guards against re-introduction.
 - **File lock** (`internal/daemon/flock.go`, `flock_unix.go`): OS-level
   `flock()` on socket file. Auto-released on process death (even SIGKILL). No-op
   stubs for non-Unix platforms.

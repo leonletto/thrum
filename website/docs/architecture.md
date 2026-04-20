@@ -4,7 +4,7 @@ description:
   "Thrum architecture — daemon design, storage, sync engine, transport layer,
   key features, and foundation packages"
 category: "reference"
-last_updated: "2026-04-06"
+last_updated: "2026-04-19"
 ---
 
 ## System Architecture
@@ -26,6 +26,29 @@ server all go through it.
 | **Sync Loop**               | Automatic Git fetch/merge/push (60s interval) | Cross-machine synchronization |
 | **Subscription Dispatcher** | Route notifications to interested clients     | Targeted communication        |
 | **State Management**        | JSONL log + SQLite projection                 | Persistence + fast queries    |
+
+### RPC Accept Loop
+
+When a client connects to the Unix socket, the daemon's accept loop runs these
+steps before dispatching to any handler:
+
+1. **Peercred PID extraction** — the kernel provides the connecting process's
+   PID via `SO_PEERCRED` (Linux) or `LOCAL_PEERCRED` (macOS). No trust is
+   placed in any client-supplied identity at this stage.
+2. **DaemonResolve — 3-priority chain** — the daemon resolves the caller's
+   agent identity in priority order:
+   - PID match: walk the process tree from the peercred PID; if it matches an
+     `agent_pid` in a registered identity file, that agent is the caller.
+   - Worktree match: derive the calling process's worktree from its CWD; if
+     exactly one identity file belongs to that worktree, use it.
+   - `caller_agent_id` field: fall back to the agent ID supplied in the
+     JSON-RPC request (honored only when peercred resolution is unavailable,
+     e.g., in tests or non-Unix-socket contexts).
+3. **Guard enforcement** — before the handler runs, the identity guard layer
+   checks whether the resolved caller is permitted to execute the requested
+   method. Mutating RPCs require a resolved, registered identity. Anonymous
+   methods (health, agent.whoami, and ~28 others) pass through without
+   resolution.
 
 ### Everything Depends on the Daemon
 
@@ -362,11 +385,15 @@ internal/
 ├── tmux/        # Tmux session operations, nudge delivery, per-session mutex (v0.7.1)
 ├── restart/     # JSONL conversation extraction, snapshot formatting (v0.7.1)
 ├── daemon/
-│   └── monitor/ # Monitor job supervisor: spawn, line-read, debounce, delivery
+│   ├── monitor/     # Monitor job supervisor: spawn, line-read, debounce, delivery
+│   ├── permission/  # Permission-prompt detection, poller, nudge state (v0.9.0)
+│   └── reconcile/   # Peer drift auto-reconciliation engine (v0.9.0)
 ├── cli/
-│   └── worktree.go  # ensureWorktreeRedirects, enforceOneIdentity, buildQuickstartCmd
+│   ├── worktree.go  # ensureWorktreeRedirects, enforceOneIdentity, buildQuickstartCmd
+│   └── hints/       # Hint pipeline: HintSource, StateAccessor, Shape B/C rendering (v0.9.0)
+├── identity/
+│   └── guard/       # Identity guard enforcement: 8 guards, 3 modes, WritePID (v0.9.0)
 ├── config/      # Configuration loading, identity files, agent naming
-├── identity/    # ID generation (repo, agent, session, message, event)
 ├── jsonl/       # JSONL reader/writer with file locking
 ├── projection/  # SQLite projection engine (multi-file rebuild)
 ├── schema/      # SQLite schema, migrations, JSONL sharding migration
@@ -423,6 +450,27 @@ Identity files are stored at `.thrum/identities/{agent_name}.json`
 }
 ```
 
+Reserved pseudo-agents (such as `@supervisor_<project>`) use the same format
+with a `reserved: true` field (omitempty — absent on normal agents). Reserved
+agents are hidden from `thrum team` output by default.
+
+```json
+{
+  "version": 5,
+  "repo_id": "r_7K2Q1X9M3P0B",
+  "agent": {
+    "kind": "agent",
+    "name": "supervisor_thrum",
+    "role": "supervisor",
+    "module": "",
+    "display": "Thrum Supervisor"
+  },
+  "reserved": true,
+  "worktree": "main",
+  "updated_at": "2026-04-19T10:00:00.000Z"
+}
+```
+
 ### Agent Naming
 
 Agents support human-readable names:
@@ -469,6 +517,7 @@ cfg, err := config.LoadWithPath(repoPath, flagRole, flagModule)
 
 | Type                   | Format                            | Example                  |
 | ---------------------- | --------------------------------- | ------------------------ |
+| **Daemon ID**          | `d_` + 26-char ULID               | `d_01HXE8Z7R9K3Q6M2W8F4VY` |
 | **Repo ID**            | `r_` + base32(sha256(url))\[:12\] | `r_7K2Q1X9M3P0B`         |
 | **Agent ID (named)**   | name directly                     | `furiosa`                |
 | **Agent ID (unnamed)** | role + `_` + base32(hash)\[:10\]  | `implementer_9F2K3M1Q8Z` |
@@ -878,6 +927,56 @@ backup and receives `THRUM_BACKUP_DIR`, `THRUM_BACKUP_REPO`, and
 back to the sync worktree, imports local tables into SQLite, and removes
 `messages.db` so the projector rebuilds from JSONL on the next daemon start.
 Plugin restore commands run after the core restore.
+
+## Upgrade Safety
+
+Starting with v0.9.0, the daemon writes defensive backup files automatically on
+the first start after an upgrade. No user action needed — the files are silent
+safety nets.
+
+### Automatic Backup Files
+
+Three backup files are written (backup-once pattern: never overwritten on
+subsequent restarts after the first successful upgrade):
+
+| Trigger | Backup file | Location |
+| ------- | ----------- | -------- |
+| `identity.Bootstrap` detects a daemon_id rotation (e.g., legacy hostname-derived ID) | `config.json.pre-identity-bak` | `.thrum/config.json.pre-identity-bak` |
+| `PeerRegistry` detects a stale daemon_id in peers.json | `peers.json.pre-rotation-bak` | `.thrum/var/peers.json.pre-rotation-bak` |
+| `schema.Migrate` runs any migration step | `thrum.db.pre-migration-v<N>-bak` (plus `-shm` and `-wal` sidecars) | same directory as `thrum.db` |
+
+You can delete these files after a successful upgrade. If something goes wrong
+mid-migration, they're how you get back.
+
+### Downgrade Guard
+
+`Migrate()` refuses to start if the database schema version exceeds the binary's
+`CurrentVersion`. Error text:
+
+```
+database schema is version N, this binary supports up to M — cannot downgrade;
+use a newer binary or delete the database to start fresh
+```
+
+This is the first hard stop Thrum has ever had for schema mismatches. Previously,
+running an older binary against a migrated database would silently corrupt state.
+Now it fails loudly before touching anything.
+
+### Recovering from a Failed Upgrade
+
+If a migration goes wrong:
+
+1. Stop the daemon.
+2. Rename `thrum.db.pre-migration-v<N>-bak` back to `thrum.db` (and the `-shm`
+   and `-wal` sidecars if they exist).
+3. Run the older binary.
+
+The downgrade guard will fire on the older binary if the migration already
+partially ran and bumped the version. In that case, delete `thrum.db` entirely
+(the JSONL source of truth is unaffected) and let the older daemon rebuild the
+projection from scratch.
+
+---
 
 ## Cross-Repo Peer System (v0.7.0)
 

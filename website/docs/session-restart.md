@@ -6,7 +6,7 @@ description:
 category: "orchestration"
 order: 5
 tags: ["restart", "context", "snapshot", "recovery", "session"]
-last_updated: "2026-04-07"
+last_updated: "2026-04-19"
 ---
 
 ## Two Ways to Use This
@@ -75,7 +75,7 @@ The pipeline:
 3. Parse the JSONL and extract `user` + `assistant` text entries
 4. Skip `isSidechain: true` entries (subagent transcripts)
 5. Skip `tool_use`, `tool_result`, and `thinking` content blocks
-6. Truncate to the configured line limit (default 1000 lines, oldest removed
+6. Truncate to the configured line limit (default 200 lines, oldest removed
    first)
 7. Save to `.thrum/restart/<agent>.md`
 
@@ -120,6 +120,44 @@ rate limits, or it's stuck. It runs the `/thrum:restart` skill, which:
 
 The agent doesn't kill itself. It lets the coordinator (or operator) orchestrate
 the restart.
+
+#### Resume Plan
+
+The `/thrum:restart` skill appends a structured `## Resume Plan` block to the
+snapshot file as its final step. This block is the deterministic tail anchor —
+when the next session loads the snapshot via `thrum prime`, it can locate the
+Resume Plan reliably regardless of how much conversation was truncated.
+
+The format:
+
+```markdown
+## Resume Plan
+
+**Shipped this session:**
+- <brief bullet per merged/closed item, with bead/PR/SHA where relevant>
+
+**In-flight work:**
+- Branch: <branch name>
+- Last commit: <short SHA + subject>
+- Uncommitted files: <paths, or "none">
+- Next concrete step: <one sentence>
+
+**Blockers / open questions:**
+- <bullets, or "none">
+
+**Resume plan:**
+1. <first step the next session should take>
+2. <second step>
+3. ...
+   (4–8 numbered steps total)
+```
+
+**Single source of truth via mktemp**: the skill writes the Resume Plan once to
+a temp file (`mktemp -t resume_plan.XXXXXX`), then `cat`s it twice — once to
+the terminal for the operator to read, once appended to the snapshot file. This
+guarantees the printed copy and the snapshot copy cannot drift from each other.
+The 4-step flow is: write to temp file → print to terminal → save snapshot →
+append to snapshot → remove temp file.
 
 ### External
 
@@ -234,14 +272,16 @@ thrum tmux restart implementer-api --runtime opencode
 
 ```yaml
 restart:
-  max_lines: 1000 # Max lines in snapshot (default: 1000)
+  max_lines: 200  # Max lines in snapshot (default: 200)
   auto_threshold: 0 # Context % trigger, 0 = disabled (default: 0)
   graceful_timeout: 30 # Seconds to wait for graceful save (default: 30)
 ```
 
-`max_lines` controls how much conversation history to keep. 1000 lines is
-usually enough to capture the last 20-30 exchanges. Increase it if your agents
-have long conversations with lots of context.
+`max_lines` controls how much conversation history to keep. 200 lines captures
+the recent conversation tail; older context is covered by the appended git and
+Thrum hints (`git log`, `git status`, `bd ready`, `thrum inbox`) that the
+snapshot now includes at the tail. Increase it if your agents have long
+conversations and need more raw history.
 
 `auto_threshold` is the percentage of context window usage that triggers an
 automatic restart. Set to 0 to disable (the default). A value like 80 means
