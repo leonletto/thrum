@@ -3,6 +3,8 @@ package state
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 )
 
 // IsAgentActive returns true iff an agent with the given agent_id has a
@@ -56,4 +58,140 @@ func (s *State) ListActiveAgentsByRole(ctx context.Context, role string) ([]stri
 		return nil, fmt.Errorf("iterate rows: %w", err)
 	}
 	return out, nil
+}
+
+// ListAgentsInWorktree returns the agent IDs of every agent that has
+// ever had a session_ref mapping them to the given worktree path.
+// Ended sessions are included deliberately — an agent whose session
+// is temporarily ended is still a legitimate co-located agent and its
+// identity file must not be quarantined by enforceWorktreeIdentity.
+// Path comparison mirrors peercred's symlink canonicalization.
+func (s *State) ListAgentsInWorktree(ctx context.Context, worktree string) []string {
+	if worktree == "" {
+		return nil
+	}
+	target := canonWorktreePath(worktree)
+
+	// No locking: callers (HandleRegister's enforceWorktreeIdentity hook)
+	// already hold s.Lock() by the time this runs, and RLock would
+	// deadlock against the queued writer. Convention matches the other
+	// state_query.go methods (IsAgentActive, ListActiveAgentsByRole).
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT s.agent_id, sr.ref_value
+		  FROM session_refs sr
+		  JOIN sessions s ON sr.session_id = s.session_id
+		 WHERE sr.ref_type = 'worktree'
+		   AND sr.ref_value IS NOT NULL
+		   AND sr.ref_value != ''`)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = rows.Close() }()
+
+	seen := make(map[string]struct{})
+	for rows.Next() {
+		var agentID, wt string
+		if scanErr := rows.Scan(&agentID, &wt); scanErr != nil {
+			continue
+		}
+		if canonWorktreePath(wt) != target {
+			continue
+		}
+		seen[agentID] = struct{}{}
+	}
+	out := make([]string, 0, len(seen))
+	for id := range seen {
+		out = append(out, id)
+	}
+	return out
+}
+
+// IsAgentInWorktree reports whether the given agent_id has ever been
+// registered with a session_ref mapping it to the given worktree path.
+// Active-session filtering is deliberately NOT applied: an agent whose
+// current session is temporarily ended (between session end and the
+// next session start) is still a legitimate owner of that worktree,
+// and DaemonResolve needs to trust its CLI claim during that window.
+//
+// thrum-0pos shared-worktree disambiguation: peercred resolves a
+// connecting process to one agent via CWD → git-root → registered
+// worktree, but when multiple agents share a worktree the pick is
+// arbitrary. DaemonResolve uses this predicate to validate that a CLI-
+// asserted CallerAgentID is a legitimate co-located agent (not a
+// cross-worktree forgery) before trusting it on an identity_mismatch.
+//
+// Path comparison uses the same canonicalization as peercred's
+// matchWorktree (filepath.EvalSymlinks with Clean fallback) so a DB
+// row stored as "/tmp/foo" matches a peercred-resolved worktree of
+// "/private/tmp/foo" on macOS.
+//
+// Tradeoff: an agent that moved to a different worktree will still
+// historically match the old one via residual session_refs. The
+// narrower active-session filter rejected legitimate temporary
+// session-gaps (see SC-10 which session.end's between assertions)
+// and was the wrong axis to gate on. Forgery defense still holds
+// because the claim must match a HISTORICAL session_ref for this
+// agent at this worktree; an attacker in an unrelated worktree
+// cannot satisfy that without having been registered there.
+func (s *State) IsAgentInWorktree(ctx context.Context, agentID, worktree string) bool {
+	if agentID == "" || worktree == "" {
+		return false
+	}
+	target := canonWorktreePath(worktree)
+
+	// No locking here — DaemonResolve invokes this predicate from a
+	// path that may or may not hold a write lock; taking RLock would
+	// deadlock against queued writers. SQLite's journaling handles
+	// concurrent readers/writers at the driver level. Matches the
+	// convention used by the other state_query.go read-only helpers
+	// (IsAgentActive, ListActiveAgentsByRole).
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT sr.ref_value
+		  FROM session_refs sr
+		  JOIN sessions s ON sr.session_id = s.session_id
+		 WHERE s.agent_id = ?
+		   AND sr.ref_type = 'worktree'
+		   AND sr.ref_value IS NOT NULL
+		   AND sr.ref_value != ''`, agentID)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var wt string
+		if scanErr := rows.Scan(&wt); scanErr != nil {
+			continue
+		}
+		if canonWorktreePath(wt) == target {
+			return true
+		}
+	}
+
+	// Fallback: the agent may have been registered into this worktree
+	// via `thrum agent register` without starting a session yet, in
+	// which case there is no session_ref row yet but the CLI has
+	// written <worktree>/.thrum/identities/<agentID>.json via the
+	// CLI-side SaveIdentityFile call. An identity file at the
+	// peercred-verified worktree is itself a strong ownership signal —
+	// the caller's kernel-verified CWD corroborates it. This closes
+	// the AN-10-style gap where a fresh register is immediately
+	// followed by session.start before any session_ref exists.
+	idPath := filepath.Join(worktree, ".thrum", "identities", agentID+".json")
+	if _, err := os.Stat(idPath); err == nil {
+		return true
+	}
+	return false
+}
+
+// canonWorktreePath canonicalizes a worktree path the same way peercred's
+// matchWorktree does: filepath.EvalSymlinks (to bridge macOS /tmp →
+// /private/tmp aliasing), falling back to Clean on failure. Without this,
+// the DB stores "/tmp/foo" while peercred.ResolvedIdentity.Worktree
+// carries "/private/tmp/foo" and the equality check would fail.
+func canonWorktreePath(p string) string {
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		return resolved
+	}
+	return filepath.Clean(p)
 }

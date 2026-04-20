@@ -156,10 +156,17 @@ func (h *GroupHandler) resolveGroupCaller(ctx context.Context, callerAgentID str
 	}
 	if resolved != nil {
 		req.PeercredAgentID = resolved.AgentID
+		req.PeercredWorktree = resolved.Worktree
 	}
 	connPID, _ := peercred.ConnectingPIDFromContext(ctx)
 	req.ConnectingPID = connPID
 	req.IdentitiesDir = identitiesDirFor(h.state.RepoPath())
+	if h.state != nil {
+		st := h.state
+		req.IsAgentInWorktree = func(agentID, worktree string) bool {
+			return st.IsAgentInWorktree(context.Background(), agentID, worktree)
+		}
+	}
 	caller, err := guard.DaemonResolve(ctx, loadDaemonGuardConfig(h.state.RepoPath()), req, slog.Default())
 	if err != nil {
 		return "", err

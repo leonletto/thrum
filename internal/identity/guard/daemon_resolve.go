@@ -44,6 +44,25 @@ type DaemonResolveRequest struct {
 	// <state.RepoPath>/.thrum/identities. Empty disables the chain
 	// walk even when ConnectingPID is set.
 	IdentitiesDir string
+
+	// PeercredWorktree is the absolute worktree path that peercred
+	// resolved for the caller's PID (empty when peercred is
+	// anonymous or did not run). Used by IsAgentInWorktree below to
+	// disambiguate callers in shared worktrees.
+	PeercredWorktree string
+
+	// IsAgentInWorktree reports whether the given agent_id is
+	// registered with an active session in the given worktree. When
+	// set AND the caller's claim mismatches the peercred-resolved
+	// agent AND both agents share the caller's worktree, DaemonResolve
+	// trusts the claim. This is the thrum-0pos shared-worktree
+	// disambiguation fallback: peercred cannot distinguish multiple
+	// agents co-located in the same worktree (E2E harnesses,
+	// multi-agent test scenarios), so a matching CLI claim is the
+	// only reliable signal the daemon has. Nil disables the fallback
+	// and preserves strict per-CWD enforcement (tests, non-unix
+	// transports).
+	IsAgentInWorktree func(agentID, worktree string) bool
 }
 
 // ResolvedCaller is DaemonResolve's authoritative answer: the agent ID
@@ -92,6 +111,21 @@ func DaemonResolve(ctx context.Context, cfg Config, req DaemonResolveRequest, lo
 	if req.PeercredRan {
 		if req.PeercredAgentID != "" {
 			if req.CallerAgentID != "" && req.CallerAgentID != req.PeercredAgentID {
+				// thrum-0pos shared-worktree fallback: peercred
+				// cannot disambiguate multiple agents co-located in
+				// the same worktree (E2E harnesses, multi-agent test
+				// scenarios, peer-bridge proxies). If the CLI's
+				// claim is ALSO a registered agent in the same
+				// worktree that peercred resolved, trust the claim —
+				// the caller is one of the co-located agents and
+				// kernel-verified CWD corroborates that membership.
+				// Cross-worktree impersonation (claim from another
+				// worktree) still falls through to the mismatch
+				// error below, preserving the forgery defense.
+				if req.IsAgentInWorktree != nil && req.PeercredWorktree != "" &&
+					req.IsAgentInWorktree(req.CallerAgentID, req.PeercredWorktree) {
+					return ResolvedCaller{AgentID: req.CallerAgentID}, nil
+				}
 				e := &Error{
 					Guard:         "unauthenticated_rpc",
 					Reason:        "identity_mismatch",
