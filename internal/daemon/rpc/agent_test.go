@@ -2247,13 +2247,19 @@ func TestAgentWhoami_TmuxAliveReflectsSessionState(t *testing.T) {
 	}
 }
 
-// TestHandleRegister_EnforceOneIdentityQuarantinesStale — thrum-33dt
-// regression. Registering a NEW agent name in a worktree that already
-// has a stale identity file (mismatched PID, different name) must
-// quarantine the stale file via EnforceOneIdentity so the
-// "one identity file per worktree" invariant holds after the direct
-// agent.register RPC path, not just the tmux.create path.
-func TestHandleRegister_EnforceOneIdentityQuarantinesStale(t *testing.T) {
+// TestHandleRegister_EnforceOneIdentityOnSelfRename — thrum-33dt
+// narrowed by thrum-dw06. Daemon-side enforcement fires only when the
+// peercred-resolved caller is registering themselves, i.e.
+// resolved.AgentID == keepName. In that self-rename case, stale
+// siblings in the caller's worktree are quarantined.
+//
+// Note: under thrum-dw06 the previously-tested "caller X registers
+// different name Y wipes stale Z" scenario no longer quarantines Z,
+// because wiping siblings in a worktree the caller isn't
+// self-registering into is destructive to co-located agents. That
+// coverage moved to TestHandleRegister_PreservesCallerIdentity +
+// TestHandleRegister_PreservesCoLocatedAgents below.
+func TestHandleRegister_EnforceOneIdentityOnSelfRename(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 	idsDir := filepath.Join(thrumDir, "identities")
@@ -2261,10 +2267,10 @@ func TestHandleRegister_EnforceOneIdentityQuarantinesStale(t *testing.T) {
 		t.Fatalf("mkdir identities: %v", err)
 	}
 
-	// Seed a stale identity file: different --name than the upcoming
-	// register call, and a PID that isn't in the caller's ancestor chain
-	// (we pick 1 here which is a low, always-present PID that differs
-	// from the new registration's PID = 77777).
+	// Seed a stale identity file with a dead-looking PID. The
+	// self-registering caller ("new_agent") will trigger enforcement
+	// because peercred resolves the caller to "new_agent" (matching
+	// keepName below).
 	stale := &config.IdentityFile{
 		Version: 5,
 		Agent: config.AgentConfig{
@@ -2288,12 +2294,14 @@ func TestHandleRegister_EnforceOneIdentityQuarantinesStale(t *testing.T) {
 
 	handler := NewAgentHandler(s)
 
-	// Inject a peercred identity whose Worktree points at the tmpDir so
-	// the daemon-side enforcement call (enforceWorktreeIdentity) picks
-	// up the caller's worktree. Anonymous callers legitimately skip
-	// enforcement; that path is covered by the CLI-side tests in
-	// quickstart/refresh.
-	ctx := peercredCtxForWorktree(tmpDir)
+	// Inject peercred with AgentID=new_agent → register new_agent =
+	// self-rename path. Enforcement fires; stale old_agent gets
+	// quarantined.
+	ctx := peercred.WithIdentity(context.Background(), &peercred.ResolvedIdentity{
+		AgentID:  "new_agent",
+		Worktree: tmpDir,
+		PID:      os.Getpid(),
+	})
 
 	req := RegisterRequest{
 		Name:     "new_agent",
@@ -2311,20 +2319,170 @@ func TestHandleRegister_EnforceOneIdentityQuarantinesStale(t *testing.T) {
 		t.Fatalf("Register Status = %v (resp=%+v), want registered", regResp, resp)
 	}
 
-	// Stale sibling identity must be gone (quarantined via
-	// EnforceOneIdentity's delete semantics).
+	// Stale sibling must be out of the top-level directory — ajmd's
+	// quarantine semantics move it to .quarantine/.
 	if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
-		t.Errorf("stale identity old_agent.json should be removed after register (err=%v); the worktree invariant was not enforced", err)
+		t.Errorf("stale identity old_agent.json should be quarantined after self-rename register (err=%v)", err)
+	}
+	// And it must land in .quarantine/ (not deleted outright).
+	qDir := filepath.Join(idsDir, ".quarantine")
+	qEntries, _ := os.ReadDir(qDir)
+	foundInQuarantine := false
+	for _, e := range qEntries {
+		if strings.HasPrefix(e.Name(), "old_agent.json.") {
+			foundInQuarantine = true
+			break
+		}
+	}
+	if !foundInQuarantine {
+		t.Errorf("expected old_agent.json quarantined (ajmd semantics); .quarantine entries: %v", qEntries)
+	}
+}
+
+// TestHandleRegister_PreservesCallerIdentity — thrum-dw06 regression.
+// When a caller (peercred-resolved to an existing agent) registers a
+// DIFFERENTLY named agent from the same worktree — e.g. an E2E test
+// harness that registers short-lived test agents from the coordinator
+// dir — the daemon-side enforceWorktreeIdentity hook must NOT
+// quarantine the caller's own identity file. thrum-ajmd softened the
+// blast radius from delete → quarantine; this test pins the stricter
+// invariant that the caller's file is preserved entirely.
+func TestHandleRegister_PreservesCallerIdentity(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	idsDir := filepath.Join(thrumDir, "identities")
+	if err := os.MkdirAll(idsDir, 0o750); err != nil {
+		t.Fatalf("mkdir identities: %v", err)
 	}
 
-	// The new agent's identity file is not written by the daemon (CLI
-	// writes it), so we don't assert on its presence here. The invariant
-	// we're regressing on is "only one identity remains after register";
-	// the CLI-side follow-up will write new_agent.json.
-	remaining, _ := os.ReadDir(idsDir)
-	for _, e := range remaining {
-		if e.Name() == "old_agent.json" {
-			t.Errorf("expected old_agent.json gone, directory still contains: %s", e.Name())
+	// Seed the caller's own identity file. peercredCtxForWorktree below
+	// injects AgentID="test_caller"; that identity is the worktree's
+	// legitimate owner.
+	caller := &config.IdentityFile{
+		Version: 5,
+		Agent: config.AgentConfig{
+			Kind: "agent", Name: "test_caller", Role: "coordinator", Module: "main",
+		},
+		AgentPID: os.Getpid(),
+	}
+	if err := config.SaveIdentityFile(thrumDir, caller); err != nil {
+		t.Fatalf("seed caller identity: %v", err)
+	}
+	callerPath := filepath.Join(idsDir, "test_caller.json")
+	if _, err := os.Stat(callerPath); err != nil {
+		t.Fatalf("caller identity missing before register: %v", err)
+	}
+
+	s, err := state.NewState(thrumDir, thrumDir, "repo_dw06", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	handler := NewAgentHandler(s)
+	ctx := peercredCtxForWorktree(tmpDir)
+
+	// Register a DIFFERENT agent name from the caller's context — the
+	// E2E-harness pattern that regressed under thrum-33dt.
+	req := RegisterRequest{
+		Name:     "short_lived_target",
+		Role:     "tester",
+		Module:   "cleanup-test",
+		AgentPID: 77778,
+	}
+	reqJSON, _ := json.Marshal(req)
+	resp, err := handler.HandleRegister(ctx, reqJSON)
+	if err != nil {
+		t.Fatalf("HandleRegister: %v", err)
+	}
+	regResp, ok := resp.(*RegisterResponse)
+	if !ok || regResp.Status != "registered" {
+		t.Fatalf("Register Status = %v (resp=%+v), want registered", regResp, resp)
+	}
+
+	// The caller's own identity file must still be at the top level —
+	// NOT moved into .quarantine/. Without the fix, it would be
+	// quarantined because keepName ("short_lived_target") did not match
+	// the caller's filename.
+	if _, err := os.Stat(callerPath); err != nil {
+		t.Fatalf("caller identity test_caller.json must survive register of differently named agent: %v", err)
+	}
+
+	// And the quarantine dir must not contain the caller's identity.
+	qDir := filepath.Join(idsDir, ".quarantine")
+	if entries, err := os.ReadDir(qDir); err == nil {
+		for _, e := range entries {
+			if strings.HasPrefix(e.Name(), "test_caller.json.") {
+				t.Errorf("caller identity should not be in quarantine, found: %s", e.Name())
+			}
+		}
+	}
+}
+
+// TestHandleRegister_PreservesCoLocatedAgents — thrum-dw06. When one
+// agent registers a differently named agent from a shared worktree
+// (e.g. an E2E harness dir hosting multiple short-lived test agents),
+// OTHER co-located registered agents' identity files must also be
+// preserved, not just the caller's. Under thrum-33dt's single-keeper
+// enforcement, peercred-resolving the caller to "agent_b" while
+// registering "cleanup_target" would have quarantined "agent_a.json"
+// (a sibling not in the keep set). The narrowed semantic skips
+// enforcement entirely for bootstrap/harness registrations, so all
+// co-located agents survive.
+func TestHandleRegister_PreservesCoLocatedAgents(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	idsDir := filepath.Join(thrumDir, "identities")
+	if err := os.MkdirAll(idsDir, 0o750); err != nil {
+		t.Fatalf("mkdir identities: %v", err)
+	}
+
+	// Two pre-existing agents co-located in the same worktree.
+	agentA := &config.IdentityFile{
+		Version: 5,
+		Agent:   config.AgentConfig{Kind: "agent", Name: "agent_a", Role: "coordinator", Module: "main"},
+	}
+	agentB := &config.IdentityFile{
+		Version: 5,
+		Agent:   config.AgentConfig{Kind: "agent", Name: "agent_b", Role: "tester", Module: "e2e"},
+	}
+	if err := config.SaveIdentityFile(thrumDir, agentA); err != nil {
+		t.Fatalf("seed agent_a: %v", err)
+	}
+	if err := config.SaveIdentityFile(thrumDir, agentB); err != nil {
+		t.Fatalf("seed agent_b: %v", err)
+	}
+
+	s, err := state.NewState(thrumDir, thrumDir, "repo_dw06_colocated", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	handler := NewAgentHandler(s)
+
+	// Caller = agent_b. Registration = cleanup_target (bootstrap case).
+	ctx := peercred.WithIdentity(context.Background(), &peercred.ResolvedIdentity{
+		AgentID:  "agent_b",
+		Worktree: tmpDir,
+		PID:      os.Getpid(),
+	})
+
+	req := RegisterRequest{
+		Name:     "cleanup_target",
+		Role:     "tester",
+		Module:   "ephemeral",
+		AgentPID: 99999,
+	}
+	reqJSON, _ := json.Marshal(req)
+	if _, err := handler.HandleRegister(ctx, reqJSON); err != nil {
+		t.Fatalf("HandleRegister: %v", err)
+	}
+
+	// Both pre-existing co-located agents must remain at top level.
+	for _, name := range []string{"agent_a", "agent_b"} {
+		if _, err := os.Stat(filepath.Join(idsDir, name+".json")); err != nil {
+			t.Errorf("%s.json must survive bootstrap register of different name: %v", name, err)
 		}
 	}
 }

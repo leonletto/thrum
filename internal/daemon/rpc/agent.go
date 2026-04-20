@@ -256,7 +256,10 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 	//     (internal/cli/refresh.go)
 	//   - direct agent.register RPC: enforceWorktreeIdentity below, gated
 	//     on peercred.Worktree so anonymous bootstraps skip cleanly
-	//     (the CLI paths cover them instead).
+	//     (the CLI paths cover them instead). keepName is extended with
+	//     the peercred-resolved caller's AgentID (thrum-dw06) so the
+	//     caller's own identity never gets swept up when the call
+	//     registers a differently named agent.
 	existingAgent, err := h.getAgentByID(ctx, agentID)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("check for existing agent by id: %w", err)
@@ -346,6 +349,22 @@ func agentIdentityName(name, agentID string) string {
 // those. For direct agent.register RPCs from a registered caller,
 // this cleans up residual identity files left by prior registrations
 // under the same worktree. See thrum-33dt.
+//
+// thrum-dw06: enforcement only fires when the CALLER is registering
+// themselves (resolved.AgentID == keepName). A caller that bootstraps
+// a differently named agent — test harnesses, multi-agent worktrees,
+// peer-bridge proxies — is NOT authorised to scrub siblings in this
+// worktree, because those siblings may be other legitimately
+// registered agents co-located with the caller. The single-keeper
+// form of thrum-33dt treated every non-keepName sibling as stale,
+// including other live agents. ajmd softened the blast radius from
+// delete→quarantine; dw06 narrows the firing condition so other
+// agents' files are left alone entirely.
+//
+// Self-rename case (caller renames themselves via direct RPC) still
+// goes through enforcement — that is the legitimate stale-sibling
+// cleanup surface for this path. CLI-side quickstart (G1a/G1b) and
+// tmux.create paths continue to enforce on their own terms.
 func enforceWorktreeIdentity(ctx context.Context, keepName string) {
 	if keepName == "" {
 		return
@@ -359,6 +378,13 @@ func enforceWorktreeIdentity(ctx context.Context, keepName string) {
 	// from non-unix stub platforms (where the resolver returns an
 	// AgentID but leaves Worktree unpopulated).
 	if resolved == nil || resolved.Worktree == "" {
+		return
+	}
+	// Bootstrap / multi-agent-worktree case: caller is registering a
+	// different agent. Skip enforcement so the caller's own identity
+	// file AND any other co-located registered agents' files are
+	// preserved.
+	if resolved.AgentID != "" && resolved.AgentID != keepName {
 		return
 	}
 	wtpkg.EnforceOneIdentity(resolved.Worktree, keepName)
