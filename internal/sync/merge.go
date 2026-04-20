@@ -184,6 +184,24 @@ func (m *Merger) MergeAll(ctx context.Context) (*MergeResult, error) {
 
 	// 6. Local-only files are kept as-is (will be pushed)
 
+	// 7. thrum-ychn: reset the local a-sync branch pointer to origin/a-sync
+	// so the next commit is fast-forward-able on push. MergeAll has already
+	// written deduped content into the working tree; --mixed preserves the
+	// working tree while moving HEAD (→ origin tip) and clearing the index
+	// (→ next stageChanges re-stages the merged content on top of the
+	// remote's history).
+	//
+	// Silent skip on any error: localOnly mode, missing origin remote,
+	// and first-sync-before-remote-branch-exists all naturally produce
+	// non-fatal failures here. Matches the pattern at merge.go:70-72 for
+	// Fetch errors. If the reset doesn't happen, the worst case is the
+	// existing pre-fix behavior (push rejected, caller handles).
+	if !m.localOnly {
+		if _, err := safecmd.Git(ctx, m.syncDir, "rev-parse", "--verify", "origin/"+SyncBranchName); err == nil {
+			_, _ = safecmd.Git(ctx, m.syncDir, "reset", "--mixed", "origin/"+SyncBranchName)
+		}
+	}
+
 	return totalStats, nil
 }
 
