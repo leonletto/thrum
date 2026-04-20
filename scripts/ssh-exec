@@ -43,6 +43,14 @@ die() {
   exit "$code"
 }
 
+# Shell-escape an argument for safe interpolation into a remote command string.
+# MUST be used everywhere user-supplied data becomes part of `ssh <host> "..."`,
+# or callers risk SC2029-class command injection (e.g. paths with $(...),
+# backticks, or whitespace getting re-parsed by the remote shell).
+remote_shell_quote() {
+  printf '%q' "$1"
+}
+
 # Detect a GNU-compatible timeout binary. BSD timeout on macOS has no
 # `--kill-after`, so fail loudly with an install hint rather than producing
 # `illegal option -- -`. Order: gtimeout first (unambiguous brew path), then
@@ -78,7 +86,7 @@ case "$subcommand" in
         --stdin) use_stdin=true; shift ;;
         --env) env_vars+=("$2"); shift 2 ;;
         --) shift; break ;;
-        -h|--help) sed -n '3,29p' "$0" >&2; exit 0 ;;
+        -h|--help) sed -n '3,33p' "$0" >&2; exit 0 ;;
         *) die "unknown flag: $1" 2 ;;
       esac
     done
@@ -93,7 +101,7 @@ case "$subcommand" in
     if [ ${#env_vars[@]} -gt 0 ]; then
       env_prefix="env"
       for kv in "${env_vars[@]}"; do
-        env_prefix="$env_prefix $(printf '%q' "$kv")"
+        env_prefix="$env_prefix $(remote_shell_quote "$kv")"
       done
       env_prefix="$env_prefix "
     fi
@@ -105,7 +113,7 @@ case "$subcommand" in
     # Build the full remote command string
     remote_cmd=""
     for arg in "$@"; do
-      remote_cmd="$remote_cmd $(printf '%q' "$arg")"
+      remote_cmd="$remote_cmd $(remote_shell_quote "$arg")"
     done
     remote_cmd="${env_prefix}${remote_cmd# }"
 
@@ -133,7 +141,7 @@ case "$subcommand" in
     while [ $# -gt 0 ]; do
       case "$1" in
         --host) host="$2"; shift 2 ;;
-        -h|--help) sed -n '3,29p' "$0" >&2; exit 0 ;;
+        -h|--help) sed -n '3,33p' "$0" >&2; exit 0 ;;
         --) shift; break ;;
         -*) die "unknown flag: $1" 2 ;;
         *) break ;;
@@ -155,7 +163,7 @@ case "$subcommand" in
       case "$1" in
         --host) host="$2"; shift 2 ;;
         --follow) follow=true; shift ;;
-        -h|--help) sed -n '3,29p' "$0" >&2; exit 0 ;;
+        -h|--help) sed -n '3,33p' "$0" >&2; exit 0 ;;
         --) shift; break ;;
         -*) die "unknown flag: $1" 2 ;;
         *) break ;;
@@ -167,7 +175,7 @@ case "$subcommand" in
     # ShellCheck SC2029: remote path must be shell-escaped before interpolating
     # into the remote command string, otherwise a path with $(...), backticks,
     # or whitespace is interpreted by the remote shell → command injection.
-    escaped_path=$(printf '%q' "$remote_path")
+    escaped_path=$(remote_shell_quote "$remote_path")
     ssh_opts=(-o BatchMode=yes -o ConnectTimeout=10)
     if [ "$follow" = true ]; then
       ssh "${ssh_opts[@]}" "$host" "tail -f $escaped_path"
