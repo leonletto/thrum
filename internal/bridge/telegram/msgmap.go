@@ -183,10 +183,13 @@ func (m *MessageMap) Len() int { return m.inner.Len() }
 // This satisfies the thrum-48kt.6 acceptance criterion that the sweep
 // "does not delete mappings for nudges that are still pending" — even
 // if the mapping itself has aged past the TTL, the cross-check pins
-// it until the pending_nudges row resolves (i.e. is deleted by
-// TryResolve). The inverse risk — a nudge resolves concurrently mid-
-// sweep and we delete its mapping — is harmless because post-resolve
-// the mapping is no longer needed.
+// it until the pending_nudges row is removed. Today that removal is
+// a DELETE executed by TryResolve / pendingNudgeStore.Delete — i.e.
+// "resolved" is expressed as row absence, not a resolved-flag column.
+// If a future schema change adds a resolved boolean instead, the
+// cross-check here would need to filter on it. The inverse risk — a
+// nudge resolves concurrently mid-sweep and we delete its mapping —
+// is harmless because post-resolve the mapping is no longer needed.
 //
 // permission_nudges.message_id is declared TEXT PRIMARY KEY (see
 // internal/schema/schema.go), which in SQLite is implicitly NOT NULL.
