@@ -102,7 +102,12 @@ type TmuxHandler struct {
 	queues      map[string]*SessionQueue
 	queuesMu    sync.Mutex
 	sessionMu   sync.RWMutex      // protects sessionCwds and cwdSessions
-	sessionCwds map[string]string // session name → cwd, populated by HandleCreate
+	// sessionCwds maps session name → cwd. Populated by HandleCreate
+	// from req.Cwd (CLI-supplied, trusted: local-socket-only threat
+	// model; the daemon does not serve remote clients). Read by
+	// ensureSession (auto-create) and writeTmuxByWorktreeCwd
+	// (thrum-51cg Pass 0).
+	sessionCwds map[string]string
 	cwdSessions map[string]string // cwd → session name, for single-session-per-worktree
 
 	// permission is the optional permission-prompt scheduler. Wired
@@ -758,10 +763,13 @@ func (h *TmuxHandler) writeTmuxByWorktreeCwd(sessionName, target, runtime string
 		return false
 	}
 	if len(identityFiles) > 1 {
-		// EnforceOneIdentity invariant violated. Fall back to Pass 1/2 to
-		// avoid overwriting multiple files with the same session target.
-		log.Printf("[tmux 51cg] multiple identity files in worktree %s — falling back to name/session match (files: %v)",
-			cwd, identityFiles)
+		// EnforceOneIdentity invariant violated. Fall back to Pass 1/2
+		// to avoid overwriting multiple files with the same session
+		// target. slog.Warn surfaces in structured daemon logs so
+		// operators can see the misconfiguration (log.Printf-level
+		// output is often filtered out by structured consumers).
+		slog.Warn("tmux 51cg: multiple identity files in worktree — falling back to name/session match",
+			"worktree_cwd", cwd, "identity_files", identityFiles)
 		return false
 	}
 
@@ -775,15 +783,60 @@ func (h *TmuxHandler) writeTmuxByWorktreeCwd(sessionName, target, runtime string
 		return false
 	}
 	if gErr := h.checkWriterLiveness(idFile.AgentPID); gErr != nil {
-		// G4 refusal: dead PID. Treat as no-write and don't fall through
-		// to Pass 1/2 — the subject agent isn't alive to receive this
-		// binding, and Pass 1/2 would hit the same gate.
-		return true
+		// G4 refusal: dead PID. Fall through to Pass 1/2 rather than
+		// claiming we handled the write — Pass 1/2 will hit the same
+		// gate and refuse for the same reason, but returning false
+		// keeps the caller's code path explicit and leaves room for a
+		// future matching pass that might legitimately succeed under a
+		// different G4 mode. Addresses dual-review finding.
+		return false
 	}
 	idFile.TmuxSession = target
 	idFile.Runtime = runtime
-	_ = config.SaveIdentityFile(filepath.Dir(idDir), &idFile)
+	// Write directly to the known path (atomic rename via temp file)
+	// rather than re-deriving via SaveIdentityFile(filepath.Dir(idDir)),
+	// which relies on an implicit path-building convention. The atomic
+	// rename also closes the TOCTOU window against concurrent readers
+	// (e.g., the Option B self-heal in team.list running at the same
+	// time as a HandleLaunch). Addresses dual-review findings.
+	if werr := writeIdentityFileAtomic(path, &idFile); werr != nil {
+		log.Printf("[tmux 51cg] write identity %s failed: %v", path, werr)
+	}
 	return true
+}
+
+// writeIdentityFileAtomic writes idFile to path via a temp-file + rename
+// sequence so concurrent readers either see the pre-update contents or
+// the post-update contents, never a partial write. Used by the
+// thrum-51cg Pass 0 writer and clearDeadTmuxSessionInIdentity.
+func writeIdentityFileAtomic(path string, idFile *config.IdentityFile) error {
+	data, err := json.MarshalIndent(idFile, "", "  ")
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".identity-*.json.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	// Best-effort cleanup if rename doesn't happen.
+	defer func() {
+		if _, statErr := os.Stat(tmpPath); statErr == nil {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpPath, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }
 
 // clearDeadTmuxSessionInIdentity (thrum-51cg Option B) clears the
@@ -815,11 +868,11 @@ func clearDeadTmuxSessionInIdentity(path string) error {
 	}
 	idFile.TmuxSession = ""
 	idFile.Runtime = ""
-	updated, err := json.MarshalIndent(idFile, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, updated, 0o600) // #nosec G306
+	// Atomic rename closes the TOCTOU window against concurrent
+	// writers (Pass 0 via HandleLaunch) so Option B self-heal cannot
+	// silently overwrite a just-completed Pass 0 write with its
+	// cleared snapshot.
+	return writeIdentityFileAtomic(path, &idFile)
 }
 
 // checkWriterLiveness gates a daemon-side identity mutation through G4.
