@@ -32,6 +32,16 @@ func (s *State) TouchAgentLastSeen(ctx context.Context, agentID string) error {
 // touchAgentLastSeenAt is TouchAgentLastSeen with an injectable clock
 // for tests. Separated so test cases can simulate debounce boundaries
 // without real-time sleeps.
+//
+// Writes to BOTH tables:
+//   - agents.last_seen_at (the agent row)
+//   - sessions.last_seen_at (the agent's active session, if any)
+//
+// team.list sources the user-visible "last_seen" column from the
+// sessions table (team.go joins agents → sessions and selects
+// s.last_seen_at), and the rqkf Phase B send.recipient-stale hint
+// consumes that same column. Touching only agents would leave the
+// hint's input stale. Mirrors session.HandleHeartbeat's dual-update.
 func (s *State) touchAgentLastSeenAt(ctx context.Context, agentID string, now time.Time) error {
 	if agentID == "" {
 		return nil
@@ -56,5 +66,12 @@ func (s *State) touchAgentLastSeenAt(ctx context.Context, agentID string, now ti
 	); err != nil {
 		return fmt.Errorf("touch agent last_seen: %w", err)
 	}
+	// Best-effort: also advance the agent's active session so team.list
+	// and the send.recipient-stale hint see the fresh timestamp. Ignore
+	// the error — no active session is a common case (no-op UPDATE).
+	_, _ = s.DB().ExecContext(ctx,
+		`UPDATE sessions SET last_seen_at = ? WHERE agent_id = ? AND ended_at IS NULL`,
+		timestamp, agentID,
+	)
 	return nil
 }

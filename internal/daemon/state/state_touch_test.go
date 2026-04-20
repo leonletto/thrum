@@ -98,6 +98,72 @@ func TestTouchAgentLastSeen_EmptyAgentID(t *testing.T) {
 	}
 }
 
+// TestTouchAgentLastSeen_AlsoAdvancesActiveSession pins the dual-update:
+// team.list reads last_seen from the sessions table, not agents, so
+// touch must advance BOTH for the user-facing hint to see the change.
+// Mirrors session.HandleHeartbeat behavior.
+func TestTouchAgentLastSeen_AlsoAdvancesActiveSession(t *testing.T) {
+	s := newTestStateForTouch(t)
+
+	const agentID = "coordinator_main"
+	const sessionID = "ses_TEST01"
+	seedAgent(t, s, agentID, "2026-01-01T00:00:00Z")
+	if _, err := s.RawDB().Exec(`
+		INSERT INTO sessions (session_id, agent_id, started_at, last_seen_at)
+		VALUES (?, ?, ?, ?)
+	`, sessionID, agentID, "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"); err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+
+	now := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	if err := s.touchAgentLastSeenAt(context.Background(), agentID, now); err != nil {
+		t.Fatalf("touch: %v", err)
+	}
+
+	var sessLastSeen string
+	if err := s.RawDB().QueryRow(
+		`SELECT last_seen_at FROM sessions WHERE session_id = ?`, sessionID,
+	).Scan(&sessLastSeen); err != nil {
+		t.Fatalf("read session last_seen_at: %v", err)
+	}
+	want := now.Format(time.RFC3339Nano)
+	if sessLastSeen != want {
+		t.Errorf("sessions.last_seen_at = %q, want %q", sessLastSeen, want)
+	}
+}
+
+// TestTouchAgentLastSeen_EndedSessionNotTouched guards against reviving
+// a closed session. The UPDATE must scope to ended_at IS NULL so
+// session.end's terminal state is preserved.
+func TestTouchAgentLastSeen_EndedSessionNotTouched(t *testing.T) {
+	s := newTestStateForTouch(t)
+
+	const agentID = "impl_ended"
+	const sessionID = "ses_ENDED01"
+	seedAgent(t, s, agentID, "2026-01-01T00:00:00Z")
+	if _, err := s.RawDB().Exec(`
+		INSERT INTO sessions (session_id, agent_id, started_at, last_seen_at, ended_at)
+		VALUES (?, ?, ?, ?, ?)
+	`, sessionID, agentID, "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z"); err != nil {
+		t.Fatalf("seed ended session: %v", err)
+	}
+
+	now := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	if err := s.touchAgentLastSeenAt(context.Background(), agentID, now); err != nil {
+		t.Fatalf("touch: %v", err)
+	}
+
+	var sessLastSeen string
+	if err := s.RawDB().QueryRow(
+		`SELECT last_seen_at FROM sessions WHERE session_id = ?`, sessionID,
+	).Scan(&sessLastSeen); err != nil {
+		t.Fatalf("read session last_seen_at: %v", err)
+	}
+	if sessLastSeen != "2026-01-01T00:00:00Z" {
+		t.Errorf("sessions.last_seen_at = %q, want seed value preserved (ended session)", sessLastSeen)
+	}
+}
+
 // --- helpers ---
 
 func newTestStateForTouch(t *testing.T) *State {
