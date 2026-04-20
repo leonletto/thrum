@@ -1310,3 +1310,235 @@ func TestMigrate_DBBackupBeforeMigration(t *testing.T) {
 		t.Fatalf("backup overwritten on second Migrate; want pre-migration bytes unchanged")
 	}
 }
+
+// TestMigrate_V20_WithAgentsAndEvents_BackfillsOriginDaemon exercises the
+// realistic v20→v22 (and onward to CurrentVersion) upgrade path that a
+// production daemon would hit: a DB stopped at v20 carrying both the
+// agents table (without origin_daemon) and the events table (with
+// agent.register events whose origin_daemon fields are the authoritative
+// source for the backfill). Regression for thrum-rchj: on two remote
+// machines (ubuntuleondev + leonsmacmini) the post-deploy daemon
+// restart left schema_version=20 and no origin_daemon column, so
+// applyAgentRegister's INSERT silently failed against missing column
+// and cross-daemon registrations never landed. The existing
+// v20_to_v21_CreatesPermissionNudges test does NOT seed agents/events,
+// so it skips the 21→22 path entirely (hasAgents=false short-circuit)
+// and wouldn't catch a regression in the column-add or backfill step.
+func TestMigrate_V20_WithAgentsAndEvents_BackfillsOriginDaemon(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "v20_real.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Stand up a schema that represents a real v20-vintage daemon: the
+	// schema_version row, the v20-shape agents table (pre-origin_daemon),
+	// and the events table populated with agent.register events.
+	if _, err := db.Exec(`CREATE TABLE schema_version (
+		version INTEGER NOT NULL,
+		applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("create schema_version: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO schema_version (version) VALUES (20)`); err != nil {
+		t.Fatalf("seed version: %v", err)
+	}
+
+	// v20 agents shape: display/hostname/last_seen_at/agent_pid (v17 rename
+	// result) but NO origin_daemon yet. Matches what production v20
+	// deployments had on disk.
+	if _, err := db.Exec(`CREATE TABLE agents (
+		agent_id      TEXT PRIMARY KEY,
+		kind          TEXT NOT NULL,
+		role          TEXT NOT NULL,
+		module        TEXT NOT NULL,
+		display       TEXT NOT NULL DEFAULT '',
+		hostname      TEXT NOT NULL DEFAULT '',
+		agent_pid     INTEGER NOT NULL DEFAULT 0,
+		registered_at TEXT NOT NULL,
+		last_seen_at  TEXT NOT NULL DEFAULT ''
+	)`); err != nil {
+		t.Fatalf("create v20 agents: %v", err)
+	}
+
+	if _, err := db.Exec(`CREATE TABLE events (
+		event_id TEXT PRIMARY KEY,
+		sequence INTEGER UNIQUE NOT NULL,
+		type TEXT NOT NULL,
+		timestamp TEXT NOT NULL,
+		origin_daemon TEXT NOT NULL,
+		event_json TEXT NOT NULL
+	)`); err != nil {
+		t.Fatalf("create events: %v", err)
+	}
+
+	// Seed three agents in (agents) and their authoritative agent.register
+	// events. Two origin daemons, to verify the backfill copies the
+	// right value per-agent rather than e.g. the most-recent daemon
+	// globally.
+	agents := []struct {
+		agentID      string
+		originDaemon string
+		sequence     int64
+	}{
+		{"coordinator_main", "d_localdaemon_01", 100},
+		{"impl_auth", "d_localdaemon_01", 101},
+		{"impl_peer", "d_peerdaemon_02", 102},
+	}
+	for _, a := range agents {
+		if _, err := db.Exec(`INSERT INTO agents (agent_id, kind, role, module, registered_at)
+			VALUES (?, 'agent', 'implementer', 'test', '2026-04-15T00:00:00Z')`,
+			a.agentID); err != nil {
+			t.Fatalf("insert agent %s: %v", a.agentID, err)
+		}
+		payload := map[string]any{
+			"type":          "agent.register",
+			"agent_id":      a.agentID,
+			"role":          "implementer",
+			"module":        "test",
+			"origin_daemon": a.originDaemon,
+		}
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal event for %s: %v", a.agentID, err)
+		}
+		if _, err := db.Exec(`INSERT INTO events (event_id, sequence, type, timestamp, origin_daemon, event_json)
+			VALUES (?, ?, 'agent.register', '2026-04-15T00:00:00Z', ?, ?)`,
+			"evt_"+a.agentID, a.sequence, a.originDaemon, string(raw)); err != nil {
+			t.Fatalf("insert event for %s: %v", a.agentID, err)
+		}
+	}
+
+	// Run the migration — this is the operation that production daemons
+	// failed to actually apply on remote machines per the bug report.
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	// Assertion 1: schema_version must advance to CurrentVersion. If the
+	// tx silently rolled back, this would still be 20.
+	version, err := schema.GetSchemaVersion(db)
+	if err != nil {
+		t.Fatalf("GetSchemaVersion: %v", err)
+	}
+	if version != schema.CurrentVersion {
+		t.Fatalf("schema_version = %d after migrate, want %d", version, schema.CurrentVersion)
+	}
+
+	// Assertion 2: origin_daemon column must exist on agents. If the
+	// ALTER TABLE ADD COLUMN was skipped (e.g. via an incorrect
+	// hasAgents short-circuit), this probe catches it.
+	var colCount int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM pragma_table_info('agents') WHERE name='origin_daemon'`,
+	).Scan(&colCount); err != nil {
+		t.Fatalf("pragma_table_info agents: %v", err)
+	}
+	if colCount != 1 {
+		t.Fatalf("agents.origin_daemon column missing after migration (count=%d)", colCount)
+	}
+
+	// Assertion 3: each agent row's origin_daemon matches the value from
+	// its agent.register event. The backfill is the payoff of this
+	// migration; without it the column exists but every row is ''.
+	wantByAgent := map[string]string{
+		"coordinator_main": "d_localdaemon_01",
+		"impl_auth":        "d_localdaemon_01",
+		"impl_peer":        "d_peerdaemon_02",
+	}
+	rows, err := db.Query(`SELECT agent_id, origin_daemon FROM agents ORDER BY agent_id`)
+	if err != nil {
+		t.Fatalf("query agents post-migration: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	gotByAgent := map[string]string{}
+	for rows.Next() {
+		var agentID, origin string
+		if err := rows.Scan(&agentID, &origin); err != nil {
+			t.Fatalf("scan agents row: %v", err)
+		}
+		gotByAgent[agentID] = origin
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate agents: %v", err)
+	}
+	for agentID, want := range wantByAgent {
+		got, ok := gotByAgent[agentID]
+		if !ok {
+			t.Errorf("agent %s missing post-migration", agentID)
+			continue
+		}
+		if got != want {
+			t.Errorf("agent %s origin_daemon = %q after backfill, want %q", agentID, got, want)
+		}
+	}
+}
+
+// TestMigrate_V20_AgentWithoutRegisterEvent_KeepsEmptyOriginDaemon pins
+// the "no matching event" branch of the backfill: a legacy agents row
+// that has no agent.register event in the events table must survive
+// migration with origin_daemon = '' (not fail, not get a stale value
+// from another agent). HandleRegister treats empty origin_daemon as
+// "unknown / assume local" per the comment on migration 21→22.
+func TestMigrate_V20_AgentWithoutRegisterEvent_KeepsEmptyOriginDaemon(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "v20_legacy.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if _, err := db.Exec(`CREATE TABLE schema_version (
+		version INTEGER NOT NULL,
+		applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("create schema_version: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO schema_version (version) VALUES (20)`); err != nil {
+		t.Fatalf("seed version: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE agents (
+		agent_id      TEXT PRIMARY KEY,
+		kind          TEXT NOT NULL,
+		role          TEXT NOT NULL,
+		module        TEXT NOT NULL,
+		display       TEXT NOT NULL DEFAULT '',
+		hostname      TEXT NOT NULL DEFAULT '',
+		agent_pid     INTEGER NOT NULL DEFAULT 0,
+		registered_at TEXT NOT NULL,
+		last_seen_at  TEXT NOT NULL DEFAULT ''
+	)`); err != nil {
+		t.Fatalf("create v20 agents: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE events (
+		event_id TEXT PRIMARY KEY,
+		sequence INTEGER UNIQUE NOT NULL,
+		type TEXT NOT NULL,
+		timestamp TEXT NOT NULL,
+		origin_daemon TEXT NOT NULL,
+		event_json TEXT NOT NULL
+	)`); err != nil {
+		t.Fatalf("create events: %v", err)
+	}
+
+	// Legacy agent WITHOUT a corresponding agent.register event.
+	if _, err := db.Exec(`INSERT INTO agents (agent_id, kind, role, module, registered_at)
+		VALUES ('legacy_agent', 'agent', 'implementer', 'test', '2026-03-01T00:00:00Z')`); err != nil {
+		t.Fatalf("insert legacy agent: %v", err)
+	}
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	var origin string
+	if err := db.QueryRow(`SELECT origin_daemon FROM agents WHERE agent_id = 'legacy_agent'`).Scan(&origin); err != nil {
+		t.Fatalf("query legacy agent: %v", err)
+	}
+	if origin != "" {
+		t.Errorf("legacy agent origin_daemon = %q after migration, want '' (no matching event)", origin)
+	}
+}
