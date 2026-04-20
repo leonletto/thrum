@@ -94,8 +94,9 @@ func FormatNudge(row *NudgeRow, paneTail, runtime, projectName string, now time.
 // truncatePaneTail caps the pane content at maxPaneTailLines lines AND
 // maxPaneTailBytes bytes, preferring the HEAD of the capture.
 //
-// thrum-7khf: the daemon hands us the last ~15 lines of the tmux pane,
-// which for a typical permission prompt contains (top→bottom):
+// thrum-7khf: the daemon hands us the last ~30 lines of the tmux pane
+// (permission.SessionPollerConfig.CaptureLines), which for a typical
+// permission prompt contains (top→bottom):
 // command, reason, permission-rule noise, "Do you want to proceed?",
 // the selector ("❯ 1. Yes / 2. No"), and shortcut hints. The approval-
 // relevant content (command + reason) sits at the top; the selector +

@@ -30,9 +30,9 @@ func TestFormatNudge_FirstDetect(t *testing.T) {
 	}
 	// Header: agent · session (runtime)
 	assertContains("⚠ @researcher_cursor · cursor-test (cursor)")
-	// Pane content retained (indented)
+	// Pane content retained (indented by 2 spaces)
 	assertContains("  Run this command?")
-	assertContains("Not in allowlist: curl https://example.com")
+	assertContains("  Not in allowlist: curl https://example.com")
 	// One-line reply hint with both keys
 	assertContains(`Reply: y (approve) · n (deny) · or thrum tmux send cursor-test "y"|"Escape"`)
 	// Footer collapses reminder / repo / pattern / first-seen
@@ -76,6 +76,8 @@ func TestFormatNudge_NoDenyKey(t *testing.T) {
 
 func TestFormatNudge_LineBudget(t *testing.T) {
 	// Regression for thrum-7khf acceptance: typical nudges stay ≤10 lines.
+	// The current boundary is tight — this sample renders at exactly the
+	// budget, so adding any footer field must re-verify the budget holds.
 	row := &NudgeRow{
 		Session:       "plugin-skills-slate",
 		AgentName:     "impl_skills",
