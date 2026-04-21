@@ -119,6 +119,12 @@ Environment variables:
 	// Resolve flagRepo to the nearest parent containing .thrum/ (git-style traversal).
 	// Skip for "init" which creates .thrum/ and doesn't need it to exist.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		// Install slog bridge FIRST so any code running during repo
+		// resolution (worktree lookups, identity refresh) already has the
+		// correct stderr/JSON routing — in --json mode slog.Warn records
+		// accumulate into the hint buffer instead of corrupting stdout.
+		installSlogBridge(flagJSON, os.Stderr)
+
 		if !cmd.Flags().Changed("repo") {
 			flagRepo = paths.EffectiveRepoPath(flagRepo)
 		}
@@ -196,6 +202,22 @@ Environment variables:
 	tagGuardCategories(rootCmd)
 
 	return rootCmd
+}
+
+// installSlogBridge wires slog.Default based on whether the current command
+// is running in --json mode. In JSON mode, records route through the
+// cli.SlogHintHandler into the pushed-hints buffer so EmitJSON can graft
+// them into the response body — stdout stays pure JSON. In human mode we
+// install a plain text handler writing to stderr so users running
+// `thrum ... 2> log.txt` still see warnings as before.
+func installSlogBridge(jsonMode bool, stderr io.Writer) {
+	if jsonMode {
+		slog.SetDefault(slog.New(cli.NewSlogHintHandler()))
+		return
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	})))
 }
 
 // Placeholder commands - will be implemented in subsequent tasks
