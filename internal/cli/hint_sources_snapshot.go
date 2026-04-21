@@ -80,8 +80,11 @@ func SnapshotSaveNoPIDHint(agentName string) Hint {
 }
 
 // SnapshotSaveExtractFailedHint is emitted when restart.ExtractConversation
-// failed — the JSONL path resolved but reading or parsing it errored.
-// Typically permissions or file-corruption issues.
+// failed — the JSONL path is confirmed to exist (the os.Stat pre-flight
+// passed, or restart's auto-detect found it on disk), but the reader
+// couldn't open or scan it. Failure is therefore due to read permissions
+// or content corruption, NOT a typo'd path (which fires
+// SnapshotSaveJSONLNotFoundHint instead).
 func SnapshotSaveExtractFailedHint(jsonlPath string) Hint {
 	return Hint{
 		Code:     HintSnapshotSaveExtractFailed,
