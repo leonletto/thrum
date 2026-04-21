@@ -237,22 +237,26 @@ func TestSec3_OmittedCallerAgentID_ResolvedFromPeercred(t *testing.T) {
 }
 
 // TestRegression_SendStrictNoCallerAgentID_ReturnsError — thrum-ufv5.1
-// regression. When the unauthenticated_rpc guard is strict AND the caller
-// omits caller_agent_id AND peercred did not run (legacy-transport path,
-// the resilience-suite scenario), message.send must return a structured
-// RPC error rather than a success envelope with an empty SendResponse.
+// regression. Pins the RPC-layer invariant: HandleSend on strict-mode
+// guard-deny (unauthenticated_rpc, empty CallerAgentID, no peercred)
+// returns a structured RPC error whose Error.Message names the guard that
+// fired. Callers checking err==nil must NOT receive an empty SendResponse
+// envelope that looks like a successful send-with-no-data.
 //
-// The bug surfaced in TestCLI_ReplyChain under the full resilience suite:
-// the CLI received {message_id: "", resolved_to: 0} on stdout with exit
-// code 0 — parsed as success but lacking a message_id. The root cause is
-// that callers checking err==nil treat an empty envelope as "success with
-// no data", which is indistinguishable from "send to a non-existent
-// recipient." A guard-denied RPC must fail loudly.
+// Does NOT pin the CLI-layer (sendCmd → cli.Send → EmitJSONWithHints)
+// transformation. The observed resilience-suite symptom in ufv5.1's bd
+// (stdout JSON with empty message_id + hints block, exit code 0) originated
+// above this layer and has no known in-source repro path — the dispatcher,
+// handler, and cli.Send error paths all audit clean on separate inspection
+// (see thrum-ufv5.1 bd notes for the coordinator's independent review). If
+// a future regression reintroduces the handler-layer empty-envelope
+// behavior, this test catches it before release; the CLI-layer path
+// remains documented as "awaiting deterministic repro" on the bead.
 //
-// This test uses nil resolver to exercise the "peercred did not run"
-// path. G3 strict-mode fires on empty CallerAgentID and resolveAgentAndSession
-// returns an error, which HandleSend wraps. The dispatcher should surface
-// that as a jsonRPCError envelope, not a success body.
+// This test uses nil resolver to exercise the "peercred did not run" path.
+// G3 strict-mode fires on empty CallerAgentID and resolveAgentAndSession
+// returns an error, which HandleSend wraps. The dispatcher surfaces that
+// as a jsonRPCError envelope, not a success body.
 func TestRegression_SendStrictNoCallerAgentID_ReturnsError(t *testing.T) {
 	// nil resolver → server.SetIdentityResolver never called → connResolved=false
 	// for every accepted connection. This bypasses the dispatcher's

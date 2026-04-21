@@ -42,7 +42,7 @@ type QuickstartOptions struct {
 	RepoPath string // Repository path for runtime init
 	DryRun   bool   // Preview changes without writing
 	NoInit   bool   // Skip config file generation
-	Force    bool   // Overwrite existing files
+	Force    bool   // Overwrite existing files and force daemon re-registration (thrum-ufv5.6)
 }
 
 // QuickstartResult contains the combined result of quickstart steps.

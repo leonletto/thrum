@@ -288,6 +288,12 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		case req.AgentPID > 0 && existingAgent.AgentPID != req.AgentPID:
 			resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
 		case req.ReRegister, req.Force:
+			// ReRegister and Force are treated identically — both paths
+			// invoke registerAgent, which emits agent.register and lets
+			// the projector refresh the agents row. ReRegister is the
+			// quickstart-conflict-retry signal; Force is the user's
+			// explicit --force flag. Merged into one case because there's
+			// no state change that would differentiate them downstream.
 			resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
 		default:
 			// Same agent, same PID (or no PID provided) — no-op return.

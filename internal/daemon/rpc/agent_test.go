@@ -319,16 +319,126 @@ func TestAgentRegister_SameAgentPIDChange(t *testing.T) {
 	}
 }
 
-// TestRegister_ForceChangesRole — thrum-ufv5.2 regression. When a caller
-// re-registers an existing agent with --force (Force=true) and a different
-// role/module, the agents projection must reflect the new values. Without
-// this, agent.list returns stale role/module while whoami + identity file
-// show the new values, and downstream consumers (test harnesses, Web UI)
-// see divergent state until the agent next quickstarts.
+// TestRegister_ForceChangesRole — thrum-ufv5.2 regression. Pins the two
+// adjacent branches of HandleRegister's re-register switch with a single
+// table-driven test so a future refactor can't silently break either:
+//
+//   - Force=true  → triggers re-registration → agents projection refreshes
+//     (role/module in the projected row reflect the new request).
+//   - Force=false + ReRegister=false + PID matches existing → no-op branch
+//     fires → agents projection stays at the originally-registered values.
+//
+// Without the first branch, `agent.list` returns stale role/module while
+// whoami + the identity file show the new values (SC-04 e2e failure).
+// Without the second branch, every CLI command that fires AgentRegister for
+// liveness-touch would silently clobber role/module (identity-refresh hot
+// path).
 func TestRegister_ForceChangesRole(t *testing.T) {
+	cases := []struct {
+		name       string
+		force      bool
+		wantStatus string
+		wantRole   string
+		wantModule string
+	}{
+		{
+			name:       "Force_true_refreshes_projection",
+			force:      true,
+			wantStatus: "updated",
+			wantRole:   "owner",
+			wantModule: "all",
+		},
+		{
+			name:       "Force_false_same_pid_is_noop",
+			force:      false,
+			wantStatus: "registered",
+			wantRole:   "coordinator", // unchanged — no-op branch fires
+			wantModule: "e2e",         // unchanged — no-op branch fires
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			thrumDir := filepath.Join(tmpDir, ".thrum")
+			s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "")
+			if err != nil {
+				t.Fatalf("create state: %v", err)
+			}
+			defer func() { _ = s.Close() }()
+
+			handler := NewAgentHandler(s)
+
+			// Step 1: register named agent with role=coordinator module=e2e.
+			// AgentPID defaults to 0 — matches the second call below so the
+			// PID-update branch of the switch does NOT fire and the only
+			// remaining trigger for re-registration is Force (or ReRegister).
+			firstReq := RegisterRequest{
+				Name:   "e2e_coordinator",
+				Role:   "coordinator",
+				Module: "e2e",
+			}
+			firstJSON, _ := json.Marshal(firstReq)
+			firstResp, err := handler.HandleRegister(context.Background(), firstJSON)
+			if err != nil {
+				t.Fatalf("initial register: %v", err)
+			}
+			firstReg := firstResp.(*RegisterResponse)
+			if firstReg.AgentID != "e2e_coordinator" {
+				t.Fatalf("initial agent_id = %s, want e2e_coordinator", firstReg.AgentID)
+			}
+
+			// Step 2: re-register with different role/module. Force governs
+			// whether the projection refreshes or the no-op branch fires.
+			secondReq := RegisterRequest{
+				Name:    "e2e_coordinator",
+				Role:    "owner",
+				Module:  "all",
+				Display: "Leon",
+				Force:   tc.force,
+			}
+			secondJSON, _ := json.Marshal(secondReq)
+			secondResp, err := handler.HandleRegister(context.Background(), secondJSON)
+			if err != nil {
+				t.Fatalf("second register: %v", err)
+			}
+			secondReg := secondResp.(*RegisterResponse)
+			if secondReg.Status != tc.wantStatus {
+				t.Errorf("status = %s, want %s", secondReg.Status, tc.wantStatus)
+			}
+
+			// Verify the agents projection reflects the expected role AND
+			// module. Force-true case pins the SC-04 fix; Force-false case
+			// pins the no-op branch that keeps identity refresh cheap.
+			var storedRole, storedModule string
+			err = s.RawDB().QueryRow(
+				"SELECT role, module FROM agents WHERE agent_id = ?",
+				"e2e_coordinator",
+			).Scan(&storedRole, &storedModule)
+			if err != nil {
+				t.Fatalf("query agents projection: %v", err)
+			}
+			if storedRole != tc.wantRole {
+				t.Errorf("stored role = %q, want %q", storedRole, tc.wantRole)
+			}
+			if storedModule != tc.wantModule {
+				t.Errorf("stored module = %q, want %q", storedModule, tc.wantModule)
+			}
+		})
+	}
+}
+
+// TestRegister_ForcePreservesRegisteredAt — review finding #1. The agents
+// projection's ON CONFLICT clause must leave registered_at untouched when
+// a force re-register writes the same row. The original first-registration
+// time is what `agent.list ORDER BY registered_at DESC` relies on, and
+// INSERT OR REPLACE (the pre-fix form) would reset it on every force
+// quickstart — harmless pre-ufv5.6 because only PID-drift hit this path,
+// now exposed on every --force after ufv5.2+.6 landed.
+func TestRegister_ForcePreservesRegisteredAt(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_reg_at", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -336,56 +446,76 @@ func TestRegister_ForceChangesRole(t *testing.T) {
 
 	handler := NewAgentHandler(s)
 
-	// Step 1: register named agent with role=coordinator module=e2e.
+	// Register once and capture registered_at.
 	firstReq := RegisterRequest{
-		Name:   "e2e_coordinator",
+		Name:   "preserve_me",
 		Role:   "coordinator",
 		Module: "e2e",
 	}
 	firstJSON, _ := json.Marshal(firstReq)
-	firstResp, err := handler.HandleRegister(context.Background(), firstJSON)
-	if err != nil {
+	if _, err := handler.HandleRegister(context.Background(), firstJSON); err != nil {
 		t.Fatalf("initial register: %v", err)
 	}
-	firstReg := firstResp.(*RegisterResponse)
-	if firstReg.AgentID != "e2e_coordinator" {
-		t.Fatalf("initial agent_id = %s, want e2e_coordinator", firstReg.AgentID)
+
+	var firstRegisteredAt string
+	err = s.RawDB().QueryRow(
+		"SELECT registered_at FROM agents WHERE agent_id = ?",
+		"preserve_me",
+	).Scan(&firstRegisteredAt)
+	if err != nil {
+		t.Fatalf("query initial registered_at: %v", err)
+	}
+	if firstRegisteredAt == "" {
+		t.Fatal("initial registered_at unexpectedly empty")
 	}
 
-	// Step 2: re-register same agent with --force and different role/module.
-	// No AgentPID change, no ReRegister flag — Force must be the trigger.
+	// Sleep briefly so a reset would produce a DISTINCT timestamp.
+	// Nanosecond precision in the event timestamp would not always
+	// register as different without a wall-clock gap.
+	time.Sleep(10 * time.Millisecond)
+
+	// Re-register via Force. INSERT OR REPLACE would have written a new
+	// registered_at; ON CONFLICT DO UPDATE must leave the original.
 	secondReq := RegisterRequest{
-		Name:    "e2e_coordinator",
+		Name:    "preserve_me",
 		Role:    "owner",
 		Module:  "all",
 		Display: "Leon",
 		Force:   true,
 	}
 	secondJSON, _ := json.Marshal(secondReq)
-	secondResp, err := handler.HandleRegister(context.Background(), secondJSON)
-	if err != nil {
+	if _, err := handler.HandleRegister(context.Background(), secondJSON); err != nil {
 		t.Fatalf("force register: %v", err)
 	}
-	secondReg := secondResp.(*RegisterResponse)
-	if secondReg.Status != "updated" {
-		t.Errorf("force register status = %s, want updated", secondReg.Status)
+
+	var secondRegisteredAt string
+	err = s.RawDB().QueryRow(
+		"SELECT registered_at FROM agents WHERE agent_id = ?",
+		"preserve_me",
+	).Scan(&secondRegisteredAt)
+	if err != nil {
+		t.Fatalf("query post-force registered_at: %v", err)
 	}
 
-	// Verify the agents projection reflects the new role AND module.
-	// This is the exact divergence SC-04 surfaces.
-	var storedRole, storedModule string
+	if secondRegisteredAt != firstRegisteredAt {
+		t.Errorf("registered_at changed on force re-register: %q → %q (should stay %q)",
+			firstRegisteredAt, secondRegisteredAt, firstRegisteredAt)
+	}
+
+	// Sanity: role still updated (so ON CONFLICT DO UPDATE is actually
+	// applying the other columns; a no-op projection would also match the
+	// registered_at expectation for the wrong reason).
+	var storedRole string
 	err = s.RawDB().QueryRow(
-		"SELECT role, module FROM agents WHERE agent_id = ?",
-		"e2e_coordinator",
-	).Scan(&storedRole, &storedModule)
+		"SELECT role FROM agents WHERE agent_id = ?",
+		"preserve_me",
+	).Scan(&storedRole)
 	if err != nil {
-		t.Fatalf("query agents projection: %v", err)
+		t.Fatalf("query post-force role: %v", err)
 	}
 	if storedRole != "owner" {
-		t.Errorf("stored role = %q, want %q (agents projection is stale)", storedRole, "owner")
-	}
-	if storedModule != "all" {
-		t.Errorf("stored module = %q, want %q", storedModule, "all")
+		t.Errorf("stored role = %q, want %q — ON CONFLICT may not be updating columns",
+			storedRole, "owner")
 	}
 }
 
