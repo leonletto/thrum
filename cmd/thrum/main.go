@@ -7141,26 +7141,23 @@ func runBackupCreate(dirOverride string) error {
 	}
 
 	if flagJSON {
-		data, _ := json.MarshalIndent(result.Manifest, "", "  ")
-		fmt.Println(string(data))
-	} else {
-		fmt.Printf("Backup complete: %s\n", result.CurrentDir)
-		fmt.Printf("  Events: %d lines\n", result.SyncResult.EventLines)
-		fmt.Printf("  Message files: %d\n", result.SyncResult.MessageFiles)
-		fmt.Printf("  Local tables: %d\n", len(result.LocalResult.Tables))
-		fmt.Printf("  Config files: %d\n", result.Manifest.Counts.ConfigFiles)
-		if pluginSummary := backup.FormatPluginResults(result.PluginResults); pluginSummary != "" {
-			fmt.Printf("  Plugins:\n%s", pluginSummary)
-		}
-		if result.PostHookResult != nil {
-			if result.PostHookResult.Error != "" {
-				fmt.Printf("  Post-backup hook: FAILED (%s)\n", result.PostHookResult.Error)
-			} else {
-				fmt.Printf("  Post-backup hook: ok\n")
-			}
+		return cli.EmitJSON(result.Manifest)
+	}
+	fmt.Printf("Backup complete: %s\n", result.CurrentDir)
+	fmt.Printf("  Events: %d lines\n", result.SyncResult.EventLines)
+	fmt.Printf("  Message files: %d\n", result.SyncResult.MessageFiles)
+	fmt.Printf("  Local tables: %d\n", len(result.LocalResult.Tables))
+	fmt.Printf("  Config files: %d\n", result.Manifest.Counts.ConfigFiles)
+	if pluginSummary := backup.FormatPluginResults(result.PluginResults); pluginSummary != "" {
+		fmt.Printf("  Plugins:\n%s", pluginSummary)
+	}
+	if result.PostHookResult != nil {
+		if result.PostHookResult.Error != "" {
+			fmt.Printf("  Post-backup hook: FAILED (%s)\n", result.PostHookResult.Error)
+		} else {
+			fmt.Printf("  Post-backup hook: ok\n")
 		}
 	}
-
 	return nil
 }
 
@@ -7192,52 +7189,50 @@ func runBackupStatus(dirOverride string) error {
 	}
 
 	if flagJSON {
-		data, _ := json.MarshalIndent(manifest, "", "  ")
-		fmt.Println(string(data))
-	} else {
-		fmt.Printf("Last backup: %s\n", manifest.Timestamp.Local().Format("2006-01-02 15:04:05"))
-		fmt.Printf("  Thrum version: %s\n", manifest.ThrumVersion)
-		fmt.Printf("  Repo: %s\n", manifest.RepoName)
-		fmt.Printf("  Events: %d\n", manifest.Counts.Events)
-		fmt.Printf("  Message files: %d\n", manifest.Counts.MessageFiles)
-		fmt.Printf("  Local tables: %d\n", manifest.Counts.LocalTables)
-		fmt.Printf("  Config files: %d\n", manifest.Counts.ConfigFiles)
-		if len(manifest.Counts.Plugins) > 0 {
-			fmt.Printf("  Plugins: %v\n", manifest.Counts.Plugins)
-		}
-		fmt.Printf("  Location: %s\n", currentDir)
+		return cli.EmitJSON(manifest)
+	}
+	fmt.Printf("Last backup: %s\n", manifest.Timestamp.Local().Format("2006-01-02 15:04:05"))
+	fmt.Printf("  Thrum version: %s\n", manifest.ThrumVersion)
+	fmt.Printf("  Repo: %s\n", manifest.RepoName)
+	fmt.Printf("  Events: %d\n", manifest.Counts.Events)
+	fmt.Printf("  Message files: %d\n", manifest.Counts.MessageFiles)
+	fmt.Printf("  Local tables: %d\n", manifest.Counts.LocalTables)
+	fmt.Printf("  Config files: %d\n", manifest.Counts.ConfigFiles)
+	if len(manifest.Counts.Plugins) > 0 {
+		fmt.Printf("  Plugins: %v\n", manifest.Counts.Plugins)
+	}
+	fmt.Printf("  Location: %s\n", currentDir)
 
-		// Show archive rotation stats
-		archivesDir := filepath.Join(backupDir, repoName, "archives")
-		if entries, err := os.ReadDir(archivesDir); err == nil {
-			var archiveCount int
-			var totalSize int64
-			var oldest, newest time.Time
-			for _, e := range entries {
-				if e.IsDir() || strings.HasPrefix(e.Name(), "pre-restore-") {
-					continue
+	// Show archive rotation stats
+	archivesDir := filepath.Join(backupDir, repoName, "archives")
+	if entries, err := os.ReadDir(archivesDir); err == nil {
+		var archiveCount int
+		var totalSize int64
+		var oldest, newest time.Time
+		for _, e := range entries {
+			if e.IsDir() || strings.HasPrefix(e.Name(), "pre-restore-") {
+				continue
+			}
+			archiveCount++
+			if info, err := e.Info(); err == nil {
+				totalSize += info.Size()
+			}
+			// Parse timestamp from filename (2006-01-02T150405.zip)
+			name := strings.TrimSuffix(e.Name(), ".zip")
+			if ts, err := time.Parse("2006-01-02T150405", name); err == nil {
+				if oldest.IsZero() || ts.Before(oldest) {
+					oldest = ts
 				}
-				archiveCount++
-				if info, err := e.Info(); err == nil {
-					totalSize += info.Size()
-				}
-				// Parse timestamp from filename (2006-01-02T150405.zip)
-				name := strings.TrimSuffix(e.Name(), ".zip")
-				if ts, err := time.Parse("2006-01-02T150405", name); err == nil {
-					if oldest.IsZero() || ts.Before(oldest) {
-						oldest = ts
-					}
-					if newest.IsZero() || ts.After(newest) {
-						newest = ts
-					}
+				if newest.IsZero() || ts.After(newest) {
+					newest = ts
 				}
 			}
-			if archiveCount > 0 {
-				fmt.Printf("Archives: %d (%.1f MB)\n", archiveCount, float64(totalSize)/(1024*1024))
-				if !oldest.IsZero() {
-					fmt.Printf("  Oldest: %s\n", oldest.Local().Format("2006-01-02 15:04:05"))
-					fmt.Printf("  Newest: %s\n", newest.Local().Format("2006-01-02 15:04:05"))
-				}
+		}
+		if archiveCount > 0 {
+			fmt.Printf("Archives: %d (%.1f MB)\n", archiveCount, float64(totalSize)/(1024*1024))
+			if !oldest.IsZero() {
+				fmt.Printf("  Oldest: %s\n", oldest.Local().Format("2006-01-02 15:04:05"))
+				fmt.Printf("  Newest: %s\n", newest.Local().Format("2006-01-02 15:04:05"))
 			}
 		}
 	}
@@ -7262,29 +7257,26 @@ func runBackupConfig() error {
 	}
 
 	if flagJSON {
-		data, _ := json.MarshalIndent(cfg.Backup, "", "  ")
-		fmt.Println(string(data))
-	} else {
-		fmt.Printf("Backup directory: %s\n", effectiveDir)
-		fmt.Printf("Retention:\n")
-		fmt.Printf("  Daily: %d\n", cfg.Backup.Retention.RetentionDaily())
-		fmt.Printf("  Weekly: %d\n", cfg.Backup.Retention.RetentionWeekly())
-		monthly := fmt.Sprintf("%d", cfg.Backup.Retention.RetentionMonthly())
-		if cfg.Backup.Retention.RetentionMonthly() == -1 {
-			monthly = "forever"
-		}
-		fmt.Printf("  Monthly: %s\n", monthly)
-		if len(cfg.Backup.Plugins) > 0 {
-			fmt.Printf("Plugins:\n")
-			for _, p := range cfg.Backup.Plugins {
-				fmt.Printf("  %s: %s\n", p.Name, p.Command)
-			}
-		}
-		if cfg.Backup.PostBackup != "" {
-			fmt.Printf("Post-backup: %s\n", cfg.Backup.PostBackup)
+		return cli.EmitJSON(cfg.Backup)
+	}
+	fmt.Printf("Backup directory: %s\n", effectiveDir)
+	fmt.Printf("Retention:\n")
+	fmt.Printf("  Daily: %d\n", cfg.Backup.Retention.RetentionDaily())
+	fmt.Printf("  Weekly: %d\n", cfg.Backup.Retention.RetentionWeekly())
+	monthly := fmt.Sprintf("%d", cfg.Backup.Retention.RetentionMonthly())
+	if cfg.Backup.Retention.RetentionMonthly() == -1 {
+		monthly = "forever"
+	}
+	fmt.Printf("  Monthly: %s\n", monthly)
+	if len(cfg.Backup.Plugins) > 0 {
+		fmt.Printf("Plugins:\n")
+		for _, p := range cfg.Backup.Plugins {
+			fmt.Printf("  %s: %s\n", p.Name, p.Command)
 		}
 	}
-
+	if cfg.Backup.PostBackup != "" {
+		fmt.Printf("Post-backup: %s\n", cfg.Backup.PostBackup)
+	}
 	return nil
 }
 
@@ -7358,8 +7350,9 @@ func runBackupRestore(dirOverride, archivePath string, skipConfirm bool) error {
 	}
 
 	if flagJSON {
-		data, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(data))
+		if err := cli.EmitJSON(result); err != nil {
+			return err
+		}
 	} else {
 		if result.SafetyBackup != "" {
 			fmt.Printf("Safety backup: %s\n", result.SafetyBackup)
@@ -7484,20 +7477,17 @@ func runPluginList() error {
 	}
 
 	if flagJSON {
-		data, _ := json.MarshalIndent(cfg.Backup.Plugins, "", "  ")
-		fmt.Println(string(data))
-	} else {
-		for _, p := range cfg.Backup.Plugins {
-			fmt.Printf("  %s\n", p.Name)
-			if p.Command != "" {
-				fmt.Printf("    command: %s\n", p.Command)
-			}
-			if len(p.Include) > 0 {
-				fmt.Printf("    include: %v\n", p.Include)
-			}
+		return cli.EmitJSON(cfg.Backup.Plugins)
+	}
+	for _, p := range cfg.Backup.Plugins {
+		fmt.Printf("  %s\n", p.Name)
+		if p.Command != "" {
+			fmt.Printf("    command: %s\n", p.Command)
+		}
+		if len(p.Include) > 0 {
+			fmt.Printf("    include: %v\n", p.Include)
 		}
 	}
-
 	return nil
 }
 
@@ -7737,9 +7727,7 @@ func runTelegramStatus() error {
 		if len(tg.AllowFrom) > 0 {
 			status["allow_from"] = tg.AllowFrom
 		}
-		data, _ := json.MarshalIndent(status, "", "  ")
-		fmt.Println(string(data))
-		return nil
+		return cli.EmitJSON(status)
 	}
 
 	if tg.Token == "" {
@@ -8106,14 +8094,9 @@ func tmuxCmd() *cobra.Command {
 						"error":   "aborted by hint",
 						"aborted": true,
 					}
-					if hs := cli.RenderJSONForEmit(blockers); hs != nil {
-						body["hints"] = hs
+					if err := cli.EmitJSONWithHints(body, blockers); err != nil {
+						return fmt.Errorf("render abort body: %w", err)
 					}
-					data, mErr := json.MarshalIndent(body, "", "  ")
-					if mErr != nil {
-						return fmt.Errorf("render abort body: %w", mErr)
-					}
-					fmt.Println(string(data))
 					return fmt.Errorf("aborted")
 				}
 				return cli.EmitAbort(abortErr, flagQuiet, flagJSON)
@@ -8162,27 +8145,9 @@ func tmuxCmd() *cobra.Command {
 			allHints := append(preHints, postHints...) //nolint:gocritic // appendAssign: intentionally combining into new slice
 
 			if flagJSON {
-				// Marshal the result, then graft the hints array onto the
-				// top-level object (if suppression rules allow).
-				raw, merr := json.Marshal(result)
-				if merr != nil {
-					return merr
+				if err := cli.EmitJSONWithHints(result, allHints); err != nil {
+					return fmt.Errorf("render tmux create response: %w", err)
 				}
-				var body map[string]any
-				if uerr := json.Unmarshal(raw, &body); uerr != nil {
-					return uerr
-				}
-				if body == nil {
-					body = map[string]any{}
-				}
-				if hs := cli.RenderJSONForEmit(allHints); hs != nil {
-					body["hints"] = hs
-				}
-				data, mErr := json.MarshalIndent(body, "", "  ")
-				if mErr != nil {
-					return fmt.Errorf("render tmux create response: %w", mErr)
-				}
-				fmt.Println(string(data))
 			} else {
 				fmt.Print(cli.FormatTmuxCreate(result))
 				cli.EmitStderr(allHints, flagQuiet, flagJSON)
@@ -8258,11 +8223,9 @@ func tmuxCmd() *cobra.Command {
 				return err
 			}
 			if flagJSON {
-				out, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(out))
-			} else {
-				fmt.Printf("Launched %s in session %s\n", result.Runtime, result.Session)
+				return cli.EmitJSON(result)
 			}
+			fmt.Printf("Launched %s in session %s\n", result.Runtime, result.Session)
 			return nil
 		},
 	}
@@ -8286,11 +8249,9 @@ func tmuxCmd() *cobra.Command {
 				return err
 			}
 			if flagJSON {
-				out, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(out))
-			} else {
-				fmt.Print(cli.FormatTmuxStatus(result))
+				return cli.EmitJSON(result)
 			}
+			fmt.Print(cli.FormatTmuxStatus(result))
 			return nil
 		},
 	}
@@ -8498,13 +8459,11 @@ Without arguments, shows a numbered list of alive sessions to choose from.`,
 			}
 
 			if flagJSON {
-				out, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(out))
-			} else {
-				fmt.Printf("Session %s restarted (%d snapshot lines)\n", result.Session, result.SnapshotLines)
-				if result.SnapshotLines == 0 {
-					fmt.Println("  ⚠ No conversation history captured — agent will start without prior context")
-				}
+				return cli.EmitJSON(result)
+			}
+			fmt.Printf("Session %s restarted (%d snapshot lines)\n", result.Session, result.SnapshotLines)
+			if result.SnapshotLines == 0 {
+				fmt.Println("  ⚠ No conversation history captured — agent will start without prior context")
 			}
 			return nil
 		},
@@ -8676,9 +8635,7 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 				return err
 			}
 			if flagJSON {
-				out, _ := json.MarshalIndent(resp, "", "  ")
-				fmt.Println(string(out))
-				return nil
+				return cli.EmitJSON(resp)
 			}
 			fmt.Printf("Session: %s\n", resp.Session)
 			if resp.Active != nil {
@@ -8716,9 +8673,7 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 				return err
 			}
 			if flagJSON {
-				out, _ := json.MarshalIndent(resp, "", "  ")
-				fmt.Println(string(out))
-				return nil
+				return cli.EmitJSON(resp)
 			}
 			fmt.Printf("Canceled %s (state: %s)\n", resp.CommandID, resp.State)
 			return nil
