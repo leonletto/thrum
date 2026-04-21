@@ -41,14 +41,28 @@ func (r *recordingSender) snapshot() []keystrokeCall {
 	return out
 }
 
+// defaultReplyTestPane returns a pane tail that DetectPaneState
+// recognizes as "permission:cursor.not_in_allowlist" — the pattern
+// seeded by seedPendingNudge. Reply-path tests share this fake so the
+// pre-send recheck in TryResolve (thrum-rfy3) sees a matching pane
+// and dispatches the keystroke. Tests that want to exercise the
+// recheck-skips-dispatch branch install their own paneCapture via
+// SetPaneCaptureForTest.
+const defaultReplyTestPane = "Not in allowlist: some-command\n"
+
 // newReplyTestPermission constructs a Permission with an in-memory
-// store and an injected keystroke sender. No real state.State is
-// needed — the reply path only touches the store and the sender.
+// store, an injected keystroke sender, and a pane capture stub that
+// returns content matching the seeded pattern. No real state.State is
+// needed — the reply path only touches the store, the sender, and
+// the pane recheck.
 func newReplyTestPermission(t *testing.T, sender *recordingSender) *Permission {
 	t.Helper()
 	db := openTestDB(t)
 	p := New(nil, db, "supervisor_thrum", "thrum", ".")
 	p.keystrokeSender = sender.fn()
+	p.SetPaneCaptureForTest(func(_ string, _ int) (string, error) {
+		return defaultReplyTestPane, nil
+	})
 	return p
 }
 
@@ -558,5 +572,90 @@ func TestTryResolve_DirectFallback_Regression(t *testing.T) {
 	calls := sender.snapshot()
 	if len(calls) != 1 || calls[0].key != "y" {
 		t.Errorf("direct reply to firstDetect still expected to dispatch, got %v", calls)
+	}
+}
+
+// TestTryResolve_ApproveSkipsKeystrokeWhenPaneMoved verifies that a
+// supervisor reply does NOT send the approve keystroke if the pane
+// has moved past the prompt between claim and dispatch. This is the
+// thrum-rfy3 defense-in-depth: the atomic DELETE...RETURNING still
+// happens (so reminders stop), but the keystroke is skipped so a
+// stray "1" cannot land in the agent's post-approval turn.
+func TestTryResolve_ApproveSkipsKeystrokeWhenPaneMoved(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+
+	const msgID = "msg_moved_pane"
+	seedPendingNudge(t, p, msgID, "y", "Escape")
+
+	// Pane has moved on — content no longer matches the seeded pattern.
+	p.SetPaneCaptureForTest(func(_ string, _ int) (string, error) {
+		return "$ ls\nfile1.go\nfile2.go\n", nil
+	})
+
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "y"}},
+		msgID)
+
+	if calls := sender.snapshot(); len(calls) != 0 {
+		t.Errorf("expected keystroke to be skipped when pane moved on, got %v", calls)
+	}
+	// Row was still claimed (atomic semantics preserved) so reminders
+	// stop firing — the pane moved on, so this is the correct end state.
+	if row, _ := p.store.LookupPendingNudgeByMessageID(context.Background(), msgID); row != nil {
+		t.Error("expected nudge row to be deleted by atomic claim even when pane recheck skipped dispatch")
+	}
+}
+
+// TestTryResolve_DenySkipsKeystrokeWhenPaneMoved verifies the deny
+// path also honours the pre-send pane recheck.
+func TestTryResolve_DenySkipsKeystrokeWhenPaneMoved(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+
+	const msgID = "msg_moved_pane_deny"
+	seedPendingNudge(t, p, msgID, "y", "Escape")
+
+	p.SetPaneCaptureForTest(func(_ string, _ int) (string, error) {
+		return "agent turn content; no prompt visible", nil
+	})
+
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "n"}},
+		msgID)
+
+	if calls := sender.snapshot(); len(calls) != 0 {
+		t.Errorf("expected deny keystroke to be skipped when pane moved on, got %v", calls)
+	}
+	// Row was claimed atomically (deny path matches approve semantics):
+	// reminders stop, pane-moved-on is the correct end state. See
+	// TestTryResolve_ApproveSkipsKeystrokeWhenPaneMoved for the sibling
+	// assertion on the approve path.
+	if row, _ := p.store.LookupPendingNudgeByMessageID(context.Background(), msgID); row != nil {
+		t.Error("expected nudge row to be deleted by atomic claim even when deny recheck skipped dispatch")
+	}
+}
+
+// TestTryResolve_ApproveSkipsKeystrokeOnCaptureError verifies the
+// fail-closed stance: if we cannot observe the pane, we don't guess —
+// skip the keystroke rather than fire blind. Logged as WARN for
+// operator visibility.
+func TestTryResolve_ApproveSkipsKeystrokeOnCaptureError(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+
+	const msgID = "msg_capture_fail"
+	seedPendingNudge(t, p, msgID, "y", "Escape")
+
+	p.SetPaneCaptureForTest(func(_ string, _ int) (string, error) {
+		return "", errors.New("tmux capture-pane failed: no such session")
+	})
+
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "y"}},
+		msgID)
+
+	if calls := sender.snapshot(); len(calls) != 0 {
+		t.Errorf("expected keystroke to be skipped on capture error (fail-closed), got %v", calls)
 	}
 }

@@ -192,17 +192,26 @@ func (p *Permission) firstDetect(
 
 	body := FormatNudge(row, paneTail, runtime, p.projectName, now)
 	var firstMsgID string
-	for i, to := range supers {
-		// First-detect messages have no thread yet; threadID="" lets
-		// the projector store NULL so the message_id itself becomes
-		// the thread root that fireReminder will reference.
-		msgID, err := p.SendSupervisorMessage(ctx, to, body, "")
+	for _, to := range supers {
+		// The first successful send carries threadID="" so the
+		// projector stores NULL and its own message_id becomes the
+		// thread root — the nudge row PK. Every subsequent
+		// supervisor send must carry threadID=firstMsgID so
+		// TryResolve's thread_id fallback can walk a reply aimed at
+		// supers[1+].msg_id back to the nudge row. Matches
+		// fireReminder's pattern (row.MessageID as threadID).
+		//
+		// thrum-rfy3: before this linkage, a Telegram reply to
+		// supers[1]'s nudge silently no-op'd because the direct
+		// lookup missed the PK and the thread_id fallback had no
+		// thread to walk.
+		msgID, err := p.SendSupervisorMessage(ctx, to, body, firstMsgID)
 		if err != nil {
 			slog.Error("[permission] send nudge failed", "to", to, "err", err)
 			continue
 		}
 		slog.Info("[permission] nudge sent", "to", to, "msg_id", msgID, "session", session)
-		if i == 0 {
+		if firstMsgID == "" {
 			firstMsgID = msgID
 		}
 	}

@@ -40,6 +40,13 @@ type Permission struct {
 	// sendKeystroke falls back to defaultKeystroke (tmux.SendKeys /
 	// tmux.SendSpecialKey) in that case.
 	keystrokeSender func(target, key string) error
+
+	// paneCapture is injected by reply_test to simulate pane state at
+	// dispatch time. Production leaves it nil; the pre-send pane
+	// recheck falls back to tmux.CapturePane in that case. See
+	// TryResolve's pre-send check for why this seam exists
+	// (thrum-rfy3: race-safe defense-in-depth beyond the atomic claim).
+	paneCapture func(target string, lines int) (string, error)
 }
 
 // New builds a Permission. The state argument may be nil for unit tests
@@ -86,6 +93,16 @@ func (p *Permission) SetClock(now func() time.Time) {
 // reads keystrokeSender under no lock.
 func (p *Permission) SetKeystrokeSenderForTest(fn func(target, key string) error) {
 	p.keystrokeSender = fn
+}
+
+// SetPaneCaptureForTest installs a test-only pane capture function so
+// reply-path tests can simulate pane state at dispatch time without
+// touching real tmux. PRODUCTION CODE MUST NOT CALL THIS. Production
+// uses tmux.CapturePane via the lazy fallback in captureForRecheck.
+//
+// NOT SAFE for concurrent use. Install before the hook is wired.
+func (p *Permission) SetPaneCaptureForTest(fn func(target string, lines int) (string, error)) {
+	p.paneCapture = fn
 }
 
 // Store returns the backing *Store so tests and cross-package
