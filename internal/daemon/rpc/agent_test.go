@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,7 +15,6 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/types"
 )
-
 
 func TestAgentRegister(t *testing.T) {
 	tests := []struct {
@@ -2249,22 +2249,49 @@ func TestAgentWhoami_TmuxAliveReflectsSessionState(t *testing.T) {
 // TestHandleRegister_PreservesCoLocatedAgents below.
 func TestHandleRegister_EnforceOneIdentityOnSelfRename(t *testing.T) {
 	tmpDir := t.TempDir()
+	// thrum-182j CWD-match gate inside EnforceOneIdentityWith resolves
+	// both the CallerCwd and the target via `git rev-parse
+	// --show-toplevel`. The daemon's self-rename path passes
+	// resolved.Worktree as both, so they must be a real git worktree
+	// root or the gate refuses enforcement. TempDir is not a git repo
+	// by default; initialize one here so the test exercises the
+	// quarantine path end-to-end rather than short-circuiting at the
+	// CWD gate.
+	if out, err := exec.Command("git", "-C", tmpDir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init tmpDir: %v (%s)", err, out)
+	}
+	// EvalSymlinks-canonicalize tmpDir so the path used in
+	// peercred.WithIdentity matches gitToplevel's output after the
+	// daemon's CWD-match normalization. Without this, macOS /tmp →
+	// /private/tmp divergence fails the comparison even though both
+	// sides point at the same worktree.
+	if resolved, err := filepath.EvalSymlinks(tmpDir); err == nil {
+		tmpDir = resolved
+	}
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 	idsDir := filepath.Join(thrumDir, "identities")
 	if err := os.MkdirAll(idsDir, 0o750); err != nil {
 		t.Fatalf("mkdir identities: %v", err)
 	}
 
-	// Seed a stale identity file with a dead-looking PID. The
+	// Seed a stale identity file with a reliably-dead PID. The
 	// self-registering caller ("new_agent") will trigger enforcement
 	// because peercred resolves the caller to "new_agent" (matching
 	// keepName below).
+	//
+	// AgentPID must be outside any plausible kernel PID range so the
+	// thrum-182j defense-in-depth liveness check inside
+	// EnforceOneIdentityWith correctly classifies it as dead. PID 1 is
+	// init (always alive) and would be preserved, masking the
+	// legitimate quarantine under test. 99999999 is well above the
+	// macOS default kern.maxproc ceiling (99999) and comfortably
+	// above the common Linux pid_max default (4194304).
 	stale := &config.IdentityFile{
 		Version: 5,
 		Agent: config.AgentConfig{
 			Kind: "agent", Name: "old_agent", Role: "implementer", Module: "legacy",
 		},
-		AgentPID: 1,
+		AgentPID: 99999999,
 	}
 	if err := config.SaveIdentityFile(thrumDir, stale); err != nil {
 		t.Fatalf("seed stale identity: %v", err)
@@ -2332,7 +2359,7 @@ func TestHandleRegister_EnforceOneIdentityOnSelfRename(t *testing.T) {
 // DIFFERENTLY named agent from the same worktree — e.g. an E2E test
 // harness that registers short-lived test agents from the coordinator
 // dir — the daemon-side enforceWorktreeIdentity hook must NOT
-// quarantine the caller's own identity file. thrum-ajmd softened the
+// quarantine the caller's own identity file. Thrum-ajmd softened the
 // blast radius from delete → quarantine; this test pins the stricter
 // invariant that the caller's file is preserved entirely.
 func TestHandleRegister_PreservesCallerIdentity(t *testing.T) {

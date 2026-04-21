@@ -97,11 +97,11 @@ type TmuxStatusResponse struct {
 
 // TmuxHandler handles tmux session lifecycle RPC methods.
 type TmuxHandler struct {
-	thrumDir    string
-	state       *state.State
-	queues      map[string]*SessionQueue
-	queuesMu    sync.Mutex
-	sessionMu   sync.RWMutex      // protects sessionCwds and cwdSessions
+	thrumDir  string
+	state     *state.State
+	queues    map[string]*SessionQueue
+	queuesMu  sync.Mutex
+	sessionMu sync.RWMutex // protects sessionCwds and cwdSessions
 	// sessionCwds maps session name → cwd. Populated by HandleCreate
 	// from req.Cwd (CLI-supplied, trusted: local-socket-only threat
 	// model; the daemon does not serve remote clients). Read by
@@ -303,7 +303,33 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 		// Enforce single identity AFTER quickstart command is sent successfully.
 		// Quickstart runs asynchronously in the pane — this cleans pre-existing
 		// stale identities. The new identity will be written by quickstart.
-		worktree.EnforceOneIdentity(req.Cwd, req.AgentName)
+		//
+		// thrum-182j: mirror agent.go's keeper-list expansion so every
+		// agent registered against this worktree in session_refs
+		// survives enforcement. Without this, creating a tmux session
+		// for agent A in a worktree where agent B is already registered
+		// would quarantine agent B's identity file.
+		//
+		// Liveness gate (IsPIDAlive): refuse to quarantine a file whose
+		// AgentPID is currently running — kernel-verified backstop for
+		// a stale keeper list.
+		//
+		// AllowCrossWorktree is intentionally true here: HandleCreate
+		// legitimately operates on a target worktree (req.Cwd) that is
+		// NOT the caller's own cwd. The caller is typically a
+		// coordinator CLI instance creating a pane in a sibling
+		// worktree — the use case the static CWD-match guard is
+		// explicitly designed to allow via the override. The keeper-
+		// list expansion + liveness gate remain the active defenses
+		// on this path.
+		keepers := []string{req.AgentName}
+		if h.state != nil {
+			keepers = append(keepers, h.state.ListAgentsInWorktree(ctx, req.Cwd)...)
+		}
+		worktree.EnforceOneIdentityWith(req.Cwd, worktree.EnforceOpts{
+			IsPIDAlive:         func(pid int) bool { return process.IsRunning(pid) },
+			AllowCrossWorktree: true,
+		}, keepers...)
 
 		// Shell init (oh-my-zsh, etc.) can swallow the first command.
 		// Poll for the identity file; if it doesn't appear, re-send quickstart.
@@ -700,8 +726,9 @@ func parsePermissionReason(reason string) (runtime, name string, ok bool) {
 // back to Pass 1/2 so we don't mass-flap mis-registered files.
 //
 // Legacy passes preserved:
-//   Pass 1: match by existing tmux_session association.
-//   Pass 2: match by agent name (first launch, no tmux_session yet).
+//
+//	Pass 1: match by existing tmux_session association.
+//	Pass 2: match by agent name (first launch, no tmux_session yet).
 func (h *TmuxHandler) writeTmuxToIdentity(sessionName, target, runtime string) {
 	// Pass 0 (thrum-51cg): worktree-path pass via sessionCwds.
 	if h.writeTmuxByWorktreeCwd(sessionName, target, runtime) {
