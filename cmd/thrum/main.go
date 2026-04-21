@@ -2230,9 +2230,9 @@ The agent identity is determined from:
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
+				if err := cli.EmitJSON(result); err != nil {
+					return err
+				}
 			} else {
 				// Human-readable formatted output
 				fmt.Print(cli.FormatRegisterResponse(result))
@@ -2385,12 +2385,9 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatAgentDelete(result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatAgentDelete(result))
 			return nil
 		},
 	}
@@ -2439,9 +2436,7 @@ Examples:
 
 			// Handle JSON output
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-				return nil
+				return cli.EmitJSON(result)
 			}
 
 			// Display results
@@ -2934,12 +2929,7 @@ func worktreeListJSON(repoPath string) error {
 		}
 	}
 
-	data, err := json.MarshalIndent(worktrees, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal: %w", err)
-	}
-	fmt.Println(string(data))
-	return nil
+	return cli.EmitJSON(worktrees)
 }
 
 func agentSetStatusCmd() *cobra.Command {
@@ -3042,14 +3032,9 @@ func sessionStartRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagJSON {
-		// Output as JSON
-		output, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(output))
-	} else {
-		// Human-readable formatted output
-		fmt.Print(cli.FormatSessionStart(result))
+		return cli.EmitJSON(result)
 	}
-
+	fmt.Print(cli.FormatSessionStart(result))
 	return nil
 }
 
@@ -3093,14 +3078,9 @@ func sessionEndRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagJSON {
-		// Output as JSON
-		output, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(output))
-	} else {
-		// Human-readable formatted output
-		fmt.Print(cli.FormatSessionEnd(result))
+		return cli.EmitJSON(result)
 	}
-
+	fmt.Print(cli.FormatSessionEnd(result))
 	return nil
 }
 
@@ -3139,12 +3119,11 @@ func sessionSetIntentRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagJSON {
-		output, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(output))
-	} else if !flagQuiet {
+		return cli.EmitJSON(result)
+	}
+	if !flagQuiet {
 		fmt.Print(cli.FormatSetIntent(result))
 	}
-
 	return nil
 }
 
@@ -3175,12 +3154,11 @@ func sessionSetTaskRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagJSON {
-		output, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(output))
-	} else if !flagQuiet {
+		return cli.EmitJSON(result)
+	}
+	if !flagQuiet {
 		fmt.Print(cli.FormatSetTask(result))
 	}
-
 	return nil
 }
 
@@ -3247,12 +3225,9 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatSessionList(result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatSessionList(result))
 			return nil
 		},
 	}
@@ -3363,12 +3338,11 @@ Examples:
 			_, _ = cli.MessageMarkRead(client, []string{opts.MessageID}, agentID)
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else if !flagQuiet {
+				return cli.EmitJSON(result)
+			}
+			if !flagQuiet {
 				fmt.Printf("✓ Reply sent: %s\n", result.MessageID)
 			}
-
 			return nil
 		},
 	}
@@ -3411,12 +3385,9 @@ func messageCmd() *cobra.Command {
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatMessageGet(result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatMessageGet(result))
 			return nil
 		},
 	}
@@ -3450,12 +3421,11 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else if !flagQuiet {
+				return cli.EmitJSON(result)
+			}
+			if !flagQuiet {
 				fmt.Print(cli.FormatMessageEdit(result))
 			}
-
 			return nil
 		},
 	}
@@ -3493,12 +3463,11 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else if !flagQuiet {
+				return cli.EmitJSON(result)
+			}
+			if !flagQuiet {
 				fmt.Print(cli.FormatMessageDelete(result))
 			}
-
 			return nil
 		},
 	}
@@ -3565,9 +3534,9 @@ Examples:
 
 				remaining := inboxResult.Unread - result.MarkedCount
 				if flagJSON {
-					output, _ := json.MarshalIndent(result, "", "  ")
-					fmt.Println(string(output))
-				} else if !flagQuiet {
+					return cli.EmitJSON(result)
+				}
+				if !flagQuiet {
 					fmt.Print(cli.FormatMarkRead(result))
 					if remaining > 0 {
 						fmt.Printf("  %d unread messages remaining (run again to mark more)\n", remaining)
@@ -3586,12 +3555,11 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else if !flagQuiet {
+				return cli.EmitJSON(result)
+			}
+			if !flagQuiet {
 				fmt.Print(cli.FormatMarkRead(result))
 			}
-
 			return nil
 		},
 	}
