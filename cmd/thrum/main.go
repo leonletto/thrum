@@ -476,8 +476,9 @@ Examples:
 				}
 
 				if flagJSON {
-					output, _ := json.MarshalIndent(result, "", "  ")
-					fmt.Println(string(output))
+					if err := cli.EmitJSON(result); err != nil {
+						return err
+					}
 				} else if !flagQuiet {
 					fmt.Print(cli.FormatRuntimeInit(result))
 				}
@@ -615,12 +616,11 @@ func runSkillsInstall(repoPath, runtimeFlag string, force, dryRun bool) error {
 	}
 
 	if flagJSON {
-		output, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(output))
-	} else if !flagQuiet {
+		return cli.EmitJSON(result)
+	}
+	if !flagQuiet {
 		fmt.Print(cli.FormatSkillsInstall(result))
 	}
-
 	return nil
 }
 
@@ -714,12 +714,9 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatConfigShow(result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatConfigShow(result))
 			return nil
 		},
 	}
@@ -880,26 +877,9 @@ The daemon must be running and you must have an active session.`,
 			}
 
 			if flagJSON {
-				// Output as JSON with hints grafted onto the top-level body.
-				raw, merr := json.Marshal(result)
-				if merr != nil {
-					return merr
+				if err := cli.EmitJSONWithHints(result, preHints); err != nil {
+					return err
 				}
-				var body map[string]any
-				if uerr := json.Unmarshal(raw, &body); uerr != nil {
-					return uerr
-				}
-				if body == nil {
-					body = map[string]any{}
-				}
-				if hs := cli.RenderJSONForEmit(preHints); hs != nil {
-					body["hints"] = hs
-				}
-				data, mErr := json.MarshalIndent(body, "", "  ")
-				if mErr != nil {
-					return fmt.Errorf("render send response: %w", mErr)
-				}
-				fmt.Println(string(data))
 			} else if !flagQuiet {
 				// Human-readable output
 				fmt.Printf("✓ Message sent: %s\n", result.MessageID)
@@ -982,12 +962,11 @@ to inspect a message with full recipient state.`,
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else if !flagQuiet {
+				return cli.EmitJSON(result)
+			}
+			if !flagQuiet {
 				fmt.Print(cli.FormatOutbox(result))
 			}
-
 			return nil
 		},
 	}
@@ -1121,26 +1100,19 @@ func versionCmd() *cobra.Command {
 		Long:  `Display version information including version number, build hash, repository URL, and documentation URL.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if flagJSON {
-				// JSON output
-				output := map[string]string{
+				return cli.EmitJSON(map[string]string{
 					"version":     Version,
 					"build":       Build,
 					"go_version":  goruntime.Version(),
 					"repo_url":    "https://github.com/leonletto/thrum",
 					"website_url": "https://leonletto.github.io/thrum",
-				}
-				data, err := json.MarshalIndent(output, "", "  ")
-				if err != nil {
-					return err
-				}
-				fmt.Println(string(data))
-			} else {
-				// Human-readable output with OSC 8 hyperlinks
-				// Format: ESC ] 8 ; ; URL ESC \ TEXT ESC ] 8 ; ; ESC \
-				fmt.Printf("thrum v%s (build: %s, %s)\n", Version, Build, goruntime.Version())
-				fmt.Printf("\x1b]8;;https://github.com/leonletto/thrum\x07https://github.com/leonletto/thrum\x1b]8;;\x07\n")
-				fmt.Printf("\x1b]8;;https://leonletto.github.io/thrum\x07https://leonletto.github.io/thrum\x1b]8;;\x07\n")
+				})
 			}
+			// Human-readable output with OSC 8 hyperlinks
+			// Format: ESC ] 8 ; ; URL ESC \ TEXT ESC ] 8 ; ; ESC \
+			fmt.Printf("thrum v%s (build: %s, %s)\n", Version, Build, goruntime.Version())
+			fmt.Printf("\x1b]8;;https://github.com/leonletto/thrum\x07https://github.com/leonletto/thrum\x1b]8;;\x07\n")
+			fmt.Printf("\x1b]8;;https://leonletto.github.io/thrum\x07https://leonletto.github.io/thrum\x1b]8;;\x07\n")
 			return nil
 		},
 	}
@@ -1433,16 +1405,14 @@ Exit codes:
 			}
 
 			if flagJSON {
-				out := map[string]string{
+				return cli.EmitJSON(map[string]string{
 					"status": "received",
 					"action": "ACTION REQUIRED: You have unread messages. Run `thrum inbox --unread` now to read and respond to them.",
-				}
-				output, _ := json.MarshalIndent(out, "", "  ")
-				fmt.Println(string(output))
-			} else if !flagQuiet {
+				})
+			}
+			if !flagQuiet {
 				fmt.Println("MESSAGES_RECEIVED")
 			}
-
 			return nil
 		},
 	}
@@ -1518,9 +1488,9 @@ func daemonCmd() *cobra.Command {
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
+				if err := cli.EmitJSON(result); err != nil {
+					return err
+				}
 			} else {
 				// Human-readable formatted output
 				fmt.Print(cli.FormatDaemonStatus(result))
@@ -1879,12 +1849,9 @@ stored secrets in peers.json to re-handshake without minting a new token.`,
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(peers, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatPeerList(peers))
+				return cli.EmitJSON(peers)
 			}
-
+			fmt.Print(cli.FormatPeerList(peers))
 			return nil
 		},
 	})
@@ -1927,12 +1894,9 @@ stored secrets in peers.json to re-handshake without minting a new token.`,
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(peers, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatPeerStatus(peers))
+				return cli.EmitJSON(peers)
 			}
-
+			fmt.Print(cli.FormatPeerStatus(peers))
 			return nil
 		},
 	})
