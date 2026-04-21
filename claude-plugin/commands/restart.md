@@ -64,11 +64,21 @@ cat "$PLAN"
 ### 3. Save the conversation snapshot
 
 ```bash
-thrum tmux snapshot save
+thrum tmux snapshot save || {
+  echo "ERROR: thrum tmux snapshot save failed — see stderr above for reason"
+  echo "  (common causes: identity file missing agent_pid, JSONL not found at ~/.claude/projects/)"
+  echo "  Not proceeding to restart — investigate the save failure first."
+  rm -f "$PLAN"
+  exit 1
+}
 ```
 
 This captures the conversation tail to
 `.thrum/restart/<agent_id>.md` in the current worktree.
+
+**Exit-code check is critical**: without it, a silent save failure still
+lets the flow continue to step 6, which asks the coordinator to restart a
+session with no snapshot to restore — losing all conversation context.
 
 ### 4. Append the Resume Plan to the snapshot file
 

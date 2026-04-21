@@ -27,6 +27,29 @@
 - **Reply:** `thrum reply <msg-id>` — same audience as original
 - **Unknown recipient** — hard error; verify names with `thrum team`
 
+## Permission-Prompt Routing
+
+Runtime permission prompts (e.g. "Allow this tool?") route to recipients listed
+in `permission_supervisors` in `.thrum/config.json`. **The array is
+authoritative** — the daemon sends the nudge to each entry in order, with no
+auto-detect or broadcast fallback behind it.
+
+```jsonc
+{
+  "permission_supervisors": [
+    "coordinator",         // role → fans out to every active coordinator
+    "@coordinator_main",   // specific agent (name-based)
+    "@user:leon-letto"     // user → auto-bridges to Telegram if configured
+  ]
+}
+```
+
+**Invariant:** the list must include at least one coordinator-role recipient —
+either the bare role `"coordinator"` or an `@coordinator_*` agent name. When
+absent or empty, the resolver defaults to `["coordinator"]`. If the list is
+non-empty but has no coordinator entry, the daemon warns at start and continues
+(prompts may still go undelivered if the listed agents are offline).
+
 ## Threading
 
 Replies auto-create implicit threads. When you `thrum reply`, the daemon assigns
