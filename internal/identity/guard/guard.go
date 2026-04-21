@@ -15,6 +15,7 @@ import (
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/process"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
+	"github.com/leonletto/thrum/internal/worktree"
 )
 
 // Check is the CLI-side entrypoint for Rule #4‴. Every command that
@@ -162,17 +163,27 @@ func reconcileDrift(ctx context.Context, repoPath string, idFile *config.Identit
 		detectedRuntime = runtimeNameFn(ctx, cc.ClosestRtPID)
 	}
 
-	tmuxTarget := ""
-	if ttmux.InTmux() {
-		if target, err := ttmux.PaneTarget(); err == nil {
-			tmuxTarget = target
-		}
-	}
-
 	branch := ""
 	effective := paths.EffectiveRepoPath(repoPath)
 	if out, err := safecmd.Git(ctx, effective, "rev-parse", "--abbrev-ref", "HEAD"); err == nil {
 		branch = strings.TrimRight(string(out), "\n")
+	}
+
+	// thrum-l9s1: gate the TmuxSession write through worktree.
+	// PaneTargetForIdentity. The caller's $TMUX (e.g. coordinator
+	// running a `thrum` CLI from their own pane while cwd resolves
+	// into a different worktree) WOULD otherwise overwrite the
+	// target identity's TmuxSession with the caller's session,
+	// causing every future nudge to that agent to misroute to the
+	// caller's pane (the S44 phantom-self-echo cascade). The helper
+	// returns the input when paneTarget's session matches the
+	// effective worktree's basename, "" otherwise; the empty return
+	// short-circuits the != check below so no write happens.
+	tmuxTarget := ""
+	if ttmux.InTmux() {
+		if target, err := ttmux.PaneTarget(); err == nil {
+			tmuxTarget = worktree.PaneTargetForIdentity(target, effective, worktree.SafeTmuxOpts{})
+		}
 	}
 
 	changed := false
