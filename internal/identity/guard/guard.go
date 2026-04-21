@@ -15,6 +15,7 @@ import (
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/process"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
+	"github.com/leonletto/thrum/internal/worktree"
 )
 
 // Check is the CLI-side entrypoint for Rule #4‴. Every command that
@@ -162,17 +163,41 @@ func reconcileDrift(ctx context.Context, repoPath string, idFile *config.Identit
 		detectedRuntime = runtimeNameFn(ctx, cc.ClosestRtPID)
 	}
 
+	// thrum-l9s1: every per-identity field reconciled here is bound to
+	// the IDENTITY's worktree, not to whatever paths.EffectiveRepoPath
+	// resolves to. Use repoPath directly. EffectiveRepoPath redirects
+	// to $THRUM_HOME when that env var is set — fine for daemon RPC
+	// and sync paths that must operate on the bound checkout, but
+	// catastrophic here: with THRUM_HOME=/path/to/main, every drift
+	// reconciliation across every identity in every worktree would
+	// resolve "effective" to the SAME main-repo path, and then:
+	//   - the git rev-parse --abbrev-ref HEAD would return main
+	//     repo's branch (and overwrite the agent's actual branch)
+	//   - the worktree.PaneTargetForIdentity check would compare the
+	//     caller's pane session against filepath.Base(THRUM_HOME),
+	//     which matches coordinator's pane name "thrum" — silently
+	//     defeating the very guard this fix is trying to install
+	// internal/paths/IdentitiesDir's own doc comment makes the
+	// per-worktree rule explicit: "identities are per-worktree."
+	branch := ""
+	if out, err := safecmd.Git(ctx, repoPath, "rev-parse", "--abbrev-ref", "HEAD"); err == nil {
+		branch = strings.TrimRight(string(out), "\n")
+	}
+
+	// PaneTargetForIdentity gate: the caller's $TMUX (e.g. coordinator
+	// running a `thrum` CLI from their own pane while cwd resolves
+	// into a different worktree) WOULD otherwise overwrite the
+	// target identity's TmuxSession with the caller's session,
+	// causing every future nudge to that agent to misroute to the
+	// caller's pane (the S44 phantom-self-echo cascade). The helper
+	// returns the input when paneTarget's session matches repoPath's
+	// basename (sanitized), "" otherwise; the empty return short-
+	// circuits the != check below so no write happens.
 	tmuxTarget := ""
 	if ttmux.InTmux() {
 		if target, err := ttmux.PaneTarget(); err == nil {
-			tmuxTarget = target
+			tmuxTarget = worktree.PaneTargetForIdentity(target, repoPath, worktree.SafeTmuxOpts{})
 		}
-	}
-
-	branch := ""
-	effective := paths.EffectiveRepoPath(repoPath)
-	if out, err := safecmd.Git(ctx, effective, "rev-parse", "--abbrev-ref", "HEAD"); err == nil {
-		branch = strings.TrimRight(string(out), "\n")
 	}
 
 	changed := false
@@ -199,8 +224,9 @@ func reconcileDrift(ctx context.Context, repoPath string, idFile *config.Identit
 	// Persist via SaveIdentityFile — it handles marshaling,
 	// versioning, and umask-safe writes. The PID field is NOT
 	// modified by this path; callers that need to mutate AgentPID
-	// must route through WritePID.
-	thrumDir := filepath.Join(effective, ".thrum")
+	// must route through WritePID. Per the per-worktree rule above,
+	// thrumDir is rooted at repoPath, NOT at EffectiveRepoPath.
+	thrumDir := filepath.Join(repoPath, ".thrum")
 	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
 		return fmt.Errorf("save identity: %w", err)
 	}

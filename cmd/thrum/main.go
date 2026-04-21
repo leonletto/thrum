@@ -55,6 +55,7 @@ import (
 	"github.com/leonletto/thrum/internal/types"
 	"github.com/leonletto/thrum/internal/web"
 	"github.com/leonletto/thrum/internal/websocket"
+	"github.com/leonletto/thrum/internal/worktree"
 	"github.com/spf13/cobra"
 )
 
@@ -4612,9 +4613,22 @@ Examples:
 				// permission-prompt detection for the window between quickstart
 				// and the next `thrum` CLI call that would trigger guard.Check
 				// → reconcileDrift (thrum-enlw.8).
+				//
+				// thrum-l9s1: route the resolved target through
+				// worktree.PaneTargetForIdentity so a `thrum quickstart` run
+				// from a coordinator pane (with cwd resolving to a different
+				// worktree) doesn't write the coordinator's pane into the
+				// new agent's identity file. flagRepo is the target identity's
+				// worktree path; the helper compares the caller's pane
+				// session-name against the sanitized basename of flagRepo
+				// and refuses cross-worktree writes silently (no field
+				// changed when it returns "").
 				if ttmux.InTmux() {
-					if target, err := ttmux.PaneTarget(); err == nil && target != "" && idFile.TmuxSession != target {
-						idFile.TmuxSession = target
+					if target, err := ttmux.PaneTarget(); err == nil {
+						safe := worktree.PaneTargetForIdentity(target, flagRepo, worktree.SafeTmuxOpts{})
+						if safe != "" && idFile.TmuxSession != safe {
+							idFile.TmuxSession = safe
+						}
 					}
 				}
 
