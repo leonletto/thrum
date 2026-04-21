@@ -210,6 +210,14 @@ Environment variables:
 // them into the response body — stdout stays pure JSON. In human mode we
 // install a plain text handler writing to stderr so users running
 // `thrum ... 2> log.txt` still see warnings as before.
+//
+// Contract: called once per CLI invocation from rootCmd.PersistentPreRunE,
+// before any code that may emit slog records. The CLI is short-lived and
+// process-global slog.Default mutation is intentional. Tests that exercise
+// the cobra command tree multiple times in one process MUST save and
+// restore slog.Default themselves to avoid bleeding the bridge handler
+// into unrelated test cases — see main_sloghint_integration_test.go for
+// the pattern.
 func installSlogBridge(jsonMode bool, stderr io.Writer) {
 	if jsonMode {
 		slog.SetDefault(slog.New(cli.NewSlogHintHandler()))
@@ -2041,7 +2049,11 @@ The command and its arguments must be separated from monitor flags with '--':
 				}
 				defer func() { _ = client.Close() }()
 				if flagJSON {
-					return cli.MonitorListJSON(client, includeAll, os.Stdout)
+					jobs, err := cli.MonitorListJSON(client, includeAll)
+					if err != nil {
+						return err
+					}
+					return cli.EmitJSON(jobs)
 				}
 				return cli.MonitorList(client, includeAll, os.Stdout)
 			},
@@ -2063,7 +2075,11 @@ The command and its arguments must be separated from monitor flags with '--':
 			}
 			defer func() { _ = client.Close() }()
 			if flagJSON {
-				return cli.MonitorShowJSON(client, args[0], os.Stdout)
+				job, err := cli.MonitorShowJSON(client, args[0])
+				if err != nil {
+					return err
+				}
+				return cli.EmitJSON(job)
 			}
 			return cli.MonitorShow(client, args[0], os.Stdout)
 		},

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -104,6 +105,39 @@ func TestEmitJSON_ArrayBodyNoHintsVerbatim(t *testing.T) {
 	}
 	if len(arr) != 2 {
 		t.Errorf("len=%d want 2", len(arr))
+	}
+}
+
+func TestEmitJSON_NilBodyNoHints(t *testing.T) {
+	ResetPushedHintsForTest()
+	out := captureStdout(t, func() {
+		if err := EmitJSON(nil); err != nil {
+			t.Fatalf("EmitJSON: %v", err)
+		}
+	})
+	// json.Marshal(nil) = "null"; EmitJSON should emit it verbatim plus newline.
+	if got := strings.TrimRight(out, "\n"); got != "null" {
+		t.Errorf("nil body output=%q want %q", got, "null")
+	}
+}
+
+func TestEmitJSON_NilBodyWithPushedHints(t *testing.T) {
+	ResetPushedHintsForTest()
+	pushedHints = []Hint{{Code: "x", Severity: SeverityWarn, Message: "m"}}
+	out := captureStdout(t, func() {
+		if err := EmitJSON(nil); err != nil {
+			t.Fatalf("EmitJSON: %v", err)
+		}
+	})
+	var got map[string]any
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("nil+hints should wrap into object; got:\n%s", out)
+	}
+	if got["result"] != nil {
+		t.Errorf("result=%v want nil", got["result"])
+	}
+	if _, has := got["hints"]; !has {
+		t.Errorf("hints key missing in:\n%s", out)
 	}
 }
 

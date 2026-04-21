@@ -11,6 +11,16 @@ import (
 // shape except when pushed hints exist AND body is non-object, in which case
 // it wraps as {"result": body, "hints": [...]} to preserve the JSON contract.
 //
+// nil body emits "null" verbatim when no hints are pending, or wraps as
+// {"result": null, "hints": [...]} when hints exist. Either way the output
+// is a single valid JSON document.
+//
+// Object bodies are round-tripped through map[string]any to graft the hints
+// key — this loses any deterministic field ordering the source struct may
+// have had (Go maps marshal in sorted-key order, but struct field order may
+// differ). Acceptable for CLI output but worth noting if a future test ever
+// relies on golden-file byte-for-byte snapshots of object payloads.
+//
 // Use EmitJSONWithHints when the command also has pull-based hints (from
 // cli.Collect) that should merge with the slog-pushed set.
 func EmitJSON(body any) error {

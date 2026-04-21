@@ -68,6 +68,10 @@ func TestDeriveHintCode_DottedPrefix(t *testing.T) {
 		"worktree.PaneTargetForIdentity refused: x": "worktree.panetargetforidentity",
 		"identity_guard_fire":                       "runtime.warn",
 		"bridge.telegram: send failed":              "bridge.telegram",
+		// Daemon-style bracketed prefix should be unwrapped so the code is
+		// useful even if such records leak into the CLI bridge.
+		"[telegram.msgmap] persistence write failed": "telegram.msgmap",
+		"[queue] foo failed":                         "runtime.warn",
 	}
 	for in, want := range cases {
 		if got := deriveHintCode(in); got != want {

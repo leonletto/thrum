@@ -18,10 +18,16 @@ var (
 // human mode it's rendered to stderr by EmitStderr via the existing
 // Shape B path. Lower-level records (Info, Debug) are dropped because
 // they are operator-facing noise the CLI should not surface.
-type SlogHintHandler struct {
-	attrs []slog.Attr
-	group string
-}
+//
+// The bridge surfaces only record.Message — structured attrs (slog.With,
+// slog.Group) are intentionally NOT propagated to the resulting Hint.
+// Hint.Message is human-readable text that ends up in users' JSON
+// bodies/stderr; smuggling structured key/values into it would mangle the
+// presentation and risk leaking unredacted attribute values into outputs
+// that callers may pipe to logs or other tools. Library code that wants
+// structured context in a hint should construct the Hint at the call site
+// (with the cli.Hint API) rather than through slog.
+type SlogHintHandler struct{}
 
 // NewSlogHintHandler returns a handler ready to install via
 // slog.SetDefault(slog.New(NewSlogHintHandler())).
@@ -51,25 +57,25 @@ func (h *SlogHintHandler) Handle(_ context.Context, r slog.Record) error {
 	return nil
 }
 
-func (h *SlogHintHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	nh := *h
-	nh.attrs = append(nh.attrs, attrs...)
-	return &nh
-}
+// WithAttrs and WithGroup return the handler unchanged — see the type
+// docstring for why structured attrs are intentionally not surfaced in
+// hints. Returning the receiver means slog.With(...).Warn(msg) emits the
+// same hint that .Warn(msg) alone would, with no attribute leakage.
+func (h *SlogHintHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
 
-func (h *SlogHintHandler) WithGroup(name string) slog.Handler {
-	nh := *h
-	nh.group = name
-	return &nh
-}
+func (h *SlogHintHandler) WithGroup(_ string) slog.Handler { return h }
 
 // deriveHintCode extracts a code token from a slog record message. The
 // convention most of the codebase already follows is "package.Symbol: reason"
-// or "subsystem: reason" — we pull the first whitespace-delimited token and
-// strip a trailing colon. If that token doesn't contain a "." we fall back
-// to "runtime.warn" so EmitJSON still has a stable code.
+// or "subsystem: reason" — we pull the first whitespace-delimited token,
+// strip surrounding brackets (for daemon-style "[telegram.msgmap] ..."
+// records that may reach the bridge in unusual flows), and trim a trailing
+// colon. If the result still doesn't contain a "." we fall back to
+// "runtime.warn" so EmitJSON always has a stable code.
 func deriveHintCode(msg string) string {
-	first := strings.TrimRight(strings.SplitN(msg, " ", 2)[0], ":")
+	first := strings.SplitN(msg, " ", 2)[0]
+	first = strings.Trim(first, "[]")
+	first = strings.TrimRight(first, ":")
 	first = strings.ToLower(first)
 	if !strings.Contains(first, ".") {
 		return "runtime.warn"
