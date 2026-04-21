@@ -119,6 +119,12 @@ Environment variables:
 	// Resolve flagRepo to the nearest parent containing .thrum/ (git-style traversal).
 	// Skip for "init" which creates .thrum/ and doesn't need it to exist.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		// Install slog bridge FIRST so any code running during repo
+		// resolution (worktree lookups, identity refresh) already has the
+		// correct stderr/JSON routing — in --json mode slog.Warn records
+		// accumulate into the hint buffer instead of corrupting stdout.
+		installSlogBridge(flagJSON, os.Stderr)
+
 		if !cmd.Flags().Changed("repo") {
 			flagRepo = paths.EffectiveRepoPath(flagRepo)
 		}
@@ -196,6 +202,30 @@ Environment variables:
 	tagGuardCategories(rootCmd)
 
 	return rootCmd
+}
+
+// installSlogBridge wires slog.Default based on whether the current command
+// is running in --json mode. In JSON mode, records route through the
+// cli.SlogHintHandler into the pushed-hints buffer so EmitJSON can graft
+// them into the response body — stdout stays pure JSON. In human mode we
+// install a plain text handler writing to stderr so users running
+// `thrum ... 2> log.txt` still see warnings as before.
+//
+// Contract: called once per CLI invocation from rootCmd.PersistentPreRunE,
+// before any code that may emit slog records. The CLI is short-lived and
+// process-global slog.Default mutation is intentional. Tests that exercise
+// the cobra command tree multiple times in one process MUST save and
+// restore slog.Default themselves to avoid bleeding the bridge handler
+// into unrelated test cases — see main_sloghint_integration_test.go for
+// the pattern.
+func installSlogBridge(jsonMode bool, stderr io.Writer) {
+	if jsonMode {
+		slog.SetDefault(slog.New(cli.NewSlogHintHandler()))
+		return
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	})))
 }
 
 // Placeholder commands - will be implemented in subsequent tasks
@@ -454,8 +484,9 @@ Examples:
 				}
 
 				if flagJSON {
-					output, _ := json.MarshalIndent(result, "", "  ")
-					fmt.Println(string(output))
+					if err := cli.EmitJSON(result); err != nil {
+						return err
+					}
 				} else if !flagQuiet {
 					fmt.Print(cli.FormatRuntimeInit(result))
 				}
@@ -593,12 +624,11 @@ func runSkillsInstall(repoPath, runtimeFlag string, force, dryRun bool) error {
 	}
 
 	if flagJSON {
-		output, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(output))
-	} else if !flagQuiet {
+		return cli.EmitJSON(result)
+	}
+	if !flagQuiet {
 		fmt.Print(cli.FormatSkillsInstall(result))
 	}
-
 	return nil
 }
 
@@ -692,12 +722,9 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatConfigShow(result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatConfigShow(result))
 			return nil
 		},
 	}
@@ -858,26 +885,9 @@ The daemon must be running and you must have an active session.`,
 			}
 
 			if flagJSON {
-				// Output as JSON with hints grafted onto the top-level body.
-				raw, merr := json.Marshal(result)
-				if merr != nil {
-					return merr
+				if err := cli.EmitJSONWithHints(result, preHints); err != nil {
+					return err
 				}
-				var body map[string]any
-				if uerr := json.Unmarshal(raw, &body); uerr != nil {
-					return uerr
-				}
-				if body == nil {
-					body = map[string]any{}
-				}
-				if hs := cli.RenderJSONForEmit(preHints); hs != nil {
-					body["hints"] = hs
-				}
-				data, mErr := json.MarshalIndent(body, "", "  ")
-				if mErr != nil {
-					return fmt.Errorf("render send response: %w", mErr)
-				}
-				fmt.Println(string(data))
 			} else if !flagQuiet {
 				// Human-readable output
 				fmt.Printf("✓ Message sent: %s\n", result.MessageID)
@@ -960,12 +970,11 @@ to inspect a message with full recipient state.`,
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else if !flagQuiet {
+				return cli.EmitJSON(result)
+			}
+			if !flagQuiet {
 				fmt.Print(cli.FormatOutbox(result))
 			}
-
 			return nil
 		},
 	}
@@ -1043,9 +1052,9 @@ The daemon must be running and you must have an active session.`,
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
+				if err := cli.EmitJSON(result); err != nil {
+					return err
+				}
 			} else {
 				// Human-readable formatted output with filter context
 				fmtOpts := cli.InboxFormatOptions{
@@ -1099,26 +1108,19 @@ func versionCmd() *cobra.Command {
 		Long:  `Display version information including version number, build hash, repository URL, and documentation URL.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if flagJSON {
-				// JSON output
-				output := map[string]string{
+				return cli.EmitJSON(map[string]string{
 					"version":     Version,
 					"build":       Build,
 					"go_version":  goruntime.Version(),
 					"repo_url":    "https://github.com/leonletto/thrum",
 					"website_url": "https://leonletto.github.io/thrum",
-				}
-				data, err := json.MarshalIndent(output, "", "  ")
-				if err != nil {
-					return err
-				}
-				fmt.Println(string(data))
-			} else {
-				// Human-readable output with OSC 8 hyperlinks
-				// Format: ESC ] 8 ; ; URL ESC \ TEXT ESC ] 8 ; ; ESC \
-				fmt.Printf("thrum v%s (build: %s, %s)\n", Version, Build, goruntime.Version())
-				fmt.Printf("\x1b]8;;https://github.com/leonletto/thrum\x07https://github.com/leonletto/thrum\x1b]8;;\x07\n")
-				fmt.Printf("\x1b]8;;https://leonletto.github.io/thrum\x07https://leonletto.github.io/thrum\x1b]8;;\x07\n")
+				})
 			}
+			// Human-readable output with OSC 8 hyperlinks
+			// Format: ESC ] 8 ; ; URL ESC \ TEXT ESC ] 8 ; ; ESC \
+			fmt.Printf("thrum v%s (build: %s, %s)\n", Version, Build, goruntime.Version())
+			fmt.Printf("\x1b]8;;https://github.com/leonletto/thrum\x07https://github.com/leonletto/thrum\x1b]8;;\x07\n")
+			fmt.Printf("\x1b]8;;https://leonletto.github.io/thrum\x07https://leonletto.github.io/thrum\x1b]8;;\x07\n")
 			return nil
 		},
 	}
@@ -1266,15 +1268,9 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagJSON {
-		output, err := json.MarshalIndent(summary, "", "  ")
-		if err != nil {
-			return fmt.Errorf("marshal JSON output: %w", err)
-		}
-		fmt.Println(string(output))
-	} else {
-		fmt.Print(cli.FormatAgentSummary(summary))
+		return cli.EmitJSON(summary)
 	}
-
+	fmt.Print(cli.FormatAgentSummary(summary))
 	return nil
 }
 
@@ -1417,16 +1413,14 @@ Exit codes:
 			}
 
 			if flagJSON {
-				out := map[string]string{
+				return cli.EmitJSON(map[string]string{
 					"status": "received",
 					"action": "ACTION REQUIRED: You have unread messages. Run `thrum inbox --unread` now to read and respond to them.",
-				}
-				output, _ := json.MarshalIndent(out, "", "  ")
-				fmt.Println(string(output))
-			} else if !flagQuiet {
+				})
+			}
+			if !flagQuiet {
 				fmt.Println("MESSAGES_RECEIVED")
 			}
-
 			return nil
 		},
 	}
@@ -1502,9 +1496,9 @@ func daemonCmd() *cobra.Command {
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
+				if err := cli.EmitJSON(result); err != nil {
+					return err
+				}
 			} else {
 				// Human-readable formatted output
 				fmt.Print(cli.FormatDaemonStatus(result))
@@ -1863,12 +1857,9 @@ stored secrets in peers.json to re-handshake without minting a new token.`,
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(peers, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatPeerList(peers))
+				return cli.EmitJSON(peers)
 			}
-
+			fmt.Print(cli.FormatPeerList(peers))
 			return nil
 		},
 	})
@@ -1911,12 +1902,9 @@ stored secrets in peers.json to re-handshake without minting a new token.`,
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(peers, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatPeerStatus(peers))
+				return cli.EmitJSON(peers)
 			}
-
+			fmt.Print(cli.FormatPeerStatus(peers))
 			return nil
 		},
 	})
@@ -2061,7 +2049,11 @@ The command and its arguments must be separated from monitor flags with '--':
 				}
 				defer func() { _ = client.Close() }()
 				if flagJSON {
-					return cli.MonitorListJSON(client, includeAll, os.Stdout)
+					jobs, err := cli.MonitorListJSON(client, includeAll)
+					if err != nil {
+						return err
+					}
+					return cli.EmitJSON(jobs)
 				}
 				return cli.MonitorList(client, includeAll, os.Stdout)
 			},
@@ -2083,7 +2075,11 @@ The command and its arguments must be separated from monitor flags with '--':
 			}
 			defer func() { _ = client.Close() }()
 			if flagJSON {
-				return cli.MonitorShowJSON(client, args[0], os.Stdout)
+				job, err := cli.MonitorShowJSON(client, args[0])
+				if err != nil {
+					return err
+				}
+				return cli.EmitJSON(job)
 			}
 			return cli.MonitorShow(client, args[0], os.Stdout)
 		},
@@ -2250,9 +2246,9 @@ The agent identity is determined from:
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
+				if err := cli.EmitJSON(result); err != nil {
+					return err
+				}
 			} else {
 				// Human-readable formatted output
 				fmt.Print(cli.FormatRegisterResponse(result))
@@ -2300,12 +2296,9 @@ Use --context to show work context (branch, commits, intent) for each agent.`,
 				}
 
 				if flagJSON {
-					output, _ := json.MarshalIndent(result, "", "  ")
-					fmt.Println(string(output))
-				} else {
-					fmt.Print(cli.FormatContextList(result))
+					return cli.EmitJSON(result)
 				}
-
+				fmt.Print(cli.FormatContextList(result))
 				return nil
 			}
 
@@ -2333,23 +2326,17 @@ Use --context to show work context (branch, commits, intent) for each agent.`,
 			}
 
 			if flagJSON {
-				// Output as JSON (combine both if contexts available)
+				var body any = result
 				if contexts != nil {
-					combined := map[string]any{
+					body = map[string]any{
 						"agents":   result,
 						"contexts": contexts,
 					}
-					output, _ := json.MarshalIndent(combined, "", "  ")
-					fmt.Println(string(output))
-				} else {
-					output, _ := json.MarshalIndent(result, "", "  ")
-					fmt.Println(string(output))
 				}
-			} else {
-				// Human-readable formatted output with enhanced info
-				fmt.Print(cli.FormatAgentListWithContext(result, contexts))
+				return cli.EmitJSON(body)
 			}
-
+			// Human-readable formatted output with enhanced info
+			fmt.Print(cli.FormatAgentListWithContext(result, contexts))
 			return nil
 		},
 	}
@@ -2414,12 +2401,9 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatAgentDelete(result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatAgentDelete(result))
 			return nil
 		},
 	}
@@ -2468,9 +2452,7 @@ Examples:
 
 			// Handle JSON output
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-				return nil
+				return cli.EmitJSON(result)
 			}
 
 			// Display results
@@ -2963,12 +2945,7 @@ func worktreeListJSON(repoPath string) error {
 		}
 	}
 
-	data, err := json.MarshalIndent(worktrees, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal: %w", err)
-	}
-	fmt.Println(string(data))
-	return nil
+	return cli.EmitJSON(worktrees)
 }
 
 func agentSetStatusCmd() *cobra.Command {
@@ -3071,14 +3048,9 @@ func sessionStartRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagJSON {
-		// Output as JSON
-		output, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(output))
-	} else {
-		// Human-readable formatted output
-		fmt.Print(cli.FormatSessionStart(result))
+		return cli.EmitJSON(result)
 	}
-
+	fmt.Print(cli.FormatSessionStart(result))
 	return nil
 }
 
@@ -3122,14 +3094,9 @@ func sessionEndRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagJSON {
-		// Output as JSON
-		output, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(output))
-	} else {
-		// Human-readable formatted output
-		fmt.Print(cli.FormatSessionEnd(result))
+		return cli.EmitJSON(result)
 	}
-
+	fmt.Print(cli.FormatSessionEnd(result))
 	return nil
 }
 
@@ -3168,12 +3135,11 @@ func sessionSetIntentRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagJSON {
-		output, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(output))
-	} else if !flagQuiet {
+		return cli.EmitJSON(result)
+	}
+	if !flagQuiet {
 		fmt.Print(cli.FormatSetIntent(result))
 	}
-
 	return nil
 }
 
@@ -3204,12 +3170,11 @@ func sessionSetTaskRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagJSON {
-		output, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(output))
-	} else if !flagQuiet {
+		return cli.EmitJSON(result)
+	}
+	if !flagQuiet {
 		fmt.Print(cli.FormatSetTask(result))
 	}
-
 	return nil
 }
 
@@ -3276,12 +3241,9 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatSessionList(result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatSessionList(result))
 			return nil
 		},
 	}
@@ -3392,12 +3354,11 @@ Examples:
 			_, _ = cli.MessageMarkRead(client, []string{opts.MessageID}, agentID)
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else if !flagQuiet {
+				return cli.EmitJSON(result)
+			}
+			if !flagQuiet {
 				fmt.Printf("✓ Reply sent: %s\n", result.MessageID)
 			}
-
 			return nil
 		},
 	}
@@ -3440,12 +3401,9 @@ func messageCmd() *cobra.Command {
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatMessageGet(result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatMessageGet(result))
 			return nil
 		},
 	}
@@ -3479,12 +3437,11 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else if !flagQuiet {
+				return cli.EmitJSON(result)
+			}
+			if !flagQuiet {
 				fmt.Print(cli.FormatMessageEdit(result))
 			}
-
 			return nil
 		},
 	}
@@ -3522,12 +3479,11 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else if !flagQuiet {
+				return cli.EmitJSON(result)
+			}
+			if !flagQuiet {
 				fmt.Print(cli.FormatMessageDelete(result))
 			}
-
 			return nil
 		},
 	}
@@ -3594,9 +3550,9 @@ Examples:
 
 				remaining := inboxResult.Unread - result.MarkedCount
 				if flagJSON {
-					output, _ := json.MarshalIndent(result, "", "  ")
-					fmt.Println(string(output))
-				} else if !flagQuiet {
+					return cli.EmitJSON(result)
+				}
+				if !flagQuiet {
 					fmt.Print(cli.FormatMarkRead(result))
 					if remaining > 0 {
 						fmt.Printf("  %d unread messages remaining (run again to mark more)\n", remaining)
@@ -3615,12 +3571,11 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else if !flagQuiet {
+				return cli.EmitJSON(result)
+			}
+			if !flagQuiet {
 				fmt.Print(cli.FormatMarkRead(result))
 			}
-
 			return nil
 		},
 	}
@@ -4138,8 +4093,9 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
+				if err := cli.EmitJSON(result); err != nil {
+					return err
+				}
 			} else {
 				fmt.Print(cli.FormatPrimeContext(result))
 			}
@@ -4173,11 +4129,9 @@ defaults. Use these commands to list, inspect, and configure runtimes.`,
 			result := cli.RuntimeList()
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatRuntimeList(result))
+				return cli.EmitJSON(result)
 			}
+			fmt.Print(cli.FormatRuntimeList(result))
 			return nil
 		},
 	}
@@ -4194,11 +4148,9 @@ defaults. Use these commands to list, inspect, and configure runtimes.`,
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(preset, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatRuntimeShow(preset))
+				return cli.EmitJSON(preset)
 			}
+			fmt.Print(cli.FormatRuntimeShow(preset))
 			return nil
 		},
 	}
@@ -4366,14 +4318,9 @@ func syncCmd() *cobra.Command {
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				// Human-readable formatted output
-				fmt.Print(cli.FormatSyncStatus(result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatSyncStatus(result))
 			return nil
 		},
 	})
@@ -4397,14 +4344,9 @@ This will fetch new messages from the remote and push local messages.`,
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				// Human-readable formatted output
-				fmt.Print(cli.FormatSyncForce(result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatSyncForce(result))
 			return nil
 		},
 	})
@@ -4659,15 +4601,12 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatQuickstart(result))
-				if !flagQuiet {
-					fmt.Print(cli.LegacyHint("quickstart", flagQuiet, flagJSON))
-				}
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatQuickstart(result))
+			if !flagQuiet {
+				fmt.Print(cli.LegacyHint("quickstart", flagQuiet, flagJSON))
+			}
 			return nil
 		},
 	}
@@ -4716,15 +4655,12 @@ Examples:
 			result.WebSocketPort = cli.ReadWebSocketPort(flagRepo)
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatOverview(result))
-				if !flagQuiet {
-					fmt.Print(cli.LegacyHint("overview", flagQuiet, flagJSON))
-				}
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatOverview(result))
+			if !flagQuiet {
+				fmt.Print(cli.LegacyHint("overview", flagQuiet, flagJSON))
+			}
 			return nil
 		},
 	}
@@ -4764,12 +4700,9 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatTeam(&result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatTeam(&result))
 			return nil
 		},
 	}
@@ -4808,15 +4741,12 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatWhoHas(file, result))
-				if !flagQuiet {
-					fmt.Print(cli.LegacyHint("who-has", flagQuiet, flagJSON))
-				}
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatWhoHas(file, result))
+			if !flagQuiet {
+				fmt.Print(cli.LegacyHint("who-has", flagQuiet, flagJSON))
+			}
 			return nil
 		},
 	}
@@ -4859,19 +4789,15 @@ Examples:
 			}
 
 			if flagJSON {
-				combined := map[string]any{
+				return cli.EmitJSON(map[string]any{
 					"agents":   agents,
 					"contexts": contexts,
-				}
-				output, _ := json.MarshalIndent(combined, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatPing(name, agents, contexts))
-				if !flagQuiet {
-					fmt.Print(cli.LegacyHint("ping", flagQuiet, flagJSON))
-				}
+				})
 			}
-
+			fmt.Print(cli.FormatPing(name, agents, contexts))
+			if !flagQuiet {
+				fmt.Print(cli.LegacyHint("ping", flagQuiet, flagJSON))
+			}
 			return nil
 		},
 	}
@@ -4946,15 +4872,12 @@ func sessionHeartbeatRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagJSON {
-		output, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(output))
-	} else {
-		fmt.Print(cli.FormatHeartbeat(result))
-		if !flagQuiet {
-			fmt.Print(cli.LegacyHint("session.heartbeat", flagQuiet, flagJSON))
-		}
+		return cli.EmitJSON(result)
 	}
-
+	fmt.Print(cli.FormatHeartbeat(result))
+	if !flagQuiet {
+		fmt.Print(cli.LegacyHint("session.heartbeat", flagQuiet, flagJSON))
+	}
 	return nil
 }
 
@@ -7234,26 +7157,23 @@ func runBackupCreate(dirOverride string) error {
 	}
 
 	if flagJSON {
-		data, _ := json.MarshalIndent(result.Manifest, "", "  ")
-		fmt.Println(string(data))
-	} else {
-		fmt.Printf("Backup complete: %s\n", result.CurrentDir)
-		fmt.Printf("  Events: %d lines\n", result.SyncResult.EventLines)
-		fmt.Printf("  Message files: %d\n", result.SyncResult.MessageFiles)
-		fmt.Printf("  Local tables: %d\n", len(result.LocalResult.Tables))
-		fmt.Printf("  Config files: %d\n", result.Manifest.Counts.ConfigFiles)
-		if pluginSummary := backup.FormatPluginResults(result.PluginResults); pluginSummary != "" {
-			fmt.Printf("  Plugins:\n%s", pluginSummary)
-		}
-		if result.PostHookResult != nil {
-			if result.PostHookResult.Error != "" {
-				fmt.Printf("  Post-backup hook: FAILED (%s)\n", result.PostHookResult.Error)
-			} else {
-				fmt.Printf("  Post-backup hook: ok\n")
-			}
+		return cli.EmitJSON(result.Manifest)
+	}
+	fmt.Printf("Backup complete: %s\n", result.CurrentDir)
+	fmt.Printf("  Events: %d lines\n", result.SyncResult.EventLines)
+	fmt.Printf("  Message files: %d\n", result.SyncResult.MessageFiles)
+	fmt.Printf("  Local tables: %d\n", len(result.LocalResult.Tables))
+	fmt.Printf("  Config files: %d\n", result.Manifest.Counts.ConfigFiles)
+	if pluginSummary := backup.FormatPluginResults(result.PluginResults); pluginSummary != "" {
+		fmt.Printf("  Plugins:\n%s", pluginSummary)
+	}
+	if result.PostHookResult != nil {
+		if result.PostHookResult.Error != "" {
+			fmt.Printf("  Post-backup hook: FAILED (%s)\n", result.PostHookResult.Error)
+		} else {
+			fmt.Printf("  Post-backup hook: ok\n")
 		}
 	}
-
 	return nil
 }
 
@@ -7285,52 +7205,50 @@ func runBackupStatus(dirOverride string) error {
 	}
 
 	if flagJSON {
-		data, _ := json.MarshalIndent(manifest, "", "  ")
-		fmt.Println(string(data))
-	} else {
-		fmt.Printf("Last backup: %s\n", manifest.Timestamp.Local().Format("2006-01-02 15:04:05"))
-		fmt.Printf("  Thrum version: %s\n", manifest.ThrumVersion)
-		fmt.Printf("  Repo: %s\n", manifest.RepoName)
-		fmt.Printf("  Events: %d\n", manifest.Counts.Events)
-		fmt.Printf("  Message files: %d\n", manifest.Counts.MessageFiles)
-		fmt.Printf("  Local tables: %d\n", manifest.Counts.LocalTables)
-		fmt.Printf("  Config files: %d\n", manifest.Counts.ConfigFiles)
-		if len(manifest.Counts.Plugins) > 0 {
-			fmt.Printf("  Plugins: %v\n", manifest.Counts.Plugins)
-		}
-		fmt.Printf("  Location: %s\n", currentDir)
+		return cli.EmitJSON(manifest)
+	}
+	fmt.Printf("Last backup: %s\n", manifest.Timestamp.Local().Format("2006-01-02 15:04:05"))
+	fmt.Printf("  Thrum version: %s\n", manifest.ThrumVersion)
+	fmt.Printf("  Repo: %s\n", manifest.RepoName)
+	fmt.Printf("  Events: %d\n", manifest.Counts.Events)
+	fmt.Printf("  Message files: %d\n", manifest.Counts.MessageFiles)
+	fmt.Printf("  Local tables: %d\n", manifest.Counts.LocalTables)
+	fmt.Printf("  Config files: %d\n", manifest.Counts.ConfigFiles)
+	if len(manifest.Counts.Plugins) > 0 {
+		fmt.Printf("  Plugins: %v\n", manifest.Counts.Plugins)
+	}
+	fmt.Printf("  Location: %s\n", currentDir)
 
-		// Show archive rotation stats
-		archivesDir := filepath.Join(backupDir, repoName, "archives")
-		if entries, err := os.ReadDir(archivesDir); err == nil {
-			var archiveCount int
-			var totalSize int64
-			var oldest, newest time.Time
-			for _, e := range entries {
-				if e.IsDir() || strings.HasPrefix(e.Name(), "pre-restore-") {
-					continue
+	// Show archive rotation stats
+	archivesDir := filepath.Join(backupDir, repoName, "archives")
+	if entries, err := os.ReadDir(archivesDir); err == nil {
+		var archiveCount int
+		var totalSize int64
+		var oldest, newest time.Time
+		for _, e := range entries {
+			if e.IsDir() || strings.HasPrefix(e.Name(), "pre-restore-") {
+				continue
+			}
+			archiveCount++
+			if info, err := e.Info(); err == nil {
+				totalSize += info.Size()
+			}
+			// Parse timestamp from filename (2006-01-02T150405.zip)
+			name := strings.TrimSuffix(e.Name(), ".zip")
+			if ts, err := time.Parse("2006-01-02T150405", name); err == nil {
+				if oldest.IsZero() || ts.Before(oldest) {
+					oldest = ts
 				}
-				archiveCount++
-				if info, err := e.Info(); err == nil {
-					totalSize += info.Size()
-				}
-				// Parse timestamp from filename (2006-01-02T150405.zip)
-				name := strings.TrimSuffix(e.Name(), ".zip")
-				if ts, err := time.Parse("2006-01-02T150405", name); err == nil {
-					if oldest.IsZero() || ts.Before(oldest) {
-						oldest = ts
-					}
-					if newest.IsZero() || ts.After(newest) {
-						newest = ts
-					}
+				if newest.IsZero() || ts.After(newest) {
+					newest = ts
 				}
 			}
-			if archiveCount > 0 {
-				fmt.Printf("Archives: %d (%.1f MB)\n", archiveCount, float64(totalSize)/(1024*1024))
-				if !oldest.IsZero() {
-					fmt.Printf("  Oldest: %s\n", oldest.Local().Format("2006-01-02 15:04:05"))
-					fmt.Printf("  Newest: %s\n", newest.Local().Format("2006-01-02 15:04:05"))
-				}
+		}
+		if archiveCount > 0 {
+			fmt.Printf("Archives: %d (%.1f MB)\n", archiveCount, float64(totalSize)/(1024*1024))
+			if !oldest.IsZero() {
+				fmt.Printf("  Oldest: %s\n", oldest.Local().Format("2006-01-02 15:04:05"))
+				fmt.Printf("  Newest: %s\n", newest.Local().Format("2006-01-02 15:04:05"))
 			}
 		}
 	}
@@ -7355,29 +7273,26 @@ func runBackupConfig() error {
 	}
 
 	if flagJSON {
-		data, _ := json.MarshalIndent(cfg.Backup, "", "  ")
-		fmt.Println(string(data))
-	} else {
-		fmt.Printf("Backup directory: %s\n", effectiveDir)
-		fmt.Printf("Retention:\n")
-		fmt.Printf("  Daily: %d\n", cfg.Backup.Retention.RetentionDaily())
-		fmt.Printf("  Weekly: %d\n", cfg.Backup.Retention.RetentionWeekly())
-		monthly := fmt.Sprintf("%d", cfg.Backup.Retention.RetentionMonthly())
-		if cfg.Backup.Retention.RetentionMonthly() == -1 {
-			monthly = "forever"
-		}
-		fmt.Printf("  Monthly: %s\n", monthly)
-		if len(cfg.Backup.Plugins) > 0 {
-			fmt.Printf("Plugins:\n")
-			for _, p := range cfg.Backup.Plugins {
-				fmt.Printf("  %s: %s\n", p.Name, p.Command)
-			}
-		}
-		if cfg.Backup.PostBackup != "" {
-			fmt.Printf("Post-backup: %s\n", cfg.Backup.PostBackup)
+		return cli.EmitJSON(cfg.Backup)
+	}
+	fmt.Printf("Backup directory: %s\n", effectiveDir)
+	fmt.Printf("Retention:\n")
+	fmt.Printf("  Daily: %d\n", cfg.Backup.Retention.RetentionDaily())
+	fmt.Printf("  Weekly: %d\n", cfg.Backup.Retention.RetentionWeekly())
+	monthly := fmt.Sprintf("%d", cfg.Backup.Retention.RetentionMonthly())
+	if cfg.Backup.Retention.RetentionMonthly() == -1 {
+		monthly = "forever"
+	}
+	fmt.Printf("  Monthly: %s\n", monthly)
+	if len(cfg.Backup.Plugins) > 0 {
+		fmt.Printf("Plugins:\n")
+		for _, p := range cfg.Backup.Plugins {
+			fmt.Printf("  %s: %s\n", p.Name, p.Command)
 		}
 	}
-
+	if cfg.Backup.PostBackup != "" {
+		fmt.Printf("Post-backup: %s\n", cfg.Backup.PostBackup)
+	}
 	return nil
 }
 
@@ -7451,8 +7366,9 @@ func runBackupRestore(dirOverride, archivePath string, skipConfirm bool) error {
 	}
 
 	if flagJSON {
-		data, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(data))
+		if err := cli.EmitJSON(result); err != nil {
+			return err
+		}
 	} else {
 		if result.SafetyBackup != "" {
 			fmt.Printf("Safety backup: %s\n", result.SafetyBackup)
@@ -7577,20 +7493,17 @@ func runPluginList() error {
 	}
 
 	if flagJSON {
-		data, _ := json.MarshalIndent(cfg.Backup.Plugins, "", "  ")
-		fmt.Println(string(data))
-	} else {
-		for _, p := range cfg.Backup.Plugins {
-			fmt.Printf("  %s\n", p.Name)
-			if p.Command != "" {
-				fmt.Printf("    command: %s\n", p.Command)
-			}
-			if len(p.Include) > 0 {
-				fmt.Printf("    include: %v\n", p.Include)
-			}
+		return cli.EmitJSON(cfg.Backup.Plugins)
+	}
+	for _, p := range cfg.Backup.Plugins {
+		fmt.Printf("  %s\n", p.Name)
+		if p.Command != "" {
+			fmt.Printf("    command: %s\n", p.Command)
+		}
+		if len(p.Include) > 0 {
+			fmt.Printf("    include: %v\n", p.Include)
 		}
 	}
-
 	return nil
 }
 
@@ -7830,9 +7743,7 @@ func runTelegramStatus() error {
 		if len(tg.AllowFrom) > 0 {
 			status["allow_from"] = tg.AllowFrom
 		}
-		data, _ := json.MarshalIndent(status, "", "  ")
-		fmt.Println(string(data))
-		return nil
+		return cli.EmitJSON(status)
 	}
 
 	if tg.Token == "" {
@@ -8199,14 +8110,9 @@ func tmuxCmd() *cobra.Command {
 						"error":   "aborted by hint",
 						"aborted": true,
 					}
-					if hs := cli.RenderJSONForEmit(blockers); hs != nil {
-						body["hints"] = hs
+					if err := cli.EmitJSONWithHints(body, blockers); err != nil {
+						return fmt.Errorf("render abort body: %w", err)
 					}
-					data, mErr := json.MarshalIndent(body, "", "  ")
-					if mErr != nil {
-						return fmt.Errorf("render abort body: %w", mErr)
-					}
-					fmt.Println(string(data))
 					return fmt.Errorf("aborted")
 				}
 				return cli.EmitAbort(abortErr, flagQuiet, flagJSON)
@@ -8255,27 +8161,9 @@ func tmuxCmd() *cobra.Command {
 			allHints := append(preHints, postHints...) //nolint:gocritic // appendAssign: intentionally combining into new slice
 
 			if flagJSON {
-				// Marshal the result, then graft the hints array onto the
-				// top-level object (if suppression rules allow).
-				raw, merr := json.Marshal(result)
-				if merr != nil {
-					return merr
+				if err := cli.EmitJSONWithHints(result, allHints); err != nil {
+					return fmt.Errorf("render tmux create response: %w", err)
 				}
-				var body map[string]any
-				if uerr := json.Unmarshal(raw, &body); uerr != nil {
-					return uerr
-				}
-				if body == nil {
-					body = map[string]any{}
-				}
-				if hs := cli.RenderJSONForEmit(allHints); hs != nil {
-					body["hints"] = hs
-				}
-				data, mErr := json.MarshalIndent(body, "", "  ")
-				if mErr != nil {
-					return fmt.Errorf("render tmux create response: %w", mErr)
-				}
-				fmt.Println(string(data))
 			} else {
 				fmt.Print(cli.FormatTmuxCreate(result))
 				cli.EmitStderr(allHints, flagQuiet, flagJSON)
@@ -8351,11 +8239,9 @@ func tmuxCmd() *cobra.Command {
 				return err
 			}
 			if flagJSON {
-				out, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(out))
-			} else {
-				fmt.Printf("Launched %s in session %s\n", result.Runtime, result.Session)
+				return cli.EmitJSON(result)
 			}
+			fmt.Printf("Launched %s in session %s\n", result.Runtime, result.Session)
 			return nil
 		},
 	}
@@ -8379,11 +8265,9 @@ func tmuxCmd() *cobra.Command {
 				return err
 			}
 			if flagJSON {
-				out, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(out))
-			} else {
-				fmt.Print(cli.FormatTmuxStatus(result))
+				return cli.EmitJSON(result)
 			}
+			fmt.Print(cli.FormatTmuxStatus(result))
 			return nil
 		},
 	}
@@ -8591,13 +8475,11 @@ Without arguments, shows a numbered list of alive sessions to choose from.`,
 			}
 
 			if flagJSON {
-				out, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(out))
-			} else {
-				fmt.Printf("Session %s restarted (%d snapshot lines)\n", result.Session, result.SnapshotLines)
-				if result.SnapshotLines == 0 {
-					fmt.Println("  ⚠ No conversation history captured — agent will start without prior context")
-				}
+				return cli.EmitJSON(result)
+			}
+			fmt.Printf("Session %s restarted (%d snapshot lines)\n", result.Session, result.SnapshotLines)
+			if result.SnapshotLines == 0 {
+				fmt.Println("  ⚠ No conversation history captured — agent will start without prior context")
 			}
 			return nil
 		},
@@ -8769,9 +8651,7 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 				return err
 			}
 			if flagJSON {
-				out, _ := json.MarshalIndent(resp, "", "  ")
-				fmt.Println(string(out))
-				return nil
+				return cli.EmitJSON(resp)
 			}
 			fmt.Printf("Session: %s\n", resp.Session)
 			if resp.Active != nil {
@@ -8809,9 +8689,7 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 				return err
 			}
 			if flagJSON {
-				out, _ := json.MarshalIndent(resp, "", "  ")
-				fmt.Println(string(out))
-				return nil
+				return cli.EmitJSON(resp)
 			}
 			fmt.Printf("Canceled %s (state: %s)\n", resp.CommandID, resp.State)
 			return nil
