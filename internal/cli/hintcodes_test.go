@@ -34,13 +34,15 @@ func TestNoDuplicateCodes(t *testing.T) {
 	}
 }
 
-// TestCatalogSize locks the pilot catalog size. Bump when adding codes
-// in a deliberate review. Pilot catalog is 8:
+// TestCatalogSize locks the catalog size. Bump when adding codes in a
+// deliberate review. Current catalog is 11:
 // 6 tmux.create (session-exists, not-a-worktree, identity-exists-alive,
 // identity-exists-stale, next-launch, identity-replaced) +
-// send.recipient-stale + init.next-quickstart.
+// send.recipient-stale + init.next-quickstart +
+// 3 snapshot.save (no-jsonl, no-pid, extract-failed) — added for
+// thrum-ufv5.7 to surface silent failures of `thrum tmux snapshot save`.
 func TestCatalogSize(t *testing.T) {
-	const expected = 8
+	const expected = 11
 	if got := len(AllHintCodes); got != expected {
 		t.Errorf("AllHintCodes size = %d, want %d (update this test deliberately when catalog grows)", got, expected)
 	}
@@ -66,6 +68,9 @@ var constNameForCode = map[string]string{
 	HintTmuxCreateIdentityReplaced:    "HintTmuxCreateIdentityReplaced",
 	HintSendRecipientStale:            "HintSendRecipientStale",
 	HintInitNextQuickstart:            "HintInitNextQuickstart",
+	HintSnapshotSaveNoJSONL:           "HintSnapshotSaveNoJSONL",
+	HintSnapshotSaveNoPID:             "HintSnapshotSaveNoPID",
+	HintSnapshotSaveExtractFailed:     "HintSnapshotSaveExtractFailed",
 }
 
 // TestEveryCodeHasSourceReference ensures every code in AllHintCodes is

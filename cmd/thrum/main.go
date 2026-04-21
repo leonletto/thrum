@@ -7964,6 +7964,7 @@ func restartSnapshotSubcmds() []*cobra.Command {
 				}
 			}
 			if pid == 0 {
+				cli.EmitStderr([]cli.Hint{cli.SnapshotSaveNoPIDHint(agentName)}, flagQuiet, flagJSON)
 				return fmt.Errorf("no agent PID found for %s — ensure agent is registered with an agent PID", agentName)
 			}
 
@@ -7972,9 +7973,28 @@ func restartSnapshotSubcmds() []*cobra.Command {
 				return fmt.Errorf("resolve home directory: %w", err)
 			}
 			claudeDir := filepath.Join(homeDir, ".claude")
-			jsonlPath, err := restart.FindSessionJSONL(claudeDir, pid)
-			if err != nil {
-				return fmt.Errorf("find session JSONL: %w", err)
+
+			// Resolution order (thrum-ufv5.7):
+			//   1. --jsonl <path> flag — explicit caller override, skip auto-detect.
+			//   2. restart.FindSessionJSONL — PID-based lookup (primary path).
+			//   3. restart.FindLatestJSONLForCwd — mtime fallback using the
+			//      worktree path from the identity file. Covers the case where
+			//      ~/.claude/sessions/<pid>.json is missing or stale but the
+			//      project dir still has the current conversation JSONL.
+			// If all three fail, emit the no-jsonl hint and return.
+			var jsonlPath string
+			if explicit, _ := cmd.Flags().GetString("jsonl"); explicit != "" {
+				jsonlPath = explicit
+			} else {
+				jsonlPath, err = restart.FindSessionJSONL(claudeDir, pid)
+				if err != nil {
+					if fb, ferr := restart.FindLatestJSONLForCwd(claudeDir, idFile.Worktree); ferr == nil && fb != "" {
+						jsonlPath = fb
+					} else {
+						cli.EmitStderr([]cli.Hint{cli.SnapshotSaveNoJSONLHint(pid, claudeDir)}, flagQuiet, flagJSON)
+						return fmt.Errorf("find session JSONL: %w", err)
+					}
+				}
 			}
 
 			cfg, _ := config.LoadThrumConfig(thrumDir)
@@ -7982,6 +8002,7 @@ func restartSnapshotSubcmds() []*cobra.Command {
 
 			conversation, err := restart.ExtractConversation(jsonlPath, maxLines)
 			if err != nil {
+				cli.EmitStderr([]cli.Hint{cli.SnapshotSaveExtractFailedHint(jsonlPath)}, flagQuiet, flagJSON)
 				return fmt.Errorf("extract conversation: %w", err)
 			}
 
@@ -8003,6 +8024,7 @@ func restartSnapshotSubcmds() []*cobra.Command {
 		},
 	}
 	saveCmd.Flags().String("reason", "self-initiated", "Reason for restart")
+	saveCmd.Flags().String("jsonl", "", "Explicit path to Claude conversation JSONL (bypasses auto-detect; use when ls ~/.claude/projects/<slug>/ shows the correct file)")
 
 	restoreCmd := &cobra.Command{
 		Use:   "restore",

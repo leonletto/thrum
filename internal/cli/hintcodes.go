@@ -47,6 +47,28 @@ const HintSendRecipientStale = "send.recipient-stale"
 // init→quickstart sequence. Info.
 const HintInitNextQuickstart = "init.next-quickstart"
 
+// HintSnapshotSaveNoJSONL — thrum tmux snapshot save could not locate the
+// Claude Code JSONL for the resolved agent PID. Covers both underlying
+// restart.FindSessionJSONL failures: (a) missing ~/.claude/sessions/<pid>.json,
+// (b) session file resolved but the per-CWD JSONL under ~/.claude/projects/
+// is absent. Origin: release-test sweep 2026-04-21 — @impl_team_fix hit a
+// save failure that /thrum:restart step 3 swallowed silently (no exit-code
+// check), pre-fix by coordinator commit 27e84c39. Severity: warn; hard
+// refusal (no --force recovery — the JSONL either exists or it doesn't).
+const HintSnapshotSaveNoJSONL = "snapshot.save.no-jsonl"
+
+// HintSnapshotSaveNoPID — identity file is missing agent_pid AND the daemon
+// lookup returned no PID for the agent. Either the agent isn't registered
+// yet or the identity file predates the AgentPID column. Origin: same
+// release-test sweep as HintSnapshotSaveNoJSONL. Severity: warn; hard refusal.
+const HintSnapshotSaveNoPID = "snapshot.save.no-pid"
+
+// HintSnapshotSaveExtractFailed — JSONL located but restart.ExtractConversation
+// failed to read/parse it. Usually a file-permission or corruption issue.
+// Origin: same release-test sweep as HintSnapshotSaveNoJSONL. Severity: warn;
+// hard refusal.
+const HintSnapshotSaveExtractFailed = "snapshot.save.extract-failed"
+
 // RecipientStaleThreshold is the send-side stale cutoff. Exported per
 // spec §4 as a tunable; becomes a config key in Phase C if the pilot
 // signals that 30 minutes is the wrong threshold.
@@ -63,4 +85,7 @@ var AllHintCodes = []string{
 	HintTmuxCreateIdentityReplaced,
 	HintSendRecipientStale,
 	HintInitNextQuickstart,
+	HintSnapshotSaveNoJSONL,
+	HintSnapshotSaveNoPID,
+	HintSnapshotSaveExtractFailed,
 }
