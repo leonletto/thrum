@@ -789,3 +789,80 @@ func TestOnRecovery_ClearsRowEvenWhenIdentityDeleted(t *testing.T) {
 		t.Errorf("expected row to be deleted by OnRecovery, got %+v", row)
 	}
 }
+
+// TestScheduler_ClaudeDenyKeyDisambiguation — thrum-uy1n. The
+// scheduler must consult DisambiguateClaudeDeny when the matched
+// pattern is claude.tool_confirmation, so the row's DenyKey reflects
+// the on-screen prompt shape rather than the pattern library's
+// default. The bug 2026-04-20 14:30 UTC: a 2-option Bash picker on
+// screen, but the row carried DenyKey="3" (Variant A default), so
+// the supervisor's nudge hint read `"1"|"3"` for a dialog that only
+// offered 1 and 2.
+func TestScheduler_ClaudeDenyKeyDisambiguation(t *testing.T) {
+	p, _ := newSchedulerFixture(t)
+	ctx := context.Background()
+
+	// Pattern carries the library default (Variant A → "3"). Scheduler
+	// must override per shape.
+	claudeTC := &Pattern{
+		Name:       "tool_confirmation",
+		ApproveKey: "1",
+		DenyKey:    "3",
+	}
+
+	cases := []struct {
+		name       string
+		pane       string
+		wantDeny   string
+	}{
+		{
+			name: "VariantA_3option_keeps_library_default",
+			pane: `⏺ Bash(curl https://example.com)
+  ⎿  Do you want to proceed?
+     1. Yes
+     2. Yes, and don't ask again for Bash(curl)
+     3. No, and tell Claude what to do differently (Esc)`,
+			wantDeny: "3",
+		},
+		{
+			name: "VariantB_Bash_2option_overrides_to_2",
+			pane: `⏺ Bash(rm -rf /tmp/foo)
+  ⎿  Do you want to proceed?
+     1. Yes
+     2. No
+     Esc to cancel · Tab to amend · ctrl+e to explain`,
+			wantDeny: "2",
+		},
+		{
+			name: "VariantB_Read_2option_falls_back_to_Escape",
+			pane: ` Read file
+
+ Search(pattern: "## Task 0.2", path: "~/plans/...")
+
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, allow reading from plans/ during this session
+
+ Esc to cancel · Tab to amend`,
+			wantDeny: "Escape",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			session := "claude-test-" + tc.name
+			if err := p.OnDetection(ctx, session, "claude", session+":0.0",
+				"researcher_cursor", claudeTC, tc.pane); err != nil {
+				t.Fatalf("OnDetection: %v", err)
+			}
+			row, err := p.store.LookupPendingNudgeBySession(ctx, session)
+			if err != nil || row == nil {
+				t.Fatalf("lookup row: %v (row=%+v)", err, row)
+			}
+			if row.DenyKey != tc.wantDeny {
+				t.Errorf("DenyKey = %q, want %q", row.DenyKey, tc.wantDeny)
+			}
+		})
+	}
+}

@@ -227,3 +227,43 @@ func LookupPattern(runtime, name string) *Pattern {
 	}
 	return nil
 }
+
+// claudeOption3 matches the Variant A option-3 line: "3. No, ..." or
+// "❯ 3. ...". Anchored at start-of-line with optional leading chrome
+// (the selector arrow plus indentation Claude uses).
+var claudeOption3 = regexp.MustCompile(`(?m)^\s*(?:❯\s+)?3\.\s+`)
+
+// claudeOption2No matches the Variant B-Bash option-2-is-No shape.
+// Word-boundary on "No" so "No, " and "No\n" both match while
+// "Notify" or "Note" do not.
+var claudeOption2No = regexp.MustCompile(`(?m)^\s*(?:❯\s+)?2\.\s+No\b`)
+
+// DisambiguateClaudeDeny inspects a captured pane to decide which
+// keystroke actually denies the on-screen claude.tool_confirmation
+// prompt. claude ships three observable shapes under one regex
+// anchor; the pattern library stores DenyKey="3" (Variant A default)
+// and the dispatch layer calls this helper to override per-shape:
+//
+//   - 3-option Variant A (Write/Exec): "1. Yes / 2. don't-ask-again
+//     / 3. No, ..." → returns "3". Detected by an option-3 line.
+//   - 2-option Variant B-Bash (Bash picker): "1. Yes / 2. No"
+//     → returns "2". Detected by an option-2 line whose label starts
+//     with "No" and the absence of an option-3 line.
+//   - 2-option Variant B-Read (Read picker): "1. Yes / 2. Yes,
+//     allow ... session" → returns "Escape". The dialog has no
+//     deny option — option 2 is a forever-allow trap, sending it
+//     would APPROVE a session-scoped permission rule. Falls through
+//     to the safe universal Escape.
+//
+// Defensive default: an empty or unrecognized pane returns "Escape"
+// (universal-deny on claude). Never return "2" on an unknown shape
+// — option 2 in an unobserved variant might be a forever-allow.
+func DisambiguateClaudeDeny(pane string) string {
+	if claudeOption3.MatchString(pane) {
+		return "3"
+	}
+	if claudeOption2No.MatchString(pane) {
+		return "2"
+	}
+	return "Escape"
+}

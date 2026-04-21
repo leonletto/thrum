@@ -493,3 +493,70 @@ $ `
 		t.Errorf("auggie indexing_consent matched doc grep output: %+v", m)
 	}
 }
+
+// ----- thrum-uy1n: claude DenyKey disambiguation -----
+//
+// claude.tool_confirmation matches three observable prompt shapes
+// sharing the "Do you want to proceed?" anchor. The pattern library
+// stores DenyKey="3" (Variant A default); DisambiguateClaudeDeny
+// inspects the captured pane to pick the actual deny key for the
+// shape currently on screen, so the supervisor's nudge hint shows
+// the correct keystroke.
+
+// 3-option Write/Exec (Variant A): "1. Yes / 2. don't-ask-again / 3. No"
+// → deny="3" (the explicit "No, and tell Claude" option).
+func TestDisambiguateClaudeDeny_VariantA_3Option(t *testing.T) {
+	pane := `⏺ Bash(curl https://example.com)
+  ⎿  Do you want to proceed?
+     1. Yes
+     2. Yes, and don't ask again for Bash(curl)
+     3. No, and tell Claude what to do differently (Esc)`
+	if got := DisambiguateClaudeDeny(pane); got != "3" {
+		t.Errorf("DisambiguateClaudeDeny(3-option) = %q, want %q", got, "3")
+	}
+}
+
+// 2-option Bash picker (Variant B-Bash): "1. Yes / 2. No"
+// → deny="2" (the explicit "No" option). This is the bug observed
+// 2026-04-20 14:30 UTC by @impl_perm_test — pattern library's
+// hardcoded DenyKey="3" caused the nudge hint to read `"1"|"3"`
+// when the actual prompt only had options 1 and 2.
+func TestDisambiguateClaudeDeny_VariantB_Bash_2Option(t *testing.T) {
+	pane := `⏺ Bash(rm -rf /tmp/foo)
+  ⎿  Do you want to proceed?
+     1. Yes
+     2. No
+     Esc to cancel · Tab to amend · ctrl+e to explain`
+	if got := DisambiguateClaudeDeny(pane); got != "2" {
+		t.Errorf("DisambiguateClaudeDeny(2-option Bash) = %q, want %q", got, "2")
+	}
+}
+
+// 2-option Read picker (Variant B-Read): "1. Yes / 2. Yes, allow ... session"
+// → deny="Escape" (option 2 is a session-scoped forever-allow, NOT a
+// deny — sending "2" would APPROVE a forever-rule). The dialog has
+// no explicit deny option; recipients must use Escape.
+func TestDisambiguateClaudeDeny_VariantB_Read_2Option(t *testing.T) {
+	pane := ` Read file
+
+ Search(pattern: "## Task 0.2", path: "~/plans/...")
+
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, allow reading from plans/ during this session
+
+ Esc to cancel · Tab to amend`
+	if got := DisambiguateClaudeDeny(pane); got != "Escape" {
+		t.Errorf("DisambiguateClaudeDeny(2-option Read) = %q, want %q", got, "Escape")
+	}
+}
+
+// Empty/unrecognized pane: defensive default to "Escape" — the safe
+// universal-deny that works on every claude prompt variant. Never
+// return "2" on an unknown shape; option 2 might be a forever-allow.
+func TestDisambiguateClaudeDeny_Empty(t *testing.T) {
+	if got := DisambiguateClaudeDeny(""); got != "Escape" {
+		t.Errorf("DisambiguateClaudeDeny(empty) = %q, want %q", got, "Escape")
+	}
+}

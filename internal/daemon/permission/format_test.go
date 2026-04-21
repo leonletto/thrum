@@ -75,9 +75,10 @@ func TestFormatNudge_NoDenyKey(t *testing.T) {
 }
 
 func TestFormatNudge_LineBudget(t *testing.T) {
-	// Regression for thrum-7khf acceptance: typical nudges stay ≤10 lines.
-	// The current boundary is tight — this sample renders at exactly the
-	// budget, so adding any footer field must re-verify the budget holds.
+	// Regression for thrum-7khf acceptance: typical nudges stay ≤10
+	// lines. Fixture switched in thrum-uy1n to a real claude UI shape
+	// (5-line prompt body) — the prior 9-line synthetic fixture
+	// inflated the count beyond what the actual claude UI produces.
 	row := &NudgeRow{
 		Session:       "plugin-skills-slate",
 		AgentName:     "impl_skills",
@@ -87,20 +88,21 @@ func TestFormatNudge_LineBudget(t *testing.T) {
 		FirstDetected: time.Date(2026, 4, 20, 4, 1, 35, 0, time.UTC),
 		NudgeCount:    1,
 	}
-	paneTail := `Bash command
-rm -rf /Users/leon/.workspaces/thrum/plugin-skills-slate/dev-docs/toy-philosophy
-Clean toy artifacts
-Permission rule Bash(rm -rf *) requires confirmation for this command.
-/permissions to update rules
-Do you want to proceed?
-❯ 1. Yes
-2. No
-Esc to cancel · Tab to amend · ctrl+e to explain`
+	paneTail := `⏺ Bash(rm -rf /Users/leon/.workspaces/thrum/plugin-skills-slate/dev-docs/toy-philosophy)
+  ⎿  Do you want to proceed?
+     1. Yes
+     2. Yes, and don't ask again for Bash(rm -rf:*)
+     3. No, and tell Claude what to do differently (Esc)`
 	body := FormatNudge(row, paneTail, "claude", "permission-prompts",
 		time.Date(2026, 4, 20, 4, 1, 35, 0, time.UTC))
 	lineCount := strings.Count(body, "\n")
 	if lineCount > 10 {
 		t.Errorf("nudge body exceeds 10-line budget: %d lines\n%s", lineCount, body)
+	}
+	// Acceptance: the prompt body must be in the snippet so the
+	// recipient sees what is being approved.
+	if !strings.Contains(body, "rm -rf") {
+		t.Errorf("nudge body missing the approved command:\n%s", body)
 	}
 }
 
@@ -148,10 +150,14 @@ func TestFormatNudge_PaneTailTruncatedMidRune(t *testing.T) {
 }
 
 func TestFormatNudge_PaneTailLineCap(t *testing.T) {
-	// 30 distinct lines — we expect only the first 5 in the body
-	// (thrum-7khf: cap tightened from 15 → 5 AND head-biased to keep
-	// the command + reason at the top of a prompt capture, dropping
-	// selector/shortcut chrome from the bottom).
+	// 30 distinct lines — we expect only the LAST 5 in the body.
+	//
+	// thrum-uy1n reverts the 7khf head-bias: the actual claude UI puts
+	// the prompt body (Bash command + dialog + selector) at the BOTTOM
+	// of the pane scrollback, with banner / status / command history
+	// above. A 30-line tmux capture-pane therefore needs tail-bias so
+	// the snippet contains the prompt the supervisor must approve, not
+	// the unrelated history chrome.
 	var lines []string
 	for i := 0; i < 30; i++ {
 		lines = append(lines, fmt.Sprintf("ROW%02d", i))
@@ -165,17 +171,101 @@ func TestFormatNudge_PaneTailLineCap(t *testing.T) {
 		NudgeCount: 1,
 	}
 	body := FormatNudge(row, tail, "cursor", "thrum", time.Now())
-	// ROW00..ROW04 kept, ROW05..ROW29 dropped.
-	for i := 0; i < 5; i++ {
+	// ROW25..ROW29 kept (last 5), ROW00..ROW24 dropped.
+	for i := 25; i < 30; i++ {
 		kept := fmt.Sprintf("ROW%02d", i)
 		if !strings.Contains(body, kept) {
 			t.Errorf("%s should be present:\n%s", kept, body)
 		}
 	}
-	for i := 5; i < 30; i++ {
+	for i := 0; i < 25; i++ {
 		dropped := fmt.Sprintf("ROW%02d", i)
 		if strings.Contains(body, dropped) {
 			t.Errorf("%s should have been truncated:\n%s", dropped, body)
+		}
+	}
+}
+
+// TestFormatNudge_RealClaudePrompt_TailBias — thrum-uy1n acceptance.
+// Real-world tmux capture-pane returns ~30 lines: banner + history
+// chrome at the top, the actual permission prompt at the bottom. The
+// snippet MUST contain the prompt body (the command being approved)
+// so a Telegram recipient can decide y/n without `tmux capture-pane`
+// access. Pre-fix (head-bias) the snippet showed only the banner,
+// burying the prompt and forcing the recipient to approve blindly.
+func TestFormatNudge_RealClaudePrompt_TailBias(t *testing.T) {
+	// Mimics what the daemon sees: 30-line scrollback with banner,
+	// history, and the dialog at the bottom. Indentation matches a
+	// real claude tool-confirmation capture.
+	pane := `▝▜█████▛▘ Opus 4.7 (1M context) with high effort · Claude Max
+▘▘ ▝▝   ~/.workspaces/thrum/perm-test
+Tip: run /help for a full command list
+❯ /thrum:prime
+⎿ Loading prime context...
+⎿ Done.
+
+[user typed: thrum inbox --unread]
+
+⏺ Bash(thrum inbox --unread)
+  ⎿  Reading from inbox...
+
+(spacer)
+(spacer)
+(spacer)
+(spacer)
+(spacer)
+(spacer)
+(spacer)
+(spacer)
+(spacer)
+(spacer)
+(spacer)
+(spacer)
+(spacer)
+(spacer)
+⏺ Bash(rm -rf /tmp/foo)
+  ⎿  Do you want to proceed?
+     1. Yes
+     2. Yes, and don't ask again for Bash(rm -rf:*)
+     3. No, and tell Claude what to do differently (Esc)`
+
+	row := &NudgeRow{
+		Session:       "perm-test",
+		AgentName:     "impl_perm_test",
+		PatternKey:    "claude.tool_confirmation",
+		ApproveKey:    "1",
+		DenyKey:       "3",
+		FirstDetected: time.Date(2026, 4, 20, 14, 30, 0, 0, time.UTC),
+		NudgeCount:    1,
+	}
+	body := FormatNudge(row, pane, "claude", "thrum",
+		time.Date(2026, 4, 20, 14, 30, 5, 0, time.UTC))
+
+	// Prompt body must be in the snippet — the supervisor cannot
+	// decide y/n otherwise. These are the lines tail-5 should keep
+	// from the dialog at the bottom of the capture.
+	mustContain := []string{
+		"Do you want to proceed?",
+		"1. Yes",
+		"3. No, and tell Claude what to do differently",
+	}
+	for _, want := range mustContain {
+		if !strings.Contains(body, want) {
+			t.Errorf("nudge body missing prompt-body line %q:\n%s", want, body)
+		}
+	}
+
+	// Banner / history chrome from the top must be DROPPED, otherwise
+	// recipients see the same garbage that motivated the bug report.
+	mustNotContain := []string{
+		"Opus 4.7",         // banner
+		"~/.workspaces",    // status line
+		"/thrum:prime",     // earlier command
+		"Loading prime",    // earlier output
+	}
+	for _, dont := range mustNotContain {
+		if strings.Contains(body, dont) {
+			t.Errorf("nudge body must drop pre-prompt chrome %q:\n%s", dont, body)
 		}
 	}
 }
