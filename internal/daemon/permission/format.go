@@ -9,12 +9,22 @@ import (
 
 const (
 	// maxPaneTailLines caps how many lines of pane content we include in
-	// the nudge body. thrum-7khf trimmed this from 15 → 5: the previous
-	// cap captured approval-irrelevant UI chrome (separators, shortcut
-	// hints, "❯ 1. Yes / 2. No" selector lines) that buried the actual
-	// command. Five lines is enough for "<command>\n<reason>" plus a
-	// little context without being mobile-hostile on Telegram.
-	maxPaneTailLines = 5
+	// the nudge body. Sized for the longest known claude prompt shape
+	// plus one line of headroom:
+	//   ⏺ Bash(<command>)
+	//     ⎿  Do you want to proceed?
+	//        1. Yes
+	//        2. Yes, and don't ask again ...   (Variant A only)
+	//        3. No, and tell Claude ...        (Variant A only)
+	//        Esc to cancel · Tab to amend · ctrl+e to explain
+	// = 5 lines for Variant B-Bash (1/2 + Esc footer) or 6 lines for
+	// Variant A (1/2/3 + Esc footer). Cap at 6 keeps both shapes
+	// intact end-to-end so the supervisor sees the command being
+	// approved AND the option list. Exceeding the cap drops from the
+	// HEAD of the retained tail (truncatePaneTail trims forward to
+	// the next newline), so the option list at the bottom always
+	// survives even when the upstream capture grows.
+	maxPaneTailLines = 6
 
 	// maxPaneTailBytes is a hard byte cap. Still 2KB — a single
 	// multi-arg bash line can exceed the line cap in bytes.

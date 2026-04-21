@@ -150,7 +150,8 @@ func TestFormatNudge_PaneTailTruncatedMidRune(t *testing.T) {
 }
 
 func TestFormatNudge_PaneTailLineCap(t *testing.T) {
-	// 30 distinct lines — we expect only the LAST 5 in the body.
+	// 30 distinct lines — we expect only the LAST maxPaneTailLines (6)
+	// in the body.
 	//
 	// thrum-uy1n reverts the 7khf head-bias: the actual claude UI puts
 	// the prompt body (Bash command + dialog + selector) at the BOTTOM
@@ -171,14 +172,15 @@ func TestFormatNudge_PaneTailLineCap(t *testing.T) {
 		NudgeCount: 1,
 	}
 	body := FormatNudge(row, tail, "cursor", "thrum", time.Now())
-	// ROW25..ROW29 kept (last 5), ROW00..ROW24 dropped.
-	for i := 25; i < 30; i++ {
+	// Last maxPaneTailLines kept; everything earlier dropped.
+	keepFrom := 30 - maxPaneTailLines
+	for i := keepFrom; i < 30; i++ {
 		kept := fmt.Sprintf("ROW%02d", i)
 		if !strings.Contains(body, kept) {
 			t.Errorf("%s should be present:\n%s", kept, body)
 		}
 	}
-	for i := 0; i < 25; i++ {
+	for i := 0; i < keepFrom; i++ {
 		dropped := fmt.Sprintf("ROW%02d", i)
 		if strings.Contains(body, dropped) {
 			t.Errorf("%s should have been truncated:\n%s", dropped, body)

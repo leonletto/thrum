@@ -560,3 +560,33 @@ func TestDisambiguateClaudeDeny_Empty(t *testing.T) {
 		t.Errorf("DisambiguateClaudeDeny(empty) = %q, want %q", got, "Escape")
 	}
 }
+
+// ANSI escape codes embedded inline on option lines (e.g. SGR
+// colorization) must NOT suppress option-shape detection. Pre-fix
+// (no stripANSI) a colorized "\x1b[32m3. No, ...\x1b[0m" line would
+// fail the `^\s*(?:❯\s+)?3\.` anchor because the escape sequence
+// sits between start-of-line and the digit, and the helper would
+// fall back to "Escape" when "3" is correct. Verifying ANSI presence
+// in real claude UI requires a live capture with `tmux capture-pane
+// -e`; this test documents the defensive contract regardless.
+func TestDisambiguateClaudeDeny_VariantA_3Option_WithANSI(t *testing.T) {
+	pane := "⏺ Bash(curl https://example.com)\n" +
+		"  ⎿  Do you want to proceed?\n" +
+		"     1. Yes\n" +
+		"     2. Yes, and don't ask again for Bash(curl)\n" +
+		"     \x1b[31m3. No, and tell Claude what to do differently\x1b[0m (Esc)"
+	if got := DisambiguateClaudeDeny(pane); got != "3" {
+		t.Errorf("DisambiguateClaudeDeny(VariantA + ANSI) = %q, want %q", got, "3")
+	}
+}
+
+func TestDisambiguateClaudeDeny_VariantB_Bash_WithANSI(t *testing.T) {
+	pane := "⏺ Bash(rm -rf /tmp/foo)\n" +
+		"  ⎿  Do you want to proceed?\n" +
+		"     \x1b[32m1. Yes\x1b[0m\n" +
+		"     \x1b[31m2. No\x1b[0m\n" +
+		"     Esc to cancel · Tab to amend · ctrl+e to explain"
+	if got := DisambiguateClaudeDeny(pane); got != "2" {
+		t.Errorf("DisambiguateClaudeDeny(VariantB-Bash + ANSI) = %q, want %q", got, "2")
+	}
+}

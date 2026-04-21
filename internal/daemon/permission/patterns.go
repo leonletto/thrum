@@ -228,15 +228,42 @@ func LookupPattern(runtime, name string) *Pattern {
 	return nil
 }
 
-// claudeOption3 matches the Variant A option-3 line: "3. No, ..." or
-// "❯ 3. ...". Anchored at start-of-line with optional leading chrome
-// (the selector arrow plus indentation Claude uses).
+// claudeOption3 matches the presence of any option-3 line in a
+// claude.tool_confirmation pane. The library deliberately keeps the
+// match simple — `^\s*(?:❯\s+)?3\.\s+` — and does NOT require the
+// label "No, ..." text. Rationale: the only known shapes that show
+// option 3 are Variant A (Write/Exec) where option 3 is always the
+// deny option, and any future claude variant that exposes a third
+// option in this dialog would also need disambiguation. Detecting
+// option-3 presence is the right shape signal regardless of label.
+// The full "No, and tell Claude" string lives in the Pattern regex
+// where it gates the prompt anchor itself; that's the layer that
+// rejects unrelated panes.
 var claudeOption3 = regexp.MustCompile(`(?m)^\s*(?:❯\s+)?3\.\s+`)
 
 // claudeOption2No matches the Variant B-Bash option-2-is-No shape.
 // Word-boundary on "No" so "No, " and "No\n" both match while
 // "Notify" or "Note" do not.
 var claudeOption2No = regexp.MustCompile(`(?m)^\s*(?:❯\s+)?2\.\s+No\b`)
+
+// ansiEscapeRE matches ANSI CSI sequences ("\x1b[...<final>") that
+// some terminals embed inline in tmux capture-pane output. Stripped
+// before option-shape detection so a colorized option line like
+// "\x1b[32m3. No, ...\x1b[0m" doesn't suppress disambiguation by
+// hiding the leading "3." behind the escape sequence.
+//
+// The class `[ -/]*` covers intermediate bytes (0x20-0x2F) that may
+// appear before the final byte in less common SGR-adjacent
+// sequences; `[@-~]` covers the final byte (0x40-0x7E).
+var ansiEscapeRE = regexp.MustCompile(`\x1b\[[0-9;]*[ -/]*[@-~]`)
+
+// stripANSI removes ANSI CSI escape sequences from a string. Used by
+// DisambiguateClaudeDeny so colorized panes don't suppress option-
+// shape detection. Cheap (single-pass regex replace); falls through
+// to the legacy plain-text behavior when the input has no escapes.
+func stripANSI(s string) string {
+	return ansiEscapeRE.ReplaceAllString(s, "")
+}
 
 // DisambiguateClaudeDeny inspects a captured pane to decide which
 // keystroke actually denies the on-screen claude.tool_confirmation
@@ -258,7 +285,14 @@ var claudeOption2No = regexp.MustCompile(`(?m)^\s*(?:❯\s+)?2\.\s+No\b`)
 // Defensive default: an empty or unrecognized pane returns "Escape"
 // (universal-deny on claude). Never return "2" on an unknown shape
 // — option 2 in an unobserved variant might be a forever-allow.
+//
+// ANSI-escape robustness: the captured pane may contain inline ANSI
+// CSI sequences (e.g. SGR colorization on numbered options). Stripping
+// them before pattern matching prevents a colorized "3. No, ..." from
+// being misclassified as Variant B-Read and falling back to "Escape"
+// when "3" is correct.
 func DisambiguateClaudeDeny(pane string) string {
+	pane = stripANSI(pane)
 	if claudeOption3.MatchString(pane) {
 		return "3"
 	}
