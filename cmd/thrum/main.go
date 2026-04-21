@@ -1065,9 +1065,9 @@ The daemon must be running and you must have an active session.`,
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
+				if err := cli.EmitJSON(result); err != nil {
+					return err
+				}
 			} else {
 				// Human-readable formatted output with filter context
 				fmtOpts := cli.InboxFormatOptions{
@@ -1288,15 +1288,9 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagJSON {
-		output, err := json.MarshalIndent(summary, "", "  ")
-		if err != nil {
-			return fmt.Errorf("marshal JSON output: %w", err)
-		}
-		fmt.Println(string(output))
-	} else {
-		fmt.Print(cli.FormatAgentSummary(summary))
+		return cli.EmitJSON(summary)
 	}
-
+	fmt.Print(cli.FormatAgentSummary(summary))
 	return nil
 }
 
@@ -2322,12 +2316,9 @@ Use --context to show work context (branch, commits, intent) for each agent.`,
 				}
 
 				if flagJSON {
-					output, _ := json.MarshalIndent(result, "", "  ")
-					fmt.Println(string(output))
-				} else {
-					fmt.Print(cli.FormatContextList(result))
+					return cli.EmitJSON(result)
 				}
-
+				fmt.Print(cli.FormatContextList(result))
 				return nil
 			}
 
@@ -2355,23 +2346,17 @@ Use --context to show work context (branch, commits, intent) for each agent.`,
 			}
 
 			if flagJSON {
-				// Output as JSON (combine both if contexts available)
+				var body any = result
 				if contexts != nil {
-					combined := map[string]any{
+					body = map[string]any{
 						"agents":   result,
 						"contexts": contexts,
 					}
-					output, _ := json.MarshalIndent(combined, "", "  ")
-					fmt.Println(string(output))
-				} else {
-					output, _ := json.MarshalIndent(result, "", "  ")
-					fmt.Println(string(output))
 				}
-			} else {
-				// Human-readable formatted output with enhanced info
-				fmt.Print(cli.FormatAgentListWithContext(result, contexts))
+				return cli.EmitJSON(body)
 			}
-
+			// Human-readable formatted output with enhanced info
+			fmt.Print(cli.FormatAgentListWithContext(result, contexts))
 			return nil
 		},
 	}
@@ -4738,15 +4723,12 @@ Examples:
 			result.WebSocketPort = cli.ReadWebSocketPort(flagRepo)
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatOverview(result))
-				if !flagQuiet {
-					fmt.Print(cli.LegacyHint("overview", flagQuiet, flagJSON))
-				}
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatOverview(result))
+			if !flagQuiet {
+				fmt.Print(cli.LegacyHint("overview", flagQuiet, flagJSON))
+			}
 			return nil
 		},
 	}
@@ -4786,12 +4768,9 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatTeam(&result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatTeam(&result))
 			return nil
 		},
 	}
@@ -4830,15 +4809,12 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatWhoHas(file, result))
-				if !flagQuiet {
-					fmt.Print(cli.LegacyHint("who-has", flagQuiet, flagJSON))
-				}
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatWhoHas(file, result))
+			if !flagQuiet {
+				fmt.Print(cli.LegacyHint("who-has", flagQuiet, flagJSON))
+			}
 			return nil
 		},
 	}
