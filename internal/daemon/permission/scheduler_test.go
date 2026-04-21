@@ -152,6 +152,100 @@ func TestScheduler_FirstDetect(t *testing.T) {
 	}
 }
 
+// TestScheduler_FirstDetect_MultiSupervisor_SecondReplyResolves — when
+// firstDetect fans the nudge out to multiple supervisors (e.g.
+// coordinator + @user:leon-letto on Telegram), a supervisor other than
+// supers[0] must still be able to approve. The nudge row PK is
+// supers[0].msg_id by construction, so supers[1+]'s nudges must carry
+// thread_id = supers[0].msg_id so TryResolve's thread-ID fallback can
+// walk a reply-to-supers[1] back to the row.
+//
+// Regression: before the fix, firstDetect passed threadID="" for every
+// supervisor in the loop. Replies aimed at supers[1].msg_id missed
+// both the direct lookup (wrong PK) and the thread_id fallback (no
+// thread linkage), so the pane stayed blocked. See thrum-rfy3 for the
+// 2026-04-21 field repro.
+func TestScheduler_FirstDetect_MultiSupervisor_SecondReplyResolves(t *testing.T) {
+	p, _ := newSchedulerFixture(t)
+	ctx := context.Background()
+
+	// Register a second coordinator so ResolveSupervisors (default role
+	// "coordinator") returns two recipients and firstDetect's loop
+	// iterates twice.
+	if err := p.state.WriteEvent(ctx, types.AgentRegisterEvent{
+		Type:      "agent.register",
+		Timestamp: "2026-04-14T00:00:02Z",
+		AgentID:   "coordinator_secondary",
+		Kind:      "agent",
+		Role:      "coordinator",
+		Module:    "test",
+	}); err != nil {
+		t.Fatalf("register second coordinator: %v", err)
+	}
+	if err := p.state.WriteEvent(ctx, types.AgentSessionStartEvent{
+		Type:      "agent.session.start",
+		Timestamp: "2026-04-14T00:00:03Z",
+		SessionID: "ses_coordinator_secondary",
+		AgentID:   "coordinator_secondary",
+	}); err != nil {
+		t.Fatalf("start second coordinator session: %v", err)
+	}
+
+	sender := &recordingSender{}
+	p.keystrokeSender = sender.fn()
+	// Pre-send pane recheck needs to see a matching pane or it
+	// skips the dispatch; stub a cursor-pattern tail so the focus
+	// stays on the multi-supervisor threading invariant.
+	p.SetPaneCaptureForTest(func(_ string, _ int) (string, error) {
+		return "Not in allowlist: test\n", nil
+	})
+
+	if err := p.OnDetection(ctx, "cursor-test", "cursor", "cursor-test:0.0",
+		"researcher_cursor", testPattern(), "pane A"); err != nil {
+		t.Fatalf("first detect: %v", err)
+	}
+
+	row, err := p.store.LookupPendingNudgeBySession(ctx, "cursor-test")
+	if err != nil || row == nil {
+		t.Fatalf("expected nudge row, err=%v row=%v", err, row)
+	}
+
+	// The nudge row PK must be supers[0].msg_id. The second supervisor
+	// message must exist AND carry thread_id = row.MessageID so the
+	// reply-path thread fallback can resolve replies aimed at it.
+	var secondMsgID, secondThreadID string
+	if err := p.state.RawDB().QueryRow(`
+		SELECT message_id, COALESCE(thread_id, '') FROM messages
+		WHERE agent_id = 'supervisor_thrum' AND message_id != ?
+		ORDER BY created_at ASC LIMIT 1`, row.MessageID).Scan(&secondMsgID, &secondThreadID); err != nil {
+		t.Fatalf("expected a second supervisor message in messages table: %v", err)
+	}
+	if secondThreadID != row.MessageID {
+		t.Fatalf("second supervisor msg thread_id = %q, want %q (nudge row PK) — without this linkage, replies to the second supervisor's nudge cannot resolve the nudge row",
+			secondThreadID, row.MessageID)
+	}
+
+	// Simulate a supervisor (e.g. Leon via Telegram) replying "y" to
+	// the SECOND supervisor's nudge.
+	p.TryResolve(ctx,
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "y"}},
+		secondMsgID)
+
+	calls := sender.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 keystroke dispatch via thread fallback, got %d: %v",
+			len(calls), calls)
+	}
+	if calls[0].key != "y" {
+		t.Errorf("expected key 'y', got %q", calls[0].key)
+	}
+
+	gone, _ := p.store.LookupPendingNudgeByMessageID(ctx, row.MessageID)
+	if gone != nil {
+		t.Error("nudge row should be deleted after approve via fallback")
+	}
+}
+
 func TestScheduler_NoReminderBeforeCadence(t *testing.T) {
 	p, clock := newSchedulerFixture(t)
 	ctx := context.Background()

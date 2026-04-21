@@ -18,11 +18,14 @@ import (
 //
 // ThreadID, when non-empty, is written into the message's thread_id column
 // so that all reminder messages share the same thread as the firstDetect
-// message. The firstDetect call passes "" (no thread yet); subsequent
-// fireReminder calls pass the nudge row's MessageID (which is the
-// firstDetect message_id and therefore the thread root). TryResolve's
-// thread_id fallback relies on this linkage to resolve replies that
-// target a reminder message_id rather than the firstDetect message_id.
+// message. firstDetect passes "" for the FIRST supervisor (establishing
+// the thread root — its message_id becomes the nudge row PK) and passes
+// firstMsgID for every subsequent supervisor in the same fan-out.
+// fireReminder calls pass the nudge row's MessageID (= firstMsgID) as
+// threadID for every recipient. TryResolve's thread_id fallback relies
+// on this linkage to resolve replies that target any nudge message_id
+// other than the nudge row PK — i.e., a reminder or a non-first
+// supervisor's nudge (thrum-rfy3).
 //
 // Mirrors internal/daemon/rpc/queue_rpc.go:474 sendSystemMessage but
 // uses p.supervisorID (e.g. "supervisor_thrum") as the author instead

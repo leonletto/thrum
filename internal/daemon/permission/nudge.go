@@ -23,8 +23,11 @@ type NudgeRow struct {
 	AgentName string
 
 	// PatternKey is "runtime.pattern_name", e.g. "cursor.not_in_allowlist".
-	// Stored for display; the actual keystrokes are cached in
-	// ApproveKey/DenyKey.
+	// Format: "<runtime>.<name>" — the dot is load-bearing.
+	// reply.go's paneStillMatches splits on it to re-detect pane state,
+	// and a dotless key fails-closed (skip keystroke) rather than
+	// misroute. Stored for display; the actual keystrokes are cached
+	// in ApproveKey/DenyKey.
 	PatternKey string
 
 	// ApproveKey and DenyKey are the single-invocation keystrokes

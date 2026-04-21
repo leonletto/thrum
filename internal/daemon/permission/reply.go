@@ -11,6 +11,12 @@ import (
 	"github.com/leonletto/thrum/internal/types"
 )
 
+// paneRecheckLines controls how much pane tail we capture for the
+// pre-send recheck. Matches paneBottomMatchLines (detect.go) so the
+// recheck sees the same scoped window as the scheduler's original
+// detection — no new spurious matches or misses from a wider capture.
+const paneRecheckLines = paneBottomMatchLines
+
 // approveReplyRe and denyReplyRe match a full supervisor reply body
 // (post ToLower + TrimSpace). Anchoring matters: a body like "why
 // not?" must NOT dispatch approve just because it contains "y".
@@ -108,6 +114,9 @@ func (p *Permission) TryResolve(ctx context.Context, evt types.MessageCreateEven
 				return // not ours
 			}
 		}
+		if !p.paneStillMatches("approve", row) {
+			return
+		}
 		if err := p.sendKeystroke(row.TmuxTarget, row.ApproveKey); err != nil {
 			// Row is already gone. No retry possible by design; log
 			// loudly so the operator can intervene by hand.
@@ -158,6 +167,9 @@ func (p *Permission) TryResolve(ctx context.Context, evt types.MessageCreateEven
 		}
 		if row == nil {
 			return // lost the race — peer already dispatched
+		}
+		if !p.paneStillMatches("deny", row) {
+			return
 		}
 		if err := p.sendKeystroke(row.TmuxTarget, row.DenyKey); err != nil {
 			slog.Error("[permission] deny keystroke failed AFTER atomic claim",
@@ -222,6 +234,68 @@ func (p *Permission) claimNudgeViaThreadID(ctx context.Context, replyTo string) 
 		return nil, nil
 	}
 	return p.store.DeleteAndReturnPendingNudge(ctx, threadID)
+}
+
+// paneStillMatches captures the pane tail at dispatch time and checks
+// that DetectPaneState still reports the same pattern the nudge row
+// was opened against. Returns true when the pane still shows the
+// prompt (safe to fire the keystroke) and false when the pane has
+// moved on (skip the keystroke to avoid stray input — e.g. an extra
+// "1" that lands in the post-approval turn).
+//
+// Capture failures are treated as "no longer matches" (fail-closed):
+// better to skip a keystroke on a transient tmux hiccup than fire
+// blind into a pane we cannot observe. thrum-rfy3 field repro: two
+// supervisors approving near-simultaneously produced an extra
+// keystroke on a couple of occasions; this recheck closes the
+// remaining race windows the atomic claim cannot on its own.
+//
+// Recovery on skip: when paneStillMatches returns false the row is
+// already atomically deleted by the caller. The prompt is NOT
+// orphaned — if it is still present on the next tmux silence cycle,
+// HandleCheckPane → OnDetection → firstDetect re-fires with a fresh
+// row. Delay is bounded by the check-pane cadence (seconds), not
+// forever, so a transient capture hiccup is self-healing.
+//
+// Logging is emitted here so the caller can stay log-free: Info for
+// the expected pane-moved-on case (the operator already approved in
+// the pane, or recovery fired concurrently — nothing to do), Warn
+// for the capture-error and malformed-pattern cases so operators see
+// the recovery-pending state.
+//
+// `op` is the caller's operation ("approve"/"deny") and is threaded
+// into the log attrs so a grep over logs can distinguish which reply
+// path was short-circuited.
+func (p *Permission) paneStillMatches(op string, row *NudgeRow) bool {
+	capture := p.paneCapture
+	if capture == nil {
+		capture = tmux.CapturePane
+	}
+	content, err := capture(row.TmuxTarget, paneRecheckLines)
+	if err != nil {
+		slog.Warn("[permission] "+op+" skipped — pane recheck capture failed (will re-fire on next check-pane cycle if prompt persists)",
+			"target", row.TmuxTarget, "message_id", row.MessageID, "err", err)
+		return false
+	}
+	runtime, _, ok := strings.Cut(row.PatternKey, ".")
+	if !ok || runtime == "" {
+		// Malformed PatternKey shouldn't reach here (set by
+		// firstDetect from a validated Pattern), but fail-closed if
+		// it somehow does: without a runtime we cannot re-detect.
+		slog.Warn("[permission] "+op+" skipped — malformed pattern key",
+			"target", row.TmuxTarget, "pattern_key", row.PatternKey,
+			"message_id", row.MessageID)
+		return false
+	}
+	detected := DetectPaneState(runtime, content)
+	expected := "permission:" + row.PatternKey
+	if detected == expected {
+		return true
+	}
+	slog.Info("[permission] "+op+" skipped — pane no longer matches pattern",
+		"target", row.TmuxTarget, "pattern_key", row.PatternKey,
+		"detected", detected, "message_id", row.MessageID)
+	return false
 }
 
 // sendKeystroke dispatches a cached keystroke sequence to the tmux

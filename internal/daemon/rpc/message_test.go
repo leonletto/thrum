@@ -2298,6 +2298,14 @@ func TestHandleSend_ReplyInterceptor(t *testing.T) {
 		sentKeys = append(sentKeys, sentKey{target, key})
 		return nil
 	})
+	// Pre-send pane recheck (thrum-rfy3): production defaults to
+	// tmux.CapturePane, which can't see a test's fake target. Stub
+	// with content that matches the seeded cursor pattern so the
+	// recheck lets the keystroke through — the invariant under test
+	// is routing+dispatch, not the recheck behavior itself.
+	p.SetPaneCaptureForTest(func(_ string, _ int) (string, error) {
+		return "Not in allowlist: some-command\n", nil
+	})
 
 	// Install the event-write hook in the same shape as production
 	// runDaemon. Sync variant here for simple test assertions — the
