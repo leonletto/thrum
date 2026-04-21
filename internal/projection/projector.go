@@ -463,16 +463,41 @@ func (p *Projector) applyAgentRegister(ctx context.Context, data json.RawMessage
 	// ones (thrum-mm3l). The event's origin_daemon is set by State.WriteEvent
 	// on the emitting daemon (to its own daemon ID) and preserved verbatim
 	// when events propagate across daemons.
+	//
+	// thrum-ufv5.6 review #1: use ON CONFLICT DO UPDATE (not INSERT OR REPLACE)
+	// so registered_at on an existing row is NOT overwritten by the re-register
+	// event's timestamp. INSERT OR REPLACE deletes-and-reinserts, which loses
+	// the original first-registration time — harmless pre-ufv5.6 (only the
+	// PID-drift branch hit this path, rare) but now exposed on every --force
+	// quickstart. agents.registered_at is read by `agent.list ORDER BY
+	// registered_at DESC`, so preserving the original value keeps sort
+	// stability across re-registers.
+	//
+	// display and hostname pass through as raw strings (not sqlNullString)
+	// because schema.go declares them `TEXT NOT NULL DEFAULT ''`. SQLite's
+	// INSERT OR REPLACE special-cases NULL on NOT-NULL-with-DEFAULT columns
+	// by using the DEFAULT, but ON CONFLICT DO UPDATE SET col=excluded.col
+	// with NULL writes NULL verbatim and trips the constraint. Passing ""
+	// directly keeps both the INSERT and the UPDATE paths valid and matches
+	// the pre-fix observable behavior (stored as empty string in both cases).
 	_, err := p.db.ExecContext(ctx, `
-		INSERT OR REPLACE INTO agents (agent_id, kind, role, module, display, hostname, agent_pid, registered_at, origin_daemon)
+		INSERT INTO agents (agent_id, kind, role, module, display, hostname, agent_pid, registered_at, origin_daemon)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(agent_id) DO UPDATE SET
+			kind          = excluded.kind,
+			role          = excluded.role,
+			module        = excluded.module,
+			display       = excluded.display,
+			hostname      = excluded.hostname,
+			agent_pid     = excluded.agent_pid,
+			origin_daemon = excluded.origin_daemon
 	`,
 		event.AgentID,
 		event.Kind,
 		event.Role,
 		event.Module,
-		sqlNullString(event.Display),
-		sqlNullString(event.Hostname),
+		event.Display,
+		event.Hostname,
 		pid,
 		event.Timestamp,
 		event.OriginDaemon,

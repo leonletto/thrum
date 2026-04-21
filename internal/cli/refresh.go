@@ -121,6 +121,10 @@ func RefreshLocalIdentity(client *Client, repoPath string) (*RefreshResult, erro
 		// if detectedPID drifted, Step 3 updated idFile.AgentPID in place,
 		// so reading it here unconditionally covers both drift and no-drift
 		// paths without branching.
+		// Force intentionally not forwarded here: refresh re-registers only
+		// on PID drift, not on user intent. Explicit --force is a
+		// user-initiated trigger that lives on the quickstart/register
+		// commands (thrum-ufv5.6).
 		regResp, regErr := AgentRegister(client, AgentRegisterOptions{
 			Name:       idFile.Agent.Name,
 			Role:       idFile.Agent.Role,
