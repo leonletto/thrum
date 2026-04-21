@@ -87,3 +87,31 @@ func TestPaneTargetForIdentity_MalformedPaneTargetRefuses(t *testing.T) {
 		t.Errorf("got %q, want \"\" for malformed paneTarget", got)
 	}
 }
+
+// TestPaneTargetForIdentity_EmptySessionBeforeColonRefuses — covers
+// the ":0.0" / ":1.0" malformed shapes where the colon-presence
+// check passes but ParseTarget yields session="". The session-empty
+// guard inside the helper must catch these and return "" without
+// emitting a misleading "cross-worktree" warning.
+func TestPaneTargetForIdentity_EmptySessionBeforeColonRefuses(t *testing.T) {
+	wt := filepath.Join(t.TempDir(), "enforce-identity")
+	got := PaneTargetForIdentity(":0.0", wt, SafeTmuxOpts{})
+	if got != "" {
+		t.Errorf("got %q, want \"\" for empty session before colon", got)
+	}
+}
+
+// TestPaneTargetForIdentity_TrailingSlashWorktreeMatches — guard
+// against a future regression: a caller passing a worktree path with
+// a trailing slash must still resolve to the same basename. Pinned
+// here because internal/paths and filepath.Join can produce trailing
+// slashes from concatenation, and a NIT-grade TrimRight → TrimSuffix
+// shift would silently change behavior on multi-trailing-slash
+// inputs (TrimRight strips ALL trailing /, TrimSuffix strips ONE).
+func TestPaneTargetForIdentity_TrailingSlashWorktreeMatches(t *testing.T) {
+	wt := filepath.Join(t.TempDir(), "enforce-identity") + "/"
+	got := PaneTargetForIdentity("enforce-identity:0.0", wt, SafeTmuxOpts{})
+	if got != "enforce-identity:0.0" {
+		t.Errorf("got %q, want %q for worktree path with trailing slash", got, "enforce-identity:0.0")
+	}
+}

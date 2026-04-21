@@ -53,9 +53,9 @@ import (
 	"github.com/leonletto/thrum/internal/timeparse"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
-	"github.com/leonletto/thrum/internal/worktree"
 	"github.com/leonletto/thrum/internal/web"
 	"github.com/leonletto/thrum/internal/websocket"
+	"github.com/leonletto/thrum/internal/worktree"
 	"github.com/spf13/cobra"
 )
 

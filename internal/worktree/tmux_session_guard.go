@@ -68,7 +68,7 @@ func PaneTargetForIdentity(paneTarget, worktreePath string, opts SafeTmuxOpts) s
 	if session == "" {
 		return ""
 	}
-	expected := ttmux.SanitizeSessionName(filepath.Base(strings.TrimRight(worktreePath, "/")))
+	expected := ttmux.SanitizeSessionName(filepath.Base(strings.TrimSuffix(worktreePath, "/")))
 	if session == expected {
 		return paneTarget
 	}
