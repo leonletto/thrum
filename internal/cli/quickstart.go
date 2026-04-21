@@ -136,11 +136,22 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 	agentPID, _ := process.FindClaudeAncestor(context.Background())
 
 	// Step 1: Register agent
+	//
+	// thrum-ufv5.6: forward opts.Force to regOpts.Force. Without this, a
+	// `thrum quickstart --force` on a pre-existing agent whose AgentPID
+	// matches the caller's detected PID hits the daemon's no-op branch
+	// (neither the PID-update case nor ReRegister fires), so the agents
+	// projection never refreshes. Paired with the daemon-side Force
+	// trigger added in thrum-ufv5.2 (internal/daemon/rpc/agent.go), this
+	// guarantees --force re-registers via the projection's
+	// INSERT OR REPLACE, refreshing role/module/display/agent_pid for the
+	// post-purge scenario documented in the bug.
 	regOpts := AgentRegisterOptions{
 		Name:       opts.Name,
 		Role:       opts.Role,
 		Module:     opts.Module,
 		Display:    opts.Display,
+		Force:      opts.Force,
 		ReRegister: opts.ReRegister,
 		AgentPID:   agentPID,
 	}
