@@ -1208,6 +1208,10 @@ All methods use JSON-RPC 2.0 protocol.
   States:    idle | permission | working | command_completed | working_but_idle
   Notes:     Synthesized by daemon SessionPoller on stable pane content (10s poll,
              2-hash stability, ~20s detection latency); rarely invoked directly.
+             v0.9.0: pattern match and stability hash both run against the
+             BOTTOM 15 lines of the capture (not the full 30-line window).
+             An active prompt sits at the bottom; scoping to the tail stops
+             re-firing on resolved prompts still visible in upper scrollback.
 
 ### tmux.restart
 
@@ -1584,7 +1588,10 @@ Unknown event types are silently ignored (forward compatibility).
                                                // daemon-level override: .thrum/var/guard-daemon.json
                                                // (same keys; daemon-level wins over repo-level wins over strict default)
                                                // unauthenticated_rpc/identity_mismatch (forgery rejection)
-                                               // is unconditional regardless of mode
+                                               // ignores mode config. Narrow v0.9.0 exception:
+                                               // shared-worktree claim trust — if peercred picks Y but
+                                               // client claims X and state.IsAgentInWorktree(X, peercred_wt)
+                                               // is true, the claim is honored. Cross-worktree claims fail.
   }
 
   Config key for worktree base directory: `worktrees.base_path` (NOT `worktree_dir`).
@@ -1858,7 +1865,15 @@ Every unix-socket RPC goes through a 3-step pipeline before the handler runs:
                         e.g., tests or WebSocket callers)
     On unix socket: client-asserted caller_agent_id is cross-checked against
     peercred resolution; mismatch fires unauthenticated_rpc/identity_mismatch
-    (unconditional — not guard-mode-gated).
+    (not guard-mode-gated).
+    Shared-worktree claim trust (v0.9.0): when peercred picks agent Y but
+    client claims X, DaemonResolve consults state.IsAgentInWorktree(X, peercred_wt).
+    If X is also registered in the peercred-resolved worktree (session_refs match
+    or identity-file fallback), the claim is honored — this covers multi-agent
+    worktrees (E2E harnesses, peer proxies) where peercred's pick is arbitrary.
+    Cross-worktree claims still fail. CLI now forwards caller_agent_id on
+    message.delete / message.get plumbing paths so THRUM_NAME claims reach the
+    resolver.
 
   Step 3: Identity guard enforcement
     guard.Check() runs the applicable guard for the RPC type.
@@ -1888,7 +1903,7 @@ Emitted at: warn level (strict mode also returns error to caller)
   Guard key                    Reason code                      Trigger
   ---                          ---                              ---
   cross_worktree               pid_mismatch                     Caller PID owner ≠ identity owner
-  unauthenticated_rpc          identity_mismatch                Forged caller_agent_id (unconditional)
+  unauthenticated_rpc          identity_mismatch                Forged caller_agent_id (mode-independent; exception: shared-worktree claim trust)
   unauthenticated_rpc          anonymous_mutating_rpc           Mutating RPC outside any worktree
   unauthenticated_rpc          no_caller_agent_id               Non-peercred transport missing CallerAgentID
   non_git_bootstrap            not_a_git_repo                   thrum init/daemon start outside git repo
@@ -1897,8 +1912,11 @@ Emitted at: warn level (strict mode also returns error to caller)
   quickstart_self_rename       caller_already_owns_identity     Caller already registered in this directory
   quickstart_name_collision    name_held_by_live_foreign_pid    Requested name held by different live PID
 
-  Note: identity_mismatch fires unconditionally regardless of guard mode setting.
-  All others respect strict/warn/off from identity_guard config block.
+  Note: identity_mismatch ignores guard mode setting. Narrow runtime exception
+  (not a config knob): shared-worktree claim trust — when peercred picks Y but
+  client claims X AND X is co-located in the peercred-resolved worktree, the
+  claim is honored. Cross-worktree claims still hit strict deny. All other
+  guards respect strict/warn/off from identity_guard config block.
 
 ## CLI Hints Architecture (v0.9.0)
 
@@ -1973,3 +1991,47 @@ Permission nudges auto-forward to Telegram when:
   Restart resilience: `telegram_msg_map` SQLite table (schema v24) persists the
   Telegram ↔ Thrum message ID mapping across daemon restarts. In-flight approvals
   are not lost when the daemon restarts between nudge send and reply.
+
+## Permission Prompt Detection Details (v0.9.0)
+
+Claude per-shape deny key (`DisambiguateClaudeDeny`): claude.tool_confirmation
+matches 3 observable prompt shapes under one regex anchor. At first detection,
+the scheduler picks the deny key based on the captured pane (ANSI-stripped):
+
+  Shape                                                  Deny key stored on NudgeRow
+  ---                                                    ---
+  Variant A — 3-option Write/Exec (3. No, and tell…)     "3"
+  Variant B-Bash — 2-option (option 2 starts with "No")  "2"
+  Variant B-Read — 2-option (option 2 = "don't ask…")    "Escape"  (defensive)
+  No 1/2/3 option lines detected                         "Escape"
+
+Variant B-Read falls back to Escape because option 2 is session-scoped
+forever-allow — sending "2" would grant a forever-allow, not a deny. The
+disambiguated key is written to NudgeRow.DenyKey at firstDetect so every
+reminder in the thread carries the same keystroke.
+
+Snippet truncation is TAIL-biased: `truncatePaneTail` keeps the last 5-6 lines
+of the captured pane for the nudge body (claude tool_confirmation prompts are
+5-6 lines; cap=6). Pane capture is ANSI-stripped before option-shape matching
+to prevent inline SGR escapes (e.g., `\x1b[32m3. No, …\x1b[0m`) from defeating
+start-of-line anchors. Non-claude runtimes use their library DenyKey verbatim;
+DisambiguateClaudeDeny is gated to `runtime == "claude"`.
+
+Detection scoping (k4wf): pattern regex AND OnDetection hash both run against
+the bottom 15 lines of the capture window (not the full 30-line tail). Prevents
+re-firing firstDetect on resolved prompts still in upper scrollback.
+`bottomLines()` handles trailing-newline and CRLF normalization.
+
+Nudge dispatch observability (`[nudge]` slog tag): structured slog.Info events
+at four points in the fan-out for routing visibility:
+
+  Site                              Fields
+  ---                               ---
+  SetOnEventWrite entry             msg_id, sender, recipients, origin_daemon, session_id
+  SetOnEventWrite per-recipient     msg_id, recipient, target (or skip reason)
+  nudge.DispatchTmux                msg_id, recipient, target, session, self_echo
+  telegram outbound.handleNotify    msg_id, bridge_user, self_echo_candidate
+
+  self_echo=true means the dispatch target resolved to the sender's own pane;
+  the daemon refuses the write and logs the skip. Used by the kfn3/l9s1
+  investigation to diagnose phantom-pane misroutes.

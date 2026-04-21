@@ -953,9 +953,11 @@ fields: `guard`, `mode`, `outcome` (`denied`, `allowed`, `auto_reclaimed`, or
 | `dead_pid_auto_reclaim`     | Informational: dead owner's identity auto-reclaimed by new caller                                             | warn         | n/a                                                       |
 
 **Note on `unauthenticated_rpc`:** The `identity_mismatch` reason (forgery
-rejection) fires unconditionally regardless of the configured mode. You can't
-warn-mode or off-mode a forgery — it always returns a hard error. This is a
-deliberate security decision.
+rejection) ignores the configured mode — you can't warn-mode or off-mode it. A
+narrow runtime exception (not a config knob) trusts the claim when the claimed
+agent is co-located with peercred's pick in the same worktree; see
+[Troubleshooting → shared-worktree claim trust](troubleshooting-identity.md#unauthenticated_rpc--identity_mismatch-peercred-path).
+Cross-worktree claims still hit the strict deny.
 
 ### `guard.WritePID` Discipline
 

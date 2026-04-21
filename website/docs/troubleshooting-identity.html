@@ -101,11 +101,16 @@ daemon resolve identity from peercred.</li>
 <li>To act as <code>coord_main</code> (the agent your CWD actually belongs to), drop the
 explicit identity claim entirely and retry from your current directory.</li>
 </ol>
-<p><strong>This guard fires unconditionally.</strong> It doesn&#39;t respect the
-<code>unauthenticated_rpc</code> mode setting in config. Forgery rejection is foundational
-— lowering the mode doesn&#39;t help here. See
+<p><strong>Config mode doesn&#39;t help.</strong> Setting <code>unauthenticated_rpc</code> to <code>warn</code> or <code>off</code>
+has no effect on <code>identity_mismatch</code> — forgery rejection is foundational. See
 <a href="#guard-mode-downgrade-incident-diagnosis">Guard mode downgrade</a> for what you
 can and can&#39;t configure.</p>
+<p><strong>Narrow exception — shared-worktree claim trust.</strong> If the worktree hosts
+multiple registered agents (e.g. Playwright E2E harness, multi-agent test
+scenarios), and your claimed agent is also registered in the peercred-resolved
+worktree, the daemon trusts the claim and skips the mismatch. You won&#39;t see this
+error in that case. It only fires when peercred puts you in worktree A and the
+claimed agent lives in worktree B — that&#39;s still forgery.</p>
 <hr>
 <h3><code>unauthenticated_rpc</code> — identity_mismatch (ancestor-chain path)</h3>
 <h4>Error</h4>
@@ -126,7 +131,10 @@ a session and then issued a thrum command without re-priming.</p>
 <li>Or drop the <code>CallerAgentID</code> claim and let the daemon use <code>coord_main</code> — the
 agent your ancestor chain actually belongs to.</li>
 </ol>
-<p><strong>Also unconditional.</strong> See the note in the previous section.</p>
+<p><strong>Config mode doesn&#39;t help here either.</strong> Note that the shared-worktree claim
+trust from the previous section does NOT apply to the ancestor-chain path — it
+only fires when peercred CWD didn&#39;t match a registered worktree at all, so
+there&#39;s no worktree to check the claim against.</p>
 <hr>
 <h3><code>unauthenticated_rpc</code> — anonymous_mutating_rpc</h3>
 <h4>Error</h4>
@@ -337,12 +345,19 @@ other process was still alive and recovers after this, it&#39;ll get a
 <code>.thrum/var/guard-daemon.json</code> instead. The daemon checks this file every cycle
 and merges it on top of the repo config. This lets you temporarily loosen a
 guard on a running daemon without touching the committed config.</p>
-<p><strong><code>unauthenticated_rpc</code> / <code>identity_mismatch</code> cannot be downgraded.</strong> The
-forgery rejection — where a client-asserted <code>CallerAgentID</code> contradicts the
-kernel-verified identity — fires unconditionally regardless of what the
-<code>unauthenticated_rpc</code> mode is set to. This is a deliberate security decision.
-Disabling it would re-open the v0.8.x impersonation hole where any caller could
-claim any agent&#39;s identity. Every other guard is configurable; this one isn&#39;t.</p>
+<p><strong><code>unauthenticated_rpc</code> / <code>identity_mismatch</code> cannot be downgraded via config.</strong>
+The forgery rejection — where a client-asserted <code>CallerAgentID</code> contradicts the
+kernel-verified identity — ignores the <code>unauthenticated_rpc</code> mode setting. This
+is a deliberate security decision. Disabling it would re-open the v0.8.x
+impersonation hole where any caller could claim any agent&#39;s identity. Every
+other guard is configurable; this one isn&#39;t.</p>
+<p>The one runtime exception (not a config knob) is the <strong>shared-worktree claim
+trust</strong> described under the
+<a href="#unauthenticated_rpc--identity_mismatch-peercred-path">peercred path</a> above: a
+claim for an agent co-located in the peercred-resolved worktree is honored
+because it&#39;s kernel-verified to belong to the same worktree. This is narrower
+than a mode downgrade — it applies only when <code>state.IsAgentInWorktree</code> confirms
+the claim.</p>
 <hr>
 <h2>auto_reclaim: dead_pid_auto_reclaim (informational)</h2>
 <p>Not an error. When <code>thrum quickstart</code> or the cross_worktree check encounters a

@@ -907,9 +907,11 @@ fields: <code>guard</code>, <code>mode</code>, <code>outcome</code> (<code>denie
 </tr>
 </tbody></table>
 <p><strong>Note on <code>unauthenticated_rpc</code>:</strong> The <code>identity_mismatch</code> reason (forgery
-rejection) fires unconditionally regardless of the configured mode. You can&#39;t
-warn-mode or off-mode a forgery — it always returns a hard error. This is a
-deliberate security decision.</p>
+rejection) ignores the configured mode — you can&#39;t warn-mode or off-mode it. A
+narrow runtime exception (not a config knob) trusts the claim when the claimed
+agent is co-located with peercred&#39;s pick in the same worktree; see
+<a href="troubleshooting-identity.html#unauthenticated_rpc--identity_mismatch-peercred-path">Troubleshooting → shared-worktree claim trust</a>.
+Cross-worktree claims still hit the strict deny.</p>
 <h3><code>guard.WritePID</code> Discipline</h3>
 <p>The only function that writes <code>agent_pid</code> into an identity file is
 <code>guard.WritePID</code>. All previous inline PID-write callsites have been removed. If

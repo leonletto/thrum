@@ -116,13 +116,37 @@ transports) still use it. But when the peercred resolver is active, the daemon
 cross-checks the client-asserted `caller_agent_id` against the kernel-resolved
 identity. Mismatch → the request is rejected with "identity mismatch."
 
-This is unconditional. There's no config flag to disable it. It applies to every
-RPC on every unix-socket connection where the resolver is active.
+There's no config flag to downgrade this check. Setting `unauthenticated_rpc` to
+`warn` or `off` doesn't help — forgery rejection is foundational.
 
 In practice this mainly affects scripts. If you had a script that ran from
 `/tmp/some-tool` and passed `caller_agent_id: "agent-in-some-repo"` to send
 messages on behalf of that agent, that script now gets rejected. The fix is to
 run the script from the agent's worktree.
+
+#### Shared-worktree claim trust (v0.9.0)
+
+One narrow exception: when a single worktree hosts multiple registered agents
+(typical in Playwright E2E harnesses, multi-agent test scenarios, and peer
+bridge proxies), peercred's `PID → CWD → git-root` walk matches the worktree
+correctly but has to pick one of the co-located agents arbitrarily. If the CLI's
+explicit `caller_agent_id` is a _different_ co-located agent in that same
+worktree, the daemon trusts the claim — the claim is kernel-verified to belong
+to the same worktree, so it's not forgery.
+
+The check is:
+
+1. Peercred resolves the caller's worktree from the connecting PID.
+2. Client claims `caller_agent_id = X`, peercred picked `Y`. Mismatch.
+3. Daemon consults `state.IsAgentInWorktree(X, peercred_worktree)`. If `X` is
+   also a registered agent in that worktree (via `session_refs` or a live
+   identity file), the claim is honored and the request proceeds as `X`.
+4. If `X` is NOT a registered agent in that worktree, the request is rejected
+   with `identity_mismatch` as before.
+
+Cross-worktree impersonation — a claim from `/path/to/repo-A` asserting an
+identity registered in `/path/to/repo-B` — still hits the strict deny. The
+fallback only covers the shared-worktree case, which is legitimate.
 
 ---
 
@@ -209,7 +233,9 @@ the old behavior, they'll need updating.
 
 - **Forged `caller_agent_id` rejected.** Previously any process could claim any
   agent ID. Now mismatches on unix-socket connections with the resolver active
-  are rejected with "identity mismatch."
+  are rejected with "identity mismatch." Narrow exception: claims for another
+  agent co-located in the peercred-resolved worktree are honored (see
+  [Shared-worktree claim trust](#shared-worktree-claim-trust-v090)).
 - **`message.delete` by non-author rejected.** Previously any caller could
   soft-delete any message by ID. Now only the author can.
 - **`message.deleteByAgent` requires caller == target.** Previously callable by

@@ -136,8 +136,13 @@ semantics depend on the transport:</p>
 credentials (<code>SO_PEERCRED</code> on Linux, <code>LOCAL_PEERPID</code> on macOS). If
 <code>caller_agent_id</code> is also provided, the daemon cross-checks it against the
 kernel-verified identity. A mismatch returns
-<code>unauthenticated_rpc/identity_mismatch</code>. Forged claims cannot succeed. See
-<a href="security-model.html">Security Model</a> for the full trust stack.</li>
+<code>unauthenticated_rpc/identity_mismatch</code>. Forged claims cannot succeed.
+<strong>Shared-worktree fallback:</strong> when peercred resolves to a worktree hosting
+multiple co-located agents and the claimed <code>caller_agent_id</code> is also
+registered in that same worktree, the claim is trusted (the CLI plumbs
+<code>caller_agent_id</code> from <code>THRUM_NAME</code> / the local identity file on every
+mutating call, including <code>message.delete</code>). Cross-worktree claims still fail.
+See <a href="security-model.html">Security Model</a> for the full trust stack.</li>
 <li><strong>WebSocket:</strong> Peercred is not available. Mutating RPCs require a non-empty
 <code>caller_agent_id</code>. Strict mode returns
 <code>unauthenticated_rpc/no_caller_agent_id</code> when it is absent. See

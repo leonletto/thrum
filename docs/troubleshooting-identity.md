@@ -89,11 +89,17 @@ or wrapper sent an old `CallerAgentID` from a previous session.
 3. To act as `coord_main` (the agent your CWD actually belongs to), drop the
    explicit identity claim entirely and retry from your current directory.
 
-**This guard fires unconditionally.** It doesn't respect the
-`unauthenticated_rpc` mode setting in config. Forgery rejection is foundational
-— lowering the mode doesn't help here. See
+**Config mode doesn't help.** Setting `unauthenticated_rpc` to `warn` or `off`
+has no effect on `identity_mismatch` — forgery rejection is foundational. See
 [Guard mode downgrade](#guard-mode-downgrade-incident-diagnosis) for what you
 can and can't configure.
+
+**Narrow exception — shared-worktree claim trust.** If the worktree hosts
+multiple registered agents (e.g. Playwright E2E harness, multi-agent test
+scenarios), and your claimed agent is also registered in the peercred-resolved
+worktree, the daemon trusts the claim and skips the mismatch. You won't see this
+error in that case. It only fires when peercred puts you in worktree A and the
+claimed agent lives in worktree B — that's still forgery.
 
 ---
 
@@ -124,7 +130,10 @@ a session and then issued a thrum command without re-priming.
 2. Or drop the `CallerAgentID` claim and let the daemon use `coord_main` — the
    agent your ancestor chain actually belongs to.
 
-**Also unconditional.** See the note in the previous section.
+**Config mode doesn't help here either.** Note that the shared-worktree claim
+trust from the previous section does NOT apply to the ancestor-chain path — it
+only fires when peercred CWD didn't match a registered worktree at all, so
+there's no worktree to check the claim against.
 
 ---
 
@@ -444,12 +453,20 @@ For runtime overrides without a repo commit, write to
 and merges it on top of the repo config. This lets you temporarily loosen a
 guard on a running daemon without touching the committed config.
 
-**`unauthenticated_rpc` / `identity_mismatch` cannot be downgraded.** The
-forgery rejection — where a client-asserted `CallerAgentID` contradicts the
-kernel-verified identity — fires unconditionally regardless of what the
-`unauthenticated_rpc` mode is set to. This is a deliberate security decision.
-Disabling it would re-open the v0.8.x impersonation hole where any caller could
-claim any agent's identity. Every other guard is configurable; this one isn't.
+**`unauthenticated_rpc` / `identity_mismatch` cannot be downgraded via config.**
+The forgery rejection — where a client-asserted `CallerAgentID` contradicts the
+kernel-verified identity — ignores the `unauthenticated_rpc` mode setting. This
+is a deliberate security decision. Disabling it would re-open the v0.8.x
+impersonation hole where any caller could claim any agent's identity. Every
+other guard is configurable; this one isn't.
+
+The one runtime exception (not a config knob) is the **shared-worktree claim
+trust** described under the
+[peercred path](#unauthenticated_rpc--identity_mismatch-peercred-path) above: a
+claim for an agent co-located in the peercred-resolved worktree is honored
+because it's kernel-verified to belong to the same worktree. This is narrower
+than a mode downgrade — it applies only when `state.IsAgentInWorktree` confirms
+the claim.
 
 ---
 

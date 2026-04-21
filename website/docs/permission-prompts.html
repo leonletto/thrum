@@ -65,6 +65,13 @@ the result with SHA-256. Two consecutive polls with the same hash — stable for
 ~20 seconds — trigger <code>HandleCheckPane</code>, which runs the runtime-specific pattern
 library against the raw pane content and, on a match, calls <code>OnDetection</code> to
 start the nudge flow.</p>
+<p>Pattern matching and the stability hash both run against the <strong>bottom 15 lines</strong>
+of the capture — not the whole 30-line window. An active prompt sits at the
+bottom of the terminal by definition; a prompt still visible in the upper
+scrollback has either been resolved or is being pushed out by newer output, and
+either way isn&#39;t actionable. Scoping detection to the bottom of the pane stops
+the scheduler from re-firing <code>firstDetect</code> every ~60s on resolved prompts that
+haven&#39;t yet scrolled off the capture window.</p>
 <p>Detection latency is about 20 seconds from when the prompt appears to when the
 first nudge goes out.</p>
 <p>Sessions are enrolled automatically when the daemon launches or restarts a
@@ -130,14 +137,14 @@ key is the canonical runtime name from the agent identity file.</p>
 <th>Runtime</th>
 <th>Pattern</th>
 <th>Approve key</th>
-<th>Deny key</th>
+<th>Deny key (runtime default)</th>
 </tr>
 </thead>
 <tbody><tr>
 <td><code>claude</code></td>
 <td><code>Do you want to proceed?</code> tool confirmation</td>
 <td><code>1</code> (Yes, once)</td>
-<td><code>3</code> (Variant A) / <code>Escape</code> (Variant B)</td>
+<td>per-shape — see below</td>
 </tr>
 <tr>
 <td><code>codex</code></td>
@@ -176,6 +183,46 @@ key is the canonical runtime name from the agent identity file.</p>
 <td><code>D</code> (Deny)</td>
 </tr>
 </tbody></table>
+<p><strong>Per-shape deny key for claude.</strong> The <code>claude.tool_confirmation</code> pattern
+matches three observable prompt shapes under one regex anchor, and each shape
+has a different &quot;No&quot; key. When the scheduler fires a nudge for a claude prompt,
+<code>DisambiguateClaudeDeny</code> inspects the captured pane (ANSI-stripped) and picks
+the right deny key:</p>
+<table>
+<thead>
+<tr>
+<th>Shape</th>
+<th>Example</th>
+<th>Deny key stored on the nudge</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Variant A — 3-option Write/Exec</td>
+<td><code>1. Yes</code> / <code>2. Yes, and don&#39;t ask again</code> / <code>3. No, …</code></td>
+<td><code>3</code></td>
+</tr>
+<tr>
+<td>Variant B-Bash — 2-option Bash picker</td>
+<td><code>1. Yes</code> / <code>2. No, …</code></td>
+<td><code>2</code></td>
+</tr>
+<tr>
+<td>Variant B-Read — 2-option Read picker (or unknown 2-)</td>
+<td><code>1. Yes</code> / <code>2. Yes, and don&#39;t ask again for session</code></td>
+<td><code>Escape</code></td>
+</tr>
+<tr>
+<td>No 1/2/3 lines detected at all</td>
+<td>—</td>
+<td><code>Escape</code></td>
+</tr>
+</tbody></table>
+<p>The Variant B-Read case falls back to <code>Escape</code> on purpose: option 2 in that
+shape is a session-scoped &quot;don&#39;t ask again&quot; — sending <code>&quot;2&quot;</code> as a deny would
+grant a forever-allow. Without positive evidence that option 2 says &quot;No&quot;, the
+safe default is to cancel the dialog. The disambiguated key is written onto
+<code>NudgeRow.DenyKey</code> at first detection so every reminder in the thread carries
+the same keystroke without re-inspecting the pane.</p>
 <p>The CI guard <code>TestApproveKeyNeverForeverAllow</code> enforces a safety invariant: no
 runtime&#39;s <code>approve_key</code> can ever map to a &quot;don&#39;t ask again&quot;, &quot;add to allowlist&quot;,
 or &quot;auto-run everything&quot; option. A supervisor&#39;s approval must always grant
@@ -378,6 +425,17 @@ claims the nudge row → <code>sendKeystroke</code> fires <code>&quot;1&quot;</c
 [permission] nudge sent   to=coordinator msg_id=perm_abc123 session=thrum-main</code></pre>
 <p>On restart with in-flight nudges:</p>
 <pre><code>permission found 2 pending nudge(s) still in flight</code></pre>
+<p><strong><code>[nudge]</code> dispatch tag</strong> — the nudge fan-out emits structured <code>slog.Info</code>
+events at four points, tagged <code>[nudge]</code>, for routing visibility:</p>
+<pre><code>[nudge] dispatch         msg_id=... sender=... recipients=[...] origin_daemon=... session_id=...
+[nudge] spool.write      msg_id=... recipient=... target=...
+[nudge] spool.skip       msg_id=... recipient=... reason=non_local
+[nudge] DispatchTmux     msg_id=... recipient=... target=thrum-main:0.0 session=thrum-main self_echo=false
+[nudge] telegram.forward msg_id=... bridge_user=... self_echo_candidate=false</code></pre>
+<p><code>self_echo</code> is the coordinator&#39;s phantom-nudge guardrail — if the dispatch
+target resolves to the sender&#39;s own pane, the daemon refuses the write and logs
+the skip. These events are at <code>INFO</code> level and gated behind the daemon&#39;s
+configured log level.</p>
 <p><strong>Identity guard G4</strong> — permission writes (marking an agent stuck, clearing
 stuck) are blocked if the agent process is not running. This prevents the
 scheduler from labeling a dead agent&#39;s identity file during race conditions

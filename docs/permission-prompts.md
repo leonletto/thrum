@@ -36,6 +36,14 @@ the result with SHA-256. Two consecutive polls with the same hash — stable for
 library against the raw pane content and, on a match, calls `OnDetection` to
 start the nudge flow.
 
+Pattern matching and the stability hash both run against the **bottom 15 lines**
+of the capture — not the whole 30-line window. An active prompt sits at the
+bottom of the terminal by definition; a prompt still visible in the upper
+scrollback has either been resolved or is being pushed out by newer output, and
+either way isn't actionable. Scoping detection to the bottom of the pane stops
+the scheduler from re-firing `firstDetect` every ~60s on resolved prompts that
+haven't yet scrolled off the capture window.
+
 Detection latency is about 20 seconds from when the prompt appears to when the
 first nudge goes out.
 
@@ -94,15 +102,35 @@ key is the canonical runtime name from the agent identity file.
 The pattern library covers six runtimes. Each has one or more patterns with an
 `approve_key` and an optional `deny_key`:
 
-| Runtime    | Pattern                                          | Approve key                      | Deny key                               |
-| ---------- | ------------------------------------------------ | -------------------------------- | -------------------------------------- |
-| `claude`   | `Do you want to proceed?` tool confirmation      | `1` (Yes, once)                  | `3` (Variant A) / `Escape` (Variant B) |
-| `codex`    | `Would you like to run the following command?`   | `1` (Yes, proceed)               | `3` (No)                               |
-| `cursor`   | `Not in allowlist:`                              | `y` (Run once)                   | `Escape`                               |
-| `opencode` | `△ Permission required`                          | `Enter` (Allow once, default)    | `End,Enter` (Reject)                   |
-| `kiro-cli` | `shell requires approval`                        | `Enter` (Yes, single permission) | `Escape`                               |
-| `auggie`   | `Always index this workspace` indexing consent   | `3` (Session-only)               | `Escape`                               |
-| `auggie`   | `\| Tool Approval Required \|` per-tool approval | `A` (Allow)                      | `D` (Deny)                             |
+| Runtime    | Pattern                                          | Approve key                      | Deny key (runtime default) |
+| ---------- | ------------------------------------------------ | -------------------------------- | -------------------------- |
+| `claude`   | `Do you want to proceed?` tool confirmation      | `1` (Yes, once)                  | per-shape — see below      |
+| `codex`    | `Would you like to run the following command?`   | `1` (Yes, proceed)               | `3` (No)                   |
+| `cursor`   | `Not in allowlist:`                              | `y` (Run once)                   | `Escape`                   |
+| `opencode` | `△ Permission required`                          | `Enter` (Allow once, default)    | `End,Enter` (Reject)       |
+| `kiro-cli` | `shell requires approval`                        | `Enter` (Yes, single permission) | `Escape`                   |
+| `auggie`   | `Always index this workspace` indexing consent   | `3` (Session-only)               | `Escape`                   |
+| `auggie`   | `\| Tool Approval Required \|` per-tool approval | `A` (Allow)                      | `D` (Deny)                 |
+
+**Per-shape deny key for claude.** The `claude.tool_confirmation` pattern
+matches three observable prompt shapes under one regex anchor, and each shape
+has a different "No" key. When the scheduler fires a nudge for a claude prompt,
+`DisambiguateClaudeDeny` inspects the captured pane (ANSI-stripped) and picks
+the right deny key:
+
+| Shape                                                 | Example                                               | Deny key stored on the nudge |
+| ----------------------------------------------------- | ----------------------------------------------------- | ---------------------------- |
+| Variant A — 3-option Write/Exec                       | `1. Yes` / `2. Yes, and don't ask again` / `3. No, …` | `3`                          |
+| Variant B-Bash — 2-option Bash picker                 | `1. Yes` / `2. No, …`                                 | `2`                          |
+| Variant B-Read — 2-option Read picker (or unknown 2-) | `1. Yes` / `2. Yes, and don't ask again for session`  | `Escape`                     |
+| No 1/2/3 lines detected at all                        | —                                                     | `Escape`                     |
+
+The Variant B-Read case falls back to `Escape` on purpose: option 2 in that
+shape is a session-scoped "don't ask again" — sending `"2"` as a deny would
+grant a forever-allow. Without positive evidence that option 2 says "No", the
+safe default is to cancel the dialog. The disambiguated key is written onto
+`NudgeRow.DenyKey` at first detection so every reminder in the thread carries
+the same keystroke without re-inspecting the pane.
 
 The CI guard `TestApproveKeyNeverForeverAllow` enforces a safety invariant: no
 runtime's `approve_key` can ever map to a "don't ask again", "add to allowlist",
@@ -333,6 +361,22 @@ On restart with in-flight nudges:
 ```text
 permission found 2 pending nudge(s) still in flight
 ```
+
+**`[nudge]` dispatch tag** — the nudge fan-out emits structured `slog.Info`
+events at four points, tagged `[nudge]`, for routing visibility:
+
+```text
+[nudge] dispatch         msg_id=... sender=... recipients=[...] origin_daemon=... session_id=...
+[nudge] spool.write      msg_id=... recipient=... target=...
+[nudge] spool.skip       msg_id=... recipient=... reason=non_local
+[nudge] DispatchTmux     msg_id=... recipient=... target=thrum-main:0.0 session=thrum-main self_echo=false
+[nudge] telegram.forward msg_id=... bridge_user=... self_echo_candidate=false
+```
+
+`self_echo` is the coordinator's phantom-nudge guardrail — if the dispatch
+target resolves to the sender's own pane, the daemon refuses the write and logs
+the skip. These events are at `INFO` level and gated behind the daemon's
+configured log level.
 
 **Identity guard G4** — permission writes (marking an agent stuck, clearing
 stuck) are blocked if the agent process is not running. This prevents the

@@ -100,7 +100,13 @@ New in v0.9.0:
   without new peercode. `drift_reconcile_failed` shown as inline hint in peer list.
 - Permission supervisors — configure via `permission_supervisors` config key
   (array of role/agent/user names; default ["coordinator"]) and `project_name`
-  (owner of @supervisor_<project> pseudo-agent). Full reference: docs/permission-prompts.md.
+  (owner of @supervisor_<project> pseudo-agent). Detection: daemon-side
+  SessionPoller; pattern match + stability hash scoped to bottom 15 lines of
+  pane capture. Claude deny key is per-shape via DisambiguateClaudeDeny:
+  "3" (3-option Variant A), "2" (2-option Variant B-Bash, option 2 starts with
+  "No"), "Escape" (2-option Variant B-Read / unknown). Snippet truncation is
+  tail-biased (last 5-6 lines) with ANSI strip. Full reference:
+  docs/permission-prompts.md.
 - BREAKING: `peer add --type` and `peer join --type` now MANDATORY.
 
 ## Quick Start
@@ -758,7 +764,10 @@ All commands accept these flags:
       "dead_pid_auto_reclaim": "warn"        // informational; dead PID reclaimed automatically
     }
     // Modes: "strict" (hard error) | "warn" (log + allow) | "off" (skip)
-    // unauthenticated_rpc/identity_mismatch (forgery) is unconditional regardless of mode.
+    // unauthenticated_rpc/identity_mismatch (forgery) ignores mode config.
+    // Narrow exception (v0.9.0): shared-worktree claim trust. If peercred picks agent Y but
+    // client claims X, and X is also registered in the peercred-resolved worktree
+    // (state.IsAgentInWorktree), the claim is honored. Cross-worktree claims still fail.
     // Runtime override (no repo commit): .thrum/var/guard-daemon.json (same keys; daemon-level wins).
   }
 
