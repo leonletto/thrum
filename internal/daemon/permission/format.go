@@ -9,12 +9,22 @@ import (
 
 const (
 	// maxPaneTailLines caps how many lines of pane content we include in
-	// the nudge body. thrum-7khf trimmed this from 15 → 5: the previous
-	// cap captured approval-irrelevant UI chrome (separators, shortcut
-	// hints, "❯ 1. Yes / 2. No" selector lines) that buried the actual
-	// command. Five lines is enough for "<command>\n<reason>" plus a
-	// little context without being mobile-hostile on Telegram.
-	maxPaneTailLines = 5
+	// the nudge body. Sized for the longest known claude prompt shape
+	// plus one line of headroom:
+	//   ⏺ Bash(<command>)
+	//     ⎿  Do you want to proceed?
+	//        1. Yes
+	//        2. Yes, and don't ask again ...   (Variant A only)
+	//        3. No, and tell Claude ...        (Variant A only)
+	//        Esc to cancel · Tab to amend · ctrl+e to explain
+	// = 5 lines for Variant B-Bash (1/2 + Esc footer) or 6 lines for
+	// Variant A (1/2/3 + Esc footer). Cap at 6 keeps both shapes
+	// intact end-to-end so the supervisor sees the command being
+	// approved AND the option list. Exceeding the cap drops from the
+	// HEAD of the retained tail (truncatePaneTail trims forward to
+	// the next newline), so the option list at the bottom always
+	// survives even when the upstream capture grows.
+	maxPaneTailLines = 6
 
 	// maxPaneTailBytes is a hard byte cap. Still 2KB — a single
 	// multi-arg bash line can exceed the line cap in bytes.
@@ -92,46 +102,56 @@ func FormatNudge(row *NudgeRow, paneTail, runtime, projectName string, now time.
 }
 
 // truncatePaneTail caps the pane content at maxPaneTailLines lines AND
-// maxPaneTailBytes bytes, preferring the HEAD of the capture.
+// maxPaneTailBytes bytes, preferring the TAIL of the capture.
 //
-// thrum-7khf: the daemon hands us the last ~30 lines of the tmux pane
-// (permission.SessionPollerConfig.CaptureLines), which for a typical
-// permission prompt contains (top→bottom):
-// command, reason, permission-rule noise, "Do you want to proceed?",
-// the selector ("❯ 1. Yes / 2. No"), and shortcut hints. The approval-
-// relevant content (command + reason) sits at the top; the selector +
-// chrome sits at the bottom. Keeping the HEAD N lines therefore surfaces
-// the decision info and drops the chrome. For shorter prompts (cursor,
-// opencode) the capture fits within the cap and no truncation occurs.
+// thrum-uy1n: the daemon hands us the last ~30 lines of the tmux pane
+// (permission.SessionPollerConfig.CaptureLines). The actual claude UI
+// puts banner / status / scrollback chrome at the TOP and the prompt
+// dialog at the BOTTOM:
 //
-// The byte-cap branch keeps the HEAD bytes and walks back to the
-// previous rune boundary if a mid-rune split lands there, so a single
-// >2KB line containing multi-byte runes (e.g. a long URL with arrows,
-// a base64 blob with Unicode punctuation) cannot emit invalid UTF-8
-// into the nudge body.
+//	▝▜████▛▘ Opus 4.7 ...                         <- banner (top)
+//	▘▘ ▝▝   <cwd>                                 <- status
+//	❯ /some/earlier-command                       <- history
+//	... (more history) ...
+//	⏺ Bash(<the command being approved>)          <- prompt body
+//	  ⎿  Do you want to proceed?                  <- prompt body
+//	     1. Yes                                   <- prompt body
+//	     2. ...                                   <- prompt body
+//	     3. No, ... (Esc)                         <- prompt body (bottom)
+//
+// Tail-biasing therefore surfaces the dialog the supervisor must
+// decide on; head-biasing surfaces the banner / scrollback that the
+// supervisor cannot act on. 7khf shipped head-bias; uy1n reverts.
+//
+// For shorter pane captures that already fit within the cap (cursor,
+// opencode, claude with short scrollback) no truncation occurs and
+// direction is moot.
+//
+// The byte-cap branch keeps the TAIL bytes and walks PAST any
+// continuation bytes left by a mid-rune split at the start of the
+// retained suffix, so a single >2KB line containing multi-byte runes
+// (e.g. a long URL with arrows, a base64 blob with Unicode
+// punctuation) cannot emit invalid UTF-8 into the nudge body.
 func truncatePaneTail(pane string) string {
 	lines := strings.Split(strings.TrimRight(pane, "\n"), "\n")
 	if len(lines) > maxPaneTailLines {
-		lines = lines[:maxPaneTailLines]
+		lines = lines[len(lines)-maxPaneTailLines:]
 	}
 	out := strings.Join(lines, "\n")
 	if len(out) > maxPaneTailBytes {
-		out = out[:maxPaneTailBytes]
-		// Drop any trailing bytes that form an incomplete UTF-8 rune
-		// (mid-rune split at the tail of the retained prefix). A valid
-		// rune at the end decodes cleanly; an incomplete one surfaces
-		// as RuneError with size=1, so we can pop bytes until the
-		// trailing rune decodes.
-		for len(out) > 0 {
-			r, sz := utf8.DecodeLastRuneInString(out)
-			if r != utf8.RuneError || sz != 1 {
-				break
-			}
-			out = out[:len(out)-1]
+		out = out[len(out)-maxPaneTailBytes:]
+		// Walk past any UTF-8 continuation bytes left by a mid-rune
+		// split at the START of the retained tail. A valid rune at
+		// the start has its lead-byte at out[0] and RuneStart returns
+		// true; continuation bytes return false until the next valid
+		// rune boundary.
+		for len(out) > 0 && !utf8.RuneStart(out[0]) {
+			out = out[1:]
 		}
-		// Trim back to the previous newline so we don't end mid-line.
-		if nl := strings.LastIndexByte(out, '\n'); nl > -1 {
-			out = out[:nl]
+		// Trim forward to the next newline so the snippet doesn't
+		// start mid-line.
+		if nl := strings.IndexByte(out, '\n'); nl > -1 {
+			out = out[nl+1:]
 		}
 	}
 	return out

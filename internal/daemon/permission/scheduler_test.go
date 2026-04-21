@@ -789,3 +789,115 @@ func TestOnRecovery_ClearsRowEvenWhenIdentityDeleted(t *testing.T) {
 		t.Errorf("expected row to be deleted by OnRecovery, got %+v", row)
 	}
 }
+
+// TestScheduler_ClaudeDenyKeyDisambiguation — thrum-uy1n. The
+// scheduler must consult DisambiguateClaudeDeny when the matched
+// pattern is claude.tool_confirmation, so the row's DenyKey reflects
+// the on-screen prompt shape rather than the pattern library's
+// default. The bug 2026-04-20 14:30 UTC: a 2-option Bash picker on
+// screen, but the row carried DenyKey="3" (Variant A default), so
+// the supervisor's nudge hint read `"1"|"3"` for a dialog that only
+// offered 1 and 2.
+func TestScheduler_ClaudeDenyKeyDisambiguation(t *testing.T) {
+	p, _ := newSchedulerFixture(t)
+	ctx := context.Background()
+
+	// Pattern carries the library default (Variant A → "3"). Scheduler
+	// must override per shape.
+	claudeTC := &Pattern{
+		Name:       "tool_confirmation",
+		ApproveKey: "1",
+		DenyKey:    "3",
+	}
+
+	// cursorAllowlist (non-claude control). The scheduler's guard is
+	// `runtime == "claude" && matched.Name == "tool_confirmation"`;
+	// any future relaxation that lets DisambiguateClaudeDeny run for
+	// non-claude runtimes would silently corrupt the row's DenyKey
+	// based on whatever digits happen to live in the cursor pane's
+	// scrollback. Pinned here so a regression fails CI.
+	cursorAllowlist := &Pattern{
+		Name:       "not_in_allowlist",
+		ApproveKey: "y",
+		DenyKey:    "Escape",
+	}
+
+	cases := []struct {
+		name     string
+		runtime  string
+		pattern  *Pattern
+		pane     string
+		wantDeny string
+	}{
+		{
+			name:    "VariantA_3option_keeps_library_default",
+			runtime: "claude",
+			pattern: claudeTC,
+			pane: `⏺ Bash(curl https://example.com)
+  ⎿  Do you want to proceed?
+     1. Yes
+     2. Yes, and don't ask again for Bash(curl)
+     3. No, and tell Claude what to do differently (Esc)`,
+			wantDeny: "3",
+		},
+		{
+			name:    "VariantB_Bash_2option_overrides_to_2",
+			runtime: "claude",
+			pattern: claudeTC,
+			pane: `⏺ Bash(rm -rf /tmp/foo)
+  ⎿  Do you want to proceed?
+     1. Yes
+     2. No
+     Esc to cancel · Tab to amend · ctrl+e to explain`,
+			wantDeny: "2",
+		},
+		{
+			name:    "VariantB_Read_2option_falls_back_to_Escape",
+			runtime: "claude",
+			pattern: claudeTC,
+			pane: ` Read file
+
+ Search(pattern: "## Task 0.2", path: "~/plans/...")
+
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, allow reading from plans/ during this session
+
+ Esc to cancel · Tab to amend`,
+			wantDeny: "Escape",
+		},
+		{
+			// Non-claude control. Pane deliberately contains an
+			// option-3-shaped line that DisambiguateClaudeDeny WOULD
+			// match if invoked; the scheduler guard must keep the
+			// library DenyKey (Escape) intact for the cursor runtime.
+			name:    "Cursor_runtime_keeps_library_default",
+			runtime: "cursor",
+			pattern: cursorAllowlist,
+			pane: `Run this command?
+Not in allowlist: curl https://example.com
+ → Run (once) (y)
+   3. some line that happens to start with three-dot in unrelated context
+   Skip (esc or n)`,
+			wantDeny: "Escape",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			session := "test-" + tc.name
+			if err := p.OnDetection(ctx, session, tc.runtime, session+":0.0",
+				"researcher_cursor", tc.pattern, tc.pane); err != nil {
+				t.Fatalf("OnDetection: %v", err)
+			}
+			row, err := p.store.LookupPendingNudgeBySession(ctx, session)
+			if err != nil || row == nil {
+				t.Fatalf("lookup row: %v (row=%+v)", err, row)
+			}
+			if row.DenyKey != tc.wantDeny {
+				t.Errorf("DenyKey = %q, want %q", row.DenyKey, tc.wantDeny)
+			}
+		})
+	}
+}

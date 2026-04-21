@@ -139,13 +139,26 @@ func (p *Permission) firstDetect(
 		"supers_count", len(supers),
 		"agent_name", agentName)
 
+	// thrum-uy1n: claude.tool_confirmation matches three observable
+	// prompt shapes under one regex; the pattern library stores
+	// DenyKey="3" (Variant A default) and the dispatch layer overrides
+	// per-shape so the nudge hint shows the correct keystroke. Other
+	// runtimes ship a single shape per pattern and use the library
+	// value verbatim. The disambiguated value is stored on the row so
+	// fireReminder reuses it without re-inspecting the pane (saves a
+	// regex pass and keeps the keystroke stable across the cadence).
+	denyKey := matched.DenyKey
+	if runtime == "claude" && matched.Name == "tool_confirmation" {
+		denyKey = DisambiguateClaudeDeny(paneTail)
+	}
+
 	row := &NudgeRow{
 		Session:       session,
 		TmuxTarget:    tmuxTarget,
 		AgentName:     agentName,
 		PatternKey:    runtime + "." + matched.Name,
 		ApproveKey:    matched.ApproveKey,
-		DenyKey:       matched.DenyKey,
+		DenyKey:       denyKey,
 		FirstDetected: now,
 		LastNudgeAt:   now,
 		NudgeCount:    1,
