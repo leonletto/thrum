@@ -35,14 +35,17 @@ func TestNoDuplicateCodes(t *testing.T) {
 }
 
 // TestCatalogSize locks the catalog size. Bump when adding codes in a
-// deliberate review. Current catalog is 11:
+// deliberate review. Current catalog is 12:
 // 6 tmux.create (session-exists, not-a-worktree, identity-exists-alive,
-// identity-exists-stale, next-launch, identity-replaced) +
-// send.recipient-stale + init.next-quickstart +
-// 3 snapshot.save (no-jsonl, no-pid, extract-failed) — added for
-// thrum-ufv5.7 to surface silent failures of `thrum tmux snapshot save`.
+// identity-exists-stale, next-launch, identity-replaced),
+// send.recipient-stale, init.next-quickstart, and
+// 4 snapshot.save (no-jsonl, no-pid, extract-failed, jsonl-not-found)
+// added for thrum-ufv5.7 to surface silent failures of
+// thrum tmux snapshot save, where jsonl-not-found arrived in the
+// dual-review fixup to distinguish typo'd --jsonl paths from read/parse
+// failures.
 func TestCatalogSize(t *testing.T) {
-	const expected = 11
+	const expected = 12
 	if got := len(AllHintCodes); got != expected {
 		t.Errorf("AllHintCodes size = %d, want %d (update this test deliberately when catalog grows)", got, expected)
 	}
@@ -71,6 +74,7 @@ var constNameForCode = map[string]string{
 	HintSnapshotSaveNoJSONL:           "HintSnapshotSaveNoJSONL",
 	HintSnapshotSaveNoPID:             "HintSnapshotSaveNoPID",
 	HintSnapshotSaveExtractFailed:     "HintSnapshotSaveExtractFailed",
+	HintSnapshotSaveJSONLNotFound:     "HintSnapshotSaveJSONLNotFound",
 }
 
 // TestEveryCodeHasSourceReference ensures every code in AllHintCodes is

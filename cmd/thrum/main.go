@@ -7943,24 +7943,26 @@ func restartSnapshotSubcmds() []*cobra.Command {
 
 			pid := idFile.AgentPID
 			if pid == 0 {
-				// Fallback: query daemon for the agent's AgentPID
-				client, err := getClient()
-				if err != nil {
-					return fmt.Errorf("connect to daemon: %w", err)
-				}
-				defer func() { _ = client.Close() }()
-
-				var agents []struct {
-					AgentID  string `json:"agent_id"`
-					AgentPID int    `json:"agent_pid"`
-				}
-				if err := client.Call("agent.list", nil, &agents); err == nil {
-					for _, a := range agents {
-						if a.AgentID == agentName && a.AgentPID > 0 {
-							pid = a.AgentPID
-							break
+				// Fallback: query the daemon for the agent's AgentPID. The
+				// daemon path is itself a best-effort fallback — if we
+				// can't reach the daemon (dial failure, closed socket) we
+				// fall through to the pid==0 refusal below rather than
+				// returning an unrelated "connect to daemon" error. The
+				// no-pid hint then renders with actionable remediation.
+				if client, err := getClient(); err == nil {
+					var agents []struct {
+						AgentID  string `json:"agent_id"`
+						AgentPID int    `json:"agent_pid"`
+					}
+					if err := client.Call("agent.list", nil, &agents); err == nil {
+						for _, a := range agents {
+							if a.AgentID == agentName && a.AgentPID > 0 {
+								pid = a.AgentPID
+								break
+							}
 						}
 					}
+					_ = client.Close()
 				}
 			}
 			if pid == 0 {
@@ -7984,14 +7986,36 @@ func restartSnapshotSubcmds() []*cobra.Command {
 			// If all three fail, emit the no-jsonl hint and return.
 			var jsonlPath string
 			if explicit, _ := cmd.Flags().GetString("jsonl"); explicit != "" {
+				// Pre-flight: stat the explicit path so typos surface with a
+				// targeted hint instead of being misdiagnosed as an extract
+				// failure. ExtractConversation's own error would misdirect
+				// toward permission/corruption remediation.
+				if _, statErr := os.Stat(explicit); os.IsNotExist(statErr) {
+					cli.EmitStderr([]cli.Hint{cli.SnapshotSaveJSONLNotFoundHint(explicit)}, flagQuiet, flagJSON)
+					return fmt.Errorf("jsonl path not found: %s", explicit)
+				}
 				jsonlPath = explicit
 			} else {
 				jsonlPath, err = restart.FindSessionJSONL(claudeDir, pid)
 				if err != nil {
-					if fb, ferr := restart.FindLatestJSONLForCwd(claudeDir, idFile.Worktree); ferr == nil && fb != "" {
-						jsonlPath = fb
+					// Layer 3: mtime fallback. Track fallback diagnostics so
+					// the no-jsonl hint can explain exactly WHY the fallback
+					// didn't succeed (dir missing vs empty vs no worktree).
+					noJSONLCtx := cli.SnapshotSaveNoJSONLContext{}
+					if idFile.Worktree == "" {
+						noJSONLCtx.WorktreeMissing = true
 					} else {
-						cli.EmitStderr([]cli.Hint{cli.SnapshotSaveNoJSONLHint(pid, claudeDir)}, flagQuiet, flagJSON)
+						fb, ferr := restart.FindLatestJSONLForCwd(claudeDir, idFile.Worktree)
+						if ferr == nil && fb != "" {
+							jsonlPath = fb
+						} else if ferr != nil {
+							noJSONLCtx.ProjectDirReadErr = ferr
+						} else {
+							noJSONLCtx.ProjectDirEmpty = true
+						}
+					}
+					if jsonlPath == "" {
+						cli.EmitStderr([]cli.Hint{cli.SnapshotSaveNoJSONLHint(pid, claudeDir, noJSONLCtx)}, flagQuiet, flagJSON)
 						return fmt.Errorf("find session JSONL: %w", err)
 					}
 				}

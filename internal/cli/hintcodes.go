@@ -64,10 +64,20 @@ const HintSnapshotSaveNoJSONL = "snapshot.save.no-jsonl"
 const HintSnapshotSaveNoPID = "snapshot.save.no-pid"
 
 // HintSnapshotSaveExtractFailed — JSONL located but restart.ExtractConversation
-// failed to read/parse it. Usually a file-permission or corruption issue.
+// failed to read/parse it. Usually a file-permission or corruption issue,
+// or a file-not-found when a --jsonl override points at a path that exists
+// but the reader can't parse (e.g. non-JSONL content).
 // Origin: same release-test sweep as HintSnapshotSaveNoJSONL. Severity: warn;
 // hard refusal.
 const HintSnapshotSaveExtractFailed = "snapshot.save.extract-failed"
+
+// HintSnapshotSaveJSONLNotFound — the --jsonl <path> supplied by the caller
+// does not exist on disk. Distinguished from HintSnapshotSaveExtractFailed
+// (which fires when the file DOES exist but can't be read/parsed) so the
+// remediation can focus on the typo/path-resolution case instead of
+// permissions or corruption. Origin: dual-review thrum-ufv5.7 finding #2.
+// Severity: warn; hard refusal.
+const HintSnapshotSaveJSONLNotFound = "snapshot.save.jsonl-not-found"
 
 // RecipientStaleThreshold is the send-side stale cutoff. Exported per
 // spec §4 as a tunable; becomes a config key in Phase C if the pilot
@@ -88,4 +98,5 @@ var AllHintCodes = []string{
 	HintSnapshotSaveNoJSONL,
 	HintSnapshotSaveNoPID,
 	HintSnapshotSaveExtractFailed,
+	HintSnapshotSaveJSONLNotFound,
 }

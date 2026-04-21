@@ -33,7 +33,7 @@ type contentBlock struct {
 // user+assistant text only (no tool use, thinking, sidechains, or non-message types).
 // Returns formatted conversation text truncated to maxLines.
 func ExtractConversation(jsonlPath string, maxLines int) (string, error) {
-	f, err := os.Open(jsonlPath) // #nosec G304 -- path from internal session lookup
+	f, err := os.Open(jsonlPath) // #nosec G304 -- path from internal session lookup, mtime-fallback glob, or --jsonl flag (CLI-local tool, trust boundary is the local user)
 	if err != nil {
 		return "", fmt.Errorf("open JSONL: %w", err)
 	}

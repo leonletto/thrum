@@ -210,6 +210,43 @@ func runInDir(t *testing.T, dir, name string, args ...string) error {
 	return c.Run()
 }
 
+// writeSnapshotTestIdentity writes a minimal identity file that the
+// snapshot save command can load without ambiguity. Load-bearing fields:
+//   - agent.name: used to select the identity file by THRUM_NAME
+//   - worktree: used by the mtime fallback to derive the project-dir slug
+//   - agent_pid: used by restart.FindSessionJSONL; pass 0 to force the
+//     no-pid path with agent.list also returning no-match, or a high
+//     guaranteed-dead PID (99999999) to force the no-jsonl path.
+//   - runtime: must equal "claude" since snapshot save today only works
+//     for the Claude runtime.
+//
+// repoDir is the agent's worktree root (where .thrum/identities/ is
+// written). Name is the agent name the subprocess will resolve via
+// THRUM_NAME. The identity file lands at
+// <repoDir>/.thrum/identities/<name>.json.
+func writeSnapshotTestIdentity(t *testing.T, repoDir, name string, pid int) {
+	t.Helper()
+	identitiesDir := filepath.Join(repoDir, ".thrum", "identities")
+	if err := os.MkdirAll(identitiesDir, 0o750); err != nil {
+		t.Fatalf("mkdir identities: %v", err)
+	}
+	identity := map[string]any{
+		"version":   5,
+		"repo_id":   "test-repo",
+		"agent":     map[string]any{"name": name, "role": "impl", "module": "testmod"},
+		"worktree":  repoDir,
+		"agent_pid": pid,
+		"runtime":   "claude",
+	}
+	b, err := json.MarshalIndent(identity, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal identity: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(identitiesDir, name+".json"), b, 0o600); err != nil {
+		t.Fatalf("write identity: %v", err)
+	}
+}
+
 // TestIntegration_SnapshotSaveNoJSONL_TextMode verifies the
 // snapshot.save.no-jsonl hint lands on stderr when `thrum tmux snapshot save`
 // cannot resolve a Claude JSONL for the recorded agent PID.
@@ -228,29 +265,7 @@ func TestIntegration_SnapshotSaveNoJSONL_TextMode(t *testing.T) {
 
 	repoDir := t.TempDir()
 	fakeHome := t.TempDir()
-
-	// Write a minimal identity file. Must live under .thrum/identities/<name>.json
-	// and include agent.name so LoadIdentityWithPath can resolve a single
-	// identity without ambiguity.
-	identitiesDir := filepath.Join(repoDir, ".thrum", "identities")
-	if err := os.MkdirAll(identitiesDir, 0o750); err != nil {
-		t.Fatalf("mkdir identities: %v", err)
-	}
-	identity := map[string]any{
-		"version":   5,
-		"repo_id":   "test-repo",
-		"agent":     map[string]any{"name": "testagent", "role": "impl", "module": "testmod"},
-		"worktree":  repoDir,
-		"agent_pid": 99999999,
-		"runtime":   "claude",
-	}
-	idBytes, err := json.MarshalIndent(identity, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal identity: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(identitiesDir, "testagent.json"), idBytes, 0o600); err != nil {
-		t.Fatalf("write identity: %v", err)
-	}
+	writeSnapshotTestIdentity(t, repoDir, "testagent", 99999999)
 
 	cmd := exec.Command(bin, "--repo", repoDir, "tmux", "snapshot", "save")
 	cmd.Env = append(filterEnvVars(os.Environ(), "THRUM_HOME", "HOME", "THRUM_NAME"),
@@ -289,23 +304,7 @@ func TestIntegration_SnapshotSaveNoJSONL_ThrumNoHintsSuppresses(t *testing.T) {
 
 	repoDir := t.TempDir()
 	fakeHome := t.TempDir()
-
-	identitiesDir := filepath.Join(repoDir, ".thrum", "identities")
-	if err := os.MkdirAll(identitiesDir, 0o750); err != nil {
-		t.Fatalf("mkdir identities: %v", err)
-	}
-	identity := map[string]any{
-		"version":   5,
-		"repo_id":   "test-repo",
-		"agent":     map[string]any{"name": "testagent", "role": "impl", "module": "testmod"},
-		"worktree":  repoDir,
-		"agent_pid": 99999999,
-		"runtime":   "claude",
-	}
-	idBytes, _ := json.MarshalIndent(identity, "", "  ")
-	if err := os.WriteFile(filepath.Join(identitiesDir, "testagent.json"), idBytes, 0o600); err != nil {
-		t.Fatalf("write identity: %v", err)
-	}
+	writeSnapshotTestIdentity(t, repoDir, "testagent", 99999999)
 
 	cmd := exec.Command(bin, "--repo", repoDir, "tmux", "snapshot", "save")
 	cmd.Env = append(filterEnvVars(os.Environ(), "THRUM_HOME", "HOME", "THRUM_NAME", "THRUM_NO_HINTS"),
@@ -358,24 +357,8 @@ func TestIntegration_SnapshotSaveMtimeFallback_UsesProjectDir(t *testing.T) {
 
 	repoDir := t.TempDir()
 	fakeHome := t.TempDir()
-
-	identitiesDir := filepath.Join(repoDir, ".thrum", "identities")
-	if err := os.MkdirAll(identitiesDir, 0o750); err != nil {
-		t.Fatalf("mkdir identities: %v", err)
-	}
 	// agent_pid deliberately unresolvable — forces the fallback path.
-	identity := map[string]any{
-		"version":   5,
-		"repo_id":   "test-repo",
-		"agent":     map[string]any{"name": "testagent", "role": "impl", "module": "testmod"},
-		"worktree":  repoDir,
-		"agent_pid": 99999999,
-		"runtime":   "claude",
-	}
-	idBytes, _ := json.MarshalIndent(identity, "", "  ")
-	if err := os.WriteFile(filepath.Join(identitiesDir, "testagent.json"), idBytes, 0o600); err != nil {
-		t.Fatalf("write identity: %v", err)
-	}
+	writeSnapshotTestIdentity(t, repoDir, "testagent", 99999999)
 
 	// Mirror encodeCwd from internal/restart: strip leading '/', replace
 	// '/' and '.' with '-', prepend '-'. repoDir from t.TempDir() has no
@@ -443,25 +426,9 @@ func TestIntegration_SnapshotSaveExplicitJSONL_BypassesAutoDetect(t *testing.T) 
 
 	repoDir := t.TempDir()
 	fakeHome := t.TempDir()
-
-	identitiesDir := filepath.Join(repoDir, ".thrum", "identities")
-	if err := os.MkdirAll(identitiesDir, 0o750); err != nil {
-		t.Fatalf("mkdir identities: %v", err)
-	}
 	// PID stays unresolvable — proving the flag bypasses auto-detect, not
 	// that auto-detect happened to work.
-	identity := map[string]any{
-		"version":   5,
-		"repo_id":   "test-repo",
-		"agent":     map[string]any{"name": "testagent", "role": "impl", "module": "testmod"},
-		"worktree":  repoDir,
-		"agent_pid": 99999999,
-		"runtime":   "claude",
-	}
-	idBytes, _ := json.MarshalIndent(identity, "", "  ")
-	if err := os.WriteFile(filepath.Join(identitiesDir, "testagent.json"), idBytes, 0o600); err != nil {
-		t.Fatalf("write identity: %v", err)
-	}
+	writeSnapshotTestIdentity(t, repoDir, "testagent", 99999999)
 
 	// Craft a minimal JSONL. ExtractConversation filters to user+assistant
 	// message rows with text content; we supply one user row.
@@ -497,3 +464,190 @@ func TestIntegration_SnapshotSaveExplicitJSONL_BypassesAutoDetect(t *testing.T) 
 	}
 }
 
+
+// TestIntegration_SnapshotSaveNoPID_TextMode verifies the snapshot.save.no-pid
+// hint wires end-to-end when the identity file has agent_pid=0 AND the daemon
+// lookup returns no-match. The daemon lookup branch in saveCmd gracefully
+// tolerates a dial failure (if err != nil { ... }), so the test simply
+// leaves no daemon running — the loop over `agents` finds nothing and the
+// pid==0 refusal fires with the hint attached.
+func TestIntegration_SnapshotSaveNoPID_TextMode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration tests skipped in -short")
+	}
+	bin := buildTestBinary(t)
+
+	repoDir := t.TempDir()
+	fakeHome := t.TempDir()
+	// agent_pid=0 triggers the fallback path; with no daemon the lookup
+	// returns empty and the pid==0 error returns with the no-pid hint.
+	writeSnapshotTestIdentity(t, repoDir, "testagent", 0)
+
+	cmd := exec.Command(bin, "--repo", repoDir, "tmux", "snapshot", "save")
+	cmd.Env = append(filterEnvVars(os.Environ(), "THRUM_HOME", "HOME", "THRUM_NAME"),
+		"HOME="+fakeHome,
+		"THRUM_NAME=testagent",
+	)
+	_, errBuf := captureOut(cmd)
+	if err := cmd.Run(); err == nil {
+		t.Fatal("expected non-zero exit when no PID is resolvable")
+	}
+
+	stderr := errBuf.String()
+	if !strings.Contains(stderr, "[snapshot.save.no-pid]") {
+		t.Errorf("stderr missing hint code [snapshot.save.no-pid], got:\n%s", stderr)
+	}
+	// Remediation must reference the specific agent name so the re-register
+	// command is copy/paste-ready.
+	if !strings.Contains(stderr, "testagent") {
+		t.Errorf("stderr should name the agent in the remediation command; got:\n%s", stderr)
+	}
+}
+
+// TestIntegration_SnapshotSaveExtractFailed_TextMode verifies the
+// snapshot.save.extract-failed hint fires when the supplied JSONL is
+// present (passes os.Stat pre-flight) but ExtractConversation's
+// os.Open returns an error.
+//
+// Note on trigger choice: ExtractConversation uses bufio.Scanner with a
+// "skip unmarshal errors" policy, so feeding corrupt content would just
+// produce an empty snapshot without error. The reliable portable trigger
+// for an Open error when Stat succeeds is a chmod-000 file — Stat reads
+// the dir entry (no read perm on file needed), Open fails EACCES.
+// Skipped on Windows (chmod semantics differ).
+func TestIntegration_SnapshotSaveExtractFailed_TextMode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration tests skipped in -short")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("chmod-000 is bypassed by root; test requires non-root uid")
+	}
+	bin := buildTestBinary(t)
+
+	repoDir := t.TempDir()
+	fakeHome := t.TempDir()
+	writeSnapshotTestIdentity(t, repoDir, "testagent", 99999999)
+
+	unreadablePath := filepath.Join(t.TempDir(), "unreadable.jsonl")
+	if err := os.WriteFile(unreadablePath, []byte(`{"type":"user"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write jsonl: %v", err)
+	}
+	if err := os.Chmod(unreadablePath, 0o000); err != nil {
+		t.Fatalf("chmod 000: %v", err)
+	}
+	// Restore perms after test so t.TempDir cleanup can delete the file.
+	t.Cleanup(func() { _ = os.Chmod(unreadablePath, 0o600) })
+
+	cmd := exec.Command(bin, "--repo", repoDir, "tmux", "snapshot", "save", "--jsonl", unreadablePath)
+	cmd.Env = append(filterEnvVars(os.Environ(), "THRUM_HOME", "HOME", "THRUM_NAME"),
+		"HOME="+fakeHome,
+		"THRUM_NAME=testagent",
+	)
+	_, errBuf := captureOut(cmd)
+	if err := cmd.Run(); err == nil {
+		t.Fatal("expected non-zero exit when JSONL can't be opened")
+	}
+
+	stderr := errBuf.String()
+	if !strings.Contains(stderr, "[snapshot.save.extract-failed]") {
+		t.Errorf("stderr missing hint code [snapshot.save.extract-failed], got:\n%s", stderr)
+	}
+	// The hint should name the path for copy/paste remediation (inspect/ls).
+	if !strings.Contains(stderr, unreadablePath) {
+		t.Errorf("stderr should reference the JSONL path, got:\n%s", stderr)
+	}
+}
+
+// TestIntegration_SnapshotSaveJSONLNotFound_TextMode verifies the pre-flight
+// os.Stat on --jsonl detects typo'd paths and fires the distinct
+// snapshot.save.jsonl-not-found hint — distinguishing "path doesn't exist"
+// from "path exists but can't be read/parsed" (the extract-failed case).
+func TestIntegration_SnapshotSaveJSONLNotFound_TextMode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration tests skipped in -short")
+	}
+	bin := buildTestBinary(t)
+
+	repoDir := t.TempDir()
+	fakeHome := t.TempDir()
+	writeSnapshotTestIdentity(t, repoDir, "testagent", 99999999)
+
+	bogusPath := filepath.Join(t.TempDir(), "does-not-exist.jsonl")
+	// Explicitly do NOT create bogusPath — os.Stat must report ENOENT.
+
+	cmd := exec.Command(bin, "--repo", repoDir, "tmux", "snapshot", "save", "--jsonl", bogusPath)
+	cmd.Env = append(filterEnvVars(os.Environ(), "THRUM_HOME", "HOME", "THRUM_NAME"),
+		"HOME="+fakeHome,
+		"THRUM_NAME=testagent",
+	)
+	_, errBuf := captureOut(cmd)
+	if err := cmd.Run(); err == nil {
+		t.Fatal("expected non-zero exit when --jsonl path is missing")
+	}
+
+	stderr := errBuf.String()
+	if !strings.Contains(stderr, "[snapshot.save.jsonl-not-found]") {
+		t.Errorf("stderr missing hint code [snapshot.save.jsonl-not-found], got:\n%s", stderr)
+	}
+	// Crucial: the extract-failed hint must NOT also fire — that would
+	// re-introduce the confusion the new code exists to avoid.
+	if strings.Contains(stderr, "[snapshot.save.extract-failed]") {
+		t.Errorf("jsonl-not-found path must not ALSO emit extract-failed hint; stderr:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, bogusPath) {
+		t.Errorf("stderr should echo the bad path for copy/paste fix; got:\n%s", stderr)
+	}
+}
+
+// TestIntegration_SnapshotSaveNoJSONL_WorktreeMissing_TextMode verifies the
+// WorktreeMissing context variant: when the identity file lacks a worktree
+// field, the mtime fallback can't run. The hint must render the
+// "missing the 'worktree' field" message so operators know where to look
+// instead of hunting for sessions/<pid>.json or project dirs.
+func TestIntegration_SnapshotSaveNoJSONL_WorktreeMissing_TextMode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration tests skipped in -short")
+	}
+	bin := buildTestBinary(t)
+
+	repoDir := t.TempDir()
+	fakeHome := t.TempDir()
+
+	// Hand-craft an identity that deliberately omits 'worktree' to trigger
+	// the WorktreeMissing branch. writeSnapshotTestIdentity always populates
+	// worktree, so this test bypasses the helper.
+	identitiesDir := filepath.Join(repoDir, ".thrum", "identities")
+	if err := os.MkdirAll(identitiesDir, 0o750); err != nil {
+		t.Fatalf("mkdir identities: %v", err)
+	}
+	identity := map[string]any{
+		"version":   5,
+		"repo_id":   "test-repo",
+		"agent":     map[string]any{"name": "testagent", "role": "impl", "module": "testmod"},
+		"agent_pid": 99999999,
+		"runtime":   "claude",
+		// worktree field intentionally OMITTED
+	}
+	b, _ := json.MarshalIndent(identity, "", "  ")
+	if err := os.WriteFile(filepath.Join(identitiesDir, "testagent.json"), b, 0o600); err != nil {
+		t.Fatalf("write identity: %v", err)
+	}
+
+	cmd := exec.Command(bin, "--repo", repoDir, "tmux", "snapshot", "save")
+	cmd.Env = append(filterEnvVars(os.Environ(), "THRUM_HOME", "HOME", "THRUM_NAME"),
+		"HOME="+fakeHome,
+		"THRUM_NAME=testagent",
+	)
+	_, errBuf := captureOut(cmd)
+	if err := cmd.Run(); err == nil {
+		t.Fatal("expected non-zero exit when worktree is missing and auto-detect fails")
+	}
+
+	stderr := errBuf.String()
+	if !strings.Contains(stderr, "[snapshot.save.no-jsonl]") {
+		t.Errorf("stderr missing hint code [snapshot.save.no-jsonl], got:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "missing the 'worktree' field") {
+		t.Errorf("stderr should explain worktree field is missing (context-specific message); got:\n%s", stderr)
+	}
+}

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -38,7 +39,7 @@ func TestSnapshotSaveNoPIDHint(t *testing.T) {
 }
 
 func TestSnapshotSaveNoJSONLHint(t *testing.T) {
-	h := SnapshotSaveNoJSONLHint(91614, "/home/leon/.claude")
+	h := SnapshotSaveNoJSONLHint(91614, "/home/leon/.claude", SnapshotSaveNoJSONLContext{})
 
 	if h.Code != HintSnapshotSaveNoJSONL {
 		t.Errorf("Code = %q, want %q", h.Code, HintSnapshotSaveNoJSONL)
@@ -111,8 +112,9 @@ func TestSnapshotHints_RenderTextContainsCodeAndMessage(t *testing.T) {
 	// Render through the real text renderer to lock the trailer shape.
 	hints := []Hint{
 		SnapshotSaveNoPIDHint("impl_x"),
-		SnapshotSaveNoJSONLHint(123, "/c"),
+		SnapshotSaveNoJSONLHint(123, "/c", SnapshotSaveNoJSONLContext{}),
 		SnapshotSaveExtractFailedHint("/c/sess.jsonl"),
+		SnapshotSaveJSONLNotFoundHint("/c/missing.jsonl"),
 	}
 	var buf bytes.Buffer
 	RenderText(hints, &buf)
@@ -122,14 +124,15 @@ func TestSnapshotHints_RenderTextContainsCodeAndMessage(t *testing.T) {
 		HintSnapshotSaveNoPID,
 		HintSnapshotSaveNoJSONL,
 		HintSnapshotSaveExtractFailed,
+		HintSnapshotSaveJSONLNotFound,
 	} {
 		if !strings.Contains(out, "["+code+"]") {
 			t.Errorf("rendered output missing code marker [%s]; output:\n%s", code, out)
 		}
 	}
 	// Warn severity should always prefix each hint.
-	if strings.Count(out, "warn [") < 3 {
-		t.Errorf("expected 3 warn-level rendered hints; output:\n%s", out)
+	if strings.Count(out, "warn [") < 4 {
+		t.Errorf("expected 4 warn-level rendered hints; output:\n%s", out)
 	}
 }
 
@@ -144,9 +147,89 @@ func TestSnapshotHints_RegisteredInCanonicalList(t *testing.T) {
 		HintSnapshotSaveNoPID,
 		HintSnapshotSaveNoJSONL,
 		HintSnapshotSaveExtractFailed,
+		HintSnapshotSaveJSONLNotFound,
 	} {
 		if !codes[want] {
 			t.Errorf("code %q is not in AllHintCodes", want)
 		}
 	}
 }
+
+func TestSnapshotSaveNoJSONLHint_ContextVariants(t *testing.T) {
+	// Each context variant must produce a message that distinguishes
+	// the root cause. Reviewers flagged conflation between
+	// "dir-missing-or-readerror" and "dir-empty" — this guard locks
+	// three distinct message tails so the operator knows which branch
+	// actually failed.
+	cases := []struct {
+		name    string
+		ctx     SnapshotSaveNoJSONLContext
+		substr  string
+		absent  string // must NOT appear — keeps messages from double-reporting
+	}{
+		{
+			name:   "worktree-missing",
+			ctx:    SnapshotSaveNoJSONLContext{WorktreeMissing: true},
+			substr: "missing the 'worktree' field",
+			absent: "PID lookup + mtime fallback",
+		},
+		{
+			name:   "project-dir-read-err",
+			ctx:    SnapshotSaveNoJSONLContext{ProjectDirReadErr: fmtError("permission denied")},
+			substr: "project dir lookup failed: permission denied",
+			absent: "PID lookup + mtime fallback",
+		},
+		{
+			name:   "project-dir-empty",
+			ctx:    SnapshotSaveNoJSONLContext{ProjectDirEmpty: true},
+			substr: "project dir exists but contains no .jsonl files",
+			absent: "PID lookup + mtime fallback",
+		},
+		{
+			name:   "generic (zero context)",
+			ctx:    SnapshotSaveNoJSONLContext{},
+			substr: "PID lookup + mtime fallback both failed",
+			absent: "missing the 'worktree' field",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := SnapshotSaveNoJSONLHint(42, "/c", tc.ctx)
+			if !strings.Contains(h.Message, tc.substr) {
+				t.Errorf("Message should contain %q; got %q", tc.substr, h.Message)
+			}
+			if tc.absent != "" && strings.Contains(h.Message, tc.absent) {
+				t.Errorf("Message should NOT contain %q; got %q", tc.absent, h.Message)
+			}
+		})
+	}
+}
+
+func TestSnapshotSaveJSONLNotFoundHint(t *testing.T) {
+	h := SnapshotSaveJSONLNotFoundHint("/tmp/typo-path.jsonl")
+	if h.Code != HintSnapshotSaveJSONLNotFound {
+		t.Errorf("Code = %q, want %q", h.Code, HintSnapshotSaveJSONLNotFound)
+	}
+	if h.Severity != SeverityWarn {
+		t.Errorf("Severity = %q, want warn", h.Severity)
+	}
+	if !strings.Contains(h.Message, "/tmp/typo-path.jsonl") {
+		t.Errorf("Message should name the supplied path; got %q", h.Message)
+	}
+	// auto-detect escape hatch must be suggested (ship-worthy remediation
+	// when the operator wants to retry without --jsonl).
+	byLabel := map[string]Option{}
+	for _, o := range h.Options {
+		byLabel[o.Label] = o
+	}
+	if ad, ok := byLabel["auto-detect"]; !ok {
+		t.Error("expected 'auto-detect' option suggesting drop --jsonl")
+	} else if strings.Contains(ad.Cmd, "--jsonl") {
+		t.Errorf("auto-detect Cmd should OMIT --jsonl; got %q", ad.Cmd)
+	}
+}
+
+// fmtError is a tiny helper that returns a printable error without pulling
+// in errors.New at the top of every caller. Keeps the context-variant
+// fixture one line shorter.
+func fmtError(s string) error { return fmt.Errorf("%s", s) }
