@@ -4077,8 +4077,9 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
+				if err := cli.EmitJSON(result); err != nil {
+					return err
+				}
 			} else {
 				fmt.Print(cli.FormatPrimeContext(result))
 			}
@@ -4112,11 +4113,9 @@ defaults. Use these commands to list, inspect, and configure runtimes.`,
 			result := cli.RuntimeList()
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatRuntimeList(result))
+				return cli.EmitJSON(result)
 			}
+			fmt.Print(cli.FormatRuntimeList(result))
 			return nil
 		},
 	}
@@ -4133,11 +4132,9 @@ defaults. Use these commands to list, inspect, and configure runtimes.`,
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(preset, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatRuntimeShow(preset))
+				return cli.EmitJSON(preset)
 			}
+			fmt.Print(cli.FormatRuntimeShow(preset))
 			return nil
 		},
 	}
@@ -4305,14 +4302,9 @@ func syncCmd() *cobra.Command {
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				// Human-readable formatted output
-				fmt.Print(cli.FormatSyncStatus(result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatSyncStatus(result))
 			return nil
 		},
 	})
@@ -4336,14 +4328,9 @@ This will fetch new messages from the remote and push local messages.`,
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				// Human-readable formatted output
-				fmt.Print(cli.FormatSyncForce(result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatSyncForce(result))
 			return nil
 		},
 	})
@@ -4598,15 +4585,12 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatQuickstart(result))
-				if !flagQuiet {
-					fmt.Print(cli.LegacyHint("quickstart", flagQuiet, flagJSON))
-				}
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatQuickstart(result))
+			if !flagQuiet {
+				fmt.Print(cli.LegacyHint("quickstart", flagQuiet, flagJSON))
+			}
 			return nil
 		},
 	}
@@ -4789,19 +4773,15 @@ Examples:
 			}
 
 			if flagJSON {
-				combined := map[string]any{
+				return cli.EmitJSON(map[string]any{
 					"agents":   agents,
 					"contexts": contexts,
-				}
-				output, _ := json.MarshalIndent(combined, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatPing(name, agents, contexts))
-				if !flagQuiet {
-					fmt.Print(cli.LegacyHint("ping", flagQuiet, flagJSON))
-				}
+				})
 			}
-
+			fmt.Print(cli.FormatPing(name, agents, contexts))
+			if !flagQuiet {
+				fmt.Print(cli.LegacyHint("ping", flagQuiet, flagJSON))
+			}
 			return nil
 		},
 	}
@@ -4876,15 +4856,12 @@ func sessionHeartbeatRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagJSON {
-		output, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(output))
-	} else {
-		fmt.Print(cli.FormatHeartbeat(result))
-		if !flagQuiet {
-			fmt.Print(cli.LegacyHint("session.heartbeat", flagQuiet, flagJSON))
-		}
+		return cli.EmitJSON(result)
 	}
-
+	fmt.Print(cli.FormatHeartbeat(result))
+	if !flagQuiet {
+		fmt.Print(cli.LegacyHint("session.heartbeat", flagQuiet, flagJSON))
+	}
 	return nil
 }
 
