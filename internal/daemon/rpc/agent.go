@@ -34,6 +34,7 @@ type RegisterRequest struct {
 	Role       string `json:"role"`
 	Module     string `json:"module"`
 	Display    string `json:"display,omitempty"`
+	Force      bool   `json:"force,omitempty"`       // CLI --force: re-register existing agent, overriding stored fields (thrum-ufv5.2)
 	ReRegister bool   `json:"re_register,omitempty"` // Same agent returning
 	AgentPID   int    `json:"agent_pid,omitempty"`   // Claude process PID for identity resolution
 }
@@ -277,10 +278,16 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		// feature (thrum-pxz.14 Fix A).
 		var resp *RegisterResponse
 		var regErr error
+		// thrum-ufv5.2: Force is a distinct trigger from ReRegister. --force on
+		// an existing agent must refresh the agents projection (role, module,
+		// display) so agent.list stays consistent with whoami and the identity
+		// file. Without this branch, a re-register with --force updated the
+		// identity file but left the DB row stale — two views of the same agent
+		// diverged (see SC-04 repro in the linked bug).
 		switch {
 		case req.AgentPID > 0 && existingAgent.AgentPID != req.AgentPID:
 			resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
-		case req.ReRegister:
+		case req.ReRegister, req.Force:
 			resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
 		default:
 			// Same agent, same PID (or no PID provided) — no-op return.

@@ -319,6 +319,76 @@ func TestAgentRegister_SameAgentPIDChange(t *testing.T) {
 	}
 }
 
+// TestRegister_ForceChangesRole — thrum-ufv5.2 regression. When a caller
+// re-registers an existing agent with --force (Force=true) and a different
+// role/module, the agents projection must reflect the new values. Without
+// this, agent.list returns stale role/module while whoami + identity file
+// show the new values, and downstream consumers (test harnesses, Web UI)
+// see divergent state until the agent next quickstarts.
+func TestRegister_ForceChangesRole(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	handler := NewAgentHandler(s)
+
+	// Step 1: register named agent with role=coordinator module=e2e.
+	firstReq := RegisterRequest{
+		Name:   "e2e_coordinator",
+		Role:   "coordinator",
+		Module: "e2e",
+	}
+	firstJSON, _ := json.Marshal(firstReq)
+	firstResp, err := handler.HandleRegister(context.Background(), firstJSON)
+	if err != nil {
+		t.Fatalf("initial register: %v", err)
+	}
+	firstReg := firstResp.(*RegisterResponse)
+	if firstReg.AgentID != "e2e_coordinator" {
+		t.Fatalf("initial agent_id = %s, want e2e_coordinator", firstReg.AgentID)
+	}
+
+	// Step 2: re-register same agent with --force and different role/module.
+	// No AgentPID change, no ReRegister flag — Force must be the trigger.
+	secondReq := RegisterRequest{
+		Name:    "e2e_coordinator",
+		Role:    "owner",
+		Module:  "all",
+		Display: "Leon",
+		Force:   true,
+	}
+	secondJSON, _ := json.Marshal(secondReq)
+	secondResp, err := handler.HandleRegister(context.Background(), secondJSON)
+	if err != nil {
+		t.Fatalf("force register: %v", err)
+	}
+	secondReg := secondResp.(*RegisterResponse)
+	if secondReg.Status != "updated" {
+		t.Errorf("force register status = %s, want updated", secondReg.Status)
+	}
+
+	// Verify the agents projection reflects the new role AND module.
+	// This is the exact divergence SC-04 surfaces.
+	var storedRole, storedModule string
+	err = s.RawDB().QueryRow(
+		"SELECT role, module FROM agents WHERE agent_id = ?",
+		"e2e_coordinator",
+	).Scan(&storedRole, &storedModule)
+	if err != nil {
+		t.Fatalf("query agents projection: %v", err)
+	}
+	if storedRole != "owner" {
+		t.Errorf("stored role = %q, want %q (agents projection is stale)", storedRole, "owner")
+	}
+	if storedModule != "all" {
+		t.Errorf("stored module = %q, want %q", storedModule, "all")
+	}
+}
+
 // TestAgentRegister_SameAgentSamePID covers the idempotent no-op path
 // from thrum-pxz.14 Fix A: when the caller's PID matches the stored
 // PID and ReRegister is false, the handler must NOT emit a new event.
