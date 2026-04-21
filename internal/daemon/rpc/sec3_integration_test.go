@@ -236,6 +236,58 @@ func TestSec3_OmittedCallerAgentID_ResolvedFromPeercred(t *testing.T) {
 	require.Contains(t, content, "legit message via peercred")
 }
 
+// TestRegression_SendStrictNoCallerAgentID_ReturnsError — thrum-ufv5.1
+// regression. When the unauthenticated_rpc guard is strict AND the caller
+// omits caller_agent_id AND peercred did not run (legacy-transport path,
+// the resilience-suite scenario), message.send must return a structured
+// RPC error rather than a success envelope with an empty SendResponse.
+//
+// The bug surfaced in TestCLI_ReplyChain under the full resilience suite:
+// the CLI received {message_id: "", resolved_to: 0} on stdout with exit
+// code 0 — parsed as success but lacking a message_id. The root cause is
+// that callers checking err==nil treat an empty envelope as "success with
+// no data", which is indistinguishable from "send to a non-existent
+// recipient." A guard-denied RPC must fail loudly.
+//
+// This test uses nil resolver to exercise the "peercred did not run"
+// path. G3 strict-mode fires on empty CallerAgentID and resolveAgentAndSession
+// returns an error, which HandleSend wraps. The dispatcher should surface
+// that as a jsonRPCError envelope, not a success body.
+func TestRegression_SendStrictNoCallerAgentID_ReturnsError(t *testing.T) {
+	// nil resolver → server.SetIdentityResolver never called → connResolved=false
+	// for every accepted connection. This bypasses the dispatcher's
+	// anonymous-allowlist check (which only runs when peercred actually ran)
+	// and lets the request reach the handler, where resolveAgentAndSession
+	// must fail closed on empty CallerAgentID in strict mode.
+	h := newSec3Harness(t, nil /* resolver */, false /* registerAgent */)
+
+	resp, err := h.sendRPC(t, "message.send", map[string]any{
+		// caller_agent_id deliberately omitted — the exact resilience-suite
+		// failure mode: the CLI lost its identity during cross_worktree
+		// refresh and forwarded an empty claim.
+		"to":      "anyone",
+		"content": "should fail loudly",
+	})
+	require.NoError(t, err, "transport error unexpected; we want an RPC-level failure")
+
+	// Bug symptom: resp.Error == nil AND resp.Result decoded as empty
+	// SendResponse. Fix: resp.Error != nil with the guard's structured message.
+	require.NotNil(t, resp.Error,
+		"strict-mode guard-denied send must return RPC error, not empty envelope. got result=%s", string(resp.Result))
+
+	// The error should reference the guard that fired. G3 emits
+	// "unauthenticated_rpc" in its Error.Guard field, which the
+	// wrapping "resolve agent and session: ..." at HandleSend bubbles up.
+	require.Contains(t, resp.Error.Message, "unauthenticated_rpc",
+		"error should name the guard that fired; got: %q", resp.Error.Message)
+
+	// And nothing got persisted.
+	var count int
+	row := h.state.DB().QueryRowContext(context.Background(), `SELECT COUNT(*) FROM messages`)
+	require.NoError(t, row.Scan(&count))
+	require.Equal(t, 0, count, "no message should have been persisted on guard denial")
+}
+
 // TestSec3_AnonymousCaller_MutatingRPC_Rejected proves that a caller whose
 // peercred resolution returned ErrAnonymous (CWD outside any registered
 // worktree) cannot invoke mutating RPCs — the dispatcher rejects at the
