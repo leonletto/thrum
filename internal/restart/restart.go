@@ -33,7 +33,7 @@ type contentBlock struct {
 // user+assistant text only (no tool use, thinking, sidechains, or non-message types).
 // Returns formatted conversation text truncated to maxLines.
 func ExtractConversation(jsonlPath string, maxLines int) (string, error) {
-	f, err := os.Open(jsonlPath) // #nosec G304 -- path from internal session lookup
+	f, err := os.Open(jsonlPath) // #nosec G304 -- path from internal session lookup, mtime-fallback glob, or --jsonl flag (CLI-local tool, trust boundary is the local user)
 	if err != nil {
 		return "", fmt.Errorf("open JSONL: %w", err)
 	}
@@ -190,6 +190,46 @@ func encodeCwd(cwd string) string {
 	encoded = strings.ReplaceAll(encoded, "/", "-")
 	encoded = strings.ReplaceAll(encoded, ".", "-")
 	return "-" + encoded
+}
+
+// FindLatestJSONLForCwd picks the most-recently-modified .jsonl file under
+// ~/.claude/projects/<encoded-cwd>/, serving as a fallback when PID-based
+// session lookup (FindSessionJSONL) fails. Motivation: Claude Code's per-PID
+// sessions/<pid>.json file may be missing, stale, or pointing at a rotated
+// JSONL; the project directory itself usually still holds a current JSONL,
+// and most-recent-mtime is a good heuristic for "the conversation the agent
+// is actively in".
+//
+// Returns ("", nil) when the project dir exists but contains no .jsonl files
+// — callers treat empty-string as "no fallback available" and emit the
+// no-jsonl hint. A missing project dir is reported as an error so callers
+// can distinguish "dir absent" (agent not running under Claude, or wrong
+// cwd encoding) from "dir present but empty" (unexpected Claude state).
+func FindLatestJSONLForCwd(claudeDir, cwd string) (string, error) {
+	if cwd == "" {
+		return "", fmt.Errorf("cwd required for project-dir fallback")
+	}
+	projectDir := filepath.Join(claudeDir, "projects", encodeCwd(cwd))
+	entries, err := os.ReadDir(projectDir)
+	if err != nil {
+		return "", fmt.Errorf("read project dir %s: %w", projectDir, err)
+	}
+	var bestMTime time.Time
+	var bestPath string
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".jsonl" {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if bestPath == "" || info.ModTime().After(bestMTime) {
+			bestMTime = info.ModTime()
+			bestPath = filepath.Join(projectDir, e.Name())
+		}
+	}
+	return bestPath, nil
 }
 
 // FormatRestartSnapshot builds the complete snapshot file content.

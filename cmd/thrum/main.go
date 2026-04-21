@@ -7943,27 +7943,30 @@ func restartSnapshotSubcmds() []*cobra.Command {
 
 			pid := idFile.AgentPID
 			if pid == 0 {
-				// Fallback: query daemon for the agent's AgentPID
-				client, err := getClient()
-				if err != nil {
-					return fmt.Errorf("connect to daemon: %w", err)
-				}
-				defer func() { _ = client.Close() }()
-
-				var agents []struct {
-					AgentID  string `json:"agent_id"`
-					AgentPID int    `json:"agent_pid"`
-				}
-				if err := client.Call("agent.list", nil, &agents); err == nil {
-					for _, a := range agents {
-						if a.AgentID == agentName && a.AgentPID > 0 {
-							pid = a.AgentPID
-							break
+				// Fallback: query the daemon for the agent's AgentPID. The
+				// daemon path is itself a best-effort fallback — if we
+				// can't reach the daemon (dial failure, closed socket) we
+				// fall through to the pid==0 refusal below rather than
+				// returning an unrelated "connect to daemon" error. The
+				// no-pid hint then renders with actionable remediation.
+				if client, err := getClient(); err == nil {
+					var agents []struct {
+						AgentID  string `json:"agent_id"`
+						AgentPID int    `json:"agent_pid"`
+					}
+					if err := client.Call("agent.list", nil, &agents); err == nil {
+						for _, a := range agents {
+							if a.AgentID == agentName && a.AgentPID > 0 {
+								pid = a.AgentPID
+								break
+							}
 						}
 					}
+					_ = client.Close()
 				}
 			}
 			if pid == 0 {
+				cli.EmitStderr([]cli.Hint{cli.SnapshotSaveNoPIDHint(agentName)}, flagQuiet, flagJSON)
 				return fmt.Errorf("no agent PID found for %s — ensure agent is registered with an agent PID", agentName)
 			}
 
@@ -7972,9 +7975,50 @@ func restartSnapshotSubcmds() []*cobra.Command {
 				return fmt.Errorf("resolve home directory: %w", err)
 			}
 			claudeDir := filepath.Join(homeDir, ".claude")
-			jsonlPath, err := restart.FindSessionJSONL(claudeDir, pid)
-			if err != nil {
-				return fmt.Errorf("find session JSONL: %w", err)
+
+			// Resolution order (thrum-ufv5.7):
+			//   1. --jsonl <path> flag — explicit caller override, skip auto-detect.
+			//   2. restart.FindSessionJSONL — PID-based lookup (primary path).
+			//   3. restart.FindLatestJSONLForCwd — mtime fallback using the
+			//      worktree path from the identity file. Covers the case where
+			//      ~/.claude/sessions/<pid>.json is missing or stale but the
+			//      project dir still has the current conversation JSONL.
+			// If all three fail, emit the no-jsonl hint and return.
+			var jsonlPath string
+			if explicit, _ := cmd.Flags().GetString("jsonl"); explicit != "" {
+				// Pre-flight: stat the explicit path so typos surface with a
+				// targeted hint instead of being misdiagnosed as an extract
+				// failure. ExtractConversation's own error would misdirect
+				// toward permission/corruption remediation.
+				if _, statErr := os.Stat(explicit); os.IsNotExist(statErr) {
+					cli.EmitStderr([]cli.Hint{cli.SnapshotSaveJSONLNotFoundHint(explicit)}, flagQuiet, flagJSON)
+					return fmt.Errorf("jsonl path not found: %s", explicit)
+				}
+				jsonlPath = explicit
+			} else {
+				jsonlPath, err = restart.FindSessionJSONL(claudeDir, pid)
+				if err != nil {
+					// Layer 3: mtime fallback. Track fallback diagnostics so
+					// the no-jsonl hint can explain exactly WHY the fallback
+					// didn't succeed (dir missing vs empty vs no worktree).
+					noJSONLCtx := cli.SnapshotSaveNoJSONLContext{}
+					if idFile.Worktree == "" {
+						noJSONLCtx.WorktreeMissing = true
+					} else {
+						fb, ferr := restart.FindLatestJSONLForCwd(claudeDir, idFile.Worktree)
+						if ferr == nil && fb != "" {
+							jsonlPath = fb
+						} else if ferr != nil {
+							noJSONLCtx.ProjectDirReadErr = ferr
+						} else {
+							noJSONLCtx.ProjectDirEmpty = true
+						}
+					}
+					if jsonlPath == "" {
+						cli.EmitStderr([]cli.Hint{cli.SnapshotSaveNoJSONLHint(pid, claudeDir, noJSONLCtx)}, flagQuiet, flagJSON)
+						return fmt.Errorf("find session JSONL: %w", err)
+					}
+				}
 			}
 
 			cfg, _ := config.LoadThrumConfig(thrumDir)
@@ -7982,6 +8026,7 @@ func restartSnapshotSubcmds() []*cobra.Command {
 
 			conversation, err := restart.ExtractConversation(jsonlPath, maxLines)
 			if err != nil {
+				cli.EmitStderr([]cli.Hint{cli.SnapshotSaveExtractFailedHint(jsonlPath)}, flagQuiet, flagJSON)
 				return fmt.Errorf("extract conversation: %w", err)
 			}
 
@@ -8003,6 +8048,7 @@ func restartSnapshotSubcmds() []*cobra.Command {
 		},
 	}
 	saveCmd.Flags().String("reason", "self-initiated", "Reason for restart")
+	saveCmd.Flags().String("jsonl", "", "Explicit path to Claude conversation JSONL (bypasses auto-detect; use when ls ~/.claude/projects/<slug>/ shows the correct file)")
 
 	restoreCmd := &cobra.Command{
 		Use:   "restore",
