@@ -15,7 +15,7 @@ export THRUM_HOME="${THRUM_HOME:-$DEFAULT_THRUM_HOME}"
 if [ "$1" = "--listener-heartbeat" ]; then
   AGENT_ID="${THRUM_AGENT_ID:-${THRUM_NAME:-}}"
   if [ -z "$AGENT_ID" ]; then
-    AGENT_ID=$(thrum --repo "$THRUM_HOME" whoami --field agent_id 2>/dev/null || true)
+    AGENT_ID=$(thrum --repo "$THRUM_HOME" whoami --json 2>/dev/null | jq -r 'select(.agent_id != null) | .agent_id // empty')
   fi
   if [ -z "$AGENT_ID" ]; then
     echo "Error: Could not determine agent ID" >&2
@@ -36,11 +36,12 @@ if ! thrum --repo "$THRUM_HOME" daemon status &>/dev/null; then
   thrum --repo "$THRUM_HOME" daemon start
 fi
 
-# 2. Read existing identity from thrum whoami (--field avoids a jq dependency)
-AGENT_NAME=$(thrum --repo "$THRUM_HOME" whoami --field agent_id 2>/dev/null || true)
-AGENT_ROLE=$(thrum --repo "$THRUM_HOME" whoami --field role 2>/dev/null || true)
-AGENT_MODULE=$(thrum --repo "$THRUM_HOME" whoami --field module 2>/dev/null || true)
-AGENT_INTENT=$(thrum --repo "$THRUM_HOME" whoami --field intent 2>/dev/null || true)
+# 2. Read existing identity from thrum whoami
+AGENT_INFO=$(thrum --repo "$THRUM_HOME" whoami --json 2>/dev/null || echo '{}')
+AGENT_NAME=$(echo "$AGENT_INFO" | jq -r 'select(.agent_id != null) | .agent_id // empty')
+AGENT_ROLE=$(echo "$AGENT_INFO" | jq -r 'select(.role != null) | .role // empty')
+AGENT_MODULE=$(echo "$AGENT_INFO" | jq -r 'select(.module != null) | .module // empty')
+AGENT_INTENT=$(echo "$AGENT_INFO" | jq -r 'select(.intent != null) | .intent // empty')
 
 # If whoami returned nothing, thrum is not initialized in this worktree.
 # Allow env var overrides, but don't silently fall back to hardcoded defaults.
