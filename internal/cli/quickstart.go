@@ -43,6 +43,31 @@ type QuickstartOptions struct {
 	DryRun   bool   // Preview changes without writing
 	NoInit   bool   // Skip config file generation
 	Force    bool   // Overwrite existing files and force daemon re-registration (thrum-ufv5.6)
+
+	// NoAgentPID, when true, deregisters the caller's PID from the
+	// identity write — AgentPID is persisted as 0 instead of the
+	// detected runtime ancestor. Intended for the inline quickstart
+	// invoked by `thrum tmux create`: that invocation runs in a tmux
+	// pane's short-lived shell whose PID dies immediately after
+	// registration, so persisting it breaks `thrum tmux launch`'s G4
+	// writer-liveness check. Direct shell callers should not set this
+	// flag (thrum-x6e8.6).
+	NoAgentPID bool
+}
+
+// resolveQuickstartAgentPID returns the PID to persist in the identity
+// file's agent_pid field. When noAgentPID is set, returns 0 — the
+// caller is the tmux-create inline quickstart subshell whose PID will
+// not outlive this call; first-prime via guard.WritePID reclaims
+// ownership from the live runtime. Otherwise returns the detected
+// runtime ancestor (may still be 0 when no runtime is present, which
+// is the bare-shell case).
+func resolveQuickstartAgentPID(ctx context.Context, noAgentPID bool) int {
+	if noAgentPID {
+		return 0
+	}
+	pid, _ := process.FindClaudeAncestor(ctx)
+	return pid
 }
 
 // QuickstartResult contains the combined result of quickstart steps.
@@ -132,8 +157,10 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 
 	// Capture agent PID for identity resolution and conflict detection.
 	// Runtime/PreferredRuntime/branch/tmux fields are handled by
-	// RefreshLocalIdentity in Step 2.6 below.
-	agentPID, _ := process.FindClaudeAncestor(context.Background())
+	// RefreshLocalIdentity in Step 2.6 below. When NoAgentPID is set
+	// (the tmux-create inline path), we persist 0 — the first prime
+	// from the real runtime will reclaim via WritePID at main.go:4060.
+	agentPID := resolveQuickstartAgentPID(context.Background(), opts.NoAgentPID)
 
 	// Step 1: Register agent
 	//
