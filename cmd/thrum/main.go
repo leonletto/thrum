@@ -2668,7 +2668,7 @@ func worktreeCreateCmd() *cobra.Command {
 			if err := cli.EnsureWorktreeRedirects(worktreePath, repoPath); err != nil {
 				return fmt.Errorf("redirect setup: %w", err)
 			}
-			fmt.Println("✓ Thrum redirect configured")
+			cli.PrintRedirectConfirmations(os.Stdout, worktreePath)
 
 			// 3. Optional: create tmux session with agent quickstart
 			agentName, _ := cmd.Flags().GetString("name")
