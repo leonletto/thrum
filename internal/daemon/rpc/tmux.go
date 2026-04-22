@@ -941,11 +941,17 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 	}
 
 	// Resolve worktree to path BEFORE killing — if resolution fails, keep the session alive.
-	// IdentityFile.Worktree is a bare name like "team-fix".
+	// idFile.Worktree may be an absolute path (post thrum-x6e8.2 / nu16)
+	// OR a bare name like "team-fix" (legacy — rewritten on next
+	// guard.Check via reconcileDrift). resolveWorktreePath handles both.
 	repoDir := filepath.Dir(h.thrumDir)
 	cwd := resolveWorktreePath(ctx, repoDir, idFile.Worktree)
 	if cwd == "" {
-		// Fallback: if worktree matches the repo itself
+		// Legacy-only fallback: caller is inside the main repo itself
+		// and stored a bare name matching filepath.Base(repoDir). This
+		// branch is dead for the abs-path shape (an absolute path can
+		// never equal a basename) but remains valid for bare-name
+		// identity files that haven't yet been reconciled.
 		if filepath.Base(repoDir) == idFile.Worktree || idFile.Worktree == "" {
 			cwd = repoDir
 		}
@@ -1113,15 +1119,38 @@ func primeCommandForRuntime(runtime string) string {
 	}
 }
 
-// resolveWorktreePath uses git worktree list to find the absolute path for a worktree name.
-func resolveWorktreePath(ctx context.Context, repoDir, worktreeName string) string {
+// resolveWorktreePath returns the absolute worktree path for the
+// stored identifier, which may be either an absolute path (post
+// thrum-x6e8.2 / nu16 identity files) or a bare basename (legacy
+// identity files written before nu16, rewritten to absolute by
+// reconcileDrift on next guard.Check).
+//
+// For the path shape: if stored stat()s, return filepath.Clean(stored).
+// Otherwise return "" — don't fall back to basename lookup, since the
+// caller stored a specific path and expects an unambiguous answer.
+//
+// For the bare-name shape: fall back to `git worktree list` and match
+// by basename (legacy behavior).
+//
+// Returns "" if neither form resolves.
+func resolveWorktreePath(ctx context.Context, repoDir, stored string) string {
+	if stored == "" {
+		return ""
+	}
+	if filepath.IsAbs(stored) {
+		if _, err := os.Stat(stored); err == nil {
+			return filepath.Clean(stored)
+		}
+		return ""
+	}
+	// Legacy bare-name fallback — consult git worktree list.
 	out, err := safecmd.Git(ctx, repoDir, "worktree", "list", "--porcelain")
 	if err != nil {
 		return ""
 	}
 	for _, line := range strings.Split(string(out), "\n") {
 		if path, ok := strings.CutPrefix(line, "worktree "); ok {
-			if filepath.Base(path) == worktreeName {
+			if filepath.Base(path) == stored {
 				return path
 			}
 		}
