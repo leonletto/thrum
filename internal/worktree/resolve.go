@@ -31,5 +31,12 @@ func NormalizeWorktreePath(path string) (string, error) {
 	if _, err := os.Stat(cleaned); err != nil {
 		return "", fmt.Errorf("worktree path does not exist: %w", err)
 	}
-	return cleaned, nil
+	// Resolve symlinks so downstream equality checks (e.g.
+	// guard.cwdMatches' filepath.EvalSymlinks pair) don't get tripped up
+	// by /tmp → /private/tmp on macOS or similar per-mount aliasing.
+	resolved, err := filepath.EvalSymlinks(cleaned)
+	if err != nil {
+		return "", fmt.Errorf("resolve worktree symlinks: %w", err)
+	}
+	return resolved, nil
 }

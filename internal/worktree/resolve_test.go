@@ -12,10 +12,14 @@ func TestNormalizeWorktreePath_AbsoluteExisting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// macOS may return /private/tmp vs /tmp; accept either cleaned form.
-	want, _ := filepath.EvalSymlinks(dir)
-	if got != filepath.Clean(want) && got != filepath.Clean(dir) {
-		t.Fatalf("expected %q or %q, got %q", dir, want, got)
+	// The helper resolves symlinks, so the returned path must equal
+	// the symlink-resolved form of the input.
+	want, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks: %v", err)
+	}
+	if got != want {
+		t.Fatalf("expected symlink-resolved %q, got %q", want, got)
 	}
 }
 

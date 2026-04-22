@@ -193,6 +193,56 @@ func TestTmuxHandler_HandleCreate_NoAgentSkipsValidation(t *testing.T) {
 	}
 }
 
+// TestBuildInlineQuickstartCmd_AlwaysEmitsNoAgentPID closes the
+// coverage gap between 'BuildQuickstartCmd flag wiring' (worktree pkg)
+// and 'HandleCreate actually invokes BuildQuickstartCmd with the flag
+// set'. A regression that silently dropped --no-agent-pid from
+// HandleCreate's call site would silently re-introduce thrum-x6e8.6.
+// This test pins the invariant at the HandleCreate-facing seam.
+func TestBuildInlineQuickstartCmd_AlwaysEmitsNoAgentPID(t *testing.T) {
+	req := TmuxCreateRequest{
+		AgentName: "impl_test",
+		Role:      "implementer",
+		Module:    "testing",
+		Intent:    "test intent",
+		Runtime:   "claude",
+	}
+	cmd := buildInlineQuickstartCmd(req)
+	if !strings.Contains(cmd, "--no-agent-pid") {
+		t.Errorf("HandleCreate's inline quickstart must emit --no-agent-pid, got: %s", cmd)
+	}
+	// Defense-in-depth: a no-op shape doesn't satisfy the assertion.
+	// The command must still carry the agent identity fields so the
+	// inline invocation actually registers something.
+	for _, need := range []string{"--name 'impl_test'", "--role 'implementer'", "--module 'testing'"} {
+		if !strings.Contains(cmd, need) {
+			t.Errorf("expected %q in quickstart command, got: %s", need, cmd)
+		}
+	}
+}
+
+// TestBuildInlineQuickstartCmd_EmptyOptionalFields verifies the command
+// degrades gracefully when intent/runtime are not supplied.
+// HandleCreate happily accepts empty optional fields, so the emission
+// must still carry --no-agent-pid and the required identity flags.
+func TestBuildInlineQuickstartCmd_EmptyOptionalFields(t *testing.T) {
+	req := TmuxCreateRequest{
+		AgentName: "impl_test",
+		Role:      "implementer",
+		Module:    "testing",
+	}
+	cmd := buildInlineQuickstartCmd(req)
+	if !strings.Contains(cmd, "--no-agent-pid") {
+		t.Errorf("expected --no-agent-pid even with empty intent/runtime, got: %s", cmd)
+	}
+	if strings.Contains(cmd, "--intent") {
+		t.Errorf("expected no --intent when empty, got: %s", cmd)
+	}
+	if strings.Contains(cmd, "--runtime") {
+		t.Errorf("expected no --runtime when empty, got: %s", cmd)
+	}
+}
+
 func TestTmuxHandler_HandleCreate_NotAWorktree(t *testing.T) {
 	handler := NewTmuxHandler(t.TempDir(), nil)
 	// cwd is a regular dir (no .git file), not a worktree

@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
@@ -93,8 +92,9 @@ func TestTmuxLaunch_IdentityInvariants_DeadPIDClearedAndSessionWritten(t *testin
 		t.Fatalf("HandleLaunch: %v", err)
 	}
 
-	// Let writes flush.
-	time.Sleep(200 * time.Millisecond)
+	// HandleLaunch writes synchronously (preamble → writeTmuxToIdentity
+	// → regression guard, all on the calling goroutine); assert
+	// immediately after return.
 
 	// Assert post-launch state.
 	postIdentity := readJSON[config.IdentityFile](t, idPath)

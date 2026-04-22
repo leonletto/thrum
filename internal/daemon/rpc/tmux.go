@@ -292,12 +292,7 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 
 	// Run quickstart inside the pane for PID isolation
 	if !req.NoAgent {
-		// noAgentPID=true: the inline quickstart runs in the pane's
-		// shell which exits immediately after registration. Persisting
-		// its PID would trip HandleLaunch's G4 writer-liveness check on
-		// the subsequent launch. Prime from the real runtime claims the
-		// PID via guard.WritePID (thrum-x6e8.6).
-		quickstartCmd := worktree.BuildQuickstartCmd(req.AgentName, req.Role, req.Module, req.Intent, req.Runtime, true)
+		quickstartCmd := buildInlineQuickstartCmd(req)
 		target := name + ":0.0"
 		if err := ttmux.SendKeys(target, quickstartCmd); err != nil {
 			return nil, fmt.Errorf("send quickstart: %w", err)
@@ -1266,17 +1261,21 @@ func (h *TmuxHandler) findIdentityForSession(ctx context.Context, sessionName st
 	return "", nil, ""
 }
 
-// SetSessionCwdForTest wires a session→cwd mapping without going
-// through HandleCreate. Integration tests need this to exercise the
-// launch path without spinning up a full daemon bootstrap + git
-// worktree setup. Not for production use.
-func SetSessionCwdForTest(h *TmuxHandler, sessionName, cwd string) {
-	h.sessionMu.Lock()
-	defer h.sessionMu.Unlock()
-	if h.sessionCwds == nil {
-		h.sessionCwds = make(map[string]string)
-	}
-	h.sessionCwds[sessionName] = cwd
+// buildInlineQuickstartCmd returns the shell-safe quickstart command
+// HandleCreate sends into the tmux pane's shell. Factored so unit tests
+// can assert the exact emission (notably: --no-agent-pid must always be
+// present — the inline subshell exits immediately after registration,
+// persisting its PID breaks HandleLaunch's G4 writer-liveness check).
+//
+// The noAgentPID=true argument is fixed: HandleCreate has no legitimate
+// reason to emit an inline quickstart without the flag. If a future
+// caller needs the flag-less shape, route through a separate entry
+// point rather than parameterizing this one.
+func buildInlineQuickstartCmd(req TmuxCreateRequest) string {
+	return worktree.BuildQuickstartCmd(
+		req.AgentName, req.Role, req.Module, req.Intent, req.Runtime,
+		true, // --no-agent-pid: thrum-x6e8.6
+	)
 }
 
 // sessionCwd returns the cwd registered for a tmux session by
