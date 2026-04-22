@@ -184,8 +184,13 @@ func SetUserOption(session, key, value string) error {
 // raw value on success, and (string, error) on failure — callers
 // typically treat any error as "unset" / "not tagged". Trailing
 // whitespace is trimmed.
+//
+// -q suppresses "unknown option" errors on tmux versions that treat
+// that as an error; combined with the explicit session scope from -t,
+// this prevents a server/global user-option with the same name from
+// leaking into the per-session filter result (thrum-ufv5.11 review #2).
 func GetUserOption(session, key string) (string, error) {
-	out, err := safecmd.Tmux(context.Background(), "show-option", "-v", "-t", session, key)
+	out, err := safecmd.Tmux(context.Background(), "show-option", "-q", "-v", "-t", session, key)
 	if err != nil {
 		return "", fmt.Errorf("tmux show-option %s: %w", key, err)
 	}
@@ -194,15 +199,14 @@ func GetUserOption(session, key string) (string, error) {
 
 // ListSessions returns the names of all tmux sessions visible on the
 // current tmux socket. Empty list is a valid result (no sessions).
-// Missing tmux server (exit 1 with "no server running") is returned as
-// an empty list, not an error — callers can treat "nothing to list"
-// uniformly.
+// Missing tmux server (exit 1 with "no server running") and tmux 3.3+
+// "no sessions" on a live server are both mapped to an empty list so
+// callers don't need to string-match errors (thrum-ufv5.11 review #1).
 func ListSessions() ([]string, error) {
 	out, err := safecmd.Tmux(context.Background(), "list-sessions", "-F", "#{session_name}")
 	if err != nil {
-		// tmux returns non-zero when no server is running. Map that to
-		// an empty list so callers don't need to string-match errors.
-		if strings.Contains(err.Error(), "no server running") {
+		msg := err.Error()
+		if strings.Contains(msg, "no server running") || strings.Contains(msg, "no sessions") {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("tmux list-sessions: %w", err)

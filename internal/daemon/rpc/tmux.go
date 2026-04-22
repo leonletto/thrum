@@ -265,12 +265,18 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 	}
 
 	// Tag the session so HandleStatus can discover it via tmux state
-	// alone (no identity file required). This is what surfaces
-	// --no-agent sessions in `thrum tmux status`: they have no
-	// identity file, but the tag is enough. Non-fatal — untagged
-	// sessions still work, they just fall back to identity-file scan.
-	if err := ttmux.SetUserOption(name, "@thrum-managed", "1"); err != nil {
-		slog.Warn("tmux set-option @thrum-managed failed", "session", name, "error", err)
+	// alone (no identity file required). For agent-managed sessions
+	// this is redundant with the identity file scan, but for
+	// --no-agent sessions the tag is the ONLY discovery path — if
+	// the tag fails to stick, the session becomes invisible to
+	// `thrum tmux status` for its lifetime. Roll back by killing the
+	// session and returning an error rather than silently orphaning
+	// it (thrum-ufv5.11 review #4).
+	if err := setUserOptionFn(name, "@thrum-managed", "1"); err != nil {
+		slog.Error("tmux set-option @thrum-managed failed; rolling back session create",
+			"session", name, "error", err)
+		_ = killSessionFn(name)
+		return nil, fmt.Errorf("tag session %q as thrum-managed: %w", name, err)
 	}
 
 	// Track session→cwd mapping for auto-create and single-session enforcement
@@ -556,6 +562,13 @@ func (h *TmuxHandler) HandleStatus(ctx context.Context, params json.RawMessage) 
 	// safely filter out unrelated sessions on the same tmux socket.
 	names, _ := listSessionsFn()
 	for _, sessName := range names {
+		// Defensive: tmux names beginning with "-" would be mis-parsed
+		// as flags by the subsequent show-option -t <name> call. Skip
+		// untrusted names (may come from sessions created outside
+		// thrum on a shared socket). thrum-ufv5.11 review #3.
+		if sessName == "" || strings.HasPrefix(sessName, "-") {
+			continue
+		}
 		if seen[sessName] {
 			continue
 		}
@@ -1300,9 +1313,10 @@ var identityPollInterval = 500 * time.Millisecond
 // runInlineQuickstart end-to-end without a real tmux daemon. Tests
 // must restore the original values via t.Cleanup.
 //
-// hasSessionFn / listSessionsFn / getUserOptionFn were added for
-// HandleSend's no-agent bypass path and HandleStatus's second pass
-// (thrum-ufv5.11/12) so both can be exercised end-to-end without
+// Seams hasSessionFn / listSessionsFn / getUserOptionFn /
+// setUserOptionFn were added for HandleSend's no-agent bypass path,
+// HandleStatus's second pass, and HandleCreate's tag-failure rollback
+// (thrum-ufv5.11/12) so all three can be exercised end-to-end without
 // shelling out to tmux.
 var (
 	sendKeysFn       = ttmux.SendKeys
@@ -1311,6 +1325,7 @@ var (
 	hasSessionFn     = ttmux.HasSession
 	listSessionsFn   = ttmux.ListSessions
 	getUserOptionFn  = ttmux.GetUserOption
+	setUserOptionFn  = ttmux.SetUserOption
 )
 
 // waitForIdentityFile blocks until the identity file at idPath appears

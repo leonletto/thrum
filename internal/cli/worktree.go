@@ -21,14 +21,15 @@ func BuildQuickstartCmd(name, role, module, intent, runtime string, noAgentPID b
 }
 
 // PrintRedirectConfirmations writes one checkmark line per redirect
-// file EnsureRedirects created for worktreePath. The thrum redirect
-// is always expected; the beads redirect is conditional on the main
-// repo having .beads/ and is reported only when the file is actually
-// present on disk. Testable helper for thrum-ufv5.13 — callers in
-// cmd/thrum/main.go delegate here so output stays aligned with what
-// EnsureRedirects actually wrote.
+// file EnsureRedirects actually created for worktreePath. Both the
+// thrum line and the beads line are artifact-driven — we stat the
+// concrete file before printing, so output stays truthful even if the
+// conditions inside EnsureRedirects change later (thrum-ufv5.13,
+// review #6: both redirects get the same treatment for consistency).
 func PrintRedirectConfirmations(w io.Writer, worktreePath string) {
-	_, _ = fmt.Fprintln(w, "✓ Thrum redirect configured")
+	if _, err := os.Stat(filepath.Join(worktreePath, ".thrum", "redirect")); err == nil {
+		_, _ = fmt.Fprintln(w, "✓ Thrum redirect configured")
+	}
 	if _, err := os.Stat(filepath.Join(worktreePath, ".beads", "redirect")); err == nil {
 		_, _ = fmt.Fprintln(w, "✓ Beads redirect configured")
 	}

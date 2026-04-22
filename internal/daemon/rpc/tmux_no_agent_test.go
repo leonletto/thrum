@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/config"
@@ -112,7 +113,7 @@ func TestHandleSend_NoAgentPropagatesSendFailure(t *testing.T) {
 
 	params, _ := json.Marshal(TmuxSendRequest{Name: "bare", Text: "echo"})
 	_, err := handler.HandleSend(context.Background(), params)
-	if err == nil || !containsAny(err.Error(), "send-keys", "boom") {
+	if err == nil || (!strings.Contains(err.Error(), "send-keys") && !strings.Contains(err.Error(), "boom")) {
 		t.Fatalf("expected send-keys failure, got %v", err)
 	}
 }
@@ -258,6 +259,57 @@ func TestHandleStatus_DeduplicatesBetweenIdentityAndTagPasses(t *testing.T) {
 	}
 }
 
+// TestHandleCreate_TagFailureRollsBackSession verifies the rollback
+// invariant from thrum-ufv5.11 review #4: if SetUserOption fails to
+// tag a newly-created session, HandleCreate must kill the session and
+// return an error. Leaving an untagged session alive would break the
+// "--no-agent sessions appear in status" contract for its lifetime
+// (no identity-file fallback exists for bare sessions).
+func TestHandleCreate_TagFailureRollsBackSession(t *testing.T) {
+	if _, err := os.Stat("/usr/bin/tmux"); err != nil {
+		if _, err := os.Stat("/opt/homebrew/bin/tmux"); err != nil {
+			t.Skip("tmux binary not available on this host")
+		}
+	}
+
+	handler, _ := newNoAgentTestHandler(t)
+	cwd := t.TempDir()
+
+	prevSet, prevKill := setUserOptionFn, killSessionFn
+	t.Cleanup(func() {
+		setUserOptionFn = prevSet
+		killSessionFn = prevKill
+	})
+
+	setUserOptionFn = func(string, string, string) error {
+		return errors.New("simulated set-option failure")
+	}
+	var killCalls []string
+	killSessionFn = func(name string) error {
+		killCalls = append(killCalls, name)
+		// Still destroy the real tmux session so the test doesn't leak.
+		return prevKill(name)
+	}
+
+	params, _ := json.Marshal(map[string]any{
+		"name":     "rollback-probe",
+		"cwd":      cwd,
+		"no_agent": true,
+	})
+	_, err := handler.HandleCreate(context.Background(), json.RawMessage(params))
+	if err == nil {
+		// Clean up the dangling session before failing.
+		_ = prevKill("rollback-probe")
+		t.Fatal("expected error when set-option fails; got nil")
+	}
+	if !strings.Contains(err.Error(), "tag session") {
+		t.Errorf("error = %v, want contains 'tag session'", err)
+	}
+	if len(killCalls) != 1 || killCalls[0] != "rollback-probe" {
+		t.Errorf("killSessionFn calls = %v, want [rollback-probe]", killCalls)
+	}
+}
+
 // TestHandleSend_RejectsEmptyFields ensures HandleSend validates
 // required fields before attempting any routing decision.
 func TestHandleSend_RejectsEmptyFields(t *testing.T) {
@@ -278,13 +330,3 @@ func TestHandleSend_RejectsEmptyFields(t *testing.T) {
 	}
 }
 
-func containsAny(s string, subs ...string) bool {
-	for _, sub := range subs {
-		for i := 0; i+len(sub) <= len(s); i++ {
-			if s[i:i+len(sub)] == sub {
-				return true
-			}
-		}
-	}
-	return false
-}
