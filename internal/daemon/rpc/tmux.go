@@ -292,68 +292,9 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 
 	// Run quickstart inside the pane for PID isolation
 	if !req.NoAgent {
-		quickstartCmd := buildInlineQuickstartCmd(req)
-		target := name + ":0.0"
-		if err := ttmux.SendKeys(target, quickstartCmd); err != nil {
-			return nil, fmt.Errorf("send quickstart: %w", err)
+		if err := h.runInlineQuickstart(ctx, req, name); err != nil {
+			return nil, err
 		}
-		if err := ttmux.SendSpecialKey(target, "Enter"); err != nil {
-			return nil, fmt.Errorf("send enter: %w", err)
-		}
-		// Enforce single identity AFTER quickstart command is sent successfully.
-		// Quickstart runs asynchronously in the pane — this cleans pre-existing
-		// stale identities. The new identity will be written by quickstart.
-		//
-		// thrum-182j: mirror agent.go's keeper-list expansion so every
-		// agent registered against this worktree in session_refs
-		// survives enforcement. Without this, creating a tmux session
-		// for agent A in a worktree where agent B is already registered
-		// would quarantine agent B's identity file.
-		//
-		// Liveness gate (IsPIDAlive): refuse to quarantine a file whose
-		// AgentPID is currently running — kernel-verified backstop for
-		// a stale keeper list.
-		//
-		// AllowCrossWorktree is intentionally true here: HandleCreate
-		// legitimately operates on a target worktree (req.Cwd) that is
-		// NOT the caller's own cwd. The caller is typically a
-		// coordinator CLI instance creating a pane in a sibling
-		// worktree — the use case the static CWD-match guard is
-		// explicitly designed to allow via the override. The keeper-
-		// list expansion + liveness gate remain the active defenses
-		// on this path.
-		keepers := []string{req.AgentName}
-		if h.state != nil {
-			keepers = append(keepers, h.state.ListAgentsInWorktree(ctx, req.Cwd)...)
-		}
-		worktree.EnforceOneIdentityWith(req.Cwd, worktree.EnforceOpts{
-			IsPIDAlive:         func(pid int) bool { return process.IsRunning(pid) },
-			AllowCrossWorktree: true,
-		}, keepers...)
-
-		// Shell init (oh-my-zsh, etc.) can swallow the first command.
-		// Poll for the identity file; if it doesn't appear, re-send quickstart.
-		go func() {
-			idDir := filepath.Join(req.Cwd, ".thrum", "identities")
-			idPath := filepath.Join(idDir, req.AgentName+".json")
-			// Follow redirect symlink if present
-			if resolved, err := filepath.EvalSymlinks(idDir); err == nil {
-				idPath = filepath.Join(resolved, req.AgentName+".json")
-			}
-
-			deadline := time.Now().Add(5 * time.Second)
-			for time.Now().Before(deadline) {
-				if _, err := os.Stat(idPath); err == nil {
-					return // quickstart succeeded
-				}
-				time.Sleep(500 * time.Millisecond)
-			}
-
-			// Identity not found — shell likely swallowed the command. Retry.
-			slog.Info("quickstart identity not found after 5s, retrying", "agent", req.AgentName, "session", name)
-			_ = ttmux.SendKeys(target, quickstartCmd)
-			_ = ttmux.SendSpecialKey(target, "Enter")
-		}()
 	} else {
 		// For bare sessions, still write tmux_session to any existing identity
 		target := name + ":0.0"
@@ -1259,6 +1200,164 @@ func (h *TmuxHandler) findIdentityForSession(ctx context.Context, sessionName st
 		}
 	}
 	return "", nil, ""
+}
+
+// identityPollInterval is the cadence used by waitForIdentityFile to
+// stat the target path. Exposed as a var for test overrides; production
+// callers should not mutate at runtime.
+var identityPollInterval = 500 * time.Millisecond
+
+// tmux-side-effect seams. Package vars so unit tests can exercise
+// runInlineQuickstart end-to-end without a real tmux daemon. Tests
+// must restore the original values via t.Cleanup.
+var (
+	sendKeysFn       = ttmux.SendKeys
+	sendSpecialKeyFn = ttmux.SendSpecialKey
+	killSessionFn    = ttmux.KillSession
+)
+
+// waitForIdentityFile blocks until the identity file at idPath appears
+// on disk, or the combined initial+retry window expires. Between the
+// two windows, `resend` is invoked once — shell init (oh-my-zsh etc.)
+// can swallow the first send-keys, and a second attempt usually lands.
+//
+// The caller's ctx is honored: cancellation returns ctx.Err() even
+// while we would otherwise still be waiting. This matters for daemon
+// graceful-shutdown and client disconnects — without ctx-awareness a
+// client that drops mid-create would burn the full 10s budget.
+//
+// Returns nil on success. On resend-function failure the wrapped error
+// is returned immediately. On combined-timeout a descriptive error is
+// returned including the total window waited.
+//
+// Pre thrum-ns0b this logic ran in a background goroutine, so
+// HandleCreate returned before the identity file existed. That raced
+// a back-to-back `thrum tmux launch` which could not find any identity
+// files to bind tmux_session to (writeTmuxToIdentity fell through all
+// three passes). Running synchronously closes the race at the cost of
+// up to ~10s latency on HandleCreate when the shell is slow.
+func waitForIdentityFile(ctx context.Context, idPath string, initial, retry time.Duration, resend func() error) error {
+	if ok, ctxErr := waitUntilExists(ctx, idPath, initial); ok {
+		return nil
+	} else if ctxErr != nil {
+		return ctxErr
+	}
+	if resend != nil {
+		if err := resend(); err != nil {
+			return fmt.Errorf("re-send quickstart after initial %s wait: %w", initial, err)
+		}
+	}
+	if ok, ctxErr := waitUntilExists(ctx, idPath, retry); ok {
+		return nil
+	} else if ctxErr != nil {
+		return ctxErr
+	}
+	return fmt.Errorf("quickstart did not write identity file %s within %s", idPath, initial+retry)
+}
+
+// waitUntilExists polls idPath every identityPollInterval up to the
+// given duration. Returns (true, nil) as soon as os.Stat succeeds,
+// (false, nil) on deadline, and (false, ctx.Err()) on context
+// cancellation. Never overshoots the caller's deadline by more than
+// the time of a single os.Stat call.
+func waitUntilExists(ctx context.Context, path string, within time.Duration) (bool, error) {
+	if _, err := os.Stat(path); err == nil {
+		return true, nil
+	}
+	deadline := time.After(within)
+	ticker := time.NewTicker(identityPollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-deadline:
+			return false, nil
+		case <-ticker.C:
+			if _, err := os.Stat(path); err == nil {
+				return true, nil
+			}
+		}
+	}
+}
+
+// runInlineQuickstart sends the inline thrum-quickstart command into
+// the pane's shell and blocks until the identity file is written (or
+// the combined 10s budget expires). Factored out of HandleCreate so
+// the synchronous-wait invariant can be asserted at the RPC boundary
+// in unit tests: a future refactor back to a background goroutine
+// would fail these tests even if the waitForIdentityFile helper stayed
+// in place.
+//
+// Failure modes:
+//   - sendKeysFn/sendSpecialKeyFn error → session untouched, error returned.
+//   - EnforceOneIdentityWith → best-effort cleanup, non-fatal.
+//   - Combined 10s budget exhausted → tmux session is killed so callers
+//     don't see a half-initialized pane, structured error returned.
+//
+// ctx is honored in the wait loop: daemon shutdown / client disconnect
+// mid-create returns ctx.Err() instead of burning the full budget.
+func (h *TmuxHandler) runInlineQuickstart(ctx context.Context, req TmuxCreateRequest, name string) error {
+	quickstartCmd := buildInlineQuickstartCmd(req)
+	target := name + ":0.0"
+	if err := sendKeysFn(target, quickstartCmd); err != nil {
+		return fmt.Errorf("send quickstart: %w", err)
+	}
+	if err := sendSpecialKeyFn(target, "Enter"); err != nil {
+		return fmt.Errorf("send enter: %w", err)
+	}
+
+	// Enforce single identity AFTER quickstart command is sent
+	// successfully. Quickstart runs asynchronously in the pane —
+	// this cleans pre-existing stale identities. The new identity
+	// will be written by quickstart.
+	//
+	// thrum-182j: mirror agent.go's keeper-list expansion so every
+	// agent registered against this worktree in session_refs survives
+	// enforcement. Liveness gate (IsPIDAlive) refuses to quarantine a
+	// file whose owning agent is currently running.
+	//
+	// AllowCrossWorktree is intentionally true: HandleCreate
+	// legitimately operates on a target worktree (req.Cwd) that is NOT
+	// the caller's own cwd — the coordinator creating a pane in a
+	// sibling worktree is the canonical use case.
+	keepers := []string{req.AgentName}
+	if h.state != nil {
+		keepers = append(keepers, h.state.ListAgentsInWorktree(ctx, req.Cwd)...)
+	}
+	worktree.EnforceOneIdentityWith(req.Cwd, worktree.EnforceOpts{
+		IsPIDAlive:         func(pid int) bool { return process.IsRunning(pid) },
+		AllowCrossWorktree: true,
+	}, keepers...)
+
+	// Shell init (oh-my-zsh, etc.) can swallow the first send-keys.
+	// Block until the identity file lands on disk: a back-to-back
+	// `thrum tmux launch` would otherwise find zero identity files
+	// (pre-fix this ran in a goroutine — thrum-ns0b).
+	idDir := filepath.Join(req.Cwd, ".thrum", "identities")
+	idPath := filepath.Join(idDir, req.AgentName+".json")
+	if resolved, err := filepath.EvalSymlinks(idDir); err == nil {
+		idPath = filepath.Join(resolved, req.AgentName+".json")
+	}
+	resend := func() error {
+		slog.Info("tmux.create.quickstart-resending",
+			slog.String("agent", req.AgentName), slog.String("session", name),
+		)
+		if err := sendKeysFn(target, quickstartCmd); err != nil {
+			return err
+		}
+		return sendSpecialKeyFn(target, "Enter")
+	}
+	if err := waitForIdentityFile(ctx, idPath, 5*time.Second, 5*time.Second, resend); err != nil {
+		slog.Warn("tmux.create.quickstart-timeout",
+			slog.String("agent", req.AgentName),
+			slog.String("session", name),
+			slog.String("err", err.Error()),
+		)
+		_ = killSessionFn(name)
+		return fmt.Errorf("tmux create: %w", err)
+	}
+	return nil
 }
 
 // buildInlineQuickstartCmd returns the shell-safe quickstart command
