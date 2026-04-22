@@ -292,7 +292,12 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 
 	// Run quickstart inside the pane for PID isolation
 	if !req.NoAgent {
-		quickstartCmd := worktree.BuildQuickstartCmd(req.AgentName, req.Role, req.Module, req.Intent, req.Runtime)
+		// noAgentPID=true: the inline quickstart runs in the pane's
+		// shell which exits immediately after registration. Persisting
+		// its PID would trip HandleLaunch's G4 writer-liveness check on
+		// the subsequent launch. Prime from the real runtime claims the
+		// PID via guard.WritePID (thrum-x6e8.6).
+		quickstartCmd := worktree.BuildQuickstartCmd(req.AgentName, req.Role, req.Module, req.Intent, req.Runtime, true)
 		target := name + ":0.0"
 		if err := ttmux.SendKeys(target, quickstartCmd); err != nil {
 			return nil, fmt.Errorf("send quickstart: %w", err)
