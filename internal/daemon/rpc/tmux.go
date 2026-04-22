@@ -422,8 +422,22 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 		}()
 	}
 
+	// Preamble: null the stored agent_pid if it belongs to an exited
+	// process. Without this, writeTmuxToIdentity's Pass 0 trips G4
+	// strict writer-liveness on the tmux-create inline-quickstart
+	// subshell PID and tmux_session never gets written. After the
+	// clear, Pass 0's subjectPID=0 skip applies and the write succeeds.
+	// First /thrum:prime then reclaims the PID via guard.WritePID at
+	// cmd/thrum/main.go:4060-4064 (thrum-x6e8.6).
+	h.clearStalePIDForLaunch(name)
+
 	// Write tmux_session and runtime to the agent's identity file
 	h.writeTmuxToIdentity(name, target, runtime)
+
+	// Part 3 regression guard: if tmux_session is still empty after the
+	// full write pass, emit an observable warn so future breakage of
+	// this invariant doesn't silently drift back in.
+	h.warnIfTmuxSessionEmpty(name)
 
 	// Enroll the session in the silence-hash poller. Runs detached from
 	// tmux's alert-silence hook (which is unreliable on detached
@@ -796,45 +810,26 @@ func (h *TmuxHandler) writeTmuxToIdentity(sessionName, target, runtime string) {
 // any fallback condition (no cwd mapping, empty identities dir, >1 file in
 // the dir, or G4 refusal) so the caller proceeds to Pass 1/2.
 func (h *TmuxHandler) writeTmuxByWorktreeCwd(sessionName, target, runtime string) bool {
-	h.sessionMu.RLock()
-	cwd, ok := h.sessionCwds[sessionName]
-	h.sessionMu.RUnlock()
-	if !ok || cwd == "" {
+	cwd, ok := h.sessionCwd(sessionName)
+	if !ok {
 		return false
 	}
 
-	idDir := filepath.Join(cwd, ".thrum", "identities")
-	entries, err := os.ReadDir(idDir)
-	if err != nil {
+	// Enumerate first (rather than calling soleIdentityFile directly) so
+	// the multi-file invariant-violation warn still fires on this path —
+	// HandleLaunch's preamble uses soleIdentityFile silently because
+	// ClearPIDIfDead is best-effort, but Pass 0 wants operator signal.
+	files := identityFilesInWorktree(cwd)
+	if len(files) == 0 {
 		return false
 	}
-
-	// Collect .json identity files in this worktree. EnforceOneIdentity
-	// (worktree package, invoked at HandleCreate quickstart path) guarantees
-	// a single identity per worktree. The slice below is cautious wording
-	// for an expected-to-be-one set.
-	var identityFiles []string
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
-			continue
-		}
-		identityFiles = append(identityFiles, filepath.Join(idDir, entry.Name()))
-	}
-	if len(identityFiles) == 0 {
-		return false
-	}
-	if len(identityFiles) > 1 {
-		// EnforceOneIdentity invariant violated. Fall back to Pass 1/2
-		// to avoid overwriting multiple files with the same session
-		// target. slog.Warn surfaces in structured daemon logs so
-		// operators can see the misconfiguration (log.Printf-level
-		// output is often filtered out by structured consumers).
+	if len(files) > 1 {
 		slog.Warn("tmux 51cg: multiple identity files in worktree — falling back to name/session match",
-			"worktree_cwd", cwd, "identity_files", identityFiles)
+			"worktree_cwd", cwd, "identity_files", files)
 		return false
 	}
 
-	path := identityFiles[0]
+	path := files[0]
 	data, err := os.ReadFile(path) // #nosec G304 -- path is .thrum/identities/<name>.json under a cwd we already trust
 	if err != nil {
 		return false
@@ -1269,6 +1264,104 @@ func (h *TmuxHandler) findIdentityForSession(ctx context.Context, sessionName st
 		}
 	}
 	return "", nil, ""
+}
+
+// sessionCwd returns the cwd registered for a tmux session by
+// HandleCreate. False when the map has no entry or the entry is empty.
+// Shared between Pass 0 (writeTmuxByWorktreeCwd) and HandleLaunch's
+// preamble so both operate on the same source of truth under the same
+// lock discipline.
+func (h *TmuxHandler) sessionCwd(sessionName string) (string, bool) {
+	h.sessionMu.RLock()
+	defer h.sessionMu.RUnlock()
+	cwd, ok := h.sessionCwds[sessionName]
+	if !ok || cwd == "" {
+		return "", false
+	}
+	return cwd, true
+}
+
+// identityFilesInWorktree enumerates .json identity files under
+// <cwd>/.thrum/identities/. Returns an empty slice for any read error or
+// empty directory; callers decide how to handle len==0 / len>1.
+func identityFilesInWorktree(cwd string) []string {
+	idDir := filepath.Join(cwd, ".thrum", "identities")
+	entries, err := os.ReadDir(idDir)
+	if err != nil {
+		return nil
+	}
+	var files []string
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		files = append(files, filepath.Join(idDir, entry.Name()))
+	}
+	return files
+}
+
+// soleIdentityFile returns the single .json identity file in
+// <cwd>/.thrum/identities/, or "" + false when zero or >1 files exist.
+// EnforceOneIdentity guarantees exactly one under normal operation;
+// callers that want an observable signal on the pathological >1 case
+// should enumerate directly via identityFilesInWorktree.
+func soleIdentityFile(cwd string) (string, bool) {
+	files := identityFilesInWorktree(cwd)
+	if len(files) != 1 {
+		return "", false
+	}
+	return files[0], true
+}
+
+// clearStalePIDForLaunch is HandleLaunch's preamble: if the session's
+// registered cwd maps to a single identity file whose stored agent_pid
+// belongs to an exited process, null it via guard.ClearPIDIfDead.
+// Best-effort — any enumeration or clear error is logged and swallowed;
+// the launch proceeds regardless.
+func (h *TmuxHandler) clearStalePIDForLaunch(sessionName string) {
+	cwd, ok := h.sessionCwd(sessionName)
+	if !ok {
+		return
+	}
+	idPath, ok := soleIdentityFile(cwd)
+	if !ok {
+		return
+	}
+	if _, err := guard.ClearPIDIfDead(idPath); err != nil {
+		slog.Warn("tmux.launch.clear-pid-failed",
+			slog.String("path", idPath),
+			slog.String("err", err.Error()),
+		)
+	}
+}
+
+// warnIfTmuxSessionEmpty inspects the session's identity file after
+// writeTmuxToIdentity has run and emits a regression warn when the
+// TmuxSession field is still empty. Surfaces Part 3 cascade regressions
+// that would otherwise be silent.
+func (h *TmuxHandler) warnIfTmuxSessionEmpty(sessionName string) {
+	cwd, ok := h.sessionCwd(sessionName)
+	if !ok {
+		return
+	}
+	idPath, ok := soleIdentityFile(cwd)
+	if !ok {
+		return
+	}
+	b, err := os.ReadFile(idPath) // #nosec G304 -- idPath is .thrum/identities/<name>.json under our own sessionCwd map
+	if err != nil {
+		return
+	}
+	var id config.IdentityFile
+	if err := json.Unmarshal(b, &id); err != nil {
+		return
+	}
+	if id.TmuxSession == "" {
+		slog.Warn("tmux.launch.tmux-session-still-empty",
+			slog.String("path", idPath),
+			slog.String("session", sessionName),
+		)
+	}
 }
 
 // clearTmuxFromIdentitiesInDir removes tmux_session and runtime from identity files
