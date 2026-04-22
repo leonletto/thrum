@@ -332,28 +332,40 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 		}, keepers...)
 
 		// Shell init (oh-my-zsh, etc.) can swallow the first command.
-		// Poll for the identity file; if it doesn't appear, re-send quickstart.
-		go func() {
-			idDir := filepath.Join(req.Cwd, ".thrum", "identities")
-			idPath := filepath.Join(idDir, req.AgentName+".json")
-			// Follow redirect symlink if present
-			if resolved, err := filepath.EvalSymlinks(idDir); err == nil {
-				idPath = filepath.Join(resolved, req.AgentName+".json")
+		// Block until the identity file lands on disk: quickstart is
+		// inherently async (runs in the pane's shell), but the CLI
+		// caller typically chains `thrum tmux launch` back-to-back and
+		// HandleLaunch needs the identity file present to bind
+		// tmux_session. thrum-ns0b: was a goroutine pre-fix; the race
+		// silently left tmux_session null on the launch side.
+		idDir := filepath.Join(req.Cwd, ".thrum", "identities")
+		idPath := filepath.Join(idDir, req.AgentName+".json")
+		if resolved, err := filepath.EvalSymlinks(idDir); err == nil {
+			idPath = filepath.Join(resolved, req.AgentName+".json")
+		}
+		resend := func() error {
+			slog.Info("tmux.create.quickstart-resending",
+				slog.String("agent", req.AgentName), slog.String("session", name),
+			)
+			if err := ttmux.SendKeys(target, quickstartCmd); err != nil {
+				return err
 			}
-
-			deadline := time.Now().Add(5 * time.Second)
-			for time.Now().Before(deadline) {
-				if _, err := os.Stat(idPath); err == nil {
-					return // quickstart succeeded
-				}
-				time.Sleep(500 * time.Millisecond)
-			}
-
-			// Identity not found — shell likely swallowed the command. Retry.
-			slog.Info("quickstart identity not found after 5s, retrying", "agent", req.AgentName, "session", name)
-			_ = ttmux.SendKeys(target, quickstartCmd)
-			_ = ttmux.SendSpecialKey(target, "Enter")
-		}()
+			return ttmux.SendSpecialKey(target, "Enter")
+		}
+		if err := waitForIdentityFile(idPath, 5*time.Second, 5*time.Second, resend); err != nil {
+			// Failure mode: quickstart never wrote the identity file
+			// even after a retry. Kill the tmux session so the caller
+			// doesn't see a half-initialized pane; return a structured
+			// error so the CLI caller can distinguish "create failed"
+			// from "create succeeded, launch failed."
+			slog.Warn("tmux.create.quickstart-timeout",
+				slog.String("agent", req.AgentName),
+				slog.String("session", name),
+				slog.String("err", err.Error()),
+			)
+			_ = ttmux.KillSession(name)
+			return nil, fmt.Errorf("tmux create: %w", err)
+		}
 	} else {
 		// For bare sessions, still write tmux_session to any existing identity
 		target := name + ":0.0"
@@ -1259,6 +1271,57 @@ func (h *TmuxHandler) findIdentityForSession(ctx context.Context, sessionName st
 		}
 	}
 	return "", nil, ""
+}
+
+// identityPollInterval is the cadence used by waitForIdentityFile to
+// stat the target path. Exposed as a var for test overrides; production
+// callers should not mutate at runtime.
+var identityPollInterval = 500 * time.Millisecond
+
+// waitForIdentityFile blocks until the identity file at idPath appears
+// on disk, or the combined initial+retry window expires. Between the
+// two windows, `resend` is invoked once — shell init (oh-my-zsh etc.)
+// can swallow the first send-keys, and a second attempt usually lands.
+//
+// Returns nil on success. On resend-function failure the wrapped error
+// is returned immediately. On combined-timeout a descriptive error is
+// returned including the total window waited.
+//
+// Pre thrum-ns0b this logic ran in a background goroutine, so
+// HandleCreate returned before the identity file existed. That raced
+// a back-to-back `thrum tmux launch` which could not find any identity
+// files to bind tmux_session to (writeTmuxToIdentity fell through all
+// three passes). Running synchronously closes the race at the cost of
+// up to ~10s latency on HandleCreate when the shell is slow.
+func waitForIdentityFile(idPath string, initial, retry time.Duration, resend func() error) error {
+	if waitUntilExists(idPath, initial) {
+		return nil
+	}
+	if resend != nil {
+		if err := resend(); err != nil {
+			return fmt.Errorf("re-send quickstart after initial %s wait: %w", initial, err)
+		}
+	}
+	if waitUntilExists(idPath, retry) {
+		return nil
+	}
+	return fmt.Errorf("quickstart did not write identity file %s within %s", idPath, initial+retry)
+}
+
+// waitUntilExists polls idPath every identityPollInterval up to the
+// given duration. Returns true as soon as os.Stat succeeds.
+func waitUntilExists(path string, within time.Duration) bool {
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+		time.Sleep(identityPollInterval)
+	}
+	// One final check at the deadline, in case the sleep-tick landed
+	// on us just as the file appeared.
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // buildInlineQuickstartCmd returns the shell-safe quickstart command
