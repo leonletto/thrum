@@ -217,6 +217,27 @@ func reconcileDrift(ctx context.Context, repoPath string, idFile *config.Identit
 		idFile.Branch = branch
 		changed = true
 	}
+	// thrum-x6e8.2: self-heal bare-name Worktree values. Pre-fix
+	// quickstart + worktree-create wrote filepath.Base(repoPath); three
+	// downstream consumers (main.go:8005 snapshot-save fallback,
+	// guard.CWDMatches at guard.go:102, context.WorktreePath at
+	// context.go:509) misbehave on the basename form. Since
+	// reconcileDrift is bound to the worktree at repoPath, we can
+	// derive the correct absolute path directly — no lookup, no
+	// shell-out. Best-effort: if repoPath is unstat-able, warn and
+	// preserve the stored value.
+	if idFile.Worktree != "" && !filepath.IsAbs(idFile.Worktree) {
+		if _, err := os.Stat(repoPath); err == nil {
+			idFile.Worktree = filepath.Clean(repoPath)
+			changed = true
+		} else if cc != nil && cc.warnLogger != nil {
+			cc.warnLogger.Warn("guard.reconcile.worktree-path-derive-failed",
+				slog.String("repo_path", repoPath),
+				slog.String("stored", idFile.Worktree),
+				slog.String("err", err.Error()),
+			)
+		}
+	}
 	if !changed {
 		return nil
 	}
