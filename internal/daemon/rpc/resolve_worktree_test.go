@@ -146,5 +146,12 @@ func TestWorktreeExists_PathAware(t *testing.T) {
 			t.Errorf("expected false for unmatched legacy name")
 		}
 	})
+
+	t.Run("empty_input_returns_false", func(t *testing.T) {
+		h := newAgentHandlerAt(t, repo)
+		if h.worktreeExists(context.Background(), "") {
+			t.Errorf("expected false for empty input")
+		}
+	})
 }
 

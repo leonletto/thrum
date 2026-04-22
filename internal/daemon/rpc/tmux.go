@@ -941,11 +941,17 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 	}
 
 	// Resolve worktree to path BEFORE killing — if resolution fails, keep the session alive.
-	// IdentityFile.Worktree is a bare name like "team-fix".
+	// idFile.Worktree may be an absolute path (post thrum-x6e8.2 / nu16)
+	// OR a bare name like "team-fix" (legacy — rewritten on next
+	// guard.Check via reconcileDrift). resolveWorktreePath handles both.
 	repoDir := filepath.Dir(h.thrumDir)
 	cwd := resolveWorktreePath(ctx, repoDir, idFile.Worktree)
 	if cwd == "" {
-		// Fallback: if worktree matches the repo itself
+		// Legacy-only fallback: caller is inside the main repo itself
+		// and stored a bare name matching filepath.Base(repoDir). This
+		// branch is dead for the abs-path shape (an absolute path can
+		// never equal a basename) but remains valid for bare-name
+		// identity files that haven't yet been reconciled.
 		if filepath.Base(repoDir) == idFile.Worktree || idFile.Worktree == "" {
 			cwd = repoDir
 		}
