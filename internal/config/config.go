@@ -225,12 +225,23 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 		}
 	}
 
-	// Pass 1: Worktree-based filtering
+	// Pass 1: Worktree-based filtering. currentWT is an absolute path
+	// (thrum-8bza). idFile.Worktree may be either shape: absolute path
+	// (post thrum-x6e8.2 / nu16) or a bare name (legacy fixtures, in
+	// the process of being self-healed by reconcileDrift). Accept both.
 	currentWT := detectCurrentWorktree(dirPath)
 	if currentWT != "" {
+		currentBasename := filepath.Base(currentWT)
 		var matches []*IdentityFile
 		for _, id := range identities {
+			if id.Worktree == "" {
+				continue
+			}
 			if id.Worktree == currentWT {
+				matches = append(matches, id)
+				continue
+			}
+			if !filepath.IsAbs(id.Worktree) && id.Worktree == currentBasename {
 				matches = append(matches, id)
 			}
 		}
@@ -253,7 +264,16 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 		len(jsonFiles), strings.Join(available, ", "))
 }
 
-// detectCurrentWorktree returns the current git worktree name, or "" if detection fails.
+// detectCurrentWorktree returns the absolute path of the current git
+// worktree, or "" if detection fails.
+//
+// thrum-8bza: previously returned filepath.Base(toplevel) so the Pass 1
+// comparison at loadIdentityFromDir could match idFile.Worktree's
+// bare-name form. After thrum-x6e8.2 / nu16, identity files store the
+// full path, so this helper aligns by also returning the full path.
+// Legacy bare-name identity files self-heal via reconcileDrift on the
+// next guard.Check pass; during that window Pass 1 just falls through
+// to the generic ambiguous-identity error (same behavior as zero-match).
 func detectCurrentWorktree(identitiesDir string) string {
 	// identitiesDir is .thrum/identities/ — go up two levels to get repo root
 	repoRoot := filepath.Dir(filepath.Dir(identitiesDir))
@@ -261,7 +281,7 @@ func detectCurrentWorktree(identitiesDir string) string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Base(strings.TrimSpace(string(out)))
+	return filepath.Clean(strings.TrimSpace(string(out)))
 }
 
 // LoadIdentityFromWorktree reads the agent identity from a specific worktree

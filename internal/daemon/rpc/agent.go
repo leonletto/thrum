@@ -1363,24 +1363,31 @@ func (h *AgentHandler) HandleCleanup(ctx context.Context, params json.RawMessage
 	}, nil
 }
 
-// worktreeExists checks if a worktree exists via git worktree list.
-func (h *AgentHandler) worktreeExists(ctx context.Context, worktreeName string) bool {
-	// Run git worktree list and check if worktree name appears
+// worktreeExists reports whether the stored worktree identifier maps
+// to a live directory. Accepts either an absolute path (post
+// thrum-x6e8.2 / nu16 identity files) or a bare basename (legacy).
+// For the absolute-path shape, os.Stat(stored) is authoritative. For
+// the bare-name shape, match against `git worktree list`.
+func (h *AgentHandler) worktreeExists(ctx context.Context, stored string) bool {
+	if stored == "" {
+		return false
+	}
+	if filepath.IsAbs(stored) {
+		_, err := os.Stat(stored)
+		return err == nil
+	}
+	// Legacy bare-name fallback — consult git worktree list.
 	output, err := safecmd.Git(ctx, h.state.RepoPath(), "worktree", "list", "--porcelain")
 	if err != nil {
 		return false
 	}
-
-	// Parse output to find worktree
 	for line := range strings.SplitSeq(string(output), "\n") {
 		if path, ok := strings.CutPrefix(line, "worktree "); ok {
-			// Check if path ends with worktree name
-			if strings.HasSuffix(path, "/"+worktreeName) || strings.HasSuffix(path, "\\"+worktreeName) || filepath.Base(path) == worktreeName {
+			if strings.HasSuffix(path, "/"+stored) || strings.HasSuffix(path, "\\"+stored) || filepath.Base(path) == stored {
 				return true
 			}
 		}
 	}
-
 	return false
 }
 
