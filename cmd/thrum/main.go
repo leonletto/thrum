@@ -2219,6 +2219,10 @@ The agent identity is determined from:
 						fmt.Sprintf("%s_%s.json", flagRole, flagModule))
 					_ = os.Remove(legacyFile)
 				}
+				wtPath, err := worktree.NormalizeWorktreePath(flagRepo)
+				if err != nil {
+					return fmt.Errorf("normalize worktree path: %w", err)
+				}
 				identity := &config.IdentityFile{
 					Version: 3,
 					RepoID:  cli.GetRepoID(flagRepo),
@@ -2229,7 +2233,7 @@ The agent identity is determined from:
 						Module:  flagModule,
 						Display: cli.AutoDisplay(flagRole, flagModule),
 					},
-					Worktree: cli.GetWorktreeName(flagRepo),
+					Worktree: wtPath,
 					Branch:   cli.GetCurrentBranch(flagRepo),
 					Intent:   cli.DefaultIntent(flagRole, cli.GetRepoName(flagRepo)),
 				}
@@ -4510,6 +4514,10 @@ Examples:
 				idFile, _, loadErr := config.LoadIdentityWithPath(flagRepo)
 				if loadErr != nil || idFile == nil || idFile.Agent.Name != savedName {
 					// Create a new identity file: no existing file, or name mismatch
+					wtPath, wtErr := worktree.NormalizeWorktreePath(flagRepo)
+					if wtErr != nil {
+						return fmt.Errorf("normalize worktree path: %w", wtErr)
+					}
 					idFile = &config.IdentityFile{
 						Version: 4,
 						RepoID:  cli.GetRepoID(flagRepo),
@@ -4520,7 +4528,7 @@ Examples:
 							Module:  flagModule,
 							Display: cli.AutoDisplay(flagRole, flagModule),
 						},
-						Worktree: cli.GetWorktreeName(flagRepo),
+						Worktree: wtPath,
 						Branch:   cli.GetCurrentBranch(flagRepo),
 						Intent:   intent,
 					}
