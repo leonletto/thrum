@@ -161,7 +161,7 @@ func (h *TmuxHandler) ensureSession(name string) (string, string, error) {
 	sanitized := ttmux.SanitizeSessionName(name)
 	target := sanitized + ":0.0"
 
-	if ttmux.HasSession(sanitized) {
+	if hasSessionFn(sanitized) {
 		return sanitized, target, nil
 	}
 
@@ -262,6 +262,15 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 
 	if err := ttmux.CreateSession(name, req.Cwd); err != nil {
 		return nil, err
+	}
+
+	// Tag the session so HandleStatus can discover it via tmux state
+	// alone (no identity file required). This is what surfaces
+	// --no-agent sessions in `thrum tmux status`: they have no
+	// identity file, but the tag is enough. Non-fatal — untagged
+	// sessions still work, they just fall back to identity-file scan.
+	if err := ttmux.SetUserOption(name, "@thrum-managed", "1"); err != nil {
+		slog.Warn("tmux set-option @thrum-managed failed", "session", name, "error", err)
 	}
 
 	// Track session→cwd mapping for auto-create and single-session enforcement
@@ -414,14 +423,45 @@ func (h *TmuxHandler) HandleKill(ctx context.Context, params json.RawMessage) (a
 	return nil, ttmux.KillSession(name)
 }
 
-// HandleSend sends text to a tmux session pane by routing through the queue
-// for unified safe dispatch.
+// HandleSend sends text to a tmux session pane. Agent-managed sessions
+// route through the queue for unified @system completion notification
+// and silence-detection sequencing. --no-agent sessions bypass the
+// queue and do a raw SendKeys — queue semantics rely on an agent being
+// registered (see queue_rpc.go:64-70) and do not apply when no agent
+// exists. This preserves manual/scripted keystroke injection into
+// daemon-managed bare sessions, which is what Step 10D.11 (check-pane)
+// and the `--no-agent` tmux-first workflow need.
 func (h *TmuxHandler) HandleSend(ctx context.Context, params json.RawMessage) (any, error) {
 	var req TmuxSendRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
-	// Route through queue for unified safe dispatch
+	if req.Name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+	if req.Text == "" {
+		return nil, fmt.Errorf("text is required")
+	}
+
+	// Bypass the queue for sessions without a registered agent. The
+	// queue exists to wait for @system completion signals from an
+	// agent; on bare sessions no such agent exists and commands would
+	// otherwise pile up in "queued" forever (see queue_rpc.go:64-70).
+	agentName, _, _ := h.findIdentityForSession(ctx, req.Name)
+	if agentName == "" {
+		_, target, err := h.ensureSession(req.Name)
+		if err != nil {
+			return nil, err
+		}
+		if err := sendKeysFn(target, req.Text); err != nil {
+			return nil, fmt.Errorf("send-keys: %w", err)
+		}
+		// Return an empty QueueResponse so clients that ignore the
+		// body keep working and JSON-consumers see a consistent shape.
+		return &QueueResponse{}, nil
+	}
+
+	// Agent-managed session: preserve queue semantics.
 	queueParams, _ := json.Marshal(map[string]any{
 		"session":   req.Name,
 		"text":      req.Text,
@@ -508,6 +548,26 @@ func (h *TmuxHandler) HandleStatus(ctx context.Context, params json.RawMessage) 
 
 			sessions = append(sessions, info)
 		}
+	}
+
+	// Second pass: surface thrum-managed sessions that have no identity
+	// file (--no-agent) by reading tmux state directly. HandleCreate
+	// tags every session it creates with @thrum-managed=1, so we can
+	// safely filter out unrelated sessions on the same tmux socket.
+	names, _ := listSessionsFn()
+	for _, sessName := range names {
+		if seen[sessName] {
+			continue
+		}
+		val, err := getUserOptionFn(sessName, "@thrum-managed")
+		if err != nil || val != "1" {
+			continue
+		}
+		seen[sessName] = true
+		sessions = append(sessions, TmuxSessionInfo{
+			Name:  sessName,
+			State: "alive", // listed by tmux ⇒ present
+		})
 	}
 
 	return &TmuxStatusResponse{Sessions: sessions}, nil
@@ -1239,10 +1299,18 @@ var identityPollInterval = 500 * time.Millisecond
 // tmux-side-effect seams. Package vars so unit tests can exercise
 // runInlineQuickstart end-to-end without a real tmux daemon. Tests
 // must restore the original values via t.Cleanup.
+//
+// hasSessionFn / listSessionsFn / getUserOptionFn were added for
+// HandleSend's no-agent bypass path and HandleStatus's second pass
+// (thrum-ufv5.11/12) so both can be exercised end-to-end without
+// shelling out to tmux.
 var (
 	sendKeysFn       = ttmux.SendKeys
 	sendSpecialKeyFn = ttmux.SendSpecialKey
 	killSessionFn    = ttmux.KillSession
+	hasSessionFn     = ttmux.HasSession
+	listSessionsFn   = ttmux.ListSessions
+	getUserOptionFn  = ttmux.GetUserOption
 )
 
 // waitForIdentityFile blocks until the identity file at idPath appears
