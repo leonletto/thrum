@@ -1266,6 +1266,19 @@ func (h *TmuxHandler) findIdentityForSession(ctx context.Context, sessionName st
 	return "", nil, ""
 }
 
+// SetSessionCwdForTest wires a session→cwd mapping without going
+// through HandleCreate. Integration tests need this to exercise the
+// launch path without spinning up a full daemon bootstrap + git
+// worktree setup. Not for production use.
+func SetSessionCwdForTest(h *TmuxHandler, sessionName, cwd string) {
+	h.sessionMu.Lock()
+	defer h.sessionMu.Unlock()
+	if h.sessionCwds == nil {
+		h.sessionCwds = make(map[string]string)
+	}
+	h.sessionCwds[sessionName] = cwd
+}
+
 // sessionCwd returns the cwd registered for a tmux session by
 // HandleCreate. False when the map has no entry or the entry is empty.
 // Shared between Pass 0 (writeTmuxByWorktreeCwd) and HandleLaunch's
