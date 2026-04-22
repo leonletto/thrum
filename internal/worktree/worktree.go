@@ -326,7 +326,12 @@ func readAgentPID(path string) int {
 // for injection into a tmux pane. All values are single-quote wrapped.
 // Single quotes within values are escaped as '\” (end quote, escaped quote,
 // start quote). --force is always included for idempotent re-registration.
-func BuildQuickstartCmd(name, role, module, intent, runtime string) string {
+//
+// noAgentPID, when true, appends --no-agent-pid so the inline quickstart
+// persists agent_pid=0 instead of the caller's (short-lived subshell) PID.
+// Required for the tmux-create inline invocation — without it, HandleLaunch
+// trips G4 writer-liveness on a dead subshell PID (thrum-x6e8.6).
+func BuildQuickstartCmd(name, role, module, intent, runtime string, noAgentPID bool) string {
 	var parts []string
 	parts = append(parts, "thrum", "quickstart")
 	parts = append(parts, "--name", shellQuote(name))
@@ -341,6 +346,9 @@ func BuildQuickstartCmd(name, role, module, intent, runtime string) string {
 	}
 
 	parts = append(parts, "--force")
+	if noAgentPID {
+		parts = append(parts, "--no-agent-pid")
+	}
 
 	return strings.Join(parts, " ")
 }

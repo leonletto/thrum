@@ -9,6 +9,6 @@ func EnsureWorktreeRedirects(worktreePath, mainRepo string) error {
 }
 
 // BuildQuickstartCmd delegates to worktree.BuildQuickstartCmd.
-func BuildQuickstartCmd(name, role, module, intent, runtime string) string {
-	return worktree.BuildQuickstartCmd(name, role, module, intent, runtime)
+func BuildQuickstartCmd(name, role, module, intent, runtime string, noAgentPID bool) string {
+	return worktree.BuildQuickstartCmd(name, role, module, intent, runtime, noAgentPID)
 }

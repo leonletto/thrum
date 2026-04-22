@@ -622,7 +622,7 @@ func TestEnforceOneIdentity_QuarantineSkipped(t *testing.T) {
 // --- BuildQuickstartCmd tests ---
 
 func TestBuildQuickstartCmd_Basic(t *testing.T) {
-	cmd := BuildQuickstartCmd("impl_api", "implementer", "api", "", "")
+	cmd := BuildQuickstartCmd("impl_api", "implementer", "api", "", "", false)
 	expected := "thrum quickstart --name 'impl_api' --role 'implementer' --module 'api' --force"
 	if cmd != expected {
 		t.Errorf("got %q, want %q", cmd, expected)
@@ -630,7 +630,7 @@ func TestBuildQuickstartCmd_Basic(t *testing.T) {
 }
 
 func TestBuildQuickstartCmd_WithIntent(t *testing.T) {
-	cmd := BuildQuickstartCmd("impl_api", "implementer", "api", "Build the API endpoints", "claude")
+	cmd := BuildQuickstartCmd("impl_api", "implementer", "api", "Build the API endpoints", "claude", false)
 	if !strings.Contains(cmd, "--intent 'Build the API endpoints'") {
 		t.Errorf("missing intent: %s", cmd)
 	}
@@ -640,18 +640,32 @@ func TestBuildQuickstartCmd_WithIntent(t *testing.T) {
 }
 
 func TestBuildQuickstartCmd_QuotesSpecialChars(t *testing.T) {
-	cmd := BuildQuickstartCmd("impl_api", "implementer", "api", "Build API; handle auth", "")
+	cmd := BuildQuickstartCmd("impl_api", "implementer", "api", "Build API; handle auth", "", false)
 	if !strings.Contains(cmd, "'Build API; handle auth'") {
 		t.Errorf("intent not safely quoted: %s", cmd)
 	}
 }
 
 func TestBuildQuickstartCmd_EscapesSingleQuoteInIntent(t *testing.T) {
-	cmd := BuildQuickstartCmd("impl_api", "implementer", "api", "Build API's auth", "")
+	cmd := BuildQuickstartCmd("impl_api", "implementer", "api", "Build API's auth", "", false)
 	if strings.Contains(cmd, "'Build API's auth'") {
 		t.Errorf("unescaped single quote would break shell: %s", cmd)
 	}
 	if !strings.Contains(cmd, `'Build API'\''s auth'`) {
 		t.Errorf("expected escaped single quote: %s", cmd)
+	}
+}
+
+func TestBuildQuickstartCmd_WithNoAgentPID_AppendsFlag(t *testing.T) {
+	cmd := BuildQuickstartCmd("impl_api", "implementer", "api", "", "", true)
+	if !strings.Contains(cmd, "--no-agent-pid") {
+		t.Errorf("expected --no-agent-pid flag when noAgentPID=true, got: %s", cmd)
+	}
+}
+
+func TestBuildQuickstartCmd_WithoutNoAgentPID_OmitsFlag(t *testing.T) {
+	cmd := BuildQuickstartCmd("impl_api", "implementer", "api", "", "", false)
+	if strings.Contains(cmd, "--no-agent-pid") {
+		t.Errorf("did not expect --no-agent-pid flag when noAgentPID=false, got: %s", cmd)
 	}
 }

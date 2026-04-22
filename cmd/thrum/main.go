@@ -2219,6 +2219,10 @@ The agent identity is determined from:
 						fmt.Sprintf("%s_%s.json", flagRole, flagModule))
 					_ = os.Remove(legacyFile)
 				}
+				wtPath, err := worktree.NormalizeWorktreePath(flagRepo)
+				if err != nil {
+					return fmt.Errorf("normalize worktree path: %w", err)
+				}
 				identity := &config.IdentityFile{
 					Version: 3,
 					RepoID:  cli.GetRepoID(flagRepo),
@@ -2229,7 +2233,7 @@ The agent identity is determined from:
 						Module:  flagModule,
 						Display: cli.AutoDisplay(flagRole, flagModule),
 					},
-					Worktree: cli.GetWorktreeName(flagRepo),
+					Worktree: wtPath,
 					Branch:   cli.GetCurrentBranch(flagRepo),
 					Intent:   cli.DefaultIntent(flagRole, cli.GetRepoName(flagRepo)),
 				}
@@ -4379,6 +4383,7 @@ Examples:
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			noInit, _ := cmd.Flags().GetBool("no-init")
 			forceInit, _ := cmd.Flags().GetBool("force")
+			noAgentPID, _ := cmd.Flags().GetBool("no-agent-pid")
 
 			// Validate runtime if specified
 			if runtimeFlag != "" && !runtime.IsValidRuntime(runtimeFlag) {
@@ -4453,6 +4458,7 @@ Examples:
 				DryRun:       dryRun,
 				NoInit:       noInit,
 				Force:        forceInit,
+				NoAgentPID:   noAgentPID,
 			}
 
 			// In dry-run mode, we don't need a daemon connection
@@ -4508,6 +4514,10 @@ Examples:
 				idFile, _, loadErr := config.LoadIdentityWithPath(flagRepo)
 				if loadErr != nil || idFile == nil || idFile.Agent.Name != savedName {
 					// Create a new identity file: no existing file, or name mismatch
+					wtPath, wtErr := worktree.NormalizeWorktreePath(flagRepo)
+					if wtErr != nil {
+						return fmt.Errorf("normalize worktree path: %w", wtErr)
+					}
 					idFile = &config.IdentityFile{
 						Version: 4,
 						RepoID:  cli.GetRepoID(flagRepo),
@@ -4518,7 +4528,7 @@ Examples:
 							Module:  flagModule,
 							Display: cli.AutoDisplay(flagRole, flagModule),
 						},
-						Worktree: cli.GetWorktreeName(flagRepo),
+						Worktree: wtPath,
 						Branch:   cli.GetCurrentBranch(flagRepo),
 						Intent:   intent,
 					}
@@ -4619,6 +4629,13 @@ Examples:
 	cmd.Flags().Bool("no-init", false, "Skip runtime config generation, just register agent")
 	cmd.Flags().Bool("force", false, "Overwrite existing runtime config files")
 	cmd.Flags().String("preamble-file", "", "Custom preamble file to compose with default preamble")
+	// --no-agent-pid is intended for `thrum tmux create`'s inline
+	// quickstart. The inline caller is a short-lived subshell whose
+	// PID dies immediately; persisting it breaks `thrum tmux launch`'s
+	// G4 writer-liveness check. Direct shell use is allowed but
+	// unusual — first /thrum:prime from the runtime will reclaim the
+	// PID via guard.WritePID (thrum-x6e8.6).
+	cmd.Flags().Bool("no-agent-pid", false, "Persist agent_pid=0 instead of detecting the runtime ancestor (for inline tmux quickstart; defer PID claim to first /thrum:prime)")
 
 	return cmd
 }
