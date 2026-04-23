@@ -410,17 +410,20 @@ re-register.</p>
 commands. <code>thrum tmux create</code> (alias: <code>thrum tmux quickstart</code>) requires
 <code>--name</code>, <code>--role</code>, and <code>--module</code> and runs quickstart inside the new pane.
 <code>thrum worktree create</code> (alias: <code>thrum worktree setup</code>) accepts the same
-optional quickstart flags and, when all three are provided, creates a temp tmux
-session for PID isolation, runs quickstart, then destroys the temp session.</p>
+optional quickstart flags and, when all three are provided, creates the
+worktree plus a real tmux session and registers the agent identity inside it
+(PID-isolated, with a daemon-side retry if the shell init swallows the first
+attempt). The agent runtime is <strong>not</strong> started automatically — the output
+prints the next-step <code>thrum tmux launch &lt;name&gt;</code> command to start it.</p>
 <pre><code># Quickstart via tmux — runs inside the new pane
-thrum tmux create --name furiosa --role implementer --module auth
-thrum tmux quickstart --name furiosa --role implementer --module auth  # same thing
-
-# Quickstart via worktree create
-thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth \
+thrum tmux create implementer-auth --cwd /path/to/worktree \
   --name furiosa --role implementer --module auth
-thrum worktree setup --branch feature/auth --path ~/.workspaces/repo/auth \
-  --name furiosa --role implementer --module auth  # same thing</code></pre>
+thrum tmux launch implementer-auth
+
+# Quickstart via worktree create — also creates the tmux session
+thrum worktree create auth -b feature/auth \
+  --name furiosa --role implementer --module auth
+thrum tmux launch auth</code></pre>
 <p><strong>Single identity per worktree:</strong> after quickstart runs, any stale identity
 files left from previous registrations are cleaned up. Each worktree ends up
 with exactly one current identity file.</p>
@@ -512,12 +515,14 @@ thrum agent cleanup --force</code></pre>
 its own identity files. The preferred approach is <code>thrum worktree create</code>
 (alias: <code>thrum worktree setup</code>) — it creates the worktree, wires the Thrum
 redirect, and registers the agent in one command:</p>
-<pre><code># Preferred: create worktree and register agent together
-thrum worktree create --branch feature/auth --path ~/.workspaces/myapp/auth \
+<pre><code># Preferred: create worktree, register agent, then launch the runtime
+thrum worktree create auth -b feature/auth \
   --name furiosa --role implementer --module auth
+thrum tmux launch auth
 
-thrum worktree create --branch feature/sync --path ~/.workspaces/myapp/sync \
-  --name nux --role implementer --module sync</code></pre>
+thrum worktree create sync -b feature/sync \
+  --name nux --role implementer --module sync
+thrum tmux launch sync</code></pre>
 <p>Or if you need to register manually in an existing worktree:</p>
 <pre><code># Main worktree - coordinator (name must differ from role)
 thrum quickstart --name coord_main --role coordinator --module all

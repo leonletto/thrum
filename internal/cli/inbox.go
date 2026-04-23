@@ -117,6 +117,7 @@ func FormatInbox(result *InboxResult) string {
 type InboxFormatOptions struct {
 	ActiveScope string // The active filter scope (for empty state feedback)
 	ForAgent    string // The agent name being filtered for (for empty state / footer)
+	Unread      bool   // --unread filter: empty result produces no output (silent polling)
 	Quiet       bool
 	JSON        bool
 }
@@ -126,11 +127,16 @@ func FormatInboxWithOptions(result *InboxResult, opts InboxFormatOptions) string
 	var output strings.Builder
 
 	if len(result.Messages) == 0 {
+		// --unread is a polling filter: no messages means no signal.
+		// Silent empty output keeps hook/cron driven bash calls quiet.
+		if opts.Unread && !opts.JSON {
+			return ""
+		}
 		if opts.ActiveScope != "" {
 			fmt.Fprintf(&output, "No messages matching filter --scope %s\n", opts.ActiveScope)
 			fmt.Fprintf(&output, "  Showing 0 of %d total messages (filter: scope=%s)\n", result.Total, opts.ActiveScope)
 			if !opts.Quiet && !opts.JSON {
-				output.WriteString(Hint("inbox.empty", opts.Quiet, opts.JSON))
+				output.WriteString(LegacyHint("inbox.empty", opts.Quiet, opts.JSON))
 			}
 		} else if opts.ForAgent != "" {
 			fmt.Fprintf(&output, "No messages for @%s.\n", opts.ForAgent)
@@ -140,7 +146,7 @@ func FormatInboxWithOptions(result *InboxResult, opts InboxFormatOptions) string
 		} else {
 			output.WriteString("No messages in inbox.\n")
 			if !opts.Quiet && !opts.JSON {
-				output.WriteString(Hint("inbox.empty", opts.Quiet, opts.JSON))
+				output.WriteString(LegacyHint("inbox.empty", opts.Quiet, opts.JSON))
 			}
 		}
 		return output.String()

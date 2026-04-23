@@ -254,26 +254,35 @@ func TestCLI_TeamList(t *testing.T) {
 	}
 }
 
-// TestCLI_StatusOverview tests `thrum status` with populated data.
+// TestCLI_StatusOverview tests `thrum overview` with populated data.
+// (Historical name: this used to target `thrum status`, which was removed in
+// the S26-28 CLI audit. `thrum overview --json` is the successor composite
+// command covering identity + team + inbox + sync.)
 func TestCLI_StatusOverview(t *testing.T) {
 	bin := buildThrum(t)
 	repoDir := setupCLIFixture(t)
 
 	start := time.Now()
-	stdout, stderr, err := runThrum(t, bin, repoDir, "coordinator_0000", "status", "--json")
+	stdout, stderr, err := runThrum(t, bin, repoDir, "coordinator_0000", "overview", "--json")
 	duration := time.Since(start)
 	if err != nil {
-		t.Fatalf("status failed: %v\nstderr: %s\nstdout: %s", err, stderr, stdout)
+		t.Fatalf("overview failed: %v\nstderr: %s\nstdout: %s", err, stderr, stdout)
 	}
-	t.Logf("CLI status took %v", duration)
+	t.Logf("CLI overview took %v", duration)
 
-	// Status should contain health info
-	if !strings.Contains(stdout, "ok") && !strings.Contains(stdout, "status") {
-		t.Errorf("status output doesn't contain expected health info: %s", stdout[:min(len(stdout), 200)])
+	// Overview JSON should expose agent + health blocks (overview's top-level
+	// shape is {agent, health, team, inbox, ...}).
+	if !strings.Contains(stdout, "\"agent\"") || !strings.Contains(stdout, "\"health\"") {
+		t.Errorf("overview output missing expected agent/health blocks: %s", stdout[:min(len(stdout), 200)])
 	}
 }
 
-// TestCLI_GroupSend tests sending a message to a group via CLI.
+// TestCLI_GroupSend tests sending a role-broadcast message via CLI.
+// (Historical name: this used to send --to @<role> to a user-facing group.
+// Groups were removed as a user-facing concept in the S26-28 CLI audit;
+// role broadcast is now expressed via --mention @<role>. The replier needs
+// to be registered so the daemon knows a @coordinator exists; the fixture
+// provides coordinator_0000 by default.)
 func TestCLI_GroupSend(t *testing.T) {
 	bin := buildThrum(t)
 	repoDir := setupCLIFixture(t)
@@ -284,15 +293,15 @@ func TestCLI_GroupSend(t *testing.T) {
 		t.Fatalf("session start: %v\nstderr: %s", err, stderr)
 	}
 
-	// Send to the @coordinators group
+	// Broadcast to the coordinator role via --mention.
 	start := time.Now()
 	stdout, stderr, err := runThrum(t, bin, repoDir, "coordinator_0000",
-		"send", "Group test message", "--to", "@coordinators")
+		"send", "Role broadcast test message", "--mention", "@coordinator")
 	duration := time.Since(start)
 	if err != nil {
-		t.Fatalf("group send failed: %v\nstderr: %s\nstdout: %s", err, stderr, stdout)
+		t.Fatalf("role broadcast send failed: %v\nstderr: %s\nstdout: %s", err, stderr, stdout)
 	}
-	t.Logf("CLI group send took %v", duration)
+	t.Logf("CLI role broadcast send took %v", duration)
 }
 
 // TestCLI_WaitTimeout tests that `thrum wait --timeout` returns promptly.
@@ -379,7 +388,7 @@ func TestCLI_ReplyChain(t *testing.T) {
 		t.Fatalf("parse send result: %v\noutput: %s", err, stdout)
 	}
 	if sendResult.MessageID == "" {
-		t.Fatal("expected message_id from send")
+		t.Fatalf("expected message_id from send\nstdout: %s\nstderr: %s", stdout, stderr)
 	}
 
 	// Reply to the original

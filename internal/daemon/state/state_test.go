@@ -3,7 +3,9 @@ package state
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -673,14 +675,37 @@ func TestResolveAgentForMessage_EdgeCases(t *testing.T) {
 		}
 	})
 
-	t.Run("message_delete_nonexistent_message", func(t *testing.T) {
+	t.Run("message_delete_nonexistent_message_falls_back", func(t *testing.T) {
+		// When the original message isn't in the local DB, resolveAgentForMessage
+		// should gracefully fall back to "_unresolved" instead of returning an error.
+		// This prevents a missing message from poisoning the sync apply loop.
 		event := map[string]any{
 			"type":       "message.delete",
 			"message_id": "msg_nonexistent",
 		}
-		_, err := s.resolveAgentForMessage(context.Background(), event)
-		if err == nil {
-			t.Error("Expected error for nonexistent message")
+		name, err := s.resolveAgentForMessage(context.Background(), event)
+		if err != nil {
+			t.Fatalf("should not error for nonexistent message, got: %v", err)
+		}
+		if name != "_unresolved" {
+			t.Errorf("expected '_unresolved' fallback, got %q", name)
+		}
+	})
+
+	t.Run("message_receipt_nonexistent_uses_event_agent_id", func(t *testing.T) {
+		// Receipt events carry their own agent_id — use it as fallback when
+		// the referenced message doesn't exist locally.
+		event := map[string]any{
+			"type":       "message.receipt",
+			"message_id": "msg_nonexistent",
+			"agent_id":   "agent:reader:FALLBACK1",
+		}
+		name, err := s.resolveAgentForMessage(context.Background(), event)
+		if err != nil {
+			t.Fatalf("should not error for nonexistent message with agent_id fallback, got: %v", err)
+		}
+		if name != "reader_FALLBACK1" {
+			t.Errorf("expected 'reader_FALLBACK1' from fallback agent_id, got %q", name)
 		}
 	})
 
@@ -745,5 +770,223 @@ func TestWriteEvent_NonMessageEvent(t *testing.T) {
 	}
 	if events[0]["type"] != "session.start" {
 		t.Errorf("Expected session.start, got %s", events[0]["type"])
+	}
+}
+
+// TestWriteEvent_UnknownAuthorDoesNotBlock tests that message.edit, message.delete,
+// and message.receipt events for messages that don't exist locally do not block
+// the event apply path. This is the fix for the "poison pill" sync bug where a
+// missing message row would cause the sync loop to retry forever.
+func TestWriteEvent_UnknownAuthorDoesNotBlock(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0750); err != nil {
+		t.Fatalf("create thrum dir: %v", err)
+	}
+
+	st, err := NewState(thrumDir, thrumDir, "r_TEST123456", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	ctx := context.Background()
+
+	// (a) message.edit for a non-existent message should succeed
+	editEvent := types.MessageEditEvent{
+		Type:      "message.edit",
+		Timestamp: "2024-01-01T13:00:00Z",
+		MessageID: "msg_UNKNOWN_001",
+		Body: types.MessageBody{
+			Format:  "markdown",
+			Content: "Edited content for missing message",
+		},
+	}
+	if err := st.WriteEvent(ctx, editEvent); err != nil {
+		t.Fatalf("message.edit with unknown author should succeed, got: %v", err)
+	}
+
+	// (a) message.delete for a non-existent message should succeed
+	deleteEvent := types.MessageDeleteEvent{
+		Type:      "message.delete",
+		Timestamp: "2024-01-01T14:00:00Z",
+		MessageID: "msg_UNKNOWN_002",
+		Reason:    "cleanup",
+	}
+	if err := st.WriteEvent(ctx, deleteEvent); err != nil {
+		t.Fatalf("message.delete with unknown author should succeed, got: %v", err)
+	}
+
+	// (a) message.receipt for a non-existent message should succeed,
+	// and should use the receipt's own agent_id for JSONL routing
+	receiptEvent := types.MessageReceiptEvent{
+		Type:        "message.receipt",
+		Timestamp:   "2024-01-01T15:00:00Z",
+		MessageID:   "msg_UNKNOWN_003",
+		AgentID:     "agent:reader:XYZ789",
+		SessionID:   "ses_reader456",
+		ReceiptType: "read",
+	}
+	if err := st.WriteEvent(ctx, receiptEvent); err != nil {
+		t.Fatalf("message.receipt with unknown author should succeed, got: %v", err)
+	}
+
+	// (b) Verify sequences advanced — query events table for all 3 events
+	rows, err := st.RawDB().QueryContext(ctx, `SELECT event_id, type, sequence FROM events ORDER BY sequence`)
+	if err != nil {
+		t.Fatalf("query events: %v", err)
+	}
+	defer rows.Close()
+
+	var events []struct {
+		eventID  string
+		evtType  string
+		sequence int64
+	}
+	for rows.Next() {
+		var e struct {
+			eventID  string
+			evtType  string
+			sequence int64
+		}
+		if err := rows.Scan(&e.eventID, &e.evtType, &e.sequence); err != nil {
+			t.Fatalf("scan event: %v", err)
+		}
+		events = append(events, e)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows error: %v", err)
+	}
+
+	if len(events) != 3 {
+		t.Fatalf("expected 3 events in events table, got %d", len(events))
+	}
+	// Sequences should be monotonically increasing
+	for i := 1; i < len(events); i++ {
+		if events[i].sequence <= events[i-1].sequence {
+			t.Errorf("sequences not monotonically increasing: %d <= %d",
+				events[i].sequence, events[i-1].sequence)
+		}
+	}
+
+	// (c) The receipt event should have been routed to the receipt agent's JSONL file
+	// (using the fallback agent_id from the event)
+	receiptPath := filepath.Join(thrumDir, "messages", "reader_XYZ789.jsonl")
+	if _, err := os.Stat(receiptPath); err != nil {
+		t.Errorf("receipt event should be routed to agent's JSONL file, but %s not found: %v", receiptPath, err)
+	}
+
+	// The edit and delete events (no agent_id in event) should route to _unresolved.jsonl
+	unresolvedPath := filepath.Join(thrumDir, "messages", "_unresolved.jsonl")
+	if _, err := os.Stat(unresolvedPath); err != nil {
+		t.Errorf("edit/delete events with unknown author should route to _unresolved.jsonl, but not found: %v", err)
+	}
+
+	// (d) A later message.create for the same message should work fine —
+	// reconciliation just works because the message row carries the agent_id
+	createEvent := types.MessageCreateEvent{
+		Type:      "message.create",
+		Timestamp: "2024-01-01T12:00:00Z", // Earlier timestamp (out-of-order delivery)
+		MessageID: "msg_UNKNOWN_001",
+		AgentID:   "agent:writer:ABC123",
+		SessionID: "ses_writer789",
+		Body: types.MessageBody{
+			Format:  "markdown",
+			Content: "Original message arriving late",
+		},
+	}
+	if err := st.WriteEvent(ctx, createEvent); err != nil {
+		t.Fatalf("late message.create should succeed, got: %v", err)
+	}
+
+	// Verify the message is now queryable in the messages table
+	var msgContent string
+	err = st.RawDB().QueryRowContext(ctx,
+		`SELECT body_content FROM messages WHERE message_id = ?`, "msg_UNKNOWN_001",
+	).Scan(&msgContent)
+	if err != nil {
+		t.Fatalf("message should be queryable after late create: %v", err)
+	}
+	// The projector applied the edit event as a no-op (message didn't exist then),
+	// then the create inserted the original content. The content should be the
+	// original since the create is what actually inserts the row.
+	if msgContent != "Original message arriving late" {
+		t.Errorf("expected original content, got: %q", msgContent)
+	}
+}
+
+func TestNewState_BootstrapsIdentityWhenEmpty(t *testing.T) {
+	tmp := t.TempDir()
+	thrumDir := filepath.Join(tmp, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := NewState(thrumDir, thrumDir, "r_test_bootstrap", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer s.Close()
+
+	id := s.DaemonID()
+	if id == "" || !strings.HasPrefix(id, "d_") {
+		t.Fatalf("daemonID invalid: %q", id)
+	}
+
+	// config.json persisted
+	cfgBytes, err := os.ReadFile(filepath.Join(thrumDir, "config.json"))
+	if err != nil {
+		t.Fatalf("read config.json: %v", err)
+	}
+	if !strings.Contains(string(cfgBytes), id) {
+		t.Fatalf("daemon_id %q not found in config.json:\n%s", id, cfgBytes)
+	}
+
+	// SQLite mirror populated
+	var dbID string
+	if err := s.RawDB().QueryRow(`SELECT daemon_id FROM daemon_identity`).Scan(&dbID); err != nil {
+		t.Fatalf("query daemon_identity: %v", err)
+	}
+	if dbID != id {
+		t.Fatalf("SQLite daemon_id %q != state DaemonID %q", dbID, id)
+	}
+
+	// Identity accessor returns populated struct
+	ident := s.Identity()
+	if ident.DaemonID != id {
+		t.Fatalf("Identity().DaemonID = %q, want %q", ident.DaemonID, id)
+	}
+	if ident.RepoPath == "" {
+		t.Fatalf("Identity().RepoPath empty")
+	}
+}
+
+func TestNewState_UsesCallerIDVerbatim(t *testing.T) {
+	tmp := t.TempDir()
+	thrumDir := filepath.Join(tmp, ".thrum")
+	_ = os.MkdirAll(thrumDir, 0o750)
+
+	s, err := NewState(thrumDir, thrumDir, "r_test_verbatim", "fixed-test-daemon")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer s.Close()
+
+	if s.DaemonID() != "fixed-test-daemon" {
+		t.Fatalf("DaemonID = %q, want fixed-test-daemon", s.DaemonID())
+	}
+
+	// config.json must NOT have been created — caller-provided id path.
+	if _, err := os.Stat(filepath.Join(thrumDir, "config.json")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("config.json should not exist for test path; stat err = %v", err)
+	}
+
+	// daemon_identity table must be empty.
+	var count int
+	if err := s.RawDB().QueryRow(`SELECT COUNT(*) FROM daemon_identity`).Scan(&count); err != nil {
+		t.Fatalf("count daemon_identity: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("daemon_identity row count = %d, want 0", count)
 	}
 }

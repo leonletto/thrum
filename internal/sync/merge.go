@@ -184,6 +184,39 @@ func (m *Merger) MergeAll(ctx context.Context) (*MergeResult, error) {
 
 	// 6. Local-only files are kept as-is (will be pushed)
 
+	// 7. thrum-ychn: reset the local a-sync branch pointer to origin/a-sync
+	// so the next commit is fast-forward-able on push. MergeAll has already
+	// written deduped content into the working tree; --mixed preserves the
+	// working tree while moving HEAD (→ origin tip) and clearing the index
+	// (→ next stageChanges re-stages the merged content on top of the
+	// remote's history).
+	//
+	// Called from two paths, both intentionally:
+	//   (a) doSync pipeline: Fetch → MergeAll → CommitAndPush. The reset
+	//       here is the primary fix; it makes the first commit FF-able.
+	//   (b) CommitAndPush's internal rejection-retry at push.go:93 calls
+	//       MergeAll again after Fetch. The reset here ratchets HEAD
+	//       forward to whichever tip the retry's Fetch just pulled,
+	//       which is exactly what the retry needs to converge.
+	//
+	// Silent skip on any error: localOnly mode, missing origin remote,
+	// and first-sync-before-remote-branch-exists all naturally produce
+	// non-fatal failures here. Matches the pattern at merge.go:70-72 for
+	// Fetch errors. If the reset doesn't happen, the worst case is the
+	// existing pre-fix behavior (push rejected, caller handles).
+	//
+	// Race-window note: the rev-parse + reset is not atomic. A concurrent
+	// git fetch in another goroutine could advance origin/a-sync between
+	// the two calls. That is benign — `git reset --mixed <ref>` is atomic
+	// from git's perspective (HEAD file + index update succeed together or
+	// neither happens), so a newer tip just means the reset lands on a
+	// fresher origin pointer. The next commit is still FF-able.
+	if !m.localOnly {
+		if _, err := safecmd.Git(ctx, m.syncDir, "rev-parse", "--verify", "origin/"+SyncBranchName); err == nil {
+			_, _ = safecmd.Git(ctx, m.syncDir, "reset", "--mixed", "origin/"+SyncBranchName)
+		}
+	}
+
 	return totalStats, nil
 }
 

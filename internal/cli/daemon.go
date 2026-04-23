@@ -14,19 +14,22 @@ import (
 
 // DaemonStatusResult contains daemon status information.
 type DaemonStatusResult struct {
-	Running       bool   `json:"running"`
-	Status        string `json:"status"`
-	PID           int    `json:"pid,omitempty"`
-	RepoPath      string `json:"repo_path,omitempty"`
-	Uptime        string `json:"uptime,omitempty"`
-	Version       string `json:"version,omitempty"`
-	SyncState     string `json:"sync_state,omitempty"`
-	WebSocketPort int    `json:"ws_port,omitempty"`
+	Running       bool          `json:"running"`
+	Status        string        `json:"status"`
+	PID           int           `json:"pid,omitempty"`
+	RepoPath      string        `json:"repo_path,omitempty"`
+	Uptime        string        `json:"uptime,omitempty"`
+	Version       string        `json:"version,omitempty"`
+	SyncState     string        `json:"sync_state,omitempty"`
+	WebSocketPort int           `json:"ws_port,omitempty"`
+	Identity      *IdentityInfo `json:"identity,omitempty"`
 }
 
 // DaemonStart starts the daemon in the background.
 // When localOnly is true, the --local flag is passed to the daemon subprocess.
-func DaemonStart(repoPath string, localOnly bool) error {
+// When force is true, the --force flag is passed so the daemon's G2 guard
+// accepts non-git-anchored directories.
+func DaemonStart(repoPath string, localOnly bool, force bool) error {
 	// Convert to absolute path so the daemon knows where to run
 	absPath, err := filepath.Abs(repoPath)
 	if err != nil {
@@ -67,6 +70,9 @@ func DaemonStart(repoPath string, localOnly bool) error {
 	args := []string{"daemon", "run", "--repo", repoPath}
 	if localOnly {
 		args = append(args, "--local")
+	}
+	if force {
+		args = append(args, "--force")
 	}
 	cmd := exec.Command(executable, args...) // #nosec G204 -- executable from os.Executable(); repoPath is validated internal config, not raw user input
 
@@ -227,6 +233,7 @@ func DaemonStatus(repoPath string) (*DaemonStatusResult, error) {
 					result.Uptime = formatDuration(uptime)
 					result.Version = health.Version
 					result.SyncState = health.SyncState
+					result.Identity = health.Identity
 				}
 			}
 		}
@@ -237,7 +244,8 @@ func DaemonStatus(repoPath string) (*DaemonStatusResult, error) {
 
 // DaemonRestart restarts the daemon (stop + start).
 // When localOnly is true, the restarted daemon runs in local-only mode.
-func DaemonRestart(repoPath string, localOnly bool) error {
+// When force is true, the daemon's G2 guard accepts non-git-anchored dirs.
+func DaemonRestart(repoPath string, localOnly bool, force bool) error {
 	// Read the previous WebSocket port before stopping (DaemonStop deletes ws.port)
 	prevPort := ReadWebSocketPort(repoPath)
 
@@ -254,7 +262,7 @@ func DaemonRestart(repoPath string, localOnly bool) error {
 	}
 
 	// Start daemon
-	return DaemonStart(repoPath, localOnly)
+	return DaemonStart(repoPath, localOnly, force)
 }
 
 // FormatDaemonStatus formats the daemon status for display.
@@ -279,6 +287,25 @@ func FormatDaemonStatus(result *DaemonStatusResult) string {
 	}
 	if result.WebSocketPort > 0 {
 		status += fmt.Sprintf("UI:       http://localhost:%d\n", result.WebSocketPort)
+	}
+	if result.Identity != nil && result.Identity.DaemonID != "" {
+		status += "\nIdentity:\n"
+		status += fmt.Sprintf("  daemon_id:  %s\n", result.Identity.DaemonID)
+		if result.Identity.RepoName != "" {
+			status += fmt.Sprintf("  repo_name:  %s\n", result.Identity.RepoName)
+		}
+		if result.Identity.Hostname != "" {
+			status += fmt.Sprintf("  hostname:   %s\n", result.Identity.Hostname)
+		}
+		if result.Identity.RepoPath != "" {
+			status += fmt.Sprintf("  repo_path:  %s\n", result.Identity.RepoPath)
+		}
+		if result.Identity.GitOriginURL != "" {
+			status += fmt.Sprintf("  git_origin: %s\n", result.Identity.GitOriginURL)
+		}
+		if result.Identity.InitAt != "" {
+			status += fmt.Sprintf("  init_at:    %s\n", result.Identity.InitAt)
+		}
 	}
 
 	return status

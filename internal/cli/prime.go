@@ -357,15 +357,48 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 	}
 
 	// Section 3: Project State
+	//
+	// project_state.md lives in the main repo's .thrum/context/ and is
+	// shared across all worktrees backed by it. Before thrum-92mj this
+	// joined ctx.RepoPath (the calling worktree) directly, so feature-
+	// worktree agents hit a missing file and the whole section was
+	// silently skipped — starting sessions blind to repo structure,
+	// decisions, and scope. paths.ResolveThrumDir follows .thrum/redirect
+	// when present and returns the worktree-local .thrum/ otherwise, so
+	// the same call works for both main-repo and feature-worktree agents.
 	if ctx.RepoPath != "" {
-		projectStatePath := filepath.Join(ctx.RepoPath, ".thrum", "context", "project_state.md")
-		if data, err := os.ReadFile(projectStatePath); err == nil && len(data) > 0 { // #nosec G304 -- internal context file
-			out.WriteString("\n# Project State\n\n")
-			out.WriteString("The following is the current project state that is being maintained ")
-			out.WriteString("to give you a full understanding of where you are and what's next.\n\n")
-			out.Write(data)
-			if data[len(data)-1] != '\n' {
-				out.WriteString("\n")
+		thrumDir, err := paths.ResolveThrumDir(ctx.RepoPath)
+		if err != nil {
+			// Resolution failed (malformed redirect, missing target).
+			// Surface via stderr so the problem is visible — previously
+			// all path failures were silent. Continue without blocking;
+			// the agent still gets every other section.
+			fmt.Fprintf(os.Stderr, "thrum prime: could not resolve .thrum directory for project_state.md: %v\n", err)
+		} else {
+			projectStatePath := filepath.Join(thrumDir, "context", "project_state.md")
+			if data, readErr := os.ReadFile(projectStatePath); readErr == nil && len(data) > 0 { // #nosec G304 -- internal context file resolved via paths.ResolveThrumDir
+				// Role-aware filter (thrum-ir2a): coordinator sees the full
+				// narrative; implementers/testers/researchers get the
+				// architectural subset to avoid flooding context with
+				// Recent Sessions and What's Queued blocks they don't act on.
+				role := ""
+				if ctx.Identity != nil {
+					role = ctx.Identity.Role
+				}
+				data = filterProjectStateSections(data, role)
+				// If the filter returned empty bytes (e.g. a file with
+				// only non-allowlisted sections for a non-coordinator
+				// role), silently skip the Project State block — an
+				// empty header with no body would be worse than nothing.
+				if len(data) > 0 {
+					out.WriteString("\n# Project State\n\n")
+					out.WriteString("The following is the current project state that is being maintained ")
+					out.WriteString("to give you a full understanding of where you are and what's next.\n\n")
+					out.Write(data)
+					if data[len(data)-1] != '\n' {
+						out.WriteString("\n")
+					}
+				}
 			}
 		}
 	}

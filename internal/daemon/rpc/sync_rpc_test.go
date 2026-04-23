@@ -416,7 +416,8 @@ func initTestSchema(db *sql.DB) error {
 		hostname TEXT,
 		agent_pid INTEGER NOT NULL DEFAULT 0,
 		registered_at TEXT NOT NULL,
-		last_seen_at TEXT
+		last_seen_at TEXT,
+		origin_daemon TEXT NOT NULL DEFAULT ''
 	);
 
 	CREATE TABLE IF NOT EXISTS sessions (

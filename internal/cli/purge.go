@@ -76,6 +76,9 @@ func FormatPurge(result *PurgeResponse) string {
 		fmt.Fprintf(&b, "  Events:    %d deleted\n", result.EventsDeleted)
 		fmt.Fprintf(&b, "  Sync files: %d message files filtered, %d events file filtered\n",
 			result.SyncMessageFiles, result.SyncEventsFiltered)
+		if result.SessionsDeleted > 0 {
+			b.WriteString("\n⚠ Sessions were deleted. Active agents will re-register automatically on their next command.\n")
+		}
 		b.WriteString("\nDone.\n")
 	}
 

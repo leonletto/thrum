@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/leonletto/thrum/internal/identity"
 )
 
 func newTestPairingManager(t *testing.T) *PairingManager {
@@ -15,7 +17,12 @@ func newTestPairingManager(t *testing.T) *PairingManager {
 	if err != nil {
 		t.Fatalf("NewPeerRegistry: %v", err)
 	}
-	return NewPairingManager(reg, "d_local", "local-machine")
+	return NewPairingManager(reg, identity.Identity{
+		DaemonID: "d_local",
+		RepoName: "local-repo",
+		Hostname: "local-host",
+		RepoPath: "/local/path",
+	}, "local-machine")
 }
 
 func TestPairing_HappyPath(t *testing.T) {
@@ -31,18 +38,22 @@ func TestPairing_HappyPath(t *testing.T) {
 	}
 
 	// Handle pair request with correct code
-	token, daemonID, name, err := pm.HandlePairRequest(code, "d_remote", "remote-machine", "100.64.1.2:9100")
+	token, local, err := pm.HandlePairRequest(code, PairMetadata{
+		DaemonID: "d_remote",
+		Name:     "remote-machine",
+		Address:  "100.64.1.2:9100",
+	})
 	if err != nil {
 		t.Fatalf("HandlePairRequest: %v", err)
 	}
 	if token == "" {
 		t.Error("token should not be empty")
 	}
-	if daemonID != "d_local" {
-		t.Errorf("daemonID = %q, want %q", daemonID, "d_local")
+	if local.DaemonID != "d_local" {
+		t.Errorf("local.DaemonID = %q, want %q", local.DaemonID, "d_local")
 	}
-	if name != "local-machine" {
-		t.Errorf("name = %q, want %q", name, "local-machine")
+	if local.Name != "local-machine" {
+		t.Errorf("local.Name = %q, want %q", local.Name, "local-machine")
 	}
 
 	// Verify peer was stored with listener role
@@ -78,7 +89,7 @@ func TestPairing_WrongCode(t *testing.T) {
 	}
 
 	// Send wrong code
-	_, _, _, err = pm.HandlePairRequest("0000", "d_remote", "remote", "100.64.1.2:9100")
+	_, _, err = pm.HandlePairRequest("0000", PairMetadata{DaemonID: "d_remote", Name: "remote", Address: "100.64.1.2:9100"})
 	if err == nil {
 		t.Fatal("expected error for wrong code")
 	}
@@ -92,7 +103,7 @@ func TestPairing_WrongCode(t *testing.T) {
 	}
 
 	// Correct code should still work
-	_, _, _, err = pm.HandlePairRequest(code, "d_remote", "remote", "100.64.1.2:9100")
+	_, _, err = pm.HandlePairRequest(code, PairMetadata{DaemonID: "d_remote", Name: "remote", Address: "100.64.1.2:9100"})
 	if err != nil {
 		t.Fatalf("HandlePairRequest with correct code: %v", err)
 	}
@@ -108,14 +119,14 @@ func TestPairing_MaxAttempts(t *testing.T) {
 
 	// Exhaust all attempts with wrong codes
 	for i := 0; i < MaxPairingAttempts; i++ {
-		_, _, _, err = pm.HandlePairRequest("9999", "d_remote", "remote", "100.64.1.2:9100")
+		_, _, err = pm.HandlePairRequest("9999", PairMetadata{DaemonID: "d_remote", Name: "remote", Address: "100.64.1.2:9100"})
 		if err == nil {
 			t.Fatalf("expected error on attempt %d", i+1)
 		}
 	}
 
 	// Next attempt should fail with "too many"
-	_, _, _, err = pm.HandlePairRequest("1234", "d_remote", "remote", "100.64.1.2:9100")
+	_, _, err = pm.HandlePairRequest("1234", PairMetadata{DaemonID: "d_remote", Name: "remote", Address: "100.64.1.2:9100"})
 	if err == nil || !strings.Contains(err.Error(), "too many") {
 		t.Errorf("expected 'too many' error, got: %v", err)
 	}
@@ -132,7 +143,7 @@ func TestPairing_Timeout(t *testing.T) {
 	// Wait for timeout
 	time.Sleep(10 * time.Millisecond)
 
-	_, _, _, err = pm.HandlePairRequest(code, "d_remote", "remote", "100.64.1.2:9100")
+	_, _, err = pm.HandlePairRequest(code, PairMetadata{DaemonID: "d_remote", Name: "remote", Address: "100.64.1.2:9100"})
 	if err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Errorf("expected timeout error, got: %v", err)
 	}
@@ -141,7 +152,7 @@ func TestPairing_Timeout(t *testing.T) {
 func TestPairing_NoActiveSession(t *testing.T) {
 	pm := newTestPairingManager(t)
 
-	_, _, _, err := pm.HandlePairRequest("1234", "d_remote", "remote", "100.64.1.2:9100")
+	_, _, err := pm.HandlePairRequest("1234", PairMetadata{DaemonID: "d_remote", Name: "remote", Address: "100.64.1.2:9100"})
 	if err == nil || !strings.Contains(err.Error(), "no active pairing") {
 		t.Errorf("expected 'no active pairing' error, got: %v", err)
 	}
@@ -176,7 +187,7 @@ func TestPairing_Cancel(t *testing.T) {
 		t.Error("session should be cleared after cancel")
 	}
 
-	_, _, _, err = pm.HandlePairRequest(code, "d_remote", "remote", "100.64.1.2:9100")
+	_, _, err = pm.HandlePairRequest(code, PairMetadata{DaemonID: "d_remote", Name: "remote", Address: "100.64.1.2:9100"})
 	if err == nil {
 		t.Error("expected error after cancellation")
 	}
@@ -193,7 +204,7 @@ func TestPairing_WaitForCompletion(t *testing.T) {
 	// Complete pairing in background
 	go func() {
 		time.Sleep(50 * time.Millisecond)
-		_, _, _, _ = pm.HandlePairRequest(code, "d_remote", "remote-machine", "100.64.1.2:9100")
+		_, _, _ = pm.HandlePairRequest(code, PairMetadata{DaemonID: "d_remote", Name: "remote-machine", Address: "100.64.1.2:9100"})
 	}()
 
 	result, err := pm.WaitForPairing(context.Background())
@@ -289,5 +300,124 @@ func TestGeneratePairingToken(t *testing.T) {
 	token2, _ := generatePairingToken()
 	if token == token2 {
 		t.Error("two generated tokens should not be identical")
+	}
+}
+
+// TestPairing_MetadataExchange verifies that both sides of a pair handshake
+// have the remote peer's identity metadata stored in peers.json.
+func TestPairing_MetadataExchange(t *testing.T) {
+	// Set up side A (listener)
+	dirA := t.TempDir()
+	regA, err := NewPeerRegistry(filepath.Join(dirA, "peers.json"))
+	if err != nil {
+		t.Fatalf("NewPeerRegistry A: %v", err)
+	}
+	identA := identity.Identity{
+		DaemonID:     "d_alpha",
+		RepoName:     "repo-alpha",
+		Hostname:     "host-alpha",
+		RepoPath:     "/repos/alpha",
+		GitOriginURL: "https://github.com/example/alpha",
+	}
+	pmA := NewPairingManager(regA, identA, "machine-alpha")
+
+	// Set up side B (dialer)
+	dirB := t.TempDir()
+	regB, err := NewPeerRegistry(filepath.Join(dirB, "peers.json"))
+	if err != nil {
+		t.Fatalf("NewPeerRegistry B: %v", err)
+	}
+	identB := identity.Identity{
+		DaemonID:     "d_beta",
+		RepoName:     "repo-beta",
+		Hostname:     "host-beta",
+		RepoPath:     "/repos/beta",
+		GitOriginURL: "https://github.com/example/beta",
+	}
+
+	// A starts listening
+	code, err := pmA.StartPairing(5 * time.Minute)
+	if err != nil {
+		t.Fatalf("StartPairing: %v", err)
+	}
+
+	// B sends pair request to A (simulating what JoinPeer/RequestPairing do)
+	bMeta := PairMetadata{
+		DaemonID:     identB.DaemonID,
+		Name:         "machine-beta",
+		Address:      "100.64.2.1:9100",
+		RepoName:     identB.RepoName,
+		Hostname:     identB.Hostname,
+		RepoPath:     identB.RepoPath,
+		GitOriginURL: identB.GitOriginURL,
+	}
+	token, localMeta, err := pmA.HandlePairRequest(code, bMeta)
+	if err != nil {
+		t.Fatalf("HandlePairRequest: %v", err)
+	}
+
+	// B stores A's returned metadata (simulating what JoinPeer does after RequestPairing)
+	peerInfoOnB := &PeerInfo{
+		DaemonID:           localMeta.DaemonID,
+		Name:               localMeta.Name,
+		Address:            "100.64.1.1:9100",
+		Token:              token,
+		RemoteRepoName:     localMeta.RepoName,
+		RemoteHostname:     localMeta.Hostname,
+		RemoteRepoPath:     localMeta.RepoPath,
+		RemoteGitOriginURL: localMeta.GitOriginURL,
+	}
+	if err := regB.AddPeer(peerInfoOnB); err != nil {
+		t.Fatalf("regB.AddPeer: %v", err)
+	}
+
+	// --- Assert A's peers.json has B's metadata ---
+	peerBOnA := regA.GetPeer("d_beta")
+	if peerBOnA == nil {
+		t.Fatal("A should have B as a peer after pairing")
+	}
+	if peerBOnA.RemoteRepoName != "repo-beta" {
+		t.Errorf("A.peer[B].RemoteRepoName = %q, want %q", peerBOnA.RemoteRepoName, "repo-beta")
+	}
+	if peerBOnA.RemoteHostname != "host-beta" {
+		t.Errorf("A.peer[B].RemoteHostname = %q, want %q", peerBOnA.RemoteHostname, "host-beta")
+	}
+	if peerBOnA.RemoteRepoPath != "/repos/beta" {
+		t.Errorf("A.peer[B].RemoteRepoPath = %q, want %q", peerBOnA.RemoteRepoPath, "/repos/beta")
+	}
+	if peerBOnA.RemoteGitOriginURL != "https://github.com/example/beta" {
+		t.Errorf("A.peer[B].RemoteGitOriginURL = %q, want %q", peerBOnA.RemoteGitOriginURL, "https://github.com/example/beta")
+	}
+
+	// --- Assert B's peers.json has A's metadata ---
+	peerAOnB := regB.GetPeer("d_alpha")
+	if peerAOnB == nil {
+		t.Fatal("B should have A as a peer after pairing")
+	}
+	if peerAOnB.RemoteRepoName != "repo-alpha" {
+		t.Errorf("B.peer[A].RemoteRepoName = %q, want %q", peerAOnB.RemoteRepoName, "repo-alpha")
+	}
+	if peerAOnB.RemoteHostname != "host-alpha" {
+		t.Errorf("B.peer[A].RemoteHostname = %q, want %q", peerAOnB.RemoteHostname, "host-alpha")
+	}
+	if peerAOnB.RemoteRepoPath != "/repos/alpha" {
+		t.Errorf("B.peer[A].RemoteRepoPath = %q, want %q", peerAOnB.RemoteRepoPath, "/repos/alpha")
+	}
+	if peerAOnB.RemoteGitOriginURL != "https://github.com/example/alpha" {
+		t.Errorf("B.peer[A].RemoteGitOriginURL = %q, want %q", peerAOnB.RemoteGitOriginURL, "https://github.com/example/alpha")
+	}
+
+	// Verify the returned local metadata from A has correct identity fields
+	if localMeta.DaemonID != "d_alpha" {
+		t.Errorf("localMeta.DaemonID = %q, want %q", localMeta.DaemonID, "d_alpha")
+	}
+	if localMeta.RepoName != "repo-alpha" {
+		t.Errorf("localMeta.RepoName = %q, want %q", localMeta.RepoName, "repo-alpha")
+	}
+	if localMeta.Hostname != "host-alpha" {
+		t.Errorf("localMeta.Hostname = %q, want %q", localMeta.Hostname, "host-alpha")
+	}
+	if localMeta.GitOriginURL != "https://github.com/example/alpha" {
+		t.Errorf("localMeta.GitOriginURL = %q, want %q", localMeta.GitOriginURL, "https://github.com/example/alpha")
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -301,4 +302,61 @@ func TestConsumeInPrime_NotFound(t *testing.T) {
 	thrumDir := t.TempDir()
 	_, err := ConsumeInPrime(thrumDir, "nonexistent")
 	assert.Error(t, err)
+}
+
+func TestFindLatestJSONLForCwd_PicksMostRecent(t *testing.T) {
+	claudeDir := t.TempDir()
+	cwd := "/Users/leon/.workspaces/thrum/team-fix"
+	// encodeCwd produces the slug deterministically; mirror it for fixture setup.
+	slug := "-Users-leon--workspaces-thrum-team-fix"
+	projectDir := filepath.Join(claudeDir, "projects", slug)
+	require.NoError(t, os.MkdirAll(projectDir, 0o750))
+
+	// Write 3 JSONL files with staggered mtimes; oldest first so
+	// os.Chtimes sticks even on filesystems with 1-second resolution.
+	older := filepath.Join(projectDir, "sess-older.jsonl")
+	middle := filepath.Join(projectDir, "sess-middle.jsonl")
+	latest := filepath.Join(projectDir, "sess-latest.jsonl")
+	for _, p := range []string{older, middle, latest} {
+		require.NoError(t, os.WriteFile(p, []byte("{}\n"), 0o600))
+	}
+	base := time.Now().Add(-1 * time.Hour)
+	require.NoError(t, os.Chtimes(older, base, base))
+	require.NoError(t, os.Chtimes(middle, base.Add(10*time.Minute), base.Add(10*time.Minute)))
+	require.NoError(t, os.Chtimes(latest, base.Add(50*time.Minute), base.Add(50*time.Minute)))
+
+	got, err := FindLatestJSONLForCwd(claudeDir, cwd)
+	require.NoError(t, err)
+	assert.Equal(t, latest, got, "should pick newest-mtime JSONL")
+
+	// Sanity: non-jsonl siblings must be ignored even if newer.
+	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "notes.txt"), []byte("x"), 0o600))
+	got2, err := FindLatestJSONLForCwd(claudeDir, cwd)
+	require.NoError(t, err)
+	assert.Equal(t, latest, got2, "non-.jsonl files must not outrank the real JSONL")
+}
+
+func TestFindLatestJSONLForCwd_EmptyDir(t *testing.T) {
+	claudeDir := t.TempDir()
+	cwd := "/Users/leon/dev/empty"
+	projectDir := filepath.Join(claudeDir, "projects", "-Users-leon-dev-empty")
+	require.NoError(t, os.MkdirAll(projectDir, 0o750))
+
+	got, err := FindLatestJSONLForCwd(claudeDir, cwd)
+	require.NoError(t, err, "empty dir is not a hard error")
+	assert.Equal(t, "", got, "empty result signals 'no fallback available'")
+}
+
+func TestFindLatestJSONLForCwd_MissingDir(t *testing.T) {
+	claudeDir := t.TempDir() // no projects/ at all
+	_, err := FindLatestJSONLForCwd(claudeDir, "/some/cwd")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "read project dir")
+}
+
+func TestFindLatestJSONLForCwd_EmptyCwd(t *testing.T) {
+	claudeDir := t.TempDir()
+	_, err := FindLatestJSONLForCwd(claudeDir, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cwd required")
 }

@@ -48,7 +48,15 @@ type IdentityFile struct {
 	Runtime              string      `json:"runtime,omitempty"`
 	AgentStatus          string      `json:"agent_status,omitempty"`
 	AgentStatusUpdatedAt time.Time   `json:"agent_status_updated_at,omitempty"`
-	UpdatedAt            time.Time   `json:"updated_at"`
+
+	// Reserved marks a pseudo-agent that should be hidden from default
+	// `thrum team` output. Used by daemon-internal identities like
+	// @supervisor_<project> which exist only to send notifications and
+	// aren't real workers. Surfaced via `thrum team --system` for
+	// debugging.
+	Reserved bool `json:"reserved,omitempty"`
+
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Load loads configuration with the following priority:
@@ -182,17 +190,18 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 		return nil, fmt.Errorf("no identity files found")
 	}
 
-	// Compute agent PID once for all resolution paths
+	// Compute agent PID once for PID-first resolution. We DO NOT
+	// mutate identity files from this load path anymore — PID writes
+	// now route exclusively through guard.WritePID on
+	// prime/quickstart/refresh (Rule #4‴ auto-reclaim). The former
+	// adoptIdentity helper was the second PID-write footgun because
+	// it silently rewrote files during a read-only lookup.
 	agentPID, _ := process.FindClaudeAncestor(context.Background())
 
 	// If exactly one identity file, load it (solo-agent worktree)
 	if len(jsonFiles) == 1 {
 		identityPath := filepath.Join(dirPath, jsonFiles[0])
-		id, err := loadIdentityFile(identityPath)
-		if err != nil {
-			return nil, err
-		}
-		return adoptIdentity(dirPath, id, agentPID), nil
+		return loadIdentityFile(identityPath)
 	}
 
 	// Load all identities for multi-pass resolution
@@ -211,22 +220,33 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 	if agentPID > 0 {
 		for _, id := range identities {
 			if id.AgentPID == agentPID && process.IsRunning(agentPID) {
-				return adoptIdentity(dirPath, id, agentPID), nil
+				return id, nil
 			}
 		}
 	}
 
-	// Pass 1: Worktree-based filtering
+	// Pass 1: Worktree-based filtering. currentWT is an absolute path
+	// (thrum-8bza). idFile.Worktree may be either shape: absolute path
+	// (post thrum-x6e8.2 / nu16) or a bare name (legacy fixtures, in
+	// the process of being self-healed by reconcileDrift). Accept both.
 	currentWT := detectCurrentWorktree(dirPath)
 	if currentWT != "" {
+		currentBasename := filepath.Base(currentWT)
 		var matches []*IdentityFile
 		for _, id := range identities {
+			if id.Worktree == "" {
+				continue
+			}
 			if id.Worktree == currentWT {
+				matches = append(matches, id)
+				continue
+			}
+			if !filepath.IsAbs(id.Worktree) && id.Worktree == currentBasename {
 				matches = append(matches, id)
 			}
 		}
 		if len(matches) == 1 {
-			return adoptIdentity(dirPath, matches[0], agentPID), nil
+			return matches[0], nil
 		}
 		if len(matches) > 1 {
 			best := matches[0]
@@ -235,7 +255,7 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 					best = m
 				}
 			}
-			return adoptIdentity(dirPath, best, agentPID), nil
+			return best, nil
 		}
 		// Zero matches: fall through to generic error
 	}
@@ -244,26 +264,16 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 		len(jsonFiles), strings.Join(available, ", "))
 }
 
-// adoptIdentity updates the identity's AgentPID if the current session should claim it.
-// Returns the identity unchanged if no adoption is needed.
-func adoptIdentity(dirPath string, id *IdentityFile, agentPID int) *IdentityFile {
-	if agentPID <= 0 || id.AgentPID == agentPID {
-		return id // No adoption needed
-	}
-	if id.AgentPID == 0 || !process.IsRunning(id.AgentPID) {
-		// Dead or missing PID — silently adopt
-		id.AgentPID = agentPID
-		_ = SaveIdentityFile(filepath.Dir(dirPath), id) // best-effort rewrite; dirPath is identities dir, SaveIdentityFile expects .thrum dir
-	} else if !process.IsRuntimeProcess(context.Background(), id.AgentPID, id.Runtime) {
-		// Alive but not a known runtime — adopt
-		id.AgentPID = agentPID
-		_ = SaveIdentityFile(filepath.Dir(dirPath), id)
-	}
-	// If alive + runtime match + different PID → genuine conflict, don't adopt
-	return id
-}
-
-// detectCurrentWorktree returns the current git worktree name, or "" if detection fails.
+// detectCurrentWorktree returns the absolute path of the current git
+// worktree, or "" if detection fails.
+//
+// thrum-8bza: previously returned filepath.Base(toplevel) so the Pass 1
+// comparison at loadIdentityFromDir could match idFile.Worktree's
+// bare-name form. After thrum-x6e8.2 / nu16, identity files store the
+// full path, so this helper aligns by also returning the full path.
+// Legacy bare-name identity files self-heal via reconcileDrift on the
+// next guard.Check pass; during that window Pass 1 just falls through
+// to the generic ambiguous-identity error (same behavior as zero-match).
 func detectCurrentWorktree(identitiesDir string) string {
 	// identitiesDir is .thrum/identities/ — go up two levels to get repo root
 	repoRoot := filepath.Dir(filepath.Dir(identitiesDir))
@@ -271,7 +281,30 @@ func detectCurrentWorktree(identitiesDir string) string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Base(strings.TrimSpace(string(out)))
+	return filepath.Clean(strings.TrimSpace(string(out)))
+}
+
+// LoadIdentityFromWorktree reads the agent identity from a specific worktree
+// directory without applying THRUM_HOME/THRUM_NAME env var overrides and
+// without performing PID adoption. Use this when one agent needs to inspect
+// another agent's identity (e.g. tmux launch resolving the runtime for a
+// target worktree).
+//
+// EnforceOneIdentity guarantees a worktree has at most one identity file,
+// so this returns the first .json file found in <worktreePath>/.thrum/identities/.
+func LoadIdentityFromWorktree(worktreePath string) (*IdentityFile, error) {
+	identitiesDir := filepath.Join(worktreePath, ".thrum", "identities")
+	entries, err := os.ReadDir(identitiesDir)
+	if err != nil {
+		return nil, fmt.Errorf("read identities directory: %w", err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		return loadIdentityFile(filepath.Join(identitiesDir, entry.Name()))
+	}
+	return nil, fmt.Errorf("no identity files in %s", identitiesDir)
 }
 
 // LoadIdentityWithPath loads the identity file and returns both the parsed identity
@@ -315,6 +348,13 @@ func SaveIdentityFile(thrumDir string, identity *IdentityFile) error {
 	if identity.Version < 5 {
 		identity.Version = 5
 	}
+	// Backfill: if runtime is empty but preferred_runtime is set, copy it over.
+	// Agents created before the runtime field existed store the user's intent
+	// in preferred_runtime only; the daemon's permission-prompt detection reads
+	// runtime, so it must be populated for detection to work.
+	if identity.Runtime == "" && identity.PreferredRuntime != "" {
+		identity.Runtime = identity.PreferredRuntime
+	}
 	identity.UpdatedAt = time.Now().UTC()
 	data, err := json.MarshalIndent(identity, "", "  ")
 	if err != nil {
@@ -326,4 +366,36 @@ func SaveIdentityFile(thrumDir string, identity *IdentityFile) error {
 	}
 
 	return nil
+}
+
+// BackfillIdentityRuntime scans every identity file in thrumDir and copies
+// preferred_runtime → runtime for any file where runtime is empty.
+// Call this at daemon boot so legacy identity files (written before the
+// runtime field was added) receive the field before the first check-pane
+// fires. Errors are logged but never fatal; missing or unreadable files
+// are silently skipped.
+func BackfillIdentityRuntime(thrumDir string) {
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	entries, err := os.ReadDir(identitiesDir)
+	if err != nil {
+		return // directory doesn't exist yet — nothing to backfill
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(identitiesDir, entry.Name())
+		data, err := os.ReadFile(path) // #nosec G304 -- path is .thrum/identities/<name>.json, an internal identity file
+		if err != nil {
+			continue
+		}
+		var idFile IdentityFile
+		if err := json.Unmarshal(data, &idFile); err != nil {
+			continue
+		}
+		if idFile.Runtime == "" && idFile.PreferredRuntime != "" {
+			// SaveIdentityFile will apply the backfill and persist.
+			_ = SaveIdentityFile(thrumDir, &idFile)
+		}
+	}
 }

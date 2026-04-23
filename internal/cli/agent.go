@@ -238,7 +238,7 @@ func FormatRegisterResponse(result *RegisterResponse) string {
 // Use FormatAgentListWithContext for enhanced view with session info.
 func FormatAgentList(result *ListAgentsResponse) string {
 	if len(result.Agents) == 0 {
-		return "No agents registered.\n" + Hint("agent.list.empty", false, false)
+		return "No agents registered.\n" + LegacyHint("agent.list.empty", false, false)
 	}
 
 	var output strings.Builder
@@ -351,7 +351,7 @@ func FormatAgentCleanup(result *CleanupAgentResponse) string {
 // FormatAgentListWithContext formats agent list with session and work context info.
 func FormatAgentListWithContext(agents *ListAgentsResponse, contexts *ListContextResponse) string {
 	if len(agents.Agents) == 0 {
-		return "No agents registered.\n" + Hint("agent.list.empty", false, false)
+		return "No agents registered.\n" + LegacyHint("agent.list.empty", false, false)
 	}
 
 	var output strings.Builder
@@ -501,7 +501,7 @@ func AgentListContext(client *Client, agentID, branch, file string) (*ListContex
 // FormatContextList formats a list of work contexts for display.
 func FormatContextList(result *ListContextResponse) string {
 	if len(result.Contexts) == 0 {
-		return "No active work contexts found.\n" + Hint("agent.context.empty", false, false)
+		return "No active work contexts found.\n" + LegacyHint("agent.context.empty", false, false)
 	}
 
 	var output strings.Builder

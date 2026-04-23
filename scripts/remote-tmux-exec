@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+#
+# remote-tmux-exec — Run tmux-exec commands on a remote host.
+#
+# Composition of ssh-exec + tmux-exec. Accepts the same subcommands as
+# tmux-exec (create, run, exec, send, capture, destroy, list) but executes
+# them on the host given by --host. Use this for stateful remote workflows
+# where successive thrum CLI calls must share an agent session — a plain
+# series of ssh-exec invocations spawns fresh PIDs each time and the CLI
+# returns to "anonymous caller", breaking peer.join and other identity-
+# scoped RPCs.
+#
+# Preconditions:
+#   - ssh-exec works against the remote host
+#   - tmux-exec is installed on the remote host (run 'bootstrap' once)
+#
+# Usage:
+#   remote-tmux-exec bootstrap --host <user@host> [--remote-path <path>]
+#   remote-tmux-exec --host <user@host> [--env KEY=VAL]... [--timeout <sec>] <tmux-exec-args>
+#
+# Flags:
+#   --host <user@host>   SSH target (required)
+#   --env KEY=VAL        Set remote env var for this invocation (repeatable)
+#   --timeout <sec>      ssh-exec layer timeout in seconds (default: 120)
+#   --remote-path PATH   (bootstrap only) Remote install path
+#                        (default: ~/.local/bin/tmux-exec)
+#
+# Examples:
+#   remote-tmux-exec bootstrap --host ubuntuleondev
+#   remote-tmux-exec --host ubuntuleondev create ubunet --cwd /home/leon
+#   remote-tmux-exec --host ubuntuleondev \
+#       run ubunet -- thrum quickstart --name x --role implementer --module m --intent 'i'
+#   remote-tmux-exec --host ubuntuleondev --env THRUM_TS_AUTHKEY=xxx \
+#       run ubunet -- thrum peer join --type tailscale --peercode leonsmacm1pro.local:IP:PORT:TOKEN
+#   remote-tmux-exec --host ubuntuleondev capture ubunet --tail 30
+#   remote-tmux-exec --host ubuntuleondev destroy ubunet
+#
+# Exit codes: passes through ssh-exec / tmux-exec exit codes unchanged.
+set -euo pipefail
+
+SCRIPT_NAME="remote-tmux-exec"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SSH_EXEC="$SCRIPT_DIR/ssh-exec"
+LOCAL_TMUX_EXEC="$SCRIPT_DIR/tmux-exec"
+
+die() { printf '[%s] error: %s\n' "$SCRIPT_NAME" "$*" >&2; exit 2; }
+
+usage() {
+  sed -n '3,/^# Exit codes:/p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+# ------- bootstrap: scp tmux-exec to the remote host -------
+if [ "${1:-}" = "bootstrap" ]; then
+  shift
+  host=""
+  remote_path='$HOME/.local/bin/tmux-exec'
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --host)        host="$2"; shift 2 ;;
+      --remote-path) remote_path="$2"; shift 2 ;;
+      -h|--help)     usage; exit 0 ;;
+      *)             die "unknown flag: $1" ;;
+    esac
+  done
+  [ -n "$host" ] || die "--host is required"
+  [ -x "$LOCAL_TMUX_EXEC" ] || die "local tmux-exec not found at $LOCAL_TMUX_EXEC"
+
+  # Expand $HOME (or any env var) on the remote side.
+  resolved=$("$SSH_EXEC" exec --host "$host" --timeout 10 -- bash -lc "echo $remote_path")
+  resolved_dir=$(dirname "$resolved")
+  "$SSH_EXEC" exec --host "$host" --timeout 10 -- mkdir -p "$resolved_dir"
+  "$SSH_EXEC" copy --host "$host" "$LOCAL_TMUX_EXEC" "$resolved"
+  "$SSH_EXEC" exec --host "$host" --timeout 10 -- chmod +x "$resolved"
+  # Verify it's on PATH and reports its own help.
+  if ! "$SSH_EXEC" exec --host "$host" --timeout 10 -- bash -lc 'command -v tmux-exec >/dev/null'; then
+    printf '[%s] warning: tmux-exec installed at %s but not on remote $PATH\n' \
+      "$SCRIPT_NAME" "$resolved" >&2
+  fi
+  printf '[%s] bootstrapped tmux-exec on %s at %s\n' "$SCRIPT_NAME" "$host" "$resolved" >&2
+  exit 0
+fi
+
+# ------- passthrough: --host / --env / --timeout, then delegate to remote tmux-exec -------
+host=""
+timeout=120
+env_args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --host)    host="$2"; shift 2 ;;
+    --env)     env_args+=(--env "$2"); shift 2 ;;
+    --timeout) timeout="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    --)        shift; break ;;
+    *)         break ;;
+  esac
+done
+
+[ -n "$host" ] || die "--host is required (try: remote-tmux-exec --help)"
+[ $# -gt 0 ]   || die "no tmux-exec arguments given (try: create, run, exec, send, capture, destroy, list)"
+
+# Wrap in `bash -lc` so the remote login shell sources ~/.profile etc. and
+# ~/.local/bin is on PATH. Without this, SSH's default non-interactive shell
+# misses user PATH additions and reports "tmux-exec: command not found".
+remote_cmd="tmux-exec"
+for arg in "$@"; do
+  remote_cmd="$remote_cmd $(printf '%q' "$arg")"
+done
+exec "$SSH_EXEC" exec --host "$host" --timeout "$timeout" "${env_args[@]}" -- bash -lc "$remote_cmd"

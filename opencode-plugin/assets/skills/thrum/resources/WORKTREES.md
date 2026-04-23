@@ -5,46 +5,57 @@ daemon and git-backed message storage.
 
 ## Setup
 
-Use the setup script to create worktrees with all required configuration:
+Use `thrum worktree create` to create a worktree and register an agent in one
+step. This handles git, redirects, identity, and tmux session setup.
 
 ```bash
-# Full setup: creates worktree, branch, thrum redirect, .claude/settings.json, and identity
-./scripts/setup-worktree-thrum.sh ~/.workspaces/thrum/feature feature/my-feature \
-  --identity feature_impl --role implementer
+# Two-step pattern (create + launch)
+thrum worktree create my-feature \
+  --name impl_my_feature --role implementer --module my-feature \
+  --intent "Feature implementation"
+# → creates worktree, registers agent, creates tmux session
+# → output tells you to run: thrum tmux launch my-feature
 
-# Existing worktree: adds thrum redirect and .claude/settings.json
-./scripts/setup-worktree-thrum.sh ~/.workspaces/thrum/feature
-
-# Auto-detect: fixes all worktrees missing redirects or settings
-./scripts/setup-worktree-thrum.sh
+thrum tmux launch my-feature
+# → starts the runtime (claude/codex/cursor) in the tmux pane
 ```
 
-### Critical: `.claude/settings.json`
+The worktree is created at `<base_path>/<name>` (default
+`~/.workspaces/<repo-name>/<name>`). Branch defaults to `feature/<name>`,
+override with `-b <branch>`.
 
-This file is **gitignored** — each worktree needs its own copy. It registers the
-`SessionStart` hook that runs `scripts/thrum-startup.sh` (agent registration,
-daemon check, env vars). Without it, Claude Code sessions in the worktree won't
-auto-register with Thrum.
+`worktree create` automatically:
 
-The setup script copies it automatically from the main repo. If a worktree is
-missing it, either re-run the setup script or copy manually:
+- Creates the git worktree
+- Sets up the `.thrum/` redirect to the main repo
+- Creates a tmux session with the worktree as cwd
+- Runs quickstart inside the pane (PID-isolated, retries if shell init swallows
+  the command)
+- Reports the next-step `tmux launch` command
+
+The agent is **NOT running** until `thrum tmux launch <name>` is called. The
+launch step is what actually starts the AI runtime (claude/codex/etc).
+
+### Worktree without an agent
+
+If you want the worktree set up but no agent registered yet, omit the agent
+flags:
 
 ```bash
-cp /path/to/main-repo/.claude/settings.json ~/.workspaces/thrum/feature/.claude/settings.json
+thrum worktree create my-feature
+# → creates worktree + redirect only
+# → output tells you: thrum tmux create my-feature --cwd <path> --name <agent> --role <r> --module <m>
 ```
 
-### Manual identity setup
+### Existing worktree
 
-Each worktree agent uses a unique identity via `THRUM_NAME`:
+For a worktree that already exists without thrum setup, use `tmux create`
+directly:
 
 ```bash
-# In main worktree (/path/to/repo)
-export THRUM_NAME=main_coordinator
-thrum quickstart --name coordinator_main --role coordinator --module main --intent "Coordinating releases"
-
-# In feature worktree (~/.workspaces/repo/feature)
-export THRUM_NAME=feature_impl
-thrum quickstart --name implementer_feature --role implementer --module feature --intent "Feature implementation"
+thrum tmux create existing-feature --cwd /path/to/worktree \
+  --name impl_existing --role implementer --module existing
+thrum tmux launch existing-feature
 ```
 
 ## Shared Daemon

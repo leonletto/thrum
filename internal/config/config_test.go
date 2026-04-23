@@ -1152,8 +1152,8 @@ func TestRestartConfigJSON(t *testing.T) {
 }
 
 func TestRestartMaxLines(t *testing.T) {
-	if got := (config.RestartConfig{}).RestartMaxLines(); got != 1000 {
-		t.Errorf("RestartMaxLines() with zero = %d, want 1000", got)
+	if got := (config.RestartConfig{}).RestartMaxLines(); got != 200 {
+		t.Errorf("RestartMaxLines() with zero = %d, want 200", got)
 	}
 	if got := (config.RestartConfig{MaxLines: 500}).RestartMaxLines(); got != 500 {
 		t.Errorf("RestartMaxLines() with 500 = %d, want 500", got)
@@ -1193,5 +1193,199 @@ func TestIdentityFile_AdoptionDoesNotBlock(t *testing.T) {
 	}
 	if loaded.AgentPID != 999999 {
 		t.Errorf("AgentPID = %d, want 999999", loaded.AgentPID)
+	}
+}
+
+// TestSaveIdentityFile_BackfillsRuntimeFromPreferred verifies that
+// SaveIdentityFile copies preferred_runtime → runtime when runtime is empty.
+// This covers the quickstart write path (Part 1 of thrum-yl3k).
+func TestSaveIdentityFile_BackfillsRuntimeFromPreferred(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
+
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+
+	identity := &config.IdentityFile{
+		Agent:            config.AgentConfig{Name: "kiro-agent", Role: "implementer", Module: "main"},
+		PreferredRuntime: "kiro-cli",
+		// Runtime intentionally left empty (simulates pre-runtime-field identity)
+	}
+
+	if err := config.SaveIdentityFile(thrumDir, identity); err != nil {
+		t.Fatalf("SaveIdentityFile: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(thrumDir, "identities", "kiro-agent.json"))
+	if err != nil {
+		t.Fatalf("read identity file: %v", err)
+	}
+	var saved config.IdentityFile
+	if err := json.Unmarshal(data, &saved); err != nil {
+		t.Fatalf("unmarshal saved identity: %v", err)
+	}
+
+	if saved.Runtime != "kiro-cli" {
+		t.Errorf("Runtime = %q, want %q (backfill from preferred_runtime)", saved.Runtime, "kiro-cli")
+	}
+	if saved.PreferredRuntime != "kiro-cli" {
+		t.Errorf("PreferredRuntime = %q, want %q (must be preserved)", saved.PreferredRuntime, "kiro-cli")
+	}
+}
+
+// TestSaveIdentityFile_DoesNotOverwriteExistingRuntime verifies that the
+// backfill does not clobber a runtime field that is already set.
+func TestSaveIdentityFile_DoesNotOverwriteExistingRuntime(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
+
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+
+	identity := &config.IdentityFile{
+		Agent:            config.AgentConfig{Name: "cursor-agent", Role: "implementer", Module: "main"},
+		PreferredRuntime: "kiro-cli",
+		Runtime:          "cursor", // already set — must not be overwritten
+	}
+
+	if err := config.SaveIdentityFile(thrumDir, identity); err != nil {
+		t.Fatalf("SaveIdentityFile: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(thrumDir, "identities", "cursor-agent.json"))
+	if err != nil {
+		t.Fatalf("read identity file: %v", err)
+	}
+	var saved config.IdentityFile
+	if err := json.Unmarshal(data, &saved); err != nil {
+		t.Fatalf("unmarshal saved identity: %v", err)
+	}
+
+	if saved.Runtime != "cursor" {
+		t.Errorf("Runtime = %q, want %q (must not be overwritten by backfill)", saved.Runtime, "cursor")
+	}
+}
+
+// TestBackfillIdentityRuntime_FixesLegacyFiles verifies that
+// BackfillIdentityRuntime scans a thrumDir, finds identity files with
+// runtime="" and preferred_runtime set, and rewrites them with runtime
+// populated. This covers the daemon-boot backfill path (Part 2 of thrum-yl3k).
+func TestBackfillIdentityRuntime_FixesLegacyFiles(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
+
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	if err := os.MkdirAll(identitiesDir, 0750); err != nil {
+		t.Fatalf("create identities dir: %v", err)
+	}
+
+	// Write a legacy identity file directly (bypassing SaveIdentityFile so
+	// runtime remains empty, simulating a file created before the field existed).
+	legacy := config.IdentityFile{
+		Version:          4,
+		Agent:            config.AgentConfig{Name: "kiro-agent", Role: "implementer", Module: "main"},
+		PreferredRuntime: "kiro-cli",
+		// Runtime intentionally absent
+	}
+	data, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatalf("marshal legacy identity: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(identitiesDir, "kiro-agent.json"), data, 0o600); err != nil {
+		t.Fatalf("write legacy identity file: %v", err)
+	}
+
+	// Also write an identity that already has runtime set — must not change.
+	modern := config.IdentityFile{
+		Version:          5,
+		Agent:            config.AgentConfig{Name: "cursor-agent", Role: "reviewer", Module: "main"},
+		PreferredRuntime: "cursor",
+		Runtime:          "cursor",
+	}
+	data2, err := json.Marshal(modern)
+	if err != nil {
+		t.Fatalf("marshal modern identity: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(identitiesDir, "cursor-agent.json"), data2, 0o600); err != nil {
+		t.Fatalf("write modern identity file: %v", err)
+	}
+
+	// Run the backfill.
+	config.BackfillIdentityRuntime(thrumDir)
+
+	// Verify legacy file was fixed.
+	fixedData, err := os.ReadFile(filepath.Join(identitiesDir, "kiro-agent.json"))
+	if err != nil {
+		t.Fatalf("read fixed identity: %v", err)
+	}
+	var fixed config.IdentityFile
+	if err := json.Unmarshal(fixedData, &fixed); err != nil {
+		t.Fatalf("unmarshal fixed identity: %v", err)
+	}
+	if fixed.Runtime != "kiro-cli" {
+		t.Errorf("after backfill: Runtime = %q, want %q", fixed.Runtime, "kiro-cli")
+	}
+
+	// Verify modern file was untouched (runtime already set).
+	modernData, err := os.ReadFile(filepath.Join(identitiesDir, "cursor-agent.json"))
+	if err != nil {
+		t.Fatalf("read modern identity: %v", err)
+	}
+	var reloaded config.IdentityFile
+	if err := json.Unmarshal(modernData, &reloaded); err != nil {
+		t.Fatalf("unmarshal modern identity: %v", err)
+	}
+	if reloaded.Runtime != "cursor" {
+		t.Errorf("modern identity runtime changed unexpectedly: got %q", reloaded.Runtime)
+	}
+}
+
+func TestIdentityFile_Reserved_Default(t *testing.T) {
+	var id config.IdentityFile
+	raw := []byte(`{"version":5,"agent":{"Name":"x","Role":"r","Module":"m"}}`)
+	if err := json.Unmarshal(raw, &id); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if id.Reserved {
+		t.Errorf("Reserved should default to false, got true")
+	}
+}
+
+func TestIdentityFile_Reserved_Roundtrip(t *testing.T) {
+	in := config.IdentityFile{
+		Version:  5,
+		Agent:    config.AgentConfig{Name: "supervisor_thrum", Role: "supervisor", Module: "daemon"},
+		Reserved: true,
+	}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var out config.IdentityFile
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !out.Reserved {
+		t.Errorf("Reserved should be true after roundtrip")
+	}
+}
+
+func TestIdentityFile_Reserved_OmittedWhenFalse(t *testing.T) {
+	in := config.IdentityFile{
+		Version: 5,
+		Agent:   config.AgentConfig{Name: "worker", Role: "r", Module: "m"},
+	}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatalf("unmarshal raw: %v", err)
+	}
+	if _, exists := raw["reserved"]; exists {
+		t.Error("reserved should be omitted when false")
 	}
 }

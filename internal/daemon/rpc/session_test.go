@@ -12,6 +12,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/types"
+	wtpkg "github.com/leonletto/thrum/internal/worktree"
 )
 
 func TestSessionStart(t *testing.T) {
@@ -640,8 +641,13 @@ func TestHeartbeat_WorkContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify worktree ref stored: %v", err)
 	}
-	if storedWorktree != gitRepo {
-		t.Errorf("Expected worktree ref '%s', got '%s'", gitRepo, storedWorktree)
+	// The handler canonicalizes the worktree path via EvalSymlinks at write
+	// time (thrum-g8e8 Part B), so the stored value may differ from the raw
+	// input on systems with symlinked temp dirs (macOS: /var → /private/var).
+	// Compare against the canonical form.
+	wantWorktree := wtpkg.CanonicalizeWorktreePath(gitRepo)
+	if storedWorktree != wantWorktree {
+		t.Errorf("Expected worktree ref %q (canonical of %q), got %q", wantWorktree, gitRepo, storedWorktree)
 	}
 
 	// Send heartbeat (should extract and store work context)
