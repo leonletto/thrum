@@ -13,6 +13,7 @@ import (
 	"github.com/leonletto/thrum/internal/gitctx"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/types"
+	wtpkg "github.com/leonletto/thrum/internal/worktree"
 )
 
 // SessionStartRequest represents the request for session.start RPC.
@@ -174,10 +175,19 @@ func (h *SessionHandler) HandleStart(ctx context.Context, params json.RawMessage
 
 	// Store initial refs
 	for _, ref := range req.Refs {
+		refValue := ref.Value
+		if ref.Type == "worktree" {
+			// Canonicalize at write time so the stored path is already in
+			// vnode form (e.g. /private/tmp instead of /tmp on macOS).
+			// This prevents a path-form asymmetry when the peercred resolver
+			// compares the stored path against gopsutil.Cwd() output.
+			// Fail-open: if EvalSymlinks fails, the raw path is stored.
+			refValue = wtpkg.CanonicalizeWorktreePath(refValue)
+		}
 		_, err := h.state.DB().ExecContext(ctx, `
 			INSERT OR IGNORE INTO session_refs (session_id, ref_type, ref_value, added_at)
 			VALUES (?, ?, ?, ?)
-		`, sessionID, ref.Type, ref.Value, now)
+		`, sessionID, ref.Type, refValue, now)
 		if err != nil {
 			return nil, fmt.Errorf("add ref: %w", err)
 		}
@@ -188,12 +198,13 @@ func (h *SessionHandler) HandleStart(ctx context.Context, params json.RawMessage
 	// waiting for the first heartbeat to populate it.
 	for _, ref := range req.Refs {
 		if ref.Type == "worktree" && ref.Value != "" {
+			canonical := wtpkg.CanonicalizeWorktreePath(ref.Value)
 			_, _ = h.state.DB().ExecContext(ctx, `
 				INSERT INTO agent_work_contexts (session_id, agent_id, worktree_path)
 				VALUES (?, ?, ?)
 				ON CONFLICT(session_id) DO UPDATE SET
 					worktree_path = excluded.worktree_path
-			`, sessionID, req.AgentID, ref.Value)
+			`, sessionID, req.AgentID, canonical)
 			break
 		}
 	}

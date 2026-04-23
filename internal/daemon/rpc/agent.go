@@ -816,6 +816,11 @@ func (h *AgentHandler) persistResurrectWorktreeRef(ctx context.Context, agentID,
 		worktreePath = prior
 	}
 
+	// Canonicalize at write time so the stored path is in vnode form,
+	// matching what the peercred resolver sees from gopsutil.Cwd().
+	// Fail-open: if EvalSymlinks fails, the raw path is stored (existing behaviour).
+	worktreePath = wtpkg.CanonicalizeWorktreePath(worktreePath)
+
 	// Persist the worktree session_ref. INSERT OR IGNORE keeps this
 	// idempotent if a concurrent caller raced us to the same ref.
 	if _, werr := h.state.DB().ExecContext(ctx, `
