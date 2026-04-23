@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -162,35 +163,42 @@ func MonitorShow(client *Client, id string, out io.Writer) error {
 	return nil
 }
 
-// MonitorListJSON fetches the monitor list and returns the raw slice for
-// the caller to emit through cli.EmitJSON. Returning the value (rather than
-// printing it here) keeps the slog→hint bridge in the loop: EmitJSON drains
-// the pushedHints buffer on the way out and grafts records into the response
-// body. Bypassing it would silently discard slog records under --json mode.
-func MonitorListJSON(client *Client, includeAll bool) ([]MonitorJobView, error) {
+// MonitorListJSON outputs monitor list as JSON.
+func MonitorListJSON(client *Client, includeAll bool, out io.Writer) error {
 	req := struct {
 		IncludeAll bool `json:"include_all,omitempty"`
 	}{IncludeAll: includeAll}
 
 	var jobs []MonitorJobView
 	if err := client.Call("monitor.list", req, &jobs); err != nil {
-		return nil, fmt.Errorf("monitor list: %w", err)
+		return fmt.Errorf("monitor list: %w", err)
 	}
-	return jobs, nil
+
+	data, err := json.MarshalIndent(jobs, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal: %w", err)
+	}
+	_, _ = fmt.Fprintln(out, string(data))
+	return nil
 }
 
-// MonitorShowJSON fetches a single monitor's details for emission through
-// cli.EmitJSON. See MonitorListJSON for the rationale.
-func MonitorShowJSON(client *Client, id string) (MonitorJobView, error) {
+// MonitorShowJSON outputs a single monitor's details as JSON.
+func MonitorShowJSON(client *Client, id string, out io.Writer) error {
 	req := struct {
 		ID string `json:"id"`
 	}{ID: id}
 
 	var job MonitorJobView
 	if err := client.Call("monitor.show", req, &job); err != nil {
-		return MonitorJobView{}, fmt.Errorf("monitor show: %w", err)
+		return fmt.Errorf("monitor show: %w", err)
 	}
-	return job, nil
+
+	data, err := json.MarshalIndent(job, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal: %w", err)
+	}
+	_, _ = fmt.Fprintln(out, string(data))
+	return nil
 }
 
 // MonitorStop sends monitor.stop for the given monitor ID.

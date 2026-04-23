@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 )
 
 // DetectedAgent describes an agent found during detection.
@@ -119,46 +118,14 @@ func DetectAllRuntimes(repoPath string) []DetectedRuntime {
 }
 
 // SupportedRuntimes returns the list of all supported runtime names,
-// merging three sources: built-in presets (presets.go), built-in agents
-// (registry.go, for detection-only entries), and user-defined presets
-// loaded from ~/.thrum/runtimes.json. The meta-values "cli-only" and
-// "all" are always appended. The result is de-duplicated and sorted.
+// derived from the agent registry plus "cli-only" and "all" meta-values.
 func SupportedRuntimes() []string {
-	seen := make(map[string]bool)
-	var names []string
-
-	add := func(name string) {
-		if name == "" || seen[name] {
-			return
-		}
-		seen[name] = true
-		names = append(names, name)
+	agents := BuiltinAgents()
+	names := make([]string, 0, len(agents)+2)
+	for _, a := range agents {
+		names = append(names, a.Name)
 	}
-
-	// All built-in presets (includes "shell" which is absent from builtinAgents).
-	for name := range BuiltinPresets {
-		add(name)
-	}
-
-	// All built-in agents (mostly overlaps with presets, but acts as a safety net
-	// if a detection-only entry is ever added without a preset).
-	for _, a := range BuiltinAgents() {
-		add(a.Name)
-	}
-
-	// User-defined presets from ~/.thrum/runtimes.json. Ignore load errors —
-	// absence or parse failure should not block validation of built-ins.
-	if userPresets, err := loadUserPresets(); err == nil {
-		for name := range userPresets {
-			add(name)
-		}
-	}
-
-	// Meta-values accepted by init/skills commands.
-	add("cli-only")
-	add("all")
-
-	sort.Strings(names)
+	names = append(names, "cli-only", "all")
 	return names
 }
 

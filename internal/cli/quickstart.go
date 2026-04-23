@@ -10,8 +10,6 @@ import (
 
 	"github.com/leonletto/thrum/internal/config"
 	agentcontext "github.com/leonletto/thrum/internal/context"
-	"github.com/leonletto/thrum/internal/identity/guard"
-	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/runtime"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
@@ -42,32 +40,7 @@ type QuickstartOptions struct {
 	RepoPath string // Repository path for runtime init
 	DryRun   bool   // Preview changes without writing
 	NoInit   bool   // Skip config file generation
-	Force    bool   // Overwrite existing files and force daemon re-registration (thrum-ufv5.6)
-
-	// NoAgentPID, when true, deregisters the caller's PID from the
-	// identity write — AgentPID is persisted as 0 instead of the
-	// detected runtime ancestor. Intended for the inline quickstart
-	// invoked by `thrum tmux create`: that invocation runs in a tmux
-	// pane's short-lived shell whose PID dies immediately after
-	// registration, so persisting it breaks `thrum tmux launch`'s G4
-	// writer-liveness check. Direct shell callers should not set this
-	// flag (thrum-x6e8.6).
-	NoAgentPID bool
-}
-
-// resolveQuickstartAgentPID returns the PID to persist in the identity
-// file's agent_pid field. When noAgentPID is set, returns 0 — the
-// caller is the tmux-create inline quickstart subshell whose PID will
-// not outlive this call; first-prime via guard.WritePID reclaims
-// ownership from the live runtime. Otherwise returns the detected
-// runtime ancestor (may still be 0 when no runtime is present, which
-// is the bare-shell case).
-func resolveQuickstartAgentPID(ctx context.Context, noAgentPID bool) int {
-	if noAgentPID {
-		return 0
-	}
-	pid, _ := process.FindClaudeAncestor(ctx)
-	return pid
+	Force    bool   // Overwrite existing files
 }
 
 // QuickstartResult contains the combined result of quickstart steps.
@@ -82,38 +55,8 @@ type QuickstartResult struct {
 
 // Quickstart registers an agent, starts a session, optionally sets intent,
 // and optionally generates runtime-specific config files.
-
 func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, error) {
 	result := &QuickstartResult{}
-
-	// Identity Guard G1a + G1b: pre-flight before any daemon round-trip.
-	// G1a refuses when the caller already owns another identity in this
-	// repo (caller must --force to rename the old one aside); G1b refuses
-	// when the requested --name is held by a live foreign PID. Both
-	// guards are no-ops when their respective modes are "off" in
-	// .thrum/config.json.
-	qsRepoPath := opts.RepoPath
-	if qsRepoPath == "" {
-		qsRepoPath = "."
-	}
-	idsDir := filepath.Join(paths.EffectiveRepoPath(qsRepoPath), ".thrum", "identities")
-	qsChain, _ := guard.WalkAncestors(context.Background(), os.Getpid())
-	gcfg := guard.LoadConfigFromDir(paths.EffectiveRepoPath(qsRepoPath))
-	qc := &guard.QuickstartContext{
-		Mode:          gcfg.QuickstartSelfRename,
-		IdentitiesDir: idsDir,
-		Chain:         qsChain,
-		RequestedName: opts.Name,
-		Force:         opts.Force,
-		IsPIDAlive:    process.IsRunning,
-	}
-	if err := guard.G1a(qc); err != nil {
-		return nil, err
-	}
-	qc.Mode = gcfg.QuickstartNameCollision
-	if err := guard.G1b(qc); err != nil {
-		return nil, err
-	}
 
 	// Step 0: Runtime detection and config generation
 	if !opts.NoInit {
@@ -157,28 +100,15 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 
 	// Capture agent PID for identity resolution and conflict detection.
 	// Runtime/PreferredRuntime/branch/tmux fields are handled by
-	// RefreshLocalIdentity in Step 2.6 below. When NoAgentPID is set
-	// (the tmux-create inline path), we persist 0 — the first prime
-	// from the real runtime will reclaim via WritePID at main.go:4060.
-	agentPID := resolveQuickstartAgentPID(context.Background(), opts.NoAgentPID)
+	// RefreshLocalIdentity in Step 2.6 below.
+	agentPID, _ := process.FindClaudeAncestor(context.Background())
 
 	// Step 1: Register agent
-	//
-	// thrum-ufv5.6: forward opts.Force to regOpts.Force. Without this, a
-	// `thrum quickstart --force` on a pre-existing agent whose AgentPID
-	// matches the caller's detected PID hits the daemon's no-op branch
-	// (neither the PID-update case nor ReRegister fires), so the agents
-	// projection never refreshes. Paired with the daemon-side Force
-	// trigger added in thrum-ufv5.2 (internal/daemon/rpc/agent.go), this
-	// guarantees --force re-registers via the projection's
-	// INSERT OR REPLACE, refreshing role/module/display/agent_pid for the
-	// post-purge scenario documented in the bug.
 	regOpts := AgentRegisterOptions{
 		Name:       opts.Name,
 		Role:       opts.Role,
 		Module:     opts.Module,
 		Display:    opts.Display,
-		Force:      opts.Force,
 		ReRegister: opts.ReRegister,
 		AgentPID:   agentPID,
 	}
@@ -272,42 +202,10 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 			changed = true
 		}
 
-		// Backfill runtime from preferred_runtime when missing. Agents
-		// created before the runtime field existed store the user's
-		// intent in preferred_runtime only. The daemon's permission-prompt
-		// detection reads runtime, so we must populate it here.
-		if idFile.Runtime == "" && idFile.PreferredRuntime != "" {
-			idFile.Runtime = idFile.PreferredRuntime
-			changed = true
-		}
-
 		if changed {
 			idFile.UpdatedAt = time.Now().UTC()
 			_ = config.SaveIdentityFile(thrumDir, idFile)
 		}
-
-		// thrum-dw06: the CLI-side quickstart no longer calls
-		// worktree.EnforceOneIdentity here. G1a/G1b above already
-		// handled legitimate stale-sibling cases (caller-owned files
-		// via --force, live name-collisions). The remaining sibling
-		// files are not necessarily stale — they may belong to
-		// co-located agents legitimately registered in the same
-		// worktree (E2E harnesses, multi-agent test scenarios). A blind
-		// invariant sweep here quarantines those siblings alongside
-		// the new registration, breaking any caller that shares the
-		// worktree with another registered agent.
-		//
-		// The daemon-side enforceWorktreeIdentity (agent.go) still
-		// fires on the self-rename path (resolved.AgentID == keepName)
-		// for stale cleanup; tmux.create continues to enforce on the
-		// tmux-managed path. refresh.go enforcement was removed by
-		// thrum-ajmd for the same reason as this one.
-		//
-		// Historical note: thrum-33dt's original design coupled the
-		// quickstart and refresh enforcement sites as intentionally
-		// idempotent doubles. Both are now removed — ajmd took out the
-		// refresh site; dw06 takes out this one. The daemon-side path
-		// retains a narrower, self-rename-only enforcement.
 	}
 
 	// Step 2.6: Refresh drift-prone fields from live process/tmux/git state.

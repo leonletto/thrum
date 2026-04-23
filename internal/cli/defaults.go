@@ -29,7 +29,7 @@ func DefaultIntent(role, repoName string) string {
 }
 
 // AutoDisplay generates a display name from role and module.
-// e.g., "coordinator", "main" -> "Coordinator (main)".
+// e.g., "coordinator", "main" -> "Coordinator (main)"
 func AutoDisplay(role, module string) string {
 	if role == "" {
 		return ""

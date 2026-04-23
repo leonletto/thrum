@@ -60,21 +60,11 @@ need it.
   (or `--no-agent`) and runs quickstart inside the new pane automatically.
 - **`thrum worktree setup`** — alias for `thrum worktree create`. Both commands
   now accept optional quickstart flags (`--name`, `--role`, `--module`,
-  `--intent`, `--runtime`). Provide all three required flags and it creates a
-  real tmux session, runs quickstart inside it, and prints the next-step
-  `thrum tmux launch <name>` command. The agent identity is registered, but the
-  runtime is not started until `tmux launch` runs — a clean two-step pattern
-  with no manual `thrum quickstart`.
+  `--intent`, `--runtime`). Provide all three required flags and it registers
+  the agent via a temp tmux session — no manual `thrum quickstart` step.
 - **Single identity per worktree** — quickstart cleans up old identity files
   after writing the new one. You can't end up with a stale identity causing
   auto-select errors.
-- **`thrum tmux launch` hard-errors on missing identity** — launch needs an
-  agent identity to determine the runtime. Sessions created with `--no-agent`
-  (or worktrees with no identity file) cannot be launched until you register an
-  agent first.
-- **Next-step guard messages** — `agent register`, `worktree create` (no agent),
-  `purge --confirm`, `daemon stop`, `tmux restart`, and `tmux launch` now print
-  explicit hints about what to do next (or what just broke).
 - **Monitor Jobs v1** — `thrum monitor start/list/show/stop/logs/restart`.
   Attach a monitor to any long-running process and it emits matches as synthetic
   Thrum messages. Leading-edge debounce (default 60s, min 30s), auto-persist,

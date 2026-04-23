@@ -200,26 +200,19 @@ for architectural violations beyond just &quot;tests pass.&quot;</p>
 <p>The preferred single-command approach uses <code>thrum worktree create</code> (alias:
 <code>thrum worktree setup</code> — they&#39;re interchangeable):</p>
 <pre><code># Create worktree, set up redirects, and register the agent identity
-thrum worktree create auth -b feature/auth \
-  --name impl-auth \
+thrum worktree create ~/.workspaces/myproject/auth feature/auth \
+  --identity impl-auth \
   --role implementer \
-  --module auth
-
-# Start the runtime — the agent is NOT running until this step
-thrum tmux launch auth
+  --base thrum-dev
 
 # Same thing — worktree setup is an alias for worktree create
-thrum worktree setup auth -b feature/auth \
-  --name impl-auth \
+thrum worktree setup ~/.workspaces/myproject/auth feature/auth \
+  --identity impl-auth \
   --role implementer \
-  --module auth
-thrum tmux launch auth</code></pre>
-<p>The worktree is created at <code>worktrees.base_path/&lt;name&gt;</code> (default
-<code>~/.workspaces/&lt;repo&gt;/&lt;name&gt;</code>). The first step creates the worktree, sets up
-thrum and beads redirects, registers the agent identity, and creates a tmux
-session — but does <strong>not</strong> start the AI runtime. The second step (<code>thrum tmux launch</code>) is what actually boots Claude Code (or whichever runtime is
-configured) inside the session. The <code>setup-worktree-thrum.sh</code> script is also
-available for the same purpose if you prefer shell over the CLI.</p>
+  --base thrum-dev</code></pre>
+<p>This creates the worktree, sets up thrum and beads redirects, and registers the
+agent identity. The <code>setup-worktree-thrum.sh</code> script is also available for the
+same purpose if you prefer shell over the CLI.</p>
 <h2>Next Steps</h2>
 <ul>
 <li><a href="agent-coordination.html">Agent Coordination</a> — practical multi-agent patterns

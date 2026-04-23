@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestLegacyHint(t *testing.T) {
+func TestHint(t *testing.T) {
 	tests := []struct {
 		name       string
 		command    string
@@ -22,7 +22,7 @@ func TestLegacyHint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			hint := LegacyHint(tt.command, tt.quiet, tt.jsonMode)
+			hint := Hint(tt.command, tt.quiet, tt.jsonMode)
 
 			if tt.shouldHint {
 				if hint == "" {
@@ -40,14 +40,14 @@ func TestLegacyHint(t *testing.T) {
 	}
 }
 
-func TestLegacyHintRotation(t *testing.T) {
+func TestHintRotation(t *testing.T) {
 	// Test that hints rotate (get different hints over multiple calls)
 	command := "agent.register"
 	seenHints := make(map[string]bool)
 
 	// Call 20 times to likely see different hints
 	for i := 0; i < 20; i++ {
-		hint := LegacyHint(command, false, false)
+		hint := Hint(command, false, false)
 		if hint != "" {
 			seenHints[hint] = true
 		}
@@ -75,7 +75,7 @@ func TestCommandHintsExist(t *testing.T) {
 	}
 }
 
-func TestLegacyHintCommands(t *testing.T) {
+func TestHintCommands(t *testing.T) {
 	// Test that common commands have hints
 	expectedCommands := []string{
 		"agent.register",

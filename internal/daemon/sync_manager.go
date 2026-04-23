@@ -90,11 +90,6 @@ type PeerStatusInfo struct {
 	Address  string
 	LastSync string
 	LastSeq  int64
-	// ReconcileStatus surfaces the xir.29 auto-reconcile marker so
-	// `thrum peer list` can render a drift warning for peers where
-	// auto-reconcile gave up and the user needs to run
-	// `thrum peer join --type repair <name>`.
-	ReconcileStatus string
 }
 
 // ListPeers returns the status of all known peers.
@@ -116,12 +111,11 @@ func (m *DaemonSyncManager) ListPeers() []PeerStatusInfo {
 		}
 
 		statuses = append(statuses, PeerStatusInfo{
-			DaemonID:        p.DaemonID,
-			Name:            p.Name,
-			Address:         p.Address,
-			LastSync:        lastSync,
-			LastSeq:         lastSeq,
-			ReconcileStatus: p.ReconcileStatus,
+			DaemonID: p.DaemonID,
+			Name:     p.Name,
+			Address:  p.Address,
+			LastSync: lastSync,
+			LastSeq:  lastSeq,
 		})
 	}
 
@@ -151,10 +145,9 @@ func (m *DaemonSyncManager) AddPeer(hostname string, port int) error {
 }
 
 // JoinPeer sends a pairing request to a remote peer and stores the result.
-// Local carries the full identity metadata of this daemon sent to the remote peer.
 // This is used by the CLI "peer join" command.
-func (m *DaemonSyncManager) JoinPeer(peerAddr, code string, local PairMetadata) (*PeerInfo, error) {
-	result, err := m.client.RequestPairing(peerAddr, code, local)
+func (m *DaemonSyncManager) JoinPeer(peerAddr, code, localDaemonID, localName, localAddress string) (*PeerInfo, error) {
+	result, err := m.client.RequestPairing(peerAddr, code, localDaemonID, localName, localAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -164,14 +157,10 @@ func (m *DaemonSyncManager) JoinPeer(peerAddr, code string, local PairMetadata) 
 	}
 
 	peer := &PeerInfo{
-		DaemonID:           result.DaemonID,
-		Name:               result.Name,
-		Address:            peerAddr,
-		Token:              result.Token,
-		RemoteRepoName:     result.RepoName,
-		RemoteHostname:     result.Hostname,
-		RemoteRepoPath:     result.RepoPath,
-		RemoteGitOriginURL: result.GitOriginURL,
+		DaemonID: result.DaemonID,
+		Name:     result.Name,
+		Address:  peerAddr,
+		Token:    result.Token,
 	}
 	if err := m.peers.AddPeer(peer); err != nil {
 		return nil, fmt.Errorf("store peer: %w", err)
@@ -233,12 +222,11 @@ func (m *DaemonSyncManager) TailscaleSyncStatus(hostname string) (int, []PeerSta
 		}
 
 		statuses = append(statuses, PeerStatusInfo{
-			DaemonID:        p.DaemonID,
-			Name:            p.Name,
-			Address:         p.Address,
-			LastSync:        lastSync,
-			LastSeq:         lastSeq,
-			ReconcileStatus: p.ReconcileStatus,
+			DaemonID: p.DaemonID,
+			Name:     p.Name,
+			Address:  p.Address,
+			LastSync: lastSync,
+			LastSeq:  lastSeq,
 		})
 	}
 

@@ -361,16 +361,8 @@ func TestLifecycleWithWebSocket(t *testing.T) {
 		errCh <- lifecycle.Run(ctx)
 	}()
 
-	// Wait for server to be ready. waitForSocketReady polls for the
-	// Unix socket file; that appears after server.Start but BEFORE
-	// wsServer.Start / wsPortFile write in Lifecycle.Run. Under heavy
-	// parallel test load, the test goroutine could race past the
-	// wsServer startup window and assert on wsServer.startedVal before
-	// the Run goroutine flipped it — the thrum-9an7 flake. Wait for
-	// the wsPortFile instead (written AFTER wsServer.Start succeeds)
-	// so the assertions below are race-free.
+	// Wait for server to be ready
 	waitForSocketReady(t, socketPath)
-	waitForFileReady(t, wsPortPath)
 
 	// Verify PID file was created
 	if _, err := os.Stat(pidPath); os.IsNotExist(err) {

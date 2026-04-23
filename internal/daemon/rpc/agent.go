@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"log"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,17 +15,12 @@ import (
 
 	"github.com/leonletto/thrum/internal/config"
 	agentcontext "github.com/leonletto/thrum/internal/context"
-	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
-	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/gitctx"
 	"github.com/leonletto/thrum/internal/identity"
-	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/jsonl"
 	"github.com/leonletto/thrum/internal/process"
-	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
-	wtpkg "github.com/leonletto/thrum/internal/worktree"
 )
 
 // RegisterRequest represents the request for agent.register RPC.
@@ -34,7 +29,7 @@ type RegisterRequest struct {
 	Role       string `json:"role"`
 	Module     string `json:"module"`
 	Display    string `json:"display,omitempty"`
-	Force      bool   `json:"force,omitempty"`       // CLI --force: re-register existing agent, overriding stored fields (thrum-ufv5.2)
+	Force      bool   `json:"force,omitempty"`       // Override existing
 	ReRegister bool   `json:"re_register,omitempty"` // Same agent returning
 	AgentPID   int    `json:"agent_pid,omitempty"`   // Claude process PID for identity resolution
 }
@@ -90,11 +85,6 @@ type WhoamiResponse struct {
 	SessionStart string `json:"session_start,omitempty"`
 	Branch       string `json:"branch,omitempty"`
 	Intent       string `json:"intent,omitempty"`
-	// Hook-delivery fields (hook-inbox-delivery design).
-	Host        string `json:"host,omitempty"`
-	AgentPID    int    `json:"pid,omitempty"`
-	TmuxSession string `json:"tmux_session,omitempty"`
-	TmuxAlive   bool   `json:"tmux_alive,omitempty"`
 }
 
 // ListContextRequest represents the request for agent.listContext RPC.
@@ -241,200 +231,106 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		}
 	}
 
-	// thrum-iw42: look up by agent_id (not by role+module). The old
-	// role+module uniqueness guard was removed because it rejected every
-	// peer-bridge proxy that shared a prefix with a pre-existing proxy
-	// (e.g. Telegram's thrum:coordinator_main collided with the peer
-	// bridge's thrum:impl_mocksf_s2). Proxy uniqueness is structurally
-	// bounded by peer-derived prefix plus remote agent name, so DB-level
-	// (role, module) enforcement was redundant.
-	//
-	// Identity-file enforcement coverage (thrum-33dt):
-	//   - tmux.create path: calls worktree.EnforceOneIdentity (tmux.go:286)
-	//   - quickstart path: G1a/G1b pre-flight + EnforceOneIdentity post-save
-	//     (internal/cli/quickstart.go)
-	//   - refresh path: EnforceOneIdentity after identity load
-	//     (internal/cli/refresh.go)
-	//   - direct agent.register RPC: enforceWorktreeIdentity below, gated
-	//     on peercred.Worktree so anonymous bootstraps skip cleanly
-	//     (the CLI paths cover them instead). keepName is extended with
-	//     the peercred-resolved caller's AgentID (thrum-dw06) so the
-	//     caller's own identity never gets swept up when the call
-	//     registers a differently named agent.
-	existingAgent, err := h.getAgentByID(ctx, agentID)
+	// Check for duplicate agent name (name must be unique across all agents)
+	if req.Name != "" {
+		existingByName, err := h.getAgentByID(ctx, req.Name)
+		if err != nil && err != sql.ErrNoRows {
+			return nil, fmt.Errorf("check for existing agent by name: %w", err)
+		}
+		if existingByName != nil && existingByName.AgentID != agentID {
+			// Another agent already has this name
+			return &RegisterResponse{
+				AgentID: "",
+				Status:  "conflict",
+				Conflict: &ConflictInfo{
+					ExistingAgentID: existingByName.AgentID,
+					RegisteredAt:    existingByName.RegisteredAt,
+					LastSeenAt:      existingByName.LastSeenAt,
+					ConflictPID:     existingByName.AgentPID,
+				},
+			}, fmt.Errorf("agent name '%s' already in use by %s", req.Name, existingByName.AgentID)
+		}
+	}
+
+	// Check for existing agent with same role+module
+	existingAgent, err := h.getAgentByRoleModule(ctx, req.Role, req.Module)
 	if err != nil && err != sql.ErrNoRows {
-		return nil, fmt.Errorf("check for existing agent by id: %w", err)
+		return nil, fmt.Errorf("check for existing agent: %w", err)
 	}
 
+	// Handle conflicts
 	if existingAgent != nil {
-		// Same agent returning (agent_id matches by construction).
-		// PID self-heal: if the caller provides a PID that differs from
-		// the stored one, update the registration even without an
-		// explicit ReRegister flag. This lets quickstart and
-		// RefreshLocalIdentity correct stale DB state without requiring
-		// --force. Without this branch, the first thrum command after a
-		// daemon rebuild would fire false-positive dead-agent self-heals
-		// on every pre-existing agent whose DB PID predates the refresh
-		// feature (thrum-pxz.14 Fix A).
-		var resp *RegisterResponse
-		var regErr error
-		// thrum-ufv5.2: Force is a distinct trigger from ReRegister. --force on
-		// an existing agent must refresh the agents projection (role, module,
-		// display) so agent.list stays consistent with whoami and the identity
-		// file. Without this branch, a re-register with --force updated the
-		// identity file but left the DB row stale — two views of the same agent
-		// diverged (see SC-04 repro in the linked bug).
-		switch {
-		case req.AgentPID > 0 && existingAgent.AgentPID != req.AgentPID:
-			resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
-		case req.ReRegister, req.Force:
-			// ReRegister and Force are treated identically — both paths
-			// invoke registerAgent, which emits agent.register and lets
-			// the projector refresh the agents row. ReRegister is the
-			// quickstart-conflict-retry signal; Force is the user's
-			// explicit --force flag. Merged into one case because there's
-			// no state change that would differentiate them downstream.
-			resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
-		default:
-			// Same agent, same PID (or no PID provided) — no-op return.
-			resp = &RegisterResponse{
-				AgentID: agentID,
-				Status:  "registered",
+		// Same agent returning (ID matches)
+		if existingAgent.AgentID == agentID {
+			// PID self-heal: if the caller provides a PID that differs
+			// from the stored one, update the registration even without
+			// an explicit ReRegister flag. This lets quickstart and
+			// RefreshLocalIdentity correct stale DB state without
+			// requiring --force. Without this branch, the first thrum
+			// command after a daemon rebuild would fire false-positive
+			// dead-agent self-heals on every pre-existing agent whose
+			// DB PID predates the refresh feature (thrum-pxz.14 Fix A).
+			var resp *RegisterResponse
+			var regErr error
+			switch {
+			case req.AgentPID > 0 && existingAgent.AgentPID != req.AgentPID:
+				resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
+			case req.ReRegister:
+				// Update registration
+				resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
+			default:
+				// Same agent, same PID (or no PID provided) — no-op return
+				resp = &RegisterResponse{
+					AgentID: agentID,
+					Status:  "registered",
+				}
 			}
+			if regErr != nil {
+				return nil, regErr
+			}
+
+			// Auto-resurrect (thrum-xir.18): if the agent has no active
+			// session and the caller's PID is alive, emit a fresh
+			// agent.session.start inline. Best-effort — log and continue
+			// on error so the register RPC stays resilient. Failing
+			// register because resurrection failed would break every
+			// agent on every command, which is worse than the bug we are
+			// fixing. ensureActiveSession runs under the same write
+			// lock taken at the top of this method.
+			resumedID, resumeErr := h.ensureActiveSession(ctx, agentID, req.AgentPID)
+			if resumeErr != nil {
+				log.Printf("agent.register: session resurrect failed: agent=%s err=%v", agentID, resumeErr)
+			} else if resumedID != "" {
+				resp.SessionID = resumedID
+				resp.SessionResumed = true
+			}
+			return resp, nil
 		}
-		if regErr != nil {
-			return nil, regErr
+
+		// Different agent, same role+module
+		if !req.Force && !req.ReRegister {
+			// Return conflict info
+			return &RegisterResponse{
+				AgentID: "",
+				Status:  "conflict",
+				Conflict: &ConflictInfo{
+					ExistingAgentID: existingAgent.AgentID,
+					RegisteredAt:    existingAgent.RegisteredAt,
+					LastSeenAt:      existingAgent.LastSeenAt,
+					ConflictPID:     existingAgent.AgentPID,
+				},
+			}, nil
 		}
 
-		// Auto-resurrect (thrum-xir.18): if the agent has no active
-		// session and the caller's PID is alive, emit a fresh
-		// agent.session.start inline. Best-effort — log and continue
-		// on error so the register RPC stays resilient. Failing
-		// register because resurrection failed would break every agent
-		// on every command, which is worse than the bug we are fixing.
-		// ensureActiveSession runs under the same write lock taken at
-		// the top of this method.
-		resumedID, resumeErr := h.ensureActiveSession(ctx, agentID, req.AgentPID)
-		if resumeErr != nil {
-			log.Printf("agent.register: session resurrect failed: agent=%s err=%v", agentID, resumeErr)
-		} else if resumedID != "" {
-			// thrum-2b2t: ensureActiveSession deliberately keeps the
-			// resurrect path minimal (no scope/orphan handling) to stay
-			// out of the explicit session.start semantics used by
-			// quickstart. That minimalism leaves session_refs empty for
-			// resurrected sessions, which breaks peercred's
-			// worktree→agent match for mutating RPCs (the session
-			// exists but has no worktree ref). Persist a worktree ref
-			// here so peercred can resolve this agent on the next RPC.
-			h.persistResurrectWorktreeRef(ctx, agentID, resumedID, req.AgentPID)
-			resp.SessionID = resumedID
-			resp.SessionResumed = true
-		}
-		h.enforceWorktreeIdentity(ctx, agentIdentityName(req.Name, agentID))
-		return resp, nil
+		// Force override - remove old agent entry to prevent duplicates
+		_, _ = h.state.DB().ExecContext(ctx, "DELETE FROM agents WHERE agent_id = ?", existingAgent.AgentID)
+
+		// Force override - register new agent
+		return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered", req.AgentPID)
 	}
 
-	// Fresh agent — no existing row for this agent_id.
-	resp, err := h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered", req.AgentPID)
-	if err == nil {
-		h.enforceWorktreeIdentity(ctx, agentIdentityName(req.Name, agentID))
-	}
-	return resp, err
-}
-
-// agentIdentityName returns the string used as the per-worktree identity
-// file's base name — the human-readable agent name when provided,
-// otherwise the generated agent_id. Matches the naming convention used
-// by config.SaveIdentityFile so EnforceOneIdentity preserves the right
-// file. The agentID fallback is only reached for anonymous
-// registrations (no --name supplied).
-func agentIdentityName(name, agentID string) string {
-	if name != "" {
-		return name
-	}
-	return agentID
-}
-
-// enforceWorktreeIdentity applies the "one identity per worktree"
-// invariant for the caller's worktree when peercred resolved a caller.
-// Anonymous bootstraps (resolved==nil) are skipped — the CLI-side
-// quickstart path enforces the invariant at identity-write time for
-// those. For direct agent.register RPCs from a registered caller,
-// this cleans up residual identity files left by prior registrations
-// under the same worktree. See thrum-33dt.
-//
-// Thrum-dw06 / thrum-0pos: enforcement only fires when the CALLER is
-// registering themselves (resolved.AgentID == keepName) AND it
-// preserves every agent registered in the caller's worktree (not
-// just keepName), so co-located multi-agent scenarios survive.
-// A caller that bootstraps a differently named agent — test
-// harnesses, peer-bridge proxies — is NOT authorized to scrub
-// siblings in this worktree, because those siblings may be other
-// legitimately registered agents co-located with the caller. The
-// single-keeper form of thrum-33dt treated every non-keepName
-// sibling as stale, including other live agents. Ajmd softened the
-// blast radius from delete→quarantine; dw06 narrowed the firing
-// condition so bootstrap calls leave other files alone; 0pos
-// finishes the job by preserving every co-located registered agent
-// in the self-rename case too.
-//
-// Self-rename + stale cleanup: when the caller renames themselves
-// via direct RPC, enforcement still runs but the keeper set now
-// includes keepName + resolved.AgentID + every agent registered in
-// this worktree. Only .json files whose agent_id is NOT registered
-// in this worktree at all (truly stale — abandoned prior
-// registrations) get quarantined. This preserves production
-// housekeeping while letting multi-agent test harnesses coexist.
-func (h *AgentHandler) enforceWorktreeIdentity(ctx context.Context, keepName string) {
-	if keepName == "" {
-		return
-	}
-	// ok dropped: both (nil, true) [peercred ran, anonymous] and
-	// (nil, false) [peercred did not run — tests / non-unix stubs]
-	// correctly skip enforcement, so discriminating between them
-	// would produce identical branches.
-	resolved, _ := peercred.FromContext(ctx)
-	// The Worktree == "" guard also covers resolved identities coming
-	// from non-unix stub platforms (where the resolver returns an
-	// AgentID but leaves Worktree unpopulated).
-	if resolved == nil || resolved.Worktree == "" {
-		return
-	}
-	// Self-rename only. Collapses three cases correctly:
-	//   - AgentID == "" (anonymous + populated Worktree, rare but
-	//     possible from future non-unix stubs): skip — no caller to
-	//     self-rename against, so no authorization to scrub siblings.
-	//   - AgentID != keepName (bootstrap / multi-agent worktree):
-	//     skip — caller is registering a different agent; the
-	//     sibling .json files may belong to other co-located agents.
-	//   - AgentID == keepName (self-rename): enforce — legitimate
-	//     stale-sibling cleanup on the caller's own identity.
-	if resolved.AgentID != keepName {
-		return
-	}
-	// Self-rename only (enforced by the guard above): resolved.AgentID
-	// and keepName are the same string on this path, so listing both
-	// in keepers would duplicate an entry with no semantic gain.
-	// ListAgentsInWorktree covers every co-located agent including the
-	// caller.
-	keepers := []string{keepName}
-	if h.state != nil {
-		keepers = append(keepers, h.state.ListAgentsInWorktree(ctx, resolved.Worktree)...)
-	}
-	// thrum-182j defenses:
-	//   (a) IsPIDAlive — refuse to quarantine a file whose AgentPID
-	//       is currently running. Backstops a stale keeper list.
-	//   (b) CallerCwd + !AllowCrossWorktree — CWD-match gate. The
-	//       self-rename path's caller and target are the same
-	//       worktree by construction (both are resolved.Worktree
-	//       from the same peercred resolution), so the match
-	//       passes naturally. Populating CallerCwd makes that an
-	//       active invariant: any future refactor that lets the
-	//       two diverge will hit the gate and refuse.
-	wtpkg.EnforceOneIdentityWith(resolved.Worktree, wtpkg.EnforceOpts{
-		IsPIDAlive: func(pid int) bool { return process.IsRunning(pid) },
-		CallerCwd:  resolved.Worktree,
-	}, keepers...)
+	// No conflict - register new agent
+	return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered", req.AgentPID)
 }
 
 // HandleList handles the agent.list RPC method.
@@ -442,14 +338,6 @@ func (h *AgentHandler) HandleList(ctx context.Context, params json.RawMessage) (
 	var req ListAgentsRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
-	}
-
-	// thrum-7nuj: agent.list is on the hot path for `thrum team` and
-	// other agent-invoked lookups. Touch last_seen if we can resolve
-	// the caller from peercred; silently skip if not (anonymous /
-	// synthetic callers don't signal liveness).
-	if resolved, _ := peercred.FromContext(ctx); resolved != nil && resolved.AgentID != "" {
-		_ = h.state.TouchAgentLastSeen(ctx, resolved.AgentID)
 	}
 
 	h.state.RLock()
@@ -524,55 +412,37 @@ func (h *AgentHandler) HandleWhoami(ctx context.Context, params json.RawMessage)
 	var role, module, agentName string
 	source := "identity_file"
 
-	resolved, peercredRan := peercred.FromContext(ctx)
-	dreq := guard.DaemonResolveRequest{
-		CallerAgentID: req.CallerAgentID,
-		PeercredRan:   peercredRan,
-	}
-	if resolved != nil {
-		dreq.PeercredAgentID = resolved.AgentID
-		dreq.PeercredWorktree = resolved.Worktree
-	}
-	connPID, _ := peercred.ConnectingPIDFromContext(ctx)
-	dreq.ConnectingPID = connPID
-	dreq.IdentitiesDir = identitiesDirFor(h.state.RepoPath())
-	if h.state != nil {
-		st := h.state
-		dreq.IsAgentInWorktree = func(agentID, worktree string) bool {
-			return st.IsAgentInWorktree(context.Background(), agentID, worktree)
-		}
-	}
-	caller, err := guard.DaemonResolve(ctx, loadDaemonGuardConfig(h.state.RepoPath()), dreq, slog.Default())
-	if err != nil {
-		return nil, fmt.Errorf("resolve identity: %w", err)
-	}
-	if caller.AgentID == "" {
-		return nil, fmt.Errorf("resolve identity: no CallerAgentID and no peercred identity")
-	}
-	agentID = caller.AgentID
-	if resolved != nil && resolved.AgentID == agentID {
-		source = "peercred"
-	} else if req.CallerAgentID != "" {
+	if req.CallerAgentID != "" {
+		// Use caller-provided identity (worktree-aware)
+		agentID = req.CallerAgentID
 		source = "caller"
-	}
 
-	// thrum-7nuj: whoami is an explicit liveness probe — advance
-	// last_seen so send.recipient-stale hints don't false-positive.
-	_ = h.state.TouchAgentLastSeen(ctx, agentID)
+		// Look up role/module from the agents table
+		h.state.RLock()
+		var dbRole, dbModule sql.NullString
+		_ = h.state.DB().QueryRowContext(ctx, "SELECT role, module FROM agents WHERE agent_id = ?", agentID).Scan(&dbRole, &dbModule)
+		h.state.RUnlock()
+		if dbRole.Valid {
+			role = dbRole.String
+		}
+		if dbModule.Valid {
+			module = dbModule.String
+		}
+	} else {
+		// Fallback: resolve from daemon's config
+		log.Printf("WARNING: CallerAgentID not provided in whoami request, falling back to daemon repo path: %s (CLI should resolve identity)", h.state.RepoPath())
+		cfg, err := config.LoadWithPath(h.state.RepoPath(), "", "")
+		if err != nil {
+			return nil, fmt.Errorf("resolve identity: %w", err)
+		}
+		agentID = identity.GenerateAgentID(h.state.RepoID(), cfg.Agent.Role, cfg.Agent.Module, cfg.Agent.Name)
+		role = cfg.Agent.Role
+		module = cfg.Agent.Module
+		agentName = cfg.Agent.Name
 
-	// Look up role/module/display from the agents table.
-	h.state.RLock()
-	var dbRole, dbModule, dbDisplay sql.NullString
-	_ = h.state.DB().QueryRowContext(ctx, "SELECT role, module, display FROM agents WHERE agent_id = ?", agentID).Scan(&dbRole, &dbModule, &dbDisplay)
-	h.state.RUnlock()
-	if dbRole.Valid {
-		role = dbRole.String
-	}
-	if dbModule.Valid {
-		module = dbModule.String
-	}
-	if dbDisplay.Valid {
-		agentName = dbDisplay.String
+		if os.Getenv("THRUM_ROLE") != "" || os.Getenv("THRUM_MODULE") != "" {
+			source = "environment"
+		}
 	}
 
 	// Check for active session for this agent
@@ -608,22 +478,6 @@ func (h *AgentHandler) HandleWhoami(ctx context.Context, params json.RawMessage)
 		Module:  module,
 		Display: agentName,
 		Source:  source,
-	}
-
-	// hook-inbox-delivery: populate host + identity-file-backed fields.
-	response.Host = resolveHostname()
-
-	idsDir := identitiesDirFor(h.state.RepoPath())
-	if data, err := os.ReadFile(filepath.Join(idsDir, agentID+".json")); err == nil { // #nosec G304 -- path is .thrum/identities/<agentID>.json
-		var idFile config.IdentityFile
-		if jsonErr := json.Unmarshal(data, &idFile); jsonErr == nil {
-			response.AgentPID = idFile.AgentPID
-			response.TmuxSession = idFile.TmuxSession
-			if idFile.TmuxSession != "" {
-				session, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
-				response.TmuxAlive = ttmux.HasSession(session)
-			}
-		}
 	}
 
 	if sessionID.Valid {
@@ -744,104 +598,39 @@ func (h *AgentHandler) ensureActiveSession(ctx context.Context, agentID string, 
 	return sessionID, nil
 }
 
-// resolveCallerWorktreeFn indirects peercred.ResolveCallerWorktree so tests
-// can inject a fault into the primary-resolution path without standing up a
-// real /proc entry. Defaults to the production helper. Tests must swap
-// back under t.Cleanup.
-var resolveCallerWorktreeFn = peercred.ResolveCallerWorktree
+// getAgentByRoleModule queries for an existing agent with the given role and module.
+func (h *AgentHandler) getAgentByRoleModule(ctx context.Context, role, module string) (*AgentInfo, error) {
+	query := `SELECT agent_id, kind, role, module, display, registered_at, last_seen_at, agent_pid
+	          FROM agents
+	          WHERE role = ? AND module = ?
+	          LIMIT 1`
 
-// persistResurrectWorktreeRef (thrum-2b2t) resolves the caller's worktree
-// via their PID and writes a worktree session_ref + agent_work_contexts
-// seed for the resurrected session. Mirrors the rows HandleStart writes
-// during the quickstart path.
-//
-// Primary source: peercred.ResolveCallerWorktree(pid) — walks /proc/<pid>/cwd
-// upward to a git root. Most accurate; self-correcting when the agent moves
-// worktrees.
-//
-// Fallback: the most-recent prior session's worktree ref for this agent.
-// Logged at debug level when used so future debugging can distinguish
-// "fresh PID-based resolution" from "stale fallback-to-prior" (the latter
-// is correct graceful degradation when the PID is unreachable, but observably
-// different). Known limitation: if the agent has historically lived in
-// multiple worktrees, the fallback returns the most-recent one — which may
-// no longer match the agent's current location. Pre-fix the agent was
-// always anonymous; post-fix + stale-fallback it may resolve to the wrong
-// worktree. Acceptable graceful degradation; the debug log captures the
-// divergence.
-//
-// Failure is best-effort — mirrors the resurrect path's own "log and
-// continue" discipline (breaking register because a worktree ref can't
-// be resolved is worse than leaving the agent briefly anonymous).
-//
-// Trust boundary: pid is supplied in the RegisterRequest JSON payload,
-// not extracted from kernel peer credentials. The daemon listens only on
-// the local Unix socket, so only same-user processes can connect — the
-// existing G4 liveness check uses this same trusted PID. A malicious local
-// caller could supply an arbitrary live PID and get this helper to return
-// the git root of another process's CWD, but that discloses only the
-// ancestor directory of a same-user process, which is already readable via
-// standard POSIX APIs. No privilege escalation.
-//
-// Concurrency: must be called with h.state.Lock() held (matches
-// ensureActiveSession's contract — the two DB writes are performed
-// atomically relative to other register/session mutations on the same
-// agent). INSERT OR IGNORE + ON CONFLICT DO UPDATE are additionally safe
-// against cross-process races via the peer daemon sync layer.
-func (h *AgentHandler) persistResurrectWorktreeRef(ctx context.Context, agentID, sessionID string, pid int) {
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	var agent AgentInfo
+	var display, lastSeenAt sql.NullString
 
-	// Primary: resolve from caller's live CWD via their PID.
-	worktreePath, err := resolveCallerWorktreeFn(pid)
-	if err != nil || worktreePath == "" {
-		// Fallback: most-recent prior session's worktree ref for this agent.
-		// The JOIN + ref_value filter naturally excludes the newly-created
-		// resurrected session (no session_refs row for it yet).
-		var prior string
-		qErr := h.state.DB().QueryRowContext(ctx, `
-			SELECT sr.ref_value
-			FROM session_refs sr
-			JOIN sessions s ON s.session_id = sr.session_id
-			WHERE s.agent_id = ? AND sr.ref_type = 'worktree' AND sr.ref_value != ''
-			ORDER BY s.started_at DESC
-			LIMIT 1
-		`, agentID).Scan(&prior)
-		if qErr != nil || prior == "" {
-			slog.Debug("thrum-2b2t: worktree ref resolution failed, no fallback",
-				"agent", agentID, "session", sessionID, "pid", pid, "primary_err", err, "fallback_err", qErr)
-			return
-		}
-		slog.Debug("thrum-2b2t: using prior-session worktree as fallback",
-			"agent", agentID, "session", sessionID, "pid", pid, "fallback_worktree", prior, "primary_err", err)
-		worktreePath = prior
+	err := h.state.DB().QueryRowContext(ctx, query, role, module).Scan(
+		&agent.AgentID,
+		&agent.Kind,
+		&agent.Role,
+		&agent.Module,
+		&display,
+		&agent.RegisteredAt,
+		&lastSeenAt,
+		&agent.AgentPID,
+	)
+
+	if err != nil {
+		return nil, err
 	}
 
-	// Canonicalize at write time so the stored path is in vnode form,
-	// matching what the peercred resolver sees from gopsutil.Cwd().
-	// Fail-open: if EvalSymlinks fails, the raw path is stored (existing behaviour).
-	worktreePath = wtpkg.CanonicalizeWorktreePath(worktreePath)
-
-	// Persist the worktree session_ref. INSERT OR IGNORE keeps this
-	// idempotent if a concurrent caller raced us to the same ref.
-	if _, werr := h.state.DB().ExecContext(ctx, `
-		INSERT OR IGNORE INTO session_refs (session_id, ref_type, ref_value, added_at)
-		VALUES (?, 'worktree', ?, ?)
-	`, sessionID, worktreePath, now); werr != nil {
-		log.Printf("thrum-2b2t: write session_refs failed: agent=%s session=%s err=%v",
-			agentID, sessionID, werr)
-		return
+	if display.Valid {
+		agent.Display = display.String
+	}
+	if lastSeenAt.Valid {
+		agent.LastSeenAt = lastSeenAt.String
 	}
 
-	// Seed agent_work_contexts for immediate peercred matching. Mirrors
-	// HandleStart at session.go:186-199.
-	if _, werr := h.state.DB().ExecContext(ctx, `
-		INSERT INTO agent_work_contexts (session_id, agent_id, worktree_path)
-		VALUES (?, ?, ?)
-		ON CONFLICT(session_id) DO UPDATE SET worktree_path = excluded.worktree_path
-	`, sessionID, agentID, worktreePath); werr != nil {
-		log.Printf("thrum-2b2t: seed agent_work_contexts failed: agent=%s session=%s err=%v",
-			agentID, sessionID, werr)
-	}
+	return &agent, nil
 }
 
 // getAgentByID queries for an existing agent with the given agent ID.
@@ -1368,31 +1157,24 @@ func (h *AgentHandler) HandleCleanup(ctx context.Context, params json.RawMessage
 	}, nil
 }
 
-// worktreeExists reports whether the stored worktree identifier maps
-// to a live directory. Accepts either an absolute path (post
-// thrum-x6e8.2 / nu16 identity files) or a bare basename (legacy).
-// For the absolute-path shape, os.Stat(stored) is authoritative. For
-// the bare-name shape, match against `git worktree list`.
-func (h *AgentHandler) worktreeExists(ctx context.Context, stored string) bool {
-	if stored == "" {
-		return false
-	}
-	if filepath.IsAbs(stored) {
-		_, err := os.Stat(stored)
-		return err == nil
-	}
-	// Legacy bare-name fallback — consult git worktree list.
+// worktreeExists checks if a worktree exists via git worktree list.
+func (h *AgentHandler) worktreeExists(ctx context.Context, worktreeName string) bool {
+	// Run git worktree list and check if worktree name appears
 	output, err := safecmd.Git(ctx, h.state.RepoPath(), "worktree", "list", "--porcelain")
 	if err != nil {
 		return false
 	}
+
+	// Parse output to find worktree
 	for line := range strings.SplitSeq(string(output), "\n") {
 		if path, ok := strings.CutPrefix(line, "worktree "); ok {
-			if strings.HasSuffix(path, "/"+stored) || strings.HasSuffix(path, "\\"+stored) || filepath.Base(path) == stored {
+			// Check if path ends with worktree name
+			if strings.HasSuffix(path, "/"+worktreeName) || strings.HasSuffix(path, "\\"+worktreeName) || filepath.Base(path) == worktreeName {
 				return true
 			}
 		}
 	}
+
 	return false
 }
 
@@ -1429,32 +1211,12 @@ func (h *AgentHandler) HandleSetAgentStatus(ctx context.Context, params json.Raw
 		return nil, fmt.Errorf("find agent %s: %w", req.Agent, err)
 	}
 
-	// G4: refuse writes targeting a dead agent's identity file.
-	// Mode is loaded from the agent's own .thrum/config.json (the
-	// worktree the identity lives under), matching where the agent's
-	// other guard decisions anchor. AgentPID=0 means the agent has not
-	// been primed yet; G4 applies to dead-after-alive transitions, not
-	// pre-prime, so skip the gate for zero PIDs.
-	idDir := filepath.Dir(idPath)
-	thrumDir := filepath.Dir(idDir) // identities dir is inside .thrum
-	if idFile.AgentPID != 0 {
-		mode := guard.ConfigForIdentityDir(idDir).DaemonWriterLiveness
-		if mode == "" {
-			mode = guard.ModeStrict
-		}
-		if gErr := guard.G4(&guard.WriterContext{
-			Mode:       mode,
-			SubjectPID: idFile.AgentPID,
-			IsPIDAlive: func(pid int) bool { return process.IsRunning(pid) },
-		}); gErr != nil {
-			return nil, fmt.Errorf("set-status refused for %s: %w", req.Agent, gErr)
-		}
-	}
-
 	idFile.AgentStatus = req.Status
 	idFile.AgentStatusUpdatedAt = time.Now().UTC()
 
 	// Save back to the same directory the file was found in
+	idDir := filepath.Dir(idPath)
+	thrumDir := filepath.Dir(idDir) // identities dir is inside .thrum
 	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
 		return nil, fmt.Errorf("save identity for %s: %w", req.Agent, err)
 	}

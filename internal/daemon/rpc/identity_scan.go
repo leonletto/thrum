@@ -36,18 +36,6 @@ func AllIdentityDirs(ctx context.Context, thrumDir string) []string {
 	return dirs
 }
 
-// IdentityPathsAcrossWorktrees returns the path selected for each agent by
-// the same resolution algorithm as ReadIdentitiesAcrossWorktrees. Callers
-// that need both the parsed file and its on-disk location should call this
-// alongside ReadIdentitiesAcrossWorktrees (or switch to the combined
-// form below if added). Added for thrum-51cg Option B: team.list
-// enrichment needs the identity file path to clear stale TmuxSession
-// values when the session is dead.
-func IdentityPathsAcrossWorktrees(ctx context.Context, thrumDir string) map[string]string {
-	_, paths := readIdentitiesAndPaths(ctx, thrumDir)
-	return paths
-}
-
 // ReadIdentitiesAcrossWorktrees loads every identity file found under
 // every dir returned by AllIdentityDirs and returns them keyed by agent
 // name. When the same agent name appears in multiple dirs (cross-worktree
@@ -57,13 +45,7 @@ func IdentityPathsAcrossWorktrees(ctx context.Context, thrumDir string) map[stri
 // Directories that don't exist or can't be read are silently skipped —
 // worktrees may be missing .thrum/identities/ without it being an error.
 func ReadIdentitiesAcrossWorktrees(ctx context.Context, thrumDir string) map[string]*config.IdentityFile {
-	files, _ := readIdentitiesAndPaths(ctx, thrumDir)
-	return files
-}
-
-func readIdentitiesAndPaths(ctx context.Context, thrumDir string) (map[string]*config.IdentityFile, map[string]string) {
-	files := make(map[string]*config.IdentityFile)
-	paths := make(map[string]string)
+	result := make(map[string]*config.IdentityFile)
 	type entry struct {
 		path string
 		file *config.IdentityFile
@@ -100,8 +82,7 @@ func readIdentitiesAndPaths(ctx context.Context, thrumDir string) (map[string]*c
 
 	for name, entries := range seen {
 		if len(entries) == 1 {
-			files[name] = entries[0].file
-			paths[name] = entries[0].path
+			result[name] = entries[0].file
 			continue
 		}
 		// Pick the entry with the most recent UpdatedAt.
@@ -119,9 +100,8 @@ func readIdentitiesAndPaths(ctx context.Context, thrumDir string) (map[string]*c
 		}
 		log.Printf("identity scan: divergent files for %q, using %s (skipped: %v)",
 			name, best.path, skipped)
-		files[name] = best.file
-		paths[name] = best.path
+		result[name] = best.file
 	}
 
-	return files, paths
+	return result
 }

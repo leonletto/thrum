@@ -242,27 +242,19 @@ thrum sent</code></pre>
 <p>Feature worktrees share the main worktree&#39;s daemon and message store via a
 redirect file. Use <code>thrum worktree create</code> (alias: <code>thrum worktree setup</code>) to
 create and configure a feature worktree in one step:</p>
-<pre><code># Create a worktree with redirect setup only
-thrum worktree create auth -b feature/auth
+<pre><code># Create a worktree with redirect setup and optional agent registration
+thrum worktree create --branch feature/auth --path ~/.workspaces/myproject/auth
 # or equivalently:
-thrum worktree setup auth -b feature/auth
+thrum worktree setup --branch feature/auth --path ~/.workspaces/myproject/auth
 
-# With agent quickstart flags — creates the worktree, registers the agent,
-# and creates the tmux session in one step. The agent is NOT running yet —
-# you launch it in the next step.
-thrum worktree create auth -b feature/auth \
-  --name furiosa --role implementer --module auth
-
-# Start the runtime in the tmux session
-thrum tmux launch auth</code></pre>
-<p>The worktree is created at <code>worktrees.base_path/&lt;name&gt;</code> (default
-<code>~/.workspaces/&lt;repo&gt;/&lt;name&gt;</code>). <code>thrum worktree create</code> handles the redirect
-file creation automatically — you don&#39;t need to run <code>thrum setup --main-repo</code>
-separately. If you pass <code>--name</code>, <code>--role</code>, and <code>--module</code>, it also creates a
-real tmux session and registers the agent inside it (PID-isolated, with retry
-if the shell init swallows the first attempt). The output tells you the agent
-is not running yet and shows the exact <code>thrum tmux launch</code> command to start
-it.</p>
+# With agent quickstart flags — creates the worktree and registers the agent
+# in one step (uses a temp tmux session for PID isolation):
+thrum worktree create --branch feature/auth --path ~/.workspaces/myproject/auth \
+  --name furiosa --role implementer --module auth</code></pre>
+<p><code>thrum worktree create</code> handles the redirect file creation automatically — you
+don&#39;t need to run <code>thrum setup --main-repo</code> separately. If you pass <code>--name</code>,
+<code>--role</code>, and <code>--module</code>, it also runs quickstart inside a temporary tmux
+session for proper PID isolation.</p>
 <p>For an existing worktree that just needs redirect setup, you can still use the
 manual approach:</p>
 <pre><code>cd ~/project-features/auth

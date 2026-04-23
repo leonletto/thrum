@@ -2,68 +2,91 @@ package mcp
 
 import (
 	"context"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 )
 
-// TestWaiterTimeoutWithNoDaemon verifies the polling waiter returns a
-// timeout result (not an error) when the daemon is unreachable for the
-// entire wait window.
-func TestWaiterTimeoutWithNoDaemon(t *testing.T) {
-	// Use a socket that doesn't exist; polling connect attempts will fail
-	// on every tick. With a 1-second overall timeout the reconnect budget
-	// (60s) is irrelevant — timeoutTimer fires first.
-	socket := filepath.Join(t.TempDir(), "missing.sock")
-	w := NewWaiter(context.Background(), socket, "waiter_x", "test-role")
-	defer w.Close()
+func TestWaiterQueueDrain(t *testing.T) {
+	// Test that WaitForMessage returns immediately when queue has messages
+	w := &Waiter{
+		queue: []MessageNotification{
+			{MessageID: "msg-1", Preview: "Hello", Timestamp: "2026-01-01T00:00:00Z"},
+		},
+		socketPath: "/nonexistent/socket", // fetchAndMark will fail, falling back to preview
+		ctx:        context.Background(),
+	}
+	w.ctx, w.cancel = context.WithCancel(context.Background())
+	defer w.cancel()
+
+	result, err := w.WaitForMessage(context.Background(), 5)
+	if err != nil {
+		t.Fatalf("WaitForMessage: %v", err)
+	}
+
+	if result.Status != "message_received" {
+		t.Errorf("expected status 'message_received', got %q", result.Status)
+	}
+	if result.Message == nil {
+		t.Fatal("expected message, got nil")
+	}
+	if result.Message.MessageID != "msg-1" {
+		t.Errorf("expected message_id 'msg-1', got %q", result.Message.MessageID)
+	}
+	if result.WaitedSeconds != 0 {
+		t.Errorf("expected 0 waited_seconds for queued message, got %d", result.WaitedSeconds)
+	}
+}
+
+func TestWaiterTimeout(t *testing.T) {
+	w := &Waiter{
+		queue:      []MessageNotification{},
+		socketPath: "/nonexistent/socket",
+	}
+	w.ctx, w.cancel = context.WithCancel(context.Background())
+	defer w.cancel()
 
 	start := time.Now()
 	result, err := w.WaitForMessage(context.Background(), 1)
 	elapsed := time.Since(start)
 
 	if err != nil {
-		t.Fatalf("WaitForMessage returned error: %v", err)
-	}
-	if result == nil {
-		t.Fatal("expected result, got nil")
+		t.Fatalf("WaitForMessage: %v", err)
 	}
 	if result.Status != "timeout" {
 		t.Errorf("expected status 'timeout', got %q", result.Status)
 	}
-	if elapsed < 900*time.Millisecond || elapsed > 2*time.Second {
-		t.Errorf("expected ~1s elapsed, got %v", elapsed)
+	if elapsed < 900*time.Millisecond {
+		t.Errorf("expected ~1 second wait, got %v", elapsed)
 	}
 }
 
-// TestWaiterContextCancellation verifies the waiter returns the context
-// error when its parent context is canceled mid-wait.
 func TestWaiterContextCancellation(t *testing.T) {
-	socket := filepath.Join(t.TempDir(), "missing.sock")
-	w := NewWaiter(context.Background(), socket, "waiter_x", "test-role")
-	defer w.Close()
+	w := &Waiter{
+		queue:      []MessageNotification{},
+		socketPath: "/nonexistent/socket",
+	}
+	w.ctx, w.cancel = context.WithCancel(context.Background())
+	defer w.cancel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	_, err := w.WaitForMessage(ctx, 30)
 	if err == nil {
-		t.Fatal("expected context cancellation error, got nil")
-	}
-	if err != context.DeadlineExceeded {
-		t.Errorf("expected DeadlineExceeded, got %v", err)
+		t.Fatal("expected context cancellation error")
 	}
 }
 
-// TestWaiterSingleActive verifies the single-waiter constraint: a second
-// concurrent WaitForMessage must fail fast with a specific error.
 func TestWaiterSingleActive(t *testing.T) {
-	socket := filepath.Join(t.TempDir(), "missing.sock")
-	w := NewWaiter(context.Background(), socket, "waiter_x", "test-role")
-	defer w.Close()
+	w := &Waiter{
+		queue:      []MessageNotification{},
+		socketPath: "/nonexistent/socket",
+	}
+	w.ctx, w.cancel = context.WithCancel(context.Background())
+	defer w.cancel()
 
-	// Start first wait in the background.
+	// Start first wait in background
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -71,81 +94,93 @@ func TestWaiterSingleActive(t *testing.T) {
 		_, _ = w.WaitForMessage(context.Background(), 2)
 	}()
 
-	// Give the goroutine a moment to reach the active gate.
+	// Give goroutine time to start waiting (intentional - ensuring operation is in-flight)
 	time.Sleep(50 * time.Millisecond)
 
-	// Second wait should fail immediately.
+	// Second wait should fail
 	_, err := w.WaitForMessage(context.Background(), 1)
 	if err == nil {
-		t.Fatal("expected error for concurrent wait, got nil")
+		t.Fatal("expected error for concurrent wait")
 	}
-	want := "another wait_for_message is already active; only one waiter per agent"
-	if err.Error() != want {
+	if err.Error() != "another wait_for_message is already active; only one waiter per agent" {
 		t.Errorf("unexpected error: %v", err)
 	}
 
 	wg.Wait()
 }
 
-// TestWaiterReconnectBudgetExhaustionReturnsTimeout verifies that when the
-// daemon is unreachable for the full reconnect budget, WaitForMessage
-// returns a structured timeout result (not an error). This is the
-// documented behavior for MCP clients, so they get a uniform "no message"
-// shape whether the outage was brief or prolonged.
-func TestWaiterReconnectBudgetExhaustionReturnsTimeout(t *testing.T) {
-	// Shrink the reconnect budget so the test doesn't wait 60s.
-	prev := reconnectTimeout
-	reconnectTimeout = 300 * time.Millisecond
-	t.Cleanup(func() { reconnectTimeout = prev })
-
-	socket := filepath.Join(t.TempDir(), "missing.sock")
-	w := NewWaiter(context.Background(), socket, "waiter_x", "test-role")
-	defer w.Close()
-
-	start := time.Now()
-	// Overall timeout is 10s, well above the shrunk reconnect budget; we
-	// expect the budget to fire first and convert to a timeout result.
-	result, err := w.WaitForMessage(context.Background(), 10)
-	elapsed := time.Since(start)
-
-	if err != nil {
-		t.Fatalf("expected timeout result, got error: %v", err)
+func TestWaiterChannelSignal(t *testing.T) {
+	w := &Waiter{
+		queue:      []MessageNotification{},
+		socketPath: "/nonexistent/socket",
 	}
-	if result == nil || result.Status != "timeout" {
-		t.Fatalf("expected status 'timeout', got %+v", result)
+	w.ctx, w.cancel = context.WithCancel(context.Background())
+	defer w.cancel()
+
+	// Start wait in background
+	resultCh := make(chan *WaitForMessageOutput, 1)
+	go func() {
+		result, err := w.WaitForMessage(context.Background(), 10)
+		if err != nil {
+			return
+		}
+		resultCh <- result
+	}()
+
+	// Give goroutine time to start waiting (intentional - ensuring operation is in-flight)
+	time.Sleep(50 * time.Millisecond)
+
+	// Simulate notification arrival
+	w.mu.Lock()
+	w.queue = append(w.queue, MessageNotification{
+		MessageID: "msg-signal",
+		Preview:   "Signal test",
+		Timestamp: "2026-01-01T00:00:00Z",
+	})
+	if w.waiterCh != nil {
+		close(w.waiterCh)
+		w.waiterCh = nil
 	}
-	// Should return in budget + a couple of poll ticks; generous upper
-	// bound to tolerate CI scheduler noise.
-	if elapsed > 2*time.Second {
-		t.Errorf("expected reconnect-budget-exhaustion to return within ~1s, took %v", elapsed)
+	w.mu.Unlock()
+
+	select {
+	case result := <-resultCh:
+		if result.Status != "message_received" {
+			t.Errorf("expected status 'message_received', got %q", result.Status)
+		}
+		if result.Message == nil || result.Message.MessageID != "msg-signal" {
+			t.Error("expected message with ID 'msg-signal'")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("WaitForMessage did not return after signal")
 	}
 }
 
-// TestWaiterCloseStopsInFlight verifies Close() unblocks an in-flight wait.
-func TestWaiterCloseStopsInFlight(t *testing.T) {
-	socket := filepath.Join(t.TempDir(), "missing.sock")
-	w := NewWaiter(context.Background(), socket, "waiter_x", "test-role")
+func TestWaiterQueueOverflow(t *testing.T) {
+	w := &Waiter{
+		queue: make([]MessageNotification, maxQueueSize),
+	}
+	w.ctx, w.cancel = context.WithCancel(context.Background())
+	defer w.cancel()
 
-	errCh := make(chan error, 1)
-	go func() {
-		_, err := w.WaitForMessage(context.Background(), 30)
-		errCh <- err
-	}()
+	// Fill to capacity
+	for i := range w.queue {
+		w.queue[i] = MessageNotification{MessageID: "old"}
+	}
 
-	// Allow the waiter to enter its polling loop.
-	time.Sleep(100 * time.Millisecond)
-	_ = w.Close()
+	// readLoop would add beyond capacity — simulate that
+	w.mu.Lock()
+	if len(w.queue) >= maxQueueSize {
+		w.queue = w.queue[1:]
+	}
+	w.queue = append(w.queue, MessageNotification{MessageID: "new"})
+	w.mu.Unlock()
 
-	select {
-	case err := <-errCh:
-		if err == nil {
-			t.Fatal("expected error after Close, got nil")
-		}
-		if err != context.Canceled {
-			t.Errorf("expected context.Canceled, got %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("WaitForMessage did not return after Close")
+	if len(w.queue) != maxQueueSize {
+		t.Errorf("expected queue size %d, got %d", maxQueueSize, len(w.queue))
+	}
+	if w.queue[len(w.queue)-1].MessageID != "new" {
+		t.Error("expected newest message at end of queue")
 	}
 }
 
@@ -169,6 +204,54 @@ func TestDeriveAgentStatus(t *testing.T) {
 			got := deriveAgentStatus(tt.lastSeenAt, now)
 			if got != tt.expected {
 				t.Errorf("deriveAgentStatus(%q) = %q, want %q", tt.lastSeenAt, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestMentionSubscriptionTargets(t *testing.T) {
+	tests := []struct {
+		name      string
+		agentID   string
+		agentRole string
+		want      []string
+	}{
+		{
+			name:      "named agent includes name and role",
+			agentID:   "coordinator_main",
+			agentRole: "coordinator",
+			want:      []string{"coordinator_main", "coordinator"},
+		},
+		{
+			name:      "unnamed agent includes id and role",
+			agentID:   "implementer_ABC123DEF4",
+			agentRole: "implementer",
+			want:      []string{"implementer_ABC123DEF4", "implementer"},
+		},
+		{
+			name:      "dedupes identical values",
+			agentID:   "reviewer",
+			agentRole: "reviewer",
+			want:      []string{"reviewer"},
+		},
+		{
+			name:      "role only",
+			agentID:   "",
+			agentRole: "tester",
+			want:      []string{"tester"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mentionSubscriptionTargets(tt.agentID, tt.agentRole)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+			for i := range tt.want {
+				if got[i] != tt.want[i] {
+					t.Fatalf("got %v, want %v", got, tt.want)
+				}
 			}
 		})
 	}

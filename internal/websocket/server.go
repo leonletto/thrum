@@ -61,34 +61,6 @@ type Server struct {
 	startTime        time.Time
 }
 
-// allowedOriginsForPort returns the set of origins that are permitted for a
-// given daemon port. Only loopback origins (localhost and 127.0.0.1) with http
-// or ws schemes are allowed.
-func allowedOriginsForPort(port int) []string {
-	portStr := fmt.Sprintf("%d", port)
-	return []string{
-		"http://localhost:" + portStr,
-		"http://127.0.0.1:" + portStr,
-		"ws://localhost:" + portStr,
-		"ws://127.0.0.1:" + portStr,
-	}
-}
-
-// checkOrigin reports whether the request origin is in the allowlist.
-// An empty origin is permitted to maintain loopback-friendly behavior for
-// clients (e.g. native CLI tools) that do not send an Origin header.
-func checkOrigin(allowedOrigins []string, origin string) bool {
-	if origin == "" {
-		return true
-	}
-	for _, allowed := range allowedOrigins {
-		if origin == allowed {
-			return true
-		}
-	}
-	return false
-}
-
 // NewServer creates a new WebSocket RPC server.
 // Addr format: "host:port" (e.g., "localhost:9999").
 // Registry provides the RPC handlers that will handle JSON-RPC requests.
@@ -102,17 +74,14 @@ func NewServer(addr string, registry HandlerRegistry, uiFS fs.FS, opts ...Server
 		registry:  registry,
 		clients:   NewClientRegistry(),
 		startTime: time.Now(),
-	}
-
-	// Build the origin allowlist from the daemon port so the upgrader can
-	// validate browser-style Origin headers at handshake time.
-	allowedOrigins := allowedOriginsForPort(s.Port())
-	s.upgrader = websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool {
-			return checkOrigin(allowedOrigins, r.Header.Get("Origin"))
+		upgrader: websocket.Upgrader{
+			// Allow all origins for local development
+			CheckOrigin: func(r *http.Request) bool {
+				return true
+			},
+			ReadBufferSize:  1024,
+			WriteBufferSize: 1024,
 		},
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
 	}
 
 	// Apply functional options

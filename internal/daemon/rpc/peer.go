@@ -10,37 +10,16 @@ import (
 
 // --- Function types for peer handlers ---
 
-// StartPairingFunc starts a pairing session.
-//
-// Inputs:
-//   - timeout — how long the daemon should hold the pairing session open.
-//   - peerType — explicit transport selection (xir.27): tailscale|local|network.
-//     Empty preserves legacy implicit-tailscale behavior at the RPC layer.
-//   - addressHint — for peerType=="network", the user-supplied LAN IP that
-//     anchors the peercode. Ignored for other types.
-//
-// Returns the pair-code, the peercode address (ip:port), and the resolved
-// transport label echoed back so the CLI can surface "Pairing code
-// (transport=X): ..." consistently.
-type StartPairingFunc func(timeout time.Duration, peerType, addressHint string) (code, address, transport string, err error)
+// StartPairingFunc starts a pairing session and returns the code and local address (ip:port).
+type StartPairingFunc func(timeout time.Duration) (code, address string, err error)
 
 // WaitForPairingFunc blocks until the active pairing session completes or times out.
 // Returns the paired peer's name, address, and daemon ID.
 type WaitForPairingFunc func(ctx context.Context) (peerName, peerAddress, peerDaemonID string, err error)
 
-// JoinPeerFunc connects to a remote peer.
-//
-// Inputs:
-//   - peerAddr, code — peercode address + pair-code (used for tailscale/local/network).
-//   - repoPath — legacy local-peer hint (used pre-xir.27; --type local is the
-//     preferred entry point).
-//   - peerType — explicit transport selection: tailscale|local|network|repair.
-//   - peerName — required when peerType=="repair"; identifies the existing
-//     peer entry to reconcile.
-//   - localAddress — required when peerType=="network"; THIS daemon's LAN
-//     IP (must be assigned to a local NIC) where a WS listener will be
-//     bound and used as localMeta.Address.
-type JoinPeerFunc func(peerAddr, code, repoPath, peerType, peerName, localAddress string) (peerName_, peerDaemonID string, err error)
+// JoinPeerFunc connects to a remote peer, sends a pairing code, and stores the result.
+// RepoPath is optional; if non-empty the peer will be stored with Transport="local" and RepoPath set.
+type JoinPeerFunc func(peerAddr, code, repoPath string) (peerName, peerDaemonID string, err error)
 
 // RemovePeerFunc removes a peer by daemon ID.
 type RemovePeerFunc func(daemonID string) error
@@ -54,25 +33,12 @@ type FindPeerByNameFunc func(name string) (daemonID string, found bool)
 type PeerStartPairingRequest struct {
 	TimeoutSeconds int    `json:"timeout_seconds,omitempty"`
 	AuthKey        string `json:"auth_key,omitempty"` // Tailscale auth key (passed from CLI prompt)
-	// Type is the user-selected transport (tailscale|local|network).
-	// Required from xir.27 onwards. Empty Type is accepted at the RPC layer
-	// for legacy callers and routes to the implicit-tailscale flow; the CLI
-	// surfaces the missing-flag error before this RPC is called. "repair"
-	// is not valid here (use peer.join for repair).
-	Type string `json:"type,omitempty"`
-	// Address is the user-supplied LAN IP when Type=="network". The daemon
-	// validates the IP via internal/netdetect and uses it as the peercode
-	// address.
-	Address string `json:"address,omitempty"`
 }
 
 // PeerStartPairingResponse is the result of peer.start_pairing.
 type PeerStartPairingResponse struct {
 	Code    string `json:"code"`
-	Address string `json:"address,omitempty"` // local peer address (ip:port) — class depends on Type
-	// Transport echoes the daemon's chosen transport label (tailscale|local|network).
-	// Useful for the CLI to print "Pairing code (transport=X): ..." consistently.
-	Transport string `json:"transport,omitempty"`
+	Address string `json:"address,omitempty"` // local tsnet address (ip:port)
 }
 
 // PeerWaitPairingResponse is the result of peer.wait_pairing.
@@ -89,19 +55,6 @@ type PeerJoinRequest struct {
 	Address  string `json:"address"`
 	Code     string `json:"code"`
 	RepoPath string `json:"repo_path,omitempty"`
-	// Type is the user-selected transport (tailscale|local|network|repair).
-	// Required from xir.27 onwards. Daemon dispatches dial transport based on this.
-	Type string `json:"type,omitempty"`
-	// PeerName identifies the existing peer when Type=="repair". For repair the
-	// daemon looks up Token+DaemonID+Address from peers.json and re-handshakes
-	// without minting a new token. Address/Code are unused for repair.
-	PeerName string `json:"peer_name,omitempty"`
-	// LocalAddress is THIS daemon's LAN IP for Type=="network". The daemon
-	// validates it via internal/netdetect, binds a WS listener at
-	// LocalAddress:<port>, and uses that listener address as
-	// localMeta.Address so the listener-side daemon can reach us back for
-	// post-pair sync. Required for network; ignored for other types.
-	LocalAddress string `json:"local_address,omitempty"`
 }
 
 // PeerJoinResponse is the result of peer.join.
@@ -136,9 +89,6 @@ type PeerListEntry struct {
 	Address  string `json:"address"`
 	LastSync string `json:"last_sync"`
 	LastSeq  int64  `json:"last_synced_seq"`
-	// ReconcileStatus mirrors PeerInfo.ReconcileStatus (xir.29). Non-empty
-	// means auto-reconcile flagged the peer for manual --type repair.
-	ReconcileStatus string `json:"reconcile_status,omitempty"`
 }
 
 // --- Handlers ---
@@ -171,12 +121,12 @@ func (h *PeerStartPairingHandler) Handle(_ context.Context, params json.RawMessa
 		timeout = time.Duration(req.TimeoutSeconds) * time.Second
 	}
 
-	code, address, transport, err := h.startPairing(timeout, req.Type, req.Address)
+	code, address, err := h.startPairing(timeout)
 	if err != nil {
 		return nil, fmt.Errorf("start pairing: %w", err)
 	}
 
-	return PeerStartPairingResponse{Code: code, Address: address, Transport: transport}, nil
+	return PeerStartPairingResponse{Code: code, Address: address}, nil
 }
 
 // PeerWaitPairingHandler handles the peer.wait_pairing RPC.
@@ -227,23 +177,14 @@ func (h *PeerJoinHandler) Handle(_ context.Context, params json.RawMessage) (any
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid params: %w", err)
 	}
-
-	// xir.27: address+code are required for the peercode-based transports
-	// (tailscale/local/network) but unused for repair (resolves via stored
-	// peers.json). Per-type validation happens in the joinFn closure.
-	switch req.Type {
-	case "repair":
-		// peercode not required
-	default:
-		if req.Address == "" {
-			return nil, fmt.Errorf("address is required")
-		}
-		if req.Code == "" {
-			return nil, fmt.Errorf("code is required")
-		}
+	if req.Address == "" {
+		return nil, fmt.Errorf("address is required")
+	}
+	if req.Code == "" {
+		return nil, fmt.Errorf("code is required")
 	}
 
-	peerName, peerDaemonID, err := h.joinPeer(req.Address, req.Code, req.RepoPath, req.Type, req.PeerName, req.LocalAddress)
+	peerName, peerDaemonID, err := h.joinPeer(req.Address, req.Code, req.RepoPath)
 	if err != nil {
 		return PeerJoinResponse{
 			Status:  "error",

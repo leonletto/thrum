@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -81,37 +80,6 @@ func TestExtractRoleFromID(t *testing.T) {
 				t.Errorf("extractRoleFromID(%q) = %q, want %q", tt.agentID, got, tt.want)
 			}
 		})
-	}
-}
-
-func TestResolveQuickstartAgentPID_NoAgentPID_ReturnsZero(t *testing.T) {
-	// When the tmux-create inline path sets noAgentPID=true, the
-	// caller's PID must NOT be persisted: the subshell exits and its
-	// PID dies, breaking HandleLaunch's G4 writer-liveness check.
-	got := resolveQuickstartAgentPID(context.Background(), true)
-	if got != 0 {
-		t.Errorf("expected 0 for noAgentPID=true, got %d", got)
-	}
-}
-
-func TestResolveQuickstartAgentPID_DefaultsToAncestorDetection(t *testing.T) {
-	// noAgentPID=false preserves the legacy behavior: detect a runtime
-	// ancestor and persist its PID. In test harness there's no runtime
-	// ancestor so the helper returns 0 — but it does so via the
-	// detection path, not via the early-return short-circuit.
-	got := resolveQuickstartAgentPID(context.Background(), false)
-	// Test harness has no runtime ancestor; just assert non-negative.
-	if got < 0 {
-		t.Errorf("expected non-negative PID, got %d", got)
-	}
-}
-
-func TestQuickstartOptions_NoAgentPIDFieldExists(t *testing.T) {
-	// Compile-time guarantee that the field exists with the right type;
-	// downstream callers (cmd/thrum/main.go) depend on this shape.
-	opts := QuickstartOptions{NoAgentPID: true}
-	if !opts.NoAgentPID {
-		t.Fatal("NoAgentPID field did not round-trip")
 	}
 }
 

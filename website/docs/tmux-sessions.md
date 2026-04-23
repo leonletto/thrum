@@ -168,13 +168,6 @@ thrum tmux launch implementer-api --runtime opencode
 thrum tmux launch implementer-api --runtime shell
 ```
 
-**Hard-errors on `--no-agent` or missing identity.** Launch needs an agent
-identity in the target worktree to determine which runtime to start. If the
-session was created with `--no-agent`, or if there's no identity file, launch
-returns an error and tells you to run `thrum quickstart` first (or recreate the
-session with `--name`/`--role`/`--module`). Launching a runtime without an
-identity is a no-op.
-
 ### Check Status
 
 ```bash
@@ -213,26 +206,19 @@ and relaunches. The new session loads the snapshot via `thrum prime`. See
 Here's what a coordinator does to spin up an agent from scratch:
 
 ```bash
-# 1. Create the worktree, register the agent, and create the tmux session
-#    in one step. The agent is NOT running yet.
-thrum worktree create api-feature -b feature/api-refactor \
-  --name impl_api --role implementer --module api --intent 'API refactor'
+# 1. Create a worktree for the agent (sets up thrum + beads redirects automatically)
+thrum worktree create api-feature -b feature/api-refactor
 
-# 2. Launch the runtime
-thrum tmux launch api-feature
-
-# 3. Agent boots → prime detects tmux → agent checks inbox → starts working
-# 4. Send it a task
-thrum send "Your epic is thrum-abc. Run bd show thrum-abc and start working." --to @impl_api
-```
-
-For an existing worktree (one that wasn't created with `thrum worktree create`),
-use `thrum tmux create` directly:
-
-```bash
+# 2. Create the tmux session + register agent identity in one step
 thrum tmux create implementer-api --cwd ~/.workspaces/myproject/api-feature \
   --name impl_api --role implementer --module api --intent 'API refactor'
+
+# 3. Launch the runtime
 thrum tmux launch implementer-api
+
+# 4. Agent boots → prime detects tmux → agent checks inbox → starts working
+# 5. Send it a task
+thrum send "Your epic is thrum-abc. Run bd show thrum-abc and start working." --to @impl_api
 ```
 
 The old pattern (create first, then `thrum tmux send` to run quickstart) is

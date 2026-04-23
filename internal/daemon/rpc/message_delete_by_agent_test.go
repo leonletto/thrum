@@ -69,7 +69,7 @@ func TestMessageDeleteByAgent(t *testing.T) {
 		}
 
 		// Call deleteByAgent
-		req := DeleteByAgentRequest{AgentID: agentID, CallerAgentID: agentID}
+		req := DeleteByAgentRequest{AgentID: agentID}
 		params, _ := json.Marshal(req)
 		respRaw, err := handler.HandleDeleteByAgent(context.Background(), params)
 		if err != nil {
@@ -105,7 +105,7 @@ func TestMessageDeleteByAgent(t *testing.T) {
 			t.Fatalf("register second agent: %v", err)
 		}
 
-		req := DeleteByAgentRequest{AgentID: agent2ID, CallerAgentID: agent2ID}
+		req := DeleteByAgentRequest{AgentID: agent2ID}
 		params, _ := json.Marshal(req)
 		respRaw, err := handler.HandleDeleteByAgent(context.Background(), params)
 		if err != nil {
@@ -197,7 +197,7 @@ func TestMessageDeleteByAgent(t *testing.T) {
 		}
 
 		// Delete by agent
-		req := DeleteByAgentRequest{AgentID: agent3ID, CallerAgentID: agent3ID}
+		req := DeleteByAgentRequest{AgentID: agent3ID}
 		params, _ := json.Marshal(req)
 		if _, err := handler.HandleDeleteByAgent(context.Background(), params); err != nil {
 			t.Fatalf("HandleDeleteByAgent failed: %v", err)

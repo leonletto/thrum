@@ -289,33 +289,6 @@ func TestFormatStatusWithWebSocket(t *testing.T) {
 	}
 }
 
-func TestFormatStatus_IncludesIdentity(t *testing.T) {
-	result := &StatusResult{
-		Health: HealthResult{
-			Status: "ok",
-			Identity: &IdentityInfo{
-				DaemonID:     "d_01HYTEST123",
-				RepoName:     "thrum",
-				Hostname:     "leonsmacm1pro",
-				RepoPath:     "/Users/leon/dev/opensource/thrum",
-				GitOriginURL: "https://github.com/leonletto/thrum",
-				InitAt:       "2026-04-17T00:00:00Z",
-			},
-		},
-	}
-	out := FormatStatus(result)
-	for _, want := range []string{
-		"d_01HYTEST123",
-		"repo_name:",
-		"leonsmacm1pro",
-		"/Users/leon/dev/opensource/thrum",
-	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("FormatStatus output missing %q\n%s", want, out)
-		}
-	}
-}
-
 func TestFormatStatusWithoutWebSocket(t *testing.T) {
 	result := &StatusResult{
 		Health: HealthResult{

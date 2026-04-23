@@ -5,7 +5,6 @@ package process
 import (
 	"context"
 	"os"
-	"slices"
 	"testing"
 	"time"
 )
@@ -137,11 +136,6 @@ func TestMatchRuntimeName_BasenameAndFullPath(t *testing.T) {
 		{"opencode", "claude", false},
 		{"/opt/homebrew/bin/opencode", "opencode", true},
 		{"/usr/bin/cursor-agent", "cursor-agent", true},
-		// Regression: opencode installs a dot-prefixed shim binary
-		// (.opencode) in node_modules. Ancestor detection must match
-		// it via the dual-name alias list.
-		{"/opt/homebrew/lib/node_modules/opencode-ai/bin/.opencode", ".opencode", true},
-		{".opencode", ".opencode", true},
 	}
 	for _, c := range cases {
 		t.Run(c.psComm, func(t *testing.T) {
@@ -149,21 +143,5 @@ func TestMatchRuntimeName_BasenameAndFullPath(t *testing.T) {
 				t.Errorf("matchRuntimeName(%q, %q) = %v, want %v", c.psComm, c.runtime, got, c.want)
 			}
 		})
-	}
-}
-
-// TestKnownRuntimes_DotOpencode is a structural regression guard for
-// thrum-9hr2: opencode installs its real binary as `.opencode` (npm shim
-// convention), and FindClaudeAncestor must know that name so it can detect
-// the opencode ancestor in the process tree and populate agent_pid/runtime
-// in the identity file. Without both the knownRuntimes entry and the
-// runtimeDisplayName alias, opencode agents end up with empty PID/runtime
-// fields after `thrum prime`.
-func TestKnownRuntimes_DotOpencode(t *testing.T) {
-	if !slices.Contains(knownRuntimes, ".opencode") {
-		t.Error(".opencode missing from knownRuntimes — FindClaudeAncestor cannot detect opencode wrapper binary")
-	}
-	if got := runtimeDisplayName[".opencode"]; got != "opencode" {
-		t.Errorf("runtimeDisplayName[\".opencode\"] = %q, want \"opencode\"", got)
 	}
 }

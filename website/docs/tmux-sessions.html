@@ -136,12 +136,6 @@ for debugging, tooling, or running non-agent processes in a managed tmux pane:</
 <p>Want a different runtime?</p>
 <pre><code>thrum tmux launch implementer-api --runtime opencode
 thrum tmux launch implementer-api --runtime shell</code></pre>
-<p><strong>Hard-errors on <code>--no-agent</code> or missing identity.</strong> Launch needs an agent
-identity in the target worktree to determine which runtime to start. If the
-session was created with <code>--no-agent</code>, or if there&#39;s no identity file, launch
-returns an error and tells you to run <code>thrum quickstart</code> first (or recreate
-the session with <code>--name</code>/<code>--role</code>/<code>--module</code>). Launching a runtime without
-an identity is a no-op.</p>
 <h3>Check Status</h3>
 <pre><code>thrum tmux status</code></pre>
 <pre><code>SESSION                   AGENT                STATE        RUNTIME    BRANCH
@@ -159,21 +153,19 @@ and relaunches. The new session loads the snapshot via <code>thrum prime</code>.
 <a href="session-restart.html">Session Restart</a> for the full story.</p>
 <h3>The Full Flow</h3>
 <p>Here&#39;s what a coordinator does to spin up an agent from scratch:</p>
-<pre><code># 1. Create the worktree, register the agent, and create the tmux session
-#    in one step. The agent is NOT running yet.
-thrum worktree create api-feature -b feature/api-refactor \
+<pre><code># 1. Create a worktree for the agent (sets up thrum + beads redirects automatically)
+thrum worktree create api-feature -b feature/api-refactor
+
+# 2. Create the tmux session + register agent identity in one step
+thrum tmux create implementer-api --cwd ~/.workspaces/myproject/api-feature \
   --name impl_api --role implementer --module api --intent &#39;API refactor&#39;
 
-# 2. Launch the runtime
-thrum tmux launch api-feature
+# 3. Launch the runtime
+thrum tmux launch implementer-api
 
-# 3. Agent boots → prime detects tmux → agent checks inbox → starts working
-# 4. Send it a task
+# 4. Agent boots → prime detects tmux → agent checks inbox → starts working
+# 5. Send it a task
 thrum send &quot;Your epic is thrum-abc. Run bd show thrum-abc and start working.&quot; --to @impl_api</code></pre>
-<p>For an existing worktree (one that wasn&#39;t created with <code>thrum worktree create</code>), use <code>thrum tmux create</code> directly:</p>
-<pre><code>thrum tmux create implementer-api --cwd ~/.workspaces/myproject/api-feature \
-  --name impl_api --role implementer --module api --intent &#39;API refactor&#39;
-thrum tmux launch implementer-api</code></pre>
 <p>The old pattern (create first, then <code>thrum tmux send</code> to run quickstart) is
 gone. Passing <code>--name</code>, <code>--role</code>, and <code>--module</code> to <code>thrum tmux create</code> runs
 quickstart inside the pane automatically. You can also use the

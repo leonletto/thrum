@@ -297,33 +297,6 @@ func TestFormatInbox_EmptyWithFilter(t *testing.T) {
 	}
 }
 
-func TestFormatInbox_UnreadEmpty_IsSilent(t *testing.T) {
-	// --unread with zero messages should produce no output so that
-	// hook/cron driven bash calls stay quiet when there's nothing new.
-	result := &InboxResult{
-		Messages:   []Message{},
-		Total:      3,
-		Unread:     0,
-		Page:       1,
-		PageSize:   10,
-		TotalPages: 0,
-	}
-	got := FormatInboxWithOptions(result, InboxFormatOptions{Unread: true, ForAgent: "coordinator_main"})
-	if got != "" {
-		t.Errorf("expected empty output for --unread with zero messages, got %q", got)
-	}
-}
-
-func TestFormatInbox_UnreadEmpty_JSONPathUnaffected(t *testing.T) {
-	// JSON callers get their empty-result envelope from the caller, not this
-	// formatter. The silent-empty shortcut must not trigger when JSON is on.
-	result := &InboxResult{Messages: []Message{}, Total: 0}
-	got := FormatInboxWithOptions(result, InboxFormatOptions{Unread: true, JSON: true})
-	if got == "" {
-		t.Errorf("JSON path should still render the standard empty-inbox line")
-	}
-}
-
 func TestFormatInbox_ReplyAndReadStatus(t *testing.T) {
 	result := &InboxResult{
 		Messages: []Message{

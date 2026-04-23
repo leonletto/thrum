@@ -315,7 +315,6 @@ func TestRuntimeInit_AllRuntimes(t *testing.T) {
 		".augment/settings.json",
 		".augment/rules/thrum.md",
 		"scripts/thrum-startup.sh",
-		"scripts/thrum-check-inbox.sh",
 	}
 	for _, expected := range expectedFiles {
 		outPath := filepath.Join(tmpDir, expected)

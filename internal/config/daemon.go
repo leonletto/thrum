@@ -6,13 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 )
 
 // ThrumConfig represents the top-level .thrum/config.json file.
 type ThrumConfig struct {
 	Runtime       RuntimeConfig       `json:"runtime"`
-	Identity      IdentityConfig      `json:"identity,omitempty"`
 	Daemon        DaemonConfig        `json:"daemon"`
 	Backup        BackupConfig        `json:"backup"`
 	Telegram      TelegramConfig      `json:"telegram"`
@@ -20,41 +18,6 @@ type ThrumConfig struct {
 	Restart       RestartConfig       `json:"restart"`
 	Worktrees     WorktreesConfig     `json:"worktrees,omitempty"`
 	Orchestration OrchestrationConfig `json:"orchestration,omitempty"`
-
-	// IdentityGuard is the per-guard enforcement matrix. RawMessage to
-	// avoid an import cycle; internal/identity/guard parses it at load.
-	// See dev-docs/specs/2026-04-17-thrum-identity-guard-design.md.
-	IdentityGuard *json.RawMessage `json:"identity_guard,omitempty"`
-
-	// PermissionSupervisors lists recipients of permission-prompt nudges.
-	// Each entry is one of:
-	//   - a role name ("coordinator", "orchestrator") → broadcasts to
-	//     every active agent with that role
-	//   - a specific agent name ("@coordinator_main") → direct delivery
-	//   - a specific user ("@user:leon-letto") → direct delivery, auto-
-	//     forwarded to Telegram if the bridge is configured for that user
-	// Default when absent or empty: ["coordinator"] (applied at
-	// nudge-dispatch time, not at load).
-	PermissionSupervisors []string `json:"permission_supervisors,omitempty"`
-
-	// ProjectName is the short human-readable identifier used to form
-	// the supervisor sender identity (@supervisor_<ProjectName>). Falls
-	// back to filepath.Base(repo_root) at daemon boot if empty.
-	ProjectName string `json:"project_name,omitempty"`
-}
-
-// IdentityConfig holds the daemon's per-repo identity.
-// Daemon_id is generated once at thrum init (or first daemon start of an
-// un-initialized repo) and persists forever. Other fields are refreshed on
-// each daemon start from current runtime values — they are informational
-// metadata, not keys. Git_origin_url is set once at init.
-type IdentityConfig struct {
-	DaemonID     string `json:"daemon_id,omitempty"`
-	RepoName     string `json:"repo_name,omitempty"`
-	Hostname     string `json:"hostname,omitempty"`
-	RepoPath     string `json:"repo_path,omitempty"`
-	GitOriginURL string `json:"git_origin_url,omitempty"`
-	InitAt       string `json:"init_at,omitempty"`
 }
 
 // WorktreesConfig holds worktree management settings.
@@ -242,18 +205,15 @@ const DefaultLogLevel = "info"
 
 // RestartConfig controls session restart with context snapshot behavior.
 type RestartConfig struct {
-	MaxLines        int `json:"max_lines,omitempty"`        // Max lines in snapshot (default: 200)
+	MaxLines        int `json:"max_lines,omitempty"`        // Max lines in snapshot (default: 1000)
 	AutoThreshold   int `json:"auto_threshold,omitempty"`   // Context % trigger, 0 = disabled
 	GracefulTimeout int `json:"graceful_timeout,omitempty"` // Seconds to wait for graceful save
 }
 
-// RestartMaxLines returns the configured max lines, defaulting to 200.
-// 200 lines ≈ 8 terminal screens of recent conversation, enough to recover
-// the current thread of work without burning ~20k tokens of context. For
-// older context, agents should use `git log` / `git status` / `git diff`.
+// RestartMaxLines returns the configured max lines, defaulting to 1000.
 func (r RestartConfig) RestartMaxLines() int {
 	if r.MaxLines <= 0 {
-		return 200
+		return 1000
 	}
 	return r.MaxLines
 }
@@ -283,22 +243,9 @@ func LoadThrumConfig(thrumDir string) (*ThrumConfig, error) {
 		return nil, err
 	}
 
-	// thrum-1k00: detect whether the "peers" key is present in the raw
-	// JSON. A stanza present with zero-values is distinguishable from
-	// an absent stanza only at the raw JSON level — json.Unmarshal
-	// leaves cfg.Peers at its Go zero-value in both cases. Without this
-	// distinction, defaulting AutoConnect on a zero-valued struct would
-	// clobber an explicit `auto_connect: false`.
-	var raw map[string]json.RawMessage
-	_ = json.Unmarshal(data, &raw) // best-effort; Unmarshal below reports real errors
-
 	var cfg ThrumConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err
-	}
-
-	if _, peersPresent := raw["peers"]; !peersPresent {
-		cfg.Peers = DefaultPeersConfig()
 	}
 
 	applyDefaults(&cfg)
@@ -327,50 +274,13 @@ func applyDefaults(cfg *ThrumConfig) {
 	if cfg.Backup.Retention.Monthly == nil {
 		cfg.Backup.Retention.Monthly = IntPtr(DefaultRetentionMonthly)
 	}
-	// Stanza-present-but-partial defaults. When the whole peers stanza
-	// is absent LoadThrumConfig has already substituted DefaultPeersConfig()
-	// (thrum-1k00), so here we only fill individual fields that remained
-	// at zero-value after a partial user-supplied stanza.
+	// Apply peers defaults for missing fields.
 	if cfg.Peers.PairingCodeLength == 0 {
 		cfg.Peers.PairingCodeLength = DefaultPeersConfig().PairingCodeLength
 	}
 	if cfg.Daemon.PeerPort == "" {
 		cfg.Daemon.PeerPort = "auto"
 	}
-}
-
-// ValidatePermissionSupervisors checks whether the configured supervisor
-// list contains at least one coordinator-role recipient. The permission
-// nudge pipeline uses this array as the authoritative routing list
-// (thrum-zmsk); if an operator forgets to include a coordinator, prompts
-// can land in dead mailboxes.
-//
-// A config satisfies the invariant when the list contains one of:
-//   - the bare role "coordinator"
-//   - an "@coordinator_*" or "@coordinator-*" agent name (any name with
-//     that prefix is treated as a coordinator-role entry by this check,
-//     matching the codebase convention that coordinator agents are named
-//     @coordinator_<module>)
-//
-// Returns a human-readable warning describing the problem, or "" when the
-// config is valid. An empty / nil list is considered valid — the resolver
-// falls back to ["coordinator"] at dispatch time in that case.
-func ValidatePermissionSupervisors(entries []string) string {
-	if len(entries) == 0 {
-		return ""
-	}
-	for _, e := range entries {
-		if e == "coordinator" {
-			return ""
-		}
-		if strings.HasPrefix(e, "@coordinator_") || strings.HasPrefix(e, "@coordinator-") {
-			return ""
-		}
-	}
-	return "permission_supervisors is set but contains no coordinator-role entry (" +
-		strings.Join(entries, ", ") +
-		"); permission prompts may go undelivered if listed agents are offline. " +
-		"Add \"coordinator\" or an @coordinator_<name> agent to .thrum/config.json."
 }
 
 // SaveThrumConfig writes .thrum/config.json, merging with any existing content.

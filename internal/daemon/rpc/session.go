@@ -13,7 +13,6 @@ import (
 	"github.com/leonletto/thrum/internal/gitctx"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/types"
-	wtpkg "github.com/leonletto/thrum/internal/worktree"
 )
 
 // SessionStartRequest represents the request for session.start RPC.
@@ -175,37 +174,12 @@ func (h *SessionHandler) HandleStart(ctx context.Context, params json.RawMessage
 
 	// Store initial refs
 	for _, ref := range req.Refs {
-		refValue := ref.Value
-		if ref.Type == "worktree" {
-			// Canonicalize at write time so the stored path is already in
-			// vnode form (e.g. /private/tmp instead of /tmp on macOS).
-			// This prevents a path-form asymmetry when the peercred resolver
-			// compares the stored path against gopsutil.Cwd() output.
-			// Fail-open: if EvalSymlinks fails, the raw path is stored.
-			refValue = wtpkg.CanonicalizeWorktreePath(refValue)
-		}
 		_, err := h.state.DB().ExecContext(ctx, `
 			INSERT OR IGNORE INTO session_refs (session_id, ref_type, ref_value, added_at)
 			VALUES (?, ?, ?, ?)
-		`, sessionID, ref.Type, refValue, now)
+		`, sessionID, ref.Type, ref.Value, now)
 		if err != nil {
 			return nil, fmt.Errorf("add ref: %w", err)
-		}
-	}
-
-	// Seed agent_work_contexts with the worktree path from refs so the
-	// peercred resolver can match this agent's CWD immediately — without
-	// waiting for the first heartbeat to populate it.
-	for _, ref := range req.Refs {
-		if ref.Type == "worktree" && ref.Value != "" {
-			canonical := wtpkg.CanonicalizeWorktreePath(ref.Value)
-			_, _ = h.state.DB().ExecContext(ctx, `
-				INSERT INTO agent_work_contexts (session_id, agent_id, worktree_path)
-				VALUES (?, ?, ?)
-				ON CONFLICT(session_id) DO UPDATE SET
-					worktree_path = excluded.worktree_path
-			`, sessionID, req.AgentID, canonical)
-			break
 		}
 	}
 
@@ -687,10 +661,6 @@ func (h *SessionHandler) HandleSetIntent(ctx context.Context, params json.RawMes
 		return nil, fmt.Errorf("update intent: %w", err)
 	}
 
-	// thrum-7nuj: set-intent is a deliberate agent-self action; advance
-	// last_seen so the hint doesn't false-positive.
-	_ = h.state.TouchAgentLastSeen(ctx, session.AgentID)
-
 	return &SetIntentResponse{
 		SessionID:       req.SessionID,
 		Intent:          req.Intent,
@@ -735,10 +705,6 @@ func (h *SessionHandler) HandleSetTask(ctx context.Context, params json.RawMessa
 	if err != nil {
 		return nil, fmt.Errorf("update task: %w", err)
 	}
-
-	// thrum-7nuj: set-task is a deliberate agent-self action; advance
-	// last_seen so the hint doesn't false-positive.
-	_ = h.state.TouchAgentLastSeen(ctx, session.AgentID)
 
 	return &SetTaskResponse{
 		SessionID:     req.SessionID,

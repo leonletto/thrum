@@ -19,11 +19,6 @@ import (
 // TeamListRequest represents the request for team.list RPC.
 type TeamListRequest struct {
 	IncludeOffline bool `json:"include_offline,omitempty"`
-
-	// IncludeSystem, when true, surfaces identities marked
-	// Reserved=true (e.g. @supervisor_<project>) that are hidden
-	// from the default listing. Set via `thrum team --system`.
-	IncludeSystem bool `json:"include_system,omitempty"`
 }
 
 // TeamListResponse represents the response from team.list RPC.
@@ -51,7 +46,6 @@ type TeamMember struct {
 	Module          string             `json:"module"`
 	Display         string             `json:"display,omitempty"`
 	Hostname        string             `json:"hostname,omitempty"`
-	OriginDaemon    string             `json:"origin_daemon,omitempty"`
 	AgentPID        int                `json:"agent_pid,omitempty"`
 	Runtime         string             `json:"runtime,omitempty"`
 	WorktreePath    string             `json:"worktree,omitempty"`
@@ -65,41 +59,20 @@ type TeamMember struct {
 	FileChanges     []types.FileChange `json:"file_changes,omitempty"`
 	InboxTotal      int                `json:"inbox_total"`
 	InboxUnread     int                `json:"inbox_unread"`
-	Status          string             `json:"status"` // "active", "offline", or "reserved"
+	Status          string             `json:"status"` // "active", "offline"
 	TmuxSession     string             `json:"tmux_session,omitempty"`
 	TmuxState       string             `json:"tmux_state,omitempty"` // alive, stale, dead, or empty
-
-	// Reserved marks a daemon-internal pseudo-agent (e.g.
-	// @supervisor_<project>) that is hidden from the default
-	// `thrum team` output. Only surfaced when IncludeSystem is
-	// set on the request.
-	Reserved bool `json:"reserved,omitempty"`
-
-	// IsLocal is true when the agent's OriginDaemon matches the local daemon
-	// ID or is empty (legacy/fixture entries treated as local). Populated by
-	// the team.list handler. Consumers (e.g. sendHints) gate heartbeat-
-	// staleness checks on this field because heartbeats are DB-only and do
-	// NOT propagate across peer daemons (thrum-iyrt).
-	IsLocal bool `json:"is_local,omitempty"`
 }
 
 // TeamHandler handles team-related RPC methods.
 type TeamHandler struct {
-	state              *state.State
-	thrumDir           string
-	supervisorIdentity *config.IdentityFile // synthesized virtual-supervisor identity; nil in tests
+	state    *state.State
+	thrumDir string
 }
 
 // NewTeamHandler creates a new team handler.
-// SupervisorIdentity is the virtual-supervisor identity synthesized at
-// daemon boot; it is wired in here now and consumed by ListAgents in a
-// later task. Passing nil is safe — the injection path short-circuits.
-func NewTeamHandler(state *state.State, thrumDir string, supervisorIdentity *config.IdentityFile) *TeamHandler {
-	return &TeamHandler{
-		state:              state,
-		thrumDir:           thrumDir,
-		supervisorIdentity: supervisorIdentity,
-	}
+func NewTeamHandler(state *state.State, thrumDir string) *TeamHandler {
+	return &TeamHandler{state: state, thrumDir: thrumDir}
 }
 
 // HandleList handles the team.list RPC method.
@@ -136,21 +109,11 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 	}
 
 	var deadAgents []deadAgent
-	localDaemonID := h.state.DaemonID()
 	for _, m := range members {
 		if m.Status != "active" ||
 			m.AgentPID <= 0 ||
 			process.IsRunning(m.AgentPID) ||
 			m.SessionID == "" {
-			continue
-		}
-
-		// Skip self-heal for cross-daemon agents. Their PID lives on a
-		// remote host, so a local IsRunning check is meaningless and
-		// would false-positive every synced agent into "offline".
-		// Authoritative liveness for remote agents comes from sync
-		// events, not local PID checks. See thrum-pxz.14.
-		if m.OriginDaemon != "" && m.OriginDaemon != localDaemonID {
 			continue
 		}
 
@@ -207,15 +170,6 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 		members = []TeamMember{}
 	}
 
-	// Populate IsLocal: empty OriginDaemon is treated as local (legacy/fixture),
-	// as is an OriginDaemon that matches this daemon's own ID. Any other value
-	// means the agent lives on a remote peer daemon. This mirrors the self-heal
-	// skip guard at the top of Phase 1 (thrum-iyrt).
-	for i := range members {
-		od := members[i].OriginDaemon
-		members[i].IsLocal = od == "" || od == localDaemonID
-	}
-
 	var sharedPtr *SharedMessages
 	if shared != nil && (shared.BroadcastTotal > 0 || len(shared.Groups) > 0) {
 		sharedPtr = shared
@@ -232,31 +186,10 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 // file-vs-DB state without re-walking worktrees.
 func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListRequest) ([]TeamMember, *SharedMessages, map[string]*config.IdentityFile, error) {
 	// Query 1: Agents + sessions + work contexts
-	//
-	// worktree_path comes from agent_work_contexts first, with a fallback to
-	// the session's worktree session_ref. Without this fallback, agents whose
-	// agent_work_contexts row is missing (e.g. dormant-resurrect paths, or
-	// heartbeats that added a worktree ref without a subsequent git context
-	// extraction) would drop the `worktree` field entirely via `omitempty`
-	// on TeamMember.WorktreePath. thrum-naak.
-	//
-	// A scalar subquery is used for the session_refs fallback (rather than a
-	// LEFT JOIN) because session_refs has PK (session_id, ref_type, ref_value):
-	// a session can legitimately carry multiple 'worktree' rows with different
-	// values, and a LEFT JOIN on that would multiply team-member rows.
-	// ORDER BY added_at DESC picks the most recently added worktree so a
-	// moved worktree beats a stale historical value.
 	query := `SELECT
-		a.agent_id, a.role, a.module, a.display, a.hostname, a.origin_daemon, a.agent_pid,
+		a.agent_id, a.role, a.module, a.display, a.hostname, a.agent_pid,
 		s.session_id, s.started_at, s.last_seen_at,
-		wc.branch,
-		COALESCE(NULLIF(wc.worktree_path, ''), (
-			SELECT ref_value FROM session_refs
-			WHERE session_id = s.session_id AND ref_type = 'worktree'
-			ORDER BY added_at DESC
-			LIMIT 1
-		)) AS worktree_path,
-		wc.intent, wc.current_task,
+		wc.branch, wc.worktree_path, wc.intent, wc.current_task,
 		wc.unmerged_commits, wc.file_changes
 	FROM agents a
 	LEFT JOIN sessions s ON s.agent_id = a.agent_id AND s.ended_at IS NULL
@@ -280,13 +213,13 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 
 	for rows.Next() {
 		var m TeamMember
-		var display, hostname, originDaemon sql.NullString
+		var display, hostname sql.NullString
 		var sessionID, sessionStart, lastSeen sql.NullString
 		var branch, worktreePath, intent, currentTask sql.NullString
 		var unmergedCommitsJSON, fileChangesJSON sql.NullString
 
 		if err := rows.Scan(
-			&m.AgentID, &m.Role, &m.Module, &display, &hostname, &originDaemon, &m.AgentPID,
+			&m.AgentID, &m.Role, &m.Module, &display, &hostname, &m.AgentPID,
 			&sessionID, &sessionStart, &lastSeen,
 			&branch, &worktreePath, &intent, &currentTask,
 			&unmergedCommitsJSON, &fileChangesJSON,
@@ -299,9 +232,6 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 		}
 		if hostname.Valid {
 			m.Hostname = hostname.String
-		}
-		if originDaemon.Valid {
-			m.OriginDaemon = originDaemon.String
 		}
 		if sessionID.Valid {
 			m.SessionID = sessionID.String
@@ -357,9 +287,8 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 	// caller so Phase 1's dead-agent cross-check can reuse it without a
 	// second worktree scan.
 	var identityMap map[string]*config.IdentityFile
-	var identityPaths map[string]string
 	if h.thrumDir != "" {
-		identityMap, identityPaths = readIdentitiesAndPaths(ctx, h.thrumDir)
+		identityMap = ReadIdentitiesAcrossWorktrees(ctx, h.thrumDir)
 		for i := range members {
 			m := &members[i]
 			idFile := identityMap[m.AgentID]
@@ -369,112 +298,19 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 
 			m.Runtime = idFile.Runtime
 			m.TmuxSession = idFile.TmuxSession
-			m.Reserved = idFile.Reserved
 
 			switch {
 			case idFile.TmuxSession == "":
 				m.TmuxState = ""
 			case !ttmux.HasSession(parseSessionName(idFile.TmuxSession)):
 				m.TmuxState = "dead"
-				// thrum-51cg Option B: self-heal stale TmuxSession when
-				// the bound tmux session no longer exists (external kill,
-				// γ reset, pane exit). Idempotent; best-effort.
-				if path := identityPaths[m.AgentID]; path != "" {
-					if cerr := clearDeadTmuxSessionInIdentity(path); cerr == nil {
-						m.TmuxSession = ""
-						m.Runtime = ""
-					}
-				}
 			case m.AgentPID > 0 && !process.IsRunning(m.AgentPID):
 				m.TmuxState = "stale"
 			default:
 				m.TmuxState = "alive"
 			}
 		}
-
-		// When IncludeSystem is set, synthesize TeamMember entries for
-		// Reserved identities that are NOT in the agents table. The
-		// permission supervisor pseudo-agent is the canonical case: it
-		// exists only as a reply-capable sender for nudges, never
-		// registers an agent.register event, and therefore never has
-		// an agents row. Without this synthesis step, `thrum team
-		// --system` would return nothing for it.
-		//
-		// Synthesized members get Status="reserved" (distinct from
-		// "active" or "offline") to make them visually distinguishable
-		// in the output, and their AgentID is the identity file's
-		// Agent.Name so downstream listing code sees a stable ID.
-		if req.IncludeSystem {
-			for name, idFile := range identityMap {
-				if !idFile.Reserved {
-					continue
-				}
-				if _, exists := memberIndex[name]; exists {
-					// Already in the list from the agents-table query; the
-					// enrichment loop above already populated Reserved.
-					continue
-				}
-				synthetic := TeamMember{
-					AgentID:  name,
-					Role:     idFile.Agent.Role,
-					Module:   idFile.Agent.Module,
-					Display:  idFile.Agent.Display,
-					Runtime:  idFile.Runtime,
-					Status:   "reserved",
-					Reserved: true,
-				}
-				memberIndex[name] = len(members)
-				members = append(members, synthetic)
-			}
-		}
-
-		// Filter out Reserved entries when IncludeSystem is NOT set.
-		// This covers both (a) future agents registered via
-		// agent.register that happen to have Reserved=true in their
-		// identity file, and (b) paranoid defense-in-depth: if a
-		// reserved synthesis ever landed by mistake without the
-		// IncludeSystem flag, the filter still hides it.
-		if !req.IncludeSystem {
-			filtered := members[:0]
-			newIndex := make(map[string]int, len(members))
-			for _, m := range members {
-				if m.Reserved {
-					continue
-				}
-				newIndex[m.AgentID] = len(filtered)
-				filtered = append(filtered, m)
-			}
-			members = filtered
-			memberIndex = newIndex
-		}
 	}
-	// Inject the virtual supervisor pseudo-agent when IncludeSystem is
-	// set. After Task 7 (thrum-kqna.3) removed the Reserved=true
-	// identity file from disk, the file walk above cannot find a
-	// supervisor entry; the daemon carries its synthesized identity
-	// in-memory and injects it here. Injection runs outside the
-	// `h.thrumDir != ""` block so it works even when the file walk is
-	// disabled (e.g. unit-test fixtures).
-	if req.IncludeSystem && h.supervisorIdentity != nil {
-		name := h.supervisorIdentity.Agent.Name
-		if _, exists := memberIndex[name]; !exists {
-			// No memberIndex write here: the map is discarded below via
-			// `_ = memberIndex` so nothing downstream would read the entry.
-			members = append(members, TeamMember{
-				AgentID:  name,
-				Role:     h.supervisorIdentity.Agent.Role,
-				Module:   h.supervisorIdentity.Agent.Module,
-				Display:  h.supervisorIdentity.Agent.Display,
-				Status:   "reserved",
-				Reserved: true,
-			})
-		}
-	}
-
-	// memberIndex is used by downstream logic below and by the caller's
-	// dead-agent self-heal in HandleList, which keys off agent_id
-	// (still valid after the optional filter above).
-	_ = memberIndex
 
 	// Query 2: Per-agent directed message counts (mentions only, not broadcasts/groups)
 	for i, m := range members {

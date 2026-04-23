@@ -22,7 +22,6 @@ func setupFilterTest(t *testing.T) (handler *MessageHandler, agentID string, cle
 	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
 		t.Fatalf("create .thrum dir: %v", err)
 	}
-	writeGuardOffConfig(t, tmpDir)
 
 	repoID := "r_FILTER_TEST"
 	st, err := state.NewState(thrumDir, thrumDir, repoID, "")

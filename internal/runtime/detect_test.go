@@ -112,11 +112,6 @@ func TestDetectRuntime_FileMarkerPrecedence(t *testing.T) {
 }
 
 func TestIsValidRuntime(t *testing.T) {
-	// Isolate from any ~/.thrum/runtimes.json on the dev host so the
-	// user-preset branch of SupportedRuntimes doesn't accidentally
-	// match a test name.
-	t.Setenv("HOME", t.TempDir())
-
 	tests := []struct {
 		name  string
 		valid bool
@@ -126,8 +121,6 @@ func TestIsValidRuntime(t *testing.T) {
 		{"cursor", true},
 		{"gemini", true},
 		{"auggie", true},
-		{"kiro-cli", true},
-		{"shell", true},
 		{"cli-only", true},
 		{"all", true},
 		{"nonexistent", false},
@@ -140,35 +133,6 @@ func TestIsValidRuntime(t *testing.T) {
 				t.Errorf("IsValidRuntime(%q) = %v, want %v", tt.name, got, tt.valid)
 			}
 		})
-	}
-}
-
-func TestIsValidRuntime_UserPreset(t *testing.T) {
-	// Verify SupportedRuntimes picks up a preset defined in ~/.thrum/runtimes.json,
-	// which is the path that failed in practice for 'thrum quickstart --runtime kiro-cli'
-	// before kiro-cli became a builtin (thrum-e994).
-	tmpDir := t.TempDir()
-	t.Setenv("HOME", tmpDir)
-
-	configDir := filepath.Join(tmpDir, ".thrum")
-	if err := os.MkdirAll(configDir, 0750); err != nil {
-		t.Fatal(err)
-	}
-	cfg := []byte(`{
-  "custom_runtimes": {
-    "my-custom-agent": {
-      "name": "my-custom-agent",
-      "display_name": "My Custom Agent",
-      "command": "my-agent"
-    }
-  }
-}`)
-	if err := os.WriteFile(filepath.Join(configDir, "runtimes.json"), cfg, 0600); err != nil {
-		t.Fatal(err)
-	}
-
-	if !IsValidRuntime("my-custom-agent") {
-		t.Error("expected user-preset runtime to be valid; SupportedRuntimes does not merge user presets")
 	}
 }
 
@@ -318,17 +282,13 @@ func TestDetectAgents_MultipleAgents(t *testing.T) {
 }
 
 func TestSupportedRuntimes(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-
 	runtimes := SupportedRuntimes()
 	if len(runtimes) < 6 {
 		t.Errorf("expected at least 6 supported runtimes, got %d", len(runtimes))
 	}
 
-	// Verify required runtimes are present. kiro-cli and shell were added
-	// in thrum-e994 when the SupportedRuntimes source expanded from
-	// builtinAgents to BuiltinPresets ∪ builtinAgents ∪ user presets.
-	required := []string{"claude", "codex", "cursor", "gemini", "auggie", "kiro-cli", "shell", "cli-only"}
+	// Verify required runtimes are present
+	required := []string{"claude", "codex", "cursor", "gemini", "auggie", "cli-only"}
 	for _, name := range required {
 		found := false
 		for _, r := range runtimes {

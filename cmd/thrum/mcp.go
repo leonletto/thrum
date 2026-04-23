@@ -101,10 +101,15 @@ func runMCPServe(agentID string) error {
 		cancel()
 	}()
 
-	// Attach polling waiter for wait_for_message. The waiter shares the
-	// same message.list path as the CLI `thrum wait` command and requires
-	// no WebSocket connection.
-	server.InitWaiter(ctx)
+	// Initialize WebSocket waiter for wait_for_message (best-effort)
+	wsPort := cli.ReadWebSocketPort(repoPath)
+	if wsPort > 0 {
+		wsURL := fmt.Sprintf("ws://localhost:%d/ws", wsPort)
+		if initErr := server.InitWaiter(ctx, wsURL); initErr != nil {
+			// Log but continue — MCP server works without waiter
+			fmt.Fprintf(os.Stderr, "Warning: WebSocket waiter not available (wait_for_message will fail): %v\n", initErr)
+		}
+	}
 
 	// Run MCP server (blocks on stdio until client disconnects)
 	return server.Run(ctx)

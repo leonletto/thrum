@@ -1,4 +1,4 @@
-.PHONY: help test test-unit test-integration test-coverage test-verbose build build-ui build-go sync-embed-reference install dev deploy-remote clean clean-e2e test-e2e fmt fmt-md fmt-all lint lint-check lint-fix lint-md lint-md-fix lint-all vet tidy install-tools ci quick-check pre-commit pre-push security gosec-check vulncheck setup-hooks sync-skills
+.PHONY: help test test-unit test-integration test-coverage test-verbose build build-ui build-go sync-embed-reference install deploy-remote clean clean-e2e test-e2e fmt fmt-md fmt-all lint lint-check lint-fix lint-md lint-md-fix lint-all vet tidy install-tools ci quick-check pre-commit pre-push security gosec-check vulncheck setup-hooks sync-skills
 
 # Tool versions - pinned for supply chain security
 GOLANGCI_LINT_VERSION := v1.64.5
@@ -10,7 +10,7 @@ GOVULNCHECK_VERSION := latest
 BINARY_NAME := thrum
 BUILD_DIR := bin
 INSTALL_DIR := $(HOME)/.local/bin
-VERSION := 0.9.0
+VERSION := 0.8.2
 
 # Default target
 help:
@@ -20,9 +20,8 @@ help:
 	@echo "  make build             - Build UI and Go binary (full build)"
 	@echo "  make build-ui          - Build UI and copy to embed location"
 	@echo "  make build-go          - Build Go binary only (skip UI rebuild)"
-	@echo "  make install           - Full build and install thrum to ~/.local/bin (SHARED — affects all agents)"
-	@echo "  make dev               - Full build + restart LOCAL worktree daemon (isolated — safe for multi-agent machines)"
-	@echo "  make deploy-remote REMOTE=host - Cross-compile + scp + (macOS: codesign) + verify version on remote"
+	@echo "  make install           - Full build and install thrum to ~/.local/bin"
+	@echo "  make deploy-remote REMOTE=host - Install + scp + sign on remote macOS"
 	@echo "  make fmt               - Format Go code"
 	@echo "  make fmt-md            - Format Markdown files with prettier"
 	@echo "  make fmt-all           - Format all files (Go + Markdown)"
@@ -126,76 +125,17 @@ install: build
 	@rm -f $(shell go env GOPATH)/bin/$(BINARY_NAME)
 	@echo "Installed $(BINARY_NAME) to $(INSTALL_DIR)/$(BINARY_NAME)"
 
-# Build, sign, and restart the LOCAL worktree daemon.
-#
-# Use this when testing changes in a worktree on a multi-agent machine.
-# Produces a signed binary at ./$(BUILD_DIR)/$(BINARY_NAME) and restarts
-# the repo-scoped daemon via os.Executable() re-exec — the new daemon
-# runs from the local bin path, NOT from $(INSTALL_DIR). Other agents
-# on the same machine using ~/.local/bin/$(BINARY_NAME) are unaffected.
-#
-# Safe to run repeatedly during development. First-time use (no daemon
-# running yet in this repo) falls through from restart to start.
-dev: build
-	@echo "Restarting worktree-local daemon using ./$(BUILD_DIR)/$(BINARY_NAME)..."
-	@./$(BUILD_DIR)/$(BINARY_NAME) daemon restart 2>/dev/null || ./$(BUILD_DIR)/$(BINARY_NAME) daemon start
-	@./$(BUILD_DIR)/$(BINARY_NAME) daemon status
-
-# Deploy binary to a remote machine via scp with cross-compilation.
-# Usage: make deploy-remote REMOTE=leonsmacmini.local
-#        make deploy-remote REMOTE=ubuntuleondev
+# Deploy binary to a remote macOS machine via scp
+# Usage: make deploy-remote REMOTE=leontest
 #        make deploy-remote REMOTE=user@192.168.1.10
-#
-# Scope: JUST installs a verified working binary at ~/.local/bin/. Does NOT
-# touch daemon lifecycle — the agent operating on the remote decides when
-# to restart. The final `version` check confirms the binary is runnable on
-# the target (if codesign is missing or the arch is wrong the version call
-# fails and the deploy errors out). `thrum version` is repo-context-free
-# and is the only thrum subcommand run over raw ssh here.
-#
-# Detects remote OS/arch via `uname -s -m`, cross-compiles the right binary,
-# uploads it, codesigns on darwin targets, moves it into place, and verifies.
-# Supports darwin/amd64, darwin/arm64, linux/amd64, linux/arm64.
-deploy-remote:
+deploy-remote: install
 ifndef REMOTE
-	$(error REMOTE is required. Usage: make deploy-remote REMOTE=host)
+	$(error REMOTE is required. Usage: make deploy-remote REMOTE=leontest)
 endif
-	@set -e; \
-	echo "Detecting remote OS/arch on $(REMOTE)..."; \
-	uname_out=$$(ssh $(REMOTE) uname -s -m); \
-	echo "  remote: $$uname_out"; \
-	case "$$uname_out" in \
-		Darwin*arm64)    goos=darwin; goarch=arm64 ;; \
-		Darwin*x86_64)   goos=darwin; goarch=amd64 ;; \
-		Linux*x86_64)    goos=linux;  goarch=amd64 ;; \
-		Linux*aarch64)   goos=linux;  goarch=arm64 ;; \
-		Linux*arm64)     goos=linux;  goarch=arm64 ;; \
-		*) echo "ERROR: unsupported remote OS/arch: $$uname_out"; exit 1 ;; \
-	esac; \
-	artifact=$(BINARY_NAME)-$$goos-$$goarch; \
-	short_sha=$$(git rev-parse --short HEAD); \
-	echo "Cross-compiling $$artifact (v$(VERSION) build $$short_sha)..."; \
-	GOOS=$$goos GOARCH=$$goarch go build \
-		-ldflags="-X main.Version=$(VERSION) -X main.Build=$$short_sha" \
-		-o $(BUILD_DIR)/$$artifact ./cmd/$(BINARY_NAME); \
-	echo "Uploading $(BUILD_DIR)/$$artifact to $(REMOTE):/tmp/$(BINARY_NAME)-new..."; \
-	scp $(BUILD_DIR)/$$artifact $(REMOTE):/tmp/$(BINARY_NAME)-new; \
-	ssh $(REMOTE) "chmod +x /tmp/$(BINARY_NAME)-new"; \
-	if [ "$$goos" = "darwin" ]; then \
-		echo "Codesigning on darwin target..."; \
-		ssh $(REMOTE) "xattr -cr /tmp/$(BINARY_NAME)-new && codesign -s - -f /tmp/$(BINARY_NAME)-new"; \
-	fi; \
-	ssh $(REMOTE) "mv /tmp/$(BINARY_NAME)-new ~/.local/bin/$(BINARY_NAME)"; \
-	echo "Verifying remote binary runs..."; \
-	remote_ver=$$(ssh $(REMOTE) "~/.local/bin/$(BINARY_NAME) version" 2>&1 | head -1); \
-	echo "  remote: $$remote_ver"; \
-	if ! echo "$$remote_ver" | grep -qF "v$(VERSION)" || ! echo "$$remote_ver" | grep -qF "$$short_sha"; then \
-		echo "ERROR: remote binary did not report expected version v$(VERSION) + build $$short_sha."; \
-		echo "This usually means the binary did not codesign properly, is"; \
-		echo "the wrong arch, or failed to run for another reason."; \
-		exit 1; \
-	fi; \
-	echo "Deployed $(BINARY_NAME) ($$goos/$$goarch) to $(REMOTE) — version verified. Daemon restart is up to the operator."
+	@echo "Deploying $(BINARY_NAME) to $(REMOTE)..."
+	scp $(INSTALL_DIR)/$(BINARY_NAME) $(REMOTE):~/.local/bin/$(BINARY_NAME)
+	ssh $(REMOTE) "xattr -cr ~/.local/bin/$(BINARY_NAME) && codesign -s - -f ~/.local/bin/$(BINARY_NAME)"
+	@echo "Deployed and signed $(BINARY_NAME) on $(REMOTE)"
 
 ## E2E test cleanup — stops daemon and removes /tmp/thrum-e2e-release/
 clean-e2e:
@@ -337,18 +277,7 @@ gosec-check:
 		echo "gosec not found. Installing $(GOSEC_VERSION)..."; \
 		go install github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION); \
 	fi
-	gosec \
-		-exclude-dir=.ref -exclude-dir=third_party -exclude-dir=builtin -exclude-dir=examples -exclude-dir=output \
-		-exclude=G115,G117,G204,G404,G602,G703 \
-		./...
-# Exclusion rationale (matches .golangci.yml — standalone gosec doesn't
-# read that file nor honor //nolint directives):
-#   G115: int(file.Fd()) for syscall.Flock — safe on 64-bit Go builds.
-#   G117: struct field names matching "secret" patterns are intentional config fields.
-#   G204: CLI tool legitimately runs git and other subprocesses with variables.
-#   G404: math/rand used for non-security UI hint rotation (cli/hints.go).
-#   G602: false positive on guarded slice access (e.g. i > 0 before ports[i-1]).
-#   G703: path traversal via taint — paths are constructed internally, not from user input.
+	gosec -exclude-dir=.ref -exclude-dir=third_party -exclude-dir=builtin -exclude-dir=examples -exclude-dir=output ./...
 
 vulncheck:
 	@echo "Running govulncheck..."

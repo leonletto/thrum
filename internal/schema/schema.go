@@ -6,10 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +17,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 24
+const CurrentVersion = 20
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -134,26 +131,17 @@ func createTables(tx *sql.Tx) error {
 			created_by TEXT NOT NULL
 		)`,
 
-		// Agents table.
-		//
-		// origin_daemon tracks which daemon emitted the agent.register event
-		// for this row — local registrations get the local daemon_id, synced
-		// registrations carry the remote origin's daemon_id. HandleRegister's
-		// role+module conflict check filters by origin_daemon so cross-daemon
-		// agents with overlapping (role, module) aren't treated as local
-		// conflicts (thrum-mm3l). See migration 21→22 for the backfill path
-		// on pre-existing databases.
+		// Agents table
 		`CREATE TABLE IF NOT EXISTS agents (
-			agent_id       TEXT PRIMARY KEY,
-			kind           TEXT NOT NULL,
-			role           TEXT NOT NULL,
-			module         TEXT NOT NULL,
-			display        TEXT NOT NULL DEFAULT '',
-			hostname       TEXT NOT NULL DEFAULT '',
-			agent_pid      INTEGER NOT NULL DEFAULT 0,
-			registered_at  TEXT NOT NULL,
-			last_seen_at   TEXT NOT NULL DEFAULT '',
-			origin_daemon  TEXT NOT NULL DEFAULT ''
+			agent_id   TEXT PRIMARY KEY,
+			kind       TEXT NOT NULL,
+			role       TEXT NOT NULL,
+			module     TEXT NOT NULL,
+			display    TEXT NOT NULL DEFAULT '',
+			hostname   TEXT NOT NULL DEFAULT '',
+			agent_pid INTEGER NOT NULL DEFAULT 0,
+			registered_at TEXT NOT NULL,
+			last_seen_at TEXT NOT NULL DEFAULT ''
 		)`,
 
 		// Sessions table
@@ -327,48 +315,6 @@ func createTables(tx *sql.Tx) error {
 			last_exit_at      TEXT,
 			pid               INTEGER
 		)`,
-
-		// Permission nudges table (for permission-prompt detection — v21).
-		// Daemon-local only: each row describes a pending nudge for a tmux
-		// session on THIS host. Not synced across repos; see
-		// dev-docs/specs/2026-04-14-permission-prompt-detection-design.md §3.
-		`CREATE TABLE IF NOT EXISTS permission_nudges (
-			message_id       TEXT PRIMARY KEY,
-			session          TEXT NOT NULL,
-			tmux_target      TEXT NOT NULL,
-			agent_name       TEXT NOT NULL,
-			pattern_key      TEXT NOT NULL,
-			approve_key      TEXT NOT NULL,
-			deny_key         TEXT,
-			first_detected   TIMESTAMP NOT NULL,
-			last_nudge_at    TIMESTAMP NOT NULL,
-			nudge_count      INTEGER NOT NULL,
-			last_pane_hash   BLOB NOT NULL,
-			expires_at       TIMESTAMP NOT NULL
-		)`,
-
-		// Daemon identity table (v23). Single-row mirror of the identity block
-		// in .thrum/config.json. Populated at daemon startup; not synced.
-		`CREATE TABLE IF NOT EXISTS daemon_identity (
-			daemon_id      TEXT PRIMARY KEY,
-			repo_name      TEXT NOT NULL,
-			hostname       TEXT NOT NULL,
-			repo_path      TEXT NOT NULL,
-			git_origin_url TEXT,
-			init_at        TEXT NOT NULL,
-			updated_at     TEXT NOT NULL
-		)`,
-
-		// Telegram↔Thrum message ID map (v24, thrum-48kt.2). Durable
-		// backing for the in-memory LRU in internal/bridge/telegram/msgmap.go
-		// so supervisor replies that arrive after a daemon restart still
-		// resolve to the originating nudge. Keys are the telegram
-		// "chatID:msgID" format produced by teleKey().
-		`CREATE TABLE IF NOT EXISTS telegram_msg_map (
-			external_key TEXT PRIMARY KEY,
-			thrum_msg_id TEXT NOT NULL,
-			created_at   INTEGER NOT NULL
-		)`,
 	}
 
 	for _, sql := range tables {
@@ -432,13 +378,6 @@ func createIndexes(tx *sql.Tx) error {
 
 		// Monitors indexes (v20)
 		"CREATE INDEX IF NOT EXISTS idx_monitors_status ON monitors(status)",
-
-		// Permission nudges indexes (v21)
-		"CREATE INDEX IF NOT EXISTS idx_permission_nudges_session ON permission_nudges(session)",
-		"CREATE INDEX IF NOT EXISTS idx_permission_nudges_expires ON permission_nudges(expires_at)",
-
-		// Telegram msg map reverse-lookup index (v24, thrum-48kt.2)
-		"CREATE INDEX IF NOT EXISTS idx_telegram_msg_map_thrum ON telegram_msg_map(thrum_msg_id)",
 	}
 
 	for _, sql := range indexes {
@@ -520,44 +459,11 @@ func Migrate(db *sql.DB) error {
 		return nil
 	}
 
-	// Downgrade guard: refuse to run against a DB from a newer binary.
-	if currentVersion > CurrentVersion {
-		return fmt.Errorf("database schema is version %d, this binary supports up to %d — cannot downgrade; use a newer binary or delete the database to start fresh", currentVersion, CurrentVersion)
-	}
-
-	// Back up the DB file + WAL/SHM sidecars before any migration runs so the
-	// operator can revert cleanly by renaming the backup back.  Backup-once:
-	// never overwrite an existing backup (a later startup must not clobber the
-	// true pre-upgrade snapshot).  Skip when file == "" (in-memory test DB).
-	var dbSeq int
-	var dbName, dbFile string
-	if err := db.QueryRow("PRAGMA database_list").Scan(&dbSeq, &dbName, &dbFile); err == nil && dbFile != "" {
-		suffix := fmt.Sprintf(".pre-migration-v%d-bak", currentVersion)
-		if err := backupFileOnce(dbFile, dbFile+suffix); err != nil {
-			log.Printf("[schema] DB backup failed (migration proceeding): %v", err)
-		}
-		// WAL and SHM sidecars — absence is fine, backupFileOnce is a no-op.
-		if err := backupFileOnce(dbFile+"-wal", dbFile+"-wal"+suffix); err != nil {
-			log.Printf("[schema] WAL backup failed (migration proceeding): %v", err)
-		}
-		if err := backupFileOnce(dbFile+"-shm", dbFile+"-shm"+suffix); err != nil {
-			log.Printf("[schema] SHM backup failed (migration proceeding): %v", err)
-		}
-	}
-
 	// Run migrations
 	if currentVersion < CurrentVersion {
-		// Emit start + completion logs so operators can confirm from daemon
-		// logs that a migration actually ran on post-deploy restart.
-		// Pre-thrum-rchj the function logged only backup errors, so a
-		// bug report of "schema stayed at vX after restart" had no log
-		// evidence to distinguish "daemon didn't pick up the new binary"
-		// from "migration silently failed".
-		log.Printf("[schema] migrating DB from v%d to v%d", currentVersion, CurrentVersion)
 		if err := runMigrations(db, currentVersion, CurrentVersion); err != nil {
 			return fmt.Errorf("run migrations: %w", err)
 		}
-		log.Printf("[schema] migration complete: v%d", CurrentVersion)
 	}
 
 	return nil
@@ -936,148 +842,6 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		}
 	}
 
-	// Migration from version 20 to 21: Add permission_nudges table for
-	// the permission-prompt detection feature. Daemon-local only (not
-	// synced across repos). Uses CREATE TABLE IF NOT EXISTS so the
-	// migration is safe to run after createTables().
-	if startVersion < 21 && endVersion >= 21 {
-		_, err = tx.Exec(`
-			CREATE TABLE IF NOT EXISTS permission_nudges (
-				message_id       TEXT PRIMARY KEY,
-				session          TEXT NOT NULL,
-				tmux_target      TEXT NOT NULL,
-				agent_name       TEXT NOT NULL,
-				pattern_key      TEXT NOT NULL,
-				approve_key      TEXT NOT NULL,
-				deny_key         TEXT,
-				first_detected   TIMESTAMP NOT NULL,
-				last_nudge_at    TIMESTAMP NOT NULL,
-				nudge_count      INTEGER NOT NULL,
-				last_pane_hash   BLOB NOT NULL,
-				expires_at       TIMESTAMP NOT NULL
-			)
-		`)
-		if err != nil {
-			return fmt.Errorf("migration 20→21: create permission_nudges: %w", err)
-		}
-		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_permission_nudges_session ON permission_nudges(session)`)
-		if err != nil {
-			return fmt.Errorf("migration 20→21: idx_permission_nudges_session: %w", err)
-		}
-		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_permission_nudges_expires ON permission_nudges(expires_at)`)
-		if err != nil {
-			return fmt.Errorf("migration 20→21: idx_permission_nudges_expires: %w", err)
-		}
-	}
-
-	// Migration from version 21 to 22: add origin_daemon column to agents
-	// table and backfill from the events table. Fixes thrum-mm3l: without
-	// origin tracking, HandleRegister's role+module conflict check treats
-	// cross-daemon agents as local duplicates and silently deletes them on
-	// force-override. The backfill reads each agent's most-recent
-	// agent.register event from the events table (the authoritative source
-	// of origin_daemon) and copies the value onto the agents row.
-	//
-	// Rows with no matching agent.register event keep the default empty
-	// string — those are legacy rows from before the events table was
-	// durable. HandleRegister's filter treats empty origin_daemon as
-	// "unknown / assume local" to avoid false negatives on those rows.
-	//
-	// Idempotent: skipped entirely if the agents table doesn't exist (the
-	// v5→V_partial migration tests bring up a minimal schema); skipped if
-	// the column is already present (safe to re-run against a fresh
-	// createTables() schema which already has it).
-	if startVersion < 22 && endVersion >= 22 {
-		hasAgents, err := tableExists(tx, "agents")
-		if err != nil {
-			return fmt.Errorf("migration 21→22: check agents table: %w", err)
-		}
-		if hasAgents {
-			agentCols, err := columnSet(tx, "agents")
-			if err != nil {
-				return fmt.Errorf("migration 21→22: inspect agents: %w", err)
-			}
-			if !agentCols["origin_daemon"] {
-				_, err = tx.Exec(`ALTER TABLE agents ADD COLUMN origin_daemon TEXT NOT NULL DEFAULT ''`)
-				if err != nil {
-					return fmt.Errorf("migration 21→22: add origin_daemon column: %w", err)
-				}
-			}
-			// Backfill: for each agent, find the most-recent agent.register
-			// event and copy its origin_daemon. Uses the events table (not
-			// JSONL) — the table is populated by the same WriteEvent path
-			// that feeds the projector, so every projected agent should have
-			// at least one event. Skipped when the events table is absent
-			// (minimal test schema) — the column default of '' is correct
-			// in that case.
-			hasEvents, err := tableExists(tx, "events")
-			if err != nil {
-				return fmt.Errorf("migration 21→22: check events table: %w", err)
-			}
-			if hasEvents {
-				_, err = tx.Exec(`
-					UPDATE agents
-					SET origin_daemon = COALESCE((
-						SELECT e.origin_daemon
-						FROM events e
-						WHERE e.type = 'agent.register'
-						  AND json_extract(e.event_json, '$.agent_id') = agents.agent_id
-						ORDER BY e.sequence DESC
-						LIMIT 1
-					), '')
-					WHERE origin_daemon = ''
-				`)
-				if err != nil {
-					return fmt.Errorf("migration 21→22: backfill origin_daemon: %w", err)
-				}
-			}
-		}
-	}
-
-	// Migration from version 22 to 23: Add daemon_identity table
-	// Single-row table mirroring the identity block in .thrum/config.json.
-	// Populated at daemon startup by state code; not backfilled here
-	// (existing databases simply get the empty table; state wiring in a
-	// subsequent task fills it on first daemon start post-upgrade).
-	if startVersion < 23 && endVersion >= 23 {
-		_, err = tx.Exec(`
-			CREATE TABLE IF NOT EXISTS daemon_identity (
-				daemon_id      TEXT PRIMARY KEY,
-				repo_name      TEXT NOT NULL,
-				hostname       TEXT NOT NULL,
-				repo_path      TEXT NOT NULL,
-				git_origin_url TEXT,
-				init_at        TEXT NOT NULL,
-				updated_at     TEXT NOT NULL
-			)
-		`)
-		if err != nil {
-			return fmt.Errorf("migration 22→23: create daemon_identity table: %w", err)
-		}
-	}
-
-	// Migration from version 23 to 24: Add telegram_msg_map table for
-	// durable Telegram↔Thrum message ID mapping (thrum-48kt.2).
-	// Prior state: in-memory LRU only, daemon restart lost pending-nudge
-	// mappings → supervisor replies after restart landed as top-level
-	// DMs with no reply_to ref → TryResolve never fired.
-	if startVersion < 24 && endVersion >= 24 {
-		_, err = tx.Exec(`
-			CREATE TABLE IF NOT EXISTS telegram_msg_map (
-				external_key TEXT PRIMARY KEY,
-				thrum_msg_id TEXT NOT NULL,
-				created_at   INTEGER NOT NULL
-			)
-		`)
-		if err != nil {
-			return fmt.Errorf("migration 23→24: create telegram_msg_map table: %w", err)
-		}
-		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_telegram_msg_map_thrum ON telegram_msg_map(thrum_msg_id)`)
-		if err != nil {
-			return fmt.Errorf("migration 23→24: create idx_telegram_msg_map_thrum: %w", err)
-		}
-	}
-
 	// Update schema version
 	_, err = tx.Exec("UPDATE schema_version SET version = ?", endVersion)
 	if err != nil {
@@ -1092,55 +856,6 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 }
 
 // queueColumnSet returns the set of column names currently present on the
-// tableExists reports whether a table of the given name exists. Used by
-// migrations that ALTER or UPDATE a specific table so they stay idempotent
-// when the partial test schemas don't create that table.
-func tableExists(tx *sql.Tx, name string) (bool, error) {
-	var dummy string
-	err := tx.QueryRow(
-		`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`,
-		name,
-	).Scan(&dummy)
-	if err == sql.ErrNoRows {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-// columnSet returns the set of column names on a table via PRAGMA table_info.
-// Used by migrations for idempotent ALTER TABLE ADD COLUMN since SQLite does
-// not support IF NOT EXISTS on ADD COLUMN.
-func columnSet(tx *sql.Tx, table string) (map[string]bool, error) {
-	// PRAGMA doesn't support bind parameters; callers pass a trusted
-	// table name (hardcoded at call sites), not user input.
-	//nolint:gosec // trusted table name
-	rows, err := tx.Query("PRAGMA table_info(" + table + ")")
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	cols := map[string]bool{}
-	for rows.Next() {
-		var (
-			cid     int
-			name    string
-			ctype   string
-			notnull int
-			dflt    sql.NullString
-			pk      int
-		)
-		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
-			return nil, err
-		}
-		cols[name] = true
-	}
-	return cols, rows.Err()
-}
-
 // command_queue table. Used by the v18→v19 migration for idempotent ALTER TABLE
 // ADD COLUMN (SQLite does not support IF NOT EXISTS on ADD COLUMN).
 func queueColumnSet(tx *sql.Tx) (map[string]bool, error) {
@@ -1166,27 +881,6 @@ func queueColumnSet(tx *sql.Tx) (map[string]bool, error) {
 		cols[name] = true
 	}
 	return cols, rows.Err()
-}
-
-// backupFileOnce copies src to dst if src exists and dst does not.
-// Returns nil if dst already exists or src does not exist; errors on copy failure.
-// Same backup-once pattern as identity.backupConfigOnce.
-func backupFileOnce(src, dst string) error {
-	if _, err := os.Stat(dst); err == nil {
-		return nil // backup already exists — don't overwrite pre-upgrade state
-	}
-	data, err := os.ReadFile(src) // #nosec G304 -- src is SQLite DB path (+ sidecars) derived from PRAGMA database_list
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil // sidecar absent (e.g. no WAL) — nothing to back up
-		}
-		return fmt.Errorf("read for backup: %w", err)
-	}
-	if err := os.WriteFile(dst, data, 0o600); err != nil {
-		return fmt.Errorf("write backup: %w", err)
-	}
-	log.Printf("[schema] backed up pre-migration file to %s", dst)
-	return nil
 }
 
 // BackfillEventID backfills event_id fields for events in JSONL files that lack them.

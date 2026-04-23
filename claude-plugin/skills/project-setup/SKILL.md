@@ -47,12 +47,7 @@ digraph when_to_use {
 
 ## Prerequisites
 
-Two prereqs must be satisfied before project-setup proceeds. Bail on either
-rather than trying to work around it.
-
-### Beads (bd) installed
-
-Verify beads is installed:
+Before starting, verify beads is installed:
 
 ```bash
 bd version
@@ -74,26 +69,6 @@ If `bd` is not found, stop and tell the user:
 
 Do not proceed without beads. Do not fall back to markdown task lists or
 TodoWrite.
-
-### Implementation Philosophy Doc
-
-Verify the project has an implementation philosophy doc at the canonical path:
-
-```bash
-test -f .thrum/philosophy.md
-```
-
-If the file does not exist, stop and tell the user:
-
-> project-setup requires a philosophy doc at `.thrum/philosophy.md`. Run the
-> `project-philosophy` skill first to generate or locate one, then re-invoke
-> project-setup.
-
-Do not proceed without the philosophy doc. Do not inline-create.
-
-If the doc exists, read it and extract the anti-patterns for injection in
-Phase 4. Refer to the `project-philosophy` skill for the doc contents and the
-anti-pattern format.
 
 ## Inputs
 
@@ -132,20 +107,50 @@ get there).
 enough to stand alone.** Flag any plan tasks with vague or missing
 implementation code during this phase.
 
-Explore the codebase and recent beads state in parallel. Partition the work so:
+Use sub-agents to explore the codebase in parallel:
 
-- One sub-agent maps packages, interfaces, and patterns relevant to
-  `{{FEATURE_DESCRIPTION}}` — output: `output/planning/codebase-scan.md`.
-- One sub-agent runs `bd list --status=open`, `bd ready`, and `bd blocked` and
-  identifies work related to `{{FEATURE_DESCRIPTION}}` — output:
-  `output/planning/beads-context.md`.
+```text
+# All launched in ONE message for parallel execution
+Task(subagent_type="Explore", run_in_background=true,
+  prompt="Explore {{PROJECT_ROOT}}. Map packages, interfaces, and patterns
+  relevant to: {{FEATURE_DESCRIPTION}}.
+  Write findings to output/planning/codebase-scan.md")
 
-Invoke `efficient-multi-agent-research` for the launch-and-wait mechanics. After
-agents complete, read the two output files — do not fan-read individual beads
-entries into your main context.
+Task(subagent_type="general-purpose", model="haiku", run_in_background=true,
+  prompt="Run: bd list --status=open, bd ready, bd blocked.
+  Identify work related to {{FEATURE_DESCRIPTION}}.
+  Write to output/planning/beads-context.md")
+```
+
+After agents complete, read the output files. Check `bd list` / `bd ready` /
+`bd blocked` for related or overlapping work.
 
 Ask the user focused questions (prefer multiple choice) about anything the plan
 leaves ambiguous — constraints, scope boundaries, patterns to follow.
+
+### Check for Implementation Philosophy Doc
+
+After reading the plan and design doc, check if the project has an
+implementation philosophy doc — a file defining anti-patterns, red flags, and
+non-negotiable criteria:
+
+1. Check if the design doc references a philosophy doc (look for "philosophy",
+   "anti-patterns", "implementation standards" keywords)
+2. Search for existing files:
+
+   ```bash
+   find . -name "*philosophy*" -o -name "*anti-pattern*" -o -name "*implementation-standards*" | head
+   ```
+
+3. **If found:** Read it and extract the key anti-patterns. These will be
+   injected into each epic's prompt in Phase 4.
+4. **If not found:** Offer to create one from the `philosophy-template.md` file
+   in this skill's `resources/` directory. Use `AskUserQuestion` to ask whether
+   to create it now or skip.
+
+This is the project's "rules of engagement" for implementation agents. Without
+it, agents can only verify "tests pass" — they can't verify architectural
+compliance.
 
 ## Phase 2: Decompose into Epics & Tasks
 
@@ -176,12 +181,20 @@ bd dep add <later-epic-id> <earlier-epic-id>
 
 ### Create Tasks
 
-When creating > 6 tasks, delegate to parallel sub-agents — one per epic. Each
-sub-agent (haiku is sufficient — the work is mechanical) gets the epic ID, the
-list of `bd create --title=... --type=task --priority=N --description=...`
-commands to run, the within-epic `bd dep add <later_id> <earlier_id>` ordering
-commands, and instructions to return the created task IDs and titles. Invoke
-`efficient-multi-agent-research` § Core Pattern for launch-and-wait mechanics.
+When creating > 6 tasks, delegate to parallel sub-agents — one per epic:
+
+```text
+Task(subagent_type="general-purpose", model="haiku",
+  prompt="Create these beads tasks under epic {{EPIC_1_ID}}:
+  1. bd create --title='...' --type=task --priority=2 --description='...'
+  2. bd create --title='...' --type=task --priority=1 --description='...'
+  Then set ordering: bd dep add <later_id> <earlier_id>
+  Return the created task IDs and their titles.")
+
+Task(subagent_type="general-purpose", model="haiku",
+  prompt="Create these beads tasks under epic {{EPIC_2_ID}}:
+  ...")
+```
 
 After sub-agents return IDs, set cross-epic dependencies directly (requires IDs
 from multiple sub-agents):
@@ -543,20 +556,19 @@ every time.
 
 ### Step 1.5: Generate Anti-Patterns for Each Epic
 
-For each epic's prompt, derive the `{{ANTI_PATTERNS}}` content by combining two
-sources:
+For each epic's prompt, generate the `{{ANTI_PATTERNS}}` content:
 
-1. The design doc's **Key Decisions** section — implementation-constraining
-   decisions (e.g., "full page reload, not HTMX", "real service calls, not
-   hardcoded").
-2. The philosophy doc's **Anti-Patterns** and **Red Flags** sections (already
-   read during the Prerequisites check).
-
-Present the derived anti-patterns to the user for approval via `AskUserQuestion`
-before injecting into the prompt.
-
-Refer to the `project-philosophy` skill for the anti-pattern format spec (rule
-count, grep-ability, positive + negative pair structure).
+1. Read the design doc's **Key Decisions** section — extract decisions that
+   constrain implementation (e.g., "full page reload, not HTMX", "real service
+   calls, not hardcoded")
+2. Read the philosophy doc's **Anti-Patterns** and **Red Flags** sections
+   (identified in Phase 1)
+3. Generate 3-5 epic-specific rules and red flags:
+   - State what MUST happen (positive requirement)
+   - State what MUST NOT happen (anti-pattern)
+   - Make rules grep-able where possible (e.g., "grep for `display:none`")
+4. Present the generated anti-patterns to the user for approval via
+   `AskUserQuestion` before injecting into the prompt
 
 **Why this matters:** The verifier sub-agent pattern in the implementation
 template uses these red flags to check each task. Generic "tests pass"
@@ -581,7 +593,7 @@ worktree-related values come from the Phase 3 assignments:
 | `{{COVERAGE_TARGET}}`  | Coverage threshold (e.g., `>80%`)                                                                                                                                                                                           |
 | `{{AGENT_NAME}}`       | **From Phase 3 agent registration**                                                                                                                                                                                         |
 | `{{PLAN_FILE}}`        | **Absolute path** to the plan file (primary input)                                                                                                                                                                          |
-| `{{ANTI_PATTERNS}}`    | Generated in Step 1.5; refer to the `project-philosophy` skill for the anti-pattern format spec.                                                                                                                            |
+| `{{ANTI_PATTERNS}}`    | Generated in Step 1.5 from design doc + philosophy doc                                                                                                                                                                      |
 | `{{SUPERVISOR_NAME}}`  | From `thrum team` — first agent with role=orchestrator; if none, first with role=coordinator; if none, ask user                                                                                                             |
 | `{{CROSS_EPIC_DEPS}}`  | From Phase 2 cross-epic dependency map. If no cross-epic deps, replace with "No cross-epic dependencies."                                                                                                                   |
 
@@ -750,20 +762,3 @@ When complete, you should have produced:
 After setup is complete, each epic is ready for an implementation agent. The
 filled prompt at `dev-docs/prompts/{feature}.md` is the session start prompt —
 give it directly to the implementing agent.
-
-### Implementer Status Reports
-
-Implementation agents prefix every completion or escalation message with one of
-four status tokens defined in `implementation-agent.md`'s Phase 4 Status
-Vocabulary. Your response depends on the token:
-
-| Token                | Coordinator Response                                                                                                                                                                                                                                     |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DONE`               | Proceed to code review and merge for the epic's branch.                                                                                                                                                                                                  |
-| `DONE_WITH_CONCERNS` | Read the concerns before review. Address correctness/scope issues before merging; note architectural observations for follow-up. Do not merge blind.                                                                                                     |
-| `NEEDS_CONTEXT`      | Answer the question, then re-dispatch the implementer with the missing context.                                                                                                                                                                          |
-| `BLOCKED`            | Assess the blocker: context problem → re-dispatch with more context; task too large → split it; stronger reasoning needed → re-dispatch on a more capable model; plan wrong → escalate to the user. Never force the same model to retry without changes. |
-
-**Never ignore a status escalation or silently re-dispatch.** If the implementer
-reports `BLOCKED` or `NEEDS_CONTEXT`, something must change before retrying —
-provide missing context, split the task, switch models, or escalate.

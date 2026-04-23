@@ -81,15 +81,21 @@ func NewServer(repoPath string, opts ...Option) (*Server, error) {
 	return s, nil
 }
 
-// SetWaiter sets the waiter used by the wait_for_message tool.
+// SetWaiter sets the WebSocket waiter for real-time message notifications.
 func (s *Server) SetWaiter(w *Waiter) {
 	s.waiter = w
 }
 
-// InitWaiter attaches a polling Waiter for the wait_for_message tool.
-// The returned Waiter lives for the duration of ctx.
-func (s *Server) InitWaiter(ctx context.Context) {
-	s.waiter = NewWaiter(ctx, s.socketPath, s.agentID, s.agentRole)
+// InitWaiter initializes the WebSocket waiter for real-time notifications.
+// WsURL should be like "ws://localhost:9999/ws". If the WebSocket is not
+// available, the MCP server still works — wait_for_message returns an error.
+func (s *Server) InitWaiter(ctx context.Context, wsURL string) error {
+	w, err := NewWaiter(ctx, s.socketPath, s.agentID, s.agentRole, wsURL)
+	if err != nil {
+		return err
+	}
+	s.waiter = w
+	return nil
 }
 
 // Run starts the MCP server on stdin/stdout. It blocks until the client

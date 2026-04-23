@@ -1,11 +1,3 @@
-> **DEPRECATED (2026-04-18):** New Claude Code agents should rely on the hook +
-> cron delivery system installed by `thrum init --runtime claude` — see
-> Notification Delivery in the main SKILL.md. The listener pattern documented
-> below still works and is supported, but it holds tokens in the agent's context
-> for the entire session. Prefer hook-delivery for any new Claude-runtime agent.
-> Cross-runtime agents (codex, cursor, etc.) still use this listener pattern
-> until their hook support matures.
-
 # Listener Pattern: Background Message Monitoring
 
 The message-listener is a background sub-agent that blocks on `thrum wait` and

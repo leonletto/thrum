@@ -462,28 +462,3 @@ func TestSanitizeAgentName(t *testing.T) {
 		})
 	}
 }
-
-func TestGenerateDaemonID_UniqueAcrossCalls(t *testing.T) {
-	seen := make(map[string]struct{}, 1000)
-	for i := 0; i < 1000; i++ {
-		id := identity.GenerateDaemonID()
-		if !strings.HasPrefix(id, "d_") {
-			t.Fatalf("id %q missing d_ prefix", id)
-		}
-		if _, dup := seen[id]; dup {
-			t.Fatalf("duplicate id generated: %q (iteration %d)", id, i)
-		}
-		seen[id] = struct{}{}
-	}
-}
-
-func TestIsLegacyDaemonID(t *testing.T) {
-	ulid := identity.GenerateDaemonID()
-	host := "leonsmacm1pro"
-	if identity.IsLegacyDaemonID(ulid, host) {
-		t.Fatalf("fresh ULID %q incorrectly classified as legacy", ulid)
-	}
-	if identity.IsLegacyDaemonID("", host) {
-		t.Fatalf("empty id classified as legacy")
-	}
-}

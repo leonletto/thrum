@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
@@ -31,22 +30,21 @@ func NewBranchManager(repoPath string, localOnly bool) *BranchManager {
 	}
 }
 
-// CreateSyncBranch ensures refs/heads/a-sync exists. If refs/remotes/origin/a-sync
-// was populated by a prior git clone or git fetch, attach local a-sync to that
-// remote SHA (spec matrix row 3). Otherwise create an orphan (row 2).
-// Idempotent: if local a-sync already exists, returns early without touching anything.
+// CreateSyncBranch creates the a-sync branch if it doesn't exist.
+// The a-sync branch is always created as an orphan (no shared history with main).
 func (b *BranchManager) CreateSyncBranch(ctx context.Context) error {
+	// Check if we're in a git repository
 	if err := b.checkGitRepo(ctx); err != nil {
 		return err
 	}
-	if b.BranchExists(ctx, SyncBranchName) {
-		// Local already exists — do not modify. --force-reconciliation happens
-		// in cli/init.go's reconcileSyncBranch for cases that need it.
+
+	// Check if a-sync branch already exists
+	if exists := b.branchExists(ctx, SyncBranchName); exists {
+		// Branch already exists, nothing to do
 		return nil
 	}
-	if sha, ok := b.RemoteTrackingSyncSHA(ctx); ok {
-		return b.AttachToRemote(ctx, sha)
-	}
+
+	// Always create as orphan — a-sync should never share history with main
 	return b.createOrphanBranch(ctx)
 }
 
@@ -106,85 +104,6 @@ func (b *BranchManager) GetSyncBranchRef(ctx context.Context) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-// RemoteTrackingSyncSHA returns the SHA of refs/remotes/origin/a-sync if it
-// exists locally (populated by git clone or git fetch). Returns ("", false)
-// if the ref is not present. Never performs a network call — this reads the
-// already-fetched remote-tracking ref.
-func (b *BranchManager) RemoteTrackingSyncSHA(ctx context.Context) (string, bool) {
-	output, err := safecmd.Git(ctx, b.repoPath, "rev-parse", "--verify",
-		"refs/remotes/origin/"+SyncBranchName)
-	if err != nil {
-		return "", false
-	}
-	sha := strings.TrimSpace(string(output))
-	if sha == "" {
-		return "", false
-	}
-	return sha, true
-}
-
-// AttachToRemote points refs/heads/a-sync at the given SHA and sets upstream
-// tracking to origin/a-sync. Must only be called when refs/heads/a-sync does
-// NOT already exist, or when the caller has explicitly decided to overwrite
-// the local ref. No working-tree changes.
-func (b *BranchManager) AttachToRemote(ctx context.Context, sha string) error {
-	if _, err := safecmd.Git(ctx, b.repoPath, "update-ref",
-		"refs/heads/"+SyncBranchName, sha); err != nil {
-		return fmt.Errorf("attach to remote: update-ref: %w", err)
-	}
-	if _, err := safecmd.Git(ctx, b.repoPath, "branch",
-		"--set-upstream-to=origin/"+SyncBranchName, SyncBranchName); err != nil {
-		return fmt.Errorf("attach to remote: set-upstream-to: %w", err)
-	}
-	return nil
-}
-
-// BranchHasContent reports whether the branch at ref has any JSONL event data
-// in its tree. Content = events.jsonl size > 0, OR any blob under messages/
-// with size > 0. Does not check out or touch the working tree.
-// Returns (false, nil) for non-existent refs — callers should handle existence
-// separately if they care.
-func (b *BranchManager) BranchHasContent(ctx context.Context, ref string) (bool, error) {
-	// Check events.jsonl blob size at the tree root.
-	output, err := safecmd.Git(ctx, b.repoPath, "cat-file", "-s", ref+":events.jsonl")
-	if err == nil {
-		if size, convErr := strconv.Atoi(strings.TrimSpace(string(output))); convErr == nil && size > 0 {
-			return true, nil
-		}
-	}
-	// cat-file -s fails when the path is missing from the tree — fall through to messages/ check.
-
-	// Enumerate messages/ subtree. `-l` adds size; format:
-	//   <mode> <type> <sha> <size>\t<path>
-	output, err = safecmd.Git(ctx, b.repoPath, "ls-tree", "-r", "-l", ref, "messages/")
-	if err != nil {
-		// Missing ref or missing subtree — treat as empty.
-		return false, nil //nolint:nilerr // intentional: absent subtree means no content
-	}
-	for _, line := range strings.Split(strings.TrimRight(string(output), "\n"), "\n") {
-		if line == "" {
-			continue
-		}
-		// The path segment is tab-separated from the metadata; split there first.
-		tabIdx := strings.IndexByte(line, '\t')
-		if tabIdx < 0 {
-			continue
-		}
-		head := strings.Fields(line[:tabIdx])
-		if len(head) < 4 {
-			continue
-		}
-		if head[0] != "100644" {
-			continue
-		}
-		size, convErr := strconv.Atoi(head[3])
-		if convErr == nil && size > 0 {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 // checkGitRepo verifies that the path is a git repository.
 func (b *BranchManager) checkGitRepo(ctx context.Context) error {
 	if _, err := safecmd.Git(ctx, b.repoPath, "rev-parse", "--git-dir"); err != nil {
@@ -193,8 +112,8 @@ func (b *BranchManager) checkGitRepo(ctx context.Context) error {
 	return nil
 }
 
-// BranchExists reports whether a git branch exists as refs/heads/<name> locally.
-func (b *BranchManager) BranchExists(ctx context.Context, branchName string) bool {
+// branchExists checks if a git branch exists.
+func (b *BranchManager) branchExists(ctx context.Context, branchName string) bool {
 	_, err := safecmd.Git(ctx, b.repoPath, "rev-parse", "--verify", branchName)
 	return err == nil
 }

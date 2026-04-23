@@ -190,76 +190,23 @@ type PeerInfoResult struct {
 
 // PairResult represents the response from a pair.request RPC call.
 type PairResult struct {
-	Status       string `json:"status"`
-	Token        string `json:"token"`
-	DaemonID     string `json:"daemon_id"`
-	Name         string `json:"name"`
-	RepoName     string `json:"repo_name,omitempty"`
-	Hostname     string `json:"hostname,omitempty"`
-	RepoPath     string `json:"repo_path,omitempty"`
-	GitOriginURL string `json:"git_origin_url,omitempty"`
-}
-
-// RepairResult is the result of a peer.repair RPC call. Mirrors PairResult
-// but omits Token (repair does not mint one).
-type RepairResult struct {
-	Status       string `json:"status"`
-	DaemonID     string `json:"daemon_id"`
-	Name         string `json:"name"`
-	RepoName     string `json:"repo_name,omitempty"`
-	Hostname     string `json:"hostname,omitempty"`
-	RepoPath     string `json:"repo_path,omitempty"`
-	GitOriginURL string `json:"git_origin_url,omitempty"`
-}
-
-// RequestRepair sends a peer.repair to a remote peer using the stored token.
-// Local carries this daemon's current identity metadata so the remote side
-// can refresh its own entry. The connection is authenticated via
-// Authorization: Bearer <token>, NOT a pairing code — repair reuses the
-// trust anchor that was established during the original pair.
-func (c *SyncClient) RequestRepair(peerAddr, token string, local PairMetadata) (*RepairResult, error) {
-	ctx := context.Background()
-	wsURL := syncWSURL(peerAddr)
-
-	params := map[string]any{
-		"token":          token,
-		"daemon_id":      local.DaemonID,
-		"name":           local.Name,
-		"address":        local.Address,
-		"repo_name":      local.RepoName,
-		"hostname":       local.Hostname,
-		"repo_path":      local.RepoPath,
-		"git_origin_url": local.GitOriginURL,
-	}
-
-	raw, err := c.wsCall(ctx, wsURL, "peer.repair", params, tokenDialOpts(token)...)
-	if err != nil {
-		return nil, fmt.Errorf("peer.repair to %s: %w", peerAddr, err)
-	}
-
-	var result RepairResult
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("unmarshal repair result: %w", err)
-	}
-	return &result, nil
+	Status   string `json:"status"`
+	Token    string `json:"token"`
+	DaemonID string `json:"daemon_id"`
+	Name     string `json:"name"`
 }
 
 // RequestPairing sends a pair.request to a remote peer using the pairing code.
-// Local carries the full identity metadata of this daemon sent to the remote.
 // The connection uses ?pairing_code= (no token) since the goal is to obtain a token.
-func (c *SyncClient) RequestPairing(peerAddr, code string, local PairMetadata) (*PairResult, error) {
+func (c *SyncClient) RequestPairing(peerAddr, code, localDaemonID, localName, localAddress string) (*PairResult, error) {
 	ctx := context.Background()
 	wsURL := pairingWSURL(peerAddr, code)
 
 	params := map[string]any{
-		"code":           code,
-		"daemon_id":      local.DaemonID,
-		"name":           local.Name,
-		"address":        local.Address,
-		"repo_name":      local.RepoName,
-		"hostname":       local.Hostname,
-		"repo_path":      local.RepoPath,
-		"git_origin_url": local.GitOriginURL,
+		"code":      code,
+		"daemon_id": localDaemonID,
+		"name":      localName,
+		"address":   localAddress,
 	}
 
 	raw, err := c.wsCall(ctx, wsURL, "pair.request", params)

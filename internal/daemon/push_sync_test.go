@@ -187,8 +187,8 @@ func TestPushSync_EventWriteHookTriggersNotification(t *testing.T) {
 	})
 
 	// Wire event write hook (same as daemon main.go does)
-	daemonA.state.SetOnEventWrite(func(daemonID string, sequence int64, _ []byte) {
-		go syncManager.BroadcastNotify(daemonID, sequence, 1)
+	daemonA.state.SetOnEventWrite(func(daemonID string, sequence int64, eventCount int) {
+		go syncManager.BroadcastNotify(daemonID, sequence, eventCount)
 	})
 
 	// Write an event — this should trigger the hook → BroadcastNotify → peer receives sync.notify
@@ -216,8 +216,8 @@ func TestPushSync_NotifyFailureDoesNotBlockWrite(t *testing.T) {
 	})
 
 	// Wire hook
-	daemonA.state.SetOnEventWrite(func(daemonID string, sequence int64, _ []byte) {
-		go syncManager.BroadcastNotify(daemonID, sequence, 1)
+	daemonA.state.SetOnEventWrite(func(daemonID string, sequence int64, eventCount int) {
+		go syncManager.BroadcastNotify(daemonID, sequence, eventCount)
 	})
 
 	// Write should succeed even though notification will fail

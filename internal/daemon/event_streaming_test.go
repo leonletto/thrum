@@ -98,7 +98,7 @@ func TestEventStreamingIntegration(t *testing.T) {
 	dispatcher.SetClientNotifier(receiver)
 
 	// Create message handler with the dispatcher
-	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, "", "", "")
+	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, "")
 
 	// Send a message
 	sendReq := rpc.SendRequest{
@@ -343,7 +343,7 @@ func TestEventStreamingWithSubscriptionFiltering(t *testing.T) {
 	dispatcher.SetClientNotifier(multiNotifier)
 
 	// Create message handler
-	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, "", "", "")
+	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, "")
 
 	// Send message with matching scope (task:thrum-ukr)
 	sendReq1 := rpc.SendRequest{

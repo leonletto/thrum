@@ -204,51 +204,10 @@ Handle each message type:
 **Completion report:**
 
 1. Acknowledge: `thrum reply <msg-id> "Received. Running review."`
-2. Dispatch BOTH reviewers IN PARALLEL (one Agent call per reviewer in the same
-   response). Block until BOTH return:
-   - Code-quality: `superpowers:code-reviewer` (or `feature-dev:code-reviewer`
-     if the project provides one) — `model: "sonnet"`
-   - Spec-compliance: `general-purpose` reviewer cross-referencing the plan/
-     spec — `model: "sonnet"`
-3. **Verify** every cited `file:line` claim against the actual source before
-   forwarding. Reviewers can misread files; forwarding unverified findings
-   wastes the implementer's time.
-4. **Consolidate** both reviewers' findings into ONE numbered list (sequential
-   numbering, severity-prefixed). Send once. Never send partial findings — the
-   implementer fixes batch 1 and misses batch 2 if you split.
-5. If review passes → close the task: `bd close <task-id>`
-6. If review has findings → send the consolidated list to the agent, wait for
-   fixes (max 3 rounds, then escalate)
-
-**Implementer pushback on a finding:**
-
-- Verify against source before defending. Pushback is feedback, not
-  insubordination — coordinator/orchestrator claims drift from runtime reality,
-  and implementers see the actual code.
-- For finding pushback: read the cited file at the cited lines.
-- For behavior pushback: trace the call path.
-- For beads-state pushback: `bd show <id>`.
-- If the implementer is right, acknowledge the correction explicitly.
-
-**Findings must be fixed or escalated — never just noted:**
-
-- A finding labeled "out of scope" or "noted for follow-up" disappears from
-  working memory within a few exchanges.
-- In scope: fix as part of current dispatch.
-- Genuinely out of scope: file a beads issue with full context AND dispatch it
-  as a follow-up task (not just a bare bead).
-- Unsure: stop and ask the human. Don't categorize as "out of scope" unless the
-  human explicitly deferred it.
-
-**Sub-agent model discipline (applies to ALL Agent tool calls in this phase and
-Phase 5):**
-
-- ALWAYS pass an explicit `model` parameter. The orchestrator runs on Opus and
-  silent inheritance burns tokens.
-- `model: "haiku"` — lint, test, simple verification, mechanical work
-- `model: "sonnet"` — code review, spec compliance, exploration, judgment
-- `model: "opus"` — reserve for genuinely hard architectural reasoning (rare).
-  Prose-heavy long-form docs is a reasonable exception.
+2. Dispatch code review sub-agent (use `feature-dev:code-reviewer`)
+3. If review passes → close the task: `bd close <task-id>`
+4. If review has findings → send findings to agent, wait for fixes (max 3
+   rounds, then escalate)
 
 **Blocker:**
 

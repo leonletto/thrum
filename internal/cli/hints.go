@@ -2,19 +2,17 @@ package cli
 
 import (
 	"math/rand"
+	"time"
 )
 
-// Random hint rotation uses the global math/rand source, which became
-// concurrency-safe in Go 1.20. Not security-sensitive — just UI rotation.
+var (
+	// Random source for hint rotation (not security-sensitive, just UI hint selection).
+	hintRandom = rand.New(rand.NewSource(time.Now().UnixNano())) // #nosec G404 -- non-security RNG used only for UI hint rotation, not crypto //nolint:gosec
+)
 
-// LegacyHint returns a contextual hint for the given command using the
-// legacy random-rotation flat-map model. Kept as the fallback path for
-// commands that haven't migrated to the per-command HintSource model
-// (see hint_types.go, hint_registry.go). Package-level identifier freed
-// up so that the new `Hint` struct type can use it.
-//
+// Hint returns a contextual hint for the given command.
 // Returns empty string if hints should be suppressed (quiet/JSON mode).
-func LegacyHint(command string, quiet, jsonMode bool) string {
+func Hint(command string, quiet, jsonMode bool) string {
 	if quiet || jsonMode {
 		return ""
 	}
@@ -24,9 +22,8 @@ func LegacyHint(command string, quiet, jsonMode bool) string {
 		return ""
 	}
 
-	// Select a random hint from the available options. rand.Intn
-	// uses the concurrency-safe global source (Go 1.20+).
-	idx := rand.Intn(len(hints)) //nolint:gosec // G404: UI hint rotation, not security-sensitive
+	// Select a random hint from the available options
+	idx := hintRandom.Intn(len(hints))
 	return "  " + hints[idx] + "\n"
 }
 
@@ -62,9 +59,6 @@ var commandHints = map[string][]string{
 		"Tip: See only unread with '--unread' (does not mark as read)",
 		"Tip: Reply to a message with 'thrum reply msg_id \"text\"'",
 		"Tip: Use 'thrum message read --all' to mark all messages as read",
-	},
-	"inbox.unread": {
-		"ACTION: After processing, mark these messages read so they don't keep reappearing:\n  thrum message read --all\n  (or: thrum message read <msg_id> [<msg_id>...] for specific messages)",
 	},
 	"agent.list": {
 		"Tip: See work contexts with 'thrum agent list --context'",

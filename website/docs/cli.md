@@ -1808,14 +1808,6 @@ $ thrum tmux launch implementer-api --runtime opencode
 Launched opencode in session implementer-api
 ```
 
-**Hard-errors when no agent identity is registered.** `thrum tmux launch` needs
-an agent identity in the target worktree to determine the runtime. If the
-session was created with `--no-agent`, or if there's no identity file in the
-worktree, launch returns an error and tells you to run `thrum quickstart` (or
-recreate the session with `--name`/`--role`/`--module`) first. Launching a
-runtime without an identity is a no-op — the agent has no way to register
-itself.
-
 ### thrum tmux status
 
 Show all tmux-managed sessions with agent info, liveness state, runtime, and
@@ -1995,20 +1987,10 @@ Create a git worktree with Thrum and Beads setup. Sets up `.thrum/redirect` and
 Optionally sets up `.beads/redirect` if Beads is enabled.
 
 Quickstart flags (`--name`, `--role`, `--module`) are optional. When all three
-are provided, the command creates a real tmux session with the worktree as `cwd`
-and runs `thrum quickstart` inside the pane via SendKeys (PID-isolated). The
-daemon retries quickstart at 5s if the shell init swallows the first attempt,
-and the CLI captures pane content if the identity file still hasn't appeared
-after 12s. Old identity files in the worktree are cleaned up after quickstart
-runs — one identity per worktree is enforced.
-
-The agent runtime is **not** started by `worktree create` — the output prints
-the next-step `thrum tmux launch <name>` command. The agent isn't running until
-you run that command.
-
-**Repo-root guard:** the command errors out if the resolved worktree path or
-`worktrees.base_path` is the repo root itself, to prevent accidentally turning
-the main worktree into a "feature" worktree.
+are provided, the command spins up a temporary tmux session, runs
+`thrum quickstart` inside it for PID isolation, then destroys the temp session.
+Old identity files in the worktree are cleaned up after quickstart runs — one
+identity per worktree is enforced.
 
 ```text
 thrum worktree create <name> [flags]
@@ -2046,10 +2028,7 @@ Worktree created: ~/.workspaces/thrum/auth-feature
   Branch: feature/auth-feature
   Thrum: .thrum/redirect → /path/to/main/.thrum
   Beads: .beads/redirect → /path/to/main/.beads
-✓ Session created: auth-feature
-✓ Registered @impl_auth in worktree
-  Agent is NOT running yet. Start it with:
-    thrum tmux launch auth-feature [--runtime <runtime>]
+Agent registered: impl_auth
 ```
 
 ### thrum worktree setup

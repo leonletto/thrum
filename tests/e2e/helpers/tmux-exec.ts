@@ -59,14 +59,8 @@ export function tmuxExec(
   const session = `exec-${++sessionCounter}-${Date.now().toString(36)}`;
 
   try {
-    // Create session with clean shell.
-    // -x/-y widen the virtual terminal so long stdout lines (e.g. JSON
-    // string values containing whole sentences) don't physically wrap;
-    // -J on capture-pane below joins any wraps that still happen. Both
-    // are needed: tmux otherwise inserts literal '\n' into the captured
-    // text mid-string, silently breaking JSON.parse on consumers like
-    // thrumJson(). See thrum-json-contract Task 4.
-    const newArgs = ['new-session', '-d', '-s', session, '-x', '500', '-y', '50'];
+    // Create session with clean shell
+    const newArgs = ['new-session', '-d', '-s', session];
     if (opts?.cwd) newArgs.push('-c', opts.cwd);
     tmuxRun(...newArgs);
 
@@ -88,12 +82,11 @@ export function tmuxExec(
       execFileSync('sleep', ['0.05']); // 50ms
     }
 
-    // Read exit code and output. -J joins any physically-wrapped lines
-    // back into a single logical line — required for JSON-output fidelity.
+    // Read exit code and output
     const exitCodeStr = tmuxRun(
       'display-message', '-p', '-t', session, '#{pane_dead_status}',
     );
-    const rawOutput = tmuxRun('capture-pane', '-p', '-J', '-t', session, '-S', '-');
+    const rawOutput = tmuxRun('capture-pane', '-p', '-t', session, '-S', '-');
     const stdout = cleanOutput(rawOutput);
     const exitCode = parseInt(exitCodeStr, 10) || 0;
 
@@ -125,8 +118,8 @@ export function tmuxExecAsync(
   const timeoutMs = opts?.timeoutMs ?? 30_000;
   const session = `async-${++sessionCounter}-${Date.now().toString(36)}`;
 
-  // Create session and start command. See tmuxExec for -x/-y rationale.
-  const newArgs = ['new-session', '-d', '-s', session, '-x', '500', '-y', '50'];
+  // Create session and start command
+  const newArgs = ['new-session', '-d', '-s', session];
   if (opts?.cwd) newArgs.push('-c', opts.cwd);
   tmuxRun(...newArgs);
   tmuxRun('set-option', '-t', session, 'remain-on-exit', 'on');
@@ -143,7 +136,7 @@ export function tmuxExecAsync(
           const exitCodeStr = tmuxRun(
             'display-message', '-p', '-t', session, '#{pane_dead_status}',
           );
-          const rawOutput = tmuxRun('capture-pane', '-p', '-J', '-t', session, '-S', '-');
+          const rawOutput = tmuxRun('capture-pane', '-p', '-t', session, '-S', '-');
           try { tmuxRun('kill-session', '-t', session); } catch { /* ok */ }
           resolve({
             stdout: cleanOutput(rawOutput),

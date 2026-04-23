@@ -24,29 +24,6 @@ func waitForSocketReady(t *testing.T, socketPath string) {
 	t.Fatalf("socket %s did not become available", socketPath)
 }
 
-// waitForFileReady polls for filePath to exist, with a short timeout.
-// Shared by lifecycle tests that need to synchronize on post-socket
-// state changes (WebSocket port file, other post-Start artifacts)
-// without racing the lifecycle goroutine. See thrum-9an7.
-//
-// The 2s timeout (vs 1s for waitForSocketReady) is intentional:
-// wsServer.Start adds one serial step beyond socket creation in
-// Lifecycle.Run, so callers of this helper sit behind more work than
-// a bare socket wait. 2s keeps the helper tolerant of scheduler
-// pressure under the full parallel suite while still failing fast
-// on a real bug.
-func waitForFileReady(t *testing.T, filePath string) {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(filePath); err == nil {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatalf("file %s did not become available", filePath)
-}
-
 func TestNewClient(t *testing.T) {
 	tmpDir := t.TempDir()
 	socketPath := filepath.Join(tmpDir, "test.sock")

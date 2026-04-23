@@ -14,21 +14,7 @@ type HealthResponse struct {
 	RepoID    string             `json:"repo_id"`             // Repository ID
 	SyncState string             `json:"sync_state"`          // "synced", "pending", "error"
 	Tailscale *TailscaleSyncInfo `json:"tailscale,omitempty"` // Tailscale sync info (nil if disabled)
-	Identity  *IdentityInfo      `json:"identity,omitempty"`  // Daemon identity fields
 }
-
-// IdentityInfo carries the daemon's persistent identity metadata.
-type IdentityInfo struct {
-	DaemonID     string `json:"daemon_id"`
-	RepoName     string `json:"repo_name"`
-	Hostname     string `json:"hostname"`
-	RepoPath     string `json:"repo_path"`
-	GitOriginURL string `json:"git_origin_url,omitempty"`
-	InitAt       string `json:"init_at"`
-}
-
-// IdentityInfoProvider returns the local daemon's identity snapshot.
-type IdentityInfoProvider func() *IdentityInfo
 
 // TailscaleSyncInfo contains Tailscale sync status for the health response.
 type TailscaleSyncInfo struct {
@@ -52,11 +38,10 @@ type TailscaleSyncInfoProvider func() *TailscaleSyncInfo
 
 // HealthHandler creates a health check handler.
 type HealthHandler struct {
-	startTime        time.Time
-	version          string
-	repoID           string
-	tsInfoProvider   TailscaleSyncInfoProvider
-	identityProvider IdentityInfoProvider
+	startTime      time.Time
+	version        string
+	repoID         string
+	tsInfoProvider TailscaleSyncInfoProvider
 }
 
 // NewHealthHandler creates a new health check handler.
@@ -71,11 +56,6 @@ func NewHealthHandler(startTime time.Time, version string, repoID string) *Healt
 // SetTailscaleInfoProvider sets a callback to provide Tailscale sync info.
 func (h *HealthHandler) SetTailscaleInfoProvider(provider TailscaleSyncInfoProvider) {
 	h.tsInfoProvider = provider
-}
-
-// SetIdentityProvider sets a callback to provide the daemon's identity fields.
-func (h *HealthHandler) SetIdentityProvider(provider IdentityInfoProvider) {
-	h.identityProvider = provider
 }
 
 // Handle handles the health check request.
@@ -95,11 +75,6 @@ func (h *HealthHandler) Handle(ctx context.Context, params json.RawMessage) (any
 	// Add Tailscale sync info if available
 	if h.tsInfoProvider != nil {
 		response.Tailscale = h.tsInfoProvider()
-	}
-
-	// Add identity fields if available
-	if h.identityProvider != nil {
-		response.Identity = h.identityProvider()
 	}
 
 	return response, nil

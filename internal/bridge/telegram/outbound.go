@@ -79,13 +79,6 @@ func (r *OutboundRelay) handleNotification(ctx context.Context, params json.RawM
 		return
 	}
 
-	slog.Info("[nudge] telegram.handleNotification entry",
-		"msg_id", data.MessageID,
-		"sender", data.Author.AgentID,
-		"bridge_user", r.userID,
-		"self_echo_candidate", data.Author.AgentID == r.userID,
-	)
-
 	// Skip messages FROM the bridge user (don't echo our own sends)
 	if data.Author.AgentID == r.userID {
 		return

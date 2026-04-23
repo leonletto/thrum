@@ -39,14 +39,14 @@ func RuntimeSetDefault(name string) error {
 func FormatRuntimeList(result *RuntimeListResult) string {
 	var out strings.Builder
 
-	// Separate built-in from custom. Built-in presets are whatever lives in
-	// runtime.BuiltinPresets — iterating the map keeps this in sync when new
-	// runtimes are added (opencode, shell, kiro-cli, etc.) without touching
-	// this function. Anything present in ListPresets() but absent from
-	// BuiltinPresets is, by definition, a user-defined custom preset.
+	// Separate built-in from custom
 	var builtins, custom []runtime.RuntimePreset
+	builtinNames := map[string]bool{
+		"claude": true, "codex": true, "cursor": true,
+		"gemini": true, "auggie": true, "amp": true,
+	}
 	for _, p := range result.Presets {
-		if _, ok := runtime.BuiltinPresets[p.Name]; ok {
+		if builtinNames[p.Name] {
 			builtins = append(builtins, p)
 		} else {
 			custom = append(custom, p)

@@ -78,13 +78,6 @@ var builtinAgents = []AgentDefinition{
 		Binaries:    []BinaryCheck{{Name: "amp", VerifyArgs: []string{"--version"}, MatchAny: []string{"sourcegraph"}}},
 		SkillsDir:   ".agents/skills",
 	},
-	{
-		Name:        "kiro-cli",
-		DisplayName: "Amazon Kiro CLI",
-		RepoMarkers: []string{".kiro/"},
-		Binaries:    []BinaryCheck{{Name: "kiro-cli", VerifyArgs: []string{"--version"}, MatchAny: []string{"kiro"}}},
-		SkillsDir:   ".kiro/skills",
-	},
 }
 
 // BuiltinAgents returns a copy of the built-in agent definitions.

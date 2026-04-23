@@ -94,21 +94,11 @@ clearer name. <code>thrum tmux create</code> now requires <code>--name</code>, <
 (or <code>--no-agent</code>) and runs quickstart inside the new pane automatically.</li>
 <li><strong><code>thrum worktree setup</code></strong> — alias for <code>thrum worktree create</code>. Both commands
 now accept optional quickstart flags (<code>--name</code>, <code>--role</code>, <code>--module</code>,
-<code>--intent</code>, <code>--runtime</code>). Provide all three required flags and it creates a
-real tmux session, runs quickstart inside it, and prints the next-step
-<code>thrum tmux launch &lt;name&gt;</code> command. The agent identity is registered, but
-the runtime is not started until <code>tmux launch</code> runs — a clean two-step
-pattern with no manual <code>thrum quickstart</code>.</li>
+<code>--intent</code>, <code>--runtime</code>). Provide all three required flags and it registers
+the agent via a temp tmux session — no manual <code>thrum quickstart</code> step.</li>
 <li><strong>Single identity per worktree</strong> — quickstart cleans up old identity files
 after writing the new one. You can&#39;t end up with a stale identity causing
 auto-select errors.</li>
-<li><strong><code>thrum tmux launch</code> hard-errors on missing identity</strong> — launch needs an
-agent identity to determine the runtime. Sessions created with <code>--no-agent</code>
-(or worktrees with no identity file) cannot be launched until you register
-an agent first.</li>
-<li><strong>Next-step guard messages</strong> — <code>agent register</code>, <code>worktree create</code> (no
-agent), <code>purge --confirm</code>, <code>daemon stop</code>, <code>tmux restart</code>, and <code>tmux launch</code>
-now print explicit hints about what to do next (or what just broke).</li>
 <li><strong>Monitor Jobs v1</strong> — <code>thrum monitor start/list/show/stop/logs/restart</code>.
 Attach a monitor to any long-running process and it emits matches as synthetic
 Thrum messages. Leading-edge debounce (default 60s, min 30s), auto-persist,

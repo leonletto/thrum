@@ -8,9 +8,6 @@ import (
 )
 
 func TestGetPreset_Builtin(t *testing.T) {
-	// Isolate from any real ~/.thrum/runtimes.json on the test host.
-	t.Setenv("HOME", t.TempDir())
-
 	tests := []struct {
 		name        string
 		displayName string
@@ -20,11 +17,10 @@ func TestGetPreset_Builtin(t *testing.T) {
 	}{
 		{"claude", "Claude Code", "claude", true, true},
 		{"codex", "OpenAI Codex", "codex", true, false},
-		{"cursor", "Cursor", "agent", true, false},
+		{"cursor", "Cursor", "cursor-agent", true, false},
 		{"gemini", "Google Gemini Code Assist", "gemini", true, false},
 		{"auggie", "Augment (Auggie)", "auggie", false, false},
 		{"amp", "Sourcegraph Amp", "amp", false, false},
-		{"kiro-cli", "Amazon Kiro CLI", "kiro-cli chat", false, false},
 	}
 
 	for _, tt := range tests {
@@ -60,12 +56,12 @@ func TestGetPreset_NotFound(t *testing.T) {
 }
 
 func TestGetPreset_Custom(t *testing.T) {
-	// Create a temporary HOME so ~/.thrum/ is isolated
+	// Create a temporary config dir
 	tmpDir := t.TempDir()
-	t.Setenv("HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	// Write custom preset config
-	configDir := filepath.Join(tmpDir, ".thrum")
+	configDir := filepath.Join(tmpDir, "thrum")
 	if err := os.MkdirAll(configDir, 0750); err != nil {
 		t.Fatal(err)
 	}
@@ -101,9 +97,9 @@ func TestGetPreset_Custom(t *testing.T) {
 
 func TestGetPreset_CustomOverridesBuiltin(t *testing.T) {
 	tmpDir := t.TempDir()
-	t.Setenv("HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
-	configDir := filepath.Join(tmpDir, ".thrum")
+	configDir := filepath.Join(tmpDir, "thrum")
 	if err := os.MkdirAll(configDir, 0750); err != nil {
 		t.Fatal(err)
 	}
@@ -133,10 +129,9 @@ func TestGetPreset_CustomOverridesBuiltin(t *testing.T) {
 }
 
 func TestListPresets_BuiltinOnly(t *testing.T) {
-	// Point HOME to a fresh tmpdir so ~/.thrum/runtimes.json doesn't exist;
-	// isolates the test from any user-defined presets on the dev machine.
+	// Point to a non-existent config to isolate built-ins
 	tmpDir := t.TempDir()
-	t.Setenv("HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	presets := ListPresets()
 	if len(presets) < 6 {
@@ -145,7 +140,7 @@ func TestListPresets_BuiltinOnly(t *testing.T) {
 
 	required := map[string]bool{
 		"claude": false, "codex": false, "cursor": false,
-		"gemini": false, "auggie": false, "amp": false, "kiro-cli": false,
+		"gemini": false, "auggie": false, "amp": false,
 	}
 	for _, p := range presets {
 		if _, ok := required[p.Name]; ok {
@@ -161,7 +156,7 @@ func TestListPresets_BuiltinOnly(t *testing.T) {
 
 func TestListPresets_Sorted(t *testing.T) {
 	tmpDir := t.TempDir()
-	t.Setenv("HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	presets := ListPresets()
 	for i := 1; i < len(presets); i++ {
@@ -173,9 +168,9 @@ func TestListPresets_Sorted(t *testing.T) {
 
 func TestListPresets_Merged(t *testing.T) {
 	tmpDir := t.TempDir()
-	t.Setenv("HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
-	configDir := filepath.Join(tmpDir, ".thrum")
+	configDir := filepath.Join(tmpDir, "thrum")
 	if err := os.MkdirAll(configDir, 0750); err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +210,7 @@ func TestListPresets_Merged(t *testing.T) {
 
 func TestSetDefaultRuntime(t *testing.T) {
 	tmpDir := t.TempDir()
-	t.Setenv("HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	if err := SetDefaultRuntime("claude"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -229,7 +224,7 @@ func TestSetDefaultRuntime(t *testing.T) {
 
 func TestSetDefaultRuntime_Invalid(t *testing.T) {
 	tmpDir := t.TempDir()
-	t.Setenv("HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	err := SetDefaultRuntime("nonexistent")
 	if err == nil {

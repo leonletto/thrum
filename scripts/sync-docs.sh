@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
 # sync-docs.sh — Copy website/docs/ to docs/ (stripping YAML frontmatter) and
-# sync llms.txt + llms-full.txt from website/ to repo root, plus llms.txt to
-# internal/context/reference/ (the embedded binary copy).
+# sync llms.txt + llms-full.txt from website/ to repo root.
 #
 # Usage: ./scripts/sync-docs.sh
 #
 # The website/ directory is the source of truth. This script copies each .md
 # file from website/docs/ to docs/, removing any YAML frontmatter (--- delimited
 # block at the top of the file) so docs/ contains clean markdown for GitHub/LLM
-# consumption. It also copies llms.txt and llms-full.txt to the repo root and
-# llms.txt to internal/context/reference/ (the binary embed source), erroring
-# out if any destination copy is newer than the website source (to prevent
-# silent overwrites of direct edits).
+# consumption. It also copies llms.txt and llms-full.txt to the repo root,
+# erroring out if the root copies are newer (to prevent overwriting edits).
 
 set -euo pipefail
 
@@ -82,27 +79,6 @@ for llm_file in llms.txt llms-full.txt; do
     echo "  $llm_file: synced"
   fi
 done
-
-# Sync website/llms.txt to internal/context/reference/llms.txt (the embedded
-# binary copy). Only llms.txt is embedded — llms-full.txt is not. Same safety
-# check: error if the embed copy is newer than the website source.
-echo ""
-echo "Syncing llms.txt to internal/context/reference/ (embedded binary copy)..."
-embed_src="$REPO_ROOT/website/llms.txt"
-embed_dst="$REPO_ROOT/internal/context/reference/llms.txt"
-if [ ! -f "$embed_src" ]; then
-  echo "Warning: $embed_src not found; skipping embed sync" >&2
-elif [ -f "$embed_dst" ] && [ "$embed_dst" -nt "$embed_src" ]; then
-  echo "Error: $embed_dst is newer than $embed_src" >&2
-  echo "  Someone may have edited the embed copy directly." >&2
-  echo "  If website/ is correct, touch it first: touch $embed_src" >&2
-  exit 1
-elif [ -f "$embed_dst" ] && diff -q "$embed_src" "$embed_dst" >/dev/null 2>&1; then
-  echo "  llms.txt (embed): already in sync"
-else
-  cp "$embed_src" "$embed_dst"
-  echo "  llms.txt (embed): synced"
-fi
 
 # Run formatting and linting only on the synced doc trees so we don't touch
 # unrelated files elsewhere in the repo.
