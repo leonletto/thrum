@@ -305,7 +305,11 @@ func (h *MessageHandler) loadBroadcaster() WSBroadcaster {
 	if v == nil {
 		return nil
 	}
-	return v.(WSBroadcaster)
+	b, ok := v.(WSBroadcaster)
+	if !ok {
+		return nil
+	}
+	return b
 }
 
 // NotifyMessageCreate fires the WebSocket notification.message broadcast

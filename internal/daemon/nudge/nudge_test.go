@@ -112,7 +112,7 @@ func TestDispatchTmux_SkipsUnresolvableRecipients(t *testing.T) {
 func TestHasLocalIdentity(t *testing.T) {
 	dir := t.TempDir()
 	thrumDir := filepath.Join(dir, ".thrum")
-	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
 		t.Fatal(err)
 	}
 	writeIdentity := func(name string) {
@@ -120,7 +120,7 @@ func TestHasLocalIdentity(t *testing.T) {
 		_ = os.WriteFile(
 			filepath.Join(thrumDir, "identities", name+".json"),
 			[]byte(body),
-			0o644,
+			0o600,
 		)
 	}
 	writeIdentity("bob")
@@ -137,17 +137,17 @@ func TestLocalAgentNames(t *testing.T) {
 	dir := t.TempDir()
 	thrumDir := filepath.Join(dir, ".thrum")
 	identitiesDir := filepath.Join(thrumDir, "identities")
-	if err := os.MkdirAll(identitiesDir, 0o755); err != nil {
+	if err := os.MkdirAll(identitiesDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"alice", "bob"} {
 		body := fmt.Sprintf(`{"version":1,"agent":{"name":%q}}`, name)
-		if err := os.WriteFile(filepath.Join(identitiesDir, name+".json"), []byte(body), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(identitiesDir, name+".json"), []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// Also drop a non-json file that should be ignored.
-	if err := os.WriteFile(filepath.Join(identitiesDir, "README.txt"), []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(identitiesDir, "README.txt"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

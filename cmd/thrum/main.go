@@ -1066,7 +1066,7 @@ The daemon must be running and you must have an active session.`,
 				}
 				fmt.Print(cli.FormatInboxWithOptions(result, fmtOpts))
 				// Suppress hint for --unread + empty (silent polling).
-				if !flagQuiet && !(unread && len(result.Messages) == 0) {
+				if !flagQuiet && (!unread || len(result.Messages) != 0) {
 					hintGroup := "inbox"
 					if unread && len(result.Messages) > 0 {
 						hintGroup = "inbox.unread"
@@ -1612,11 +1612,13 @@ list of transports and a one-line "when to use" for each.`,
 			peerType, parseErr := cli.ParsePeerType(addType)
 			if parseErr != nil {
 				if errors.Is(parseErr, cli.ErrPeerTypeMissing) {
+					//nolint:staticcheck // ST1005: multi-line user-facing CLI hint; formatting is intentional
 					return errors.New(cli.MissingTypeMessage)
 				}
 				return parseErr
 			}
 			if peerType == cli.PeerTypeRepair {
+				//nolint:staticcheck // ST1005: multi-line user-facing CLI hint; formatting is intentional
 				return errors.New("--type repair is not valid for 'peer add'.\n" +
 					"Use 'thrum peer join --type repair <peer-name>' to reconcile an existing peer.")
 			}
@@ -1736,6 +1738,7 @@ stored secrets in peers.json to re-handshake without minting a new token.`,
 			peerType, parseErr := cli.ParsePeerType(joinType)
 			if parseErr != nil {
 				if errors.Is(parseErr, cli.ErrPeerTypeMissing) {
+					//nolint:staticcheck // ST1005: multi-line user-facing CLI hint; formatting is intentional
 					return errors.New(cli.MissingTypeMessage)
 				}
 				return parseErr
@@ -6092,6 +6095,10 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			}
 			oldIPStr, _, err := net.SplitHostPort(oldAddr)
 			if err != nil {
+				// Unparseable cached old address: cannot evaluate
+				// subnet equality → accept per M11 (treat like an
+				// empty cached address).
+				//nolint:nilerr // intentional accept-path; see comment
 				return nil
 			}
 			newIPStr, _, err := net.SplitHostPort(newAddr)
@@ -6108,6 +6115,7 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				// Old address no longer on any local NIC; cannot
 				// evaluate subnet equality → accept (the peer has
 				// already moved off this host's LAN).
+				//nolint:nilerr // intentional accept-path; see comment
 				return nil
 			}
 			if !netdetect.SameSubnet(oldIP, newIP, subnet.CIDR) {
@@ -7904,6 +7912,7 @@ func isValidBotToken(token string) bool {
 		}
 	}
 	for _, c := range parts[1] {
+		//nolint:staticcheck // QF1001: explicit positive-range form is clearer for character classes
 		if !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
 			return false
 		}

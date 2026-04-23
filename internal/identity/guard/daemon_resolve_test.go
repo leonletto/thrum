@@ -140,7 +140,7 @@ func TestDaemonResolve_SharedWorktreeTrustsClaim(t *testing.T) {
 	checker := func(agentID, worktree string) bool {
 		return registered[worktree][agentID]
 	}
-	got, err := DaemonResolve(context.Background(), cfg, DaemonResolveRequest{
+	got, err := DaemonResolve(context.Background(), cfg, DaemonResolveRequest{ //nolint:gosec // G101 false positive: "agent_a"/"agent_b" are test-only identities
 		CallerAgentID:     "agent_b", // CLI claims agent_b
 		PeercredAgentID:   "agent_a", // peercred arbitrarily picked agent_a
 		PeercredRan:       true,
@@ -166,7 +166,7 @@ func TestDaemonResolve_CrossWorktreeForgeryRejected(t *testing.T) {
 		// agent_b is NOT registered in /tmp/peercred-worktree.
 		return agentID == "agent_a" && worktree == "/tmp/peercred-worktree"
 	}
-	_, err := DaemonResolve(context.Background(), cfg, DaemonResolveRequest{
+	_, err := DaemonResolve(context.Background(), cfg, DaemonResolveRequest{ //nolint:gosec // G101 false positive: "agent_a"/"agent_b" are test-only identities
 		CallerAgentID:     "agent_b", // cross-worktree claim
 		PeercredAgentID:   "agent_a",
 		PeercredRan:       true,
@@ -191,7 +191,7 @@ func TestDaemonResolve_CrossWorktreeForgeryRejected(t *testing.T) {
 // compatibility with all existing DaemonResolve callers.
 func TestDaemonResolve_SharedWorktreeNilCheckerStrict(t *testing.T) {
 	cfg := DefaultConfig()
-	_, err := DaemonResolve(context.Background(), cfg, DaemonResolveRequest{
+	_, err := DaemonResolve(context.Background(), cfg, DaemonResolveRequest{ //nolint:gosec // G101 false positive: "agent_a"/"agent_b" are test-only identities
 		CallerAgentID:    "agent_b",
 		PeercredAgentID:  "agent_a",
 		PeercredRan:      true,

@@ -203,7 +203,11 @@ func (pm *PeerManager) makeOnDialError(hook ReconcileHook, _ string) func(contex
 
 		// Per-peer attempt state. Allocate on first use.
 		rawSt, _ := pm.attemptStates.LoadOrStore(name, &peerAttemptState{})
-		st := rawSt.(*peerAttemptState)
+		st, ok := rawSt.(*peerAttemptState)
+		if !ok {
+			pm.logger.Printf("peer %s: attemptStates type assertion failed; skipping reconcile", name)
+			return false
+		}
 		st.mu.Lock()
 		st.count++
 		attempt := st.count

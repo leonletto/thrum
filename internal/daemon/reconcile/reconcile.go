@@ -68,7 +68,15 @@ func (m *Manager) WithLogger(l *log.Logger) *Manager {
 // Concurrent callers see the same mutex via sync.Map's LoadOrStore.
 func (m *Manager) lockFor(peerName string) *sync.Mutex {
 	v, _ := m.locks.LoadOrStore(peerName, &sync.Mutex{})
-	return v.(*sync.Mutex)
+	mu, ok := v.(*sync.Mutex)
+	if !ok {
+		// sync.Map only ever stores *sync.Mutex under this key (see
+		// LoadOrStore above). An unexpected type would be a programmer
+		// error in this package; fall back to a fresh mutex so callers
+		// don't panic.
+		return &sync.Mutex{}
+	}
+	return mu
 }
 
 // ReconcileOne attempts to reconcile a single peer by name.

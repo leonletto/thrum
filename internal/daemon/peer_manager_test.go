@@ -158,7 +158,7 @@ func TestPeerManager_BuildConfigs_NonASCIIPeerNameFallback(t *testing.T) {
 	// With the d_ prefix stripped the ULID body is 26 chars, which fits
 	// inside the 27-char cap with headroom.
 	const daemonID = "d_01ABCDEFGHIJKLMNPQRSTVWXYZ"
-	nonASCII := &PeerInfo{
+	nonASCII := &PeerInfo{ //nolint:gosec // G101 false positive: "tok-non-ascii" is a test fixture, not a real credential
 		Name:     "北京",
 		DaemonID: daemonID,
 		Address:  "100.64.1.10:9100",

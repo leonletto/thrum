@@ -2387,7 +2387,7 @@ func TestAgentWhoami_TmuxAliveReflectsSessionState(t *testing.T) {
 	// Write a synthetic identity file with a TmuxSession that definitely
 	// does not exist. The daemon must compute TmuxAlive=false without error.
 	idsDir := filepath.Join(tmpDir, ".thrum", "identities")
-	if err := os.MkdirAll(idsDir, 0o755); err != nil {
+	if err := os.MkdirAll(idsDir, 0o750); err != nil {
 		t.Fatalf("mkdir identities: %v", err)
 	}
 	idFile := config.IdentityFile{

@@ -24,7 +24,7 @@ func WriteSpool(thrumDir, agentID string, env Envelope) error {
 		return fmt.Errorf("inbox: invalid arguments (thrumDir, agentID, and env.MsgID are required)")
 	}
 	spoolDir := filepath.Join(thrumDir, "spool", agentID)
-	if err := os.MkdirAll(spoolDir, 0o755); err != nil {
+	if err := os.MkdirAll(spoolDir, 0o750); err != nil {
 		return fmt.Errorf("inbox: mkdir spool dir: %w", err)
 	}
 	final := filepath.Join(spoolDir, env.MsgID+".json")
