@@ -6,10 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.9.0] - 2026-04-23
 
 ### Added
 
+- **CLI hints infrastructure (thrum-rqkf Phase A-B)** — pre/post-action hint
+  pipeline wired into `thrum init`, `thrum send`, `thrum tmux create`; shape-B
+  text + shape-C JSON renderers; stable hint-code registry; `THRUM_NO_HINTS=1`
+  opt-out. Unified framework for actionable CLI warnings.
+- **CLI `--json` output contract (thrum-swg2)** — `slog→hint` bridge installed
+  in `PersistentPreRunE`; all `--json` commands emit via central
+  `cli.EmitJSON` / `EmitJSONWithHints` helpers. `slog.Warn` records are grafted
+  under a top-level `"hints"` key instead of polluting stdout. 46 JSON sites
+  migrated. Stable contract for agent harnesses that merge stdout+stderr via
+  `tmux capture-pane`.
+- **Identity guard system (thrum-xir.20 family, thrum-38u7)** —
+  cross-worktree + cross-host PID guards prevent accidental identity hijack;
+  daemon-side resolve authenticates against peercred-verified worktree.
+- **Tmux identity invariants (thrum-x6e8 family)** — `--no-agent-pid` flag
+  for inline quickstart; `HandleLaunch` clears stale subshell PID before
+  writing `tmux_session`; absolute worktree path + `NormalizeWorktreePath`
+  helper; bare-name self-heal. `HandleCreate` now blocks until the inline
+  quickstart writes the identity file (thrum-ns0b), eliminating a
+  create→launch race.
+- **No-agent tmux sessions (thrum-ufv5.11/.12)** — `thrum tmux status` lists
+  sessions created with `--no-agent` via a new `@thrum-managed=1` user-option
+  tag; `thrum tmux send` bypasses the queue and injects raw keystrokes when
+  the session has no registered agent.
+- **Role-scoped prime (thrum-ir2a)** — `thrum prime` filters
+  `project_state.md` sections by the calling agent's role so implementers /
+  testers don't see coordinator-only content.
+- **Plugin skills slate** — 5 new skills: `project-philosophy`,
+  `verify-against-plan`, `efficient-multi-agent-research`,
+  `adversarial-critique`, `project-setup`.
+- **Cross-host mesh tooling** — `scripts/remote-tmux-exec` wrapper +
+  `tmux-exec shell-run` subcommand for Topology B/C (local ↔ mac mini ↔
+  ubuntu) validated bringup; required on macOS because fresh `sh -c`
+  subshells fail peercred authentication for mutating RPCs.
 - **Permission prompt detection and supervisor nudge** — when a tmux-managed
   agent hits a permission prompt it cannot auto-approve, thrum detects the stuck
   state and routes a rich actionable notification to configured supervisors.
@@ -116,6 +149,23 @@ and this project adheres to
 
 ### Fixed
 
+- **macOS daemon peercred anonymous-latch (thrum-g8e8, thrum-9165)** —
+  peer-credential identity resolution now runs per-RPC instead of once per
+  unix-socket connection. The old connection-level cache latched
+  `ErrAnonymous` if the agent lister was momentarily empty at connect-accept
+  time (e.g. `quickstart`'s connection accepts before `session_refs` is
+  written), forcing `thrum daemon restart` as a workaround on macOS before
+  mutating RPCs worked. Also added diagnostic slog at each resolve step and
+  canonicalized worktree paths at `session_refs` write time via
+  `filepath.EvalSymlinks` (pair with the resolver's both-sides canonicalization
+  to close `/tmp` ↔ `/private/tmp` asymmetry on macOS).
+- **Cross-host recipient-stale hint (thrum-has1)** — `send.recipient-stale`
+  hint is now suppressed when the recipient's `origin_daemon` is a peer
+  daemon. Heartbeats are DB-only by design (thrum-iyrt) and don't propagate
+  across peer daemons, so a peer-hosted recipient's `last_seen` is
+  structurally stale; the old warning fired on every cross-host send with a
+  misleading "may be idle" message. Added `IsLocal bool` to `TeamMember` and
+  `AgentSummary`; `sendHints` gates on it.
 - **`thrum peer add` no longer prompts for `THRUM_TS_AUTHKEY` when the daemon's
   tsnet is already up (xir.26).** The CLI now queries `health` before
   prompting; if `health.tailscale.enabled` is `true` the daemon already has a
