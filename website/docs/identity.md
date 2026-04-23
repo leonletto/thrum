@@ -470,19 +470,22 @@ You can also trigger quickstart automatically through the tmux and worktree
 commands. `thrum tmux create` (alias: `thrum tmux quickstart`) requires
 `--name`, `--role`, and `--module` and runs quickstart inside the new pane.
 `thrum worktree create` (alias: `thrum worktree setup`) accepts the same
-optional quickstart flags and, when all three are provided, creates a temp tmux
-session for PID isolation, runs quickstart, then destroys the temp session.
+optional quickstart flags and, when all three are provided, creates the worktree
+plus a real tmux session and registers the agent identity inside it
+(PID-isolated, with a daemon-side retry if the shell init swallows the first
+attempt). The agent runtime is **not** started automatically — the output prints
+the next-step `thrum tmux launch <name>` command to start it.
 
 ```bash
 # Quickstart via tmux — runs inside the new pane
-thrum tmux create --name furiosa --role implementer --module auth
-thrum tmux quickstart --name furiosa --role implementer --module auth  # same thing
-
-# Quickstart via worktree create
-thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth \
+thrum tmux create implementer-auth --cwd /path/to/worktree \
   --name furiosa --role implementer --module auth
-thrum worktree setup --branch feature/auth --path ~/.workspaces/repo/auth \
-  --name furiosa --role implementer --module auth  # same thing
+thrum tmux launch implementer-auth
+
+# Quickstart via worktree create — also creates the tmux session
+thrum worktree create auth -b feature/auth \
+  --name furiosa --role implementer --module auth
+thrum tmux launch auth
 ```
 
 **Single identity per worktree:** after quickstart runs, any stale identity
@@ -610,12 +613,14 @@ its own identity files. The preferred approach is `thrum worktree create`
 redirect, and registers the agent in one command:
 
 ```bash
-# Preferred: create worktree and register agent together
-thrum worktree create --branch feature/auth --path ~/.workspaces/myapp/auth \
+# Preferred: create worktree, register agent, then launch the runtime
+thrum worktree create auth -b feature/auth \
   --name furiosa --role implementer --module auth
+thrum tmux launch auth
 
-thrum worktree create --branch feature/sync --path ~/.workspaces/myapp/sync \
+thrum worktree create sync -b feature/sync \
   --name nux --role implementer --module sync
+thrum tmux launch sync
 ```
 
 Or if you need to register manually in an existing worktree:

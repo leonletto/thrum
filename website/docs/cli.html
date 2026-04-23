@@ -2147,6 +2147,13 @@ Launched claude in session implementer-api
 
 $ thrum tmux launch implementer-api --runtime opencode
 Launched opencode in session implementer-api</code></pre>
+<p><strong>Hard-errors when no agent identity is registered.</strong> <code>thrum tmux launch</code>
+needs an agent identity in the target worktree to determine the runtime. If
+the session was created with <code>--no-agent</code>, or if there&#39;s no identity file in
+the worktree, launch returns an error and tells you to run <code>thrum quickstart</code>
+(or recreate the session with <code>--name</code>/<code>--role</code>/<code>--module</code>) first. Launching
+a runtime without an identity is a no-op — the agent has no way to register
+itself.</p>
 <h3>thrum tmux status</h3>
 <p>Show all tmux-managed sessions with agent info, liveness state, runtime, and
 branch.</p>
@@ -2295,10 +2302,18 @@ Canceled cmd_01KNTF2A9 (state: cancelled)</code></pre>
 <code>.thrum/identities/</code> so the new worktree shares the daemon with the main repo.
 Optionally sets up <code>.beads/redirect</code> if Beads is enabled.</p>
 <p>Quickstart flags (<code>--name</code>, <code>--role</code>, <code>--module</code>) are optional. When all three
-are provided, the command spins up a temporary tmux session, runs
-<code>thrum quickstart</code> inside it for PID isolation, then destroys the temp session.
-Old identity files in the worktree are cleaned up after quickstart runs — one
-identity per worktree is enforced.</p>
+are provided, the command creates a real tmux session with the worktree as
+<code>cwd</code> and runs <code>thrum quickstart</code> inside the pane via SendKeys (PID-isolated).
+The daemon retries quickstart at 5s if the shell init swallows the first
+attempt, and the CLI captures pane content if the identity file still hasn&#39;t
+appeared after 12s. Old identity files in the worktree are cleaned up after
+quickstart runs — one identity per worktree is enforced.</p>
+<p>The agent runtime is <strong>not</strong> started by <code>worktree create</code> — the output prints
+the next-step <code>thrum tmux launch &lt;name&gt;</code> command. The agent isn&#39;t running
+until you run that command.</p>
+<p><strong>Repo-root guard:</strong> the command errors out if the resolved worktree path or
+<code>worktrees.base_path</code> is the repo root itself, to prevent accidentally turning
+the main worktree into a &quot;feature&quot; worktree.</p>
 <pre><code>thrum worktree create &lt;name&gt; [flags]</code></pre>
 <table>
 <thead>
@@ -2367,7 +2382,10 @@ Worktree created: ~/.workspaces/thrum/auth-feature
   Branch: feature/auth-feature
   Thrum: .thrum/redirect → /path/to/main/.thrum
   Beads: .beads/redirect → /path/to/main/.beads
-Agent registered: impl_auth</code></pre>
+✓ Session created: auth-feature
+✓ Registered @impl_auth in worktree
+  Agent is NOT running yet. Start it with:
+    thrum tmux launch auth-feature [--runtime &lt;runtime&gt;]</code></pre>
 <h3>thrum worktree setup</h3>
 <p>Alias for <code>thrum worktree create</code>. Same flags, same behavior.</p>
 <pre><code>thrum worktree setup &lt;name&gt; [flags]</code></pre>
