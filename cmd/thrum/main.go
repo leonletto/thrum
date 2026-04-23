@@ -4222,18 +4222,6 @@ Examples:
   thrum overview
   thrum overview --json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Always emit the legacy 'Tip:' trailer in text mode, even when
-			// the daemon connect or RPC fails. The L5 contract is that
-			// commands wired to cli.LegacyHint produce a tip on stderr-or-
-			// stdout regardless of the action outcome — useful guidance
-			// (e.g. "next, try X") still helps the user when the daemon is
-			// down. JSON / quiet modes keep the structured-output contract.
-			defer func() {
-				if !flagJSON && !flagQuiet {
-					fmt.Print(cli.LegacyHint("overview", flagQuiet, flagJSON))
-				}
-			}()
-
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("failed to connect to daemon: %w", err)
@@ -4253,9 +4241,15 @@ Examples:
 			result.WebSocketPort = cli.ReadWebSocketPort(flagRepo)
 
 			if flagJSON {
-				return cli.EmitJSON(result)
+				output, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(output))
+			} else {
+				fmt.Print(cli.FormatOverview(result))
+				if !flagQuiet {
+					fmt.Print(cli.Hint("overview", flagQuiet, flagJSON))
+				}
 			}
-			fmt.Print(cli.FormatOverview(result))
+
 			return nil
 		},
 	}
@@ -6724,72 +6718,11 @@ func tmuxCmd() *cobra.Command {
 			noAgent, _ := cmd.Flags().GetBool("no-agent")
 			force, _ := cmd.Flags().GetBool("force")
 
-			// Hint pipeline: pre-action collection + gating runs BEFORE the
-			// daemon connect. The pre-action hints (not-a-worktree,
-			// session-exists, identity-exists) are FS-only by design — they
-			// must fire even when the daemon is unreachable so users get
-			// actionable guidance instead of a cryptic socket error. Use
-			// FSOnlyStateAccessor here; the LiveStateAccessor below is for
-			// post-action observations that legitimately need the RPC.
-			hintFlags := map[string]any{"cwd": cwd, "force": force}
-			preCtx := cli.HintCtx{
-				Command: "tmux.create",
-				Args:    args,
-				Flags:   hintFlags,
-				Post:    false,
-				State:   cli.NewFSOnlyStateAccessor(),
-			}
-			preHints := cli.Collect(preCtx)
-			if abortErr := cli.HandlePreAction(preHints, force); abortErr != nil {
-				if flagJSON {
-					// Emit abort body to stdout so agents can parse it,
-					// then return a terse error for the exit code. Render
-					// only the blocking hints for symmetry with the text
-					// path (EmitAbort) — non-blocking info hints, if any,
-					// aren't what caused the abort.
-					var he *cli.HintAbortError
-					var blockers []cli.Hint
-					if errors.As(abortErr, &he) {
-						blockers = he.Hints
-					}
-					body := map[string]any{
-						"error":   "aborted by hint",
-						"aborted": true,
-					}
-					if err := cli.EmitJSONWithHints(body, blockers); err != nil {
-						return fmt.Errorf("render abort body: %w", err)
-					}
-					return fmt.Errorf("aborted")
-				}
-				return cli.EmitAbort(abortErr, flagQuiet, flagJSON)
-			}
-
-			// Pre-action checks passed; now connect to the daemon for the
-			// actual mutation. Failure here is a real error (we already know
-			// the request is otherwise sensible).
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
-
-			// LiveStateAccessor is needed for post-action hint collection
-			// (session-exists liveness, identity-status liveness) which
-			// legitimately needs the daemon view.
-			state := cli.NewLiveStateAccessor(client)
-
-			// Snapshot pre-state for the identity-replaced audit marker. Done
-			// BEFORE the mutation so we can detect whether --force overwrote
-			// a stale identity without re-reading (now-mutated) FS state.
-			var replaceMarker cli.TmuxCreateResultMarker
-			if force && cwd != "" {
-				if status, preAgent, serr := state.IdentityStatus(cwd); serr == nil && status == cli.IdentityStale && preAgent != nil {
-					replaceMarker = cli.TmuxCreateResultMarker{
-						ReplacedStaleIdentity: true,
-						ReplacedAgentName:     preAgent.AgentID,
-					}
-				}
-			}
 
 			result, err := cli.TmuxCreate(client, cli.TmuxCreateOptions{
 				Name:      args[0],
