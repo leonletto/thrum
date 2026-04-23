@@ -23,6 +23,21 @@ func seedIdentityFile(t *testing.T, dir, name string, agentPID int) {
 	}
 }
 
+// stubRuntimeAncestorPresent forces the chain-walk's runtime-ancestor
+// precondition to succeed for the duration of the test. Without this,
+// tests whose process tree lacks an AI runtime ancestor (e.g. bare GH
+// Actions runners) hit the §Rule #4‴ step 2 fallthrough and return
+// "" before the chain walk runs. The PID value is arbitrary — only
+// non-zero matters.
+func stubRuntimeAncestorPresent(t *testing.T) {
+	t.Helper()
+	prev := closestRuntimeAncestorFn
+	closestRuntimeAncestorFn = func(_ context.Context, _ int) (int, string, error) {
+		return 1, "claude", nil
+	}
+	t.Cleanup(func() { closestRuntimeAncestorFn = prev })
+}
+
 // TestDaemonResolve_ChainWalk_FindsOwner proves that on the anonymous-
 // peercred branch, if the connecting process's ancestor chain contains
 // a registered agent's AgentPID AND that PID is alive, DaemonResolve
@@ -30,6 +45,7 @@ func seedIdentityFile(t *testing.T, dir, name string, agentPID int) {
 // closed. This is Rule #4‴ ancestor-chain authentication — the
 // daemon-side complement to CWD-based peercred matching.
 func TestDaemonResolve_ChainWalk_FindsOwner(t *testing.T) {
+	stubRuntimeAncestorPresent(t)
 	identitiesDir := t.TempDir()
 	self := os.Getpid() // definitely alive, in its own chain
 	seedIdentityFile(t, identitiesDir, "impl_self", self)
@@ -77,6 +93,7 @@ func TestDaemonResolve_ChainWalk_DeadPIDFallsClosed(t *testing.T) {
 // we reject with identity_mismatch — forgery defense applies to the
 // chain-authenticated path too, not just peercred.
 func TestDaemonResolve_ChainWalk_MismatchClaimRejected(t *testing.T) {
+	stubRuntimeAncestorPresent(t)
 	identitiesDir := t.TempDir()
 	self := os.Getpid()
 	seedIdentityFile(t, identitiesDir, "impl_self", self)
