@@ -189,6 +189,13 @@ func DaemonResolve(ctx context.Context, cfg Config, req DaemonResolveRequest, lo
 	return ResolvedCaller{AgentID: req.CallerAgentID}, nil
 }
 
+// closestRuntimeAncestorFn is the runtime-ancestor probe used by
+// resolveByChain. Exposed as a var so tests in this package can substitute
+// a deterministic stub on platforms where the test process has no real
+// AI-runtime ancestor in its chain (e.g. fresh GH Actions runners).
+// Production code MUST NOT mutate this.
+var closestRuntimeAncestorFn = ClosestRuntimeAncestor
+
 // resolveByChain walks ConnectingPID's ancestor chain and returns the
 // agent_id of the first registered identity whose AgentPID appears in
 // the chain AND is still alive. Returns "" when the walk is disabled
@@ -213,7 +220,7 @@ func resolveByChain(ctx context.Context, req DaemonResolveRequest) string {
 	// when the caller has a recognized runtime in its ancestor chain.
 	// Non-runtime callers (bare shell / cron / script) fall through
 	// to the anonymous-allow or anonymous-deny path per policy.
-	if rtPID, _, _ := ClosestRuntimeAncestor(ctx, req.ConnectingPID); rtPID == 0 {
+	if rtPID, _, _ := closestRuntimeAncestorFn(ctx, req.ConnectingPID); rtPID == 0 {
 		return ""
 	}
 	chain, err := WalkAncestors(ctx, req.ConnectingPID)
