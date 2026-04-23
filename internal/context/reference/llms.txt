@@ -1,4 +1,4 @@
-# Thrum v0.8.2
+# Thrum v0.9.0
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -240,25 +240,16 @@ All commands accept these flags:
   thrum sync force
     Trigger immediate sync (non-blocking).
 
-### Peer Management (Cross-Repo, v0.7.0+)
+### Peer Management (Cross-Repo, v0.7.0)
 
-  thrum peer add --type <transport>
-    Start a pairing session. Displays a peercode and blocks until peer connects (5min timeout).
-    --type is REQUIRED — no default. Missing flag errors with a help block listing all 4 values.
-    Values:
-      --type tailscale                       Cross-host via Tailscale. Requires THRUM_TS_AUTHKEY.
-                                             (Skipped automatically if daemon's tsnet is already up.)
-      --type local                           Same-host sibling repos. Loopback peercode, no tsnet.
-      --type network --address <ip>          Same-LAN, no Tailscale. Subnet inferred from the NIC
-                                             that owns the supplied IP. Direct TCP.
-      --type repair                          Rejected on peer add (use peer join --type repair instead).
+  thrum peer add
+    Start a Tailscale pairing session. Displays a 16-digit peercode. Blocks until peer connects (5min timeout).
+    Prompts for THRUM_TS_AUTHKEY if not set.
 
-  thrum peer join --type <transport> [peercode] [--peercode CODE] [--repo-path PATH]
-    Connect to a remote peer. --type is REQUIRED.
+  thrum peer join [peercode] [--peercode CODE] [--repo-path PATH]
+    Connect to a remote peer using the peercode from `peer add`.
     Peercode format: name:ip:port:code. Accepts positional arg, --peercode flag, stdin pipe, or interactive prompt.
-    Values: tailscale | local | network | repair. --type repair operates on an existing paired peer
-    using stored secrets in peers.json — does NOT create new pairings; refuses if the peer is not
-    already in peers.json.
+    Use --repo-path for local same-machine peers (sets transport to "local").
 
   thrum peer list [--json]
     List paired peers with address, last sync, sequence number.
@@ -455,12 +446,6 @@ All commands accept these flags:
   thrum daemon restart
     Stop and restart daemon.
 
-  Daemon not responding / hanging?
-    Run `thrum daemon restart`. This resolves most stale-daemon issues
-    including unresponsive Unix socket, stuck sync loop, or stale binary
-    from a recent reinstall. Check `thrum daemon logs` afterward if the
-    restart itself fails.
-
   thrum daemon logs [--follow|-f] [--lines|-n N] [--since DURATION|DATE]  # v0.8.0
     View the daemon log file (.thrum/var/daemon.log). Default: last 50 lines.
     --follow streams new lines; --lines N shows N lines (0 = all);
@@ -507,27 +492,17 @@ All commands accept these flags:
 
   thrum overview
 
-### Cross-repo peer communication (transports: tailscale | local | network, v0.7.0+)
+### Cross-repo peer communication (Tailscale, v0.7.0)
 
-  # Cross-host via Tailscale (xir.27 default replacement for the old no-flag form)
-  thrum peer add  --type tailscale                          # Machine A
-  thrum peer join --type tailscale --peercode alice:100.64.1.5:44123:7392168401234567   # Machine B
-
-  # Same-host sibling-repo bridge (no auth key needed)
-  thrum peer add  --type local                              # daemon X (in repo X's worktree)
-  thrum peer join --type local --peercode hostname:127.0.0.1:62921:1234567890123456 \
-    --repo-path /path/to/repo-X                             # daemon Y (in repo Y's worktree)
-
-  # Same-LAN, no Tailscale (user supplies an IP that's on a NIC of this host)
-  thrum peer add  --type network --address 192.168.1.42     # Machine A
-  thrum peer join --type network --peercode alice:192.168.1.42:9100:1234567890123456   # Machine B
-
+  # Machine A
+  thrum peer add                    # Displays 16-digit peercode, blocks 5min
+  # Machine B
+  thrum peer join --peercode alice:100.64.1.5:44123:7392168401234567
   # Both daemons now route messages bidirectionally
+
+  # Configure proxy agents so remote agents are addressable locally
   thrum peer configure alice add-agent planner
   thrum send "Ready for review" --to @alice:planner
-
-  # Recovery: re-verify and reconcile an existing peer entry without re-pairing
-  thrum peer join --type repair <peer-name>                 # uses stored token + daemon_id
 
 ### Launch agents in tmux sessions (v0.7.1+)
 
