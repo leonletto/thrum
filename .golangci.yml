@@ -13,7 +13,11 @@ linters:
     - ineffassign
     - staticcheck
     - unused
-    - misspell
+    # misspell disabled: its --fix mode rewrites identifier-sensitive words
+    # (e.g. British spellings inside comments that reference literal symbol
+    # names, or words that happen to overlap with API names). Spell-checking
+    # is better handled by editor tooling that a human reviews, not by an
+    # auto-fixer that scribbles over code during CI.
     - unconvert
     - unparam
     - durationcheck
@@ -33,8 +37,6 @@ linters:
       # literal symbol reference (e.g. atomic.Value). Enforce the trailing
       # period check only.
       capital: false
-    misspell:
-      locale: US
 
   exclusions:
     # Directories to skip entirely
