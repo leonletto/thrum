@@ -44,8 +44,10 @@ for AI agent coordination.
 | `thrum session set-task`      | Set current task identifier                                    |
 | `thrum context save`          | Save agent context from file or stdin                          |
 | `thrum context show`          | Show agent context                                             |
+| `thrum context load`          | Alias for `thrum context show`                                 |
 | `thrum context clear`         | Clear agent context                                            |
 | `thrum context sync`          | Sync context to a-sync branch                                  |
+| `thrum context preamble`      | Show or set the role-template preamble                         |
 | `thrum runtime`               | Manage runtime presets (list, show, set-default)               |
 | `thrum peer add`              | Start a pairing session and display a peercode                 |
 | `thrum peer join`             | Join a peer using a peercode                                   |
@@ -76,9 +78,11 @@ for AI agent coordination.
 | `thrum backup plugin list`    | List configured backup plugins                                 |
 | `thrum backup plugin add`     | Add a backup plugin (or use a built-in preset)                 |
 | `thrum backup schedule`       | Configure automatic backup schedule                            |
+| `thrum tmux start`            | One-command: create + launch + prime + attach                  |
 | `thrum tmux create`           | Create a tmux session for an agent (quickstart flags required) |
 | `thrum tmux quickstart`       | Alias for `thrum tmux create`                                  |
 | `thrum tmux launch`           | Start an AI tool inside a tmux session                         |
+| `thrum tmux connect`          | Attach to a tmux session (interactive picker or by name)       |
 | `thrum tmux status`           | Show tmux-managed sessions with state                          |
 | `thrum tmux list`             | Alias for `thrum tmux status`                                  |
 | `thrum tmux kill`             | Tear down a tmux session                                       |
@@ -1170,6 +1174,25 @@ Context for furiosa (1.2 KB, updated 5m ago):
 $ thrum context show --raw > backup.md
 ```
 
+### thrum context load
+
+Alias for `thrum context show`. Same flags, same output. Named for the common
+use case: a downstream tool (a runtime's session-restore, a scripted workflow)
+that "loads" the saved context back into the current session.
+
+```text
+thrum context load [flags]
+```
+
+See [thrum context show](#thrum-context-show) for the full flag table.
+
+Example:
+
+```bash
+# In a session-restore hook: load the previous snapshot
+thrum context load --raw > /tmp/restore.md
+```
+
 ### thrum context clear
 
 Remove the context file for the current agent. Idempotent — running clear when
@@ -1219,6 +1242,47 @@ $ thrum context sync
 ✓ Context synced for furiosa
   Committed and pushed to a-sync branch
 ```
+
+### thrum context preamble
+
+Manage the preamble — the role-template header that prepends every
+`thrum context show` / `thrum context load` output. This is what gets injected
+into a session by `thrum prime` before the agent's own saved context. Preambles
+live at `.thrum/context/preambles/{agent}.md` and are produced by
+`thrum roles deploy` from templates under `.thrum/roles/`.
+
+```text
+thrum context preamble [flags]
+```
+
+Without flags, prints the current preamble to stdout.
+
+| Flag      | Description                                        | Default |
+| --------- | -------------------------------------------------- | ------- |
+| `--agent` | Override agent name (defaults to current identity) |         |
+| `--file`  | Set preamble from a file                           |         |
+| `--init`  | Create or reset to the default preamble            | `false` |
+
+Example:
+
+```text
+# View current preamble
+$ thrum context preamble
+# Role: implementer
+You build what you're assigned…
+
+# Reset to the role default
+$ thrum context preamble --init
+✓ Preamble reset to implementer default
+
+# Load a custom preamble from a file
+$ thrum context preamble --file ./my-preamble.md
+✓ Preamble updated from my-preamble.md
+```
+
+`--init` is the normal way to regenerate a preamble after a role change or a
+template edit. Use `thrum roles deploy` to bulk-regenerate preambles for every
+agent that matches a template.
 
 ## Notifications
 
@@ -1621,6 +1685,94 @@ $ thrum roles deploy --agent alice
 ✓ Deployed preamble for alice (implementer)
 ```
 
+## Runtime Presets
+
+Runtime presets tell Thrum how to launch each supported AI runtime — the binary
+name, the launch command, how to detect the runtime from an existing process
+tree, and pane-state pattern matching for permission-prompt detection. The
+built-in presets ship with Thrum; user-defined presets live at
+`~/.thrum/runtimes.json`.
+
+Supported built-ins in v0.9.0: `claude`, `codex`, `cursor`, `gemini`, `auggie`,
+`kiro-cli`, `opencode`, `cli-only`.
+
+### thrum runtime list
+
+List all runtime presets (built-in + user-defined) with their detection status
+on the current host.
+
+```text
+thrum runtime list [--json]
+```
+
+| Flag     | Description                | Default |
+| -------- | -------------------------- | ------- |
+| `--json` | Emit machine-readable JSON | `false` |
+
+Example:
+
+```text
+$ thrum runtime list
+PRESET       BINARY       DETECTED   DEFAULT
+claude       claude       yes        ✓
+codex        codex        yes
+cursor       cursor       no
+opencode     opencode     yes
+kiro-cli     kiro-cli     no
+auggie       auggie       no
+gemini       gemini       no
+cli-only     (none)       n/a
+```
+
+### thrum runtime show
+
+Show the full definition for a single preset: launch command, binary paths,
+detection pattern, permission-prompt pattern, approve/deny keys.
+
+```text
+thrum runtime show <name> [--json]
+```
+
+Example:
+
+```text
+$ thrum runtime show claude
+Runtime: claude
+  Binary: claude
+  Launch: claude
+  Detect: process ancestry match on "claude"
+  Permission pattern: claude.tool_confirmation
+  Approve key: 1
+  Deny key: 3 (Variant A) | 2 (Variant B-Bash) | Escape (other)
+```
+
+See [Permission Prompts](permission-prompts.md) for how the approve/deny keys
+are used by the supervisor nudge flow, including the per-shape claude deny-key
+disambiguation.
+
+### thrum runtime set-default
+
+Set the default runtime preset used when no `--runtime` flag is passed to
+commands like `thrum tmux create` / `thrum tmux launch`. The default is
+persisted to `.thrum/config.json` under `runtime.default`.
+
+```text
+thrum runtime set-default <name>
+```
+
+Example:
+
+```text
+$ thrum runtime set-default opencode
+✓ Default runtime set to opencode
+```
+
+The default applies per-repo, not per-agent. Override on any individual launch
+with `thrum tmux launch <session> --runtime <name>`.
+
+See [Multi-Runtime Support](multi-runtime.md) for the runtime-resolution order
+and guidance on adding a custom preset to `~/.thrum/runtimes.json`.
+
 ## Peer Management
 
 ### thrum peer add
@@ -1852,6 +2004,47 @@ Manage daemon-driven tmux sessions for agents. Replaces the background listener
 with instant message delivery via `send-keys`. See
 [Tmux-Managed Sessions](tmux-sessions.md) for the full story.
 
+### thrum tmux start
+
+One-command session bring-up: runs `tmux create`, `tmux launch`, `thrum prime`,
+and attaches the current terminal — all in sequence. This is the shortest path
+from "I want to start an agent in this worktree" to "I'm sitting at its prompt."
+If any step fails, the session is left in place so you can inspect what happened
+with `thrum tmux status` and `thrum tmux capture`.
+
+```text
+thrum tmux start <name> --cwd <path> --name <agent-name> --role <role> --module <module> [flags]
+```
+
+Flags are identical to [thrum tmux create](#thrum-tmux-create) — the composite
+forwards them through. The most common additions are `--runtime` (to override
+the default runtime preset) and `--intent` (to seed the agent's work intent).
+
+Example:
+
+```text
+$ thrum tmux start impl-api --cwd ../worktrees/api-feature \
+    --name impl_api --role implementer --module api
+Session created: impl-api
+Agent registered: impl_api
+Runtime launched: opencode (PID 58421)
+Priming session…
+[attaches to session]
+```
+
+Under the hood this is equivalent to:
+
+```bash
+thrum tmux create impl-api --cwd … --name impl_api --role implementer --module api
+thrum tmux launch impl-api
+thrum tmux send impl-api "/thrum:prime"
+thrum tmux connect impl-api
+```
+
+Use the lower-level commands directly when you need to inspect intermediate
+state (e.g. verify the identity file was written before launching), or when
+scripting multi-session setups where attach doesn't fit.
+
 ### thrum tmux create
 
 Create a tmux session for an agent with a clean environment. Sets up
@@ -1933,10 +2126,45 @@ recreate the session with `--name`/`--role`/`--module`) first. Launching a
 runtime without an identity is a no-op — the agent has no way to register
 itself.
 
+### thrum tmux connect
+
+Attach your terminal to a tmux-managed session. With no arguments, prints an
+interactive picker listing every session visible to `thrum tmux status`; pass a
+session name to attach directly.
+
+```text
+thrum tmux connect            # interactive picker
+thrum tmux connect <name>     # attach directly
+```
+
+Example:
+
+```text
+$ thrum tmux connect
+Managed sessions:
+  1. coordinator-main       (coordinator_main · claude)
+  2. implementer-api        (impl_api · opencode)
+  3. implementer-website    (impl_website_dev · claude)
+Attach to: 2
+[attaches to implementer-api]
+
+$ thrum tmux connect implementer-api
+[attaches to implementer-api]
+```
+
+The picker also surfaces sessions created with `--no-agent` (they're tagged
+`@thrum-managed=1` in tmux user-options so status / connect still see them
+without needing a registered agent).
+
+Under the hood this is a thin wrapper around `tmux attach-session -t <name>`, so
+all the usual tmux attach semantics apply (Ctrl-b d to detach, etc.).
+
 ### thrum tmux status
 
 Show all tmux-managed sessions with agent info, liveness state, runtime, and
-branch.
+branch. Includes sessions created with `--no-agent` (they're tagged
+`@thrum-managed=1` as a tmux user-option and still show up here, with an empty
+agent column).
 
 ```text
 thrum tmux status
@@ -1974,6 +2202,12 @@ Session implementer-api killed
 
 Send text into a tmux session via `send-keys`. Useful for coordinator debugging
 or injecting commands.
+
+For agent-managed sessions (the normal case), input is routed through the
+daemon's command queue so `@system` completion semantics and `thrum tmux queue`
+coordination stay intact. For sessions created with `--no-agent`, there is no
+agent identity to queue against — `tmux send` bypasses the queue and writes the
+keystrokes directly into the pane.
 
 ```text
 thrum tmux send <name> "text"
