@@ -337,7 +337,18 @@ gosec-check:
 		echo "gosec not found. Installing $(GOSEC_VERSION)..."; \
 		go install github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION); \
 	fi
-	gosec -exclude-dir=.ref -exclude-dir=third_party -exclude-dir=builtin -exclude-dir=examples -exclude-dir=output ./...
+	gosec \
+		-exclude-dir=.ref -exclude-dir=third_party -exclude-dir=builtin -exclude-dir=examples -exclude-dir=output \
+		-exclude=G115,G117,G204,G404,G602,G703 \
+		./...
+# Exclusion rationale (matches .golangci.yml — standalone gosec doesn't
+# read that file nor honor //nolint directives):
+#   G115: int(file.Fd()) for syscall.Flock — safe on 64-bit Go builds.
+#   G117: struct field names matching "secret" patterns are intentional config fields.
+#   G204: CLI tool legitimately runs git and other subprocesses with variables.
+#   G404: math/rand used for non-security UI hint rotation (cli/hints.go).
+#   G602: false positive on guarded slice access (e.g. i > 0 before ports[i-1]).
+#   G703: path traversal via taint — paths are constructed internally, not from user input.
 
 vulncheck:
 	@echo "Running govulncheck..."
