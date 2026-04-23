@@ -13,7 +13,7 @@ and machines. You direct the work. The agents coordinate through Thrum. Messages
 persist through context compaction, session restarts, and machine changes —
 nothing gets lost.
 
-**v0.8.2 highlights:**
+**v0.9.0 highlights:**
 
 - **Cursor Agent plugin** — Full plugin with hooks, skills, commands, MCP
   config. Install via `cursor-plugin/local-install.sh`.

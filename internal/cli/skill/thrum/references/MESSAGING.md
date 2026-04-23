@@ -4,7 +4,9 @@
 
 1. **Send** — `thrum send "msg" --to @name` (direct) or `--to @group` (group)
 2. **Deliver** — Daemon writes to recipient's inbox (synced via git)
-3. **Receive** — `thrum inbox` or `thrum wait` (blocking)
+3. **Receive** — Hook-delivered nudges + `thrum inbox` (recommended) or
+   `thrum wait` (blocking, used for the legacy listener pattern — see
+   `references/LISTENER_PATTERN.md` for deprecation notes)
 4. **Verify sent state** — `thrum sent` or `thrum sent show <msg-id>`
 5. **Read** — Auto-marked read when displayed via `thrum inbox`; use
    `thrum inbox --unread` to peek without marking. Explicit:

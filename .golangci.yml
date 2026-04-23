@@ -13,7 +13,11 @@ linters:
     - ineffassign
     - staticcheck
     - unused
-    - misspell
+    # misspell disabled: its --fix mode rewrites identifier-sensitive words
+    # (e.g. British spellings inside comments that reference literal symbol
+    # names, or words that happen to overlap with API names). Spell-checking
+    # is better handled by editor tooling that a human reviews, not by an
+    # auto-fixer that scribbles over code during CI.
     - unconvert
     - unparam
     - durationcheck
@@ -27,9 +31,12 @@ linters:
   settings:
     godot:
       scope: declarations
-      capital: true
-    misspell:
-      locale: US
+      # capital: false (default) — auto-fixing comments to start with a
+      # capital letter breaks godoc conventions whenever the first word is
+      # a lowercase identifier name (e.g. cgnatCIDR, tsnet, ttl) or a
+      # literal symbol reference (e.g. atomic.Value). Enforce the trailing
+      # period check only.
+      capital: false
 
   exclusions:
     # Directories to skip entirely

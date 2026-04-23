@@ -232,14 +232,23 @@ wiring, and optional agent registration in one command:
 
 ```bash
 # Create worktree with redirect wiring only
-thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth
+thrum worktree create auth -b feature/auth
 # or equivalently:
-thrum worktree setup --branch feature/auth --path ~/.workspaces/repo/auth
+thrum worktree setup auth -b feature/auth
 
-# Create worktree and register agent in one step
-thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth \
+# Create worktree, register agent, and create the tmux session in one step
+thrum worktree create auth -b feature/auth \
   --name furiosa --role implementer --module auth
+
+# Start the runtime — the agent is NOT running until this step
+thrum tmux launch auth
 ```
+
+The worktree path is `worktrees.base_path/<name>` (default
+`~/.workspaces/<repo>/<name>`). When you pass `--name`, `--role`, and
+`--module`, the command creates a real tmux session and registers the agent
+identity inside it, then prints the next-step `thrum tmux launch` command. The
+agent runtime is not started until you run `tmux launch`.
 
 If you need to wire up an existing worktree manually:
 
@@ -260,12 +269,14 @@ Each agent in a worktree gets its own identity. The integrated path handles
 worktree creation and registration together:
 
 ```bash
-# Create worktrees and register agents in one step
-thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth \
+# Create worktrees and register agents in one step, then launch each
+thrum worktree create auth -b feature/auth \
   --name furiosa --role implementer --module auth
+thrum tmux launch auth
 
-thrum worktree create --branch feature/sync --path ~/.workspaces/repo/sync \
+thrum worktree create sync -b feature/sync \
   --name nux --role implementer --module sync
+thrum tmux launch sync
 ```
 
 Or register manually after creating worktrees:
@@ -412,9 +423,11 @@ thrum reply msg_01HXE... "Reviewed. LGTM with minor comments on error handling."
 
 ```bash
 # Claude Code agent in its own worktree (integrated path — preferred)
-thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth \
+thrum worktree create auth -b feature/auth \
   --name claude_agent --role implementer --module auth --runtime claude
-# Creates worktree, wires redirect, registers agent, all in one step
+thrum tmux launch auth
+# Step 1 creates the worktree, wires the redirect, registers the agent, and
+# creates the tmux session. Step 2 starts Claude Code inside the session.
 
 # Or register manually in an existing worktree
 thrum init --runtime claude
@@ -453,11 +466,14 @@ thrum agent set-intent "Resuming JWT implementation after compaction"
 # === Coordinator (main worktree) ===
 thrum quickstart --name coord_main --role coordinator --module main
 
-# Preferred: create worktrees and register agents in one step
-thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth \
+# Preferred: create worktrees, register agents, then launch the runtimes
+thrum worktree create auth -b feature/auth \
   --name furiosa --role implementer --module auth
-thrum worktree create --branch feature/sync --path ~/.workspaces/repo/sync \
+thrum tmux launch auth
+
+thrum worktree create sync -b feature/sync \
   --name nux --role implementer --module sync
+thrum tmux launch sync
 
 # Assign work
 thrum send "furiosa: implement auth (feature/auth worktree)" --to @furiosa

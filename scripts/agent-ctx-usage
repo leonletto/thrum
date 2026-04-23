@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+#
+# agent-ctx-usage — read a Claude Code agent's transcript JSONL and report
+# context-window usage. Mirrors the formula ccstatusline uses to render the
+# status-line "Ctx: X%" indicator, but works without tmux pane reading.
+#
+# Usage:
+#   scripts/agent-ctx-usage --agent <name> [--window <tokens>] [--threshold <pct>]
+#
+# Exit codes:
+#   0  — usage retrieved (printed to stdout)
+#   1  — error (missing agent / no transcript / no usage data)
+#   2  — usage above threshold (when --threshold passed)
+#
+# Examples:
+#   scripts/agent-ctx-usage --agent orch_skills
+#   scripts/agent-ctx-usage --agent orch_skills --threshold 70
+
+set -euo pipefail
+
+AGENT=""
+WORKTREE=""
+WINDOW=1000000
+THRESHOLD=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --agent)     AGENT="$2"; shift 2;;
+    --worktree)  WORKTREE="$2"; shift 2;;
+    --window)    WINDOW="$2"; shift 2;;
+    --threshold) THRESHOLD="$2"; shift 2;;
+    -h|--help)
+      grep '^# ' "$0" | sed 's/^# \?//'
+      exit 0
+      ;;
+    *) echo "unknown arg: $1" >&2; exit 1;;
+  esac
+done
+
+if [[ -z "$AGENT" ]]; then
+  echo "usage: $0 --agent <name> [--worktree <path>] [--window <tokens>] [--threshold <pct>]" >&2
+  exit 1
+fi
+
+# Resolve worktree: --worktree flag wins, else look up via thrum team --json.
+# As of 2026-04-19 the daemon's team-list output dropped the worktree field
+# (regression tracked separately); --worktree flag is the durable workaround.
+if [[ -z "$WORKTREE" ]]; then
+  WORKTREE=$(thrum team --json | jq -r --arg a "$AGENT" \
+    '.members[] | select(.agent_id == $a) | .worktree // empty')
+fi
+
+if [[ -z "$WORKTREE" ]]; then
+  echo "no worktree for agent '$AGENT' (pass --worktree explicitly if team-list lookup fails)" >&2
+  exit 1
+fi
+
+# Claude Code project directory: /Users/x/.workspaces/y → -Users-x--workspaces-y
+TRANSCRIPT_DIR="$HOME/.claude/projects/$(echo "$WORKTREE" | sed 's|[./]|-|g')"
+
+if [[ ! -d "$TRANSCRIPT_DIR" ]]; then
+  echo "no transcript directory for $WORKTREE (not a claude runtime?)" >&2
+  exit 1
+fi
+
+TRANSCRIPT=$(ls -t "$TRANSCRIPT_DIR"/*.jsonl 2>/dev/null | head -1 || true)
+if [[ -z "$TRANSCRIPT" ]]; then
+  echo "no transcripts in $TRANSCRIPT_DIR" >&2
+  exit 1
+fi
+
+# Latest assistant message's usage block. ccstatusline formula:
+#   contextLengthTokens = input + cache_creation + cache_read
+USED=$(tail -200 "$TRANSCRIPT" | jq -rs '
+  map(select(.message.usage != null)) | last | .message.usage |
+  ((.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0))
+' 2>/dev/null || echo "")
+
+if [[ -z "$USED" || "$USED" == "null" ]]; then
+  echo "no usage data found in $TRANSCRIPT" >&2
+  exit 1
+fi
+
+PCT=$(awk -v u="$USED" -v w="$WINDOW" 'BEGIN { printf "%.1f", (u/w)*100 }')
+
+# If --threshold not passed, look it up from .thrum/config.json keyed by window size.
+# Falls back to 70 if neither flag, config entry, nor file is present.
+if [[ -z "$THRESHOLD" ]]; then
+  CONFIG="$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel 2>/dev/null)/.thrum/config.json"
+  if [[ -f "$CONFIG" ]]; then
+    THRESHOLD=$(jq -r --arg w "$WINDOW" \
+      '.orchestration.context_restart_thresholds_pct[$w] // 70' \
+      "$CONFIG" 2>/dev/null || echo "70")
+  else
+    THRESHOLD=70
+  fi
+fi
+
+echo "${AGENT}: ${USED} tokens (${PCT}% of $((WINDOW/1000))k window, threshold ${THRESHOLD}%)"
+
+EXCEEDED=$(awk -v p="$PCT" -v t="$THRESHOLD" 'BEGIN { print (p+0 > t+0) ? "1" : "0" }')
+if [[ "$EXCEEDED" == "1" ]]; then
+  exit 2
+fi
+
+exit 0

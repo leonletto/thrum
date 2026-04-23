@@ -19,9 +19,7 @@ test('smoke: health bar shows connected', async ({ page }) => {
   await expect(page.getByText('CONNECTED')).toBeVisible({ timeout: 15_000 });
 });
 
-test.fixme('smoke: CLI message sent while UI is open', async ({ page }) => {
-  // FIXME: WebSocket push notifications don't trigger Live Feed re-render.
-  // Same root cause as SC-51. Message sends successfully but doesn't appear in UI.
+test('smoke: CLI message sent while UI is open', async ({ page }) => {
   // Arrange: navigate to UI first
   await page.goto(getWebUIUrl());
   await waitForWebSocket(page);

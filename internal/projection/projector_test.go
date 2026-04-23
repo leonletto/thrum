@@ -535,7 +535,10 @@ func TestProjector_MessageEditNonExistent(t *testing.T) {
 
 	p := projection.NewProjector(safedb.New(db))
 
-	// Try to edit a message that doesn't exist
+	// Editing a message that doesn't exist should succeed gracefully (no-op).
+	// This supports out-of-order event delivery during peer sync — an edit may
+	// arrive before the original message.create. The event is stored in JSONL;
+	// the projection just skips the edit history and update when no row matches.
 	editEvent := types.MessageEditEvent{
 		Type:      "message.edit",
 		Timestamp: "2026-01-01T01:00:00Z",
@@ -548,8 +551,8 @@ func TestProjector_MessageEditNonExistent(t *testing.T) {
 
 	data, _ := json.Marshal(editEvent)
 	err := p.Apply(context.Background(), data)
-	if err == nil {
-		t.Error("Expected error when editing non-existent message")
+	if err != nil {
+		t.Errorf("editing non-existent message should succeed gracefully, got: %v", err)
 	}
 }
 
@@ -683,5 +686,412 @@ func TestProjector_UnknownEventType(t *testing.T) {
 	data, _ := json.Marshal(unknownEvent)
 	if err := p.Apply(context.Background(), data); err != nil {
 		t.Errorf("Apply() should not error on unknown event type: %v", err)
+	}
+}
+
+// TestProjector_GroupMemberAddUnknownGroup verifies that a group.member.add
+// event referencing a group that doesn't exist locally succeeds gracefully
+// instead of raising a FK constraint violation that would poison sync.
+func TestProjector_GroupMemberAddUnknownGroup(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+	ctx := context.Background()
+
+	// Apply a member.add for a group that doesn't exist
+	addEvent := types.GroupMemberAddEvent{
+		Type:        "group.member.add",
+		Timestamp:   "2026-01-01T10:00:00Z",
+		GroupID:     "grp_UNKNOWN",
+		MemberType:  "agent",
+		MemberValue: "agent:test:ABC123",
+		AddedBy:     "agent:admin:XYZ",
+	}
+	data, _ := json.Marshal(addEvent)
+	if err := p.Apply(ctx, data); err != nil {
+		t.Errorf("group.member.add for unknown group should succeed gracefully, got: %v", err)
+	}
+
+	// Verify no rows were inserted into group_members
+	var count int
+	err := db.QueryRow(`SELECT COUNT(*) FROM group_members WHERE group_id = ?`, "grp_UNKNOWN").Scan(&count)
+	if err != nil {
+		t.Fatalf("query group_members: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected 0 rows for unknown group, got %d", count)
+	}
+}
+
+// TestProjector_AgentUpdateUnknownSession verifies that an agent.update event
+// with a work context referencing a session that doesn't exist locally
+// succeeds gracefully — contexts with unknown session_ids are skipped instead
+// of raising a FK constraint violation.
+func TestProjector_AgentUpdateUnknownSession(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+	ctx := context.Background()
+
+	// First insert a session so we can verify mixed-batch behavior (one known,
+	// one unknown session)
+	knownSessionID := "ses_KNOWN_001"
+	startEvent := types.AgentSessionStartEvent{
+		Type:      "agent.session.start",
+		Timestamp: "2026-01-01T09:00:00Z",
+		SessionID: knownSessionID,
+		AgentID:   "agent:test:ABC123",
+	}
+	startData, _ := json.Marshal(startEvent)
+	if err := p.Apply(ctx, startData); err != nil {
+		t.Fatalf("apply session.start: %v", err)
+	}
+
+	// Apply agent.update with contexts for both known and unknown sessions
+	updateEvent := types.AgentUpdateEvent{
+		Type:      "agent.update",
+		Timestamp: "2026-01-01T10:00:00Z",
+		AgentID:   "agent:test:ABC123",
+		WorkContexts: []types.SessionWorkContext{
+			{
+				SessionID:    knownSessionID,
+				Branch:       "main",
+				WorktreePath: "/tmp/known",
+			},
+			{
+				SessionID:    "ses_UNKNOWN_999",
+				Branch:       "feature",
+				WorktreePath: "/tmp/unknown",
+			},
+		},
+	}
+	data, _ := json.Marshal(updateEvent)
+	if err := p.Apply(ctx, data); err != nil {
+		t.Errorf("agent.update with unknown session should succeed gracefully, got: %v", err)
+	}
+
+	// Known session context should be inserted
+	var knownCount int
+	err := db.QueryRow(`SELECT COUNT(*) FROM agent_work_contexts WHERE session_id = ?`, knownSessionID).Scan(&knownCount)
+	if err != nil {
+		t.Fatalf("query known context: %v", err)
+	}
+	if knownCount != 1 {
+		t.Errorf("expected 1 row for known session, got %d", knownCount)
+	}
+
+	// Unknown session context should be skipped
+	var unknownCount int
+	err = db.QueryRow(`SELECT COUNT(*) FROM agent_work_contexts WHERE session_id = ?`, "ses_UNKNOWN_999").Scan(&unknownCount)
+	if err != nil {
+		t.Fatalf("query unknown context: %v", err)
+	}
+	if unknownCount != 0 {
+		t.Errorf("expected 0 rows for unknown session, got %d", unknownCount)
+	}
+}
+
+// thrum-qb62: ensure receipt events from non-recipients do not create phantom
+// delivery rows. The INSERT OR IGNORE at projector line 360 previously created
+// a delivery row for any agent that marked a message read, even if the agent
+// was never a legitimate recipient (e.g. a directly-targeted @impl_skills
+// send was phantom-delivered to impl_permission_prompts because impl_permission_prompts
+// ran `thrum message read --all` and the projector blindly inserted a row).
+
+// insertMessageWithRef inserts a message row with a single mention ref and the
+// given recipients (as message_deliveries rows).
+func insertMessageWithRef(t *testing.T, p *projection.Projector, id string, mention string, recipients []string) {
+	t.Helper()
+	var refs []types.Ref
+	if mention != "" {
+		refs = []types.Ref{{Type: "mention", Value: mention}}
+	}
+	ev := types.MessageCreateEvent{
+		Type:       "message.create",
+		Timestamp:  "2026-01-01T00:00:00Z",
+		MessageID:  id,
+		AgentID:    "sender_test",
+		SessionID:  "ses_sender",
+		Body:       types.MessageBody{Format: "markdown", Content: "hi"},
+		Refs:       refs,
+		Recipients: recipients,
+	}
+	data, _ := json.Marshal(ev)
+	if err := p.Apply(context.Background(), data); err != nil {
+		t.Fatalf("apply create %s: %v", id, err)
+	}
+}
+
+func insertMessageWithScope(t *testing.T, p *projection.Projector, id string, scopeType, scopeValue string, recipients []string) {
+	t.Helper()
+	ev := types.MessageCreateEvent{
+		Type:       "message.create",
+		Timestamp:  "2026-01-01T00:00:00Z",
+		MessageID:  id,
+		AgentID:    "sender_test",
+		SessionID:  "ses_sender",
+		Body:       types.MessageBody{Format: "markdown", Content: "hi"},
+		Scopes:     []types.Scope{{Type: scopeType, Value: scopeValue}},
+		Recipients: recipients,
+	}
+	data, _ := json.Marshal(ev)
+	if err := p.Apply(context.Background(), data); err != nil {
+		t.Fatalf("apply create %s: %v", id, err)
+	}
+}
+
+func insertAgent(t *testing.T, db *sql.DB, agentID, role string) {
+	t.Helper()
+	_, err := db.Exec(`INSERT INTO agents (agent_id, kind, role, module, registered_at) VALUES (?, 'named', ?, 'test', '2026-01-01T00:00:00Z')`,
+		agentID, role)
+	if err != nil {
+		t.Fatalf("insert agent %s: %v", agentID, err)
+	}
+}
+
+func applyReceipt(t *testing.T, p *projection.Projector, messageID, agentID, receiptType, timestamp string) {
+	t.Helper()
+	ev := types.MessageReceiptEvent{
+		Type:        "message.receipt",
+		Timestamp:   timestamp,
+		MessageID:   messageID,
+		AgentID:     agentID,
+		ReceiptType: receiptType,
+	}
+	data, _ := json.Marshal(ev)
+	if err := p.Apply(context.Background(), data); err != nil {
+		t.Fatalf("apply receipt for %s by %s: %v", messageID, agentID, err)
+	}
+}
+
+func deliveryCount(t *testing.T, db *sql.DB, messageID, agentID string) int {
+	t.Helper()
+	var n int
+	err := db.QueryRow(`SELECT COUNT(*) FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ?`,
+		messageID, agentID).Scan(&n)
+	if err != nil {
+		t.Fatalf("count deliveries: %v", err)
+	}
+	return n
+}
+
+func readAtOf(t *testing.T, db *sql.DB, messageID, agentID string) sql.NullString {
+	t.Helper()
+	var readAt sql.NullString
+	err := db.QueryRow(`SELECT read_at FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ?`,
+		messageID, agentID).Scan(&readAt)
+	if err == sql.ErrNoRows {
+		return sql.NullString{}
+	}
+	if err != nil {
+		t.Fatalf("query read_at: %v", err)
+	}
+	return readAt
+}
+
+func TestProjector_ApplyMessageReceipt_NonRecipientDoesNotCreatePhantomRow(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	// Register agents — "alice" is targeted; "bob" is NOT a recipient.
+	insertAgent(t, db, "alice", "implementer")
+	insertAgent(t, db, "bob", "implementer")
+
+	// Message targets alice via direct mention, not bob.
+	insertMessageWithRef(t, p, "msg_phantom", "alice", []string{"alice"})
+
+	// Bob sends a read receipt — simulating `thrum message read --all`.
+	applyReceipt(t, p, "msg_phantom", "bob", "read", "2026-01-01T00:00:05Z")
+
+	if got := deliveryCount(t, db, "msg_phantom", "bob"); got != 0 {
+		t.Fatalf("bob is not a recipient — expected 0 delivery rows, got %d", got)
+	}
+	// Alice's legitimate row should remain intact.
+	if got := deliveryCount(t, db, "msg_phantom", "alice"); got != 1 {
+		t.Fatalf("alice is the recipient — expected 1 delivery row, got %d", got)
+	}
+}
+
+func TestProjector_ApplyMessageReceipt_ExistingRecipientRowIsUpdated(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	insertAgent(t, db, "alice", "implementer")
+	insertMessageWithRef(t, p, "msg_ok", "alice", []string{"alice"})
+
+	// Normal post-v14 path: legitimate recipient has a delivery row; read updates it.
+	applyReceipt(t, p, "msg_ok", "alice", "read", "2026-01-01T00:00:05Z")
+
+	if got := deliveryCount(t, db, "msg_ok", "alice"); got != 1 {
+		t.Fatalf("alice has existing delivery row — expected 1 row, got %d", got)
+	}
+	readAt := readAtOf(t, db, "msg_ok", "alice")
+	if !readAt.Valid || readAt.String != "2026-01-01T00:00:05Z" {
+		t.Fatalf("alice's read_at should be set to receipt timestamp, got %v", readAt)
+	}
+}
+
+func TestProjector_ApplyMessageReceipt_MentionedAgentCreatesRowForPreV14(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	insertAgent(t, db, "alice", "implementer")
+	// Pre-v14 simulation: message has mention ref for alice but NO delivery row
+	// (empty Recipients). A legitimate recipient reading it should still create
+	// their own delivery row on receipt.
+	insertMessageWithRef(t, p, "msg_prev14", "alice", nil)
+
+	applyReceipt(t, p, "msg_prev14", "alice", "read", "2026-01-01T00:00:05Z")
+
+	if got := deliveryCount(t, db, "msg_prev14", "alice"); got != 1 {
+		t.Fatalf("mentioned agent alice should create a delivery row on receipt, got %d", got)
+	}
+	readAt := readAtOf(t, db, "msg_prev14", "alice")
+	if !readAt.Valid {
+		t.Fatalf("alice's read_at should be populated")
+	}
+}
+
+func TestProjector_ApplyMessageReceipt_RoleMentionCreatesRow(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	insertAgent(t, db, "alice", "reviewer")
+	// Message mentions @reviewer (role), not @alice directly. Alice fills that role.
+	insertMessageWithRef(t, p, "msg_role", "reviewer", nil)
+
+	applyReceipt(t, p, "msg_role", "alice", "read", "2026-01-01T00:00:05Z")
+
+	if got := deliveryCount(t, db, "msg_role", "alice"); got != 1 {
+		t.Fatalf("agent with matching role should create a delivery row, got %d", got)
+	}
+}
+
+func TestProjector_ApplyMessageReceipt_RoleMentionDoesNotMatchOtherRole(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	insertAgent(t, db, "alice", "reviewer")
+	insertAgent(t, db, "bob", "implementer")
+	insertMessageWithRef(t, p, "msg_role_other", "reviewer", nil)
+
+	// Bob is an implementer — the @reviewer mention does not include him.
+	applyReceipt(t, p, "msg_role_other", "bob", "read", "2026-01-01T00:00:05Z")
+
+	if got := deliveryCount(t, db, "msg_role_other", "bob"); got != 0 {
+		t.Fatalf("bob's role does not match — expected 0 delivery rows, got %d", got)
+	}
+}
+
+func TestProjector_ApplyMessageReceipt_BroadcastCreatesRow(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	insertAgent(t, db, "alice", "implementer")
+	insertAgent(t, db, "bob", "implementer")
+	insertMessageWithScope(t, p, "msg_bcast", "broadcast", "everyone", nil)
+
+	applyReceipt(t, p, "msg_bcast", "bob", "read", "2026-01-01T00:00:05Z")
+
+	if got := deliveryCount(t, db, "msg_bcast", "bob"); got != 1 {
+		t.Fatalf("broadcast scope should accept any agent, got %d rows for bob", got)
+	}
+}
+
+func TestProjector_ApplyMessageReceipt_GroupMemberCreatesRow(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	insertAgent(t, db, "alice", "implementer")
+
+	// Create a group with alice as a member.
+	_, err := db.Exec(`INSERT INTO groups (group_id, name, created_at, created_by) VALUES ('grp_1','team_a','2026-01-01T00:00:00Z','sender_test')`)
+	if err != nil {
+		t.Fatalf("insert group: %v", err)
+	}
+	_, err = db.Exec(`INSERT INTO group_members (group_id, member_type, member_value, added_at) VALUES ('grp_1','agent','alice','2026-01-01T00:00:00Z')`)
+	if err != nil {
+		t.Fatalf("insert group member: %v", err)
+	}
+
+	insertMessageWithScope(t, p, "msg_grp", "group", "team_a", nil)
+
+	applyReceipt(t, p, "msg_grp", "alice", "read", "2026-01-01T00:00:05Z")
+
+	if got := deliveryCount(t, db, "msg_grp", "alice"); got != 1 {
+		t.Fatalf("group member alice should create a delivery row, got %d", got)
+	}
+}
+
+func TestProjector_ApplyMessageReceipt_GroupRoleMemberCreatesRow(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	// Register an agent whose role matches a role-type group member.
+	insertAgent(t, db, "alice", "reviewer")
+
+	_, err := db.Exec(`INSERT INTO groups (group_id, name, created_at, created_by) VALUES ('grp_r','reviewers','2026-01-01T00:00:00Z','sender_test')`)
+	if err != nil {
+		t.Fatalf("insert group: %v", err)
+	}
+	// Group member stored by role, not by agent_id — exercises the role
+	// lookup branch in the legitimacy gate.
+	_, err = db.Exec(`INSERT INTO group_members (group_id, member_type, member_value, added_at) VALUES ('grp_r','role','reviewer','2026-01-01T00:00:00Z')`)
+	if err != nil {
+		t.Fatalf("insert group role member: %v", err)
+	}
+
+	insertMessageWithScope(t, p, "msg_grp_role", "group", "reviewers", nil)
+
+	applyReceipt(t, p, "msg_grp_role", "alice", "read", "2026-01-01T00:00:05Z")
+
+	if got := deliveryCount(t, db, "msg_grp_role", "alice"); got != 1 {
+		t.Fatalf("agent with matching role in role-type group member should create a delivery row, got %d", got)
+	}
+}
+
+func TestProjector_ApplyMessageReceipt_NonGroupMemberDoesNotCreateRow(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	insertAgent(t, db, "alice", "implementer")
+	insertAgent(t, db, "carol", "implementer")
+
+	_, err := db.Exec(`INSERT INTO groups (group_id, name, created_at, created_by) VALUES ('grp_a','team_a','2026-01-01T00:00:00Z','sender_test')`)
+	if err != nil {
+		t.Fatalf("insert group: %v", err)
+	}
+	_, err = db.Exec(`INSERT INTO group_members (group_id, member_type, member_value, added_at) VALUES ('grp_a','agent','alice','2026-01-01T00:00:00Z')`)
+	if err != nil {
+		t.Fatalf("insert group member: %v", err)
+	}
+
+	insertMessageWithScope(t, p, "msg_grp_no", "group", "team_a", nil)
+
+	// carol is not in team_a — her receipt must not create a delivery row.
+	applyReceipt(t, p, "msg_grp_no", "carol", "read", "2026-01-01T00:00:05Z")
+
+	if got := deliveryCount(t, db, "msg_grp_no", "carol"); got != 0 {
+		t.Fatalf("carol is not a group member — expected 0 rows, got %d", got)
 	}
 }

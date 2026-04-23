@@ -1,4 +1,4 @@
-# Thrum v0.8.2
+# Thrum v0.9.0
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -44,13 +44,36 @@ New in v0.8.2:
   and MCP config. Deployed via `cursor-plugin/local-install.sh` into `.cursor/`.
 - Test infrastructure scripts (`scripts/test-setup.sh`, `scripts/test-teardown.sh`)
   for automated agent test environments.
+- Worktree create quickstart fix — `thrum worktree create` with quickstart
+  flags now creates a real tmux session (kept, not destroyed) and runs
+  quickstart inside it via SendKeys instead of the old temp-session + queue
+  RPC path that rejected agentless sessions. Daemon-side retry at 5s if shell
+  init swallowed the command, CLI-side pane capture at 12s if the identity
+  file still hasn't appeared. Repo-root guard: errors out if the resolved
+  worktree path or `worktrees.base_path` is the repo root itself.
+- Two-step create + launch — `thrum worktree create` and `thrum tmux create`
+  now print explicit next-step hints: "Agent is NOT running yet. Start it
+  with: thrum tmux launch <name>". The agent identity is registered, but the
+  runtime is not started until `tmux launch` runs.
+- `thrum tmux launch` hard-errors on missing identity — sessions created
+  with `--no-agent` (or worktrees with no identity file) cannot be launched.
+  Returns an error telling you to run `thrum quickstart` first. Launching a
+  runtime without an identity is a no-op.
+- Next-step guard messages — `agent register`, `worktree create` (no agent),
+  `purge --confirm`, `daemon stop`, and `tmux restart` now print explicit
+  hints about what to do next or what just broke. `daemon stop` warns that
+  messaging commands will fail until the daemon is restarted. `tmux restart`
+  warns when the snapshot has 0 lines (no conversation history).
+- Purge auto-re-register message corrected — agents auto-re-register via
+  `RefreshLocalIdentity` wired into `getClient()`, so no manual action is
+  needed after `thrum purge`.
 
 New in v0.9.0 (upcoming):
 - Safe agent registration — `thrum tmux create` now requires quickstart flags
   (`--name`, `--role`, `--module`) or `--no-agent`; runs quickstart inside the
   pane automatically. New alias: `thrum tmux quickstart`.
   `thrum worktree create` gains optional quickstart flags; when all three are
-  provided it spins up a temp tmux session for PID isolation.
+  provided it creates a real tmux session and runs quickstart inside it.
   New alias: `thrum worktree setup`. Single-identity-per-worktree enforcement.
 - Monitor Jobs — `thrum monitor start/list/show/stop/logs/restart`. Spawn a
   child process, watch stdout+stderr with a regex, and emit matches as
@@ -356,10 +379,15 @@ All commands accept these flags:
     `worktrees.base_path/<name>` (default: ~/.workspaces/<project>/<name>).
     - -b / --branch: branch name (default: feature/<name>)
     - --detach: create detached HEAD worktree
-    - --name, --role, --module (all optional): if all three provided, spins up a
-      temp tmux session to run quickstart, giving the agent a proper PID-based identity.
+    - --name, --role, --module (all optional): if all three provided, creates a
+      real tmux session with the worktree as cwd and runs quickstart inside the
+      pane via SendKeys (PID-isolated, with daemon-side retry at 5s and CLI-side
+      pane capture at 12s). The session is kept — start the runtime later with
+      `thrum tmux launch <name>`. The CLI prints the next-step launch command.
     Sets up .thrum/redirect and .thrum/identities/ (if worktrees.thrum_enabled).
     Sets up .beads/redirect (if worktrees.beads_enabled and .beads/ exists).
+    v0.8.2: errors out if the resolved worktree path or worktrees.base_path is
+    the repo root itself (repo-root guard).
 
   thrum worktree setup <name> [-b BRANCH] [--detach] [...]
     Alias for `thrum worktree create`.
@@ -506,15 +534,20 @@ All commands accept these flags:
 
 ### Launch agents in tmux sessions (v0.7.1+)
 
-  # Create a worktree and register an agent in one step (v0.9.0)
+  # Create a worktree, register the agent, and create the tmux session in one step (v0.8.2)
+  # The agent is NOT running yet — tmux launch starts the runtime.
   thrum worktree create api-feature -b feature/api-refactor \
     --name impl_api --role implementer --module api
+  thrum tmux launch api-feature
 
-  # OR: create the session + run quickstart in one command (v0.9.0)
+  # OR for an existing worktree: create the session + run quickstart in one command
   thrum tmux create implementer-api \
     --cwd ~/.workspaces/myproj/api-feature \
     --name impl_api --role implementer --module api --runtime claude
-  # quickstart runs automatically inside the pane; no separate send needed
+  thrum tmux launch implementer-api
+  # quickstart runs automatically inside the pane during create; tmux launch
+  # then starts the runtime. Hard-errors if the session was created with
+  # --no-agent or the worktree has no identity file.
 
   thrum send "Your epic is thrum-abc. Start working." --to @impl_api
 

@@ -12,6 +12,11 @@ import (
 // TeamListRequest represents the request for team.list RPC.
 type TeamListRequest struct {
 	IncludeOffline bool `json:"include_offline,omitempty"`
+
+	// IncludeSystem, when true, surfaces identities marked
+	// Reserved=true (e.g. @supervisor_<project>) that are hidden
+	// from the default listing. Set via `thrum team --system`.
+	IncludeSystem bool `json:"include_system,omitempty"`
 }
 
 // TeamListResponse represents the response from team.list RPC.
@@ -39,6 +44,7 @@ type TeamMember struct {
 	Module          string       `json:"module"`
 	Display         string       `json:"display,omitempty"`
 	Hostname        string       `json:"hostname,omitempty"`
+	OriginDaemon    string       `json:"origin_daemon,omitempty"`
 	AgentPID        int          `json:"agent_pid,omitempty"`
 	Runtime         string       `json:"runtime,omitempty"`
 	WorktreePath    string       `json:"worktree,omitempty"`
@@ -55,6 +61,18 @@ type TeamMember struct {
 	Status          string       `json:"status"`
 	TmuxSession     string       `json:"tmux_session,omitempty"`
 	TmuxState       string       `json:"tmux_state,omitempty"`
+
+	// Reserved marks a daemon-internal pseudo-agent (e.g.
+	// @supervisor_<project>) that is hidden from the default
+	// `thrum team` output. Only surfaced when IncludeSystem is
+	// set on the request.
+	Reserved bool `json:"reserved,omitempty"`
+
+	// IsLocal is true when the agent's OriginDaemon matches the local daemon
+	// ID or is empty (legacy/fixture entries treated as local). Set by the
+	// team.list handler; consumers should gate heartbeat-staleness checks on
+	// this field because heartbeats don't propagate across peer daemons.
+	IsLocal bool `json:"is_local,omitempty"`
 }
 
 // FileChange represents a changed file for team display.

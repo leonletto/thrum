@@ -191,6 +191,73 @@ cmd_run() {
   return "${exit_code:-0}"
 }
 
+# shell-run sends a command into the pane's persistent login shell (via
+# send-keys), rather than spawning a fresh sh -c subshell like `run` does.
+# This is required on macOS for peercred-authenticated thrum calls: fresh
+# subshells are resolved as anonymous callers, while commands typed into the
+# pane's long-lived shell inherit its CWD/process-tree identity.
+#
+# Output capture: the command's stdout+stderr are redirected to a temp file
+# on the host running tmux, and a marker line with the exit code is echoed
+# after. The poller greps the pane for the marker, then cats the temp file
+# back to the caller's stdout.
+cmd_shell_run() {
+  local name="$1"
+  shift
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --timeout) TIMEOUT="$2"; shift 2 ;;
+      --socket)  SOCKET="$2"; shift 2 ;;
+      --)        shift; break ;;
+      *)         die "shell-run: unknown option '$1' (put command after --)" ;;
+    esac
+  done
+
+  [[ $# -eq 0 ]] && die "shell-run: no command specified (use -- before command)"
+
+  if ! session_exists "$name"; then
+    die "session '$name' does not exist (use 'create' first)"
+  fi
+
+  local cmd
+  cmd=$(printf '%q ' "$@")
+
+  local marker="__TMUX_EXEC_DONE_${RANDOM}_$(date +%s)__"
+  local outfile="/tmp/tmux-exec-$$-$(date +%s)-$RANDOM.out"
+
+  local line="${cmd}> ${outfile} 2>&1; echo \"${marker}:\$?\""
+
+  tmux_cmd send-keys -t "$name" "$line" Enter
+
+  local deadline=$(( $(date +%s) + TIMEOUT ))
+  local rc=""
+  while [[ $(date +%s) -lt $deadline ]]; do
+    local pane
+    pane=$(tmux_cmd capture-pane -p -t "$name" -S - 2>/dev/null || echo "")
+    if grep -qE "^${marker}:[0-9]+$" <<<"$pane"; then
+      rc=$(grep -E "^${marker}:[0-9]+$" <<<"$pane" | tail -1 | cut -d: -f2)
+      break
+    fi
+    sleep "$POLL_INTERVAL"
+  done
+
+  if [[ -z "$rc" ]]; then
+    if [[ -f "$outfile" ]]; then
+      cat "$outfile" >&2
+      rm -f "$outfile"
+    fi
+    die "shell-run: command timed out after ${TIMEOUT}s (marker not seen)"
+  fi
+
+  if [[ -f "$outfile" ]]; then
+    cat "$outfile"
+    rm -f "$outfile"
+  fi
+
+  return "$rc"
+}
+
 cmd_exec() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -357,13 +424,14 @@ usage() {
 [[ $# -eq 0 ]] && usage 1
 
 case "$1" in
-  create)  shift; cmd_create "$@" ;;
-  run)     shift; cmd_run "$@" ;;
-  exec)    shift; cmd_exec "$@" ;;
-  send)    shift; cmd_send "$@" ;;
-  capture) shift; cmd_capture "$@" ;;
-  destroy) shift; cmd_destroy "$@" ;;
-  list)    shift; cmd_list "$@" ;;
+  create)    shift; cmd_create "$@" ;;
+  run)       shift; cmd_run "$@" ;;
+  shell-run) shift; cmd_shell_run "$@" ;;
+  exec)      shift; cmd_exec "$@" ;;
+  send)      shift; cmd_send "$@" ;;
+  capture)   shift; cmd_capture "$@" ;;
+  destroy)   shift; cmd_destroy "$@" ;;
+  list)      shift; cmd_list "$@" ;;
   -h|--help|help) usage 0 ;;
-  *)       die "unknown command: $1 (try 'tmux-exec help')" ;;
+  *)         die "unknown command: $1 (try 'tmux-exec help')" ;;
 esac

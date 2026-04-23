@@ -13,7 +13,7 @@ import (
 func TestRuntimeList_HumanReadable(t *testing.T) {
 	// Isolate from user config
 	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("HOME", tmpDir)
 
 	result := RuntimeList()
 	output := FormatRuntimeList(result)
@@ -33,7 +33,7 @@ func TestRuntimeList_HumanReadable(t *testing.T) {
 
 func TestRuntimeList_JSON(t *testing.T) {
 	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("HOME", tmpDir)
 
 	result := RuntimeList()
 
@@ -110,7 +110,7 @@ func TestRuntimeShow_NotFound(t *testing.T) {
 
 func TestRuntimeSetDefault(t *testing.T) {
 	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("HOME", tmpDir)
 
 	if err := RuntimeSetDefault("claude"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -124,7 +124,7 @@ func TestRuntimeSetDefault(t *testing.T) {
 
 func TestRuntimeSetDefault_Invalid(t *testing.T) {
 	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("HOME", tmpDir)
 
 	err := RuntimeSetDefault("nonexistent")
 	if err == nil {
@@ -167,9 +167,9 @@ func TestFormatFeatures(t *testing.T) {
 
 func TestRuntimeList_WithCustomPresets(t *testing.T) {
 	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("HOME", tmpDir)
 
-	configDir := filepath.Join(tmpDir, "thrum")
+	configDir := filepath.Join(tmpDir, ".thrum")
 	if err := os.MkdirAll(configDir, 0750); err != nil {
 		t.Fatal(err)
 	}

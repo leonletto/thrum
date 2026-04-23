@@ -1,0 +1,190 @@
+#!/usr/bin/env bash
+#
+# ssh-exec — Run commands, copy files, and tail logs over SSH.
+#
+# Sibling to scripts/tmux-exec. Provides a single consistent interface for
+# remote operations with explicit timeouts, structured error propagation, and
+# clear distinction between SSH-layer failures (exit 255) and remote command
+# failures (pass-through 0–254).
+#
+# Usage:
+#   ssh-exec exec --host <user@host> --timeout <sec> [--stdin] [--env KEY=VAL]... -- <cmd> [args...]
+#   ssh-exec copy --host <user@host> <local-path> <remote-path>
+#   ssh-exec logs --host <user@host> [--follow] <remote-path>
+#
+# Options:
+#   --host <user@host>   SSH target (required)
+#   --timeout <sec>      Command timeout, positive integer (default: 30)
+#   --stdin              Pipe caller's stdin into the remote command
+#   --env KEY=VAL        Set KEY=VAL in the remote command's environment (repeatable)
+#   --follow             (logs only) equivalent to `tail -f`
+#
+# Exit codes:
+#   0-254: remote command's actual exit code
+#   255:   SSH layer failure (connection refused, auth, timeout) — OR, inherently
+#          ambiguous, a remote command that genuinely exits 255. ssh(1) collides
+#          its own failure code with the remote cmd's on this value; distinguish
+#          via the `[ssh-exec]` stderr diagnostic (timeouts and layer failures
+#          log one, plain remote-255 does not).
+#
+# Dependencies:
+#   - GNU coreutils `timeout` with `--kill-after` (BSD /usr/bin/timeout on macOS
+#     lacks this flag). Install via `brew install coreutils` — provides both
+#     `gtimeout` and (PATH-dependent) `timeout`. Script auto-detects either.
+set -euo pipefail
+
+SCRIPT_NAME="ssh-exec"
+log() { printf '[%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
+# die [msg] [exit_code]   — default exit code 255 (SSH-layer convention);
+#                            pass 2 for usage errors.
+die() {
+  local msg="$1" code="${2:-255}"
+  log "error: $msg"
+  exit "$code"
+}
+
+# Shell-escape an argument for safe interpolation into a remote command string.
+# MUST be used everywhere user-supplied data becomes part of `ssh <host> "..."`,
+# or callers risk SC2029-class command injection (e.g. paths with $(...),
+# backticks, or whitespace getting re-parsed by the remote shell).
+remote_shell_quote() {
+  printf '%q' "$1"
+}
+
+# Detect a GNU-compatible timeout binary. BSD timeout on macOS has no
+# `--kill-after`, so fail loudly with an install hint rather than producing
+# `illegal option -- -`. Order: gtimeout first (unambiguous brew path), then
+# `timeout` only if it advertises `--kill-after`.
+if command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT_CMD=gtimeout
+elif command -v timeout >/dev/null 2>&1 && timeout --help 2>&1 | grep -q -- '--kill-after'; then
+  TIMEOUT_CMD=timeout
+else
+  die "GNU 'timeout' not found (BSD timeout lacks --kill-after). Install: brew install coreutils"
+fi
+
+subcommand="${1:-}"
+if [ -z "$subcommand" ]; then
+  cat <<EOF >&2
+Usage: ssh-exec <exec|copy|logs> [flags]
+Run 'ssh-exec <subcommand> --help' for details.
+EOF
+  exit 2
+fi
+shift
+
+case "$subcommand" in
+  exec)
+    host=""
+    cmd_timeout=30
+    use_stdin=false
+    env_vars=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --host) host="$2"; shift 2 ;;
+        --timeout) cmd_timeout="$2"; shift 2 ;;
+        --stdin) use_stdin=true; shift ;;
+        --env) env_vars+=("$2"); shift 2 ;;
+        --) shift; break ;;
+        -h|--help) sed -n '3,33p' "$0" >&2; exit 0 ;;
+        *) die "unknown flag: $1" 2 ;;
+      esac
+    done
+    [ -z "$host" ] && die "--host is required" 2
+    [ $# -eq 0 ] && die "no command given (expected: -- <cmd> [args...])" 2
+    [[ "$cmd_timeout" =~ ^[1-9][0-9]*$ ]] \
+      || die "--timeout must be a positive integer (got '$cmd_timeout')" 2
+
+    # Build the env prefix: for each --env KEY=VAL, prepend to remote command.
+    # We wrap in `env` so the KEY=VAL syntax works regardless of remote shell.
+    env_prefix=""
+    if [ ${#env_vars[@]} -gt 0 ]; then
+      env_prefix="env"
+      for kv in "${env_vars[@]}"; do
+        env_prefix="$env_prefix $(remote_shell_quote "$kv")"
+      done
+      env_prefix="$env_prefix "
+    fi
+
+    # -o options: ConnectTimeout limits SSH dial; ServerAliveInterval + CountMax
+    # enforce heartbeat; BatchMode=yes fails instead of prompting for password.
+    ssh_opts=(-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3)
+
+    # Build the full remote command string
+    remote_cmd=""
+    for arg in "$@"; do
+      remote_cmd="$remote_cmd $(remote_shell_quote "$arg")"
+    done
+    remote_cmd="${env_prefix}${remote_cmd# }"
+
+    # timeout command wraps the ssh invocation. SIGTERM after timeout, SIGKILL
+    # 5s later. Exit 124 from timeout means timed out; we normalize to 255.
+    # `|| rc=$?` captures the exit code without tripping `set -e`.
+    # Non-stdin branch redirects from /dev/null so ssh never consumes the
+    # caller's stdin unintentionally.
+    rc=0
+    if [ "$use_stdin" = true ]; then
+      "$TIMEOUT_CMD" --kill-after=5 "$cmd_timeout" ssh "${ssh_opts[@]}" "$host" "$remote_cmd" || rc=$?
+    else
+      "$TIMEOUT_CMD" --kill-after=5 "$cmd_timeout" ssh "${ssh_opts[@]}" "$host" "$remote_cmd" </dev/null || rc=$?
+    fi
+    if [ $rc -eq 124 ] || [ $rc -eq 137 ]; then
+      log "timed out after ${cmd_timeout}s"
+      exit 255
+    fi
+    # SSH's own failures (255) propagate as-is; remote cmd exits 0-254 pass through.
+    exit $rc
+    ;;
+
+  copy)
+    host=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --host) host="$2"; shift 2 ;;
+        -h|--help) sed -n '3,33p' "$0" >&2; exit 0 ;;
+        --) shift; break ;;
+        -*) die "unknown flag: $1" 2 ;;
+        *) break ;;
+      esac
+    done
+    [ -z "$host" ] && die "--host is required" 2
+    [ $# -ne 2 ] && die "usage: ssh-exec copy --host <host> <local> <remote>" 2
+    local_path="$1"
+    remote_path="$2"
+    scp_opts=(-o BatchMode=yes -o ConnectTimeout=10)
+    # scp exits non-zero on SSH failure; no clear layer distinction available — surface as-is.
+    scp "${scp_opts[@]}" "$local_path" "$host:$remote_path"
+    ;;
+
+  logs)
+    host=""
+    follow=false
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --host) host="$2"; shift 2 ;;
+        --follow) follow=true; shift ;;
+        -h|--help) sed -n '3,33p' "$0" >&2; exit 0 ;;
+        --) shift; break ;;
+        -*) die "unknown flag: $1" 2 ;;
+        *) break ;;
+      esac
+    done
+    [ -z "$host" ] && die "--host is required" 2
+    [ $# -ne 1 ] && die "usage: ssh-exec logs --host <host> [--follow] <remote-path>" 2
+    remote_path="$1"
+    # ShellCheck SC2029: remote path must be shell-escaped before interpolating
+    # into the remote command string, otherwise a path with $(...), backticks,
+    # or whitespace is interpreted by the remote shell → command injection.
+    escaped_path=$(remote_shell_quote "$remote_path")
+    ssh_opts=(-o BatchMode=yes -o ConnectTimeout=10)
+    if [ "$follow" = true ]; then
+      ssh "${ssh_opts[@]}" "$host" "tail -f $escaped_path"
+    else
+      ssh "${ssh_opts[@]}" "$host" "cat $escaped_path"
+    fi
+    ;;
+
+  *)
+    die "unknown subcommand: $subcommand (expected exec|copy|logs)" 2
+    ;;
+esac

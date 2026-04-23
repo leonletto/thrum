@@ -2,9 +2,11 @@ package sync
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -425,16 +427,16 @@ func TestBranchManager_branchExists(t *testing.T) {
 			t.Skip("no current branch found")
 		}
 
-		exists := bm.branchExists(context.Background(), currentBranch)
+		exists := bm.BranchExists(context.Background(), currentBranch)
 		if !exists {
-			t.Errorf("branchExists returned false for existing branch %s", currentBranch)
+			t.Errorf("BranchExists returned false for existing branch %s", currentBranch)
 		}
 	})
 
 	t.Run("non-existing branch", func(t *testing.T) {
-		exists := bm.branchExists(context.Background(), "non-existent-branch")
+		exists := bm.BranchExists(context.Background(), "non-existent-branch")
 		if exists {
-			t.Error("branchExists returned true for non-existent branch")
+			t.Error("BranchExists returned true for non-existent branch")
 		}
 	})
 }
@@ -717,4 +719,289 @@ func TestBranchManager_isWorktreeRegistered(t *testing.T) {
 			t.Error("expected no match in empty output")
 		}
 	})
+}
+
+// createBranchWithContent creates a branch at a commit whose tree contains the
+// given events.jsonl content and messages/ files. Returns the branch SHA.
+// Writing tree entries uses git plumbing — no working tree changes.
+func createBranchWithContent(t *testing.T, repoPath, branchName, events string, messages map[string]string) string {
+	t.Helper()
+
+	var treeEntries []string
+
+	// events.jsonl blob (always present; may be empty)
+	blobSHA := writeBlob(t, repoPath, events)
+	treeEntries = append(treeEntries, fmt.Sprintf("100644 blob %s\tevents.jsonl", blobSHA))
+
+	// messages/ subtree, if any files provided
+	if len(messages) > 0 {
+		var subEntries []string
+		names := make([]string, 0, len(messages))
+		for name := range messages {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			shardSHA := writeBlob(t, repoPath, messages[name])
+			subEntries = append(subEntries, fmt.Sprintf("100644 blob %s\t%s", shardSHA, name))
+		}
+		subtreeSHA := mktree(t, repoPath, strings.Join(subEntries, "\n")+"\n")
+		treeEntries = append(treeEntries, fmt.Sprintf("040000 tree %s\tmessages", subtreeSHA))
+	}
+
+	treeSHA := mktree(t, repoPath, strings.Join(treeEntries, "\n")+"\n")
+
+	cmd := exec.Command("git", "-C", repoPath, "commit-tree", treeSHA, "-m", "test commit")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("commit-tree: %v", err)
+	}
+	commitSHA := strings.TrimSpace(string(out))
+
+	if err := exec.Command("git", "-C", repoPath, "update-ref", "refs/heads/"+branchName, commitSHA).Run(); err != nil {
+		t.Fatalf("update-ref: %v", err)
+	}
+	return commitSHA
+}
+
+func writeBlob(t *testing.T, repoPath, content string) string {
+	t.Helper()
+	cmd := exec.Command("git", "-C", repoPath, "hash-object", "-w", "--stdin")
+	cmd.Stdin = strings.NewReader(content)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("hash-object: %v", err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func mktree(t *testing.T, repoPath, body string) string {
+	t.Helper()
+	cmd := exec.Command("git", "-C", repoPath, "mktree")
+	cmd.Stdin = strings.NewReader(body)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("mktree: %v", err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func TestBranchHasContent_EmptyEventsEmptyMessages(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+	createBranchWithContent(t, tmpDir, "a-sync", "", nil)
+	bm := NewBranchManager(tmpDir, true)
+
+	has, err := bm.BranchHasContent(context.Background(), "refs/heads/a-sync")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if has {
+		t.Error("expected has=false for empty events.jsonl + no messages")
+	}
+}
+
+func TestBranchHasContent_NonEmptyEvents(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+	createBranchWithContent(t, tmpDir, "a-sync", `{"type":"x"}`+"\n", nil)
+	bm := NewBranchManager(tmpDir, true)
+
+	has, err := bm.BranchHasContent(context.Background(), "refs/heads/a-sync")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !has {
+		t.Error("expected has=true for non-empty events.jsonl")
+	}
+}
+
+func TestBranchHasContent_EmptyEventsNonEmptyMessage(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+	createBranchWithContent(t, tmpDir, "a-sync", "",
+		map[string]string{"agent_a.jsonl": `{"type":"msg"}` + "\n"})
+	bm := NewBranchManager(tmpDir, true)
+
+	has, err := bm.BranchHasContent(context.Background(), "refs/heads/a-sync")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !has {
+		t.Error("expected has=true when messages/ has non-empty file")
+	}
+}
+
+func TestBranchHasContent_EmptyEventsEmptyMessageFile(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+	createBranchWithContent(t, tmpDir, "a-sync", "",
+		map[string]string{"agent_a.jsonl": ""})
+	bm := NewBranchManager(tmpDir, true)
+
+	has, err := bm.BranchHasContent(context.Background(), "refs/heads/a-sync")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if has {
+		t.Error("expected has=false when all files are empty")
+	}
+}
+
+func TestBranchHasContent_MissingRef(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+	bm := NewBranchManager(tmpDir, true)
+
+	has, err := bm.BranchHasContent(context.Background(), "refs/heads/nonexistent")
+	if err != nil {
+		t.Fatalf("expected no error for missing ref, got %v", err)
+	}
+	if has {
+		t.Error("expected has=false for missing ref")
+	}
+}
+
+func TestCreateSyncBranch_Row3_AttachesToRemoteOnFreshClone(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+
+	// Synthesize a populated refs/remotes/origin/a-sync as if git clone had fetched it
+	remoteSHA := createBranchWithContent(t, tmpDir, "unused-tmp",
+		`{"type":"hello"}`+"\n", nil)
+	if err := exec.Command("git", "-C", tmpDir, "update-ref",
+		"refs/remotes/origin/a-sync", remoteSHA).Run(); err != nil {
+		t.Fatalf("update-ref remote: %v", err)
+	}
+	if err := exec.Command("git", "-C", tmpDir, "update-ref", "-d",
+		"refs/heads/unused-tmp").Run(); err != nil {
+		t.Fatalf("delete tmp branch: %v", err)
+	}
+	if err := exec.Command("git", "-C", tmpDir, "remote", "add",
+		"origin", tmpDir).Run(); err != nil {
+		t.Fatalf("remote add: %v", err)
+	}
+
+	bm := NewBranchManager(tmpDir, true)
+	if err := bm.CreateSyncBranch(context.Background()); err != nil {
+		t.Fatalf("CreateSyncBranch failed: %v", err)
+	}
+
+	// Assert local a-sync SHA == remote SHA (attach, not orphan)
+	out, err := exec.Command("git", "-C", tmpDir, "rev-parse", "refs/heads/a-sync").Output()
+	if err != nil {
+		t.Fatalf("rev-parse: %v", err)
+	}
+	if got := strings.TrimSpace(string(out)); got != remoteSHA {
+		t.Errorf("CreateSyncBranch did not attach: local SHA %q != remote SHA %q", got, remoteSHA)
+	}
+}
+
+func TestCreateSyncBranch_Row2_OrphanWhenNoRemote(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+	bm := NewBranchManager(tmpDir, true)
+
+	if err := bm.CreateSyncBranch(context.Background()); err != nil {
+		t.Fatalf("CreateSyncBranch failed: %v", err)
+	}
+	// Assert local a-sync exists
+	if err := exec.Command("git", "-C", tmpDir, "rev-parse", "--verify",
+		"refs/heads/a-sync").Run(); err != nil {
+		t.Errorf("expected refs/heads/a-sync to exist, got error: %v", err)
+	}
+	// Assert no common ancestor with HEAD (orphan)
+	mainSHA, err := exec.Command("git", "-C", tmpDir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("rev-parse HEAD: %v", err)
+	}
+	syncSHA, err := exec.Command("git", "-C", tmpDir, "rev-parse", "refs/heads/a-sync").Output()
+	if err != nil {
+		t.Fatalf("rev-parse a-sync: %v", err)
+	}
+	cmd := exec.Command("git", "-C", tmpDir, "merge-base",
+		strings.TrimSpace(string(mainSHA)), strings.TrimSpace(string(syncSHA)))
+	if err := cmd.Run(); err == nil {
+		t.Error("expected no common ancestor between HEAD and a-sync (orphan), but merge-base succeeded")
+	}
+}
+
+func TestAttachToRemote_PointsLocalAtRemoteSHA(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+
+	// Synthesize refs/remotes/origin/a-sync by building a branch with content
+	// and moving its ref to the remote-tracking namespace.
+	remoteSHA := createBranchWithContent(t, tmpDir, "unused-tmp",
+		`{"type":"event"}`+"\n", nil)
+	if err := exec.Command("git", "-C", tmpDir, "update-ref",
+		"refs/remotes/origin/a-sync", remoteSHA).Run(); err != nil {
+		t.Fatalf("update-ref remote: %v", err)
+	}
+	if err := exec.Command("git", "-C", tmpDir, "update-ref", "-d",
+		"refs/heads/unused-tmp").Run(); err != nil {
+		t.Fatalf("delete tmp branch: %v", err)
+	}
+
+	// set-upstream-to requires an 'origin' remote to exist in config.
+	if err := exec.Command("git", "-C", tmpDir, "remote", "add",
+		"origin", tmpDir).Run(); err != nil {
+		t.Fatalf("remote add: %v", err)
+	}
+
+	bm := NewBranchManager(tmpDir, true)
+	if err := bm.AttachToRemote(context.Background(), remoteSHA); err != nil {
+		t.Fatalf("AttachToRemote failed: %v", err)
+	}
+
+	// Assert local a-sync points at remoteSHA
+	out, err := exec.Command("git", "-C", tmpDir, "rev-parse", "refs/heads/a-sync").Output()
+	if err != nil {
+		t.Fatalf("rev-parse local: %v", err)
+	}
+	if got := strings.TrimSpace(string(out)); got != remoteSHA {
+		t.Errorf("local a-sync SHA mismatch: want %q got %q", remoteSHA, got)
+	}
+
+	// Assert upstream tracking was set (branch.a-sync.merge == refs/heads/a-sync)
+	out, err = exec.Command("git", "-C", tmpDir, "config", "branch.a-sync.merge").Output()
+	if err != nil {
+		t.Fatalf("config read: %v", err)
+	}
+	if got := strings.TrimSpace(string(out)); got != "refs/heads/a-sync" {
+		t.Errorf("upstream merge key mismatch: want %q got %q", "refs/heads/a-sync", got)
+	}
+}
+
+func TestRemoteTrackingSyncSHA_NoRemoteTrackingRef(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+	bm := NewBranchManager(tmpDir, true)
+
+	sha, ok := bm.RemoteTrackingSyncSHA(context.Background())
+	if ok {
+		t.Errorf("expected ok=false with no remote-tracking ref, got ok=true sha=%q", sha)
+	}
+	if sha != "" {
+		t.Errorf("expected empty SHA, got %q", sha)
+	}
+}
+
+func TestRemoteTrackingSyncSHA_RemoteTrackingRefPresent(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+
+	// Synthesize a remote-tracking ref by creating a commit pointing at the
+	// empty tree and setting refs/remotes/origin/a-sync to it. No real remote
+	// is needed — this is a pure local-ref inspection test.
+	cmd := exec.Command("git", "-C", tmpDir, "commit-tree",
+		"4b825dc642cb6eb9a060e54bf8d69288fbee4904", "-m", "fake remote a-sync")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("commit-tree failed: %v", err)
+	}
+	wantSHA := strings.TrimSpace(string(out))
+	if err := exec.Command("git", "-C", tmpDir, "update-ref",
+		"refs/remotes/origin/a-sync", wantSHA).Run(); err != nil {
+		t.Fatalf("update-ref failed: %v", err)
+	}
+
+	bm := NewBranchManager(tmpDir, true)
+	sha, ok := bm.RemoteTrackingSyncSHA(context.Background())
+	if !ok {
+		t.Fatalf("expected ok=true, got false")
+	}
+	if sha != wantSHA {
+		t.Errorf("SHA mismatch: want %q got %q", wantSHA, sha)
+	}
 }

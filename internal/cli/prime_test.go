@@ -705,3 +705,110 @@ func TestContextPrime_RuntimePrefersProcessTree(t *testing.T) {
 		t.Errorf("ctx.Runtime = %q, want codex", ctx.Runtime)
 	}
 }
+
+// TestFormatPrimeContext_ProjectStateFollowsRedirect pins thrum-92mj:
+// feature-worktree agents must see `.thrum/context/project_state.md`
+// content in their prime output. Pre-fix, prime.go joined ctx.RepoPath
+// directly with `.thrum/context/project_state.md`; in a worktree the
+// file doesn't exist there (it lives in the main repo), os.ReadFile
+// returned "not exist", and the whole Project State section was
+// silently skipped — agents started sessions blind to repo structure
+// and decisions. Fix: paths.ResolveThrumDir follows `.thrum/redirect`.
+func TestFormatPrimeContext_ProjectStateFollowsRedirect(t *testing.T) {
+	// Stand up a realistic main-repo + worktree layout:
+	//   <tmp>/main/.thrum/context/project_state.md   (the shared file)
+	//   <tmp>/worktree/.thrum/redirect               (→ <tmp>/main/.thrum)
+	// The test runs ContextPrime() from inside the worktree and
+	// asserts the project-state content surfaces in FormatPrimeContext
+	// output.
+	tmpDir := t.TempDir()
+	mainRepo := filepath.Join(tmpDir, "main")
+	mainThrum := filepath.Join(mainRepo, ".thrum")
+	mainContextDir := filepath.Join(mainThrum, "context")
+	if err := os.MkdirAll(mainContextDir, 0o750); err != nil {
+		t.Fatalf("mkdir main context: %v", err)
+	}
+	const projectStateContent = "# Project State Summary\n\nShared across all worktrees (thrum-92mj marker).\n"
+	projectStatePath := filepath.Join(mainContextDir, "project_state.md")
+	if err := os.WriteFile(projectStatePath, []byte(projectStateContent), 0o600); err != nil {
+		t.Fatalf("write project_state.md: %v", err)
+	}
+
+	worktree := filepath.Join(tmpDir, "worktree")
+	worktreeThrum := filepath.Join(worktree, ".thrum")
+	if err := os.MkdirAll(worktreeThrum, 0o750); err != nil {
+		t.Fatalf("mkdir worktree .thrum: %v", err)
+	}
+	redirectPath := filepath.Join(worktreeThrum, "redirect")
+	if err := os.WriteFile(redirectPath, []byte(mainThrum+"\n"), 0o600); err != nil {
+		t.Fatalf("write redirect: %v", err)
+	}
+
+	// Pin THRUM_HOME to the synthetic worktree so paths.EffectiveRepoPath
+	// doesn't override ctx.RepoPath with the real repo in CI/dev shells
+	// (same pattern as TestContextPrime_RuntimePrefersProcessTree).
+	t.Setenv("THRUM_HOME", worktree)
+
+	// Sanity-check: before the fix this same setup would have the
+	// worktree's .thrum/context/project_state.md missing — prove it by
+	// confirming no such file exists. If this assertion ever fails,
+	// the test's mental model is off.
+	if _, err := os.Stat(filepath.Join(worktreeThrum, "context", "project_state.md")); !os.IsNotExist(err) {
+		t.Fatalf("worktree-local project_state.md unexpectedly present (err=%v); test setup invalid", err)
+	}
+
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(worktree); err != nil {
+		t.Fatalf("chdir worktree: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	ctx := ContextPrime(nil)
+	output := FormatPrimeContext(ctx)
+
+	if !strings.Contains(output, "# Project State") {
+		t.Errorf("missing '# Project State' header — section skipped?\n%s", output)
+	}
+	if !strings.Contains(output, "thrum-92mj marker") {
+		t.Errorf("missing project_state.md content from the MAIN repo in output — redirect not followed:\n%s", output)
+	}
+}
+
+// TestFormatPrimeContext_ProjectStateLocalMainRepo verifies the
+// non-redirected case: an agent running in the main repo itself
+// (no .thrum/redirect) still finds the same file via paths.ResolveThrumDir
+// returning the local .thrum/ directory. Guards against the fix
+// accidentally breaking the main-repo path.
+func TestFormatPrimeContext_ProjectStateLocalMainRepo(t *testing.T) {
+	tmpDir := t.TempDir()
+	contextDir := filepath.Join(tmpDir, ".thrum", "context")
+	if err := os.MkdirAll(contextDir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	const body = "# Project State\n\nmain-repo direct read (thrum-92mj marker).\n"
+	if err := os.WriteFile(filepath.Join(contextDir, "project_state.md"), []byte(body), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	// Pin THRUM_HOME so paths.EffectiveRepoPath doesn't override with a
+	// real repo path from the ambient environment.
+	t.Setenv("THRUM_HOME", tmpDir)
+
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	ctx := ContextPrime(nil)
+	output := FormatPrimeContext(ctx)
+	if !strings.Contains(output, "thrum-92mj marker") {
+		t.Errorf("main-repo project_state.md content missing:\n%s", output)
+	}
+}
