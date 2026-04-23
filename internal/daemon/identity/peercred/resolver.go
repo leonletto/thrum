@@ -15,6 +15,7 @@ package peercred
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -86,6 +87,7 @@ func matchWorktree(candidate string, agents []AgentWorktree) (*AgentWorktree, er
 	if err != nil {
 		// If the candidate path can't be resolved, fall through to no-match.
 		// Treat this as ErrAnonymous rather than a hard error.
+		slog.Warn("peercred.matchWorktree candidate EvalSymlinks failed", "path", candidate, "err", err)
 		canon = candidate
 	}
 
@@ -93,9 +95,11 @@ func matchWorktree(candidate string, agents []AgentWorktree) (*AgentWorktree, er
 		wt := a.Worktree
 		canonWt, err := filepath.EvalSymlinks(wt)
 		if err != nil {
+			slog.Warn("peercred.matchWorktree stored EvalSymlinks failed", "path", wt, "err", err)
 			canonWt = wt
 		}
 		if canon == canonWt {
+			slog.Debug("peercred.matchWorktree matched", "candidate", canon, "stored", canonWt, "agent_id", a.AgentID)
 			result := a
 			return &result, nil
 		}

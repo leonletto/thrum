@@ -4,6 +4,7 @@ package peercred
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 
 	tspeer "github.com/tailscale/peercred"
@@ -44,6 +45,7 @@ func (r *unixResolver) Resolve(conn net.Conn) (*ResolvedIdentity, error) {
 	if !ok || pid == 0 {
 		return nil, fmt.Errorf("%w: no PID in peer credentials", ErrAnonymous)
 	}
+	slog.Debug("peercred.resolve step=pid", "pid", pid)
 
 	// Step 2: Resolve PID → CWD.
 	cwd, err := processCWD(pid)
@@ -51,24 +53,30 @@ func (r *unixResolver) Resolve(conn net.Conn) (*ResolvedIdentity, error) {
 		// Process may have exited in the race window between connect and here.
 		return nil, fmt.Errorf("%w: cannot read CWD for PID %d: %v", ErrAnonymous, pid, err)
 	}
+	slog.Debug("peercred.resolve step=cwd", "pid", pid, "cwd", cwd)
 
 	// Step 3: Walk CWD upward to find nearest git root (directory OR file .git).
 	gitRoot := findGitRoot(cwd)
 	if gitRoot == "" {
+		slog.Warn("peercred.resolve step=git_root: no git root found, returning anonymous", "pid", pid, "cwd", cwd)
 		return nil, fmt.Errorf("%w: PID %d CWD %q is not under any git repository", ErrAnonymous, pid, cwd)
 	}
+	slog.Debug("peercred.resolve step=git_root", "cwd", cwd, "git_root", gitRoot)
 
 	// Step 4: List registered worktrees.
 	agents, err := r.lister.ListAgentWorktrees()
 	if err != nil {
 		return nil, fmt.Errorf("peercred: list agent worktrees: %w", err)
 	}
+	slog.Debug("peercred.resolve step=list_worktrees", "count", len(agents))
 
 	// Step 5: Match with symlink canonicalization.
 	match, err := matchWorktree(gitRoot, agents)
 	if err != nil {
+		slog.Warn("peercred.resolve step=match: no registered worktree matched", "candidate_git_root", gitRoot, "registered_count", len(agents))
 		return nil, err // already wraps ErrAnonymous
 	}
+	slog.Debug("peercred.resolve step=match: matched", "agent_id", match.AgentID, "worktree", match.Worktree)
 
 	return &ResolvedIdentity{
 		AgentID:  match.AgentID,

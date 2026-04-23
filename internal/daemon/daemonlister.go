@@ -2,7 +2,9 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
@@ -61,6 +63,9 @@ func (l *daemonAgentLister) ListAgentWorktrees() ([]peercred.AgentWorktree, erro
 	            AND s.ended_at IS NULL`
 	rows, err := l.st.DB().QueryContext(ctx, query)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			slog.Warn("peercred lister: query timed out after 2s", "held_lock_contention_suspected", true)
+		}
 		return nil, fmt.Errorf("peercred lister: query session_refs: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
