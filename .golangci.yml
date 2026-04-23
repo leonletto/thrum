@@ -27,7 +27,12 @@ linters:
   settings:
     godot:
       scope: declarations
-      capital: true
+      # capital: false (default) — auto-fixing comments to start with a
+      # capital letter breaks godoc conventions whenever the first word is
+      # a lowercase identifier name (e.g. cgnatCIDR, tsnet, ttl) or a
+      # literal symbol reference (e.g. atomic.Value). Enforce the trailing
+      # period check only.
+      capital: false
     misspell:
       locale: US
 
