@@ -1,0 +1,661 @@
+package permission
+
+import (
+	"context"
+	"crypto/sha256"
+	"errors"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/leonletto/thrum/internal/types"
+)
+
+// recordingSender captures sendKeystroke calls for test assertions.
+type recordingSender struct {
+	mu    sync.Mutex
+	calls []keystrokeCall
+	fail  error // optional — when set, returned from every call
+}
+
+type keystrokeCall struct {
+	target string
+	key    string
+}
+
+func (r *recordingSender) fn() func(target, key string) error {
+	return func(target, key string) error {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.calls = append(r.calls, keystrokeCall{target: target, key: key})
+		return r.fail
+	}
+}
+
+func (r *recordingSender) snapshot() []keystrokeCall {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]keystrokeCall, len(r.calls))
+	copy(out, r.calls)
+	return out
+}
+
+// defaultReplyTestPane returns a pane tail that DetectPaneState
+// recognizes as "permission:cursor.not_in_allowlist" — the pattern
+// seeded by seedPendingNudge. Reply-path tests share this fake so the
+// pre-send recheck in TryResolve (thrum-rfy3) sees a matching pane
+// and dispatches the keystroke. Tests that want to exercise the
+// recheck-skips-dispatch branch install their own paneCapture via
+// SetPaneCaptureForTest.
+const defaultReplyTestPane = "Not in allowlist: some-command\n"
+
+// newReplyTestPermission constructs a Permission with an in-memory
+// store, an injected keystroke sender, and a pane capture stub that
+// returns content matching the seeded pattern. No real state.State is
+// needed — the reply path only touches the store, the sender, and
+// the pane recheck.
+func newReplyTestPermission(t *testing.T, sender *recordingSender) *Permission {
+	t.Helper()
+	db := openTestDB(t)
+	p := New(nil, db, "supervisor_thrum", "thrum", ".")
+	p.keystrokeSender = sender.fn()
+	p.SetPaneCaptureForTest(func(_ string, _ int) (string, error) {
+		return defaultReplyTestPane, nil
+	})
+	return p
+}
+
+// seedPendingNudge inserts a nudge row with the given keys so
+// TryResolve has something to match.
+func seedPendingNudge(t *testing.T, p *Permission, msgID, approveKey, denyKey string) {
+	t.Helper()
+	row := &NudgeRow{
+		MessageID:     msgID,
+		Session:       "cursor-test",
+		TmuxTarget:    "cursor-test:0.0",
+		AgentName:     "researcher_cursor",
+		PatternKey:    "cursor.not_in_allowlist",
+		ApproveKey:    approveKey,
+		DenyKey:       denyKey,
+		FirstDetected: time.Now().UTC(),
+		LastNudgeAt:   time.Now().UTC(),
+		NudgeCount:    1,
+		LastPaneHash:  sha256.Sum256([]byte("pane")),
+		ExpiresAt:     time.Now().UTC().Add(time.Hour),
+	}
+	if err := p.store.InsertPendingNudge(context.Background(), row); err != nil {
+		t.Fatalf("seed nudge: %v", err)
+	}
+}
+
+func TestAfterMessageCreate_NoReplyTo_NoOp(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+
+	p.AfterMessageCreate(context.Background(), types.MessageCreateEvent{
+		Type:      "message.create",
+		MessageID: "msg_random",
+		Body:      types.MessageBody{Content: "hello"},
+	})
+
+	if len(sender.snapshot()) != 0 {
+		t.Errorf("expected no keystroke sends, got %v", sender.snapshot())
+	}
+}
+
+func TestAfterMessageCreate_NonMessageEvent_Tolerated(t *testing.T) {
+	// AfterMessageCreate only gets called for message.create events in
+	// production (the hook filters), but we defensively accept any
+	// event shape and no-op on missing replyTo.
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+	p.AfterMessageCreate(context.Background(), types.MessageCreateEvent{})
+	if len(sender.snapshot()) != 0 {
+		t.Errorf("expected no keystrokes, got %v", sender.snapshot())
+	}
+}
+
+func TestTryResolve_UnknownNudge_NoOp(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "y"}},
+		"msg_nonexistent")
+
+	if len(sender.snapshot()) != 0 {
+		t.Errorf("expected no keystroke sends, got %v", sender.snapshot())
+	}
+}
+
+func TestTryResolve_ApproveSendsKeystroke(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+	seedPendingNudge(t, p, "msg_nudge_1", "y", "Escape")
+
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "y"}},
+		"msg_nudge_1")
+
+	calls := sender.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 keystroke, got %d: %v", len(calls), calls)
+	}
+	if calls[0].target != "cursor-test:0.0" || calls[0].key != "y" {
+		t.Errorf("expected (cursor-test:0.0, y), got %+v", calls[0])
+	}
+
+	// Row must be deleted after a successful approve.
+	row, _ := p.store.LookupPendingNudgeByMessageID(context.Background(), "msg_nudge_1")
+	if row != nil {
+		t.Error("row should be deleted after approve")
+	}
+}
+
+func TestTryResolve_ApproveCaseInsensitive(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+	seedPendingNudge(t, p, "msg_nudge_1", "y", "Escape")
+
+	// All of these should dispatch approve.
+	for _, body := range []string{"Y", "YES", "yes", "approve", "Approve", "A", "a"} {
+		// Re-seed between calls since approve deletes the row.
+		if body != "Y" {
+			seedPendingNudge(t, p, "msg_nudge_1", "y", "Escape")
+		}
+		p.TryResolve(context.Background(),
+			types.MessageCreateEvent{Body: types.MessageBody{Content: body}},
+			"msg_nudge_1")
+	}
+
+	calls := sender.snapshot()
+	if len(calls) != 7 {
+		t.Errorf("expected 7 approve keystrokes, got %d: %v", len(calls), calls)
+	}
+}
+
+func TestTryResolve_DenySendsKeystroke(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+	seedPendingNudge(t, p, "msg_nudge_1", "y", "Escape")
+
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "n"}},
+		"msg_nudge_1")
+
+	calls := sender.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 keystroke, got %d: %v", len(calls), calls)
+	}
+	if calls[0].key != "Escape" {
+		t.Errorf("expected Escape, got %q", calls[0].key)
+	}
+	// Row must be deleted after a successful deny.
+	row, _ := p.store.LookupPendingNudgeByMessageID(context.Background(), "msg_nudge_1")
+	if row != nil {
+		t.Error("row should be deleted after deny")
+	}
+}
+
+func TestTryResolve_DenyButNoDenyKey_RowStays(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+	seedPendingNudge(t, p, "msg_nudge_1", "A", "") // auggie tool — no in-prompt deny
+
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "n"}},
+		"msg_nudge_1")
+
+	if len(sender.snapshot()) != 0 {
+		t.Errorf("expected 0 keystrokes for empty deny key, got %v", sender.snapshot())
+	}
+	row, _ := p.store.LookupPendingNudgeByMessageID(context.Background(), "msg_nudge_1")
+	if row == nil {
+		t.Error("row should stay in place when deny key is empty")
+	}
+}
+
+func TestTryResolve_UnknownBody_PassThrough(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+	seedPendingNudge(t, p, "msg_nudge_1", "y", "Escape")
+
+	// Unknown reply body — not approve or deny. No keystrokes, row
+	// stays so reminders continue firing.
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "hmm let me think"}},
+		"msg_nudge_1")
+
+	if len(sender.snapshot()) != 0 {
+		t.Errorf("expected no keystrokes for unknown body, got %v", sender.snapshot())
+	}
+	row, _ := p.store.LookupPendingNudgeByMessageID(context.Background(), "msg_nudge_1")
+	if row == nil {
+		t.Error("row should stay in place for unknown reply bodies")
+	}
+}
+
+func TestTryResolve_KeystrokeFailureAfterAtomicClaim_RowGone(t *testing.T) {
+	// Contract under the atomic-claim design (Epic C fix High 2):
+	// the row is DELETE ... RETURNING'd BEFORE the keystroke fires.
+	// If the keystroke subprocess fails, the row is already gone —
+	// there is no retry. The reviewer explicitly accepted this
+	// trade-off: losing one retry beats double-firing into a numeric
+	// selection prompt like claude's "1/2/3", where the second
+	// keystroke lands on whatever replaces the original prompt.
+	sender := &recordingSender{fail: errors.New("tmux unreachable")}
+	p := newReplyTestPermission(t, sender)
+	seedPendingNudge(t, p, "msg_nudge_1", "y", "Escape")
+
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "y"}},
+		"msg_nudge_1")
+
+	row, _ := p.store.LookupPendingNudgeByMessageID(context.Background(), "msg_nudge_1")
+	if row != nil {
+		t.Errorf("row should be deleted by atomic claim even when keystroke fails; got %+v", row)
+	}
+	// And the sender must still have been called — the claim
+	// wasn't a silent no-op.
+	calls := sender.snapshot()
+	if len(calls) != 1 {
+		t.Errorf("expected 1 keystroke attempt, got %d: %v", len(calls), calls)
+	}
+}
+
+func TestAfterMessageCreate_ReplyToRefDispatches(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+	seedPendingNudge(t, p, "msg_nudge_1", "y", "Escape")
+
+	// Simulate an approved reply routed via the reply_to ref.
+	p.AfterMessageCreate(context.Background(), types.MessageCreateEvent{
+		Type:      "message.create",
+		MessageID: "msg_reply_1",
+		Body:      types.MessageBody{Content: "y"},
+		Refs:      []types.Ref{{Type: "reply_to", Value: "msg_nudge_1"}},
+	})
+
+	calls := sender.snapshot()
+	if len(calls) != 1 || calls[0].key != "y" {
+		t.Errorf("expected approve dispatch, got %v", calls)
+	}
+}
+
+func TestAfterMessageCreate_MultipleRefsPicksReplyTo(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+	seedPendingNudge(t, p, "msg_nudge_1", "y", "Escape")
+
+	p.AfterMessageCreate(context.Background(), types.MessageCreateEvent{
+		Type:      "message.create",
+		MessageID: "msg_reply_1",
+		Body:      types.MessageBody{Content: "n"},
+		Refs: []types.Ref{
+			{Type: "mention", Value: "@coordinator_main"},
+			{Type: "reply_to", Value: "msg_nudge_1"},
+		},
+	})
+
+	calls := sender.snapshot()
+	if len(calls) != 1 || calls[0].key != "Escape" {
+		t.Errorf("expected deny dispatch, got %v", calls)
+	}
+}
+
+func TestIsSpecialKeyName(t *testing.T) {
+	cases := []struct {
+		key  string
+		want bool
+	}{
+		{"Enter", true},
+		{"Escape", true},
+		{"Tab", true},
+		{"BTab", true},
+		{"Up", true},
+		{"Down", true},
+		{"Left", true},
+		{"Right", true},
+		{"Space", true},
+		{"BSpace", true},
+		{"Delete", true},
+		{"Home", true},
+		{"End", true},
+		{"PgUp", true},
+		{"PgDn", true},
+		{"y", false},
+		{"1", false},
+		{"A", false},
+		{"yes", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		if got := isSpecialKeyName(tc.key); got != tc.want {
+			t.Errorf("isSpecialKeyName(%q) = %v, want %v", tc.key, got, tc.want)
+		}
+	}
+}
+
+// sendKeystroke with a comma-separated sequence (opencode DenyKey
+// "End,Enter") should dispatch one send per segment. We test via the
+// injected sender by wrapping it and counting.
+func TestSendKeystroke_CommaSplit(t *testing.T) {
+	var captured []string
+	p := New(nil, openTestDB(t), "supervisor_thrum", "thrum", ".")
+	p.keystrokeSender = func(target, key string) error {
+		captured = append(captured, key)
+		return nil
+	}
+	if err := p.sendKeystroke("cursor-test:0.0", "End,Enter"); err != nil {
+		t.Fatalf("sendKeystroke: %v", err)
+	}
+	if len(captured) != 2 || captured[0] != "End" || captured[1] != "Enter" {
+		t.Errorf("expected [End Enter], got %v", captured)
+	}
+}
+
+// An injected sender that returns an error on the first segment
+// should short-circuit — no second segment is attempted.
+func TestSendKeystroke_CommaSplitShortCircuitsOnError(t *testing.T) {
+	var captured []string
+	boom := errors.New("first segment failed")
+	p := New(nil, openTestDB(t), "supervisor_thrum", "thrum", ".")
+	p.keystrokeSender = func(target, key string) error {
+		captured = append(captured, key)
+		return boom
+	}
+	err := p.sendKeystroke("cursor-test:0.0", "End,Enter")
+	if !errors.Is(err, boom) {
+		t.Errorf("expected first-segment error to propagate, got %v", err)
+	}
+	if len(captured) != 1 {
+		t.Errorf("expected short-circuit after 1 segment, got %v", captured)
+	}
+}
+
+// TestStore_DeleteAndReturnPendingNudge_HappyPath covers the new
+// atomic claim primitive: first caller gets the full row back,
+// second caller sees (nil, nil).
+func TestStore_DeleteAndReturnPendingNudge_HappyPath(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+	seedPendingNudge(t, p, "msg_claim_1", "y", "Escape")
+
+	row, err := p.store.DeleteAndReturnPendingNudge(context.Background(), "msg_claim_1")
+	if err != nil {
+		t.Fatalf("DeleteAndReturnPendingNudge: %v", err)
+	}
+	if row == nil {
+		t.Fatal("expected a populated row on first claim")
+	}
+	if row.MessageID != "msg_claim_1" || row.ApproveKey != "y" || row.DenyKey != "Escape" {
+		t.Errorf("row fields not populated correctly: %+v", row)
+	}
+
+	// Second claim on the same msg_id must be a silent no-op (nil, nil).
+	row2, err := p.store.DeleteAndReturnPendingNudge(context.Background(), "msg_claim_1")
+	if err != nil {
+		t.Fatalf("second DeleteAndReturnPendingNudge: %v", err)
+	}
+	if row2 != nil {
+		t.Errorf("second claim should return nil; got %+v", row2)
+	}
+}
+
+// TestStore_DeleteAndReturnPendingNudge_UnknownID returns (nil, nil)
+// for an ID that was never inserted.
+func TestStore_DeleteAndReturnPendingNudge_UnknownID(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+
+	row, err := p.store.DeleteAndReturnPendingNudge(context.Background(), "msg_nonexistent")
+	if err != nil {
+		t.Fatalf("DeleteAndReturnPendingNudge: %v", err)
+	}
+	if row != nil {
+		t.Errorf("expected nil row for unknown ID, got %+v", row)
+	}
+}
+
+// TestTryResolve_ConcurrentApproveDispatchesExactlyOnce is the
+// motivating race coverage for Critical 1 / High 2: two concurrent
+// replies hitting TryResolve for the same row must fire the
+// keystroke exactly once, not twice.
+func TestTryResolve_ConcurrentApproveDispatchesExactlyOnce(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+	seedPendingNudge(t, p, "msg_race_1", "y", "Escape")
+
+	// Launch N concurrent resolves. All should see the same replyTo,
+	// but only one DeleteAndReturnPendingNudge can win.
+	const workers = 8
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			p.TryResolve(context.Background(),
+				types.MessageCreateEvent{Body: types.MessageBody{Content: "y"}},
+				"msg_race_1")
+		}()
+	}
+	wg.Wait()
+
+	calls := sender.snapshot()
+	if len(calls) != 1 {
+		t.Errorf("expected exactly 1 keystroke (atomic claim), got %d: %v", len(calls), calls)
+	}
+}
+
+// Regression: the approve/deny regexes must be anchored so bodies
+// that merely contain "y" (e.g. "why not?") do NOT dispatch.
+func TestTryResolve_AnchoredRegex(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+	seedPendingNudge(t, p, "msg_nudge_1", "y", "Escape")
+
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "why not?"}},
+		"msg_nudge_1")
+
+	if len(sender.snapshot()) != 0 {
+		t.Errorf("'why not?' should NOT dispatch approve, got %v", sender.snapshot())
+	}
+	if !strings.Contains("cursor-test:0.0", "cursor-test") {
+		t.Skip("tautology")
+	}
+}
+
+// seedReminderMessage inserts a row into the messages table with the
+// given message_id and thread_id, simulating the reminder message that
+// fireReminder would have produced via SendSupervisorMessage(..., threadID).
+// Tests in this package have direct access to p.store.db (unexported)
+// because they live in package permission.
+func seedReminderMessage(t *testing.T, p *Permission, reminderMsgID, threadID string) {
+	t.Helper()
+	_, err := p.store.db.ExecContext(context.Background(), `
+		INSERT INTO messages
+			(message_id, thread_id, agent_id, session_id, created_at, body_format, body_content)
+		VALUES (?, ?, 'supervisor_thrum', 'supervisor', ?, 'markdown', '# Reminder')`,
+		reminderMsgID, threadID, time.Now().UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		t.Fatalf("seed reminder message: %v", err)
+	}
+}
+
+// TestTryResolve_ThreadIDFallback_Approve verifies that a reply aimed
+// at a reminder message_id (not the firstDetect nudge PK) still resolves
+// the nudge via the thread_id fallback path.
+func TestTryResolve_ThreadIDFallback_Approve(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+
+	const firstDetectMsgID = "msg_first_detect"
+	const reminderMsgID = "msg_reminder_2"
+
+	// Seed the nudge row — PK is the firstDetect message_id.
+	seedPendingNudge(t, p, firstDetectMsgID, "y", "Escape")
+
+	// Seed a reminder message in the messages table with thread_id
+	// pointing back to the firstDetect message (as fireReminder does).
+	seedReminderMessage(t, p, reminderMsgID, firstDetectMsgID)
+
+	// Reply to the reminder msg_id — NOT the firstDetect msg_id.
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "y"}},
+		reminderMsgID)
+
+	calls := sender.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 keystroke dispatch via thread fallback, got %d: %v", len(calls), calls)
+	}
+	if calls[0].key != "y" {
+		t.Errorf("expected approve key 'y', got %q", calls[0].key)
+	}
+
+	// Nudge row must be gone after claim.
+	row, _ := p.store.LookupPendingNudgeByMessageID(context.Background(), firstDetectMsgID)
+	if row != nil {
+		t.Error("nudge row should be deleted after thread-fallback approve")
+	}
+}
+
+// TestTryResolve_ThreadIDFallback_Deny verifies the thread_id fallback
+// for the deny path (two-step peek-then-delete) also works when replyTo
+// targets a reminder message rather than the firstDetect nudge root.
+func TestTryResolve_ThreadIDFallback_Deny(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+
+	const firstDetectMsgID = "msg_first_detect_deny"
+	const reminderMsgID = "msg_reminder_deny_2"
+
+	seedPendingNudge(t, p, firstDetectMsgID, "y", "Escape")
+	seedReminderMessage(t, p, reminderMsgID, firstDetectMsgID)
+
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "n"}},
+		reminderMsgID)
+
+	calls := sender.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 deny keystroke via thread fallback, got %d: %v", len(calls), calls)
+	}
+	if calls[0].key != "Escape" {
+		t.Errorf("expected deny key 'Escape', got %q", calls[0].key)
+	}
+
+	// Nudge row must be gone.
+	row, _ := p.store.LookupPendingNudgeByMessageID(context.Background(), firstDetectMsgID)
+	if row != nil {
+		t.Error("nudge row should be deleted after thread-fallback deny")
+	}
+}
+
+// TestTryResolve_DirectFallback_Regression ensures that replies to the
+// original firstDetect message_id still work (no regression from the
+// thread_id fallback addition).
+func TestTryResolve_DirectFallback_Regression(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+
+	const firstDetectMsgID = "msg_first_direct"
+	seedPendingNudge(t, p, firstDetectMsgID, "y", "Escape")
+
+	// Reply directly to the firstDetect message_id — original path.
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "y"}},
+		firstDetectMsgID)
+
+	calls := sender.snapshot()
+	if len(calls) != 1 || calls[0].key != "y" {
+		t.Errorf("direct reply to firstDetect still expected to dispatch, got %v", calls)
+	}
+}
+
+// TestTryResolve_ApproveSkipsKeystrokeWhenPaneMoved verifies that a
+// supervisor reply does NOT send the approve keystroke if the pane
+// has moved past the prompt between claim and dispatch. This is the
+// thrum-rfy3 defense-in-depth: the atomic DELETE...RETURNING still
+// happens (so reminders stop), but the keystroke is skipped so a
+// stray "1" cannot land in the agent's post-approval turn.
+func TestTryResolve_ApproveSkipsKeystrokeWhenPaneMoved(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+
+	const msgID = "msg_moved_pane"
+	seedPendingNudge(t, p, msgID, "y", "Escape")
+
+	// Pane has moved on — content no longer matches the seeded pattern.
+	p.SetPaneCaptureForTest(func(_ string, _ int) (string, error) {
+		return "$ ls\nfile1.go\nfile2.go\n", nil
+	})
+
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "y"}},
+		msgID)
+
+	if calls := sender.snapshot(); len(calls) != 0 {
+		t.Errorf("expected keystroke to be skipped when pane moved on, got %v", calls)
+	}
+	// Row was still claimed (atomic semantics preserved) so reminders
+	// stop firing — the pane moved on, so this is the correct end state.
+	if row, _ := p.store.LookupPendingNudgeByMessageID(context.Background(), msgID); row != nil {
+		t.Error("expected nudge row to be deleted by atomic claim even when pane recheck skipped dispatch")
+	}
+}
+
+// TestTryResolve_DenySkipsKeystrokeWhenPaneMoved verifies the deny
+// path also honours the pre-send pane recheck.
+func TestTryResolve_DenySkipsKeystrokeWhenPaneMoved(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+
+	const msgID = "msg_moved_pane_deny"
+	seedPendingNudge(t, p, msgID, "y", "Escape")
+
+	p.SetPaneCaptureForTest(func(_ string, _ int) (string, error) {
+		return "agent turn content; no prompt visible", nil
+	})
+
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "n"}},
+		msgID)
+
+	if calls := sender.snapshot(); len(calls) != 0 {
+		t.Errorf("expected deny keystroke to be skipped when pane moved on, got %v", calls)
+	}
+	// Row was claimed atomically (deny path matches approve semantics):
+	// reminders stop, pane-moved-on is the correct end state. See
+	// TestTryResolve_ApproveSkipsKeystrokeWhenPaneMoved for the sibling
+	// assertion on the approve path.
+	if row, _ := p.store.LookupPendingNudgeByMessageID(context.Background(), msgID); row != nil {
+		t.Error("expected nudge row to be deleted by atomic claim even when deny recheck skipped dispatch")
+	}
+}
+
+// TestTryResolve_ApproveSkipsKeystrokeOnCaptureError verifies the
+// fail-closed stance: if we cannot observe the pane, we don't guess —
+// skip the keystroke rather than fire blind. Logged as WARN for
+// operator visibility.
+func TestTryResolve_ApproveSkipsKeystrokeOnCaptureError(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+
+	const msgID = "msg_capture_fail"
+	seedPendingNudge(t, p, msgID, "y", "Escape")
+
+	p.SetPaneCaptureForTest(func(_ string, _ int) (string, error) {
+		return "", errors.New("tmux capture-pane failed: no such session")
+	})
+
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "y"}},
+		msgID)
+
+	if calls := sender.snapshot(); len(calls) != 0 {
+		t.Errorf("expected keystroke to be skipped on capture error (fail-closed), got %v", calls)
+	}
+}

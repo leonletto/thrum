@@ -165,6 +165,20 @@ func (td *testDaemon) createIdentity(t *testing.T, filename, role, module string
 	}
 }
 
+// useIdentity points the test process at this daemon's repo and selects
+// the given identity file. Tests that run in a shell with THRUM_HOME /
+// THRUM_NAME / THRUM_ROLE / THRUM_MODULE set (e.g. inside a Thrum
+// worktree) would otherwise resolve identities from the wrong place.
+func (td *testDaemon) useIdentity(t *testing.T, name string) {
+	t.Helper()
+	t.Setenv("THRUM_HOME", td.repoPath)
+	t.Setenv("THRUM_NAME", name)
+	t.Setenv("THRUM_AGENT_ID", "")
+	t.Setenv("THRUM_ROLE", "")
+	t.Setenv("THRUM_MODULE", "")
+	t.Setenv("THRUM_DISPLAY", "")
+}
+
 // newClient creates a daemon RPC client.
 func (td *testDaemon) newClient() (*cli.Client, error) {
 	return cli.NewClient(td.socketPath)
@@ -501,21 +515,23 @@ func TestMCPServerStartupFailsWithoutDaemon(t *testing.T) {
 	// The error should be something like "dial unix ... no such file or directory"
 }
 
-// TestWaitForMessageTimeout verifies timeout behavior when no messages arrive.
+// TestWaitForMessageTimeout verifies timeout behavior when no messages
+// arrive during the wait window. Uses the polling waiter against a real
+// daemon with no sender.
 func TestWaitForMessageTimeout(t *testing.T) {
-	t.Skip("TODO: Implement after WebSocket server is added to testDaemon")
-
 	td := newTestDaemon(t)
 	defer td.stop()
 
 	td.createIdentity(t, "waiter", "test-waiter", "mcp")
 	td.start(t)
+	td.registerAndStartSession(t, "test-waiter", "mcp", "waiter")
 
-	t.Setenv("THRUM_NAME", "waiter")
+	td.useIdentity(t, "waiter")
 	mcpServer, err := NewServer(td.repoPath)
 	if err != nil {
 		t.Fatalf("NewServer failed: %v", err)
 	}
+	mcpServer.InitWaiter(context.Background())
 
 	ctx := context.Background()
 	start := time.Now()
@@ -533,16 +549,16 @@ func TestWaitForMessageTimeout(t *testing.T) {
 		t.Errorf("expected status 'timeout', got %q", output.Status)
 	}
 
-	// Should take approximately 2 seconds
-	if elapsed < 1900*time.Millisecond || elapsed > 2500*time.Millisecond {
+	// Should take approximately 2 seconds; allow slack for CI scheduler noise.
+	if elapsed < 1800*time.Millisecond || elapsed > 3*time.Second {
 		t.Errorf("expected ~2s timeout, took %v", elapsed)
 	}
 }
 
-// TestWaitForMessageReceivesMessage verifies message reception via WebSocket.
+// TestWaitForMessageReceivesMessage verifies that a message sent after the
+// wait begins wakes the polling waiter and is returned via the
+// wait_for_message MCP tool.
 func TestWaitForMessageReceivesMessage(t *testing.T) {
-	t.Skip("TODO: Implement after WebSocket server is added to testDaemon")
-
 	td := newTestDaemon(t)
 	defer td.stop()
 
@@ -550,15 +566,18 @@ func TestWaitForMessageReceivesMessage(t *testing.T) {
 	td.createIdentity(t, "waiter", "test-waiter", "mcp")
 
 	td.start(t)
+	td.registerAndStartSession(t, "test-sender", "mcp", "sender")
+	td.registerAndStartSession(t, "test-waiter", "mcp", "waiter")
 
 	ctx := context.Background()
 
-	// Start wait_for_message in a goroutine
-	t.Setenv("THRUM_NAME", "waiter")
+	// Build the waiter-side MCP server.
+	td.useIdentity(t, "waiter")
 	mcpWaiter, err := NewServer(td.repoPath)
 	if err != nil {
 		t.Fatalf("NewServer for waiter failed: %v", err)
 	}
+	mcpWaiter.InitWaiter(context.Background())
 
 	type waitResult struct {
 		output WaitForMessageOutput
@@ -573,11 +592,11 @@ func TestWaitForMessageReceivesMessage(t *testing.T) {
 		resultCh <- waitResult{output, err}
 	}()
 
-	// Give waiter time to connect to WebSocket (intentional - ensuring operation is in-flight)
-	time.Sleep(500 * time.Millisecond)
+	// Give the poller time to enter its loop and establish `after`.
+	time.Sleep(600 * time.Millisecond)
 
-	// Send a message to waiter
-	t.Setenv("THRUM_NAME", "sender")
+	// Send a message from sender to waiter (by agent name).
+	td.useIdentity(t, "sender")
 	mcpSender, err := NewServer(td.repoPath)
 	if err != nil {
 		t.Fatalf("NewServer for sender failed: %v", err)
@@ -591,11 +610,13 @@ func TestWaitForMessageReceivesMessage(t *testing.T) {
 		t.Fatalf("handleSendMessage failed: %v", err)
 	}
 
-	// Wait for result with timeout
+	// Wait for the background goroutine to pick the message up. Allow
+	// generous slack: poll interval is 500ms and the sender fires after
+	// the waiter's `after` timestamp.
 	select {
 	case result := <-resultCh:
 		if result.err != nil {
-			t.Fatalf("waitForMessageHandler failed: %v", result.err)
+			t.Fatalf("handleWaitForMessage failed: %v", result.err)
 		}
 		if result.output.Status != "message_received" {
 			t.Errorf("expected status 'message_received', got %q", result.output.Status)
@@ -609,8 +630,28 @@ func TestWaitForMessageReceivesMessage(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("wait_for_message did not return within 5 seconds")
 	}
+}
 
-	// Should return in < 2 seconds (we waited 500ms + send time)
+// TestWaitForMessageNotInitializedErrors verifies that calling
+// wait_for_message before InitWaiter returns the expected error.
+func TestWaitForMessageNotInitializedErrors(t *testing.T) {
+	td := newTestDaemon(t)
+	defer td.stop()
+	td.createIdentity(t, "lonely", "test-lonely", "mcp")
+	td.start(t)
+
+	td.useIdentity(t, "lonely")
+	mcpServer, err := NewServer(td.repoPath)
+	if err != nil {
+		t.Fatalf("NewServer failed: %v", err)
+	}
+
+	_, _, err = mcpServer.handleWaitForMessage(context.Background(), nil, WaitForMessageInput{
+		Timeout: 1,
+	})
+	if err == nil {
+		t.Fatal("expected error when waiter is not initialized, got nil")
+	}
 }
 
 // waitForSocketReady waits for a Unix socket to become available and accept connections, with timeout.

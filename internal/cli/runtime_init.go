@@ -68,6 +68,7 @@ func runtimeTemplates(runtime string) []runtimeTemplate {
 		return []runtimeTemplate{
 			{"templates/claude/settings.json.tmpl", ".claude/settings.json", 0644},
 			{"templates/shared/startup.sh.tmpl", "scripts/thrum-startup.sh", 0755},
+			{"templates/shared/thrum-check-inbox.sh.tmpl", "scripts/thrum-check-inbox.sh", 0755},
 		}
 	case "codex":
 		return []runtimeTemplate{

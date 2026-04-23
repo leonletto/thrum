@@ -26,6 +26,16 @@ type AgentSummary struct {
 	UpdatedAt    string `json:"updated_at,omitempty"`
 	Source       string `json:"source"`
 	Status       string `json:"status,omitempty"`
+	// Hook-delivery fields (hook-inbox-delivery design)
+	Host        string `json:"host,omitempty"`
+	PID         int    `json:"pid,omitempty"`
+	TmuxSession string `json:"tmux_session,omitempty"`
+	TmuxAlive   bool   `json:"tmux_alive,omitempty"`
+	// IsLocal is true when the agent originated on the local daemon (or when
+	// OriginDaemon is empty, which is treated as local for legacy entries).
+	// Set by the team.list RPC handler; false means the agent lives on a
+	// remote peer daemon and its last_seen on this daemon is structurally stale.
+	IsLocal bool `json:"is_local,omitempty"`
 }
 
 // BuildAgentSummary constructs an AgentSummary from an identity file and
@@ -50,6 +60,11 @@ func BuildAgentSummary(idFile *config.IdentityFile, idPath string, daemonInfo *W
 		s.UpdatedAt = idFile.UpdatedAt.Format(time.RFC3339)
 	}
 
+	// Hook-delivery fields from identity file.
+	s.PID = idFile.AgentPID
+	s.TmuxSession = idFile.TmuxSession
+	// Host is daemon-only (not in identity file); populated below if daemonInfo is available.
+
 	// Enrich from daemon if available
 	if daemonInfo != nil {
 		s.Source = "daemon"
@@ -67,6 +82,14 @@ func BuildAgentSummary(idFile *config.IdentityFile, idPath string, daemonInfo *W
 		}
 		if daemonInfo.Intent != "" {
 			s.Intent = daemonInfo.Intent
+		}
+		s.Host = daemonInfo.Host
+		s.TmuxAlive = daemonInfo.TmuxAlive
+		if daemonInfo.TmuxSession != "" {
+			s.TmuxSession = daemonInfo.TmuxSession
+		}
+		if daemonInfo.AgentPID != 0 {
+			s.PID = daemonInfo.AgentPID
 		}
 	}
 
@@ -118,11 +141,20 @@ func FormatAgentSummary(s *AgentSummary) string {
 
 // FormatAgentSummaryCompact formats an AgentSummary as a single-line summary.
 // Used in team and agent list contexts.
-// Format: "● @name (module) — intent [branch]".
+//
+// Status glyphs:
+//   - ● active agent (has a live session)
+//   - ○ offline agent (no live session)
+//   - ⊙ reserved pseudo-agent (surfaced only by `thrum team --system`;
+//     used for daemon-internal identities like @supervisor_<project>
+//     that exist as notification senders rather than real workers).
 func FormatAgentSummaryCompact(s *AgentSummary) string {
 	icon := "○"
-	if s.Status == "active" {
+	switch s.Status {
+	case "active":
 		icon = "●"
+	case "reserved":
+		icon = "⊙"
 	}
 
 	parts := []string{fmt.Sprintf("%s @%s (%s)", icon, s.AgentID, s.Module)}

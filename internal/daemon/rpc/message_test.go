@@ -2,14 +2,18 @@ package rpc
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/leonletto/thrum/internal/daemon/permission"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/types"
@@ -992,8 +996,9 @@ func TestMessageDelete(t *testing.T) {
 
 	t.Run("delete existing message", func(t *testing.T) {
 		req := DeleteMessageRequest{
-			MessageID: messageID,
-			Reason:    "test delete",
+			MessageID:     messageID,
+			Reason:        "test delete",
+			CallerAgentID: agentID, // sec.4: author required
 		}
 		params, _ := json.Marshal(req)
 
@@ -1035,7 +1040,7 @@ func TestMessageDelete(t *testing.T) {
 	})
 
 	t.Run("delete already deleted message", func(t *testing.T) {
-		req := DeleteMessageRequest{MessageID: messageID}
+		req := DeleteMessageRequest{MessageID: messageID, CallerAgentID: agentID}
 		params, _ := json.Marshal(req)
 
 		_, err := handler.HandleDelete(context.Background(), params)
@@ -1048,7 +1053,7 @@ func TestMessageDelete(t *testing.T) {
 	})
 
 	t.Run("delete non-existent message", func(t *testing.T) {
-		req := DeleteMessageRequest{MessageID: "msg_NONEXISTENT"}
+		req := DeleteMessageRequest{MessageID: "msg_NONEXISTENT", CallerAgentID: agentID}
 		params, _ := json.Marshal(req)
 
 		_, err := handler.HandleDelete(context.Background(), params)
@@ -1074,7 +1079,7 @@ func TestMessageDelete(t *testing.T) {
 		}
 		msgID := sendResponse.MessageID
 
-		req := DeleteMessageRequest{MessageID: msgID}
+		req := DeleteMessageRequest{MessageID: msgID, CallerAgentID: agentID}
 		params, _ := json.Marshal(req)
 
 		resp, err := handler.HandleDelete(context.Background(), params)
@@ -1320,7 +1325,7 @@ func TestMessageEdit(t *testing.T) {
 		}
 		msgID := sendResponse.MessageID
 
-		deleteReq := DeleteMessageRequest{MessageID: msgID}
+		deleteReq := DeleteMessageRequest{MessageID: msgID, CallerAgentID: agentID}
 		deleteParams, _ := json.Marshal(deleteReq)
 		_, err = handler.HandleDelete(context.Background(), deleteParams)
 		if err != nil {
@@ -1845,6 +1850,7 @@ func TestHandleSend_GroupScope(t *testing.T) {
 	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
 		t.Fatalf("create .thrum dir: %v", err)
 	}
+	writeGuardOffConfig(t, tmpDir)
 
 	repoID := "r_GROUPSCOPE_TEST"
 	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
@@ -2005,6 +2011,7 @@ func TestInboxGroupMembership(t *testing.T) {
 	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
 		t.Fatalf("create .thrum dir: %v", err)
 	}
+	writeGuardOffConfig(t, tmpDir)
 
 	repoID := "r_INBOX_GROUP_TEST"
 	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
@@ -2218,5 +2225,291 @@ func TestResolveNudgeTarget_NoFile(t *testing.T) {
 	target := resolveNudgeTarget(thrumDir, "nonexistent")
 	if target != "" {
 		t.Errorf("resolveNudgeTarget should return empty for missing identity, got %q", target)
+	}
+}
+
+// TestHandleSend_ReplyInterceptor is the RPC-level end-to-end cover
+// for the full reply path: HandleSend writes a reply message via
+// state.WriteEvent, which fires EventWriteHook, which routes
+// message.create events to the permission package's
+// AfterMessageCreate, which resolves the pending nudge and fires
+// the cached approve keystroke through the injected test sender.
+//
+// Pairs with the permission-package unit tests in
+// internal/daemon/permission/reply_test.go, which cover the body
+// parsing, regex anchoring, and race-safe atomic claim logic in
+// isolation. This test ties the RPC handler, the state event
+// writer, the event-write hook, and the permission dispatcher
+// together — the same chain production daemon boot wires up at
+// cmd/thrum/main.go.
+func TestHandleSend_ReplyInterceptor(t *testing.T) {
+	// t.Parallel() surfaces future data races earlier under -race.
+	// The hook we register is synchronous (matching production's
+	// pre-goroutine call graph at the RPC level), so any shared
+	// state the reply dispatcher might grow — e.g. a mutex-guarded
+	// keystroke cache — would flake under parallelism if the lock
+	// discipline were wrong.
+	t.Parallel()
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	repoID := "r_REPLYINT"
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	// Register a test agent + session so HandleSend can resolve
+	// caller_agent_id → (agent_id, session_id). The RegisterRequest
+	// carries Role/Module directly — no t.Setenv needed, which is
+	// what makes the t.Parallel() above legal (Setenv + Parallel
+	// panics under the 1.22+ checker).
+	callerID := identity.GenerateAgentID(repoID, "coordinator", "main", "")
+	agentHandler := NewAgentHandler(st)
+	registerParams, _ := json.Marshal(RegisterRequest{
+		Role:   "coordinator",
+		Module: "main",
+	})
+	if _, err := agentHandler.HandleRegister(context.Background(), registerParams); err != nil {
+		t.Fatalf("register agent: %v", err)
+	}
+
+	sessionHandler := NewSessionHandler(st)
+	sessionParams, _ := json.Marshal(SessionStartRequest{AgentID: callerID})
+	if _, err := sessionHandler.HandleStart(context.Background(), sessionParams); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	// Build a Permission wired to this state + an injected keystroke
+	// sender that records invocations instead of touching tmux.
+	type sentKey struct{ target, key string }
+	var (
+		mu       sync.Mutex
+		sentKeys []sentKey
+	)
+	p := permission.New(st, st.RawDB(), "supervisor_test", "test", thrumDir)
+	p.SetKeystrokeSenderForTest(func(target, key string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		sentKeys = append(sentKeys, sentKey{target, key})
+		return nil
+	})
+	// Pre-send pane recheck (thrum-rfy3): production defaults to
+	// tmux.CapturePane, which can't see a test's fake target. Stub
+	// with content that matches the seeded cursor pattern so the
+	// recheck lets the keystroke through — the invariant under test
+	// is routing+dispatch, not the recheck behavior itself.
+	p.SetPaneCaptureForTest(func(_ string, _ int) (string, error) {
+		return "Not in allowlist: some-command\n", nil
+	})
+
+	// Install the event-write hook in the same shape as production
+	// runDaemon. Sync variant here for simple test assertions — the
+	// production code goroutines this call, but the behavior being
+	// tested is the RPC routing + dispatch chain, not the concurrency
+	// wrapper (which is covered by unit tests in reply_test.go).
+	ctx := context.Background()
+	st.SetOnEventWrite(func(_ string, _ int64, event []byte) {
+		var head struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(event, &head); err != nil {
+			return
+		}
+		if head.Type != "message.create" {
+			return
+		}
+		var evt types.MessageCreateEvent
+		if err := json.Unmarshal(event, &evt); err != nil {
+			return
+		}
+		p.AfterMessageCreate(ctx, evt)
+	})
+
+	// Produce a real parent supervisor message so HandleSend can
+	// resolve reply_to against the messages table. SendSupervisorMessage
+	// writes through state.WriteEvent, returns the generated
+	// message_id, and makes the row lookup in HandleSend's reply_to
+	// validation path succeed.
+	parentMsgID, err := p.SendSupervisorMessage(ctx, "@coordinator_main", "⚠ Permission prompt — test", "")
+	if err != nil {
+		t.Fatalf("SendSupervisorMessage: %v", err)
+	}
+
+	// Seed a pending nudge keyed on that real message_id.
+	now := time.Now().UTC()
+	row := &permission.NudgeRow{
+		MessageID:     parentMsgID,
+		Session:       "cursor-test",
+		TmuxTarget:    "cursor-test:0.0",
+		AgentName:     "researcher_cursor",
+		PatternKey:    "cursor.not_in_allowlist",
+		ApproveKey:    "y",
+		DenyKey:       "Escape",
+		FirstDetected: now,
+		LastNudgeAt:   now,
+		NudgeCount:    1,
+		LastPaneHash:  sha256.Sum256([]byte("pane")),
+		ExpiresAt:     now.Add(8 * time.Hour),
+	}
+	if err := p.Store().InsertPendingNudge(ctx, row); err != nil {
+		t.Fatalf("seed nudge row: %v", err)
+	}
+
+	// Issue the reply via HandleSend.
+	handler := NewMessageHandler(st)
+	sendParams, _ := json.Marshal(SendRequest{
+		Content:       "y",
+		Format:        "plain",
+		ReplyTo:       parentMsgID,
+		CallerAgentID: callerID,
+	})
+	if _, err := handler.HandleSend(ctx, sendParams); err != nil {
+		t.Fatalf("HandleSend: %v", err)
+	}
+
+	// Assert the fake keystroke sender was invoked with the approve key.
+	mu.Lock()
+	captured := make([]sentKey, len(sentKeys))
+	copy(captured, sentKeys)
+	mu.Unlock()
+
+	if len(captured) != 1 {
+		t.Fatalf("expected exactly 1 keystroke dispatch, got %d: %+v", len(captured), captured)
+	}
+	if captured[0].target != "cursor-test:0.0" {
+		t.Errorf("target = %q, want cursor-test:0.0", captured[0].target)
+	}
+	if captured[0].key != "y" {
+		t.Errorf("key = %q, want y", captured[0].key)
+	}
+
+	// The pending nudge must be gone (atomic claim deleted it).
+	gone, _ := p.Store().LookupPendingNudgeByMessageID(ctx, parentMsgID)
+	if gone != nil {
+		t.Errorf("nudge row should be deleted after approve, got %+v", gone)
+	}
+}
+
+// TestQueryAgentsByRecipient_SupervisorFallback verifies the supervisor
+// fallback in queryAgentsByRecipient: a recipient that has no row in
+// the agents table BUT matches the MessageHandler's supervisorID or
+// supervisorLegacy resolves as itself. This is the replacement for the
+// old Reserved=true file-stat fallback, and the fix for the real-world
+// break where `thrum reply msg_XXX "y"` to a permission supervisor was
+// failing with "unknown recipient" because the supervisor pseudo-agent
+// never registers a session.
+func TestQueryAgentsByRecipient_SupervisorFallback(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	st, err := state.NewState(thrumDir, thrumDir, "r_QARRESERVED", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	const (
+		canonicalID = "supervisor_thrum_leon_letto"
+		legacyID    = "supervisor_thrum"
+	)
+	handler := NewMessageHandlerWithDispatcher(st, nil, thrumDir, canonicalID, legacyID)
+	ctx := context.Background()
+
+	// Positive: canonical supervisor recipient resolves via the
+	// in-memory fallback.
+	got, err := handler.queryAgentsByRecipient(ctx, canonicalID)
+	if err != nil {
+		t.Fatalf("queryAgentsByRecipient(%q): %v", canonicalID, err)
+	}
+	if len(got) != 1 || got[0] != canonicalID {
+		t.Errorf("canonical lookup got %v, want [%q]", got, canonicalID)
+	}
+
+	// Positive: legacy supervisor recipient also resolves (upgrade-window
+	// compat — pre-upgrade peers address replies by the old form).
+	got, err = handler.queryAgentsByRecipient(ctx, legacyID)
+	if err != nil {
+		t.Fatalf("queryAgentsByRecipient(%q): %v", legacyID, err)
+	}
+	if len(got) != 1 || got[0] != legacyID {
+		t.Errorf("legacy lookup got %v, want [%q]", got, legacyID)
+	}
+
+	// Negative: non-matching recipient stays unknown.
+	got, err = handler.queryAgentsByRecipient(ctx, "implementer_bogus")
+	if err != nil {
+		t.Fatalf("queryAgentsByRecipient(implementer_bogus): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("non-supervisor lookup got %v, want empty", got)
+	}
+
+	// Negative: unrelated supervisor_* slug stays unknown.
+	got, err = handler.queryAgentsByRecipient(ctx, "supervisor_other_user")
+	if err != nil {
+		t.Fatalf("queryAgentsByRecipient(supervisor_other_user): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("unrelated supervisor lookup got %v, want empty", got)
+	}
+
+	// Negative: handler built without supervisor wiring (test-friendly
+	// NewMessageHandler constructor) never matches — empty supervisorID
+	// and supervisorLegacy short-circuit the check.
+	noSupHandler := NewMessageHandler(st)
+	got, err = noSupHandler.queryAgentsByRecipient(ctx, canonicalID)
+	if err != nil {
+		t.Fatalf("queryAgentsByRecipient without supervisor wiring: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("unwired-handler lookup got %v, want empty", got)
+	}
+}
+
+func TestIsSupervisorRecipient(t *testing.T) {
+	h := &MessageHandler{
+		supervisorID:     "supervisor_thrum_leon-letto",
+		supervisorLegacy: "supervisor_thrum",
+	}
+	cases := []struct {
+		name      string
+		recipient string
+		want      bool
+	}{
+		{"canonical matches", "supervisor_thrum_leon-letto", true},
+		{"legacy matches", "supervisor_thrum", true},
+		{"unrelated supervisor rejected", "supervisor_other_user", false},
+		{"non-supervisor rejected", "coordinator_main", false},
+		{"empty rejected", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isSupervisorRecipient(h, tc.recipient)
+			if got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsSupervisorRecipient_EmptyLegacyOK(t *testing.T) {
+	// supervisorLegacy may be empty in test paths; must not match anything.
+	h := &MessageHandler{
+		supervisorID:     "supervisor_x_y",
+		supervisorLegacy: "",
+	}
+	if isSupervisorRecipient(h, "") {
+		t.Fatal("empty recipient must not match empty supervisorLegacy")
+	}
+	if !isSupervisorRecipient(h, "supervisor_x_y") {
+		t.Fatal("canonical must still match with empty supervisorLegacy")
 	}
 }

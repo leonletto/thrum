@@ -7,10 +7,9 @@ description: Reply to a message
 
 # Thrum Reply
 
-Use this skill when the user explicitly wants the `reply` Thrum
-workflow. Prefer the umbrella `thrum` skill when the request spans multiple
-commands or needs broader coordination judgment.
-
+Use this skill when the user explicitly wants the `reply` Thrum workflow. Prefer
+the umbrella `thrum` skill when the request spans multiple commands or needs
+broader coordination judgment.
 
 Reply to a message with the same audience as the original.
 

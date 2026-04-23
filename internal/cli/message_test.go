@@ -386,7 +386,7 @@ func TestMessageDelete(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	result, err := MessageDelete(client, "msg_01HXE8Z7")
+	result, err := MessageDelete(client, "msg_01HXE8Z7", "")
 	if err != nil {
 		t.Fatalf("MessageDelete() error = %v", err)
 	}

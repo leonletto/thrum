@@ -185,11 +185,21 @@ func parseStatusOutput(output string) []string {
 
 	for _, line := range lines {
 		// Porcelain format: "XY filename"
-		// XY is 2-character status code, then space, then filename
-		if len(line) < 4 {
+		// XY is a 2-character status code followed by a space, then the filename.
+		// parseLines trims leading whitespace, which corrupts lines like " M file"
+		// (unstaged modifications) — after trim the leading space is gone, so the
+		// line becomes "M file" instead of " M file".  Fixed-index slicing [3:]
+		// on the trimmed form eats the first character of the filename.
+		//
+		// Splitting on the first space is robust: regardless of which XY slot
+		// holds the space (staged, unstaged, or both modified), the filename
+		// always follows the first space.  A subsequent TrimSpace handles the
+		// double-space in formats like "A  file" (staged-only) where Y is ' '.
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) < 2 {
 			continue
 		}
-		filename := strings.TrimSpace(line[3:])
+		filename := strings.TrimSpace(parts[1])
 		if filename != "" {
 			files = append(files, filename)
 		}

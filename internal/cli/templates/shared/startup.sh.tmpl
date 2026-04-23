@@ -100,3 +100,10 @@ thrum --repo "$THRUM_HOME" inbox --unread --json
 if [ "${THRUM_ANNOUNCE:-false}" = "true" ]; then
   thrum --repo "$THRUM_HOME" send "Agent $AGENT_NAME online" --to @everyone --json
 fi
+
+# 6. Emit CronCreate instruction. The runtime (Claude Code) consumes the
+# instruction block from our stdout via the SessionStart hook's context-
+# injection path and schedules the 15-minute inbox-check cron. For
+# runtimes without that capability (e.g. cli-only), this is a no-op at
+# the agent's end — the command still prints, but nothing reads it.
+thrum --repo "$THRUM_HOME" cron install-inbox-poll 2>/dev/null || true

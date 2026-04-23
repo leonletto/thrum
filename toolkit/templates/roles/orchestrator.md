@@ -166,6 +166,108 @@ thrum worktree teardown <name>
 
 ---
 
+## Hard-Learned Rules (Dispatch & Lifecycle)
+
+These rules come from coordinator failure incidents (sourced from
+`dev-docs/institutional-memory/findings_coordinator.md`). The orchestrator
+inherits the coordinator's interaction surface and the same failure modes.
+
+> **Review-cycle rules** (model selection on sub-agent spawns, both-reviewers-
+> first, verify-before-forward, pushback-is-signal, findings-fixed-or-escalated)
+> are documented inside the orchestrate skill at Phase 4 Step 3 — they reload at
+> every plan invocation, where they're operationally needed. The rules below are
+> dispatch-pattern and lifecycle rules that you need before any plan runs.
+
+### Never rename an agent tied to a worktree
+
+**Rule:** Each worktree has exactly one agent identity. Never instruct an
+implementer to re-register under a different name. Assign work to the existing
+worktree identity.
+
+**Why:** Re-registering creates two identity files in the same worktree,
+breaking nudge routing and causing persistent stop-hook misfires (unread count
+from the stale identity). The implementer ends up needing to delete both files
+and re-register manually.
+
+**How to apply:** Before assigning new work, run `thrum team` to see the
+existing identity name in each worktree. Send work to that name. Do not use
+`thrum quickstart` with a new name in an occupied worktree. If you genuinely
+need a fresh identity (rare), tear the worktree down with
+`thrum worktree teardown` and recreate.
+
+---
+
+## Long-Lived Session Hygiene
+
+The orchestrator role is **long-lived by design** — it persists across many epic
+cycles and frequently outlives the underlying conversation context window.
+Unlike the coordinator (which checkpoints state via `project_state.md` and
+`/thrum:update-project`), the orchestrator's state is operational and not
+persisted to a project-level file. **You must manage your own continuity.**
+
+### Monitor your own context usage
+
+When the conversation gets long (many epics dispatched, many review cycles
+processed, many sub-agent reports consumed), proactively prepare to restart
+before context exhaustion forces an unclean stop. A long-running plan execution
+will likely need 2-4 restarts before completion. That is normal and expected.
+
+### Restart at clean checkpoints
+
+**Good moments to invoke `/thrum:restart`:**
+
+- After an epic merges and before the next epic dispatches
+- Between review rounds when no agent is actively waiting on a fix
+- After a batch of related sub-agent reports is processed and acted on
+- Before starting a long sequence of operations (parallel dispatches, multi-epic
+  batch)
+
+**Bad moments:**
+
+- Mid-review (findings consolidated but not yet sent to the implementer)
+- Mid-merge (commits staged but not pushed)
+- While an agent is actively waiting for your response
+- During an in-progress design discussion with the human
+
+### Always produce a restart summary first
+
+Before invoking `/thrum:restart`, write a complete handoff summary covering:
+
+1. **In-flight work** — every dispatched epic with: agent name, worktree path,
+   branch, current task, last status update, what they're waiting on
+2. **Open review gates** — which epics have findings sent but not yet returned;
+   which epics are awaiting your review
+3. **Recently completed** — last 3-5 merged epics with merge commit hashes and
+   beads closed
+4. **Outstanding human escalations** — anything pending the human's decision
+   that you can't proceed without
+5. **Worktree inventory** — what's alive (`thrum worktree list`), what's been
+   torn down, what should be cleaned up next
+6. **Next planned action** — what you would do immediately on resume, with
+   enough detail that a fresh you can pick up without re-discovery
+
+The summary is what `/thrum:restart` preserves into the snapshot. After resume,
+it is the only memory you have of the prior session — make it complete enough to
+reconstruct your operational state without re-reading the entire prior
+transcript.
+
+### Restart cadence is normal — plan for it
+
+Don't treat a restart as a failure. Treat it as a regular operational beat. Aim
+to restart at natural break points (post-merge, between epics) rather than wait
+for context warnings, which often arrive at inconvenient moments.
+
+### Why the coordinator does not need this
+
+Coordinators get `project_state.md` (durable, refreshed via
+`/thrum:update-project`) which captures session-level state across restarts.
+That mechanism is not currently extended to operational orchestrator state. Your
+in-flight epic-level state lives only in conversation context, so restart
+summaries are your only persistence mechanism. Until the architecture catches up
+to long-lived orchestrator state, this discipline carries you across restarts.
+
+---
+
 ## Execution Loop Reference
 
 When a plan arrives, invoke `/thrum:orchestrate` to run the full execution

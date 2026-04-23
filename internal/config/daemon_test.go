@@ -635,3 +635,117 @@ func TestSaveThrumConfig_OmitsDefaultRestart(t *testing.T) {
 		t.Error("restart section should not be written when all fields are zero")
 	}
 }
+
+func TestThrumConfig_PermissionSupervisors_Default(t *testing.T) {
+	var cfg config.ThrumConfig
+	raw := []byte(`{}`)
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if cfg.PermissionSupervisors != nil {
+		t.Errorf("PermissionSupervisors should be nil when absent, got %v", cfg.PermissionSupervisors)
+	}
+	if cfg.ProjectName != "" {
+		t.Errorf("ProjectName should be empty when absent, got %q", cfg.ProjectName)
+	}
+}
+
+func TestThrumConfig_PermissionSupervisors_Roundtrip(t *testing.T) {
+	in := config.ThrumConfig{
+		PermissionSupervisors: []string{"coordinator", "@user:leon-letto"},
+		ProjectName:           "thrum",
+	}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var out config.ThrumConfig
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(out.PermissionSupervisors) != 2 {
+		t.Errorf("expected 2 supervisors, got %d", len(out.PermissionSupervisors))
+	}
+	if out.PermissionSupervisors[0] != "coordinator" || out.PermissionSupervisors[1] != "@user:leon-letto" {
+		t.Errorf("unexpected supervisors: %v", out.PermissionSupervisors)
+	}
+	if out.ProjectName != "thrum" {
+		t.Errorf("ProjectName = %q, want %q", out.ProjectName, "thrum")
+	}
+}
+
+func TestSaveThrumConfig_OmitsEmptyPermissionFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.ThrumConfig{}
+	if err := config.SaveThrumConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(tmpDir, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := raw["permission_supervisors"]; exists {
+		t.Error("permission_supervisors should be omitted when nil")
+	}
+	if _, exists := raw["project_name"]; exists {
+		t.Error("project_name should be omitted when empty")
+	}
+}
+
+func TestThrumConfig_IdentityRoundTrip(t *testing.T) {
+	original := config.ThrumConfig{
+		Identity: config.IdentityConfig{
+			DaemonID:     "d_01HYC7K9ABCDEFGHJKMNPQRSTV",
+			RepoName:     "thrum",
+			Hostname:     "leonsmacm1pro",
+			RepoPath:     "/Users/leon/dev/opensource/thrum",
+			GitOriginURL: "https://github.com/leonletto/thrum",
+			InitAt:       "2026-04-17T05:30:00Z",
+		},
+	}
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var round config.ThrumConfig
+	if err := json.Unmarshal(data, &round); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if round.Identity != original.Identity {
+		t.Fatalf("identity mismatch:\n  got  = %+v\n  want = %+v", round.Identity, original.Identity)
+	}
+}
+
+func TestValidatePermissionSupervisors(t *testing.T) {
+	tests := []struct {
+		name    string
+		entries []string
+		wantOK  bool
+	}{
+		{"empty list is valid (resolver defaults to coordinator)", nil, true},
+		{"zero-length list is valid", []string{}, true},
+		{"bare coordinator role is valid", []string{"coordinator"}, true},
+		{"coordinator alongside user is valid", []string{"coordinator", "@user:leon-letto"}, true},
+		{"@coordinator_main named agent is valid", []string{"@coordinator_main"}, true},
+		{"@coordinator-main hyphen variant is valid", []string{"@coordinator-main"}, true},
+		{"mixed entries with a coordinator are valid", []string{"@user:leon-letto", "@coordinator_main"}, true},
+		{"only user (no coordinator) is invalid", []string{"@user:leon-letto"}, false},
+		{"only non-coordinator agent is invalid", []string{"@impl_x"}, false},
+		{"orchestrator role alone is invalid", []string{"orchestrator"}, false},
+		{"multiple non-coordinator entries are invalid", []string{"@impl_x", "@user:leon-letto"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := config.ValidatePermissionSupervisors(tt.entries)
+			ok := got == ""
+			if ok != tt.wantOK {
+				t.Errorf("ValidatePermissionSupervisors(%v): got warning=%q, wantOK=%v",
+					tt.entries, got, tt.wantOK)
+			}
+		})
+	}
+}

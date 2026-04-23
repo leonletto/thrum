@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net"
 	"testing"
+
+	"github.com/leonletto/thrum/internal/config"
 )
 
 func TestAgentRegister(t *testing.T) {
@@ -73,6 +75,80 @@ func TestAgentRegister(t *testing.T) {
 
 	if result.AgentID != mockResponse.AgentID {
 		t.Errorf("AgentID = %s, want %s", result.AgentID, mockResponse.AgentID)
+	}
+}
+
+// TestAgentRegister_ForceFwd — thrum-ufv5.6 regression.
+// Verifies the CLI-side AgentRegister serializes Force=true into the
+// "force" JSON field on the wire. Paired with the daemon-side Force
+// trigger (thrum-ufv5.2), this guarantees a `thrum quickstart --force`
+// actually re-registers the agent in the daemon projection even when
+// the caller's detected PID matches the stored one (post-purge scenario
+// where --force is the only remaining trigger for re-registration).
+//
+// Test name kept short to stay under macOS's 104-char unix-socket path
+// limit when combined with $TMPDIR.
+func TestAgentRegister_ForceFwd(t *testing.T) {
+	mockResponse := RegisterResponse{
+		AgentID: "e2e_coordinator",
+		Status:  "updated",
+	}
+
+	daemon, socketPath := newMockDaemon(t)
+	defer daemon.stop()
+
+	var captured map[string]any
+	daemon.start(t, func(conn net.Conn) {
+		defer func() { _ = conn.Close() }()
+
+		decoder := json.NewDecoder(conn)
+		encoder := json.NewEncoder(conn)
+
+		var request map[string]any
+		if err := decoder.Decode(&request); err != nil {
+			t.Logf("decode request: %v", err)
+			return
+		}
+		if params, ok := request["params"].(map[string]any); ok {
+			captured = params
+		}
+
+		response := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      request["id"],
+			"result":  mockResponse,
+		}
+		_ = encoder.Encode(response)
+	})
+	<-daemon.Ready()
+
+	client, err := NewClient(socketPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	// Call with Force=true — the CLI register command and (after
+	// thrum-ufv5.6) cli.Quickstart both forward --force into this field.
+	opts := AgentRegisterOptions{
+		Name:   "e2e_coordinator",
+		Role:   "owner",
+		Module: "all",
+		Force:  true,
+	}
+	if _, err := AgentRegister(client, opts); err != nil {
+		t.Fatalf("AgentRegister: %v", err)
+	}
+
+	if captured == nil {
+		t.Fatal("daemon did not receive a request")
+	}
+	// Key assertion: wire payload carries "force":true.
+	// Without this, the daemon's Force branch never fires and the
+	// agents projection stays stale on --force.
+	force, _ := captured["force"].(bool)
+	if !force {
+		t.Errorf(`params["force"] = %v, want true; full params: %+v`, captured["force"], captured)
 	}
 }
 
@@ -418,5 +494,34 @@ func TestFormatPing(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAgentSummary_IncludesHookDeliveryFields(t *testing.T) {
+	idFile := &config.IdentityFile{
+		Agent:       config.AgentConfig{Name: "bob", Role: "impl", Module: "mod"},
+		AgentPID:    12345,
+		TmuxSession: "bob:0.0",
+	}
+	daemonInfo := &WhoamiResult{
+		TmuxAlive: true,
+		Host:      "laptop.local",
+	}
+	s := BuildAgentSummary(idFile, "/p/bob.json", daemonInfo)
+	if s.Host != "laptop.local" || s.PID != 12345 || s.TmuxSession != "bob:0.0" || !s.TmuxAlive {
+		t.Fatalf("missing hook-delivery fields: %+v", s)
+	}
+	data, err := json.Marshal(s)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for _, key := range []string{"host", "pid", "tmux_session", "tmux_alive"} {
+		if _, ok := got[key]; !ok {
+			t.Errorf("missing JSON key %q in %s", key, string(data))
+		}
 	}
 }

@@ -9,6 +9,8 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"github.com/leonletto/thrum/internal/identity"
 )
 
 const (
@@ -31,6 +33,18 @@ func (s *PairingSession) IsExpired() bool {
 	return time.Since(s.CreatedAt) > s.Timeout
 }
 
+// PairMetadata carries the identity metadata exchanged during a pair handshake.
+// Both sides send their own metadata and receive the other side's.
+type PairMetadata struct {
+	DaemonID     string
+	Name         string
+	Address      string
+	RepoName     string
+	Hostname     string
+	RepoPath     string
+	GitOriginURL string
+}
+
 // PairingResult contains the outcome of a completed pairing.
 type PairingResult struct {
 	PeerName     string
@@ -40,21 +54,25 @@ type PairingResult struct {
 
 // PairingManager manages pairing sessions for the local daemon.
 type PairingManager struct {
-	mu       sync.Mutex
-	session  *PairingSession
-	peers    *PeerRegistry
-	daemonID string
-	name     string
+	mu            sync.Mutex
+	session       *PairingSession
+	peers         *PeerRegistry
+	daemonID      string
+	name          string
+	localIdentity identity.Identity
 	// done is signaled when a pairing completes successfully
 	done chan *PairingResult
 }
 
 // NewPairingManager creates a new pairing manager.
-func NewPairingManager(peers *PeerRegistry, daemonID, name string) *PairingManager {
+// LocalIdentity provides the full identity metadata sent to the remote peer during pairing.
+// The name parameter is the human-readable hostname/machine name for display.
+func NewPairingManager(peers *PeerRegistry, localIdentity identity.Identity, name string) *PairingManager {
 	return &PairingManager{
-		peers:    peers,
-		daemonID: daemonID,
-		name:     name,
+		peers:         peers,
+		daemonID:      localIdentity.DaemonID,
+		name:          name,
+		localIdentity: localIdentity,
 	}
 }
 
@@ -129,68 +147,88 @@ func (pm *PairingManager) WaitForPairing(ctx context.Context) (*PairingResult, e
 }
 
 // HandlePairRequest handles an incoming pair.request from a remote peer.
-// The remote peer sends: code, daemon_id, name, address.
-// If the code matches, the peer is stored and the auth token is returned.
-func (pm *PairingManager) HandlePairRequest(code, peerDaemonID, peerName, peerAddress string) (token, localDaemonID, localName string, err error) {
+// The remote peer sends its PairMetadata (daemon_id, name, address, and identity fields).
+// If the code matches, the peer is stored and the local identity metadata is returned.
+func (pm *PairingManager) HandlePairRequest(code string, peer PairMetadata) (token string, local PairMetadata, err error) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
 	if pm.session == nil {
-		return "", "", "", fmt.Errorf("no active pairing session")
+		return "", PairMetadata{}, fmt.Errorf("no active pairing session")
 	}
 
 	if pm.session.IsExpired() {
 		pm.session = nil
 		pm.done = nil
-		return "", "", "", fmt.Errorf("pairing timed out")
+		return "", PairMetadata{}, fmt.Errorf("pairing timed out")
 	}
 
 	pm.session.attempts++
 	if pm.session.attempts > MaxPairingAttempts {
 		pm.session = nil
 		pm.done = nil
-		return "", "", "", fmt.Errorf("too many failed attempts")
+		return "", PairMetadata{}, fmt.Errorf("too many failed attempts")
 	}
 
 	if code != pm.session.Code {
 		remaining := MaxPairingAttempts - pm.session.attempts
-		return "", "", "", fmt.Errorf("invalid pairing code (%d attempts remaining)", remaining)
+		return "", PairMetadata{}, fmt.Errorf("invalid pairing code (%d attempts remaining)", remaining)
 	}
 
 	// Check if already paired
 	if existing := pm.peers.FindPeerByToken(pm.session.Token); existing != nil {
-		return "", "", "", fmt.Errorf("already paired with %s", existing.Name)
+		return "", PairMetadata{}, fmt.Errorf("already paired with %s", existing.Name)
 	}
 
-	// Store the peer (listener side — we accepted the incoming pair request)
-	err = pm.peers.AddPeer(&PeerInfo{
-		Name:     peerName,
-		Address:  peerAddress,
-		DaemonID: peerDaemonID,
-		Token:    pm.session.Token,
-		Role:     "listener",
-	})
+	// Store the peer (listener side — we accepted the incoming pair request).
+	// Infer Transport from the dialer's reach-back address: loopback ⇒ "local",
+	// CGNAT ⇒ "tailscale", anything else ⇒ "network". Mirrors the dialer-side
+	// transport stamping in cmd/thrum/main.go peer.join. xir.27 sub-1 hooks
+	// the loopback class to enable same-host sibling pairing without tsnet.
+	listenerPeer := &PeerInfo{
+		Name:               peer.Name,
+		Address:            peer.Address,
+		DaemonID:           peer.DaemonID,
+		Token:              pm.session.Token,
+		Role:               "listener",
+		Transport:          DetectTransport(peer.Address),
+		RemoteRepoName:     peer.RepoName,
+		RemoteHostname:     peer.Hostname,
+		RemoteRepoPath:     peer.RepoPath,
+		RemoteGitOriginURL: peer.GitOriginURL,
+	}
+	// thrum-b6yv: derive proxy_prefix from remote_repo_name (fallback
+	// to peer name). Listener-side reverse-bridge register path needs
+	// a non-empty prefix so proxy agent names round-trip cleanly.
+	listenerPeer.ProxyPrefix = DeriveProxyPrefix(listenerPeer)
+	err = pm.peers.AddPeer(listenerPeer)
 	if err != nil {
-		return "", "", "", fmt.Errorf("store peer: %w", err)
+		return "", PairMetadata{}, fmt.Errorf("store peer: %w", err)
 	}
 
 	token = pm.session.Token
-	localDaemonID = pm.daemonID
-	localName = pm.name
+	local = PairMetadata{
+		DaemonID:     pm.localIdentity.DaemonID,
+		Name:         pm.name,
+		RepoName:     pm.localIdentity.RepoName,
+		Hostname:     pm.localIdentity.Hostname,
+		RepoPath:     pm.localIdentity.RepoPath,
+		GitOriginURL: pm.localIdentity.GitOriginURL,
+	}
 
 	// Signal completion
 	if pm.done != nil {
 		pm.done <- &PairingResult{
-			PeerName:     peerName,
-			PeerAddress:  peerAddress,
-			PeerDaemonID: peerDaemonID,
+			PeerName:     peer.Name,
+			PeerAddress:  peer.Address,
+			PeerDaemonID: peer.DaemonID,
 		}
 	}
 
-	log.Printf("[pairing] Paired with %s (%s) at %s", peerName, peerDaemonID, peerAddress)
+	log.Printf("[pairing] Paired with %s (%s) at %s", peer.Name, peer.DaemonID, peer.Address)
 	pm.session = nil
 
-	return token, localDaemonID, localName, nil
+	return token, local, nil
 }
 
 // CancelPairing cancels the active pairing session.

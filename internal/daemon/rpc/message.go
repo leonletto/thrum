@@ -7,19 +7,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
-	"github.com/leonletto/thrum/internal/daemon/safecmd"
+	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
+	"github.com/leonletto/thrum/internal/daemon/nudge"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/groups"
 	"github.com/leonletto/thrum/internal/identity"
+	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/subscriptions"
-	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
 )
 
@@ -183,8 +186,9 @@ type OutboxResponse struct {
 
 // DeleteMessageRequest represents the request for message.delete RPC.
 type DeleteMessageRequest struct {
-	MessageID string `json:"message_id"`
-	Reason    string `json:"reason,omitempty"`
+	MessageID     string `json:"message_id"`
+	Reason        string `json:"reason,omitempty"`
+	CallerAgentID string `json:"caller_agent_id,omitempty"` // CLI-resolved agent identity; verified against peercred in sec.3
 }
 
 // DeleteMessageResponse represents the response from message.delete RPC.
@@ -256,20 +260,113 @@ type WSBroadcaster interface {
 }
 
 // MessageHandler handles message-related RPC methods.
+//
+// # Concurrency
+//
+// wsBroadcaster is stored as an atomic.Value because it is set ONCE
+// at daemon startup (via SetWSBroadcaster) but read from multiple
+// goroutines: the SetOnEventWrite hook dispatches NotifyMessageCreate
+// on its own goroutine for every message.create event, which reads
+// wsBroadcaster while main.go's startup goroutine writes it. A plain
+// field would be a data race per Go's memory model even though the
+// write-before-read ordering is guaranteed in practice by daemon
+// startup sequencing. atomic.Value is the minimal-overhead fix for
+// this set-once-read-many pattern.
 type MessageHandler struct {
-	state         *state.State
-	dispatcher    *subscriptions.Dispatcher
-	groupResolver *groups.Resolver
-	wsBroadcaster WSBroadcaster // optional; nil if not wired
-	thrumDir      string        // for tmux nudge resolution
+	state            *state.State
+	dispatcher       *subscriptions.Dispatcher
+	groupResolver    *groups.Resolver
+	wsBroadcaster    atomic.Value // holds WSBroadcaster; Load() returns nil until SetWSBroadcaster is called
+	thrumDir         string       // for tmux nudge resolution
+	supervisorID     string       // canonical virtual-supervisor ID, e.g. "supervisor_thrum_leon-letto"
+	supervisorLegacy string       // pre-upgrade form for receiver compat, e.g. "supervisor_thrum"
 }
 
 // SetWSBroadcaster configures a broadcaster that will be called after every
 // message write to push real-time events to all connected WebSocket clients.
 // This is required for the browser UI live feed to work because the UI never
 // creates a subscription row in the DB.
+//
+// Safe to call concurrently with loadBroadcaster reads because the
+// underlying atomic.Value handles the memory barrier. In practice this
+// is invoked once during daemon startup — see "Concurrency" note on
+// MessageHandler.
 func (h *MessageHandler) SetWSBroadcaster(b WSBroadcaster) {
-	h.wsBroadcaster = b
+	if b == nil {
+		return
+	}
+	h.wsBroadcaster.Store(b)
+}
+
+// loadBroadcaster returns the currently-wired broadcaster, or nil if
+// SetWSBroadcaster has not been called yet. Safe across goroutines.
+func (h *MessageHandler) loadBroadcaster() WSBroadcaster {
+	v := h.wsBroadcaster.Load()
+	if v == nil {
+		return nil
+	}
+	b, ok := v.(WSBroadcaster)
+	if !ok {
+		return nil
+	}
+	return b
+}
+
+// NotifyMessageCreate fires the WebSocket notification.message broadcast
+// for a persisted message.create event. Called from the daemon's
+// SetOnEventWrite hook so the broadcast fires for ALL message writers,
+// not just HandleSend — previously, writers that bypassed HandleSend
+// (permission.SendSupervisorMessage, peer-synced events) did not trigger
+// outbound forwarding (e.g. to Telegram via OutboundRelay) because the
+// broadcast lived inline in HandleSend. See thrum-48kt.1.
+//
+// Nil-safe: returns immediately if the broadcaster isn't wired (test path).
+// Intended to be called from a goroutine — BroadcastAll does per-client
+// network sends that should not block the WriteEvent writer path.
+func (h *MessageHandler) NotifyMessageCreate(evt types.MessageCreateEvent) {
+	// thrum-xfsb: broadcast only for events this daemon authored. Peer-
+	// synced events reach the hook via State.IngestSyncedEvent (the
+	// sync_apply replica path) with OriginDaemon set to the authoring
+	// peer. Firing BroadcastAll here would fan the notification out to
+	// THIS daemon's local Telegram bridge as well — in multi-daemon
+	// setups (thrum-lgv9 --type local pairings) that caused duplicate
+	// delivery: one nudge landed in both the originating daemon's bot
+	// and every peer daemon's bot.
+	//
+	// Empty OriginDaemon is treated as local: test fixtures and legacy
+	// callers that construct events without passing through WriteEvent
+	// do not set it, and they expect the broadcast to fire. h.state is
+	// always non-nil in production (constructor contract) — no nil guard
+	// because every other method on this handler deferences it unguarded
+	// (HandleSend, HandleGet, etc.). A nil-state test path would panic
+	// here the same way it panics on HandleSend, which is the intended
+	// early failure.
+	if evt.OriginDaemon != "" && evt.OriginDaemon != h.state.DaemonID() {
+		return
+	}
+	bc := h.loadBroadcaster()
+	if bc == nil {
+		return
+	}
+	ts := evt.Timestamp
+	if ts == "" {
+		ts = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	preview := evt.Body.Content
+	if len(preview) > 100 {
+		preview = preview[:100]
+	}
+	msgInfo := &subscriptions.MessageInfo{
+		MessageID: evt.MessageID,
+		ThreadID:  evt.ThreadID,
+		AgentID:   evt.AgentID,
+		SessionID: evt.SessionID,
+		Scopes:    evt.Scopes,
+		Refs:      evt.Refs,
+		Timestamp: ts,
+		Preview:   preview,
+	}
+	bc.BroadcastAll(buildWSNotification(msgInfo))
 }
 
 // NewMessageHandler creates a new message handler.
@@ -283,12 +380,17 @@ func NewMessageHandler(state *state.State) *MessageHandler {
 
 // NewMessageHandlerWithDispatcher creates a new message handler with a custom dispatcher.
 // The dispatcher should have the client notifier configured for push notifications.
-func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptions.Dispatcher, thrumDir string) *MessageHandler {
+// SupervisorID / supervisorLegacy are the canonical and pre-upgrade forms of the
+// virtual supervisor ID; both are consulted by isSupervisorRecipient on the
+// reply receiver path. Empty strings are safe (degrade to never-match).
+func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptions.Dispatcher, thrumDir, supervisorID, supervisorLegacy string) *MessageHandler {
 	return &MessageHandler{
-		state:         state,
-		dispatcher:    dispatcher,
-		groupResolver: groups.NewResolver(state.DB()),
-		thrumDir:      thrumDir,
+		state:            state,
+		dispatcher:       dispatcher,
+		groupResolver:    groups.NewResolver(state.DB()),
+		thrumDir:         thrumDir,
+		supervisorID:     supervisorID,
+		supervisorLegacy: supervisorLegacy,
 	}
 }
 
@@ -319,10 +421,15 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	messageID := identity.GenerateMessageID()
 
 	// Resolve current agent and session
-	callerID, sessionID, err := h.resolveAgentAndSession(req.CallerAgentID)
+	callerID, sessionID, err := h.resolveAgentAndSession(ctx, req.CallerAgentID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve agent and session: %w", err)
 	}
+
+	// thrum-7nuj: advance last_seen_at for the caller so the
+	// send.recipient-stale hint doesn't false-positive on actively
+	// coordinating agents. Debounced in the state layer.
+	_ = h.state.TouchAgentLastSeen(ctx, callerID)
 
 	// Handle impersonation (users can impersonate agents)
 	agentID := callerID
@@ -572,30 +679,19 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	// Find matching subscriptions and push notifications to connected clients
 	_, _ = h.dispatcher.DispatchForMessage(ctx, msgInfo)
 
-	// Nudge tmux-managed recipients asynchronously
-	if h.thrumDir != "" {
-		senderName := agentID
+	// thrum-wvpv: tmux nudge dispatch moved into the SetOnEventWrite hook
+	// (cmd/thrum/main.go) so the same code path covers BOTH local writes
+	// (this handler) and synced writes (peer sync, cross-repo bridge).
+	// The hook receives the persisted event payload, including the
+	// recipients list, and calls nudge.DispatchTmux. Removing the inline
+	// block here prevents double-nudging on the local path.
 
-		for _, recipientName := range recipients {
-			go func(name string) {
-				target := resolveNudgeTarget(h.thrumDir, name)
-				if target == "" {
-					return
-				}
-				session, _, _ := ttmux.ParseTarget(target)
-				if !ttmux.HasSession(session) {
-					return
-				}
-				_ = ttmux.Nudge(target, senderName)
-			}(recipientName)
-		}
-	}
-
-	// Broadcast to ALL connected WebSocket clients so the browser UI live feed
-	// receives events even though it never registers a subscription row in the DB.
-	if h.wsBroadcaster != nil {
-		h.wsBroadcaster.BroadcastAll(buildWSNotification(msgInfo))
-	}
+	// thrum-48kt.1: WebSocket notification.message broadcast MOVED into
+	// the SetOnEventWrite hook so writers that bypass HandleSend
+	// (permission.SendSupervisorMessage, peer-synced events) also trigger
+	// OutboundRelay → Telegram forwarding. Keeping it inline here would
+	// double-fire on the HandleSend path. Hook location:
+	// cmd/thrum/main.go SetOnEventWrite closure → messageHandler.NotifyMessageCreate.
 
 	// Emit thread.updated event for real-time updates
 	if threadID != "" {
@@ -721,7 +817,17 @@ func (h *MessageHandler) HandleGet(ctx context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("iterate refs: %w", err)
 	}
 
-	msg.Audiences = extractAudiences(msg.Refs, msg.Scopes)
+	mentionValues := make([]string, 0, len(msg.Refs))
+	for _, ref := range msg.Refs {
+		if ref.Type == "mention" {
+			mentionValues = append(mentionValues, ref.Value)
+		}
+	}
+	knownAgents, err := h.resolveKnownAgents(ctx, mentionValues)
+	if err != nil {
+		return nil, fmt.Errorf("resolve known agents: %w", err)
+	}
+	msg.Audiences = extractAudiences(msg.Refs, msg.Scopes, knownAgents)
 	recipients, err := h.loadRecipientsForMessages(ctx, []string{req.MessageID})
 	if err != nil {
 		return nil, fmt.Errorf("query message recipients: %w", err)
@@ -771,12 +877,23 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	h.state.RLock()
 	defer h.state.RUnlock()
 
-	// Resolve current agent ID once — used for exclude_self, is_read, and unread count.
-	// Use resolveAgentOnly (not resolveAgentAndSession) so the unread count works
-	// even when the caller has no active session (e.g., thrum prime on startup).
-	var currentAgentID string
-	if req.ExcludeSelf || req.Unread || req.UnreadForAgent != "" {
-		currentAgentID = h.resolveAgentOnly(req.CallerAgentID)
+	// Resolve current agent ID once — used for exclude_self, is_read,
+	// unread count, AND thrum-7nuj last_seen touch. Resolve
+	// unconditionally so bare message.list (UI full-inbox view, or
+	// `thrum inbox` without flags) still signals liveness; the state
+	// layer debounces so the extra resolve work is not amplified into
+	// DB churn.
+	//
+	// resolveAgentOnly returns "" on failure, which naturally skips the
+	// touch for anonymous callers — no extra gate needed.
+	currentAgentID := h.resolveAgentOnly(ctx, req.CallerAgentID)
+
+	// Safe with the RLock held — TouchAgentLastSeen acquires touchMu
+	// (independent of state.mu) and writes directly via the DB()
+	// accessor. If a future refactor grows touchAgentLastSeenAt to
+	// acquire state.mu, revisit this call site.
+	if currentAgentID != "" {
+		_ = h.state.TouchAgentLastSeen(ctx, currentAgentID)
 	}
 
 	// Determine which identity to use for the is_read correlated subquery.
@@ -871,7 +988,7 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	// Unread filter: explicit UnreadForAgent takes priority, falls back to config when Unread=true
 	unreadAgentID := req.UnreadForAgent
 	if unreadAgentID == "" && req.Unread {
-		agentID, _, resolveErr := h.resolveAgentAndSession(req.CallerAgentID)
+		agentID, _, resolveErr := h.resolveAgentAndSession(ctx, req.CallerAgentID)
 		if resolveErr == nil {
 			unreadAgentID = agentID
 		}
@@ -1104,7 +1221,7 @@ func (h *MessageHandler) HandleOutbox(ctx context.Context, params json.RawMessag
 		page = 1
 	}
 
-	authorID := h.resolveAgentOnly(req.CallerAgentID)
+	authorID := h.resolveAgentOnly(ctx, req.CallerAgentID)
 	if authorID == "" {
 		return nil, fmt.Errorf("caller_agent_id is required")
 	}
@@ -1256,6 +1373,18 @@ func (h *MessageHandler) HandleOutbox(ctx context.Context, params json.RawMessag
 }
 
 // HandleDelete handles the message.delete RPC method.
+//
+// Author enforcement (sec.4): the caller's peercred-resolved identity MUST
+// match the message author. The check mirrors HandleEdit and is the last
+// layer in the trust stack:
+//   - sec.3 dispatcher rejects anonymous callers before we get here
+//   - sec.3 resolveAgentAndSession rejects forged caller_agent_id claims
+//   - sec.4 (this function) verifies the resolved caller actually authored
+//     the message being deleted
+//
+// Before sec.4 this function performed NO identity check at all — any
+// caller could soft-delete any message by ID. See the 2026-04-14 codex
+// review item #2.
 func (h *MessageHandler) HandleDelete(ctx context.Context, params json.RawMessage) (any, error) {
 	var req DeleteMessageRequest
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -1267,11 +1396,21 @@ func (h *MessageHandler) HandleDelete(ctx context.Context, params json.RawMessag
 		return nil, fmt.Errorf("message_id is required")
 	}
 
-	// Verify message exists and is not already deleted
+	// Resolve caller identity (this is where sec.3's peercred verification
+	// takes effect — forged caller_agent_id is rejected in the resolver).
+	agentID, _, err := h.resolveAgentAndSession(ctx, req.CallerAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve agent and session: %w", err)
+	}
+
+	// Verify message exists, is not already deleted, and author matches.
+	// The query mirrors HandleEdit's pattern at line ~1342 — one read that
+	// pulls everything the guard needs.
 	h.state.RLock()
+	var authorAgentID string
 	var deleted int
-	query := `SELECT deleted FROM messages WHERE message_id = ?`
-	err := h.state.DB().QueryRowContext(ctx, query, req.MessageID).Scan(&deleted)
+	query := `SELECT agent_id, deleted FROM messages WHERE message_id = ?`
+	err = h.state.DB().QueryRowContext(ctx, query, req.MessageID).Scan(&authorAgentID, &deleted)
 	h.state.RUnlock()
 
 	if err == sql.ErrNoRows {
@@ -1283,6 +1422,12 @@ func (h *MessageHandler) HandleDelete(ctx context.Context, params json.RawMessag
 
 	if deleted == 1 {
 		return nil, fmt.Errorf("message already deleted: %s", req.MessageID)
+	}
+
+	// Author guard — mirrors HandleEdit's phrasing so error messages are
+	// consistent across the two write paths.
+	if authorAgentID != agentID {
+		return nil, fmt.Errorf("only message author can delete (author: %s, current: %s)", authorAgentID, agentID)
 	}
 
 	// Prepare timestamp
@@ -1328,7 +1473,7 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 	}
 
 	// Get current agent and session
-	agentID, sessionID, err := h.resolveAgentAndSession(req.CallerAgentID)
+	agentID, sessionID, err := h.resolveAgentAndSession(ctx, req.CallerAgentID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve agent and session: %w", err)
 	}
@@ -1471,8 +1616,8 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 	_, _ = h.dispatcher.DispatchForMessage(ctx, msgInfo)
 
 	// Broadcast to all connected WebSocket clients for browser UI live feed.
-	if h.wsBroadcaster != nil {
-		h.wsBroadcaster.BroadcastAll(buildWSNotification(msgInfo))
+	if bc := h.loadBroadcaster(); bc != nil {
+		bc.BroadcastAll(buildWSNotification(msgInfo))
 	}
 
 	// Count edits for version number (count includes the edit we just applied)
@@ -1629,7 +1774,55 @@ func (h *MessageHandler) queryAgentsByRecipient(ctx context.Context, recipient s
 		}
 		agentIDs = append(agentIDs, agentID)
 	}
-	return agentIDs, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Fallback: the virtual supervisor pseudo-agent has no row in the
+	// agents table (it never registers a session, by design). Without
+	// this fallback the regular send path rejects replies addressed to
+	// the permission supervisor with "unknown recipient", which breaks
+	// the reply-interceptor chain end-to-end (supervisors can't reply
+	// `y`/`n` to a nudge).
+	//
+	// Kept targeted: pure in-memory string compare against the two
+	// supervisor IDs (canonical + legacy). No I/O, no directory walk,
+	// no identity-file read.
+	if len(agentIDs) == 0 && recipient != "" && isSupervisorRecipient(h, recipient) {
+		agentIDs = []string{recipient}
+	}
+	return agentIDs, nil
+}
+
+// isSupervisorRecipient reports whether the given recipient string
+// matches this daemon's canonical or legacy supervisor agent ID.
+// Used by queryAgentsByRecipient to accept reply targets for the
+// virtual supervisor pseudo-agent (never registered in the agents
+// table or written as an identity file).
+//
+// Debug-logs the branch that matched, or — if recipient has the
+// supervisor_ prefix but matches neither — logs the miss for
+// cross-repo-misrouting diagnostics.
+//
+// Empty supervisorLegacy cannot match empty recipient because the
+// call site guards on recipient != "".
+func isSupervisorRecipient(h *MessageHandler, recipient string) bool {
+	if recipient == "" {
+		return false
+	}
+	if recipient == h.supervisorID {
+		log.Printf("[message] supervisor recipient matched canonical: %s", recipient)
+		return true
+	}
+	if h.supervisorLegacy != "" && recipient == h.supervisorLegacy {
+		log.Printf("[message] supervisor recipient matched legacy: %s (canonical=%s)", recipient, h.supervisorID)
+		return true
+	}
+	if strings.HasPrefix(recipient, "supervisor_") {
+		log.Printf("[message] supervisor-prefixed recipient did not match (canonical=%s legacy=%s recipient=%s)",
+			h.supervisorID, h.supervisorLegacy, recipient)
+	}
+	return false
 }
 
 // queryAgentByID checks if an agent with the exact agent_id exists.
@@ -1677,12 +1870,27 @@ func buildDeliveredRecipients(agentIDs []string, deliveredAt string) []MessageRe
 	return recipients
 }
 
-func extractAudiences(refs []types.Ref, scopes []types.Scope) []MessageAudience {
+// extractAudiences rebuilds the audience list for a persisted message from its
+// refs and scopes. The ref table stores all mentions as ref_type="mention", but
+// send-time recorded whether the target was an exact agent_id (Type="agent")
+// or a role/name mention (Type="mention") — that distinction lives in the
+// agents table, which the caller supplies via knownAgents. A ref.value that
+// matches an agent_id produces Type="agent"; otherwise it stays "mention".
+//
+// thrum-qb62 Bug 1: passing a nil knownAgents preserves the pre-fix behavior
+// (all mentions reported as Type="mention"). Callers that can cheaply reach
+// the agents table should populate the map so the CLI/UI display matches the
+// send-time audience type.
+func extractAudiences(refs []types.Ref, scopes []types.Scope, knownAgents map[string]struct{}) []MessageAudience {
 	audiences := make([]MessageAudience, 0, len(refs)+len(scopes))
 	for _, ref := range refs {
 		switch ref.Type {
 		case "mention":
-			audiences = append(audiences, MessageAudience{Type: "mention", Value: ref.Value})
+			audType := "mention"
+			if _, ok := knownAgents[ref.Value]; ok {
+				audType = "agent"
+			}
+			audiences = append(audiences, MessageAudience{Type: audType, Value: ref.Value})
 		case "group":
 			audiences = append(audiences, MessageAudience{Type: "group", Value: ref.Value})
 		}
@@ -1696,6 +1904,47 @@ func extractAudiences(refs []types.Ref, scopes []types.Scope) []MessageAudience 
 		audiences = append(audiences, MessageAudience{Type: "broadcast", Value: "everyone"})
 	}
 	return dedupeAudiences(audiences)
+}
+
+// resolveKnownAgents returns the subset of the given names that exist in the
+// agents table. Used by audience-building paths to distinguish direct agent
+// mentions from role/name mentions.
+func (h *MessageHandler) resolveKnownAgents(ctx context.Context, names []string) (map[string]struct{}, error) {
+	out := make(map[string]struct{}, len(names))
+	if len(names) == 0 {
+		return out, nil
+	}
+	// De-dup input so the IN() list stays small on messages that repeat a mention.
+	uniq := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		if n == "" {
+			continue
+		}
+		uniq[n] = struct{}{}
+	}
+	if len(uniq) == 0 {
+		return out, nil
+	}
+	placeholders := make([]string, 0, len(uniq))
+	args := make([]any, 0, len(uniq))
+	for n := range uniq {
+		placeholders = append(placeholders, "?")
+		args = append(args, n)
+	}
+	query := `SELECT agent_id FROM agents WHERE agent_id IN (` + strings.Join(placeholders, ",") + `)`
+	rows, err := h.state.DB().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = struct{}{}
+	}
+	return out, rows.Err()
 }
 
 func normalizeAudienceTarget(target string) string {
@@ -1767,7 +2016,17 @@ func (h *MessageHandler) loadMessageAudiences(ctx context.Context, messageID str
 	}
 	_ = scopeRows.Close()
 
-	return extractAudiences(refs, scopes), nil
+	mentionValues := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		if ref.Type == "mention" {
+			mentionValues = append(mentionValues, ref.Value)
+		}
+	}
+	knownAgents, err := h.resolveKnownAgents(ctx, mentionValues)
+	if err != nil {
+		return nil, err
+	}
+	return extractAudiences(refs, scopes, knownAgents), nil
 }
 
 func (h *MessageHandler) loadRecipientsForMessages(ctx context.Context, messageIDs []string) (map[string][]MessageRecipientState, error) {
@@ -1812,13 +2071,57 @@ func (h *MessageHandler) loadRecipientsForMessages(ctx context.Context, messageI
 	return result, rows.Err()
 }
 
+// loadDaemonGuardConfig reads the identity_guard config block from the
+// daemon's repo. Re-read per-call to pick up operator-side mode changes
+// without a daemon restart; Phase 5 Task 5.1 will layer in daemon-level
+// overrides and cache.
+func loadDaemonGuardConfig(repoPath string) guard.Config {
+	return guard.LoadConfigFromDir(repoPath)
+}
+
 // resolveAgentAndSession returns the current agent ID and session ID.
-func (h *MessageHandler) resolveAgentAndSession(callerAgentID string) (agentID string, sessionID string, err error) {
-	if callerAgentID != "" {
-		agentID = callerAgentID
-	} else {
-		// Fallback: load identity from daemon's config (single-worktree backward compat)
-		log.Printf("WARNING: CallerAgentID not provided in message RPC, falling back to daemon repo path: %s (CLI should resolve identity)", h.state.RepoPath())
+// ResolveAgentAndSession resolves the caller's agent and active session.
+//
+// Identity sources, in priority order:
+//  1. peercred.FromContext(ctx) — kernel-verified identity injected by the
+//     unix-socket accept loop. This is the trusted source of truth.
+//  2. callerAgentID (legacy client-asserted path) — used only when peercred
+//     never ran (tests, early boot) or on non-unix transports.
+//
+// Forgery rule: when peercred HAS resolved a trusted identity AND the caller
+// also asserts a mismatched callerAgentID, return an error. Silent acceptance
+// would defeat the entire purpose of kernel-verified identity.
+//
+// Anonymous rule: when peercred ran and returned anonymous, AND this function
+// is called (i.e. a mutating handler), return an error. Mutating handlers
+// must never be called by anonymous callers because the dispatcher would
+// have rejected them via the read-only allowlist first — if we reach this
+// point with an anonymous ctx, something is wrong.
+func (h *MessageHandler) resolveAgentAndSession(ctx context.Context, callerAgentID string) (agentID string, sessionID string, err error) {
+	resolved, peercredRan := peercred.FromContext(ctx)
+	req := guard.DaemonResolveRequest{
+		CallerAgentID: callerAgentID,
+		PeercredRan:   peercredRan,
+	}
+	if resolved != nil {
+		req.PeercredAgentID = resolved.AgentID
+		req.PeercredWorktree = resolved.Worktree
+	}
+	connPID, _ := peercred.ConnectingPIDFromContext(ctx)
+	req.ConnectingPID = connPID
+	req.IdentitiesDir = identitiesDirFor(h.state.RepoPath())
+	req.IsAgentInWorktree = h.sharedWorktreeChecker()
+	caller, resolveErr := guard.DaemonResolve(ctx, loadDaemonGuardConfig(h.state.RepoPath()), req, slog.Default())
+	if resolveErr != nil {
+		return "", "", resolveErr
+	}
+	agentID = caller.AgentID
+	if agentID == "" {
+		// Warn/off G3 fall-through: the guard let an empty claim pass
+		// (explicit opt-out or migration window). Fall back to deriving
+		// the agent ID from the daemon's own config so the RPC can
+		// still complete — strict mode errored earlier in DaemonResolve,
+		// so only opted-out deployments reach this path.
 		cfg, loadErr := config.LoadWithPath(h.state.RepoPath(), "", "")
 		if loadErr != nil {
 			return "", "", fmt.Errorf("load config: %w", loadErr)
@@ -1835,9 +2138,7 @@ func (h *MessageHandler) resolveAgentAndSession(callerAgentID string) (agentID s
 	          ORDER BY started_at DESC
 	          LIMIT 1`
 
-	// Use context.Background() since this is called from methods that already have ctx
-	// but this function doesn't have ctx parameter. We'll need to add ctx parameter.
-	err = h.state.DB().QueryRowContext(context.Background(), query, agentID).Scan(&sessionID)
+	err = h.state.DB().QueryRowContext(ctx, query, agentID).Scan(&sessionID)
 	if err == sql.ErrNoRows {
 		return "", "", fmt.Errorf("no active session found for agent %s (you must start a session first)", agentID)
 	}
@@ -1848,19 +2149,59 @@ func (h *MessageHandler) resolveAgentAndSession(callerAgentID string) (agentID s
 	return agentID, sessionID, nil
 }
 
-// resolveAgentOnly resolves the caller's agent ID without requiring an active session.
-// Used by HandleList for unread count and is_read computation where only the agent
-// identity matters, not the session.
-func (h *MessageHandler) resolveAgentOnly(callerAgentID string) string {
-	if callerAgentID != "" {
-		return callerAgentID
+// resolveAgentOnly resolves the caller's agent ID without requiring an active
+// session.  Used by HandleList for unread count and is_read computation where
+// only the agent identity matters, not the session.
+//
+// Unlike resolveAgentAndSession this helper is called from read-only handlers
+// and returns an empty string on anonymous/unknown identity (caller treats
+// empty as "no filter" and returns unfiltered results). DaemonResolve errors
+// are absorbed into empty-string fallthrough — read-only handlers never fail
+// the RPC on identity concerns; they simply drop the per-caller filter.
+func (h *MessageHandler) resolveAgentOnly(ctx context.Context, callerAgentID string) string {
+	resolved, peercredRan := peercred.FromContext(ctx)
+	req := guard.DaemonResolveRequest{
+		CallerAgentID: callerAgentID,
+		PeercredRan:   peercredRan,
 	}
-	// Fallback: load identity from daemon's config
-	cfg, err := config.LoadWithPath(h.state.RepoPath(), "", "")
+	if resolved != nil {
+		req.PeercredAgentID = resolved.AgentID
+		req.PeercredWorktree = resolved.Worktree
+	}
+	connPID, _ := peercred.ConnectingPIDFromContext(ctx)
+	req.ConnectingPID = connPID
+	req.IdentitiesDir = identitiesDirFor(h.state.RepoPath())
+	req.IsAgentInWorktree = h.sharedWorktreeChecker()
+	caller, err := guard.DaemonResolve(ctx, loadDaemonGuardConfig(h.state.RepoPath()), req, slog.Default())
 	if err != nil {
 		return ""
 	}
-	return identity.GenerateAgentID(h.state.RepoID(), cfg.Agent.Role, cfg.Agent.Module, cfg.Agent.Name)
+	return caller.AgentID
+}
+
+// sharedWorktreeChecker returns a closure that DaemonResolve uses to
+// disambiguate a shared-worktree identity mismatch (thrum-0pos). It
+// reports whether the given agent_id has an active session mapping
+// it to the given worktree path. Kept as a per-handler method so the
+// closure binds to the handler's state snapshot — the checker is
+// called inside guard.DaemonResolve where the state.State isn't
+// available directly.
+func (h *MessageHandler) sharedWorktreeChecker() func(string, string) bool {
+	st := h.state
+	if st == nil {
+		return nil
+	}
+	return func(agentID, worktree string) bool {
+		return st.IsAgentInWorktree(context.Background(), agentID, worktree)
+	}
+}
+
+// identitiesDirFor returns the absolute identities-directory path a
+// repo resolves to. Centralized so every DaemonResolve call site
+// computes it the same way — the chain walk enumerates files under
+// this dir.
+func identitiesDirFor(repoPath string) string {
+	return filepath.Join(repoPath, ".thrum", "identities")
 }
 
 // validateImpersonation validates that the caller is authorized to impersonate the target identity.
@@ -1908,10 +2249,14 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 	}
 
 	// Get current agent and session
-	agentID, sessionID, err := h.resolveAgentAndSession(req.CallerAgentID)
+	agentID, sessionID, err := h.resolveAgentAndSession(ctx, req.CallerAgentID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve agent and session: %w", err)
 	}
+
+	// thrum-7nuj: advance last_seen_at — mark-read is a liveness signal
+	// for the reader.
+	_ = h.state.TouchAgentLastSeen(ctx, agentID)
 
 	// Prepare timestamp
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -2028,9 +2373,15 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 }
 
 // emitThreadUpdated emits a thread.updated event for real-time WebSocket notifications.
-func (h *MessageHandler) emitThreadUpdated(_ context.Context, threadID string) error {
+//
+// The ctx passed in MUST carry peercred.FromContext (when running over unix
+// socket) so that the helper resolves to the calling agent's identity for
+// unread-count accounting. When called outside a request context (e.g. from
+// background reconcile jobs), ctx will lack peercred info and resolveAgentAndSession
+// falls back to the config-based path — same as pre-sec.3 behavior.
+func (h *MessageHandler) emitThreadUpdated(ctx context.Context, threadID string) error {
 	// Get current agent and session for unread count
-	agentID, _, err := h.resolveAgentAndSession("")
+	agentID, _, err := h.resolveAgentAndSession(ctx, "")
 	if err != nil {
 		// If we can't resolve agent/session, just skip emitting (best-effort)
 		return nil
@@ -2338,7 +2689,26 @@ type DeleteByScopeResponse struct {
 
 // HandleDeleteByScope handles the message.deleteByScope RPC method.
 // Hard deletes all messages that have a matching scope (type+value).
+//
+// Sec.8: This is a destructive bulk operation (cascading hard-DELETE across
+// 5+ FK tables). It is restricted to daemon-internal callers only — when
+// the call arrives over a unix-socket connection (where peercred identity
+// resolution has been injected into ctx by sec.3's dispatcher), it is
+// rejected unconditionally. This means no external CLI user or agent can
+// invoke deleteByScope from outside the daemon process.
+//
+// The daemon itself calls HandleDeleteByScope via direct handler invocation
+// from internal cleanup jobs (e.g. purge, scope cleanup). Those paths
+// construct their own context without peercred injection, so the check
+// allows them through.
 func (h *MessageHandler) HandleDeleteByScope(ctx context.Context, params json.RawMessage) (any, error) {
+	// sec.8: restrict to daemon-internal callers. Any ctx that carries
+	// peercred identity (resolved or anonymous) came from the unix-socket
+	// accept loop — reject it.
+	if _, peercredRan := peercred.FromContext(ctx); peercredRan {
+		return nil, fmt.Errorf("message.deleteByScope is restricted to daemon-internal callers; external clients cannot invoke bulk hard-deletes")
+	}
+
 	var req DeleteByScopeRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -2405,7 +2775,8 @@ func (h *MessageHandler) HandleDeleteByScope(ctx context.Context, params json.Ra
 
 // DeleteByAgentRequest represents the request for message.deleteByAgent RPC.
 type DeleteByAgentRequest struct {
-	AgentID string `json:"agent_id"`
+	AgentID       string `json:"agent_id"`
+	CallerAgentID string `json:"caller_agent_id,omitempty"` // sec.8: resolved caller must match target
 }
 
 // DeleteByAgentResponse represents the response from message.deleteByAgent RPC.
@@ -2415,6 +2786,11 @@ type DeleteByAgentResponse struct {
 
 // HandleDeleteByAgent handles the message.deleteByAgent RPC method.
 // Hard deletes all messages where agent_id matches the given agent.
+//
+// Sec.8: Agents can only bulk-delete their OWN messages. The resolved
+// caller identity (via sec.3 peercred or legacy CallerAgentID) must match
+// the target agent_id. This prevents one agent from hard-deleting another
+// agent's entire message history.
 func (h *MessageHandler) HandleDeleteByAgent(ctx context.Context, params json.RawMessage) (any, error) {
 	var req DeleteByAgentRequest
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -2423,6 +2799,15 @@ func (h *MessageHandler) HandleDeleteByAgent(ctx context.Context, params json.Ra
 
 	if req.AgentID == "" {
 		return nil, fmt.Errorf("agent_id is required")
+	}
+
+	// sec.8: resolve caller and enforce self-only deletion.
+	callerID := h.resolveAgentOnly(ctx, req.CallerAgentID)
+	if callerID == "" {
+		return nil, fmt.Errorf("cannot resolve caller identity for deleteByAgent")
+	}
+	if callerID != req.AgentID {
+		return nil, fmt.Errorf("only the target agent can bulk-delete their own messages (caller: %s, target: %s)", callerID, req.AgentID)
 	}
 
 	h.state.Lock()
@@ -2520,36 +2905,14 @@ func buildWSNotification(msg *subscriptions.MessageInfo) map[string]any {
 	}
 }
 
-// resolveNudgeTarget reads the identity file for an agent and returns the tmux target
-// if the agent is in a tmux session. Returns empty string otherwise.
+// resolveNudgeTarget reads the identity file for an agent and returns the
+// tmux target if the agent is in a tmux session. Returns empty string
+// otherwise.
+//
+// thrum-wvpv: this is now a thin wrapper around the nudge package, which
+// owns the canonical implementation. Kept here as a wrapper because tmux.go
+// (HandleCheckPane) and existing message_test.go tests still reference it
+// by this name. New callers should use nudge.ResolveTarget directly.
 func resolveNudgeTarget(thrumDir, agentName string) string {
-	// Check main repo identity dir first
-	if target := readTmuxFromIdentity(filepath.Join(thrumDir, "identities"), agentName); target != "" {
-		return target
-	}
-
-	// Check all worktree identity dirs
-	repoDir := filepath.Dir(thrumDir)
-	for _, wtPath := range safecmd.WorktreePaths(context.Background(), repoDir) {
-		if wtPath == repoDir {
-			continue // already checked
-		}
-		idDir := filepath.Join(wtPath, ".thrum", "identities")
-		if target := readTmuxFromIdentity(idDir, agentName); target != "" {
-			return target
-		}
-	}
-	return ""
-}
-
-func readTmuxFromIdentity(identitiesDir, agentName string) string {
-	data, err := os.ReadFile(filepath.Join(identitiesDir, agentName+".json")) // #nosec G304 -- path is .thrum/identities/<name>.json
-	if err != nil {
-		return ""
-	}
-	var idFile config.IdentityFile
-	if err := json.Unmarshal(data, &idFile); err != nil {
-		return ""
-	}
-	return idFile.TmuxSession
+	return nudge.ResolveTarget(thrumDir, agentName)
 }

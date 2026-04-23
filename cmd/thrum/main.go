@@ -3,12 +3,16 @@ package main
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"log"
+	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,12 +32,20 @@ import (
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
+	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
+	"github.com/leonletto/thrum/internal/daemon/inbox"
 	"github.com/leonletto/thrum/internal/daemon/monitor"
+	"github.com/leonletto/thrum/internal/daemon/nudge"
+	"github.com/leonletto/thrum/internal/daemon/permission"
+	"github.com/leonletto/thrum/internal/daemon/reconcile"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
+	"github.com/leonletto/thrum/internal/identity/guard"
+	"github.com/leonletto/thrum/internal/netdetect"
 	"github.com/leonletto/thrum/internal/paths"
+	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/restart"
 	"github.com/leonletto/thrum/internal/runtime"
 	"github.com/leonletto/thrum/internal/subscriptions"
@@ -43,6 +55,7 @@ import (
 	"github.com/leonletto/thrum/internal/types"
 	"github.com/leonletto/thrum/internal/web"
 	"github.com/leonletto/thrum/internal/websocket"
+	"github.com/leonletto/thrum/internal/worktree"
 	"github.com/spf13/cobra"
 )
 
@@ -63,13 +76,28 @@ var (
 )
 
 func main() {
+	rootCmd := buildRootCmd()
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// buildRootCmd assembles the full cobra command tree and returns the
+// root. Extracted from main() so tests (command_categories_test.go)
+// can walk the tree and enforce the guard-category taxonomy.
+func buildRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "thrum",
 		Short: "Git-backed agent messaging",
 		Long: `Thrum is a Git-backed messaging system for agent coordination.
 
 It enables agents and humans to communicate persistently across
-sessions, worktrees, and machines using Git as the sync layer.`,
+sessions, worktrees, and machines using Git as the sync layer.
+
+Environment variables:
+  THRUM_NO_HINTS=1   Suppress all CLI hints (both stderr trailers and JSON
+                     'hints' field). Useful in CI or scripted pipelines.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
@@ -91,6 +119,12 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	// Resolve flagRepo to the nearest parent containing .thrum/ (git-style traversal).
 	// Skip for "init" which creates .thrum/ and doesn't need it to exist.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		// Install slog bridge FIRST so any code running during repo
+		// resolution (worktree lookups, identity refresh) already has the
+		// correct stderr/JSON routing — in --json mode slog.Warn records
+		// accumulate into the hint buffer instead of corrupting stdout.
+		installSlogBridge(flagJSON, os.Stderr)
+
 		if !cmd.Flags().Changed("repo") {
 			flagRepo = paths.EffectiveRepoPath(flagRepo)
 		}
@@ -121,6 +155,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(whoamiCmd())
 	rootCmd.AddCommand(versionCmd())
 	rootCmd.AddCommand(waitCmd())
+	rootCmd.AddCommand(cronCmd())
 
 	// Composite commands
 	rootCmd.AddCommand(primeCmd())
@@ -160,10 +195,37 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(restartCmd())
 	rootCmd.AddCommand(worktreeCmd())
 
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+	// Apply guard-category annotations to every leaf command under
+	// rootCmd. See command_categories.go for the per-path mapping +
+	// categorization rationale; command_categories_test.go walks this
+	// same tree in-test and fails if any leaf is missing a category.
+	tagGuardCategories(rootCmd)
+
+	return rootCmd
+}
+
+// installSlogBridge wires slog.Default based on whether the current command
+// is running in --json mode. In JSON mode, records route through the
+// cli.SlogHintHandler into the pushed-hints buffer so EmitJSON can graft
+// them into the response body — stdout stays pure JSON. In human mode we
+// install a plain text handler writing to stderr so users running
+// `thrum ... 2> log.txt` still see warnings as before.
+//
+// Contract: called once per CLI invocation from rootCmd.PersistentPreRunE,
+// before any code that may emit slog records. The CLI is short-lived and
+// process-global slog.Default mutation is intentional. Tests that exercise
+// the cobra command tree multiple times in one process MUST save and
+// restore slog.Default themselves to avoid bleeding the bridge handler
+// into unrelated test cases — see main_sloghint_integration_test.go for
+// the pattern.
+func installSlogBridge(jsonMode bool, stderr io.Writer) {
+	if jsonMode {
+		slog.SetDefault(slog.New(cli.NewSlogHintHandler()))
+		return
 	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	})))
 }
 
 // Placeholder commands - will be implemented in subsequent tasks
@@ -200,7 +262,27 @@ Examples:
 
 			// Validate runtime flag if specified
 			if runtimeFlag != "" && !runtime.IsValidRuntime(runtimeFlag) {
-				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, opencode, auggie, cli-only, all", runtimeFlag)
+				return fmt.Errorf("unknown runtime %q; supported: %s", runtimeFlag, strings.Join(runtime.SupportedRuntimes(), ", "))
+			}
+
+			// Identity Guard G2: refuse `thrum init` from a non-git
+			// directory unless --force is set. This closes the footgun
+			// where `init` silently materialized .thrum/ under $HOME
+			// with nonsense supervisor slugs. We only fire the check in
+			// full-init mode (skipped for --skills-only, which does not
+			// create .thrum/).
+			if !skillsOnly {
+				initDir := flagRepo
+				if initDir == "" {
+					initDir = "."
+				}
+				resolvedDir, err := filepath.Abs(initDir)
+				if err != nil {
+					resolvedDir = initDir
+				}
+				if err := guard.G2(loadInitBootstrapMode(resolvedDir), resolvedDir, force, nil); err != nil {
+					return err
+				}
 			}
 
 			// Skills-only mode: install thrum skill without full init
@@ -330,8 +412,21 @@ Examples:
 					}
 				}
 				if cfg.Orchestration.MergeTarget == "" {
+					// Detect the repo's current branch rather than
+					// hardcoding "main". Agents need to merge back into
+					// the branch active work is happening on — in this
+					// repo that's thrum-dev, but for generic users it's
+					// whatever the repo's default is. Falls back to
+					// "main" only when detection fails (bare repo,
+					// detached HEAD, etc.).
+					mergeTarget := "main"
+					if out, err := safecmd.Git(cmd.Context(), flagRepo, "symbolic-ref", "--short", "HEAD"); err == nil {
+						if branch := strings.TrimSpace(string(out)); branch != "" && branch != "HEAD" {
+							mergeTarget = branch
+						}
+					}
 					cfg.Orchestration = config.OrchestrationConfig{
-						MergeTarget:     "main",
+						MergeTarget:     mergeTarget,
 						DefaultAutonomy: "end_only",
 					}
 				}
@@ -389,8 +484,9 @@ Examples:
 				}
 
 				if flagJSON {
-					output, _ := json.MarshalIndent(result, "", "  ")
-					fmt.Println(string(output))
+					if err := cli.EmitJSON(result); err != nil {
+						return err
+					}
 				} else if !flagQuiet {
 					fmt.Print(cli.FormatRuntimeInit(result))
 				}
@@ -407,7 +503,7 @@ Examples:
 
 			// Start daemon if not already running
 			if _, err := getClient(); err != nil {
-				if startErr := cli.DaemonStart(flagRepo, false); startErr != nil && !strings.Contains(startErr.Error(), "already running") {
+				if startErr := cli.DaemonStart(flagRepo, false, false); startErr != nil && !strings.Contains(startErr.Error(), "already running") {
 					fmt.Fprintf(os.Stderr, "Warning: could not auto-start daemon: %v\n", startErr)
 					fmt.Println("Start manually: thrum daemon start")
 				} else if !flagQuiet {
@@ -422,6 +518,22 @@ Examples:
 			}
 
 			fmt.Println("\nDone. Run 'thrum quickstart --name <name> --role <role> --module <module>' to register an agent.")
+
+			// Post-action hint: tip the operator to register via quickstart
+			// when this machine has no identity yet. Runs only on the
+			// full-init success path (the worktree-redirect branch at
+			// main.go line ~285 returns earlier by design — spec §4 point 6).
+			// Skip in dry-run: nothing actually got initialized.
+			if !dryRun && !alreadyInitialized {
+				state := cli.NewFSOnlyStateAccessor()
+				postCtx := cli.HintCtx{
+					Command: "init",
+					Flags:   map[string]any{"repo": flagRepo},
+					Post:    true,
+					State:   state,
+				}
+				cli.EmitStderr(cli.Collect(postCtx), flagQuiet, flagJSON)
+			}
 
 			return nil
 		},
@@ -512,12 +624,11 @@ func runSkillsInstall(repoPath, runtimeFlag string, force, dryRun bool) error {
 	}
 
 	if flagJSON {
-		output, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(output))
-	} else if !flagQuiet {
+		return cli.EmitJSON(result)
+	}
+	if !flagQuiet {
 		fmt.Print(cli.FormatSkillsInstall(result))
 	}
-
 	return nil
 }
 
@@ -611,12 +722,9 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatConfigShow(result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatConfigShow(result))
 			return nil
 		},
 	}
@@ -755,15 +863,31 @@ The daemon must be running and you must have an active session.`,
 			}
 			defer func() { _ = client.Close() }()
 
+			// Hint pipeline: pre-action collection only. Send has no
+			// post-action hints in the pilot; recipient-stale is info
+			// severity so HandlePreAction never blocks — but collecting
+			// through the gate keeps the wiring symmetric with tmux.create.
+			state := cli.NewLiveStateAccessor(client)
+			preCtx := cli.HintCtx{
+				Command: "send",
+				Flags:   map[string]any{"to": to},
+				Post:    false,
+				State:   state,
+			}
+			preHints := cli.Collect(preCtx)
+			if abortErr := cli.HandlePreAction(preHints, false); abortErr != nil {
+				return cli.EmitAbort(abortErr, flagQuiet, flagJSON)
+			}
+
 			result, err := cli.Send(client, opts)
 			if err != nil {
 				return err
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
+				if err := cli.EmitJSONWithHints(result, preHints); err != nil {
+					return err
+				}
 			} else if !flagQuiet {
 				// Human-readable output
 				fmt.Printf("✓ Message sent: %s\n", result.MessageID)
@@ -788,6 +912,7 @@ The daemon must be running and you must have an active session.`,
 				for _, w := range result.Warnings {
 					fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 				}
+				cli.EmitStderr(preHints, flagQuiet, flagJSON)
 			}
 
 			return nil
@@ -845,12 +970,11 @@ to inspect a message with full recipient state.`,
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else if !flagQuiet {
+				return cli.EmitJSON(result)
+			}
+			if !flagQuiet {
 				fmt.Print(cli.FormatOutbox(result))
 			}
-
 			return nil
 		},
 	}
@@ -928,20 +1052,26 @@ The daemon must be running and you must have an active session.`,
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
+				if err := cli.EmitJSON(result); err != nil {
+					return err
+				}
 			} else {
 				// Human-readable formatted output with filter context
 				fmtOpts := cli.InboxFormatOptions{
 					ActiveScope: scope,
 					ForAgent:    opts.ForAgent,
+					Unread:      unread,
 					Quiet:       flagQuiet,
 					JSON:        flagJSON,
 				}
 				fmt.Print(cli.FormatInboxWithOptions(result, fmtOpts))
-				if !flagQuiet {
-					fmt.Print(cli.Hint("inbox", flagQuiet, flagJSON))
+				// Suppress hint for --unread + empty (silent polling).
+				if !flagQuiet && (!unread || len(result.Messages) != 0) {
+					hintGroup := "inbox"
+					if unread && len(result.Messages) > 0 {
+						hintGroup = "inbox.unread"
+					}
+					fmt.Print(cli.LegacyHint(hintGroup, flagQuiet, flagJSON))
 				}
 			}
 
@@ -978,30 +1108,131 @@ func versionCmd() *cobra.Command {
 		Long:  `Display version information including version number, build hash, repository URL, and documentation URL.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if flagJSON {
-				// JSON output
-				output := map[string]string{
+				return cli.EmitJSON(map[string]string{
 					"version":     Version,
 					"build":       Build,
 					"go_version":  goruntime.Version(),
 					"repo_url":    "https://github.com/leonletto/thrum",
 					"website_url": "https://leonletto.github.io/thrum",
-				}
-				data, err := json.MarshalIndent(output, "", "  ")
-				if err != nil {
-					return err
-				}
-				fmt.Println(string(data))
-			} else {
-				// Human-readable output with OSC 8 hyperlinks
-				// Format: ESC ] 8 ; ; URL ESC \ TEXT ESC ] 8 ; ; ESC \
-				fmt.Printf("thrum v%s (build: %s, %s)\n", Version, Build, goruntime.Version())
-				fmt.Printf("\x1b]8;;https://github.com/leonletto/thrum\x07https://github.com/leonletto/thrum\x1b]8;;\x07\n")
-				fmt.Printf("\x1b]8;;https://leonletto.github.io/thrum\x07https://leonletto.github.io/thrum\x1b]8;;\x07\n")
+				})
 			}
+			// Human-readable output with OSC 8 hyperlinks
+			// Format: ESC ] 8 ; ; URL ESC \ TEXT ESC ] 8 ; ; ESC \
+			fmt.Printf("thrum v%s (build: %s, %s)\n", Version, Build, goruntime.Version())
+			fmt.Printf("\x1b]8;;https://github.com/leonletto/thrum\x07https://github.com/leonletto/thrum\x1b]8;;\x07\n")
+			fmt.Printf("\x1b]8;;https://leonletto.github.io/thrum\x07https://leonletto.github.io/thrum\x1b]8;;\x07\n")
 			return nil
 		},
 	}
 	return cmd
+}
+
+// cronCmd is the root of the `thrum cron` subtree. Currently houses
+// only install-inbox-poll. Subcommands here emit runtime-specific
+// scheduling instructions for the calling agent to execute — they do
+// not schedule anything directly; the daemon has no cron primitive.
+func cronCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "cron",
+		Short: "Manage cron-style scheduled tasks (runtime-specific emitters)",
+	}
+	cmd.AddCommand(cronInstallInboxPollCmd())
+	return cmd
+}
+
+// cronInstallInboxPollCmd emits an instruction block that the
+// SessionStart hook forwards to Claude Code, which reads it and calls
+// CronCreate to schedule the 15-minute inbox-check poll. The command
+// itself prints to stdout and exits — it does NOT call the daemon,
+// touch identity, or invoke any runtime API directly. That's why it's
+// classified as bypass.
+func cronInstallInboxPollCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "install-inbox-poll",
+		Short: "Emit a CronCreate instruction to schedule the 15-minute inbox-check poll",
+		Long: `Prints an instruction block for the running runtime agent to schedule
+the 15-minute inbox-check cron. Emitted to stdout; the SessionStart hook
+forwards it into the agent's context, where the runtime acts on it.
+
+This command is print-only. It does NOT call the daemon, touch identity
+state, or invoke any runtime scheduling API directly.`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			_, err := fmt.Fprintln(cmd.OutOrStdout(), inboxPollCronInstruction)
+			return err
+		},
+	}
+}
+
+// inboxPollCronInstruction is the instruction block consumed by
+// Claude Code's SessionStart hook → context-injection pipeline.
+// The format intentionally mirrors other hook-output instructions:
+// a delimited banner, explicit kv lines, and a closing banner so
+// the runtime can parse it unambiguously.
+const inboxPollCronInstruction = `===== SCHEDULE CRON (hook-inbox-delivery) =====
+Please call CronCreate with the following parameters:
+  cron: "7,22,37,52 * * * *"
+  prompt: "Background inbox check. Run ` + "`thrum inbox --unread`" + ` once. If messages are present, process them; if not, return to idle without further action."
+  recurring: true
+  durable: false
+===============================================`
+
+// printAgentSummaryField emits the bare value of a single field from
+// AgentSummary, newline-terminated. Unknown fields return an error so
+// scripts fail loudly rather than silently consuming the empty string.
+func printAgentSummaryField(w io.Writer, s *cli.AgentSummary, field string) error {
+	value, ok := agentSummaryField(s, field)
+	if !ok {
+		return fmt.Errorf("unknown field %q (known: agent_id, role, module, display, branch, worktree, intent, repo_id, session_id, session_start, identity_file, updated_at, source, status, host, pid, tmux_session, tmux_alive)", field)
+	}
+	_, err := fmt.Fprintln(w, value)
+	return err
+}
+
+// agentSummaryField returns the stringified value of a named field on
+// AgentSummary, plus a boolean ok flag. Booleans render as "true"/"false".
+// Zero integers render as "0". Empty strings render as the empty string
+// (the newline from Fprintln is still emitted so callers can | xargs etc.).
+func agentSummaryField(s *cli.AgentSummary, field string) (string, bool) {
+	switch field {
+	case "agent_id":
+		return s.AgentID, true
+	case "role":
+		return s.Role, true
+	case "module":
+		return s.Module, true
+	case "display":
+		return s.Display, true
+	case "branch":
+		return s.Branch, true
+	case "worktree":
+		return s.Worktree, true
+	case "intent":
+		return s.Intent, true
+	case "repo_id":
+		return s.RepoID, true
+	case "session_id":
+		return s.SessionID, true
+	case "session_start":
+		return s.SessionStart, true
+	case "identity_file":
+		return s.IdentityFile, true
+	case "updated_at":
+		return s.UpdatedAt, true
+	case "source":
+		return s.Source, true
+	case "status":
+		return s.Status, true
+	case "host":
+		return s.Host, true
+	case "pid":
+		return strconv.Itoa(s.PID), true
+	case "tmux_session":
+		return s.TmuxSession, true
+	case "tmux_alive":
+		return strconv.FormatBool(s.TmuxAlive), true
+	default:
+		return "", false
+	}
 }
 
 // runWhoami is the shared implementation for both top-level `thrum whoami`
@@ -1032,16 +1263,14 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 
 	summary := cli.BuildAgentSummary(identityFile, identityPath, daemonInfo)
 
-	if flagJSON {
-		output, err := json.MarshalIndent(summary, "", "  ")
-		if err != nil {
-			return fmt.Errorf("marshal JSON output: %w", err)
-		}
-		fmt.Println(string(output))
-	} else {
-		fmt.Print(cli.FormatAgentSummary(summary))
+	if field, _ := cmd.Flags().GetString("field"); field != "" {
+		return printAgentSummaryField(cmd.OutOrStdout(), summary, field)
 	}
 
+	if flagJSON {
+		return cli.EmitJSON(summary)
+	}
+	fmt.Print(cli.FormatAgentSummary(summary))
 	return nil
 }
 
@@ -1060,6 +1289,8 @@ Examples:
   THRUM_NAME=alice thrum whoami`,
 		RunE: runWhoami,
 	}
+
+	cmd.Flags().String("field", "", "Print a single field's value (e.g. agent_id, tmux_alive) and exit")
 
 	return cmd
 }
@@ -1182,16 +1413,14 @@ Exit codes:
 			}
 
 			if flagJSON {
-				out := map[string]string{
+				return cli.EmitJSON(map[string]string{
 					"status": "received",
 					"action": "ACTION REQUIRED: You have unread messages. Run `thrum inbox --unread` now to read and respond to them.",
-				}
-				output, _ := json.MarshalIndent(out, "", "  ")
-				fmt.Println(string(output))
-			} else if !flagQuiet {
+				})
+			}
+			if !flagQuiet {
 				fmt.Println("MESSAGES_RECEIVED")
 			}
-
 			return nil
 		},
 	}
@@ -1207,6 +1436,7 @@ Exit codes:
 
 func daemonCmd() *cobra.Command {
 	var flagLocal bool
+	var flagForce bool
 
 	cmd := &cobra.Command{
 		Use:   "daemon",
@@ -1215,12 +1445,14 @@ func daemonCmd() *cobra.Command {
 
 	cmd.PersistentFlags().BoolVar(&flagLocal, "local", false,
 		"Local-only mode: skip git push/fetch in sync loop")
+	cmd.PersistentFlags().BoolVar(&flagForce, "force", false,
+		"Proceed even when the repo directory is not git-anchored (G2 override)")
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "start",
 		Short: "Start the daemon in the background",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := cli.DaemonStart(flagRepo, flagLocal); err != nil {
+			if err := cli.DaemonStart(flagRepo, flagLocal, flagForce); err != nil {
 				return err
 			}
 
@@ -1264,9 +1496,9 @@ func daemonCmd() *cobra.Command {
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
+				if err := cli.EmitJSON(result); err != nil {
+					return err
+				}
 			} else {
 				// Human-readable formatted output
 				fmt.Print(cli.FormatDaemonStatus(result))
@@ -1286,7 +1518,7 @@ func daemonCmd() *cobra.Command {
 		Use:   "restart",
 		Short: "Restart the daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := cli.DaemonRestart(flagRepo, flagLocal); err != nil {
+			if err := cli.DaemonRestart(flagRepo, flagLocal, flagForce); err != nil {
 				return err
 			}
 
@@ -1302,7 +1534,7 @@ func daemonCmd() *cobra.Command {
 		},
 	})
 
-	cmd.AddCommand(daemonRunCmd(&flagLocal))
+	cmd.AddCommand(daemonRunCmd(&flagLocal, &flagForce))
 	cmd.AddCommand(daemonLogsCmd())
 	// Old tsync/peers commands removed — replaced by top-level "thrum peer" commands
 
@@ -1347,13 +1579,13 @@ they are written. Use --since to filter by timestamp (e.g. "1h", "7d",
 	return cmd
 }
 
-func daemonRunCmd(flagLocal *bool) *cobra.Command {
+func daemonRunCmd(flagLocal *bool, flagForce *bool) *cobra.Command {
 	return &cobra.Command{
 		Use:    "run",
 		Short:  "Run the daemon in the foreground (internal use)",
 		Hidden: true, // Hidden from help - used internally by daemon start
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDaemon(flagRepo, *flagLocal)
+			return runDaemon(flagRepo, *flagLocal, *flagForce)
 		},
 	}
 }
@@ -1366,33 +1598,38 @@ func peerCmd() *cobra.Command {
 	}
 
 	// thrum peer add — start pairing on this machine
-	cmd.AddCommand(&cobra.Command{
+	var addType, addAddress string
+	addCmd := &cobra.Command{
 		Use:   "add",
 		Short: "Start pairing and wait for a peer to connect",
-		Long: `Starts a pairing session and displays a 4-digit code.
-Share this code with the person running 'thrum peer join' on the other machine.
-Blocks until a peer connects or the session times out (5 minutes).`,
+		Long: `Starts a pairing session and displays a peercode.
+Share this code with the person running 'thrum peer join' on the other side.
+Blocks until a peer connects or the session times out (5 minutes).
+
+--type is required. Run 'thrum peer add' with no flags to see the full
+list of transports and a one-line "when to use" for each.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Ensure auth key is available — prompt if missing
-			var pairingParams *cli.PeerStartPairingParams
-			authKey := os.Getenv("THRUM_TS_AUTHKEY")
-			if authKey == "" {
-				fmt.Print("Enter Tailscale auth key: ")
-				if _, err := fmt.Scanln(&authKey); err != nil {
-					return fmt.Errorf("failed to read auth key: %w", err)
+			peerType, parseErr := cli.ParsePeerType(addType)
+			if parseErr != nil {
+				if errors.Is(parseErr, cli.ErrPeerTypeMissing) {
+					//nolint:staticcheck // ST1005: multi-line user-facing CLI hint; formatting is intentional
+					return errors.New(cli.MissingTypeMessage)
 				}
-				authKey = strings.TrimSpace(authKey)
-				if authKey == "" {
-					return fmt.Errorf("auth key is required for Tailscale sync")
+				return parseErr
+			}
+			if peerType == cli.PeerTypeRepair {
+				//nolint:staticcheck // ST1005: multi-line user-facing CLI hint; formatting is intentional
+				return errors.New("--type repair is not valid for 'peer add'.\n" +
+					"Use 'thrum peer join --type repair <peer-name>' to reconcile an existing peer.")
+			}
+			if peerType == cli.PeerTypeNetwork {
+				trimmed := strings.TrimSpace(addAddress)
+				if trimmed == "" {
+					return errors.New("--type network requires --address <ip>")
 				}
-				// Save to .thrum/.env for persistence
-				if flagRepo != "" {
-					thrumDir := filepath.Join(flagRepo, ".thrum")
-					if err := config.SaveAuthKeyToEnvFile(thrumDir, authKey); err != nil {
-						fmt.Fprintf(os.Stderr, "Warning: could not save auth key to .env: %v\n", err)
-					}
+				if net.ParseIP(trimmed) == nil {
+					return fmt.Errorf("--type network --address %q: not a valid IP address", trimmed)
 				}
-				pairingParams = &cli.PeerStartPairingParams{AuthKey: authKey}
 			}
 
 			client, err := getClient()
@@ -1400,6 +1637,39 @@ Blocks until a peer connects or the session times out (5 minutes).`,
 				return fmt.Errorf("failed to connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
+
+			// For tailscale: ensure auth key is available unless the daemon
+			// already has a healthy tsnet node (xir.26 fix). Other transports
+			// never need an auth key.
+			pairingParams := &cli.PeerStartPairingParams{
+				Type:    string(peerType),
+				Address: strings.TrimSpace(addAddress),
+			}
+			if peerType == cli.PeerTypeTailscale {
+				authKey := os.Getenv("THRUM_TS_AUTHKEY")
+				var health cli.HealthResult
+				var healthPtr *cli.HealthResult
+				if hErr := client.Call("health", map[string]any{}, &health); hErr == nil {
+					healthPtr = &health
+				}
+				if cli.AuthKeyPromptNeeded(authKey, healthPtr) {
+					fmt.Print("Enter Tailscale auth key: ")
+					if _, scanErr := fmt.Scanln(&authKey); scanErr != nil {
+						return fmt.Errorf("failed to read auth key: %w", scanErr)
+					}
+					authKey = strings.TrimSpace(authKey)
+					if authKey == "" {
+						return errors.New("auth key is required for --type tailscale")
+					}
+					if flagRepo != "" {
+						thrumDir := filepath.Join(flagRepo, ".thrum")
+						if saveErr := config.SaveAuthKeyToEnvFile(thrumDir, authKey); saveErr != nil {
+							fmt.Fprintf(os.Stderr, "Warning: could not save auth key to .env: %v\n", saveErr)
+						}
+					}
+					pairingParams.AuthKey = authKey
+				}
+			}
 
 			result, err := cli.PeerStartPairing(client, pairingParams)
 			if err != nil {
@@ -1409,8 +1679,12 @@ Blocks until a peer connects or the session times out (5 minutes).`,
 			localHostname, _ := os.Hostname()
 			if result.Address != "" {
 				connStr := daemon.FormatPeercode(localHostname, result.Address, result.Code)
-				fmt.Printf("Waiting for connection...\nPairing code: %s\n\n", connStr)
-				fmt.Printf("Share this with the other machine:\n  thrum peer join --peercode %s\n\n", connStr)
+				transportTag := result.Transport
+				if transportTag == "" {
+					transportTag = string(peerType)
+				}
+				fmt.Printf("Waiting for connection...\nPairing code (transport=%s): %s\n\n", transportTag, connStr)
+				fmt.Printf("Share this with the other side:\n  thrum peer join --type %s --peercode %s\n\n", peerType, connStr)
 			} else {
 				fmt.Printf("Waiting for connection... Pairing code: %s\n", result.Code)
 			}
@@ -1425,67 +1699,49 @@ Blocks until a peer connects or the session times out (5 minutes).`,
 				fmt.Println("\nTo enable message routing for an agent on this peer:")
 				fmt.Println("  thrum peer configure <peer-name> add-agent <agent-name>")
 			} else {
-				fmt.Println("Pairing timed out. Run 'thrum peer add' again.")
+				fmt.Println("Pairing timed out. Run 'thrum peer add --type <transport>' again.")
 			}
 
 			return nil
 		},
-	})
+	}
+	addCmd.Flags().StringVar(&addType, "type", "", "Transport: tailscale | local | network (REQUIRED)")
+	addCmd.Flags().StringVar(&addAddress, "address", "", "LAN IP for --type network (must be assigned to a local NIC)")
+	cmd.AddCommand(addCmd)
 
-	// thrum peer join --peercode — connect to a remote peer using a connection string
+	// thrum peer join — connect to a remote peer using a peercode (or
+	// reconcile an existing peer entry via --type repair).
 	var peerCode string
 	var repoPath string
+	var joinType string
+	var joinPeerName string
+	var joinAddress string
 	joinCmd := &cobra.Command{
 		Use:   "join [peercode]",
-		Short: "Join a remote peer using a peercode",
+		Short: "Join a remote peer (or repair an existing one)",
 		Long: `Connects to a remote peer using the peercode from 'thrum peer add'.
 
-Five input methods:
-  thrum peer join name:ip:port:code              (positional argument)
-  thrum peer join --peercode name:ip:port:code   (flag)
-  echo "name:ip:port:code" | thrum peer join     (pipe, no flag)
-  thrum peer join --peercode -                   (pipe via stdin flag)
-  thrum peer join                                 (interactive prompt)`,
+--type is required. Run 'thrum peer join' with no flags to see the full
+list of transports and a one-line "when to use" for each.
+
+Peercode input methods (for --type tailscale|local|network):
+  thrum peer join --type T name:ip:port:code              (positional argument)
+  thrum peer join --type T --peercode name:ip:port:code   (flag)
+  echo "name:ip:port:code" | thrum peer join --type T     (pipe, no flag)
+  thrum peer join --type T --peercode -                   (pipe via stdin flag)
+  thrum peer join --type T                                 (interactive prompt)
+
+--type repair requires <peer-name> (positional or --peer-name) — uses
+stored secrets in peers.json to re-handshake without minting a new token.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Resolve peercode: flag > positional arg > stdin > prompt
-			code := peerCode
-			// Treat "--peercode -" as "read from stdin" (Unix convention)
-			if code == "-" {
-				code = ""
-			}
-			if code == "" && len(args) > 0 {
-				code = strings.TrimSpace(args[0])
-			}
-			if code == "" {
-				stat, _ := os.Stdin.Stat()
-				if (stat.Mode() & os.ModeCharDevice) == 0 {
-					scanner := bufio.NewScanner(os.Stdin)
-					if scanner.Scan() {
-						code = strings.TrimSpace(scanner.Text())
-					}
+			peerType, parseErr := cli.ParsePeerType(joinType)
+			if parseErr != nil {
+				if errors.Is(parseErr, cli.ErrPeerTypeMissing) {
+					//nolint:staticcheck // ST1005: multi-line user-facing CLI hint; formatting is intentional
+					return errors.New(cli.MissingTypeMessage)
 				}
-			}
-			if code == "" {
-				fmt.Print("Enter peercode: ")
-				var input string
-				if _, err := fmt.Scanln(&input); err != nil {
-					return fmt.Errorf("failed to read peercode: %w", err)
-				}
-				code = strings.TrimSpace(input)
-			}
-
-			name, ip, port, pairCode, err := daemon.ParseConnectionString(code)
-			if err != nil {
-				return err
-			}
-			_ = name // used by ParseConnectionString output only
-
-			address := fmt.Sprintf("%s:%d", ip, port)
-
-			// Warn if connecting via loopback without --repo-path
-			if repoPath == "" && daemon.DetectTransport(address) == "local" {
-				fmt.Fprintf(os.Stderr, "warning: connecting to loopback address; consider using --repo-path for local peers\n")
+				return parseErr
 			}
 
 			client, err := getClient()
@@ -1494,12 +1750,82 @@ Five input methods:
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.PeerJoin(client, address, pairCode, repoPath)
+			params := &cli.PeerJoinParams{Type: string(peerType)}
+
+			switch peerType {
+			case cli.PeerTypeRepair:
+				name := strings.TrimSpace(joinPeerName)
+				if name == "" && len(args) > 0 {
+					name = strings.TrimSpace(args[0])
+				}
+				if name == "" {
+					return errors.New("--type repair requires a peer name (positional arg or --peer-name)")
+				}
+				params.PeerName = name
+
+			default: // tailscale, local, network — peercode-based
+				code := peerCode
+				if code == "-" {
+					code = ""
+				}
+				if code == "" && len(args) > 0 {
+					code = strings.TrimSpace(args[0])
+				}
+				if code == "" {
+					stat, _ := os.Stdin.Stat()
+					if (stat.Mode() & os.ModeCharDevice) == 0 {
+						scanner := bufio.NewScanner(os.Stdin)
+						if scanner.Scan() {
+							code = strings.TrimSpace(scanner.Text())
+						}
+					}
+				}
+				if code == "" {
+					fmt.Print("Enter peercode: ")
+					var input string
+					if _, scanErr := fmt.Scanln(&input); scanErr != nil {
+						return fmt.Errorf("failed to read peercode: %w", scanErr)
+					}
+					code = strings.TrimSpace(input)
+				}
+
+				_, ip, port, pairCode, parseErr := daemon.ParseConnectionString(code)
+				if parseErr != nil {
+					return parseErr
+				}
+				params.Address = fmt.Sprintf("%s:%d", ip, port)
+				params.Code = pairCode
+				params.RepoPath = repoPath
+				params.LocalAddress = strings.TrimSpace(joinAddress)
+
+				if peerType == cli.PeerTypeLocal && daemon.DetectTransport(params.Address) != "local" {
+					fmt.Fprintf(os.Stderr,
+						"warning: --type local but peercode address %s is not loopback; "+
+							"the peer add side likely emitted a non-local peercode\n", params.Address)
+				}
+				if peerType == cli.PeerTypeNetwork {
+					if daemon.DetectTransport(params.Address) == "local" {
+						fmt.Fprintf(os.Stderr,
+							"warning: --type network but peercode address %s is loopback; "+
+								"did you mean --type local?\n", params.Address)
+					}
+					if params.LocalAddress == "" {
+						return errors.New("--type network requires --address <ip> on this side too " +
+							"(the LAN IP this daemon should bind for sync reach-back)")
+					}
+				}
+			}
+
+			result, err := cli.PeerJoin(client, params)
 			if err != nil {
 				return err
 			}
 
 			if result.Status == "paired" {
+				name := result.PeerName
+				if name == "" {
+					name = "<peer>"
+				}
 				fmt.Printf("Paired with %q. Syncing started.\n", name)
 				fmt.Println("\nTo enable message routing for an agent on this peer:")
 				fmt.Println("  thrum peer configure <peer-name> add-agent <agent-name>")
@@ -1510,8 +1836,11 @@ Five input methods:
 			return nil
 		},
 	}
-	joinCmd.Flags().StringVar(&peerCode, "peercode", "", "Connection string from 'thrum peer add'")
-	joinCmd.Flags().StringVar(&repoPath, "repo-path", "", "Filesystem path to the peer's repo (sets transport=local)")
+	joinCmd.Flags().StringVar(&joinType, "type", "", "Transport: tailscale | local | network | repair (REQUIRED)")
+	joinCmd.Flags().StringVar(&peerCode, "peercode", "", "Connection string from 'thrum peer add' (peercode-based types)")
+	joinCmd.Flags().StringVar(&repoPath, "repo-path", "", "Filesystem path to the peer's repo (legacy hint; --type local preferred)")
+	joinCmd.Flags().StringVar(&joinPeerName, "peer-name", "", "Existing peer name for --type repair")
+	joinCmd.Flags().StringVar(&joinAddress, "address", "", "LAN IP for --type network (this daemon's reach-back address)")
 	cmd.AddCommand(joinCmd)
 
 	// thrum peer list — show all peers
@@ -1531,12 +1860,9 @@ Five input methods:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(peers, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatPeerList(peers))
+				return cli.EmitJSON(peers)
 			}
-
+			fmt.Print(cli.FormatPeerList(peers))
 			return nil
 		},
 	})
@@ -1579,12 +1905,9 @@ Five input methods:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(peers, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatPeerStatus(peers))
+				return cli.EmitJSON(peers)
 			}
-
+			fmt.Print(cli.FormatPeerStatus(peers))
 			return nil
 		},
 	})
@@ -1729,7 +2052,11 @@ The command and its arguments must be separated from monitor flags with '--':
 				}
 				defer func() { _ = client.Close() }()
 				if flagJSON {
-					return cli.MonitorListJSON(client, includeAll, os.Stdout)
+					jobs, err := cli.MonitorListJSON(client, includeAll)
+					if err != nil {
+						return err
+					}
+					return cli.EmitJSON(jobs)
 				}
 				return cli.MonitorList(client, includeAll, os.Stdout)
 			},
@@ -1751,7 +2078,11 @@ The command and its arguments must be separated from monitor flags with '--':
 			}
 			defer func() { _ = client.Close() }()
 			if flagJSON {
-				return cli.MonitorShowJSON(client, args[0], os.Stdout)
+				job, err := cli.MonitorShowJSON(client, args[0])
+				if err != nil {
+					return err
+				}
+				return cli.EmitJSON(job)
 			}
 			return cli.MonitorShow(client, args[0], os.Stdout)
 		},
@@ -1891,6 +2222,10 @@ The agent identity is determined from:
 						fmt.Sprintf("%s_%s.json", flagRole, flagModule))
 					_ = os.Remove(legacyFile)
 				}
+				wtPath, err := worktree.NormalizeWorktreePath(flagRepo)
+				if err != nil {
+					return fmt.Errorf("normalize worktree path: %w", err)
+				}
 				identity := &config.IdentityFile{
 					Version: 3,
 					RepoID:  cli.GetRepoID(flagRepo),
@@ -1901,7 +2236,7 @@ The agent identity is determined from:
 						Module:  flagModule,
 						Display: cli.AutoDisplay(flagRole, flagModule),
 					},
-					Worktree: cli.GetWorktreeName(flagRepo),
+					Worktree: wtPath,
 					Branch:   cli.GetCurrentBranch(flagRepo),
 					Intent:   cli.DefaultIntent(flagRole, cli.GetRepoName(flagRepo)),
 				}
@@ -1918,14 +2253,14 @@ The agent identity is determined from:
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
+				if err := cli.EmitJSON(result); err != nil {
+					return err
+				}
 			} else {
 				// Human-readable formatted output
 				fmt.Print(cli.FormatRegisterResponse(result))
 				if result.Status == "registered" || result.Status == "updated" {
-					fmt.Print(cli.Hint("agent.register", flagQuiet, flagJSON))
+					fmt.Print(cli.LegacyHint("agent.register", flagQuiet, flagJSON))
 				}
 			}
 
@@ -1968,12 +2303,9 @@ Use --context to show work context (branch, commits, intent) for each agent.`,
 				}
 
 				if flagJSON {
-					output, _ := json.MarshalIndent(result, "", "  ")
-					fmt.Println(string(output))
-				} else {
-					fmt.Print(cli.FormatContextList(result))
+					return cli.EmitJSON(result)
 				}
-
+				fmt.Print(cli.FormatContextList(result))
 				return nil
 			}
 
@@ -2001,23 +2333,17 @@ Use --context to show work context (branch, commits, intent) for each agent.`,
 			}
 
 			if flagJSON {
-				// Output as JSON (combine both if contexts available)
+				var body any = result
 				if contexts != nil {
-					combined := map[string]any{
+					body = map[string]any{
 						"agents":   result,
 						"contexts": contexts,
 					}
-					output, _ := json.MarshalIndent(combined, "", "  ")
-					fmt.Println(string(output))
-				} else {
-					output, _ := json.MarshalIndent(result, "", "  ")
-					fmt.Println(string(output))
 				}
-			} else {
-				// Human-readable formatted output with enhanced info
-				fmt.Print(cli.FormatAgentListWithContext(result, contexts))
+				return cli.EmitJSON(body)
 			}
-
+			// Human-readable formatted output with enhanced info
+			fmt.Print(cli.FormatAgentListWithContext(result, contexts))
 			return nil
 		},
 	}
@@ -2026,7 +2352,7 @@ Use --context to show work context (branch, commits, intent) for each agent.`,
 	listCmd.Flags().Bool("context", false, "Show work context (branch, commits, intent)")
 	cmd.AddCommand(listCmd)
 
-	cmd.AddCommand(&cobra.Command{
+	agentWhoamiCmd := &cobra.Command{
 		Use:   "whoami",
 		Short: "Show current agent identity",
 		Long: `Show the current agent identity and active session.
@@ -2036,7 +2362,9 @@ Identity is resolved from:
 2. Environment variables (THRUM_ROLE, THRUM_MODULE, THRUM_NAME)
 3. Identity files in .thrum/identities/ directory`,
 		RunE: runWhoami,
-	})
+	}
+	agentWhoamiCmd.Flags().String("field", "", "Print a single field's value (e.g. agent_id, tmux_alive) and exit")
+	cmd.AddCommand(agentWhoamiCmd)
 
 	deleteCmd := &cobra.Command{
 		Use:   "delete <name>",
@@ -2080,12 +2408,9 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatAgentDelete(result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatAgentDelete(result))
 			return nil
 		},
 	}
@@ -2134,9 +2459,7 @@ Examples:
 
 			// Handle JSON output
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-				return nil
+				return cli.EmitJSON(result)
 			}
 
 			// Display results
@@ -2348,7 +2671,7 @@ func worktreeCreateCmd() *cobra.Command {
 			if err := cli.EnsureWorktreeRedirects(worktreePath, repoPath); err != nil {
 				return fmt.Errorf("redirect setup: %w", err)
 			}
-			fmt.Println("✓ Thrum redirect configured")
+			cli.PrintRedirectConfirmations(os.Stdout, worktreePath)
 
 			// 3. Optional: create tmux session with agent quickstart
 			agentName, _ := cmd.Flags().GetString("name")
@@ -2629,12 +2952,7 @@ func worktreeListJSON(repoPath string) error {
 		}
 	}
 
-	data, err := json.MarshalIndent(worktrees, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal: %w", err)
-	}
-	fmt.Println(string(data))
-	return nil
+	return cli.EmitJSON(worktrees)
 }
 
 func agentSetStatusCmd() *cobra.Command {
@@ -2737,14 +3055,9 @@ func sessionStartRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagJSON {
-		// Output as JSON
-		output, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(output))
-	} else {
-		// Human-readable formatted output
-		fmt.Print(cli.FormatSessionStart(result))
+		return cli.EmitJSON(result)
 	}
-
+	fmt.Print(cli.FormatSessionStart(result))
 	return nil
 }
 
@@ -2788,14 +3101,9 @@ func sessionEndRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagJSON {
-		// Output as JSON
-		output, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(output))
-	} else {
-		// Human-readable formatted output
-		fmt.Print(cli.FormatSessionEnd(result))
+		return cli.EmitJSON(result)
 	}
-
+	fmt.Print(cli.FormatSessionEnd(result))
 	return nil
 }
 
@@ -2834,12 +3142,11 @@ func sessionSetIntentRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagJSON {
-		output, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(output))
-	} else if !flagQuiet {
+		return cli.EmitJSON(result)
+	}
+	if !flagQuiet {
 		fmt.Print(cli.FormatSetIntent(result))
 	}
-
 	return nil
 }
 
@@ -2870,12 +3177,11 @@ func sessionSetTaskRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagJSON {
-		output, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(output))
-	} else if !flagQuiet {
+		return cli.EmitJSON(result)
+	}
+	if !flagQuiet {
 		fmt.Print(cli.FormatSetTask(result))
 	}
-
 	return nil
 }
 
@@ -2942,12 +3248,9 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatSessionList(result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatSessionList(result))
 			return nil
 		},
 	}
@@ -3058,12 +3361,11 @@ Examples:
 			_, _ = cli.MessageMarkRead(client, []string{opts.MessageID}, agentID)
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else if !flagQuiet {
+				return cli.EmitJSON(result)
+			}
+			if !flagQuiet {
 				fmt.Printf("✓ Reply sent: %s\n", result.MessageID)
 			}
-
 			return nil
 		},
 	}
@@ -3106,12 +3408,9 @@ func messageCmd() *cobra.Command {
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatMessageGet(result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatMessageGet(result))
 			return nil
 		},
 	}
@@ -3145,12 +3444,11 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else if !flagQuiet {
+				return cli.EmitJSON(result)
+			}
+			if !flagQuiet {
 				fmt.Print(cli.FormatMessageEdit(result))
 			}
-
 			return nil
 		},
 	}
@@ -3178,18 +3476,21 @@ Examples:
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.MessageDelete(client, args[0])
+			// Pass caller's claimed identity so the daemon's
+			// shared-worktree disambiguation (thrum-0pos) can accept
+			// the claim when peercred picks a co-located sibling.
+			callerID, _ := resolveLocalAgentID()
+			result, err := cli.MessageDelete(client, args[0], callerID)
 			if err != nil {
 				return err
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else if !flagQuiet {
+				return cli.EmitJSON(result)
+			}
+			if !flagQuiet {
 				fmt.Print(cli.FormatMessageDelete(result))
 			}
-
 			return nil
 		},
 	}
@@ -3256,9 +3557,9 @@ Examples:
 
 				remaining := inboxResult.Unread - result.MarkedCount
 				if flagJSON {
-					output, _ := json.MarshalIndent(result, "", "  ")
-					fmt.Println(string(output))
-				} else if !flagQuiet {
+					return cli.EmitJSON(result)
+				}
+				if !flagQuiet {
 					fmt.Print(cli.FormatMarkRead(result))
 					if remaining > 0 {
 						fmt.Printf("  %d unread messages remaining (run again to mark more)\n", remaining)
@@ -3277,12 +3578,11 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else if !flagQuiet {
+				return cli.EmitJSON(result)
+			}
+			if !flagQuiet {
 				fmt.Print(cli.FormatMarkRead(result))
 			}
-
 			return nil
 		},
 	}
@@ -3660,6 +3960,56 @@ Examples:
 	return cmd
 }
 
+// loadInitBootstrapMode returns the NonGitBootstrap guard mode for
+// the init dir, falling back to strict when config is absent or the
+// field is unset. In the non-git-bootstrap scenario the config file
+// typically doesn't exist yet, so the fallback path is the common
+// case.
+func loadInitBootstrapMode(dir string) guard.Mode {
+	m := guard.LoadConfigFromDir(dir).NonGitBootstrap
+	if m == "" {
+		return guard.ModeStrict
+	}
+	return m
+}
+
+// resolvePrimeIdentityPath resolves the on-disk identity file path for
+// the current agent and returns the closest-runtime PID plus the
+// stored AgentPID so the caller can compare before writing. Returns
+// ok=false when the agent has no identity file yet (first-prime) —
+// G5 + WritePID are no-ops in that case.
+func resolvePrimeIdentityPath(agentID string) (repoPath, idPath string, runtimePID, storedPID int, ok bool) {
+	repoPath = paths.EffectiveRepoPath(".")
+	idPath = filepath.Join(repoPath, ".thrum", "identities", agentID+".json")
+	// #nosec G304 -- idPath is derived from the agent's own identity dir.
+	data, err := os.ReadFile(idPath)
+	if err != nil {
+		return repoPath, "", 0, 0, false
+	}
+	var id config.IdentityFile
+	if err := json.Unmarshal(data, &id); err != nil {
+		// Corrupted file — let G5's own load path surface the error.
+		storedPID = 0
+	} else {
+		storedPID = id.AgentPID
+	}
+	ctx := context.Background()
+	rtPID, _, _ := guard.ClosestRuntimeAncestor(ctx, os.Getpid())
+	return repoPath, idPath, rtPID, storedPID, true
+}
+
+// loadPrimeOwnershipMode returns the PrimeOwnership guard mode for
+// repoPath, falling back to strict when config is absent or the field
+// is unset. Guard enforcement defaults on, not off, on malformed
+// config.
+func loadPrimeOwnershipMode(repoPath string) guard.Mode {
+	m := guard.LoadConfigFromDir(repoPath).PrimeOwnership
+	if m == "" {
+		return guard.ModeStrict
+	}
+	return m
+}
+
 func primeCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "prime",
@@ -3693,6 +4043,34 @@ Examples:
 			if err != nil {
 				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
 			}
+
+			// Identity Guard G5 (prime_ownership): refuse if the caller
+			// is not the topmost runtime that owns the identity file.
+			// Dead/absent owners pass through so a first-prime or an
+			// orphaned-agent reclaim can proceed. When the closest
+			// runtime differs from the stored PID and the stored PID is
+			// dead, guard.WritePID refreshes the identity atomically.
+			if repoPath, idPath, runtimePID, storedPID, ok := resolvePrimeIdentityPath(agentID); ok {
+				pc := &guard.PrimeContext{
+					Mode:         loadPrimeOwnershipMode(repoPath),
+					IdentityPath: idPath,
+					ClosestRtPID: runtimePID,
+					IsPIDAlive:   process.IsRunning,
+				}
+				if err := guard.G5(pc); err != nil {
+					return err
+				}
+				// Only write when the stored PID diverged from the
+				// current runtime — unconditional writes on every
+				// prime inflate mtime and risk lock contention with
+				// concurrent agents in the same repo.
+				if runtimePID > 0 && runtimePID != storedPID {
+					if err := guard.WritePID(idPath, runtimePID); err != nil {
+						fmt.Fprintf(os.Stderr, "thrum: prime WritePID failed: %v\n", err)
+					}
+				}
+			}
+
 			result := cli.ContextPrime(client, agentID)
 
 			// Wire SingleAgentMode from config
@@ -3722,8 +4100,9 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
+				if err := cli.EmitJSON(result); err != nil {
+					return err
+				}
 			} else {
 				fmt.Print(cli.FormatPrimeContext(result))
 			}
@@ -3757,11 +4136,9 @@ defaults. Use these commands to list, inspect, and configure runtimes.`,
 			result := cli.RuntimeList()
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatRuntimeList(result))
+				return cli.EmitJSON(result)
 			}
+			fmt.Print(cli.FormatRuntimeList(result))
 			return nil
 		},
 	}
@@ -3778,11 +4155,9 @@ defaults. Use these commands to list, inspect, and configure runtimes.`,
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(preset, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatRuntimeShow(preset))
+				return cli.EmitJSON(preset)
 			}
+			fmt.Print(cli.FormatRuntimeShow(preset))
 			return nil
 		},
 	}
@@ -3950,14 +4325,9 @@ func syncCmd() *cobra.Command {
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				// Human-readable formatted output
-				fmt.Print(cli.FormatSyncStatus(result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatSyncStatus(result))
 			return nil
 		},
 	})
@@ -3981,14 +4351,9 @@ This will fetch new messages from the remote and push local messages.`,
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				// Human-readable formatted output
-				fmt.Print(cli.FormatSyncForce(result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatSyncForce(result))
 			return nil
 		},
 	})
@@ -4021,10 +4386,11 @@ Examples:
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			noInit, _ := cmd.Flags().GetBool("no-init")
 			forceInit, _ := cmd.Flags().GetBool("force")
+			noAgentPID, _ := cmd.Flags().GetBool("no-agent-pid")
 
 			// Validate runtime if specified
 			if runtimeFlag != "" && !runtime.IsValidRuntime(runtimeFlag) {
-				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, opencode, auggie, cli-only", runtimeFlag)
+				return fmt.Errorf("unknown runtime %q; supported: %s", runtimeFlag, strings.Join(runtime.SupportedRuntimes(), ", "))
 			}
 
 			// THRUM_NAME env var sets a default name; explicit --name flag takes precedence.
@@ -4095,6 +4461,7 @@ Examples:
 				DryRun:       dryRun,
 				NoInit:       noInit,
 				Force:        forceInit,
+				NoAgentPID:   noAgentPID,
 			}
 
 			// In dry-run mode, we don't need a daemon connection
@@ -4134,16 +4501,26 @@ Examples:
 
 				thrumDir := filepath.Join(flagRepo, ".thrum")
 
-				// Load the identity file that cli.Quickstart's enrichment block
-				// already wrote — it contains AgentPID, TmuxSession, and other
-				// fields set during enrichment. Building a fresh struct here would
-				// overwrite those fields.
-				// Only use the loaded identity if the agent name matches — a stale
-				// identity from `thrum init` (e.g. implementer_main) must not
-				// prevent creation of the correct identity file.
+				// Prefer an existing identity file when its name matches — the
+				// library's enrichment block (internal/cli/quickstart.go Step 2.5)
+				// only runs when LoadIdentityWithPath succeeds, so on a pre-
+				// existing file it will have populated AgentPID and other
+				// drift-prone fields we don't want to clobber. For first-time
+				// quickstart the load returns "no identity file" and we build
+				// a fresh struct below, then the TmuxSession block further down
+				// backfills the tmux target (thrum-enlw.8 — without that
+				// backfill, findIdentityForSession can't match the session to
+				// this identity and the permission-prompt pipeline is silent).
+				// Name-mismatch case: a stale identity from `thrum init`
+				// (e.g. implementer_main) must not prevent creation of the
+				// correct identity file.
 				idFile, _, loadErr := config.LoadIdentityWithPath(flagRepo)
 				if loadErr != nil || idFile == nil || idFile.Agent.Name != savedName {
 					// Create a new identity file: no existing file, or name mismatch
+					wtPath, wtErr := worktree.NormalizeWorktreePath(flagRepo)
+					if wtErr != nil {
+						return fmt.Errorf("normalize worktree path: %w", wtErr)
+					}
 					idFile = &config.IdentityFile{
 						Version: 4,
 						RepoID:  cli.GetRepoID(flagRepo),
@@ -4154,7 +4531,7 @@ Examples:
 							Module:  flagModule,
 							Display: cli.AutoDisplay(flagRole, flagModule),
 						},
-						Worktree: cli.GetWorktreeName(flagRepo),
+						Worktree: wtPath,
 						Branch:   cli.GetCurrentBranch(flagRepo),
 						Intent:   intent,
 					}
@@ -4178,6 +4555,36 @@ Examples:
 				}
 				if runtimeFlag != "" && idFile.PreferredRuntime != runtimeFlag {
 					idFile.PreferredRuntime = runtimeFlag
+				}
+
+				// Populate TmuxSession from live tmux state when we're running
+				// inside a tmux pane. Mirrors guard.reconcileDrift's contract:
+				// only writes when a target is resolvable, never clears an
+				// existing value. Without this, the FIRST identity-file write
+				// on a fresh quickstart (library enrichment skipped because
+				// the file didn't exist yet) is missing tmux_session entirely,
+				// and findIdentityForSession in daemon/rpc/tmux.go can't match
+				// the session name back to this identity. That silently breaks
+				// permission-prompt detection for the window between quickstart
+				// and the next `thrum` CLI call that would trigger guard.Check
+				// → reconcileDrift (thrum-enlw.8).
+				//
+				// thrum-l9s1: route the resolved target through
+				// worktree.PaneTargetForIdentity so a `thrum quickstart` run
+				// from a coordinator pane (with cwd resolving to a different
+				// worktree) doesn't write the coordinator's pane into the
+				// new agent's identity file. flagRepo is the target identity's
+				// worktree path; the helper compares the caller's pane
+				// session-name against the sanitized basename of flagRepo
+				// and refuses cross-worktree writes silently (no field
+				// changed when it returns "").
+				if ttmux.InTmux() {
+					if target, err := ttmux.PaneTarget(); err == nil {
+						safe := worktree.PaneTargetForIdentity(target, flagRepo, worktree.SafeTmuxOpts{})
+						if safe != "" && idFile.TmuxSession != safe {
+							idFile.TmuxSession = safe
+						}
+					}
 				}
 
 				if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
@@ -4207,15 +4614,12 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatQuickstart(result))
-				if !flagQuiet {
-					fmt.Print(cli.Hint("quickstart", flagQuiet, flagJSON))
-				}
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatQuickstart(result))
+			if !flagQuiet {
+				fmt.Print(cli.LegacyHint("quickstart", flagQuiet, flagJSON))
+			}
 			return nil
 		},
 	}
@@ -4223,11 +4627,18 @@ Examples:
 	cmd.Flags().String("name", "", "Human-readable agent name (optional, defaults to role_hash)")
 	cmd.Flags().String("display", "", "Display name for the agent")
 	cmd.Flags().String("intent", "", "Initial work intent")
-	cmd.Flags().String("runtime", "", "Runtime preset (claude, codex, cursor, gemini, auggie, cli-only)")
+	cmd.Flags().String("runtime", "", "Runtime preset (see 'thrum runtime list')")
 	cmd.Flags().Bool("dry-run", false, "Preview changes without writing files or registering")
 	cmd.Flags().Bool("no-init", false, "Skip runtime config generation, just register agent")
 	cmd.Flags().Bool("force", false, "Overwrite existing runtime config files")
 	cmd.Flags().String("preamble-file", "", "Custom preamble file to compose with default preamble")
+	// --no-agent-pid is intended for `thrum tmux create`'s inline
+	// quickstart. The inline caller is a short-lived subshell whose
+	// PID dies immediately; persisting it breaks `thrum tmux launch`'s
+	// G4 writer-liveness check. Direct shell use is allowed but
+	// unusual — first /thrum:prime from the runtime will reclaim the
+	// PID via guard.WritePID (thrum-x6e8.6).
+	cmd.Flags().Bool("no-agent-pid", false, "Persist agent_pid=0 instead of detecting the runtime ancestor (for inline tmux quickstart; defer PID claim to first /thrum:prime)")
 
 	return cmd
 }
@@ -4264,15 +4675,12 @@ Examples:
 			result.WebSocketPort = cli.ReadWebSocketPort(flagRepo)
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatOverview(result))
-				if !flagQuiet {
-					fmt.Print(cli.Hint("overview", flagQuiet, flagJSON))
-				}
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatOverview(result))
+			if !flagQuiet {
+				fmt.Print(cli.LegacyHint("overview", flagQuiet, flagJSON))
+			}
 			return nil
 		},
 	}
@@ -4290,6 +4698,7 @@ and per-file change details for all agents with active sessions.
 Examples:
   thrum team
   thrum team --all
+  thrum team --system
   thrum team --json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := getClient()
@@ -4299,8 +4708,10 @@ Examples:
 			defer func() { _ = client.Close() }()
 
 			includeAll, _ := cmd.Flags().GetBool("all")
+			includeSystem, _ := cmd.Flags().GetBool("system")
 			req := cli.TeamListRequest{
 				IncludeOffline: includeAll,
+				IncludeSystem:  includeSystem,
 			}
 
 			var result cli.TeamListResponse
@@ -4309,17 +4720,15 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatTeam(&result))
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatTeam(&result))
 			return nil
 		},
 	}
 
 	cmd.Flags().Bool("all", false, "Include offline agents")
+	cmd.Flags().Bool("system", false, "Include reserved pseudo-agents (@supervisor_*, etc.)")
 
 	return cmd
 }
@@ -4352,15 +4761,12 @@ Examples:
 			}
 
 			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatWhoHas(file, result))
-				if !flagQuiet {
-					fmt.Print(cli.Hint("who-has", flagQuiet, flagJSON))
-				}
+				return cli.EmitJSON(result)
 			}
-
+			fmt.Print(cli.FormatWhoHas(file, result))
+			if !flagQuiet {
+				fmt.Print(cli.LegacyHint("who-has", flagQuiet, flagJSON))
+			}
 			return nil
 		},
 	}
@@ -4403,19 +4809,15 @@ Examples:
 			}
 
 			if flagJSON {
-				combined := map[string]any{
+				return cli.EmitJSON(map[string]any{
 					"agents":   agents,
 					"contexts": contexts,
-				}
-				output, _ := json.MarshalIndent(combined, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatPing(name, agents, contexts))
-				if !flagQuiet {
-					fmt.Print(cli.Hint("ping", flagQuiet, flagJSON))
-				}
+				})
 			}
-
+			fmt.Print(cli.FormatPing(name, agents, contexts))
+			if !flagQuiet {
+				fmt.Print(cli.LegacyHint("ping", flagQuiet, flagJSON))
+			}
 			return nil
 		},
 	}
@@ -4490,15 +4892,12 @@ func sessionHeartbeatRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagJSON {
-		output, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(output))
-	} else {
-		fmt.Print(cli.FormatHeartbeat(result))
-		if !flagQuiet {
-			fmt.Print(cli.Hint("session.heartbeat", flagQuiet, flagJSON))
-		}
+		return cli.EmitJSON(result)
 	}
-
+	fmt.Print(cli.FormatHeartbeat(result))
+	if !flagQuiet {
+		fmt.Print(cli.LegacyHint("session.heartbeat", flagQuiet, flagJSON))
+	}
 	return nil
 }
 
@@ -4570,11 +4969,21 @@ func resolveLocalMentionRole() (string, error) {
 }
 
 // runDaemon runs the daemon server in the foreground.
-func runDaemon(repoPath string, flagLocal bool) error {
+func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// Resolve to absolute path
 	absPath, err := filepath.Abs(repoPath)
 	if err != nil {
 		return fmt.Errorf("failed to resolve repo path: %w", err)
+	}
+
+	// Identity Guard G2: refuse to start the daemon from a non-git
+	// directory unless --force is set. Closes the same footgun as
+	// `thrum init` G2 — prevents the daemon from anchoring to an
+	// arbitrary cwd (e.g. $HOME) and materializing a .thrum/ there.
+	// Mode is loaded from the repo's identity_guard.non_git_bootstrap
+	// config; strict is the default when unset.
+	if err := guardDaemonBootstrap(absPath, flagForce, nil); err != nil {
+		return err
 	}
 
 	// Resolve effective .thrum/ directory (follows redirect if in feature worktree)
@@ -4615,6 +5024,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		return fmt.Errorf("failed to create identities directory: %w", err)
 	}
 
+	// Backfill runtime from preferred_runtime for any identity files that
+	// pre-date the runtime field. Idempotent and non-fatal: silently skips
+	// unreadable files, never aborts daemon startup.
+	config.BackfillIdentityRuntime(filepath.Join(absPath, ".thrum"))
+
 	// Self-heal embedded reference files (.thrum/strategies/*.md + .thrum/llms.txt).
 	// Re-running this is idempotent and covers:
 	//   - Repos initialized before this feature landed (backfill on first daemon restart)
@@ -4638,14 +5052,12 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		fmt.Fprintf(os.Stderr, "Warning: failed to create peer registry: %v\n", err)
 	}
 
-	// Use persistent daemon_id from peers.json if available
-	var daemonID string
-	if peerRegistry != nil {
-		daemonID = peerRegistry.LocalDaemonID()
-	}
-
-	// Create state manager
-	st, err := state.NewState(thrumDir, syncDir, repoID, daemonID)
+	// Create state manager. Passing empty daemonID so state.NewState calls
+	// identity.Bootstrap against config.json (source of truth) and populates
+	// the full Identity block on the state. peer_registry.LocalDaemonID
+	// will match because Bootstrap is idempotent — both reads resolve to
+	// the same ULID in config.json.
+	st, err := state.NewState(thrumDir, syncDir, repoID, "")
 	if err != nil {
 		return fmt.Errorf("failed to create state: %w", err)
 	}
@@ -4686,6 +5098,15 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	daemon.ConfigureSlog(logWriter, thrumCfg.Daemon.LogLevel)
 	log.Printf("daemon: log level=%s", thrumCfg.Daemon.LogLevel)
 
+	// Validate permission_supervisors invariant: the array is authoritative
+	// routing for permission-prompt nudges (thrum-zmsk). If an operator
+	// sets the array but forgets a coordinator-role recipient, prompts
+	// can land in dead mailboxes — warn loudly so they see it on boot.
+	if warn := config.ValidatePermissionSupervisors(thrumCfg.PermissionSupervisors); warn != "" {
+		fmt.Fprintf(os.Stderr, "Warning: %s\n", warn)
+		slog.Warn("[config] permission_supervisors validation", "issue", warn)
+	}
+
 	// Resolve local-only mode: CLI flag > env var > config file > default
 	localOnly := flagLocal
 	localOnlyFromExplicit := flagLocal // track if set via flag or env (not config)
@@ -4709,6 +5130,38 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		fmt.Fprintf(os.Stderr, "  Mode:        local-only (remote sync disabled)\n")
 	}
 
+	// Resolve the project name once — used for the "Repo:" display
+	// line in nudge bodies via permission.New below.
+	projectName := permission.ResolveProjectName(thrumCfg, absPath)
+
+	// Synthesize the virtual supervisor pseudo-agent. Pure resolvers;
+	// never persisted to disk. Legacy identity files (from pre-v0.8.3
+	// installs that wrote supervisor_<project>.json) are swept here so
+	// the daemon presents a single source of truth for its identity set.
+	supervisorID := permission.ResolveSupervisorID(thrumCfg, absPath)
+	legacySupervisorID := permission.ResolveLegacySupervisorID(thrumCfg, absPath)
+	supervisorIdentity := permission.SupervisorIdentity(thrumCfg, absPath)
+	permission.CleanupLegacySupervisorFiles(thrumDir)
+	log.Printf("daemon: supervisor virtual identity @%s (legacy compat @%s)", supervisorID, legacySupervisorID)
+
+	// Construct the permission package. The reply interceptor (Task
+	// 6.2) is wired into the event-write hook further below; the
+	// tmux check-pane dispatch (Task 7.1) is wired into the
+	// TmuxHandler via SetPermission further below.
+	permPkg := permission.New(st, st.RawDB(), supervisorID, projectName, thrumDir)
+
+	// Log the count of non-expired pending nudges for operator
+	// visibility. No in-memory rehydration is needed — OnDetection
+	// re-reads the permission_nudges table on every check-pane fire,
+	// so reminders resume at the correct cadence automatically after
+	// a daemon restart. This call just gives operators a
+	// "how many nudges were in flight when we bounced?" breadcrumb.
+	if rows, reloadErr := permPkg.ReloadOnBoot(context.Background()); reloadErr != nil {
+		log.Printf("daemon: permission reload on boot failed: %v", reloadErr)
+	} else if len(rows) > 0 {
+		log.Printf("daemon: permission found %d pending nudge(s) still in flight", len(rows))
+	}
+
 	// Resolve sync interval: env var > config.json > default
 	syncInterval := time.Duration(thrumCfg.Daemon.SyncInterval) * time.Second
 	if envInterval := os.Getenv("THRUM_SYNC_INTERVAL"); envInterval != "" {
@@ -4723,6 +5176,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	if _, err := os.Stat(syncDir); err == nil {
 		syncer := thrumSync.NewSyncer(absPath, syncDir, localOnly)
 		syncLoop = thrumSync.NewSyncLoop(syncer, st.Projector(), absPath, syncDir, thrumDir, syncInterval, localOnly)
+		// Route synced events through State.IngestSyncedEvent so the
+		// event-write hook fires on cross-repo ingest, not just local
+		// writes. Without this, replies arriving via sync from a peer
+		// repo never reach the permission reply interceptor.
+		syncLoop.SetIngester(st)
 		if err := syncLoop.Start(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to start sync loop: %v\n", err)
 		} else {
@@ -4734,6 +5192,16 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	socketPath := filepath.Join(varDir, "thrum.sock")
 	server := daemon.NewServer(socketPath)
 
+	// Wire the peer-credential identity resolver into the server. The
+	// resolver consults agent_work_contexts to map connecting PIDs → CWD →
+	// registered-agent worktrees, giving the daemon a kernel-verified caller
+	// identity on every unix-socket request. This replaces the old
+	// client-asserted CallerAgentID trust model and is the core of the v0.9.0
+	// security hardening (thrum-u4xv.3).
+	identityLister := daemon.NewDaemonAgentLister(st)
+	identityResolver := peercred.NewResolver(identityLister)
+	server.SetIdentityResolver(identityResolver)
+
 	// Create subscription dispatcher
 	dispatcher := subscriptions.NewDispatcher(st.DB())
 
@@ -4744,6 +5212,20 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	// Health check
 	healthHandler := rpc.NewHealthHandler(startTime, version, repoID)
 	server.RegisterHandler("health", healthHandler.Handle)
+	healthHandler.SetIdentityProvider(func() *rpc.IdentityInfo {
+		ident := st.Identity()
+		if ident.DaemonID == "" {
+			return nil
+		}
+		return &rpc.IdentityInfo{
+			DaemonID:     ident.DaemonID,
+			RepoName:     ident.RepoName,
+			Hostname:     ident.Hostname,
+			RepoPath:     ident.RepoPath,
+			GitOriginURL: ident.GitOriginURL,
+			InitAt:       ident.InitAt,
+		}
+	})
 
 	// Agent management
 	agentHandler := rpc.NewAgentHandler(st)
@@ -4756,7 +5238,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("agent.set-status", agentHandler.HandleSetAgentStatus)
 
 	// Team management
-	teamHandler := rpc.NewTeamHandler(st, thrumDir)
+	teamHandler := rpc.NewTeamHandler(st, thrumDir, supervisorIdentity)
 	server.RegisterHandler("team.list", teamHandler.HandleList)
 
 	// Context management
@@ -4787,7 +5269,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("group.members", groupHandler.HandleMembers)
 
 	// Message management
-	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, thrumDir)
+	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, thrumDir, supervisorID, legacySupervisorID)
 	server.RegisterHandler("message.send", messageHandler.HandleSend)
 	server.RegisterHandler("message.get", messageHandler.HandleGet)
 	server.RegisterHandler("message.list", messageHandler.HandleList)
@@ -4833,14 +5315,49 @@ func runDaemon(repoPath string, flagLocal bool) error {
 
 	// Tailscale peer sync management
 	var syncManager *daemon.DaemonSyncManager
+	var peerManager *daemon.PeerManager
 	if peerRegistry != nil {
 		syncManager = daemon.NewDaemonSyncManager(st, peerRegistry)
+		// Create the PeerManager up front so peer.join's post-AddPeer hook
+		// can bind to ConnectPeer before the peer.join RPC handler is
+		// registered below. wsPort is still unresolved here; we call
+		// SetLocalWSPort once it binds (see the WS server setup further
+		// down). Without this ordering, peer.join would silently fall
+		// through the nil-guard on the hook and the original thrum-1f4y
+		// bug would quietly regress on any future WS-start reshuffle.
+		peerManager = daemon.NewPeerManager(peerRegistry, "", nil)
 	}
 
 	var pairingMgr *daemon.PairingManager
 	var tsLocalAddr string           // set when Tailscale listener starts
 	var tsnetMu sync.Mutex           // protects tsLocalAddr and tsnetStarted
 	var startTsnetFn func(int) error // lazy tsnet start, assigned later
+	// wsPort is resolved later (line ~5631) but the peer.start_pairing /
+	// peer.join closures need to read it at RPC time for the --type local
+	// loopback peercode. Declared here so the closures capture it by
+	// reference; the assignment happens before any peer RPC can fire (the
+	// closures are wired into the daemon server below, which itself only
+	// starts accepting connections once the WS server is up).
+	var wsPort string
+	// ensureNetworkListenerFn is wired below once wsServer is built. It
+	// lazily binds an additional WS listener on a user-supplied LAN IP so
+	// `--type network` peers (xir.27 sub-2) can dial a non-loopback address
+	// without rebinding the main wsServer to 0.0.0.0. Returns the bound
+	// "ip:port" address string. Per-IP idempotent: subsequent calls with
+	// the same IP return the existing listener's port.
+	var ensureNetworkListenerFn func(addrIP string) (string, error)
+	// spawnPeerBridgeFn is called by peer.join immediately after AddPeer so a
+	// freshly paired dialer peer's bridge starts without waiting for the next
+	// daemon restart (thrum-1f4y). Wired here (before the peer.join RPC
+	// handler registers) so a future reshuffle that starts the WS server
+	// earlier cannot race past a nil hook. nil-case means peerRegistry is
+	// nil; peer.join is not registered in that mode either.
+	var spawnPeerBridgeFn func(*daemon.PeerInfo)
+	if peerManager != nil {
+		spawnPeerBridgeFn = func(p *daemon.PeerInfo) {
+			peerManager.ConnectPeer(ctx, p)
+		}
+	}
 	hostname, _ := os.Hostname()
 
 	getTsLocalAddr := func() string {
@@ -4849,14 +5366,243 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		return tsLocalAddr
 	}
 
+	// Register the single event-write hook. *state.State exposes
+	// exactly one hook slot (by design — a multi-slot registry was
+	// considered and rejected as API-surface bloat for this feature),
+	// so both the sync-notify broadcast and the permission reply
+	// interceptor share this closure. If a third consumer ever needs
+	// to hang off the same hook, either extend State with a slice of
+	// callbacks or keep composing here.
+	//
+	//   - sync notify: fires on every local event write, dispatched
+	//     to a background goroutine (fire-and-forget) so the
+	//     BroadcastNotify RPC fanout does not block the writer.
+	//   - permission intercept: filters for message.create events,
+	//     unmarshals them, and dispatches to permPkg.AfterMessageCreate
+	//     to resolve reply_to refs into approve/deny keystrokes.
+	//
+	// IMPORTANT: the EventWriteHook contract is "called synchronously
+	// but should not block" (state.go:25). Both branches here must
+	// yield quickly — AfterMessageCreate does a DB lookup plus a
+	// tmux subprocess exec on the happy path, so it MUST run on its
+	// own goroutine with a fresh context and a panic recover. Without
+	// the recover, a bug in the reply dispatcher could take down the
+	// whole event pipeline via a writer-goroutine panic.
+	//
+	// This fires on LOCAL writes only. The cross-repo path (events
+	// arriving via sync ingest) is bridged through IngestSyncedEvent
+	// in Task 6.3, which fires the same hook.
+	st.SetOnEventWrite(func(daemonID string, sequence int64, event []byte) {
+		if syncManager != nil {
+			go syncManager.BroadcastNotify(daemonID, sequence, 1)
+		}
+		// Cheap type-only unmarshal to filter non-message events
+		// BEFORE the larger MessageCreateEvent decode. The double
+		// unmarshal is intentional: the head check short-circuits
+		// hot paths (agent.register, session.start, etc.) without
+		// building a full MessageCreateEvent that would be
+		// immediately discarded. Do NOT "optimize" these into a
+		// single decode without verifying the non-message traffic
+		// volume on a busy daemon.
+		var head struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(event, &head); err != nil {
+			return
+		}
+		if head.Type != "message.create" {
+			return
+		}
+		var evt types.MessageCreateEvent
+		if err := json.Unmarshal(event, &evt); err != nil {
+			return
+		}
+		// Dispatch off the writer goroutine with a fresh context
+		// (the caller's ctx may be canceled by the time this runs)
+		// and a panic recover so a reply-dispatcher bug can't crash
+		// the event pipeline. evt is already a value copy — safe
+		// to capture.
+		//
+		// NO origin_daemon filter here (unlike NotifyMessageCreate
+		// below — see thrum-xfsb). Cross-repo reply delivery depends on
+		// this interceptor firing for peer-synced events: when a user
+		// replies to a nudge on daemon B, the reply message syncs to
+		// daemon A, and daemon A's IngestSyncedEvent hook must invoke
+		// AfterMessageCreate so daemon A's pending_nudges row gets
+		// resolved. The AC2 guarantee "reply resolves against the
+		// owning daemon's pending-nudge map only" is preserved
+		// structurally: pending_nudges is per-daemon SQLite state that
+		// does not replicate, so a peer daemon's AfterMessageCreate
+		// call finds no matching row and silently no-ops.
+		go func(evt types.MessageCreateEvent) {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("[permission] intercept panic", "panic", r)
+				}
+			}()
+			permPkg.AfterMessageCreate(context.Background(), evt)
+		}(evt)
+
+		// thrum-48kt.1: broadcast notification.message to connected
+		// WebSocket clients (including OutboundRelay → Telegram). Moved
+		// here from HandleSend so the broadcast covers writers that
+		// bypass the RPC layer (permission.SendSupervisorMessage).
+		// Without this move, nudges stayed DB-only and never forwarded
+		// to Telegram. thrum-xfsb refines the policy: NotifyMessageCreate
+		// itself short-circuits when evt.OriginDaemon points at a peer,
+		// so synced-in replicas don't fan out to THIS daemon's local
+		// bridge (which caused duplicate bot delivery in multi-daemon
+		// setups).
+		// Async because BroadcastAll does per-client network sends;
+		// must not block the state.WriteEvent writer.
+		go func(evt types.MessageCreateEvent) {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("[rpc] NotifyMessageCreate panic", "panic", r)
+				}
+			}()
+			messageHandler.NotifyMessageCreate(evt)
+		}(evt)
+
+		// thrum-wvpv: nudge tmux-managed recipients. This branch fires for
+		// BOTH local writes (HandleSend) and synced writes (sync_apply →
+		// State.WriteEvent), giving cross-machine and cross-repo recipients
+		// the same tmux pane notification that local recipients used to
+		// get exclusively. nudge.DispatchTmux is fire-and-forget; failures
+		// are intentionally swallowed because nudges are advisory.
+		//
+		// kfn3 instrumentation: capture every dispatch attempt so phantom
+		// self-echoes show up in slog with sender + recipients + origin.
+		slog.Info("[nudge] nudge.dispatch entry",
+			"site", "main.go:SetOnEventWrite",
+			"msg_id", evt.MessageID,
+			"sender", evt.AgentID,
+			"recipients", evt.Recipients,
+			"origin_daemon", evt.OriginDaemon,
+			"session_id", evt.SessionID,
+			"thrum_dir", thrumDir,
+		)
+		nudge.DispatchTmux(thrumDir, evt.Recipients, evt.AgentID)
+
+		// hook-inbox-delivery: write a spool file for every LOCAL recipient.
+		// "Local" means the recipient has an identity file reachable from
+		// this daemon (matching the implicit rule in nudge.DispatchTmux —
+		// cross-machine recipients are a no-op because their identity file
+		// isn't on this daemon's disk). The agent-side check-inbox hook
+		// reads the spool and decides whether to surface a nudge (tmux dead)
+		// or silently consume (tmux alive — tmux path already handled it).
+		//
+		// Dispatched on its own goroutine (same async pattern as
+		// nudge.DispatchTmux) so the SetOnEventWrite writer goroutine
+		// doesn't block on the per-recipient git-worktree walk inside
+		// HasLocalIdentity. The hook contract is "synchronous but must not
+		// block" — a git subprocess per recipient on the hot write path
+		// violates that on busy daemons.
+		go func(evt types.MessageCreateEvent) {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("[inbox] spool dispatch panic", "panic", r)
+				}
+			}()
+			for _, recipient := range evt.Recipients {
+				if !nudge.HasLocalIdentity(thrumDir, recipient) {
+					slog.Info("[nudge] spool.skip non-local",
+						"site", "main.go:WriteSpool",
+						"msg_id", evt.MessageID,
+						"sender", evt.AgentID,
+						"recipient", recipient,
+						"origin_daemon", evt.OriginDaemon,
+					)
+					continue
+				}
+				env := inbox.Envelope{
+					MsgID:      evt.MessageID,
+					From:       "@" + evt.AgentID,
+					ReceivedAt: time.Now().UTC(),
+				}
+				slog.Info("[nudge] spool.write attempt",
+					"site", "main.go:WriteSpool",
+					"msg_id", evt.MessageID,
+					"sender", evt.AgentID,
+					"recipient", recipient,
+					"origin_daemon", evt.OriginDaemon,
+					"session_id", evt.SessionID,
+				)
+				if err := inbox.WriteSpool(thrumDir, recipient, env); err != nil {
+					slog.Warn("[inbox] spool write failed",
+						"agent", recipient, "msg_id", evt.MessageID, "err", err)
+					// Continue — DB is authoritative; cron backstop surfaces
+					// unread messages regardless of spool state.
+				}
+			}
+		}(evt)
+	})
+
+	// pairHandler is created once, registered on multiple WS registries:
+	//   - syncRegistry (tsnet listener) for cross-host Tailscale pairing
+	//   - wsRegistry (localhost listener) for same-host loopback pairing
+	//     under --type local (xir.27 sub-component 1)
+	//
+	// thrum-lgv9: sync.pull / sync.peer_info / sync.notify follow the same
+	// pattern — must be reachable on wsRegistry for --type local peers so
+	// post-pair sync and periodic event-log replication can reach each other
+	// over loopback WS. Before lgv9 only the tsnet syncRegistry had them,
+	// so local peers saw persistent "Method not found" and never synced.
+	var pairHandler *rpc.PairRequestHandler
+	var repairHandler *rpc.PeerRepairHandler
+	var syncPullHandler *rpc.SyncPullHandler
+	var syncPeerInfoHandler *rpc.PeerInfoHandler
+	var syncNotifyHandler *rpc.SyncNotifyHandler
+
 	if syncManager != nil {
-		// Hook into event writes to broadcast sync.notify to peers
-		st.SetOnEventWrite(func(daemonID string, sequence int64, eventCount int) {
-			go syncManager.BroadcastNotify(daemonID, sequence, eventCount)
+		// Create pairing manager (used by both Unix socket and Tailscale handlers)
+		pairingMgr = daemon.NewPairingManager(syncManager.PeerRegistry(), st.Identity(), hostname)
+
+		// Build the shared pair.request handler.
+		pairHandler = rpc.NewPairRequestHandler(func(
+			code, peerDaemonID, peerName, peerAddress string,
+			peerRepoName, peerHostname, peerRepoPath, peerGitOriginURL string,
+		) (string, string, string, string, string, string, string, error) {
+			token, local, err := pairingMgr.HandlePairRequest(code, daemon.PairMetadata{
+				DaemonID:     peerDaemonID,
+				Name:         peerName,
+				Address:      peerAddress,
+				RepoName:     peerRepoName,
+				Hostname:     peerHostname,
+				RepoPath:     peerRepoPath,
+				GitOriginURL: peerGitOriginURL,
+			})
+			return token, local.DaemonID, local.Name, local.RepoName, local.Hostname, local.RepoPath, local.GitOriginURL, err
 		})
 
-		// Create pairing manager (used by both Unix socket and Tailscale handlers)
-		pairingMgr = daemon.NewPairingManager(syncManager.PeerRegistry(), st.DaemonID(), hostname)
+		// xir.27 sub-4: build the peer.repair manager + handler (dedicated
+		// RPC; intentionally separate from pair.request because verify-
+		// stored-token and mint-from-code have opposite trust models).
+		// repairMgr is captured by the handler closure — no need for a
+		// package-scoped var.
+		repairMgr := daemon.NewPeerRepairManager(syncManager.PeerRegistry(), st.Identity(), hostname)
+		repairHandler = rpc.NewPeerRepairHandler(func(
+			token, dialerDaemonID, dialerName, dialerAddress string,
+			dialerRepoName, dialerHostname, dialerRepoPath, dialerGitOriginURL string,
+		) (string, string, string, string, string, string, error) {
+			local, err := repairMgr.HandleRepairRequest(token, daemon.PairMetadata{
+				DaemonID:     dialerDaemonID,
+				Name:         dialerName,
+				Address:      dialerAddress,
+				RepoName:     dialerRepoName,
+				Hostname:     dialerHostname,
+				RepoPath:     dialerRepoPath,
+				GitOriginURL: dialerGitOriginURL,
+			})
+			return local.DaemonID, local.Name, local.RepoName, local.Hostname, local.RepoPath, local.GitOriginURL, err
+		})
+
+		// thrum-lgv9: build sync handlers once so they can be registered on
+		// both wsRegistry (for --type local loopback reach-back) and
+		// syncRegistry (for tsnet cross-host).
+		syncPullHandler = rpc.NewSyncPullHandler(st)
+		syncPeerInfoHandler = rpc.NewPeerInfoHandler(st.DaemonID(), hostname)
+		syncNotifyHandler = rpc.NewSyncNotifyHandler(syncManager.SyncFromPeerByID)
 
 		// Adapter: convert daemon.PeerStatusInfo → rpc.PeerStatus
 		listPeersFn := func() []rpc.PeerStatus {
@@ -4886,34 +5632,89 @@ func runDaemon(repoPath string, flagLocal bool) error {
 
 		// peer.start_pairing — begin pairing, return code
 		// Wrap to ensure port is selected before pairing starts.
-		startPairingFn := func(timeout time.Duration) (string, string, error) {
-			// Lazy port selection: pick a random port on first peer add
-			if peerRegistry.LocalPort() == 0 {
-				// THRUM_TS_PORT env override takes precedence
-				if p := os.Getenv("THRUM_TS_PORT"); p != "" {
-					if port, err := strconv.Atoi(p); err == nil {
+		startPairingFn := func(timeout time.Duration, peerType, addressHint string) (string, string, string, error) {
+			// xir.27: dispatch on the user-selected transport. An empty Type
+			// preserves the legacy implicit-tailscale path for any caller
+			// invoking the RPC directly without going through the new CLI
+			// surface (which would have errored earlier on missing --type).
+			switch peerType {
+			case "", "tailscale":
+				if peerRegistry.LocalPort() == 0 {
+					if p := os.Getenv("THRUM_TS_PORT"); p != "" {
+						if port, err := strconv.Atoi(p); err == nil {
+							if err := peerRegistry.SetLocalPort(port); err != nil {
+								return "", "", "", fmt.Errorf("set local port from env: %w", err)
+							}
+						}
+					} else {
+						port, err := daemon.FindRandomAvailablePort(daemon.TsnetPortRangeMin, daemon.TsnetPortRangeMax)
+						if err != nil {
+							return "", "", "", fmt.Errorf("find available tsnet port: %w", err)
+						}
 						if err := peerRegistry.SetLocalPort(port); err != nil {
-							return "", "", fmt.Errorf("set local port from env: %w", err)
+							return "", "", "", fmt.Errorf("set local port: %w", err)
 						}
 					}
-				} else {
-					port, err := daemon.FindRandomAvailablePort(daemon.TsnetPortRangeMin, daemon.TsnetPortRangeMax)
-					if err != nil {
-						return "", "", fmt.Errorf("find available tsnet port: %w", err)
-					}
-					if err := peerRegistry.SetLocalPort(port); err != nil {
-						return "", "", fmt.Errorf("set local port: %w", err)
+				}
+				if startTsnetFn != nil {
+					if err := startTsnetFn(peerRegistry.LocalPort()); err != nil {
+						return "", "", "", fmt.Errorf("start tailscale for peer add: %w", err)
 					}
 				}
-			}
-			// Lazy tsnet start: start tsnet after port selection — fail if it can't start
-			if startTsnetFn != nil {
-				if err := startTsnetFn(peerRegistry.LocalPort()); err != nil {
-					return "", "", fmt.Errorf("start tailscale for peer add: %w", err)
+				code, err := pairingMgr.StartPairing(timeout)
+				return code, getTsLocalAddr(), "tailscale", err
+
+			case "local":
+				// xir.27 sub-1: emit a loopback peercode anchored at the
+				// daemon's own WS port. The peer.join side dials
+				// ws://127.0.0.1:<wsPort>/ws?pairing_code=<code> directly,
+				// hitting pair.request on wsRegistry — no tsnet bring-up.
+				if wsPort == "" {
+					return "", "", "", fmt.Errorf("--type local: daemon ws port not yet resolved")
 				}
+				code, err := pairingMgr.StartPairing(timeout)
+				if err != nil {
+					return "", "", "", err
+				}
+				return code, net.JoinHostPort("127.0.0.1", wsPort), "local", nil
+
+			case "network":
+				// xir.27 sub-2: anchor the peercode at the user-supplied
+				// LAN IP. The daemon validates that the IP is assigned to a
+				// local NIC eligible for direct-TCP peer transport (filters
+				// loopback / link-local / tsnet / docker / utun / etc.) via
+				// internal/netdetect, then binds a SECONDARY WS listener on
+				// addressHint:<port>. Per coordinator: scoped second listener
+				// (NOT a 0.0.0.0 rebind) keeps blast radius narrow.
+				if strings.TrimSpace(addressHint) == "" {
+					return "", "", "", fmt.Errorf("--type network requires --address <ip>")
+				}
+				ip := net.ParseIP(strings.TrimSpace(addressHint))
+				if ip == nil {
+					return "", "", "", fmt.Errorf("--type network --address %q: not a valid IP", addressHint)
+				}
+				if _, err := netdetect.SubnetForLocalAddress(ip); err != nil {
+					return "", "", "", fmt.Errorf("--type network --address %s: %w", addressHint, err)
+				}
+				if ensureNetworkListenerFn == nil {
+					return "", "", "", fmt.Errorf("--type network: secondary listener helper not initialized")
+				}
+				bound, err := ensureNetworkListenerFn(ip.String())
+				if err != nil {
+					return "", "", "", fmt.Errorf("--type network: bind listener on %s: %w", ip, err)
+				}
+				code, err := pairingMgr.StartPairing(timeout)
+				if err != nil {
+					return "", "", "", err
+				}
+				return code, bound, "network", nil
+
+			case "repair":
+				return "", "", "", fmt.Errorf("--type repair is not valid for peer add (use 'thrum peer join --type repair <name>')")
+
+			default:
+				return "", "", "", fmt.Errorf("unknown peer type %q", peerType)
 			}
-			code, err := pairingMgr.StartPairing(timeout)
-			return code, getTsLocalAddr(), err
 		}
 		server.RegisterHandler("peer.start_pairing",
 			rpc.NewPeerStartPairingHandler(startPairingFn).Handle)
@@ -4929,58 +5730,291 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		server.RegisterLongPollHandler("peer.wait_pairing",
 			rpc.NewPeerWaitPairingHandler(waitFn).Handle)
 
-		// peer.join — send pairing code to remote peer
-		joinFn := func(peerAddr, code, repoPath string) (peerName, peerDaemonID string, err error) {
-			// Lazy tsnet start for peer join (machine B may not have run peer add)
-			if startTsnetFn != nil && getTsLocalAddr() == "" {
-				if peerRegistry.LocalPort() == 0 {
-					port, portErr := daemon.FindRandomAvailablePort(daemon.TsnetPortRangeMin, daemon.TsnetPortRangeMax)
-					if portErr != nil {
-						return "", "", fmt.Errorf("find available tsnet port: %w", portErr)
+		// peer.join — dispatch on the user-selected transport (xir.27).
+		joinFn := func(peerAddr, code, repoPath, peerType, peerName, localAddress string) (string, string, error) {
+			switch peerType {
+			case "", "tailscale":
+				if startTsnetFn != nil && getTsLocalAddr() == "" {
+					if peerRegistry.LocalPort() == 0 {
+						port, portErr := daemon.FindRandomAvailablePort(daemon.TsnetPortRangeMin, daemon.TsnetPortRangeMax)
+						if portErr != nil {
+							return "", "", fmt.Errorf("find available tsnet port: %w", portErr)
+						}
+						if portErr := peerRegistry.SetLocalPort(port); portErr != nil {
+							return "", "", fmt.Errorf("set local port: %w", portErr)
+						}
 					}
-					if portErr := peerRegistry.SetLocalPort(port); portErr != nil {
-						return "", "", fmt.Errorf("set local port: %w", portErr)
+					if tsErr := startTsnetFn(peerRegistry.LocalPort()); tsErr != nil {
+						return "", "", fmt.Errorf("start tailscale for peer join: %w", tsErr)
 					}
 				}
-				if tsErr := startTsnetFn(peerRegistry.LocalPort()); tsErr != nil {
-					return "", "", fmt.Errorf("start tailscale for peer join: %w", tsErr)
+				localAddr := getTsLocalAddr()
+				if localAddr == "" {
+					return "", "", fmt.Errorf("tailscale not configured or not started")
 				}
-			}
-			localAddr := getTsLocalAddr()
-			if localAddr == "" {
-				return "", "", fmt.Errorf("tailscale not configured or not started")
-			}
-			peer, err := syncManager.JoinPeer(peerAddr, code, st.DaemonID(), hostname, localAddr)
-			if err != nil {
-				return "", "", err
-			}
-			// Set role and transport on the dialer side
-			peer.Role = "dialer"
-			if repoPath != "" {
-				peer.RepoPath = repoPath
+				localIdent := st.Identity()
+				localMeta := daemon.PairMetadata{
+					DaemonID:     localIdent.DaemonID,
+					Name:         hostname,
+					Address:      localAddr,
+					RepoName:     localIdent.RepoName,
+					Hostname:     localIdent.Hostname,
+					RepoPath:     localIdent.RepoPath,
+					GitOriginURL: localIdent.GitOriginURL,
+				}
+				peer, err := syncManager.JoinPeer(peerAddr, code, localMeta)
+				if err != nil {
+					return "", "", err
+				}
+				peer.Role = "dialer"
+				if repoPath != "" {
+					peer.RepoPath = repoPath
+					peer.Transport = "local"
+				} else {
+					peer.Transport = daemon.DetectTransport(peerAddr)
+				}
+				// thrum-b6yv: stamp proxy_prefix before persisting.
+				// RemoteRepoName is already populated on `peer` by
+				// syncManager.JoinPeer above; DeriveProxyPrefix reads
+				// it (fallback to Name) and sanitizes.
+				peer.ProxyPrefix = daemon.DeriveProxyPrefix(peer)
+				if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
+					fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
+				}
+				// thrum-1f4y: spawn the bridge for this new peer immediately;
+				// previously a daemon restart was required for ConnectAll to
+				// pick it up.
+				if spawnPeerBridgeFn != nil {
+					spawnPeerBridgeFn(peer)
+				}
+				return peer.Name, peer.DaemonID, nil
+
+			case "local":
+				// xir.27 sub-1: dial the loopback peercode address directly.
+				// No tsnet — RequestPairing builds ws://<peerAddr>/ws?pairing_code=
+				// which routes to wsRegistry's pair.request via the localhost
+				// WS server on the listener side. localMeta.Address advertises
+				// our own loopback WS so post-pair sync (sync.notify) reaches
+				// us back on the right port.
+				if wsPort == "" {
+					return "", "", fmt.Errorf("--type local: daemon ws port not yet resolved")
+				}
+				localAddr := net.JoinHostPort("127.0.0.1", wsPort)
+				localIdent := st.Identity()
+				localMeta := daemon.PairMetadata{
+					DaemonID:     localIdent.DaemonID,
+					Name:         hostname,
+					Address:      localAddr,
+					RepoName:     localIdent.RepoName,
+					Hostname:     localIdent.Hostname,
+					RepoPath:     localIdent.RepoPath,
+					GitOriginURL: localIdent.GitOriginURL,
+				}
+				peer, err := syncManager.JoinPeer(peerAddr, code, localMeta)
+				if err != nil {
+					return "", "", err
+				}
+				peer.Role = "dialer"
 				peer.Transport = "local"
-			} else {
-				peer.Transport = daemon.DetectTransport(peerAddr)
+				if repoPath != "" {
+					peer.RepoPath = repoPath
+				}
+				// thrum-b6yv: stamp proxy_prefix before persisting.
+				// RemoteRepoName is already populated on `peer` by
+				// syncManager.JoinPeer above; DeriveProxyPrefix reads
+				// it (fallback to Name) and sanitizes.
+				peer.ProxyPrefix = daemon.DeriveProxyPrefix(peer)
+				if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
+					fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
+				}
+				// thrum-1f4y: spawn the bridge for this new peer immediately;
+				// previously a daemon restart was required for ConnectAll to
+				// pick it up.
+				if spawnPeerBridgeFn != nil {
+					spawnPeerBridgeFn(peer)
+				}
+				return peer.Name, peer.DaemonID, nil
+
+			case "network":
+				// xir.27 sub-2: dial the peercode address directly (no tsnet),
+				// and bind a SECONDARY WS listener on this daemon's user-
+				// supplied --address so the listener-side daemon can reach
+				// us back for post-pair sync.notify. Symmetric to the add
+				// side: both sides must explicitly opt into a LAN address.
+				if strings.TrimSpace(localAddress) == "" {
+					return "", "", fmt.Errorf("--type network requires --address <ip> on this side too (the LAN IP this daemon should bind for sync reach-back)")
+				}
+				ip := net.ParseIP(strings.TrimSpace(localAddress))
+				if ip == nil {
+					return "", "", fmt.Errorf("--type network --address %q: not a valid IP", localAddress)
+				}
+				if _, err := netdetect.SubnetForLocalAddress(ip); err != nil {
+					return "", "", fmt.Errorf("--type network --address %s: %w", localAddress, err)
+				}
+				if ensureNetworkListenerFn == nil {
+					return "", "", fmt.Errorf("--type network: secondary listener helper not initialized")
+				}
+				localAddr, err := ensureNetworkListenerFn(ip.String())
+				if err != nil {
+					return "", "", fmt.Errorf("--type network: bind listener on %s: %w", ip, err)
+				}
+				localIdent := st.Identity()
+				localMeta := daemon.PairMetadata{
+					DaemonID:     localIdent.DaemonID,
+					Name:         hostname,
+					Address:      localAddr,
+					RepoName:     localIdent.RepoName,
+					Hostname:     localIdent.Hostname,
+					RepoPath:     localIdent.RepoPath,
+					GitOriginURL: localIdent.GitOriginURL,
+				}
+				peer, err := syncManager.JoinPeer(peerAddr, code, localMeta)
+				if err != nil {
+					return "", "", err
+				}
+				peer.Role = "dialer"
+				peer.Transport = "network"
+				// thrum-b6yv: stamp proxy_prefix before persisting.
+				// RemoteRepoName is already populated on `peer` by
+				// syncManager.JoinPeer above; DeriveProxyPrefix reads
+				// it (fallback to Name) and sanitizes.
+				peer.ProxyPrefix = daemon.DeriveProxyPrefix(peer)
+				if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
+					fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
+				}
+				// thrum-1f4y: spawn the bridge for this new peer immediately;
+				// previously a daemon restart was required for ConnectAll to
+				// pick it up.
+				if spawnPeerBridgeFn != nil {
+					spawnPeerBridgeFn(peer)
+				}
+				return peer.Name, peer.DaemonID, nil
+
+			case "repair":
+				// xir.27 sub-4: reconcile an existing peer entry using its
+				// stored Token as the trust anchor. peerName comes from the
+				// CLI (positional arg or --peer-name). We look up the
+				// entry, dial via its stored Transport/Address, send
+				// peer.repair with the stored token + our current
+				// identity, then refresh the entry with the listener's
+				// returned metadata.
+				name := strings.TrimSpace(peerName)
+				if name == "" {
+					return "", "", fmt.Errorf("--type repair requires a peer name")
+				}
+				existing := peerRegistry.FindPeerByName(name)
+				if existing == nil {
+					return "", "", fmt.Errorf("--type repair: no peer named %q in peers.json", name)
+				}
+				if existing.Token == "" {
+					return "", "", fmt.Errorf("--type repair: peer %q has no stored token (directory-only entry cannot be repaired)", name)
+				}
+				if existing.Address == "" {
+					return "", "", fmt.Errorf("--type repair: peer %q has no stored address", name)
+				}
+
+				// Tailscale repair: bring up tsnet if not already started.
+				// Symmetric to the JoinPeer path so a dialer coming out of
+				// a cold start can still reconcile a tailscale peer.
+				if existing.Transport == "tailscale" && startTsnetFn != nil && getTsLocalAddr() == "" {
+					if peerRegistry.LocalPort() == 0 {
+						port, portErr := daemon.FindRandomAvailablePort(daemon.TsnetPortRangeMin, daemon.TsnetPortRangeMax)
+						if portErr != nil {
+							return "", "", fmt.Errorf("--type repair: find available tsnet port: %w", portErr)
+						}
+						if portErr := peerRegistry.SetLocalPort(port); portErr != nil {
+							return "", "", fmt.Errorf("--type repair: set local port: %w", portErr)
+						}
+					}
+					if tsErr := startTsnetFn(peerRegistry.LocalPort()); tsErr != nil {
+						return "", "", fmt.Errorf("--type repair: start tailscale: %w", tsErr)
+					}
+				}
+
+				localIdent := st.Identity()
+				localAddr := ""
+				switch existing.Transport {
+				case "tailscale":
+					localAddr = getTsLocalAddr()
+				case "local":
+					if wsPort != "" {
+						localAddr = net.JoinHostPort("127.0.0.1", wsPort)
+					}
+				case "network":
+					// For network repair the local address comes from the
+					// secondary listener. The dialer may need --address to
+					// rebind an ephemeral listener; if unset, we advertise
+					// whatever the existing entry carries (best-effort).
+					localAddr = existing.Address
+				}
+				localMeta := daemon.PairMetadata{
+					DaemonID:     localIdent.DaemonID,
+					Name:         hostname,
+					Address:      localAddr,
+					RepoName:     localIdent.RepoName,
+					Hostname:     localIdent.Hostname,
+					RepoPath:     localIdent.RepoPath,
+					GitOriginURL: localIdent.GitOriginURL,
+				}
+
+				client := daemon.NewSyncClient()
+				result, err := client.RequestRepair(existing.Address, existing.Token, localMeta)
+				if err != nil {
+					return "", "", fmt.Errorf("--type repair: %w", err)
+				}
+				if result.Status != "repaired" {
+					return "", "", fmt.Errorf("--type repair: unexpected status %q", result.Status)
+				}
+
+				// Refresh local entry with the listener's current metadata.
+				// If the listener's daemon_id rotated, the entry's key
+				// changes too: RemovePeer the old key first so both sides
+				// settle on the same DaemonID.
+				refreshed := *existing
+				oldKey := refreshed.DaemonID
+				refreshed.DaemonID = result.DaemonID
+				if result.RepoName != "" {
+					refreshed.RemoteRepoName = result.RepoName
+				}
+				if result.Hostname != "" {
+					refreshed.RemoteHostname = result.Hostname
+				}
+				if result.RepoPath != "" {
+					refreshed.RemoteRepoPath = result.RepoPath
+				}
+				if result.GitOriginURL != "" {
+					refreshed.RemoteGitOriginURL = result.GitOriginURL
+				}
+				if oldKey != result.DaemonID && oldKey != "" {
+					if rmErr := peerRegistry.RemovePeer(oldKey); rmErr != nil {
+						fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to remove stale peer entry %s: %v\n", oldKey, rmErr)
+					}
+				}
+				if addErr := peerRegistry.AddPeer(&refreshed); addErr != nil {
+					return "", "", fmt.Errorf("--type repair: update local entry: %w", addErr)
+				}
+				return refreshed.Name, refreshed.DaemonID, nil
+
+			default:
+				return "", "", fmt.Errorf("unknown peer type %q", peerType)
 			}
-			if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
-				fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
-			}
-			return peer.Name, peer.DaemonID, nil
 		}
 		server.RegisterHandler("peer.join",
 			rpc.NewPeerJoinHandler(joinFn).Handle)
 
-		// peer.list — compact peer list
+		// peer.list — compact peer list. xir.29: propagate ReconcileStatus
+		// so the CLI can render drift markers.
 		peerListFn := func() []rpc.PeerListEntry {
 			infos := syncManager.ListPeers()
 			entries := make([]rpc.PeerListEntry, len(infos))
 			for i, p := range infos {
 				entries[i] = rpc.PeerListEntry{
-					DaemonID: p.DaemonID,
-					Name:     p.Name,
-					Address:  p.Address,
-					LastSync: p.LastSync,
-					LastSeq:  p.LastSeq,
+					DaemonID:        p.DaemonID,
+					Name:            p.Name,
+					Address:         p.Address,
+					LastSync:        p.LastSync,
+					LastSeq:         p.LastSeq,
+					ReconcileStatus: p.ReconcileStatus,
 				}
 			}
 			return entries
@@ -5029,8 +6063,13 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		)
 		server.RegisterHandler("peer.configure", peerConfigureHandler.Handle)
 
-		// peer.address_changed — receive address change notifications from peers
-		addressChangedHandler := rpc.NewPeerAddressChangedHandler(func(peerToken, newIP, newPort string) error {
+		// peer.address_changed — receive address change notifications from peers.
+		// xir.29: wrap with a SubnetGuard so cross-subnet address changes
+		// are rejected (they indicate a topology shift, not a same-network
+		// reshuffle) and escalated to manual `thrum peer join --type repair`.
+		// Transport=="local" skips the guard entirely — loopback peers
+		// are strictly stronger than same-subnet (I6 review finding).
+		addrChangedUpdate := func(peerToken, newIP, newPort string) error {
 			p := peerRegistry.FindPeerByToken(peerToken)
 			if p == nil {
 				return fmt.Errorf("unknown peer token")
@@ -5041,7 +6080,59 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			}
 			p.Address = newAddr
 			return peerRegistry.AddPeer(p)
-		})
+		}
+		subnetGuard := func(transport, oldAddr, newAddr string) error {
+			// Local transport: same-host is a stronger property than
+			// same-subnet; no check needed (coordinator 2026-04-19 +
+			// I6 review finding).
+			if transport == "local" {
+				return nil
+			}
+			// Empty oldAddr means "no cached address" (first-boot or
+			// lookup-disabled path). Cannot evaluate — accept per M11.
+			if oldAddr == "" {
+				return nil
+			}
+			oldIPStr, _, err := net.SplitHostPort(oldAddr)
+			if err != nil {
+				// Unparseable cached old address: cannot evaluate
+				// subnet equality → accept per M11 (treat like an
+				// empty cached address).
+				//nolint:nilerr // intentional accept-path; see comment
+				return nil
+			}
+			newIPStr, _, err := net.SplitHostPort(newAddr)
+			if err != nil {
+				return fmt.Errorf("invalid new address %q: %w", newAddr, err)
+			}
+			oldIP := net.ParseIP(oldIPStr)
+			newIP := net.ParseIP(newIPStr)
+			if oldIP == nil || newIP == nil {
+				return nil
+			}
+			subnet, err := netdetect.SubnetForLocalAddress(oldIP)
+			if err != nil {
+				// Old address no longer on any local NIC; cannot
+				// evaluate subnet equality → accept (the peer has
+				// already moved off this host's LAN).
+				//nolint:nilerr // intentional accept-path; see comment
+				return nil
+			}
+			if !netdetect.SameSubnet(oldIP, newIP, subnet.CIDR) {
+				return fmt.Errorf("peer moved from %s to %s (different subnets)",
+					oldIP, newIP)
+			}
+			return nil
+		}
+		lookupPeer := func(token string) (oldAddr, transport string, err error) {
+			p := peerRegistry.FindPeerByToken(token)
+			if p == nil {
+				return "", "", fmt.Errorf("unknown peer token")
+			}
+			return p.Address, p.Transport, nil
+		}
+		addressChangedHandler := rpc.NewPeerAddressChangedHandlerWithGuard(
+			addrChangedUpdate, subnetGuard, lookupPeer)
 		server.RegisterHandler("peer.address_changed", addressChangedHandler.Handle)
 	}
 
@@ -5055,7 +6146,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("purge.execute", purgeHandler.Handle)
 
 	// Resolve WS port: env var > config.json > default ("auto" = find free port)
-	wsPort := os.Getenv("THRUM_WS_PORT")
+	wsPort = os.Getenv("THRUM_WS_PORT")
 	if wsPort == "" {
 		wsPort = thrumCfg.Daemon.WSPort
 	}
@@ -5118,8 +6209,13 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	wsRegistry.Register("message.delete", websocket.Handler(messageHandler.HandleDelete))
 	wsRegistry.Register("message.edit", websocket.Handler(messageHandler.HandleEdit))
 	wsRegistry.Register("message.markRead", websocket.Handler(messageHandler.HandleMarkRead))
-	wsRegistry.Register("message.deleteByAgent", websocket.Handler(messageHandler.HandleDeleteByAgent))
-	wsRegistry.Register("message.deleteByScope", websocket.Handler(messageHandler.HandleDeleteByScope))
+	// SECURITY (sec.8): message.deleteByAgent and message.deleteByScope are
+	// NOT registered on the WS transport. They are admin/system operations
+	// restricted to daemon-internal callers (sec.8). The WS transport has no
+	// peercred injection, so the daemon-internal check would be bypassed —
+	// any localhost browser page could invoke bulk hard-deletes.
+	// See internal/daemon/rpc/monitor_trust_boundary_test.go for the
+	// structural guard pattern that enforces this on the monitor.* handlers.
 	wsRegistry.Register("message.archive", websocket.Handler(messageHandler.HandleArchive))
 	// Subscribe/unsubscribe WS handlers removed — CLI subscribe commands deleted.
 	wsRegistry.Register("user.register", websocket.Handler(userHandler.HandleRegister))
@@ -5127,6 +6223,40 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	if syncLoop != nil {
 		wsRegistry.Register("sync.force", websocket.Handler(syncForceHandler.Handle))
 		wsRegistry.Register("sync.status", websocket.Handler(syncStatusHandler.Handle))
+	}
+
+	// xir.27 sub-1: pair.request on the localhost WS so --type local peers
+	// can complete the handshake without going through tsnet. Same handler
+	// instance as the tsnet-side registration; the pairing-code-active gate
+	// in WithPairingValidator below ensures only an active pairing session
+	// accepts pair-code connections, mirroring the tsnet-side gate.
+	if pairHandler != nil {
+		wsRegistry.Register("pair.request", websocket.Handler(pairHandler.Handle))
+	}
+
+	// xir.27 sub-4: peer.repair on the localhost WS so --type repair flows
+	// for local/network peers complete without requiring tsnet. The RPC is
+	// token-authenticated via Bearer header (existing post-pair auth path);
+	// no pairing-code validator is required because repair reuses the
+	// trust anchor established during the original pair.
+	if repairHandler != nil {
+		wsRegistry.Register("peer.repair", websocket.Handler(repairHandler.Handle))
+	}
+
+	// thrum-lgv9: sync.pull / sync.peer_info / sync.notify on the localhost
+	// WS so --type local peers can complete post-pair sync over loopback.
+	// Previously these were registered only on the tsnet syncRegistry, so
+	// local peers got "RPC error -32601: Method not found" on every periodic
+	// sync and sync.notify push, leaving event-log replication silently
+	// broken even after the handshake succeeded.
+	if syncPullHandler != nil {
+		wsRegistry.Register("sync.pull", websocket.Handler(syncPullHandler.Handle))
+	}
+	if syncPeerInfoHandler != nil {
+		wsRegistry.Register("sync.peer_info", websocket.Handler(syncPeerInfoHandler.Handle))
+	}
+	if syncNotifyHandler != nil {
+		wsRegistry.Register("sync.notify", websocket.Handler(syncNotifyHandler.Handle))
 	}
 
 	// Resolve UI filesystem (embedded or dev mode)
@@ -5146,11 +6276,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		}
 	}
 
-	// Create PeerManager before the WS server so we can wire the accept handler.
-	var peerManager *daemon.PeerManager
+	// PeerManager was created up-front (line ~5278); now that wsPort is
+	// resolved, finish wiring it and register the WS accept handler.
 	var wsOpts []websocket.ServerOption
-	if peerRegistry != nil {
-		peerManager = daemon.NewPeerManager(peerRegistry, wsPort, nil)
+	if peerManager != nil {
+		peerManager.SetLocalWSPort(wsPort)
 		defer peerManager.StopAll()
 		wsOpts = append(wsOpts, websocket.WithPeerAcceptHandler(func(token string) {
 			p := peerRegistry.FindPeerByToken(token)
@@ -5160,7 +6290,56 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		}))
 	}
 
+	// xir.27 sub-1: localhost WS accepts pair-code connections (?pairing_code=)
+	// without a token while a pairing session is active. Same gate semantics
+	// as the tsnet-side validator. Without this, --type local peer.join calls
+	// would be rejected at the WS handshake before ever reaching the
+	// pair.request handler.
+	if pairingMgr != nil {
+		wsOpts = append(wsOpts, websocket.WithPairingValidator(func(code string) bool {
+			return pairingMgr.HasActiveSession()
+		}))
+	}
+
 	wsServer := websocket.NewServer(wsAddr, wsRegistry, uiFS, wsOpts...)
+
+	// xir.27 sub-2: lazy per-IP secondary WS listener for --type network.
+	// Reuses wsServer.HTTPHandler() so all RPC handlers + the pairing /
+	// peer-accept gates are identical to the localhost listener; only the
+	// bind address differs. Per-IP idempotent — multiple --type network
+	// pairs anchored at the same LAN IP share one listener.
+	//
+	// NOT a 0.0.0.0 rebind by design: the user explicitly types the LAN IP
+	// they want to expose; binding to that specific IP keeps the blast
+	// radius narrow and auditable. Other interfaces on the host (vpn,
+	// docker, secondary NICs) stay invisible from this daemon's pairing
+	// surface unless the user opts each one in.
+	var (
+		networkListenersMu sync.Mutex
+		networkListeners   = map[string]string{} // ip → "ip:port"
+	)
+	ensureNetworkListenerFn = func(addrIP string) (string, error) {
+		networkListenersMu.Lock()
+		defer networkListenersMu.Unlock()
+		if existing, ok := networkListeners[addrIP]; ok {
+			return existing, nil
+		}
+		ln, err := net.Listen("tcp", net.JoinHostPort(addrIP, "0"))
+		if err != nil {
+			return "", fmt.Errorf("listen on %s: %w", addrIP, err)
+		}
+		bound := ln.Addr().String()
+		// Serve the same handler the main wsServer uses so all RPCs +
+		// validators are reachable on the LAN listener too.
+		go func() { // #nosec G114 -- intentional fire-and-forget; lifecycle ends with daemon process
+			if serveErr := http.Serve(ln, wsServer.HTTPHandler()); serveErr != nil && serveErr != http.ErrServerClosed {
+				slog.Warn("[network-listener] serve ended", "addr", bound, "err", serveErr)
+			}
+		}()
+		networkListeners[addrIP] = bound
+		slog.Info("[network-listener] bound", "addr", bound)
+		return bound, nil
+	}
 
 	// Wire the WebSocket client registry into the message handler so it can
 	// broadcast notification.message to ALL connected clients (including the
@@ -5222,19 +6401,23 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		tsHost := tsListener.ReachableAddr(tsCfg.Hostname)
 		tsLocalAddr = fmt.Sprintf("%s:%d", tsHost, tsCfg.Port)
 
-		// Register sync handlers
-		syncPullHandler := rpc.NewSyncPullHandler(st)
-		syncPeerInfoHandler := rpc.NewPeerInfoHandler(st.DaemonID(), hostname)
-		_ = syncRegistry.Register("sync.pull", syncPullHandler.Handle)
-		_ = syncRegistry.Register("sync.peer_info", syncPeerInfoHandler.Handle)
-
-		if syncManager != nil {
-			syncNotifyHandler := rpc.NewSyncNotifyHandler(syncManager.SyncFromPeerByID)
+		// Register sync handlers on syncRegistry (tsnet). Handler instances
+		// were created up-front (thrum-lgv9) so they can be shared with the
+		// localhost wsRegistry; we just register them here too.
+		if syncPullHandler != nil {
+			_ = syncRegistry.Register("sync.pull", syncPullHandler.Handle)
+		}
+		if syncPeerInfoHandler != nil {
+			_ = syncRegistry.Register("sync.peer_info", syncPeerInfoHandler.Handle)
+		}
+		if syncNotifyHandler != nil {
 			_ = syncRegistry.Register("sync.notify", syncNotifyHandler.Handle)
 		}
-		if pairingMgr != nil {
-			pairHandler := rpc.NewPairRequestHandler(pairingMgr.HandlePairRequest)
+		if pairHandler != nil {
 			_ = syncRegistry.Register("pair.request", pairHandler.Handle)
+		}
+		if repairHandler != nil {
+			_ = syncRegistry.Register("peer.repair", repairHandler.Handle)
 		}
 
 		// Build WebSocket server options for the Tailscale sync endpoint.
@@ -5384,6 +6567,17 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	monitorHandler.EnsureAllMonitorSenders(ctx)
 	go monitorSupervisor.Start(ctx)
 
+	// hook-inbox-delivery: reconcile spool files against DB read-state hourly.
+	// Pattern mirrors PeriodicSyncScheduler — own goroutine, own ticker.
+	spoolJanitor := inbox.NewSpoolJanitor(
+		thrumDir,
+		func() []string { return nudge.LocalAgentNames(thrumDir) },
+		func(msgID, agentID string) inbox.ReadState {
+			return queryMessageReadState(ctx, st, msgID, agentID)
+		},
+	)
+	go spoolJanitor.Start(ctx)
+
 	// Telegram bridge RPC handlers + goroutine
 	telegramHandler := rpc.NewTelegramHandler(absPath)
 	server.RegisterHandler("telegram.configure", telegramHandler.HandleConfigure)
@@ -5395,8 +6589,37 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	wsRegistry.Register("telegram.status", websocket.Handler(telegramHandler.HandleStatus))
 	wsRegistry.Register("telegram.pair", websocket.Handler(telegramHandler.HandlePair))
 
+	// thrum-48kt.6: periodically reap telegram_msg_map rows that have
+	// aged past the TTL and are not pinned by a live permission_nudges
+	// row. Runs regardless of whether the Telegram bridge is enabled
+	// in this session — the durable table persists across restarts,
+	// so a daemon booted without the bridge should still compact any
+	// leftover rows rather than letting them accumulate until the
+	// next bridge-enabled boot. SweepLoop runs one leading sweep
+	// immediately, then once per interval, until ctx is canceled.
+	go telegram.SweepLoop(ctx, st.RawDB(), telegram.DefaultMapTTL, telegram.DefaultSweepInterval)
+
 	if thrumCfg.Telegram.TelegramEnabled() {
 		tgBridge := telegram.New(thrumCfg.Telegram, wsPort)
+		// Wire the SQLite handle so telegram.MessageMap persists the
+		// Telegram↔Thrum mapping across daemon restarts (thrum-48kt.2).
+		// Without this, supervisor replies after restart silently
+		// drop reply_to and TryResolve never fires.
+		tgBridge.SetDB(st.RawDB())
+		// Wire the pending-nudge lookup so fresh Telegram DMs
+		// (y/n/yes/no/allow/deny not reply-threaded to the nudge) still
+		// resolve the supervisor's most-recent pending nudge
+		// (thrum-48kt.3). Keyed on the relay's userID inside the
+		// InboundRelay, so a fresh 'y' from a DIFFERENT human cannot
+		// inadvertently resolve someone else's pending nudge.
+		pStore := permPkg.Store()
+		tgBridge.SetPendingNudgeLookup(func(ctx context.Context, supervisorAgentID string) (string, error) {
+			row, err := pStore.LookupMostRecentPendingNudgeByRecipient(ctx, supervisorAgentID)
+			if err != nil || row == nil {
+				return "", err
+			}
+			return row.MessageID, nil
+		})
 		telegramHandler.SetBridge(tgBridge)
 		go tgBridge.Run(ctx)
 		fmt.Fprintf(os.Stderr, "  Telegram:    bridge enabled (target: %s)\n", thrumCfg.Telegram.Target)
@@ -5404,6 +6627,46 @@ func runDaemon(repoPath string, flagLocal bool) error {
 
 	// Tmux session management handlers
 	tmuxHandler := rpc.NewTmuxHandler(thrumDir, st)
+	// Wire the permission scheduler so HandleCheckPane can dispatch
+	// to OnDetection / OnRecovery. Without this, the permission
+	// branch of HandleCheckPane is a no-op and nudges never fire.
+	tmuxHandler.SetPermission(permPkg)
+
+	// Wire the silence-hash poller. tmux's alert-silence hook is
+	// unreliable on detached sessions (tmux issue #1384 — alerts are
+	// processed per-session-per-client; a detached session typically
+	// does not fire the hook). Thrum agents run detached by design, so
+	// the daemon polls enrolled sessions directly, hashes the pane
+	// tail (excluding runtime-specific volatile lines like codex's
+	// "Working (Ns)" timer), and dispatches HandleCheckPane when the
+	// hash stabilizes. This is the direct-control replacement for the
+	// unreliable tmux hook.
+	paneSilencePoller := permission.NewSessionPoller(permission.SessionPollerConfig{
+		CaptureLines:   30,
+		StabilityCount: 2, // 2 consecutive unchanged polls at 10s = 20s silence window
+		Capture:        ttmux.CapturePane,
+		OnStable: func(ctx context.Context, session, content string) error {
+			params, err := json.Marshal(rpc.CheckPaneRequest{
+				Session: session,
+				Content: content,
+			})
+			if err != nil {
+				return fmt.Errorf("marshal CheckPaneRequest: %w", err)
+			}
+			_, err = tmuxHandler.HandleCheckPane(ctx, params)
+			return err
+		},
+	})
+	tmuxHandler.SetPoller(paneSilencePoller)
+	// Cold-start reconciliation: enroll any currently-live thrum-managed
+	// tmux sessions that existed before daemon restart.
+	if n := tmuxHandler.ReconcilePoller(ctx); n > 0 {
+		slog.Info("[poller] cold-start reconciliation complete", "enrolled", n)
+	}
+	// Start the poll loop. Stops when ctx is canceled by the daemon
+	// shutdown sequence.
+	go paneSilencePoller.Run(ctx, 10*time.Second)
+
 	server.RegisterHandler("tmux.create", tmuxHandler.HandleCreate)
 	server.RegisterHandler("tmux.launch", tmuxHandler.HandleLaunch)
 	server.RegisterHandler("tmux.status", tmuxHandler.HandleStatus)
@@ -5423,6 +6686,29 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	}
 
 	// Auto-connect to dialer-role peers after the WS server is ready.
+	// xir.29: build a single reconcile.Manager shared by the boot-time
+	// scan below and the send-time OnDialError hook wired via
+	// peerManager.SetReconcileManager (Phase 5). Defined here so both
+	// consumers observe the same attempt/lock state.
+	var reconcileMgr *reconcile.Manager
+	if peerManager != nil && peerRegistry != nil {
+		localIdent := st.Identity()
+		// I7 review finding: Address was previously empty here, so the
+		// peer.repair request sent an empty address field and the
+		// listener could not update its cached view of us. Supply the
+		// WS port (same format peers store as PeerInfo.Address).
+		localDialer := reconcile.DialerIdentity{
+			DaemonID:     peerRegistry.LocalDaemonID(),
+			Address:      ":" + wsPort,
+			RepoName:     localIdent.RepoName,
+			Hostname:     localIdent.Hostname,
+			RepoPath:     localIdent.RepoPath,
+			GitOriginURL: localIdent.GitOriginURL,
+		}
+		reconcileMgr = reconcile.NewManager(peerRegistry, reconcile.WSDial, localDialer)
+		peerManager.SetReconcileManager(reconcileMgr)
+	}
+
 	if peerManager != nil && thrumCfg.Peers.AutoConnect {
 		go func() {
 			time.Sleep(500 * time.Millisecond) // Wait for WS server to start
@@ -5430,7 +6716,94 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		}()
 	}
 
+	// xir.29: one-shot boot-time reconcile scan. NOT periodic — fires
+	// once after bridges have had a chance to attempt their initial
+	// dial via ConnectAll, then exits. Per-peer drift is surfaced via
+	// PeerInfo.ReconcileStatus → `thrum peer list`.
+	//
+	// The 2s settling window gives bridge.ConnectAll (scheduled at
+	// 500ms) time to complete its first dial round; any drift indicators
+	// (daemon_id rotation, etc.) surface before reconcile kicks in.
+	// peer.repair is registered statically before lifecycle.Run (see
+	// the tsnet+WS registration sites above) so there is no handler-
+	// registration race.
+	if reconcileMgr != nil {
+		go func() {
+			select {
+			case <-time.After(2 * time.Second):
+			case <-ctx.Done():
+				return
+			}
+			results := reconcileMgr.ReconcileAll(ctx)
+			var attempted, succeeded, failed int
+			for _, r := range results {
+				attempted++
+				if r.OK {
+					succeeded++
+				} else {
+					failed++
+					// Emit per-peer detail at DEBUG only when a
+					// plumbing failure surfaced (r.Err != nil). Known
+					// categories (CatUnreachable / CatTokenRejected)
+					// without r.Err are already reflected in the
+					// registry's ReconcileStatus marker — no need to
+					// double-report at log level (M8 review finding).
+					if r.Err != nil {
+						slog.Debug("reconcile peer failed",
+							"peer", r.PeerName,
+							"category", int(r.Category),
+							"err", r.Err)
+					}
+				}
+			}
+			slog.Info("reconcile boot scan complete",
+				"attempted", attempted,
+				"succeeded", succeeded,
+				"failed", failed)
+		}()
+	}
+
 	return lifecycle.Run(ctx)
+}
+
+// queryMessageReadState checks whether a message is read by a specific
+// recipient agent, missing entirely, or still unread. Used by the
+// SpoolJanitor to reconcile per-agent spool files against DB state.
+//
+// Semantics (derived from the unread-filter clause in
+// internal/daemon/rpc/message.go): a message is "read by agent A"
+// when a row exists in message_deliveries with recipient_agent_id=A
+// and read_at IS NOT NULL. "Missing" means no row in messages.
+func queryMessageReadState(ctx context.Context, st *state.State, msgID, agentID string) inbox.ReadState {
+	var exists int
+	err := st.DB().QueryRowContext(ctx,
+		`SELECT 1 FROM messages WHERE message_id = ?`,
+		msgID,
+	).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return inbox.StateMissing
+	}
+	if err != nil {
+		// On DB error, be conservative — keep the file.
+		return inbox.StateUnread
+	}
+
+	var readExists int
+	err = st.DB().QueryRowContext(ctx,
+		`SELECT 1 FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ? AND read_at IS NOT NULL LIMIT 1`,
+		msgID, agentID,
+	).Scan(&readExists)
+	if err == nil {
+		return inbox.StateRead
+	}
+	if err != sql.ErrNoRows {
+		// Unexpected DB error on the read-state probe. Keep the file
+		// (conservative default) but surface the error so persistent
+		// DB trouble is visible in the janitor logs.
+		slog.Warn("[inbox_janitor] message_deliveries probe failed",
+			"agent", agentID, "msg_id", msgID, "err", err)
+	}
+	return inbox.StateUnread
 }
 
 func rolesCmd() *cobra.Command {
@@ -5809,26 +7182,23 @@ func runBackupCreate(dirOverride string) error {
 	}
 
 	if flagJSON {
-		data, _ := json.MarshalIndent(result.Manifest, "", "  ")
-		fmt.Println(string(data))
-	} else {
-		fmt.Printf("Backup complete: %s\n", result.CurrentDir)
-		fmt.Printf("  Events: %d lines\n", result.SyncResult.EventLines)
-		fmt.Printf("  Message files: %d\n", result.SyncResult.MessageFiles)
-		fmt.Printf("  Local tables: %d\n", len(result.LocalResult.Tables))
-		fmt.Printf("  Config files: %d\n", result.Manifest.Counts.ConfigFiles)
-		if pluginSummary := backup.FormatPluginResults(result.PluginResults); pluginSummary != "" {
-			fmt.Printf("  Plugins:\n%s", pluginSummary)
-		}
-		if result.PostHookResult != nil {
-			if result.PostHookResult.Error != "" {
-				fmt.Printf("  Post-backup hook: FAILED (%s)\n", result.PostHookResult.Error)
-			} else {
-				fmt.Printf("  Post-backup hook: ok\n")
-			}
+		return cli.EmitJSON(result.Manifest)
+	}
+	fmt.Printf("Backup complete: %s\n", result.CurrentDir)
+	fmt.Printf("  Events: %d lines\n", result.SyncResult.EventLines)
+	fmt.Printf("  Message files: %d\n", result.SyncResult.MessageFiles)
+	fmt.Printf("  Local tables: %d\n", len(result.LocalResult.Tables))
+	fmt.Printf("  Config files: %d\n", result.Manifest.Counts.ConfigFiles)
+	if pluginSummary := backup.FormatPluginResults(result.PluginResults); pluginSummary != "" {
+		fmt.Printf("  Plugins:\n%s", pluginSummary)
+	}
+	if result.PostHookResult != nil {
+		if result.PostHookResult.Error != "" {
+			fmt.Printf("  Post-backup hook: FAILED (%s)\n", result.PostHookResult.Error)
+		} else {
+			fmt.Printf("  Post-backup hook: ok\n")
 		}
 	}
-
 	return nil
 }
 
@@ -5860,52 +7230,50 @@ func runBackupStatus(dirOverride string) error {
 	}
 
 	if flagJSON {
-		data, _ := json.MarshalIndent(manifest, "", "  ")
-		fmt.Println(string(data))
-	} else {
-		fmt.Printf("Last backup: %s\n", manifest.Timestamp.Local().Format("2006-01-02 15:04:05"))
-		fmt.Printf("  Thrum version: %s\n", manifest.ThrumVersion)
-		fmt.Printf("  Repo: %s\n", manifest.RepoName)
-		fmt.Printf("  Events: %d\n", manifest.Counts.Events)
-		fmt.Printf("  Message files: %d\n", manifest.Counts.MessageFiles)
-		fmt.Printf("  Local tables: %d\n", manifest.Counts.LocalTables)
-		fmt.Printf("  Config files: %d\n", manifest.Counts.ConfigFiles)
-		if len(manifest.Counts.Plugins) > 0 {
-			fmt.Printf("  Plugins: %v\n", manifest.Counts.Plugins)
-		}
-		fmt.Printf("  Location: %s\n", currentDir)
+		return cli.EmitJSON(manifest)
+	}
+	fmt.Printf("Last backup: %s\n", manifest.Timestamp.Local().Format("2006-01-02 15:04:05"))
+	fmt.Printf("  Thrum version: %s\n", manifest.ThrumVersion)
+	fmt.Printf("  Repo: %s\n", manifest.RepoName)
+	fmt.Printf("  Events: %d\n", manifest.Counts.Events)
+	fmt.Printf("  Message files: %d\n", manifest.Counts.MessageFiles)
+	fmt.Printf("  Local tables: %d\n", manifest.Counts.LocalTables)
+	fmt.Printf("  Config files: %d\n", manifest.Counts.ConfigFiles)
+	if len(manifest.Counts.Plugins) > 0 {
+		fmt.Printf("  Plugins: %v\n", manifest.Counts.Plugins)
+	}
+	fmt.Printf("  Location: %s\n", currentDir)
 
-		// Show archive rotation stats
-		archivesDir := filepath.Join(backupDir, repoName, "archives")
-		if entries, err := os.ReadDir(archivesDir); err == nil {
-			var archiveCount int
-			var totalSize int64
-			var oldest, newest time.Time
-			for _, e := range entries {
-				if e.IsDir() || strings.HasPrefix(e.Name(), "pre-restore-") {
-					continue
+	// Show archive rotation stats
+	archivesDir := filepath.Join(backupDir, repoName, "archives")
+	if entries, err := os.ReadDir(archivesDir); err == nil {
+		var archiveCount int
+		var totalSize int64
+		var oldest, newest time.Time
+		for _, e := range entries {
+			if e.IsDir() || strings.HasPrefix(e.Name(), "pre-restore-") {
+				continue
+			}
+			archiveCount++
+			if info, err := e.Info(); err == nil {
+				totalSize += info.Size()
+			}
+			// Parse timestamp from filename (2006-01-02T150405.zip)
+			name := strings.TrimSuffix(e.Name(), ".zip")
+			if ts, err := time.Parse("2006-01-02T150405", name); err == nil {
+				if oldest.IsZero() || ts.Before(oldest) {
+					oldest = ts
 				}
-				archiveCount++
-				if info, err := e.Info(); err == nil {
-					totalSize += info.Size()
-				}
-				// Parse timestamp from filename (2006-01-02T150405.zip)
-				name := strings.TrimSuffix(e.Name(), ".zip")
-				if ts, err := time.Parse("2006-01-02T150405", name); err == nil {
-					if oldest.IsZero() || ts.Before(oldest) {
-						oldest = ts
-					}
-					if newest.IsZero() || ts.After(newest) {
-						newest = ts
-					}
+				if newest.IsZero() || ts.After(newest) {
+					newest = ts
 				}
 			}
-			if archiveCount > 0 {
-				fmt.Printf("Archives: %d (%.1f MB)\n", archiveCount, float64(totalSize)/(1024*1024))
-				if !oldest.IsZero() {
-					fmt.Printf("  Oldest: %s\n", oldest.Local().Format("2006-01-02 15:04:05"))
-					fmt.Printf("  Newest: %s\n", newest.Local().Format("2006-01-02 15:04:05"))
-				}
+		}
+		if archiveCount > 0 {
+			fmt.Printf("Archives: %d (%.1f MB)\n", archiveCount, float64(totalSize)/(1024*1024))
+			if !oldest.IsZero() {
+				fmt.Printf("  Oldest: %s\n", oldest.Local().Format("2006-01-02 15:04:05"))
+				fmt.Printf("  Newest: %s\n", newest.Local().Format("2006-01-02 15:04:05"))
 			}
 		}
 	}
@@ -5930,29 +7298,26 @@ func runBackupConfig() error {
 	}
 
 	if flagJSON {
-		data, _ := json.MarshalIndent(cfg.Backup, "", "  ")
-		fmt.Println(string(data))
-	} else {
-		fmt.Printf("Backup directory: %s\n", effectiveDir)
-		fmt.Printf("Retention:\n")
-		fmt.Printf("  Daily: %d\n", cfg.Backup.Retention.RetentionDaily())
-		fmt.Printf("  Weekly: %d\n", cfg.Backup.Retention.RetentionWeekly())
-		monthly := fmt.Sprintf("%d", cfg.Backup.Retention.RetentionMonthly())
-		if cfg.Backup.Retention.RetentionMonthly() == -1 {
-			monthly = "forever"
-		}
-		fmt.Printf("  Monthly: %s\n", monthly)
-		if len(cfg.Backup.Plugins) > 0 {
-			fmt.Printf("Plugins:\n")
-			for _, p := range cfg.Backup.Plugins {
-				fmt.Printf("  %s: %s\n", p.Name, p.Command)
-			}
-		}
-		if cfg.Backup.PostBackup != "" {
-			fmt.Printf("Post-backup: %s\n", cfg.Backup.PostBackup)
+		return cli.EmitJSON(cfg.Backup)
+	}
+	fmt.Printf("Backup directory: %s\n", effectiveDir)
+	fmt.Printf("Retention:\n")
+	fmt.Printf("  Daily: %d\n", cfg.Backup.Retention.RetentionDaily())
+	fmt.Printf("  Weekly: %d\n", cfg.Backup.Retention.RetentionWeekly())
+	monthly := fmt.Sprintf("%d", cfg.Backup.Retention.RetentionMonthly())
+	if cfg.Backup.Retention.RetentionMonthly() == -1 {
+		monthly = "forever"
+	}
+	fmt.Printf("  Monthly: %s\n", monthly)
+	if len(cfg.Backup.Plugins) > 0 {
+		fmt.Printf("Plugins:\n")
+		for _, p := range cfg.Backup.Plugins {
+			fmt.Printf("  %s: %s\n", p.Name, p.Command)
 		}
 	}
-
+	if cfg.Backup.PostBackup != "" {
+		fmt.Printf("Post-backup: %s\n", cfg.Backup.PostBackup)
+	}
 	return nil
 }
 
@@ -6026,8 +7391,9 @@ func runBackupRestore(dirOverride, archivePath string, skipConfirm bool) error {
 	}
 
 	if flagJSON {
-		data, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(data))
+		if err := cli.EmitJSON(result); err != nil {
+			return err
+		}
 	} else {
 		if result.SafetyBackup != "" {
 			fmt.Printf("Safety backup: %s\n", result.SafetyBackup)
@@ -6037,7 +7403,7 @@ func runBackupRestore(dirOverride, archivePath string, skipConfirm bool) error {
 
 	// Restart daemon if it was running before restore
 	if daemonWasRunning {
-		if restartErr := cli.DaemonRestart(flagRepo, cfg.Daemon.LocalOnly); restartErr != nil {
+		if restartErr := cli.DaemonRestart(flagRepo, cfg.Daemon.LocalOnly, false); restartErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not restart daemon: %v\n", restartErr)
 			fmt.Println("Restart manually: thrum daemon start")
 		} else {
@@ -6152,20 +7518,17 @@ func runPluginList() error {
 	}
 
 	if flagJSON {
-		data, _ := json.MarshalIndent(cfg.Backup.Plugins, "", "  ")
-		fmt.Println(string(data))
-	} else {
-		for _, p := range cfg.Backup.Plugins {
-			fmt.Printf("  %s\n", p.Name)
-			if p.Command != "" {
-				fmt.Printf("    command: %s\n", p.Command)
-			}
-			if len(p.Include) > 0 {
-				fmt.Printf("    include: %v\n", p.Include)
-			}
+		return cli.EmitJSON(cfg.Backup.Plugins)
+	}
+	for _, p := range cfg.Backup.Plugins {
+		fmt.Printf("  %s\n", p.Name)
+		if p.Command != "" {
+			fmt.Printf("    command: %s\n", p.Command)
+		}
+		if len(p.Include) > 0 {
+			fmt.Printf("    include: %v\n", p.Include)
 		}
 	}
-
 	return nil
 }
 
@@ -6359,7 +7722,7 @@ func runTelegramConfigure(token, target, userID string, skipConfirm bool, allowF
 
 	// Path 3: Auto-pair flow
 	fmt.Println("\nStarting daemon with new config...")
-	if err := cli.DaemonRestart(flagRepo, false); err != nil {
+	if err := cli.DaemonRestart(flagRepo, false, false); err != nil {
 		return fmt.Errorf("daemon restart: %w", err)
 	}
 	fmt.Println("Daemon restarted")
@@ -6405,9 +7768,7 @@ func runTelegramStatus() error {
 		if len(tg.AllowFrom) > 0 {
 			status["allow_from"] = tg.AllowFrom
 		}
-		data, _ := json.MarshalIndent(status, "", "  ")
-		fmt.Println(string(data))
-		return nil
+		return cli.EmitJSON(status)
 	}
 
 	if tg.Token == "" {
@@ -6551,6 +7912,7 @@ func isValidBotToken(token string) bool {
 		}
 	}
 	for _, c := range parts[1] {
+		//nolint:staticcheck // QF1001: explicit positive-range form is clearer for character classes
 		if !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
 			return false
 		}
@@ -6607,27 +7969,30 @@ func restartSnapshotSubcmds() []*cobra.Command {
 
 			pid := idFile.AgentPID
 			if pid == 0 {
-				// Fallback: query daemon for the agent's AgentPID
-				client, err := getClient()
-				if err != nil {
-					return fmt.Errorf("connect to daemon: %w", err)
-				}
-				defer func() { _ = client.Close() }()
-
-				var agents []struct {
-					AgentID  string `json:"agent_id"`
-					AgentPID int    `json:"agent_pid"`
-				}
-				if err := client.Call("agent.list", nil, &agents); err == nil {
-					for _, a := range agents {
-						if a.AgentID == agentName && a.AgentPID > 0 {
-							pid = a.AgentPID
-							break
+				// Fallback: query the daemon for the agent's AgentPID. The
+				// daemon path is itself a best-effort fallback — if we
+				// can't reach the daemon (dial failure, closed socket) we
+				// fall through to the pid==0 refusal below rather than
+				// returning an unrelated "connect to daemon" error. The
+				// no-pid hint then renders with actionable remediation.
+				if client, err := getClient(); err == nil {
+					var agents []struct {
+						AgentID  string `json:"agent_id"`
+						AgentPID int    `json:"agent_pid"`
+					}
+					if err := client.Call("agent.list", nil, &agents); err == nil {
+						for _, a := range agents {
+							if a.AgentID == agentName && a.AgentPID > 0 {
+								pid = a.AgentPID
+								break
+							}
 						}
 					}
+					_ = client.Close()
 				}
 			}
 			if pid == 0 {
+				cli.EmitStderr([]cli.Hint{cli.SnapshotSaveNoPIDHint(agentName)}, flagQuiet, flagJSON)
 				return fmt.Errorf("no agent PID found for %s — ensure agent is registered with an agent PID", agentName)
 			}
 
@@ -6636,9 +8001,50 @@ func restartSnapshotSubcmds() []*cobra.Command {
 				return fmt.Errorf("resolve home directory: %w", err)
 			}
 			claudeDir := filepath.Join(homeDir, ".claude")
-			jsonlPath, err := restart.FindSessionJSONL(claudeDir, pid)
-			if err != nil {
-				return fmt.Errorf("find session JSONL: %w", err)
+
+			// Resolution order (thrum-ufv5.7):
+			//   1. --jsonl <path> flag — explicit caller override, skip auto-detect.
+			//   2. restart.FindSessionJSONL — PID-based lookup (primary path).
+			//   3. restart.FindLatestJSONLForCwd — mtime fallback using the
+			//      worktree path from the identity file. Covers the case where
+			//      ~/.claude/sessions/<pid>.json is missing or stale but the
+			//      project dir still has the current conversation JSONL.
+			// If all three fail, emit the no-jsonl hint and return.
+			var jsonlPath string
+			if explicit, _ := cmd.Flags().GetString("jsonl"); explicit != "" {
+				// Pre-flight: stat the explicit path so typos surface with a
+				// targeted hint instead of being misdiagnosed as an extract
+				// failure. ExtractConversation's own error would misdirect
+				// toward permission/corruption remediation.
+				if _, statErr := os.Stat(explicit); os.IsNotExist(statErr) {
+					cli.EmitStderr([]cli.Hint{cli.SnapshotSaveJSONLNotFoundHint(explicit)}, flagQuiet, flagJSON)
+					return fmt.Errorf("jsonl path not found: %s", explicit)
+				}
+				jsonlPath = explicit
+			} else {
+				jsonlPath, err = restart.FindSessionJSONL(claudeDir, pid)
+				if err != nil {
+					// Layer 3: mtime fallback. Track fallback diagnostics so
+					// the no-jsonl hint can explain exactly WHY the fallback
+					// didn't succeed (dir missing vs empty vs no worktree).
+					noJSONLCtx := cli.SnapshotSaveNoJSONLContext{}
+					if idFile.Worktree == "" {
+						noJSONLCtx.WorktreeMissing = true
+					} else {
+						fb, ferr := restart.FindLatestJSONLForCwd(claudeDir, idFile.Worktree)
+						if ferr == nil && fb != "" {
+							jsonlPath = fb
+						} else if ferr != nil {
+							noJSONLCtx.ProjectDirReadErr = ferr
+						} else {
+							noJSONLCtx.ProjectDirEmpty = true
+						}
+					}
+					if jsonlPath == "" {
+						cli.EmitStderr([]cli.Hint{cli.SnapshotSaveNoJSONLHint(pid, claudeDir, noJSONLCtx)}, flagQuiet, flagJSON)
+						return fmt.Errorf("find session JSONL: %w", err)
+					}
+				}
 			}
 
 			cfg, _ := config.LoadThrumConfig(thrumDir)
@@ -6646,6 +8052,7 @@ func restartSnapshotSubcmds() []*cobra.Command {
 
 			conversation, err := restart.ExtractConversation(jsonlPath, maxLines)
 			if err != nil {
+				cli.EmitStderr([]cli.Hint{cli.SnapshotSaveExtractFailedHint(jsonlPath)}, flagQuiet, flagJSON)
 				return fmt.Errorf("extract conversation: %w", err)
 			}
 
@@ -6667,6 +8074,7 @@ func restartSnapshotSubcmds() []*cobra.Command {
 		},
 	}
 	saveCmd.Flags().String("reason", "self-initiated", "Reason for restart")
+	saveCmd.Flags().String("jsonl", "", "Explicit path to Claude conversation JSONL (bypasses auto-detect; use when ls ~/.claude/projects/<slug>/ shows the correct file)")
 
 	restoreCmd := &cobra.Command{
 		Use:   "restore",
@@ -6747,6 +8155,54 @@ func tmuxCmd() *cobra.Command {
 			}
 			defer func() { _ = client.Close() }()
 
+			// Hint pipeline: pre-action collection + gating.
+			state := cli.NewLiveStateAccessor(client)
+			hintFlags := map[string]any{"cwd": cwd, "force": force}
+			preCtx := cli.HintCtx{
+				Command: "tmux.create",
+				Args:    args,
+				Flags:   hintFlags,
+				Post:    false,
+				State:   state,
+			}
+			preHints := cli.Collect(preCtx)
+			if abortErr := cli.HandlePreAction(preHints, force); abortErr != nil {
+				if flagJSON {
+					// Emit abort body to stdout so agents can parse it,
+					// then return a terse error for the exit code. Render
+					// only the blocking hints for symmetry with the text
+					// path (EmitAbort) — non-blocking info hints, if any,
+					// aren't what caused the abort.
+					var he *cli.HintAbortError
+					var blockers []cli.Hint
+					if errors.As(abortErr, &he) {
+						blockers = he.Hints
+					}
+					body := map[string]any{
+						"error":   "aborted by hint",
+						"aborted": true,
+					}
+					if err := cli.EmitJSONWithHints(body, blockers); err != nil {
+						return fmt.Errorf("render abort body: %w", err)
+					}
+					return fmt.Errorf("aborted")
+				}
+				return cli.EmitAbort(abortErr, flagQuiet, flagJSON)
+			}
+
+			// Snapshot pre-state for the identity-replaced audit marker. Done
+			// BEFORE the mutation so we can detect whether --force overwrote
+			// a stale identity without re-reading (now-mutated) FS state.
+			var replaceMarker cli.TmuxCreateResultMarker
+			if force && cwd != "" {
+				if status, preAgent, serr := state.IdentityStatus(cwd); serr == nil && status == cli.IdentityStale && preAgent != nil {
+					replaceMarker = cli.TmuxCreateResultMarker{
+						ReplacedStaleIdentity: true,
+						ReplacedAgentName:     preAgent.AgentID,
+					}
+				}
+			}
+
 			result, err := cli.TmuxCreate(client, cli.TmuxCreateOptions{
 				Name:      args[0],
 				Cwd:       cwd,
@@ -6761,11 +8217,28 @@ func tmuxCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			// Post-action hint collection. preHints are also re-emitted at
+			// this point — a warn+AllowForce=true hint that was force-cleared
+			// is still useful context (e.g. 'session was replaced, FYI').
+			postCtx := cli.HintCtx{
+				Command: "tmux.create",
+				Args:    args,
+				Flags:   hintFlags,
+				Post:    true,
+				Result:  replaceMarker,
+				State:   state,
+			}
+			postHints := cli.Collect(postCtx)
+			allHints := append(preHints, postHints...) //nolint:gocritic // appendAssign: intentionally combining into new slice
+
 			if flagJSON {
-				out, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(out))
+				if err := cli.EmitJSONWithHints(result, allHints); err != nil {
+					return fmt.Errorf("render tmux create response: %w", err)
+				}
 			} else {
 				fmt.Print(cli.FormatTmuxCreate(result))
+				cli.EmitStderr(allHints, flagQuiet, flagJSON)
 			}
 			return nil
 		},
@@ -6811,7 +8284,10 @@ func tmuxCmd() *cobra.Command {
 						rt = cfg.Runtime.Primary
 					}
 				}
-				if idFile, _, loadErr := config.LoadIdentityWithPath(sessionCwd); loadErr == nil && idFile != nil {
+				// Use LoadIdentityFromWorktree (not LoadIdentityWithPath) to bypass
+				// THRUM_HOME/THRUM_NAME env vars from the calling shell. The launch
+				// command resolves the target worktree's identity, not the caller's.
+				if idFile, loadErr := config.LoadIdentityFromWorktree(sessionCwd); loadErr == nil && idFile != nil {
 					if idFile.PreferredRuntime != "" {
 						rt = idFile.PreferredRuntime
 					}
@@ -6835,11 +8311,9 @@ func tmuxCmd() *cobra.Command {
 				return err
 			}
 			if flagJSON {
-				out, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(out))
-			} else {
-				fmt.Printf("Launched %s in session %s\n", result.Runtime, result.Session)
+				return cli.EmitJSON(result)
 			}
+			fmt.Printf("Launched %s in session %s\n", result.Runtime, result.Session)
 			return nil
 		},
 	}
@@ -6863,11 +8337,9 @@ func tmuxCmd() *cobra.Command {
 				return err
 			}
 			if flagJSON {
-				out, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(out))
-			} else {
-				fmt.Print(cli.FormatTmuxStatus(result))
+				return cli.EmitJSON(result)
 			}
+			fmt.Print(cli.FormatTmuxStatus(result))
 			return nil
 		},
 	}
@@ -6950,9 +8422,15 @@ func tmuxCmd() *cobra.Command {
 				return err
 			}
 
-			reason := detectPaneState(content)
-
-			// Always call daemon — queue dispatch needs idle notifications
+			// Runtime resolution and permission-prompt detection both
+			// live on the daemon side (HandleCheckPane). The CLI used to
+			// load .thrum/identities/*.json from cwd to resolve runtime,
+			// but tmux's alert-silence run-shell fires from the tmux
+			// server's cwd — not the agent's worktree — so identity
+			// lookup was unreliable. The daemon has authoritative
+			// session → identity mapping via findIdentityForSession, so
+			// we send only (session, content) and let the daemon handle
+			// detection as a single source of truth.
 			client, err := getClient()
 			if err != nil {
 				return nil // Daemon not running, silently skip
@@ -6961,7 +8439,6 @@ func tmuxCmd() *cobra.Command {
 
 			req := map[string]string{
 				"session": session,
-				"reason":  reason,
 				"content": content,
 			}
 			var result any
@@ -6969,7 +8446,10 @@ func tmuxCmd() *cobra.Command {
 			return nil
 		},
 	}
-	checkPaneCmd.Flags().String("repo", "", "Repository path (baked in by tmux hook)")
+	// --repo is kept as a flag for backward compatibility with baked-in
+	// tmux hooks from older thrum binaries. The new CLI ignores it —
+	// the daemon is the single source of truth for runtime resolution.
+	checkPaneCmd.Flags().String("repo", "", "Repository path (deprecated — unused; daemon resolves identity)")
 	cmd.AddCommand(checkPaneCmd)
 
 	// connect
@@ -7067,13 +8547,11 @@ Without arguments, shows a numbered list of alive sessions to choose from.`,
 			}
 
 			if flagJSON {
-				out, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(out))
-			} else {
-				fmt.Printf("Session %s restarted (%d snapshot lines)\n", result.Session, result.SnapshotLines)
-				if result.SnapshotLines == 0 {
-					fmt.Println("  ⚠ No conversation history captured — agent will start without prior context")
-				}
+				return cli.EmitJSON(result)
+			}
+			fmt.Printf("Session %s restarted (%d snapshot lines)\n", result.Session, result.SnapshotLines)
+			if result.SnapshotLines == 0 {
+				fmt.Println("  ⚠ No conversation history captured — agent will start without prior context")
 			}
 			return nil
 		},
@@ -7245,9 +8723,7 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 				return err
 			}
 			if flagJSON {
-				out, _ := json.MarshalIndent(resp, "", "  ")
-				fmt.Println(string(out))
-				return nil
+				return cli.EmitJSON(resp)
 			}
 			fmt.Printf("Session: %s\n", resp.Session)
 			if resp.Active != nil {
@@ -7285,9 +8761,7 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 				return err
 			}
 			if flagJSON {
-				out, _ := json.MarshalIndent(resp, "", "  ")
-				fmt.Println(string(out))
-				return nil
+				return cli.EmitJSON(resp)
 			}
 			fmt.Printf("Canceled %s (state: %s)\n", resp.CommandID, resp.State)
 			return nil
@@ -7313,24 +8787,4 @@ func tmuxAttach(session string) error {
 	// This makes the terminal see "tmux" as the process, which then
 	// propagates session/window titles to the terminal tab correctly.
 	return safecmd.TmuxExec("attach-session", "-t", session)
-}
-
-// detectPaneState scans visible pane content for an explicit permission
-// prompt. Requires both "allow" and an explicit prompt indicator
-// ("y/n", "yes/no", or "allow/deny") on the same line to avoid matching
-// unrelated text that merely mentions "allow" and "yes".
-func detectPaneState(content string) string {
-	lines := strings.Split(strings.TrimSpace(content), "\n")
-	for _, line := range lines {
-		lower := strings.ToLower(line)
-		if !strings.Contains(lower, "allow") {
-			continue
-		}
-		if strings.Contains(lower, "y/n") ||
-			strings.Contains(lower, "yes/no") ||
-			strings.Contains(lower, "allow/deny") {
-			return "permission:" + strings.TrimSpace(line)
-		}
-	}
-	return ""
 }

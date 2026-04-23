@@ -3,7 +3,7 @@ name: thrum
 description: >
   Multi-agent coordination via messaging, groups, and shared context. Use when
   agents need to communicate, delegate work, or coordinate across worktrees.
-version: "0.8.2"
+version: "0.9.0"
 author: "Leon Letto <https://github.com/leonletto>"
 license: "MIT"
 ---

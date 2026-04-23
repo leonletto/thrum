@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
 	"github.com/leonletto/thrum/internal/transport"
 )
 
@@ -19,16 +21,17 @@ type Handler func(ctx context.Context, params json.RawMessage) (any, error)
 
 // Server represents the Unix socket RPC server.
 type Server struct {
-	socketPath string
-	listener   net.Listener
-	handlers   map[string]Handler
-	longPoll   map[string]bool
-	mu         sync.RWMutex
-	shutdown   bool
-	wg         sync.WaitGroup
-	startTime  time.Time
-	connsMu    sync.Mutex            // protects conns
-	conns      map[net.Conn]struct{} // active client connections
+	socketPath       string
+	listener         net.Listener
+	handlers         map[string]Handler
+	longPoll         map[string]bool
+	mu               sync.RWMutex
+	shutdown         bool
+	wg               sync.WaitGroup
+	startTime        time.Time
+	connsMu          sync.Mutex            // protects conns
+	conns            map[net.Conn]struct{} // active client connections
+	identityResolver peercred.Resolver     // optional; nil disables per-connection identity resolution (tests, early boot)
 }
 
 // NewServer creates a new RPC server.
@@ -57,6 +60,91 @@ func (s *Server) RegisterLongPollHandler(method string, h Handler) {
 	defer s.mu.Unlock()
 	s.handlers[method] = h
 	s.longPoll[method] = true
+}
+
+// SetIdentityResolver wires a peer-credential resolver into the server so that
+// every RPC request gets its kernel-verified identity injected into the
+// per-request context. Passing nil disables peercred-based identity injection
+// entirely (used by tests and early-boot phases before the state DB is ready).
+//
+// The resolver is consulted once per RPC request (not once per connection) so
+// that agents registered after a connection is accepted (e.g. quickstart) are
+// picked up immediately without requiring a reconnect. For the CLI path this is
+// net-zero cost (each command opens a fresh connection for a single RPC). For
+// long-lived connections (MCP server) the overhead is one gopsutil Cwd + one
+// session_refs query per call, which is ~1 ms and acceptable.
+func (s *Server) SetIdentityResolver(r peercred.Resolver) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.identityResolver = r
+}
+
+// anonymousAllowedMethods is the allowlist of JSON-RPC methods that callers
+// without a resolved peercred identity may still invoke. The list is the
+// union of:
+//
+//   - the baseline the bead acceptance criteria named (team.list, message.list,
+//     group.list, session.list, agent.get/whoami, daemon.status),
+//   - every read-only RPC in the daemon that does not require caller identity
+//     for its correctness (health, session.get, tmux.status/capture/check-pane,
+//     monitor.list/show/logs, sync/peer status queries, user.identify which
+//     only reads git config).
+//
+// The coordinator's directive for v0.9.0: err on the side of ALLOWING more
+// read-only RPCs, not fewer. A stuck `cd ~ && thrum team` is worse than a
+// theoretically tighter boundary on read access. Mutating RPCs fall off this
+// list and are rejected for anonymous callers.
+//
+// SECURITY: This list is consulted in handleConnection BEFORE the handler
+// runs. Any method not in this list, when invoked by an anonymous caller,
+// is rejected with a clear error — it never reaches the handler.
+var anonymousAllowedMethods = map[string]bool{
+	// Observability / liveness
+	"health":           true,
+	"daemon.status":    true,
+	"sync.status":      true,
+	"tsync.peers.list": true,
+	"peer.list":        true,
+	"peer.status":      true,
+	"telegram.status":  true,
+	// Read-only agent/team/session queries
+	"agent.list":        true,
+	"agent.whoami":      true,
+	"agent.listContext": true,
+	"team.list":         true,
+	"session.list":      true,
+	// Read-only context queries
+	"context.show":          true,
+	"context.preamble.show": true,
+	// Read-only message/group queries
+	"message.get":    true,
+	"message.list":   true,
+	"message.outbox": true,
+	"group.list":     true,
+	"group.info":     true,
+	"group.members":  true,
+	// Read-only monitor queries
+	"monitor.list": true,
+	"monitor.show": true,
+	"monitor.logs": true,
+	// Read-only tmux queries
+	"tmux.status":       true,
+	"tmux.capture":      true,
+	"tmux.check-pane":   true,
+	"tmux.queue-status": true,
+	"tmux.queue-wait":   true,
+	// Git-config identity read (no auth)
+	"user.identify": true,
+	// Bootstrap: the quickstart flow calls register → session.start →
+	// session.setIntent on a single connection. Peercred identity is resolved
+	// once at connection accept time, so even after agent.register populates
+	// agent_work_contexts, the current connection stays tagged as anonymous.
+	// All three bootstrap RPCs must be anonymous-allowed or daemon restart
+	// creates a chicken-and-egg. Socket is 0600 so only the owning user can
+	// reach these endpoints.
+	"agent.register":    true,
+	"session.start":     true,
+	"session.setIntent": true,
 }
 
 // Start starts the server and begins accepting connections.
@@ -281,7 +369,66 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 		}
 		reqCtx, reqCancel := context.WithTimeout(ctx, timeout)
 		ctxWithTransport := transport.WithTransport(reqCtx, transport.TransportUnixSocket)
-		result, err := handler(ctxWithTransport, reqParams)
+
+		// Resolve peer-credential identity per-RPC. Doing this here (not once
+		// at connection-accept time) prevents the anonymous-latch bug: if an
+		// agent registers AFTER the connection is accepted but BEFORE the first
+		// RPC body arrives, a per-connection resolve would latch ErrAnonymous
+		// for the lifetime of that connection. Re-resolving on every RPC means
+		// freshly-registered agents are visible immediately without a reconnect.
+		//
+		// Cost: one gopsutil Cwd + one session_refs query per RPC. For the CLI
+		// path this is net-zero (each CLI command opens a fresh connection for
+		// a single RPC). For long-lived connections (MCP server) the overhead
+		// is ~1 ms per call, which is acceptable.
+		//
+		// When the resolver is absent (tests, browser/WS transport): skip the
+		// block. The context stays un-injected — same as the old
+		// connResolved=false path — so all existing tests keep passing.
+		ctxWithIdentity := ctxWithTransport
+		s.mu.RLock()
+		resolver := s.identityResolver
+		s.mu.RUnlock()
+		if resolver != nil {
+			// Extract the kernel-verified PID so handlers can walk the caller's
+			// ancestor chain independent of identity resolution success.
+			// Rule #4‴'s ancestor-chain clause wire-up is tracked in thrum-u5fk.4.
+			if pid, err := peercred.PIDFromConn(conn); err == nil {
+				ctxWithIdentity = peercred.WithConnectingPID(ctxWithIdentity, pid)
+			}
+
+			reqIdentity, resolveErr := resolver.Resolve(conn)
+			if resolveErr == nil || errors.Is(resolveErr, peercred.ErrAnonymous) {
+				// resolved (with or without a match) — inject result and enforce
+				// the anonymous allowlist.
+				ctxWithIdentity = peercred.WithIdentity(ctxWithIdentity, reqIdentity)
+
+				// Read-only allowlist enforcement: an anonymous caller (peercred
+				// ran but no registered worktree matched) may only invoke
+				// methods on the allowlist. Anything else is rejected here,
+				// before the handler runs.
+				if reqIdentity == nil && !anonymousAllowedMethods[req.Method] {
+					reqCancel()
+					resp := jsonRPCResponse{
+						JSONRPC: "2.0",
+						ID:      req.ID,
+						Error: &jsonRPCError{
+							Code:    -32002, // anonymous caller not permitted
+							Message: fmt.Sprintf("anonymous caller cannot invoke %q: cd into a registered agent worktree and retry", req.Method),
+						},
+					}
+					if err := s.writeResponse(writer, resp); err != nil {
+						return
+					}
+					continue
+				}
+			}
+			// Any other error (kernel denied peercred, list lookup failed)
+			// leaves ctxWithIdentity un-injected — the connection falls back
+			// to legacy behavior to avoid wedging the daemon on transient DB errors.
+		}
+
+		result, err := handler(ctxWithIdentity, reqParams)
 		reqCancel()
 		if err != nil {
 			resp := jsonRPCResponse{

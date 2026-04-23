@@ -22,6 +22,10 @@ func setupGroupTest(t *testing.T) (*GroupHandler, *state.State, func()) {
 	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
 		t.Fatalf("create .thrum dir: %v", err)
 	}
+	// Disable unauthenticated_rpc guard: these tests exercise group-handler
+	// behavior, not identity enforcement, and were written when an absent
+	// CallerAgentID silently defaulted to "system".
+	writeGuardOffConfig(t, tmpDir)
 
 	repoID := "r_GROUP_TEST"
 	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
@@ -130,7 +134,7 @@ func TestGroupDelete_ProtectedEveryone(t *testing.T) {
 func registerTestAgent(t *testing.T, st *state.State, name string) {
 	t.Helper()
 	agentHandler := NewAgentHandler(st)
-	params, _ := json.Marshal(RegisterRequest{Name: name, Role: name + "_role", Module: name + "_mod", Force: true})
+	params, _ := json.Marshal(RegisterRequest{Name: name, Role: name + "_role", Module: name + "_mod"})
 	if _, err := agentHandler.HandleRegister(context.Background(), params); err != nil {
 		t.Fatalf("register agent %q: %v", name, err)
 	}
@@ -403,6 +407,7 @@ func setupGroupTestWithMessages(t *testing.T) (*GroupHandler, *MessageHandler, *
 	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
 		t.Fatalf("create .thrum dir: %v", err)
 	}
+	writeGuardOffConfig(t, tmpDir)
 
 	repoID := "r_GROUP_MSG_TEST"
 	st, err := state.NewState(thrumDir, thrumDir, repoID, "")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -240,37 +241,51 @@ func (p *Projector) applyMessageEdit(ctx context.Context, data json.RawMessage) 
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Query current content and session_id before updating
+	// Query current content and session_id before updating.
+	//
+	// If the original message hasn't been synced yet (out-of-order delivery
+	// across peers), skip edit history and let the UPDATE become a safe no-op.
+	// This prevents a missing message from poisoning the sync apply loop.
+	//
+	// KNOWN LIMITATION: when an edit applies before its create, the edit is
+	// permanently lost from the live projection — the UPDATE matches zero rows
+	// and when the create eventually arrives it inserts only the original
+	// content. A full Rebuild from JSONL would apply both events in timestamp
+	// order and produce the correct result, so data is preserved in the log.
+	// This is acceptable per the graceful-degradation design: never block sync.
 	var oldContent string
 	var oldStructured sql.NullString
 	var sessionID string
 	query := `SELECT body_content, body_structured, session_id FROM messages WHERE message_id = ?`
 	err = tx.QueryRow(query, event.MessageID).Scan(&oldContent, &oldStructured, &sessionID)
-	if err != nil {
+	switch {
+	case err == nil:
+		// Original message exists — record edit history
+		_, err = tx.Exec(`
+			INSERT INTO message_edits (
+				message_id, edited_at, edited_by,
+				old_content, new_content,
+				old_structured, new_structured
+			) VALUES (?, ?, ?, ?, ?, ?, ?)
+		`,
+			event.MessageID,
+			event.Timestamp,
+			sessionID,
+			sqlNullString(oldContent),
+			sqlNullString(event.Body.Content),
+			oldStructured,
+			sqlNullString(event.Body.Structured),
+		)
+		if err != nil {
+			return fmt.Errorf("insert edit history: %w", err)
+		}
+	case errors.Is(err, sql.ErrNoRows):
+		// Message not in local DB yet — skip edit history, still attempt update
+	default:
 		return fmt.Errorf("query message: %w", err)
 	}
 
-	// Insert edit history record
-	_, err = tx.Exec(`
-		INSERT INTO message_edits (
-			message_id, edited_at, edited_by,
-			old_content, new_content,
-			old_structured, new_structured
-		) VALUES (?, ?, ?, ?, ?, ?, ?)
-	`,
-		event.MessageID,
-		event.Timestamp,
-		sessionID,
-		sqlNullString(oldContent),
-		sqlNullString(event.Body.Content),
-		oldStructured,
-		sqlNullString(event.Body.Structured),
-	)
-	if err != nil {
-		return fmt.Errorf("insert edit history: %w", err)
-	}
-
-	// Update message content
+	// Update message content (no-op if message doesn't exist locally)
 	_, err = tx.Exec(`
 		UPDATE messages
 		SET body_content = ?, body_structured = ?, updated_at = ?
@@ -322,13 +337,87 @@ func (p *Projector) applyMessageReceipt(ctx context.Context, data json.RawMessag
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Ensure a delivery row exists even for pre-v14 messages that are marked read later.
+	// Check if the referenced message exists locally. If it doesn't (out-of-order
+	// sync from a peer), skip the delivery/receipt projection entirely. The event
+	// is still stored in JSONL and the events table — it just won't create delivery
+	// rows until the message.create arrives. This prevents FK constraint failures
+	// from poisoning the sync apply loop.
+	//
+	// Same design trade-off as applyMessageEdit: receipts that arrive before the
+	// message are permanently lost from the live projection but preserved in JSONL.
+	var exists int
+	err = tx.QueryRow(`SELECT 1 FROM messages WHERE message_id = ?`, event.MessageID).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		// Message not synced yet — skip delivery projection, commit empty tx
+		return tx.Commit()
+	}
+	if err != nil {
+		return fmt.Errorf("check message exists: %w", err)
+	}
+
+	// thrum-qb62: gate the INSERT on recipient legitimacy to prevent phantom
+	// delivery rows. Previously any receipt event unconditionally inserted a
+	// delivery row, which let `thrum message read --all` fabricate rows for
+	// messages the agent was never targeted for — making send targeting look
+	// like it had fanned out. The row is now only created when the agent is a
+	// legitimate recipient: mentioned by agent_id or role, in a targeted
+	// group, or on a broadcast-scoped message. Pre-v14 messages with legitimate
+	// recipients still get their row created the first time they read.
+	//
+	// Note: if the delivery row already exists (the normal post-v14 path), the
+	// INSERT is a no-op via OR IGNORE and the subsequent UPDATE sets seen_at /
+	// read_at as usual. If no row exists and the agent is not a legitimate
+	// recipient, no row is created and the UPDATE below is also a no-op —
+	// the receipt event is still stored in JSONL + events for auditability.
 	_, err = tx.Exec(`
-		INSERT OR IGNORE INTO message_deliveries (
-			message_id, recipient_agent_id, delivered_at
+		INSERT OR IGNORE INTO message_deliveries (message_id, recipient_agent_id, delivered_at)
+		SELECT ?, ?, ?
+		WHERE EXISTS (
+			SELECT 1 FROM message_refs mr
+			WHERE mr.message_id = ?
+			  AND mr.ref_type = 'mention'
+			  AND (
+			    mr.ref_value = ?
+			    OR mr.ref_value = (SELECT role FROM agents WHERE agent_id = ? LIMIT 1)
+			  )
+		) OR EXISTS (
+			SELECT 1 FROM message_scopes ms
+			WHERE ms.message_id = ?
+			  AND ms.scope_type = 'broadcast'
+		) OR EXISTS (
+			SELECT 1 FROM message_scopes ms
+			JOIN groups g ON g.name = ms.scope_value
+			JOIN group_members gm ON g.group_id = gm.group_id
+			WHERE ms.message_id = ?
+			  AND ms.scope_type = 'group'
+			  AND (
+			    (gm.member_type = 'agent' AND gm.member_value = ?)
+			    OR (gm.member_type = 'role' AND gm.member_value = (SELECT role FROM agents WHERE agent_id = ? LIMIT 1))
+			  )
+		) OR (
+			-- Legacy-broadcast: the message has no targeting whatsoever
+			-- (no mention refs, no broadcast/group scopes). Any agent can
+			-- mark it read. Mirrors the legacy-broadcast branch in
+			-- buildForAgentClause (message.go) so inbox visibility and
+			-- delivery-gate semantics stay aligned.
+			NOT EXISTS (
+				SELECT 1 FROM message_refs mr_lb
+				WHERE mr_lb.message_id = ?
+				  AND mr_lb.ref_type IN ('mention', 'group', 'broadcast')
+			)
+			AND NOT EXISTS (
+				SELECT 1 FROM message_scopes ms_lb
+				WHERE ms_lb.message_id = ?
+				  AND ms_lb.scope_type IN ('group', 'broadcast')
+			)
 		)
-		VALUES (?, ?, ?)
-	`, event.MessageID, event.AgentID, event.Timestamp)
+	`,
+		event.MessageID, event.AgentID, event.Timestamp,
+		event.MessageID, event.AgentID, event.AgentID,
+		event.MessageID,
+		event.MessageID, event.AgentID, event.AgentID,
+		event.MessageID, event.MessageID,
+	)
 	if err != nil {
 		return fmt.Errorf("ensure message delivery: %w", err)
 	}
@@ -369,18 +458,49 @@ func (p *Projector) applyAgentRegister(ctx context.Context, data json.RawMessage
 		pid = event.ClaudePID
 	}
 
+	// origin_daemon is carried through from the event so HandleRegister's
+	// role+module conflict check can distinguish local agents from synced
+	// ones (thrum-mm3l). The event's origin_daemon is set by State.WriteEvent
+	// on the emitting daemon (to its own daemon ID) and preserved verbatim
+	// when events propagate across daemons.
+	//
+	// thrum-ufv5.6 review #1: use ON CONFLICT DO UPDATE (not INSERT OR REPLACE)
+	// so registered_at on an existing row is NOT overwritten by the re-register
+	// event's timestamp. INSERT OR REPLACE deletes-and-reinserts, which loses
+	// the original first-registration time — harmless pre-ufv5.6 (only the
+	// PID-drift branch hit this path, rare) but now exposed on every --force
+	// quickstart. agents.registered_at is read by `agent.list ORDER BY
+	// registered_at DESC`, so preserving the original value keeps sort
+	// stability across re-registers.
+	//
+	// display and hostname pass through as raw strings (not sqlNullString)
+	// because schema.go declares them `TEXT NOT NULL DEFAULT ''`. SQLite's
+	// INSERT OR REPLACE special-cases NULL on NOT-NULL-with-DEFAULT columns
+	// by using the DEFAULT, but ON CONFLICT DO UPDATE SET col=excluded.col
+	// with NULL writes NULL verbatim and trips the constraint. Passing ""
+	// directly keeps both the INSERT and the UPDATE paths valid and matches
+	// the pre-fix observable behavior (stored as empty string in both cases).
 	_, err := p.db.ExecContext(ctx, `
-		INSERT OR REPLACE INTO agents (agent_id, kind, role, module, display, hostname, agent_pid, registered_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO agents (agent_id, kind, role, module, display, hostname, agent_pid, registered_at, origin_daemon)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(agent_id) DO UPDATE SET
+			kind          = excluded.kind,
+			role          = excluded.role,
+			module        = excluded.module,
+			display       = excluded.display,
+			hostname      = excluded.hostname,
+			agent_pid     = excluded.agent_pid,
+			origin_daemon = excluded.origin_daemon
 	`,
 		event.AgentID,
 		event.Kind,
 		event.Role,
 		event.Module,
-		sqlNullString(event.Display),
-		sqlNullString(event.Hostname),
+		event.Display,
+		event.Hostname,
 		pid,
 		event.Timestamp,
+		event.OriginDaemon,
 	)
 	if err != nil {
 		return fmt.Errorf("insert agent: %w", err)
@@ -550,6 +670,9 @@ func (p *Projector) getWorkContexts(ctx context.Context, agentID string) ([]type
 }
 
 // setWorkContexts replaces all work contexts for an agent in the database.
+// Contexts whose session_id doesn't exist locally are skipped to avoid FK
+// constraint failures during out-of-order peer sync (see applyMessageEdit for
+// the general design trade-off).
 func (p *Projector) setWorkContexts(ctx context.Context, agentID string, contexts []types.SessionWorkContext) error {
 	tx, err := p.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -564,11 +687,23 @@ func (p *Projector) setWorkContexts(ctx context.Context, agentID string, context
 	}
 
 	// Insert new contexts
-	for _, ctx := range contexts {
+	for _, wc := range contexts {
+		// Check that the referenced session exists locally. If it doesn't
+		// (out-of-order sync from a peer — the agent.session.start hasn't
+		// arrived yet), skip this context rather than failing the FK constraint.
+		var exists int
+		err = tx.QueryRow(`SELECT 1 FROM sessions WHERE session_id = ?`, wc.SessionID).Scan(&exists)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue // Session not synced yet — skip this context
+		}
+		if err != nil {
+			return fmt.Errorf("check session exists: %w", err)
+		}
+
 		// Marshal JSON fields
-		unmergedCommitsJSON, _ := json.Marshal(ctx.UnmergedCommits)
-		uncommittedFilesJSON, _ := json.Marshal(ctx.UncommittedFiles)
-		changedFilesJSON, _ := json.Marshal(ctx.ChangedFiles)
+		unmergedCommitsJSON, _ := json.Marshal(wc.UnmergedCommits)
+		uncommittedFilesJSON, _ := json.Marshal(wc.UncommittedFiles)
+		changedFilesJSON, _ := json.Marshal(wc.ChangedFiles)
 
 		_, err = tx.Exec(`
 			INSERT INTO agent_work_contexts (
@@ -577,18 +712,18 @@ func (p *Projector) setWorkContexts(ctx context.Context, agentID string, context
 				current_task, task_updated_at, intent, intent_updated_at
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
-			ctx.SessionID,
+			wc.SessionID,
 			agentID,
-			sqlNullString(ctx.Branch),
-			sqlNullString(ctx.WorktreePath),
+			sqlNullString(wc.Branch),
+			sqlNullString(wc.WorktreePath),
 			string(unmergedCommitsJSON),
 			string(uncommittedFilesJSON),
 			string(changedFilesJSON),
-			sqlNullString(ctx.GitUpdatedAt),
-			sqlNullString(ctx.CurrentTask),
-			sqlNullString(ctx.TaskUpdatedAt),
-			sqlNullString(ctx.Intent),
-			sqlNullString(ctx.IntentUpdatedAt),
+			sqlNullString(wc.GitUpdatedAt),
+			sqlNullString(wc.CurrentTask),
+			sqlNullString(wc.TaskUpdatedAt),
+			sqlNullString(wc.Intent),
+			sqlNullString(wc.IntentUpdatedAt),
 		)
 		if err != nil {
 			return fmt.Errorf("insert context: %w", err)
@@ -763,7 +898,23 @@ func (p *Projector) applyGroupMemberAdd(ctx context.Context, data json.RawMessag
 		return fmt.Errorf("unmarshal group.member.add: %w", err)
 	}
 
-	_, err := p.db.ExecContext(ctx, `
+	// Check if the referenced group exists locally. If not (out-of-order sync),
+	// skip the member insert. The event is still stored in JSONL and the events
+	// table. This prevents FK constraint failures from poisoning the sync loop.
+	//
+	// Same design trade-off as applyMessageEdit: member-adds that arrive before
+	// the group.create are permanently lost from the projection but preserved
+	// in JSONL. A full Rebuild would apply them correctly.
+	var exists int
+	err := p.db.QueryRowContext(ctx, `SELECT 1 FROM groups WHERE group_id = ?`, event.GroupID).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil // Group not synced yet — skip
+	}
+	if err != nil {
+		return fmt.Errorf("check group exists: %w", err)
+	}
+
+	_, err = p.db.ExecContext(ctx, `
 		INSERT OR IGNORE INTO group_members (group_id, member_type, member_value, added_at, added_by)
 		VALUES (?, ?, ?, ?, ?)
 	`, event.GroupID, event.MemberType, event.MemberValue, event.Timestamp, sqlNullString(event.AddedBy))

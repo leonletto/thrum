@@ -135,7 +135,7 @@ func (s *Server) handleWaitForMessage(
 	input WaitForMessageInput,
 ) (*gomcp.CallToolResult, WaitForMessageOutput, error) {
 	if s.waiter == nil {
-		return nil, WaitForMessageOutput{}, fmt.Errorf("wait_for_message requires WebSocket connection to daemon; waiter not initialized")
+		return nil, WaitForMessageOutput{}, fmt.Errorf("wait_for_message requires the polling waiter; call Server.InitWaiter first")
 	}
 
 	result, err := s.waiter.WaitForMessage(ctx, input.Timeout)
