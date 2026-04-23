@@ -67,6 +67,12 @@ type TeamMember struct {
 	// `thrum team` output. Only surfaced when IncludeSystem is
 	// set on the request.
 	Reserved bool `json:"reserved,omitempty"`
+
+	// IsLocal is true when the agent's OriginDaemon matches the local daemon
+	// ID or is empty (legacy/fixture entries treated as local). Set by the
+	// team.list handler; consumers should gate heartbeat-staleness checks on
+	// this field because heartbeats don't propagate across peer daemons.
+	IsLocal bool `json:"is_local,omitempty"`
 }
 
 // FileChange represents a changed file for team display.

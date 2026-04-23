@@ -820,3 +820,76 @@ func TestHandleList_WorktreeAgentWorkContextsWins(t *testing.T) {
 			got.WorktreePath, authoritative)
 	}
 }
+
+// TestTeamList_IsLocalPopulated verifies the IsLocal bool on TeamMember:
+//   - empty OriginDaemon  → IsLocal == true  (legacy/fixture rows)
+//   - OriginDaemon == local daemon ID → IsLocal == true
+//   - OriginDaemon == some other ID   → IsLocal == false  (remote peer)
+//
+// Heartbeats are DB-only and don't propagate across peer daemons (thrum-iyrt),
+// so hint sources must not fire "may be idle" for remote-peer agents.
+func TestTeamList_IsLocalPopulated(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	syncDir := filepath.Join(tmpDir, "sync")
+	if err := os.MkdirAll(syncDir, 0o750); err != nil {
+		t.Fatalf("create sync dir: %v", err)
+	}
+	const localDaemonID = "d_local_01"
+	const remoteDaemonID = "d_peer_02"
+
+	s, err := state.NewState(thrumDir, syncDir, "repo_islocal", localDaemonID)
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+
+	// Insert three agents directly into the DB with controlled origin_daemon values.
+	// (1) empty origin_daemon — legacy/fixture
+	// (2) matches local daemon ID
+	// (3) remote peer daemon ID
+	_, err = s.RawDB().ExecContext(ctx, `INSERT INTO agents
+		(agent_id, kind, role, module, origin_daemon, hostname, registered_at)
+		VALUES
+		('agent_legacy', 'agent', 'worker', 'test', '', 'host1', datetime('now')),
+		('agent_local',  'agent', 'worker', 'test', ?, 'host1', datetime('now')),
+		('agent_remote', 'agent', 'worker', 'test', ?, 'host2', datetime('now'))`,
+		localDaemonID, remoteDaemonID)
+	if err != nil {
+		t.Fatalf("insert agents: %v", err)
+	}
+
+	handler := NewTeamHandler(s, "", nil)
+	reqJSON, _ := json.Marshal(TeamListRequest{IncludeOffline: true})
+	raw, err := handler.HandleList(ctx, reqJSON)
+	if err != nil {
+		t.Fatalf("HandleList: %v", err)
+	}
+	resp := raw.(*TeamListResponse)
+
+	byID := make(map[string]TeamMember, len(resp.Members))
+	for _, m := range resp.Members {
+		byID[m.AgentID] = m
+	}
+
+	for _, tc := range []struct {
+		agentID string
+		want    bool
+	}{
+		{"agent_legacy", true},
+		{"agent_local", true},
+		{"agent_remote", false},
+	} {
+		m, ok := byID[tc.agentID]
+		if !ok {
+			t.Errorf("agent %q not found in response", tc.agentID)
+			continue
+		}
+		if m.IsLocal != tc.want {
+			t.Errorf("agent %q: IsLocal = %v, want %v (OriginDaemon=%q)",
+				tc.agentID, m.IsLocal, tc.want, m.OriginDaemon)
+		}
+	}
+}

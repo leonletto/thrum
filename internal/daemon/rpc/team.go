@@ -74,6 +74,13 @@ type TeamMember struct {
 	// `thrum team` output. Only surfaced when IncludeSystem is
 	// set on the request.
 	Reserved bool `json:"reserved,omitempty"`
+
+	// IsLocal is true when the agent's OriginDaemon matches the local daemon
+	// ID or is empty (legacy/fixture entries treated as local). Populated by
+	// the team.list handler. Consumers (e.g. sendHints) gate heartbeat-
+	// staleness checks on this field because heartbeats are DB-only and do
+	// NOT propagate across peer daemons (thrum-iyrt).
+	IsLocal bool `json:"is_local,omitempty"`
 }
 
 // TeamHandler handles team-related RPC methods.
@@ -198,6 +205,15 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 
 	if members == nil {
 		members = []TeamMember{}
+	}
+
+	// Populate IsLocal: empty OriginDaemon is treated as local (legacy/fixture),
+	// as is an OriginDaemon that matches this daemon's own ID. Any other value
+	// means the agent lives on a remote peer daemon. This mirrors the self-heal
+	// skip guard at the top of Phase 1 (thrum-iyrt).
+	for i := range members {
+		od := members[i].OriginDaemon
+		members[i].IsLocal = od == "" || od == localDaemonID
 	}
 
 	var sharedPtr *SharedMessages

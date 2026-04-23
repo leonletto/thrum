@@ -36,6 +36,15 @@ func sendHints(ctx HintCtx) []Hint {
 		return nil
 	}
 
+	// Heartbeats are DB-only by design and do NOT sync across peer
+	// daemons (see thrum-iyrt close-out). A peer-hosted recipient's
+	// last_seen on this local daemon is structurally stale; firing a
+	// "may be idle" warning based on it is actively misleading. Only
+	// evaluate liveness for locally-originated agents.
+	if !agent.IsLocal {
+		return nil
+	}
+
 	if agent.UpdatedAt == "" {
 		return nil
 	}

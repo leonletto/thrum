@@ -31,6 +31,11 @@ type AgentSummary struct {
 	PID         int    `json:"pid,omitempty"`
 	TmuxSession string `json:"tmux_session,omitempty"`
 	TmuxAlive   bool   `json:"tmux_alive,omitempty"`
+	// IsLocal is true when the agent originated on the local daemon (or when
+	// OriginDaemon is empty, which is treated as local for legacy entries).
+	// Set by the team.list RPC handler; false means the agent lives on a
+	// remote peer daemon and its last_seen on this daemon is structurally stale.
+	IsLocal bool `json:"is_local,omitempty"`
 }
 
 // BuildAgentSummary constructs an AgentSummary from an identity file and

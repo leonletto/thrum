@@ -68,6 +68,7 @@ func (s *LiveStateAccessor) AgentByName(name string) (*AgentSummary, error) {
 				PID:         m.AgentPID,
 				TmuxSession: m.TmuxSession,
 				TmuxAlive:   alive,
+				IsLocal:     m.IsLocal,
 			}, nil
 		}
 	}

@@ -17,7 +17,7 @@ func Test_sendHints_recipientFresh_silent(t *testing.T) {
 
 func Test_sendHints_recipientStale_fires(t *testing.T) {
 	state := &MockState{Agents: map[string]*AgentSummary{
-		"target": {AgentID: "target", UpdatedAt: time.Now().Add(-47 * time.Minute).Format(time.RFC3339)},
+		"target": {AgentID: "target", UpdatedAt: time.Now().Add(-47 * time.Minute).Format(time.RFC3339), IsLocal: true},
 	}}
 	ctx := HintCtx{Command: "send", Flags: map[string]any{"to": "@target"}, State: state}
 	hs := sendHints(ctx)
@@ -41,7 +41,7 @@ func Test_sendHints_justUnderThreshold_silent(t *testing.T) {
 // Well past the threshold fires.
 func Test_sendHints_wellPastThreshold_fires(t *testing.T) {
 	state := &MockState{Agents: map[string]*AgentSummary{
-		"target": {AgentID: "target", UpdatedAt: time.Now().Add(-(RecipientStaleThreshold + 5*time.Minute)).Format(time.RFC3339)},
+		"target": {AgentID: "target", UpdatedAt: time.Now().Add(-(RecipientStaleThreshold + 5*time.Minute)).Format(time.RFC3339), IsLocal: true},
 	}}
 	ctx := HintCtx{Command: "send", Flags: map[string]any{"to": "@target"}, State: state}
 	if hs := sendHints(ctx); !containsCode(hs, HintSendRecipientStale) {
@@ -68,7 +68,7 @@ func Test_sendHints_unknownRecipient_silent(t *testing.T) {
 // Post-action has no send hints in pilot.
 func Test_sendHints_postAction_silent(t *testing.T) {
 	state := &MockState{Agents: map[string]*AgentSummary{
-		"target": {AgentID: "target", UpdatedAt: time.Now().Add(-47 * time.Minute).Format(time.RFC3339)},
+		"target": {AgentID: "target", UpdatedAt: time.Now().Add(-47 * time.Minute).Format(time.RFC3339), IsLocal: true},
 	}}
 	ctx := HintCtx{Command: "send", Flags: map[string]any{"to": "@target"}, Post: true, State: state}
 	if hs := sendHints(ctx); len(hs) != 0 {
@@ -96,10 +96,45 @@ func Test_sendHints_unparseableUpdatedAt_silent(t *testing.T) {
 	}
 }
 
+// Remote-origin recipient: hint must NOT fire even when last_seen is stale,
+// because heartbeats are DB-only and don't propagate across peer daemons
+// (thrum-iyrt). The last_seen on the local daemon is structurally stale for
+// any peer-hosted agent, so firing "may be idle" would be actively misleading.
+func Test_sendHints_suppressedForRemoteOrigin(t *testing.T) {
+	state := &MockState{Agents: map[string]*AgentSummary{
+		"target": {
+			AgentID:   "target",
+			UpdatedAt: time.Now().Add(-(RecipientStaleThreshold + 30*time.Minute)).Format(time.RFC3339),
+			IsLocal:   false,
+		},
+	}}
+	ctx := HintCtx{Command: "send", Flags: map[string]any{"to": "@target"}, State: state}
+	if hs := sendHints(ctx); len(hs) != 0 {
+		t.Errorf("remote-origin recipient must suppress stale hint, got %+v", codes(hs))
+	}
+}
+
+// Local-origin recipient: hint MUST fire when last_seen is stale and
+// IsLocal is true. This pins the IsLocal gate so a future removal breaks
+// a test.
+func Test_sendHints_firesForLocalOrigin(t *testing.T) {
+	state := &MockState{Agents: map[string]*AgentSummary{
+		"target": {
+			AgentID:   "target",
+			UpdatedAt: time.Now().Add(-(RecipientStaleThreshold + 30*time.Minute)).Format(time.RFC3339),
+			IsLocal:   true,
+		},
+	}}
+	ctx := HintCtx{Command: "send", Flags: map[string]any{"to": "@target"}, State: state}
+	if hs := sendHints(ctx); !containsCode(hs, HintSendRecipientStale) {
+		t.Errorf("local-origin stale recipient must fire %s, got %+v", HintSendRecipientStale, codes(hs))
+	}
+}
+
 // --to without @ prefix should also be handled.
 func Test_sendHints_toWithoutAtPrefix_stillWorks(t *testing.T) {
 	state := &MockState{Agents: map[string]*AgentSummary{
-		"target": {AgentID: "target", UpdatedAt: time.Now().Add(-47 * time.Minute).Format(time.RFC3339)},
+		"target": {AgentID: "target", UpdatedAt: time.Now().Add(-47 * time.Minute).Format(time.RFC3339), IsLocal: true},
 	}}
 	ctx := HintCtx{Command: "send", Flags: map[string]any{"to": "target"}, State: state}
 	if hs := sendHints(ctx); !containsCode(hs, HintSendRecipientStale) {
