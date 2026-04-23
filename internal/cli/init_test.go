@@ -303,8 +303,12 @@ func TestIsGitWorktree(t *testing.T) {
 func initGitRepo(t *testing.T, dir string) {
 	t.Helper()
 
-	// git init
-	cmd := exec.Command("git", "init")
+	// git init -b main: force the default branch name so the test is
+	// deterministic on systems without init.defaultBranch=main set globally
+	// (e.g. fresh GH Actions Ubuntu runners). Without -b, modern git defaults
+	// to "master" on those runners and TestInit_Integration_FreshCloneAttachesToRemoteASync
+	// fails when it later runs `git push bareremote main`.
+	cmd := exec.Command("git", "init", "-b", "main")
 	cmd.Dir = dir
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("Failed to init git repo: %v", err)
