@@ -63,14 +63,16 @@ func (s *Server) RegisterLongPollHandler(method string, h Handler) {
 }
 
 // SetIdentityResolver wires a peer-credential resolver into the server so that
-// every accepted unix-socket connection gets its kernel-verified identity
-// injected into the per-request context. Passing nil disables peercred-based
-// identity injection entirely (used by tests and early-boot phases before the
-// state DB is ready).
+// every RPC request gets its kernel-verified identity injected into the
+// per-request context. Passing nil disables peercred-based identity injection
+// entirely (used by tests and early-boot phases before the state DB is ready).
 //
-// The resolver is consulted once per accepted connection (not per request),
-// because the connecting process's CWD does not change within the lifetime of
-// a single unix-socket connection.
+// The resolver is consulted once per RPC request (not once per connection) so
+// that agents registered after a connection is accepted (e.g. quickstart) are
+// picked up immediately without requiring a reconnect. For the CLI path this is
+// net-zero cost (each command opens a fresh connection for a single RPC). For
+// long-lived connections (MCP server) the overhead is one gopsutil Cwd + one
+// session_refs query per call, which is ~1 ms and acceptable.
 func (s *Server) SetIdentityResolver(r peercred.Resolver) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -277,48 +279,6 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 		_ = conn.Close()
 	}()
 
-	// Resolve the peer-credential identity for this connection ONCE. The
-	// connecting process's CWD does not change within the lifetime of a
-	// single unix-socket connection, so resolving per-request is wasted work.
-	// If the resolver is absent (tests, early boot), connIdentity stays nil
-	// and the dispatcher falls back to the legacy client-asserted path —
-	// which means tests that don't set a resolver keep passing unchanged.
-	//
-	// When resolver IS configured:
-	//   - resolved, no error       → trusted identity in connIdentity
-	//   - resolved to ErrAnonymous → connIdentity stays nil, but connResolved=true
-	//   - transport error          → connIdentity stays nil, connResolved=false
-	var connIdentity *peercred.ResolvedIdentity
-	var connResolved bool
-	var connPID int
-	s.mu.RLock()
-	resolver := s.identityResolver
-	s.mu.RUnlock()
-	if resolver != nil {
-		// Extract the kernel-verified PID first so it's available to handlers
-		// regardless of whether the identity resolution below succeeds. Guard
-		// checks (Rule #4‴) rely on the PID to walk the ancestor chain and
-		// must never trust a client-asserted agent_id in its place.
-		if pid, err := peercred.PIDFromConn(conn); err == nil {
-			connPID = pid
-		}
-
-		id, err := resolver.Resolve(conn)
-		if err == nil {
-			connIdentity = id
-			connResolved = true
-		} else if errors.Is(err, peercred.ErrAnonymous) {
-			// Peercred ran but the connecting process is not in any
-			// registered agent worktree. This is legitimate (CLI from
-			// outside a worktree); mark the context resolved-but-anonymous
-			// so the dispatcher can enforce the read-only allowlist.
-			connResolved = true
-		}
-		// Any other error (kernel denied peercred, list lookup failed)
-		// leaves connResolved=false — the connection falls back to legacy
-		// behavior to avoid wedging the daemon on transient DB errors.
-	}
-
 	reader := bufio.NewReader(conn)
 	writer := bufio.NewWriter(conn)
 
@@ -410,47 +370,62 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 		reqCtx, reqCancel := context.WithTimeout(ctx, timeout)
 		ctxWithTransport := transport.WithTransport(reqCtx, transport.TransportUnixSocket)
 
-		// Inject peer-credential identity into the request context. This is
-		// the point where kernel-verified identity replaces client-asserted
-		// CallerAgentID as the source of truth for mutating RPCs.
+		// Resolve peer-credential identity per-RPC. Doing this here (not once
+		// at connection-accept time) prevents the anonymous-latch bug: if an
+		// agent registers AFTER the connection is accepted but BEFORE the first
+		// RPC body arrives, a per-connection resolve would latch ErrAnonymous
+		// for the lifetime of that connection. Re-resolving on every RPC means
+		// freshly-registered agents are visible immediately without a reconnect.
 		//
-		// When connResolved=true (peercred ran successfully), the handler
-		// can call peercred.FromContext(ctx) and trust the result.
-		// When connResolved=false (resolver absent / error), FromContext
-		// returns (nil, false) and handlers fall back to legacy behavior
-		// — which is the same path as tests and browser/WS transport.
+		// Cost: one gopsutil Cwd + one session_refs query per RPC. For the CLI
+		// path this is net-zero (each CLI command opens a fresh connection for
+		// a single RPC). For long-lived connections (MCP server) the overhead
+		// is ~1 ms per call, which is acceptable.
+		//
+		// When the resolver is absent (tests, browser/WS transport): skip the
+		// block. The context stays un-injected — same as the old
+		// connResolved=false path — so all existing tests keep passing.
 		ctxWithIdentity := ctxWithTransport
-		if connPID > 0 {
-			// Inject the kernel-verified PID so future handler code can
-			// walk the caller's ancestor chain. As of Epic 5, no handler
-			// consumes this — guard.DaemonResolve authenticates via
-			// peercred.FromContext (CWD-based) only. Rule #4‴'s
-			// ancestor-chain clause wire-up is tracked in thrum-u5fk.4;
-			// the PID plumbing lives here so that epic can bolt the
-			// walk on without changing the accept loop.
-			ctxWithIdentity = peercred.WithConnectingPID(ctxWithIdentity, connPID)
-		}
-		if connResolved {
-			ctxWithIdentity = peercred.WithIdentity(ctxWithIdentity, connIdentity)
-
-			// Read-only allowlist enforcement: an anonymous caller (peercred
-			// ran, no match) may only invoke methods on the allowlist.
-			// Anything else is rejected here, before the handler runs.
-			if connIdentity == nil && !anonymousAllowedMethods[req.Method] {
-				reqCancel()
-				resp := jsonRPCResponse{
-					JSONRPC: "2.0",
-					ID:      req.ID,
-					Error: &jsonRPCError{
-						Code:    -32002, // anonymous caller not permitted
-						Message: fmt.Sprintf("anonymous caller cannot invoke %q: cd into a registered agent worktree and retry", req.Method),
-					},
-				}
-				if err := s.writeResponse(writer, resp); err != nil {
-					return
-				}
-				continue
+		s.mu.RLock()
+		resolver := s.identityResolver
+		s.mu.RUnlock()
+		if resolver != nil {
+			// Extract the kernel-verified PID so handlers can walk the caller's
+			// ancestor chain independent of identity resolution success.
+			// Rule #4‴'s ancestor-chain clause wire-up is tracked in thrum-u5fk.4.
+			if pid, err := peercred.PIDFromConn(conn); err == nil {
+				ctxWithIdentity = peercred.WithConnectingPID(ctxWithIdentity, pid)
 			}
+
+			reqIdentity, resolveErr := resolver.Resolve(conn)
+			if resolveErr == nil || errors.Is(resolveErr, peercred.ErrAnonymous) {
+				// resolved (with or without a match) — inject result and enforce
+				// the anonymous allowlist.
+				ctxWithIdentity = peercred.WithIdentity(ctxWithIdentity, reqIdentity)
+
+				// Read-only allowlist enforcement: an anonymous caller (peercred
+				// ran but no registered worktree matched) may only invoke
+				// methods on the allowlist. Anything else is rejected here,
+				// before the handler runs.
+				if reqIdentity == nil && !anonymousAllowedMethods[req.Method] {
+					reqCancel()
+					resp := jsonRPCResponse{
+						JSONRPC: "2.0",
+						ID:      req.ID,
+						Error: &jsonRPCError{
+							Code:    -32002, // anonymous caller not permitted
+							Message: fmt.Sprintf("anonymous caller cannot invoke %q: cd into a registered agent worktree and retry", req.Method),
+						},
+					}
+					if err := s.writeResponse(writer, resp); err != nil {
+						return
+					}
+					continue
+				}
+			}
+			// Any other error (kernel denied peercred, list lookup failed)
+			// leaves ctxWithIdentity un-injected — the connection falls back
+			// to legacy behavior to avoid wedging the daemon on transient DB errors.
 		}
 
 		result, err := handler(ctxWithIdentity, reqParams)
