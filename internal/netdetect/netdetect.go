@@ -169,19 +169,19 @@ func isFilteredAddress(ip net.IP) bool {
 func isFilteredInterfaceName(name string) bool {
 	lower := strings.ToLower(name)
 	prefixes := []string{
-		"utun",   // macOS user-mode tunnel (Tailscale, WireGuard userspace, etc.)
-		"tun",    // Linux/BSD generic tun
-		"tap",    // Linux/BSD generic tap (often used by VMs)
-		"ppp",    // PPP / dial-up / mobile broadband
-		"gif",    // BSD generic tunnel
-		"stf",    // BSD 6to4 tunnel
-		"awdl",   // macOS Apple Wireless Direct Link
-		"llw",    // macOS low-latency wireless (peer-to-peer)
-		"docker", // docker bridge / host
-		"br-",    // docker user-defined bridge
-		"veth",   // Linux virtual ethernet (containers)
-		"virbr",  // libvirt bridge
-		"vmnet",  // VMware
+		"utun",    // macOS user-mode tunnel (Tailscale, WireGuard userspace, etc.)
+		"tun",     // Linux/BSD generic tun
+		"tap",     // Linux/BSD generic tap (often used by VMs)
+		"ppp",     // PPP / dial-up / mobile broadband
+		"gif",     // BSD generic tunnel
+		"stf",     // BSD 6to4 tunnel
+		"awdl",    // macOS Apple Wireless Direct Link
+		"llw",     // macOS low-latency wireless (peer-to-peer)
+		"docker",  // docker bridge / host
+		"br-",     // docker user-defined bridge
+		"veth",    // Linux virtual ethernet (containers)
+		"virbr",   // libvirt bridge
+		"vmnet",   // VMware
 		"vboxnet", // VirtualBox
 	}
 	for _, p := range prefixes {

@@ -104,8 +104,8 @@ func TestFilterProjectStateSections(t *testing.T) {
 			},
 		},
 		{
-			name: "researcher filtered same as implementer",
-			role: "researcher",
+			name:        "researcher filtered same as implementer",
+			role:        "researcher",
 			mustContain: []string{"## Current State Summary"},
 			mustNotContain: []string{
 				"## Recent Sessions",
@@ -125,9 +125,9 @@ func TestFilterProjectStateSections(t *testing.T) {
 			},
 		},
 		{
-			name: "unknown role fails closed to filtered",
-			role: "orchestrator",
-			mustContain: []string{"## Current State Summary"},
+			name:           "unknown role fails closed to filtered",
+			role:           "orchestrator",
+			mustContain:    []string{"## Current State Summary"},
 			mustNotContain: []string{"## Recent Sessions"},
 		},
 	}

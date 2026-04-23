@@ -59,4 +59,3 @@ func TestWSDial_UnreachableAddressCategorizesCorrectly(t *testing.T) {
 		t.Errorf("expected CatUnreachable for port 1; got category=%v err=%v", CategorizeErr(err), err)
 	}
 }
-

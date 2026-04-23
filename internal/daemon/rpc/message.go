@@ -2075,7 +2075,6 @@ func loadDaemonGuardConfig(repoPath string) guard.Config {
 	return guard.LoadConfigFromDir(repoPath)
 }
 
-
 // resolveAgentAndSession returns the current agent ID and session ID.
 // ResolveAgentAndSession resolves the caller's agent and active session.
 //

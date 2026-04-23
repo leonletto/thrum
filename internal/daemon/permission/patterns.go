@@ -110,7 +110,7 @@ var patterns = map[string][]Pattern{
 			//
 			// See dev-docs/plans/2026-04-14-permission-prompt-samples.md
 			// for the raw captures.
-			Regex: regexp.MustCompile(`(?ms)^\s*(?:⎿\s+)?Do you want to proceed\?.{0,500}(?:^\s*❯\s+\d+\.\s|Esc to cancel · Tab to amend|No,\s+and tell Claude what to do differently)`),
+			Regex:      regexp.MustCompile(`(?ms)^\s*(?:⎿\s+)?Do you want to proceed\?.{0,500}(?:^\s*❯\s+\d+\.\s|Esc to cancel · Tab to amend|No,\s+and tell Claude what to do differently)`),
 			ApproveKey: "1", // Yes (once) — NEVER "2" (don't ask again)
 			DenyKey:    "3", // Variant A default; dispatch overrides to Escape for Variant B
 			Comment:    "Claude Code tool-use confirmation (two variants — dispatch disambiguates)",

@@ -162,10 +162,10 @@ func TestSnapshotSaveNoJSONLHint_ContextVariants(t *testing.T) {
 	// three distinct message tails so the operator knows which branch
 	// actually failed.
 	cases := []struct {
-		name    string
-		ctx     SnapshotSaveNoJSONLContext
-		substr  string
-		absent  string // must NOT appear — keeps messages from double-reporting
+		name   string
+		ctx    SnapshotSaveNoJSONLContext
+		substr string
+		absent string // must NOT appear — keeps messages from double-reporting
 	}{
 		{
 			name:   "worktree-missing",

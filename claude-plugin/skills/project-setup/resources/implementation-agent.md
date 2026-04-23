@@ -80,7 +80,8 @@ cross-cutting decisions.
 4. **Focused prompts** — Give each sub-agent the full task description, worktree
    path, quality commands, and expected deliverables
 
-Full dispatch mechanics (partition, parallel launch, findings-to-disk, consolidate): invoke `efficient-multi-agent-research` § Core Pattern.
+Full dispatch mechanics (partition, parallel launch, findings-to-disk,
+consolidate): invoke `efficient-multi-agent-research` § Core Pattern.
 
 ### Agent Selection
 
@@ -94,7 +95,8 @@ Full dispatch mechanics (partition, parallel launch, findings-to-disk, consolida
 | Doc updates / config tweaks | `general-purpose`           | haiku  | yes         |
 
 \*Use foreground when you need the result before proceeding. Use background when
-you can continue other work while they run. For research across N > 6 items, invoke `efficient-multi-agent-research` instead of bespoke dispatch.
+you can continue other work while they run. For research across N > 6 items,
+invoke `efficient-multi-agent-research` instead of bespoke dispatch.
 
 ### When to Parallelize vs. Work Sequentially
 
@@ -157,7 +159,8 @@ notifications. Re-arm it every time it returns (both MESSAGES_RECEIVED and
 NO_MESSAGES_TIMEOUT).
 
 When your work is complete (Phase 4), send a completion message prefixed with
-the appropriate **status token** (see Status Vocabulary at the start of Phase 4):
+the appropriate **status token** (see Status Vocabulary at the start of Phase
+4):
 
 ```bash
 thrum send "DONE: {{EPIC_ID}} complete. All tasks done, tests passing." --to @{{SUPERVISOR_NAME}}
@@ -350,9 +353,15 @@ depend on each other's output.
 
 #### Launch Pattern
 
-Give each sub-agent everything it needs to work autonomously. Each prompt must include: worktree path, branch name, the full `bd show <task_id>` output as the source of truth, the quality commands for the verify step, and the commit-message format (`{{EPIC_TITLE}}: <task summary>`). Each sub-agent returns what was built, test results, and the commit hash.
+Give each sub-agent everything it needs to work autonomously. Each prompt must
+include: worktree path, branch name, the full `bd show <task_id>` output as the
+source of truth, the quality commands for the verify step, and the
+commit-message format (`{{EPIC_TITLE}}: <task summary>`). Each sub-agent returns
+what was built, test results, and the commit hash.
 
-Invoke `efficient-multi-agent-research` § Core Pattern for the launch-and-wait mechanics (dispatch all agents in ONE message, `run_in_background=true`, wait for all completions before consolidating).
+Invoke `efficient-multi-agent-research` § Core Pattern for the launch-and-wait
+mechanics (dispatch all agents in ONE message, `run_in_background=true`, wait
+for all completions before consolidating).
 
 #### After Sub-Agents Complete
 
@@ -465,23 +474,26 @@ thrum send "BLOCKED: {{TASK_ID}} by external dependency {{BLOCKER_ID}}" --to @{{
 
 ### When you hit a design fork
 
-**If you're blocked on a genuine 2-3 way design fork** — a real tradeoff where "just pick one" would likely be regretted — invoke `adversarial-critique` with the options, constraints, and the decision you need made. The `adversarial-critique` skill documents cost, threshold, and the audit artifact path.
+**If you're blocked on a genuine 2-3 way design fork** — a real tradeoff where
+"just pick one" would likely be regretted — invoke `adversarial-critique` with
+the options, constraints, and the decision you need made. The
+`adversarial-critique` skill documents cost, threshold, and the audit artifact
+path.
 
-**If you're investigating N > 6 items** (function call sites, pattern
-audits, multi-file reviews), invoke the
-`efficient-multi-agent-research` skill *instead of* reading files
-into this context. It partitions the work across parallel sub-agents
-that write findings to disk, then consolidates into one report.
+**If you're investigating N > 6 items** (function call sites, pattern audits,
+multi-file reviews), invoke the `efficient-multi-agent-research` skill _instead
+of_ reading files into this context. It partitions the work across parallel
+sub-agents that write findings to disk, then consolidates into one report.
 
-Cost: ~50-100k tokens depending on item count. Worth it to keep
-decision-making context clean and produce an auditable research
-trail at `dev-docs/<topic>/`. Skip it when:
+Cost: ~50-100k tokens depending on item count. Worth it to keep decision-making
+context clean and produce an auditable research trail at `dev-docs/<topic>/`.
+Skip it when:
 
 - Fewer than ~6 items — just use Grep/Glob
 - Items are deeply interdependent and can't be partitioned
 
-These two gates are sister patterns: critique decides *which option
-wins*; research uncovers *what's there*.
+These two gates are sister patterns: critique decides _which option wins_;
+research uncovers _what's there_.
 
 ### Communicating During Work
 
@@ -528,7 +540,9 @@ Before proceeding to the next epic:
 or abbreviate it. The purpose is to catch issues before the coordinator reviews,
 reducing back-and-forth rounds.
 
-Use a **two-stage review** in this exact order: **spec compliance first, then code quality.** Run `verify-against-plan` before `feature-dev:code-reviewer`; fix each stage's findings before moving to the next.
+Use a **two-stage review** in this exact order: **spec compliance first, then
+code quality.** Run `verify-against-plan` before `feature-dev:code-reviewer`;
+fix each stage's findings before moving to the next.
 
 ### Step 1: Run Quality Gates
 
@@ -676,16 +690,16 @@ Before proceeding to Phase 4, confirm:
 
 ### Status Vocabulary (MANDATORY)
 
-Every completion or escalation message to your supervisor must start with one
-of these four status tokens. The coordinator's handler depends on the token —
-wrong token means wrong response.
+Every completion or escalation message to your supervisor must start with one of
+these four status tokens. The coordinator's handler depends on the token — wrong
+token means wrong response.
 
-| Token                | Meaning                                                                 | Send When                                                          |
-| -------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `DONE`               | Epic complete, all tasks closed, tests pass, self-review clean          | Ready for coordinator review and merge                             |
-| `DONE_WITH_CONCERNS` | Work complete but with caveats the coordinator should see               | Unresolved review findings, architectural concerns, iteration caps hit |
-| `NEEDS_CONTEXT`      | Cannot proceed without more information                                 | Missing design decision, ambiguous spec, unclear scope             |
-| `BLOCKED`            | Cannot proceed — external dependency or tooling issue                   | Cross-epic dependency, test infra broken, auth problem             |
+| Token                | Meaning                                                        | Send When                                                              |
+| -------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `DONE`               | Epic complete, all tasks closed, tests pass, self-review clean | Ready for coordinator review and merge                                 |
+| `DONE_WITH_CONCERNS` | Work complete but with caveats the coordinator should see      | Unresolved review findings, architectural concerns, iteration caps hit |
+| `NEEDS_CONTEXT`      | Cannot proceed without more information                        | Missing design decision, ambiguous spec, unclear scope                 |
+| `BLOCKED`            | Cannot proceed — external dependency or tooling issue          | Cross-epic dependency, test infra broken, auth problem                 |
 
 Prefix every completion and escalation `thrum send` with the status token, for
 example:

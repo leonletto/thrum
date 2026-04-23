@@ -1479,7 +1479,7 @@ func TestMigrate_V20_WithAgentsAndEvents_BackfillsOriginDaemon(t *testing.T) {
 // TestMigrate_V20_AgentWithoutRegisterEvent_KeepsEmptyOriginDaemon pins
 // the "no matching event" branch of the backfill: a legacy agents row
 // that has no agent.register event in the events table must survive
-// migration with origin_daemon = '' (not fail, not get a stale value
+// migration with origin_daemon = ” (not fail, not get a stale value
 // from another agent). HandleRegister treats empty origin_daemon as
 // "unknown / assume local" per the comment on migration 21→22.
 func TestMigrate_V20_AgentWithoutRegisterEvent_KeepsEmptyOriginDaemon(t *testing.T) {

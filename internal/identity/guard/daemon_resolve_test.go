@@ -141,8 +141,8 @@ func TestDaemonResolve_SharedWorktreeTrustsClaim(t *testing.T) {
 		return registered[worktree][agentID]
 	}
 	got, err := DaemonResolve(context.Background(), cfg, DaemonResolveRequest{
-		CallerAgentID:     "agent_b",             // CLI claims agent_b
-		PeercredAgentID:   "agent_a",             // peercred arbitrarily picked agent_a
+		CallerAgentID:     "agent_b", // CLI claims agent_b
+		PeercredAgentID:   "agent_a", // peercred arbitrarily picked agent_a
 		PeercredRan:       true,
 		PeercredWorktree:  "/tmp/shared-worktree",
 		IsAgentInWorktree: checker,
@@ -167,7 +167,7 @@ func TestDaemonResolve_CrossWorktreeForgeryRejected(t *testing.T) {
 		return agentID == "agent_a" && worktree == "/tmp/peercred-worktree"
 	}
 	_, err := DaemonResolve(context.Background(), cfg, DaemonResolveRequest{
-		CallerAgentID:     "agent_b",                 // cross-worktree claim
+		CallerAgentID:     "agent_b", // cross-worktree claim
 		PeercredAgentID:   "agent_a",
 		PeercredRan:       true,
 		PeercredWorktree:  "/tmp/peercred-worktree",

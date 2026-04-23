@@ -260,10 +260,10 @@ Tip: run /help for a full command list
 	// Banner / history chrome from the top must be DROPPED, otherwise
 	// recipients see the same garbage that motivated the bug report.
 	mustNotContain := []string{
-		"Opus 4.7",         // banner
-		"~/.workspaces",    // status line
-		"/thrum:prime",     // earlier command
-		"Loading prime",    // earlier output
+		"Opus 4.7",      // banner
+		"~/.workspaces", // status line
+		"/thrum:prime",  // earlier command
+		"Loading prime", // earlier output
 	}
 	for _, dont := range mustNotContain {
 		if strings.Contains(body, dont) {

@@ -15,34 +15,33 @@ and this project adheres to
   text + shape-C JSON renderers; stable hint-code registry; `THRUM_NO_HINTS=1`
   opt-out. Unified framework for actionable CLI warnings.
 - **CLI `--json` output contract (thrum-swg2)** — `slog→hint` bridge installed
-  in `PersistentPreRunE`; all `--json` commands emit via central
-  `cli.EmitJSON` / `EmitJSONWithHints` helpers. `slog.Warn` records are grafted
-  under a top-level `"hints"` key instead of polluting stdout. 46 JSON sites
-  migrated. Stable contract for agent harnesses that merge stdout+stderr via
+  in `PersistentPreRunE`; all `--json` commands emit via central `cli.EmitJSON`
+  / `EmitJSONWithHints` helpers. `slog.Warn` records are grafted under a
+  top-level `"hints"` key instead of polluting stdout. 46 JSON sites migrated.
+  Stable contract for agent harnesses that merge stdout+stderr via
   `tmux capture-pane`.
-- **Identity guard system (thrum-xir.20 family, thrum-38u7)** —
-  cross-worktree + cross-host PID guards prevent accidental identity hijack;
-  daemon-side resolve authenticates against peercred-verified worktree.
-- **Tmux identity invariants (thrum-x6e8 family)** — `--no-agent-pid` flag
-  for inline quickstart; `HandleLaunch` clears stale subshell PID before
-  writing `tmux_session`; absolute worktree path + `NormalizeWorktreePath`
-  helper; bare-name self-heal. `HandleCreate` now blocks until the inline
-  quickstart writes the identity file (thrum-ns0b), eliminating a
-  create→launch race.
+- **Identity guard system (thrum-xir.20 family, thrum-38u7)** — cross-worktree +
+  cross-host PID guards prevent accidental identity hijack; daemon-side resolve
+  authenticates against peercred-verified worktree.
+- **Tmux identity invariants (thrum-x6e8 family)** — `--no-agent-pid` flag for
+  inline quickstart; `HandleLaunch` clears stale subshell PID before writing
+  `tmux_session`; absolute worktree path + `NormalizeWorktreePath` helper;
+  bare-name self-heal. `HandleCreate` now blocks until the inline quickstart
+  writes the identity file (thrum-ns0b), eliminating a create→launch race.
 - **No-agent tmux sessions (thrum-ufv5.11/.12)** — `thrum tmux status` lists
   sessions created with `--no-agent` via a new `@thrum-managed=1` user-option
-  tag; `thrum tmux send` bypasses the queue and injects raw keystrokes when
-  the session has no registered agent.
-- **Role-scoped prime (thrum-ir2a)** — `thrum prime` filters
-  `project_state.md` sections by the calling agent's role so implementers /
-  testers don't see coordinator-only content.
+  tag; `thrum tmux send` bypasses the queue and injects raw keystrokes when the
+  session has no registered agent.
+- **Role-scoped prime (thrum-ir2a)** — `thrum prime` filters `project_state.md`
+  sections by the calling agent's role so implementers / testers don't see
+  coordinator-only content.
 - **Plugin skills slate** — 5 new skills: `project-philosophy`,
   `verify-against-plan`, `efficient-multi-agent-research`,
   `adversarial-critique`, `project-setup`.
 - **Cross-host mesh tooling** — `scripts/remote-tmux-exec` wrapper +
-  `tmux-exec shell-run` subcommand for Topology B/C (local ↔ mac mini ↔
-  ubuntu) validated bringup; required on macOS because fresh `sh -c`
-  subshells fail peercred authentication for mutating RPCs.
+  `tmux-exec shell-run` subcommand for Topology B/C (local ↔ mac mini ↔ ubuntu)
+  validated bringup; required on macOS because fresh `sh -c` subshells fail
+  peercred authentication for mutating RPCs.
 - **Permission prompt detection and supervisor nudge** — when a tmux-managed
   agent hits a permission prompt it cannot auto-approve, thrum detects the stuck
   state and routes a rich actionable notification to configured supervisors.
@@ -87,31 +86,30 @@ and this project adheres to
 ### Breaking changes
 
 - **`thrum peer add` and `thrum peer join` now require `--type <transport>`
-  (xir.27).** The previously-implicit `tailscale` default has been removed.
-  Four values are accepted, each gates both the peercode emission and the
-  handshake dial:
-    - `--type tailscale` — current behavior (tsnet peercode, Tailscale dial,
-      requires `THRUM_TS_AUTHKEY`).
-    - `--type local` — same-host loopback (`127.0.0.1` peercode, direct
-      localhost dial, no tsnet). Use for sibling-repo bridges on one host.
-    - `--type network` — same-LAN, no Tailscale. Requires `--address <ip>`;
-      the subnet is inferred from the NIC that owns the supplied IP. Direct
-      TCP, no tsnet.
-    - `--type repair` — re-verify and reconcile an EXISTING peer entry
-      using stored secrets in `peers.json`. Valid only on `peer join`;
-      rejected on `peer add`. Used to recover from drift (e.g., after a peer
-      `daemon_id` rotation). Implemented as a dedicated `peer.repair` RPC
-      (token-authenticated, NOT an extension of `pair.request`): the dialer
-      looks up the stored `Token`, `Address`, and `Transport`, dials the
-      peer's WebSocket with `Authorization: Bearer <token>`, calls
-      `peer.repair` with its current identity, and receives the listener's
-      refreshed metadata in return. Both sides re-key the peer entry if
-      the daemon_id has rotated; `Name` and `Token` are preserved. Works
-      for `local`, `network`, and `tailscale` transports.
-  Migration: any script calling `thrum peer add` (no flag) must add an
-  explicit `--type tailscale` for the same behavior. Missing `--type` errors
-  with a help block listing all four options and a one-line "when to use"
-  for each — the canonical instance of the CLI-hint pattern.
+  (xir.27).** The previously-implicit `tailscale` default has been removed. Four
+  values are accepted, each gates both the peercode emission and the handshake
+  dial:
+  - `--type tailscale` — current behavior (tsnet peercode, Tailscale dial,
+    requires `THRUM_TS_AUTHKEY`).
+  - `--type local` — same-host loopback (`127.0.0.1` peercode, direct localhost
+    dial, no tsnet). Use for sibling-repo bridges on one host.
+  - `--type network` — same-LAN, no Tailscale. Requires `--address <ip>`; the
+    subnet is inferred from the NIC that owns the supplied IP. Direct TCP, no
+    tsnet.
+  - `--type repair` — re-verify and reconcile an EXISTING peer entry using
+    stored secrets in `peers.json`. Valid only on `peer join`; rejected on
+    `peer add`. Used to recover from drift (e.g., after a peer `daemon_id`
+    rotation). Implemented as a dedicated `peer.repair` RPC
+    (token-authenticated, NOT an extension of `pair.request`): the dialer looks
+    up the stored `Token`, `Address`, and `Transport`, dials the peer's
+    WebSocket with `Authorization: Bearer <token>`, calls `peer.repair` with its
+    current identity, and receives the listener's refreshed metadata in return.
+    Both sides re-key the peer entry if the daemon_id has rotated; `Name` and
+    `Token` are preserved. Works for `local`, `network`, and `tailscale`
+    transports. Migration: any script calling `thrum peer add` (no flag) must
+    add an explicit `--type tailscale` for the same behavior. Missing `--type`
+    errors with a help block listing all four options and a one-line "when to
+    use" for each — the canonical instance of the CLI-hint pattern.
 
 ### Security
 
@@ -151,39 +149,38 @@ and this project adheres to
 
 - **macOS daemon peercred anonymous-latch (thrum-g8e8, thrum-9165)** —
   peer-credential identity resolution now runs per-RPC instead of once per
-  unix-socket connection. The old connection-level cache latched
-  `ErrAnonymous` if the agent lister was momentarily empty at connect-accept
-  time (e.g. `quickstart`'s connection accepts before `session_refs` is
-  written), forcing `thrum daemon restart` as a workaround on macOS before
-  mutating RPCs worked. Also added diagnostic slog at each resolve step and
-  canonicalized worktree paths at `session_refs` write time via
-  `filepath.EvalSymlinks` (pair with the resolver's both-sides canonicalization
-  to close `/tmp` ↔ `/private/tmp` asymmetry on macOS).
-- **Cross-host recipient-stale hint (thrum-has1)** — `send.recipient-stale`
-  hint is now suppressed when the recipient's `origin_daemon` is a peer
-  daemon. Heartbeats are DB-only by design (thrum-iyrt) and don't propagate
-  across peer daemons, so a peer-hosted recipient's `last_seen` is
-  structurally stale; the old warning fired on every cross-host send with a
-  misleading "may be idle" message. Added `IsLocal bool` to `TeamMember` and
-  `AgentSummary`; `sendHints` gates on it.
+  unix-socket connection. The old connection-level cache latched `ErrAnonymous`
+  if the agent lister was momentarily empty at connect-accept time (e.g.
+  `quickstart`'s connection accepts before `session_refs` is written), forcing
+  `thrum daemon restart` as a workaround on macOS before mutating RPCs worked.
+  Also added diagnostic slog at each resolve step and canonicalized worktree
+  paths at `session_refs` write time via `filepath.EvalSymlinks` (pair with the
+  resolver's both-sides canonicalization to close `/tmp` ↔ `/private/tmp`
+  asymmetry on macOS).
+- **Cross-host recipient-stale hint (thrum-has1)** — `send.recipient-stale` hint
+  is now suppressed when the recipient's `origin_daemon` is a peer daemon.
+  Heartbeats are DB-only by design (thrum-iyrt) and don't propagate across peer
+  daemons, so a peer-hosted recipient's `last_seen` is structurally stale; the
+  old warning fired on every cross-host send with a misleading "may be idle"
+  message. Added `IsLocal bool` to `TeamMember` and `AgentSummary`; `sendHints`
+  gates on it.
 - **`thrum peer add` no longer prompts for `THRUM_TS_AUTHKEY` when the daemon's
-  tsnet is already up (xir.26).** The CLI now queries `health` before
-  prompting; if `health.tailscale.enabled` is `true` the daemon already has a
-  tsnet node with cached credentials and the prompt is skipped. The prompt
-  still fires when env is empty AND the daemon's tsnet is missing or
-  unreachable.
+  tsnet is already up (xir.26).** The CLI now queries `health` before prompting;
+  if `health.tailscale.enabled` is `true` the daemon already has a tsnet node
+  with cached credentials and the prompt is skipped. The prompt still fires when
+  env is empty AND the daemon's tsnet is missing or unreachable.
 - **`thrum init` now correctly attaches to existing `origin/a-sync` on fresh
   clones.** Previously, running `thrum init` in a freshly-cloned repo whose
   remote already had an `a-sync` branch would create a disjoint local orphan
   that could never be reconciled with the remote — every daemon sync tick
-  rejected with "non-fast-forward", silently blocking outbound sync forever.
-  The fix adds a decision matrix that checks for `refs/remotes/origin/a-sync`
+  rejected with "non-fast-forward", silently blocking outbound sync forever. The
+  fix adds a decision matrix that checks for `refs/remotes/origin/a-sync`
   (populated by `git clone`) and attaches local `a-sync` to it instead of
   creating an orphan. `--force` reinit also reconciles content-based state: if
   both local and remote have events, init errors out with the two recovery
-  commands the user can pick between instead of clobbering either side. A
-  future `thrum doctor --fix` (tracked as `thrum-uvpp.1`) will automate
-  recovery for machines already in the bad state.
+  commands the user can pick between instead of clobbering either side. A future
+  `thrum doctor --fix` (tracked as `thrum-uvpp.1`) will automate recovery for
+  machines already in the bad state.
 - **`SendSupervisorMessage` @-prefix normalisation** — supervisor nudges no
   longer ghost to recipients with a leading `@` that doesn't match the
   `message_refs` / `message_deliveries` schema (which store bare agent IDs).

@@ -191,4 +191,3 @@ func TestPeerAddressChanged_GuardSetButLookupNil_AcceptsFirstChange(t *testing.T
 		t.Errorf("updateFn not called")
 	}
 }
-

@@ -21,16 +21,16 @@ type testRuleCtx struct {
 
 type ruleOpt func(*testRuleCtx)
 
-func withChain(c []int) ruleOpt               { return func(r *testRuleCtx) { r.cc.Chain = c } }
+func withChain(c []int) ruleOpt { return func(r *testRuleCtx) { r.cc.Chain = c } }
 func withClosestRuntime(pid int, _ string) ruleOpt {
 	return func(r *testRuleCtx) { r.cc.ClosestRtPID = pid }
 }
 func withIdentityAgentPID(pid int) ruleOpt {
 	return func(r *testRuleCtx) { r.cc.IdentityAgentPID = pid }
 }
-func withCWDMatch(b bool) ruleOpt   { return func(r *testRuleCtx) { r.cc.CWDMatches = b } }
-func withTmuxMatch(b bool) ruleOpt  { return func(r *testRuleCtx) { r.cc.TmuxMatches = b } }
-func withMode(m Mode) ruleOpt       { return func(r *testRuleCtx) { r.cc.Mode = m } }
+func withCWDMatch(b bool) ruleOpt  { return func(r *testRuleCtx) { r.cc.CWDMatches = b } }
+func withTmuxMatch(b bool) ruleOpt { return func(r *testRuleCtx) { r.cc.TmuxMatches = b } }
+func withMode(m Mode) ruleOpt      { return func(r *testRuleCtx) { r.cc.Mode = m } }
 func withDeadReclaimMode(m Mode) ruleOpt {
 	return func(r *testRuleCtx) { r.cc.DeadReclaimMode = m }
 }

@@ -85,13 +85,15 @@ test -f .thrum/philosophy.md
 
 If the file does not exist, stop and tell the user:
 
-> project-setup requires a philosophy doc at `.thrum/philosophy.md`.
-> Run the `project-philosophy` skill first to generate or locate one,
-> then re-invoke project-setup.
+> project-setup requires a philosophy doc at `.thrum/philosophy.md`. Run the
+> `project-philosophy` skill first to generate or locate one, then re-invoke
+> project-setup.
 
 Do not proceed without the philosophy doc. Do not inline-create.
 
-If the doc exists, read it and extract the anti-patterns for injection in Phase 4. Refer to the `project-philosophy` skill for the doc contents and the anti-pattern format.
+If the doc exists, read it and extract the anti-patterns for injection in
+Phase 4. Refer to the `project-philosophy` skill for the doc contents and the
+anti-pattern format.
 
 ## Inputs
 
@@ -132,10 +134,15 @@ implementation code during this phase.
 
 Explore the codebase and recent beads state in parallel. Partition the work so:
 
-- One sub-agent maps packages, interfaces, and patterns relevant to `{{FEATURE_DESCRIPTION}}` — output: `output/planning/codebase-scan.md`.
-- One sub-agent runs `bd list --status=open`, `bd ready`, and `bd blocked` and identifies work related to `{{FEATURE_DESCRIPTION}}` — output: `output/planning/beads-context.md`.
+- One sub-agent maps packages, interfaces, and patterns relevant to
+  `{{FEATURE_DESCRIPTION}}` — output: `output/planning/codebase-scan.md`.
+- One sub-agent runs `bd list --status=open`, `bd ready`, and `bd blocked` and
+  identifies work related to `{{FEATURE_DESCRIPTION}}` — output:
+  `output/planning/beads-context.md`.
 
-Invoke `efficient-multi-agent-research` for the launch-and-wait mechanics. After agents complete, read the two output files — do not fan-read individual beads entries into your main context.
+Invoke `efficient-multi-agent-research` for the launch-and-wait mechanics. After
+agents complete, read the two output files — do not fan-read individual beads
+entries into your main context.
 
 Ask the user focused questions (prefer multiple choice) about anything the plan
 leaves ambiguous — constraints, scope boundaries, patterns to follow.
@@ -169,7 +176,12 @@ bd dep add <later-epic-id> <earlier-epic-id>
 
 ### Create Tasks
 
-When creating > 6 tasks, delegate to parallel sub-agents — one per epic. Each sub-agent (haiku is sufficient — the work is mechanical) gets the epic ID, the list of `bd create --title=... --type=task --priority=N --description=...` commands to run, the within-epic `bd dep add <later_id> <earlier_id>` ordering commands, and instructions to return the created task IDs and titles. Invoke `efficient-multi-agent-research` § Core Pattern for launch-and-wait mechanics.
+When creating > 6 tasks, delegate to parallel sub-agents — one per epic. Each
+sub-agent (haiku is sufficient — the work is mechanical) gets the epic ID, the
+list of `bd create --title=... --type=task --priority=N --description=...`
+commands to run, the within-epic `bd dep add <later_id> <earlier_id>` ordering
+commands, and instructions to return the created task IDs and titles. Invoke
+`efficient-multi-agent-research` § Core Pattern for launch-and-wait mechanics.
 
 After sub-agents return IDs, set cross-epic dependencies directly (requires IDs
 from multiple sub-agents):
@@ -531,14 +543,20 @@ every time.
 
 ### Step 1.5: Generate Anti-Patterns for Each Epic
 
-For each epic's prompt, derive the `{{ANTI_PATTERNS}}` content by combining two sources:
+For each epic's prompt, derive the `{{ANTI_PATTERNS}}` content by combining two
+sources:
 
-1. The design doc's **Key Decisions** section — implementation-constraining decisions (e.g., "full page reload, not HTMX", "real service calls, not hardcoded").
-2. The philosophy doc's **Anti-Patterns** and **Red Flags** sections (already read during the Prerequisites check).
+1. The design doc's **Key Decisions** section — implementation-constraining
+   decisions (e.g., "full page reload, not HTMX", "real service calls, not
+   hardcoded").
+2. The philosophy doc's **Anti-Patterns** and **Red Flags** sections (already
+   read during the Prerequisites check).
 
-Present the derived anti-patterns to the user for approval via `AskUserQuestion` before injecting into the prompt.
+Present the derived anti-patterns to the user for approval via `AskUserQuestion`
+before injecting into the prompt.
 
-Refer to the `project-philosophy` skill for the anti-pattern format spec (rule count, grep-ability, positive + negative pair structure).
+Refer to the `project-philosophy` skill for the anti-pattern format spec (rule
+count, grep-ability, positive + negative pair structure).
 
 **Why this matters:** The verifier sub-agent pattern in the implementation
 template uses these red flags to check each task. Generic "tests pass"
@@ -735,17 +753,17 @@ give it directly to the implementing agent.
 
 ### Implementer Status Reports
 
-Implementation agents prefix every completion or escalation message with one
-of four status tokens defined in `implementation-agent.md`'s Phase 4 Status
+Implementation agents prefix every completion or escalation message with one of
+four status tokens defined in `implementation-agent.md`'s Phase 4 Status
 Vocabulary. Your response depends on the token:
 
-| Token                | Coordinator Response                                                                                                                                                                                                          |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `DONE`               | Proceed to code review and merge for the epic's branch.                                                                                                                                                                        |
-| `DONE_WITH_CONCERNS` | Read the concerns before review. Address correctness/scope issues before merging; note architectural observations for follow-up. Do not merge blind.                                                                           |
-| `NEEDS_CONTEXT`      | Answer the question, then re-dispatch the implementer with the missing context.                                                                                                                                                |
+| Token                | Coordinator Response                                                                                                                                                                                                                                     |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DONE`               | Proceed to code review and merge for the epic's branch.                                                                                                                                                                                                  |
+| `DONE_WITH_CONCERNS` | Read the concerns before review. Address correctness/scope issues before merging; note architectural observations for follow-up. Do not merge blind.                                                                                                     |
+| `NEEDS_CONTEXT`      | Answer the question, then re-dispatch the implementer with the missing context.                                                                                                                                                                          |
 | `BLOCKED`            | Assess the blocker: context problem → re-dispatch with more context; task too large → split it; stronger reasoning needed → re-dispatch on a more capable model; plan wrong → escalate to the user. Never force the same model to retry without changes. |
 
-**Never ignore a status escalation or silently re-dispatch.** If the
-implementer reports `BLOCKED` or `NEEDS_CONTEXT`, something must change before
-retrying — provide missing context, split the task, switch models, or escalate.
+**Never ignore a status escalation or silently re-dispatch.** If the implementer
+reports `BLOCKED` or `NEEDS_CONTEXT`, something must change before retrying —
+provide missing context, split the task, switch models, or escalate.

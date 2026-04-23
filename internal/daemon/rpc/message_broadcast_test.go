@@ -286,13 +286,13 @@ func TestMessageHandler_HookDispatch_FiresBroadcastOncePerMessage(t *testing.T) 
 	// Case 2: simulate permission.SendSupervisorMessage — direct
 	// state.WriteEvent of a message.create. Hook should fire broadcast.
 	directEvt := types.MessageCreateEvent{
-		Type:      "message.create",
-		Timestamp: "2026-04-20T03:05:00Z",
-		EventID:   identity.GenerateEventID(),
-		MessageID: identity.GenerateMessageID(),
-		AgentID:   agentID,
-		SessionID: "ses_direct_write",
-		Body:      types.MessageBody{Format: "markdown", Content: "from WriteEvent"},
+		Type:       "message.create",
+		Timestamp:  "2026-04-20T03:05:00Z",
+		EventID:    identity.GenerateEventID(),
+		MessageID:  identity.GenerateMessageID(),
+		AgentID:    agentID,
+		SessionID:  "ses_direct_write",
+		Body:       types.MessageBody{Format: "markdown", Content: "from WriteEvent"},
 		Recipients: []string{"some_recipient"},
 	}
 	st.Lock()
@@ -379,13 +379,13 @@ func TestMessageHandler_TwoDaemons_OnlyOriginBroadcasts(t *testing.T) {
 	// WriteEvent bypassing HandleSend (the path that 48kt.1 originally
 	// unblocked for Telegram forwarding).
 	evt := types.MessageCreateEvent{
-		Type:      "message.create",
-		Timestamp: "2026-04-20T05:45:00Z",
-		EventID:   identity.GenerateEventID(),
-		MessageID: identity.GenerateMessageID(),
-		AgentID:   "supervisor_on_A",
-		SessionID: "ses_supervisor_A",
-		Body:      types.MessageBody{Format: "markdown", Content: "[Permission] Allow tool use? y/n"},
+		Type:       "message.create",
+		Timestamp:  "2026-04-20T05:45:00Z",
+		EventID:    identity.GenerateEventID(),
+		MessageID:  identity.GenerateMessageID(),
+		AgentID:    "supervisor_on_A",
+		SessionID:  "ses_supervisor_A",
+		Body:       types.MessageBody{Format: "markdown", Content: "[Permission] Allow tool use? y/n"},
 		Recipients: []string{"user:leon-letto"},
 	}
 	stA.Lock()

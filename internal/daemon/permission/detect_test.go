@@ -153,7 +153,7 @@ func TestBottomLines_TrailingNewlinePreservesWindow(t *testing.T) {
 	// 20 distinct lines, each of the form "line-NN".
 	lines := make([]string, 0, 20)
 	for i := 1; i <= 20; i++ {
-		lines = append(lines, "line-" + itoa(i))
+		lines = append(lines, "line-"+itoa(i))
 	}
 	// Trailing newline on the input (matches what some tmux / capture
 	// wrappers emit).

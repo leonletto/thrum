@@ -62,8 +62,8 @@ func TestIsFilteredInterfaceName(t *testing.T) {
 		{"virbr0", true},
 		{"vmnet1", true},
 		{"vboxnet0", true},
-		{"En0", false},     // case-sensitive lowering: still allowed
-		{"UTUN0", true},    // upper-case still matched
+		{"En0", false},  // case-sensitive lowering: still allowed
+		{"UTUN0", true}, // upper-case still matched
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

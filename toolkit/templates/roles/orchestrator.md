@@ -174,10 +174,9 @@ inherits the coordinator's interaction surface and the same failure modes.
 
 > **Review-cycle rules** (model selection on sub-agent spawns, both-reviewers-
 > first, verify-before-forward, pushback-is-signal, findings-fixed-or-escalated)
-> are documented inside the orchestrate skill at Phase 4 Step 3 — they reload
-> at every plan invocation, where they're operationally needed. The rules
-> below are dispatch-pattern and lifecycle rules that you need before any plan
-> runs.
+> are documented inside the orchestrate skill at Phase 4 Step 3 — they reload at
+> every plan invocation, where they're operationally needed. The rules below are
+> dispatch-pattern and lifecycle rules that you need before any plan runs.
 
 ### Never rename an agent tied to a worktree
 
@@ -200,8 +199,8 @@ need a fresh identity (rare), tear the worktree down with
 
 ## Long-Lived Session Hygiene
 
-The orchestrator role is **long-lived by design** — it persists across many
-epic cycles and frequently outlives the underlying conversation context window.
+The orchestrator role is **long-lived by design** — it persists across many epic
+cycles and frequently outlives the underlying conversation context window.
 Unlike the coordinator (which checkpoints state via `project_state.md` and
 `/thrum:update-project`), the orchestrator's state is operational and not
 persisted to a project-level file. **You must manage your own continuity.**
@@ -216,13 +215,15 @@ will likely need 2-4 restarts before completion. That is normal and expected.
 ### Restart at clean checkpoints
 
 **Good moments to invoke `/thrum:restart`:**
+
 - After an epic merges and before the next epic dispatches
 - Between review rounds when no agent is actively waiting on a fix
 - After a batch of related sub-agent reports is processed and acted on
-- Before starting a long sequence of operations (parallel dispatches,
-  multi-epic batch)
+- Before starting a long sequence of operations (parallel dispatches, multi-epic
+  batch)
 
 **Bad moments:**
+
 - Mid-review (findings consolidated but not yet sent to the implementer)
 - Mid-merge (commits staged but not pushed)
 - While an agent is actively waiting for your response
@@ -246,25 +247,24 @@ Before invoking `/thrum:restart`, write a complete handoff summary covering:
    enough detail that a fresh you can pick up without re-discovery
 
 The summary is what `/thrum:restart` preserves into the snapshot. After resume,
-it is the only memory you have of the prior session — make it complete enough
-to reconstruct your operational state without re-reading the entire prior
+it is the only memory you have of the prior session — make it complete enough to
+reconstruct your operational state without re-reading the entire prior
 transcript.
 
 ### Restart cadence is normal — plan for it
 
-Don't treat a restart as a failure. Treat it as a regular operational beat.
-Aim to restart at natural break points (post-merge, between epics) rather than
-wait for context warnings, which often arrive at inconvenient moments.
+Don't treat a restart as a failure. Treat it as a regular operational beat. Aim
+to restart at natural break points (post-merge, between epics) rather than wait
+for context warnings, which often arrive at inconvenient moments.
 
 ### Why the coordinator does not need this
 
 Coordinators get `project_state.md` (durable, refreshed via
 `/thrum:update-project`) which captures session-level state across restarts.
-That mechanism is not currently extended to operational orchestrator state.
-Your in-flight epic-level state lives only in conversation context, so restart
-summaries are your only persistence mechanism. Until the architecture catches
-up to long-lived orchestrator state, this discipline carries you across
-restarts.
+That mechanism is not currently extended to operational orchestrator state. Your
+in-flight epic-level state lives only in conversation context, so restart
+summaries are your only persistence mechanism. Until the architecture catches up
+to long-lived orchestrator state, this discipline carries you across restarts.
 
 ---
 

@@ -464,7 +464,6 @@ func TestIntegration_SnapshotSaveExplicitJSONL_BypassesAutoDetect(t *testing.T) 
 	}
 }
 
-
 // TestIntegration_SnapshotSaveNoPID_TextMode verifies the snapshot.save.no-pid
 // hint wires end-to-end when the identity file has agent_pid=0 AND the daemon
 // lookup returns no-match. The daemon lookup branch in saveCmd gracefully

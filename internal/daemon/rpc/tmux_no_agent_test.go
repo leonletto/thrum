@@ -329,4 +329,3 @@ func TestHandleSend_RejectsEmptyFields(t *testing.T) {
 		}
 	}
 }
-

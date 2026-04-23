@@ -154,4 +154,3 @@ func TestWorktreeExists_PathAware(t *testing.T) {
 		}
 	})
 }
-

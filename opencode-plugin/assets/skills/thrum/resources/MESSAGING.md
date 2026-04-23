@@ -37,10 +37,10 @@ auto-detect or broadcast fallback behind it.
 ```jsonc
 {
   "permission_supervisors": [
-    "coordinator",         // role → fans out to every active coordinator
-    "@coordinator_main",   // specific agent (name-based)
-    "@user:leon-letto"     // user → auto-bridges to Telegram if configured
-  ]
+    "coordinator", // role → fans out to every active coordinator
+    "@coordinator_main", // specific agent (name-based)
+    "@user:leon-letto", // user → auto-bridges to Telegram if configured
+  ],
 }
 ```
 

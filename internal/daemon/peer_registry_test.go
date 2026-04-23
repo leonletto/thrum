@@ -340,11 +340,11 @@ func TestPeerInfo_NewFields_Persist(t *testing.T) {
 	}
 
 	info := &PeerInfo{
-		DaemonID:     "d_newfields",
-		Name:         "newfields-peer",
-		Address:      "peer.example.com:9100",
-		Transport:    "tailscale",
-		RepoPath:     "/home/user/project",
+		DaemonID:  "d_newfields",
+		Name:      "newfields-peer",
+		Address:   "peer.example.com:9100",
+		Transport: "tailscale",
+		RepoPath:  "/home/user/project",
 		// thrum-b6yv: pass an unclean prefix to assert the AddPeer
 		// boundary sanitizes it. "remote." → "remote-".
 		ProxyPrefix:  "remote.",

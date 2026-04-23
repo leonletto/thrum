@@ -18,8 +18,8 @@ import (
 // a single worktree matching the current test process's CWD, so Resolve
 // succeeds for any connection from this PID.
 type gatedResolver struct {
-	mu      sync.Mutex
-	open    bool
+	mu       sync.Mutex
+	open     bool
 	worktree string
 	agentID  string
 }
