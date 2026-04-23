@@ -566,7 +566,7 @@ only "does the code do what was asked?"
 
 Invoke `verify-against-plan` with these inputs:
 
-```
+```text
 /verify-against-plan plan={{PLAN_FILE}} branch={{BRANCH_NAME}}
 ```
 

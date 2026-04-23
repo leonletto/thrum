@@ -195,7 +195,7 @@ quality comes from real answers, not filler.
 Read `resources/philosophy-template.md` and interpolate the detected + provided
 values. Template interpolation uses simple placeholder substitution:
 
-```
+```text
 {{LANGUAGE}}        → "Go 1.22"
 {{FRAMEWORK}}       → "cobra CLI + net/http server"
 {{TEST_HARNESS}}    → "stdlib testing + testify assertions"

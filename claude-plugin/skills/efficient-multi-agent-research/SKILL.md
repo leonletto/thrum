@@ -41,7 +41,7 @@ workflow: partition, investigate to disk, consolidate, then decide.
 
 ## Core Pattern
 
-**Partition > Parallel Investigate > Consolidate > Decide**
+### Partition > Parallel Investigate > Consolidate > Decide
 
 1. **Create output directory:** `mkdir -p dev-docs/<topic>/` — if re-running,
    archive previous `findings_*.md` to a subdirectory (e.g., `run-01/`) before

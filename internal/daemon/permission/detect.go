@@ -60,6 +60,7 @@ func DetectPaneState(runtime, paneContent string) string {
 // input had a trailing newline we preserve it on output too, so
 // multi-line regex anchors (`(?m)^...$`) behave identically to the
 // full-content path.
+//
 //nolint:unparam // n is always paneBottomMatchLines today, but keeping it explicit makes tests readable and future tuning easy.
 func bottomLines(content string, n int) string {
 	if n <= 0 {

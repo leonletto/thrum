@@ -41,13 +41,13 @@ When the caller supplies no explicit scope, infer:
 
 **Explicit args:**
 
-```
+```text
 /verify-against-plan plan=dev-docs/plans/YYYY-MM-DD-topic-plan.md branch=feat/plugin-skills-slate
 ```
 
 **Context-inferred (from current worktree):**
 
-```
+```text
 /verify-against-plan plan=dev-docs/plans/YYYY-MM-DD-topic-plan.md
 ```
 
