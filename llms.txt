@@ -127,6 +127,21 @@ New in v0.9.1:
   gopsutil.Cwd races (subprocess exits before introspection completes) and
   interactive zsh callers hit the same path — both were incorrectly rejected
   as anonymous despite being legitimate callers.
+- thrum setup claude-md --apply (issue #8) — implemented the
+  documented-but-missing CLI subcommand. External users following the
+  quickstart hit `Error: unknown flag: --apply` because the setupCmd stub
+  only suggested `thrum worktree setup`. The command now installs a
+  Thrum-managed block (wrapped in `<!-- BEGIN THRUM -->...<!-- END THRUM -->`
+  markers) into ./CLAUDE.md. Three forms: bare prints to stdout, --apply
+  creates-or-appends, --apply --force replaces existing block idempotently.
+  Errors with exit 1 if a block exists and --force is not set. Template is
+  static (go:embed) and intentionally minimal (~30-40 lines: what Thrum
+  is, 5 essential commands, docs pointer). Plugin-vs-standalone framing:
+  use this path ONLY when not running the Claude Code Thrum plugin —
+  the plugin already injects messaging instructions, so combining the two
+  duplicates content. The CLAUDE.md block is the alternative for other
+  runtimes (codex, cursor, opencode, kiro, auggie) and for Claude Code
+  without the plugin.
 
 ## Quick Start
 
@@ -160,6 +175,20 @@ All commands accept these flags:
 
   thrum worktree setup WORKTREE_NAME
     Configure a feature worktree with .thrum/redirect to share the main issue database. Alias for `thrum worktree create`.
+
+  thrum setup claude-md [--apply] [--force]
+    Install or manage a Thrum-managed block in ./CLAUDE.md. Default: prints template to stdout.
+    --apply: writes to ./CLAUDE.md. Creates file with template-only content if missing.
+             Appends blank-line + template at end if file exists without a Thrum block.
+             Errors if a Thrum block already present (exit 1, stderr message asks for --force).
+    --force (with --apply): replaces the existing Thrum block in place. Idempotent.
+    Block markers: <!-- BEGIN THRUM --> ... <!-- END THRUM --> (single space, no version, no trailing dot).
+    Template is intentionally minimal (~30-40 lines): what Thrum is, 5 essential commands
+    (whoami/team/inbox/send/reply), quickstart pointer.
+    Use this ONLY when NOT running the Claude Code Thrum plugin — the plugin already
+    injects messaging instructions via SessionStart hook + skills + slash commands.
+    The CLAUDE.md path is for Claude Code without the plugin, or other runtimes (codex,
+    cursor, opencode, kiro, auggie). Use one or the other, not both.
 
   thrum quickstart --name <agent-name> --role ROLE --module MODULE [--display NAME] [--intent TEXT] [--runtime PRESET] [--dry-run] [--force] [--no-init] [--preamble-file PATH]
     Register agent, start session, generate runtime config, and set intent in one step.

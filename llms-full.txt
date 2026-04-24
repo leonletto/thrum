@@ -113,6 +113,29 @@ New in v0.9.1:
   correct worktree and whoami resolved correctly.
   Net-zero security regression: only restores pre-v0.9.0 behavior on the
   "don't know" path. Provably anonymous callers still hit the allowlist.
+- thrum setup claude-md --apply (issue #8) — implemented the
+  documented-but-missing CLI subcommand. External user mjn298 followed the
+  quickstart and hit `Error: unknown flag: --apply` because the setupCmd
+  stub at cmd/thrum/main.go just suggested `thrum worktree setup`. The
+  command now installs a Thrum-managed block (wrapped in
+  `<!-- BEGIN THRUM -->...<!-- END THRUM -->` markers) into ./CLAUDE.md.
+  Three forms:
+    bare:                  print template to stdout, write nothing
+    --apply:               create CLAUDE.md if missing, or append blank-line
+                           + template to end of existing file. Errors with
+                           exit 1 + stderr if a Thrum block already exists
+                           ("use --force to replace").
+    --apply --force:       replace existing Thrum block in place; idempotent.
+  Template is static (go:embed at internal/cli/templates/claude-md/
+  thrum-block.md), intentionally minimal — ~30-40 lines covering what Thrum
+  is, the 5 essential commands (whoami, team, inbox, send, reply), and a
+  pointer to the full docs. Designed as the standalone messaging-instruction
+  path for environments without the Claude Code Thrum plugin (other
+  runtimes: codex, cursor, opencode, kiro, auggie; or Claude Code where
+  the plugin isn't installed). Plugin users should NOT also run this — it
+  would duplicate messaging instructions the plugin already provides via
+  SessionStart hook + skills + slash commands. Use one approach or the
+  other.
 
 New in v0.9.0 (upcoming):
 - Safe agent registration — `thrum tmux create` now requires `--name`, `--role`,
@@ -675,6 +698,55 @@ All commands accept:
     List git worktrees with thrum agent info (reads identity files from each
     worktree's .thrum/identities/ to show which agent is active where).
     Columns: WORKTREE | BRANCH | HEAD | AGENT | STATUS
+
+### thrum setup claude-md (v0.9.1)
+
+  Usage:    thrum setup claude-md [--apply] [--force]
+  Action:   Install or manage a Thrum-managed block in ./CLAUDE.md.
+
+  Behavior:
+    Default (no flags):  Print template to stdout. Writes nothing.
+    --apply:             Write template to ./CLAUDE.md.
+                         - File missing: create it with template-only content
+                           (the BEGIN/END THRUM block + nothing else).
+                         - File exists, no Thrum block: append blank line +
+                           template at end. Existing content preserved
+                           byte-for-byte.
+                         - File exists, Thrum block present: exit 1 with
+                           stderr "Error: thrum block already present in
+                           CLAUDE.md — use --force to replace".
+                           (Lowercase "thrum" matches the underlying
+                           sentinel error per Go staticcheck ST1005.)
+    --apply --force:     Replace the existing Thrum block in place.
+                         Idempotent — re-runs produce the same result.
+                         Useful for refreshing the block after upgrading thrum.
+
+  Block markers: <!-- BEGIN THRUM --> and <!-- END THRUM -->
+                 (single space, no version, no trailing dot — exact byte match
+                  is what the command uses for detection).
+
+  Template:      Static, embedded at build time via go:embed from
+                 internal/cli/templates/claude-md/thrum-block.md. Intentionally
+                 minimal (~30-40 lines): what Thrum is, the 5 essential
+                 commands (whoami, team, inbox, send, reply), pointer to full
+                 docs at https://leonletto.github.io/thrum.
+
+  When to use:   Claude Code WITHOUT the Thrum plugin, or other runtimes
+                 (codex, cursor, opencode, kiro, auggie) that don't have a
+                 first-class plugin. The CLAUDE.md block is the standalone
+                 messaging path.
+
+  When NOT to use: Claude Code WITH the Thrum plugin installed. The plugin's
+                 SessionStart hook + skills + slash commands already provide
+                 messaging instructions; running setup claude-md on top of
+                 the plugin would duplicate what the plugin injects.
+
+  Use one approach or the other, not both.
+
+  Issue context: GitHub issue #8 — external user hit "Error: unknown flag:
+                 --apply" because the command was documented but the setupCmd
+                 stub at cmd/thrum/main.go just suggested "worktree setup".
+                 v0.9.1 implements the documented behavior.
 
 ### thrum ping
 

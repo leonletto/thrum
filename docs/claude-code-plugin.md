@@ -39,14 +39,17 @@ cd /path/to/your/repo
 thrum init
 ```
 
-`thrum init` (v0.4.5+) handles the full setup: prompts for runtime detection,
-generates CLAUDE.md coordination instructions, starts the daemon, registers your
-agent, and starts a session. For manual control, you can still run individual
-steps:
+`thrum init` handles the daemon-side setup: prompts for runtime detection,
+starts the daemon, registers your agent, and starts a session.
 
-```bash
-thrum setup claude-md --apply    # Generate CLAUDE.md coordination instructions
-```
+If you install the Thrum plugin (next section), you do **not** need to run
+`thrum setup claude-md` — the plugin's SessionStart hook injects messaging
+instructions into the agent at session start, slash commands cover the common
+operations, and skills disclose deeper docs on demand. The
+`thrum setup claude-md --apply` CLI is the alternative for environments without
+the plugin (other runtimes, or Claude Code without the plugin installed); see
+[CLI Reference → thrum setup claude-md](cli.md#thrum-setup-claude-md). Use one
+approach or the other, not both.
 
 Verify the daemon is running:
 
