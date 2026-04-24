@@ -713,8 +713,10 @@ All commands accept:
                            template at end. Existing content preserved
                            byte-for-byte.
                          - File exists, Thrum block present: exit 1 with
-                           stderr "Error: Thrum block already present in
+                           stderr "Error: thrum block already present in
                            CLAUDE.md — use --force to replace".
+                           (Lowercase "thrum" matches the underlying
+                           sentinel error per Go staticcheck ST1005.)
     --apply --force:     Replace the existing Thrum block in place.
                          Idempotent — re-runs produce the same result.
                          Useful for refreshing the block after upgrading thrum.
