@@ -10,7 +10,7 @@ GOVULNCHECK_VERSION := latest
 BINARY_NAME := thrum
 BUILD_DIR := bin
 INSTALL_DIR := $(HOME)/.local/bin
-VERSION := 0.9.0
+VERSION := 0.9.1
 
 # Default target
 help:

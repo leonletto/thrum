@@ -13,18 +13,20 @@ and machines. You direct the work. The agents coordinate through Thrum. Messages
 persist through context compaction, session restarts, and machine changes —
 nothing gets lost.
 
-**v0.9.0 highlights:**
+**v0.9.1 highlights:**
 
-- **Cursor Agent plugin** — Full plugin with hooks, skills, commands, MCP
-  config. Install via `cursor-plugin/local-install.sh`.
-- **Reusable test infrastructure** — `scripts/test-setup.sh` and
-  `scripts/test-teardown.sh` for isolated plugin testing across all runtimes.
-- **Monitor delivery fix** — Monitor jobs now register synthetic agent+session
-  so matched lines actually deliver messages.
-- **CLI audit cleanup** — Removed groups as user-facing concept, simplified
-  messaging to agent IDs + @everyone, -2400 lines across 24 files.
-- **Tmux session titles** — Terminal tabs show `@agent_name` instead of generic
-  "thrum" for all sessions (iTerm2, Terminal.app).
+- **Peercred fix (thrum-ndtw)** — Mutating RPCs (`thrum tmux create`,
+  `thrum agent delete`, etc.) no longer reject authenticated callers when
+  kernel peer credentials or `gopsutil.Cwd` process inspection fails.
+  Previously caused "anonymous caller" rejections from macOS interactive
+  shells and short-lived subprocesses. Falls through to legacy
+  client-asserted identity on the "unknown state" path; provably-anonymous
+  callers still hit the allowlist.
+- **`thrum setup claude-md`** — New subcommand prints or installs a minimal
+  Thrum-managed block into `CLAUDE.md` for non-plugin environments.
+  `thrum setup claude-md --apply` installs, `--apply --force` replaces
+  idempotently. If you're running the Thrum plugin for Claude Code, skip
+  this — the plugin handles coordination via skills and hooks. Closes #8.
 
 ## Quick Start
 
