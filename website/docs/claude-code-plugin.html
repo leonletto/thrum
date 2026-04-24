@@ -71,11 +71,16 @@ curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/instal
 # Initialize in your repository (v0.4.5+: init does full setup)
 cd /path/to/your/repo
 thrum init</code></pre>
-<p><code>thrum init</code> (v0.4.5+) handles the full setup: prompts for runtime detection,
-generates CLAUDE.md coordination instructions, starts the daemon, registers your
-agent, and starts a session. For manual control, you can still run individual
-steps:</p>
-<pre><code>thrum setup claude-md --apply    # Generate CLAUDE.md coordination instructions</code></pre>
+<p><code>thrum init</code> handles the daemon-side setup: prompts for runtime detection,
+starts the daemon, registers your agent, and starts a session.</p>
+<p>If you install the Thrum plugin (next section), you do <strong>not</strong> need to run
+<code>thrum setup claude-md</code> — the plugin&#39;s SessionStart hook injects messaging
+instructions into the agent at session start, slash commands cover the common
+operations, and skills disclose deeper docs on demand. The
+<code>thrum setup claude-md --apply</code> CLI is the alternative for environments without
+the plugin (other runtimes, or Claude Code without the plugin installed); see
+<a href="cli.html#thrum-setup-claude-md">CLI Reference → thrum setup claude-md</a>. Use one
+approach or the other, not both.</p>
 <p>Verify the daemon is running:</p>
 <pre><code>thrum daemon status</code></pre>
 <h2>Installation</h2>

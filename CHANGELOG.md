@@ -10,6 +10,19 @@ and this project adheres to
 
 ### Fixed
 
+- **`thrum setup claude-md --apply` documented-but-missing subcommand
+  (issue #8)** — external user followed the quickstart and hit
+  `Error: unknown flag: --apply` because the `setupCmd` stub at
+  `cmd/thrum/main.go` only suggested `thrum worktree setup`. The
+  command is now implemented: `thrum setup claude-md` prints the
+  template to stdout, `--apply` creates `CLAUDE.md` (template-only) or
+  appends the template to an existing file, and `--apply --force`
+  replaces an existing Thrum block idempotently. Block is wrapped in
+  `<!-- BEGIN THRUM -->` / `<!-- END THRUM -->` markers for
+  detection. Template (`internal/cli/templates/claude-md/thrum-block.md`,
+  embedded via `go:embed`) is intentionally minimal for users not
+  running the Thrum plugin; plugin users should not run this command
+  since it would duplicate what the plugin already injects.
 - **Peercred resolver error taxonomy (thrum-ndtw)** — v0.9.0 wrapped
   introspection failures (kernel peer-creds via `tspeer.Get`, `gopsutil.Cwd`)
   with `ErrAnonymous`, which routed through `server.go`'s anonymous-allowlist

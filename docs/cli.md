@@ -246,29 +246,40 @@ Connected to daemon
 
 ### thrum setup claude-md
 
-Generate Thrum agent coordination instructions for CLAUDE.md.
+Install or manage a Thrum-managed block in `CLAUDE.md`. Prints the template to
+stdout by default; `--apply` writes to `./CLAUDE.md`; `--apply --force` replaces
+an existing Thrum block idempotently.
 
 ```bash
-thrum setup claude-md              # Print to stdout
-thrum setup claude-md --apply      # Append to CLAUDE.md (creates if missing)
-thrum setup claude-md --apply --force  # Replace existing Thrum section
+thrum setup claude-md                   # Print template to stdout
+thrum setup claude-md --apply           # Create CLAUDE.md or append block
+thrum setup claude-md --apply --force   # Replace existing Thrum block
 ```
 
 Flags:
 
-- `--apply` — Append generated content to CLAUDE.md (with duplicate detection)
-- `--force` — Replace existing Thrum section instead of skipping (used with
-  --apply)
+- `--apply` — Write to `./CLAUDE.md`. Creates the file with template-only
+  content if it doesn't exist, or appends a blank line plus the template at the
+  end if it exists without a Thrum block. Errors if a Thrum block is already
+  present (use `--force` to replace it).
+- `--force` — Replace an existing Thrum block in place. Idempotent: re-runs
+  produce the same result. Has no effect without `--apply`.
 
-This command generates comprehensive agent coordination instructions including:
+The block is wrapped in `<!-- BEGIN THRUM -->` and `<!-- END THRUM -->` markers
+so the command can detect, replace, or skip it on subsequent runs. Content
+outside the markers is preserved byte-for-byte.
 
-- Registration and session management
-- Message protocols
-- MCP server configuration
-- Background listener setup
+**Use this command only if you are NOT running the Claude Code Thrum plugin.**
+The plugin already provides messaging instructions via its SessionStart hook,
+slash commands, and skills — adding the same content to `CLAUDE.md` would
+duplicate what the plugin injects. The CLAUDE.md block is the minimal-messaging
+path for Claude Code without the plugin, for other runtimes (Codex, Cursor,
+opencode, kiro, auggie), or for environments where plugin install isn't
+available.
 
-The instructions are automatically injected by `thrum prime` when agents start
-sessions, providing immediate context on how to use Thrum for coordination.
+Without `--apply`, the command writes nothing — it just prints the template so
+you can pipe it elsewhere or inspect it. Errors that block the apply (existing
+block without `--force`, IO failures) go to stderr; exit code is non-zero.
 
 ### thrum prime
 

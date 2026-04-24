@@ -108,17 +108,47 @@ The plugin already includes the skill — `thrum init --skills` will detect the
 plugin and skip the install. See [Claude Code Plugin](claude-code-plugin.md) for
 details.
 
-### 3. Generate CLAUDE.md Coordination Instructions
+### 3. Wire Thrum into Your Agent
 
-For Claude Code and other AI agents, generate Thrum coordination instructions:
+Pick **one** of the two paths below. They're alternatives — don't run both.
+
+**Path A: Claude Code with the Thrum plugin (recommended).** If you installed
+the plugin in Step 2 above, you're done with this step. The plugin's
+SessionStart hook injects messaging instructions, slash commands cover the
+common operations, and skills disclose deeper docs on demand. There is nothing
+to add to your CLAUDE.md — the plugin already provides everything agents need.
+
+**Path B: Claude Code without the plugin, or another runtime.** Inject a minimal
+Thrum coordination block into your repository's `CLAUDE.md` (or equivalent
+agent-instructions file):
 
 ```bash
 thrum setup claude-md --apply
 ```
 
-This appends Thrum coordination instructions to your CLAUDE.md (creates it if
-missing). After that, agents working in the repo will pick up Thrum
-automatically.
+What this does:
+
+- If `CLAUDE.md` doesn't exist, creates it with a Thrum block and nothing else.
+- If `CLAUDE.md` exists and has no Thrum block, appends a blank line plus the
+  block at the end. Existing content is preserved byte-for-byte.
+- If `CLAUDE.md` already contains a Thrum block (between `<!-- BEGIN THRUM -->`
+  and `<!-- END THRUM -->` markers), exits with an error and tells you to re-run
+  with `--force`.
+
+Re-run with `--force` after upgrading thrum to refresh the block in place:
+
+```bash
+thrum setup claude-md --apply --force
+```
+
+The block is intentionally minimal — what Thrum is, the five essential commands
+(`whoami`, `team`, `inbox`, `send`, `reply`), and a pointer to the full docs at
+<https://leonletto.github.io/thrum>. To preview the template without writing to
+disk, omit `--apply`:
+
+```bash
+thrum setup claude-md   # prints to stdout
+```
 
 ### 4. Register Your Agent and Start a Session
 
