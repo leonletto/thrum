@@ -2116,8 +2116,8 @@ persisted to <code>.thrum/config.json</code> under <code>runtime.default</code>.
 <p>Example:</p>
 <pre><code>$ thrum runtime set-default opencode
 ✓ Default runtime set to opencode</code></pre>
-<p>The default applies per-repo, not per-agent. Override on any individual
-launch with <code>thrum tmux launch &lt;session&gt; --runtime &lt;name&gt;</code>.</p>
+<p>The default applies per-repo, not per-agent. Override on any individual launch
+with <code>thrum tmux launch &lt;session&gt; --runtime &lt;name&gt;</code>.</p>
 <p>See <a href="multi-runtime.html">Multi-Runtime Support</a> for the runtime-resolution order
 and guidance on adding a custom preset to <code>~/.thrum/runtimes.json</code>.</p>
 <h2>Peer Management</h2>
@@ -2369,10 +2369,10 @@ with instant message delivery via <code>send-keys</code>. See
 <a href="tmux-sessions.html">Tmux-Managed Sessions</a> for the full story.</p>
 <h3>thrum tmux start</h3>
 <p>One-command session bring-up: runs <code>tmux create</code>, <code>tmux launch</code>, <code>thrum prime</code>,
-and attaches the current terminal — all in sequence. This is the shortest
-path from &quot;I want to start an agent in this worktree&quot; to &quot;I&#39;m sitting at its
-prompt.&quot; If any step fails, the session is left in place so you can inspect
-what happened with <code>thrum tmux status</code> and <code>thrum tmux capture</code>.</p>
+and attaches the current terminal — all in sequence. This is the shortest path
+from &quot;I want to start an agent in this worktree&quot; to &quot;I&#39;m sitting at its prompt.&quot;
+If any step fails, the session is left in place so you can inspect what happened
+with <code>thrum tmux status</code> and <code>thrum tmux capture</code>.</p>
 <pre><code>thrum tmux start &lt;name&gt; --cwd &lt;path&gt; --name &lt;agent-name&gt; --role &lt;role&gt; --module &lt;module&gt; [flags]</code></pre>
 <p>Flags are identical to <a href="#thrum-tmux-create">thrum tmux create</a> — the composite
 forwards them through. The most common additions are <code>--runtime</code> (to override
@@ -2497,8 +2497,8 @@ runtime without an identity is a no-op — the agent has no way to register
 itself.</p>
 <h3>thrum tmux connect</h3>
 <p>Attach your terminal to a tmux-managed session. With no arguments, prints an
-interactive picker listing every session visible to <code>thrum tmux status</code>; pass
-a session name to attach directly.</p>
+interactive picker listing every session visible to <code>thrum tmux status</code>; pass a
+session name to attach directly.</p>
 <pre><code>thrum tmux connect            # interactive picker
 thrum tmux connect &lt;name&gt;     # attach directly</code></pre>
 <p>Example:</p>
@@ -2515,13 +2515,13 @@ $ thrum tmux connect implementer-api
 <p>The picker also surfaces sessions created with <code>--no-agent</code> (they&#39;re tagged
 <code>@thrum-managed=1</code> in tmux user-options so status / connect still see them
 without needing a registered agent).</p>
-<p>Under the hood this is a thin wrapper around <code>tmux attach-session -t &lt;name&gt;</code>,
-so all the usual tmux attach semantics apply (Ctrl-b d to detach, etc.).</p>
+<p>Under the hood this is a thin wrapper around <code>tmux attach-session -t &lt;name&gt;</code>, so
+all the usual tmux attach semantics apply (Ctrl-b d to detach, etc.).</p>
 <h3>thrum tmux status</h3>
 <p>Show all tmux-managed sessions with agent info, liveness state, runtime, and
 branch. Includes sessions created with <code>--no-agent</code> (they&#39;re tagged
-<code>@thrum-managed=1</code> as a tmux user-option and still show up here, with an
-empty agent column).</p>
+<code>@thrum-managed=1</code> as a tmux user-option and still show up here, with an empty
+agent column).</p>
 <pre><code>thrum tmux status</code></pre>
 <p><code>thrum tmux list</code> is an alias.</p>
 <p>Example:</p>
@@ -2543,8 +2543,8 @@ or injecting commands.</p>
 <p>For agent-managed sessions (the normal case), input is routed through the
 daemon&#39;s command queue so <code>@system</code> completion semantics and <code>thrum tmux queue</code>
 coordination stay intact. For sessions created with <code>--no-agent</code>, there is no
-agent identity to queue against — <code>tmux send</code> bypasses the queue and writes
-the keystrokes directly into the pane.</p>
+agent identity to queue against — <code>tmux send</code> bypasses the queue and writes the
+keystrokes directly into the pane.</p>
 <pre><code>thrum tmux send &lt;name&gt; &quot;text&quot;</code></pre>
 <p>Example:</p>
 <pre><code>thrum tmux send implementer-api &quot;thrum inbox --unread&quot;</code></pre>

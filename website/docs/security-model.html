@@ -81,8 +81,21 @@ and similar symlink mismatches.</li>
 <li>The canonicalized git root is matched against <code>session_refs</code>, the table of
 registered agent worktree paths in the state DB.</li>
 <li>If a match is found: <code>ResolvedIdentity{AgentID, Worktree, PID}</code> is injected
-into the request context. If not: <code>ErrAnonymous</code> — the caller is anonymous.</li>
+into the request context. If not: <code>ErrAnonymous</code> — the caller is <em>provably</em>
+anonymous (their CWD is outside every registered worktree).</li>
 </ol>
+<p><strong>Since v0.9.1 (thrum-ndtw):</strong> the resolver distinguishes <em>unknown state</em> from
+<em>provably anonymous</em>. Only steps 3 and 5 — no git root above your CWD, or a git
+root that matches no registered worktree — return <code>ErrAnonymous</code> and trigger the
+allowlist rejection below. Steps 1 and 2 are introspection steps: if the kernel
+refuses peer credentials, or if gopsutil can&#39;t read the CWD for the connecting
+PID (short-lived subprocess, permission drift, race window), the resolver
+returns a raw error instead of wrapping <code>ErrAnonymous</code>. The daemon treats that
+as &quot;we don&#39;t know who you are&quot; and falls through to legacy behavior —
+client-asserted <code>caller_agent_id</code>, the pre-v0.9.0 path — rather than rejecting a
+caller the daemon simply couldn&#39;t classify. Both introspection failures emit
+<code>slog.Warn</code> with <code>step=pid failed</code> or <code>step=cwd failed</code>, which is the diagnostic
+path when this matters.</p>
 <p>The resolution runs once per connection, not once per request. Your process&#39;s
 CWD doesn&#39;t change within a single unix-socket connection&#39;s lifetime, so doing
 it per-request would be wasted work.</p>
@@ -105,7 +118,11 @@ only activates when the resolver is wired in.</p>
 <h3>Anonymous caller policy (sec.3)</h3>
 <p>A caller without a resolved identity is &quot;anonymous.&quot; This covers the normal case
 of running <code>thrum team</code> from your home directory, or from any path that isn&#39;t
-under a registered agent worktree.</p>
+under a registered agent worktree. Since v0.9.1, &quot;anonymous&quot; means <em>provably</em>
+anonymous — the resolver walked your PID&#39;s CWD to a git root and found that git
+root is not in <code>session_refs</code>. It does <em>not</em> mean the resolver failed
+mid-introspection; those cases fall through to legacy client-asserted identity
+(see the callout above).</p>
 <p>Anonymous callers can invoke these 32 methods. Everything else is rejected at
 the dispatcher with a clear error before the handler runs.</p>
 <table>
@@ -153,6 +170,11 @@ the dispatcher with a clear error before the handler runs.</p>
 <pre><code>anonymous caller cannot invoke &quot;message.send&quot;: cd into a registered agent worktree and retry</code></pre>
 <p>The intent here was to err on the side of more access for reads, not less.
 <code>cd ~ &amp;&amp; thrum team</code> works. <code>cd ~ &amp;&amp; thrum send</code> doesn&#39;t.</p>
+<p>If you see this error from a path you believe <em>should</em> be under a registered
+worktree, it&#39;s genuinely anonymous — your git root isn&#39;t in <code>session_refs</code>. If
+you see it when peercred introspection failed (which would be a v0.9.0 bug,
+fixed in v0.9.1), grep the daemon log for <code>step=pid failed</code> or <code>step=cwd failed</code>
+to confirm.</p>
 <hr>
 <h3>Forged caller_agent_id rejected</h3>
 <p>The <code>caller_agent_id</code> field in request payloads still exists for backward

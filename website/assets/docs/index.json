@@ -160,7 +160,7 @@
       "conflicts",
       "resolution"
     ],
-    "lastUpdated": "2026-04-20"
+    "lastUpdated": "2026-04-24"
   },
   {
     "path": "agent-configs.html",
@@ -209,7 +209,7 @@
       "lifecycle",
       "sync"
     ],
-    "lastUpdated": "2026-04-19"
+    "lastUpdated": "2026-04-24"
   },
   {
     "path": "sync.html",
@@ -745,7 +745,7 @@
       "daemon",
       "rpc"
     ],
-    "lastUpdated": "2026-04-20"
+    "lastUpdated": "2026-04-24"
   },
   {
     "path": "architecture.html",
@@ -754,7 +754,7 @@
     "category": "reference",
     "order": 999,
     "tags": [],
-    "lastUpdated": "2026-04-19"
+    "lastUpdated": "2026-04-24"
   },
   {
     "path": "cli.html",
@@ -866,6 +866,6 @@
       "errors",
       "peercred"
     ],
-    "lastUpdated": "2026-04-20"
+    "lastUpdated": "2026-04-24"
   }
 ]

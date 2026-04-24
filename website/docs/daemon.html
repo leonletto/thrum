@@ -288,13 +288,20 @@ on both the Unix socket and WebSocket servers unless noted.</p>
 kernel-verified PID via <code>SO_PEERCRED</code> (Linux) or <code>LOCAL_PEERPID</code> (macOS),
 resolves the PID&#39;s working directory, walks to the git root, and matches
 against registered agent worktrees. Matched callers get a verified identity;
-unmatched callers are classified as <strong>anonymous</strong>.</p>
+callers whose CWD resolves to a git root that doesn&#39;t match any registered
+worktree are classified as <strong>anonymous</strong>. Since v0.9.1, callers whose
+introspection failed outright (kernel refused peer creds, gopsutil.Cwd
+errored on a short-lived subprocess) are <em>not</em> classified as anonymous — the
+resolver returns a raw error and the daemon falls through to legacy
+client-asserted identity. <code>slog.Warn</code> at <code>step=pid failed</code> or
+<code>step=cwd failed</code> captures the introspection failure for diagnostics.</p>
 </li>
 <li><p><strong>Anonymous allowlist</strong> — anonymous callers may only invoke a hardcoded set
 of ~30 read-only methods (observability, team/session/message queries, tmux
 status reads, and the bootstrap RPCs <code>agent.register</code>, <code>session.start</code>,
 <code>session.setIntent</code>). All mutating RPCs are rejected before the handler runs.
-See <a href="security-model.html">Security Model</a> for the full allowlist.</p>
+Since v0.9.1 this rejection applies only to <em>provably</em> anonymous callers; see
+<a href="security-model.html">Security Model</a> for the full allowlist.</p>
 </li>
 </ol>
 <p>The G4 liveness gate additionally guards all daemon-side writes to identity

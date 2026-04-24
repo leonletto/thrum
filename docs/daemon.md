@@ -246,13 +246,20 @@ Every RPC request on the Unix socket goes through a two-stage identity check:
    kernel-verified PID via `SO_PEERCRED` (Linux) or `LOCAL_PEERPID` (macOS),
    resolves the PID's working directory, walks to the git root, and matches
    against registered agent worktrees. Matched callers get a verified identity;
-   unmatched callers are classified as **anonymous**.
+   callers whose CWD resolves to a git root that doesn't match any registered
+   worktree are classified as **anonymous**. Since v0.9.1, callers whose
+   introspection failed outright (kernel refused peer creds, gopsutil.Cwd
+   errored on a short-lived subprocess) are _not_ classified as anonymous — the
+   resolver returns a raw error and the daemon falls through to legacy
+   client-asserted identity. `slog.Warn` at `step=pid failed` or
+   `step=cwd failed` captures the introspection failure for diagnostics.
 
 2. **Anonymous allowlist** — anonymous callers may only invoke a hardcoded set
    of ~30 read-only methods (observability, team/session/message queries, tmux
    status reads, and the bootstrap RPCs `agent.register`, `session.start`,
    `session.setIntent`). All mutating RPCs are rejected before the handler runs.
-   See [Security Model](security-model.md) for the full allowlist.
+   Since v0.9.1 this rejection applies only to _provably_ anonymous callers; see
+   [Security Model](security-model.md) for the full allowlist.
 
 The G4 liveness gate additionally guards all daemon-side writes to identity
 files: if the target agent's PID is no longer alive, the write is refused and an

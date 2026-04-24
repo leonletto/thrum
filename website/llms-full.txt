@@ -1,4 +1,4 @@
-# Thrum v0.9.0 -- Complete Agent Reference
+# Thrum v0.9.1 -- Complete Agent Reference
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -87,6 +87,32 @@ New in v0.8.2:
   `thrum worktree create` workflow; TMUX_SESSIONS.md warns that `tmux launch`
   hard-errors on `--no-agent` sessions; CLI_REFERENCE.md corrected to drop
   the old broken temp-session description.
+
+New in v0.9.1:
+- Peercred resolver error taxonomy (thrum-ndtw) — introspection failures no
+  longer masquerade as anonymous. Step 1 (kernel peer credentials via
+  tailscale/peercred) and Step 2 (gopsutil CWD lookup) now return raw errors
+  instead of wrapping `ErrAnonymous`. `server.go` treats `ErrAnonymous` as
+  "provably anonymous" and enforces the allowlist; raw errors fall through
+  to legacy client-asserted identity (pre-v0.9.0 behavior). Only Step 3
+  (no git root above CWD) and Step 5 (git root doesn't match any registered
+  worktree) are provable evidence that the caller is outside every
+  registered worktree — those still wrap `ErrAnonymous`.
+  slog.Warn fires at both introspection-failure paths:
+    step=pid failed   — tailscale/peercred.Get errored or returned PID=0
+    step=cwd failed   — gopsutil Cwd errored for the peercred PID
+  The rejection error "anonymous caller cannot invoke X: cd into a
+  registered agent worktree and retry" now fires only for cases where the
+  daemon could inspect the caller and determine they were outside every
+  registered worktree. It no longer fires when peercred or gopsutil
+  couldn't classify the caller at all — those now fall through.
+  Fixes 2026-04-24 failure mode where claude-code Bash subprocesses on
+  macOS hit gopsutil.Cwd races (subprocess exits before introspection
+  completes) and interactive zsh callers hit the same path. Pre-fix symptom:
+  "anonymous caller cannot invoke X" even when the caller was CD'd into the
+  correct worktree and whoami resolved correctly.
+  Net-zero security regression: only restores pre-v0.9.0 behavior on the
+  "don't know" path. Provably anonymous callers still hit the allowlist.
 
 New in v0.9.0 (upcoming):
 - Safe agent registration — `thrum tmux create` now requires `--name`, `--role`,
@@ -1592,6 +1618,12 @@ Unknown event types are silently ignored (forward compatibility).
                                                // shared-worktree claim trust — if peercred picks Y but
                                                // client claims X and state.IsAgentInWorktree(X, peercred_wt)
                                                // is true, the claim is honored. Cross-worktree claims fail.
+                                               // v0.9.1 (thrum-ndtw): anonymous-rejection scope tightened —
+                                               // only PROVABLY anonymous (no git root above CWD, or no
+                                               // registered-worktree match) triggers the allowlist. Peercred
+                                               // introspection failures (kernel peer-creds or gopsutil.Cwd)
+                                               // fall through to legacy client-asserted identity. slog.Warn
+                                               // with step=pid failed / step=cwd failed is the diagnostic.
   }
 
   Config key for worktree base directory: `worktrees.base_path` (NOT `worktree_dir`).
@@ -1857,6 +1889,9 @@ Every unix-socket RPC goes through a 3-step pipeline before the handler runs:
     Linux: SO_PEERCRED syscall
     macOS: LOCAL_PEERPID getsockopt
     Result: caller OS PID (kernel-verified; cannot be spoofed)
+    v0.9.1: introspection failure here is UNKNOWN STATE, not anonymous —
+    returns raw error, slog.Warn "peercred.resolve step=pid failed", and
+    server.go falls through to legacy client-asserted identity.
 
   Step 2: DaemonResolve — 3-priority identity chain
     1. PID match:       caller PID matches agent_pid in an identity file (highest trust)
@@ -1874,6 +1909,15 @@ Every unix-socket RPC goes through a 3-step pipeline before the handler runs:
     Cross-worktree claims still fail. CLI now forwards caller_agent_id on
     message.delete / message.get plumbing paths so THRUM_NAME claims reach the
     resolver.
+    Error taxonomy (v0.9.1, thrum-ndtw): peercred resolver distinguishes
+    UNKNOWN STATE from PROVABLY ANONYMOUS. Only these two resolver outcomes
+    wrap ErrAnonymous and trigger server.go's anonymous-allowlist enforcement:
+      - CWD has no git root in its ancestor chain
+      - CWD's git root matches no registered worktree
+    Introspection failures (Step 1 kernel peercred, Step 2 gopsutil.Cwd)
+    return raw errors so server.go falls through to the legacy client-
+    asserted-identity path (pre-v0.9.0 behavior). Diagnostic: slog.Warn
+    with step=pid failed or step=cwd failed captures the failing step.
 
   Step 3: Identity guard enforcement
     guard.Check() runs the applicable guard for the RPC type.

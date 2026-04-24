@@ -7,7 +7,7 @@ category: "identity"
 order: 1
 tags:
   ["identity", "registration", "agents", "naming", "conflicts", "resolution"]
-last_updated: "2026-04-20"
+last_updated: "2026-04-24"
 ---
 
 ## Agent Identity & Registration
@@ -953,16 +953,16 @@ fields: `guard`, `mode`, `outcome` (`denied`, `allowed`, `auto_reclaimed`, or
 
 ### Guard Table
 
-| Guard key                   | Trigger                                                                                                       | Default mode | `--force` bypass                                          |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------- |
-| `cross_worktree`            | Caller's ancestor PID chain doesn't contain the identity file's `agent_pid`                                   | strict       | No — fix by `cd` to correct worktree or run `thrum prime` |
-| `unauthenticated_rpc`       | Mutating RPC from anonymous caller, forged `caller_agent_id`, or no `CallerAgentID` on non-peercred transport | strict       | No                                                        |
-| `non_git_bootstrap`         | `thrum init` or `thrum daemon start` from a non-git directory                                                 | strict       | Yes (`--force`)                                           |
-| `daemon_writer_liveness`    | Daemon tries to write an identity file for an agent whose PID is dead                                         | strict       | No                                                        |
-| `prime_ownership`           | `thrum prime` called from a sub-agent whose closest runtime ancestor is not the identity file's owner         | strict       | No                                                        |
-| `quickstart_self_rename`    | Caller already owns an identity in this directory and tries to register under a new name                      | strict       | Yes (`--force`)                                           |
-| `quickstart_name_collision` | Requested name is held by a different agent with a live PID                                                   | strict       | Yes (`--force`)                                           |
-| `dead_pid_auto_reclaim`     | Informational: dead owner's identity auto-reclaimed by new caller                                             | warn         | n/a                                                       |
+| Guard key                   | Trigger                                                                                                                                                        | Default mode | `--force` bypass                                          |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------- |
+| `cross_worktree`            | Caller's ancestor PID chain doesn't contain the identity file's `agent_pid`                                                                                    | strict       | No — fix by `cd` to correct worktree or run `thrum prime` |
+| `unauthenticated_rpc`       | Mutating RPC from provably-anonymous caller (CWD outside every registered worktree), forged `caller_agent_id`, or no `CallerAgentID` on non-peercred transport | strict       | No                                                        |
+| `non_git_bootstrap`         | `thrum init` or `thrum daemon start` from a non-git directory                                                                                                  | strict       | Yes (`--force`)                                           |
+| `daemon_writer_liveness`    | Daemon tries to write an identity file for an agent whose PID is dead                                                                                          | strict       | No                                                        |
+| `prime_ownership`           | `thrum prime` called from a sub-agent whose closest runtime ancestor is not the identity file's owner                                                          | strict       | No                                                        |
+| `quickstart_self_rename`    | Caller already owns an identity in this directory and tries to register under a new name                                                                       | strict       | Yes (`--force`)                                           |
+| `quickstart_name_collision` | Requested name is held by a different agent with a live PID                                                                                                    | strict       | Yes (`--force`)                                           |
+| `dead_pid_auto_reclaim`     | Informational: dead owner's identity auto-reclaimed by new caller                                                                                              | warn         | n/a                                                       |
 
 **Note on `unauthenticated_rpc`:** The `identity_mismatch` reason (forgery
 rejection) ignores the configured mode — you can't warn-mode or off-mode it. A
@@ -970,6 +970,14 @@ narrow runtime exception (not a config knob) trusts the claim when the claimed
 agent is co-located with peercred's pick in the same worktree; see
 [Troubleshooting → shared-worktree claim trust](troubleshooting-identity.md#unauthenticated_rpc--identity_mismatch-peercred-path).
 Cross-worktree claims still hit the strict deny.
+
+**Since v0.9.1:** the `anonymous_mutating_rpc` reason scope is tightened to
+_provably anonymous_ callers only. When peercred introspection fails (the kernel
+refuses peer credentials, or gopsutil can't read the PID's CWD), the daemon
+falls through to legacy client-asserted identity instead of treating the caller
+as anonymous. Introspection failures emit `slog.Warn` with `step=pid failed` or
+`step=cwd failed` for diagnostics — see
+[Troubleshooting → anonymous_mutating_rpc](troubleshooting-identity.md#unauthenticated_rpc--anonymous_mutating_rpc).
 
 ### `guard.WritePID` Discipline
 

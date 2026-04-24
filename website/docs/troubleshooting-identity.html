@@ -145,6 +145,13 @@ there&#39;s no worktree to check the claim against.</p>
 agent&#39;s worktree, and the ancestor-chain walk also came up empty. You&#39;re calling
 a mutating RPC from outside any known agent context — typically from <code>~</code> or a
 directory that has no <code>.thrum/identities/</code> associated with it.</p>
+<p>Since v0.9.1, this error only fires when the daemon <em>provably</em> classified you as
+anonymous — it walked your CWD to a git root and that git root wasn&#39;t in
+<code>session_refs</code>. If peercred introspection itself failed (the daemon couldn&#39;t
+extract your PID, or gopsutil couldn&#39;t read your CWD), the daemon falls through
+to legacy client-asserted identity instead of rejecting. That distinction
+matters when debugging: this error means &quot;you are outside every registered
+worktree,&quot; not &quot;I couldn&#39;t tell where you are.&quot;</p>
 <h4>Fix</h4>
 <ol>
 <li><p><code>cd</code> into a worktree that has a registered agent:</p>
@@ -156,6 +163,30 @@ thrum quickstart --name myagent --role implementer --module mymodule</code></pre
 </ol>
 <p>If you&#39;re starting fresh in a new repo, run <code>thrum init</code> first to initialize the
 <code>.thrum/</code> directory, then <code>thrum quickstart</code> to register.</p>
+<h4>Still seeing it from inside a registered worktree?</h4>
+<p>If you hit this error from a path you believe <em>is</em> registered, the daemon&#39;s view
+disagrees with yours. Grep the daemon log for the peercred resolve warnings to
+see what it saw:</p>
+<pre><code>thrum daemon logs --lines 1000 | grep &#39;peercred.resolve step=&#39;</code></pre>
+<p>Three things can surface:</p>
+<ul>
+<li><code>step=pid failed</code> — kernel refused peer credentials, or the peercred library
+couldn&#39;t extract a PID. On v0.9.1+ this falls through to legacy behavior
+rather than rejecting, so if you see this <em>and</em> an anonymous-rejection error,
+you&#39;re on a pre-v0.9.1 daemon — upgrade.</li>
+<li><code>step=cwd failed</code> — gopsutil couldn&#39;t read the CWD for your PID. Usually a
+short-lived subprocess race (especially claude-code Bash tool calls on macOS).
+Same fallthrough behavior on v0.9.1+; if you&#39;re still being rejected after
+upgrading, confirm the daemon is actually running the new binary
+(<code>thrum daemon status</code> for version).</li>
+<li><code>step=git_root: no git root found</code> or
+<code>step=match: no registered worktree matched</code> — the daemon did classify you as
+anonymous. Either <code>thrum quickstart</code> in this directory hasn&#39;t been run, or the
+git root the daemon saw after <code>filepath.EvalSymlinks</code> doesn&#39;t match what&#39;s in
+<code>session_refs</code> (macOS <code>/var</code> vs <code>/private/var</code> style mismatch, for example).
+Run <code>thrum agent list --json</code> and compare the <code>worktree</code> field to your
+<code>pwd -P</code> output.</li>
+</ul>
 <hr>
 <h3><code>unauthenticated_rpc</code> — no_caller_agent_id</h3>
 <h4>Error</h4>
