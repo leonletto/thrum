@@ -182,7 +182,7 @@ disagrees with yours. Grep the daemon log for the peercred resolve warnings to
 see what it saw:
 
 ```bash
-grep 'peercred.resolve step=' ~/.thrum/logs/daemon.log
+thrum daemon logs --lines 1000 | grep 'peercred.resolve step='
 ```
 
 Three things can surface:

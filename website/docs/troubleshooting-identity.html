@@ -167,7 +167,7 @@ thrum quickstart --name myagent --role implementer --module mymodule</code></pre
 <p>If you hit this error from a path you believe <em>is</em> registered, the daemon&#39;s view
 disagrees with yours. Grep the daemon log for the peercred resolve warnings to
 see what it saw:</p>
-<pre><code>grep &#39;peercred.resolve step=&#39; ~/.thrum/logs/daemon.log</code></pre>
+<pre><code>thrum daemon logs --lines 1000 | grep &#39;peercred.resolve step=&#39;</code></pre>
 <p>Three things can surface:</p>
 <ul>
 <li><code>step=pid failed</code> — kernel refused peer credentials, or the peercred library
