@@ -10,36 +10,34 @@ and this project adheres to
 
 ### Fixed
 
-- **`thrum setup claude-md --apply` documented-but-missing subcommand
-  (issue #8)** — external user followed the quickstart and hit
+- **`thrum setup claude-md --apply` documented-but-missing subcommand (issue
+  #8)** — external user followed the quickstart and hit
   `Error: unknown flag: --apply` because the `setupCmd` stub at
-  `cmd/thrum/main.go` only suggested `thrum worktree setup`. The
-  command is now implemented: `thrum setup claude-md` prints the
-  template to stdout, `--apply` creates `CLAUDE.md` (template-only) or
-  appends the template to an existing file, and `--apply --force`
-  replaces an existing Thrum block idempotently. Block is wrapped in
-  `<!-- BEGIN THRUM -->` / `<!-- END THRUM -->` markers for
+  `cmd/thrum/main.go` only suggested `thrum worktree setup`. The command is now
+  implemented: `thrum setup claude-md` prints the template to stdout, `--apply`
+  creates `CLAUDE.md` (template-only) or appends the template to an existing
+  file, and `--apply --force` replaces an existing Thrum block idempotently.
+  Block is wrapped in `<!-- BEGIN THRUM -->` / `<!-- END THRUM -->` markers for
   detection. Template (`internal/cli/templates/claude-md/thrum-block.md`,
-  embedded via `go:embed`) is intentionally minimal for users not
-  running the Thrum plugin; plugin users should not run this command
-  since it would duplicate what the plugin already injects.
+  embedded via `go:embed`) is intentionally minimal for users not running the
+  Thrum plugin; plugin users should not run this command since it would
+  duplicate what the plugin already injects.
 - **Peercred resolver error taxonomy (thrum-ndtw)** — v0.9.0 wrapped
   introspection failures (kernel peer-creds via `tspeer.Get`, `gopsutil.Cwd`)
   with `ErrAnonymous`, which routed through `server.go`'s anonymous-allowlist
-  and rejected mutating RPCs. Observed 2026-04-24: claude-code Bash
-  subprocesses on macOS hit `gopsutil.Cwd` races (subprocess exits before
-  introspection completes), and interactive zsh callers hit the same path —
-  both surfaced as `anonymous caller cannot invoke X: cd into a registered
-  agent worktree and retry` even from correctly registered CWDs.
-  Fix: drop the `ErrAnonymous` wrap at steps 1 (`tspeer.Get`, PID=0) and 2
-  (`gopsutil.Cwd`). Raw errors now return, and `server.go` falls through to
-  legacy client-asserted identity (pre-v0.9.0 behavior). Steps 3
-  (`findGitRoot` empty) and 5 (`matchWorktree` no-match) still wrap
-  `ErrAnonymous` — those are provable evidence that the caller is outside
-  every registered worktree. `slog.Warn` now fires at both introspection
-  paths (`step=pid failed`, `step=cwd failed`) for diagnostics.
-  Net-zero security regression: reinstates pre-v0.9.0 behavior only on the
-  "unknown state" path. Provably anonymous callers still hit the allowlist.
+  and rejected mutating RPCs. Observed 2026-04-24: claude-code Bash subprocesses
+  on macOS hit `gopsutil.Cwd` races (subprocess exits before introspection
+  completes), and interactive zsh callers hit the same path — both surfaced as
+  `anonymous caller cannot invoke X: cd into a registered agent worktree and retry`
+  even from correctly registered CWDs. Fix: drop the `ErrAnonymous` wrap at
+  steps 1 (`tspeer.Get`, PID=0) and 2 (`gopsutil.Cwd`). Raw errors now return,
+  and `server.go` falls through to legacy client-asserted identity (pre-v0.9.0
+  behavior). Steps 3 (`findGitRoot` empty) and 5 (`matchWorktree` no-match)
+  still wrap `ErrAnonymous` — those are provable evidence that the caller is
+  outside every registered worktree. `slog.Warn` now fires at both introspection
+  paths (`step=pid failed`, `step=cwd failed`) for diagnostics. Net-zero
+  security regression: reinstates pre-v0.9.0 behavior only on the "unknown
+  state" path. Provably anonymous callers still hit the allowlist.
 
 ## [0.9.0] - 2026-04-23
 

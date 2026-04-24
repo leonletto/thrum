@@ -16,17 +16,16 @@ nothing gets lost.
 **v0.9.1 highlights:**
 
 - **Peercred fix (thrum-ndtw)** — Mutating RPCs (`thrum tmux create`,
-  `thrum agent delete`, etc.) no longer reject authenticated callers when
-  kernel peer credentials or `gopsutil.Cwd` process inspection fails.
-  Previously caused "anonymous caller" rejections from macOS interactive
-  shells and short-lived subprocesses. Falls through to legacy
-  client-asserted identity on the "unknown state" path; provably-anonymous
-  callers still hit the allowlist.
+  `thrum agent delete`, etc.) no longer reject authenticated callers when kernel
+  peer credentials or `gopsutil.Cwd` process inspection fails. Previously caused
+  "anonymous caller" rejections from macOS interactive shells and short-lived
+  subprocesses. Falls through to legacy client-asserted identity on the "unknown
+  state" path; provably-anonymous callers still hit the allowlist.
 - **`thrum setup claude-md`** — New subcommand prints or installs a minimal
   Thrum-managed block into `CLAUDE.md` for non-plugin environments.
   `thrum setup claude-md --apply` installs, `--apply --force` replaces
-  idempotently. If you're running the Thrum plugin for Claude Code, skip
-  this — the plugin handles coordination via skills and hooks. Closes #8.
+  idempotently. If you're running the Thrum plugin for Claude Code, skip this —
+  the plugin handles coordination via skills and hooks. Closes #8.
 
 ## Quick Start
 

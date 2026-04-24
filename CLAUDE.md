@@ -240,12 +240,12 @@ codex-plugin/        → OpenAI Codex plugin (skills)
 
 ### Branch push policy
 
-| Branch | Push to origin | Why |
-| --- | --- | --- |
-| `thrum-dev` | Every session end | Authoritative pre-release truth; protects work |
-| `feature/*` / `fix/*` | NEVER auto-push | Local-only by design; reach origin via merge into `thrum-dev` |
-| `website-dev` | Only when ready to deploy | Push triggers website deployment workflow |
-| `main` | Only via release flow | See `dev-docs/RELEASE-STEPS.md` |
+| Branch                | Push to origin            | Why                                                           |
+| --------------------- | ------------------------- | ------------------------------------------------------------- |
+| `thrum-dev`           | Every session end         | Authoritative pre-release truth; protects work                |
+| `feature/*` / `fix/*` | NEVER auto-push           | Local-only by design; reach origin via merge into `thrum-dev` |
+| `website-dev`         | Only when ready to deploy | Push triggers website deployment workflow                     |
+| `main`                | Only via release flow     | See `dev-docs/RELEASE-STEPS.md`                               |
 
 Long-running implementer worktrees (e.g. `team-fix`) often switch what they're
 working on across sessions and accumulate experimental commits. Auto-pushing

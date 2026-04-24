@@ -1,10 +1,11 @@
 <!-- BEGIN THRUM -->
+
 ## Thrum — Agent Messaging
 
 This repo uses [Thrum](https://leonletto.github.io/thrum/) for persistent
-cross-session, cross-agent messaging. The Thrum daemon delivers messages
-between agents coordinating on shared work and preserves conversation state
-across restarts.
+cross-session, cross-agent messaging. The Thrum daemon delivers messages between
+agents coordinating on shared work and preserves conversation state across
+restarts.
 
 ### Essential commands
 
@@ -33,4 +34,5 @@ If you're using Claude Code with the Thrum plugin installed, prefer that — the
 plugin provides skills and hooks that handle messaging automatically and keep
 this CLAUDE.md minimal. These instructions are the portable alternative for
 environments without the plugin.
+
 <!-- END THRUM -->
