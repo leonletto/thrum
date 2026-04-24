@@ -816,10 +816,51 @@ func setupCmd() *cobra.Command {
 			fmt.Println("Did you mean 'thrum worktree setup'?")
 			fmt.Println("  thrum worktree setup   — Set up a worktree with redirects and agent registration")
 			fmt.Println("  thrum worktree create  — Same as worktree setup")
+			fmt.Println("  thrum setup claude-md  — Print or install the Thrum block for CLAUDE.md")
 			return nil
 		},
 	}
+	cmd.AddCommand(setupClaudeMDCmd())
+	return cmd
+}
 
+func setupClaudeMDCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "claude-md",
+		Short: "Print or install the Thrum-managed block for CLAUDE.md",
+		Long: `Print or install a Thrum-managed block into CLAUDE.md.
+
+Without flags the template is written to stdout for inspection or piping.
+With --apply the block is installed into ./CLAUDE.md — the file is created
+if missing, or the block is appended if no Thrum block exists. If a Thrum
+block is already present, --apply refuses without --force. --apply --force
+is idempotent: running it twice produces byte-identical file content.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			apply, _ := cmd.Flags().GetBool("apply")
+			force, _ := cmd.Flags().GetBool("force")
+
+			res, err := cli.SetupClaudeMD(cli.SetupClaudeMDOptions{
+				Apply: apply,
+				Force: force,
+				Out:   cmd.OutOrStdout(),
+			})
+			if err != nil {
+				return err
+			}
+			switch res.Mode {
+			case cli.ModeCreated:
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Created %s with Thrum block.\n", res.Path)
+			case cli.ModeAppended:
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Appended Thrum block to %s.\n", res.Path)
+			case cli.ModeReplaced:
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Replaced Thrum block in %s.\n", res.Path)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().Bool("apply", false, "Write to ./CLAUDE.md instead of stdout")
+	cmd.Flags().Bool("force", false, "With --apply: replace an existing Thrum block")
 	return cmd
 }
 
