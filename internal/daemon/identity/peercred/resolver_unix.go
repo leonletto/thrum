@@ -3,6 +3,7 @@
 package peercred
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -32,26 +33,48 @@ func NewResolver(lister AgentLister) Resolver {
 	return &unixResolver{lister: lister}
 }
 
+// processCWDFn is the function used to look up a process's CWD by PID.
+// Indirected through a package-level variable so tests can inject forced
+// failures — see SetProcessCWDFnForTest in export_unix_test.go.
+var processCWDFn = processCWD
+
 // Resolve extracts the connecting process PID via kernel peer credentials,
 // resolves its CWD, walks upward to find the git root, and matches against
 // registered agent worktrees.
+//
+// Error taxonomy (see thrum-ndtw): the caller (server.go) distinguishes
+// "provably anonymous" (ErrAnonymous → anonymous allowlist enforced) from
+// "unknown state" (any other error → fall through to legacy client-asserted
+// identity, pre-v0.9.0 behavior). Only steps 3 and 5 — empty git root and
+// matchWorktree no-match — produce ErrAnonymous, because only those states
+// are provable evidence that the caller is outside every registered
+// worktree. Introspection failures at steps 1 and 2 cannot prove that and
+// therefore return raw errors so server.go takes the legacy path.
 func (r *unixResolver) Resolve(conn net.Conn) (*ResolvedIdentity, error) {
 	// Step 1: Extract PID via kernel peer credentials.
+	// UNKNOWN state on failure (see Error taxonomy above) — return raw errors.
 	creds, err := tspeer.Get(conn)
 	if err != nil {
+		slog.Warn("peercred.resolve step=pid failed", "err", err.Error())
 		return nil, fmt.Errorf("peercred: get peer credentials: %w", err)
 	}
 	pid, ok := creds.PID()
 	if !ok || pid == 0 {
-		return nil, fmt.Errorf("%w: no PID in peer credentials", ErrAnonymous)
+		slog.Warn("peercred.resolve step=pid failed", "err", "no PID in peer credentials")
+		return nil, errors.New("peercred: no PID in peer credentials")
 	}
 	slog.Debug("peercred.resolve step=pid", "pid", pid)
 
 	// Step 2: Resolve PID → CWD.
-	cwd, err := processCWD(pid)
+	// UNKNOWN state on failure — gopsutil can miss for any of: process exited
+	// in the race window, permission model drift on macOS, short-lived shell
+	// subprocess, etc. We cannot prove the caller is anonymous, so return a
+	// raw error (NOT wrapped with ErrAnonymous) to route through server.go's
+	// legacy fallthrough.
+	cwd, err := processCWDFn(pid)
 	if err != nil {
-		// Process may have exited in the race window between connect and here.
-		return nil, fmt.Errorf("%w: cannot read CWD for PID %d: %v", ErrAnonymous, pid, err)
+		slog.Warn("peercred.resolve step=cwd failed", "pid", pid, "err", err.Error())
+		return nil, fmt.Errorf("peercred: cannot read CWD for PID %d: %w", pid, err)
 	}
 	slog.Debug("peercred.resolve step=cwd", "pid", pid, "cwd", cwd)
 
