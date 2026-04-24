@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2026-04-24
+
+### Fixed
+
+- **Peercred resolver error taxonomy (thrum-ndtw)** — v0.9.0 wrapped
+  introspection failures (kernel peer-creds via `tspeer.Get`, `gopsutil.Cwd`)
+  with `ErrAnonymous`, which routed through `server.go`'s anonymous-allowlist
+  and rejected mutating RPCs. Observed 2026-04-24: claude-code Bash
+  subprocesses on macOS hit `gopsutil.Cwd` races (subprocess exits before
+  introspection completes), and interactive zsh callers hit the same path —
+  both surfaced as `anonymous caller cannot invoke X: cd into a registered
+  agent worktree and retry` even from correctly registered CWDs.
+  Fix: drop the `ErrAnonymous` wrap at steps 1 (`tspeer.Get`, PID=0) and 2
+  (`gopsutil.Cwd`). Raw errors now return, and `server.go` falls through to
+  legacy client-asserted identity (pre-v0.9.0 behavior). Steps 3
+  (`findGitRoot` empty) and 5 (`matchWorktree` no-match) still wrap
+  `ErrAnonymous` — those are provable evidence that the caller is outside
+  every registered worktree. `slog.Warn` now fires at both introspection
+  paths (`step=pid failed`, `step=cwd failed`) for diagnostics.
+  Net-zero security regression: reinstates pre-v0.9.0 behavior only on the
+  "unknown state" path. Provably anonymous callers still hit the allowlist.
+
 ## [0.9.0] - 2026-04-23
 
 ### Added

@@ -93,7 +93,13 @@ identity in priority order:<ul>
 exactly one identity file belongs to that worktree, use it.</li>
 <li><code>caller_agent_id</code> field: fall back to the agent ID supplied in the JSON-RPC
 request (honored only when peercred resolution is unavailable, e.g., in
-tests or non-Unix-socket contexts).</li>
+tests or non-Unix-socket contexts). <strong>Since v0.9.1 (thrum-ndtw):</strong> the
+resolver distinguishes introspection failure from provable anonymity. When
+the kernel refuses peer credentials or gopsutil can&#39;t read the PID&#39;s CWD,
+the resolver returns a raw error and the daemon falls through to the
+<code>caller_agent_id</code> field (legacy pre-v0.9.0 path) rather than treating the
+caller as anonymous. Only a successful introspection that resolves to a git
+root with no matching <code>session_refs</code> entry counts as &quot;provably anonymous.&quot;</li>
 </ul>
 </li>
 <li><strong>Guard enforcement</strong> — before the handler runs, the identity guard layer

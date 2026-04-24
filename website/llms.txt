@@ -1,4 +1,4 @@
-# Thrum v0.9.0
+# Thrum v0.9.1
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -108,6 +108,25 @@ New in v0.9.0:
   tail-biased (last 5-6 lines) with ANSI strip. Full reference:
   docs/permission-prompts.md.
 - BREAKING: `peer add --type` and `peer join --type` now MANDATORY.
+
+New in v0.9.1:
+- Peercred resolver error taxonomy (thrum-ndtw) — introspection failures at
+  Step 1 (kernel peer credentials) and Step 2 (gopsutil CWD) no longer wrap
+  `ErrAnonymous`. They return raw errors so `server.go` falls through to the
+  legacy client-asserted identity path (pre-v0.9.0 behavior). Only Step 3
+  (no git root above CWD) and Step 5 (CWD's git root doesn't match any
+  registered worktree) are PROVABLY anonymous — those still wrap
+  `ErrAnonymous` and trigger the allowlist-rejection error
+  `anonymous caller cannot invoke "<method>": cd into a registered agent
+  worktree and retry`.
+  Diagnostic path: slog.Warn fires at both introspection-failure paths with
+  `step=pid failed` (kernel peercred) or `step=cwd failed` (gopsutil). Grep
+  daemon logs for those keys to distinguish "we couldn't classify you" from
+  "you are provably outside every registered worktree".
+  Fixes 2026-04-24 breakage where claude-code Bash subprocesses on macOS hit
+  gopsutil.Cwd races (subprocess exits before introspection completes) and
+  interactive zsh callers hit the same path — both were incorrectly rejected
+  as anonymous despite being legitimate callers.
 
 ## Quick Start
 
@@ -769,6 +788,11 @@ All commands accept these flags:
     // client claims X, and X is also registered in the peercred-resolved worktree
     // (state.IsAgentInWorktree), the claim is honored. Cross-worktree claims still fail.
     // Runtime override (no repo commit): .thrum/var/guard-daemon.json (same keys; daemon-level wins).
+    // v0.9.1 (thrum-ndtw): anonymous-caller rejection scoped to PROVABLY anonymous
+    // callers only (git-root-missing or no-worktree-match). Peercred introspection
+    // failures (kernel peer-creds or gopsutil.Cwd errored) fall through to legacy
+    // client-asserted identity — server.go never treats them as anonymous. slog.Warn
+    // at step=pid failed / step=cwd failed is the diagnostic path.
   }
 
   Config key for worktree base directory: `worktrees.base_path` (NOT `worktree_dir`).

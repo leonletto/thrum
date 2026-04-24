@@ -865,7 +865,7 @@ fields: <code>guard</code>, <code>mode</code>, <code>outcome</code> (<code>denie
 </tr>
 <tr>
 <td><code>unauthenticated_rpc</code></td>
-<td>Mutating RPC from anonymous caller, forged <code>caller_agent_id</code>, or no <code>CallerAgentID</code> on non-peercred transport</td>
+<td>Mutating RPC from provably-anonymous caller (CWD outside every registered worktree), forged <code>caller_agent_id</code>, or no <code>CallerAgentID</code> on non-peercred transport</td>
 <td>strict</td>
 <td>No</td>
 </tr>
@@ -912,6 +912,13 @@ narrow runtime exception (not a config knob) trusts the claim when the claimed
 agent is co-located with peercred&#39;s pick in the same worktree; see
 <a href="troubleshooting-identity.html#unauthenticated_rpc--identity_mismatch-peercred-path">Troubleshooting → shared-worktree claim trust</a>.
 Cross-worktree claims still hit the strict deny.</p>
+<p><strong>Since v0.9.1:</strong> the <code>anonymous_mutating_rpc</code> reason scope is tightened to
+<em>provably anonymous</em> callers only. When peercred introspection fails (the kernel
+refuses peer credentials, or gopsutil can&#39;t read the PID&#39;s CWD), the daemon
+falls through to legacy client-asserted identity instead of treating the caller
+as anonymous. Introspection failures emit <code>slog.Warn</code> with <code>step=pid failed</code> or
+<code>step=cwd failed</code> for diagnostics — see
+<a href="troubleshooting-identity.html#unauthenticated_rpc--anonymous_mutating_rpc">Troubleshooting → anonymous_mutating_rpc</a>.</p>
 <h3><code>guard.WritePID</code> Discipline</h3>
 <p>The only function that writes <code>agent_pid</code> into an identity file is
 <code>guard.WritePID</code>. All previous inline PID-write callsites have been removed. If

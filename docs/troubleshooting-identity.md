@@ -153,6 +153,14 @@ agent's worktree, and the ancestor-chain walk also came up empty. You're calling
 a mutating RPC from outside any known agent context — typically from `~` or a
 directory that has no `.thrum/identities/` associated with it.
 
+Since v0.9.1, this error only fires when the daemon _provably_ classified you as
+anonymous — it walked your CWD to a git root and that git root wasn't in
+`session_refs`. If peercred introspection itself failed (the daemon couldn't
+extract your PID, or gopsutil couldn't read your CWD), the daemon falls through
+to legacy client-asserted identity instead of rejecting. That distinction
+matters when debugging: this error means "you are outside every registered
+worktree," not "I couldn't tell where you are."
+
 #### Fix
 
 1. `cd` into a worktree that has a registered agent:
@@ -166,6 +174,35 @@ directory that has no `.thrum/identities/` associated with it.
 
 If you're starting fresh in a new repo, run `thrum init` first to initialize the
 `.thrum/` directory, then `thrum quickstart` to register.
+
+#### Still seeing it from inside a registered worktree?
+
+If you hit this error from a path you believe _is_ registered, the daemon's view
+disagrees with yours. Grep the daemon log for the peercred resolve warnings to
+see what it saw:
+
+```bash
+grep 'peercred.resolve step=' ~/.thrum/logs/daemon.log
+```
+
+Three things can surface:
+
+- `step=pid failed` — kernel refused peer credentials, or the peercred library
+  couldn't extract a PID. On v0.9.1+ this falls through to legacy behavior
+  rather than rejecting, so if you see this _and_ an anonymous-rejection error,
+  you're on a pre-v0.9.1 daemon — upgrade.
+- `step=cwd failed` — gopsutil couldn't read the CWD for your PID. Usually a
+  short-lived subprocess race (especially claude-code Bash tool calls on macOS).
+  Same fallthrough behavior on v0.9.1+; if you're still being rejected after
+  upgrading, confirm the daemon is actually running the new binary
+  (`thrum daemon status` for version).
+- `step=git_root: no git root found` or
+  `step=match: no registered worktree matched` — the daemon did classify you as
+  anonymous. Either `thrum quickstart` in this directory hasn't been run, or the
+  git root the daemon saw after `filepath.EvalSymlinks` doesn't match what's in
+  `session_refs` (macOS `/var` vs `/private/var` style mismatch, for example).
+  Run `thrum agent list --json` and compare the `worktree` field to your
+  `pwd -P` output.
 
 ---
 

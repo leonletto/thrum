@@ -34,7 +34,13 @@ steps before dispatching to any handler:
      exactly one identity file belongs to that worktree, use it.
    - `caller_agent_id` field: fall back to the agent ID supplied in the JSON-RPC
      request (honored only when peercred resolution is unavailable, e.g., in
-     tests or non-Unix-socket contexts).
+     tests or non-Unix-socket contexts). **Since v0.9.1 (thrum-ndtw):** the
+     resolver distinguishes introspection failure from provable anonymity. When
+     the kernel refuses peer credentials or gopsutil can't read the PID's CWD,
+     the resolver returns a raw error and the daemon falls through to the
+     `caller_agent_id` field (legacy pre-v0.9.0 path) rather than treating the
+     caller as anonymous. Only a successful introspection that resolves to a git
+     root with no matching `session_refs` entry counts as "provably anonymous."
 3. **Guard enforcement** — before the handler runs, the identity guard layer
    checks whether the resolved caller is permitted to execute the requested
    method. Mutating RPCs require a resolved, registered identity. Anonymous
