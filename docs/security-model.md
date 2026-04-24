@@ -65,9 +65,14 @@ caller the daemon simply couldn't classify. Both introspection failures emit
 `slog.Warn` with `step=pid failed` or `step=cwd failed`, which is the diagnostic
 path when this matters.
 
-The resolution runs once per connection, not once per request. Your process's
-CWD doesn't change within a single unix-socket connection's lifetime, so doing
-it per-request would be wasted work.
+The resolver runs per-RPC, not once at connection accept. The reason is the
+anonymous-latch bug: if an agent registers _after_ the connection is accepted
+but _before_ the first RPC body arrives, a per-connection resolve would latch
+`ErrAnonymous` for the lifetime of that connection and freshly-registered agents
+wouldn't be visible until reconnect. Re-resolving on every RPC closes that
+window. The per-RPC cost is ~1ms for long-lived MCP connections and net-zero for
+the CLI (each CLI command opens a fresh connection for a single RPC). See the
+wire-up at `server.go:373`.
 
 A "registered worktree" is any git root that was recorded in `session_refs` when
 an agent ran `agent.register` and `session.start` from that directory. If you've
@@ -239,11 +244,12 @@ these calls create. The peercred resolver resolves identity by looking up the
 connecting process's worktree against `session_refs`. Before `agent.register`
 runs, there's nothing to look up.
 
-There's also a subtler issue: peercred identity is resolved once per connection,
-at accept time. Even if `agent.register` populates `session_refs`
-mid-connection, the current connection stays tagged as anonymous for its
-lifetime. That's why all three bootstrap RPCs need the anonymous exception — the
-quickstart flow calls them in sequence on a single connection.
+Concretely: at the moment `agent.register` executes, peercred resolves the
+caller's CWD to a git root, finds no matching entry in `session_refs`, and
+correctly returns provably-anonymous. The allowlist lets these three calls
+through so quickstart can populate `session_refs` in the first place. After
+`agent.register` completes, subsequent RPCs — on the same connection or a new
+one — resolve normally via the per-RPC re-resolution at `server.go:373`.
 
 The `0600` socket permission is the only access control on these three calls.
 Only the owning user can reach them.
