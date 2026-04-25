@@ -519,6 +519,10 @@ Examples:
 
 			fmt.Println("\nDone. Run 'thrum quickstart --name <name> --role <role> --module <module>' to register an agent.")
 
+			fmt.Println()
+			fmt.Println("Tip: To enable repo-knowledge queries from other agents, register a researcher:")
+			fmt.Println("  thrum tmux start --role researcher")
+
 			// Post-action hint: tip the operator to register via quickstart
 			// when this machine has no identity yet. Runs only on the
 			// full-init success path (the worktree-redirect branch at
