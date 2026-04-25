@@ -98,10 +98,10 @@ name.
 
 ### Specs live in `dev-docs/specs/`, plans in `dev-docs/plans/`
 
-When receiving an implementation prompt, verify referenced spec and plan
-paths exist under the main repo's `dev-docs/`. If a path is missing,
-report `NEEDS_CONTEXT` rather than guessing. Never create planning
-documents in the worktree directory or anywhere outside `dev-docs/`.
+All spec and plan documents live under the main repo's `dev-docs/`. Never
+create planning documents in the worktree directory or anywhere outside
+`dev-docs/`. (When receiving a dispatch, the per-task verify-paths
+discipline lives in `implementer-receiving-dispatch`.)
 
 ### Never `git add -f` or `--force` gitignored files
 

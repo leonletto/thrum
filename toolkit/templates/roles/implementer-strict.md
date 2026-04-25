@@ -97,9 +97,9 @@ that role and create cross-talk. The coordinator is
 
 ### Specs live in `dev-docs/specs/`, plans in `dev-docs/plans/`
 
-When receiving an implementation prompt, verify referenced spec and plan
-paths exist under the main repo's `dev-docs/`. If a path is missing,
-report `NEEDS_CONTEXT` rather than guessing.
+All spec and plan documents live under the main repo's `dev-docs/`. Never
+create planning documents elsewhere. (Per-task verify-paths discipline
+lives in `implementer-receiving-dispatch`.)
 
 ### Never `git add -f` or `--force` gitignored files
 
