@@ -17,7 +17,7 @@ communication patterns, idle behavior, and efficiency rules.
 
 **Three layers:**
 
-1. **Shipped examples** in `toolkit/templates/roles/` — reference material with
+1. **Shipped examples** in `internal/context/roleconfig/templates/roles/` — reference material with
    strict and autonomous variants for each role
 2. **Active templates** in `.thrum/role_templates/` — per-project templates that
    auto-apply on agent registration
@@ -81,7 +81,7 @@ Every role template follows the same section structure:
 
 ## Shipped Examples
 
-Reference templates in `toolkit/templates/roles/`:
+Reference templates in `internal/context/roleconfig/templates/roles/`:
 
 | File                        | Description                                      |
 | --------------------------- | ------------------------------------------------ |
@@ -145,7 +145,7 @@ Deploy is a full overwrite — templates are the source of truth.
 1. Copy a shipped example to `.thrum/role_templates/`:
 
 ```bash
-cp toolkit/templates/roles/implementer-autonomous.md .thrum/role_templates/implementer.md
+cp internal/context/roleconfig/templates/roles/implementer-autonomous.md .thrum/role_templates/implementer.md
 ```
 
 1. Edit to customize for your project.

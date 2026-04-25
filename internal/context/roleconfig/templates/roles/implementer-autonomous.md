@@ -1,3 +1,7 @@
+---
+schema_version: 1
+---
+
 # Agent: {{.AgentName}}
 
 **Role:** {{.Role}} | **Module:** {{.Module}} | **Worktree:** {{.WorktreePath}}
