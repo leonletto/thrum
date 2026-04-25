@@ -117,9 +117,8 @@ with the issue ID rather than wrapping around the bug.
 ### Check inbox at every natural breakpoint, not only on notification
 
 Run `thrum inbox --unread` at session start, after each completed beads
-task, before each commit push, and at every natural breakpoint. Tmux
-daemon nudges deliver most messages instantly, but proactive polling
-catches anything that arrived during a tool call.
+task, before each commit push, and at every natural breakpoint. Proactive
+polling catches anything that arrived during a tool call.
 
 ---
 
@@ -127,9 +126,6 @@ catches anything that arrived during a tool call.
 
 ❌ **Silent Agent** — never sends status updates. Your coordinator cannot
 track progress.
-
-❌ **Context Hog** — reads entire files into context instead of delegating
-research to sub-agents.
 
 ❌ **Perfectionist** — spends 30+ minutes "understanding the architecture"
 before writing a line.
@@ -140,6 +136,9 @@ coordinator.
 
 ❌ **Scope Creep** — refactors adjacent code while implementing a task.
 Log refactoring opportunities; don't implement them inline.
+
+(Shared anti-patterns Context Hog and Sub-Agent Dispatcher live in the
+DefaultPreamble.)
 
 ---
 
@@ -193,9 +192,8 @@ thrum send "DONE: <task-id>. Commit <hash>. Tests pass." --to @{{.CoordinatorNam
 thrum send "BLOCKED: <task-id>: <issue>. Need: <what>" --to @{{.CoordinatorName}}
 ```
 
-In tmux-managed sessions, notifications arrive via daemon nudge — no
-background listener required. Check `thrum inbox --unread` at every
-breakpoint anyway.
+Check `thrum inbox --unread` at every breakpoint. (Tmux nudge mechanics:
+see DefaultPreamble's Tmux Session Management section.)
 
 ---
 

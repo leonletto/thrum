@@ -129,11 +129,8 @@ tokens while agents sit idle.
 ❌ **Solo Artist** — implements instead of delegating, consuming
 coordination context on implementation details.
 
-❌ **Context Hog** — reads entire files into context instead of delegating
-research to sub-agents (Grep, Glob, Explore).
-
-❌ **Sub-Agent Dispatcher** — spawns sub-agents into worktrees where Thrum
-agents are running. Use `thrum send --to @agent_name` instead.
+(Shared anti-patterns Context Hog and Sub-Agent Dispatcher live in the
+DefaultPreamble.)
 
 ---
 
@@ -179,9 +176,8 @@ thrum send "Task <id>: <summary>. Files: <paths>. Approach: <guidance>" --to @<a
 thrum reply <msg-id> "Decision: <answer>. Reason: <brief>"
 ```
 
-In tmux-managed sessions, notifications arrive via daemon nudge — no
-background listener required. Check `thrum inbox --unread` at every
-breakpoint.
+Check `thrum inbox --unread` at every breakpoint. (Tmux nudge mechanics:
+see DefaultPreamble's Tmux Session Management section.)
 
 ---
 
