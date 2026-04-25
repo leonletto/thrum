@@ -198,6 +198,40 @@ func TestIntegration_InitNextQuickstart_TextMode(t *testing.T) {
 	}
 }
 
+// TestInitOutputMentionsResearcher verifies `thrum init` prints a
+// discoverability tip that signposts how to register a researcher
+// agent. The tip lands on stdout (not the hints stream) so it survives
+// THRUM_NO_HINTS and --quiet.
+//
+// Daemon-free: same pattern as TestIntegration_InitNextQuickstart —
+// init uses FSOnlyStateAccessor; --runtime cli-only avoids interactive
+// prompts.
+func TestInitOutputMentionsResearcher(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration tests skipped in -short")
+	}
+	bin := buildTestBinary(t)
+
+	repoDir := t.TempDir()
+	thrumHome := t.TempDir()
+	if err := runInDir(t, repoDir, "git", "init", "-q"); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+	if err := runInDir(t, repoDir, "git", "commit", "--allow-empty", "-m", "init", "--quiet"); err != nil {
+		t.Logf("git commit failed (tolerating): %v", err)
+	}
+
+	cmd := exec.Command(bin, "--repo", repoDir, "init", "--runtime", "cli-only", "--force")
+	cmd.Env = append(cmd.Environ(), "THRUM_HOME="+thrumHome)
+	outBuf, _ := captureOut(cmd)
+	_ = cmd.Run()
+
+	stdout := outBuf.String()
+	if !strings.Contains(stdout, "thrum tmux start --role researcher") {
+		t.Errorf("init stdout should signpost researcher registration; got:\n%s", stdout)
+	}
+}
+
 // runInDir runs a command in a specific working directory. Test helper
 // for fixture setup (git init etc).
 func runInDir(t *testing.T, dir, name string, args ...string) error {

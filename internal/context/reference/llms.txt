@@ -852,7 +852,16 @@ All commands accept these flags:
       implementation-agent.md   Active: prompt template for implementation agents
       philosophy-template.md    Active: anti-patterns template for implementation standards
       planning-agent.md         Reference: superseded by skill pipeline
+    roles/                  Role preambles loaded by configure-roles
+      coordinator-{strict,autonomous}.md
+      implementer-{strict,autonomous}.md
+      researcher-{strict,autonomous}.md
     README.md               Documentation for using templates
+
+  Role-discipline ships in three layers:
+    - Preambles: toolkit/templates/roles/<role>-{strict,autonomous}.md
+    - Skills:    claude-plugin/skills/<role>-* (description-triggered)
+    - Per-repo:  bd remember --key <role>-rule-<slug>  (project-local)
 
   Install: cp toolkit/agents/*.md your-project/.claude/agents/
 
