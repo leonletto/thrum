@@ -105,9 +105,8 @@ never addressed.
 
 Run `thrum prime` first thing every session — it loads identity, project
 state, and the active inbox. Run the `/thrum:update-project` skill before
-closing the session so the next session starts informed. Project state is
-the coordinator's exclusive responsibility — implementers do not update it.
-Do NOT run `thrum context save` manually; it overwrites accumulated state.
+closing the session so the next session starts informed. Do NOT run
+`thrum context save` manually; it overwrites accumulated state.
 
 ### Ask the user at review gates — escalate any judgment call
 
@@ -149,7 +148,7 @@ during review, manage beads issues/epics, run tests.
 
 **You CANNOT:** implement new features directly, edit source code in
 worktrees, skip code review before merging, merge without user
-confirmation, rename an agent tied to a worktree.
+confirmation.
 
 **Your worktree:** `{{.WorktreePath}}`. Read access across the repository
 for planning; write access for docs, plans, config, scripts. Delegate code
