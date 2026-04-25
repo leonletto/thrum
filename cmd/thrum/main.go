@@ -6902,8 +6902,99 @@ identity data (AgentName, Role, Module, WorktreePath, RepoRoot, CoordinatorName)
 	cmd.AddCommand(rolesListCmd())
 	cmd.AddCommand(rolesDeployCmd())
 	cmd.AddCommand(rolesRefreshCmd())
+	cmd.AddCommand(rolesSaveConfigCmd())
+	cmd.AddCommand(rolesTemplatesCmd())
 
 	return cmd
+}
+
+// rolesSaveConfigCmd is the CLI shim used by /thrum:configure-roles to
+// persist the user's answers. Reads JSON-on-stdin matching RoleConfig,
+// backfills schema/version/timestamp/rendered_hash defaults, and atomically
+// writes role_config to .thrum/config.json.
+func rolesSaveConfigCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "save-config",
+		Short: "Write role_config to .thrum/config.json from JSON on stdin",
+		Long: `Internal subcommand used by /thrum:configure-roles to persist answers.
+Reads JSON from stdin, validates against the RoleConfig schema, fills
+rendered_hash from current shipped templates, and atomically writes to
+.thrum/config.json (preserving other top-level keys byte-identical).`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+			return runRolesSaveConfig(thrumDir, os.Stdin)
+		},
+	}
+}
+
+// runRolesSaveConfig is the testable body of `thrum roles save-config`.
+// Decodes RoleConfig from in, fills defaults for absent scalar fields,
+// backfills rendered_hash from current shipped templates per role, and
+// delegates to roleconfig.Save for atomic write + unknown-key preservation.
+func runRolesSaveConfig(thrumDir string, in io.Reader) error {
+	var cfg roleconfig.RoleConfig
+	dec := json.NewDecoder(in)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&cfg); err != nil {
+		return fmt.Errorf("decode role_config: %w", err)
+	}
+	if cfg.SchemaVersion == 0 {
+		cfg.SchemaVersion = roleconfig.CurrentSchemaVersion
+	}
+	if cfg.PluginVersion == "" {
+		cfg.PluginVersion = Version
+	}
+	if cfg.ConfiguredAt.IsZero() {
+		cfg.ConfiguredAt = time.Now().UTC()
+	}
+
+	for role, settings := range cfg.Roles {
+		if _, hash, err := roleconfig.ShippedTemplateInfo(role, settings.Autonomy); err == nil {
+			settings.RenderedHash = hash
+			cfg.Roles[role] = settings
+		}
+	}
+
+	if err := roleconfig.Save(thrumDir, &cfg); err != nil {
+		return fmt.Errorf("save: %w", err)
+	}
+	fmt.Printf("Saved role_config (%d roles).\n", len(cfg.Roles))
+	return nil
+}
+
+// rolesTemplatesCmd groups inspection subcommands for embedded shipped
+// templates. The configure-roles skill uses `print` to read shipped content
+// over CLI rather than from a raw filesystem path (binary may run from any
+// directory).
+func rolesTemplatesCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "templates",
+		Short: "Inspect shipped role templates",
+	}
+	cmd.AddCommand(rolesTemplatesPrintCmd())
+	return cmd
+}
+
+func rolesTemplatesPrintCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "print <role>-<autonomy>",
+		Short: "Print the embedded shipped role template (with frontmatter)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			role, autonomy, ok := strings.Cut(args[0], "-")
+			if !ok {
+				// Single-variant role (e.g. orchestrator) — pass autonomy
+				// empty so ReadShippedTemplate falls back to <role>.md.
+				role, autonomy = args[0], ""
+			}
+			raw, err := roleconfig.ReadShippedTemplate(role, autonomy)
+			if err != nil {
+				return err
+			}
+			_, err = os.Stdout.Write(raw)
+			return err
+		},
+	}
 }
 
 // rolesRefreshCmd regenerates rendered .thrum/role_templates/<role>.md files
