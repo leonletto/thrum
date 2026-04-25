@@ -4006,10 +4006,19 @@ type preambleRPCCaller interface {
 // when present. Falls back to the generic RoleAwarePreamble when no
 // rendered template is available (or rendering fails).
 func runPreambleInit(client preambleRPCCaller, agentID, role, repoPath, agentName string) error {
+	if strings.ContainsAny(agentName, "/\\") || strings.Contains(agentName, "..") {
+		return fmt.Errorf("invalid agent name %q: must not contain /, \\, or parent references", agentName)
+	}
 	thrumDir := filepath.Join(repoPath, ".thrum")
 	content := agentcontext.RoleAwarePreamble(role)
-	if rendered, err := agentcontext.RenderRoleTemplate(thrumDir, agentName, role); err == nil && rendered != nil {
+	if rendered, renderErr := agentcontext.RenderRoleTemplate(thrumDir, agentName, role); renderErr == nil && rendered != nil {
 		content = rendered
+	} else if renderErr != nil && !os.IsNotExist(renderErr) {
+		// Surface genuine render failures (parse errors, permission issues) as
+		// hints via slog → installSlogBridge, then fall through to the generic
+		// RoleAwarePreamble. IsNotExist is the no-template-deployed case and
+		// is not surfaced.
+		slog.Warn("context.preamble.render-failed Falling back to generic preamble.", "error", renderErr)
 	}
 	var resp rpc.PreambleSaveResponse
 	if err := client.Call("context.preamble.save", rpc.PreambleSaveRequest{
