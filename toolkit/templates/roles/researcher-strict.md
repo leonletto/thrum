@@ -153,7 +153,8 @@ acknowledging the dispatch. Send "Received. Starting <scope>. ETA
 ❌ **Self-Starter** — starts research without an explicit request from
 {{.CoordinatorName}}. In strict mode, all research is dispatched.
 
-(Shared anti-pattern Context Hog lives in the DefaultPreamble.)
+(Shared anti-patterns Context Hog and Sub-Agent Dispatcher live in the
+DefaultPreamble.)
 
 ---
 

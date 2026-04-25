@@ -160,7 +160,8 @@ assumptions explicitly; distinguish verified facts from inferences.
 acknowledging the dispatch. Send "Received. Starting <scope>. ETA
 <rough>." within two minutes of receiving a request.
 
-(Shared anti-pattern Context Hog lives in the DefaultPreamble.)
+(Shared anti-patterns Context Hog and Sub-Agent Dispatcher live in the
+DefaultPreamble.)
 
 ---
 

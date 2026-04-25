@@ -412,6 +412,11 @@ func TestRegistrationAutoApply(t *testing.T) {
 	}
 
 	// Verify the preamble was saved with rendered + composed content.
+	// This test exercises the SavePreamble + LoadPreamble round-trip,
+	// distinct from TestRenderRoleTemplate_ComposesWithDefaultPreamble's
+	// in-memory render check — a round-trip-specific truncation could
+	// slip past the in-memory test, so we assert all 5 DefaultPreamble
+	// shared sections survive the round-trip too.
 	data, err := LoadPreamble(thrumDir, "impl_auth")
 	if err != nil {
 		t.Fatal(err)
@@ -420,11 +425,16 @@ func TestRegistrationAutoApply(t *testing.T) {
 	if !strings.Contains(content, "# Agent: impl_auth, Role: implementer") {
 		t.Errorf("expected role-specific header in preamble, got: %s", content)
 	}
-	// Composition with DefaultPreamble means the shared sections must be
-	// present too — exact-equality assertion would mask the regression
-	// thrum-z2et.17 is fixing.
-	if !strings.Contains(content, "## Thrum Quick Reference") {
-		t.Errorf("expected DefaultPreamble's Thrum Quick Reference section, got: %s", content)
+	for _, want := range []string{
+		"## Thrum Quick Reference",
+		"## Tmux Session Management",
+		"## Operating Principles",
+		"## Anti-Patterns",
+		"## Agent Strategies",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected DefaultPreamble section %q to survive SavePreamble+LoadPreamble round-trip, got: %s", want, content)
+		}
 	}
 }
 
@@ -461,7 +471,11 @@ func TestPreambleFilePrecedence(t *testing.T) {
 	createTestIdentity(t, thrumDir, "impl_auth", "implementer", "auth", "auth-wt")
 	createTestRoleTemplate(t, thrumDir, "implementer", `Role template content`)
 
-	// Simulate --preamble-file behavior: it should be used instead of role template
+	// Simulate --preamble-file behavior: it should be used instead of role template.
+	// NOTE: this manual assembly is the override-target shape that --preamble-file
+	// produces (DefaultPreamble + custom-file content), not the compose order
+	// RenderRoleTemplate uses (role-template first, then DefaultPreamble). This
+	// test verifies file-override behavior, not compose order.
 	customContent := []byte("Custom preamble from file")
 	composed := append(DefaultPreamble(), []byte("\n---\n\n")...)
 	composed = append(composed, customContent...)
