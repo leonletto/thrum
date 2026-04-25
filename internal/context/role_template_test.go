@@ -91,6 +91,70 @@ Coordinator: {{.CoordinatorName}}`)
 	}
 }
 
+// TestRenderRoleTemplate_ComposesWithDefaultPreamble verifies that a rendered
+// role template EXTENDS DefaultPreamble rather than replacing it. The role
+// template carries role-specific discipline; DefaultPreamble carries shared
+// operational reference (Thrum Quick Reference, Tmux Session Management,
+// Operating Principles, Anti-Patterns, Agent Strategies). Both must be present
+// in the rendered output. The compose order matches RoleAwarePreamble:
+// role-specific content first, then a "---" separator, then DefaultPreamble.
+//
+// Regression spec: thrum-z2et.17 — before this change, RenderRoleTemplate
+// returned the rendered template only, silently dropping DefaultPreamble's
+// shared content from agents that ran /thrum:configure-roles.
+func TestRenderRoleTemplate_ComposesWithDefaultPreamble(t *testing.T) {
+	thrumDir := t.TempDir()
+
+	createTestIdentity(t, thrumDir, "impl_auth", "implementer", "auth", "auth-worktree")
+	createTestRoleTemplate(t, thrumDir, "implementer",
+		`# Implementer-Specific Header for {{.AgentName}}
+
+Some role-specific guidance.`)
+
+	rendered, err := RenderRoleTemplate(thrumDir, "impl_auth", "implementer")
+	if err != nil {
+		t.Fatalf("RenderRoleTemplate: %v", err)
+	}
+	if rendered == nil {
+		t.Fatal("expected rendered content, got nil")
+	}
+
+	content := string(rendered)
+
+	// Role-specific content must be present (with template variable rendered).
+	if !strings.Contains(content, "# Implementer-Specific Header for impl_auth") {
+		t.Errorf("expected role template header, got:\n%s", content)
+	}
+	if !strings.Contains(content, "Some role-specific guidance.") {
+		t.Errorf("expected role template body, got:\n%s", content)
+	}
+
+	// DefaultPreamble shared sections must also be present.
+	for _, want := range []string{
+		"## Thrum Quick Reference",
+		"## Tmux Session Management",
+		"## Operating Principles",
+		"## Agent Strategies",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected DefaultPreamble section %q in composed output, got:\n%s", want, content)
+		}
+	}
+
+	// Compose order: role-specific first, then separator, then DefaultPreamble.
+	roleIdx := strings.Index(content, "# Implementer-Specific Header")
+	defaultIdx := strings.Index(content, "## Thrum Quick Reference")
+	if roleIdx == -1 || defaultIdx == -1 {
+		t.Fatalf("could not locate compose anchors")
+	}
+	if roleIdx >= defaultIdx {
+		t.Errorf("expected role-specific content before DefaultPreamble; role at %d, default at %d", roleIdx, defaultIdx)
+	}
+	if !strings.Contains(content[roleIdx:defaultIdx], "---") {
+		t.Errorf("expected horizontal-rule separator between role content and DefaultPreamble")
+	}
+}
+
 func TestRenderRoleTemplate_MissingTemplate(t *testing.T) {
 	thrumDir := t.TempDir()
 
@@ -343,14 +407,20 @@ func TestRegistrationAutoApply(t *testing.T) {
 		t.Fatalf("SavePreamble: %v", err)
 	}
 
-	// Verify the preamble was saved with rendered content
+	// Verify the preamble was saved with rendered + composed content.
 	data, err := LoadPreamble(thrumDir, "impl_auth")
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := "# Agent: impl_auth, Role: implementer"
-	if string(data) != expected {
-		t.Errorf("expected %q, got %q", expected, data)
+	content := string(data)
+	if !strings.Contains(content, "# Agent: impl_auth, Role: implementer") {
+		t.Errorf("expected role-specific header in preamble, got: %s", content)
+	}
+	// Composition with DefaultPreamble means the shared sections must be
+	// present too — exact-equality assertion would mask the regression
+	// thrum-z2et.17 is fixing.
+	if !strings.Contains(content, "## Thrum Quick Reference") {
+		t.Errorf("expected DefaultPreamble's Thrum Quick Reference section, got: %s", content)
 	}
 }
 

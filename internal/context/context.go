@@ -386,9 +386,16 @@ type RoleTemplateData struct {
 	CoordinatorName string
 }
 
-// RenderRoleTemplate renders the role template for the given agent.
-// It checks for .thrum/role_templates/{role}.md, and if found, renders it
-// with the agent's identity data. Returns nil, nil if no template exists.
+// RenderRoleTemplate renders the role template for the given agent and
+// composes it with DefaultPreamble. The role template carries role-specific
+// discipline; DefaultPreamble carries shared operational reference (Thrum
+// Quick Reference, Tmux Session Management, Operating Principles, shared
+// Anti-Patterns, Agent Strategies). The composed output is the rendered
+// role-template content, a horizontal-rule separator, then DefaultPreamble —
+// matching RoleAwarePreamble's compose pattern (role-specific first, default
+// floor second).
+//
+// Returns nil, nil if no template exists at .thrum/role_templates/{role}.md.
 func RenderRoleTemplate(thrumDir, agentName, role string) ([]byte, error) {
 	templatePath := filepath.Join(thrumDir, "role_templates", role+".md")
 	tmplContent, err := os.ReadFile(templatePath) // #nosec G304 -- templatePath is .thrum/role_templates/<role>.md, an internal directory
@@ -412,7 +419,17 @@ func RenderRoleTemplate(thrumDir, agentName, role string) ([]byte, error) {
 		return nil, fmt.Errorf("render role template: %w", err)
 	}
 
-	return buf.Bytes(), nil
+	// Compose: rendered role template + separator + DefaultPreamble.
+	// One newline pad between the rendered content and the separator so the
+	// "---" sits on its own line regardless of whether the role template
+	// ended with a trailing newline.
+	composed := buf.Bytes()
+	if !bytes.HasSuffix(composed, []byte("\n")) {
+		composed = append(composed, '\n')
+	}
+	composed = append(composed, []byte("\n---\n\n")...)
+	composed = append(composed, DefaultPreamble()...)
+	return composed, nil
 }
 
 // DeployAll re-renders preambles for all registered agents that have matching
