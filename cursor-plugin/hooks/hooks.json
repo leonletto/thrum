@@ -4,7 +4,8 @@
     "sessionStart": [
       {
         "type": "command",
-        "command": "echo 'Run /thrum:prime to load your session context, identity, and any restart snapshots.'"
+        "command": "__PLUGIN_ROOT__/scripts/inject-prime-context.sh",
+        "timeout": 15
       }
     ],
     "beforeShellExecution": [
