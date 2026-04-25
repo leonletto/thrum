@@ -11,7 +11,9 @@ description: Use when receiving a new task from the coordinator, starting implem
 criteria, file paths, and the worktree to work in. Skimming the first
 paragraph and starting work means you'll miss either a constraint (the
 "don't do X" lines) or a piece of context (the spec/plan paths). Both lead
-to wasted work that has to be redone after review.
+to wasted work that has to be redone after review. (Source:
+findings_teamfix.md — "Read the full implementation prompt before any tool
+call".)
 
 **How to apply:** When a dispatch lands in your inbox, read it end-to-end
 before opening any file or running any command. Read the linked spec and
@@ -42,6 +44,9 @@ it. Only create a new function when nothing exists.
 doesn't need a helper. Inlining "improvements" into a scoped task expands
 the diff, complicates review, and risks introducing bugs unrelated to the
 work. Three similar lines is better than a premature abstraction.
+(Source: findings_teamfix.md — "File refactoring opportunities, do not
+implement them"; thrum-pxz dispatch named `thrum-xir` as the filing
+destination.)
 
 **How to apply:** When you spot duplicated patterns, hardcoded values that
 should be shared, or missed abstractions during implementation, log them
@@ -66,6 +71,10 @@ Then continue with the assigned work. Do not implement the refactoring.
 described), the right time to surface it is the moment you notice — not
 buried in a `DONE_WITH_CONCERNS` after hours of work in the wrong
 direction. Late surfacing wastes the time between noticing and reporting.
+(Source: findings_teamfix.md — "Scope deviations are flagged immediately,
+not buried"; spec deliberately tightened the rule from team-fix's
+"flag at the same message that reports completion" to "the moment you
+notice".)
 
 **How to apply:** The moment you spot a scope deviation, send a
 `NEEDS_CONTEXT` or `BLOCKED` message to the coordinator with the specific
