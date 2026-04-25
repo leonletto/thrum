@@ -173,6 +173,31 @@ func TestHintCodeStringsMatchCanonical(t *testing.T) {
 	}
 }
 
+// TestDriftStatus_PrecedenceSchemaBumpOverBodyDiff locks in the second tier
+// of precedence: when both schema-bump (saved schema_version < shipped) and
+// body-diff (saved rendered_hash != shipped) conditions hold, only the
+// schema-bump hint fires. Without the early return in DriftStatus, both
+// would surface and the user would see two redundant hints for the same
+// upgrade.
+func TestDriftStatus_PrecedenceSchemaBumpOverBodyDiff(t *testing.T) {
+	thrumDir := t.TempDir()
+	writeRoleConfigJSON(t, thrumDir, &RoleConfig{
+		SchemaVersion: 0,
+		PluginVersion: "0.9.0",
+		Roles: map[string]RoleSettings{
+			"coordinator": {Autonomy: "autonomous", Scope: "cross_worktree", RenderedHash: "deadbeef-not-shipped"},
+		},
+	})
+
+	report, err := DriftStatus(thrumDir)
+	if err != nil {
+		t.Fatalf("DriftStatus: %v", err)
+	}
+	if len(report.Hints) != 1 || report.Hints[0].Code != HintCodeRolesConfigSchemaBump {
+		t.Errorf("expected single schema-bump hint (precedence over body-diff), got %+v", report.Hints)
+	}
+}
+
 // TestDriftStatus_PrecedenceMigrationOverSchemaBump locks in that when the
 // migration condition holds, no schema/body hints fire (early return).
 func TestDriftStatus_PrecedenceMigrationOverSchemaBump(t *testing.T) {

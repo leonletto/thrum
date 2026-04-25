@@ -99,3 +99,8 @@ scripts/thrum-startup.sh
 
 # Safety snapshot from bd 0.62 → 1.0 embedded migration (delete once verified)
 .beads.server-backup/
+
+# Stale role-template location (moved to internal/context/roleconfig/templates/
+# in thrum-z2et.20.1). Some tooling may recreate the directory; ignore it so
+# the no-frontmatter copies don't surface as untracked drift.
+toolkit/templates/roles/

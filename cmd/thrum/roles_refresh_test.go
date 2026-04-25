@@ -79,6 +79,36 @@ func TestRolesRefresh_RegeneratesAndUpdatesRenderedHash(t *testing.T) {
 	}
 }
 
+// TestRolesRefresh_RejectsTraversalRoleKey covers the defense-in-depth
+// guard at the top of runRolesRefresh's loop. A role key from
+// .thrum/config.json containing path-separator characters or ".." would
+// otherwise resolve to a path outside .thrum/role_templates. The embedded
+// FS already rejects such names inside RenderShipped, but the explicit
+// guard matches runPreambleInit / worktreeCreateCmd.
+func TestRolesRefresh_RejectsTraversalRoleKey(t *testing.T) {
+	thrumDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(thrumDir, "config.json"), []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &roleconfig.RoleConfig{
+		SchemaVersion: 1,
+		Roles: map[string]roleconfig.RoleSettings{
+			"../evil": {Autonomy: "autonomous", Scope: "cross_worktree"},
+		},
+	}
+	if err := roleconfig.Save(thrumDir, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	err := runRolesRefresh(thrumDir)
+	if err == nil {
+		t.Fatal("expected error for path-traversal role key")
+	}
+	if !strings.Contains(err.Error(), "invalid role name") {
+		t.Errorf("want error mentioning 'invalid role name', got: %v", err)
+	}
+}
+
 // TestRolesRefresh_Idempotent confirms two consecutive refreshes against
 // unchanged shipped templates yield byte-identical rendered output.
 func TestRolesRefresh_Idempotent(t *testing.T) {
