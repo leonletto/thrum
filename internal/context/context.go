@@ -429,6 +429,20 @@ func RenderRoleTemplate(thrumDir, agentName, role string) ([]byte, error) {
 	}
 	composed = append(composed, []byte("\n---\n\n")...)
 	composed = append(composed, DefaultPreamble()...)
+
+	// Compose user overlay: .thrum/context/<agentName>.md is auto-created
+	// empty by quickstart and intended for hand-written customization. When
+	// non-empty, append after DefaultPreamble with a separator so user
+	// content sits at the very end (highest precedence in agent reading).
+	overlayPath := filepath.Join(thrumDir, "context", agentName+".md")
+	if overlay, err := os.ReadFile(overlayPath); err == nil && len(bytes.TrimSpace(overlay)) > 0 { // #nosec G304 -- overlayPath is .thrum/context/<agent>.md, an internal directory
+		if !bytes.HasSuffix(composed, []byte("\n")) {
+			composed = append(composed, '\n')
+		}
+		composed = append(composed, []byte("\n---\n\n")...)
+		composed = append(composed, overlay...)
+	}
+
 	return composed, nil
 }
 

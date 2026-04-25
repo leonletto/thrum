@@ -222,6 +222,85 @@ func TestRenderRoleTemplate_RepoRoot(t *testing.T) {
 	}
 }
 
+// TestRenderRoleTemplate_NoOverlayFile asserts that with no overlay file at
+// .thrum/context/<agent>.md, the rendered output contains exactly one
+// separator (between the role template and DefaultPreamble) — no extra
+// separator from a missing overlay.
+//
+// Regression spec: thrum-z2et.19.1.
+func TestRenderRoleTemplate_NoOverlayFile(t *testing.T) {
+	thrumDir := t.TempDir()
+	createTestIdentity(t, thrumDir, "impl_api", "implementer", "api", "api-wt")
+	createTestRoleTemplate(t, thrumDir, "implementer", "## Implementer Discipline\n")
+
+	rendered, err := RenderRoleTemplate(thrumDir, "impl_api", "implementer")
+	if err != nil {
+		t.Fatalf("RenderRoleTemplate: %v", err)
+	}
+	if got := strings.Count(string(rendered), "\n---\n\n"); got != 1 {
+		t.Fatalf("expected exactly one separator (role+default), got %d:\n%s", got, rendered)
+	}
+}
+
+// TestRenderRoleTemplate_EmptyOverlayFile asserts that a whitespace-only
+// overlay is treated as absent (no extra separator).
+func TestRenderRoleTemplate_EmptyOverlayFile(t *testing.T) {
+	thrumDir := t.TempDir()
+	createTestIdentity(t, thrumDir, "impl_api", "implementer", "api", "api-wt")
+	createTestRoleTemplate(t, thrumDir, "implementer", "## Implementer Discipline\n")
+
+	overlayPath := filepath.Join(thrumDir, "context", "impl_api.md")
+	if err := os.MkdirAll(filepath.Dir(overlayPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(overlayPath, []byte("   \n\n  \n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	rendered, err := RenderRoleTemplate(thrumDir, "impl_api", "implementer")
+	if err != nil {
+		t.Fatalf("RenderRoleTemplate: %v", err)
+	}
+	if got := strings.Count(string(rendered), "\n---\n\n"); got != 1 {
+		t.Fatalf("whitespace-only overlay should be skipped (no extra separator); got %d", got)
+	}
+}
+
+// TestRenderRoleTemplate_PopulatedOverlayFile asserts that overlay content
+// is appended after DefaultPreamble with a "---" separator, so user content
+// sits last in the rendered output.
+func TestRenderRoleTemplate_PopulatedOverlayFile(t *testing.T) {
+	thrumDir := t.TempDir()
+	createTestIdentity(t, thrumDir, "impl_api", "implementer", "api", "api-wt")
+	createTestRoleTemplate(t, thrumDir, "implementer", "## Implementer Discipline\n")
+
+	overlayPath := filepath.Join(thrumDir, "context", "impl_api.md")
+	if err := os.MkdirAll(filepath.Dir(overlayPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	overlayContent := "## My Custom Notes\n\nProject-specific reminders.\n"
+	if err := os.WriteFile(overlayPath, []byte(overlayContent), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	rendered, err := RenderRoleTemplate(thrumDir, "impl_api", "implementer")
+	if err != nil {
+		t.Fatalf("RenderRoleTemplate: %v", err)
+	}
+	out := string(rendered)
+	if !strings.Contains(out, overlayContent) {
+		t.Fatalf("overlay content not present in render:\n%s", out)
+	}
+	if got := strings.Count(out, "\n---\n\n"); got != 2 {
+		t.Fatalf("expected 2 separators (role+default+overlay), got %d", got)
+	}
+	idx := strings.LastIndex(out, "\n---\n\n")
+	rest := out[idx+len("\n---\n\n"):]
+	if !strings.HasPrefix(rest, "## My Custom Notes") {
+		t.Fatalf("overlay not at end of render; tail starts with: %.80q", rest)
+	}
+}
+
 func TestDeployAll_MultipleAgents(t *testing.T) {
 	thrumDir := t.TempDir()
 
