@@ -1,6 +1,20 @@
 // Package context provides per-agent context storage for Thrum.
 // Context files are markdown files stored in .thrum/context/{agent-name}.md.
 // They allow agents to persist volatile project state across sessions.
+//
+// # Canonical preamble-write rule
+//
+// The single canonical path for producing a per-agent preamble is
+// RenderRoleTemplate(thrumDir, agentName, role). It composes:
+//
+//	role_templates/<role>.md  +  DefaultPreamble  +  .thrum/context/<agent>.md
+//
+// Direct calls to RoleAwarePreamble must only occur as fallbacks for
+// RenderRoleTemplate returning (nil, nil) — i.e. no role template is
+// configured for the role. New write sites bypassing this rule silently
+// overwrite customized templates and drop the user overlay; they are bugs.
+// The audit at role_aware_preamble_audit_test.go enforces this by failing
+// when a non-test, non-allowlisted file calls RoleAwarePreamble directly.
 package context
 
 import (
