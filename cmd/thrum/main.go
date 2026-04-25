@@ -3947,18 +3947,8 @@ Examples:
 			defer func() { _ = client.Close() }()
 
 			if flagInit {
-				// Reset to role-aware default preamble
 				role, _ := resolveLocalMentionRole()
-				var resp rpc.PreambleSaveResponse
-				if err := client.Call("context.preamble.save", rpc.PreambleSaveRequest{
-					AgentName: agentID,
-					Content:   agentcontext.RoleAwarePreamble(role),
-					RepoPath:  absRepo,
-				}, &resp); err != nil {
-					return err
-				}
-				fmt.Println(resp.Message)
-				return nil
+				return runPreambleInit(client, agentID, role, absRepo, agentID)
 			}
 
 			if flagFile != "" {
@@ -4003,6 +3993,34 @@ Examples:
 	cmd.Flags().StringVar(&flagFile, "file", "", "Set preamble from file")
 
 	return cmd
+}
+
+// preambleRPCCaller is the minimal RPC surface runPreambleInit needs.
+// Defined as an interface so tests can supply a fake.
+type preambleRPCCaller interface {
+	Call(method string, params any, result any) error
+}
+
+// runPreambleInit resets the agent's preamble to the role-aware default,
+// preferring the rendered role template at .thrum/role_templates/<role>.md
+// when present. Falls back to the generic RoleAwarePreamble when no
+// rendered template is available (or rendering fails).
+func runPreambleInit(client preambleRPCCaller, agentID, role, repoPath, agentName string) error {
+	thrumDir := filepath.Join(repoPath, ".thrum")
+	content := agentcontext.RoleAwarePreamble(role)
+	if rendered, err := agentcontext.RenderRoleTemplate(thrumDir, agentName, role); err == nil && rendered != nil {
+		content = rendered
+	}
+	var resp rpc.PreambleSaveResponse
+	if err := client.Call("context.preamble.save", rpc.PreambleSaveRequest{
+		AgentName: agentID,
+		Content:   content,
+		RepoPath:  repoPath,
+	}, &resp); err != nil {
+		return err
+	}
+	fmt.Println(resp.Message)
+	return nil
 }
 
 // loadInitBootstrapMode returns the NonGitBootstrap guard mode for
