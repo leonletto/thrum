@@ -156,12 +156,12 @@ Verify across call sites, tests, and git history.
 ❌ **Opinion** — speculates about behavior without checking. Label
 assumptions explicitly; distinguish verified facts from inferences.
 
-❌ **Context Hog** — reads entire files into your main context instead
-of delegating exploration to sub-agents.
-
 ❌ **Silent Researcher** — investigates for an hour without
 acknowledging the dispatch. Send "Received. Starting <scope>. ETA
 <rough>." within two minutes of receiving a request.
+
+(Shared anti-patterns Context Hog and Sub-Agent Dispatcher live in the
+DefaultPreamble.)
 
 ---
 
@@ -202,8 +202,7 @@ thrum send "Research <task-id>: <answer>. Evidence: <file:line refs>" --to @{{.C
 thrum send "Research note for your task: <finding>" --to @<agent_name>
 ```
 
-In tmux-managed sessions, notifications arrive via daemon nudge — no
-background listener required.
+(Tmux nudge mechanics: see DefaultPreamble's Tmux Session Management section.)
 
 ---
 

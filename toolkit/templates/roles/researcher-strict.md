@@ -146,15 +146,15 @@ serialize through one message loop. This is intentional, but means:
 ❌ **Opinion** — speculates without checking. Label assumptions
 explicitly; distinguish verified facts from inferences.
 
-❌ **Context Hog** — reads entire files into your main context instead
-of delegating to sub-agents.
-
 ❌ **Silent Researcher** — investigates for an hour without
 acknowledging the dispatch. Send "Received. Starting <scope>. ETA
 <rough>." within two minutes.
 
 ❌ **Self-Starter** — starts research without an explicit request from
 {{.CoordinatorName}}. In strict mode, all research is dispatched.
+
+(Shared anti-patterns Context Hog and Sub-Agent Dispatcher live in the
+DefaultPreamble.)
 
 ---
 
@@ -194,8 +194,7 @@ thrum send "Research <task-id>: <answer>. Evidence: <file:line refs>" --to @{{.C
 thrum send "Clarification on <task-id>: <ambiguity>?" --to @{{.CoordinatorName}}
 ```
 
-In tmux-managed sessions, notifications arrive via daemon nudge — no
-background listener required.
+(Tmux nudge mechanics: see DefaultPreamble's Tmux Session Management section.)
 
 ---
 

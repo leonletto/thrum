@@ -91,6 +91,74 @@ Coordinator: {{.CoordinatorName}}`)
 	}
 }
 
+// TestRenderRoleTemplate_ComposesWithDefaultPreamble verifies that a rendered
+// role template EXTENDS DefaultPreamble rather than replacing it. The role
+// template carries role-specific discipline; DefaultPreamble carries shared
+// operational reference (Thrum Quick Reference, Tmux Session Management,
+// Operating Principles, Anti-Patterns, Agent Strategies). Both must be present
+// in the rendered output. The compose order matches RoleAwarePreamble:
+// role-specific content first, then a "---" separator, then DefaultPreamble.
+//
+// Regression spec: thrum-z2et.17 — before this change, RenderRoleTemplate
+// returned the rendered template only, silently dropping DefaultPreamble's
+// shared content from agents that ran /thrum:configure-roles.
+func TestRenderRoleTemplate_ComposesWithDefaultPreamble(t *testing.T) {
+	thrumDir := t.TempDir()
+
+	createTestIdentity(t, thrumDir, "impl_auth", "implementer", "auth", "auth-worktree")
+	createTestRoleTemplate(t, thrumDir, "implementer",
+		`# Implementer-Specific Header for {{.AgentName}}
+
+Some role-specific guidance.`)
+
+	rendered, err := RenderRoleTemplate(thrumDir, "impl_auth", "implementer")
+	if err != nil {
+		t.Fatalf("RenderRoleTemplate: %v", err)
+	}
+	if rendered == nil {
+		t.Fatal("expected rendered content, got nil")
+	}
+
+	content := string(rendered)
+
+	// Role-specific content must be present (with template variable rendered).
+	if !strings.Contains(content, "# Implementer-Specific Header for impl_auth") {
+		t.Errorf("expected role template header, got:\n%s", content)
+	}
+	if !strings.Contains(content, "Some role-specific guidance.") {
+		t.Errorf("expected role template body, got:\n%s", content)
+	}
+
+	// All 5 DefaultPreamble shared sections must be present (the
+	// Anti-Patterns section is the one whose content motivates this
+	// fix — keeping it in the want-list catches the regression where
+	// shared anti-patterns get dropped from DefaultPreamble).
+	for _, want := range []string{
+		"## Thrum Quick Reference",
+		"## Tmux Session Management",
+		"## Operating Principles",
+		"## Anti-Patterns",
+		"## Agent Strategies",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected DefaultPreamble section %q in composed output, got:\n%s", want, content)
+		}
+	}
+
+	// Compose order: role-specific first, then separator, then DefaultPreamble.
+	roleIdx := strings.Index(content, "# Implementer-Specific Header")
+	defaultIdx := strings.Index(content, "## Thrum Quick Reference")
+	if roleIdx == -1 || defaultIdx == -1 {
+		t.Fatalf("could not locate compose anchors")
+	}
+	if roleIdx >= defaultIdx {
+		t.Errorf("expected role-specific content before DefaultPreamble; role at %d, default at %d", roleIdx, defaultIdx)
+	}
+	if !strings.Contains(content[roleIdx:defaultIdx], "---") {
+		t.Errorf("expected horizontal-rule separator between role content and DefaultPreamble")
+	}
+}
+
 func TestRenderRoleTemplate_MissingTemplate(t *testing.T) {
 	thrumDir := t.TempDir()
 
@@ -343,14 +411,30 @@ func TestRegistrationAutoApply(t *testing.T) {
 		t.Fatalf("SavePreamble: %v", err)
 	}
 
-	// Verify the preamble was saved with rendered content
+	// Verify the preamble was saved with rendered + composed content.
+	// This test exercises the SavePreamble + LoadPreamble round-trip,
+	// distinct from TestRenderRoleTemplate_ComposesWithDefaultPreamble's
+	// in-memory render check — a round-trip-specific truncation could
+	// slip past the in-memory test, so we assert all 5 DefaultPreamble
+	// shared sections survive the round-trip too.
 	data, err := LoadPreamble(thrumDir, "impl_auth")
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := "# Agent: impl_auth, Role: implementer"
-	if string(data) != expected {
-		t.Errorf("expected %q, got %q", expected, data)
+	content := string(data)
+	if !strings.Contains(content, "# Agent: impl_auth, Role: implementer") {
+		t.Errorf("expected role-specific header in preamble, got: %s", content)
+	}
+	for _, want := range []string{
+		"## Thrum Quick Reference",
+		"## Tmux Session Management",
+		"## Operating Principles",
+		"## Anti-Patterns",
+		"## Agent Strategies",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected DefaultPreamble section %q to survive SavePreamble+LoadPreamble round-trip, got: %s", want, content)
+		}
 	}
 }
 
@@ -387,7 +471,11 @@ func TestPreambleFilePrecedence(t *testing.T) {
 	createTestIdentity(t, thrumDir, "impl_auth", "implementer", "auth", "auth-wt")
 	createTestRoleTemplate(t, thrumDir, "implementer", `Role template content`)
 
-	// Simulate --preamble-file behavior: it should be used instead of role template
+	// Simulate --preamble-file behavior: it should be used instead of role template.
+	// NOTE: this manual assembly is the override-target shape that --preamble-file
+	// produces (DefaultPreamble + custom-file content), not the compose order
+	// RenderRoleTemplate uses (role-template first, then DefaultPreamble). This
+	// test verifies file-override behavior, not compose order.
 	customContent := []byte("Custom preamble from file")
 	composed := append(DefaultPreamble(), []byte("\n---\n\n")...)
 	composed = append(composed, customContent...)
