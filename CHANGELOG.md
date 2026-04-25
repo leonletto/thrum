@@ -6,6 +6,64 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`thrum context preamble --init` ignored customized role templates
+  (thrum-pk2o)** — `--init` called `RoleAwarePreamble(role)` directly, so
+  customized templates at `.thrum/role_templates/<role>.md` were silently
+  overwritten with the generic default. The handler now consults
+  `RenderRoleTemplate` first and only falls back to the generic preamble when
+  no rendered template exists.
+
+### Added
+
+- **User overlay composed into rendered preamble (thrum-z2et.19.1)** —
+  `RenderRoleTemplate` now appends non-empty `.thrum/context/<agent>.md`
+  content after `DefaultPreamble` with a `---` separator. The overlay file
+  is auto-created empty by `thrum quickstart` for hand-written customization;
+  whitespace-only files are treated as absent so empty overlays don't add a
+  stray separator.
+- **`role_config` persistence in `.thrum/config.json` (thrum-z2et.20)** —
+  `/thrum:configure-roles` answers persist under a new `role_config`
+  top-level key (per-role autonomy + scope + rendered_hash). Atomic
+  temp+rename writes preserve every other top-level key
+  (backup/daemon/identity/telegram) byte-identical via
+  `json.RawMessage` round-trip. New schema version field allows future
+  migrations.
+- **`thrum roles refresh` regenerates from saved answers** — new CLI
+  subcommand under `thrum roles` that re-renders
+  `.thrum/role_templates/<role>.md` from the embedded shipped variants +
+  saved answers, then updates `rendered_hash` to the current shipped
+  body_hash. Per-agent template tokens (`{{.AgentName}}` etc.) are kept
+  literal so the existing per-agent deploy pass can substitute them.
+- **`thrum prime` surfaces 3 drift hints** — `roles.config.migration` (rendered
+  templates exist, no `role_config`), `roles.config.schema-bump` (shipped
+  schema_version > saved), `roles.config.body-diff` (shipped body_hash !=
+  saved rendered_hash). Hints route via `slog.Warn` →
+  `installSlogBridge`, surfacing in the `--json` hints array or stderr at
+  warn level. Precedence is migration > schema-bump > body-diff (only one
+  fires per repo).
+- **`thrum roles save-config` and `thrum roles templates print`** — internal
+  CLI shims used by the rewritten `configure-roles` skill so the skill can
+  persist answers and read embedded shipped content via CLI rather than
+  filesystem path.
+- **Shipped role templates embedded under `internal/context/roleconfig/`** —
+  the 19 shipped templates moved from `toolkit/templates/roles/` to
+  `internal/context/roleconfig/templates/roles/` and embedded via
+  `//go:embed` so they're available regardless of binary cwd. All 19 carry
+  `schema_version: 1` YAML frontmatter; body_hash excludes the frontmatter
+  so whitespace-only metadata edits don't trigger drift.
+
+### Changed
+
+- **`/thrum:configure-roles` skill rewrite** — uses `AskUserQuestion` for all
+  interactive prompts, persists answers via `thrum roles save-config`, and
+  reads shipped reference content via `thrum roles templates print` instead
+  of raw filesystem paths. Prefills values from saved `role_config` on
+  re-run so the user only re-confirms.
+
 ## [0.9.1] - 2026-04-24
 
 ### Fixed

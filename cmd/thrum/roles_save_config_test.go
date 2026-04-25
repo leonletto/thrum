@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -96,6 +98,53 @@ func TestRolesSaveConfig_FillsRenderedHashes(t *testing.T) {
 	if cfg.Roles["coordinator"].RenderedHash != expected {
 		t.Errorf("rendered_hash not backfilled: got %q, want %q",
 			cfg.Roles["coordinator"].RenderedHash, expected)
+	}
+}
+
+// TestRolesTemplatesPrint covers the rolesTemplatesPrintCmd CLI shim used
+// by /thrum:configure-roles. Asserts that the multi-variant lookup
+// (coordinator-autonomous) and the single-variant fallback (orchestrator)
+// both write non-empty embedded content to the command's stdout.
+func TestRolesTemplatesPrint(t *testing.T) {
+	cases := []struct {
+		name string
+		arg  string
+	}{
+		{"multi-variant", "coordinator-autonomous"},
+		{"single-variant fallback", "orchestrator"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := rolesTemplatesPrintCmd()
+
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			origStdout := os.Stdout
+			os.Stdout = w
+			t.Cleanup(func() { os.Stdout = origStdout })
+
+			cmd.SetArgs([]string{tc.arg})
+			runErr := cmd.Execute()
+			if cerr := w.Close(); cerr != nil {
+				t.Fatal(cerr)
+			}
+			if runErr != nil {
+				t.Fatalf("Execute(%q): %v", tc.arg, runErr)
+			}
+
+			out, readErr := io.ReadAll(r)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if len(out) == 0 {
+				t.Fatalf("expected non-empty embedded template content for %q", tc.arg)
+			}
+			if !bytes.Contains(out, []byte("schema_version: 1")) {
+				t.Errorf("printed template missing frontmatter for %q:\n%s", tc.arg, out[:min(120, len(out))])
+			}
+		})
 	}
 }
 
