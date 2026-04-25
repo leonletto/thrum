@@ -30,6 +30,7 @@ import (
 	"github.com/leonletto/thrum/internal/cli"
 	"github.com/leonletto/thrum/internal/config"
 	agentcontext "github.com/leonletto/thrum/internal/context"
+	"github.com/leonletto/thrum/internal/context/roleconfig"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
@@ -6900,8 +6901,77 @@ identity data (AgentName, Role, Module, WorktreePath, RepoRoot, CoordinatorName)
 
 	cmd.AddCommand(rolesListCmd())
 	cmd.AddCommand(rolesDeployCmd())
+	cmd.AddCommand(rolesRefreshCmd())
 
 	return cmd
+}
+
+// rolesRefreshCmd regenerates rendered .thrum/role_templates/<role>.md files
+// from saved role_config answers + current shipped templates. Used after a
+// plugin upgrade to apply new template content. Per-agent tokens
+// (`{{.AgentName}}` etc.) are kept literal so the existing per-agent deploy
+// pass can substitute them.
+func rolesRefreshCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "refresh",
+		Short: "Regenerate .thrum/role_templates/<role>.md from saved answers",
+		Long: `Regenerate rendered role templates from saved role_config answers plus
+current shipped templates. Used after a plugin upgrade to apply new template
+content. Fails loud if role_config is absent — run /thrum:configure-roles
+first to capture answers.
+
+Examples:
+  thrum roles refresh`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+			return runRolesRefresh(thrumDir)
+		},
+	}
+}
+
+// runRolesRefresh is the testable body of `thrum roles refresh`. Fails loud
+// when role_config is absent (no fallback — user is told to run
+// configure-roles). On success, writes rendered templates and updates each
+// role's rendered_hash to the current shipped body_hash, then atomically
+// rewrites .thrum/config.json with the bumped plugin_version.
+func runRolesRefresh(thrumDir string) error {
+	cfg, err := roleconfig.Load(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load role_config: %w", err)
+	}
+	if cfg == nil {
+		return fmt.Errorf("no role_config found in .thrum/config.json — run /thrum:configure-roles first")
+	}
+
+	rtDir := filepath.Join(thrumDir, "role_templates")
+	if err := os.MkdirAll(rtDir, 0o750); err != nil {
+		return fmt.Errorf("create role_templates dir: %w", err)
+	}
+
+	refreshed := 0
+	for role, settings := range cfg.Roles {
+		body, err := roleconfig.RenderShipped(role, settings.Autonomy, settings.Scope, roleconfig.RenderEnv{})
+		if err != nil {
+			return fmt.Errorf("render %s/%s: %w", role, settings.Autonomy, err)
+		}
+		outPath := filepath.Join(rtDir, role+".md")
+		if err := os.WriteFile(outPath, body, 0o600); err != nil {
+			return fmt.Errorf("write %s: %w", outPath, err)
+		}
+		if _, hash, hashErr := roleconfig.ShippedTemplateInfo(role, settings.Autonomy); hashErr == nil {
+			settings.RenderedHash = hash
+			cfg.Roles[role] = settings
+		}
+		refreshed++
+	}
+
+	cfg.PluginVersion = Version
+	if err := roleconfig.Save(thrumDir, cfg); err != nil {
+		return fmt.Errorf("save updated role_config: %w", err)
+	}
+
+	fmt.Printf("Refreshed %d role templates from plugin v%s.\n", refreshed, Version)
+	return nil
 }
 
 func rolesListCmd() *cobra.Command {
