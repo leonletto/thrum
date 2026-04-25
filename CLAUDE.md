@@ -160,7 +160,7 @@ you can continue other work while they run.
 
 Role-discipline ships as a layered system across three locations:
 
-- **Preambles** at `toolkit/templates/roles/<role>-{strict,autonomous}.md` —
+- **Preambles** at `internal/context/roleconfig/templates/roles/<role>-{strict,autonomous}.md` —
   always-loaded role invariants (coordinator/implementer/researcher × strict/
   autonomous variants). Rendered into `.thrum/role_templates/<role>.md` per
   project by the `configure-roles` skill at agent registration time.

@@ -1,6 +1,20 @@
 // Package context provides per-agent context storage for Thrum.
 // Context files are markdown files stored in .thrum/context/{agent-name}.md.
 // They allow agents to persist volatile project state across sessions.
+//
+// # Canonical preamble-write rule
+//
+// The single canonical path for producing a per-agent preamble is
+// RenderRoleTemplate(thrumDir, agentName, role). It composes:
+//
+//	role_templates/<role>.md  +  DefaultPreamble  +  .thrum/context/<agent>.md
+//
+// Direct calls to RoleAwarePreamble must only occur as fallbacks for
+// RenderRoleTemplate returning (nil, nil) — i.e. no role template is
+// configured for the role. New write sites bypassing this rule silently
+// overwrite customized templates and drop the user overlay; they are bugs.
+// The audit at role_aware_preamble_audit_test.go enforces this by failing
+// when a non-test, non-allowlisted file calls RoleAwarePreamble directly.
 package context
 
 import (
@@ -429,6 +443,20 @@ func RenderRoleTemplate(thrumDir, agentName, role string) ([]byte, error) {
 	}
 	composed = append(composed, []byte("\n---\n\n")...)
 	composed = append(composed, DefaultPreamble()...)
+
+	// Compose user overlay: .thrum/context/<agentName>.md is auto-created
+	// empty by quickstart and intended for hand-written customization. When
+	// non-empty, append after DefaultPreamble with a separator so user
+	// content sits at the very end (highest precedence in agent reading).
+	overlayPath := filepath.Join(thrumDir, "context", agentName+".md")
+	if overlay, err := os.ReadFile(overlayPath); err == nil && len(bytes.TrimSpace(overlay)) > 0 { // #nosec G304 -- overlayPath is .thrum/context/<agent>.md, an internal directory
+		if !bytes.HasSuffix(composed, []byte("\n")) {
+			composed = append(composed, '\n')
+		}
+		composed = append(composed, []byte("\n---\n\n")...)
+		composed = append(composed, overlay...)
+	}
+
 	return composed, nil
 }
 

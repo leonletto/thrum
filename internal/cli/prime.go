@@ -10,6 +10,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/config"
 	agentcontext "github.com/leonletto/thrum/internal/context"
+	"github.com/leonletto/thrum/internal/context/roleconfig"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/runtime"
@@ -87,6 +88,16 @@ func ContextPrime(client *Client, callerAgentID ...string) *PrimeContext {
 			ctx.Runtime = rt
 		} else {
 			ctx.Runtime = runtime.DetectRuntime(ctx.RepoPath)
+		}
+	}
+
+	// Role-config drift detection. EmitRolesConfigDriftHints calls slog.Warn,
+	// which installSlogBridge (cmd/thrum/main.go) routes into either the JSON
+	// output's "hints" array (--json mode) or stderr at LevelWarn (human mode).
+	if ctx.RepoPath != "" {
+		thrumDir := filepath.Join(ctx.RepoPath, ".thrum")
+		if report, err := roleconfig.DriftStatus(thrumDir); err == nil {
+			EmitRolesConfigDriftHints(report)
 		}
 	}
 

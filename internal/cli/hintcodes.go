@@ -79,6 +79,24 @@ const HintSnapshotSaveExtractFailed = "snapshot.save.extract-failed"
 // Severity: warn; hard refusal.
 const HintSnapshotSaveJSONLNotFound = "snapshot.save.jsonl-not-found"
 
+// HintRolesConfigMigration fires when .thrum/role_templates/<role>.md exists
+// but .thrum/config.json has no role_config block — meaning the repo
+// pre-dates configure-roles persistence. Severity: warn. Remediation: run
+// /thrum:configure-roles to register the active settings.
+const HintRolesConfigMigration = "roles.config.migration"
+
+// HintRolesConfigSchemaBump fires when a shipped role template declares a
+// higher schema_version than the saved role_config — the configure-roles
+// skill has new questions to ask. Severity: warn. Remediation:
+// /thrum:configure-roles.
+const HintRolesConfigSchemaBump = "roles.config.schema-bump"
+
+// HintRolesConfigBodyDiff fires when the saved rendered_hash for a role does
+// not match the shipped template body_hash (schema unchanged) — answers
+// remain valid but the rendered file is stale. Severity: warn. Remediation:
+// thrum roles refresh.
+const HintRolesConfigBodyDiff = "roles.config.body-diff"
+
 // RecipientStaleThreshold is the send-side stale cutoff. Exported per
 // spec §4 as a tunable; becomes a config key in Phase C if the pilot
 // signals that 30 minutes is the wrong threshold.
@@ -99,4 +117,7 @@ var AllHintCodes = []string{
 	HintSnapshotSaveNoPID,
 	HintSnapshotSaveExtractFailed,
 	HintSnapshotSaveJSONLNotFound,
+	HintRolesConfigMigration,
+	HintRolesConfigSchemaBump,
+	HintRolesConfigBodyDiff,
 }

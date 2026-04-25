@@ -107,7 +107,7 @@ Templates use Go template variables: `{{.AgentName}}`, `{{.Role}}`,
 /thrum:configure-roles
 
 # Or copy manually
-cp toolkit/templates/roles/implementer-strict.md .thrum/role_templates/implementer.md
+cp internal/context/roleconfig/templates/roles/implementer-strict.md .thrum/role_templates/implementer.md
 
 # Deploy to registered agents
 thrum roles deploy

@@ -30,6 +30,7 @@ import (
 	"github.com/leonletto/thrum/internal/cli"
 	"github.com/leonletto/thrum/internal/config"
 	agentcontext "github.com/leonletto/thrum/internal/context"
+	"github.com/leonletto/thrum/internal/context/roleconfig"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
@@ -3947,18 +3948,8 @@ Examples:
 			defer func() { _ = client.Close() }()
 
 			if flagInit {
-				// Reset to role-aware default preamble
 				role, _ := resolveLocalMentionRole()
-				var resp rpc.PreambleSaveResponse
-				if err := client.Call("context.preamble.save", rpc.PreambleSaveRequest{
-					AgentName: agentID,
-					Content:   agentcontext.RoleAwarePreamble(role),
-					RepoPath:  absRepo,
-				}, &resp); err != nil {
-					return err
-				}
-				fmt.Println(resp.Message)
-				return nil
+				return runPreambleInit(client, agentID, role, absRepo, agentID)
 			}
 
 			if flagFile != "" {
@@ -4003,6 +3994,43 @@ Examples:
 	cmd.Flags().StringVar(&flagFile, "file", "", "Set preamble from file")
 
 	return cmd
+}
+
+// preambleRPCCaller is the minimal RPC surface runPreambleInit needs.
+// Defined as an interface so tests can supply a fake.
+type preambleRPCCaller interface {
+	Call(method string, params any, result any) error
+}
+
+// runPreambleInit resets the agent's preamble to the role-aware default,
+// preferring the rendered role template at .thrum/role_templates/<role>.md
+// when present. Falls back to the generic RoleAwarePreamble when no
+// rendered template is available (or rendering fails).
+func runPreambleInit(client preambleRPCCaller, agentID, role, repoPath, agentName string) error {
+	if strings.ContainsAny(agentName, "/\\") || strings.Contains(agentName, "..") {
+		return fmt.Errorf("invalid agent name %q: must not contain /, \\, or parent references", agentName)
+	}
+	thrumDir := filepath.Join(repoPath, ".thrum")
+	content := agentcontext.RoleAwarePreamble(role)
+	if rendered, renderErr := agentcontext.RenderRoleTemplate(thrumDir, agentName, role); renderErr == nil && rendered != nil {
+		content = rendered
+	} else if renderErr != nil && !os.IsNotExist(renderErr) {
+		// Surface genuine render failures (parse errors, permission issues) as
+		// hints via slog → installSlogBridge, then fall through to the generic
+		// RoleAwarePreamble. IsNotExist is the no-template-deployed case and
+		// is not surfaced.
+		slog.Warn("context.preamble.render-failed Falling back to generic preamble.", "error", renderErr)
+	}
+	var resp rpc.PreambleSaveResponse
+	if err := client.Call("context.preamble.save", rpc.PreambleSaveRequest{
+		AgentName: agentID,
+		Content:   content,
+		RepoPath:  repoPath,
+	}, &resp); err != nil {
+		return err
+	}
+	fmt.Println(resp.Message)
+	return nil
 }
 
 // loadInitBootstrapMode returns the NonGitBootstrap guard mode for
@@ -6873,8 +6901,176 @@ identity data (AgentName, Role, Module, WorktreePath, RepoRoot, CoordinatorName)
 
 	cmd.AddCommand(rolesListCmd())
 	cmd.AddCommand(rolesDeployCmd())
+	cmd.AddCommand(rolesRefreshCmd())
+	cmd.AddCommand(rolesSaveConfigCmd())
+	cmd.AddCommand(rolesTemplatesCmd())
 
 	return cmd
+}
+
+// rolesSaveConfigCmd is the CLI shim used by /thrum:configure-roles to
+// persist the user's answers. Reads JSON-on-stdin matching RoleConfig,
+// backfills schema/version/timestamp/rendered_hash defaults, and atomically
+// writes role_config to .thrum/config.json.
+func rolesSaveConfigCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "save-config",
+		Short: "Write role_config to .thrum/config.json from JSON on stdin",
+		Long: `Internal subcommand used by /thrum:configure-roles to persist answers.
+Reads JSON from stdin, validates against the RoleConfig schema, fills
+rendered_hash from current shipped templates, and atomically writes to
+.thrum/config.json (preserving other top-level keys byte-identical).`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+			return runRolesSaveConfig(thrumDir, os.Stdin)
+		},
+	}
+}
+
+// runRolesSaveConfig is the testable body of `thrum roles save-config`.
+// Decodes RoleConfig from in, fills defaults for absent scalar fields,
+// backfills rendered_hash from current shipped templates per role, and
+// delegates to roleconfig.Save for atomic write + unknown-key preservation.
+func runRolesSaveConfig(thrumDir string, in io.Reader) error {
+	var cfg roleconfig.RoleConfig
+	dec := json.NewDecoder(in)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&cfg); err != nil {
+		return fmt.Errorf("decode role_config: %w", err)
+	}
+	if cfg.SchemaVersion == 0 {
+		cfg.SchemaVersion = roleconfig.CurrentSchemaVersion
+	}
+	if cfg.PluginVersion == "" {
+		cfg.PluginVersion = Version
+	}
+	if cfg.ConfiguredAt.IsZero() {
+		cfg.ConfiguredAt = time.Now().UTC()
+	}
+
+	for role, settings := range cfg.Roles {
+		if _, hash, err := roleconfig.ShippedTemplateInfo(role, settings.Autonomy); err == nil {
+			settings.RenderedHash = hash
+			cfg.Roles[role] = settings
+		}
+	}
+
+	if err := roleconfig.Save(thrumDir, &cfg); err != nil {
+		return fmt.Errorf("save: %w", err)
+	}
+	fmt.Printf("Saved role_config (%d roles).\n", len(cfg.Roles))
+	return nil
+}
+
+// rolesTemplatesCmd groups inspection subcommands for embedded shipped
+// templates. The configure-roles skill uses `print` to read shipped content
+// over CLI rather than from a raw filesystem path (binary may run from any
+// directory).
+func rolesTemplatesCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "templates",
+		Short: "Inspect shipped role templates",
+	}
+	cmd.AddCommand(rolesTemplatesPrintCmd())
+	return cmd
+}
+
+func rolesTemplatesPrintCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "print <role>-<autonomy>",
+		Short: "Print the embedded shipped role template (with frontmatter)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			role, autonomy, ok := strings.Cut(args[0], "-")
+			if !ok {
+				// Single-variant role (e.g. orchestrator) — pass autonomy
+				// empty so ReadShippedTemplate falls back to <role>.md.
+				role, autonomy = args[0], ""
+			}
+			raw, err := roleconfig.ReadShippedTemplate(role, autonomy)
+			if err != nil {
+				return err
+			}
+			_, err = os.Stdout.Write(raw)
+			return err
+		},
+	}
+}
+
+// rolesRefreshCmd regenerates rendered .thrum/role_templates/<role>.md files
+// from saved role_config answers + current shipped templates. Used after a
+// plugin upgrade to apply new template content. Per-agent tokens
+// (`{{.AgentName}}` etc.) are kept literal so the existing per-agent deploy
+// pass can substitute them.
+func rolesRefreshCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "refresh",
+		Short: "Regenerate .thrum/role_templates/<role>.md from saved answers",
+		Long: `Regenerate rendered role templates from saved role_config answers plus
+current shipped templates. Used after a plugin upgrade to apply new template
+content. Fails loud if role_config is absent — run /thrum:configure-roles
+first to capture answers.
+
+Examples:
+  thrum roles refresh`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+			return runRolesRefresh(thrumDir)
+		},
+	}
+}
+
+// runRolesRefresh is the testable body of `thrum roles refresh`. Fails loud
+// when role_config is absent (no fallback — user is told to run
+// configure-roles). On success, writes rendered templates and updates each
+// role's rendered_hash to the current shipped body_hash, then atomically
+// rewrites .thrum/config.json with the bumped plugin_version.
+func runRolesRefresh(thrumDir string) error {
+	cfg, err := roleconfig.Load(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load role_config: %w", err)
+	}
+	if cfg == nil {
+		return fmt.Errorf("no role_config found in .thrum/config.json — run /thrum:configure-roles first")
+	}
+
+	rtDir := filepath.Join(thrumDir, "role_templates")
+	if err := os.MkdirAll(rtDir, 0o750); err != nil {
+		return fmt.Errorf("create role_templates dir: %w", err)
+	}
+
+	refreshed := 0
+	for role, settings := range cfg.Roles {
+		// Defense in depth: role keys come from .thrum/config.json, which is
+		// internal-controlled, but a role string of "../evil" would resolve
+		// to .thrum/evil.md when joined with rtDir. The embedded FS already
+		// rejects such paths inside RenderShipped, but match the explicit
+		// guard pattern used by runPreambleInit / worktreeCreateCmd.
+		if strings.ContainsAny(role, "/\\") || strings.Contains(role, "..") {
+			return fmt.Errorf("invalid role name %q in role_config: must not contain /, \\, or parent references", role)
+		}
+		body, err := roleconfig.RenderShipped(role, settings.Autonomy, settings.Scope, roleconfig.RenderEnv{})
+		if err != nil {
+			return fmt.Errorf("render %s/%s: %w", role, settings.Autonomy, err)
+		}
+		outPath := filepath.Join(rtDir, role+".md")
+		if err := os.WriteFile(outPath, body, 0o600); err != nil {
+			return fmt.Errorf("write %s: %w", outPath, err)
+		}
+		if _, hash, hashErr := roleconfig.ShippedTemplateInfo(role, settings.Autonomy); hashErr == nil {
+			settings.RenderedHash = hash
+			cfg.Roles[role] = settings
+		}
+		refreshed++
+	}
+
+	cfg.PluginVersion = Version
+	if err := roleconfig.Save(thrumDir, cfg); err != nil {
+		return fmt.Errorf("save updated role_config: %w", err)
+	}
+
+	fmt.Printf("Refreshed %d role templates from plugin v%s.\n", refreshed, Version)
+	return nil
 }
 
 func rolesListCmd() *cobra.Command {

@@ -400,6 +400,26 @@ All commands accept these flags:
   thrum roles deploy [--agent NAME] [--dry-run]
     Re-render preambles from role templates. Full overwrite.
 
+  thrum roles refresh
+    Regenerate .thrum/role_templates/<role>.md from saved role_config
+    answers + current shipped templates. Used after a plugin upgrade.
+    Fails loud when role_config is absent (prompts the user to run
+    /thrum:configure-roles first). Per-agent template tokens like
+    {{.AgentName}} stay literal so the deploy pass can substitute them.
+
+  thrum roles save-config
+    Internal subcommand. Reads JSON RoleConfig on stdin and atomically
+    persists role_config under .thrum/config.json (preserving all other
+    top-level keys byte-identical). Backfills rendered_hash per role from
+    the current shipped body_hash. Used by /thrum:configure-roles to
+    persist the user's answers.
+
+  thrum roles templates print <role>-<autonomy>
+    Print the embedded shipped role template (with frontmatter). Falls
+    back to <role>.md for single-variant roles like 'orchestrator'.
+    Used by /thrum:configure-roles to read shipped content via CLI
+    rather than from a filesystem path.
+
 ### Configuration
 
   thrum config show [--json]
