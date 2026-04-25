@@ -1,0 +1,116 @@
+---
+name: researcher-investigating
+description: Use when investigating, exploring code, working on a research task, when asked to find me X, or to investigate Y. Loads researcher-specific discipline for running an investigation cleanly.
+---
+
+# Researcher: Investigating
+
+## Use Explore sub-agents for breadth-first searches
+
+**Why:** Reading 10 files into your main context to "understand the
+architecture" is the Context Hog trap. Sub-agents partition the search
+across multiple conversations that each report a focused finding back
+— the investigation gets done without polluting your context with raw
+file contents. (Source: findings_researcher.md F1 / project Sub-Agent
+Strategy.)
+
+**How to apply:** When the question is "how does X work" or "what
+calls Y", spawn an `Explore` sub-agent (`model: "sonnet"` for judgment,
+`model: "haiku"` for mechanical) with a clear partition: a specific
+directory, a specific symbol, or a specific question. Get a focused
+report back. For research across N > 6 items, invoke
+`efficient-multi-agent-research` instead of bespoke dispatch — it
+handles partition + parallelization + consolidation.
+
+## Scope queries before deep-diving — return early when unclear
+
+**Why:** A vague request ("investigate the auth flow") burns hours
+investigating dimensions the requester didn't actually care about.
+Returning early with a clarifying question is faster overall — even if
+it adds five minutes of round-trip latency, it prevents three hours of
+wrong-direction work. (Source: findings_researcher.md F6 — codex
+"3 hours of work, one real deliverable commit" stemmed from an
+ambiguous dispatch where the spec and the message conflicted.)
+
+**How to apply:** Read the dispatch and the linked spec/plan first.
+If the scope is ambiguous (multiple plausible interpretations,
+contradictory documents, no clear acceptance signal), reply with
+NEEDS_CONTEXT and one specific narrowing question. Don't guess. Don't
+investigate "what they probably meant" in parallel.
+
+## Verify don't recall — re-read state before reporting
+
+**Why:** Reporting from memory of past panes, files, or commits
+produces over-claimed findings. (Source: findings_researcher.md F1 —
+researcher_codex initially claimed no permission prompt fired during a
+session; user corrected. Root cause: reporting from memory instead of
+inspecting the actual pane capture.)
+
+**How to apply:** For each finding, run a fresh capture before
+reporting:
+
+- Pane state: `tmux capture-pane -t <session> -p` (or runtime
+  equivalent)
+- Code: `git show HEAD:<path>` or read the file at HEAD
+- Beads state: `bd show <id>` (not your remembered idea of the state)
+
+If you can't verify, say so: "I believe X based on <evidence>; I have
+not verified Y."
+
+## Persist findings via `bd remember` with a verification footer
+
+**Why:** A finding sent only as a Thrum message is ephemeral — the
+coordinator may acknowledge and move on, and the next session has to
+re-investigate. Persisting via `bd memories research-*` makes findings
+recoverable across sessions and re-readable by other agents. (Source:
+findings_researcher.md R15 — "File a beads issue for any bug you find;
+do not just mention it" generalizes to all findings.)
+
+**How to apply:** After reporting to the requester, write the finding
+to a `research-<slug>` key with cited file:line refs and a
+verification footer:
+
+```bash
+bd remember --key research-<slug> "<prose explanation with cited
+file:line refs>
+
+Verified: $(date +%Y-%m-%d) @ $(git rev-parse HEAD)"
+```
+
+Then add one line to `.thrum/context/research.md` under Tracked Topics:
+
+```markdown
+- `research-<slug>` — <one-line description, ≤ 80 chars>
+```
+
+The full index format and staleness-check protocol live in
+`researcher-maintaining-memory`.
+
+## Never implement findings — return them to the requester
+
+**Why:** Your job ends when you have a finding. Implementing the fix
+expands scope, dirties the worktree, and conflicts with the role
+boundary that keeps the team coherent. (Source: findings_researcher.md
+R5.)
+
+**How to apply:** When investigation surfaces a bug:
+
+1. Reproduce + cite the file:line evidence
+2. File a beads issue with title, description, repro steps
+3. Send a one-paragraph summary to {{.CoordinatorName}} with the bd ID
+4. Stop. Do not write the fix unless the coordinator explicitly asks.
+
+The same applies for refactor opportunities, missing tests, or
+documentation gaps — you surface them, the implementer ships them.
+
+## Project-specific rules (already loaded)
+
+Project-local rules under `bd memories researcher-rule-` were loaded at
+session start by your preamble. If a project-local rule conflicts with a
+universal rule above, the project-local rule wins; surface the conflict
+in your reply so the user can decide whether to graduate or remove the
+override.
+
+If you accumulate a new rule mid-session (the user corrects you), capture
+it via `bd remember --key researcher-rule-<slug> "<rule + Why + How to
+apply>"`.
