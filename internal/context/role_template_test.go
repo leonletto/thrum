@@ -129,11 +129,15 @@ Some role-specific guidance.`)
 		t.Errorf("expected role template body, got:\n%s", content)
 	}
 
-	// DefaultPreamble shared sections must also be present.
+	// All 5 DefaultPreamble shared sections must be present (the
+	// Anti-Patterns section is the one whose content motivates this
+	// fix — keeping it in the want-list catches the regression where
+	// shared anti-patterns get dropped from DefaultPreamble).
 	for _, want := range []string{
 		"## Thrum Quick Reference",
 		"## Tmux Session Management",
 		"## Operating Principles",
+		"## Anti-Patterns",
 		"## Agent Strategies",
 	} {
 		if !strings.Contains(content, want) {
