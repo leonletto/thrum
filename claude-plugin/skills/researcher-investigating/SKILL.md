@@ -22,6 +22,26 @@ report back. For research across N > 6 items, invoke
 `efficient-multi-agent-research` instead of bespoke dispatch — it
 handles partition + parallelization + consolidation.
 
+## Verify the actual state — don't answer from recall
+
+**Why:** Reporting from memory of past panes, files, or commits produces
+over-claimed findings. The preamble carries the invariant; this rule
+carries the operational depth — the specific commands to run before
+trusting any state claim.
+
+**How to apply:**
+
+- **Pane state.** Run `tmux capture-pane -p -t <pane>` (or the runtime
+  equivalent) before reporting "the pane shows X" / "the prompt fired".
+- **Code state.** Use the Read tool or `git show HEAD:<path>` before
+  reporting "function Y is at line Z" or "file X handles case W".
+- **Beads state.** Run `bd show <id>` before reporting "task is
+  in_progress" / "issue is closed" — your remembered idea of the state
+  may be stale.
+
+If you can't verify, say so explicitly: "I believe X based on
+<evidence>; I have not verified Y."
+
 ## Scope queries before deep-diving — return early when unclear
 
 **Why:** A vague request ("investigate the auth flow") burns hours
