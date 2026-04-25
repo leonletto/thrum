@@ -1,7 +1,9 @@
 package roleconfig
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,7 +42,15 @@ func DriftStatus(thrumDir string) (DriftReport, error) {
 
 	cfg, err := Load(thrumDir)
 	if err != nil {
-		return report, fmt.Errorf("load role_config: %w", err)
+		// A wholly-missing config.json is the same shape as "no role_config
+		// block": treat as cfg==nil so the migration check still fires for
+		// repos predating config.json creation. Only propagate genuine
+		// read/parse failures.
+		if errors.Is(err, fs.ErrNotExist) {
+			cfg = nil
+		} else {
+			return report, fmt.Errorf("load role_config: %w", err)
+		}
 	}
 
 	if cfg == nil {

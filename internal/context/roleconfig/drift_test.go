@@ -130,6 +130,49 @@ func TestDriftStatus_BodyDiffHint(t *testing.T) {
 	}
 }
 
+// TestDriftStatus_MigrationHint_NoConfigJsonAtAll covers repos predating
+// config.json creation: when the file is wholly absent, the migration check
+// must still fire if rendered templates exist. Without the os.IsNotExist
+// guard in DriftStatus, Load would propagate a hard read error and the
+// migration hint would never surface.
+func TestDriftStatus_MigrationHint_NoConfigJsonAtAll(t *testing.T) {
+	thrumDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(thrumDir, "role_templates"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(thrumDir, "role_templates", "coordinator.md"),
+		[]byte("# coord\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// No config.json written.
+
+	report, err := DriftStatus(thrumDir)
+	if err != nil {
+		t.Fatalf("DriftStatus: %v", err)
+	}
+	if len(report.Hints) != 1 || report.Hints[0].Code != HintCodeRolesConfigMigration {
+		t.Fatalf("expected single migration hint when config.json absent, got %+v", report.Hints)
+	}
+}
+
+// TestHintCodeStringsMatchCanonical pins the local hint-code string
+// constants in drift.go against their canonical wire values. internal/cli
+// holds a duplicate set (HintRolesConfig*) — re-declared because cli
+// imports roleconfig, not the other way round. Without this check, a rename
+// in either package would silently break the bridge.
+func TestHintCodeStringsMatchCanonical(t *testing.T) {
+	cases := []struct{ got, want string }{
+		{HintCodeRolesConfigMigration, "roles.config.migration"},
+		{HintCodeRolesConfigSchemaBump, "roles.config.schema-bump"},
+		{HintCodeRolesConfigBodyDiff, "roles.config.body-diff"},
+	}
+	for _, c := range cases {
+		if c.got != c.want {
+			t.Errorf("hint code drift: got %q, want %q", c.got, c.want)
+		}
+	}
+}
+
 // TestDriftStatus_PrecedenceMigrationOverSchemaBump locks in that when the
 // migration condition holds, no schema/body hints fire (early return).
 func TestDriftStatus_PrecedenceMigrationOverSchemaBump(t *testing.T) {

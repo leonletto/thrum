@@ -7041,6 +7041,14 @@ func runRolesRefresh(thrumDir string) error {
 
 	refreshed := 0
 	for role, settings := range cfg.Roles {
+		// Defense in depth: role keys come from .thrum/config.json, which is
+		// internal-controlled, but a role string of "../evil" would resolve
+		// to .thrum/evil.md when joined with rtDir. The embedded FS already
+		// rejects such paths inside RenderShipped, but match the explicit
+		// guard pattern used by runPreambleInit / worktreeCreateCmd.
+		if strings.ContainsAny(role, "/\\") || strings.Contains(role, "..") {
+			return fmt.Errorf("invalid role name %q in role_config: must not contain /, \\, or parent references", role)
+		}
 		body, err := roleconfig.RenderShipped(role, settings.Autonomy, settings.Scope, roleconfig.RenderEnv{})
 		if err != nil {
 			return fmt.Errorf("render %s/%s: %w", role, settings.Autonomy, err)
