@@ -35,17 +35,17 @@ func TestNoDuplicateCodes(t *testing.T) {
 }
 
 // TestCatalogSize locks the catalog size. Bump when adding codes in a
-// deliberate review. Current catalog is 12:
+// deliberate review. Current catalog is 15:
 // 6 tmux.create (session-exists, not-a-worktree, identity-exists-alive,
 // identity-exists-stale, next-launch, identity-replaced),
-// send.recipient-stale, init.next-quickstart, and
+// send.recipient-stale, init.next-quickstart,
 // 4 snapshot.save (no-jsonl, no-pid, extract-failed, jsonl-not-found)
 // added for thrum-ufv5.7 to surface silent failures of
-// thrum tmux snapshot save, where jsonl-not-found arrived in the
-// dual-review fixup to distinguish typo'd --jsonl paths from read/parse
-// failures.
+// thrum tmux snapshot save, and 3 roles.config (migration, schema-bump,
+// body-diff) added for thrum-z2et.20.3 to surface role-template drift
+// in `thrum prime`.
 func TestCatalogSize(t *testing.T) {
-	const expected = 12
+	const expected = 15
 	if got := len(AllHintCodes); got != expected {
 		t.Errorf("AllHintCodes size = %d, want %d (update this test deliberately when catalog grows)", got, expected)
 	}
@@ -75,6 +75,9 @@ var constNameForCode = map[string]string{
 	HintSnapshotSaveNoPID:             "HintSnapshotSaveNoPID",
 	HintSnapshotSaveExtractFailed:     "HintSnapshotSaveExtractFailed",
 	HintSnapshotSaveJSONLNotFound:     "HintSnapshotSaveJSONLNotFound",
+	HintRolesConfigMigration:          "HintRolesConfigMigration",
+	HintRolesConfigSchemaBump:         "HintRolesConfigSchemaBump",
+	HintRolesConfigBodyDiff:           "HintRolesConfigBodyDiff",
 }
 
 // TestEveryCodeHasSourceReference ensures every code in AllHintCodes is
