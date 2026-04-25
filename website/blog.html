@@ -4,21 +4,34 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark light">
-  <title>About — Thrum</title>
-  <meta name="description" content="About the developer behind Thrum">
+  <title>Blog — Thrum</title>
+  <meta name="description" content="Notes from the Thrum project — features, workflows, and how to coordinate AI agents without losing the plot.">
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Blog — Thrum">
+  <meta property="og:description" content="Notes from the Thrum project — features, workflows, and how to coordinate AI agents without losing the plot.">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/blog.html">
+  <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Blog — Thrum">
+  <meta name="twitter:description" content="Notes from the Thrum project — features, workflows, and how to coordinate AI agents without losing the plot.">
+  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/theme.css">
   <link rel="stylesheet" href="css/landing.css">
+  <link rel="stylesheet" href="css/blog.css">
   <script>
     (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
   </script>
 </head>
 <body>
-
-  <!-- Header -->
   <header class="site-header">
     <div class="container">
       <nav class="header-nav">
@@ -29,8 +42,8 @@
         <div class="nav-links">
           <a href="index.html" class="nav-link">Home</a>
           <a href="docs.html" class="nav-link">Docs</a>
-          <a href="blog.html" class="nav-link">Blog</a>
-          <a href="about.html" class="nav-link nav-link-active">About</a>
+          <a href="blog.html" class="nav-link nav-link-active">Blog</a>
+          <a href="about.html" class="nav-link">About</a>
           <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
           <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
             <span class="icon-sun">&#x2600;</span>
@@ -41,36 +54,36 @@
     </div>
   </header>
 
-  <!-- About -->
-  <section class="section" style="padding-top: 120px;">
+  <section class="section blog-index-hero">
     <div class="container-narrow">
-      <h1 class="section-title">About Thrum</h1>
+      <h1 class="section-title">Blog</h1>
       <p class="section-lead" style="text-align: left;">
-        Thrum is built and maintained by <strong>Leon Letto</strong> &mdash; a software engineer focused on
-        AI agent tooling, developer infrastructure, and multi-agent coordination systems.
+        Notes from the Thrum project &mdash; how features work, how to use them,
+        and how to keep your head above water when several AI agents are working
+        for you at once. Some posts include short videos.
       </p>
+    </div>
+  </section>
 
-      <div class="card" style="margin-top: 2rem; padding: 2rem;">
-        <h3 style="margin-top: 0;">Leon Letto</h3>
-        <p>
-          Creator of Thrum, a persistent messaging system designed to make AI agents
-          coordinate effectively across sessions, machines, and teams.
-        </p>
-        <p style="margin-bottom: 0;">
-          <a href="https://leonletto.github.io" target="_blank" rel="noopener">leonletto.github.io</a>
-          &nbsp;&middot;&nbsp;
-          <a href="https://linkedin.com/in/leonletto" target="_blank" rel="noopener">LinkedIn</a>
-          &nbsp;&middot;&nbsp;
-          <a href="https://github.com/leonletto" target="_blank" rel="noopener">GitHub</a>
-        </p>
-        <p class="text-muted" style="margin-top: 1rem; margin-bottom: 0; font-size: 0.875rem;">
-          Reach out via LinkedIn for questions, collaboration, or feedback.
-        </p>
+  <section class="section section-alt blog-index-list">
+    <div class="container-narrow">
+      <div class="post-grid">
+<article class="card post-card">
+            <a href="blog/why-thrum-exists.html" class="post-card-link">
+              <div class="post-card-meta">
+                <span class="post-date">April 24, 2026</span>
+                
+              </div>
+              <h3 class="post-card-title">Why Thrum Exists</h3>
+              <p class="post-card-description">I started Thrum because I was tired of being the integration layer between my own agents. This is the story of what that actually looked like.</p>
+              <div class="post-tags post-tags-small"><span class="post-tag">origin</span><span class="post-tag">intro</span></div>
+              <span class="post-card-readmore">Read more &rarr;</span>
+            </a>
+          </article>
       </div>
     </div>
   </section>
 
-  <!-- Footer -->
   <footer class="site-footer">
     <div class="container">
       <div class="footer-content">
