@@ -98,7 +98,7 @@ R5.)
 
 1. Reproduce + cite the file:line evidence
 2. File a beads issue with title, description, repro steps
-3. Send a one-paragraph summary to {{.CoordinatorName}} with the bd ID
+3. Send a one-paragraph summary to the coordinator with the bd ID
 4. Stop. Do not write the fix unless the coordinator explicitly asks.
 
 The same applies for refactor opportunities, missing tests, or
