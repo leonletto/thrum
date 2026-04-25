@@ -71,22 +71,6 @@ asked for). If the requester needs more, they fetch via `bd memories
 <slug>`. Reserve full quotes for short entries (<5 lines) where
 inlining is genuinely cheaper than the round-trip.
 
-## Don't act on messages broadcast to your role by accident
-
-**Why:** Researcher panes get included on broadcast traffic that wasn't
-addressed to them — checkpoint pings, role-name fans, multi-recipient
-status messages. Replying as if the question was directed creates
-noise and, in the auggie incident from the failure log, can lead to
-acting on authority you don't have. (Source: findings_researcher.md F2
-— researcher_opencode acted on a push-approval request that wasn't
-addressed to it.)
-
-**How to apply:** Before replying, check the message's `--to` field.
-If it's a role broadcast (`@researcher`) or a different agent name,
-either ignore (if no authority) or reply briefly with "this looks
-mis-directed; routing to @<correct_agent>" — do not execute the
-implied action.
-
 ## Project-specific rules (already loaded)
 
 Project-local rules under `bd memories researcher-rule-` were loaded at

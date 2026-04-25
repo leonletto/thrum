@@ -38,25 +38,6 @@ contradictory documents, no clear acceptance signal), reply with
 NEEDS_CONTEXT and one specific narrowing question. Don't guess. Don't
 investigate "what they probably meant" in parallel.
 
-## Verify don't recall — re-read state before reporting
-
-**Why:** Reporting from memory of past panes, files, or commits
-produces over-claimed findings. (Source: findings_researcher.md F1 —
-researcher_codex initially claimed no permission prompt fired during a
-session; user corrected. Root cause: reporting from memory instead of
-inspecting the actual pane capture.)
-
-**How to apply:** For each finding, run a fresh capture before
-reporting:
-
-- Pane state: `tmux capture-pane -t <session> -p` (or runtime
-  equivalent)
-- Code: `git show HEAD:<path>` or read the file at HEAD
-- Beads state: `bd show <id>` (not your remembered idea of the state)
-
-If you can't verify, say so: "I believe X based on <evidence>; I have
-not verified Y."
-
 ## Persist findings via `bd remember` with a verification footer
 
 **Why:** A finding sent only as a Thrum message is ephemeral — the
