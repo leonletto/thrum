@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Scenario: restart-snapshot-preamble
+#
+# What this verifies: when an agent saves a restart snapshot then its session
+# is restarted, the next SessionStart hook injects a loud action-required
+# preamble pointing at the Resume Plan inside the previous-session snapshot.
+#
+# Why it matters: without the preamble, agents read the snapshot section as
+# background reading and skip the actionable Resume Plan steps.
+#
+# Fixture mutation: writes a snapshot in IMPL repo, restarts IMPL pane.
+# Coord pane is left untouched (stable driver surface).
+
+SID="02-restart-snapshot-preamble"
+PANE="$IMPL_PANE"
+REPO="$IMPL_REPO"
+
+# Step 1: have the implementer save a restart snapshot
+send_command "$PANE" "! thrum tmux snapshot save --reason 'release-test 02 snapshot precondition'"
+# Wait for the .md to appear on disk
+elapsed=0
+while [ ! -f "$REPO/.thrum/restart/test_implementer.md" ] && [ "$elapsed" -lt 30 ]; do
+  sleep 1
+  elapsed=$((elapsed + 1))
+done
+if [ ! -f "$REPO/.thrum/restart/test_implementer.md" ]; then
+  emit_fail "$SID" "snapshot-precondition" "snapshot file at $REPO/.thrum/restart/test_implementer.md" "(file not present after 30s)" "scenarios/${SID}.test.sh:$LINENO"
+  return 0
+fi
+
+# Step 2: restart the IMPL pane (fires a fresh SessionStart with the snapshot
+# embedded in the briefing).
+thrum tmux restart impl --force >/dev/null
+
+# Step 3: wait for the NEW SessionStart attachment to appear in IMPL JSONL.
+#
+# Race-condition note: `jsonl_for_repo` uses `ls -t | head -n1` to find the
+# newest JSONL. Right after `thrum tmux restart`, the OLD JSONL still exists
+# with its OLD SessionStart entries. Until the new claude process creates its
+# new JSONL file, `wait_for_session_start` would match the stale SessionStart
+# from the old file. The 5-second sleep gives claude time to create its new
+# JSONL before polling starts. Conservative but reliable; if performance
+# matters later, replace with: capture the pre-restart JSONL path, poll until
+# `jsonl_for_repo` returns a DIFFERENT path, then call wait_for_session_start.
+sleep 5
+if ! wait_for_session_start "$REPO" 60; then
+  emit_fail "$SID" "restart-session-start" "new SessionStart attachment within 60s" "(none observed)" "scenarios/${SID}.test.sh:$LINENO"
+  return 0
+fi
+
+# Step 4: three assertions on the new SessionStart attachment.
+send_command "$PANE" "! $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh loud_preamble \"🛑 ACTION REQUIRED\" SessionStart:startup"
+assert_jsonl "$PANE" "$REPO" "$SID" "loud-preamble" "VERIFIED loud_preamble" \
+  "scenarios/${SID}.test.sh:$LINENO"
+
+send_command "$PANE" "! $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh section_heading \"# Previous Session Context\" SessionStart:startup"
+assert_jsonl "$PANE" "$REPO" "$SID" "section-heading" "VERIFIED section_heading" \
+  "scenarios/${SID}.test.sh:$LINENO"
+
+send_command "$PANE" "! $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh resume_plan \"## Resume Plan\" SessionStart:startup"
+assert_jsonl "$PANE" "$REPO" "$SID" "resume-plan" "VERIFIED resume_plan" \
+  "scenarios/${SID}.test.sh:$LINENO"
