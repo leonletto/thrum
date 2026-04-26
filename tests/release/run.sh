@@ -7,21 +7,55 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HELPERS_DIR="$SCRIPT_DIR/helpers"
 SCENARIOS_DIR="$SCRIPT_DIR/scenarios"
 
-# Preflight: required tools
+# Preflight
 for tool in thrum tmux jq git claude; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "ERROR: required tool '$tool' not found in PATH" >&2
     exit 2
   fi
 done
-
-# Preflight: scripts/check-context-value.sh exists + executable
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CHECK_CONTEXT="$REPO_ROOT/scripts/check-context-value.sh"
 if [ ! -x "$CHECK_CONTEXT" ]; then
   echo "ERROR: $CHECK_CONTEXT missing or not executable" >&2
   exit 2
 fi
+export THRUM_RELEASE_REPO_ROOT="$REPO_ROOT"  # scenarios may need it
 
-# TODO (Task 6+): source helpers/all.sh, run_setup, dispatch scenarios, run_teardown, summary
-echo "skeleton OK; helpers and scenarios not yet wired"
+# shellcheck disable=SC1091
+source "$HELPERS_DIR/all.sh"
+
+# Optional: scenario filter. If args given, treat as glob filters within scenarios/.
+SCENARIO_FILTER="${1:-*.test.sh}"
+SCENARIOS=()
+while IFS= read -r f; do SCENARIOS+=("$f"); done < <(
+  cd "$SCENARIOS_DIR" && ls $SCENARIO_FILTER 2>/dev/null | sort
+)
+if [ "${#SCENARIOS[@]}" -eq 0 ]; then
+  echo "ERROR: no scenarios matched '$SCENARIO_FILTER' under $SCENARIOS_DIR" >&2
+  exit 2
+fi
+
+RUN_START=$(date +%s)
+trap 'run_teardown' EXIT
+
+if ! run_setup; then
+  echo "ERROR: run-level setup failed; aborting (no scenarios run)" >&2
+  exit 2
+fi
+
+for scenario_file in "${SCENARIOS[@]}"; do
+  sid="${scenario_file%.test.sh}"
+  rel="scenarios/$scenario_file"
+  scenario_start "$sid" "$rel"
+  # shellcheck disable=SC1090
+  if ! source "$SCENARIOS_DIR/$scenario_file"; then
+    emit_fail "$sid" "scenario-source" "scenario sourced cleanly" "non-zero exit while sourcing" "$rel"
+  fi
+  scenario_end "$sid"
+done
+
+DUR=$(( $(date +%s) - RUN_START ))
+summary_block "$DUR"
+
+[ "$RT_COUNT_FAIL" -eq 0 ]
