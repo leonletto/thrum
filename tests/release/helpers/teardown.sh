@@ -10,9 +10,8 @@ run_teardown() {
 
   thrum tmux kill coord 2>/dev/null || true
   thrum tmux kill impl 2>/dev/null || true
-  # Daemon was started by `thrum init` in $BASE/main, not $REPO (the worktree).
-  if [ -n "${BASE:-}" ] && [ -d "$BASE/main" ]; then
-    (cd "$BASE/main" && thrum daemon stop) >/dev/null 2>&1 || true
+  if [ -n "${REPO:-}" ] && [ -d "$REPO" ]; then
+    (cd "$REPO" && thrum daemon stop) >/dev/null 2>&1 || true
   fi
   rm -rf "$BASE"
   unset THRUM_HOME    # leave caller env clean
