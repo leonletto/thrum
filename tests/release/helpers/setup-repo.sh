@@ -9,18 +9,28 @@ run_setup() {
   RUNID="$(date +%Y%m%dT%H%M%S)-$$"
   BASE="$HOME/.thrum_release_tests/$RUNID"
   REPO="$BASE/repo"
-  mkdir -p "$REPO"
+  mkdir -p "$BASE"
   # shellcheck disable=SC2046
   unset $(env | grep -E '^THRUM_' | cut -d= -f1) 2>/dev/null || true
 
   # B. Main repo + coordinator
+  # Note: thrum tmux create requires --cwd to be a true git worktree
+  # (IsGitWorktree returns false when git-dir == git-common-dir, which is the
+  # case for a fresh `git init`). So we create the main repo at $BASE/main and
+  # add $REPO as a worktree from it.
   (
-    cd "$REPO" || exit 1
+    mkdir -p "$BASE/main" || exit 1
+    cd "$BASE/main" || exit 1
     git init --initial-branch=main >/dev/null
     git config user.email release-tests@thrum.local
     git config user.name "Release Tests"
     echo "# Release test repo $RUNID" > README.md
     git add . && git commit -m "Initial commit" >/dev/null
+    # Detach HEAD so 'main' is free for the worktree checkout (git refuses to
+    # check out a branch that's already checked out elsewhere).
+    git checkout --detach >/dev/null 2>&1
+    git worktree add "$REPO" main >/dev/null
+    cd "$REPO" || exit 1
     thrum init >/dev/null
   ) || { echo "ERROR: B/repo init failed" >&2; return 1; }
 
