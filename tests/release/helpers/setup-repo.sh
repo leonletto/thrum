@@ -44,7 +44,11 @@ run_setup() {
   # sufficient — no need to wrap each CLI call with tmux-exec on the
   # driver side. Pane-side thrum calls (inside coord/impl) resolve via
   # their --cwd correctly without THRUM_HOME.
-  export THRUM_HOME="$REPO"
+  #
+  # NOTE: points at $BASE/main (where `thrum init` ran), not $REPO. $REPO is
+  # a secondary worktree; its .thrum/ lives in the main repo, and the daemon
+  # socket is at $BASE/main/.thrum/var/thrum.sock.
+  export THRUM_HOME="$BASE/main"
 
   thrum tmux create coord \
     --cwd "$REPO" \
