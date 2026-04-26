@@ -424,11 +424,21 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 	}
 
 	// Section 4.5: Restart Snapshot (if present — consumed from .thrum/restart/)
+	//
+	// Heading text "# Previous Session Context" is load-bearing: the
+	// claude-plugin SessionStart hook (inject-prime-context.sh) greps for
+	// this exact string to decide whether to hoist the loud action-required
+	// preamble at the top of additionalContext. Do not rename without
+	// updating the hook script in lockstep.
 	if ctx.RestartSnapshot != "" {
 		out.WriteString("\n# Previous Session Context\n\n")
-		out.WriteString("The following is a conversation log from your previous ")
-		out.WriteString("session. Use it to understand what was accomplished and ")
-		out.WriteString("continue from where the previous session left off.\n\n")
+		out.WriteString("**🛑 ACTION REQUIRED — read this section before responding to the user or doing other work.**\n\n")
+		out.WriteString("The block below is a conversation snapshot **you** wrote in your previous session, immediately before restarting. It contains a `## Resume Plan` sub-section with concrete numbered steps that past-you decided future-you must execute. This is not background reading — it is your own message-to-self.\n\n")
+		out.WriteString("**Required steps:**\n\n")
+		out.WriteString("1. Read the `## Resume Plan` sub-section in full.\n")
+		out.WriteString("2. Execute its numbered steps in order.\n")
+		out.WriteString("3. Only after the plan is complete, return to the rest of this briefing or any pending user prompt.\n\n")
+		out.WriteString("---\n\n")
 		out.WriteString(ctx.RestartSnapshot)
 		out.WriteString("\n")
 	}

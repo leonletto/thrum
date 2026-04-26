@@ -652,10 +652,13 @@ func TestFormatPrimeContext_RestartSnapshot(t *testing.T) {
 	}
 	output := FormatPrimeContext(ctx)
 	if !strings.Contains(output, "# Previous Session Context") {
-		t.Error("missing Previous Session Context section")
+		t.Error("missing Previous Session Context section (heading is load-bearing for hook grep)")
 	}
-	if !strings.Contains(output, "conversation log from your previous session") {
-		t.Error("missing restart snapshot description")
+	if !strings.Contains(output, "ACTION REQUIRED") {
+		t.Error("missing loud action-required framing on restart snapshot")
+	}
+	if !strings.Contains(output, "Resume Plan") {
+		t.Error("missing Resume Plan pointer in framing")
 	}
 	if !strings.Contains(output, "=== USER ===") {
 		t.Error("restart snapshot content not included")
