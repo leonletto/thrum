@@ -26,12 +26,14 @@ run_setup() {
     git config user.name "Release Tests"
     echo "# Release test repo $RUNID" > README.md
     git add . && git commit -m "Initial commit" >/dev/null
+    # thrum init in the MAIN repo: a worktree's `thrum init` refuses unless
+    # the main repo is initialized first ("this is a git worktree, but the
+    # main repo is not initialized"). The worktree inherits .thrum/ from main.
+    thrum init >/dev/null
     # Detach HEAD so 'main' is free for the worktree checkout (git refuses to
     # check out a branch that's already checked out elsewhere).
     git checkout --detach >/dev/null 2>&1
     git worktree add "$REPO" main >/dev/null
-    cd "$REPO" || exit 1
-    thrum init >/dev/null
   ) || { echo "ERROR: B/repo init failed" >&2; return 1; }
 
   # PIN driver-side thrum CLI calls to the ephemeral repo's daemon.
@@ -63,11 +65,13 @@ run_setup() {
     || { echo "ERROR: coord whoami did not return expected agent_id" >&2; return 1; }
 
   # C. Implementer worktree
-  # C.1 patch worktrees config
+  # C.1 patch worktrees config in the MAIN repo (canonical .thrum/ location;
+  # the worktree at $REPO inherits via git's worktree relationship).
+  local MAIN_REPO="$BASE/main"
   jq --arg bp "$BASE/" \
     '.worktrees = {"base_path": $bp, "beads_enabled": false, "thrum_enabled": true}' \
-    "$REPO/.thrum/config.json" > "$REPO/.thrum/config.json.tmp" \
-    && mv "$REPO/.thrum/config.json.tmp" "$REPO/.thrum/config.json" \
+    "$MAIN_REPO/.thrum/config.json" > "$MAIN_REPO/.thrum/config.json.tmp" \
+    && mv "$MAIN_REPO/.thrum/config.json.tmp" "$MAIN_REPO/.thrum/config.json" \
     || { echo "ERROR: C.1 worktrees config patch failed" >&2; return 1; }
 
   # C.2 create the worktree FROM the coordinator pane
