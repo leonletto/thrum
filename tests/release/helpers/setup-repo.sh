@@ -5,6 +5,21 @@
 
 # run_setup → exports the env vars above. Returns non-zero on any setup failure.
 run_setup() {
+  # Capture tmux-exec path BEFORE step A unsets all THRUM_* env vars (which
+  # would also strip THRUM_RELEASE_REPO_ROOT set by run.sh).
+  #
+  # Driver-side thrum calls run through scripts/tmux-exec to break the PID
+  # ancestry chain (spec § 4 lines 206-212). Otherwise thrum walks up from
+  # the driver's bash → claude (this script's parent) and adopts the wrong
+  # identity / fires cross-worktree guards. tmux-exec runs each command in
+  # an ephemeral tmux pane whose ancestry chain ends at the tmux server, no
+  # claude in sight.
+  local TE="$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec"
+  if [ ! -x "$TE" ]; then
+    echo "ERROR: $TE missing or not executable" >&2
+    return 1
+  fi
+
   # A. Prep
   RUNID="$(date +%Y%m%dT%H%M%S)-$$"
   BASE="$HOME/.thrum_release_tests/$RUNID"
@@ -13,7 +28,6 @@ run_setup() {
   # shellcheck disable=SC2046
   unset $(env | grep -E '^THRUM_' | cut -d= -f1) 2>/dev/null || true
 
-  # B. Main repo + coordinator
   (
     cd "$REPO" || exit 1
     git init --initial-branch=main >/dev/null
@@ -21,8 +35,40 @@ run_setup() {
     git config user.name "Release Tests"
     echo "# Release test repo $RUNID" > README.md
     git add . && git commit -m "Initial commit" >/dev/null
-    thrum init >/dev/null
-  ) || { echo "ERROR: B/repo init failed" >&2; return 1; }
+  ) || { echo "ERROR: B/git init failed" >&2; return 1; }
+
+  # --runtime claude bypasses the interactive prompt (when stdin is a tty,
+  # which it is inside a tmux-exec pane).
+  "$TE" exec --cwd "$REPO" --clean -- thrum init --runtime claude \
+    || { echo "ERROR: B/thrum init failed" >&2; return 1; }
+
+  "$TE" exec --cwd "$REPO" --clean -- thrum quickstart \
+      --name test_coordinator_main \
+      --role coordinator \
+      --module all \
+      --intent "Release test coordinator" \
+    || { echo "ERROR: B/thrum quickstart failed" >&2; return 1; }
+
+  # thrum tmux start creates the session, launches claude, then auto-attaches.
+  # The attach blocks until the tty closes; tmux-exec's --timeout bounds it.
+  # Session + runtime launch happen synchronously before the attach attempt.
+  : > /tmp/zh4p-tmux-start.log
+  "$TE" exec --cwd "$REPO" --clean --timeout 30 -- thrum tmux start --name coord \
+    > /tmp/zh4p-tmux-start.log 2>&1 || true
+
+  # TROUBLESHOOTING STOP: halt after init + quickstart + tmux start so we
+  # can examine what landed before continuing.
+  echo "=== STOP after init + quickstart + tmux start ==="
+  echo "REPO=$REPO"
+  echo "--- /tmp/zh4p-tmux-start.log ---"
+  cat /tmp/zh4p-tmux-start.log 2>&1 || true
+  echo "--- tmux list-sessions ---"
+  tmux list-sessions 2>&1 || true
+  echo "--- ls -la \$REPO/.thrum/identities/ ---"
+  ls -la "$REPO/.thrum/identities/" 2>&1 || true
+  echo "--- cat \$REPO/.thrum/config.json ---"
+  cat "$REPO/.thrum/config.json" 2>&1 || true
+  return 0
 
   # PIN driver-side thrum CLI calls to the ephemeral repo's daemon.
   # Without this, every subsequent `thrum tmux create/send/kill` in this
