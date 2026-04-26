@@ -47,6 +47,36 @@ if [ -z "$PRIME_OUTPUT" ]; then
   exit 0
 fi
 
+# Detect a restart snapshot embedded in the briefing. `thrum prime` includes
+# it under the `# Previous Session Context` heading when `.thrum/restart/<agent>.md`
+# exists. Without prominent framing, the agent treats it as background reading
+# and skips the actionable Resume Plan inside. Hoist a loud action-required
+# block to the very top so the directive is impossible to miss.
+HAS_RESTART=0
+if printf '%s' "$PRIME_OUTPUT" | grep -q '^# Previous Session Context'; then
+  HAS_RESTART=1
+fi
+
+if [ "$HAS_RESTART" = "1" ]; then
+  cat <<'EOF'
+# 🛑 ACTION REQUIRED — Instructions From Your Previous Session
+
+**You restarted from a prior session and left yourself a Resume Plan.** It is in the **`# Previous Session Context`** section of the briefing below. That plan is not background reading — it is your own message-to-self with concrete next steps.
+
+**Before doing anything else:**
+
+1. Scroll to the `# Previous Session Context` section of the briefing.
+2. Read the **`## Resume Plan`** sub-section in full.
+3. Execute its numbered steps in order.
+4. Only then continue to the rest of the briefing or the user's prompt.
+
+The Resume Plan was written by *you* in the previous session specifically because you knew this future you would need it. Trust it and act on it.
+
+---
+
+EOF
+fi
+
 cat <<EOF
 # Thrum Session Briefing (auto-loaded)
 
