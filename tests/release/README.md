@@ -96,44 +96,38 @@ should need; reach for these before reinventing.
 | `wait_for_pane_idle <pane> [seconds]` | Block until pane render stabilizes (≥1s of identical capture-pane hashes). Use BETWEEN sends in panes whose response is large (e.g. coord pane post-prime — `! cmd` rendering can exceed `send_command`'s default 10s idle gate, which leaks the next keystroke into mid-render). |
 | `wait_for_jsonl_match <repo> <jq-filter> [timeout]` | Generic JSONL poller. Use for assertions that don't fit the bash-stdout shape. |
 | `wait_for_bash_stdout_contains <repo> <substring> [timeout]` | Specialization of the above for `<bash-stdout>` substring matches. |
+| `spawn_sub_fixture_claude <tmux-name> <cwd> [launch-cmd]` | Spawn a non-thrum-managed claude pane in a fresh cwd. Handles the first-time-cwd "trust this folder?" dialog automatically (wait_for_pane_idle gates the confirming Enter). Optional `launch-cmd` (default `"claude"`) overrides the launch invocation, e.g. for PATH-stripped variants. |
+| `kick_session_then_wait <pane> <cwd> [timeout]` | Force a fresh claude pane to flush its first JSONL before any `assert_jsonl`. Sends `! true` and waits for the SessionStart attachment, so subsequent helpers don't ERROR with "no project dir at …". |
 
 ## Spawning sub-fixture claude panes (scenario 04 pattern)
 
 Scenarios that need additional claude panes BEYOND the run-level
 coord/impl (e.g. fallback-path tests in their own cwds) should use
-**raw `tmux new-session` + `tmux send-keys 'claude' Enter`** rather
-than `thrum tmux create`. `thrum tmux create` enforces a
+the `spawn_sub_fixture_claude` + `kick_session_then_wait` helpers
+rather than `thrum tmux create`. `thrum tmux create` enforces a
 worktree-identity guard and rejects calls that target directories
 outside the repo's worktree set ("caller pane belongs to a different
 worktree" error).
 
-Required pattern:
+```bash
+spawn_sub_fixture_claude "$tmux_name" "$cwd"
+kick_session_then_wait "$tmux_name" "$cwd"
+# Now safe to run real assertions via send_command + assert_jsonl…
+```
+
+For PATH-stripped variants (e.g. scenario 04A's no-thrum-binary case),
+pass a custom launch command:
 
 ```bash
-tmux new-session -d -s "$tmux_name" -x 500 -y 50 -c "$cwd"
-wait_for_pane_idle "$tmux_name" 10        # let shell init
-tmux send-keys -t "$tmux_name" "claude"
-sleep 0.5
-tmux send-keys -t "$tmux_name" Enter
-# Trust dialog (option 1 pre-highlighted) — wait for it to render
-# then send a second Enter to confirm.
-wait_for_pane_idle "$tmux_name" 30
-tmux send-keys -t "$tmux_name" Enter
-# Kick the session — claude writes ZERO JSONL until first user input,
-# but check-context-value.sh ERRORs with "no project dir" if the
-# project dir hasn't been created yet. Send a no-op then wait for
-# the SessionStart attachment to confirm JSONL is on disk.
-send_command "$tmux_name" "! true"
-wait_for_session_start "$cwd" 60
-# Now safe to run real assertions...
+spawn_sub_fixture_claude "$tmux_name" "$cwd" \
+  "env PATH='$pathdir:/usr/bin:/bin' claude"
 ```
 
 If the sub-fixture launches claude with a **PATH stripped of homebrew
-bash** (e.g. scenario 04A's no-thrum-binary case), the `! cmd` subshell
-will fall back to `/bin/bash` 3.2 on macOS — which doesn't have
-`mapfile` and other bash 4+ builtins. Keep helper scripts that run
-inside such subshells bash 3.2 compatible (use `while read` loops in
-place of `mapfile`).
+bash**, the `! cmd` subshell will fall back to `/bin/bash` 3.2 on
+macOS — which doesn't have `mapfile` and other bash 4+ builtins. Keep
+helper scripts that run inside such subshells bash 3.2 compatible
+(use `while read` loops in place of `mapfile`).
 
 ## Debugging a failed scenario
 
