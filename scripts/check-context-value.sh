@@ -47,14 +47,20 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 2
 fi
 
-# Encode cwd using Claude Code's convention: leading "/" stripped, then "/"
-# and "." both replaced with "-", then a leading "-" prepended. Matches
-# internal/restart/restart.go:encodeCwd.
+# Encode cwd using Claude Code's convention: leading "/" stripped, then "/",
+# ".", and "_" all replaced with "-", then a leading "-" prepended.
+#
+# NOTE: Adds the "_" → "-" substitution missing from the Go reference at
+# internal/restart/restart.go:encodeCwd, which only handles "/" and ".".
+# Real Claude Code behavior also collapses underscores; without this, paths
+# containing "_" (e.g. ~/.thrum_release_tests/$RUNID) resolve to the wrong
+# project dir and check-context-value.sh fails with "no project dir at...".
 encode_cwd() {
   local cwd="$1"
   cwd="${cwd#/}"
   cwd="${cwd//\//-}"
   cwd="${cwd//./-}"
+  cwd="${cwd//_/-}"
   printf '%s' "-${cwd}"
 }
 
@@ -65,19 +71,23 @@ if [ ! -d "$PROJECT_DIR" ]; then
   exit 2
 fi
 
-# Pick the most-recently-modified .jsonl in the project dir (mirrors
-# FindLatestJSONLForCwd). Retry up to ~3s in case the runtime hasn't
-# flushed the SessionStart attachment to disk yet.
-JSONL=""
+# Collect all .jsonl transcripts in the project dir. Claude Code writes
+# multiple JSONL files per session (a main `<uuid>.jsonl` plus
+# `agent-<short>.jsonl` files for sub-agents spawned by SessionStart hooks
+# and the like). The needle could be in the main one, but a sub-agent
+# JSONL may briefly be the newest by mtime — so we scan all of them and
+# concatenate matching SessionStart attachments. Retry up to ~3s in case
+# the runtime hasn't flushed the SessionStart attachment to disk yet.
+JSONL_FILES=()
 for _ in 1 2 3; do
-  JSONL=$(ls -t "$PROJECT_DIR"/*.jsonl 2>/dev/null | head -n1 || true)
-  if [ -n "$JSONL" ] && [ -s "$JSONL" ]; then
+  mapfile -t JSONL_FILES < <(ls -1 "$PROJECT_DIR"/*.jsonl 2>/dev/null || true)
+  if [ "${#JSONL_FILES[@]}" -gt 0 ]; then
     break
   fi
   sleep 1
 done
 
-if [ -z "$JSONL" ] || [ ! -s "$JSONL" ]; then
+if [ "${#JSONL_FILES[@]}" -eq 0 ]; then
   echo "ERROR $TAG (no JSONL transcript found under $PROJECT_DIR)"
   exit 2
 fi
@@ -88,13 +98,34 @@ fi
 #   .attachment.hookName matches HOOK_FILTER (or any if filter empty)
 #   .attachment.content is a string (or occasionally an array of strings for
 #     skill-injected SessionStart entries — handle both shapes).
-JQ_HOOK_PREDICATE='.type=="attachment" and .attachment.hookEvent=="SessionStart"'
+#
+# HOOK_FILTER is passed via `jq --arg hookName` (NOT interpolated into the
+# filter string) so a hook name containing `"` or `\\` can't corrupt the
+# expression. The shape of the predicate differs whether the filter is set
+# or unset.
+JQ_HOOK_PREDICATE_BASE='.type=="attachment" and .attachment.hookEvent=="SessionStart"'
 if [ -n "$HOOK_FILTER" ]; then
-  JQ_HOOK_PREDICATE="${JQ_HOOK_PREDICATE} and .attachment.hookName==\"${HOOK_FILTER}\""
+  JQ_HOOK_PREDICATE="${JQ_HOOK_PREDICATE_BASE} and .attachment.hookName==\$hookName"
+else
+  JQ_HOOK_PREDICATE="$JQ_HOOK_PREDICATE_BASE"
 fi
 
-# Concatenate all matching content into a single blob, then grep.
-BLOB=$(jq -r "select(${JQ_HOOK_PREDICATE}) | .attachment.content | if type==\"array\" then join(\"\n\") else . end" "$JSONL" 2>/dev/null || true)
+# Concatenate all matching SessionStart attachment content across every
+# JSONL in the project dir into a single blob, then grep. The blob also
+# pulls .attachment.stdout — Claude Code's SessionStart attachment shape
+# is dual: some tool versions populate .content, others populate .stdout
+# (with .content empty). Reading both is required for cross-version
+# robustness.
+BLOB=""
+for f in "${JSONL_FILES[@]}"; do
+  [ -s "$f" ] || continue
+  CHUNK=$(jq -r --arg hookName "$HOOK_FILTER" \
+    "select(${JQ_HOOK_PREDICATE}) | (.attachment.content // \"\" | if type==\"array\" then join(\"\n\") else . end), (.attachment.stdout // \"\")" \
+    "$f" 2>/dev/null || true)
+  if [ -n "$CHUNK" ]; then
+    BLOB="${BLOB}${CHUNK}"$'\n'
+  fi
+done
 
 if [ -z "$BLOB" ]; then
   echo "FAILED $TAG (no matching SessionStart attachments in ${HOOK_LABEL})"
