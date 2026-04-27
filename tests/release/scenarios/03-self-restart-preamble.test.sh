@@ -78,13 +78,22 @@ fi
 wait_for_pane_idle "$PANE" 30
 
 # Step 4: three assertions on the new SessionStart attachment.
+#
+# Inter-send pane-idle waits: coord's `thrum prime` output is much larger
+# than impl's, so post-`!` claude rendering takes longer than send_command's
+# default 10s wait_for_pane_idle. Without an explicit longer settle between
+# sends, the next `!` keystroke can land mid-render and miss bash-prefix
+# mode → no <bash-stdout> entry → 30s assert_jsonl timeout → flake.
+# 30s is empirically sufficient for coord pane.
 send_command "$PANE" "! $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh loud_preamble \"🛑 ACTION REQUIRED\" SessionStart:startup"
 assert_jsonl "$PANE" "$REPO" "$SID" "loud-preamble" "VERIFIED loud_preamble" \
   "scenarios/${SID}.test.sh:$LINENO"
+wait_for_pane_idle "$PANE" 60
 
 send_command "$PANE" "! $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh section_heading \"# Previous Session Context\" SessionStart:startup"
 assert_jsonl "$PANE" "$REPO" "$SID" "section-heading" "VERIFIED section_heading" \
   "scenarios/${SID}.test.sh:$LINENO"
+wait_for_pane_idle "$PANE" 60
 
 send_command "$PANE" "! $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh resume_plan \"## Resume Plan\" SessionStart:startup"
 assert_jsonl "$PANE" "$REPO" "$SID" "resume-plan" "VERIFIED resume_plan" \

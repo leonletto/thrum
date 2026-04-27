@@ -106,12 +106,20 @@ fi
 # JSONL may briefly be the newest by mtime — so we scan all of them and
 # concatenate matching SessionStart attachments. Retry up to ~3s in case
 # the runtime hasn't flushed the SessionStart attachment to disk yet.
+# Bash 3.2 compatible (macOS /bin/bash) — mapfile was added in bash 4.
+# Some sub-fixtures launch claude with a restricted PATH and the resulting
+# `! cmd` subshell finds /bin/bash which is 3.2.
 JSONL_FILES=()
 for _ in 1 2 3; do
+  JSONL_FILES=()
   if [ "$SOURCE_ANY" = "1" ]; then
-    mapfile -t JSONL_FILES < <(ls -1 "$PROJECTS_ROOT"/*/*.jsonl 2>/dev/null || true)
+    while IFS= read -r line; do
+      [ -n "$line" ] && JSONL_FILES+=("$line")
+    done < <(ls -1 "$PROJECTS_ROOT"/*/*.jsonl 2>/dev/null || true)
   else
-    mapfile -t JSONL_FILES < <(ls -1 "$PROJECT_DIR"/*.jsonl 2>/dev/null || true)
+    while IFS= read -r line; do
+      [ -n "$line" ] && JSONL_FILES+=("$line")
+    done < <(ls -1 "$PROJECT_DIR"/*.jsonl 2>/dev/null || true)
   fi
   if [ "${#JSONL_FILES[@]}" -gt 0 ]; then
     break
