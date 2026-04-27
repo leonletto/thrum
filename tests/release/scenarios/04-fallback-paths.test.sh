@@ -222,8 +222,9 @@ run_4c_daemon_down() {
     thrum daemon stop >/dev/null 2>&1 || true
 }
 
-# Run order: 4A and 4B first (arbitrary). 4C last — it stops and restarts
-# the fallback-4c local daemon (not the run-level $REPO daemon).
+# Run order: 4A and 4B first (arbitrary). 4C last — it leaves the
+# fallback-4c local daemon stopped (run_teardown's rm -rf cleans up its
+# .thrum state). The run-level $REPO daemon is never touched.
 if [ "$THRUM_RELEASE_4A_READY" = "1" ]; then
   run_4a_no_thrum_binary || true
 fi
