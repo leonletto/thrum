@@ -27,6 +27,15 @@ run_teardown() {
   thrum tmux kill bare-session 2>/dev/null || true
   thrum tmux kill tmux-start-test 2>/dev/null || true
   thrum tmux kill force-restart-test 2>/dev/null || true
+  # Defensive cleanup for the kafm.6 restart-snapshot fixtures. Scenario
+  # 76 tears down kafm6-impl-restart-test on the happy path; scenario 80
+  # tears down kafm6-self-restart-test. This catches partial failures
+  # and the bare-tmux relaunch in scenario 79 that the daemon doesn't
+  # know about (raw tmux kill needed to reach it).
+  thrum tmux kill kafm6-impl-restart-test 2>/dev/null || true
+  thrum tmux kill kafm6-self-restart-test 2>/dev/null || true
+  tmux kill-session -t kafm6-impl-restart-test 2>/dev/null || true
+  tmux kill-session -t kafm6-self-restart-test 2>/dev/null || true
   if [ -n "${REPO:-}" ] && [ -d "$REPO" ]; then
     (cd "$REPO" && thrum daemon stop) >/dev/null 2>&1 || true
   fi
