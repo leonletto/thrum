@@ -53,7 +53,7 @@ if [ "$submit_rc" -ne 0 ] || [ -z "$cmd_id" ]; then
     "queue submit succeeds with a cmd_xxx id (precondition for restart test)" \
     "exit ${submit_rc}; output: $(printf '%s' "$submit_out" | tr '\n' ' ' | head -c 240)" \
     "scenarios/${SID}.test.sh:$LINENO"
-  _scenario_49_cleanup
+  _scenario_49_drain_assertion; _scenario_49_cleanup_worktree
   return 0
 fi
 
@@ -63,8 +63,12 @@ sleep 3
 
 # Restart the daemon. tmux-exec breaks the PID chain so the daemon
 # stop signal doesn't ride up through the runner's parent claude.
+# THRUM_NAME prefix kept consistent with all other out-of-pane
+# thrum invocations in the kafm.10 batch — daemon restart is
+# daemon-scoped (doesn't strictly need an identity) but uniform
+# prefixing matters for audit/telemetry.
 "$TE" exec --cwd "$COORD_REPO" --clean -- \
-  thrum daemon restart >/dev/null 2>&1 || true
+  env THRUM_NAME=test_coordinator_main thrum daemon restart >/dev/null 2>&1 || true
 
 # Give the daemon time to come back up, run RecoverQueueState
 # (marks the command interrupted + writes the @system message),
@@ -98,7 +102,7 @@ else
     "@system message mentioning ${cmd_id} within 30s of daemon restart" \
     "(no matching @system message)" \
     "scenarios/${SID}.test.sh:$LINENO"
-  _scenario_49_cleanup
+  _scenario_49_drain_assertion; _scenario_49_cleanup_worktree
   return 0
 fi
 
@@ -113,17 +117,51 @@ else
     "scenarios/${SID}.test.sh:$LINENO"
 fi
 
-_scenario_49_cleanup
+# Drain-on-kill assertion (§ 10E.6 absorption): kill the queue-test
+# session and verify the queue is drained. HandleKill calls
+# drainQueueOnKill internally; queue-status post-kill should report
+# the empty shape (active=null, queued=empty) — getQueue() returns
+# nil for unknown sessions, which marshals to an empty-active /
+# empty-queued response. This is what completes the kafm.10.6
+# cleanup contract; without this assertion the absorption claim is
+# incomplete (the kill happens but drain isn't verified).
+_scenario_49_drain_assertion
+
+_scenario_49_cleanup_worktree
 
 }  # _run_scenario_49
 
-# kafm.10.6 (cleanup) is rolled into this scenario rather than its
-# own file: the framework teardown trap (helpers/teardown.sh) has a
-# defensive fallback that runs the same kill+teardown if this scenario
-# never executes (or partial-fails before reaching cleanup).
-_scenario_49_cleanup() {
+# Drain assertion split out so it runs BEFORE worktree teardown:
+# queue-status against a torn-down worktree's daemon would surface
+# as a connection error, not the empty-shape contract we want to
+# verify. Order matters: kill → assert drain → teardown worktree.
+_scenario_49_drain_assertion() {
   "$TE" exec --cwd "$COORD_REPO" --clean -- \
     thrum tmux kill "$QUEUE_SESSION" >/dev/null 2>&1 || true
+
+  local status_file="/tmp/kafm10-49-drain-${RUNID}.json"
+  "$TE" exec --cwd "$COORD_REPO" --clean -- bash -c \
+    "thrum tmux queue-status '$QUEUE_SESSION' --json > '$status_file' 2>/dev/null"
+  if jq -e '((.active // null) == null) and (((.queued // []) | length) == 0)' \
+      "$status_file" >/dev/null 2>&1; then
+    emit_pass "$SID" "kill-drains-queue"
+  else
+    local got
+    got=$(tr '\n' ' ' < "$status_file" 2>/dev/null | head -c 320)
+    emit_fail "$SID" "kill-drains-queue" \
+      "queue-status reports active=null AND queued=empty after kill (HandleKill drain)" \
+      "${got:-<no status output>}" \
+      "scenarios/${SID}.test.sh:$LINENO"
+  fi
+  rm -f "$status_file"
+}
+
+# Worktree teardown follows the drain assertion. The framework
+# teardown trap (helpers/teardown.sh) has a defensive fallback that
+# kills queue-test if scenario 49 never reaches this cleanup —
+# but the worktree teardown is scenario-scoped and only happens
+# here on the happy path.
+_scenario_49_cleanup_worktree() {
   "$TE" exec --cwd "$COORD_REPO" --clean -- \
     env THRUM_NAME=test_coordinator_main thrum worktree teardown "$QUEUE_WT_NAME" \
     >/dev/null 2>&1 || true

@@ -118,6 +118,27 @@ else
     "scenarios/${SID}.test.sh:$LINENO"
 fi
 
+# Queue-drain assertion: § 10E.4 spec says "Verify queue is empty"
+# after cancel. Active should be null (cancel cleared the in-flight
+# command) and queued should be empty (no follow-on commands).
+# File-redirect to avoid tmux-capture-pane wrap (memory:
+# tmux-capture-pane-json-wrap).
+local status_file="/tmp/kafm10-48-status-${RUNID}.json"
+"$TE" exec --cwd "$COORD_REPO" --clean -- bash -c \
+  "thrum tmux queue-status '$QUEUE_SESSION' --json > '$status_file' 2>/dev/null"
+if jq -e '((.active // null) == null) and (((.queued // []) | length) == 0)' \
+    "$status_file" >/dev/null 2>&1; then
+  emit_pass "$SID" "cancel-queue-drained"
+else
+  local got
+  got=$(tr '\n' ' ' < "$status_file" 2>/dev/null | head -c 320)
+  emit_fail "$SID" "cancel-queue-drained" \
+    "queue-status reports active=null AND queued=empty after cancel" \
+    "${got:-<no status output>}" \
+    "scenarios/${SID}.test.sh:$LINENO"
+fi
+rm -f "$status_file"
+
 # Clear inbox so scenario 49's restart-recovery match is unambiguous.
 "$TE" exec --cwd "$COORD_REPO" --clean -- \
   env THRUM_NAME=test_coordinator_main thrum message read --all \
