@@ -272,6 +272,13 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 	// `thrum tmux status` for its lifetime. Roll back by killing the
 	// session and returning an error rather than silently orphaning
 	// it (thrum-ufv5.11 review #4).
+	//
+	// Two writes happen in sequence: @thrum-managed first, then
+	// @thrum-thrum-dir below. Between the two calls a concurrent
+	// HandleStatus pass 2 would see the session as managed but
+	// un-scoped (empty @thrum-thrum-dir) and skip it via the
+	// graceful-skip path — safe by construction, no races to manage.
+	// Both rollbacks kill the partially-tagged session.
 	if err := setUserOptionFn(name, "@thrum-managed", "1"); err != nil {
 		slog.Error("tmux set-option @thrum-managed failed; rolling back session create",
 			"session", name, "error", err)
@@ -578,6 +585,10 @@ func (h *TmuxHandler) HandleStatus(ctx context.Context, params json.RawMessage) 
 	// through — across worktrees, projects, and unrelated thrum repos
 	// (thrum-zuz5).
 	names, _ := listSessionsFn()
+	// h.thrumDir is canonical at construction (filepath.Join cleans,
+	// ResolveThrumDir enforces absolute); the Clean here is a safety
+	// belt for future callers and matches the Clean applied to the
+	// per-session ownerDir below.
 	ownDir := filepath.Clean(h.thrumDir)
 	for _, sessName := range names {
 		// Defensive: tmux names beginning with "-" would be mis-parsed
@@ -596,8 +607,9 @@ func (h *TmuxHandler) HandleStatus(ctx context.Context, params json.RawMessage) 
 		}
 		// Daemon-scope filter: only surface sessions whose owning
 		// daemon is THIS one. Pre-zuz5 sessions (no @thrum-thrum-dir)
-		// are skipped — they will become visible again on next
-		// HandleCreate, which re-stamps the tag.
+		// are skipped — they are not broken, just not surfaced. The
+		// tag is written by HandleCreate, so visibility restores when
+		// the session is next recreated.
 		ownerDir, err := getUserOptionFn(sessName, "@thrum-thrum-dir")
 		if err != nil || ownerDir == "" {
 			continue
@@ -1347,7 +1359,9 @@ var identityPollInterval = 500 * time.Millisecond
 // setUserOptionFn were added for HandleSend's no-agent bypass path,
 // HandleStatus's second pass, and HandleCreate's tag-failure rollback
 // (thrum-ufv5.11/12) so all three can be exercised end-to-end without
-// shelling out to tmux.
+// shelling out to tmux. thrum-zuz5 added a second use of getUserOptionFn
+// (read @thrum-thrum-dir) and a second setUserOptionFn write
+// (stamp @thrum-thrum-dir) for daemon-scoped pass 2 filtering.
 var (
 	sendKeysFn       = ttmux.SendKeys
 	sendSpecialKeyFn = ttmux.SendSpecialKey
