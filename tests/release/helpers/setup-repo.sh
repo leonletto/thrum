@@ -52,8 +52,9 @@ run_setup() {
   # parent shell leaking identity hints into the ephemeral fixture. Preserve
   # framework-internal THRUM_RELEASE_* vars (THRUM_RELEASE_REPO_ROOT used by
   # scenarios, THRUM_RELEASE_NO_TEARDOWN debug toggle).
-  # shellcheck disable=SC2046
-  unset $(env | grep -E '^THRUM_' | grep -v '^THRUM_RELEASE_' | cut -d= -f1) 2>/dev/null || true
+  while IFS= read -r v; do
+    [ -n "$v" ] && unset "$v"
+  done < <(env | grep -E '^THRUM_' | grep -v '^THRUM_RELEASE_' | cut -d= -f1)
 
   (
     cd "$REPO" || exit 1

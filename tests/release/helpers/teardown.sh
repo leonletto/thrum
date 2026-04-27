@@ -19,6 +19,5 @@ run_teardown() {
   if [ -n "${WORKTREE_BASE:-}" ]; then
     rm -rf "$WORKTREE_BASE"
   fi
-  unset THRUM_HOME    # leave caller env clean
   return 0
 }

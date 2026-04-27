@@ -37,11 +37,18 @@ assert_jsonl() {
 
   # Failure path: extract the LAST `!`-bash entry's content (both stdout and
   # stderr regions) so the operator can see what actually landed. Newlines
-  # collapsed to spaces for one-line presentation.
-  local got
-  got=$(jq -r 'select(.type=="user" and (.message.content | type == "string") and (.message.content | startswith("<bash-stdout>"))) | .message.content' \
-    "$HOME/.claude/projects/$(encode_cwd "$repo")"/*.jsonl 2>/dev/null \
-    | tail -n1 | tr '\n' ' ')
+  # collapsed to spaces for one-line presentation. Guard the glob: if the
+  # project dir doesn't exist yet OR contains no JSONL files, the unquoted
+  # glob would expand to the literal `*.jsonl` and jq would fail silently,
+  # masking the real "no transcript" condition behind a generic empty `got`.
+  local project_dir got
+  project_dir="$HOME/.claude/projects/$(encode_cwd "$repo")"
+  got=""
+  if [ -d "$project_dir" ] && compgen -G "$project_dir/*.jsonl" >/dev/null; then
+    got=$(jq -r 'select(.type=="user" and (.message.content | type == "string") and (.message.content | startswith("<bash-stdout>"))) | .message.content' \
+      "$project_dir"/*.jsonl 2>/dev/null \
+      | tail -n1 | tr '\n' ' ')
+  fi
   emit_fail "$sid" "$name" "${expected} (in <bash-stdout> or <bash-stderr>)" \
     "${got:-<no bash entry seen yet>}" "$loc"
   return 1

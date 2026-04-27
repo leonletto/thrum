@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tests/release/run.sh — release test framework entry point.
 # See dev-docs/specs/2026-04-26-release-test-framework-design.md
-set -uo pipefail
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HELPERS_DIR="$SCRIPT_DIR/helpers"
@@ -29,6 +29,11 @@ source "$HELPERS_DIR/all.sh"
 SCENARIO_FILTER="${1:-*.test.sh}"
 SCENARIOS=()
 while IFS= read -r f; do SCENARIOS+=("$f"); done < <(
+  # NOTE: `$SCENARIO_FILTER` is intentionally unquoted so a caller-supplied
+  # glob pattern (e.g. `01-*.test.sh`) expands inside `ls`. Don't "fix" the
+  # shellcheck-quoting hint here — quoting it would treat the glob as a
+  # literal filename and never match anything.
+  # shellcheck disable=SC2086
   cd "$SCENARIOS_DIR" && ls $SCENARIO_FILTER 2>/dev/null | sort
 )
 if [ "${#SCENARIOS[@]}" -eq 0 ]; then

@@ -39,14 +39,14 @@ fi
 
 # Step 3: wait for the NEW SessionStart attachment to appear in IMPL JSONL.
 #
-# Race-condition note: `jsonl_for_repo` uses `ls -t | head -n1` to find the
-# newest JSONL. Right after `thrum tmux restart`, the OLD JSONL still exists
-# with its OLD SessionStart entries. Until the new claude process creates its
-# new JSONL file, `wait_for_session_start` would match the stale SessionStart
-# from the old file. The 5-second sleep gives claude time to create its new
-# JSONL before polling starts. Conservative but reliable; if performance
-# matters later, replace with: capture the pre-restart JSONL path, poll until
-# `jsonl_for_repo` returns a DIFFERENT path, then call wait_for_session_start.
+# Race-condition note: right after `thrum tmux restart`, the OLD JSONL still
+# exists with its OLD SessionStart entries. Until the new claude process
+# creates its new JSONL file, `wait_for_session_start` would match the stale
+# SessionStart from the old file. The 5-second sleep gives claude time to
+# create its new JSONL before polling starts. Conservative but reliable; if
+# performance matters later, replace with: snapshot the project dir's *.jsonl
+# listing pre-restart, poll until a NEW filename appears, THEN call
+# wait_for_session_start.
 sleep 5
 if ! wait_for_session_start "$REPO" 60; then
   emit_fail "$SID" "restart-session-start" "new SessionStart attachment within 60s" "(none observed)" "scenarios/${SID}.test.sh:$LINENO"

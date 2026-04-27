@@ -80,8 +80,7 @@ fi
 # the runtime hasn't flushed the SessionStart attachment to disk yet.
 JSONL_FILES=()
 for _ in 1 2 3; do
-  # shellcheck disable=SC2207
-  JSONL_FILES=( $(ls -1 "$PROJECT_DIR"/*.jsonl 2>/dev/null || true) )
+  mapfile -t JSONL_FILES < <(ls -1 "$PROJECT_DIR"/*.jsonl 2>/dev/null || true)
   if [ "${#JSONL_FILES[@]}" -gt 0 ]; then
     break
   fi
@@ -99,9 +98,16 @@ fi
 #   .attachment.hookName matches HOOK_FILTER (or any if filter empty)
 #   .attachment.content is a string (or occasionally an array of strings for
 #     skill-injected SessionStart entries — handle both shapes).
-JQ_HOOK_PREDICATE='.type=="attachment" and .attachment.hookEvent=="SessionStart"'
+#
+# HOOK_FILTER is passed via `jq --arg hookName` (NOT interpolated into the
+# filter string) so a hook name containing `"` or `\\` can't corrupt the
+# expression. The shape of the predicate differs whether the filter is set
+# or unset.
+JQ_HOOK_PREDICATE_BASE='.type=="attachment" and .attachment.hookEvent=="SessionStart"'
 if [ -n "$HOOK_FILTER" ]; then
-  JQ_HOOK_PREDICATE="${JQ_HOOK_PREDICATE} and .attachment.hookName==\"${HOOK_FILTER}\""
+  JQ_HOOK_PREDICATE="${JQ_HOOK_PREDICATE_BASE} and .attachment.hookName==\$hookName"
+else
+  JQ_HOOK_PREDICATE="$JQ_HOOK_PREDICATE_BASE"
 fi
 
 # Concatenate all matching SessionStart attachment content across every
@@ -113,7 +119,9 @@ fi
 BLOB=""
 for f in "${JSONL_FILES[@]}"; do
   [ -s "$f" ] || continue
-  CHUNK=$(jq -r "select(${JQ_HOOK_PREDICATE}) | (.attachment.content // \"\" | if type==\"array\" then join(\"\n\") else . end), (.attachment.stdout // \"\")" "$f" 2>/dev/null || true)
+  CHUNK=$(jq -r --arg hookName "$HOOK_FILTER" \
+    "select(${JQ_HOOK_PREDICATE}) | (.attachment.content // \"\" | if type==\"array\" then join(\"\n\") else . end), (.attachment.stdout // \"\")" \
+    "$f" 2>/dev/null || true)
   if [ -n "$CHUNK" ]; then
     BLOB="${BLOB}${CHUNK}"$'\n'
   fi
