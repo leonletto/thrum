@@ -224,6 +224,9 @@ func TestEncodeCwd(t *testing.T) {
 	// Dot-prefixed directories (e.g. .workspaces) encode dots as dashes
 	assert.Equal(t, "-Users-leon--workspaces-thrum-website-dev", encodeCwd("/Users/leon/.workspaces/thrum/website-dev"))
 	assert.Equal(t, "-home-user--config-app", encodeCwd("/home/user/.config/app"))
+	// Underscores also collapse to dashes (matches Claude Code's project-dir naming)
+	assert.Equal(t, "-Users-leon--thrum-release-tests-run1-repo", encodeCwd("/Users/leon/.thrum_release_tests/run1/repo"))
+	assert.Equal(t, "-home-user-foo-bar-baz", encodeCwd("/home/user/foo_bar_baz"))
 }
 
 func TestSnapshotSaveAndRestore(t *testing.T) {

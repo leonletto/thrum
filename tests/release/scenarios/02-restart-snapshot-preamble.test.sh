@@ -29,8 +29,13 @@ if [ ! -f "$REPO/.thrum/restart/test_implementer.md" ]; then
 fi
 
 # Step 2: restart the IMPL pane (fires a fresh SessionStart with the snapshot
-# embedded in the briefing).
-thrum tmux restart impl --force >/dev/null
+# embedded in the briefing). Driver-side thrum calls must wrap through
+# tmux-exec to break the PID chain back to the parent runtime — otherwise
+# the call is attributed to the parent and routed to the wrong daemon, and
+# `thrum tmux restart impl` becomes a no-op (no impl session known to that
+# daemon).
+"$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$REPO" --clean -- \
+  thrum tmux restart impl --force >/dev/null
 
 # Step 3: wait for the NEW SessionStart attachment to appear in IMPL JSONL.
 #
@@ -47,6 +52,28 @@ if ! wait_for_session_start "$REPO" 60; then
   emit_fail "$SID" "restart-session-start" "new SessionStart attachment within 60s" "(none observed)" "scenarios/${SID}.test.sh:$LINENO"
   return 0
 fi
+
+# A bare SessionStart attachment can land in JSONL before claude flushes
+# all the per-hook attachments (the inject-prime-context.sh hook output is
+# typically the second of three startup attachments). Asserting against
+# the loud preamble before that specific attachment lands produces a
+# false-negative FAILED entry that the rest of the run can never recover
+# from. Wait specifically for an attachment whose stdout (or content)
+# contains the post-restart loud-preamble marker before continuing.
+if ! wait_for_jsonl_match "$REPO" \
+  '.attachment.hookEvent == "SessionStart" and (((.attachment.stdout // "" | tostring) | contains("ACTION REQUIRED")) or ((.attachment.content // "" | tostring) | contains("ACTION REQUIRED")))' \
+  60 >/dev/null; then
+  emit_fail "$SID" "restart-loud-preamble-attachment" "SessionStart attachment containing the loud preamble within 60s" "(none observed)" "scenarios/${SID}.test.sh:$LINENO"
+  return 0
+fi
+
+# Post-restart, claude auto-runs `/thrum:prime` and renders a multi-line
+# response (briefing already loaded via the SessionStart hook, status
+# summary, etc). send_command's built-in 10s pane-idle gate can return on
+# timeout before that render fully settles, causing the FIRST `!` keystroke
+# to land mid-render and be typed as a literal char instead of triggering
+# bash-prefix mode. Wait for the longer post-restart settle explicitly here.
+wait_for_pane_idle "$PANE" 30
 
 # Step 4: three assertions on the new SessionStart attachment.
 send_command "$PANE" "! $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh loud_preamble \"🛑 ACTION REQUIRED\" SessionStart:startup"

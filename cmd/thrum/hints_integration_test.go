@@ -395,10 +395,11 @@ func TestIntegration_SnapshotSaveMtimeFallback_UsesProjectDir(t *testing.T) {
 	writeSnapshotTestIdentity(t, repoDir, "testagent", 99999999)
 
 	// Mirror encodeCwd from internal/restart: strip leading '/', replace
-	// '/' and '.' with '-', prepend '-'. repoDir from t.TempDir() has no
-	// dots so we only need the slash substitution.
+	// '/', '.', and '_' with '-', prepend '-'. repoDir from t.TempDir() has
+	// no dots/underscores so the extra substitutions are no-ops here.
 	slug := "-" + strings.ReplaceAll(strings.TrimPrefix(repoDir, "/"), "/", "-")
 	slug = strings.ReplaceAll(slug, ".", "-")
+	slug = strings.ReplaceAll(slug, "_", "-")
 	projectDir := filepath.Join(fakeHome, ".claude", "projects", slug)
 	if err := os.MkdirAll(projectDir, 0o750); err != nil {
 		t.Fatalf("mkdir project dir: %v", err)
