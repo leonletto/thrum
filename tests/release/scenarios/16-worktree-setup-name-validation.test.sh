@@ -69,6 +69,18 @@ else
     "scenarios/${SID}.test.sh:$LINENO"
 fi
 
+# Probe 2b: error message mentions name validity (mirrors probe 1b).
+if send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
+    "thrum worktree create 'path/with/slash' 2>&1" \
+    "invalid" 60; then
+  emit_pass "$SID" "slash-error-message"
+else
+  emit_fail "$SID" "slash-error-message" \
+    'thrum worktree create error output containing "invalid"' \
+    "(timeout, no matching bash-stdout entry)" \
+    "scenarios/${SID}.test.sh:$LINENO"
+fi
+
 }  # _run_scenario_16
 
 _run_scenario_16

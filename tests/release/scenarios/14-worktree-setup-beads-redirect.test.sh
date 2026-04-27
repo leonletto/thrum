@@ -61,6 +61,10 @@ mkdir -p "$SUB_REPO" "$SUB_WT_BASE"
 
 # Patch worktrees config to point at our scenario-controlled base_path
 # (mirrors setup-repo.sh:113). thrum auto-appends the repo basename.
+# beads_enabled=false here is intentional and NOT a test bug: per
+# internal/worktree/worktree.go:123, EnsureRedirects detects beads by
+# checking `$mainRepo/.beads` on disk, NOT by reading this flag. The
+# scenario specifically asserts the on-disk-driven detection path.
 jq --arg bp "$SUB_WT_BASE/" \
   '.worktrees = {"base_path": $bp, "beads_enabled": false, "thrum_enabled": true}' \
   "$SUB_REPO/.thrum/config.json" > "$SUB_REPO/.thrum/config.json.tmp" \

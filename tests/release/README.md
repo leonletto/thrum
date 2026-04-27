@@ -43,7 +43,7 @@ The arg is a glob filter against `scenarios/`.
 | `13-worktree-setup-thrum-redirect` | `thrum worktree create <name>` produces the canonical worktree-side .thrum scaffolding: `redirect` pointer to the main repo's .thrum/, plus per-worktree `identities/` and `context/` directories. Drives via the COORD pane (registered-agent caller, mirrors setup-repo.sh's pattern) and tears down the worktree at scenario end (migrates `full_test_plan.md` § 10B.1). |
 | `14-worktree-setup-beads-redirect` | When the main repo has `.beads/`, `thrum worktree create` writes a `.beads/redirect` in the new worktree. Sub-fixture (`thrum init` + `thrum quickstart` + `mkdir .beads` in `$BASE/kafm7-14-beads-repo/`); driven via tmux-exec with `THRUM_NAME=$SUB_AGENT`. Sub-daemon stopped at end (au7k-class) (migrates § 10B.2). |
 | `15-worktree-setup-no-beads` | Inverse of 14: when the main repo has NO `.beads/`, `thrum worktree create` does NOT write `.beads/` in the new worktree. Sub-fixture without `.beads/`. Sub-daemon stopped at end (migrates § 10B.3). |
-| `16-worktree-setup-name-validation` | `thrum worktree create '../../../tmp/evil'` and `thrum worktree create 'path/with/slash'` both exit non-zero with an "invalid"-marked validation error. Pins the path-traversal / separator rejection contract (migrates § 10B.4). |
+| `16-worktree-setup-name-validation` | `thrum worktree create '../../../tmp/evil'` and `thrum worktree create 'path/with/slash'` both exit non-zero AND each error output contains "invalid" (4 assertions: exit + error message per probe). Pins the path-traversal / separator rejection contract (migrates § 10B.4). |
 
 ## Output
 
