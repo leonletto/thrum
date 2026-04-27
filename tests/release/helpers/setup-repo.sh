@@ -20,6 +20,22 @@ run_setup() {
     return 1
   fi
 
+  # A.preflight. Nuke leftover state from a prior crashed/killed run before
+  # starting. Without this, a SIGKILL'd run leaves coord/impl tmux sessions
+  # alive plus an ephemeral daemon, and the next `thrum tmux start --name
+  # coord` mixes with the stale session causing the whoami probe to fail
+  # against the wrong claude. Idempotent: harmless if there's nothing to
+  # clean.
+  tmux kill-session -t coord 2>/dev/null || true
+  tmux kill-session -t impl 2>/dev/null || true
+  # shellcheck disable=SC2009
+  ps -eo pid,command 2>/dev/null \
+    | grep -E "thrum.*daemon.*\.thrum_release_tests" \
+    | grep -v grep \
+    | awk '{print $1}' \
+    | xargs -r kill 2>/dev/null \
+    || true
+
   # A. Prep
   RUNID="$(date +%Y%m%dT%H%M%S)-$$"
   BASE="$HOME/.thrum_release_tests/$RUNID"
