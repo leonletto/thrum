@@ -38,10 +38,23 @@ MARKER="kafm2-25-broadcast-${RUNID}"
 # leftover messages).
 wait_for_pane_idle "$IMPL_PANE" 60
 
+# Pre-clear IMPL's unread queue out-of-pane so `thrum wait`'s only
+# viable trigger is OUR broadcast. Without this, a slowly-delivered
+# message from an earlier scenario (22-24) could land in IMPL's
+# subscription window right after wait subscribes and unblock it
+# before our broadcast arrives — primary assertion `"status":
+# "received"` would then false-positive (wait DID receive, just on
+# the wrong message). The secondary inbox-marker check below
+# catches that, but tightening primary too keeps the failure mode
+# attributable.
+"$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$IMPL_REPO" --clean -- \
+  env THRUM_NAME=test_implementer thrum message read --all \
+  >/dev/null 2>&1 || true
+
 # Step 1: fire wait on IMPL (fire-and-forget — bash subshell blocks
 # but driver returns immediately after keystrokes land). send_command's
-# `!` branch handles the keystroke split; --json so the marker shows
-# up cleanly in the eventual bash-stdout output.
+# `!` branch handles the keystroke split; --json so the completion
+# envelope is parseable from the JSONL bash-stdout entry.
 send_command "$IMPL_PANE" "! thrum wait --timeout 12s --json"
 
 # Step 2: brief settle so the wait actually subscribes to the daemon
@@ -56,22 +69,21 @@ wait_for_pane_idle "$COORD_PANE" 60
 send_command "$COORD_PANE" "! thrum send 'Broadcast for waiter (${MARKER})' --to @everyone"
 
 # Step 4: poll IMPL's JSONL for `thrum wait`'s success-shape output.
-# wait's --json output on a received message is not the message body
-# itself — it's a fixed envelope shape:
-#   {"action":"ACTION REQUIRED: You have unread messages...",
-#    "status":"received"}
-# The marker we sent goes into the daemon's inbox (later visible to
-# `thrum inbox`), not into wait's own stdout. So the deterministic
-# wait-completion signal is the literal substring `"status":
-# "received"`. Combined with the fact we just sent a uniquely-marked
-# broadcast (which is the only message in flight in this fixture),
-# this is sufficient evidence the wait unblocked because of OUR
-# broadcast — no other senders are active during the test window.
+# wait's --json output on a received message is a fixed envelope
+# shape — verified at cmd/thrum/main.go:1461-1465:
+#   {"status":"received",
+#    "action":"ACTION REQUIRED: You have unread messages..."}
+# It does NOT include the message body or any RUNID marker. So
+# the deterministic wait-completion signal is the literal substring
+# `"status": "received"`. Strengthening the primary filter to include
+# the RUNID marker is not possible at this layer — the marker
+# isn't in wait's stdout. Instead, primary tightness comes from the
+# pre-wait inbox clear above (wait can only unblock on a message
+# arriving AFTER subscription) plus the secondary inbox-marker
+# check (proves OUR broadcast specifically delivered).
 #
 # Generous timeout — the wait's own --timeout 12s plus a few seconds
-# of post-arrival render slack. We assert the second sub-assertion
-# (marker actually delivered to inbox) separately so a "wait
-# unblocked but on the wrong message" regression would still surface.
+# of post-arrival render slack.
 if wait_for_bash_stdout_contains "$IMPL_REPO" '"status": "received"' 30 >/dev/null; then
   emit_pass "$SID" "wait-receives-broadcast"
 else

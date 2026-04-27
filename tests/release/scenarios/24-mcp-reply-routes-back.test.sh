@@ -59,29 +59,37 @@ _impl_reply() {
       fi
       env THRUM_NAME=test_implementer thrum reply \"\$MSG_ID\" 'Reply back (${REPLY_MARKER})' --json > '${reply_file}' 2>/dev/null
     " >/dev/null 2>&1 || true
-  if [ -s "$reply_file" ]; then
-    cat "$reply_file"
-  fi
+}
+
+# `thrum reply --json` writes its output to $reply_file inside the
+# inner pane. After each attempt, jq-validate the file from the host
+# — `jq -e '.message_id | test("^msg_")'` exits 0 only when the
+# field exists AND starts with "msg_", strictly stronger than a
+# whitespace-fragile grep on the raw JSON shape.
+_reply_confirmed() {
+  [ -s "$reply_file" ] && jq -e '.message_id | test("^msg_")' < "$reply_file" >/dev/null 2>&1
 }
 
 # Brief poll for the original to land in impl inbox before reply.
 elapsed=0
-reply_output=""
 while [ "$elapsed" -lt 30 ]; do
-  reply_output="$(_impl_reply)"
-  if echo "$reply_output" | grep -q '"message_id": "msg_'; then
+  _impl_reply
+  if _reply_confirmed; then
     break
   fi
   sleep 2
   elapsed=$((elapsed + 2))
 done
 
-if echo "$reply_output" | grep -q '"message_id": "msg_'; then
+if _reply_confirmed; then
   emit_pass "$SID" "impl-reply-confirmed"
 else
-  got="$(echo "$reply_output" | tr '\n' ' ' | head -c 200)"
+  got=""
+  if [ -s "$reply_file" ]; then
+    got="$(tr '\n' ' ' < "$reply_file" | head -c 200)"
+  fi
   emit_fail "$SID" "impl-reply-confirmed" \
-    'thrum reply --json output containing "message_id": "msg_"' \
+    'thrum reply --json output with .message_id matching ^msg_' \
     "${got:-<empty>}" \
     "scenarios/${SID}.test.sh:$LINENO"
   rm -f "$inbox_file" "$reply_file"

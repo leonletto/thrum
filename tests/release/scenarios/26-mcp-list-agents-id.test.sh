@@ -44,20 +44,34 @@ else
     "scenarios/${SID}.test.sh:$LINENO"
 fi
 
-# Assertion 2: both fixture identities present. Defensive against
-# the empty-list false-positive on assertion 1.
-PRESENT_QUERY="thrum agent list --json | jq -r '.agents.agents[].agent_id' | sort -u | tr '\n' ',' | sed 's/,\$//'"
-
-# Need both names in the comma-separated output. send_bash_and_wait
-# matches a substring; both identities sorted alphabetically:
-# test_coordinator_main,test_implementer.
+# Assertions 2+3: both fixture identities present. Defensive
+# against the empty-list false-positive on assertion 1, and split
+# per-identity (not a single comma-joined substring) so a third
+# agent appearing in the registry between the two — e.g. a
+# `test_debug` that sorts between `test_coordinator_main` and
+# `test_implementer` — doesn't break the substring match. Each
+# identity gets its own pre/post jq-anchored emit on a dedicated
+# bash subshell.
+COORD_PRESENT_QUERY="N=\$(thrum agent list --json | jq -r '[.agents.agents[] | select(.agent_id == \"test_coordinator_main\")] | length'); if [ \"\$N\" -ge 1 ]; then echo VERIFIED_COORD_PRESENT_${RUNID}; else echo FAILED_COORD_MISSING; fi"
 if send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
-    "$PRESENT_QUERY" \
-    "test_coordinator_main,test_implementer" 60; then
-  emit_pass "$SID" "fixture-identities-present"
+    "$COORD_PRESENT_QUERY" \
+    "VERIFIED_COORD_PRESENT_${RUNID}" 60; then
+  emit_pass "$SID" "coord-identity-present"
 else
-  emit_fail "$SID" "fixture-identities-present" \
-    "both test_coordinator_main and test_implementer present in agent list" \
-    "(timeout or one/both missing)" \
+  emit_fail "$SID" "coord-identity-present" \
+    "agent list contains entry with agent_id 'test_coordinator_main'" \
+    "(timeout or coord identity missing)" \
+    "scenarios/${SID}.test.sh:$LINENO"
+fi
+
+IMPL_PRESENT_QUERY="N=\$(thrum agent list --json | jq -r '[.agents.agents[] | select(.agent_id == \"test_implementer\")] | length'); if [ \"\$N\" -ge 1 ]; then echo VERIFIED_IMPL_PRESENT_${RUNID}; else echo FAILED_IMPL_MISSING; fi"
+if send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
+    "$IMPL_PRESENT_QUERY" \
+    "VERIFIED_IMPL_PRESENT_${RUNID}" 60; then
+  emit_pass "$SID" "impl-identity-present"
+else
+  emit_fail "$SID" "impl-identity-present" \
+    "agent list contains entry with agent_id 'test_implementer'" \
+    "(timeout or impl identity missing)" \
     "scenarios/${SID}.test.sh:$LINENO"
 fi
