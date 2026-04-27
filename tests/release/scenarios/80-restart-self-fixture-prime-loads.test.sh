@@ -32,6 +32,25 @@
 
 SID="80-restart-self-fixture-prime-loads"
 
+TE="$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec"
+
+# Defined ahead of any callers (precondition early-return path uses it
+# too). Cleanup runs unconditionally — assertion failure shouldn't leak
+# fixtures into the next run.
+_scenario_80_cleanup() {
+  # Raw kill of the manually-relaunched session (daemon doesn't
+  # know about it — `thrum tmux kill` would no-op).
+  [ -n "${KAFM6_S2_SESSION:-}" ] && tmux kill-session -t "$KAFM6_S2_SESSION" 2>/dev/null || true
+  # Worktree teardown via thrum (worktree was created by thrum in
+  # scenario 77). Stale daemon session-row referencing the killed
+  # tmux session is non-fatal — daemon self-heals on next sweep.
+  if [ -n "${KAFM6_S2_WT_NAME:-}" ]; then
+    "$TE" exec --cwd "$COORD_REPO" --clean -- \
+      env THRUM_NAME=test_coordinator_main thrum worktree teardown "$KAFM6_S2_WT_NAME" \
+      >/dev/null 2>&1 || true
+  fi
+}
+
 if [ -z "${KAFM6_S2_AGENT:-}" ] || [ -z "${KAFM6_S2_SESSION:-}" ] || [ -z "${KAFM6_S2_WT:-}" ] || [ -z "${KAFM6_S2_WT_NAME:-}" ] || [ -z "${KAFM6_S2_SAVE_REASON:-}" ] || [ -z "${KAFM6_S2_RELAUNCH_FLOOR_TS:-}" ]; then
   emit_fail "$SID" "fixture-precondition" \
     "scenarios 77+79 fixture identifiers exported (KAFM6_S2_*, KAFM6_S2_RELAUNCH_FLOOR_TS)" \
@@ -40,20 +59,6 @@ if [ -z "${KAFM6_S2_AGENT:-}" ] || [ -z "${KAFM6_S2_SESSION:-}" ] || [ -z "${KAF
   _scenario_80_cleanup
   return 0
 fi
-
-TE="$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec"
-
-_scenario_80_cleanup() {
-  # Raw kill of the manually-relaunched session (daemon doesn't
-  # know about it — `thrum tmux kill` would no-op).
-  tmux kill-session -t "$KAFM6_S2_SESSION" 2>/dev/null || true
-  # Worktree teardown via thrum (worktree was created by thrum in
-  # scenario 77). Stale daemon session-row referencing the killed
-  # tmux session is non-fatal — daemon self-heals on next sweep.
-  "$TE" exec --cwd "$COORD_REPO" --clean -- \
-    env THRUM_NAME=test_coordinator_main thrum worktree teardown "$KAFM6_S2_WT_NAME" \
-    >/dev/null 2>&1 || true
-}
 
 _run_scenario_80() {
 

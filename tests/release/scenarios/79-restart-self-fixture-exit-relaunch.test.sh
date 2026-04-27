@@ -98,6 +98,16 @@ tmux send-keys -t "$KAFM6_S2_SESSION" Enter
 wait_for_pane_idle "$KAFM6_S2_SESSION" 30
 tmux send-keys -t "$KAFM6_S2_SESSION" Enter
 
+# Claude writes ZERO JSONL until first user input — the welcome
+# banner is keystrokes-only. SessionStart hooks fire but their
+# output is buffered until the JSONL file is created on first
+# real input. Kick the new session with `! true` (mirrors
+# kick_session_then_wait) so the SessionStart attachment with
+# the snapshot-loaded briefing actually flushes to disk for the
+# polling filter below.
+wait_for_pane_idle "$KAFM6_S2_SESSION" 30
+send_command "$KAFM6_S2_SESSION" "! true"
+
 # Step 4: poll for a SessionStart attachment with timestamp >= floor_ts
 # (proves the NEW claude wrote its own JSONL with hooks fired). 60s
 # matches setup-repo.sh's bootloader headroom.
@@ -107,9 +117,14 @@ local relaunch_filter='.type == "attachment"
 if wait_for_jsonl_match "$KAFM6_S2_WT" "$relaunch_filter" 90 >/dev/null; then
   emit_pass "$SID" "session-relaunched"
 else
+  # Capture pane content for diagnostics — a hung trust dialog,
+  # missing claude binary, or shell-syntax error would all surface
+  # here.
+  local pane_capture
+  pane_capture=$(tmux capture-pane -t "$KAFM6_S2_SESSION" -p 2>&1 | tr '\n' ' ' | head -c 320)
   emit_fail "$SID" "session-relaunched" \
     "post-relaunch SessionStart attachment in JSONL with timestamp >= ${floor_ts}" \
-    "(none observed within 90s — manual claude relaunch may have failed or trust dialog stalled)" \
+    "(none observed within 90s; pane content: ${pane_capture:-<empty>})" \
     "scenarios/${SID}.test.sh:$LINENO"
 fi
 

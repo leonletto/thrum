@@ -63,16 +63,25 @@ if ! send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
   return 0
 fi
 
-# Step 3: launch claude.
-local launch_rc
-"$TE" exec --cwd "$COORD_REPO" --clean -- \
-  env THRUM_NAME=test_coordinator_main thrum tmux launch "$KAFM6_S2_SESSION" \
-  >/dev/null 2>&1
+# Brief settle between create and launch — daemon's session-row write
+# is async; a fast launch immediately after create can race the row
+# being persisted, which surfaces as a "session not found" exit 1
+# from the launch RPC.
+sleep 2
+
+# Step 3: launch claude. Capture output for failure diagnostics
+# (mirrors scenario 70's pattern — redirecting to /dev/null in an
+# earlier draft hid the actual failure mode).
+local launch_out launch_rc
+launch_out=$(
+  "$TE" exec --cwd "$COORD_REPO" --clean -- \
+    env THRUM_NAME=test_coordinator_main thrum tmux launch "$KAFM6_S2_SESSION" 2>&1
+)
 launch_rc=$?
 if [ "$launch_rc" -ne 0 ]; then
   emit_fail "$SID" "snapshot-save-success-line" \
     "thrum tmux launch $KAFM6_S2_SESSION succeeds" \
-    "(non-zero exit ${launch_rc})" \
+    "exit ${launch_rc}; output: $(printf '%s' "$launch_out" | tr '\n' ' ' | head -c 320)" \
     "scenarios/${SID}.test.sh:$LINENO"
   return 0
 fi
