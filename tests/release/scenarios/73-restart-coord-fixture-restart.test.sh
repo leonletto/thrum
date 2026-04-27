@@ -44,31 +44,23 @@ _run_scenario_73() {
 # a stable JSONL state (avoids capturing a half-rendered turn).
 wait_for_pane_idle "$KAFM6_S1_SESSION" 30
 
-# Step 2: drive `thrum tmux restart --force` from coord identity via
-# tmux-exec (PID-chain break). --force matches scenarios 02/03/21/69's
-# precedent: the framework's tmux-exec ephemeral pane fails the
-# daemon's PaneTargetForIdentity caller-pane guard on the graceful
-# path (caller_session is "tmux-exec-NNN-NNN", not the worktree's
-# basename), which surfaces as a non-zero exit + WARN even when the
-# restart itself completes. --force bypasses the graceful-shutdown
-# wait that triggers the guard. The snapshot-save → kill → recreate
-# → launch contract this scenario verifies is identical on both
-# paths; only the optional graceful-pause step differs.
-local restart_out restart_rc
-restart_out=$(
-  "$TE" exec --cwd "$COORD_REPO" --clean -- \
-    env THRUM_NAME=test_coordinator_main thrum tmux restart "$KAFM6_S1_SESSION" \
-      --force 2>&1
-)
-restart_rc=$?
-
-# Assertion 1: restart success line.
-if [ "$restart_rc" -eq 0 ] && printf '%s' "$restart_out" | grep -q "restarted"; then
+# Step 2: drive `thrum tmux restart --force` from COORD_PANE rather
+# than tmux-exec. --force matches scenarios 02/03/21/69's precedent
+# (graceful-shutdown wait isn't materially different from the
+# verified contract). COORD_PANE drive (vs tmux-exec) sidesteps
+# the daemon's PaneTargetForIdentity caller-pane guard's intermittent
+# refusal of ephemeral callers in long-running test contexts —
+# COORD_PANE is the registered run-level coord agent that the daemon
+# trusts for cross-worktree restart authority. Mirrors the launch
+# driver pattern in scenario 70.
+if send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
+    "thrum tmux restart $KAFM6_S1_SESSION --force" \
+    "restarted" 60; then
   emit_pass "$SID" "restart-success-line"
 else
   emit_fail "$SID" "restart-success-line" \
-    'thrum tmux restart --force exits 0 AND stdout contains "restarted"' \
-    "exit ${restart_rc}; output: $(printf '%s' "$restart_out" | tr '\n' ' ' | head -c 240)" \
+    "thrum tmux restart --force (driven from COORD pane) emits 'restarted' line" \
+    "(timeout, no matching bash-stdout entry)" \
     "scenarios/${SID}.test.sh:$LINENO"
 fi
 

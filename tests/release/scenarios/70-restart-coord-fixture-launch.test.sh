@@ -71,6 +71,11 @@ if [ "$create_rc" -ne 0 ] || [ ! -d "$KAFM6_S1_WT" ]; then
   return 0
 fi
 
+# Settle COORD pane before sending — by the time scenario 70 runs in
+# a full-suite, COORD may still be rendering output from an earlier
+# scenario, which trips send_command's `!`-prefix bash-mode trigger.
+wait_for_pane_idle "$COORD_PANE" 60
+
 # Step 2: agent-registered tmux session, driven from COORD_PANE
 # (mirrors scenario 69's rationale — daemon's identity guard refuses
 # inline-registration tmux create from tmux-exec ephemeral callers).
@@ -84,19 +89,26 @@ if ! send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
   return 0
 fi
 
-# Step 3: launch claude. Daemon's HandleLaunch goroutine clears any
-# stale subshell PID and writes tmux_session; claude's /thrum:prime
-# auto-run reclaims agent_pid.
-local launch_out launch_rc
-launch_out=$(
-  "$TE" exec --cwd "$COORD_REPO" --clean -- \
-    env THRUM_NAME=test_coordinator_main thrum tmux launch "$KAFM6_S1_SESSION" 2>&1
-)
-launch_rc=$?
-if [ "$launch_rc" -ne 0 ]; then
+# Brief settle between create and launch — daemon's session-row
+# write is async; a fast launch immediately after create can race
+# the row being persisted.
+sleep 2
+
+# Step 3: launch claude — driven from COORD_PANE (registered agent
+# identity), NOT tmux-exec. tmux-exec ephemeral callers fail the
+# daemon's PaneTargetForIdentity guard, which causes a partial-
+# success path: the launch returns 0 (or 1 intermittently) but the
+# tmux_session field is silently skipped from the identity write.
+# That breaks downstream scenarios 72/73 that rely on tmux_session
+# being populated. COORD_PANE has a registered identity the daemon
+# trusts for cross-worktree launch authority. Mirrors the create
+# step's COORD_PANE pattern (Step 2).
+if ! send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
+    "thrum tmux launch $KAFM6_S1_SESSION" \
+    "Launched" 60; then
   emit_fail "$SID" "coord-restart-fixture-alive" \
-    "thrum tmux launch $KAFM6_S1_SESSION succeeds" \
-    "exit ${launch_rc}; output: $(printf '%s' "$launch_out" | tr '\n' ' ' | head -c 320)" \
+    "thrum tmux launch $KAFM6_S1_SESSION (driven from COORD pane) emits 'Launched' line" \
+    "(timeout, no matching bash-stdout entry)" \
     "scenarios/${SID}.test.sh:$LINENO"
   return 0
 fi
