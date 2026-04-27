@@ -174,23 +174,33 @@ func TestHandleSend_AgentManagedStillRoutesThroughQueue(t *testing.T) {
 // TestHandleStatus_IncludesNoAgentManagedSessions verifies the second
 // pass: sessions discovered via tmux's `@thrum-managed=1` tag appear
 // in the status response with empty Agent and State=alive. Regression
-// guard for thrum-ufv5.11 (Step 10C.1 / 10C.7).
+// guard for thrum-ufv5.11 (Step 10C.1 / 10C.7) and thrum-zuz5
+// (daemon-scoped via @thrum-thrum-dir).
 func TestHandleStatus_IncludesNoAgentManagedSessions(t *testing.T) {
-	handler, _ := newNoAgentTestHandler(t)
+	handler, thrumDir := newNoAgentTestHandler(t)
 
 	stubTmuxSeams(t,
 		func(string) bool { return true },
 		nil,
 		func() ([]string, error) { return []string{"bare-1", "unrelated", "bare-2"}, nil },
 		func(sess, key string) (string, error) {
-			if key != "@thrum-managed" {
-				return "", fmt.Errorf("unexpected key %q", key)
-			}
-			switch sess {
-			case "bare-1", "bare-2":
-				return "1", nil
+			switch key {
+			case "@thrum-managed":
+				switch sess {
+				case "bare-1", "bare-2":
+					return "1", nil
+				default:
+					return "", errors.New("option not set")
+				}
+			case "@thrum-thrum-dir":
+				switch sess {
+				case "bare-1", "bare-2":
+					return thrumDir, nil
+				default:
+					return "", errors.New("option not set")
+				}
 			default:
-				return "", errors.New("option not set")
+				return "", fmt.Errorf("unexpected key %q", key)
 			}
 		},
 	)
@@ -224,6 +234,90 @@ func TestHandleStatus_IncludesNoAgentManagedSessions(t *testing.T) {
 	}
 }
 
+// TestHandleStatus_FiltersForeignDaemonSessions verifies that thrum-managed
+// sessions whose @thrum-thrum-dir tag points at a different daemon do NOT
+// leak into this daemon's status response. Regression for thrum-zuz5:
+// before the fix, pass 2 filtered only on @thrum-managed=1, which is set
+// by every thrum daemon — so cross-repo sessions polluted the status
+// response and the `thrum tmux connect` picker, and broke local make ci.
+func TestHandleStatus_FiltersForeignDaemonSessions(t *testing.T) {
+	handler, thrumDir := newNoAgentTestHandler(t)
+
+	otherDaemonDir := filepath.Join(t.TempDir(), ".thrum-other")
+
+	stubTmuxSeams(t,
+		func(string) bool { return true },
+		nil,
+		func() ([]string, error) { return []string{"mine", "theirs", "untagged"}, nil },
+		func(sess, key string) (string, error) {
+			switch key {
+			case "@thrum-managed":
+				if sess == "mine" || sess == "theirs" {
+					return "1", nil
+				}
+				return "", errors.New("option not set")
+			case "@thrum-thrum-dir":
+				switch sess {
+				case "mine":
+					return thrumDir, nil
+				case "theirs":
+					return otherDaemonDir, nil
+				default:
+					return "", errors.New("option not set")
+				}
+			default:
+				return "", fmt.Errorf("unexpected key %q", key)
+			}
+		},
+	)
+
+	resp, err := handler.HandleStatus(context.Background(), json.RawMessage("{}"))
+	if err != nil {
+		t.Fatalf("HandleStatus: %v", err)
+	}
+	list := resp.(*TmuxStatusResponse).Sessions
+	if len(list) != 1 {
+		t.Fatalf("got %d sessions, want 1 (only the local-daemon session): %+v", len(list), list)
+	}
+	if list[0].Name != "mine" {
+		t.Errorf("Name = %q, want %q", list[0].Name, "mine")
+	}
+}
+
+// TestHandleStatus_SkipsManagedSessionsWithoutDaemonTag verifies the
+// graceful-upgrade path: a pre-zuz5 session tagged with @thrum-managed=1
+// but lacking @thrum-thrum-dir does NOT appear in pass 2 — pass 2 cannot
+// safely attribute it. The session becomes visible again on next
+// HandleCreate or after backfill. Per acceptance criteria.
+func TestHandleStatus_SkipsManagedSessionsWithoutDaemonTag(t *testing.T) {
+	handler, _ := newNoAgentTestHandler(t)
+
+	stubTmuxSeams(t,
+		func(string) bool { return true },
+		nil,
+		func() ([]string, error) { return []string{"legacy"}, nil },
+		func(_, key string) (string, error) {
+			switch key {
+			case "@thrum-managed":
+				return "1", nil
+			case "@thrum-thrum-dir":
+				return "", errors.New("option not set")
+			default:
+				return "", fmt.Errorf("unexpected key %q", key)
+			}
+		},
+	)
+
+	resp, err := handler.HandleStatus(context.Background(), json.RawMessage("{}"))
+	if err != nil {
+		t.Fatalf("HandleStatus: %v", err)
+	}
+	list := resp.(*TmuxStatusResponse).Sessions
+	if len(list) != 0 {
+		t.Errorf("got %d sessions, want 0 (legacy session without daemon tag is skipped): %+v", len(list), list)
+	}
+}
+
 // TestHandleStatus_DeduplicatesBetweenIdentityAndTagPasses ensures the
 // second pass does not double-list a session that also has an
 // identity file — the `seen` map spans both passes.
@@ -243,7 +337,16 @@ func TestHandleStatus_DeduplicatesBetweenIdentityAndTagPasses(t *testing.T) {
 		func(string) bool { return true },
 		nil,
 		func() ([]string, error) { return []string{"shared"}, nil },
-		func(_, _ string) (string, error) { return "1", nil },
+		func(_, key string) (string, error) {
+			switch key {
+			case "@thrum-managed":
+				return "1", nil
+			case "@thrum-thrum-dir":
+				return thrumDir, nil
+			default:
+				return "", errors.New("option not set")
+			}
+		},
 	)
 
 	resp, err := handler.HandleStatus(context.Background(), json.RawMessage("{}"))
