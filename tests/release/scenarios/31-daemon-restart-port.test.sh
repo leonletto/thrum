@@ -62,7 +62,7 @@ if [ ! -s "$PORT_FILE" ]; then
   return 0
 fi
 
-port_before="$(cat "$PORT_FILE" | tr -d '[:space:]')"
+port_before="$(tr -d '[:space:]' < "$PORT_FILE")"
 
 # Restart the sub-daemon.
 restart_out="$(mktemp -t kafm1-31-restart.XXXXXX).txt"
@@ -105,7 +105,7 @@ elapsed=0
 port_after=""
 while [ "$elapsed" -lt 15 ]; do
   if [ -s "$PORT_FILE" ]; then
-    port_after="$(cat "$PORT_FILE" | tr -d '[:space:]')"
+    port_after="$(tr -d '[:space:]' < "$PORT_FILE")"
     [ -n "$port_after" ] && break
   fi
   sleep 1

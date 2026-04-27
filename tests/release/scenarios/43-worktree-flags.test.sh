@@ -54,7 +54,8 @@ while [ ! -d "$WT_BRANCH_PATH" ] && [ "$elapsed" -lt 10 ]; do
   elapsed=$((elapsed + 1))
 done
 
-# A2: branch matches custom name.
+# A2: branch matches custom name. Always emit PASS or FAIL — silent
+# skip on A1 failure would produce false-green.
 if [ -d "$WT_BRANCH_PATH" ]; then
   current_branch="$(git -C "$WT_BRANCH_PATH" branch --show-current 2>/dev/null || true)"
   if [ "$current_branch" = "$WT_BRANCH_BRANCH" ]; then
@@ -65,6 +66,11 @@ if [ -d "$WT_BRANCH_PATH" ]; then
       "got: '${current_branch}'" \
       "scenarios/${SID}.test.sh:$LINENO"
   fi
+else
+  emit_fail "$SID" "custom-branch-name" \
+    "worktree dir at ${WT_BRANCH_PATH}" \
+    "(create failed above; cannot check branch name)" \
+    "scenarios/${SID}.test.sh:$LINENO"
 fi
 
 # A3: --detach create.
@@ -91,7 +97,8 @@ while [ ! -d "$WT_DETACH_PATH" ] && [ "$elapsed" -lt 10 ]; do
   elapsed=$((elapsed + 1))
 done
 
-# A4: detached HEAD — git branch --show-current returns empty.
+# A4: detached HEAD — git branch --show-current returns empty. Always
+# emit PASS or FAIL — silent skip on A3 failure would produce false-green.
 if [ -d "$WT_DETACH_PATH" ]; then
   current_branch="$(git -C "$WT_DETACH_PATH" branch --show-current 2>/dev/null || true)"
   if [ -z "$current_branch" ]; then
@@ -102,6 +109,11 @@ if [ -d "$WT_DETACH_PATH" ]; then
       "got: '${current_branch}'" \
       "scenarios/${SID}.test.sh:$LINENO"
   fi
+else
+  emit_fail "$SID" "detach-empty-branch" \
+    "worktree dir at ${WT_DETACH_PATH}" \
+    "(create failed above; cannot check detached HEAD)" \
+    "scenarios/${SID}.test.sh:$LINENO"
 fi
 
 }  # _run_scenario_43

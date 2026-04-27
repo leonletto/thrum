@@ -97,10 +97,11 @@ rm -f "$out"
 # path ("paths and/or pathspecs matched paths that exist outside of
 # your sparse-checkout") — the latter is a real bug in
 # `thrum context sync` against a freshly-init'd a-sync worktree
-# whose sparse-checkout excludes context/. Tracked separately; this
-# scenario pins the contract surface (command exists + responds in a
-# bounded way), not the success of the sync itself. Migrating to
-# strict success-only assertion gates on the upstream fix.
+# whose sparse-checkout excludes context/. Tracked in thrum-nt4c
+# (P3 upstream fix). This scenario pins the contract surface
+# (command exists + responds in a bounded way), not the success of
+# the sync itself. Migrating to strict success-only assertion gates
+# on thrum-nt4c.
 res="$(_ctx_run sync)"
 rc="${res%%:*}"; out="${res#*:}"
 if grep -qE "(Context synced|no remote configured|No remote configured|sparse-checkout)" "$out"; then
