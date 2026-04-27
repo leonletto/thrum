@@ -50,11 +50,9 @@ fi
 # Encode cwd using Claude Code's convention: leading "/" stripped, then "/",
 # ".", and "_" all replaced with "-", then a leading "-" prepended.
 #
-# NOTE: Adds the "_" → "-" substitution missing from the Go reference at
-# internal/restart/restart.go:encodeCwd, which only handles "/" and ".".
-# Real Claude Code behavior also collapses underscores; without this, paths
-# containing "_" (e.g. ~/.thrum_release_tests/$RUNID) resolve to the wrong
-# project dir and check-context-value.sh fails with "no project dir at...".
+# Mirrors internal/restart/restart.go:encodeCwd. Both must stay in sync —
+# they're independent implementations of one Claude-Code-side convention,
+# applied at the same three characters ("/", ".", "_").
 encode_cwd() {
   local cwd="$1"
   cwd="${cwd#/}"
