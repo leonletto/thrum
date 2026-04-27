@@ -72,7 +72,7 @@ fi
 # orthogonal to agent registration). --force tolerates leftover state
 # from a prior partial run.
 "$TE" exec --cwd "$COORD_REPO" --clean -- \
-  thrum tmux create "$RT_SESSION" \
+  env THRUM_NAME=test_coordinator_main thrum tmux create "$RT_SESSION" \
     --cwd "$RT_WT" \
     --no-agent --force >/dev/null 2>&1 || {
     emit_fail "$SID" "tmux-create-runtime-test" \
@@ -105,14 +105,13 @@ fi
 
 # Step 4: poll `thrum tmux status --json` until the runtime-test row
 # reports state=alive. Daemon writes the row asynchronously after
-# launch returns; 10s is generous for shell startup. File-redirect
-# from inside the ephemeral pane keeps long JSON intact (memory:
+# launch returns; 10s is generous for shell startup. capture_thrum_json
+# (helpers/drive.sh) wraps the file-redirect→host-jq pattern (memory:
 # tmux-capture-pane-json-wrap).
 local status_file="/tmp/kafm8-62-status-${RUNID}.json"
 local elapsed=0
 while [ "$elapsed" -lt 10 ]; do
-  "$TE" exec --cwd "$COORD_REPO" --clean -- bash -c \
-    "thrum tmux status --json > '$status_file' 2>/dev/null"
+  capture_thrum_json "$COORD_REPO" test_coordinator_main "$status_file" tmux status
   if jq -e --arg n "$RT_SESSION" \
       '.sessions[]? | select(.name == $n and .state == "alive")' \
       "$status_file" >/dev/null 2>&1; then
@@ -142,7 +141,7 @@ rm -f "$status_file"
 # 65/66/68 (they create their own per-scenario session names but
 # share the worktree as --cwd).
 "$TE" exec --cwd "$COORD_REPO" --clean -- \
-  thrum tmux kill "$RT_SESSION" >/dev/null 2>&1 || true
+  env THRUM_NAME=test_coordinator_main thrum tmux kill "$RT_SESSION" >/dev/null 2>&1 || true
 
 }  # _run_scenario_62
 

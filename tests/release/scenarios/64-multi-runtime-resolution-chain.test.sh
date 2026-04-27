@@ -154,7 +154,7 @@ fi
 # Cleanup the sub-fixture session (worktree + sub-daemon are cleaned
 # up by the post-function block below).
 "$TE" exec --cwd "$SUB_REPO" --clean -- \
-  thrum tmux kill "$RESOLVE_SESSION" >/dev/null 2>&1 || true
+  env THRUM_NAME="$SUB_AGENT" thrum tmux kill "$RESOLVE_SESSION" >/dev/null 2>&1 || true
 
 }  # _run_scenario_64
 

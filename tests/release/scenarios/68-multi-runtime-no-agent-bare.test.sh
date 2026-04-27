@@ -33,7 +33,7 @@ _run_scenario_68() {
 
 # Step 1: bare --no-agent session. --force tolerates leftover state.
 "$TE" exec --cwd "$COORD_REPO" --clean -- \
-  thrum tmux create "$BARE_SESSION" \
+  env THRUM_NAME=test_coordinator_main thrum tmux create "$BARE_SESSION" \
     --cwd "$RT_WT" \
     --no-agent --force >/dev/null 2>&1 || {
     emit_fail "$SID" "tmux-create-bare-session" \
@@ -46,10 +46,10 @@ _run_scenario_68() {
 # Step 2: assert NO agent named "bare-session" appears in team.
 # `thrum team --json` is the structured form (markdown's
 # `thrum team | grep` would also work, but JSON is parser-stable).
-# File-redirect for capture so long output doesn't wrap-break.
+# capture_thrum_json (helpers/drive.sh) handles the file-redirect
+# wrap-safe capture.
 local team_file="/tmp/kafm8-68-team-${RUNID}.json"
-"$TE" exec --cwd "$COORD_REPO" --clean -- bash -c \
-  "thrum team --json > '$team_file' 2>/dev/null"
+capture_thrum_json "$COORD_REPO" test_coordinator_main "$team_file" team
 
 # The agent list shape is .agents[] (or .agents.agents[] depending
 # on schema version). Defensive: check both. The contract: no
@@ -94,12 +94,12 @@ else
   return 0
 fi
 
-# Step 4: poll status for alive. Same shape as scenarios 62/67.
+# Step 4: poll status for alive via capture_thrum_json. Same shape
+# as scenarios 62/67.
 local status_file="/tmp/kafm8-68-status-${RUNID}.json"
 local elapsed=0
 while [ "$elapsed" -lt 10 ]; do
-  "$TE" exec --cwd "$COORD_REPO" --clean -- bash -c \
-    "thrum tmux status --json > '$status_file' 2>/dev/null"
+  capture_thrum_json "$COORD_REPO" test_coordinator_main "$status_file" tmux status
   if jq -e --arg n "$BARE_SESSION" \
       '.sessions[]? | select(.name == $n and .state == "alive")' \
       "$status_file" >/dev/null 2>&1; then
@@ -133,7 +133,7 @@ _run_scenario_68
 # the run's exit code; helpers/teardown.sh's defensive cleanup
 # catches anything we miss.
 "$TE" exec --cwd "$COORD_REPO" --clean -- \
-  thrum tmux kill "$BARE_SESSION" >/dev/null 2>&1 || true
+  env THRUM_NAME=test_coordinator_main thrum tmux kill "$BARE_SESSION" >/dev/null 2>&1 || true
 "$TE" exec --cwd "$COORD_REPO" --clean -- \
   env THRUM_NAME=test_coordinator_main thrum worktree teardown "$RT_WT_NAME" \
   >/dev/null 2>&1 || true

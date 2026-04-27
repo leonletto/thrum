@@ -32,7 +32,7 @@ _run_scenario_66() {
 
 # Step 1: scratch --no-agent session in rt-scratch.
 "$TE" exec --cwd "$COORD_REPO" --clean -- \
-  thrum tmux create "$PRIME_SESSION" \
+  env THRUM_NAME=test_coordinator_main thrum tmux create "$PRIME_SESSION" \
     --cwd "$RT_WT" \
     --no-agent --force >/dev/null 2>&1 || {
     emit_fail "$SID" "tmux-create-prime-rt-test" \
@@ -52,7 +52,7 @@ _run_scenario_66() {
       "(non-zero exit)" \
       "scenarios/${SID}.test.sh:$LINENO"
     "$TE" exec --cwd "$COORD_REPO" --clean -- \
-      thrum tmux kill "$PRIME_SESSION" >/dev/null 2>&1 || true
+      env THRUM_NAME=test_coordinator_main thrum tmux kill "$PRIME_SESSION" >/dev/null 2>&1 || true
     return 0
   }
 
@@ -70,12 +70,12 @@ sleep 3
 local capture_out
 capture_out=$(
   "$TE" exec --cwd "$COORD_REPO" --clean -- \
-    thrum tmux capture "$PRIME_SESSION" --lines 100 2>&1
+    env THRUM_NAME=test_coordinator_main thrum tmux capture "$PRIME_SESSION" --lines 100 2>&1
 )
 
 # Cleanup the scratch session immediately.
 "$TE" exec --cwd "$COORD_REPO" --clean -- \
-  thrum tmux kill "$PRIME_SESSION" >/dev/null 2>&1 || true
+  env THRUM_NAME=test_coordinator_main thrum tmux kill "$PRIME_SESSION" >/dev/null 2>&1 || true
 
 # Negative assertion: count occurrences of "thrum:prime" OR
 # "thrum-prime" — should be 0 for shell runtime. grep -cE returns

@@ -33,7 +33,7 @@ _run_scenario_65() {
 # Step 1: scratch --no-agent session in rt-scratch. --force tolerates
 # leftover state from a partial prior run.
 "$TE" exec --cwd "$COORD_REPO" --clean -- \
-  thrum tmux create "$INVALID_SESSION" \
+  env THRUM_NAME=test_coordinator_main thrum tmux create "$INVALID_SESSION" \
     --cwd "$RT_WT" \
     --no-agent --force >/dev/null 2>&1 || {
     emit_fail "$SID" "tmux-create-invalid-rt-test" \
@@ -57,7 +57,7 @@ reject_rc=$?
 # scenario — 66 and 68 use their own session names but share the
 # rt-scratch worktree.
 "$TE" exec --cwd "$COORD_REPO" --clean -- \
-  thrum tmux kill "$INVALID_SESSION" >/dev/null 2>&1 || true
+  env THRUM_NAME=test_coordinator_main thrum tmux kill "$INVALID_SESSION" >/dev/null 2>&1 || true
 
 if [ "$reject_rc" -ne 0 ]; then
   emit_pass "$SID" "launch-rejects-invalid-name"

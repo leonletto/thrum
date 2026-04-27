@@ -57,7 +57,7 @@ fi
 # Step 2: tmux create + launch shell. --no-agent + --force matches
 # the markdown § 10C.7 invocation.
 "$TE" exec --cwd "$COORD_REPO" --clean -- \
-  thrum tmux create "$START_SESSION" \
+  env THRUM_NAME=test_coordinator_main thrum tmux create "$START_SESSION" \
     --cwd "$START_WT" \
     --no-agent --force >/dev/null 2>&1 || {
     emit_fail "$SID" "tmux-create-on-detached" \
@@ -86,15 +86,13 @@ else
   return 0
 fi
 
-# Step 3: poll status JSON for state=alive (file-redirect→jq per
-# tmux-capture-pane-json-wrap memory; same shape as scenarios 45,
-# 47, 49 — uniform so a future capture_thrum_json sweep can lift
-# all four call sites cleanly).
+# Step 3: poll status JSON for state=alive via capture_thrum_json
+# (helpers/drive.sh — wraps the file-redirect→host-jq pattern,
+# memory: tmux-capture-pane-json-wrap).
 local status_file="/tmp/kafm8-67-status-${RUNID}.json"
 local elapsed=0
 while [ "$elapsed" -lt 10 ]; do
-  "$TE" exec --cwd "$COORD_REPO" --clean -- bash -c \
-    "thrum tmux status --json > '$status_file' 2>/dev/null"
+  capture_thrum_json "$COORD_REPO" test_coordinator_main "$status_file" tmux status
   if jq -e --arg n "$START_SESSION" \
       '.sessions[]? | select(.name == $n and .state == "alive")' \
       "$status_file" >/dev/null 2>&1; then
@@ -126,7 +124,7 @@ _scenario_67_cleanup
 # without duplicating the kill+teardown sequence inline.
 _scenario_67_cleanup() {
   "$TE" exec --cwd "$COORD_REPO" --clean -- \
-    thrum tmux kill "$START_SESSION" >/dev/null 2>&1 || true
+    env THRUM_NAME=test_coordinator_main thrum tmux kill "$START_SESSION" >/dev/null 2>&1 || true
   "$TE" exec --cwd "$COORD_REPO" --clean -- \
     env THRUM_NAME=test_coordinator_main thrum worktree teardown "$START_WT_NAME" \
     >/dev/null 2>&1 || true
