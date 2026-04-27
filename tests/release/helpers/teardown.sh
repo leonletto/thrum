@@ -35,6 +35,13 @@ run_teardown() {
   thrum tmux kill kafm9-86-orch-session 2>/dev/null || true
   thrum tmux kill kafm9-88-session 2>/dev/null || true
   thrum tmux kill kafm9-91-nudge 2>/dev/null || true
+  # Per-scenario worktree teardowns alongside the session kills —
+  # rm -rf $WORKTREE_BASE below is a backstop that bypasses
+  # daemon-internal cleanup (git worktree prune, .thrum redirect
+  # state). Mirrors kafm.6/8 precedent.
+  thrum worktree teardown kafm9-86-orch >/dev/null 2>&1 || true
+  thrum worktree teardown kafm9-88-orch >/dev/null 2>&1 || true
+  thrum worktree teardown kafm9-91-nudge-wt >/dev/null 2>&1 || true
   if [ -n "${REPO:-}" ] && [ -d "$REPO" ]; then
     (cd "$REPO" && thrum daemon stop) >/dev/null 2>&1 || true
   fi
