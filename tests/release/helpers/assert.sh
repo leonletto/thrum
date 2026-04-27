@@ -17,10 +17,17 @@
 assert_jsonl() {
   local pane="$1" repo="$2" sid="$3" name="$4" expected="$5" loc="${6:-unknown}"
 
-  # Grep for the next <bash-stdout> entry containing the expected prefix.
-  # The literal text marker is stable per spec § 4 "Empirical findings".
+  # Match the expected prefix at the start of EITHER the bash-stdout region
+  # or the bash-stderr region of a `!`-prefix bash command's JSONL entry.
+  # check-context-value.sh writes VERIFIED to stdout (exit 0) and FAILED /
+  # ERROR to stderr (exit 1/2) — the spec uses both shapes as positive
+  # signals, so we have to look in both regions. Content layout:
+  #   stdout-only:  <bash-stdout>VERIFIED…</bash-stdout><bash-stderr></bash-stderr>
+  #   stderr-only:  <bash-stdout></bash-stdout><bash-stderr>FAILED…</bash-stderr>
+  local stdout_prefix="<bash-stdout>${expected}"
+  local stderr_prefix="<bash-stdout></bash-stdout><bash-stderr>${expected}"
   local filter
-  filter=".type == \"user\" and (.message.content | type == \"string\") and (.message.content | startswith(\"<bash-stdout>${expected}\"))"
+  filter=".type == \"user\" and (.message.content | type == \"string\") and (.message.content | (startswith(\"${stdout_prefix}\") or startswith(\"${stderr_prefix}\")))"
 
   local match
   if match=$(wait_for_jsonl_match "$repo" "$filter" 30); then
@@ -28,18 +35,14 @@ assert_jsonl() {
     return 0
   fi
 
-  # Failure path: capture the most recent <bash-stdout> in the repo's JSONL
-  # to put in the "got:" line, so the operator sees what actually arrived
-  # instead of a generic timeout.
-  local jsonl
-  if jsonl=$(jsonl_for_repo "$repo"); then
-    local got
-    got=$(jq -r 'select(.type=="user" and (.message.content | type == "string") and (.message.content | startswith("<bash-stdout>"))) | .message.content' "$jsonl" \
-      | tail -n1 \
-      | sed 's|^<bash-stdout>||; s|</bash-stdout>.*||')
-    emit_fail "$sid" "$name" "bash-stdout starting with '${expected}'" "${got:-<no <bash-stdout> entry seen yet>}" "$loc"
-  else
-    emit_fail "$sid" "$name" "bash-stdout starting with '${expected}'" "(no JSONL found at all for $pane)" "$loc"
-  fi
+  # Failure path: extract the LAST `!`-bash entry's content (both stdout and
+  # stderr regions) so the operator can see what actually landed. Newlines
+  # collapsed to spaces for one-line presentation.
+  local got
+  got=$(jq -r 'select(.type=="user" and (.message.content | type == "string") and (.message.content | startswith("<bash-stdout>"))) | .message.content' \
+    "$HOME/.claude/projects/$(encode_cwd "$repo")"/*.jsonl 2>/dev/null \
+    | tail -n1 | tr '\n' ' ')
+  emit_fail "$sid" "$name" "${expected} (in <bash-stdout> or <bash-stderr>)" \
+    "${got:-<no bash entry seen yet>}" "$loc"
   return 1
 }

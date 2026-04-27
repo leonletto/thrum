@@ -32,8 +32,12 @@ run_setup() {
   # ~/.workspaces (separate from /Users/leon/dev/opensource/thrum).
   WORKTREE_BASE="$HOME/.thrum_release_test_worktrees/$RUNID"
   mkdir -p "$REPO" "$WORKTREE_BASE"
+  # Strip THRUM_* env vars (THRUM_HOME, THRUM_NAME, etc.) to avoid the script's
+  # parent shell leaking identity hints into the ephemeral fixture. Preserve
+  # framework-internal THRUM_RELEASE_* vars (THRUM_RELEASE_REPO_ROOT used by
+  # scenarios, THRUM_RELEASE_NO_TEARDOWN debug toggle).
   # shellcheck disable=SC2046
-  unset $(env | grep -E '^THRUM_' | cut -d= -f1) 2>/dev/null || true
+  unset $(env | grep -E '^THRUM_' | grep -v '^THRUM_RELEASE_' | cut -d= -f1) 2>/dev/null || true
 
   (
     cd "$REPO" || exit 1
@@ -63,20 +67,16 @@ run_setup() {
   "$TE" exec --cwd "$REPO" --clean --timeout 30 -- thrum tmux start --name coord \
     > /tmp/zh4p-tmux-start.log 2>&1 || true
 
-  # Verify coord identity from inside the pane via discrete-`!` bash-prefix
-  # mode (see send_command in helpers/drive.sh for the rationale; same trick).
+  # Verify coord identity from inside the pane. send_bash_and_wait handles
+  # the discrete-`!`, separate-Enter, and pane-idle gating; we just supply
+  # the bash command and a substring we expect in the bash-stdout entry.
   #
-  # Note: we don't wait_for_session_start here. claude at its welcome screen
-  # writes ZERO JSONL until it receives user input that starts a session;
-  # polling for SessionStart attachments before the first `!` send is a
-  # chicken-and-egg deadlock. This whoami send IS what kicks the session
-  # alive, and the wait_for_jsonl_match below is the proper signal.
-  tmux send-keys -t coord "!"
-  sleep 0.3
-  tmux send-keys -t coord "thrum whoami --json" Enter
-  wait_for_jsonl_match "$REPO" \
-    '.type == "user" and (.message.content | type == "string") and (.message.content | startswith("<bash-stdout>")) and (.message.content | contains("test_coordinator_main"))' \
-    60 >/dev/null \
+  # Note: we don't wait_for_session_start before this. claude at its welcome
+  # screen writes ZERO JSONL until it receives user input that starts a
+  # session; polling for a SessionStart attachment before the first `!` send
+  # would be a chicken-and-egg deadlock. This whoami send IS what kicks the
+  # session alive.
+  send_bash_and_wait coord "$REPO" "thrum whoami --json" "test_coordinator_main" 60 \
     || { echo "ERROR: coord whoami did not return expected bash-stdout entry within 60s" >&2; return 1; }
 
   # C. Implementer worktree
@@ -97,10 +97,10 @@ run_setup() {
   local IMPL_WT="$WORKTREE_BASE/repo/impl"
 
   # C.2 create the impl worktree FROM the coord pane (so the call runs with
-  # coord's identity, mirroring real workflow). Discrete-`!` again.
-  tmux send-keys -t coord "!"
-  sleep 0.3
-  tmux send-keys -t coord "thrum worktree create impl -b feature/release-test-impl" Enter
+  # coord's identity, mirroring real workflow). Plain send_command — we
+  # don't need to wait for a specific bash-stdout substring here because
+  # the wait below polls the filesystem for the worktree dir directly.
+  send_command coord "! thrum worktree create impl -b feature/release-test-impl"
   local elapsed=0
   while [ ! -d "$IMPL_WT" ] && [ "$elapsed" -lt 30 ]; do
     sleep 1
@@ -123,9 +123,22 @@ run_setup() {
       --intent "Release test implementer" \
     || { echo "ERROR: C.3 tmux create impl failed" >&2; return 1; }
 
-  # STOP here for inspection. claude is NOT yet launched in the impl pane —
-  # next iteration will add `thrum tmux launch impl` and impl-side whoami.
-  echo "=== setup B + C.1 + C.2 + C.3-create complete ==="
+  # thrum tmux create only registers the agent inline; claude isn't running
+  # yet. Launch sends `claude` keystrokes (then /thrum:prime after 10s) via
+  # the daemon's HandleLaunch goroutine.
+  "$TE" exec --cwd "$REPO" --clean -- thrum tmux launch impl \
+    || { echo "ERROR: C.3 tmux launch impl failed" >&2; return 1; }
+
+  # Wait for the impl session to actually start in claude (SessionStart hook
+  # firing means claude booted and processed /thrum:prime).
+  wait_for_session_start "$IMPL_WT" 60 \
+    || { echo "ERROR: impl SessionStart did not appear within 60s" >&2; return 1; }
+
+  # Verify impl identity from inside the pane.
+  send_bash_and_wait impl "$IMPL_WT" "thrum whoami --json" "test_implementer" 60 \
+    || { echo "ERROR: impl whoami did not return expected bash-stdout entry within 60s" >&2; return 1; }
+
+  echo "=== setup A + B + C complete ==="
   echo "RUNID=$RUNID"
   echo "REPO=$REPO"
   echo "BASE=$BASE"
