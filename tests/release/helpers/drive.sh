@@ -51,6 +51,35 @@ send_command() {
   fi
 }
 
+# send_slash_command <pane> <command>
+# Sends a Claude Code slash command (e.g. "/thrum:load-context",
+# "/thrum:update-project") into a tmux pane in two pieces: the leading
+# `/` first, brief settle, then the rest of the command, brief settle,
+# then Enter.
+#
+# Same rationale as send_command's `!`-prefix split — Claude Code's UI
+# treats `/` as a keystroke-time mode switch (slash command palette).
+# Bundling "/foo:bar" in a single tmux send-keys call sometimes lets
+# the rest of the text race the mode switch, causing claude to receive
+# the command as plain chat instead of registering it as a slash
+# invocation.
+#
+# Accepts the command WITH or WITHOUT the leading `/` (canonicalizes
+# internally).
+send_slash_command() {
+  local pane="$1" cmd="$2"
+  # Strip a leading slash so the explicit `/` keystroke is the only one.
+  local body="${cmd#/}"
+  # Settle the pane first — same gating as send_command, so callers
+  # don't need a separate wait_for_pane_idle.
+  wait_for_pane_idle "$pane" 10
+  tmux send-keys -t "$pane" "/"
+  sleep 0.5
+  tmux send-keys -t "$pane" "$body"
+  sleep 0.8
+  tmux send-keys -t "$pane" Enter
+}
+
 # wait_for_bash_stdout_contains <repo-path> <substring> [timeout-seconds]
 # Specialization of wait_for_jsonl_match for the most common assertion
 # shape: "wait for a `!`-prefix bash command's <bash-stdout> entry whose
