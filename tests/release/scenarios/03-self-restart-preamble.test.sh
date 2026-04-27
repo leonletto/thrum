@@ -19,7 +19,10 @@ REPO="$COORD_REPO"
 
 # Step 1: have the coordinator save a restart snapshot
 send_command "$PANE" "! thrum tmux snapshot save --reason 'release-test 03 snapshot precondition'"
-# Wait for the .md to appear on disk
+# Wait for the .md to appear on disk. Snapshot filename is the agent's
+# registered name (`<agent_name>.md`), set by setup-repo.sh's quickstart
+# call: --name=test_coordinator_main → test_coordinator_main.md. If
+# setup-repo.sh changes the coord agent name, update the literal below.
 elapsed=0
 while [ ! -f "$REPO/.thrum/restart/test_coordinator_main.md" ] && [ "$elapsed" -lt 30 ]; do
   sleep 1
@@ -75,7 +78,9 @@ fi
 # timeout before that render fully settles, causing the FIRST `!` keystroke
 # to land mid-render and be typed as a literal char instead of triggering
 # bash-prefix mode. Wait for the longer post-restart settle explicitly here.
-wait_for_pane_idle "$PANE" 30
+# Use the same 60s ceiling as the inter-assertion gates below — slow CI
+# can stretch coord's prime render past 30s.
+wait_for_pane_idle "$PANE" 60
 
 # Step 4: three assertions on the new SessionStart attachment.
 #

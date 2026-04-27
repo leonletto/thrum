@@ -17,7 +17,10 @@
 #                 negative assertions during full release-test runs because
 #                 the run-level coord/impl panes also produce briefing-bearing
 #                 SessionStart attachments — prefer unique sub-case cwds with
-#                 default cwd-mode for negative assertions.
+#                 default cwd-mode for negative assertions. Note: on machines
+#                 with very many project directories (>500) the two-level
+#                 glob may approach shell ARG_MAX and silently truncate;
+#                 prefer cwd-mode where possible.
 #   test_tag   Arbitrary identifier echoed back in the result line so a single
 #              tmux capture can disambiguate multiple checks (test_1, test_2,…).
 #   needle     Literal string to grep for (passed to `grep -F`; emoji + special

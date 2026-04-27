@@ -67,13 +67,19 @@ done
 # 4A needs a PATH that contains `claude` but NOT `thrum`. Both live in the
 # same directory on this dev machine (~/.local/bin), so we can't just strip
 # one path entry. Build a synthetic PATH dir with only a claude symlink.
+# If claude is missing from PATH, fail loudly here and SKIP creating the
+# symlink — otherwise the broken symlink would silently turn 4A into a
+# 60s wait_for_pane_idle timeout instead of a clean error.
 THRUM_RELEASE_4A_PATHDIR="$BASE/fallback-4a-path"
 mkdir -p "$THRUM_RELEASE_4A_PATHDIR"
 CLAUDE_BIN="$(command -v claude || true)"
+THRUM_RELEASE_4A_READY=0
 if [ -z "$CLAUDE_BIN" ]; then
   emit_fail "$SID" "4A-setup" "claude on PATH" "(claude not found)" "scenarios/${SID}.test.sh:$LINENO"
+else
+  ln -sf "$CLAUDE_BIN" "$THRUM_RELEASE_4A_PATHDIR/claude"
+  THRUM_RELEASE_4A_READY=1
 fi
-ln -sf "$CLAUDE_BIN" "$THRUM_RELEASE_4A_PATHDIR/claude"
 
 run_4a_no_thrum_binary() {
   local tmux_name="fallback-no-thrum"
@@ -207,14 +213,19 @@ run_4c_daemon_down() {
 
   tmux kill-session -t "$tmux_name" 2>/dev/null || true
 
-  # Restart the local daemon so any teardown logic that walks daemon
-  # processes sees a clean state.
+  # Leave fallback-4c's daemon STOPPED. run_teardown only stops $REPO's
+  # daemon and then `rm -rf $BASE` — restarting fallback-4c's daemon
+  # here would leave an orphan process accumulating across runs after
+  # its .thrum/ state gets nuked. Stop is idempotent (we already stopped
+  # it earlier in this function), so this is a no-op the first time.
   "$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$cwd" --clean -- \
-    thrum daemon start >/dev/null || true
+    thrum daemon stop >/dev/null 2>&1 || true
 }
 
-# Run order: 4A and 4B first while daemon is healthy. 4C last because it
-# stops + restarts the run-level daemon.
-run_4a_no_thrum_binary || true
+# Run order: 4A and 4B first (arbitrary). 4C last — it stops and restarts
+# the fallback-4c local daemon (not the run-level $REPO daemon).
+if [ "$THRUM_RELEASE_4A_READY" = "1" ]; then
+  run_4a_no_thrum_binary || true
+fi
 run_4b_no_agent_registered || true
 run_4c_daemon_down || true

@@ -189,6 +189,20 @@ coord/impl panes also produce briefing-bearing SessionStart attachments
 that would false-positive a "no briefing here" scan — prefer unique
 sub-case cwds with default cwd-mode for negative assertions.
 
+**Manual smoke** (run from any thrum-initialized cwd; mirrors the
+verification steps in plan ns73.1 §§ 4-6):
+
+```bash
+# Default mode — regression sanity, output depends on the current pane:
+./scripts/check-context-value.sh smoke_default "# Thrum Session Briefing" SessionStart:startup
+
+# --source=any positive case — should report N≥1 hits across project dirs:
+./scripts/check-context-value.sh --source=any smoke_any "Thrum Session Briefing" SessionStart:startup
+
+# --source=any negative case — should report 0 hits:
+./scripts/check-context-value.sh --source=any smoke_any_neg "this_string_should_match_nothing_xyzzy_42" SessionStart:startup
+```
+
 ### `scripts/tmux-exec`
 
 Wraps a thrum CLI invocation in an ephemeral tmux pane so the call's
