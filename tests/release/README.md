@@ -32,6 +32,10 @@ The arg is a glob filter against `scenarios/`.
 | `02-restart-snapshot-preamble` | After IMPL pane saves a restart snapshot and is restarted, the new SessionStart attachment carries the loud `🛑 ACTION REQUIRED` preamble + `# Previous Session Context` heading + `## Resume Plan`. |
 | `03-self-restart-preamble` | Same loud-preamble path as 02 but driven against the COORD pane (covers thrum-501a.2 step 10.11). Coord's prime output is larger so this scenario adds explicit `wait_for_pane_idle` between assertions. |
 | `04-fallback-paths` | Three sub-cases for `inject-prime-context.sh`'s degraded paths, each in its own `$BASE/fallback-XX/` cwd: 4A (no thrum binary on PATH → silent no-op), 4B (thrum present, no agent → historical nudge), 4C (daemon down → degraded prime output wrapped in briefing envelope; tracks thrum-br6t for the eventual hook fix). |
+| `05-cross-session-identity` | Each pane resolves to its OWN registered thrum identity + role (coord → @test_coordinator_main/coordinator, impl → @test_implementer/implementer). Read-only re-assertion of the setup-time invariant under post-restart conditions (migrates `full_test_plan.md` § 8.1). |
+| `06-cross-session-send` | Coordinator can send a thrum message addressed to a different agent in a different pane. Asserts the success-path JSON envelope's `message_id`. Body carries a RUNID-anchored marker that scenario 07 matches against (migrates § 8.2). |
+| `07-cross-session-receive-reply` | Implementer's inbox shows the message scenario 06 sent (matched by marker), and impl can send a response message back to the coordinator with a distinct RUNID-anchored reply marker. Uses `thrum inbox --json` (not `--unread`) and `thrum send` (not `thrum reply <msg_id>`) so assertions are robust to claude's autonomous mark-as-read handling (migrates § 8.3). |
+| `08-cross-session-confirm-receipt` | Coordinator's inbox shows the implementer's reply (matched by reply marker). Closes the bidirectional loop. Adds an explicit `wait_for_pane_idle 60` so claude's autonomous handling of the inbound nudge can settle before `!`-bash mode is engaged (migrates § 8.4). |
 
 ## Output
 
