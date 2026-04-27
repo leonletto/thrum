@@ -16,6 +16,17 @@ run_teardown() {
   # out before reaching scenario 49's cleanup).
   thrum tmux kill bare-queue 2>/dev/null || true
   thrum tmux kill queue-test 2>/dev/null || true
+  # Defensive cleanup for the kafm.8 multi-runtime fixtures. Scenario
+  # 68 tears down rt-scratch (worktree + sessions) on the happy path;
+  # scenarios 67 and 69 tear down their own per-scenario worktrees.
+  # This catches partial failures and orphaned sessions from any of
+  # 62-69.
+  thrum tmux kill runtime-test 2>/dev/null || true
+  thrum tmux kill invalid-rt-test 2>/dev/null || true
+  thrum tmux kill prime-rt-test 2>/dev/null || true
+  thrum tmux kill bare-session 2>/dev/null || true
+  thrum tmux kill tmux-start-test 2>/dev/null || true
+  thrum tmux kill force-restart-test 2>/dev/null || true
   if [ -n "${REPO:-}" ] && [ -d "$REPO" ]; then
     (cd "$REPO" && thrum daemon stop) >/dev/null 2>&1 || true
   fi
