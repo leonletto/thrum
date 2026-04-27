@@ -226,6 +226,105 @@ spawn_sub_fixture_claude() {
   tmux send-keys -t "$tmux_name" Enter
 }
 
+# capture_thrum_json <repo> <thrum-name> <out-file> <thrum-args... (no --json)>
+# Runs a thrum subcommand inside an ephemeral tmux-exec pane (PID-chain
+# break, identity pinned via THRUM_NAME) and writes the --json output to
+# <out-file> on the host filesystem. Caller then runs jq against
+# <out-file> directly — no `tmux capture-pane | jq` involved, sidestepping
+# the 80-col wrap that mangles JSON strings (memory:
+# tmux-capture-pane-json-wrap).
+#
+# CONTRACT: callers must NOT include `--json` in <thrum-args>. The helper
+# appends it. Callers that need a non-JSON capture should call tmux-exec
+# directly.
+#
+# Args:
+#   repo         working directory for tmux-exec --cwd (typically $COORD_REPO
+#                or a sub-fixture root)
+#   thrum-name   value for THRUM_NAME inside the ephemeral pane
+#   out-file     host-side file path to write JSON to (use a $RUNID-anchored
+#                /tmp path; the helper does not handle paths containing
+#                single quotes)
+#   thrum-args   thrum subcommand + flags, NO `--json` (helper appends)
+#
+# Exit code: whatever tmux-exec returned. The helper does NOT verify the
+# file is parseable JSON — caller jq's it.
+#
+# Quoting note: thrum-args are marshalled via printf %q so embedded spaces,
+# quotes, and shell metacharacters survive the bash -c hop intact.
+capture_thrum_json() {
+  local repo="$1" thrum_name="$2" out_file="$3"
+  shift 3
+  local te="${THRUM_RELEASE_REPO_ROOT}/scripts/tmux-exec"
+  local args_quoted=""
+  local a
+  for a in "$@"; do
+    args_quoted+=" $(printf %q "$a")"
+  done
+  "$te" exec --cwd "$repo" --clean -- bash -c \
+    "env THRUM_NAME=$(printf %q "$thrum_name") thrum${args_quoted} --json > $(printf %q "$out_file") 2>/dev/null"
+}
+
+# assert_tool_use_bash <repo> <sid> <name> <floor_ts> <command-substring> [timeout]
+# Polls the agent's JSONL for an assistant entry whose .message.content[]
+# contains a tool_use with .name == "Bash" and .input.command containing
+# <command-substring>, constrained to entries with .timestamp >= <floor_ts>.
+# Emits PASS / FAIL via emit_pass / emit_fail.
+#
+# Specialization for the "natural-language → claude shells out via Bash"
+# assertion shape used by NL-driven scenarios (precedent: scenario 21's
+# slash-chain sub-assertion 2). The tool_use entry is the deterministic
+# anchor: regardless of what the model says in chat, if it actually
+# invoked the requested command, the tool_use lands.
+#
+# Argument shape mirrors assert_jsonl (<repo> <sid> <name> ... <secs>) with
+# command-substring substituted for assert_jsonl's expected-line-prefix.
+# Default timeout: 60s.
+#
+# floor_ts is REQUIRED (not optional) because without it the helper would
+# false-match earlier tool_use entries from setup-repo.sh's whoami probes
+# or prior scenarios. Generate immediately before sending the NL prompt:
+#
+#   local floor_ts="$(date -u +%Y-%m-%dT%H:%M:%S)"
+#   send_command "$pane" "ask claude something here"
+#   assert_tool_use_bash "$repo" "$SID" "name" "$floor_ts" "thrum send" 90 \
+#     "scenarios/${SID}.test.sh:$LINENO"
+#
+# Args:
+#   repo                agent's repo path (used to locate JSONL via encode_cwd)
+#   sid                 scenario id, for output tagging
+#   name                assertion name, for output tagging
+#   floor_ts            RFC3339 cutoff; only entries at-or-after match
+#   command-substring   substring jq finds inside .input.command (use
+#                       distinctive tokens like "thrum send" / "thrum reply")
+#   timeout             optional poll timeout seconds (default 60)
+#   loc                 optional "scenarios/NN.test.sh:LINENO" for failure attribution
+#                       (positional after timeout, mirroring assert_jsonl)
+#
+# Returns 0 on PASS, 1 on FAIL.
+assert_tool_use_bash() {
+  local repo="$1" sid="$2" name="$3" floor_ts="$4" substring="$5"
+  local timeout="${6:-60}" loc="${7:-unknown}"
+  local filter
+  filter='.type == "assistant"
+        and (.timestamp >= "'"$floor_ts"'")
+        and (.message.content | type == "array")
+        and (.message.content
+             | map(select(.type == "tool_use"
+                          and .name == "Bash"
+                          and (.input.command | tostring | contains("'"$substring"'"))))
+             | length > 0)'
+  if wait_for_jsonl_match "$repo" "$filter" "$timeout" >/dev/null; then
+    emit_pass "$sid" "$name"
+    return 0
+  fi
+  emit_fail "$sid" "$name" \
+    "assistant tool_use Bash with .input.command containing '${substring}' within ${timeout}s after ${floor_ts}" \
+    "(no matching JSONL entry)" \
+    "$loc"
+  return 1
+}
+
 # kick_session_then_wait <pane> <cwd> [timeout-seconds]
 # Forces a fresh claude pane to flush its first JSONL (creating the
 # project dir) so subsequent assertion helpers don't ERROR with "no
