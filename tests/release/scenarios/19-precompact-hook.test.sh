@@ -37,9 +37,9 @@ BACKUP_GLOB="/tmp/thrum-pre-compact-test_coordinator_main-coordinator-all-*.md"
 
 _run_scenario_19() {
 
-if [ ! -x "$SCRIPT" ] && [ ! -f "$SCRIPT" ]; then
-  emit_fail "$SID" "script-present" "pre-compact-save-context.sh at $SCRIPT" \
-    "(file missing)" "scenarios/${SID}.test.sh:$LINENO"
+if [ ! -f "$SCRIPT" ] || [ ! -x "$SCRIPT" ]; then
+  emit_fail "$SID" "script-present" "pre-compact-save-context.sh at $SCRIPT (executable)" \
+    "(file missing or not executable)" "scenarios/${SID}.test.sh:$LINENO"
   return 0
 fi
 

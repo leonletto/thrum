@@ -1,36 +1,45 @@
 #!/usr/bin/env bash
 # Scenario: context-show-saved (migrates full_test_plan.md § 9.2)
 #
-# Verifies that `thrum context show` round-trips a previously saved
-# context blob — i.e. that step 9.1's save persisted to a place where
-# show can read it back. The spec frames this as a smoke test that
-# context storage works at the CLI layer (independent of any claude
-# session): driven from outside the agent's tmux pane via tmux-exec
-# with THRUM_NAME pinned, the same env shape the markdown uses.
+# Verifies the `thrum context save` → `thrum context show` round trip
+# at the CLI layer, independent of any claude session: a content blob
+# saved via `thrum context save --file` is readable back via
+# `thrum context show --session`. The save/show pair is the
+# storage-layer contract every higher-level path (the
+# /thrum:update-project skill, the PreCompact hook, /thrum:load-context
+# via thrum prime) eventually reads through.
 #
-# Coupling to scenario 17: 17 saves a marker via the NL "update my
-# thrum context with" prompt; 18 verifies that same marker is readable
-# via `thrum context show`. Together they exercise the save→show round
-# trip end-to-end. Listing 17 before 18 in run.sh's natural sort order
-# (17- < 18-) matches the spec's § 9.1 → § 9.2 ordering.
+# Driven entirely out-of-pane via tmux-exec — same pattern the
+# markdown spec uses (`cd ~/.workspaces/.../test-coordinator;
+# THRUM_NAME=test_coordinator thrum context show`). tmux-exec breaks
+# the PID ancestry chain so the call resolves to the agent we pass via
+# THRUM_NAME, not the runner's parent.
 #
-# Deviation from markdown § 9.2: the spec runs the show command from
-# a fresh shell (`cd ~/.workspaces/.../test-coordinator; THRUM_NAME=...
-# thrum context show`). We use tmux-exec to run the equivalent in an
-# ephemeral pane that breaks the PID ancestry chain — same reason
-# setup-repo.sh wraps driver-side thrum calls through tmux-exec
-# (avoids the framework parent-process leaking identity). Otherwise
-# faithful to the markdown.
+# Independent of scenario 17 by design: 17 covers the slash-command
+# /thrum:update-project path; this scenario covers the CLI save+show
+# round-trip without any claude involvement. Coverage of those two
+# paths is intentionally separate so a regression in either is
+# attributable.
 #
-# Read-only: no fixture mutation.
+# Read-only at the fixture level (writes to test_coordinator_main's
+# context store, which is not consumed by any subsequent scenario).
 
 SID="18-context-show-saved"
-MARKER="kafm5-17-marker-${RUNID}"
+MARKER="kafm5-18-marker-${RUNID}"
 
-# Use tmux-exec for an out-of-pane invocation, mirroring the spec's
-# fresh-shell + THRUM_NAME pattern. THRUM_NAME=test_coordinator_main
-# ensures the lookup keys on the same agent identity scenario 17 wrote.
-output_file="$(mktemp -t kafm5-18.XXXXXX)"
+# Save the marker via tmux-exec + --file. tmux-exec runs commands
+# inside an ephemeral tmux pane (not a child process), so shell-pipe
+# stdin doesn't reach the inner command — use the --file flag, which
+# `thrum context save` accepts as an explicit content source.
+marker_file="$(mktemp -t kafm5-18.XXXXXX)"
+printf '%s\n' "$MARKER" > "$marker_file"
+"$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$COORD_REPO" --clean -- \
+  env THRUM_NAME=test_coordinator_main thrum context save --file "$marker_file" \
+  >/dev/null 2>&1 || true
+rm -f "$marker_file"
+
+# Read the marker back via the same out-of-pane pattern.
+output_file="$(mktemp -t kafm5-18-show.XXXXXX)"
 "$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$COORD_REPO" --clean -- \
   env THRUM_NAME=test_coordinator_main thrum context show --session \
   > "$output_file" 2>&1 || true

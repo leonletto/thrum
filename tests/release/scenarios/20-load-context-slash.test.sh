@@ -14,28 +14,67 @@
 # Bash tool invocation suppressed) would silently break compaction
 # recovery — agents would compact and not re-load their state.
 #
-# Test approach: send the slash command (no `!`-prefix — it's a Claude
-# Code slash command, not a bash command) via send_command's else
-# branch. Then poll JSONL for an assistant tool_use entry where
-# .name=="Bash" and .input.command starts with "thrum prime". That's
-# the deterministic, code-path-anchored evidence the skill ran.
+# Test approach:
+#   1. Create a /tmp/thrum-pre-compact-<identity>-*.md backup via the
+#      pre-compact-save-context.sh script — so the precondition the
+#      spec § 9.4 expects (a /tmp backup is present at the time
+#      /thrum:load-context runs) is actually met. Without this step,
+#      we'd be testing /thrum:load-context against an empty backup
+#      directory.
+#   2. Send the slash command via send_slash_command (drive.sh helper).
+#   3. Poll JSONL for an assistant tool_use entry where .name=="Bash"
+#      and .input.command starts with "thrum prime". Code-path-anchored
+#      evidence the skill ran.
 #
-# Deviation from markdown § 9.4: the spec captures the pane and greps
-# free-form claude prose for "thrum context" / "/tmp backup" markers.
-# We assert against the underlying tool invocation instead, mirroring
-# scenario 05's whoami --json deviation rationale: deterministic and
-# grep-friendly vs claude's free-form output, and code-path-anchored
-# vs surface-prose-anchored.
+# Spec drift note (§ 9.4): the markdown claims /thrum:load-context
+# "displays both the thrum context AND the /tmp backup." Inspection of
+# the skill body + the prime CLI shows prime does NOT read or render
+# /tmp/thrum-pre-compact-*.md files. So the /tmp-backup-display claim
+# is not currently true. Tracked in thrum-eq6q (P3) — until the spec
+# or skill is reconciled, this scenario asserts only what's actually
+# implemented: that the slash command routes to `thrum prime`. We DO
+# create the /tmp file as a precondition so the skill-render path can
+# observe it if/when thrum-eq6q lands.
+#
+# Deviation from markdown § 9.4 assertion shape: the spec captures
+# the pane and greps free-form claude prose for "thrum context" /
+# "/tmp backup" markers. We assert against the underlying tool
+# invocation instead, mirroring scenario 05's whoami --json deviation
+# rationale: deterministic and grep-friendly vs claude's free-form
+# output, and code-path-anchored vs surface-prose-anchored.
 #
 # Driven against COORD pane (matches markdown). Read-only at the
 # fixture level — claude reading its own context doesn't mutate it.
+# The /tmp backup file is removed at scenario end.
 
 SID="20-load-context-slash"
 PANE="$COORD_PANE"
 REPO="$COORD_REPO"
+PRECOMPACT_SCRIPT="$THRUM_RELEASE_REPO_ROOT/claude-plugin/scripts/pre-compact-save-context.sh"
+BACKUP_GLOB="/tmp/thrum-pre-compact-test_coordinator_main-coordinator-all-*.md"
 
-# Settle the coord pane. COORD's prime output is large + scenario 17
-# left chat content in flight; allow up to 90s.
+_run_scenario_20() {
+
+# Step 1: precondition. Create a /tmp backup so the file the spec
+# expects is present at slash-command invocation time. Same
+# invocation pattern as scenario 19.
+rm -f $BACKUP_GLOB 2>/dev/null || true
+"$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$COORD_REPO" --clean -- \
+  env -u THRUM_HOME THRUM_NAME=test_coordinator_main bash "$PRECOMPACT_SCRIPT" \
+  >/dev/null 2>&1 || true
+sleep 1
+# shellcheck disable=SC2086 — intentional glob expansion
+backup_files=( $BACKUP_GLOB )
+if [ ! -e "${backup_files[0]}" ]; then
+  emit_fail "$SID" "precondition-backup-present" \
+    "/tmp backup matching ${BACKUP_GLOB} created by pre-compact hook" \
+    "(no file present after pre-compact invocation)" \
+    "scenarios/${SID}.test.sh:$LINENO"
+  return 0
+fi
+
+# Step 2: settle the coord pane. COORD's prime output is large +
+# scenario 17 left chat content in flight; allow up to 90s.
 wait_for_pane_idle "$PANE" 90
 
 # Capture an RFC3339 floor timestamp so we only match NEW assistant
@@ -43,29 +82,15 @@ wait_for_pane_idle "$PANE" 90
 # fired by setup-repo.sh's tmux start. JSONL timestamps are RFC3339Z;
 # our floor (no fractional seconds, no Z) sorts lexicographically
 # before anything that includes a fractional/Z suffix at the same
-# clock-second, which is the desired behavior for the comparison.
+# clock-second, which is the desired behavior.
+local floor_ts
 floor_ts="$(date -u +%Y-%m-%dT%H:%M:%S)"
 
-# Send the slash command in two pieces: leading `/` first, then the
-# rest of the command string. Same rationale as drive.sh's `!`-prefix
-# split — Claude Code's UI treats `/` as a mode switch (command
-# palette) at keystroke-time. Bundling `/thrum:load-context` in a
-# single tmux send-keys call sometimes lets the rest of the text race
-# the mode switch, causing claude to receive the command as plain
-# chat instead of registering it as a slash invocation. The two-step
-# pattern with a brief settle is what works reliably in scenario
-# 03's auto-prime path; mirroring it here removes the flake.
-tmux send-keys -t "$PANE" "/"
-sleep 0.5
-tmux send-keys -t "$PANE" "thrum:load-context"
-sleep 0.8
-tmux send-keys -t "$PANE" Enter
+# Step 3: send the slash command via the drive.sh helper.
+send_slash_command "$PANE" "/thrum:load-context"
 
-# Allow claude time to read the skill body and dispatch the Bash tool
-# call. Skill bodies are short; tool dispatch is fast; the bash command
-# itself (thrum prime) takes a few seconds to render. 90s ceiling
-# matches the rest of the suite's claude-mediated polls.
-filter='.type == "assistant"
+# Step 4: poll JSONL for the routed Bash tool call.
+local filter='.type == "assistant"
         and (.timestamp >= "'"$floor_ts"'")
         and (.message.content | type == "array")
         and (.message.content
@@ -82,3 +107,10 @@ else
     "(no matching JSONL entry)" \
     "scenarios/${SID}.test.sh:$LINENO"
 fi
+
+}  # _run_scenario_20
+
+_run_scenario_20
+
+# Cleanup: remove the /tmp backup we created.
+rm -f $BACKUP_GLOB 2>/dev/null || true
