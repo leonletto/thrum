@@ -15,6 +15,16 @@
 # repo." Restart-bearing scenarios 02/03 above mutate session state and
 # could in principle disturb identity routing.
 #
+# Deviation from markdown § 8.1: the original spec prompted claude in
+# natural language ("what is my thrum identity") and inspected the
+# pane's chat output. We assert against `thrum whoami --json` directly
+# because (i) deterministic and grep-able vs claude's free-form prose,
+# (ii) `thrum whoami` IS the actual identity contract — what the daemon
+# resolves for each pane is what every other CLI command will use,
+# (iii) claude's NL identity answer comes from the SessionStart
+# briefing-injection path, which is already covered by scenario 01.
+# Asserting on the same path here would only verify the briefing twice.
+#
 # Read-only: no fixture mutation.
 
 SID="05-cross-session-identity"

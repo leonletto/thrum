@@ -14,15 +14,29 @@
 # autonomously process inbound thrum messages (read inbox + reply +
 # mark-read) before this scenario's `!`-prefix query lands. We therefore
 # use `thrum inbox --json` (all messages, NOT --unread) so the assertion
-# remains valid whether or not claude has auto-marked the message read,
-# and we send a NEW outbound message via `thrum send` rather than
-# `thrum reply` so we don't depend on extracting a msg_id from an inbox
-# that may already have been emptied by autonomous handling.
+# remains valid whether or not claude has auto-marked the message read.
+#
+# We exercise the actual `thrum reply` RPC path (NOT `thrum send`) to
+# match the original markdown § 8.3's "reply to coordinator" semantics
+# and exercise the daemon's reply-threading code (distinct from message
+# send). Race against claude's autonomous mark-read is collapsed by
+# extracting msg_id and invoking `thrum reply` inside the SAME bash
+# subshell — single composite command, no inter-keystroke window in
+# which claude can change inbox state between the lookup and the reply.
 #
 # Fixture mutation: writes a reply-direction message back to
 # @test_coordinator_main carrying $CROSS_REPLY_MARKER.
 
 SID="07-cross-session-receive-reply"
+
+# Define + export CROSS_REPLY_MARKER unconditionally at the top, BEFORE
+# any early-return path. This way, if assertion 1 fails and we return
+# early, scenario 08's precondition guard still sees the marker set —
+# 08 will fail its main assertion (correctly), but the cascade of a
+# misleading `marker-precondition` FAIL on top of the real root cause
+# goes away.
+CROSS_REPLY_MARKER="cross-session-reply-${RUNID}"
+export CROSS_REPLY_MARKER
 
 if [ -z "${CROSS_SEND_MARKER:-}" ]; then
   emit_fail "$SID" "marker-precondition" \
@@ -54,24 +68,22 @@ else
   return 0
 fi
 
-# Assertion 2: impl can send a message back to the coordinator. We use
-# `thrum send --to @test_coordinator_main` rather than `thrum reply
-# <msg_id>` because msg_id extraction from impl's inbox would race
-# claude's autonomous mark-as-read; `thrum send` is independent of inbox
-# state. The semantic intent of full_test_plan.md § 8.3 ("implementer
-# replies to coordinator") is preserved — the response message reaches
-# the same recipient and carries a distinct marker for scenario 08 to
-# match.
-CROSS_REPLY_MARKER="cross-session-reply-${RUNID}"
-export CROSS_REPLY_MARKER
+# Assertion 2: impl uses `thrum reply` (the actual reply RPC) against the
+# scenario-06 message_id to thread a response back to coord. The msg_id
+# extraction (matching by CROSS_SEND_MARKER, not by .messages[0]) and
+# the `thrum reply` invocation happen in a SINGLE bash subshell — by
+# the time the inner pipeline runs, claude can't have marked-read the
+# message in a way that affects this command, because `thrum inbox
+# --json` returns all messages regardless of read state.
+REPLY_CMD="MSG_ID=\$(thrum inbox --json | jq -r '[.messages[] | select(.body.content | contains(\"${CROSS_SEND_MARKER}\"))] | .[0].message_id') && thrum reply \"\$MSG_ID\" 'Received cross-session message (${CROSS_REPLY_MARKER})' --format plain --json"
 
 if send_bash_and_wait "$IMPL_PANE" "$IMPL_REPO" \
-    "thrum send 'Received cross-session message (${CROSS_REPLY_MARKER})' --to @test_coordinator_main --json" \
+    "$REPLY_CMD" \
     '"message_id": "msg_' 60; then
   emit_pass "$SID" "impl-reply-confirmed"
 else
   emit_fail "$SID" "impl-reply-confirmed" \
-    'thrum send --json output containing "message_id": "msg_' \
+    'thrum reply --json output containing "message_id": "msg_' \
     "(timeout, no matching bash-stdout entry)" \
     "scenarios/${SID}.test.sh:$LINENO"
 fi
