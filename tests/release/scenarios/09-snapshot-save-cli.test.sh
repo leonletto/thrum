@@ -15,6 +15,12 @@
 # The marker text + file-content assertions still cover every check the
 # markdown spec lists.
 #
+# Reason value deviation: markdown § 10G.1 uses the literal reason
+# `cli-direct-test`. We suffix with `${RUNID}` so successive release-test
+# runs (e.g. CI re-runs against the same fixture root) cannot match
+# stale reason markers from a prior run's snapshot file in case
+# pre-clean races a slow filesystem. Functional contract is unchanged.
+#
 # Per-scenario isolation: the snapshot file is consumed by scenario 11
 # (snapshot-restore-cli), so by the end of the 09→10→11 chain the impl
 # restart dir is clean. We pre-clean any leftover snapshot at the top of
