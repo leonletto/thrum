@@ -14,6 +14,11 @@ run_teardown() {
     (cd "$REPO" && thrum daemon stop) >/dev/null 2>&1 || true
   fi
   rm -rf "$BASE"
+  # WORKTREE_BASE is at a separate parent path from BASE (so thrum's repo-name
+  # auto-append doesn't collide with $REPO), so it needs its own cleanup.
+  if [ -n "${WORKTREE_BASE:-}" ]; then
+    rm -rf "$WORKTREE_BASE"
+  fi
   unset THRUM_HOME    # leave caller env clean
   return 0
 }

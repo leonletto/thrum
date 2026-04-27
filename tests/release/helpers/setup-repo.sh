@@ -24,7 +24,14 @@ run_setup() {
   RUNID="$(date +%Y%m%dT%H%M%S)-$$"
   BASE="$HOME/.thrum_release_tests/$RUNID"
   REPO="$BASE/repo"
-  mkdir -p "$REPO"
+  # WORKTREE_BASE is a SEPARATE root for the impl worktree, intentionally not
+  # nested inside BASE. thrum worktree create auto-appends the repo's basename
+  # ("repo") to worktrees.base_path (cmd/thrum/main.go:2680-2683), which makes
+  # base_path collide with $REPO if WORKTREE_BASE were under $BASE. Putting it
+  # at a different parent path matches how the real dev coord uses
+  # ~/.workspaces (separate from /Users/leon/dev/opensource/thrum).
+  WORKTREE_BASE="$HOME/.thrum_release_test_worktrees/$RUNID"
+  mkdir -p "$REPO" "$WORKTREE_BASE"
   # shellcheck disable=SC2046
   unset $(env | grep -E '^THRUM_' | cut -d= -f1) 2>/dev/null || true
 
@@ -56,94 +63,82 @@ run_setup() {
   "$TE" exec --cwd "$REPO" --clean --timeout 30 -- thrum tmux start --name coord \
     > /tmp/zh4p-tmux-start.log 2>&1 || true
 
-  # TROUBLESHOOTING STOP: halt after init + quickstart + tmux start so we
-  # can examine what landed before continuing.
-  echo "=== STOP after init + quickstart + tmux start ==="
-  echo "REPO=$REPO"
-  echo "--- /tmp/zh4p-tmux-start.log ---"
-  cat /tmp/zh4p-tmux-start.log 2>&1 || true
-  echo "--- tmux list-sessions ---"
-  tmux list-sessions 2>&1 || true
-  echo "--- ls -la \$REPO/.thrum/identities/ ---"
-  ls -la "$REPO/.thrum/identities/" 2>&1 || true
-  echo "--- cat \$REPO/.thrum/config.json ---"
-  cat "$REPO/.thrum/config.json" 2>&1 || true
-  return 0
-
-  # PIN driver-side thrum CLI calls to the ephemeral repo's daemon.
-  # Without this, every subsequent `thrum tmux create/send/kill` in this
-  # script walks up from the script's cwd and finds the DEV repo's .thrum/,
-  # talking to the wrong daemon and silently failing. EffectiveRepoPath
-  # checks THRUM_HOME before flagRepo / cwd, so this single export is
-  # sufficient — no need to wrap each CLI call with tmux-exec on the
-  # driver side. Pane-side thrum calls (inside coord/impl) resolve via
-  # their --cwd correctly without THRUM_HOME.
-  export THRUM_HOME="$REPO"
-
-  thrum tmux create coord \
-    --cwd "$REPO" \
-    --name test_coordinator_main \
-    --role coordinator \
-    --module all \
-    --intent "Release test coordinator" >/dev/null \
-    || { echo "ERROR: B/tmux create coord failed" >&2; return 1; }
-
-  thrum tmux send coord "claude --model haiku --dangerously-skip-permissions"
-  wait_for_session_start "$REPO" 60 \
-    || { echo "ERROR: coord SessionStart did not appear within 60s" >&2; return 1; }
-
-  thrum tmux send coord '! thrum whoami --json'
+  # Verify coord identity from inside the pane via discrete-`!` bash-prefix
+  # mode (see send_command in helpers/drive.sh for the rationale; same trick).
+  #
+  # Note: we don't wait_for_session_start here. claude at its welcome screen
+  # writes ZERO JSONL until it receives user input that starts a session;
+  # polling for SessionStart attachments before the first `!` send is a
+  # chicken-and-egg deadlock. This whoami send IS what kicks the session
+  # alive, and the wait_for_jsonl_match below is the proper signal.
+  tmux send-keys -t coord "!"
+  sleep 0.3
+  tmux send-keys -t coord "thrum whoami --json" Enter
   wait_for_jsonl_match "$REPO" \
-    '.type == "user" and (.message.content | type == "string") and (.message.content | contains("test_coordinator_main"))' \
-    30 >/dev/null \
-    || { echo "ERROR: coord whoami did not return expected agent_id" >&2; return 1; }
+    '.type == "user" and (.message.content | type == "string") and (.message.content | startswith("<bash-stdout>")) and (.message.content | contains("test_coordinator_main"))' \
+    60 >/dev/null \
+    || { echo "ERROR: coord whoami did not return expected bash-stdout entry within 60s" >&2; return 1; }
 
   # C. Implementer worktree
-  # C.1 patch worktrees config
-  jq --arg bp "$BASE/" \
+  # C.1 patch worktrees config so C.2 lands under $WORKTREE_BASE. quickstart
+  # populated base_path from the user's real config (~/.workspaces); without
+  # this patch the new worktree would land there.
+  #
+  # Note: thrum auto-appends the repo's basename ("repo") to base_path
+  # (cmd/thrum/main.go:2680), so the effective path is $WORKTREE_BASE/repo.
+  # The impl worktree therefore lands at $WORKTREE_BASE/repo/impl.
+  jq --arg bp "$WORKTREE_BASE/" \
     '.worktrees = {"base_path": $bp, "beads_enabled": false, "thrum_enabled": true}' \
     "$REPO/.thrum/config.json" > "$REPO/.thrum/config.json.tmp" \
     && mv "$REPO/.thrum/config.json.tmp" "$REPO/.thrum/config.json" \
     || { echo "ERROR: C.1 worktrees config patch failed" >&2; return 1; }
 
-  # C.2 create the worktree FROM the coordinator pane
-  thrum tmux send coord '! thrum worktree create impl -b feature/release-test-impl'
-  # Wait for the worktree dir to appear on disk (driver-side filesystem check —
-  # faster + more deterministic than waiting for the JSONL bash-stdout entry).
+  # The path thrum will actually create the impl worktree at, after auto-append.
+  local IMPL_WT="$WORKTREE_BASE/repo/impl"
+
+  # C.2 create the impl worktree FROM the coord pane (so the call runs with
+  # coord's identity, mirroring real workflow). Discrete-`!` again.
+  tmux send-keys -t coord "!"
+  sleep 0.3
+  tmux send-keys -t coord "thrum worktree create impl -b feature/release-test-impl" Enter
   local elapsed=0
-  while [ ! -d "$BASE/impl" ] && [ "$elapsed" -lt 30 ]; do
+  while [ ! -d "$IMPL_WT" ] && [ "$elapsed" -lt 30 ]; do
     sleep 1
     elapsed=$((elapsed + 1))
   done
-  if [ ! -d "$BASE/impl" ]; then
-    echo "ERROR: C.2 worktree create did not produce $BASE/impl/" >&2
+  if [ ! -d "$IMPL_WT" ]; then
+    echo "ERROR: C.2 worktree create did not produce $IMPL_WT/" >&2
     return 1
   fi
 
-  # C.3 implementer's tmux session + claude
-  thrum tmux create impl \
-    --cwd "$BASE/impl" \
-    --name test_implementer \
-    --role implementer \
-    --module all \
-    --intent "Release test implementer" >/dev/null \
+  # C.3 implementer's tmux session — $IMPL_WT IS a secondary worktree (just
+  # created by C.2), so the not-a-worktree hint won't fire and `thrum tmux
+  # create` accepts it. Inline quickstart (per spec § 4 lines 110-115) registers
+  # the impl agent inside the new pane.
+  "$TE" exec --cwd "$REPO" --clean -- thrum tmux create impl \
+      --cwd "$IMPL_WT" \
+      --name test_implementer \
+      --role implementer \
+      --module all \
+      --intent "Release test implementer" \
     || { echo "ERROR: C.3 tmux create impl failed" >&2; return 1; }
 
-  thrum tmux send impl "claude --model haiku --dangerously-skip-permissions"
-  wait_for_session_start "$BASE/impl" 60 \
-    || { echo "ERROR: impl SessionStart did not appear within 60s" >&2; return 1; }
-
-  thrum tmux send impl '! thrum whoami --json'
-  wait_for_jsonl_match "$BASE/impl" \
-    '.type == "user" and (.message.content | type == "string") and (.message.content | contains("test_implementer"))' \
-    30 >/dev/null \
-    || { echo "ERROR: impl whoami did not return expected agent_id" >&2; return 1; }
+  # STOP here for inspection. claude is NOT yet launched in the impl pane —
+  # next iteration will add `thrum tmux launch impl` and impl-side whoami.
+  echo "=== setup B + C.1 + C.2 + C.3-create complete ==="
+  echo "RUNID=$RUNID"
+  echo "REPO=$REPO"
+  echo "BASE=$BASE"
+  echo "WORKTREE_BASE=$WORKTREE_BASE"
+  echo "IMPL_WT=$IMPL_WT"
+  echo "tmux sessions:"
+  tmux list-sessions 2>&1 | grep -E "coord|impl" || true
 
   # Export per-scenario context
-  export RUNID BASE REPO
+  export RUNID BASE WORKTREE_BASE REPO
   export COORD_PANE=coord
   export IMPL_PANE=impl
   export COORD_REPO="$REPO"
-  export IMPL_REPO="$BASE/impl"
+  export IMPL_REPO="$IMPL_WT"
   return 0
 }

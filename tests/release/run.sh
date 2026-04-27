@@ -37,7 +37,14 @@ if [ "${#SCENARIOS[@]}" -eq 0 ]; then
 fi
 
 RUN_START=$(date +%s)
-trap 'run_teardown' EXIT
+# Debug toggle: set THRUM_RELEASE_NO_TEARDOWN=1 to leave coord/impl tmux
+# sessions and the ephemeral daemon alive after the script exits, so the
+# fixture can be inspected manually (tmux attach -t coord, etc.).
+if [ "${THRUM_RELEASE_NO_TEARDOWN:-}" = "1" ]; then
+  echo "DEBUG: THRUM_RELEASE_NO_TEARDOWN=1 — teardown disabled; manual cleanup required" >&2
+else
+  trap 'run_teardown' EXIT
+fi
 
 if ! run_setup; then
   echo "ERROR: run-level setup failed; aborting (no scenarios run)" >&2

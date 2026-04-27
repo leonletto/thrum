@@ -3,15 +3,21 @@
 # Port of internal/restart/restart.go:encodeCwd + FindLatestJSONLForCwd.
 
 # encode_cwd <abs-path> → encoded project dir name
-# Mirrors Claude Code's project-dir naming: leading "/" stripped, then "/" and
-# "." both replaced with "-", then a leading "-" prepended.
+# Mirrors Claude Code's project-dir naming: leading "/" stripped, then "/", ".",
+# and "_" all replaced with "-", then a leading "-" prepended.
 #   /Users/leon/dev/project       → -Users-leon-dev-project
-#   $HOME/.thrum_release_tests/x  → -Users-leon--thrum_release_tests-x
+#   $HOME/.thrum_release_tests/x  → -Users-leon--thrum-release-tests-x
+#
+# NOTE: Adds the "_" → "-" substitution missing from the Go reference
+# (internal/restart/restart.go:184-193, which only handles "/" and "."). The
+# real Claude Code behavior also collapses underscores; without this,
+# jsonl_for_repo never finds JSONL for paths containing underscores.
 encode_cwd() {
   local cwd="$1"
   cwd="${cwd#/}"
   cwd="${cwd//\//-}"
   cwd="${cwd//./-}"
+  cwd="${cwd//_/-}"
   printf '%s' "-${cwd}"
 }
 
