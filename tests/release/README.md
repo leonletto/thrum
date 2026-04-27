@@ -7,7 +7,8 @@ fixture in tmux panes, asserts against agent JSONL transcripts via
 `dev-docs/release-testing/`.
 
 **Design spec:** `dev-docs/specs/2026-04-26-release-test-framework-design.md`
-**Implementation plan:** `dev-docs/plans/2026-04-26-release-test-framework-implementation.md`
+**Phase 1 plan:** `dev-docs/plans/2026-04-26-release-test-framework-implementation.md`
+**Phase 2 plan:** `dev-docs/plans/2026-04-27-release-test-framework-phase-2-implementation.md`
 
 ## Run all scenarios
 
@@ -22,6 +23,15 @@ fixture in tmux panes, asserts against agent JSONL transcripts via
 ```
 
 The arg is a glob filter against `scenarios/`.
+
+## Scenarios
+
+| Scenario | What it verifies |
+|----------|------------------|
+| `01-session-start-injection` | The `inject-prime-context.sh` SessionStart hook injects the briefing envelope + drops the pre-injection nudge for a registered agent. |
+| `02-restart-snapshot-preamble` | After IMPL pane saves a restart snapshot and is restarted, the new SessionStart attachment carries the loud `🛑 ACTION REQUIRED` preamble + `# Previous Session Context` heading + `## Resume Plan`. |
+| `03-self-restart-preamble` | Same loud-preamble path as 02 but driven against the COORD pane (covers thrum-501a.2 step 10.11). Coord's prime output is larger so this scenario adds explicit `wait_for_pane_idle` between assertions. |
+| `04-fallback-paths` | Three sub-cases for `inject-prime-context.sh`'s degraded paths, each in its own `$BASE/fallback-XX/` cwd: 4A (no thrum binary on PATH → silent no-op), 4B (thrum present, no agent → historical nudge), 4C (daemon down → degraded prime output wrapped in briefing envelope; tracks thrum-br6t for the eventual hook fix). |
 
 ## Output
 
@@ -72,6 +82,59 @@ failure (no scenarios attempted).
    --cwd "$REPO" --clean -- thrum <args>` so the call runs in an
    ephemeral pane whose ancestry chain ends at the tmux server.
 
+## Helpers cheat sheet
+
+`helpers/drive.sh` and `helpers/assert.sh` provide everything a scenario
+should need; reach for these before reinventing.
+
+| Helper | When to use |
+|--------|-------------|
+| `send_command <pane> <text>` | Type into a tmux pane. Splits `!`-prefix discretely + adds the post-text Enter delay so bash-prefix mode triggers reliably. |
+| `send_bash_and_wait <pane> <repo> <cmd> <expected> [timeout]` | Send `!` bash + wait for a `<bash-stdout>` entry containing `<expected>`. Use this whenever you'd otherwise hand-roll a `wait_for_jsonl_match` over a typed bash result. |
+| `assert_jsonl <pane> <repo> <sid> <name> <expected> [loc]` | Wait up to 30s for a `<bash-stdout>` OR `<bash-stderr>` entry whose region starts with `<expected>`. Emits PASS/FAIL. Use after every `!`-prefix assertion send. |
+| `wait_for_session_start <repo> [timeout]` | Block until the FIRST SessionStart attachment lands. Required when a fresh cwd has no JSONL yet — `check-context-value.sh` ERRORs with "no project dir" otherwise. |
+| `wait_for_pane_idle <pane> [seconds]` | Block until pane render stabilizes (≥1s of identical capture-pane hashes). Use BETWEEN sends in panes whose response is large (e.g. coord pane post-prime — `! cmd` rendering can exceed `send_command`'s default 10s idle gate, which leaks the next keystroke into mid-render). |
+| `wait_for_jsonl_match <repo> <jq-filter> [timeout]` | Generic JSONL poller. Use for assertions that don't fit the bash-stdout shape. |
+| `wait_for_bash_stdout_contains <repo> <substring> [timeout]` | Specialization of the above for `<bash-stdout>` substring matches. |
+
+## Spawning sub-fixture claude panes (scenario 04 pattern)
+
+Scenarios that need additional claude panes BEYOND the run-level
+coord/impl (e.g. fallback-path tests in their own cwds) should use
+**raw `tmux new-session` + `tmux send-keys 'claude' Enter`** rather
+than `thrum tmux create`. `thrum tmux create` enforces a
+worktree-identity guard and rejects calls that target directories
+outside the repo's worktree set ("caller pane belongs to a different
+worktree" error).
+
+Required pattern:
+
+```bash
+tmux new-session -d -s "$tmux_name" -x 500 -y 50 -c "$cwd"
+wait_for_pane_idle "$tmux_name" 10        # let shell init
+tmux send-keys -t "$tmux_name" "claude"
+sleep 0.5
+tmux send-keys -t "$tmux_name" Enter
+# Trust dialog (option 1 pre-highlighted) — wait for it to render
+# then send a second Enter to confirm.
+wait_for_pane_idle "$tmux_name" 30
+tmux send-keys -t "$tmux_name" Enter
+# Kick the session — claude writes ZERO JSONL until first user input,
+# but check-context-value.sh ERRORs with "no project dir" if the
+# project dir hasn't been created yet. Send a no-op then wait for
+# the SessionStart attachment to confirm JSONL is on disk.
+send_command "$tmux_name" "! true"
+wait_for_session_start "$cwd" 60
+# Now safe to run real assertions...
+```
+
+If the sub-fixture launches claude with a **PATH stripped of homebrew
+bash** (e.g. scenario 04A's no-thrum-binary case), the `! cmd` subshell
+will fall back to `/bin/bash` 3.2 on macOS — which doesn't have
+`mapfile` and other bash 4+ builtins. Keep helper scripts that run
+inside such subshells bash 3.2 compatible (use `while read` loops in
+place of `mapfile`).
+
 ## Debugging a failed scenario
 
 The fixture lives at `$HOME/.thrum_release_tests/$RUNID/`. By default
@@ -104,6 +167,48 @@ executable `scripts/check-context-value.sh` and `scripts/tmux-exec` in
 this repo. The pre-release thrum claude-plugin must be installed (see
 `dev-docs/prompts/release-test-framework-continuation.md` § 13 for the
 plugin install flow).
+
+### `scripts/check-context-value.sh`
+
+Greps SessionStart hook attachments in the current pane's Claude Code
+JSONL for a literal needle. Emits one of:
+
+- `VERIFIED <tag> (<n> hits in <hook>)` — exit 0
+- `FAILED <tag> (0 hits in <hook>)` — exit 1
+- `ERROR <tag> (<reason>)` — exit 2
+
+```bash
+check-context-value.sh [--source=any] <test_tag> <needle> [hook_name]
+```
+
+`--source=any` (Phase 2) skips the cwd-encoded project lookup and scans
+every JSONL under `~/.claude/projects/*/`. Useful for panes whose cwd
+doesn't encode to a thrum project dir. **Unsafe for negative
+assertions during full release-test runs** because the run-level
+coord/impl panes also produce briefing-bearing SessionStart attachments
+that would false-positive a "no briefing here" scan — prefer unique
+sub-case cwds with default cwd-mode for negative assertions.
+
+**Manual smoke** (run from any thrum-initialized cwd; mirrors the
+verification steps in plan ns73.1 §§ 4-6):
+
+```bash
+# Default mode — regression sanity, output depends on the current pane:
+./scripts/check-context-value.sh smoke_default "# Thrum Session Briefing" SessionStart:startup
+
+# --source=any positive case — should report N≥1 hits across project dirs:
+./scripts/check-context-value.sh --source=any smoke_any "Thrum Session Briefing" SessionStart:startup
+
+# --source=any negative case — should report 0 hits:
+./scripts/check-context-value.sh --source=any smoke_any_neg "this_string_should_match_nothing_xyzzy_42" SessionStart:startup
+```
+
+### `scripts/tmux-exec`
+
+Wraps a thrum CLI invocation in an ephemeral tmux pane so the call's
+PID ancestry chain ends at the tmux server, not at the runner's
+parent runtime. Required for any driver-side `thrum` call (see § 6 in
+"Author a new scenario" above).
 
 ## NOT part of `make ci`
 

@@ -7,9 +7,20 @@
 # without having to ask the agent to introspect its own context.
 #
 # Usage:
-#   check-context-value.sh <test_tag> <needle> [hook_name]
+#   check-context-value.sh [--source=any] <test_tag> <needle> [hook_name]
 #
 # Arguments:
+#   --source=any  Optional flag. Skip the cwd→project-dir encoding and scan
+#                 every JSONL under ~/.claude/projects/*/. Use when the
+#                 caller's cwd does not encode to a thrum project directory
+#                 (e.g. /tmp panes in fallback scenarios). UNSAFE for
+#                 negative assertions during full release-test runs because
+#                 the run-level coord/impl panes also produce briefing-bearing
+#                 SessionStart attachments — prefer unique sub-case cwds with
+#                 default cwd-mode for negative assertions. Note: on machines
+#                 with very many project directories (>500) the two-level
+#                 glob may approach shell ARG_MAX and silently truncate;
+#                 prefer cwd-mode where possible.
 #   test_tag   Arbitrary identifier echoed back in the result line so a single
 #              tmux capture can disambiguate multiple checks (test_1, test_2,…).
 #   needle     Literal string to grep for (passed to `grep -F`; emoji + special
@@ -31,12 +42,29 @@
 
 set -uo pipefail
 
+SOURCE_ANY=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --source=any) SOURCE_ANY=1; shift ;;
+    --source=*)
+      echo "ERROR ? (unknown --source value: ${1#--source=}; only 'any' is supported)"
+      exit 2
+      ;;
+    --) shift; break ;;
+    -*)
+      echo "ERROR ? (unknown flag: $1)"
+      exit 2
+      ;;
+    *) break ;;
+  esac
+done
+
 TAG="${1:-}"
 NEEDLE="${2:-}"
 HOOK_FILTER="${3:-}"
 
 if [ -z "$TAG" ] || [ -z "$NEEDLE" ]; then
-  echo "ERROR ${TAG:-?} (usage: $0 <test_tag> <needle> [hook_name])"
+  echo "ERROR ${TAG:-?} (usage: $0 [--source=any] <test_tag> <needle> [hook_name])"
   exit 2
 fi
 
@@ -62,11 +90,16 @@ encode_cwd() {
   printf '%s' "-${cwd}"
 }
 
-PROJECT_DIR="${HOME}/.claude/projects/$(encode_cwd "$PWD")"
-
-if [ ! -d "$PROJECT_DIR" ]; then
-  echo "ERROR $TAG (no project dir at $PROJECT_DIR)"
-  exit 2
+if [ "$SOURCE_ANY" = "1" ]; then
+  PROJECT_DIR_LABEL="<all projects>"
+  PROJECTS_ROOT="${HOME}/.claude/projects"
+else
+  PROJECT_DIR="${HOME}/.claude/projects/$(encode_cwd "$PWD")"
+  PROJECT_DIR_LABEL="$PROJECT_DIR"
+  if [ ! -d "$PROJECT_DIR" ]; then
+    echo "ERROR $TAG (no project dir at $PROJECT_DIR)"
+    exit 2
+  fi
 fi
 
 # Collect all .jsonl transcripts in the project dir. Claude Code writes
@@ -76,9 +109,21 @@ fi
 # JSONL may briefly be the newest by mtime — so we scan all of them and
 # concatenate matching SessionStart attachments. Retry up to ~3s in case
 # the runtime hasn't flushed the SessionStart attachment to disk yet.
+# Bash 3.2 compatible (macOS /bin/bash) — mapfile was added in bash 4.
+# Some sub-fixtures launch claude with a restricted PATH and the resulting
+# `! cmd` subshell finds /bin/bash which is 3.2.
 JSONL_FILES=()
 for _ in 1 2 3; do
-  mapfile -t JSONL_FILES < <(ls -1 "$PROJECT_DIR"/*.jsonl 2>/dev/null || true)
+  JSONL_FILES=()
+  if [ "$SOURCE_ANY" = "1" ]; then
+    while IFS= read -r line; do
+      [ -n "$line" ] && JSONL_FILES+=("$line")
+    done < <(ls -1 "$PROJECTS_ROOT"/*/*.jsonl 2>/dev/null || true)
+  else
+    while IFS= read -r line; do
+      [ -n "$line" ] && JSONL_FILES+=("$line")
+    done < <(ls -1 "$PROJECT_DIR"/*.jsonl 2>/dev/null || true)
+  fi
   if [ "${#JSONL_FILES[@]}" -gt 0 ]; then
     break
   fi
@@ -86,7 +131,7 @@ for _ in 1 2 3; do
 done
 
 if [ "${#JSONL_FILES[@]}" -eq 0 ]; then
-  echo "ERROR $TAG (no JSONL transcript found under $PROJECT_DIR)"
+  echo "ERROR $TAG (no JSONL transcript found under $PROJECT_DIR_LABEL)"
   exit 2
 fi
 
