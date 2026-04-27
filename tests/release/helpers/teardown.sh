@@ -27,6 +27,14 @@ run_teardown() {
   thrum tmux kill bare-session 2>/dev/null || true
   thrum tmux kill tmux-start-test 2>/dev/null || true
   thrum tmux kill force-restart-test 2>/dev/null || true
+  # Defensive cleanup for the kafm.9 orchestrator-infrastructure
+  # fixtures. Scenarios 86/88/91 each tear down their own
+  # session+worktree on the happy path; this catches partial
+  # failures that bailed before explicit teardown. Sub-fixture
+  # daemons (85/89/90) are stopped by their own scenarios.
+  thrum tmux kill kafm9-86-orch-session 2>/dev/null || true
+  thrum tmux kill kafm9-88-session 2>/dev/null || true
+  thrum tmux kill kafm9-91-nudge 2>/dev/null || true
   if [ -n "${REPO:-}" ] && [ -d "$REPO" ]; then
     (cd "$REPO" && thrum daemon stop) >/dev/null 2>&1 || true
   fi
