@@ -69,19 +69,26 @@ fi
 # from the launch RPC.
 sleep 2
 
-# Step 3: launch claude. Capture output for failure diagnostics
-# (mirrors scenario 70's pattern — redirecting to /dev/null in an
-# earlier draft hid the actual failure mode).
-local launch_out launch_rc
-launch_out=$(
-  "$TE" exec --cwd "$COORD_REPO" --clean -- \
-    env THRUM_NAME=test_coordinator_main thrum tmux launch "$KAFM6_S2_SESSION" 2>&1
-)
-launch_rc=$?
-if [ "$launch_rc" -ne 0 ]; then
+# Settle COORD pane before sending — by the time scenario 77 runs
+# in a full-suite, COORD may still be rendering output from an
+# earlier scenario, which trips send_command's `!`-prefix bash-mode
+# trigger.
+wait_for_pane_idle "$COORD_PANE" 60
+
+# Step 3: launch claude — driven from COORD_PANE (registered agent
+# identity), NOT tmux-exec. Same rationale as scenarios 70 + 73:
+# tmux-exec ephemeral callers intermittently fail the daemon's
+# PaneTargetForIdentity guard for thrum tmux launch against agent-
+# registered sub-fixture sessions in long-running test contexts,
+# silently skipping the tmux_session-write step that downstream
+# scenarios 79/80 depend on. COORD_PANE is the registered run-level
+# coord agent the daemon trusts for cross-worktree authority.
+if ! send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
+    "thrum tmux launch $KAFM6_S2_SESSION" \
+    "Launched" 60; then
   emit_fail "$SID" "snapshot-save-success-line" \
-    "thrum tmux launch $KAFM6_S2_SESSION succeeds" \
-    "exit ${launch_rc}; output: $(printf '%s' "$launch_out" | tr '\n' ' ' | head -c 320)" \
+    "thrum tmux launch $KAFM6_S2_SESSION (driven from COORD pane) emits 'Launched' line" \
+    "(timeout, no matching bash-stdout entry)" \
     "scenarios/${SID}.test.sh:$LINENO"
   return 0
 fi

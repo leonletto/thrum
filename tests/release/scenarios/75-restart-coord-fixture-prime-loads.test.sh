@@ -36,6 +36,14 @@ _run_scenario_75() {
 # carries the loud preamble. Scenario 73 returned ~immediately after
 # the restart RPC; the new claude needs ~15s to boot and write
 # SessionStart. 90s headroom matches scenario 02/03's polling.
+#
+# 5s sleep before polling: the OLD JSONL still holds matching
+# SessionStart entries (from the pre-restart claude session) until
+# the new claude writes its own JSONL file. Polling immediately
+# would match a stale pre-restart attachment that doesn't carry the
+# ACTION REQUIRED needle. The sleep gives the new claude time to
+# create its post-restart JSONL before polling starts. Same
+# precedent + race-condition rationale as scenario 02.
 sleep 5
 if ! wait_for_jsonl_match "$KAFM6_S1_WT" \
   '.attachment.hookEvent == "SessionStart" and (((.attachment.stdout // "" | tostring) | contains("ACTION REQUIRED")) or ((.attachment.content // "" | tostring) | contains("ACTION REQUIRED")))' \
