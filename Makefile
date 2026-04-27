@@ -1,4 +1,4 @@
-.PHONY: help test test-unit test-integration test-coverage test-verbose build build-ui build-go sync-embed-reference install dev deploy-remote clean clean-e2e test-e2e fmt fmt-md fmt-all lint lint-check lint-fix lint-md lint-md-fix lint-all vet tidy install-tools ci quick-check pre-commit pre-push security gosec-check vulncheck setup-hooks sync-skills
+.PHONY: help test test-unit test-integration test-coverage test-verbose build build-ui build-go sync-embed-reference install dev deploy-remote clean clean-e2e test-e2e fmt fmt-md fmt-all lint lint-check lint-fix lint-md lint-md-fix lint-all vet tidy install-tools ci quick-check pre-commit pre-push security gosec-check vulncheck setup-hooks sync-skills release-tests
 
 # Tool versions - pinned for supply chain security
 GOLANGCI_LINT_VERSION := v1.64.5
@@ -380,3 +380,9 @@ sync-skills:
 # Setup git hook chaining
 setup-hooks:
 	@scripts/install-hooks.sh
+
+# Release test framework — drives a real coord+impl multi-agent fixture
+# in tmux panes. Slow (~100s for the full baseline), spawns real claude
+# processes, NOT part of `make ci`.
+release-tests: build
+	@./tests/release/run.sh
