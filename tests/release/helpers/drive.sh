@@ -164,3 +164,55 @@ wait_for_session_start() {
     '.type == "attachment" and .attachment.hookEvent == "SessionStart"' \
     "$timeout" >/dev/null
 }
+
+# spawn_sub_fixture_claude <tmux-name> <cwd> [launch-cmd]
+# Spawns a non-thrum-managed claude pane in a fresh cwd, handling Claude
+# Code's first-time-cwd "trust this folder?" dialog automatically.
+#
+# Why raw tmux + send-keys instead of `thrum tmux create`: the daemon's
+# create RPC enforces a worktree-identity guard ("caller pane belongs to
+# a different worktree") and rejects calls that target directories
+# outside the calling repo's worktree set. Sub-fixtures live outside any
+# thrum worktree by design.
+#
+# Trust-dialog handling: option 1 ("Yes, I trust this folder") is
+# pre-highlighted, so a single Enter once the dialog has rendered
+# confirms it. We use wait_for_pane_idle to gate the second Enter rather
+# than a fixed sleep — render time varies with shell-init load.
+#
+# Args:
+#   tmux-name   tmux session name (must be unique within the run)
+#   cwd         working directory for the new session
+#   launch-cmd  command to launch claude (default: "claude"). Override
+#               for PATH-stripped variants, e.g. "env PATH=/foo:/bin claude".
+spawn_sub_fixture_claude() {
+  local tmux_name="$1" cwd="$2" launch_cmd="${3:-claude}"
+  tmux new-session -d -s "$tmux_name" -x 500 -y 50 -c "$cwd"
+  wait_for_pane_idle "$tmux_name" 10
+  tmux send-keys -t "$tmux_name" "$launch_cmd"
+  sleep 0.5
+  tmux send-keys -t "$tmux_name" Enter
+  # Trust dialog renders once shell-claude handshake completes.
+  wait_for_pane_idle "$tmux_name" 30
+  tmux send-keys -t "$tmux_name" Enter
+}
+
+# kick_session_then_wait <pane> <cwd> [timeout-seconds]
+# Forces a fresh claude pane to flush its first JSONL (creating the
+# project dir) so subsequent assertion helpers don't ERROR with "no
+# project dir at …".
+#
+# Background: claude writes ZERO JSONL until first user input — the
+# welcome screen is keystrokes-only. check-context-value.sh's existence
+# check on PROJECT_DIR fails fast in that window, masking the actual
+# "we haven't asked claude anything yet" condition behind a confusing
+# ERROR line. Send a no-op `! true` (which still triggers SessionStart
+# + flushes JSONL), then wait for the SessionStart attachment so we
+# know the project dir is on disk.
+#
+# Default timeout: 60s.
+kick_session_then_wait() {
+  local pane="$1" cwd="$2" timeout="${3:-60}"
+  send_command "$pane" "! true"
+  wait_for_session_start "$cwd" "$timeout"
+}
