@@ -10,6 +10,17 @@ and this project adheres to
 
 ### Fixed
 
+- **`thrum tmux status` and `thrum tmux connect` leaked sessions across
+  daemons (thrum-zuz5)** — pass 2 of `HandleStatus` filtered only on
+  `@thrum-managed=1`, which is set by every thrum daemon — so sessions
+  from unrelated worktrees and projects appeared in the status response
+  and the `connect` picker, and broke `make ci` locally on dev machines
+  with any live thrum-managed tmux session. `HandleCreate` now also stamps
+  `@thrum-thrum-dir=<this daemon's thrum_dir>`, and pass 2 filters on the
+  matching value. **Migration:** sessions created before this release will
+  not appear in `thrum tmux status` pass 2 (or the `thrum tmux connect`
+  picker) until they are recreated. They are not lost — just un-scoped.
+  Recreate via `thrum tmux create` to restore visibility.
 - **`thrum context preamble --init` ignored customized role templates
   (thrum-pk2o)** — `--init` called `RoleAwarePreamble(role)` directly, so
   customized templates at `.thrum/role_templates/<role>.md` were silently
