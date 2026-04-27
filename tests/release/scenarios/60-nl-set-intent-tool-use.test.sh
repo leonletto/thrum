@@ -15,11 +15,21 @@
 # the first kafm.3 run — claude may legitimately invoke the command
 # with intermediate whitespace, comment-stripped argv reconstruction,
 # or a brief preceding `bash -c` wrapper that buries "thrum agent" out
-# of the contains-substring window. "set-intent" is distinctive on its
-# own (no other thrum subcommand uses that token; no shell builtin
-# uses the hyphenated form), so the false-positive risk is acceptably
-# low. The model-stability guarantee is what matters: any path claude
-# takes to mutate intent passes through the `set-intent` verb.
+# of the contains-substring window. **NB:** the SPECIFIC invocation
+# shape that caused the original miss was not directly captured —
+# run-level teardown removed the failing JSONL before it could be
+# inspected, and the subsequent NO_TEARDOWN re-run hit the green path
+# under both the relaxed and full substrings (so the failing shape
+# self-recovered before forensic capture). The relaxation is therefore
+# a defensive choice based on the failure-class hypotheses above, not
+# from observed evidence — if the false-positive risk ever materializes
+# (e.g. `set-intent` matches a non-thrum tool surface), the right move
+# is to retighten with a NO_TEARDOWN reproducer in hand. "set-intent"
+# is distinctive on its own (no other thrum subcommand uses that token;
+# no shell builtin uses the hyphenated form), so the false-positive
+# risk is acceptably low for now. The model-stability guarantee is what
+# matters: any path claude takes to mutate intent passes through the
+# `set-intent` verb.
 #
 # Driven against COORD pane.
 
