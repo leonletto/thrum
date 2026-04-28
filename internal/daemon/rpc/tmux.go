@@ -17,6 +17,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity/guard"
+	"github.com/leonletto/thrum/internal/identitybanner"
 	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/restart"
 	trt "github.com/leonletto/thrum/internal/runtime"
@@ -372,6 +373,16 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 
 	launchCmd := runtimeToLaunchCmd(runtime)
 	if launchCmd != "" {
+		// Identity banner (thrum-6hqy). Emit BEFORE the runtime launch so
+		// the banner lands at the shell prompt and stays in the pane's
+		// scrollback after the runtime takes over the screen. h.emitIdentityBanner
+		// loads the identity from req.Cwd's .thrum/identities/, composes the
+		// agent/role/worktree/branch banner, and routes it through tmux
+		// send-keys + Enter. Best-effort: a missing identity (no agent
+		// registered) silently skips the banner so bare-runtime panes don't
+		// emit a half-rendered "Agent: @" line.
+		h.emitIdentityBanner(name, target)
+
 		if err := ttmux.SendKeys(target, launchCmd); err != nil {
 			return nil, fmt.Errorf("launch send-keys: %w", err)
 		}
@@ -379,18 +390,27 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 			return nil, fmt.Errorf("launch enter: %w", err)
 		}
 
-		// Send the runtime-appropriate prime command after startup delay.
-		// Runs in a goroutine so the RPC returns immediately.
-		primeCmd := primeCommandForRuntime(runtime)
-		go func() {
-			time.Sleep(10 * time.Second)
-			_ = ttmux.SendKeys(target, primeCmd)
-			_ = ttmux.SendSpecialKey(target, "Enter")
-			// TUI runtimes (e.g. OpenCode) may swallow the first Enter during
-			// startup. Retry after a brief pause as a fallback.
-			time.Sleep(3 * time.Second)
-			_ = ttmux.SendSpecialKey(target, "Enter")
-		}()
+		// Send the runtime-appropriate prime command after startup delay,
+		// UNLESS the runtime has its own SessionStart auto-injection hook
+		// (claude/cursor — xupf+2qe2 in claude-plugin/cursor-plugin
+		// scripts). In that case the hook already loads the briefing into
+		// the agent's context and a redundant /thrum:prime would fire a
+		// second priming pass that the agent has to reason about. Skip
+		// when has_session_start_hook=true on the runtime preset (single
+		// source of truth in internal/runtime). Runs in a goroutine so
+		// the RPC returns immediately.
+		if !runtimeHasSessionStartHook(runtime) {
+			primeCmd := primeCommandForRuntime(runtime)
+			go func() {
+				time.Sleep(10 * time.Second)
+				_ = ttmux.SendKeys(target, primeCmd)
+				_ = ttmux.SendSpecialKey(target, "Enter")
+				// TUI runtimes (e.g. OpenCode) may swallow the first Enter during
+				// startup. Retry after a brief pause as a fallback.
+				time.Sleep(3 * time.Second)
+				_ = ttmux.SendSpecialKey(target, "Enter")
+			}()
+		}
 	}
 
 	// Preamble: null the stored agent_pid if it belongs to an exited
@@ -1148,6 +1168,13 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 	target := name + ":0.0"
 	launchCmd := runtimeToLaunchCmd(runtime)
 	if launchCmd != "" {
+		// Identity banner (thrum-6hqy). Same shape as HandleLaunch — emit
+		// before the runtime starts so it lands at the shell prompt and
+		// stays in scrollback. Restart is the same orientation moment as
+		// initial start from the human-watching-tmux side; the banner
+		// shouldn't differ.
+		h.emitIdentityBanner(name, target)
+
 		if err := ttmux.SendKeys(target, launchCmd); err != nil {
 			return nil, fmt.Errorf("send launch command: %w", err)
 		}
@@ -1156,17 +1183,27 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 		}
 
 		// Send the runtime-appropriate prime command after startup delay.
-		// For restart, this is critical — prime loads the restart snapshot.
-		primeCmd := primeCommandForRuntime(runtime)
-		go func() {
-			time.Sleep(10 * time.Second)
-			_ = ttmux.SendKeys(target, primeCmd)
-			_ = ttmux.SendSpecialKey(target, "Enter")
-			// TUI runtimes (e.g. OpenCode) may swallow the first Enter during
-			// startup. Retry after a brief pause as a fallback.
-			time.Sleep(3 * time.Second)
-			_ = ttmux.SendSpecialKey(target, "Enter")
-		}()
+		// For restart, prime is what loads the restart snapshot for
+		// runtimes WITHOUT a SessionStart hook (codex/opencode/etc) —
+		// keep it for them. For runtimes WITH the hook (claude/cursor),
+		// inject-prime-context.sh already loads the snapshot from
+		// .thrum/restart/<agent>.md as part of the briefing, so the
+		// post-relaunch /thrum:prime is redundant (and the agent's
+		// reflexive "wait, am I supposed to prime again?" reasoning is
+		// what thrum-xupf already addressed for fresh starts; same shape
+		// applies to restart). thrum-6hqy.
+		if !runtimeHasSessionStartHook(runtime) {
+			primeCmd := primeCommandForRuntime(runtime)
+			go func() {
+				time.Sleep(10 * time.Second)
+				_ = ttmux.SendKeys(target, primeCmd)
+				_ = ttmux.SendSpecialKey(target, "Enter")
+				// TUI runtimes (e.g. OpenCode) may swallow the first Enter during
+				// startup. Retry after a brief pause as a fallback.
+				time.Sleep(3 * time.Second)
+				_ = ttmux.SendSpecialKey(target, "Enter")
+			}()
+		}
 	}
 
 	// Write tmux_session and runtime to the agent's identity file
@@ -1656,4 +1693,50 @@ func (h *TmuxHandler) clearTmuxFromIdentitiesInDir(idDir, sessionName string) {
 			_ = os.WriteFile(path, updated, 0600) // #nosec G306
 		}
 	}
+}
+
+// runtimeHasSessionStartHook returns true when the named runtime ships an
+// inject-prime-context.sh SessionStart hook (claude-plugin / cursor-plugin)
+// that auto-injects the briefing on every pane start. Single source of
+// truth for the prime-skip gate in HandleLaunch + HandleRestart — read
+// from the runtime preset's HasSessionStartHook field rather than
+// hard-coding runtime names. Falls back to false for unknown runtimes
+// (safer default: a runtime not in the preset registry can't be assumed
+// to have the hook). thrum-6hqy.
+func runtimeHasSessionStartHook(runtime string) bool {
+	preset, err := trt.GetPreset(runtime)
+	if err != nil {
+		return false
+	}
+	return preset.HasSessionStartHook
+}
+
+// emitIdentityBanner sends the identity banner for the agent registered
+// at the session's stored cwd into the pane via tmux send-keys + Enter.
+// Best-effort: silently no-ops when no cwd is stored, no identity is
+// found, or identitybanner.ShellCommand returns empty (e.g. a bare
+// session created with --no-agent). Called before runtime launch in
+// HandleLaunch + HandleRestart so the banner lands at the shell prompt
+// and stays in the pane's scrollback after the runtime takes over the
+// screen. thrum-6hqy.
+func (h *TmuxHandler) emitIdentityBanner(session, target string) {
+	h.sessionMu.RLock()
+	cwd, ok := h.sessionCwds[session]
+	h.sessionMu.RUnlock()
+	if !ok || cwd == "" {
+		return
+	}
+	idFile, _, err := config.LoadIdentityWithPath(cwd)
+	if err != nil || idFile == nil {
+		return
+	}
+	cmdLine := identitybanner.ShellCommand(idFile)
+	if cmdLine == "" {
+		return
+	}
+	// Best-effort: SendKeys errors here shouldn't fail the launch.
+	if err := ttmux.SendKeys(target, cmdLine); err != nil {
+		return
+	}
+	_ = ttmux.SendSpecialKey(target, "Enter")
 }

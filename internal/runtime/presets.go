@@ -21,19 +21,29 @@ type RuntimePreset struct {
 	InstructionsFile string `json:"instructions_file"`
 	MCPConfigPath    string `json:"mcp_config_path"`
 	SetupNotes       string `json:"setup_notes"`
+
+	// HasSessionStartHook is true for runtimes that ship the
+	// inject-prime-context.sh SessionStart hook (claude-plugin /
+	// cursor-plugin). When true, the daemon's tmux launch/restart flow
+	// skips the post-launch /thrum:prime send because the hook already
+	// auto-injects the briefing. Single source of truth — do NOT
+	// hard-code runtime names in cmd/thrum or daemon code; route
+	// through GetPreset and read this field. thrum-6hqy.
+	HasSessionStartHook bool `json:"has_session_start_hook,omitempty"`
 }
 
 // BuiltinPresets contains the default presets for all known runtimes.
 var BuiltinPresets = map[string]RuntimePreset{
 	"claude": {
-		Name:             "claude",
-		DisplayName:      "Claude Code",
-		Command:          "claude",
-		MCPSupported:     true,
-		HooksSupported:   true,
-		InstructionsFile: "CLAUDE.md",
-		MCPConfigPath:    ".claude/settings.json",
-		SetupNotes:       "Add thrum MCP server to .claude/settings.json",
+		Name:                "claude",
+		DisplayName:         "Claude Code",
+		Command:             "claude",
+		MCPSupported:        true,
+		HooksSupported:      true,
+		HasSessionStartHook: true,
+		InstructionsFile:    "CLAUDE.md",
+		MCPConfigPath:       ".claude/settings.json",
+		SetupNotes:          "Add thrum MCP server to .claude/settings.json",
 	},
 	"codex": {
 		Name:             "codex",
@@ -56,14 +66,15 @@ var BuiltinPresets = map[string]RuntimePreset{
 		SetupNotes:       "Install plugin: opencode plugin opencode-thrum",
 	},
 	"cursor": {
-		Name:             "cursor",
-		DisplayName:      "Cursor",
-		Command:          "agent",
-		MCPSupported:     true,
-		HooksSupported:   false,
-		InstructionsFile: ".cursorrules",
-		MCPConfigPath:    "Settings > Tools & MCP",
-		SetupNotes:       "Add MCP server via UI, use startup script",
+		Name:                "cursor",
+		DisplayName:         "Cursor",
+		Command:             "agent",
+		MCPSupported:        true,
+		HooksSupported:      false,
+		HasSessionStartHook: true, // ships cursor-plugin/scripts/inject-prime-context.sh
+		InstructionsFile:    ".cursorrules",
+		MCPConfigPath:       "Settings > Tools & MCP",
+		SetupNotes:          "Add MCP server via UI, use startup script",
 	},
 	"gemini": {
 		Name:             "gemini",
