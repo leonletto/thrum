@@ -51,6 +51,11 @@ run_teardown() {
   thrum worktree teardown kafm9-86-orch >/dev/null 2>&1 || true
   thrum worktree teardown kafm9-88-orch >/dev/null 2>&1 || true
   thrum worktree teardown kafm9-91-nudge-wt >/dev/null 2>&1 || true
+  # Defensive cleanup for the thrum-6hqy restart-banner sub-fixture.
+  # Scenario 100 tears it down on the happy path; this catches partial
+  # failures that bailed before _scenario_100_cleanup ran.
+  thrum tmux kill hqy-100-restart >/dev/null 2>&1 || true
+  thrum worktree teardown hqy-100-restart-wt >/dev/null 2>&1 || true
   # Defensive cleanup for the kafm.11 monitor-jobs fixture. Scenarios
   # 92-98 share a single monitor + log file driven against the
   # run-level daemon. Happy-path stop happens in scenario 96; the
