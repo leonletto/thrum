@@ -61,27 +61,53 @@ else
 fi
 
 # Assertion 2: claude (has SessionStart hook) should NOT have received
-# a post-launch /thrum:prime send. Search the coord agent's JSONL for
-# the routing tag claude emits when it processes a slash command.
-# Filter is the same shape as scenario 54's positive-routing assertion
-# (`<command-name>/thrum:prime</command-name>`) — here we want ZERO
-# matches. Reuse wait_for_jsonl_match's negative form: if the filter
-# matches anything within a short poll window, the assertion FAILS.
+# a post-launch /thrum:prime send during the launch window. The daemon's
+# HandleLaunch goroutine fires `time.Sleep(10s)` after launchCmd, so a
+# regression that re-introduced the prime-send would show up as a
+# `<command-name>/thrum:prime</command-name>` tag in coord's JSONL
+# within the first ~30s of the session.
+#
+# Scoping is required: scenario 54 explicitly sends /thrum:prime to the
+# COORD pane via send_slash_command, producing a tag in COORD JSONL,
+# AND scenario 54 may run before scenario 99 in a full-suite run
+# (alphabetic sort puts "54-" before "99-"). An unscoped grep would
+# always be ≥1 in that ordering. Filter to entries within
+# (session_start, session_start + LAUNCH_WINDOW_SEC). Anything outside
+# that window is from a deliberate later /thrum:prime send by another
+# scenario and irrelevant to thrum-6hqy.
+LAUNCH_WINDOW_SEC=120
 project_dir="$HOME/.claude/projects/$(encode_cwd "$REPO")"
-prime_hits=0
-if [ -d "$project_dir" ]; then
-  prime_hits=$(grep -hF '<command-name>/thrum:prime</command-name>' \
-    "$project_dir"/*.jsonl 2>/dev/null | wc -l | tr -d ' ')
+launch_window_hits=0
+if [ -d "$project_dir" ] && compgen -G "$project_dir/*.jsonl" >/dev/null; then
+  # Single slurp-mode jq pass over every JSONL file in the project
+  # dir: derive session_start as the earliest .timestamp seen, then
+  # count user messages within session_start + LAUNCH_WINDOW_SEC
+  # whose content contains the /thrum:prime tag. Robust to claude's
+  # multiple-file session rotation.
+  launch_window_hits=$(jq -s --argjson win "$LAUNCH_WINDOW_SEC" '
+    ([.[] | select(.timestamp != null) | .timestamp] | min) as $start
+    | if $start == null then 0
+      else
+        ($start | fromdateiso8601) as $start_epoch
+        | [.[]
+            | select(.type == "user"
+                     and (.message.content | type == "string")
+                     and (.message.content | contains("<command-name>/thrum:prime</command-name>"))
+                     and (.timestamp != null))
+            | select(((.timestamp | fromdateiso8601) - $start_epoch) < $win)]
+        | length
+      end' \
+    "$project_dir"/*.jsonl 2>/dev/null)
 fi
-case "${prime_hits:-0}" in
-  ''|*[!0-9]*) prime_hits=0 ;;
+case "${launch_window_hits:-0}" in
+  ''|*[!0-9]*) launch_window_hits=0 ;;
 esac
 
-if [ "$prime_hits" = "0" ]; then
+if [ "$launch_window_hits" = "0" ]; then
   emit_pass "$SID" "no-post-launch-prime-for-claude"
 else
   emit_fail "$SID" "no-post-launch-prime-for-claude" \
-    "0 occurrences of <command-name>/thrum:prime</command-name> in coord JSONL (claude has SessionStart hook — daemon should skip the post-launch prime send)" \
-    "got: ${prime_hits} occurrences" \
+    "0 occurrences of <command-name>/thrum:prime</command-name> in coord JSONL within ${LAUNCH_WINDOW_SEC}s of session start (claude has SessionStart hook — daemon should skip the post-launch prime send)" \
+    "got: ${launch_window_hits} occurrences inside the launch window" \
     "scenarios/${SID}.test.sh:$LINENO"
 fi

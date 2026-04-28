@@ -123,3 +123,15 @@ func TestShellCommand_NilReturnsEmpty(t *testing.T) {
 		t.Errorf("ShellCommand(nil) = %q, want empty", got)
 	}
 }
+
+// TestShellCommand_EmptyAgentNameReturnsEmpty parallels
+// TestCompose_EmptyAgentNameReturnsEmpty for ShellCommand. Although
+// ShellCommand delegates to Compose so the property holds transitively,
+// pinning it explicitly defends against a future refactor that fans out
+// the empty-name guard between the two functions.
+func TestShellCommand_EmptyAgentNameReturnsEmpty(t *testing.T) {
+	id := &config.IdentityFile{}
+	if got := ShellCommand(id); got != "" {
+		t.Errorf("ShellCommand(empty-name) = %q, want empty", got)
+	}
+}
