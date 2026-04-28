@@ -1,47 +1,49 @@
 #!/usr/bin/env bash
-# SessionStart hook: inject `thrum prime` output as additionalContext.
+# SessionStart hook: inject `thrum prime` output into the agent's context.
 #
-# Replaces the prior "Run /thrum:prime" nudge. When an agent is registered
-# for this project, we run `thrum prime` and emit the briefing through
-# Claude Code's documented JSON output protocol —
-#   {"hookSpecificOutput":{"hookEventName":"SessionStart",
-#                          "additionalContext": "<assembled body>"}}
-# `additionalContext` is routed straight into the model's context window
-# with no size truncation and no persisted-output indirection. Plain
-# stdout >2KB is otherwise persisted to a tool-results file with only the
-# first 2KB previewed inline (thrum-tfrv: coordinator briefings around
-# 60KB were dropping the entire session-context section past the cutoff).
+# Emits the assembled banner+directive+briefing as plain stdout. Claude
+# Code routes hook stdout through a size-gated path: small outputs
+# (<~2KB) become inline `<system-reminder>` blocks delivered straight to
+# the model; larger outputs get persisted to a `tool-results/<id>.txt`
+# file with only the first ~2KB previewed inline (and a
+# `<persisted-output>` wrapper showing the full file path).
+#
+# Field-test history (zarambp14):
+#   - thrum-tfrv tried the documented JSON output protocol
+#     (`hookSpecificOutput.additionalContext`) to bypass the size cap.
+#     Claude Code captured the JSON to attachment.stdout but
+#     attachment.additionalContext stayed null — the field is silently
+#     ignored for SessionStart hooks. Reverted in thrum-a6sw (this
+#     change).
+#   - thrum-a6sw: keep plain stdout, but make the directive
+#     SIZE-AWARE. Small briefings get the original "auto-loaded, do
+#     not re-prime" directive (xupf+2qe2). Large briefings get a
+#     MUST-READ directive that points the agent at the path inside
+#     the `<persisted-output>` wrapper Claude Code already shows in
+#     the first 2KB preview, turning the truncation into a forcing
+#     function instead of a silent loss.
 #
 # Hook-level timeout is enforced by plugin.json; this script does not
 # need a portable `timeout` wrapper.
 #
 # Output ordering for a registered agent (top → bottom):
 #   1. Identity banner — agent / role / worktree / branch / module
-#      (thrum-2qe2). First thing the agent sees in context.
-#   2. Loud auto-load directive (thrum-xupf). Tells the agent NOT to
-#      run /thrum:prime — the briefing is already in context.
-#   3. Loud restart-snapshot preamble (existing). Hoisted only when the
+#      (thrum-2qe2). Always first; renders inside the 2KB preview.
+#   2. Directive — size-aware:
+#        - small body (< THRESHOLD bytes): "auto-loaded, do not re-prime"
+#        - large body (>= THRESHOLD bytes): "MUST READ the persisted file"
+#      Always second so it lands inside the 2KB preview.
+#   3. Restart-snapshot preamble (existing). Hoisted only when the
 #      briefing carries a `# Previous Session Context` block.
 #   4. Briefing envelope + full prime output.
 
 set -uo pipefail
 
-# emit_context "<body>" — final emission step. Prefers the JSON
-# protocol (Claude Code routes additionalContext directly into the
-# model's context window, no size cap). Falls back to plain stdout
-# when jq isn't available — that path retains the historical
-# system-reminder routing with the documented 2KB inline preview
-# (degraded mode; we'd rather ship a partial briefing than abort
-# session start). thrum-tfrv.
-emit_context() {
-  local body="$1"
-  if command -v jq >/dev/null 2>&1; then
-    jq -n --arg ctx "$body" \
-      '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $ctx}}'
-  else
-    printf '%s' "$body"
-  fi
-}
+# Threshold for choosing the small-body vs large-body directive.
+# Claude Code's documented preview cap is ~2KB; using 1500 leaves
+# headroom for the directive block itself + the banner so the
+# directive lands cleanly inside the preview window.
+SIZE_DIRECTIVE_THRESHOLD=1500
 
 # Project doesn't use thrum — silent no-op.
 if ! command -v thrum >/dev/null 2>&1; then
@@ -62,9 +64,8 @@ fi
 
 if [ -z "$AGENT_ID" ]; then
   # No agent registered — preserve historical nudge so the user/agent
-  # knows to prime manually after registration. Wrapped in the JSON
-  # envelope so all branches share one protocol shape.
-  emit_context "Run /thrum:prime to load your session context, identity, and any restart snapshots."
+  # knows to prime manually after registration.
+  echo "Run /thrum:prime to load your session context, identity, and any restart snapshots."
   exit 0
 fi
 
@@ -75,79 +76,99 @@ AGENT_WORKTREE=$(printf '%s' "$WHOAMI_JSON" | jq -r '.worktree // empty' 2>/dev/
 AGENT_BRANCH=$(printf '%s' "$WHOAMI_JSON" | jq -r '.branch // empty' 2>/dev/null || true)
 AGENT_MODULE=$(printf '%s' "$WHOAMI_JSON" | jq -r '.module // empty' 2>/dev/null || true)
 
-# Agent registered — assemble the full briefing body in $ASSEMBLED so
-# we can wrap it in the JSON envelope at the end (rather than emitting
-# piecemeal to stdout, which would be size-truncated above ~2KB).
 PRIME_OUTPUT=$(thrum prime 2>/dev/null || true)
 
 if [ -z "$PRIME_OUTPUT" ]; then
   # Prime failed (daemon down, slow, etc.) — fall back to the manual
-  # nudge so session start never blocks on a broken thrum. JSON
-  # envelope same as the no-agent branch above for protocol uniformity.
-  fallback_body=$'Run /thrum:prime to load your session context, identity, and any restart snapshots.\n(Auto-injection failed — daemon may be unreachable. Run `thrum daemon status` to check.)'
-  emit_context "$fallback_body"
+  # nudge so session start never blocks on a broken thrum.
+  echo "Run /thrum:prime to load your session context, identity, and any restart snapshots."
+  echo "(Auto-injection failed — daemon may be unreachable. Run \`thrum daemon status\` to check.)"
   exit 0
 fi
 
-# Build $ASSEMBLED via incremental append. printf-into-variable rather
-# than the previous `cat <<EOF` to-stdout pattern — same content, but
-# now redirected through emit_context so the >2KB truncation gate
-# can't fire.
-ASSEMBLED=""
-append() { ASSEMBLED+="$1"; }
+# Two-phase build: assemble BANNER, RESTART_PREAMBLE, and BRIEFING into
+# separate variables, total their byte count, then choose the
+# size-appropriate directive and emit in the canonical order.
+append_to() { local _name="$1"; shift; printf -v "$_name" '%s%s' "${!_name}" "$1"; }
 
-# 1. Identity banner.
-append "# 🎯 You are: @${AGENT_ID}"$'\n'
-append $'\n'
-append "- **Role:** ${AGENT_ROLE:-unknown}"$'\n'
-append "- **Worktree:** ${AGENT_WORKTREE:-unknown}"$'\n'
-append "- **Branch:** ${AGENT_BRANCH:-unknown}"$'\n'
-# Module is optional — only show it when set and it isn't a redundant
-# echo of role (some setups default module=role).
+# 1. Identity banner — always first; lands in the 2KB preview.
+BANNER=""
+append_to BANNER "# 🎯 You are: @${AGENT_ID}"$'\n'
+append_to BANNER $'\n'
+append_to BANNER "- **Role:** ${AGENT_ROLE:-unknown}"$'\n'
+append_to BANNER "- **Worktree:** ${AGENT_WORKTREE:-unknown}"$'\n'
+append_to BANNER "- **Branch:** ${AGENT_BRANCH:-unknown}"$'\n'
 if [ -n "$AGENT_MODULE" ] && [ "$AGENT_MODULE" != "$AGENT_ROLE" ]; then
-  append "- **Module:** ${AGENT_MODULE}"$'\n'
+  append_to BANNER "- **Module:** ${AGENT_MODULE}"$'\n'
 fi
-append $'\n---\n\n'
+append_to BANNER $'\n---\n\n'
 
-# 2. Loud auto-load directive. The agent should NOT consider running
-# /thrum:prime or `thrum prime` again — the briefing is in context.
-# Blockquote framing matches the heaviness of the restart-snapshot
-# block below so this directive isn't visually outranked.
-append '> ✅ **Context auto-loaded by SessionStart hook.**'$'\n'
-append '>'$'\n'
-append '> **Do NOT run `/thrum:prime` or `thrum prime` — the full briefing is already in your context below.**'$'\n'
-append '> Only invoke them manually if this hook fell through to a degraded "auto-injection failed" notice.'$'\n'
-append $'\n'
-
-# 3. Detect a restart snapshot embedded in the briefing. `thrum prime`
-# includes it under the `# Previous Session Context` heading when
-# `.thrum/restart/<agent>.md` exists. Without prominent framing, the
-# agent treats it as background reading and skips the actionable
-# Resume Plan inside. Hoist a loud action-required block above the
-# briefing so the directive is impossible to miss.
+# 3. Restart-snapshot preamble (if `thrum prime` carries a Previous
+# Session Context block). Built before directive so the size check
+# below sees the total prefix bytes.
+RESTART_PREAMBLE=""
 if printf '%s' "$PRIME_OUTPUT" | grep -q '^# Previous Session Context'; then
-  append '# 🛑 ACTION REQUIRED — Instructions From Your Previous Session'$'\n'
-  append $'\n'
-  append '**You restarted from a prior session and left yourself a Resume Plan.** It is in the **`# Previous Session Context`** section of the briefing below. That plan is not background reading — it is your own message-to-self with concrete next steps.'$'\n'
-  append $'\n'
-  append '**Before doing anything else:**'$'\n'
-  append $'\n'
-  append '1. Scroll to the `# Previous Session Context` section of the briefing.'$'\n'
-  append '2. Read the **`## Resume Plan`** sub-section in full.'$'\n'
-  append '3. Execute its numbered steps in order.'$'\n'
-  append '4. Only then continue to the rest of the briefing or the user'\''s prompt.'$'\n'
-  append $'\n'
-  append 'The Resume Plan was written by *you* in the previous session specifically because you knew this future you would need it. Trust it and act on it.'$'\n'
-  append $'\n---\n\n'
+  append_to RESTART_PREAMBLE '# 🛑 ACTION REQUIRED — Instructions From Your Previous Session'$'\n'
+  append_to RESTART_PREAMBLE $'\n'
+  append_to RESTART_PREAMBLE '**You restarted from a prior session and left yourself a Resume Plan.** It is in the **`# Previous Session Context`** section of the briefing below. That plan is not background reading — it is your own message-to-self with concrete next steps.'$'\n'
+  append_to RESTART_PREAMBLE $'\n'
+  append_to RESTART_PREAMBLE '**Before doing anything else:**'$'\n'
+  append_to RESTART_PREAMBLE $'\n'
+  append_to RESTART_PREAMBLE '1. Scroll to the `# Previous Session Context` section of the briefing.'$'\n'
+  append_to RESTART_PREAMBLE '2. Read the **`## Resume Plan`** sub-section in full.'$'\n'
+  append_to RESTART_PREAMBLE '3. Execute its numbered steps in order.'$'\n'
+  append_to RESTART_PREAMBLE '4. Only then continue to the rest of the briefing or the user'\''s prompt.'$'\n'
+  append_to RESTART_PREAMBLE $'\n'
+  append_to RESTART_PREAMBLE 'The Resume Plan was written by *you* in the previous session specifically because you knew this future you would need it. Trust it and act on it.'$'\n'
+  append_to RESTART_PREAMBLE $'\n---\n\n'
 fi
 
 # 4. Briefing envelope + full prime output.
-append '# Thrum Session Briefing (auto-loaded)'$'\n'
-append $'\n'
-append 'The complete `thrum prime` output is included below. You do NOT need to run `/thrum:prime` or `thrum prime` again this session — the briefing is already in your context. Read it in full; the session context section at the end is the most important.'$'\n'
-append $'\n'
-append 'Only spawn additional commands if the inbox section shows unread messages that need processing.'$'\n'
-append $'\n---\n\n'
-append "$PRIME_OUTPUT"$'\n'
+BRIEFING=""
+append_to BRIEFING '# Thrum Session Briefing (auto-loaded)'$'\n'
+append_to BRIEFING $'\n'
+append_to BRIEFING 'The complete `thrum prime` output is included below. You do NOT need to run `/thrum:prime` or `thrum prime` again this session — the briefing is already in your context. Read it in full; the session context section at the end is the most important.'$'\n'
+append_to BRIEFING $'\n'
+append_to BRIEFING 'Only spawn additional commands if the inbox section shows unread messages that need processing.'$'\n'
+append_to BRIEFING $'\n---\n\n'
+append_to BRIEFING "$PRIME_OUTPUT"$'\n'
 
-emit_context "$ASSEMBLED"
+# Choose the directive based on the total non-directive body size. The
+# directive itself is short (~400B for either variant), so adding it
+# pushes a borderline body over the cap — but that's fine since the
+# directive is the highest-priority content and lands inside the
+# preview either way.
+TOTAL_BODY_SIZE=$(( ${#BANNER} + ${#RESTART_PREAMBLE} + ${#BRIEFING} ))
+
+DIRECTIVE=""
+if [ "$TOTAL_BODY_SIZE" -ge "$SIZE_DIRECTIVE_THRESHOLD" ]; then
+  # Large-body case: briefing exceeds the 2KB preview. Tell the agent
+  # to Read the persisted file path Claude Code shows in the
+  # `<persisted-output>` wrapper above the preview. Truncation
+  # becomes a forcing function instead of a silent loss.
+  append_to DIRECTIVE '> 🛑 **BRIEFING TRUNCATED — YOU MUST READ THE PERSISTED FILE** 🛑'$'\n'
+  append_to DIRECTIVE '>'$'\n'
+  append_to DIRECTIVE '> The full session briefing exceeded the ~2KB inline preview. Use the **Read** tool against the path shown in the `<persisted-output>` wrapper above (`Full output saved to: ...`) to load:'$'\n'
+  append_to DIRECTIVE '>'$'\n'
+  append_to DIRECTIVE '> - Your inbox (unread messages may need processing)'$'\n'
+  append_to DIRECTIVE '> - Project state + recent commits'$'\n'
+  append_to DIRECTIVE '> - Session context for restart recovery'$'\n'
+  append_to DIRECTIVE '>'$'\n'
+  append_to DIRECTIVE '> Do NOT skip this. Do NOT run `thrum prime` manually — that would double-prime. Just Read the file shown above.'$'\n'
+  append_to DIRECTIVE $'\n'
+else
+  # Small-body case: full briefing fits in the inline preview, so the
+  # original auto-loaded directive applies (xupf+2qe2 phrasing).
+  append_to DIRECTIVE '> ✅ **Context auto-loaded by SessionStart hook.**'$'\n'
+  append_to DIRECTIVE '>'$'\n'
+  append_to DIRECTIVE '> **Do NOT run `/thrum:prime` or `thrum prime` — the full briefing is already in your context below.**'$'\n'
+  append_to DIRECTIVE '> Only invoke them manually if this hook fell through to a degraded "auto-injection failed" notice.'$'\n'
+  append_to DIRECTIVE $'\n'
+fi
+
+# Emit in canonical order: banner → directive → restart preamble →
+# briefing. Banner + directive always land inside the 2KB preview.
+printf '%s' "$BANNER"
+printf '%s' "$DIRECTIVE"
+printf '%s' "$RESTART_PREAMBLE"
+printf '%s' "$BRIEFING"
