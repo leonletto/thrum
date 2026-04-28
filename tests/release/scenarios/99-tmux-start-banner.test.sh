@@ -32,13 +32,16 @@ SID="99-tmux-start-banner"
 PANE="$COORD_PANE"
 REPO="$COORD_REPO"
 
-# Assertion 1: banner header present in pane scrollback. tmux
-# capture-pane -S -1000 -p reads the last 1000 lines of scrollback (vs.
-# capture-pane -p which reads only the current screen, where claude's
-# TUI has long since taken over). The banner's `Agent: @<id>` line
-# is the highest-signal anchor; pinning the @-prefixed form catches a
-# regression where the banner was emitted but agent_id rendered empty.
-capture=$(tmux capture-pane -t "$PANE" -S -1000 -p 2>/dev/null || true)
+# Assertion 1: banner header present in pane scrollback. Per
+# thrum-6hqy.1 the daemon emits the banner via a goroutine 10s AFTER
+# launchCmd, so by the time scenario 99 runs (well after setup-repo's
+# `thrum tmux start --name coord` + the 10s sleep) the banner is
+# safely in scrollback — but possibly hundreds of lines back, since
+# claude's TUI redraws + setup-repo's whoami probe + downstream
+# scenarios accumulate output continuously after the banner fires.
+# Capture all available history (`-S -`) so the banner remains
+# reachable regardless of tmux's history-limit.
+capture=$(tmux capture-pane -t "$PANE" -S - -p 2>/dev/null || true)
 if printf '%s' "$capture" | grep -qE '^Agent: @test_coordinator_main$'; then
   emit_pass "$SID" "banner-agent-line"
 else

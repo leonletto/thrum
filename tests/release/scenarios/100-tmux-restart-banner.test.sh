@@ -1,27 +1,33 @@
 #!/usr/bin/env bash
-# Scenario: tmux-restart-banner (migrates thrum-6hqy AC #3)
+# Scenario: tmux-restart-banner (migrates thrum-6hqy AC #3 +
+# thrum-6hqy.1 post-launch-slot move)
 #
 # Pins the daemon-side identity banner emitted at `thrum tmux restart`
-# time. Same shape as scenario 99's start-time banner, but the
-# orientation event is the post-relaunch pane (not the initial start).
-# Restart is the same identity-display moment as start from the
-# human-watching-tmux perspective.
+# time. Per thrum-6hqy.1, the banner now lives in the post-launch
+# goroutine slot (10s after launchCmd) for hook runtimes — replacing
+# the redundant /thrum:prime that inject-prime-context.sh already
+# satisfies. So the contract under test is: claude (hook=true) gets
+# banner-via-goroutine 10s after the post-restart launchCmd; the
+# banner lands AFTER claude has rendered the briefing in the pane.
 #
 # Per-scenario sub-fixture (worktree + branch-backed inline-registered
-# agent + shell runtime, mirrors scenario 91's pattern). Shell runtime
-# is intentional: claude would burn API budget on the restart-snapshot
-# preamble work for no contract gain — the contract under test is
-# the daemon's banner emission, which is runtime-independent.
+# agent + claude runtime). Claude (not shell) is mandatory — shell
+# has HasSessionStartHook=false so the daemon's goroutine takes the
+# non-hook branch and never emits the banner. Mirrors kafm.6's
+# scenario 70-76 rationale: the contract is hook-runtime banner;
+# testing it requires a hook runtime.
 #
 # Two assertions:
 #   1. Restart RPC succeeds (canonical "restarted" success-line).
-#   2. After restart, pane scrollback contains the banner's
-#      `Agent: @<agent_id>` header line. capture-pane -S -1000 reads
-#      scrollback so the banner is reachable even if subsequent prompt
-#      output scrolled past the visible screen.
+#   2. Pane scrollback contains the banner's `Agent: @<agent_id>`
+#      header line within ~35s after restart returns. Budget covers
+#      the daemon goroutine's 10s sleep + claude's ~10-15s startup
+#      + the SendKeys settle + scrollback-render time. Capture via
+#      `tmux capture-pane -S -1000 -p` so the banner is visible even
+#      after the briefing has scrolled past the visible screen.
 #
-# Per-scenario teardown of session+worktree at scenario end (same
-# discipline as scenario 91).
+# Per-scenario teardown of session+worktree. Defensive sweep in
+# helpers/teardown.sh catches partial failures.
 
 SID="100-tmux-restart-banner"
 RST_WT_NAME="hqy-100-restart-wt"
@@ -64,7 +70,7 @@ fi
 # Step 2: inline-register agent via thrum tmux create from COORD pane
 # (caller-identity guard — tmux-exec ephemeral callers get refused).
 if ! send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
-    "thrum tmux create ${RST_SESSION} --cwd ${RST_WT} --name ${RST_AGENT} --role tester --module testing --intent 'thrum-6hqy restart fixture'" \
+    "thrum tmux create ${RST_SESSION} --cwd ${RST_WT} --name ${RST_AGENT} --role tester --module testing --intent 'thrum-6hqy.1 restart fixture'" \
     "Session created" 60; then
   emit_fail "$SID" "subfixture-tmux-create" \
     "thrum tmux create ${RST_SESSION} succeeds with 'Session created' line" \
@@ -74,28 +80,38 @@ if ! send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
   return 0
 fi
 
-# Step 3: launch shell runtime via COORD pane drive (mirrors 91's
-# rationale — caller-identity guard refuses tmux-exec ephemeral
-# callers for HandleLaunch on cross-worktree create).
+# Step 3: launch claude via COORD pane drive. Claude (default runtime)
+# has HasSessionStartHook=true → daemon goroutine emits banner
+# (replaces /thrum:prime). Mirrors scenario 91/69's COORD-driven
+# launch pattern.
 if ! send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
-    "thrum tmux launch ${RST_SESSION} --runtime shell" \
-    "Launched shell" 60; then
+    "thrum tmux launch ${RST_SESSION}" \
+    "Launched" 60; then
   emit_fail "$SID" "subfixture-tmux-launch" \
-    "thrum tmux launch ${RST_SESSION} --runtime shell driven from COORD pane outputs 'Launched shell'" \
+    "thrum tmux launch ${RST_SESSION} (claude) driven from COORD pane outputs 'Launched'" \
     "(timeout, no matching bash-stdout entry)" \
     "scenarios/${SID}.test.sh:$LINENO"
   _scenario_100_cleanup
   return 0
 fi
 
-# Brief settle: launch's HandleLaunch goroutine writes the row +
-# starts the shell async. 3s mirrors scenario 45/69/91 timing.
-sleep 3
+# Step 4: wait for claude to fully boot before restarting. The launch
+# goroutine sleeps 10s before its prime/banner action; claude itself
+# typically takes ~10-15s from `claude` keystroke to ready prompt. Use
+# wait_for_session_start as the boot-complete anchor (mirrors
+# setup-repo.sh's pattern for impl).
+if ! wait_for_session_start "$RST_WT" 60; then
+  emit_fail "$SID" "subfixture-claude-booted" \
+    "claude SessionStart attachment in ${RST_WT}'s JSONL within 60s" \
+    "(no SessionStart entry observed)" \
+    "scenarios/${SID}.test.sh:$LINENO"
+  _scenario_100_cleanup
+  return 0
+fi
 
-# Step 4: restart the session and assert the success-line contract.
-# --force skips the graceful snapshot-save phase (no claude in this
-# fixture so there's no snapshot to capture; matches scenarios
-# 02/03/21/69's --force precedent).
+# Step 5: restart the session and assert the success-line contract.
+# --force skips the graceful snapshot-save phase (no conversation to
+# checkpoint here; matches scenarios 02/03/21/69's --force precedent).
 if ! send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
     "thrum tmux restart ${RST_SESSION} --force" \
     "restarted" 60; then
@@ -108,16 +124,15 @@ if ! send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
 fi
 emit_pass "$SID" "restart-success-line"
 
-# Step 5: poll the post-restart pane for the banner. The daemon's
-# HandleRestart calls h.emitIdentityBanner BEFORE launchCmd — the
-# banner shell-printf executes at the fresh shell prompt and then
-# the runtime takes over. capture-pane -S -1000 reads scrollback so
-# we see lines that scrolled past the current screen. Allow up to
-# 10s for the send-keys + Enter chain to land + the shell to render
-# the printf output.
+# Step 6: poll the post-restart pane for the banner. Per thrum-6hqy.1,
+# the daemon's HandleRestart fires the banner from a goroutine 10s
+# after launchCmd (replacing /thrum:prime for hook runtimes). Budget:
+# 10s daemon sleep + ~10-15s claude startup + send-keys + render.
+# 35s wall-clock with 1s polling interval gives enough headroom for
+# slow boots without making a healthy run wait the full window.
 local pane_capture banner_seen=0
 local elapsed=0
-while [ "$elapsed" -lt 10 ]; do
+while [ "$elapsed" -lt 35 ]; do
   pane_capture=$(tmux capture-pane -t "$RST_SESSION" -S -1000 -p 2>/dev/null || true)
   if printf '%s' "$pane_capture" | grep -qE "^Agent: @${RST_AGENT}$"; then
     banner_seen=1
@@ -131,8 +146,8 @@ if [ "$banner_seen" = "1" ]; then
   emit_pass "$SID" "restart-banner-agent-line"
 else
   emit_fail "$SID" "restart-banner-agent-line" \
-    "tmux pane '${RST_SESSION}' scrollback contains 'Agent: @${RST_AGENT}' after restart" \
-    "(not found in last 1000 lines within 10s; sample: $(printf '%s' "$pane_capture" | tail -c 240 | tr '\n' ' '))" \
+    "tmux pane '${RST_SESSION}' scrollback contains 'Agent: @${RST_AGENT}' within 35s after restart (post-launch goroutine fires at 10s; claude boot adds ~10-15s)" \
+    "(not found in last 1000 lines; sample: $(printf '%s' "$pane_capture" | tail -c 240 | tr '\n' ' '))" \
     "scenarios/${SID}.test.sh:$LINENO"
 fi
 
