@@ -52,16 +52,23 @@ send_command "$PANE" "! $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh 
 assert_jsonl "$PANE" "$REPO" "$SID" "identity-banner-role" "VERIFIED identity_banner_role" \
   "scenarios/${SID}.test.sh:$LINENO"
 
-# Assertion 6: loud auto-load directive (thrum-xupf). The directive
-# blockquote tells the agent NOT to re-run /thrum:prime. The needle
-# `Do NOT run \`/thrum:prime\`` (literal backticks around the slash
-# command) appears ONLY in the directive blockquote — the briefing
-# envelope's prose at step 4 of inject-prime-context.sh contains the
-# softer phrasing "You do NOT need to run \`/thrum:prime\`", which
-# is distinct. Pinning the unique form defends against a regression
-# that silently removed the blockquote while leaving the envelope
-# paragraph behind (substring overlap on a looser "Do NOT run"
-# needle would let that regression through).
-send_command "$PANE" "! $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh autoload_directive \"Do NOT run \\\`/thrum:prime\\\`\" SessionStart:startup"
+# Assertion 6: size-aware directive (thrum-xupf + thrum-a6sw). The
+# inject-prime-context.sh hook chooses between two directive variants
+# at emit time based on the assembled body's byte count:
+#   - small body (< 1500 bytes): "Context auto-loaded by SessionStart
+#     hook ... Do NOT run \`/thrum:prime\`" (xupf+2qe2 phrasing).
+#   - large body (>= 1500 bytes): "🛑 BRIEFING TRUNCATED — YOU MUST
+#     READ THE PERSISTED FILE 🛑 ... Do NOT run \`thrum prime\`
+#     manually" (a6sw — turns Claude Code's persisted-output
+#     truncation into a forcing function instead of a silent loss).
+#
+# Both variants share the literal token `Do NOT run` (capital D + the
+# space). The briefing envelope's prose at step 4 uses lowercase
+# `do NOT need to run` — distinct from the directive's `Do NOT run`,
+# so this needle remains regression-proof against a refactor that
+# silently dropped the blockquote while leaving the envelope text
+# behind. The fixture's coord briefing size determines which variant
+# fires; the common needle assertion passes either way.
+send_command "$PANE" "! $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh autoload_directive \"Do NOT run\" SessionStart:startup"
 assert_jsonl "$PANE" "$REPO" "$SID" "autoload-directive-present" "VERIFIED autoload_directive" \
   "scenarios/${SID}.test.sh:$LINENO"
