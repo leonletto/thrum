@@ -58,9 +58,10 @@ run_teardown() {
   # the daemon shuts down, and rm -rf "$BASE" clears the SQLite
   # monitor rows along with the rest of the fixture state. The only
   # side-effect that lives outside $BASE is the temp log file under
-  # /tmp; the RUNID-anchored glob safely targets only this run's
-  # artifacts.
-  rm -f /tmp/thrum-monitor-kafm11-*.log
+  # /tmp at a deterministic RUNID-keyed path; remove that exact path
+  # only — a glob would match log files from concurrent suite runs
+  # on the same machine and wipe their artifacts.
+  rm -f "/tmp/thrum-monitor-kafm11-${RUNID}.log"
   if [ -n "${REPO:-}" ] && [ -d "$REPO" ]; then
     (cd "$REPO" && thrum daemon stop) >/dev/null 2>&1 || true
   fi

@@ -179,5 +179,10 @@ rm -f "$inbox_pos"
 # scenario 28 read-all sub-assertion runs much earlier in the suite
 # and we don't break that, but a future scenario inspecting coord's
 # inbox under unread-only filtering shouldn't pick up our marker.
-capture_thrum_json "$COORD_REPO" test_coordinator_main /dev/null \
+# Use a real tempfile (not /dev/null) — capture_thrum_json's contract
+# isn't documented to support /dev/null and a future `[ -s ]` guard
+# would break us silently. Mirrors the drain at line 67-69 above.
+drain_file2="$(mktemp -t kafm11-95-drain2.XXXXXX).json"
+capture_thrum_json "$COORD_REPO" test_coordinator_main "$drain_file2" \
   message read --all >/dev/null 2>&1 || true
+rm -f "$drain_file2"
