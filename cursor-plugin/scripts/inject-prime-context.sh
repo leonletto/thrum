@@ -15,13 +15,18 @@
 #     attachment.additionalContext stayed null — the field is silently
 #     ignored for SessionStart hooks. Reverted in thrum-a6sw (this
 #     change).
-#   - thrum-a6sw: keep plain stdout, but make the directive
-#     SIZE-AWARE. Small briefings get the original "auto-loaded, do
-#     not re-prime" directive (xupf+2qe2). Large briefings get a
-#     MUST-READ directive that points the agent at the path inside
-#     the `<persisted-output>` wrapper Claude Code already shows in
-#     the first 2KB preview, turning the truncation into a forcing
-#     function instead of a silent loss.
+#   - thrum-a6sw: kept plain stdout but tried a size-aware directive
+#     (small body → "auto-loaded, do not re-prime"; large body →
+#     "MUST READ the persisted file"). Agents read the MUST-READ
+#     block but rationalized deferring the Read — system-reminder
+#     framing is treated as advisory, not imperative.
+#   - The MUST-READ directive moved to the daemon-emitted pane-typed
+#     identity banner (internal/identitybanner). That channel routes
+#     through the same input path as user prompts, which the model
+#     treats more imperatively. The hook-output directive reverted
+#     to a single unconditional "auto-loaded, do not re-prime"
+#     phrasing (accurate for small briefings; harmlessly redundant
+#     for large ones since the banner-side directive does the work).
 #
 # Hook-level timeout is enforced by plugin.json; this script does not
 # need a portable `timeout` wrapper.
@@ -29,21 +34,13 @@
 # Output ordering for a registered agent (top → bottom):
 #   1. Identity banner — agent / role / worktree / branch / module
 #      (thrum-2qe2). Always first; renders inside the 2KB preview.
-#   2. Directive — size-aware:
-#        - small body (< THRESHOLD bytes): "auto-loaded, do not re-prime"
-#        - large body (>= THRESHOLD bytes): "MUST READ the persisted file"
+#   2. Directive — single "auto-loaded, do not re-prime" message.
 #      Always second so it lands inside the 2KB preview.
 #   3. Restart-snapshot preamble (existing). Hoisted only when the
 #      briefing carries a `# Previous Session Context` block.
 #   4. Briefing envelope + full prime output.
 
 set -uo pipefail
-
-# Threshold for choosing the small-body vs large-body directive.
-# Claude Code's documented preview cap is ~2KB; using 1500 leaves
-# headroom for the directive block itself + the banner so the
-# directive lands cleanly inside the preview window.
-SIZE_DIRECTIVE_THRESHOLD=1500
 
 # Project doesn't use thrum — silent no-op.
 if ! command -v thrum >/dev/null 2>&1; then
@@ -133,38 +130,18 @@ append_to BRIEFING 'Only spawn additional commands if the inbox section shows un
 append_to BRIEFING $'\n---\n\n'
 append_to BRIEFING "$PRIME_OUTPUT"$'\n'
 
-# Choose the directive based on the total non-directive body size. The
-# directive itself is short (~400B for either variant), so adding it
-# pushes a borderline body over the cap — but that's fine since the
-# directive is the highest-priority content and lands inside the
-# preview either way.
-TOTAL_BODY_SIZE=$(( ${#BANNER} + ${#RESTART_PREAMBLE} + ${#BRIEFING} ))
-
+# Single directive: agents read this BEFORE the briefing body and act
+# on it. The MUST-READ-the-persisted-file directive that previously
+# lived here for the large-body case has moved to the daemon-emitted
+# pane-typed banner (internal/identitybanner) — that channel is
+# treated more imperatively by the model than hook-output system
+# reminders.
 DIRECTIVE=""
-if [ "$TOTAL_BODY_SIZE" -ge "$SIZE_DIRECTIVE_THRESHOLD" ]; then
-  # Large-body case: briefing exceeds the 2KB preview. Tell the agent
-  # to Read the persisted file path Claude Code shows in the
-  # `<persisted-output>` wrapper above the preview. Truncation
-  # becomes a forcing function instead of a silent loss.
-  append_to DIRECTIVE '> 🛑 **BRIEFING TRUNCATED — YOU MUST READ THE PERSISTED FILE** 🛑'$'\n'
-  append_to DIRECTIVE '>'$'\n'
-  append_to DIRECTIVE '> The full session briefing exceeded the ~2KB inline preview. Use the **Read** tool against the path shown in the `<persisted-output>` wrapper above (`Full output saved to: ...`) to load:'$'\n'
-  append_to DIRECTIVE '>'$'\n'
-  append_to DIRECTIVE '> - Your inbox (unread messages may need processing)'$'\n'
-  append_to DIRECTIVE '> - Project state + recent commits'$'\n'
-  append_to DIRECTIVE '> - Session context for restart recovery'$'\n'
-  append_to DIRECTIVE '>'$'\n'
-  append_to DIRECTIVE '> Do NOT skip this. Do NOT run `thrum prime` manually — that would double-prime. Just Read the file shown above.'$'\n'
-  append_to DIRECTIVE $'\n'
-else
-  # Small-body case: full briefing fits in the inline preview, so the
-  # original auto-loaded directive applies (xupf+2qe2 phrasing).
-  append_to DIRECTIVE '> ✅ **Context auto-loaded by SessionStart hook.**'$'\n'
-  append_to DIRECTIVE '>'$'\n'
-  append_to DIRECTIVE '> **Do NOT run `/thrum:prime` or `thrum prime` — the full briefing is already in your context below.**'$'\n'
-  append_to DIRECTIVE '> Only invoke them manually if this hook fell through to a degraded "auto-injection failed" notice.'$'\n'
-  append_to DIRECTIVE $'\n'
-fi
+append_to DIRECTIVE '> ✅ **Context auto-loaded by SessionStart hook.**'$'\n'
+append_to DIRECTIVE '>'$'\n'
+append_to DIRECTIVE '> **Do NOT run `/thrum:prime` or `thrum prime` — the full briefing is already in your context below.**'$'\n'
+append_to DIRECTIVE '> Only invoke them manually if this hook fell through to a degraded "auto-injection failed" notice.'$'\n'
+append_to DIRECTIVE $'\n'
 
 # Emit in canonical order: banner → directive → restart preamble →
 # briefing. Banner + directive always land inside the 2KB preview.

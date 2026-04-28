@@ -89,6 +89,7 @@ func TestShellCommand_QuotesEachLine(t *testing.T) {
 		"'Role:  implementer'",
 		"'Worktree: /path'",
 		"'Branch: main'",
+		"'If the prime output was truncated, you must read it now.'",
 		"''", // trailing blank line
 	} {
 		if !strings.Contains(got, needle) {

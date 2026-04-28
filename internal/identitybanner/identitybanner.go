@@ -67,10 +67,19 @@ func ShellCommand(id *config.IdentityFile) string {
 		return ""
 	}
 	lines := strings.Split(strings.TrimRight(body, "\n"), "\n")
-	args := make([]string, 0, len(lines)+1)
+	args := make([]string, 0, len(lines)+2)
 	for _, l := range lines {
 		args = append(args, shellSingleQuote(l))
 	}
+	// MUST-READ line: when the SessionStart hook's prime output is large
+	// (>~2KB), Claude Code persists it to a tool-results file with only a
+	// 2KB preview shown inline. The hook script's own size-aware directive
+	// proved insufficient — agents read it but rationalized deferring the
+	// Read. Putting the directive in the pane-typed banner instead routes
+	// it through the same input channel as user prompts, which the model
+	// treats more imperatively. Idempotent for small briefings (no
+	// truncation → "if truncated" is vacuous).
+	args = append(args, shellSingleQuote("If the prime output was truncated, you must read it now."))
 	// Trailing blank line for visual separation from runtime output.
 	args = append(args, "''")
 	return "printf '%s\\n' " + strings.Join(args, " ")
