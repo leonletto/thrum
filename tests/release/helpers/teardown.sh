@@ -51,6 +51,16 @@ run_teardown() {
   thrum worktree teardown kafm9-86-orch >/dev/null 2>&1 || true
   thrum worktree teardown kafm9-88-orch >/dev/null 2>&1 || true
   thrum worktree teardown kafm9-91-nudge-wt >/dev/null 2>&1 || true
+  # Defensive cleanup for the kafm.11 monitor-jobs fixture. Scenarios
+  # 92-98 share a single monitor + log file driven against the
+  # run-level daemon. Happy-path stop happens in scenario 96; the
+  # daemon stop below reaps any lingering monitor child process when
+  # the daemon shuts down, and rm -rf "$BASE" clears the SQLite
+  # monitor rows along with the rest of the fixture state. The only
+  # side-effect that lives outside $BASE is the temp log file under
+  # /tmp; the RUNID-anchored glob safely targets only this run's
+  # artifacts.
+  rm -f /tmp/thrum-monitor-kafm11-*.log
   if [ -n "${REPO:-}" ] && [ -d "$REPO" ]; then
     (cd "$REPO" && thrum daemon stop) >/dev/null 2>&1 || true
   fi
