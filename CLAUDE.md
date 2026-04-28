@@ -15,16 +15,22 @@ v0.9.1
 
 ## On Session Start
 
-Run thrum prime to understand the current project state and available issues.
+In Claude Code (and any runtime that loads the thrum plugin), the
+SessionStart hook auto-injects the full `thrum prime` briefing —
+identity, project state, inbox, and any restart snapshot — into your
+context. You do NOT need to run `/thrum:prime` or `thrum prime`
+manually under normal conditions.
+
+Only run the manual fallback when:
+
+- The hook reported a degraded "Auto-injection failed" notice (daemon
+  unreachable at session start), OR
+- You see no briefing in your initial context (e.g., the runtime
+  doesn't load thrum's SessionStart hook).
 
 ```bash
-thrum prime
-```
-
-Then run thrum context show to understand the current context.
-
-```bash
-thrum context show
+thrum prime         # only if auto-injection didn't fire
+thrum context show  # always safe — read-only state inspection
 ```
 
 ## Git Rules
