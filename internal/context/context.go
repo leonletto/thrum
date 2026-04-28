@@ -32,6 +32,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/paths"
 )
 
 //go:embed strategies/*.md
@@ -240,9 +241,47 @@ func DetectLanguage(repoRoot string) string {
 	return strings.Join(found, " + ")
 }
 
-// DefaultPreamble returns the default mode-independent preamble.
-// Messaging and listener content lives in FormatPrimeContext() section 5 (multi-agent only).
+// DefaultPreamble returns the default mode-independent preamble with paths
+// to the Agent Strategies block rendered as repo-root-relative (e.g.
+// `.thrum/strategies/sub-agent-strategy.md`). Suitable when the caller has
+// no repo-root context to substitute. When called from a render path that
+// DOES know the repo root (e.g. RenderRoleTemplate), use
+// DefaultPreambleWithRoot to substitute absolute paths so worktree agents
+// can read the files without traversing `.thrum/redirect` themselves
+// (thrum-z9zl).
+//
+// Messaging and listener content lives in FormatPrimeContext() section 5
+// (multi-agent only).
 func DefaultPreamble() []byte {
+	return DefaultPreambleWithRoot("")
+}
+
+// DefaultPreambleWithRoot returns DefaultPreamble with the Agent Strategies
+// paths rendered as absolute when repoRoot is non-empty. repoRoot is the
+// directory that contains `.thrum/strategies/` and `.thrum/llms.txt` — i.e.
+// the MAIN repo root, even when the calling agent lives in a worktree (the
+// strategies + llms.txt files only exist at the main repo's `.thrum/`; a
+// worktree's `.thrum/` carries `redirect`, `identities/`, `context/`,
+// `restart/` only).
+//
+// When repoRoot == "", paths render as `.thrum/strategies/X.md` (the
+// pre-z9zl shape — back-compat for callers that don't have a redirect-
+// resolved root). The Agent Strategies block in that case is preceded by a
+// short header note explaining that paths are repo-root-relative; in a
+// worktree they resolve via `.thrum/redirect`.
+func DefaultPreambleWithRoot(repoRoot string) []byte {
+	strategiesPrefix := ".thrum/strategies"
+	llmsTxtPath := ".thrum/llms.txt"
+	pathsHeader := "Read these strategy files for operational patterns. They are in `" + strategiesPrefix + "/`:\n\n" +
+		"> Paths below are repo-root-relative. In a git worktree the strategies/\n" +
+		"> directory and llms.txt only exist at the **main repo's** `.thrum/`,\n" +
+		"> not the worktree's; the worktree's `.thrum/redirect` points at the\n" +
+		"> main repo. Resolve paths against that root if Read fails locally.\n\n"
+	if repoRoot != "" {
+		strategiesPrefix = filepath.Join(repoRoot, ".thrum/strategies")
+		llmsTxtPath = filepath.Join(repoRoot, ".thrum/llms.txt")
+		pathsHeader = "Read these strategy files for operational patterns. Absolute paths below — copy/paste into Read directly:\n\n"
+	}
 	return []byte(`## Thrum Quick Reference
 
 **Update project state:** ` + "`/thrum:update-project`" + ` — updates durable project state
@@ -282,13 +321,11 @@ are running. Use ` + "`thrum send`" + ` to dispatch work via messaging instead.
 
 ## Agent Strategies
 
-Read these strategy files for operational patterns. They are in ` + "`.thrum/strategies/`" + `:
-
-- ` + "`.thrum/strategies/sub-agent-strategy.md`" + ` — When and how to delegate work to sub-agents
-- ` + "`.thrum/strategies/thrum-registration.md`" + ` — Registration, messaging, and coordination patterns
-- ` + "`.thrum/strategies/resume-after-context-loss.md`" + ` — How to resume work after compaction or session restart
-- ` + "`.thrum/llms.txt`" + ` — Full CLI/config/RPC reference. Grep this before asking about thrum commands, config keys, or RPC methods. Version-locked to your installed binary (do not WebFetch the website copy — it may drift).
-`)
+` + pathsHeader +
+		"- `" + strategiesPrefix + "/sub-agent-strategy.md` — When and how to delegate work to sub-agents\n" +
+		"- `" + strategiesPrefix + "/thrum-registration.md` — Registration, messaging, and coordination patterns\n" +
+		"- `" + strategiesPrefix + "/resume-after-context-loss.md` — How to resume work after compaction or session restart\n" +
+		"- `" + llmsTxtPath + "` — Full CLI/config/RPC reference. Grep this before asking about thrum commands, config keys, or RPC methods. Version-locked to your installed binary (do not WebFetch the website copy — it may drift).\n")
 }
 
 // RoleAwarePreamble returns a preamble with a role-specific behavioral header
@@ -410,7 +447,20 @@ type RoleTemplateData struct {
 // floor second).
 //
 // Returns nil, nil if no template exists at .thrum/role_templates/{role}.md.
+//
+// Follows .thrum/redirect ONLY when a redirect file actually exists at
+// thrumDir. That distinguishes a worktree's local .thrum (which has the
+// redirect file pointing at the main repo's .thrum) from a freshly
+// minted .thrum or a unit-test temp dir (no redirect — leave thrumDir
+// alone, otherwise paths.ResolveThrumDir's "no redirect = use local"
+// fallback resolves filepath.Dir(thrumDir) to a sibling .thrum that may
+// not even exist). thrum-z9zl.
 func RenderRoleTemplate(thrumDir, agentName, role string) ([]byte, error) {
+	if _, err := os.Stat(filepath.Join(thrumDir, "redirect")); err == nil {
+		if resolved, rerr := paths.ResolveThrumDir(filepath.Dir(thrumDir)); rerr == nil {
+			thrumDir = resolved
+		}
+	}
 	templatePath := filepath.Join(thrumDir, "role_templates", role+".md")
 	tmplContent, err := os.ReadFile(templatePath) // #nosec G304 -- templatePath is .thrum/role_templates/<role>.md, an internal directory
 	if err != nil {
@@ -442,7 +492,7 @@ func RenderRoleTemplate(thrumDir, agentName, role string) ([]byte, error) {
 		composed = append(composed, '\n')
 	}
 	composed = append(composed, []byte("\n---\n\n")...)
-	composed = append(composed, DefaultPreamble()...)
+	composed = append(composed, DefaultPreambleWithRoot(data.RepoRoot)...)
 
 	// Compose user overlay: .thrum/context/<agentName>.md is auto-created
 	// empty by quickstart and intended for hand-written customization. When
@@ -555,8 +605,23 @@ func buildTemplateData(thrumDir, agentName, role string) *RoleTemplateData {
 		}
 	}
 
-	// Resolve RepoRoot from thrumDir (thrumDir is .thrum/, parent is repo root)
+	// Resolve RepoRoot from thrumDir (thrumDir is .thrum/, parent is repo
+	// root). When the caller passed a worktree's local .thrum (which
+	// carries only `redirect`, `identities/`, `context/`, `restart/`),
+	// follow the redirect so RepoRoot reflects the MAIN repo — that's
+	// where strategies/ + llms.txt live. Without this, DefaultPreamble's
+	// absolute-path substitution (thrum-z9zl) would point at the
+	// worktree's .thrum/strategies/ which doesn't exist. Same gate as
+	// RenderRoleTemplate: only follow when a redirect file actually
+	// exists, otherwise paths.ResolveThrumDir's "no redirect = use
+	// local" fallback would mis-resolve a fresh-minted .thrum to a
+	// sibling that may not exist.
 	data.RepoRoot = filepath.Dir(thrumDir)
+	if _, err := os.Stat(filepath.Join(thrumDir, "redirect")); err == nil {
+		if resolved, rerr := paths.ResolveThrumDir(filepath.Dir(thrumDir)); rerr == nil {
+			data.RepoRoot = filepath.Dir(resolved)
+		}
+	}
 
 	// Find coordinator name by scanning identities
 	data.CoordinatorName = findCoordinatorName(thrumDir)

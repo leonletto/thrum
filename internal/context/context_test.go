@@ -356,6 +356,148 @@ func TestDefaultPreambleContent(t *testing.T) {
 	}
 }
 
+// TestDefaultPreamble_RepoRootRelativeNote verifies that the bare
+// DefaultPreamble (no repo-root context) renders the strategies block with
+// a header note explaining that paths are repo-root-relative and that
+// worktree agents resolve them via .thrum/redirect. Pins the docstring
+// half of the thrum-z9zl hybrid fix — even when the caller can't supply
+// an absolute root, the agent reading the preamble has a recoverable
+// pointer.
+func TestDefaultPreamble_RepoRootRelativeNote(t *testing.T) {
+	s := string(DefaultPreamble())
+	for _, needle := range []string{
+		"Paths below are repo-root-relative",
+		".thrum/redirect",
+		// The relative paths themselves remain — back-compat shape for
+		// callers that didn't pass a root.
+		".thrum/strategies/sub-agent-strategy.md",
+		".thrum/llms.txt",
+	} {
+		if !strings.Contains(s, needle) {
+			t.Errorf("DefaultPreamble missing header-note keyword %q", needle)
+		}
+	}
+}
+
+// TestDefaultPreambleWithRoot_AbsolutePaths verifies that a non-empty
+// repo-root substitutes absolute paths into the strategies block. Pins
+// the template-render half of the thrum-z9zl hybrid fix — a worktree
+// agent reading the rendered preamble can copy/paste the path strings
+// straight into a Read call.
+func TestDefaultPreambleWithRoot_AbsolutePaths(t *testing.T) {
+	const repoRoot = "/tmp/main-repo"
+	s := string(DefaultPreambleWithRoot(repoRoot))
+
+	// Absolute paths must be rendered into the strategies block.
+	for _, needle := range []string{
+		"/tmp/main-repo/.thrum/strategies/sub-agent-strategy.md",
+		"/tmp/main-repo/.thrum/strategies/thrum-registration.md",
+		"/tmp/main-repo/.thrum/strategies/resume-after-context-loss.md",
+		"/tmp/main-repo/.thrum/llms.txt",
+	} {
+		if !strings.Contains(s, needle) {
+			t.Errorf("DefaultPreambleWithRoot(%q) missing absolute path %q", repoRoot, needle)
+		}
+	}
+
+	// And the relative-path forms should be GONE from the strategies
+	// bullet block (they'd mislead a fast reader). The strategies/
+	// directory header text up top is still allowed to mention the
+	// directory in repo-root-relative form for context.
+	for _, needle := range []string{
+		"`.thrum/strategies/sub-agent-strategy.md`",
+		"`.thrum/llms.txt`",
+	} {
+		if strings.Contains(s, needle) {
+			t.Errorf("DefaultPreambleWithRoot(%q) should not contain relative bullet %q", repoRoot, needle)
+		}
+	}
+
+	// The redirect-clarification note is unnecessary when paths are
+	// absolute — verify it's omitted to avoid contradicting the
+	// already-resolved bullets.
+	if strings.Contains(s, "Paths below are repo-root-relative") {
+		t.Errorf("DefaultPreambleWithRoot(%q) should not include the relative-path header note", repoRoot)
+	}
+}
+
+// TestRenderRoleTemplate_WorktreeRedirectsToMainRepoPaths verifies that
+// the buildTemplateData redirect-follow makes RenderRoleTemplate emit
+// absolute paths pointing at the MAIN repo's .thrum/strategies/, even
+// when called from a worktree's local .thrum (which carries only the
+// `redirect` file). End-to-end pin for the thrum-z9zl bug.
+func TestRenderRoleTemplate_WorktreeRedirectsToMainRepoPaths(t *testing.T) {
+	mainRepo := t.TempDir()
+	mainThrum := filepath.Join(mainRepo, ".thrum")
+	if err := os.MkdirAll(filepath.Join(mainThrum, "strategies"), 0750); err != nil {
+		t.Fatal(err)
+	}
+	// A role template the renderer can find. Minimal — content under
+	// test is the appended DefaultPreamble strategies block.
+	if err := os.MkdirAll(filepath.Join(mainThrum, "role_templates"), 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(mainThrum, "role_templates", "implementer.md"),
+		[]byte("# Role: implementer\n\nAgent: {{.AgentName}}\n"),
+		0644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Build a worktree-shape .thrum at a separate path with only a
+	// redirect file pointing at the main repo's .thrum.
+	worktree := t.TempDir()
+	worktreeThrum := filepath.Join(worktree, ".thrum")
+	if err := os.MkdirAll(worktreeThrum, 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(worktreeThrum, "redirect"),
+		[]byte(mainThrum+"\n"),
+		0600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Identity file on the MAIN side (where role_templates lives) so
+	// buildTemplateData can populate worktree/module from it.
+	if err := os.MkdirAll(filepath.Join(mainThrum, "identities"), 0750); err != nil {
+		t.Fatal(err)
+	}
+	idJSON := []byte(`{"agent":{"name":"impl","role":"implementer","module":"feat"},"worktree":"` + worktree + `"}`)
+	if err := os.WriteFile(
+		filepath.Join(mainThrum, "identities", "impl.json"),
+		idJSON,
+		0600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Render via the WORKTREE's .thrum (the case the bug describes).
+	rendered, err := RenderRoleTemplate(worktreeThrum, "impl", "implementer")
+	if err != nil {
+		t.Fatalf("RenderRoleTemplate: %v", err)
+	}
+	if rendered == nil {
+		t.Fatal("RenderRoleTemplate returned nil — role_templates/implementer.md should have been found via redirect")
+	}
+
+	s := string(rendered)
+	// The strategies block must have the absolute paths that point at
+	// the MAIN repo, not the worktree.
+	expected := filepath.Join(mainRepo, ".thrum/strategies/sub-agent-strategy.md")
+	if !strings.Contains(s, expected) {
+		t.Errorf("rendered template missing main-repo absolute path %q\n--- got ---\n%s", expected, s)
+	}
+	// And the worktree-rooted form must NOT appear (would resolve to a
+	// non-existent path on disk and waste tokens).
+	bogus := filepath.Join(worktree, ".thrum/strategies/sub-agent-strategy.md")
+	if strings.Contains(s, bogus) {
+		t.Errorf("rendered template contains worktree-rooted strategies path %q (should redirect to main repo)", bogus)
+	}
+}
+
 func TestSaveEmptyContent(t *testing.T) {
 	thrumDir := t.TempDir()
 
