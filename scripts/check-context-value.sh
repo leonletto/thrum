@@ -154,16 +154,25 @@ else
 fi
 
 # Concatenate all matching SessionStart attachment content across every
-# JSONL in the project dir into a single blob, then grep. The blob also
-# pulls .attachment.stdout — Claude Code's SessionStart attachment shape
-# is dual: some tool versions populate .content, others populate .stdout
-# (with .content empty). Reading both is required for cross-version
-# robustness.
+# JSONL in the project dir into a single blob, then grep. The blob pulls
+# from FOUR fields to handle every SessionStart-attachment shape Claude
+# Code has produced:
+#   - .attachment.content                       (older plain-stdout shape)
+#   - .attachment.stdout                        (alt plain-stdout shape)
+#   - .attachment.additionalContext             (JSON-protocol direct)
+#   - .attachment.hookSpecificOutput.additionalContext
+#                                               (JSON-protocol nested form
+#                                                produced by hooks that emit
+#                                                {"hookSpecificOutput":...}
+#                                                — the thrum-tfrv shape that
+#                                                bypasses the >2KB
+#                                                stdout-truncation gate).
+# Reading all four is required for cross-version robustness.
 BLOB=""
 for f in "${JSONL_FILES[@]}"; do
   [ -s "$f" ] || continue
   CHUNK=$(jq -r --arg hookName "$HOOK_FILTER" \
-    "select(${JQ_HOOK_PREDICATE}) | (.attachment.content // \"\" | if type==\"array\" then join(\"\n\") else . end), (.attachment.stdout // \"\")" \
+    "select(${JQ_HOOK_PREDICATE}) | (.attachment.content // \"\" | if type==\"array\" then join(\"\n\") else . end), (.attachment.stdout // \"\"), (.attachment.additionalContext // \"\"), (.attachment.hookSpecificOutput.additionalContext // \"\")" \
     "$f" 2>/dev/null || true)
   if [ -n "$CHUNK" ]; then
     BLOB="${BLOB}${CHUNK}"$'\n'

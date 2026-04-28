@@ -2,22 +2,22 @@
 # SessionStart hook: inject `thrum prime` output as additionalContext.
 #
 # Replaces the prior "Run /thrum:prime" nudge. When an agent is registered
-# for this project, we run `thrum prime` here and emit the briefing to
-# stdout — Claude Code surfaces hook stdout to the model as a
-# <system-reminder>, so the agent receives the full briefing as
-# conversation context with no Bash/Read round-trip.
-#
-# This avoids the 25KB Read-tool truncation that caused coordinator
-# briefings (~63KB) to be partial-read, dropping the session-context
-# section at the end of the doc.
+# for this project, we run `thrum prime` and emit the briefing through
+# Claude Code's documented JSON output protocol —
+#   {"hookSpecificOutput":{"hookEventName":"SessionStart",
+#                          "additionalContext": "<assembled body>"}}
+# `additionalContext` is routed straight into the model's context window
+# with no size truncation and no persisted-output indirection. Plain
+# stdout >2KB is otherwise persisted to a tool-results file with only the
+# first 2KB previewed inline (thrum-tfrv: coordinator briefings around
+# 60KB were dropping the entire session-context section past the cutoff).
 #
 # Hook-level timeout is enforced by plugin.json; this script does not
 # need a portable `timeout` wrapper.
 #
 # Output ordering for a registered agent (top → bottom):
 #   1. Identity banner — agent / role / worktree / branch / module
-#      (thrum-2qe2). First thing the agent and any user watching the
-#      tmux pane see.
+#      (thrum-2qe2). First thing the agent sees in context.
 #   2. Loud auto-load directive (thrum-xupf). Tells the agent NOT to
 #      run /thrum:prime — the briefing is already in context.
 #   3. Loud restart-snapshot preamble (existing). Hoisted only when the
@@ -25,6 +25,23 @@
 #   4. Briefing envelope + full prime output.
 
 set -uo pipefail
+
+# emit_context "<body>" — final emission step. Prefers the JSON
+# protocol (Claude Code routes additionalContext directly into the
+# model's context window, no size cap). Falls back to plain stdout
+# when jq isn't available — that path retains the historical
+# system-reminder routing with the documented 2KB inline preview
+# (degraded mode; we'd rather ship a partial briefing than abort
+# session start). thrum-tfrv.
+emit_context() {
+  local body="$1"
+  if command -v jq >/dev/null 2>&1; then
+    jq -n --arg ctx "$body" \
+      '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $ctx}}'
+  else
+    printf '%s' "$body"
+  fi
+}
 
 # Project doesn't use thrum — silent no-op.
 if ! command -v thrum >/dev/null 2>&1; then
@@ -45,8 +62,9 @@ fi
 
 if [ -z "$AGENT_ID" ]; then
   # No agent registered — preserve historical nudge so the user/agent
-  # knows to prime manually after registration.
-  echo "Run /thrum:prime to load your session context, identity, and any restart snapshots."
+  # knows to prime manually after registration. Wrapped in the JSON
+  # envelope so all branches share one protocol shape.
+  emit_context "Run /thrum:prime to load your session context, identity, and any restart snapshots."
   exit 0
 fi
 
@@ -57,49 +75,49 @@ AGENT_WORKTREE=$(printf '%s' "$WHOAMI_JSON" | jq -r '.worktree // empty' 2>/dev/
 AGENT_BRANCH=$(printf '%s' "$WHOAMI_JSON" | jq -r '.branch // empty' 2>/dev/null || true)
 AGENT_MODULE=$(printf '%s' "$WHOAMI_JSON" | jq -r '.module // empty' 2>/dev/null || true)
 
-# Agent registered — inject the briefing inline.
+# Agent registered — assemble the full briefing body in $ASSEMBLED so
+# we can wrap it in the JSON envelope at the end (rather than emitting
+# piecemeal to stdout, which would be size-truncated above ~2KB).
 PRIME_OUTPUT=$(thrum prime 2>/dev/null || true)
 
 if [ -z "$PRIME_OUTPUT" ]; then
-  # Prime failed (daemon down, slow, etc.) — fall back to the manual nudge
-  # so session start never blocks on a broken thrum.
-  echo "Run /thrum:prime to load your session context, identity, and any restart snapshots."
-  echo "(Auto-injection failed — daemon may be unreachable. Run \`thrum daemon status\` to check.)"
+  # Prime failed (daemon down, slow, etc.) — fall back to the manual
+  # nudge so session start never blocks on a broken thrum. JSON
+  # envelope same as the no-agent branch above for protocol uniformity.
+  fallback_body=$'Run /thrum:prime to load your session context, identity, and any restart snapshots.\n(Auto-injection failed — daemon may be unreachable. Run `thrum daemon status` to check.)'
+  emit_context "$fallback_body"
   exit 0
 fi
 
-# 1. Identity banner. First thing the agent's context window shows AND
-# the first thing a human watching the tmux pane sees when the hook
-# fires. Markdown header keeps it scannable in both surfaces.
-cat <<EOF
-# 🎯 You are: @${AGENT_ID}
+# Build $ASSEMBLED via incremental append. printf-into-variable rather
+# than the previous `cat <<EOF` to-stdout pattern — same content, but
+# now redirected through emit_context so the >2KB truncation gate
+# can't fire.
+ASSEMBLED=""
+append() { ASSEMBLED+="$1"; }
 
-- **Role:** ${AGENT_ROLE:-unknown}
-- **Worktree:** ${AGENT_WORKTREE:-unknown}
-- **Branch:** ${AGENT_BRANCH:-unknown}
-EOF
+# 1. Identity banner.
+append "# 🎯 You are: @${AGENT_ID}"$'\n'
+append $'\n'
+append "- **Role:** ${AGENT_ROLE:-unknown}"$'\n'
+append "- **Worktree:** ${AGENT_WORKTREE:-unknown}"$'\n'
+append "- **Branch:** ${AGENT_BRANCH:-unknown}"$'\n'
 # Module is optional — only show it when set and it isn't a redundant
 # echo of role (some setups default module=role).
 if [ -n "$AGENT_MODULE" ] && [ "$AGENT_MODULE" != "$AGENT_ROLE" ]; then
-  echo "- **Module:** ${AGENT_MODULE}"
+  append "- **Module:** ${AGENT_MODULE}"$'\n'
 fi
-cat <<'EOF'
-
----
-
-EOF
+append $'\n---\n\n'
 
 # 2. Loud auto-load directive. The agent should NOT consider running
 # /thrum:prime or `thrum prime` again — the briefing is in context.
 # Blockquote framing matches the heaviness of the restart-snapshot
 # block below so this directive isn't visually outranked.
-cat <<'EOF'
-> ✅ **Context auto-loaded by SessionStart hook.**
->
-> **Do NOT run `/thrum:prime` or `thrum prime` — the full briefing is already in your context below.**
-> Only invoke them manually if this hook fell through to a degraded "auto-injection failed" notice.
-
-EOF
+append '> ✅ **Context auto-loaded by SessionStart hook.**'$'\n'
+append '>'$'\n'
+append '> **Do NOT run `/thrum:prime` or `thrum prime` — the full briefing is already in your context below.**'$'\n'
+append '> Only invoke them manually if this hook fell through to a degraded "auto-injection failed" notice.'$'\n'
+append $'\n'
 
 # 3. Detect a restart snapshot embedded in the briefing. `thrum prime`
 # includes it under the `# Previous Session Context` heading when
@@ -107,40 +125,29 @@ EOF
 # agent treats it as background reading and skips the actionable
 # Resume Plan inside. Hoist a loud action-required block above the
 # briefing so the directive is impossible to miss.
-HAS_RESTART=0
 if printf '%s' "$PRIME_OUTPUT" | grep -q '^# Previous Session Context'; then
-  HAS_RESTART=1
-fi
-
-if [ "$HAS_RESTART" = "1" ]; then
-  cat <<'EOF'
-# 🛑 ACTION REQUIRED — Instructions From Your Previous Session
-
-**You restarted from a prior session and left yourself a Resume Plan.** It is in the **`# Previous Session Context`** section of the briefing below. That plan is not background reading — it is your own message-to-self with concrete next steps.
-
-**Before doing anything else:**
-
-1. Scroll to the `# Previous Session Context` section of the briefing.
-2. Read the **`## Resume Plan`** sub-section in full.
-3. Execute its numbered steps in order.
-4. Only then continue to the rest of the briefing or the user's prompt.
-
-The Resume Plan was written by *you* in the previous session specifically because you knew this future you would need it. Trust it and act on it.
-
----
-
-EOF
+  append '# 🛑 ACTION REQUIRED — Instructions From Your Previous Session'$'\n'
+  append $'\n'
+  append '**You restarted from a prior session and left yourself a Resume Plan.** It is in the **`# Previous Session Context`** section of the briefing below. That plan is not background reading — it is your own message-to-self with concrete next steps.'$'\n'
+  append $'\n'
+  append '**Before doing anything else:**'$'\n'
+  append $'\n'
+  append '1. Scroll to the `# Previous Session Context` section of the briefing.'$'\n'
+  append '2. Read the **`## Resume Plan`** sub-section in full.'$'\n'
+  append '3. Execute its numbered steps in order.'$'\n'
+  append '4. Only then continue to the rest of the briefing or the user'\''s prompt.'$'\n'
+  append $'\n'
+  append 'The Resume Plan was written by *you* in the previous session specifically because you knew this future you would need it. Trust it and act on it.'$'\n'
+  append $'\n---\n\n'
 fi
 
 # 4. Briefing envelope + full prime output.
-cat <<EOF
-# Thrum Session Briefing (auto-loaded)
+append '# Thrum Session Briefing (auto-loaded)'$'\n'
+append $'\n'
+append 'The complete `thrum prime` output is included below. You do NOT need to run `/thrum:prime` or `thrum prime` again this session — the briefing is already in your context. Read it in full; the session context section at the end is the most important.'$'\n'
+append $'\n'
+append 'Only spawn additional commands if the inbox section shows unread messages that need processing.'$'\n'
+append $'\n---\n\n'
+append "$PRIME_OUTPUT"$'\n'
 
-The complete \`thrum prime\` output is included below. You do NOT need to run \`/thrum:prime\` or \`thrum prime\` again this session — the briefing is already in your context. Read it in full; the session context section at the end is the most important.
-
-Only spawn additional commands if the inbox section shows unread messages that need processing.
-
----
-
-$PRIME_OUTPUT
-EOF
+emit_context "$ASSEMBLED"
