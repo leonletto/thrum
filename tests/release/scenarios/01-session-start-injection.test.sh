@@ -53,10 +53,15 @@ assert_jsonl "$PANE" "$REPO" "$SID" "identity-banner-role" "VERIFIED identity_ba
   "scenarios/${SID}.test.sh:$LINENO"
 
 # Assertion 6: loud auto-load directive (thrum-xupf). The directive
-# blockquote tells the agent NOT to re-run /thrum:prime. The
-# substring `Do NOT run` followed by the inline-code marker for
-# /thrum:prime is the load-bearing phrasing that defends against a
-# regression that softened the directive back into a paragraph.
-send_command "$PANE" "! $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh autoload_directive \"Do NOT run\" SessionStart:startup"
+# blockquote tells the agent NOT to re-run /thrum:prime. The needle
+# `Do NOT run \`/thrum:prime\`` (literal backticks around the slash
+# command) appears ONLY in the directive blockquote — the briefing
+# envelope's prose at step 4 of inject-prime-context.sh contains the
+# softer phrasing "You do NOT need to run \`/thrum:prime\`", which
+# is distinct. Pinning the unique form defends against a regression
+# that silently removed the blockquote while leaving the envelope
+# paragraph behind (substring overlap on a looser "Do NOT run"
+# needle would let that regression through).
+send_command "$PANE" "! $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh autoload_directive \"Do NOT run \\\`/thrum:prime\\\`\" SessionStart:startup"
 assert_jsonl "$PANE" "$REPO" "$SID" "autoload-directive-present" "VERIFIED autoload_directive" \
   "scenarios/${SID}.test.sh:$LINENO"
