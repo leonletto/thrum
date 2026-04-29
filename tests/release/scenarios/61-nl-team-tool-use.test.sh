@@ -5,15 +5,12 @@
 # ask and shells out to `thrum team`. Assertion anchor is the assistant
 # tool_use Bash with .input.command containing "thrum team".
 #
-# Spec § 7.12 is the F2 video demo source. This scenario also closes
-# the coverage loop for kafm.3.5 (the spec § 7.5 /thrum:team subsection
-# that's flagged P3 "verify covered, then delete"). § 7.5 was the slash-
-# routing variant of the same `thrum team` invocation; § 7.12 covers
-# the NL variant. Together with setup-repo.sh's whoami probes (which
-# implicitly verify the team registry is queryable) and scenario 26
-# (mcp-list-agents-id, the JSON-shape contract for `thrum agent list`),
-# the team-listing surface is fully covered without a dedicated /thrum:
-# team scenario.
+# Spec § 7.12 is the F2 video demo source. § 7.5 (/thrum:team slash
+# variant) is covered by scenario 50 (slash-team-routing) which asserts
+# the slash-routing tag; this scenario covers § 7.12's NL → tool_use
+# chain. Together with setup-repo.sh's whoami probes (registry-reachable)
+# and scenario 26 (mcp-list-agents-id, JSON-shape contract for
+# `thrum agent list`), the team-listing surface is fully covered.
 #
 # Driven against COORD pane.
 
