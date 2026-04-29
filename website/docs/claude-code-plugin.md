@@ -179,6 +179,32 @@ passive prose, so the model treats it as an actionable instruction on boot.
 
 If Thrum isn't initialized, shows a friendly setup message instead of failing.
 
+#### Pane-side identity banner
+
+For runtimes whose plugin ships the SessionStart hook (Claude Code and Cursor),
+the daemon also types a short identity banner directly into the tmux pane before
+the runtime takes over the screen. It looks like this:
+
+```text
+Agent:     impl_auth
+Role:      implementer
+Worktree:  /Users/you/dev/myproject/auth-feature
+Branch:    feature/auth
+MUST READ: see auto-loaded briefing above and follow it before anything else
+```
+
+Two reasons for the redundancy. First, a human watching the pane gets
+orientation regardless of how the runtime renders its UI. Second, the MUST-READ
+line routes through the same channel as user prompts, which the model treats
+more imperatively than `additionalContext` (which sometimes gets
+read-and-rationalized-away). Two surfaces, the same directive.
+
+Whether the banner fires is keyed off a `HasSessionStartHook` field on the
+runtime preset — Claude Code and Cursor are the only `true` entries today. For
+runtimes without a SessionStart hook (codex, opencode, auggie, kiro-cli, gemini,
+shell), the launch flow falls back to the historical post-launch `/thrum:prime`
+send.
+
 ### PreCompact
 
 Saves session context before context compaction. This preserves agent state

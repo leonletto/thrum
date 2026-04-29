@@ -45,13 +45,52 @@ customized set of behavioral directives — scope boundaries, task protocol,
 communication patterns, idle behavior, and efficiency rules.</p>
 <p><strong>Three layers:</strong></p>
 <ol>
-<li><strong>Shipped examples</strong> in <code>toolkit/templates/roles/</code> — reference material with
-strict and autonomous variants for each role</li>
+<li><strong>Shipped examples</strong> in <code>internal/context/roleconfig/templates/roles/</code> —
+reference material with strict and autonomous variants for each role</li>
 <li><strong>Active templates</strong> in <code>.thrum/role_templates/</code> — per-project templates that
 auto-apply on agent registration</li>
 <li><strong>Claude skill</strong> (<code>thrum:configure-roles</code>) — interactive environment-aware
 template generation</li>
 </ol>
+<h2>Role Discipline Lives in Two Places</h2>
+<p>The preamble is always loaded, but it can&#39;t carry every situational rule without
+becoming a wall of text nobody reads. Thrum splits role discipline across two
+surfaces.</p>
+<p><strong>Always-loaded (preambles).</strong> Identity, scope boundaries, communication
+protocol, idle behavior, anti-patterns. Things the agent must know before it
+does anything.</p>
+<p><strong>Description-triggered (skills).</strong> Situational deepening that loads only when
+relevant. Each role has its own set:</p>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Skills</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Coordinator</td>
+<td><code>coordinator-dispatching-work</code>, <code>coordinator-running-review-cycles</code>, <code>coordinator-managing-state-and-lifecycle</code></td>
+</tr>
+<tr>
+<td>Implementer</td>
+<td><code>implementer-receiving-dispatch</code>, <code>implementer-tdd-and-quality</code>, <code>implementer-status-and-handoff</code>, <code>implementer-receiving-review-feedback</code></td>
+</tr>
+<tr>
+<td>Researcher</td>
+<td><code>researcher-investigating</code>, <code>researcher-answering-queries</code>, <code>researcher-maintaining-memory</code></td>
+</tr>
+</tbody></table>
+<p>The preamble points at these by name. The runtime loads the skill body when its
+description matches what the agent is doing, so you get focused guidance when
+you need it without paying for it the rest of the time.</p>
+<p><strong>Project-local rules.</strong> Anything you tell an agent mid-session — &quot;stop doing
+X&quot;, &quot;always do Y here&quot; — captured via <code>bd remember --key &lt;role&gt;-rule-&lt;slug&gt;</code>
+persists across restarts. Each preamble loads project-local rules with
+<code>bd memories &lt;role&gt;-rule-</code>. They take precedence over universal rules on
+conflict, so a project-specific correction beats a generic shipped instruction.
+Module-installed rules reserve the <code>&lt;role&gt;-rule-mod-&lt;module&gt;-&lt;slug&gt;</code>
+sub-segment.</p>
 <h2>How It Works</h2>
 <p>When an agent registers via <code>thrum quickstart --role implementer</code>, the system
 checks for <code>.thrum/role_templates/implementer.md</code>. If found, it renders the
@@ -122,7 +161,7 @@ template with the agent&#39;s identity data and saves it as the agent&#39;s prea
 
 ## Project-Specific Rules</code></pre>
 <h2>Shipped Examples</h2>
-<p>Reference templates in <code>toolkit/templates/roles/</code>:</p>
+<p>Reference templates in <code>internal/context/roleconfig/templates/roles/</code>:</p>
 <table>
 <thead>
 <tr>
@@ -202,6 +241,10 @@ template with the agent&#39;s identity data and saves it as the agent&#39;s prea
 <td><code>monitor-autonomous.md</code></td>
 <td>Can restart services and open issues on alerts</td>
 </tr>
+<tr>
+<td><code>orchestrator.md</code></td>
+<td>Launches agents, manages worktrees, runs review-gated epics (single variant)</td>
+</tr>
 </tbody></table>
 <blockquote>
 <p><strong><code>monitor-*.md</code> vs <code>thrum monitor</code>:</strong> These role templates configure <em>agent
@@ -209,9 +252,7 @@ behavior</em> for agents whose job is monitoring (e.g., watching logs, reporting
 alerts). They&#39;re unrelated to
 <code>thrum monitor start/list/show/stop/logs/restart</code>, which is a separate daemon
 feature for running long-lived process monitors that emit synthetic thrum
-messages. See <a href="monitor-jobs.html">Monitor Jobs</a> for the process monitor feature.
-| <code>orchestrator.md</code> | Launches agents, manages worktrees, executes plans via
-review-gated epics |</p>
+messages. See <a href="monitor-jobs.html">Monitor Jobs</a> for the process monitor feature.</p>
 </blockquote>
 <h2>CLI Commands</h2>
 <h3>thrum roles list</h3>
@@ -220,6 +261,18 @@ review-gated epics |</p>
 # coordinator.md    (2 agents: coord_main, coord_api)
 # implementer.md    (3 agents: impl_auth, impl_payments, impl_ui)
 # planner.md        (0 agents)</code></pre>
+<h3>thrum roles refresh</h3>
+<p>Re-render <code>.thrum/role_templates/&lt;role&gt;.md</code> from saved <code>role_config</code> answers
+(set by <code>/thrum:configure-roles</code>) without running interactive prompts. Uses the
+embedded shipped templates plus the saved <code>autonomy</code> and <code>scope</code> per role.
+Updates <code>rendered_hash</code> to the current shipped <code>body_hash</code> so drift hints from
+<code>thrum prime</code> clear after the next run.</p>
+<p>Per-agent template tokens (<code>{{.AgentName}}</code> etc.) are kept literal — the
+existing per-agent deploy pass substitutes them when you run
+<code>thrum roles deploy</code>.</p>
+<pre><code>thrum roles refresh</code></pre>
+<p>Run this after upgrading Thrum when <code>thrum prime</code> emits a
+<code>roles.config.schema-bump</code> or <code>roles.config.body-diff</code> hint.</p>
 <h3>thrum roles deploy</h3>
 <p>Re-render preambles for registered agents from role templates:</p>
 <pre><code>thrum roles deploy              # Deploy for all agents
@@ -231,7 +284,7 @@ thrum roles deploy --dry-run    # Preview what would change</code></pre>
 <ol>
 <li>Copy a shipped example to <code>.thrum/role_templates/</code>:</li>
 </ol>
-<pre><code>cp toolkit/templates/roles/implementer-autonomous.md .thrum/role_templates/implementer.md</code></pre>
+<pre><code>cp internal/context/roleconfig/templates/roles/implementer-autonomous.md .thrum/role_templates/implementer.md</code></pre>
 <ol>
 <li><p>Edit to customize for your project.</p>
 </li>
@@ -251,11 +304,18 @@ generates customized templates interactively.</p>
 │   ├── implementer.md
 │   └── planner.md
 ├── context/
+│   ├── impl_auth.md          # User overlay (hand-authored; appended to preamble)
 │   ├── impl_auth_preamble.md # Rendered output (per-agent)
 │   └── coord_main_preamble.md
 └── identities/
     ├── impl_auth.json
     └── coord_main.json</code></pre>
+<p><code>.thrum/context/&lt;agent&gt;.md</code> has a dual purpose: it stores volatile session state
+written by <code>thrum context save</code>, and it acts as a <strong>user overlay</strong> that
+<code>RenderRoleTemplate</code> appends to the rendered preamble after a <code>---</code> separator.
+<code>thrum quickstart</code> auto-creates the file empty so it&#39;s ready for hand-written
+customization. Whitespace-only files are treated as absent (no stray separator
+is added). See <a href="context.html">Agent Context Management</a> for details.</p>
 <h2>Next Steps</h2>
 <ul>
 <li><a href="context.html">Context Management</a> — per-agent context and preamble files that

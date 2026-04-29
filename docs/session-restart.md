@@ -72,6 +72,15 @@ On the next session start, `thrum prime` detects the snapshot file and includes
 it in the session briefing. The agent gets its conversation history and picks up
 where it left off. The file is deleted after loading — it's a one-time transfer.
 
+The snapshot is framed as a directive, not background reading. As of v0.9.2,
+`thrum prime` introduces the section as
+`🛑 ACTION REQUIRED — this is YOUR message-to-self` and lists numbered required
+steps: read the Resume Plan, execute it, only then continue. The Claude Code and
+Cursor SessionStart hooks add another layer on top — when the briefing carries a
+snapshot, the hook prepends an `ACTION REQUIRED` block at the very top of
+`additionalContext` pointing at the section below. Two surfaces, the same
+directive, so it can't be compressed away or skimmed past.
+
 ### Snapshot Format
 
 ```markdown

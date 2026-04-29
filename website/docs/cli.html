@@ -247,6 +247,18 @@ for AI agent coordination.</p>
 <td>Re-render agent preambles from role templates</td>
 </tr>
 <tr>
+<td><code>thrum roles refresh</code></td>
+<td>Re-render templates from saved answers + update rendered_hash</td>
+</tr>
+<tr>
+<td><code>thrum roles save-config</code></td>
+<td>Write role_config to .thrum/config.json from JSON on stdin</td>
+</tr>
+<tr>
+<td><code>thrum roles templates print</code></td>
+<td>Print an embedded shipped template to stdout</td>
+</tr>
+<tr>
 <td><code>thrum config</code></td>
 <td>Manage configuration (show, init)</td>
 </tr>
@@ -546,7 +558,16 @@ Detected AI runtimes:
   1. Claude Code    (found .claude/settings.json)
 
 Which is your primary runtime? [1]:
-✓ Runtime saved to .thrum/config.json (primary: claude)</code></pre>
+✓ Runtime saved to .thrum/config.json (primary: claude)
+
+Done. Run &#39;thrum quickstart --name &lt;name&gt; --role &lt;role&gt; --module &lt;module&gt;&#39; to register an agent.
+
+Tip: To enable repo-knowledge queries from other agents, register a researcher:
+  thrum tmux start --role researcher</code></pre>
+<p>The researcher tip lands on stdout (not the hints stream) so it survives
+<code>THRUM_NO_HINTS</code> and <code>--quiet</code>. It&#39;s there to prevent the silent-confusion case
+where a coordinator and implementers are running but research queries time out
+because no <code>@researcher</code> has been spun up.</p>
 <h4>Skills-Only Install</h4>
 <p>Use <code>--skills</code> to install just the thrum skill without full runtime
 configuration. Detects your agent automatically and installs to the correct
@@ -683,6 +704,32 @@ model and are intentionally bypassing this check.</p>
 <pre><code>$ thrum prime
 # Outputs session context block to stdout
 # Agent reads this at session start via /thrum:prime skill</code></pre>
+<p><strong>Drift Hints:</strong> <code>thrum prime</code> emits up to one <code>slog.Warn</code>-level hint per run
+when role template state drifts from the current shipped templates. Hints appear
+on stderr (or in the <code>hints</code> array with <code>--json</code>). Precedence — only the
+highest-priority matching hint fires:</p>
+<table>
+<thead>
+<tr>
+<th>Hint code</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>roles.config.migration</code></td>
+<td>Rendered templates exist but no <code>role_config</code> key in config.json (pre-v0.9.2 install)</td>
+</tr>
+<tr>
+<td><code>roles.config.schema-bump</code></td>
+<td>Saved <code>schema_version</code> is older than the current shipped version</td>
+</tr>
+<tr>
+<td><code>roles.config.body-diff</code></td>
+<td>Saved <code>rendered_hash</code> doesn&#39;t match current shipped <code>body_hash</code> (template content changed)</td>
+</tr>
+</tbody></table>
+<p>Run <code>thrum roles refresh</code> to re-render templates from saved answers and clear
+the hint.</p>
 <p>See also: <a href="identity.html">Identity System</a>, <a href="session-restart.html">Session Restart</a>.</p>
 <h3>thrum quickstart</h3>
 <p>Register, start a session, and set an initial intent in one step. If the agent
@@ -2064,6 +2111,37 @@ $ thrum roles deploy --dry-run
 
 $ thrum roles deploy --agent alice
 ✓ Deployed preamble for alice (implementer)</code></pre>
+<h3>thrum roles refresh</h3>
+<p>Re-render <code>.thrum/role_templates/&lt;role&gt;.md</code> for all roles that have saved
+answers in <code>role_config</code>. Uses the embedded shipped templates plus the saved
+<code>autonomy</code> and <code>scope</code> values — no interactive prompts. Updates <code>rendered_hash</code>
+to the current shipped <code>body_hash</code> so drift hints clear on the next
+<code>thrum prime</code>.</p>
+<p>Per-agent template tokens (<code>{{.AgentName}}</code> etc.) are kept literal so the
+existing per-agent deploy pass can substitute them.</p>
+<pre><code>thrum roles refresh</code></pre>
+<p>This command takes no additional flags. Run it after upgrading Thrum to
+re-render templates without re-running <code>/thrum:configure-roles</code>.</p>
+<h3>thrum roles save-config</h3>
+<p>Write <code>role_config</code> to <code>.thrum/config.json</code> from JSON on stdin. This is the
+internal CLI shim used by the <code>/thrum:configure-roles</code> skill to persist answers.
+Reads a <code>RoleConfig</code> JSON object, fills in defaults (<code>schema_version</code>,
+<code>rendered_hash</code>) and atomically writes the <code>role_config</code> key while preserving
+all other top-level keys byte-identical.</p>
+<pre><code>thrum roles save-config</code></pre>
+<p>Reads from stdin; exit code is non-zero on decode or write failure.</p>
+<h3>thrum roles templates print</h3>
+<p>Print an embedded shipped role template to stdout. Used by the
+<code>/thrum:configure-roles</code> skill to read reference content via CLI rather than a
+raw filesystem path (the binary may run from any directory).</p>
+<pre><code>thrum roles templates print &lt;role&gt;-&lt;autonomy&gt;</code></pre>
+<p><code>&lt;role&gt;-&lt;autonomy&gt;</code> must match an embedded template name, e.g.
+<code>implementer-autonomous</code> or <code>coordinator-strict</code>. Exit code is non-zero if the
+template is not found.</p>
+<p>Example:</p>
+<pre><code>$ thrum roles templates print implementer-autonomous
+# Agent: {{.AgentName}}
+...</code></pre>
 <h2>Runtime Presets</h2>
 <p>Runtime presets tell Thrum how to launch each supported AI runtime — the binary
 name, the launch command, how to detect the runtime from an existing process
@@ -2382,10 +2460,30 @@ and attaches the current terminal — all in sequence. This is the shortest path
 from &quot;I want to start an agent in this worktree&quot; to &quot;I&#39;m sitting at its prompt.&quot;
 If any step fails, the session is left in place so you can inspect what happened
 with <code>thrum tmux status</code> and <code>thrum tmux capture</code>.</p>
-<pre><code>thrum tmux start &lt;name&gt; --cwd &lt;path&gt; --name &lt;agent-name&gt; --role &lt;role&gt; --module &lt;module&gt; [flags]</code></pre>
-<p>Flags are identical to <a href="#thrum-tmux-create">thrum tmux create</a> — the composite
-forwards them through. The most common additions are <code>--runtime</code> (to override
-the default runtime preset) and <code>--intent</code> (to seed the agent&#39;s work intent).</p>
+<pre><code>thrum tmux start [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--name</code></td>
+<td>Override session name (default: current directory name)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--runtime</code></td>
+<td>Override runtime for this launch (default: from config or <code>claude</code>)</td>
+<td></td>
+</tr>
+</tbody></table>
+<p><code>thrum tmux start</code> operates on the <strong>current working directory</strong> — it infers the
+session name and agent identity from the worktree at <code>$PWD</code>. Use
+<a href="#thrum-tmux-create">thrum tmux create</a> when you need to target a different path
+or pass agent registration flags (<code>--role</code>, <code>--module</code>, etc.).</p>
 <p>Example:</p>
 <pre><code>$ thrum tmux start impl-api --cwd ../worktrees/api-feature \
     --name impl_api --role implementer --module api

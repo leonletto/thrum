@@ -24,6 +24,37 @@ communication patterns, idle behavior, and efficiency rules.
 3. **Claude skill** (`thrum:configure-roles`) — interactive environment-aware
    template generation
 
+## Role Discipline Lives in Two Places
+
+The preamble is always loaded, but it can't carry every situational rule without
+becoming a wall of text nobody reads. Thrum splits role discipline across two
+surfaces.
+
+**Always-loaded (preambles).** Identity, scope boundaries, communication
+protocol, idle behavior, anti-patterns. Things the agent must know before it
+does anything.
+
+**Description-triggered (skills).** Situational deepening that loads only when
+relevant. Each role has its own set:
+
+| Role        | Skills                                                                                                                                     |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Coordinator | `coordinator-dispatching-work`, `coordinator-running-review-cycles`, `coordinator-managing-state-and-lifecycle`                            |
+| Implementer | `implementer-receiving-dispatch`, `implementer-tdd-and-quality`, `implementer-status-and-handoff`, `implementer-receiving-review-feedback` |
+| Researcher  | `researcher-investigating`, `researcher-answering-queries`, `researcher-maintaining-memory`                                                |
+
+The preamble points at these by name. The runtime loads the skill body when its
+description matches what the agent is doing, so you get focused guidance when
+you need it without paying for it the rest of the time.
+
+**Project-local rules.** Anything you tell an agent mid-session — "stop doing
+X", "always do Y here" — captured via `bd remember --key <role>-rule-<slug>`
+persists across restarts. Each preamble loads project-local rules with
+`bd memories <role>-rule-`. They take precedence over universal rules on
+conflict, so a project-specific correction beats a generic shipped instruction.
+Module-installed rules reserve the `<role>-rule-mod-<module>-<slug>`
+sub-segment.
+
 ## How It Works
 
 When an agent registers via `thrum quickstart --role implementer`, the system
@@ -83,26 +114,27 @@ Every role template follows the same section structure:
 
 Reference templates in `internal/context/roleconfig/templates/roles/`:
 
-| File                        | Description                                      |
-| --------------------------- | ------------------------------------------------ |
-| `coordinator-strict.md`     | All task assignment flows through coordinator    |
-| `coordinator-autonomous.md` | Coordinator orchestrates, agents can self-assign |
-| `implementer-strict.md`     | Waits for explicit task from coordinator         |
-| `implementer-autonomous.md` | Can pick up ready tasks from issue tracker       |
-| `planner-strict.md`         | Read-only exploration, writes plans to docs      |
-| `planner-autonomous.md`     | Can create issues and break down epics           |
-| `researcher-strict.md`      | Read-only, responds to research requests         |
-| `researcher-autonomous.md`  | Can proactively research when idle               |
-| `reviewer-strict.md`        | Reviews only assigned PRs/changes                |
-| `reviewer-autonomous.md`    | Can pick up review requests proactively          |
-| `tester-strict.md`          | Runs tests on request, reports results           |
-| `tester-autonomous.md`      | Can proactively run tests on changed files       |
-| `deployer-strict.md`        | Deploys only on explicit coordinator approval    |
-| `deployer-autonomous.md`    | Can deploy to non-production environments freely |
-| `documenter-strict.md`      | Documents only assigned areas                    |
-| `documenter-autonomous.md`  | Can proactively update docs when code changes    |
-| `monitor-strict.md`         | Reports alerts, takes no remediation action      |
-| `monitor-autonomous.md`     | Can restart services and open issues on alerts   |
+| File                        | Description                                                                  |
+| --------------------------- | ---------------------------------------------------------------------------- |
+| `coordinator-strict.md`     | All task assignment flows through coordinator                                |
+| `coordinator-autonomous.md` | Coordinator orchestrates, agents can self-assign                             |
+| `implementer-strict.md`     | Waits for explicit task from coordinator                                     |
+| `implementer-autonomous.md` | Can pick up ready tasks from issue tracker                                   |
+| `planner-strict.md`         | Read-only exploration, writes plans to docs                                  |
+| `planner-autonomous.md`     | Can create issues and break down epics                                       |
+| `researcher-strict.md`      | Read-only, responds to research requests                                     |
+| `researcher-autonomous.md`  | Can proactively research when idle                                           |
+| `reviewer-strict.md`        | Reviews only assigned PRs/changes                                            |
+| `reviewer-autonomous.md`    | Can pick up review requests proactively                                      |
+| `tester-strict.md`          | Runs tests on request, reports results                                       |
+| `tester-autonomous.md`      | Can proactively run tests on changed files                                   |
+| `deployer-strict.md`        | Deploys only on explicit coordinator approval                                |
+| `deployer-autonomous.md`    | Can deploy to non-production environments freely                             |
+| `documenter-strict.md`      | Documents only assigned areas                                                |
+| `documenter-autonomous.md`  | Can proactively update docs when code changes                                |
+| `monitor-strict.md`         | Reports alerts, takes no remediation action                                  |
+| `monitor-autonomous.md`     | Can restart services and open issues on alerts                               |
+| `orchestrator.md`           | Launches agents, manages worktrees, runs review-gated epics (single variant) |
 
 > **`monitor-*.md` vs `thrum monitor`:** These role templates configure _agent
 > behavior_ for agents whose job is monitoring (e.g., watching logs, reporting
@@ -110,8 +142,6 @@ Reference templates in `internal/context/roleconfig/templates/roles/`:
 > `thrum monitor start/list/show/stop/logs/restart`, which is a separate daemon
 > feature for running long-lived process monitors that emit synthetic thrum
 > messages. See [Monitor Jobs](monitor-jobs.md) for the process monitor feature.
-> | `orchestrator.md` | Launches agents, manages worktrees, executes plans via
-> review-gated epics |
 
 ## CLI Commands
 

@@ -184,7 +184,31 @@ Running prime loads:</p>
 <li>Daemon health</li>
 <li>Restart snapshots (if any exist from a previous session)</li>
 </ul>
+<p>Since v0.9.2 the hook also injects <code>thrum prime</code> output via the hook&#39;s
+<code>additionalContext</code> field, so the full briefing reaches the model even when the
+pane-side banner is truncated or scrolled off. Restart-snapshot content is
+hoisted to the top of <code>additionalContext</code> and framed as a directive rather than
+passive prose, so the model treats it as an actionable instruction on boot.</p>
 <p>If Thrum isn&#39;t initialized, shows a friendly setup message instead of failing.</p>
+<h4>Pane-side identity banner</h4>
+<p>For runtimes whose plugin ships the SessionStart hook (Claude Code and Cursor),
+the daemon also types a short identity banner directly into the tmux pane before
+the runtime takes over the screen. It looks like this:</p>
+<pre><code>Agent:     impl_auth
+Role:      implementer
+Worktree:  /Users/you/dev/myproject/auth-feature
+Branch:    feature/auth
+MUST READ: see auto-loaded briefing above and follow it before anything else</code></pre>
+<p>Two reasons for the redundancy. First, a human watching the pane gets
+orientation regardless of how the runtime renders its UI. Second, the MUST-READ
+line routes through the same channel as user prompts, which the model treats
+more imperatively than <code>additionalContext</code> (which sometimes gets
+read-and-rationalized-away). Two surfaces, the same directive.</p>
+<p>Whether the banner fires is keyed off a <code>HasSessionStartHook</code> field on the
+runtime preset — Claude Code and Cursor are the only <code>true</code> entries today. For
+runtimes without a SessionStart hook (codex, opencode, auggie, kiro-cli, gemini,
+shell), the launch flow falls back to the historical post-launch <code>/thrum:prime</code>
+send.</p>
 <h3>PreCompact</h3>
 <p>Saves session context before context compaction. This preserves agent state
 (decisions, next steps, work-in-progress) so it can be restored after

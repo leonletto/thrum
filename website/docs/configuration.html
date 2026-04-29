@@ -680,6 +680,75 @@ Identity
 Overrides (environment)
   THRUM_NAME=claude_planner</code></pre>
 <p>Use <code>thrum config show --json</code> for machine-readable output.</p>
+<h2>Role Config</h2>
+<p>The <code>role_config</code> top-level key persists role template answers written by
+<code>/thrum:configure-roles</code> and <code>thrum roles save-config</code>. It is never set by hand
+— the skill and CLI command are the intended writers.</p>
+<h3><code>role_config</code> structure</h3>
+<pre><code>{
+  &quot;role_config&quot;: {
+    &quot;schema_version&quot;: 1,
+    &quot;roles&quot;: {
+      &quot;implementer&quot;: {
+        &quot;autonomy&quot;: &quot;autonomous&quot;,
+        &quot;scope&quot;: &quot;auth module&quot;,
+        &quot;rendered_hash&quot;: &quot;sha256:abc123...&quot;
+      },
+      &quot;coordinator&quot;: {
+        &quot;autonomy&quot;: &quot;strict&quot;,
+        &quot;scope&quot;: &quot;&quot;,
+        &quot;rendered_hash&quot;: &quot;sha256:def456...&quot;
+      }
+    }
+  }
+}</code></pre>
+<p><strong>Per-role fields</strong> (under <code>role_config.roles.&lt;role-name&gt;</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>autonomy</code></td>
+<td>string</td>
+<td>Template variant selected: <code>&quot;strict&quot;</code> or <code>&quot;autonomous&quot;</code></td>
+</tr>
+<tr>
+<td><code>scope</code></td>
+<td>string</td>
+<td>User-supplied scope string embedded into the rendered template (may be empty)</td>
+</tr>
+<tr>
+<td><code>rendered_hash</code></td>
+<td>string</td>
+<td>SHA-256 of the shipped template body used when this role was last rendered (drift check)</td>
+</tr>
+</tbody></table>
+<p><strong>Top-level fields</strong> (under <code>role_config</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>schema_version</code></td>
+<td>integer</td>
+<td>Schema version of the saved config; compared against the current shipped version for drift detection</td>
+</tr>
+</tbody></table>
+<p><strong>Writes are atomic:</strong> both <code>/thrum:configure-roles</code> and
+<code>thrum roles save-config</code> write via a temp file + rename, preserving every other
+top-level key (<code>backup</code>, <code>daemon</code>, <code>identity</code>, <code>telegram</code>, etc.) byte-identical
+via <code>json.RawMessage</code> round-trip.</p>
+<p>Run <code>thrum roles refresh</code> after a Thrum upgrade to re-render templates from
+saved answers without re-running the interactive skill. See
+<a href="role-templates.html">Role-Based Preamble Templates</a> for the full workflow.</p>
 <h2>What&#39;s NOT in config.json</h2>
 <p>These remain separate for good reasons:</p>
 <ul>

@@ -179,7 +179,17 @@ Detected AI runtimes:
 
 Which is your primary runtime? [1]:
 ✓ Runtime saved to .thrum/config.json (primary: claude)
+
+Done. Run 'thrum quickstart --name <name> --role <role> --module <module>' to register an agent.
+
+Tip: To enable repo-knowledge queries from other agents, register a researcher:
+  thrum tmux start --role researcher
 ```
+
+The researcher tip lands on stdout (not the hints stream) so it survives
+`THRUM_NO_HINTS` and `--quiet`. It's there to prevent the silent-confusion case
+where a coordinator and implementers are running but research queries time out
+because no `@researcher` has been spun up.
 
 #### Skills-Only Install
 
