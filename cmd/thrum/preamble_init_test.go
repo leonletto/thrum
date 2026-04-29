@@ -94,7 +94,10 @@ func TestPreambleInit_UsesRoleTemplateWhenPresent(t *testing.T) {
 
 // TestPreambleInit_FallsBackWhenNoRoleTemplate confirms the fallback path:
 // when no .thrum/role_templates/<role>.md exists, the generic
-// RoleAwarePreamble is sent (preserving existing behavior).
+// RoleAwarePreambleWithRoot is sent — and the substituted strategies/
+// llms.txt paths are ABSOLUTE (rooted at the agent's repo path) so
+// worktree agents can Read them directly without traversing
+// .thrum/redirect. Pins the thrum-rm4x fix.
 func TestPreambleInit_FallsBackWhenNoRoleTemplate(t *testing.T) {
 	repo := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(repo, ".thrum"), 0o750); err != nil {
@@ -113,5 +116,32 @@ func TestPreambleInit_FallsBackWhenNoRoleTemplate(t *testing.T) {
 	// shared DefaultPreamble reference content.
 	if !bytes.Contains(fc.captured, []byte("Thrum Quick Reference")) {
 		t.Fatalf("fallback content missing DefaultPreamble shared section:\n%s", fc.captured)
+	}
+
+	// thrum-rm4x: strategies + llms.txt paths must be absolute,
+	// rooted at the agent's repo path (the runPreambleInit caller's
+	// repoPath argument). Without this, worktree-side agents that
+	// fall through to this path can't Read the strategies files
+	// without first resolving .thrum/redirect.
+	for _, needle := range []string{
+		filepath.Join(repo, ".thrum/strategies/sub-agent-strategy.md"),
+		filepath.Join(repo, ".thrum/strategies/thrum-registration.md"),
+		filepath.Join(repo, ".thrum/strategies/resume-after-context-loss.md"),
+		filepath.Join(repo, ".thrum/llms.txt"),
+	} {
+		if !bytes.Contains(fc.captured, []byte(needle)) {
+			t.Errorf("fallback preamble missing absolute path %q\n--- got ---\n%s", needle, fc.captured)
+		}
+	}
+	// And the relative-path bullet forms should be absent — they'd
+	// mislead a worktree agent into Reading paths that don't exist
+	// on its side of the redirect.
+	for _, relative := range []string{
+		"`.thrum/strategies/sub-agent-strategy.md`",
+		"`.thrum/llms.txt`",
+	} {
+		if bytes.Contains(fc.captured, []byte(relative)) {
+			t.Errorf("fallback preamble should not contain relative bullet %q", relative)
+		}
 	}
 }

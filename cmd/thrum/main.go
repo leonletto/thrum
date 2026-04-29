@@ -4011,7 +4011,14 @@ func runPreambleInit(client preambleRPCCaller, agentID, role, repoPath, agentNam
 		return fmt.Errorf("invalid agent name %q: must not contain /, \\, or parent references", agentName)
 	}
 	thrumDir := filepath.Join(repoPath, ".thrum")
-	content := agentcontext.RoleAwarePreamble(role)
+	// Initial fallback content uses RoleAwarePreambleWithRoot so the
+	// no-role-template path renders absolute strategies/llms.txt paths.
+	// repoPath here is the agent's repo root (worktree-side or main —
+	// in either case the right anchor for absolute path substitution).
+	// Without this, worktree agents that hit the fallback (no rendered
+	// template deployed) get repo-relative paths that don't resolve
+	// without traversing .thrum/redirect (thrum-rm4x).
+	content := agentcontext.RoleAwarePreambleWithRoot(role, repoPath)
 	if rendered, renderErr := agentcontext.RenderRoleTemplate(thrumDir, agentName, role); renderErr == nil && rendered != nil {
 		content = rendered
 	} else if renderErr != nil && !os.IsNotExist(renderErr) {

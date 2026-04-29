@@ -330,12 +330,31 @@ are running. Use ` + "`thrum send`" + ` to dispatch work via messaging instead.
 
 // RoleAwarePreamble returns a preamble with a role-specific behavioral header
 // prepended to the default preamble. For unknown roles, returns the default.
+//
+// Back-compat thin wrapper over RoleAwarePreambleWithRoot — emits the
+// repo-root-relative strategies paths (matching DefaultPreamble's relative
+// shape). Callers that know the repo root should prefer
+// RoleAwarePreambleWithRoot to surface absolute paths into worktree agents.
 func RoleAwarePreamble(role string) []byte {
+	return RoleAwarePreambleWithRoot(role, "")
+}
+
+// RoleAwarePreambleWithRoot is the role-aware analogue of
+// DefaultPreambleWithRoot. Composes the role-specific header with
+// DefaultPreambleWithRoot(repoRoot), so a non-empty repoRoot renders
+// absolute strategies/llms.txt paths instead of the .thrum/-relative
+// forms. For unknown roles, falls back to DefaultPreambleWithRoot.
+//
+// Closes the runPreambleInit fallback gap: when
+// .thrum/role_templates/<role>.md is absent, the CLI must still render
+// absolute paths in worktree agents (z9zl only patched the
+// RenderRoleTemplate path; this is the fallback path).
+func RoleAwarePreambleWithRoot(role, repoRoot string) []byte {
 	header := roleHeader(role)
 	if header == "" {
-		return DefaultPreamble()
+		return DefaultPreambleWithRoot(repoRoot)
 	}
-	base := DefaultPreamble()
+	base := DefaultPreambleWithRoot(repoRoot)
 	return append([]byte(header+"\n---\n\n"), base...)
 }
 
