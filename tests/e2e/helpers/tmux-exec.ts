@@ -87,6 +87,13 @@ function ensurePersistentSession(): string {
   // Settle PS1 to a known minimal form so the prompt doesn't share a
   // line with our marker echo (would defeat ^MARKER:N$ regex). Send
   // both PS1 and PROMPT_COMMAND wipes; an Enter to submit.
+  //
+  // No explicit settle delay before the first sendAndWait: tmux
+  // queues send-keys input into the pane's TTY buffer, and bash
+  // reads from that buffer once it's ready. The PS1 line will be
+  // executed before the first command's send-keys regardless of
+  // whether the shell has finished initializing yet — input is
+  // strictly ordered.
   tmuxRun('send-keys', '-t', name, `PS1=''; PROMPT_COMMAND=''`, 'Enter');
   persistentSession = name;
   return name;

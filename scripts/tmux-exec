@@ -38,6 +38,34 @@
 #   sleep 25
 #   tmux-exec capture coordinator --tail 40
 #
+# Pool-session lifecycle (cmd_exec):
+#   `tmux-exec exec` routes through a per-USER persistent pool pane
+#   named `tmux-exec-pool-${USER}` on the active socket. The pane is
+#   created lazily on the first call and reused across subsequent
+#   invocations of this script (same socket + same user) for the
+#   lifetime of the tmux server. Each call wraps its work in
+#   `(cd <cwd> && <cmd>)` so cwd / env / unset side-effects scope to
+#   the per-call subshell — the pool shell itself never has its cwd
+#   or environment mutated by a successful caller. A subshell that
+#   exits abnormally (kill -9 mid-command, terminal SIGHUP) cannot
+#   leak state because nothing escapes the `(...)` boundary at the
+#   syntax level. The pool dies with the tmux server (kill-server).
+#
+# Concurrency / serialization (cmd_exec):
+#   `cmd_exec` serializes concurrent invocations via flock(1) on
+#   `/tmp/tmux-exec-pool-<socket>-<user>.lock`. Linux ships flock by
+#   default; macOS does NOT, so on macOS the script runs WITHOUT
+#   inter-process serialization — concurrent `tmux-exec exec` calls
+#   could interleave send-keys input and break marker attribution.
+#   Mitigations:
+#     - The script emits a one-time stderr warning the first time
+#       cmd_exec runs without flock, so callers know it happened.
+#     - Project workflows that touch this script (test-setup.sh,
+#       release-test scenarios) are serial by design — no concurrent
+#       invocations expected. Document any new caller that would
+#       parallelize. Remediation if needed: install `brew install
+#       flock` on macOS, or wrap calls in a host-side mutex.
+#
 set -euo pipefail
 
 SOCKET="${TMUX_EXEC_SOCKET:-tmux-exec}"
@@ -142,10 +170,36 @@ send_marker_wait() {
   return 0
 }
 
-# Generate a per-call marker token. Embeds $$ + epoch + RANDOM so
-# concurrent invocations never collide.
+# Generate a per-call marker token. Embeds $$ + epoch-seconds +
+# RANDOM. With flock-serialized invocations the marker is trivially
+# unique. Without flock (macOS default — see header), a theoretical
+# collision could occur if two invocations land in the same wall-clock
+# second, share a PID (very rare across separate processes), AND $RANDOM
+# repeats. The compound probability is negligible in practice; document
+# rather than fix because the practical-risk path is the documented
+# serial-invocation contract above.
 gen_marker() {
   echo "__TMUX_EXEC_DONE_$$_$(date +%s)_${RANDOM}__"
+}
+
+# One-time stderr warning when flock is unavailable (macOS by default).
+# Sets a marker file under TMPDIR so subsequent invocations stay quiet
+# until the marker is removed (e.g. by a fresh server restart) — keeps
+# noisy CI logs from drowning out real signal while still ensuring the
+# warning lands once per environment.
+warn_flock_missing_once() {
+  local marker="${TMPDIR:-/tmp}/.tmux-exec-flock-warning-${USER:-default}"
+  if [[ -f "$marker" ]]; then
+    return 0
+  fi
+  cat >&2 <<EOF
+tmux-exec: warning: 'flock' is not installed on this host. Concurrent
+  'tmux-exec exec' invocations are NOT serialized — interleaved send-keys
+  may corrupt marker attribution. Project workflows are serial by design,
+  so this is informational. Install via 'brew install flock' to silence.
+  (This warning is emitted once per user; remove ${marker} to re-trigger.)
+EOF
+  : >"$marker" 2>/dev/null || true
 }
 
 gen_outfile() {
@@ -346,6 +400,11 @@ cmd_exec() {
   builtin exec 9>"$lock"
   if command -v flock >/dev/null 2>&1; then
     flock -w "$TIMEOUT" 9 || die "exec: could not acquire pool lock within ${TIMEOUT}s"
+  else
+    # See script header "Concurrency / serialization" section. macOS
+    # does not ship flock(1); concurrent invocations are not safe but
+    # project workflows that use this script are serial by design.
+    warn_flock_missing_once
   fi
   ensure_pool_session
 
