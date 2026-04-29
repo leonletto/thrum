@@ -145,3 +145,81 @@ func TestPreambleInit_FallsBackWhenNoRoleTemplate(t *testing.T) {
 		}
 	}
 }
+
+// TestPreambleInit_WorktreeWithRedirect pins the thrum-5hhx fix: when
+// runPreambleInit is invoked from a worktree (.thrum carries a
+// `redirect` file pointing at the main repo's .thrum/), the rendered
+// strategies/llms.txt paths must point at the MAIN repo, not the
+// worktree itself. Without the redirect-follow, the fallback path
+// would substitute the worktree's repoPath and produce paths that
+// don't resolve (worktree .thrum carries only redirect + identities/
+// + context/ + restart/, never strategies/ or llms.txt).
+func TestPreambleInit_WorktreeWithRedirect(t *testing.T) {
+	mainRepo := t.TempDir()
+	mainThrum := filepath.Join(mainRepo, ".thrum")
+	if err := os.MkdirAll(filepath.Join(mainThrum, "strategies"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	// Placeholder files so a future caller could actually Read them;
+	// runPreambleInit doesn't open them, but creating them mirrors
+	// the real-world shape and guards against any future "stat the
+	// path before substituting" check.
+	for _, name := range []string{
+		"sub-agent-strategy.md",
+		"thrum-registration.md",
+		"resume-after-context-loss.md",
+	} {
+		if err := os.WriteFile(filepath.Join(mainThrum, "strategies", name), []byte("placeholder\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(mainThrum, "llms.txt"), []byte("placeholder\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Worktree-shape .thrum at a separate path with only a redirect
+	// file pointing at the main repo's .thrum.
+	worktree := t.TempDir()
+	worktreeThrum := filepath.Join(worktree, ".thrum")
+	if err := os.MkdirAll(worktreeThrum, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(worktreeThrum, "redirect"), []byte(mainThrum), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	fc := &fakePreambleClient{}
+	if err := runPreambleInit(fc, "wt_impl", "implementer", worktree, "wt_impl"); err != nil {
+		t.Fatalf("runPreambleInit: %v", err)
+	}
+
+	if len(fc.captured) == 0 {
+		t.Fatalf("expected fallback content, got empty")
+	}
+
+	// Strategies/llms.txt paths must resolve under the MAIN repo, not
+	// the worktree. We use HasPrefix-style filepath joins so the
+	// macOS /private/var symlink resolution doesn't break the match
+	// (t.TempDir() returns a /private/var-prefixed path on macOS).
+	for _, needle := range []string{
+		filepath.Join(mainRepo, ".thrum/strategies/sub-agent-strategy.md"),
+		filepath.Join(mainRepo, ".thrum/strategies/thrum-registration.md"),
+		filepath.Join(mainRepo, ".thrum/strategies/resume-after-context-loss.md"),
+		filepath.Join(mainRepo, ".thrum/llms.txt"),
+	} {
+		if !bytes.Contains(fc.captured, []byte(needle)) {
+			t.Errorf("rendered preamble missing main-repo absolute path %q\n--- got ---\n%s", needle, fc.captured)
+		}
+	}
+
+	// Worktree-rooted strategies paths must NOT appear (they don't
+	// exist on disk and would mislead a fast-reading agent).
+	for _, antiNeedle := range []string{
+		filepath.Join(worktree, ".thrum/strategies/sub-agent-strategy.md"),
+		filepath.Join(worktree, ".thrum/llms.txt"),
+	} {
+		if bytes.Contains(fc.captured, []byte(antiNeedle)) {
+			t.Errorf("rendered preamble contains worktree-rooted path %q (should be main-repo path)", antiNeedle)
+		}
+	}
+}

@@ -4011,14 +4011,27 @@ func runPreambleInit(client preambleRPCCaller, agentID, role, repoPath, agentNam
 		return fmt.Errorf("invalid agent name %q: must not contain /, \\, or parent references", agentName)
 	}
 	thrumDir := filepath.Join(repoPath, ".thrum")
+	// Resolve the strategies root by following .thrum/redirect when
+	// present. Worktrees only carry redirect + identities/ + context/
+	// + restart/; strategies/ and llms.txt live at the MAIN repo's
+	// .thrum/. Without this redirect-follow, a worktree-side caller
+	// would substitute its OWN path into the strategies bullets and
+	// produce file paths that don't exist (thrum-5hhx). Mirrors the
+	// gate in buildTemplateData (internal/context/context.go) so the
+	// fallback path and the rendered-template path agree on which
+	// directory hosts the strategies block.
+	strategiesRoot := repoPath
+	if _, err := os.Stat(filepath.Join(thrumDir, "redirect")); err == nil {
+		if resolved, rerr := paths.ResolveThrumDir(repoPath); rerr == nil {
+			strategiesRoot = filepath.Dir(resolved)
+		}
+	}
 	// Initial fallback content uses RoleAwarePreambleWithRoot so the
 	// no-role-template path renders absolute strategies/llms.txt paths.
-	// repoPath here is the agent's repo root (worktree-side or main —
-	// in either case the right anchor for absolute path substitution).
-	// Without this, worktree agents that hit the fallback (no rendered
-	// template deployed) get repo-relative paths that don't resolve
-	// without traversing .thrum/redirect (thrum-rm4x).
-	content := agentcontext.RoleAwarePreambleWithRoot(role, repoPath)
+	// strategiesRoot is the MAIN repo (post-redirect) so worktree
+	// agents that hit this fallback get paths under the main repo's
+	// .thrum/ where the files actually live (thrum-rm4x + thrum-5hhx).
+	content := agentcontext.RoleAwarePreambleWithRoot(role, strategiesRoot)
 	if rendered, renderErr := agentcontext.RenderRoleTemplate(thrumDir, agentName, role); renderErr == nil && rendered != nil {
 		content = rendered
 	} else if renderErr != nil && !os.IsNotExist(renderErr) {
