@@ -65,12 +65,21 @@ needs to survive session boundaries.
 ```text
 .thrum/
 ├── context/
-│   ├── furiosa.md                  # Agent context (volatile)
+│   ├── furiosa.md                  # Agent context (volatile) + user overlay
 │   ├── furiosa_preamble.md         # Agent preamble (stable)
 │   ├── maximus.md
 │   ├── maximus_preamble.md
 │   └── coordinator_1B9K33T6RK.md   # Hash-based agent ID
 ```
+
+**Dual purpose of `.thrum/context/<agent>.md`:** this file serves two roles.
+First, it stores volatile session state written by `thrum context save`. Second,
+it acts as a **hand-authored user overlay**: `RenderRoleTemplate` appends any
+non-empty content to the rendered preamble after a `---` separator, so
+project-specific instructions and conventions are always included in the agent's
+boot context without editing the role template itself. `thrum quickstart`
+auto-creates the file empty so it's ready to customize. Whitespace-only files
+are treated as absent — no stray separator is added.
 
 Context files are local by default. Use `thrum context sync` to manually share
 across worktrees via the a-sync branch.

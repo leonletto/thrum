@@ -6,9 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.9.2] - 2026-04-29
 
 ### Fixed
+
+- **tmux pty leak under repeated `respawn-pane` (thrum-x6e8.5)** — tmux-exec
+  migrated from `respawn-pane` to a persistent-session pool. The previous
+  approach leaked pseudo-terminals on every respawn, eventually exhausting the
+  per-process fd limit on long-running daemons. The pool reuses sessions with
+  flock-based coordination (with a portable fallback when flock is unavailable)
+  and documents the lifecycle/marker contract for future maintainers.
+- **`runPreambleInit` fallback ignored `.thrum/redirect` (thrum-5hhx)** — when
+  the rendered template lookup failed and the handler fell back to
+  `RoleAwarePreamble`, it skipped the `.thrum/redirect` indirection used by
+  worktree setups. Fallback now follows the redirect before resolving the role.
+- **`runPreambleInit` and worktree preambles rendered relative strategy paths
+  (thrum-rm4x, thrum-z9zl)** — generated preambles referenced
+  `strategies/<file>` relative to the rendering CWD, which broke when the
+  preamble was read from a different directory. Paths are now rendered
+  absolute against the project root.
+- **SessionStart identity banner + auto-load directive (thrum-6hqy / 6hqy.1 /
+  a6sw / tfrv / xupf / 2qe2)** — Claude Code sessions launched via
+  `thrum tmux create` and restarted via `thrum tmux restart` now display a
+  pane-side identity banner and a size-aware `MUST-READ` directive pointing at
+  the briefing. The plugin SessionStart hook also injects `thrum prime` output
+  via `additionalContext` so the briefing reaches the model even when the
+  pane-side banner is truncated. Restart-snapshot framing was hoisted to the
+  top of `additionalContext` and rephrased as a directive rather than passive
+  prose.
 
 - **`thrum tmux status` and `thrum tmux connect` leaked sessions across
   daemons (thrum-zuz5)** — pass 2 of `HandleStatus` filtered only on

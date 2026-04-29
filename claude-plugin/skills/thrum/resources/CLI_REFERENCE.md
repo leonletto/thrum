@@ -453,9 +453,23 @@ Flags:
 ## Setup
 
 ```bash
+thrum setup claude-md                          # Print Thrum CLAUDE.md block to stdout
+thrum setup claude-md --apply                  # Create or append CLAUDE.md block
+thrum setup claude-md --apply --force          # Replace existing Thrum block in place
 thrum worktree setup                           # Set up redirect in feature worktree (default)
 thrum worktree setup --main-repo /path/to/main
 ```
+
+`setup claude-md` flags:
+
+```text
+--apply   Write to ./CLAUDE.md (create or append); errors if block exists (use --force to replace)
+--force   Replace an existing Thrum block idempotently; no effect without --apply
+```
+
+Block is wrapped in `<!-- BEGIN THRUM -->` / `<!-- END THRUM -->` markers for
+detection. Use only if you are NOT running the Thrum Claude Code plugin — the
+plugin already injects equivalent content via its SessionStart hook.
 
 `worktree setup` flags:
 
@@ -598,6 +612,9 @@ thrum roles list                               # List templates and matching age
 thrum roles deploy                             # Re-render preambles from templates (all agents)
 thrum roles deploy --agent alice               # Deploy for a specific agent
 thrum roles deploy --dry-run                   # Preview changes without writing files
+thrum roles refresh                            # Re-render templates from saved role_config answers
+thrum roles save-config                        # Write role_config to config.json from JSON on stdin
+thrum roles templates print <role>-<autonomy>  # Print an embedded shipped template to stdout
 ```
 
 `roles deploy` flags:
@@ -606,6 +623,14 @@ thrum roles deploy --dry-run                   # Preview changes without writing
 --agent string   Deploy for a specific agent only
 --dry-run        Preview changes without writing files
 ```
+
+`roles templates print` takes a single positional argument of the form
+`<role>-<autonomy>` (e.g. `implementer-autonomous`, `coordinator-strict`).
+Exit code is non-zero if the template name is not found.
+
+`roles save-config` reads a `RoleConfig` JSON object from stdin and atomically
+writes `role_config` to `.thrum/config.json`, preserving all other top-level
+keys. Used internally by `/thrum:configure-roles`.
 
 ---
 
@@ -666,7 +691,9 @@ Configure in `.claude/settings.json`:
 ## Tmux Sessions
 
 ```bash
-thrum tmux start                               # One-command: create + launch + prime + attach
+thrum tmux start                               # One-command in current worktree: launch + prime + attach
+thrum tmux start --name <session>              # Override session name
+thrum tmux start --runtime opencode            # Override runtime
 thrum tmux create <name> --cwd <path> \
   --name <agent> --role <role> --module <mod>  # Create session + register agent (flags required)
 thrum tmux create <name> --cwd <path> \
@@ -685,6 +712,13 @@ thrum tmux queue <session> <command>           # Submit command to session queue
 thrum tmux queue <session> <command> --wait    # Queue + block until complete
 thrum tmux queue-status <session>              # Show active + queued commands
 thrum tmux cancel <command-id>                 # Cancel a queued or active command
+```
+
+`tmux start` flags (operates on current working directory):
+
+```text
+--name string      Override session name (default: directory name)
+--runtime string   Override runtime (default: from config or claude)
 ```
 
 `tmux create` / `tmux quickstart` flags:

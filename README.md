@@ -13,19 +13,28 @@ and machines. You direct the work. The agents coordinate through Thrum. Messages
 persist through context compaction, session restarts, and machine changes —
 nothing gets lost.
 
-**v0.9.1 highlights:**
+**v0.9.2 highlights:**
 
-- **Peercred fix (thrum-ndtw)** — Mutating RPCs (`thrum tmux create`,
-  `thrum agent delete`, etc.) no longer reject authenticated callers when kernel
-  peer credentials or `gopsutil.Cwd` process inspection fails. Previously caused
-  "anonymous caller" rejections from macOS interactive shells and short-lived
-  subprocesses. Falls through to legacy client-asserted identity on the "unknown
-  state" path; provably-anonymous callers still hit the allowlist.
-- **`thrum setup claude-md`** — New subcommand prints or installs a minimal
-  Thrum-managed block into `CLAUDE.md` for non-plugin environments.
-  `thrum setup claude-md --apply` installs, `--apply --force` replaces
-  idempotently. If you're running the Thrum plugin for Claude Code, skip this —
-  the plugin handles coordination via skills and hooks. Closes #8.
+- **Role configuration system (thrum-z2et)** — `/thrum:configure-roles` now
+  persists answers under `role_config` in `.thrum/config.json`, and
+  `thrum roles refresh` regenerates `.thrum/role_templates/<role>.md` from the
+  saved answers + the shipped templates embedded in the binary. `thrum prime`
+  surfaces drift hints when shipped templates change (`migration`,
+  `schema-bump`, `body-diff`). User overlays at `.thrum/context/<agent>.md`
+  compose into the rendered preamble.
+- **SessionStart identity banner + auto-load directive** — Claude Code
+  sessions launched via `thrum tmux create` and restarted via
+  `thrum tmux restart` show a pane-side identity banner and a size-aware
+  MUST-READ directive. The plugin SessionStart hook injects `thrum prime`
+  output via `additionalContext` so the briefing reaches the model even when
+  the pane is small.
+- **tmux session scoping (thrum-zuz5)** — `thrum tmux status` /
+  `thrum tmux connect` now scope to the current daemon via a
+  `@thrum-thrum-dir` tag, no longer leaking sessions across worktrees and
+  projects. Migration: pre-0.9.2 sessions need to be recreated to appear.
+- **tmux pty leak fix (thrum-x6e8.5)** — tmux-exec moved from `respawn-pane`
+  to a persistent-session pool, eliminating fd-leak crashes on long-running
+  daemons.
 
 ## Quick Start
 

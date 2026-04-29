@@ -337,11 +337,11 @@ create agent worktrees:
 
 ### Role Template
 
-The orchestrator preamble lives at `internal/context/roleconfig/templates/roles/orchestrator.md` in
-the Thrum repo. It's the context file the orchestrator loads at startup via
-`thrum prime`. You don't need to edit it. If you register an orchestrator agent
-with `thrum quickstart --role orchestrator`, the right template loads
-automatically.
+The orchestrator preamble lives at
+`internal/context/roleconfig/templates/roles/orchestrator.md` in the Thrum repo.
+It's the context file the orchestrator loads at startup via `thrum prime`. You
+don't need to edit it. If you register an orchestrator agent with
+`thrum quickstart --role orchestrator`, the right template loads automatically.
 
 ---
 

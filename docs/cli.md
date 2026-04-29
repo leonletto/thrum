@@ -60,6 +60,9 @@ for AI agent coordination.
 | `thrum telegram status`       | Show Telegram bridge connection status and config              |
 | `thrum roles list`            | List role templates and matching agents                        |
 | `thrum roles deploy`          | Re-render agent preambles from role templates                  |
+| `thrum roles refresh`         | Re-render templates from saved answers + update rendered_hash  |
+| `thrum roles save-config`     | Write role_config to .thrum/config.json from JSON on stdin     |
+| `thrum roles templates print` | Print an embedded shipped template to stdout                   |
 | `thrum config`                | Manage configuration (show, init)                              |
 | `thrum who-has`               | Check which agents are editing a file                          |
 | `thrum ping`                  | Check if an agent is online                                    |
@@ -312,6 +315,20 @@ $ thrum prime
 # Outputs session context block to stdout
 # Agent reads this at session start via /thrum:prime skill
 ```
+
+**Drift Hints:** `thrum prime` emits up to one `slog.Warn`-level hint per run
+when role template state drifts from the current shipped templates. Hints appear
+on stderr (or in the `hints` array with `--json`). Precedence — only the
+highest-priority matching hint fires:
+
+| Hint code                  | Meaning                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------ |
+| `roles.config.migration`   | Rendered templates exist but no `role_config` key in config.json (pre-v0.9.2 install)      |
+| `roles.config.schema-bump` | Saved `schema_version` is older than the current shipped version                           |
+| `roles.config.body-diff`   | Saved `rendered_hash` doesn't match current shipped `body_hash` (template content changed) |
+
+Run `thrum roles refresh` to re-render templates from saved answers and clear
+the hint.
 
 See also: [Identity System](identity.md), [Session Restart](session-restart.md).
 
@@ -1696,6 +1713,60 @@ $ thrum roles deploy --agent alice
 ✓ Deployed preamble for alice (implementer)
 ```
 
+### thrum roles refresh
+
+Re-render `.thrum/role_templates/<role>.md` for all roles that have saved
+answers in `role_config`. Uses the embedded shipped templates plus the saved
+`autonomy` and `scope` values — no interactive prompts. Updates `rendered_hash`
+to the current shipped `body_hash` so drift hints clear on the next
+`thrum prime`.
+
+Per-agent template tokens (`{{.AgentName}}` etc.) are kept literal so the
+existing per-agent deploy pass can substitute them.
+
+```text
+thrum roles refresh
+```
+
+This command takes no additional flags. Run it after upgrading Thrum to
+re-render templates without re-running `/thrum:configure-roles`.
+
+### thrum roles save-config
+
+Write `role_config` to `.thrum/config.json` from JSON on stdin. This is the
+internal CLI shim used by the `/thrum:configure-roles` skill to persist answers.
+Reads a `RoleConfig` JSON object, fills in defaults (`schema_version`,
+`rendered_hash`) and atomically writes the `role_config` key while preserving
+all other top-level keys byte-identical.
+
+```text
+thrum roles save-config
+```
+
+Reads from stdin; exit code is non-zero on decode or write failure.
+
+### thrum roles templates print
+
+Print an embedded shipped role template to stdout. Used by the
+`/thrum:configure-roles` skill to read reference content via CLI rather than a
+raw filesystem path (the binary may run from any directory).
+
+```text
+thrum roles templates print <role>-<autonomy>
+```
+
+`<role>-<autonomy>` must match an embedded template name, e.g.
+`implementer-autonomous` or `coordinator-strict`. Exit code is non-zero if the
+template is not found.
+
+Example:
+
+```text
+$ thrum roles templates print implementer-autonomous
+# Agent: {{.AgentName}}
+...
+```
+
 ## Runtime Presets
 
 Runtime presets tell Thrum how to launch each supported AI runtime — the binary
@@ -2024,12 +2095,18 @@ If any step fails, the session is left in place so you can inspect what happened
 with `thrum tmux status` and `thrum tmux capture`.
 
 ```text
-thrum tmux start <name> --cwd <path> --name <agent-name> --role <role> --module <module> [flags]
+thrum tmux start [flags]
 ```
 
-Flags are identical to [thrum tmux create](#thrum-tmux-create) — the composite
-forwards them through. The most common additions are `--runtime` (to override
-the default runtime preset) and `--intent` (to seed the agent's work intent).
+| Flag        | Description                                                         | Default |
+| ----------- | ------------------------------------------------------------------- | ------- |
+| `--name`    | Override session name (default: current directory name)             |         |
+| `--runtime` | Override runtime for this launch (default: from config or `claude`) |         |
+
+`thrum tmux start` operates on the **current working directory** — it infers the
+session name and agent identity from the worktree at `$PWD`. Use
+[thrum tmux create](#thrum-tmux-create) when you need to target a different path
+or pass agent registration flags (`--role`, `--module`, etc.).
 
 Example:
 

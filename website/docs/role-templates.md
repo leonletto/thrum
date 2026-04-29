@@ -17,8 +17,8 @@ communication patterns, idle behavior, and efficiency rules.
 
 **Three layers:**
 
-1. **Shipped examples** in `internal/context/roleconfig/templates/roles/` — reference material with
-   strict and autonomous variants for each role
+1. **Shipped examples** in `internal/context/roleconfig/templates/roles/` —
+   reference material with strict and autonomous variants for each role
 2. **Active templates** in `.thrum/role_templates/` — per-project templates that
    auto-apply on agent registration
 3. **Claude skill** (`thrum:configure-roles`) — interactive environment-aware
@@ -126,6 +126,25 @@ thrum roles list
 # planner.md        (0 agents)
 ```
 
+### thrum roles refresh
+
+Re-render `.thrum/role_templates/<role>.md` from saved `role_config` answers
+(set by `/thrum:configure-roles`) without running interactive prompts. Uses the
+embedded shipped templates plus the saved `autonomy` and `scope` per role.
+Updates `rendered_hash` to the current shipped `body_hash` so drift hints from
+`thrum prime` clear after the next run.
+
+Per-agent template tokens (`{{.AgentName}}` etc.) are kept literal — the
+existing per-agent deploy pass substitutes them when you run
+`thrum roles deploy`.
+
+```bash
+thrum roles refresh
+```
+
+Run this after upgrading Thrum when `thrum prime` emits a
+`roles.config.schema-bump` or `roles.config.body-diff` hint.
+
 ### thrum roles deploy
 
 Re-render preambles for registered agents from role templates:
@@ -176,12 +195,20 @@ generates customized templates interactively.
 │   ├── implementer.md
 │   └── planner.md
 ├── context/
+│   ├── impl_auth.md          # User overlay (hand-authored; appended to preamble)
 │   ├── impl_auth_preamble.md # Rendered output (per-agent)
 │   └── coord_main_preamble.md
 └── identities/
     ├── impl_auth.json
     └── coord_main.json
 ```
+
+`.thrum/context/<agent>.md` has a dual purpose: it stores volatile session state
+written by `thrum context save`, and it acts as a **user overlay** that
+`RenderRoleTemplate` appends to the rendered preamble after a `---` separator.
+`thrum quickstart` auto-creates the file empty so it's ready for hand-written
+customization. Whitespace-only files are treated as absent (no stray separator
+is added). See [Agent Context Management](context.md) for details.
 
 ## Next Steps
 

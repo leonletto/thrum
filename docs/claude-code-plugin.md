@@ -159,6 +159,12 @@ Running prime loads:
 - Daemon health
 - Restart snapshots (if any exist from a previous session)
 
+Since v0.9.2 the hook also injects `thrum prime` output via the hook's
+`additionalContext` field, so the full briefing reaches the model even when the
+pane-side banner is truncated or scrolled off. Restart-snapshot content is
+hoisted to the top of `additionalContext` and framed as a directive rather than
+passive prose, so the model treats it as an actionable instruction on boot.
+
 If Thrum isn't initialized, shows a friendly setup message instead of failing.
 
 ### PreCompact

@@ -1,4 +1,4 @@
-# Thrum v0.9.1 -- Complete Agent Reference
+# Thrum v0.9.2 -- Complete Agent Reference
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 

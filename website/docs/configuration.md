@@ -602,6 +602,57 @@ Overrides (environment)
 
 Use `thrum config show --json` for machine-readable output.
 
+## Role Config
+
+The `role_config` top-level key persists role template answers written by
+`/thrum:configure-roles` and `thrum roles save-config`. It is never set by hand
+— the skill and CLI command are the intended writers.
+
+### `role_config` structure
+
+```json
+{
+  "role_config": {
+    "schema_version": 1,
+    "roles": {
+      "implementer": {
+        "autonomy": "autonomous",
+        "scope": "auth module",
+        "rendered_hash": "sha256:abc123..."
+      },
+      "coordinator": {
+        "autonomy": "strict",
+        "scope": "",
+        "rendered_hash": "sha256:def456..."
+      }
+    }
+  }
+}
+```
+
+**Per-role fields** (under `role_config.roles.<role-name>`):
+
+| Field           | Type   | Description                                                                              |
+| --------------- | ------ | ---------------------------------------------------------------------------------------- |
+| `autonomy`      | string | Template variant selected: `"strict"` or `"autonomous"`                                  |
+| `scope`         | string | User-supplied scope string embedded into the rendered template (may be empty)            |
+| `rendered_hash` | string | SHA-256 of the shipped template body used when this role was last rendered (drift check) |
+
+**Top-level fields** (under `role_config`):
+
+| Field            | Type    | Description                                                                                          |
+| ---------------- | ------- | ---------------------------------------------------------------------------------------------------- |
+| `schema_version` | integer | Schema version of the saved config; compared against the current shipped version for drift detection |
+
+**Writes are atomic:** both `/thrum:configure-roles` and
+`thrum roles save-config` write via a temp file + rename, preserving every other
+top-level key (`backup`, `daemon`, `identity`, `telegram`, etc.) byte-identical
+via `json.RawMessage` round-trip.
+
+Run `thrum roles refresh` after a Thrum upgrade to re-render templates from
+saved answers without re-running the interactive skill. See
+[Role-Based Preamble Templates](role-templates.md) for the full workflow.
+
 ## What's NOT in config.json
 
 These remain separate for good reasons:

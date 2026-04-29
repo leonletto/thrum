@@ -1,4 +1,4 @@
-# Thrum v0.9.1
+# Thrum v0.9.2
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -142,6 +142,39 @@ New in v0.9.1:
   duplicates content. The CLAUDE.md block is the alternative for other
   runtimes (codex, cursor, opencode, kiro, auggie) and for Claude Code
   without the plugin.
+
+New in v0.9.2:
+- Role configuration system (thrum-z2et) — `/thrum:configure-roles` answers
+  persist under a new `role_config` top-level key in `.thrum/config.json`
+  (per-role autonomy + scope + rendered_hash; top-level schema_version).
+  `thrum roles refresh` regenerates `.thrum/role_templates/<role>.md` from
+  saved answers + the shipped templates embedded in the binary.
+  `thrum prime` surfaces three drift hints: `roles.config.migration`
+  (rendered templates exist but no role_config), `roles.config.schema-bump`
+  (shipped schema_version > saved), and `roles.config.body-diff` (shipped
+  body_hash != saved rendered_hash). Precedence: migration > schema-bump >
+  body-diff. `.thrum/context/<agent>.md` doubles as a hand-authored user
+  overlay appended to the rendered preamble with a `---` separator;
+  `thrum quickstart` auto-creates it empty.
+- SessionStart identity banner + auto-load directive — Claude Code sessions
+  launched via `thrum tmux create` and restarted via `thrum tmux restart`
+  show a pane-side identity banner and a size-aware `MUST-READ` directive
+  pointing at the briefing. The plugin SessionStart hook also injects
+  `thrum prime` output via `additionalContext` so the briefing reaches the
+  model even when the pane is small. Restart-snapshot framing is hoisted to
+  the top of `additionalContext` and rephrased as a directive.
+- tmux session scoping (thrum-zuz5) — `thrum tmux status` and `thrum tmux
+  connect` now scope to the current daemon via a `@thrum-thrum-dir` tag,
+  no longer leaking sessions across worktrees and projects. Migration:
+  pre-0.9.2 sessions need to be recreated via `thrum tmux create` to appear
+  in pass-2 output.
+- tmux pty leak fix (thrum-x6e8.5) — tmux-exec migrated from `respawn-pane`
+  to a persistent-session pool with flock-based coordination (portable
+  fallback when flock is unavailable), eliminating fd-leak crashes on
+  long-running daemons.
+- Preamble fallback fixes (thrum-5hhx, rm4x, z9zl) — `runPreambleInit`
+  fallback now follows `.thrum/redirect`; rendered preamble paths to
+  strategy files are absolute, not relative.
 
 ## Quick Start
 

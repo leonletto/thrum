@@ -179,6 +179,12 @@ implementer-website-dev   impl_website_dev     stale        claude     website-d
 
 `thrum tmux list` is an alias for the same output.
 
+> **Note (v0.9.2):** `thrum tmux status` and `thrum tmux connect` only show
+> sessions tagged with the current daemon's `@thrum-thrum-dir`. Sessions created
+> before v0.9.2 were not stamped with this tag and will not appear in the status
+> output or the `connect` picker. They are not lost — just un-scoped. Recreate
+> them via `thrum tmux create` to restore visibility.
+
 ### Kill a Session
 
 ```bash
