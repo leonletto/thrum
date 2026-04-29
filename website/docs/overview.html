@@ -21,7 +21,7 @@ a{color:#0366d6}
 <nav>
 <strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Overview &rsaquo; Overview
 <hr>
-<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <strong>Overview</strong><br>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <strong>Overview</strong> | <a href="whats-new.html">What's New</a><br>
 <strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
   <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
 <strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
@@ -88,122 +88,10 @@ need it.</p>
   </a>
 </div>
 
-<h2>What&#39;s New in v0.9.0</h2>
-<ul>
-<li><strong>Permission-prompt detection</strong> — the daemon detects when a tmux-managed agent
-hits a blocking permission prompt and routes an actionable nudge to configured
-supervisors. Approve or deny from the CLI, web UI, or Telegram. See
-<a href="permission-prompts.html">Permission Prompt Detection</a>.</li>
-<li><strong>Identity guards</strong> — cross-worktree CWD enforcement hard-errors on CWD drift
-instead of silently misattributing actions to the wrong agent. See
-<a href="troubleshooting-identity.html">Troubleshooting: Identity</a>.</li>
-<li><strong>CLI hints (Phase B)</strong> — contextual guidance printed before and after
-destructive or multi-step commands. See <a href="cli-hints.html">CLI Hints</a>.</li>
-<li><strong>Drift reconciliation</strong> — peers self-heal address drift automatically without
-re-pairing. See <a href="peers.html">Peers</a>.</li>
-<li><strong><code>thrum tmux quickstart</code></strong> — alias for <code>thrum tmux create</code>. Same command,
-clearer name. <code>thrum tmux create</code> now requires <code>--name</code>, <code>--role</code>, <code>--module</code>
-(or <code>--no-agent</code>) and runs quickstart inside the new pane automatically.</li>
-<li><strong><code>thrum worktree setup</code></strong> — alias for <code>thrum worktree create</code>. Both commands
-now accept optional quickstart flags (<code>--name</code>, <code>--role</code>, <code>--module</code>,
-<code>--intent</code>, <code>--runtime</code>). Provide all three required flags and it creates a
-real tmux session, runs quickstart inside it, and prints the next-step
-<code>thrum tmux launch &lt;name&gt;</code> command. The agent identity is registered, but the
-runtime is not started until <code>tmux launch</code> runs — a clean two-step pattern
-with no manual <code>thrum quickstart</code>.</li>
-<li><strong>Single identity per worktree</strong> — quickstart cleans up old identity files
-after writing the new one. You can&#39;t end up with a stale identity causing
-auto-select errors.</li>
-<li><strong><code>thrum tmux launch</code> hard-errors on missing identity</strong> — launch needs an
-agent identity to determine the runtime. Sessions created with <code>--no-agent</code>
-(or worktrees with no identity file) cannot be launched until you register an
-agent first.</li>
-<li><strong>Next-step guard messages</strong> — <code>agent register</code>, <code>worktree create</code> (no agent),
-<code>purge --confirm</code>, <code>daemon stop</code>, <code>tmux restart</code>, and <code>tmux launch</code> now print
-explicit hints about what to do next (or what just broke).</li>
-<li><strong>Monitor Jobs v1</strong> — <code>thrum monitor start/list/show/stop/logs/restart</code>.
-Attach a monitor to any long-running process and it emits matches as synthetic
-Thrum messages. Leading-edge debounce (default 60s, min 30s), auto-persist,
-local-socket-only.</li>
-</ul>
-<h2>Breaking Changes (v0.9.0)</h2>
-<p>If you&#39;re upgrading from v0.8.x, read this section before starting the daemon.</p>
-<ul>
-<li><strong>Forged <code>caller_agent_id</code> rejected</strong> — pre-v0.9.0 callers could pass any
-<code>caller_agent_id</code> and it was accepted at face value. Now cross-checked against
-kernel-verified PID resolution. Mismatches get &quot;identity mismatch&quot; and are
-dropped.</li>
-<li><strong>WebSocket non-localhost origin → HTTP 403</strong> — pre-v0.9.0, <code>CheckOrigin</code>
-returned <code>true</code> for all origins. Browser pages on non-loopback origins can no
-longer upgrade to WebSocket.</li>
-<li><strong><code>message.delete</code> by non-author rejected</strong> — only the original author can
-soft-delete their own messages.</li>
-<li><strong><code>message.deleteByAgent</code> requires caller == target</strong> — agents can only
-bulk-delete their own messages.</li>
-<li><strong><code>message.deleteByScope</code> is daemon-internal only</strong> — no longer callable from
-any external client (CLI, browser, or unix socket).</li>
-<li><strong>Legacy daemon_id auto-rotated</strong> — first v0.9.0 daemon start rotates
-pre-existing hostname-derived daemon IDs to ULID format. Existing peer pairs
-must be re-paired: <code>thrum peer remove &lt;name&gt;</code> then
-<code>thrum peer add --type tailscale &lt;name&gt;</code> on each peer.</li>
-<li><strong>Downgrade blocked by migration guard</strong> — running a v0.8.x binary against a
-database migrated to schema v24 fails with a clear error. Recovery: stop
-daemon → restore <code>thrum.db.pre-migration-v&lt;N&gt;-bak</code> → run the older binary.</li>
-<li><strong><code>~/.thrum/runtimes.json</code> replaces the old platform config path</strong> — silently
-dropped on upgrade; custom runtimes disappear. Move the file manually: Linux:
-<code>~/.config/thrum/runtimes.json</code> → <code>~/.thrum/runtimes.json</code>; macOS:
-<code>~/Library/Application Support/thrum/runtimes.json</code> →
-<code>~/.thrum/runtimes.json</code>.</li>
-<li><strong><code>peer add --type</code> and <code>peer join --type</code> are now mandatory</strong> — the
-previously implicit <code>tailscale</code> default is gone. Add <code>--type tailscale</code> to any
-existing scripts that omit it.</li>
-<li><strong><code>alert-silence</code> hook no longer triggers permission-prompt detection</strong> —
-daemon-side poller replaces it (~20s detection latency). Existing
-<code>alert-silence</code> config in <code>.tmux.conf</code> is inert for this purpose.</li>
-<li><strong>Identity guards hard-error on CWD drift</strong> — running thrum from the wrong CWD
-fails with <code>identity guard &quot;cross_worktree&quot; fired: pid_mismatch</code> instead of
-silently misattributing. Use <code>THRUM_HOME</code> to pin repo path. See
-<a href="troubleshooting-identity.html">Troubleshooting: Identity</a>.</li>
-<li><strong><code>thrum daemon start</code> and <code>thrum init</code> refuse non-git directories</strong> — pass
-<code>--force</code> for non-anchored use.</li>
-<li><strong><code>thrum quickstart</code> refuses self-rename / name collision</strong> — without
-<code>--force</code>. Previously a silent overwrite.</li>
-<li><strong>Telegram fresh-DM <code>y</code> resolves a pending nudge instead of routing to
-<code>--target</code></strong> — if the sender has a pending permission nudge, a bare
-<code>y</code>/<code>n</code>/<code>yes</code>/<code>no</code>/<code>allow</code>/<code>deny</code> DM resolves that nudge rather than
-delivering to the configured target agent.</li>
-</ul>
-<h2>What&#39;s New in v0.7.x</h2>
-<ul>
-<li><strong>Orchestrator role</strong> — a dedicated coordinator agent that reads your plan,
-claims tasks, spawns implementers, and stops at every review gate without
-touching the merge button; see <a href="orchestrator-role.html">Orchestrator Role</a></li>
-<li><strong>Multi-runtime support</strong> — Claude Code, Codex, OpenCode, etc. all work; Thrum
-picks the right tmux launch command for each; see
-<a href="multi-runtime.html">Multi-Runtime</a></li>
-<li><strong>Peer mesh</strong> — agents on different machines join one team over Tailscale or
-local network with no extra servers; see <a href="peers.html">Peers</a></li>
-<li><strong>Single-agent mode</strong> — Thrum&#39;s context management and session tracking work
-without any messaging layer; it&#39;s now the default for new installs; see
-<a href="single-agent-mode.html">Single-Agent Mode</a></li>
-<li><strong>Daemon-managed tmux sessions</strong> — the daemon owns the session lifecycle,
-delivers messages the moment they arrive, and runs zero background listeners
-in the agent process; see <a href="tmux-sessions.html">Tmux Sessions</a></li>
-<li><strong>Command queue dispatch</strong> — coordinators submit commands to agent panes via
-<code>thrum tmux queue</code>, with completion tracking, <code>@system</code> notifications, and
-restart recovery; see
-<a href="tmux-sessions.html#command-queue-dispatch">Tmux Sessions — Queue Dispatch</a></li>
-<li><strong>Worktree management</strong> — <code>thrum worktree create/teardown/list</code> (alias:
-<code>thrum worktree setup</code>) handles git worktree setup with automatic Thrum and
-Beads redirect wiring</li>
-<li><strong>Daemon logging</strong> — structured slog output with lumberjack rotation; view
-with <code>thrum daemon logs</code>; configurable via <code>daemon.log_level</code></li>
-<li><strong>Orchestrator role</strong> — a dedicated role for plan execution with review gates,
-worktree lifecycle, and agent spawning; see
-<a href="orchestrator-role.html">Orchestrator Role</a></li>
-</ul>
 <h2>Further Reading</h2>
 <ul>
+<li><a href="whats-new.html">What&#39;s New</a> — release-by-release highlights, breaking changes,
+and migration notes</li>
 <li><a href="philosophy.html">Why Thrum Exists</a> — the reasoning behind human-directed agent
 coordination and what Thrum deliberately doesn&#39;t do</li>
 <li><a href="quickstart.html">Quickstart Guide</a> — install Thrum, start the daemon, and get
