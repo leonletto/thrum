@@ -421,6 +421,86 @@ func TestDefaultPreambleWithRoot_AbsolutePaths(t *testing.T) {
 	}
 }
 
+// TestRoleAwarePreambleWithRoot_AbsolutePaths is the role-aware analogue
+// of TestDefaultPreambleWithRoot_AbsolutePaths. Pins the runPreambleInit
+// fallback path (thrum-rm4x): when no role_templates/<role>.md is
+// deployed, the CLI still must render absolute strategies/llms.txt
+// paths so worktree agents can copy/paste them straight into Read.
+func TestRoleAwarePreambleWithRoot_AbsolutePaths(t *testing.T) {
+	const repoRoot = "/tmp/main-repo"
+	s := string(RoleAwarePreambleWithRoot("coordinator", repoRoot))
+
+	// Role header must be present (proves we composed via the role-aware
+	// path, not the bare DefaultPreambleWithRoot fallback).
+	if !strings.Contains(s, "## Your Role: Coordinator") {
+		t.Errorf("RoleAwarePreambleWithRoot(coordinator, %q) missing role header", repoRoot)
+	}
+
+	// Absolute paths must be rendered into the strategies block (the
+	// substantive thrum-rm4x guarantee).
+	for _, needle := range []string{
+		"/tmp/main-repo/.thrum/strategies/sub-agent-strategy.md",
+		"/tmp/main-repo/.thrum/strategies/thrum-registration.md",
+		"/tmp/main-repo/.thrum/strategies/resume-after-context-loss.md",
+		"/tmp/main-repo/.thrum/llms.txt",
+	} {
+		if !strings.Contains(s, needle) {
+			t.Errorf("RoleAwarePreambleWithRoot(coordinator, %q) missing absolute path %q", repoRoot, needle)
+		}
+	}
+
+	// Relative-path bullet forms must be absent (would mislead a
+	// worktree-side agent that fast-reads the bullets).
+	for _, needle := range []string{
+		"`.thrum/strategies/sub-agent-strategy.md`",
+		"`.thrum/llms.txt`",
+	} {
+		if strings.Contains(s, needle) {
+			t.Errorf("RoleAwarePreambleWithRoot(coordinator, %q) should not contain relative bullet %q", repoRoot, needle)
+		}
+	}
+
+	// Relative-path header note is omitted when paths are absolute.
+	if strings.Contains(s, "Paths below are repo-root-relative") {
+		t.Errorf("RoleAwarePreambleWithRoot(coordinator, %q) should not include the relative-path header note", repoRoot)
+	}
+}
+
+// TestRoleAwarePreamble_BackCompat verifies that the no-arg form still
+// emits the relative-path shape (DefaultPreamble's pre-z9zl behavior).
+// This is the back-compat thin-wrapper contract: callers that don't have
+// a repoRoot in scope continue to render the same bytes as before.
+func TestRoleAwarePreamble_BackCompat(t *testing.T) {
+	s := string(RoleAwarePreamble("coordinator"))
+
+	// Role header still composed in.
+	if !strings.Contains(s, "## Your Role: Coordinator") {
+		t.Error("RoleAwarePreamble(coordinator) missing role header")
+	}
+
+	// Relative-path bullets present (back-compat shape).
+	for _, needle := range []string{
+		"`.thrum/strategies/sub-agent-strategy.md`",
+		"`.thrum/llms.txt`",
+	} {
+		if !strings.Contains(s, needle) {
+			t.Errorf("RoleAwarePreamble(coordinator) missing relative bullet %q", needle)
+		}
+	}
+
+	// Relative-path header note IS rendered (signals to the reader
+	// that paths resolve via .thrum/redirect in worktrees).
+	if !strings.Contains(s, "Paths below are repo-root-relative") {
+		t.Error("RoleAwarePreamble(coordinator) should include the relative-path header note")
+	}
+
+	// Round-trip with RoleAwarePreambleWithRoot("") to pin the
+	// thin-wrapper contract.
+	if s != string(RoleAwarePreambleWithRoot("coordinator", "")) {
+		t.Error("RoleAwarePreamble(role) should equal RoleAwarePreambleWithRoot(role, \"\")")
+	}
+}
+
 // TestRenderRoleTemplate_WorktreeRedirectsToMainRepoPaths verifies that
 // the buildTemplateData redirect-follow makes RenderRoleTemplate emit
 // absolute paths pointing at the MAIN repo's .thrum/strategies/, even
