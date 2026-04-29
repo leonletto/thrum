@@ -22,18 +22,17 @@ nothing gets lost.
   surfaces drift hints when shipped templates change (`migration`,
   `schema-bump`, `body-diff`). User overlays at `.thrum/context/<agent>.md`
   compose into the rendered preamble.
-- **SessionStart identity banner + auto-load directive** — Claude Code
-  sessions launched via `thrum tmux create` and restarted via
-  `thrum tmux restart` show a pane-side identity banner and a size-aware
-  MUST-READ directive. The plugin SessionStart hook injects `thrum prime`
-  output via `additionalContext` so the briefing reaches the model even when
-  the pane is small.
+- **SessionStart identity banner + auto-load directive** — Claude Code sessions
+  launched via `thrum tmux create` and restarted via `thrum tmux restart` show a
+  pane-side identity banner and a size-aware MUST-READ directive. The plugin
+  SessionStart hook injects `thrum prime` output via `additionalContext` so the
+  briefing reaches the model even when the pane is small.
 - **tmux session scoping (thrum-zuz5)** — `thrum tmux status` /
-  `thrum tmux connect` now scope to the current daemon via a
-  `@thrum-thrum-dir` tag, no longer leaking sessions across worktrees and
-  projects. Migration: pre-0.9.2 sessions need to be recreated to appear.
-- **tmux pty leak fix (thrum-x6e8.5)** — tmux-exec moved from `respawn-pane`
-  to a persistent-session pool, eliminating fd-leak crashes on long-running
+  `thrum tmux connect` now scope to the current daemon via a `@thrum-thrum-dir`
+  tag, no longer leaking sessions across worktrees and projects. Migration:
+  pre-0.9.2 sessions need to be recreated to appear.
+- **tmux pty leak fix (thrum-x6e8.5)** — tmux-exec moved from `respawn-pane` to
+  a persistent-session pool, eliminating fd-leak crashes on long-running
   daemons.
 
 ## Quick Start

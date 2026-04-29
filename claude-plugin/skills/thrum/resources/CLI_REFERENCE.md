@@ -625,8 +625,8 @@ thrum roles templates print <role>-<autonomy>  # Print an embedded shipped templ
 ```
 
 `roles templates print` takes a single positional argument of the form
-`<role>-<autonomy>` (e.g. `implementer-autonomous`, `coordinator-strict`).
-Exit code is non-zero if the template name is not found.
+`<role>-<autonomy>` (e.g. `implementer-autonomous`, `coordinator-strict`). Exit
+code is non-zero if the template name is not found.
 
 `roles save-config` reads a `RoleConfig` JSON object from stdin and atomically
 writes `role_config` to `.thrum/config.json`, preserving all other top-level

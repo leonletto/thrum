@@ -1,16 +1,17 @@
 ---
 name: thrum-restart
-description: Save a conversation snapshot and prepare for session restart. Use when you need a fresh session due to context exhaustion, rate limits, or stuck state.
+description:
+  Save a conversation snapshot and prepare for session restart. Use when you
+  need a fresh session due to context exhaustion, rate limits, or stuck state.
 # source: claude-plugin/commands/restart.md
 # generated-by: scripts/sync-skills.sh
 ---
 
 # Thrum Restart
 
-Use this skill when the user explicitly wants the `restart` Thrum
-workflow. Prefer the umbrella `thrum` skill when the request spans multiple
-commands or needs broader coordination judgment.
-
+Use this skill when the user explicitly wants the `restart` Thrum workflow.
+Prefer the umbrella `thrum` skill when the request spans multiple commands or
+needs broader coordination judgment.
 
 ## Session Restart
 

@@ -68,4 +68,3 @@ func TestRenderShipped_UnknownRole(t *testing.T) {
 		t.Error("expected error for unknown role")
 	}
 }
-

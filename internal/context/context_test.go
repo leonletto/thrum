@@ -520,7 +520,7 @@ func TestRenderRoleTemplate_WorktreeRedirectsToMainRepoPaths(t *testing.T) {
 	if err := os.WriteFile(
 		filepath.Join(mainThrum, "role_templates", "implementer.md"),
 		[]byte("# Role: implementer\n\nAgent: {{.AgentName}}\n"),
-		0644,
+		0600,
 	); err != nil {
 		t.Fatal(err)
 	}

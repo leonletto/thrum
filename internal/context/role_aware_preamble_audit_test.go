@@ -24,7 +24,7 @@ func TestAudit_RoleAwarePreambleCallSitesInAllowlist(t *testing.T) {
 	var bypass []string
 	walkErr := filepath.Walk(repoRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr // tolerate transient walk errors; audit is best-effort
 		}
 		if info.IsDir() {
 			base := info.Name()
@@ -42,7 +42,7 @@ func TestAudit_RoleAwarePreambleCallSitesInAllowlist(t *testing.T) {
 		}
 		body, readErr := os.ReadFile(path) // #nosec G304 -- path comes from filepath.Walk under repoRoot
 		if readErr != nil {
-			return nil
+			return nil //nolint:nilerr // skip unreadable files; audit is best-effort
 		}
 		if pat.Match(body) {
 			if !allowed[rel] {

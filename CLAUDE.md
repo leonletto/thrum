@@ -15,18 +15,17 @@ v0.9.2
 
 ## On Session Start
 
-In Claude Code (and any runtime that loads the thrum plugin), the
-SessionStart hook auto-injects the full `thrum prime` briefing —
-identity, project state, inbox, and any restart snapshot — into your
-context. You do NOT need to run `/thrum:prime` or `thrum prime`
-manually under normal conditions.
+In Claude Code (and any runtime that loads the thrum plugin), the SessionStart
+hook auto-injects the full `thrum prime` briefing — identity, project state,
+inbox, and any restart snapshot — into your context. You do NOT need to run
+`/thrum:prime` or `thrum prime` manually under normal conditions.
 
 Only run the manual fallback when:
 
 - The hook reported a degraded "Auto-injection failed" notice (daemon
   unreachable at session start), OR
-- You see no briefing in your initial context (e.g., the runtime
-  doesn't load thrum's SessionStart hook).
+- You see no briefing in your initial context (e.g., the runtime doesn't load
+  thrum's SessionStart hook).
 
 ```bash
 thrum prime         # only if auto-injection didn't fire
@@ -166,23 +165,24 @@ you can continue other work while they run.
 
 Role-discipline ships as a layered system across three locations:
 
-- **Preambles** at `internal/context/roleconfig/templates/roles/<role>-{strict,autonomous}.md` —
+- **Preambles** at
+  `internal/context/roleconfig/templates/roles/<role>-{strict,autonomous}.md` —
   always-loaded role invariants (coordinator/implementer/researcher × strict/
   autonomous variants). Rendered into `.thrum/role_templates/<role>.md` per
   project by the `configure-roles` skill at agent registration time.
 - **Skills** at `claude-plugin/skills/<role>-<skill>/SKILL.md` —
   description-triggered, situational deepening (3 coordinator + 4 implementer
-  + 3 researcher = 10 skills). Synced to other runtime plugins via
-  `scripts/sync-skills.sh`.
+  - 3 researcher = 10 skills). Synced to other runtime plugins via
+    `scripts/sync-skills.sh`.
 - **Project-local rules** via `bd remember --key <role>-rule-<slug>` — captured
   in-session, persist across restarts. Each preamble loads them with
   `bd memories <role>-rule-` and project-local rules take precedence over
   universal rules on conflict. Module-installed rules reserve the
   `<role>-rule-mod-<module>-<slug>` sub-segment.
 
-When the user gives feedback like "stop doing X" mid-session, the right
-response is: fix the behavior, capture via `bd remember --key
-<role>-rule-<slug>`, acknowledge.
+When the user gives feedback like "stop doing X" mid-session, the right response
+is: fix the behavior, capture via `bd remember --key <role>-rule-<slug>`,
+acknowledge.
 
 ## Explore Existing Code
 

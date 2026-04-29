@@ -16,8 +16,8 @@ team."
 
 ## Interaction Style — MANDATORY
 
-Use **`AskUserQuestion` for ALL interactive prompts.** Do not ask "reply with
-1, 2, or 3" style questions in plain prose. Every choice the user makes goes
+Use **`AskUserQuestion` for ALL interactive prompts.** Do not ask "reply with 1,
+2, or 3" style questions in plain prose. Every choice the user makes goes
 through the structured `AskUserQuestion` UI so answers are unambiguous and
 machine-readable.
 
@@ -40,9 +40,8 @@ Also check:
 - Existing rendered templates in `.thrum/role_templates/`
 - Current saved answers in `.thrum/config.json` under `role_config` (if any)
 
-To inspect a shipped reference template, use the CLI shim — never read
-directly from a filesystem path, since the binary may run from any
-directory:
+To inspect a shipped reference template, use the CLI shim — never read directly
+from a filesystem path, since the binary may run from any directory:
 
 ```bash
 thrum roles templates print coordinator-autonomous
@@ -68,14 +67,14 @@ ls .thrum/role_templates/ 2>/dev/null
 thrum config show 2>/dev/null | jq '.role_config' 2>/dev/null
 ```
 
-If `role_config` exists, prefill each AskUserQuestion with the saved value
-(see "Re-run Behavior" below) so the user only has to confirm rather than
-re-enter every choice.
+If `role_config` exists, prefill each AskUserQuestion with the saved value (see
+"Re-run Behavior" below) so the user only has to confirm rather than re-enter
+every choice.
 
 ## Step 4: Ask Questions
 
-Ask these in sequence using `AskUserQuestion`. Each call should accept
-exactly one answer and surface the available choices structurally.
+Ask these in sequence using `AskUserQuestion`. Each call should accept exactly
+one answer and surface the available choices structurally.
 
 ### 4a: Team Structure
 
@@ -88,26 +87,26 @@ Options based on detected agents, plus common defaults:
 - coordinator, implementer, reviewer, tester
 - Custom set
 
-Available roles (all have strict and autonomous variants except
-`orchestrator`, which is single-variant):
+Available roles (all have strict and autonomous variants except `orchestrator`,
+which is single-variant):
 
-| Role         | Purpose                                             |
-| ------------ | --------------------------------------------------- |
-| coordinator  | Orchestrates team, dispatches tasks, reviews/merges |
-| implementer  | Writes code in assigned worktree                    |
-| planner      | Creates plans, designs architecture, writes specs   |
-| researcher   | Investigates codebases, produces research reports   |
-| reviewer     | Reviews code for quality, security, correctness     |
-| tester       | Writes and runs tests, verifies acceptance criteria |
-| deployer     | Handles builds, releases, deployment operations     |
-| documenter   | Creates and maintains documentation                 |
-| monitor      | Watches system health, reports anomalies            |
+| Role         | Purpose                                              |
+| ------------ | ---------------------------------------------------- |
+| coordinator  | Orchestrates team, dispatches tasks, reviews/merges  |
+| implementer  | Writes code in assigned worktree                     |
+| planner      | Creates plans, designs architecture, writes specs    |
+| researcher   | Investigates codebases, produces research reports    |
+| reviewer     | Reviews code for quality, security, correctness      |
+| tester       | Writes and runs tests, verifies acceptance criteria  |
+| deployer     | Handles builds, releases, deployment operations      |
+| documenter   | Creates and maintains documentation                  |
+| monitor      | Watches system health, reports anomalies             |
 | orchestrator | Drives plan execution across agents (single-variant) |
 
 ### 4b: Autonomy Level Per Role
 
-For each role selected (except `orchestrator`), call `AskUserQuestion`:
-"What autonomy level for the {role} role?"
+For each role selected (except `orchestrator`), call `AskUserQuestion`: "What
+autonomy level for the {role} role?"
 
 - **Strict** — waits for coordinator instruction, limited scope
 - **Autonomous** — can self-assign tasks, broader scope
@@ -137,7 +136,6 @@ For each role:
    ```
 
 2. Customize based on environment detection:
-
    - If beads detected: include `bd` commands in Task Tracking section
    - If MCP servers detected: add to Efficiency section
    - If specific skills detected: reference them
@@ -145,8 +143,8 @@ For each role:
 
 3. Write to `.thrum/role_templates/{role}.md`. Keep per-agent template tokens
    (`{{.AgentName}}`, `{{.Module}}`, `{{.WorktreePath}}`,
-   `{{.CoordinatorName}}`, `{{.RepoRoot}}`) **literal** — they get
-   substituted per-agent at deploy time, not at template-write time.
+   `{{.CoordinatorName}}`, `{{.RepoRoot}}`) **literal** — they get substituted
+   per-agent at deploy time, not at template-write time.
 
 ## Step 5b: Persist Answers
 
@@ -165,18 +163,18 @@ cat <<'EOF' | thrum roles save-config
 EOF
 ```
 
-`thrum roles save-config` writes `role_config` into `.thrum/config.json`,
-fills `schema_version` / `plugin_version` / `configured_at` with sensible
-defaults if absent, and backfills `rendered_hash` per role from the current
-shipped body hash so `thrum prime` shows no drift hints.
+`thrum roles save-config` writes `role_config` into `.thrum/config.json`, fills
+`schema_version` / `plugin_version` / `configured_at` with sensible defaults if
+absent, and backfills `rendered_hash` per role from the current shipped body
+hash so `thrum prime` shows no drift hints.
 
 The save is atomic and preserves every other top-level config key
 (backup/daemon/identity/telegram) byte-identical.
 
 ## Step 6: Offer Deploy
 
-If agents are already registered, ask via `AskUserQuestion` whether to
-deploy now:
+If agents are already registered, ask via `AskUserQuestion` whether to deploy
+now:
 
 ```bash
 thrum roles deploy --dry-run    # Preview
@@ -185,22 +183,22 @@ thrum roles deploy              # Apply to all agents
 
 ## Re-run Behavior
 
-When `role_config` exists in `.thrum/config.json` (the canonical record),
-load the saved answers and use them as the **prefilled values** for each
-`AskUserQuestion` call so the user only has to re-confirm rather than
-re-enter every choice:
+When `role_config` exists in `.thrum/config.json` (the canonical record), load
+the saved answers and use them as the **prefilled values** for each
+`AskUserQuestion` call so the user only has to re-confirm rather than re-enter
+every choice:
 
 1. Show existing roles with their saved autonomy and scope.
 2. Ask via `AskUserQuestion` what to change: add a role, modify an existing
    role, or remove one.
 3. Only regenerate requested templates.
-4. Always re-run `thrum roles save-config` so `rendered_hash` is refreshed
-   and the saved `plugin_version` / `configured_at` reflect the current run.
+4. Always re-run `thrum roles save-config` so `rendered_hash` is refreshed and
+   the saved `plugin_version` / `configured_at` reflect the current run.
 5. Offer deploy for changes.
 
-If the user wants to apply only template-content updates after a plugin
-upgrade (no answer changes), point them at `thrum roles refresh` — it
-regenerates rendered files from saved answers without asking any questions.
+If the user wants to apply only template-content updates after a plugin upgrade
+(no answer changes), point them at `thrum roles refresh` — it regenerates
+rendered files from saved answers without asking any questions.
 
 ## Environment-Specific Customizations
 
