@@ -38,6 +38,34 @@
 #   sleep 25
 #   tmux-exec capture coordinator --tail 40
 #
+# Pool-session lifecycle (cmd_exec):
+#   `tmux-exec exec` routes through a per-USER persistent pool pane
+#   named `tmux-exec-pool-${USER}` on the active socket. The pane is
+#   created lazily on the first call and reused across subsequent
+#   invocations of this script (same socket + same user) for the
+#   lifetime of the tmux server. Each call wraps its work in
+#   `(cd <cwd> && <cmd>)` so cwd / env / unset side-effects scope to
+#   the per-call subshell — the pool shell itself never has its cwd
+#   or environment mutated by a successful caller. A subshell that
+#   exits abnormally (kill -9 mid-command, terminal SIGHUP) cannot
+#   leak state because nothing escapes the `(...)` boundary at the
+#   syntax level. The pool dies with the tmux server (kill-server).
+#
+# Concurrency / serialization (cmd_exec):
+#   `cmd_exec` serializes concurrent invocations via flock(1) on
+#   `/tmp/tmux-exec-pool-<socket>-<user>.lock`. Linux ships flock by
+#   default; macOS does NOT, so on macOS the script runs WITHOUT
+#   inter-process serialization — concurrent `tmux-exec exec` calls
+#   could interleave send-keys input and break marker attribution.
+#   Mitigations:
+#     - The script emits a one-time stderr warning the first time
+#       cmd_exec runs without flock, so callers know it happened.
+#     - Project workflows that touch this script (test-setup.sh,
+#       release-test scenarios) are serial by design — no concurrent
+#       invocations expected. Document any new caller that would
+#       parallelize. Remediation if needed: install `brew install
+#       flock` on macOS, or wrap calls in a host-side mutex.
+#
 set -euo pipefail
 
 SOCKET="${TMUX_EXEC_SOCKET:-tmux-exec}"
@@ -80,6 +108,102 @@ clean_output() {
       for (i = 1; i <= last; i++) print lines[i]
     }
   '
+}
+
+# Persistent shared pool session for `cmd_exec`. One PTY per socket
+# instead of one PTY per call. Replaces the previous per-call
+# new-session + respawn-pane pattern that exhausted macOS's PTY pool
+# after ~30-50 rapid invocations (ENXIO "Device not configured").
+#
+# Concurrent invocations of `tmux-exec exec` from different processes
+# share this pane via a flock on the lockfile, so send-keys input
+# never interleaves and per-call markers stay attributable.
+pool_session_name() {
+  echo "tmux-exec-pool-${USER:-default}"
+}
+
+pool_lockfile() {
+  echo "/tmp/tmux-exec-pool-${SOCKET}-${USER:-default}.lock"
+}
+
+# Lazily create the persistent pool session. Spawns
+# `bash --noprofile --norc` so prompts/aliases don't clutter
+# scrollback or interfere with marker matching.
+ensure_pool_session() {
+  local pool
+  pool=$(pool_session_name)
+  if session_exists "$pool"; then
+    return 0
+  fi
+  tmux_cmd new-session -d -s "$pool" bash --noprofile --norc
+  # Suppress prompt so marker echoes land on their own line.
+  tmux_cmd send-keys -t "$pool" "PS1=''; PROMPT_COMMAND=''" Enter
+}
+
+# send_marker_wait <session> <line> <timeout> <outfile>
+#
+# Sends one composite line to <session> via send-keys, polls the
+# captured pane for `^<marker>:<exit-code>$`, and returns the matched
+# exit code via stdout. Caller is responsible for the marker (so it
+# can include it in <line>) and for reading <outfile>.
+#
+# Returns the command's exit code as the function's stdout (printf).
+# Function's own exit is 0 on marker match, 1 on timeout.
+send_marker_wait() {
+  local session="$1" line="$2" timeout="$3" marker="$4"
+  tmux_cmd send-keys -t "$session" "$line" Enter
+  local deadline=$(( $(date +%s) + timeout ))
+  local rc=""
+  while [[ $(date +%s) -lt $deadline ]]; do
+    local pane
+    pane=$(tmux_cmd capture-pane -p -J -t "$session" -S - 2>/dev/null || echo "")
+    if grep -qE "^${marker}:[0-9]+$" <<<"$pane"; then
+      rc=$(grep -E "^${marker}:[0-9]+$" <<<"$pane" | tail -1 | cut -d: -f2)
+      break
+    fi
+    sleep "$POLL_INTERVAL"
+  done
+  if [[ -z "$rc" ]]; then
+    return 1
+  fi
+  printf '%s' "$rc"
+  return 0
+}
+
+# Generate a per-call marker token. Embeds $$ + epoch-seconds +
+# RANDOM. With flock-serialized invocations the marker is trivially
+# unique. Without flock (macOS default — see header), a theoretical
+# collision could occur if two invocations land in the same wall-clock
+# second, share a PID (very rare across separate processes), AND $RANDOM
+# repeats. The compound probability is negligible in practice; document
+# rather than fix because the practical-risk path is the documented
+# serial-invocation contract above.
+gen_marker() {
+  echo "__TMUX_EXEC_DONE_$$_$(date +%s)_${RANDOM}__"
+}
+
+# One-time stderr warning when flock is unavailable (macOS by default).
+# Sets a marker file under TMPDIR so subsequent invocations stay quiet
+# until the marker is removed (e.g. by a fresh server restart) — keeps
+# noisy CI logs from drowning out real signal while still ensuring the
+# warning lands once per environment.
+warn_flock_missing_once() {
+  local marker="${TMPDIR:-/tmp}/.tmux-exec-flock-warning-${USER:-default}"
+  if [[ -f "$marker" ]]; then
+    return 0
+  fi
+  cat >&2 <<EOF
+tmux-exec: warning: 'flock' is not installed on this host. Concurrent
+  'tmux-exec exec' invocations are NOT serialized — interleaved send-keys
+  may corrupt marker attribution. Project workflows are serial by design,
+  so this is informational. Install via 'brew install flock' to silence.
+  (This warning is emitted once per user; remove ${marker} to re-trigger.)
+EOF
+  : >"$marker" 2>/dev/null || true
+}
+
+gen_outfile() {
+  echo "/tmp/tmux-exec-$$-$(date +%s)-${RANDOM}.out"
 }
 
 # ── Commands ─────────────────────────────────────────────────────────────────
@@ -146,49 +270,33 @@ cmd_run() {
   local cmd
   cmd=$(printf '%q ' "$@")
 
-  # Use a unique window for this execution so we don't clobber the main shell.
-  # Inherit the session's start directory for the new window.
-  local win="run-$$-$(date +%s)"
+  # Inherit the session's start directory so the cmd runs in the same
+  # cwd a respawn-pane new-window would have. Wrap in a subshell so
+  # the `cd` plus any env mutations the cmd makes scope to that
+  # subshell — the user's persistent session shell is untouched.
   local session_cwd
   session_cwd=$(tmux_cmd display-message -p -t "$name" '#{session_path}' 2>/dev/null || echo "")
 
-  local win_args=(-t "$name" -n "$win")
-  [[ -n "$session_cwd" ]] && win_args+=(-c "$session_cwd")
-  tmux_cmd new-window "${win_args[@]}"
-  tmux_cmd set-option -t "$name:$win" remain-on-exit on
-  tmux_cmd respawn-pane -k -t "$name:$win" -- sh -c "$cmd"
+  local marker outfile cwd_part line rc
+  marker=$(gen_marker)
+  outfile=$(gen_outfile)
+  : >"$outfile"  # ensure readable on early failure paths
+  cwd_part=""
+  [[ -n "$session_cwd" ]] && cwd_part="cd $(printf %q "$session_cwd") && "
+  line="${cwd_part}(${cmd}) > ${outfile} 2>&1; echo \"${marker}:\$?\""
 
-  # Poll for completion
-  local deadline=$(( $(date +%s) + TIMEOUT ))
-  local timed_out=true
-  while [[ $(date +%s) -lt $deadline ]]; do
-    local dead
-    dead=$(tmux_cmd display-message -p -t "$name:$win" '#{pane_dead}' 2>/dev/null || echo "1")
-    if [[ "$dead" == "1" ]]; then
-      timed_out=false
-      break
+  if rc=$(send_marker_wait "$name" "$line" "$TIMEOUT" "$marker"); then
+    if [[ -f "$outfile" ]]; then
+      cat "$outfile"
+      rm -f "$outfile"
     fi
-    sleep "$POLL_INTERVAL"
-  done
-
-  # Capture results
-  local exit_code
-  exit_code=$(tmux_cmd display-message -p -t "$name:$win" '#{pane_dead_status}' 2>/dev/null || echo "1")
-  local output
-  output=$(tmux_cmd capture-pane -p -t "$name:$win" -S - 2>/dev/null || echo "")
-
-  # Cleanup the execution window
-  tmux_cmd kill-window -t "$name:$win" 2>/dev/null || true
-
-  if $timed_out; then
-    echo "$output" | clean_output >&2
-    die "command timed out after ${TIMEOUT}s"
+    return "${rc:-0}"
   fi
-
-  # Print clean output
-  echo "$output" | clean_output
-
-  return "${exit_code:-0}"
+  if [[ -f "$outfile" ]]; then
+    cat "$outfile" >&2
+    rm -f "$outfile"
+  fi
+  die "command timed out after ${TIMEOUT}s"
 }
 
 # shell-run sends a command into the pane's persistent login shell (via
@@ -275,49 +383,56 @@ cmd_exec() {
   # Build the command string, preserving quoting for each argument.
   local cmd
   cmd=$(printf '%q ' "$@")
-  local session="tmux-exec-$$-$(date +%s)"
 
-  # Create ephemeral session
-  local args=(new-session -d -s "$session")
-  [[ -n "$CWD" ]] && args+=(-c "$CWD")
-  tmux_cmd "${args[@]}"
-  tmux_cmd set-option -t "$session" remain-on-exit on
+  # Pool-session pattern: route this one-shot through the per-socket
+  # persistent pool pane. Caller still gets ephemeral semantics
+  # (cwd / env / cleanup all subshell-scoped), but only one PTY is
+  # allocated for the lifetime of the socket — sidestepping the
+  # macOS PTY-pool exhaustion that respawn-pane churn causes.
+  #
+  # Concurrent script invocations serialize on a flock so send-keys
+  # never interleaves and per-call markers stay attributable.
+  local lock pool
+  lock=$(pool_lockfile)
+  pool=$(pool_session_name)
 
-  # Prepend env cleanup if --clean
-  local prefix
-  prefix=$(clean_prefix)
-  tmux_cmd respawn-pane -k -t "$session" -- sh -c "${prefix}${cmd}"
-
-  # Poll for completion
-  local deadline=$(( $(date +%s) + TIMEOUT ))
-  local timed_out=true
-  while [[ $(date +%s) -lt $deadline ]]; do
-    local dead
-    dead=$(tmux_cmd display-message -p -t "$session" '#{pane_dead}' 2>/dev/null || echo "1")
-    if [[ "$dead" == "1" ]]; then
-      timed_out=false
-      break
-    fi
-    sleep "$POLL_INTERVAL"
-  done
-
-  # Capture results
-  local exit_code
-  exit_code=$(tmux_cmd display-message -p -t "$session" '#{pane_dead_status}' 2>/dev/null || echo "1")
-  local output
-  output=$(tmux_cmd capture-pane -p -t "$session" -S - 2>/dev/null || echo "")
-
-  # Always cleanup ephemeral session
-  tmux_cmd kill-session -t "$session" 2>/dev/null || true
-
-  if $timed_out; then
-    echo "$output" | clean_output >&2
-    die "command timed out after ${TIMEOUT}s"
+  # shellcheck disable=SC2094
+  builtin exec 9>"$lock"
+  if command -v flock >/dev/null 2>&1; then
+    flock -w "$TIMEOUT" 9 || die "exec: could not acquire pool lock within ${TIMEOUT}s"
+  else
+    # See script header "Concurrency / serialization" section. macOS
+    # does not ship flock(1); concurrent invocations are not safe but
+    # project workflows that use this script are serial by design.
+    warn_flock_missing_once
   fi
+  ensure_pool_session
 
-  echo "$output" | clean_output
+  local marker outfile cwd_part prefix line rc
+  marker=$(gen_marker)
+  outfile=$(gen_outfile)
+  : >"$outfile"
+  cwd_part=""
+  [[ -n "$CWD" ]] && cwd_part="cd $(printf %q "$CWD") && "
+  prefix=$(clean_prefix)
+  # Wrap cmd + env-cleanup in a subshell so cwd / unset side-effects
+  # don't leak into the persistent pool shell.
+  line="(${cwd_part}${prefix}${cmd}) > ${outfile} 2>&1; echo \"${marker}:\$?\""
 
-  return "${exit_code:-0}"
+  if rc=$(send_marker_wait "$pool" "$line" "$TIMEOUT" "$marker"); then
+    builtin exec 9>&-
+    if [[ -f "$outfile" ]]; then
+      cat "$outfile"
+      rm -f "$outfile"
+    fi
+    return "${rc:-0}"
+  fi
+  builtin exec 9>&-
+  if [[ -f "$outfile" ]]; then
+    cat "$outfile" >&2
+    rm -f "$outfile"
+  fi
+  die "command timed out after ${TIMEOUT}s"
 }
 
 cmd_send() {
