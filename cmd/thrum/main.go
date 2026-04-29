@@ -3090,8 +3090,13 @@ func sessionStartRunE(cmd *cobra.Command, args []string) error {
 		AgentID: whoami.AgentID,
 	}
 
-	// Auto-set worktree ref so heartbeat can extract git context
-	if worktreeRoot := cli.GitTopLevel("."); worktreeRoot != "" {
+	// Auto-set worktree ref so heartbeat can extract git context.
+	// Use flagRepo so the resolved worktree matches the caller's --repo
+	// (or THRUM_HOME) — not the test-runner's CWD. With "." the call
+	// would land on the process's actual working directory, which in
+	// fixture tests is the parent thrum source tree and pollutes
+	// session_refs with cross-agent collisions at the same git root.
+	if worktreeRoot := cli.GitTopLevel(flagRepo); worktreeRoot != "" {
 		opts.Refs = append(opts.Refs, types.Ref{Type: "worktree", Value: worktreeRoot})
 	}
 
