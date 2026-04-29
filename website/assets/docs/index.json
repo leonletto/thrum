@@ -672,20 +672,6 @@
     "lastUpdated": "2026-04-19"
   },
   {
-    "path": "whats-new.html",
-    "title": "What's New",
-    "description": "Release-by-release highlights, breaking changes, and migration notes for recent Thrum versions.",
-    "category": "overview",
-    "order": 2,
-    "tags": [
-      "release-notes",
-      "changelog",
-      "migration",
-      "version"
-    ],
-    "lastUpdated": "2026-04-29"
-  },
-  {
     "path": "quickstart.html",
     "title": "Quickstart Guide",
     "description": "Get up and running with Thrum in 5 minutes - initialization, daemon setup, agent registration, and first message",
