@@ -255,6 +255,7 @@ var thrumExcludeEntries = []string{
 	".thrum/",
 	".thrum.*.json",
 	"scripts/thrum-startup.sh",
+	"scripts/thrum-check-inbox.sh",
 }
 
 // updateGitignore adds Thrum-related entries to .gitignore.
