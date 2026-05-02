@@ -2620,11 +2620,14 @@ Examples:
 }
 
 // inferWorktreeBasePath returns the conventional worktree base path for a repo.
-// Checks ~/.workspaces/<project>; returns it whether or not it exists yet.
+// Returns ~/.thrum/worktrees/<project>; returns it whether or not it exists yet.
 func inferWorktreeBasePath(repoPath string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
 	projectName := filepath.Base(repoPath)
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".workspaces", projectName)
+	return filepath.Join(home, ".thrum", "worktrees", projectName)
 }
 
 func worktreeCmd() *cobra.Command {

@@ -892,3 +892,37 @@ func TestInit_DoesNotCreateSupervisorIdentity(t *testing.T) {
 		}
 	}
 }
+
+func TestInit_GitignoreContainsCheckInboxScript(t *testing.T) {
+	tmp := t.TempDir()
+	initGitRepo(t, tmp)
+
+	if err := Init(InitOptions{RepoPath: tmp}); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmp, ".gitignore")) //nolint:gosec // G304 - test fixture path
+	if err != nil {
+		t.Fatalf("read .gitignore: %v", err)
+	}
+	if !strings.Contains(string(data), "scripts/thrum-check-inbox.sh") {
+		t.Errorf("expected scripts/thrum-check-inbox.sh in .gitignore, got:\n%s", data)
+	}
+}
+
+func TestInit_StealthExcludeContainsCheckInboxScript(t *testing.T) {
+	tmp := t.TempDir()
+	initGitRepo(t, tmp)
+
+	if err := Init(InitOptions{RepoPath: tmp, Stealth: true}); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmp, ".git", "info", "exclude")) //nolint:gosec // G304 - test fixture path
+	if err != nil {
+		t.Fatalf("read .git/info/exclude: %v", err)
+	}
+	if !strings.Contains(string(data), "scripts/thrum-check-inbox.sh") {
+		t.Errorf("expected scripts/thrum-check-inbox.sh in .git/info/exclude, got:\n%s", data)
+	}
+}
