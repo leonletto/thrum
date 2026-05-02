@@ -93,31 +93,3 @@ func (p *ScannerPrompter) Confirm(_ PromptID, label string, defaultYes bool) (bo
 	return line == "y" || line == "yes", nil
 }
 
-// FakePrompter is the test impl. Canned responses are keyed by PromptID;
-// missing entries fall back to the default passed at call time.
-type FakePrompter struct {
-	Strings  map[PromptID]string
-	Choices  map[PromptID]int
-	Confirms map[PromptID]bool
-}
-
-func (p *FakePrompter) String(id PromptID, _, defaultValue string) (string, error) {
-	if v, ok := p.Strings[id]; ok {
-		return v, nil
-	}
-	return defaultValue, nil
-}
-
-func (p *FakePrompter) Choice(id PromptID, _ string, _ []string, defaultIdx int) (int, error) {
-	if v, ok := p.Choices[id]; ok {
-		return v, nil
-	}
-	return defaultIdx, nil
-}
-
-func (p *FakePrompter) Confirm(id PromptID, _ string, defaultYes bool) (bool, error) {
-	if v, ok := p.Confirms[id]; ok {
-		return v, nil
-	}
-	return defaultYes, nil
-}

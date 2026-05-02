@@ -3,17 +3,17 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"strings"
 )
 
 // tmuxGate verifies tmux is on PATH. Returns an error message with
 // install suggestions when missing. Called as Step 0 of the wizard
-// before any filesystem changes.
-func tmuxGate() error {
+// before any filesystem changes. Successful detection writes a
+// confirmation line to out (typically os.Stderr).
+func tmuxGate(out io.Writer) error {
 	if path, err := exec.LookPath("tmux"); err == nil {
-		_, _ = fmt.Fprintf(stderr(), "  tmux: found at %s\n", path)
+		_, _ = fmt.Fprintf(out, "  tmux: found at %s\n", path)
 		return nil
 	}
 	var preferred string
@@ -41,9 +41,3 @@ func has(cmd string) bool {
 	_, err := exec.LookPath(cmd)
 	return err == nil
 }
-
-// stderrWriter is a package-level indirection so tests can swap output.
-// Default uses os.Stderr.
-var stderrWriter io.Writer = os.Stderr
-
-func stderr() io.Writer { return stderrWriter }

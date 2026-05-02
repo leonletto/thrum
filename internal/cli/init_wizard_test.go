@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"bytes"
+	"io"
 	"os/exec"
 	"strings"
 	"testing"
@@ -10,7 +12,7 @@ func TestTmuxGate_PassesWhenTmuxFound(t *testing.T) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux not installed in test env")
 	}
-	if err := tmuxGate(); err != nil {
+	if err := tmuxGate(io.Discard); err != nil {
 		t.Errorf("tmuxGate() = %v, want nil", err)
 	}
 }
@@ -18,7 +20,8 @@ func TestTmuxGate_PassesWhenTmuxFound(t *testing.T) {
 func TestTmuxGate_ReturnsInstallMessageWhenMissing(t *testing.T) {
 	// Stub PATH so tmux is not findable.
 	t.Setenv("PATH", "/nonexistent")
-	err := tmuxGate()
+	var buf bytes.Buffer
+	err := tmuxGate(&buf)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
