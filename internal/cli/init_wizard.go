@@ -13,7 +13,7 @@ import (
 // before any filesystem changes.
 func tmuxGate() error {
 	if path, err := exec.LookPath("tmux"); err == nil {
-		fmt.Fprintf(stderr(), "  tmux: found at %s\n", path)
+		_, _ = fmt.Fprintf(stderr(), "  tmux: found at %s\n", path)
 		return nil
 	}
 	var preferred string

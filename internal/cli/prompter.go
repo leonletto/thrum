@@ -40,7 +40,7 @@ func NewScannerPrompter(in io.Reader, out io.Writer) *ScannerPrompter {
 }
 
 func (p *ScannerPrompter) String(_ PromptID, label, defaultValue string) (string, error) {
-	fmt.Fprintf(p.out, "  %s [%s]: ", label, defaultValue)
+	_, _ = fmt.Fprintf(p.out, "  %s [%s]: ", label, defaultValue)
 	if !p.scanner.Scan() {
 		if err := p.scanner.Err(); err != nil {
 			return "", err
@@ -55,11 +55,11 @@ func (p *ScannerPrompter) String(_ PromptID, label, defaultValue string) (string
 }
 
 func (p *ScannerPrompter) Choice(_ PromptID, label string, options []string, defaultIdx int) (int, error) {
-	fmt.Fprintf(p.out, "  %s\n", label)
+	_, _ = fmt.Fprintf(p.out, "  %s\n", label)
 	for i, opt := range options {
-		fmt.Fprintf(p.out, "    [%d] %s\n", i+1, opt)
+		_, _ = fmt.Fprintf(p.out, "    [%d] %s\n", i+1, opt)
 	}
-	fmt.Fprintf(p.out, "  Choose [%d]: ", defaultIdx+1)
+	_, _ = fmt.Fprintf(p.out, "  Choose [%d]: ", defaultIdx+1)
 	if !p.scanner.Scan() {
 		if err := p.scanner.Err(); err != nil {
 			return 0, err
@@ -82,7 +82,7 @@ func (p *ScannerPrompter) Confirm(_ PromptID, label string, defaultYes bool) (bo
 	if defaultYes {
 		suffix = "[Y/n]"
 	}
-	fmt.Fprintf(p.out, "  %s %s: ", label, suffix)
+	_, _ = fmt.Fprintf(p.out, "  %s %s: ", label, suffix)
 	if !p.scanner.Scan() {
 		return defaultYes, p.scanner.Err()
 	}
