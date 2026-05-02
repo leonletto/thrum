@@ -1,6 +1,7 @@
 package roleconfig
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -51,13 +52,27 @@ func TestParseShippedTemplate_BodyChangeChangesHash(t *testing.T) {
 	}
 }
 
-func TestListShippedTemplates_Returns19Files(t *testing.T) {
+func TestListShippedTemplates_Returns20Files(t *testing.T) {
 	list, err := ListShippedTemplates()
 	if err != nil {
 		t.Fatalf("ListShippedTemplates: %v", err)
 	}
-	if len(list) != 19 {
-		t.Errorf("expected 19 templates, got %d (%v)", len(list), list)
+	if len(list) != 20 {
+		t.Errorf("expected 20 templates, got %d (%v)", len(list), list)
+	}
+}
+
+func TestReadShippedTemplate_ImplementerWorktreeWriteOnly(t *testing.T) {
+	data, err := ReadShippedTemplate("implementer", "worktree-write-only")
+	if err != nil {
+		t.Fatalf("ReadShippedTemplate: %v", err)
+	}
+	body := string(data)
+	if !strings.Contains(body, "Filesystem Boundary") {
+		t.Error("template missing Filesystem Boundary section")
+	}
+	if !strings.Contains(body, "$THRUM_HOME") {
+		t.Error("template should reference $THRUM_HOME")
 	}
 }
 
