@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -156,9 +155,9 @@ func setupGitRepoNoRemote(t *testing.T, branch string) string {
 // origin/HEAD nor local HEAD resolves to a branch via symbolic-ref --short.
 func setupBareRepoNoCommits(t *testing.T) string {
 	t.Helper()
+	ctx := context.Background()
 	repo := t.TempDir()
-	cmd := exec.Command("git", "init", repo)
-	if err := cmd.Run(); err != nil {
+	if _, err := safecmd.Git(ctx, "", "init", repo); err != nil {
 		t.Fatalf("init: %v", err)
 	}
 	return repo
