@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -65,5 +66,15 @@ func TestCronInstallInboxPoll_EmitsInstruction(t *testing.T) {
 		if strings.Contains(strings.ToLower(out), forbidden) {
 			t.Errorf("unexpected %q in output:\n%s", forbidden, out)
 		}
+	}
+}
+
+func TestInferWorktreeBasePath_DefaultsToThrumWorktrees(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	got := inferWorktreeBasePath("/some/path/falcon-backend")
+	want := filepath.Join(home, ".thrum", "worktrees", "falcon-backend")
+	if got != want {
+		t.Errorf("inferWorktreeBasePath = %q, want %q", got, want)
 	}
 }
