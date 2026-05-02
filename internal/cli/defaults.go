@@ -96,6 +96,30 @@ func GetRepoID(repoPath string) string {
 	return repoID
 }
 
+// DefaultModule returns the default module name for a repo, used as the
+// default value for the wizard's module prompt. Resolution order:
+//  1. git symbolic-ref refs/remotes/origin/HEAD (e.g. "main", "master")
+//  2. git symbolic-ref HEAD (current local branch)
+//  3. "main" (literal fallback for fresh repos with no commits)
+func DefaultModule(repoPath string) string {
+	ctx := context.Background()
+	if out, err := safecmd.Git(ctx, repoPath, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"); err == nil {
+		if name := strings.TrimSpace(string(out)); name != "" {
+			// Output is like "origin/main"; strip the "origin/" prefix.
+			if _, after, ok := strings.Cut(name, "/"); ok {
+				return after
+			}
+			return name
+		}
+	}
+	if out, err := safecmd.Git(ctx, repoPath, "symbolic-ref", "--short", "HEAD"); err == nil {
+		if name := strings.TrimSpace(string(out)); name != "" {
+			return name
+		}
+	}
+	return "main"
+}
+
 // GetWorktreeName returns the basename of the git worktree root.
 // Falls back to the basename of repoPath.
 func GetWorktreeName(repoPath string) string {
