@@ -40,8 +40,8 @@ make deploy-remote REMOTE=leondev
 Prerequisites on the remote: `thrum` on `PATH` (a symlink from
 `~/.local/bin/thrum` to a `PATH`-visible directory like `/opt/homebrew/bin`
 suffices), plus `tmux`, `jq`, `git`. `claude` is **not** required — the remote
-scenarios exercise CLI + daemon RPC only, sidestepping the
-tmux-pane-with-claude bootstrap that the local `run.sh` needs.
+scenarios exercise CLI + daemon RPC only, sidestepping the tmux-pane-with-claude
+bootstrap that the local `run.sh` needs.
 
 Remote scenarios live under `remote-scenarios/`. Each scenario manages its own
 remote tempdir under `/tmp/thrum-remote-<name>-<runid>/` and tears itself down

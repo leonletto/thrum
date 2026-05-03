@@ -331,9 +331,21 @@ func readAgentPID(path string) int {
 // persists agent_pid=0 instead of the caller's (short-lived subshell) PID.
 // Required for the tmux-create inline invocation — without it, HandleLaunch
 // trips G4 writer-liveness on a dead subshell PID (thrum-x6e8.6).
-func BuildQuickstartCmd(name, role, module, intent, runtime string, noAgentPID bool) string {
+//
+// repoPath, when non-empty, prepends `--repo <path>` so the inline quickstart
+// resolves identity-write paths against the explicitly-supplied worktree
+// instead of the daemon-inherited THRUM_HOME. Without this, panes spawned by
+// the daemon inherit THRUM_HOME from the user's shell at daemon-start, and
+// EffectiveRepoPath in the quickstart cobra handler hijacks flagRepo to
+// THRUM_HOME — silently writing the new agent's identity into THRUM_HOME's
+// .thrum/identities/ instead of the calling worktree (thrum-tc4w).
+func BuildQuickstartCmd(repoPath, name, role, module, intent, runtime string, noAgentPID bool) string {
 	var parts []string
-	parts = append(parts, "thrum", "quickstart")
+	parts = append(parts, "thrum")
+	if repoPath != "" {
+		parts = append(parts, "--repo", shellQuote(repoPath))
+	}
+	parts = append(parts, "quickstart")
 	parts = append(parts, "--name", shellQuote(name))
 	parts = append(parts, "--role", shellQuote(role))
 	parts = append(parts, "--module", shellQuote(module))

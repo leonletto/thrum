@@ -1555,8 +1555,13 @@ func (h *TmuxHandler) runInlineQuickstart(ctx context.Context, req TmuxCreateReq
 // reason to emit an inline quickstart without the flag. If a future
 // caller needs the flag-less shape, route through a separate entry
 // point rather than parameterizing this one.
+//
+// req.Cwd is forwarded as --repo so the quickstart cobra handler resolves
+// flagRepo to the daemon-known target worktree, not whatever THRUM_HOME
+// the pane's shell inherited from the daemon's environ (thrum-tc4w).
 func buildInlineQuickstartCmd(req TmuxCreateRequest) string {
 	return worktree.BuildQuickstartCmd(
+		req.Cwd,
 		req.AgentName, req.Role, req.Module, req.Intent, req.Runtime,
 		true, // --no-agent-pid: thrum-x6e8.6
 	)

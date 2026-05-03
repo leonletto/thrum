@@ -16,8 +16,8 @@ func EnsureWorktreeRedirects(worktreePath, mainRepo string) error {
 }
 
 // BuildQuickstartCmd delegates to worktree.BuildQuickstartCmd.
-func BuildQuickstartCmd(name, role, module, intent, runtime string, noAgentPID bool) string {
-	return worktree.BuildQuickstartCmd(name, role, module, intent, runtime, noAgentPID)
+func BuildQuickstartCmd(repoPath, name, role, module, intent, runtime string, noAgentPID bool) string {
+	return worktree.BuildQuickstartCmd(repoPath, name, role, module, intent, runtime, noAgentPID)
 }
 
 // PrintRedirectConfirmations writes one checkmark line per redirect

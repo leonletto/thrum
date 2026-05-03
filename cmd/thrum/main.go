@@ -126,7 +126,16 @@ Environment variables:
 		// accumulate into the hint buffer instead of corrupting stdout.
 		installSlogBridge(flagJSON, os.Stderr)
 
-		if !cmd.Flags().Changed("repo") {
+		// THRUM_HOME pins runtime commands to the agent's bound checkout
+		// even when cwd moves. For commands that REGISTER a new agent
+		// (init, quickstart) the user's actual cwd is the explicit
+		// "this is where I want the new agent" signal — applying
+		// EffectiveRepoPath here silently rewrites the identity-file
+		// destination to THRUM_HOME, producing cross-worktree identity
+		// files (thrum-tc4w). Skip the substitution for those commands;
+		// downstream still uses cwd-rooted FindThrumRoot below.
+		registers := cmd.Name() == "init" || cmd.Name() == "quickstart"
+		if !registers && !cmd.Flags().Changed("repo") {
 			flagRepo = paths.EffectiveRepoPath(flagRepo)
 		}
 
