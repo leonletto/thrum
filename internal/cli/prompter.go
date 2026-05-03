@@ -92,4 +92,3 @@ func (p *ScannerPrompter) Confirm(_ PromptID, label string, defaultYes bool) (bo
 	}
 	return line == "y" || line == "yes", nil
 }
-

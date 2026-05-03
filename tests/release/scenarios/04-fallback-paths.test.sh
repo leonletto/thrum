@@ -50,7 +50,7 @@ for sub in 4b 4c; do
     || emit_fail "$SID" "${sub}-git-init" "git init in $BASE/fallback-${sub}" "(failed)" "scenarios/${SID}.test.sh:$LINENO"
 
   "$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$BASE/fallback-${sub}" --clean -- \
-    thrum init --runtime claude >/dev/null \
+    thrum init --non-interactive --runtime claude >/dev/null \
     || emit_fail "$SID" "${sub}-init" "thrum init in $BASE/fallback-${sub}" "(failed)" "scenarios/${SID}.test.sh:$LINENO"
 done
 

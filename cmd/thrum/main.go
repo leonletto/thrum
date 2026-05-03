@@ -322,6 +322,49 @@ Examples:
 					}
 				}
 
+				// Dispatch to interactive wizard on a TTY unless the user
+				// asked for legacy silent mode via --non-interactive. The
+				// wizard runs Init, identity registration, worktrees-root,
+				// role-template, and daemon-start in one guided flow, so it
+				// returns directly on success — the legacy post-init steps
+				// (runtime selection, project_state, runtime configs) are
+				// owned by the silent path. dry-run preserves the silent
+				// preview path because the wizard always materializes state.
+				nonInteractive, _ := cmd.Flags().GetBool("non-interactive")
+				thrumDirExists := dirExists(filepath.Join(flagRepo, ".thrum"))
+				if !dryRun && shouldUseWizard(isInteractive(), nonInteractive, thrumDirExists, force) {
+					name, _ := cmd.Flags().GetString("name")
+					role, _ := cmd.Flags().GetString("role")
+					module, _ := cmd.Flags().GetString("module")
+					worktreesRoot, _ := cmd.Flags().GetString("worktrees-root")
+					rolesChoice, _ := cmd.Flags().GetString("roles")
+					noDaemon, _ := cmd.Flags().GetBool("no-daemon")
+
+					// Resolve to absolute so the wizard's later
+					// `thrum --repo <path> quickstart` subprocess passes
+					// an absolute path (the cobra handler's
+					// worktree.NormalizeWorktreePath rejects relative
+					// values like "." that the init PreRunE leaves alone).
+					wizardRepo, absErr := filepath.Abs(flagRepo)
+					if absErr != nil {
+						wizardRepo = flagRepo
+					}
+
+					return cli.RunWizard(&cli.WizardConfig{
+						RepoPath:      wizardRepo,
+						Prompter:      cli.NewScannerPrompter(os.Stdin, os.Stderr),
+						NameFlag:      name,
+						RoleFlag:      role,
+						ModuleFlag:    module,
+						WorktreesRoot: worktreesRoot,
+						RolesChoice:   rolesChoice,
+						NoDaemon:      noDaemon,
+						Force:         force,
+						Stealth:       stealth,
+						Runtime:       runtimeFlag,
+					})
+				}
+
 				opts := cli.InitOptions{
 					RepoPath: flagRepo,
 					Force:    force,
@@ -550,6 +593,18 @@ Examples:
 	cmd.Flags().String("runtime", "", "Generate runtime-specific configs (claude|codex|cursor|gemini|opencode|cli-only|all)")
 	cmd.Flags().Bool("skills", false, "Install thrum skill only (no MCP config, no startup script)")
 
+	// Wizard-related flags. The wizard fires on a TTY for fresh repos (or
+	// with --force) unless suppressed by --non-interactive; the per-prompt
+	// flags below pre-fill answers so the wizard can be partially or fully
+	// scripted. Spec: dev-docs/specs/2026-05-02-thrum-init-wizard-design.md.
+	cmd.Flags().Bool("non-interactive", false, "Force silent (legacy) mode even on a TTY")
+	cmd.Flags().String("name", "", "Pre-fill identity name (skips wizard prompt)")
+	cmd.Flags().String("role", "", "Pre-fill role")
+	cmd.Flags().String("module", "", "Pre-fill module")
+	cmd.Flags().String("worktrees-root", "", "Pre-fill worktrees root path")
+	cmd.Flags().String("roles", "", "Pre-fill role-template choice (enhanced|default|skip)")
+	cmd.Flags().Bool("no-daemon", false, "Skip auto-starting daemon at end of wizard")
+
 	return cmd
 }
 
@@ -640,6 +695,24 @@ func runSkillsInstall(repoPath, runtimeFlag string, force, dryRun bool) error {
 // isInteractive returns true if stdin is a terminal (not piped/redirected).
 func isInteractive() bool {
 	return term.IsTerminal(int(os.Stdin.Fd())) // #nosec G115 -- file descriptors are small non-negative integers; uintptr->int conversion cannot overflow
+}
+
+// shouldUseWizard returns true when `thrum init` should dispatch to the
+// interactive wizard rather than the legacy silent init flow. The wizard
+// fires on a TTY (unless explicitly suppressed by --non-interactive) when
+// either the project has no .thrum/ yet, or the user passed --force to
+// re-initialize. Spec: dev-docs/specs/2026-05-02-thrum-init-wizard-design.md.
+func shouldUseWizard(isTTY, nonInteractive, thrumDirExists, force bool) bool {
+	if !isTTY || nonInteractive {
+		return false
+	}
+	return !thrumDirExists || force
+}
+
+// dirExists reports whether path is an existing directory.
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
 
 func singleAgentModeCmd() *cobra.Command {

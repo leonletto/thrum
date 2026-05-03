@@ -8,7 +8,7 @@ HELPERS_DIR="$SCRIPT_DIR/helpers"
 SCENARIOS_DIR="$SCRIPT_DIR/scenarios"
 
 # Preflight
-for tool in thrum tmux jq git claude; do
+for tool in thrum tmux jq git claude expect; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "ERROR: required tool '$tool' not found in PATH" >&2
     exit 2

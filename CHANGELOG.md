@@ -6,6 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`thrum init` wizard** — `thrum init` on a TTY now launches an opinionated
+  interactive setup walking new users through identity, worktrees root, role
+  templates, and daemon start in one flow. The legacy silent path is preserved
+  when stdin is not a TTY or `--non-interactive` is set, so existing CI scripts
+  continue to work unchanged. Pre-fill any prompt with `--name`, `--role`,
+  `--module`, `--worktrees-root`, `--roles=enhanced|default|skip`, and
+  `--no-daemon` to script the wizard end-to-end.
+- **New role template `implementer-worktree-write-only.md`** for the wizard's
+  "enhanced" choice. Pins implementers to writes inside their own worktree and
+  forbids drive-by edits to the main repo.
+
+### Changed
+
+- **Default worktree base path migrated from `~/.workspaces/<project>` to
+  `~/.thrum/worktrees/<project>`.** Users with explicit `Worktrees.BasePath` in
+  `.thrum/config.json` are unaffected. Users who relied on the implicit fallback
+  can keep existing worktrees in place by setting the override before the next
+  worktree create:
+
+  ```bash
+  thrum config set worktrees.base_path "$HOME/.workspaces/<project>"
+  ```
+
+  The wizard's worktrees-root prompt also accepts the legacy path; pressing
+  enter through the prompt with a previously-configured value preserves it.
+
+### Fixed
+
+- **`scripts/thrum-check-inbox.sh` is now correctly added to `.gitignore` (and
+  `.git/info/exclude` in stealth mode) alongside `thrum-startup.sh`.**
+  Previously only `thrum-startup.sh` was excluded, so the inbox-check helper
+  could leak into tracked changes on stealth-mode repos.
+
 ## [0.9.2] - 2026-04-29
 
 ### Fixed

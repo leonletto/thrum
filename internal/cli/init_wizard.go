@@ -37,10 +37,10 @@ type WizardConfig struct {
 	// "file did not exist before Init"; in that case rollback removes the
 	// file rather than restoring nil bytes. Populated by snapshotGitFiles
 	// before Init runs.
-	gitignoreSnapshot    []byte
-	gitignoreExisted     bool
-	gitExcludeSnapshot   []byte
-	gitExcludeExisted    bool
+	gitignoreSnapshot  []byte
+	gitignoreExisted   bool
+	gitExcludeSnapshot []byte
+	gitExcludeExisted  bool
 }
 
 // WizardIdentity is the result of Step 3 (identity prompts).
@@ -222,12 +222,12 @@ func loadReInitDefaults(cfg *WizardConfig) {
 // created rather than writing back nil bytes.
 func snapshotGitFiles(cfg *WizardConfig) {
 	gi := filepath.Join(cfg.RepoPath, ".gitignore")
-	if data, err := os.ReadFile(gi); err == nil {
+	if data, err := os.ReadFile(gi); err == nil { // #nosec G304 -- gi is repoPath/.gitignore, controlled by wizard caller
 		cfg.gitignoreSnapshot = data
 		cfg.gitignoreExisted = true
 	}
 	ex := filepath.Join(cfg.RepoPath, ".git", "info", "exclude")
-	if data, err := os.ReadFile(ex); err == nil {
+	if data, err := os.ReadFile(ex); err == nil { // #nosec G304 -- ex is repoPath/.git/info/exclude, controlled by wizard caller
 		cfg.gitExcludeSnapshot = data
 		cfg.gitExcludeExisted = true
 	}
@@ -321,28 +321,14 @@ func RunWizard(cfg *WizardConfig) error {
 		return err
 	}
 
+	// Step 3: collect identity (defer Quickstart until the daemon is up).
 	id, err := stepIdentity(cfg)
 	if err != nil {
 		return rollback(cfg, err)
 	}
 
-	socketPath := DefaultSocketPath(cfg.RepoPath)
-	qsClient, err := NewClient(socketPath)
-	if err != nil {
-		return rollback(cfg, err)
-	}
-	defer qsClient.Close()
-	if _, err := Quickstart(qsClient, QuickstartOptions{
-		Name:     id.Name,
-		Role:     id.Role,
-		Module:   id.Module,
-		RepoPath: cfg.RepoPath,
-		Runtime:  cfg.Runtime,
-		Force:    cfg.Force,
-	}); err != nil {
-		return rollback(cfg, err)
-	}
-
+	// Step 4 + 5: persist worktrees-root and write role templates. Both are
+	// pure filesystem writes and do not require a running daemon.
 	wtRoot, err := stepWorktreesRoot(cfg)
 	if err != nil {
 		return rollback(cfg, err)
@@ -355,13 +341,71 @@ func RunWizard(cfg *WizardConfig) error {
 		return rollback(cfg, err)
 	}
 
+	// Step 6: bring the daemon up so Step 6b's Quickstart RPC can land.
+	// --no-daemon short-circuits both Step 6 and Step 6b: the wizard
+	// returns a fully-scaffolded .thrum/ but no registered identity and
+	// no running daemon. Operators in that mode register an agent and
+	// start the daemon manually afterwards. This shape is also what the
+	// E2E scenarios use to keep test fixtures clean.
+	if cfg.NoDaemon {
+		fmt.Fprintln(os.Stderr,
+			"--no-daemon: skipping daemon start and identity registration. "+
+				"Run `thrum daemon start` and `thrum quickstart` to finish setup.")
+		return nil
+	}
+
 	if err := stepDaemon(cfg); err != nil {
 		fmt.Fprintf(os.Stderr,
-			"Daemon failed to start: %v\nConfiguration is complete. Start the daemon manually with: thrum daemon start\n",
+			"Daemon failed to start: %v\nConfiguration is complete. Start the daemon manually with: thrum daemon start, then `thrum quickstart` to register an agent.\n",
 			err)
 		return nil
 	}
+
+	// Step 6b: register the identity collected in Step 3 by re-invoking the
+	// thrum binary's `quickstart` subcommand. We deliberately shell out
+	// rather than calling cli.Quickstart directly because the library-level
+	// function does only the daemon RPC — the cobra handler in
+	// cmd/thrum/main.go owns the post-RPC identity-file write, tmux
+	// backfill, context-file bootstrap, and preamble materialization. Those
+	// are not exported as a single helper today, and inlining ~80 lines of
+	// the handler into the wizard would duplicate subtle logic. Shelling
+	// out keeps a single source of truth for "what a quickstart writes".
+	if err := runQuickstartSubprocess(cfg, id); err != nil {
+		fmt.Fprintf(os.Stderr,
+			"Quickstart failed: %v\nRun `thrum quickstart --name %s --role %s --module %s` to retry identity registration.\n",
+			err, id.Name, id.Role, id.Module)
+		return nil
+	}
 	return nil
+}
+
+// runQuickstartSubprocess re-invokes the running thrum binary with
+// `quickstart` so the cobra handler's identity-file-write logic fires.
+// Stdout/stderr are forwarded so the user sees the canonical quickstart
+// output as the wizard's final step.
+func runQuickstartSubprocess(cfg *WizardConfig, id WizardIdentity) error {
+	self, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("locate thrum binary: %w", err)
+	}
+	args := []string{
+		"--repo", cfg.RepoPath,
+		"quickstart",
+		"--name", id.Name,
+		"--role", id.Role,
+		"--module", id.Module,
+	}
+	if cfg.Force {
+		args = append(args, "--force")
+	}
+	if cfg.Runtime != "" {
+		args = append(args, "--runtime", cfg.Runtime)
+	}
+	cmd := exec.Command(self, args...) // #nosec G204 -- self is os.Executable, args are wizard inputs already validated upstream
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	return cmd.Run()
 }
 
 // stepRoleTemplates runs Step 5: write per-role markdown templates under

@@ -41,14 +41,23 @@ nothing gets lost.
 # Install
 curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
 
-# Initialize (starts the daemon automatically)
+# Initialize. On a TTY this launches an opinionated wizard that walks you
+# through identity, worktrees root, role templates, and starts the daemon.
 cd your-project
 thrum init
 
-# Register and send your first message
-thrum quickstart --name myagent --role planner --module auth
+# Send your first message (the wizard already registered your agent)
 thrum send "Starting work on auth module" --to @implementer
 thrum inbox
+```
+
+Need a non-interactive flow for CI? Pass `--non-interactive` for the legacy
+silent init, or pre-fill every wizard prompt:
+
+```bash
+thrum init --name myagent --role planner --module auth \
+           --worktrees-root ~/.thrum/worktrees/myproj \
+           --roles=enhanced --no-daemon
 ```
 
 ## How It Works
