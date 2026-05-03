@@ -211,3 +211,21 @@ func TestWizard_StepRoleTemplates_NonForcePromptsBeforeOverwrite(t *testing.T) {
 		}
 	}
 }
+
+func TestWizard_StepDaemon_DecisionMatrix(t *testing.T) {
+	cases := []struct {
+		running, force bool
+		want           daemonAction
+	}{
+		{false, false, daemonActionStart},
+		{false, true, daemonActionStart},
+		{true, false, daemonActionSkip},
+		{true, true, daemonActionRestart},
+	}
+	for _, c := range cases {
+		got := decideDaemonAction(c.running, c.force)
+		if got != c.want {
+			t.Errorf("running=%v force=%v: got %v, want %v", c.running, c.force, got, c.want)
+		}
+	}
+}

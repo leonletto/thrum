@@ -5,10 +5,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/context/roleconfig"
 )
 
@@ -109,6 +111,159 @@ func stepWorktreesRoot(cfg *WizardConfig) (string, error) {
 		return "", fmt.Errorf("failed to create worktrees root %s: %w", chosen, err)
 	}
 	return chosen, nil
+}
+
+// daemonAction is the operation chosen by Step 6 based on existing daemon
+// state plus the wizard's --force flag.
+type daemonAction int
+
+const (
+	daemonActionStart daemonAction = iota
+	daemonActionRestart
+	daemonActionSkip
+)
+
+// decideDaemonAction implements the Step 6 decision matrix:
+//   - daemon not running          → start
+//   - running, no --force         → skip (leave the existing daemon alone)
+//   - running, --force            → restart (pick up fresh config)
+func decideDaemonAction(running, force bool) daemonAction {
+	if !running {
+		return daemonActionStart
+	}
+	if force {
+		return daemonActionRestart
+	}
+	return daemonActionSkip
+}
+
+// isDaemonRunning is a thin wrapper over DaemonStatus. Any error is treated
+// as "not running" so the wizard falls through to start the daemon rather
+// than refusing to proceed when the status RPC is unreachable.
+func isDaemonRunning(repoPath string) bool {
+	status, err := DaemonStatus(repoPath)
+	if err != nil || status == nil {
+		return false
+	}
+	return status.Running
+}
+
+// stepDaemon runs Step 6: start, restart, or skip the per-repo daemon
+// based on existing state and --force. Honors --no-daemon by returning nil
+// without touching the daemon at all.
+func stepDaemon(cfg *WizardConfig) error {
+	if cfg.NoDaemon {
+		return nil
+	}
+	switch decideDaemonAction(isDaemonRunning(cfg.RepoPath), cfg.Force) {
+	case daemonActionStart:
+		return DaemonStart(cfg.RepoPath, true, cfg.Force)
+	case daemonActionRestart:
+		return DaemonRestart(cfg.RepoPath, true, cfg.Force)
+	case daemonActionSkip:
+		return nil
+	}
+	return nil
+}
+
+// rollback removes the .thrum/ directory created by Step 2 so the repo is
+// returned to its pre-wizard state when Steps 3-5 fail. Step 6 (daemon)
+// failures are recoverable and do NOT trigger rollback. Task .5 will extend
+// this to restore .gitignore / .git/info/exclude snapshots.
+func rollback(cfg *WizardConfig, cause error) error {
+	thrumDir := filepath.Join(cfg.RepoPath, ".thrum")
+	_ = os.RemoveAll(thrumDir)
+	return fmt.Errorf("wizard failed: %w (rolled back .thrum/)", cause)
+}
+
+// persistWorktreesBasePath writes the chosen worktrees root into
+// .thrum/config.json under the existing Worktrees.BasePath key.
+func persistWorktreesBasePath(repoPath, basePath string) error {
+	thrumDir := filepath.Join(repoPath, ".thrum")
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return err
+	}
+	cfg.Worktrees.BasePath = basePath
+	return config.SaveThrumConfig(thrumDir, cfg)
+}
+
+// RunWizard is the top-level wizard driver. Sequence: tmux gate → Init
+// scaffold (.thrum/) → identity (Step 3) + register via Quickstart →
+// worktrees root (Step 4) → role templates (Step 5) → daemon (Step 6).
+// Failures in Steps 3-5 trigger rollback; daemon failure is reported but
+// leaves a valid .thrum/ behind.
+func RunWizard(cfg *WizardConfig) error {
+	// SIGINT handler runs the same cleanup as a Step 3-5 error path so
+	// Ctrl-C mid-wizard never leaves a half-scaffolded .thrum/ behind.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
+	defer signal.Stop(sigCh)
+	go func() {
+		if _, ok := <-sigCh; !ok {
+			return
+		}
+		_ = rollback(cfg, fmt.Errorf("interrupted"))
+		os.Exit(130)
+	}()
+
+	if err := tmuxGate(os.Stderr); err != nil {
+		return err
+	}
+
+	// Splice point for Task .6 — loadReInitDefaults(cfg) belongs here, after
+	// tmuxGate and before Init, so existing values are captured even if
+	// Init's --force re-scaffold rewrites .thrum/.
+
+	if err := Init(InitOptions{
+		RepoPath: cfg.RepoPath,
+		Force:    cfg.Force,
+		Stealth:  cfg.Stealth,
+	}); err != nil {
+		return err
+	}
+
+	id, err := stepIdentity(cfg)
+	if err != nil {
+		return rollback(cfg, err)
+	}
+
+	socketPath := DefaultSocketPath(cfg.RepoPath)
+	qsClient, err := NewClient(socketPath)
+	if err != nil {
+		return rollback(cfg, err)
+	}
+	defer qsClient.Close()
+	if _, err := Quickstart(qsClient, QuickstartOptions{
+		Name:     id.Name,
+		Role:     id.Role,
+		Module:   id.Module,
+		RepoPath: cfg.RepoPath,
+		Runtime:  cfg.Runtime,
+		Force:    cfg.Force,
+	}); err != nil {
+		return rollback(cfg, err)
+	}
+
+	wtRoot, err := stepWorktreesRoot(cfg)
+	if err != nil {
+		return rollback(cfg, err)
+	}
+	if err := persistWorktreesBasePath(cfg.RepoPath, wtRoot); err != nil {
+		return rollback(cfg, err)
+	}
+
+	if err := stepRoleTemplates(cfg); err != nil {
+		return rollback(cfg, err)
+	}
+
+	if err := stepDaemon(cfg); err != nil {
+		fmt.Fprintf(os.Stderr,
+			"Daemon failed to start: %v\nConfiguration is complete. Start the daemon manually with: thrum daemon start\n",
+			err)
+		return nil
+	}
+	return nil
 }
 
 // stepRoleTemplates runs Step 5: write per-role markdown templates under
