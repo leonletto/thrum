@@ -106,27 +106,28 @@ Every role template follows the same section structure:
 
 Reference templates in `internal/context/roleconfig/templates/roles/`:
 
-| File                        | Description                                                                  |
-| --------------------------- | ---------------------------------------------------------------------------- |
-| `coordinator-strict.md`     | All task assignment flows through coordinator                                |
-| `coordinator-autonomous.md` | Coordinator orchestrates, agents can self-assign                             |
-| `implementer-strict.md`     | Waits for explicit task from coordinator                                     |
-| `implementer-autonomous.md` | Can pick up ready tasks from issue tracker                                   |
-| `planner-strict.md`         | Read-only exploration, writes plans to docs                                  |
-| `planner-autonomous.md`     | Can create issues and break down epics                                       |
-| `researcher-strict.md`      | Read-only, responds to research requests                                     |
-| `researcher-autonomous.md`  | Can proactively research when idle                                           |
-| `reviewer-strict.md`        | Reviews only assigned PRs/changes                                            |
-| `reviewer-autonomous.md`    | Can pick up review requests proactively                                      |
-| `tester-strict.md`          | Runs tests on request, reports results                                       |
-| `tester-autonomous.md`      | Can proactively run tests on changed files                                   |
-| `deployer-strict.md`        | Deploys only on explicit coordinator approval                                |
-| `deployer-autonomous.md`    | Can deploy to non-production environments freely                             |
-| `documenter-strict.md`      | Documents only assigned areas                                                |
-| `documenter-autonomous.md`  | Can proactively update docs when code changes                                |
-| `monitor-strict.md`         | Reports alerts, takes no remediation action                                  |
-| `monitor-autonomous.md`     | Can restart services and open issues on alerts                               |
-| `orchestrator.md`           | Launches agents, manages worktrees, runs review-gated epics (single variant) |
+| File                                 | Description                                                                                                       |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `coordinator-strict.md`              | All task assignment flows through coordinator                                                                     |
+| `coordinator-autonomous.md`          | Coordinator orchestrates, agents can self-assign                                                                  |
+| `implementer-strict.md`              | Waits for explicit task from coordinator                                                                          |
+| `implementer-autonomous.md`          | Can pick up ready tasks from issue tracker                                                                        |
+| `implementer-worktree-write-only.md` | Pins implementer writes to their own worktree; forbids drive-by edits to the main repo (wizard "enhanced" choice) |
+| `planner-strict.md`                  | Read-only exploration, writes plans to docs                                                                       |
+| `planner-autonomous.md`              | Can create issues and break down epics                                                                            |
+| `researcher-strict.md`               | Read-only, responds to research requests                                                                          |
+| `researcher-autonomous.md`           | Can proactively research when idle                                                                                |
+| `reviewer-strict.md`                 | Reviews only assigned PRs/changes                                                                                 |
+| `reviewer-autonomous.md`             | Can pick up review requests proactively                                                                           |
+| `tester-strict.md`                   | Runs tests on request, reports results                                                                            |
+| `tester-autonomous.md`               | Can proactively run tests on changed files                                                                        |
+| `deployer-strict.md`                 | Deploys only on explicit coordinator approval                                                                     |
+| `deployer-autonomous.md`             | Can deploy to non-production environments freely                                                                  |
+| `documenter-strict.md`               | Documents only assigned areas                                                                                     |
+| `documenter-autonomous.md`           | Can proactively update docs when code changes                                                                     |
+| `monitor-strict.md`                  | Reports alerts, takes no remediation action                                                                       |
+| `monitor-autonomous.md`              | Can restart services and open issues on alerts                                                                    |
+| `orchestrator.md`                    | Launches agents, manages worktrees, runs review-gated epics (single variant)                                      |
 
 > **`monitor-*.md` vs `thrum monitor`:** These role templates configure _agent
 > behavior_ for agents whose job is monitoring (e.g., watching logs, reporting

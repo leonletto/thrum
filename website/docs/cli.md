@@ -158,6 +158,11 @@ pre-filled, the wizard runs end-to-end without user input even on a TTY.
 inside a git repository. Pass `--force` to override for non-git environments
 (uncommon; the daemon cannot anchor identity without a git root).
 
+**tmux gate:** if `tmux` is not on `PATH` when the wizard reaches the
+daemon-start step, `thrum init` exits early with an OS-appropriate install hint
+(`brew install tmux` on macOS, `apt install tmux` on Debian/Ubuntu). Install
+tmux and re-run, or pass `--no-daemon` to skip the daemon-start step entirely.
+
 This command emits contextual hints — see [CLI Hints](cli-hints.md).
 
 ```text
@@ -179,7 +184,7 @@ thrum init [flags]
 | `--roles`           | Pre-fill the wizard's role-template choice (`enhanced` \| `default` \| `skip`)                |         |
 | `--no-daemon`       | Skip auto-starting the daemon at the end of the wizard                                        | `false` |
 
-#### Worktree base path migration (v0.9.3)
+#### Worktree base path migration (v0.10.0)
 
 The implicit fallback for `Worktrees.BasePath` migrated from
 `~/.workspaces/<project>` to `~/.thrum/worktrees/<project>`. Users with an
@@ -393,16 +398,17 @@ other process has exited), or choose a different name.
 thrum quickstart --name AGENT_NAME --role ROLE --module MODULE [flags]
 ```
 
-| Flag              | Description                                                                              | Default |
-| ----------------- | ---------------------------------------------------------------------------------------- | ------- |
-| `--name`          | Human-readable agent name (optional, defaults to `role_hash`)                            |         |
-| `--display`       | Display name for the agent                                                               |         |
-| `--intent`        | Initial work intent                                                                      |         |
-| `--runtime`       | Runtime preset (`claude`, `codex`, `cursor`, `gemini`, `opencode`, `auggie`, `cli-only`) |         |
-| `--preamble-file` | Path to custom preamble file                                                             |         |
-| `--dry-run`       | Preview without writing                                                                  | `false` |
-| `--no-init`       | Skip config file generation                                                              | `false` |
-| `--force`         | Overwrite existing identity (bypasses G1a and G1b guards)                                | `false` |
+| Flag              | Description                                                                                                                                 | Default |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `--name`          | Human-readable agent name (optional, defaults to `role_hash`)                                                                               |         |
+| `--display`       | Display name for the agent                                                                                                                  |         |
+| `--intent`        | Initial work intent                                                                                                                         |         |
+| `--runtime`       | Runtime preset (`claude`, `codex`, `cursor`, `gemini`, `opencode`, `auggie`, `cli-only`)                                                    |         |
+| `--preamble-file` | Path to custom preamble file                                                                                                                |         |
+| `--dry-run`       | Preview without writing                                                                                                                     | `false` |
+| `--no-init`       | Skip config file generation                                                                                                                 | `false` |
+| `--force`         | Overwrite existing identity (bypasses G1a and G1b guards)                                                                                   | `false` |
+| `--no-agent-pid`  | Persist `agent_pid=0` instead of detecting the runtime ancestor; defers PID claim to first `/thrum:prime` (used for inline tmux quickstart) | `false` |
 
 Requires `--role` and `--module` (via flags or `THRUM_ROLE`/`THRUM_MODULE` env
 vars). The `--runtime` value is written to `preferred_runtime` in the identity

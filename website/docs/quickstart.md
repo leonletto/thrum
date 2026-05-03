@@ -99,7 +99,7 @@ separately. The "Step 4: Register" section below applies only when you ran
 
 #### Worktree base path migration
 
-In v0.9.3 the implicit fallback for `Worktrees.BasePath` migrated from
+In v0.10.0 the implicit fallback for `Worktrees.BasePath` migrated from
 `~/.workspaces/<project>` to `~/.thrum/worktrees/<project>`. Users with an
 explicit `Worktrees.BasePath` in `.thrum/config.json` are unaffected. If you
 relied on the legacy fallback and want to keep existing worktrees in place, set
@@ -421,12 +421,13 @@ thrum tmux launch auth
 ```
 
 The worktree is created at `worktrees.base_path/<name>` (default
-`~/.workspaces/<repo>/<name>`). `thrum worktree create` handles the redirect
-file creation automatically — you don't need to run `thrum setup --main-repo`
-separately. If you pass `--name`, `--role`, and `--module`, it also creates a
-real tmux session and registers the agent inside it (PID-isolated, with retry if
-the shell init swallows the first attempt). The output tells you the agent is
-not running yet and shows the exact `thrum tmux launch` command to start it.
+`~/.thrum/worktrees/<repo>/<name>`). `thrum worktree create` handles the
+redirect file creation automatically — you don't need to run
+`thrum setup --main-repo` separately. If you pass `--name`, `--role`, and
+`--module`, it also creates a real tmux session and registers the agent inside
+it (PID-isolated, with retry if the shell init swallows the first attempt). The
+output tells you the agent is not running yet and shows the exact
+`thrum tmux launch` command to start it.
 
 For an existing worktree that just needs redirect setup, you can still use the
 manual approach:
@@ -463,10 +464,10 @@ appropriate redirect files. They skip worktrees that are already configured.
 
 ```bash
 # Thrum redirect for one worktree
-./scripts/setup-worktree-thrum.sh ~/.workspaces/thrum/my-feature
+./scripts/setup-worktree-thrum.sh ~/.thrum/worktrees/thrum/my-feature
 
 # Beads redirect for one worktree
-./scripts/setup-worktree-beads.sh ~/.workspaces/thrum/my-feature
+./scripts/setup-worktree-beads.sh ~/.thrum/worktrees/thrum/my-feature
 ```
 
 #### What the scripts create

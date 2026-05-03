@@ -1,4 +1,4 @@
-# Thrum v0.9.2
+# Thrum v0.10.0
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -142,6 +142,30 @@ New in v0.9.1:
   duplicates content. The CLAUDE.md block is the alternative for other
   runtimes (codex, cursor, opencode, kiro, auggie) and for Claude Code
   without the plugin.
+
+New in v0.10.0:
+- `thrum init` interactive wizard — on a TTY, `thrum init` now launches a
+  multi-step wizard (identity → worktrees-root → role-template → daemon).
+  Press enter through every prompt to accept defaults. Legacy silent path
+  is preserved on non-TTY stdin or with `--non-interactive`. Pre-fill any
+  prompt with `--name`, `--role`, `--module`, `--worktrees-root`,
+  `--roles=enhanced|default|skip`, `--no-daemon`. `--force` re-init
+  pre-seeds prompts from existing `.thrum/config.json` and identity.
+  Transactional: SIGINT or step-failure restores `.gitignore` and
+  `.git/info/exclude` byte-for-byte.
+- New role template `implementer-worktree-write-only.md` — wizard's
+  "enhanced" choice ships an implementer preamble that pins writes to the
+  agent's own worktree and forbids drive-by edits to the main repo.
+- Default `Worktrees.BasePath` migrated from `~/.workspaces/<project>` to
+  `~/.thrum/worktrees/<project>`. Repos with an explicit `worktrees.base_path`
+  in `.thrum/config.json` are unaffected. Pin the legacy path with
+  `thrum config set worktrees.base_path "$HOME/.workspaces/<project>"` to
+  preserve existing worktrees.
+- tmux gate — if `tmux` is not on `PATH` when the wizard reaches the
+  daemon-start step, init exits early with an OS-appropriate install hint.
+- `scripts/thrum-check-inbox.sh` now correctly excluded alongside
+  `thrum-startup.sh` in `.gitignore` (and `.git/info/exclude` in stealth
+  mode).
 
 New in v0.9.2:
 - Role configuration system (thrum-z2et) — `/thrum:configure-roles` answers
@@ -496,7 +520,7 @@ All commands accept these flags:
 
   thrum worktree create <name> [-b BRANCH] [--detach] [--name <agent-name> --role ROLE --module MODULE] [--intent TEXT] [--runtime PRESET] [--force]
     Create a git worktree with Thrum and Beads redirect wiring. Worktree path:
-    `worktrees.base_path/<name>` (default: ~/.workspaces/<project>/<name>).
+    `worktrees.base_path/<name>` (default: ~/.thrum/worktrees/<project>/<name>).
     - -b / --branch: branch name (default: feature/<name>)
     - --detach: create detached HEAD worktree
     - --name, --role, --module (all optional): if all three provided, creates a
@@ -810,7 +834,7 @@ All commands accept these flags:
       "pairing_code_length": 16              // length of generated pairing codes
     },
     "worktrees": {                           // v0.8.0: used by `thrum worktree create/teardown`
-      "base_path": "~/.workspaces/myproj",   // absolute path where new worktrees are created
+      "base_path": "~/.thrum/worktrees/myproj",   // absolute path where new worktrees are created
       "beads_enabled": true,                 // create .beads/redirect in new worktrees
       "thrum_enabled": true                  // create .thrum/redirect + identities/ in new worktrees
     },

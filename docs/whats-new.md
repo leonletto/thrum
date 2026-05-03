@@ -5,6 +5,64 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 [CHANGELOG.md](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
+## v0.10.0 — 2026-05-03
+
+The v0.10.0 work centers on `thrum init`. The first-run experience used to be a
+silent scaffold and a list of follow-up commands; now it walks you through
+identity, worktrees root, role templates, and daemon start in one interactive
+flow. Existing CI scripts keep working unchanged via the `--non-interactive`
+flag (or any non-TTY stdin).
+
+### New
+
+- **`thrum init` interactive wizard.** On a TTY, `thrum init` prompts for agent
+  name / role / module, worktrees-root path, role-template choice (enhanced /
+  default / skip), and starts the daemon — all in one flow. Press enter through
+  every prompt to accept the recommended defaults.
+- **Pre-fill any prompt with a flag.** The wizard reads `--name`, `--role`,
+  `--module`, `--worktrees-root`, `--roles=enhanced|default|skip`, and
+  `--no-daemon` so you can script it end-to-end in fixtures.
+- **`--force` re-init pre-seeds prompts from existing values.** Running
+  `thrum init --force` on a previously-initialized repo loads identity and
+  worktrees-root from the current `.thrum/` so pressing enter through the
+  prompts is a no-op refresh.
+- **Transactional rollback on failure or SIGINT.** If any wizard step errors
+  after `.gitignore` / `.git/info/exclude` were touched, the wizard restores
+  them byte-for-byte. Ctrl-C during prompts cleans up cleanly.
+- **`implementer-worktree-write-only` role template.** The wizard's "enhanced"
+  choice ships a stricter implementer preamble that pins writes to the agent's
+  own worktree and forbids drive-by edits to the main repo.
+- **tmux gate.** If `tmux` is not on `PATH` when the wizard reaches the
+  daemon-start step, init exits early with an OS-appropriate install hint
+  (`brew install tmux` / `apt install tmux`).
+
+### Changed
+
+- **Default worktrees base path migrated.** `worktrees.base_path` now defaults
+  to `~/.thrum/worktrees/<project>` (was `~/.workspaces/<project>`). Repos with
+  an explicit `Worktrees.BasePath` in `.thrum/config.json` are unaffected. If
+  you relied on the implicit fallback and want existing worktrees to keep
+  resolving, run
+  `thrum config set worktrees.base_path "$HOME/.workspaces/<project>"` before
+  the next worktree create. The wizard's worktrees-root prompt also accepts the
+  legacy path.
+
+### Fixed
+
+- **`scripts/thrum-check-inbox.sh` excluded alongside `thrum-startup.sh`.** Init
+  now adds the inbox-check helper to `.gitignore` (and `.git/info/exclude` in
+  stealth mode), preventing it from leaking into tracked changes.
+
+### Migration
+
+- If you scripted `thrum init` in CI: add `--non-interactive` (or rely on
+  non-TTY stdin) — both keep the legacy silent path. The wizard never fires
+  under those conditions.
+- If your worktrees lived under `~/.workspaces/<project>` and you want them to
+  stay there: pin the path with
+  `thrum config set worktrees.base_path "$HOME/.workspaces/<project>"` before
+  the next `thrum worktree create`.
+
 ## v0.9.2 — 2026-04-29
 
 The v0.9.2 work was mostly polish on agents and preambles — the parts of Thrum

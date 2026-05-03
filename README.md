@@ -13,27 +13,27 @@ and machines. You direct the work. The agents coordinate through Thrum. Messages
 persist through context compaction, session restarts, and machine changes —
 nothing gets lost.
 
-**v0.9.2 highlights:**
+**v0.10.0 highlights:**
 
-- **Role configuration system (thrum-z2et)** — `/thrum:configure-roles` now
-  persists answers under `role_config` in `.thrum/config.json`, and
-  `thrum roles refresh` regenerates `.thrum/role_templates/<role>.md` from the
-  saved answers + the shipped templates embedded in the binary. `thrum prime`
-  surfaces drift hints when shipped templates change (`migration`,
-  `schema-bump`, `body-diff`). User overlays at `.thrum/context/<agent>.md`
-  compose into the rendered preamble.
-- **SessionStart identity banner + auto-load directive** — Claude Code sessions
-  launched via `thrum tmux create` and restarted via `thrum tmux restart` show a
-  pane-side identity banner and a size-aware MUST-READ directive. The plugin
-  SessionStart hook injects `thrum prime` output via `additionalContext` so the
-  briefing reaches the model even when the pane is small.
-- **tmux session scoping (thrum-zuz5)** — `thrum tmux status` /
-  `thrum tmux connect` now scope to the current daemon via a `@thrum-thrum-dir`
-  tag, no longer leaking sessions across worktrees and projects. Migration:
-  pre-0.9.2 sessions need to be recreated to appear.
-- **tmux pty leak fix (thrum-x6e8.5)** — tmux-exec moved from `respawn-pane` to
-  a persistent-session pool, eliminating fd-leak crashes on long-running
-  daemons.
+- **`thrum init` wizard** — `thrum init` on a TTY now launches an opinionated
+  interactive setup walking new users through identity, worktrees root, role
+  templates, and daemon start in one flow. Press enter through every prompt
+  to accept recommended defaults. The legacy silent path is preserved when
+  stdin is not a TTY or `--non-interactive` is set, so existing CI scripts
+  keep working. Pre-fill any prompt with `--name`, `--role`, `--module`,
+  `--worktrees-root`, `--roles=enhanced|default|skip`, and `--no-daemon` to
+  script the wizard end-to-end.
+- **New role template `implementer-worktree-write-only`** — the wizard's
+  "enhanced" choice pins implementers to writes inside their own worktree
+  and forbids drive-by edits to the main repo.
+- **Default worktree base path migrated** to `~/.thrum/worktrees/<project>`
+  (was `~/.workspaces/<project>`). Users with an explicit `Worktrees.BasePath`
+  in `.thrum/config.json` are unaffected; the wizard prompt accepts the
+  legacy path if you want to preserve it.
+- **`scripts/thrum-check-inbox.sh` correctly excluded** alongside
+  `thrum-startup.sh` in both `.gitignore` and `.git/info/exclude` (stealth
+  mode), preventing the inbox-check helper from leaking into tracked
+  changes.
 
 ## Quick Start
 

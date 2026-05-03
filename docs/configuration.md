@@ -23,7 +23,7 @@ Located at `.thrum/config.json` in your repository:
     "pairing_code_length": 16
   },
   "worktrees": {
-    "base_path": "~/.workspaces/myproject",
+    "base_path": "~/.thrum/worktrees/myproject",
     "beads_enabled": true,
     "thrum_enabled": true
   },
@@ -162,7 +162,9 @@ how the orchestrator uses these.
 Directory where `thrum worktree create` puts new worktrees.
 
 - **Type:** string (absolute path)
-- **Default:** `~/.workspaces/<project>` (inferred from repo name)
+- **Default:** `~/.thrum/worktrees/<project>` (inferred from repo name; migrated
+  from `~/.workspaces/<project>` in v0.10.0 — set the legacy path explicitly if
+  you want to keep using it)
 
 ### `worktrees.beads_enabled`
 

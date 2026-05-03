@@ -127,60 +127,87 @@ Available on all commands:
 
 ### thrum init
 
-Initialize Thrum in the current repository. Creates the `.thrum/` directory
-structure, sets up the `a-sync` branch for message synchronization, and updates
-`.gitignore`. Detects installed AI runtimes and prompts you to select one.
-Populates the `identity` block in `config.json` (a fresh `daemon_id` is
-generated once and persists; re-init is idempotent on `daemon_id`). See
-[Identity System — Daemon Identity](identity.md) for details.
+Initialize Thrum in the current repository.
+
+**On a TTY** (and unless `--non-interactive` is set), `thrum init` launches an
+interactive wizard that walks you through identity, worktrees root, role
+templates, and daemon start. The wizard scaffolds `.thrum/`, sets up the
+`a-sync` branch, registers your initial agent, persists `Worktrees.BasePath`,
+writes the role templates you choose, and starts the daemon — all in one flow.
+Press enter through every prompt to accept the recommended defaults.
+
+**On non-TTY stdin or with `--non-interactive`**, `thrum init` runs the legacy
+silent path: scaffolds `.thrum/`, writes default config, no identity, no
+worktrees-root, no role templates, no daemon start. Existing CI scripts that
+pipe stdin to `thrum init` get this behavior unchanged.
+
+Pre-fill any wizard prompt with the corresponding flag (`--name`, `--role`,
+etc.); the wizard skips prompts whose value was supplied. With every prompt
+pre-filled, the wizard runs end-to-end without user input even on a TTY.
 
 **G2 guard:** `thrum init` hard-errors if the current working directory is not
 inside a git repository. Pass `--force` to override for non-git environments
 (uncommon; the daemon cannot anchor identity without a git root).
 
+**tmux gate:** if `tmux` is not on `PATH` when the wizard reaches the
+daemon-start step, `thrum init` exits early with an OS-appropriate install hint
+(`brew install tmux` on macOS, `apt install tmux` on Debian/Ubuntu). Install
+tmux and re-run, or pass `--no-daemon` to skip the daemon-start step entirely.
+
 This command emits contextual hints — see [CLI Hints](cli-hints.md).
 
 ```text
-thrum init [--stealth] [flags]
+thrum init [flags]
 ```
 
-| Flag             | Description                                                                                   | Default |
-| ---------------- | --------------------------------------------------------------------------------------------- | ------- |
-| `--force`        | Force reinitialization if already initialized                                                 | `false` |
-| `--runtime`      | Specify runtime directly (skip detection prompt)                                              | (auto)  |
-| `--dry-run`      | Preview changes without writing files                                                         | `false` |
-| `--stealth`      | Write exclusions to `.git/info/exclude` instead of `.gitignore` (zero tracked-file footprint) | `false` |
-| `--skills`       | Install thrum skill only (no MCP config, no startup script)                                   | `false` |
-| `--agent-name`   | Agent name for templates                                                                      |         |
-| `--agent-role`   | Agent role for templates                                                                      |         |
-| `--agent-module` | Agent module for templates                                                                    |         |
+| Flag                | Description                                                                                   | Default |
+| ------------------- | --------------------------------------------------------------------------------------------- | ------- |
+| `--force`           | Force reinitialization. On a TTY this re-runs the wizard with existing values pre-seeded.     | `false` |
+| `--runtime`         | Specify runtime directly (skip detection prompt)                                              | (auto)  |
+| `--dry-run`         | Preview changes without writing files. Bypasses the wizard regardless of TTY.                 | `false` |
+| `--stealth`         | Write exclusions to `.git/info/exclude` instead of `.gitignore` (zero tracked-file footprint) | `false` |
+| `--skills`          | Install thrum skill only (no MCP config, no startup script)                                   | `false` |
+| `--non-interactive` | Force the legacy silent path even on a TTY                                                    | `false` |
+| `--name`            | Pre-fill the wizard's identity-name prompt                                                    |         |
+| `--role`            | Pre-fill the wizard's role prompt                                                             |         |
+| `--module`          | Pre-fill the wizard's module prompt                                                           |         |
+| `--worktrees-root`  | Pre-fill the wizard's worktrees-root prompt (must be an absolute path outside the repo)       |         |
+| `--roles`           | Pre-fill the wizard's role-template choice (`enhanced` \| `default` \| `skip`)                |         |
+| `--no-daemon`       | Skip auto-starting the daemon at the end of the wizard                                        | `false` |
 
-Example:
+#### Worktree base path migration (v0.10.0)
+
+The implicit fallback for `Worktrees.BasePath` migrated from
+`~/.workspaces/<project>` to `~/.thrum/worktrees/<project>`. Users with an
+explicit `Worktrees.BasePath` in `.thrum/config.json` are unaffected. If you
+relied on the legacy fallback and want to keep existing worktrees in place, set
+the override before the next `thrum worktree create`:
+
+```bash
+thrum config set worktrees.base_path "$HOME/.workspaces/<project>"
+```
+
+The wizard also offers to set this path interactively.
+
+Example (legacy silent path, with `--non-interactive` or piped stdin):
 
 ```text
-$ thrum init
+$ thrum init --non-interactive
 ✓ Thrum initialized successfully
   Repository: .
   Created: .thrum/ directory structure
   Created: a-sync branch for message sync
   Updated: .gitignore
-
-Detected AI runtimes:
-  1. Claude Code    (found .claude/settings.json)
-
-Which is your primary runtime? [1]:
-✓ Runtime saved to .thrum/config.json (primary: claude)
+✓ Runtime saved to .thrum/config.json (primary: cli-only)
 
 Done. Run 'thrum quickstart --name <name> --role <role> --module <module>' to register an agent.
-
-Tip: To enable repo-knowledge queries from other agents, register a researcher:
-  thrum tmux start --role researcher
 ```
 
-The researcher tip lands on stdout (not the hints stream) so it survives
-`THRUM_NO_HINTS` and `--quiet`. It's there to prevent the silent-confusion case
-where a coordinator and implementers are running but research queries time out
-because no `@researcher` has been spun up.
+The post-init `quickstart` tip lands on stdout (not the hints stream) so it
+survives `THRUM_NO_HINTS` and `--quiet`. It's there to prevent the
+silent-confusion case where you forget to register an agent after running
+`thrum init --non-interactive`. The wizard path skips this tip because it
+already ran `quickstart` for you.
 
 #### Skills-Only Install
 
@@ -362,16 +389,17 @@ other process has exited), or choose a different name.
 thrum quickstart --name AGENT_NAME --role ROLE --module MODULE [flags]
 ```
 
-| Flag              | Description                                                                              | Default |
-| ----------------- | ---------------------------------------------------------------------------------------- | ------- |
-| `--name`          | Human-readable agent name (optional, defaults to `role_hash`)                            |         |
-| `--display`       | Display name for the agent                                                               |         |
-| `--intent`        | Initial work intent                                                                      |         |
-| `--runtime`       | Runtime preset (`claude`, `codex`, `cursor`, `gemini`, `opencode`, `auggie`, `cli-only`) |         |
-| `--preamble-file` | Path to custom preamble file                                                             |         |
-| `--dry-run`       | Preview without writing                                                                  | `false` |
-| `--no-init`       | Skip config file generation                                                              | `false` |
-| `--force`         | Overwrite existing identity (bypasses G1a and G1b guards)                                | `false` |
+| Flag              | Description                                                                                                                                 | Default |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `--name`          | Human-readable agent name (optional, defaults to `role_hash`)                                                                               |         |
+| `--display`       | Display name for the agent                                                                                                                  |         |
+| `--intent`        | Initial work intent                                                                                                                         |         |
+| `--runtime`       | Runtime preset (`claude`, `codex`, `cursor`, `gemini`, `opencode`, `auggie`, `cli-only`)                                                    |         |
+| `--preamble-file` | Path to custom preamble file                                                                                                                |         |
+| `--dry-run`       | Preview without writing                                                                                                                     | `false` |
+| `--no-init`       | Skip config file generation                                                                                                                 | `false` |
+| `--force`         | Overwrite existing identity (bypasses G1a and G1b guards)                                                                                   | `false` |
+| `--no-agent-pid`  | Persist `agent_pid=0` instead of detecting the runtime ancestor; defers PID claim to first `/thrum:prime` (used for inline tmux quickstart) | `false` |
 
 Requires `--role` and `--module` (via flags or `THRUM_ROLE`/`THRUM_MODULE` env
 vars). The `--runtime` value is written to `preferred_runtime` in the identity
