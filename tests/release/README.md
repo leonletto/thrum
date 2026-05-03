@@ -25,6 +25,33 @@ plan:**
 
 The arg is a glob filter against `scenarios/`.
 
+## Remote scenarios (run-remote.sh)
+
+When the local fixture can't bootstrap (active `claude` session contends with
+the tmux pane probe) or you want a clean-environment release gate, run scenarios
+on a remote host:
+
+```bash
+make deploy-remote REMOTE=leondev
+./tests/release/run-remote.sh --host leondev
+./tests/release/run-remote.sh --host leondev 'r01*'   # filter
+```
+
+Prerequisites on the remote: `thrum` on `PATH` (a symlink from
+`~/.local/bin/thrum` to a `PATH`-visible directory like `/opt/homebrew/bin`
+suffices), plus `tmux`, `jq`, `git`. `claude` is **not** required — the remote
+scenarios exercise CLI + daemon RPC only, sidestepping the
+tmux-pane-with-claude bootstrap that the local `run.sh` needs.
+
+Remote scenarios live under `remote-scenarios/`. Each scenario manages its own
+remote tempdir under `/tmp/thrum-remote-<name>-<runid>/` and tears itself down
+on exit (set `THRUM_RELEASE_NO_TEARDOWN=1` to keep the remote state for
+inspection).
+
+This is the on-ramp toward the cross-machine topologies in
+`dev-docs/release-testing/remote_agent_test_plan.md`. The current scope is the
+single-host smoke gate (r01); cross-machine sync scenarios will follow.
+
 ## Scenarios
 
 | Scenario                                        | What it verifies                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
