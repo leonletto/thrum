@@ -155,8 +155,10 @@ emit_pass "${SID}" "remote-child-quickstart-success"
 
 # Assertion 1: identity in CHILD's identities dir.
 r_exec 10 -- bash -lc "test -f '${WT_PATH}/.thrum/identities/${WT_AGENT}.json' && echo OK"
+CHILD_ID_PRESENT=0
 if [ "${RC}" -eq 0 ]; then
   emit_pass "${SID}" "remote-identity-in-child"
+  CHILD_ID_PRESENT=1
 else
   emit_fail "${SID}" "remote-identity-in-child" \
     "identity file at ${WT_PATH}/.thrum/identities/${WT_AGENT}.json" \
@@ -180,25 +182,32 @@ else
     "remote-scenarios/${SID}.test.sh:${LINENO}"
 fi
 
-# Assertion 3: worktree field on the identity equals child path.
-r_exec 10 -- bash -lc "
-  stored=\$(jq -r '.worktree // \"\"' '${WT_PATH}/.thrum/identities/${WT_AGENT}.json' 2>/dev/null)
-  expected=\$(cd '${WT_PATH}' && pwd)
-  resolved=\$(cd \"\$stored\" 2>/dev/null && pwd)
-  if [ -n \"\$resolved\" ] && [ \"\$resolved\" = \"\$expected\" ]; then
-    echo OK
+# Assertion 3: worktree field on the identity equals child path. Skipped
+# when assertion 1 failed so the report makes the cause obvious instead
+# of dropping a row or emitting a confusing "stored= resolved=" failure.
+if [ "${CHILD_ID_PRESENT}" -eq 1 ]; then
+  r_exec 10 -- bash -lc "
+    stored=\$(jq -r '.worktree // \"\"' '${WT_PATH}/.thrum/identities/${WT_AGENT}.json' 2>/dev/null)
+    expected=\$(cd '${WT_PATH}' && pwd)
+    resolved=\$(cd \"\$stored\" 2>/dev/null && pwd)
+    if [ -n \"\$resolved\" ] && [ \"\$resolved\" = \"\$expected\" ]; then
+      echo OK
+    else
+      echo \"stored=\$stored resolved=\$resolved expected=\$expected\"
+      exit 1
+    fi
+  "
+  if [ "${RC}" -eq 0 ]; then
+    emit_pass "${SID}" "remote-worktree-field-matches"
   else
-    echo \"stored=\$stored resolved=\$resolved expected=\$expected\"
-    exit 1
+    emit_fail "${SID}" "remote-worktree-field-matches" \
+      "worktree field equals child path" \
+      "rc=${RC}; out: $(printf '%s' "${OUT}" | head -c 240)" \
+      "remote-scenarios/${SID}.test.sh:${LINENO}"
   fi
-"
-if [ "${RC}" -eq 0 ]; then
-  emit_pass "${SID}" "remote-worktree-field-matches"
 else
-  emit_fail "${SID}" "remote-worktree-field-matches" \
-    "worktree field equals child path" \
-    "rc=${RC}; out: $(printf '%s' "${OUT}" | head -c 240)" \
-    "remote-scenarios/${SID}.test.sh:${LINENO}"
+  emit_skip "${SID}" "remote-worktree-field-matches" \
+    "child identity file missing — see assertion remote-identity-in-child"
 fi
 
 # Teardown via RETURN trap.

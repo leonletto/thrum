@@ -97,6 +97,35 @@ if [ ! -f "$WT_PATH/.thrum/redirect" ]; then
   return 0
 fi
 
+# Pre-stage a stale identity file in the PARENT's identities/ with the
+# SAME name the child quickstart will use. This exercises two related
+# THRUM_HOME isolation paths flagged in dual review:
+#
+#   - cli/quickstart.go G1a/G1b guard: the guard's IdentitiesDir must
+#     resolve to the child's .thrum/identities/, NOT the parent's.
+#     If the guard reads the parent dir, this stale file's PID (an
+#     intentionally-dead PID 1 — process 1 is alive but is launchd, not
+#     a thrum runtime) could falsely fire G1b ("name held by foreign
+#     PID") OR be silently quarantined as a stale sibling.
+#   - config.LoadIdentityWithPath in Step 2.5: the load must read the
+#     child's dir. If it reads the parent's, Step 2.5 picks up this
+#     file's stale Intent ("PARENT-INTENT-SHOULD-NOT-LEAK") and writes
+#     it into the child's new identity instead of the explicit --intent
+#     value the caller passed.
+#
+# The intent assertion below proves both: child file's .intent must
+# match what we passed at the CLI, not the parent's stale value.
+mkdir -p "$SUB_REPO/.thrum/identities"
+cat > "$SUB_REPO/.thrum/identities/${WT_AGENT}.json" <<JSON
+{
+  "version": 5,
+  "agent": {"kind": "agent", "name": "${WT_AGENT}", "role": "implementer", "module": "child"},
+  "worktree": "${SUB_REPO}",
+  "intent": "PARENT-INTENT-SHOULD-NOT-LEAK",
+  "agent_pid": 0
+}
+JSON
+
 # THE TEST: quickstart from the child worktree's cwd, with THRUM_HOME
 # set to the redirect target (the parent repo). On v0.10.0 this writes
 # the identity to $SUB_REPO/.thrum/identities/. Post-fix it must land
@@ -131,22 +160,58 @@ else
     "scenarios/${SID}.test.sh:$LINENO"
 fi
 
-# Assertion 2: identity file did NOT leak into the parent repo.
+# Assertion 2: pre-staged stale parent file is UNCHANGED. The pre-stage
+# wrote intent="PARENT-INTENT-SHOULD-NOT-LEAK" and left updated_at
+# absent; if quickstart hijacked to the parent, SaveIdentityFile would
+# rewrite the file and stamp updated_at with the current time. So a
+# preserved (absent or empty) updated_at + the stale intent value still
+# present is the strongest "parent untouched" signal we can read.
 local parent_id="$SUB_REPO/.thrum/identities/${WT_AGENT}.json"
-if [ ! -f "$parent_id" ]; then
-  emit_pass "$SID" "no-parent-leak"
+if [ -f "$parent_id" ]; then
+  local parent_intent parent_updated
+  parent_intent=$(jq -r '.intent // ""' "$parent_id" 2>/dev/null)
+  parent_updated=$(jq -r '.updated_at // ""' "$parent_id" 2>/dev/null)
+  if [ "$parent_intent" = "PARENT-INTENT-SHOULD-NOT-LEAK" ] && [ -z "$parent_updated" ]; then
+    emit_pass "$SID" "parent-identity-untouched"
+  else
+    emit_fail "$SID" "parent-identity-untouched" \
+      "parent ${WT_AGENT}.json intent='PARENT-INTENT-SHOULD-NOT-LEAK', updated_at empty" \
+      "intent='${parent_intent}', updated_at='${parent_updated}' (quickstart hijacked by THRUM_HOME)" \
+      "scenarios/${SID}.test.sh:$LINENO"
+  fi
 else
-  emit_fail "$SID" "no-parent-leak" \
-    "no ${WT_AGENT}.json in parent ${SUB_REPO}/.thrum/identities/" \
-    "(file present — quickstart hijacked by THRUM_HOME)" \
+  emit_fail "$SID" "parent-identity-untouched" \
+    "pre-staged ${parent_id} present" \
+    "(file missing — fixture pre-condition unmet)" \
     "scenarios/${SID}.test.sh:$LINENO"
+fi
+
+# Assertion 2b: child identity's intent matches the explicit --intent
+# value, NOT the stale parent's. This exercises Step 2.5 enrichment in
+# cli/quickstart.go: LoadIdentityWithPath must read the CHILD's
+# identities dir, not THRUM_HOME's. If it reads parent's, the new
+# child file inherits the stale "PARENT-INTENT-SHOULD-NOT-LEAK" value.
+if [ -f "$child_id" ]; then
+  local child_intent
+  child_intent=$(jq -r '.intent // ""' "$child_id" 2>/dev/null)
+  if [ "$child_intent" = "Release test 108 child" ]; then
+    emit_pass "$SID" "child-intent-not-inherited-from-parent"
+  else
+    emit_fail "$SID" "child-intent-not-inherited-from-parent" \
+      "child intent == 'Release test 108 child'" \
+      "got: '${child_intent}' (Step 2.5 enrichment may have read parent's identities dir)" \
+      "scenarios/${SID}.test.sh:$LINENO"
+  fi
+else
+  emit_skip "$SID" "child-intent-not-inherited-from-parent" \
+    "child identity file missing — see assertion identity-in-child-worktree"
 fi
 
 # Assertion 3: worktree field on the (correctly-placed) identity file
 # equals the child worktree path, not THRUM_HOME. EvalSymlinks via
 # `cd && pwd` so /var → /private/var on macOS doesn't false-fail.
 if [ -f "$child_id" ]; then
-  local stored_wt expected_wt
+  local stored_wt expected_wt stored_resolved
   stored_wt=$(jq -r '.worktree // ""' "$child_id" 2>/dev/null)
   expected_wt=$(cd "$WT_PATH" 2>/dev/null && pwd)
   stored_resolved=$(cd "$stored_wt" 2>/dev/null && pwd)
@@ -158,6 +223,12 @@ if [ -f "$child_id" ]; then
       "got: '${stored_wt}' (resolved: '${stored_resolved}')" \
       "scenarios/${SID}.test.sh:$LINENO"
   fi
+else
+  # Surface assertion 3 in the report when the child file is missing,
+  # so test output makes it obvious the bug reproduced (rather than
+  # silently dropping a row).
+  emit_skip "$SID" "worktree-field-matches-child" \
+    "child identity file missing — see assertion identity-in-child-worktree"
 fi
 
 }  # _run_scenario_108

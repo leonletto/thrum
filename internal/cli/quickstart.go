@@ -11,7 +11,6 @@ import (
 	"github.com/leonletto/thrum/internal/config"
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/identity/guard"
-	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/runtime"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
@@ -96,9 +95,17 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 	if qsRepoPath == "" {
 		qsRepoPath = "."
 	}
-	idsDir := filepath.Join(paths.EffectiveRepoPath(qsRepoPath), ".thrum", "identities")
+	// thrum-tc4w: do NOT wrap qsRepoPath in EffectiveRepoPath here. The
+	// cobra root already exempts quickstart from the THRUM_HOME hijack
+	// (cmd/thrum/main.go PersistentPreRunE), so opts.RepoPath is the
+	// caller's actual worktree. Re-applying EffectiveRepoPath would
+	// substitute back to THRUM_HOME and make G1a/G1b inspect the wrong
+	// identities dir + load config from the wrong .thrum — silently
+	// missing real child-side collisions and false-firing on stale
+	// parent-side files.
+	idsDir := filepath.Join(qsRepoPath, ".thrum", "identities")
 	qsChain, _ := guard.WalkAncestors(context.Background(), os.Getpid())
-	gcfg := guard.LoadConfigFromDir(paths.EffectiveRepoPath(qsRepoPath))
+	gcfg := guard.LoadConfigFromDir(qsRepoPath)
 	qc := &guard.QuickstartContext{
 		Mode:          gcfg.QuickstartSelfRename,
 		IdentitiesDir: idsDir,
