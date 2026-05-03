@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -15,8 +16,9 @@ import (
 )
 
 // WizardConfig holds inputs to the wizard run. Constructed by cmd/thrum's
-// init command from CLI flags + repo path. Tests construct it directly with
-// a FakePrompter.
+// init command from CLI flags + repo path. (CLI wiring lands in Epic D,
+// thrum-75rw.1; until then RunWizard is reachable only via direct calls,
+// currently exercised by tests.)
 type WizardConfig struct {
 	RepoPath      string
 	Prompter      Prompter
@@ -196,6 +198,8 @@ func loadReInitDefaults(cfg *WizardConfig) {
 		if cfg.WorktreesRoot == "" {
 			cfg.WorktreesRoot = existingCfg.Worktrees.BasePath
 		}
+	} else if err != nil {
+		slog.Debug("wizard.reinit: config load failed; using generic defaults", "err", err)
 	}
 	if id, _, err := config.LoadIdentityWithPath(cfg.RepoPath); err == nil && id != nil {
 		if cfg.NameFlag == "" {
@@ -207,6 +211,8 @@ func loadReInitDefaults(cfg *WizardConfig) {
 		if cfg.ModuleFlag == "" {
 			cfg.ModuleFlag = id.Agent.Module
 		}
+	} else if err != nil {
+		slog.Debug("wizard.reinit: identity load failed; using generic defaults", "err", err)
 	}
 }
 
@@ -244,6 +250,11 @@ func restoreSnapshot(path string, data []byte, existedBefore bool) {
 func rollback(cfg *WizardConfig, cause error) error {
 	thrumDir := filepath.Join(cfg.RepoPath, ".thrum")
 	_ = os.RemoveAll(thrumDir)
+	// Both files are restored unconditionally regardless of cfg.Stealth.
+	// When Stealth is true Init only touches .git/info/exclude, so the
+	// .gitignore restore is a no-op (snapshot equals current state). This
+	// is intentional belt-and-suspenders: branching on cfg.Stealth here
+	// would duplicate the stealth/non-stealth dispatch already in Init.
 	restoreSnapshot(filepath.Join(cfg.RepoPath, ".gitignore"),
 		cfg.gitignoreSnapshot, cfg.gitignoreExisted)
 	restoreSnapshot(filepath.Join(cfg.RepoPath, ".git", "info", "exclude"),
