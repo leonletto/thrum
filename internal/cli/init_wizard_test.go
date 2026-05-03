@@ -145,3 +145,69 @@ func TestWizard_StepWorktreesRoot_ExpandsTilde(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+func TestWizard_StepRoleTemplates_EnhancedWritesAllThree(t *testing.T) {
+	repo := setupTestRepo(t)
+	if err := os.MkdirAll(filepath.Join(repo, ".thrum"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	fp := &FakePrompter{Choices: map[PromptID]int{PromptRoleTemplates: 0}}
+	cfg := &WizardConfig{RepoPath: repo, Prompter: fp}
+	if err := stepRoleTemplates(cfg); err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range []string{"coordinator", "implementer", "orchestrator"} {
+		path := filepath.Join(repo, ".thrum", "role_templates", role+".md")
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("role template missing: %s", path)
+		}
+	}
+	impl, _ := os.ReadFile(filepath.Join(repo, ".thrum", "role_templates", "implementer.md"))
+	if !strings.Contains(string(impl), "Filesystem Boundary") {
+		t.Error("enhanced implementer template missing Filesystem Boundary section")
+	}
+}
+
+func TestWizard_StepRoleTemplates_SkipWritesNothing(t *testing.T) {
+	repo := setupTestRepo(t)
+	if err := os.MkdirAll(filepath.Join(repo, ".thrum"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	fp := &FakePrompter{Choices: map[PromptID]int{PromptRoleTemplates: 2}}
+	cfg := &WizardConfig{RepoPath: repo, Prompter: fp}
+	if err := stepRoleTemplates(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".thrum", "role_templates")); !os.IsNotExist(err) {
+		t.Error("role_templates dir should not exist for skip choice")
+	}
+}
+
+func TestWizard_StepRoleTemplates_NonForcePromptsBeforeOverwrite(t *testing.T) {
+	repo := setupTestRepo(t)
+	destDir := filepath.Join(repo, ".thrum", "role_templates")
+	if err := os.MkdirAll(destDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	existing := filepath.Join(destDir, "coordinator.md")
+	if err := os.WriteFile(existing, []byte("PRE-EXISTING"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fp := &FakePrompter{
+		Choices:  map[PromptID]int{PromptRoleTemplates: 0},
+		Confirms: map[PromptID]bool{PromptOverwriteRoleTemplate: false},
+	}
+	cfg := &WizardConfig{RepoPath: repo, Prompter: fp, Force: false}
+	if err := stepRoleTemplates(cfg); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(existing)
+	if string(data) != "PRE-EXISTING" {
+		t.Errorf("file overwritten despite refused confirm; got %q", data)
+	}
+	for _, r := range []string{"implementer", "orchestrator"} {
+		if _, err := os.Stat(filepath.Join(destDir, r+".md")); err != nil {
+			t.Errorf("expected %s.md to be written: %v", r, err)
+		}
+	}
+}

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/leonletto/thrum/internal/context/roleconfig"
 )
 
 // WizardConfig holds inputs to the wizard run. Constructed by cmd/thrum's
@@ -107,6 +109,71 @@ func stepWorktreesRoot(cfg *WizardConfig) (string, error) {
 		return "", fmt.Errorf("failed to create worktrees root %s: %w", chosen, err)
 	}
 	return chosen, nil
+}
+
+// stepRoleTemplates runs Step 5: write per-role markdown templates under
+// .thrum/role_templates/ based on a 3-way enhanced/default/skip choice.
+// Existing files are preserved unless --force or the user confirms overwrite.
+func stepRoleTemplates(cfg *WizardConfig) error {
+	choice := cfg.RolesChoice
+	if choice == "" {
+		idx, err := cfg.Prompter.Choice(PromptRoleTemplates,
+			"Apply role templates?",
+			[]string{
+				"enhanced (recommended): coordinator-autonomous, implementer-worktree-write-only, orchestrator",
+				"default: stock runtime templates (coordinator-strict, implementer-strict, orchestrator)",
+				"skip",
+			}, 0)
+		if err != nil {
+			return err
+		}
+		choice = []string{"enhanced", "default", "skip"}[idx]
+	}
+	if choice == "skip" {
+		return nil
+	}
+	var variants map[string]string
+	switch choice {
+	case "enhanced":
+		variants = map[string]string{
+			"coordinator":  "autonomous",
+			"implementer":  "worktree-write-only",
+			"orchestrator": "",
+		}
+	case "default":
+		variants = map[string]string{
+			"coordinator":  "strict",
+			"implementer":  "strict",
+			"orchestrator": "",
+		}
+	default:
+		return fmt.Errorf("invalid roles choice: %q", choice)
+	}
+	destDir := filepath.Join(cfg.RepoPath, ".thrum", "role_templates")
+	if err := os.MkdirAll(destDir, 0o750); err != nil {
+		return err
+	}
+	for role, autonomy := range variants {
+		dst := filepath.Join(destDir, role+".md")
+		if _, err := os.Stat(dst); err == nil && !cfg.Force {
+			ok, err := cfg.Prompter.Confirm(PromptOverwriteRoleTemplate,
+				fmt.Sprintf("%s already exists; overwrite?", dst), false)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				continue
+			}
+		}
+		data, err := roleconfig.ReadShippedTemplate(role, autonomy)
+		if err != nil {
+			return fmt.Errorf("read shipped template (%s, %s): %w", role, autonomy, err)
+		}
+		if err := os.WriteFile(dst, data, 0o600); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // expandTilde expands a leading "~" or "~/" to the user's home directory.
