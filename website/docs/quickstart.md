@@ -41,19 +41,33 @@ make install  # Builds UI + Go binary, installs to ~/.local/bin
 
 ## Fast Path
 
-One command to init, register, start a session, and set your intent:
+One command to scaffold the project, register your agent, configure
+worktrees, install role templates, and start the daemon:
 
 ```bash
 cd your-project
 thrum init
-thrum quickstart --name myagent --role implementer --module auth --intent "Working on auth"
 ```
 
-That's it. You're registered and ready to send messages. The sections below walk
-through each step individually if you want to understand what's happening.
+On a TTY, `thrum init` launches an opinionated wizard that walks you
+through identity, worktrees root, role templates, and daemon start. Press
+enter through every prompt to accept the recommended defaults. When the
+wizard finishes you are fully registered and can send your first message.
 
-Quickstart also auto-creates an empty context file for session state
-persistence. See [Agent Context Management](context.md) for details.
+Need a non-interactive run for CI or scripted setup? Pre-fill every prompt
+with flags (the wizard skips prompts whose value is supplied):
+
+```bash
+thrum init --name myagent --role implementer --module auth \
+           --worktrees-root ~/.thrum/worktrees/myproj \
+           --roles=enhanced
+```
+
+Force the legacy silent path explicitly with `--non-interactive` (existing
+CI scripts that pipe stdin already get this behavior automatically).
+
+The sections below walk through each step individually if you want to
+understand what the wizard is doing.
 
 ## Step-by-Step Walkthrough
 
@@ -66,17 +80,38 @@ cd your-project
 thrum init
 ```
 
-This creates:
+The wizard creates:
 
 - `.thrum/` directory (gitignored entirely)
 - `.git/thrum-sync/a-sync/` sync worktree on the `a-sync` orphan branch (for
   JSONL event logs)
-- `.thrum/identities/` for agent identity files
+- `.thrum/identities/` for agent identity files (your initial identity is
+  registered here automatically)
 - `.thrum/var/` for daemon runtime files
+- `.thrum/role_templates/` populated with the role templates you choose
 - `a-sync` orphan branch for message synchronization
+- `Worktrees.BasePath` in `.thrum/config.json` set to the directory you pick
+- The daemon, started in the background
 
-`thrum init` also starts the daemon automatically (since v0.4.5). You do not
-need a separate `thrum daemon start` step for first-time setup.
+The wizard also runs `thrum quickstart` for you, so you do not need to run
+it separately. The "Step 4: Register" section below applies only when you
+ran `thrum init --non-interactive` and want to register an agent later.
+
+#### Worktree base path migration
+
+In v0.9.3 the implicit fallback for `Worktrees.BasePath` migrated from
+`~/.workspaces/<project>` to `~/.thrum/worktrees/<project>`. Users with an
+explicit `Worktrees.BasePath` in `.thrum/config.json` are unaffected. If
+you relied on the legacy fallback and want to keep existing worktrees in
+place, set the override before your next `thrum worktree create`:
+
+```bash
+thrum config set worktrees.base_path "$HOME/.workspaces/<project>"
+```
+
+The wizard also offers to set this path interactively — press enter to
+accept the new default, or type the legacy path to preserve existing
+worktrees.
 
 **v0.7.0 default:** New repos start in single-agent mode
 (`single_agent_mode: true`). This gives you context management (`thrum prime`,
