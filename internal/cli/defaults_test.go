@@ -151,13 +151,17 @@ func setupGitRepoNoRemote(t *testing.T, branch string) string {
 	return repo
 }
 
-// setupBareRepoNoCommits creates a fresh repo with no commits — neither
-// origin/HEAD nor local HEAD resolves to a branch via symbolic-ref --short.
+// setupBareRepoNoCommits creates a fresh repo with no commits and pins the
+// initial branch to "main". The pin is what makes the test deterministic
+// across hosts — `git init` without `-b` honors `init.defaultBranch`, which
+// is `main` on modern macOS but still `master` on older Linux runners (the
+// GH Actions Ubuntu image as of 2026-05). Pinning here means
+// TestDefaultModule_FallsBackToMain asserts the same outcome on both.
 func setupBareRepoNoCommits(t *testing.T) string {
 	t.Helper()
 	ctx := context.Background()
 	repo := t.TempDir()
-	if _, err := safecmd.Git(ctx, "", "init", repo); err != nil {
+	if _, err := safecmd.Git(ctx, "", "init", "--initial-branch=main", repo); err != nil {
 		t.Fatalf("init: %v", err)
 	}
 	return repo
