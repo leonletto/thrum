@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -74,6 +75,58 @@ var sanitizeRE = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 // sanitize replaces any non-alphanumeric/underscore/dash character with a
 // dash so a repo basename is safe to use inside a default agent name.
 func sanitize(s string) string { return sanitizeRE.ReplaceAllString(s, "-") }
+
+// stepWorktreesRoot runs Step 4: pick the directory under which agent
+// worktrees are created. Default is ~/.thrum/worktrees/<repo>. Validates
+// that the chosen path is absolute and outside the repo, then creates it.
+func stepWorktreesRoot(cfg *WizardConfig) (string, error) {
+	home, _ := os.UserHomeDir()
+	repoName := filepath.Base(cfg.RepoPath)
+	defaultPath := filepath.Join(home, ".thrum", "worktrees", repoName)
+
+	chosen := cfg.WorktreesRoot
+	if chosen == "" {
+		v, err := cfg.Prompter.String(PromptWorktreesRoot, "Where should agent worktrees live?", defaultPath)
+		if err != nil {
+			return "", err
+		}
+		chosen = v
+	}
+	chosen, err := expandTilde(chosen)
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(chosen) {
+		return "", fmt.Errorf("worktrees root must be an absolute path: %q", chosen)
+	}
+	repoAbs, _ := filepath.Abs(cfg.RepoPath)
+	if strings.HasPrefix(chosen+string(filepath.Separator), repoAbs+string(filepath.Separator)) {
+		return "", fmt.Errorf("worktrees root must not be inside the repo: %q is inside %q", chosen, repoAbs)
+	}
+	if err := os.MkdirAll(chosen, 0o750); err != nil {
+		return "", fmt.Errorf("failed to create worktrees root %s: %w", chosen, err)
+	}
+	return chosen, nil
+}
+
+// expandTilde expands a leading "~" or "~/" to the user's home directory.
+// Other "~user" forms are returned unchanged (we don't resolve other users).
+func expandTilde(p string) (string, error) {
+	if !strings.HasPrefix(p, "~") {
+		return p, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	if p == "~" {
+		return home, nil
+	}
+	if strings.HasPrefix(p, "~/") {
+		return filepath.Join(home, p[2:]), nil
+	}
+	return p, nil
+}
 
 // tmuxGate verifies tmux is on PATH. Returns an error message with
 // install suggestions when missing. Called as Step 0 of the wizard

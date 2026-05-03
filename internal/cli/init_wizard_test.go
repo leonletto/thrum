@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -87,5 +88,60 @@ func TestTmuxGate_ReturnsInstallMessageWhenMissing(t *testing.T) {
 		if !strings.Contains(msg, want) {
 			t.Errorf("error message missing %q:\n%s", want, msg)
 		}
+	}
+}
+
+func TestWizard_StepWorktreesRoot_CreatesDefault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	repo := setupTestRepo(t)
+	cfg := &WizardConfig{RepoPath: repo, Prompter: &FakePrompter{}}
+	got, err := stepWorktreesRoot(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, ".thrum", "worktrees", filepath.Base(repo))
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if _, err := os.Stat(want); err != nil {
+		t.Errorf("worktrees root not created: %v", err)
+	}
+}
+
+func TestWizard_StepWorktreesRoot_RejectsRelative(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	repo := setupTestRepo(t)
+	fp := &FakePrompter{Strings: map[PromptID]string{PromptWorktreesRoot: "rel/path"}}
+	cfg := &WizardConfig{RepoPath: repo, Prompter: fp}
+	if _, err := stepWorktreesRoot(cfg); err == nil {
+		t.Error("expected validation error for relative path")
+	}
+}
+
+func TestWizard_StepWorktreesRoot_RejectsInsideRepo(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	repo := setupTestRepo(t)
+	inside := filepath.Join(repo, "wt")
+	fp := &FakePrompter{Strings: map[PromptID]string{PromptWorktreesRoot: inside}}
+	cfg := &WizardConfig{RepoPath: repo, Prompter: fp}
+	if _, err := stepWorktreesRoot(cfg); err == nil {
+		t.Error("expected validation error for path inside repo")
+	}
+}
+
+func TestWizard_StepWorktreesRoot_ExpandsTilde(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	repo := setupTestRepo(t)
+	fp := &FakePrompter{Strings: map[PromptID]string{PromptWorktreesRoot: "~/custom/wt"}}
+	cfg := &WizardConfig{RepoPath: repo, Prompter: fp}
+	got, err := stepWorktreesRoot(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, "custom", "wt")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
