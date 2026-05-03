@@ -17,23 +17,22 @@ nothing gets lost.
 
 - **`thrum init` wizard** — `thrum init` on a TTY now launches an opinionated
   interactive setup walking new users through identity, worktrees root, role
-  templates, and daemon start in one flow. Press enter through every prompt
-  to accept recommended defaults. The legacy silent path is preserved when
-  stdin is not a TTY or `--non-interactive` is set, so existing CI scripts
-  keep working. Pre-fill any prompt with `--name`, `--role`, `--module`,
-  `--worktrees-root`, `--roles=enhanced|default|skip`, and `--no-daemon` to
-  script the wizard end-to-end.
+  templates, and daemon start in one flow. Press enter through every prompt to
+  accept recommended defaults. The legacy silent path is preserved when stdin is
+  not a TTY or `--non-interactive` is set, so existing CI scripts keep working.
+  Pre-fill any prompt with `--name`, `--role`, `--module`, `--worktrees-root`,
+  `--roles=enhanced|default|skip`, and `--no-daemon` to script the wizard
+  end-to-end.
 - **New role template `implementer-worktree-write-only`** — the wizard's
-  "enhanced" choice pins implementers to writes inside their own worktree
-  and forbids drive-by edits to the main repo.
-- **Default worktree base path migrated** to `~/.thrum/worktrees/<project>`
-  (was `~/.workspaces/<project>`). Users with an explicit `Worktrees.BasePath`
-  in `.thrum/config.json` are unaffected; the wizard prompt accepts the
-  legacy path if you want to preserve it.
+  "enhanced" choice pins implementers to writes inside their own worktree and
+  forbids drive-by edits to the main repo.
+- **Default worktree base path migrated** to `~/.thrum/worktrees/<project>` (was
+  `~/.workspaces/<project>`). Users with an explicit `Worktrees.BasePath` in
+  `.thrum/config.json` are unaffected; the wizard prompt accepts the legacy path
+  if you want to preserve it.
 - **`scripts/thrum-check-inbox.sh` correctly excluded** alongside
   `thrum-startup.sh` in both `.gitignore` and `.git/info/exclude` (stealth
-  mode), preventing the inbox-check helper from leaking into tracked
-  changes.
+  mode), preventing the inbox-check helper from leaking into tracked changes.
 
 ## Quick Start
 

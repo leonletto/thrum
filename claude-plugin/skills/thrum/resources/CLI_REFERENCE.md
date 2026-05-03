@@ -613,7 +613,8 @@ thrum runtime show claude --json
 thrum runtime set-default <name>               # Set the default runtime preset
 ```
 
-Supported runtimes: `claude`, `codex`, `cursor`, `gemini`, `opencode`, `auggie`, `cli-only`
+Supported runtimes: `claude`, `codex`, `cursor`, `gemini`, `opencode`, `auggie`,
+`cli-only`
 
 ---
 
