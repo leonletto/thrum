@@ -308,7 +308,7 @@ func TestWizard_SIGINT_RunsCleanup(t *testing.T) {
 		return
 	}
 	repo := setupTestRepo(t)
-	cmd := exec.Command(os.Args[0], "-test.run=TestWizard_SIGINT_RunsCleanup", "-test.timeout=30s")
+	cmd := exec.Command(os.Args[0], "-test.run=TestWizard_SIGINT_RunsCleanup", "-test.timeout=30s") // #nosec G702 -- os.Args[0] is the test binary path; subprocess pattern is the standard helper for SIGINT testing
 	cmd.Env = append(os.Environ(),
 		"TEST_HELPER_RUN_WIZARD=1",
 		"TEST_HELPER_REPO="+repo,

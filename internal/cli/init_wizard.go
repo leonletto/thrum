@@ -37,10 +37,10 @@ type WizardConfig struct {
 	// "file did not exist before Init"; in that case rollback removes the
 	// file rather than restoring nil bytes. Populated by snapshotGitFiles
 	// before Init runs.
-	gitignoreSnapshot    []byte
-	gitignoreExisted     bool
-	gitExcludeSnapshot   []byte
-	gitExcludeExisted    bool
+	gitignoreSnapshot  []byte
+	gitignoreExisted   bool
+	gitExcludeSnapshot []byte
+	gitExcludeExisted  bool
 }
 
 // WizardIdentity is the result of Step 3 (identity prompts).
@@ -222,12 +222,12 @@ func loadReInitDefaults(cfg *WizardConfig) {
 // created rather than writing back nil bytes.
 func snapshotGitFiles(cfg *WizardConfig) {
 	gi := filepath.Join(cfg.RepoPath, ".gitignore")
-	if data, err := os.ReadFile(gi); err == nil {
+	if data, err := os.ReadFile(gi); err == nil { // #nosec G304 -- gi is repoPath/.gitignore, controlled by wizard caller
 		cfg.gitignoreSnapshot = data
 		cfg.gitignoreExisted = true
 	}
 	ex := filepath.Join(cfg.RepoPath, ".git", "info", "exclude")
-	if data, err := os.ReadFile(ex); err == nil {
+	if data, err := os.ReadFile(ex); err == nil { // #nosec G304 -- ex is repoPath/.git/info/exclude, controlled by wizard caller
 		cfg.gitExcludeSnapshot = data
 		cfg.gitExcludeExisted = true
 	}
