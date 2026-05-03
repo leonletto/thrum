@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["./opencode-plugin"],
+  "plugin": ["opencode-thrum"],
   "mcp": {
     "thrum": {
       "type": "local",
