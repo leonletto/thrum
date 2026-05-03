@@ -65,9 +65,11 @@ run_setup() {
     git add . && git commit -m "Initial commit" >/dev/null
   ) || { echo "ERROR: B/git init failed" >&2; return 1; }
 
-  # --runtime claude bypasses the interactive prompt (when stdin is a tty,
-  # which it is inside a tmux-exec pane).
-  "$TE" exec --cwd "$REPO" --clean -- thrum init --runtime claude \
+  # --non-interactive forces the legacy silent path even though the
+  # tmux-exec pane provides a TTY. v0.9.3 added the wizard, which would
+  # otherwise prompt and hang fixture setup. --runtime claude still
+  # picks the runtime explicitly.
+  "$TE" exec --cwd "$REPO" --clean -- thrum init --non-interactive --runtime claude \
     || { echo "ERROR: B/thrum init failed" >&2; return 1; }
 
   "$TE" exec --cwd "$REPO" --clean -- thrum quickstart \
