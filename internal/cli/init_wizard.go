@@ -185,10 +185,11 @@ func stepDaemon(cfg *WizardConfig) error {
 // missing config is the same as a fresh repo for re-init purposes — the
 // prompts will fall back to generic defaults instead of pre-seeded values.
 // Per-flag CLI overrides win over re-init seeds (already-set fields are
-// not overwritten).
-func loadReInitDefaults(cfg *WizardConfig) error {
+// not overwritten). The signature returns no error to make the swallow
+// contract explicit at the type level.
+func loadReInitDefaults(cfg *WizardConfig) {
 	if !cfg.Force {
-		return nil
+		return
 	}
 	thrumDir := filepath.Join(cfg.RepoPath, ".thrum")
 	if existingCfg, err := config.LoadThrumConfig(thrumDir); err == nil && existingCfg != nil {
@@ -207,7 +208,6 @@ func loadReInitDefaults(cfg *WizardConfig) error {
 			cfg.ModuleFlag = id.Agent.Module
 		}
 	}
-	return nil
 }
 
 // snapshotGitFiles captures .gitignore and .git/info/exclude before Init()
@@ -269,30 +269,38 @@ func persistWorktreesBasePath(repoPath, basePath string) error {
 // Failures in Steps 3-5 trigger rollback; daemon failure is reported but
 // leaves a valid .thrum/ behind.
 func RunWizard(cfg *WizardConfig) error {
-	// SIGINT handler runs the same cleanup as a Step 3-5 error path so
-	// Ctrl-C mid-wizard never leaves a half-scaffolded .thrum/ behind.
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt)
-	defer signal.Stop(sigCh)
-	go func() {
-		if _, ok := <-sigCh; !ok {
-			return
-		}
-		_ = rollback(cfg, fmt.Errorf("interrupted"))
-		os.Exit(130)
-	}()
-
 	if err := tmuxGate(os.Stderr); err != nil {
 		return err
 	}
 
 	// Re-init mode reads existing .thrum/ before Init's --force re-scaffold
 	// can touch it, so prompt defaults reflect the user's prior choices.
-	if err := loadReInitDefaults(cfg); err != nil {
-		return err
-	}
+	loadReInitDefaults(cfg)
 
+	// Snapshot must happen BEFORE the SIGINT handler is installed so the
+	// goroutine never sees zero snapshots if Ctrl-C arrives in the gap
+	// between Notify and the snapshot call.
 	snapshotGitFiles(cfg)
+
+	// SIGINT handler runs the same cleanup as a Step 3-5 error path so
+	// Ctrl-C mid-wizard never leaves a half-scaffolded .thrum/ behind. The
+	// done channel terminates the goroutine on normal return — signal.Stop
+	// alone does not close sigCh, which would leak the goroutine forever.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
+	done := make(chan struct{})
+	defer func() {
+		signal.Stop(sigCh)
+		close(done)
+	}()
+	go func() {
+		select {
+		case <-sigCh:
+			_ = rollback(cfg, fmt.Errorf("interrupted"))
+			os.Exit(130)
+		case <-done:
+		}
+	}()
 
 	if err := Init(InitOptions{
 		RepoPath: cfg.RepoPath,

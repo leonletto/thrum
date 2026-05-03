@@ -316,8 +316,22 @@ func TestWizard_SIGINT_RunsCleanup(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	// Give Init() time to scaffold .thrum/ and reach the first prompt.
-	time.Sleep(500 * time.Millisecond)
+	// Poll for .thrum/ to ensure Init() finished scaffolding before SIGINT.
+	// Vacuous-pass guard: SIGINT-ing before .thrum/ exists would let the
+	// rollback assertion succeed because the dir was never created.
+	thrumDir := filepath.Join(repo, ".thrum")
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(thrumDir); err == nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if _, err := os.Stat(thrumDir); err != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		t.Fatalf(".thrum/ never appeared in subprocess; SIGINT test would vacuously pass: %v", err)
+	}
 	if err := cmd.Process.Signal(os.Interrupt); err != nil {
 		t.Fatal(err)
 	}
@@ -339,9 +353,7 @@ func TestWizard_ReInitMode_WorktreesRootSeededFromExistingConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := &WizardConfig{RepoPath: repo, Prompter: &FakePrompter{}, Force: true}
-	if err := loadReInitDefaults(cfg); err != nil {
-		t.Fatal(err)
-	}
+	loadReInitDefaults(cfg)
 	if cfg.WorktreesRoot != "/custom/wt/path" {
 		t.Errorf("WorktreesRoot = %q, want %q", cfg.WorktreesRoot, "/custom/wt/path")
 	}
@@ -359,9 +371,7 @@ func TestWizard_ReInitMode_NoOpWithoutForce(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := &WizardConfig{RepoPath: repo, Prompter: &FakePrompter{}, Force: false}
-	if err := loadReInitDefaults(cfg); err != nil {
-		t.Fatal(err)
-	}
+	loadReInitDefaults(cfg)
 	if cfg.WorktreesRoot != "" {
 		t.Errorf("WorktreesRoot should remain empty without --force, got %q", cfg.WorktreesRoot)
 	}
@@ -384,9 +394,7 @@ func TestWizard_ReInitMode_FlagOverridesExistingConfig(t *testing.T) {
 		Force:         true,
 		WorktreesRoot: "/cli/override",
 	}
-	if err := loadReInitDefaults(cfg); err != nil {
-		t.Fatal(err)
-	}
+	loadReInitDefaults(cfg)
 	if cfg.WorktreesRoot != "/cli/override" {
 		t.Errorf("flag should win over re-init seed; got %q", cfg.WorktreesRoot)
 	}
