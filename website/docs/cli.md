@@ -138,27 +138,25 @@ Available on all commands:
 
 Initialize Thrum in the current repository.
 
-**On a TTY** (and unless `--non-interactive` is set), `thrum init` launches
-an interactive wizard that walks you through identity, worktrees root, role
+**On a TTY** (and unless `--non-interactive` is set), `thrum init` launches an
+interactive wizard that walks you through identity, worktrees root, role
 templates, and daemon start. The wizard scaffolds `.thrum/`, sets up the
 `a-sync` branch, registers your initial agent, persists `Worktrees.BasePath`,
-writes the role templates you choose, and starts the daemon — all in one
-flow. Press enter through every prompt to accept the recommended defaults.
+writes the role templates you choose, and starts the daemon — all in one flow.
+Press enter through every prompt to accept the recommended defaults.
 
-**On non-TTY stdin or with `--non-interactive`**, `thrum init` runs the
-legacy silent path: scaffolds `.thrum/`, writes default config, no
-identity, no worktrees-root, no role templates, no daemon start. Existing
-CI scripts that pipe stdin to `thrum init` get this behavior unchanged.
+**On non-TTY stdin or with `--non-interactive`**, `thrum init` runs the legacy
+silent path: scaffolds `.thrum/`, writes default config, no identity, no
+worktrees-root, no role templates, no daemon start. Existing CI scripts that
+pipe stdin to `thrum init` get this behavior unchanged.
 
 Pre-fill any wizard prompt with the corresponding flag (`--name`, `--role`,
-etc.); the wizard skips prompts whose value was supplied. With every
-prompt pre-filled, the wizard runs end-to-end without user input even on
-a TTY.
+etc.); the wizard skips prompts whose value was supplied. With every prompt
+pre-filled, the wizard runs end-to-end without user input even on a TTY.
 
-**G2 guard:** `thrum init` hard-errors if the current working directory is
-not inside a git repository. Pass `--force` to override for non-git
-environments (uncommon; the daemon cannot anchor identity without a git
-root).
+**G2 guard:** `thrum init` hard-errors if the current working directory is not
+inside a git repository. Pass `--force` to override for non-git environments
+(uncommon; the daemon cannot anchor identity without a git root).
 
 This command emits contextual hints — see [CLI Hints](cli-hints.md).
 
@@ -166,28 +164,28 @@ This command emits contextual hints — see [CLI Hints](cli-hints.md).
 thrum init [flags]
 ```
 
-| Flag                | Description                                                                                       | Default |
-| ------------------- | ------------------------------------------------------------------------------------------------- | ------- |
-| `--force`           | Force reinitialization. On a TTY this re-runs the wizard with existing values pre-seeded.         | `false` |
-| `--runtime`         | Specify runtime directly (skip detection prompt)                                                  | (auto)  |
-| `--dry-run`         | Preview changes without writing files. Bypasses the wizard regardless of TTY.                     | `false` |
-| `--stealth`         | Write exclusions to `.git/info/exclude` instead of `.gitignore` (zero tracked-file footprint)     | `false` |
-| `--skills`          | Install thrum skill only (no MCP config, no startup script)                                       | `false` |
-| `--non-interactive` | Force the legacy silent path even on a TTY                                                        | `false` |
-| `--name`            | Pre-fill the wizard's identity-name prompt                                                        |         |
-| `--role`            | Pre-fill the wizard's role prompt                                                                 |         |
-| `--module`          | Pre-fill the wizard's module prompt                                                               |         |
-| `--worktrees-root`  | Pre-fill the wizard's worktrees-root prompt (must be an absolute path outside the repo)           |         |
-| `--roles`           | Pre-fill the wizard's role-template choice (`enhanced` \| `default` \| `skip`)                    |         |
-| `--no-daemon`       | Skip auto-starting the daemon at the end of the wizard                                            | `false` |
+| Flag                | Description                                                                                   | Default |
+| ------------------- | --------------------------------------------------------------------------------------------- | ------- |
+| `--force`           | Force reinitialization. On a TTY this re-runs the wizard with existing values pre-seeded.     | `false` |
+| `--runtime`         | Specify runtime directly (skip detection prompt)                                              | (auto)  |
+| `--dry-run`         | Preview changes without writing files. Bypasses the wizard regardless of TTY.                 | `false` |
+| `--stealth`         | Write exclusions to `.git/info/exclude` instead of `.gitignore` (zero tracked-file footprint) | `false` |
+| `--skills`          | Install thrum skill only (no MCP config, no startup script)                                   | `false` |
+| `--non-interactive` | Force the legacy silent path even on a TTY                                                    | `false` |
+| `--name`            | Pre-fill the wizard's identity-name prompt                                                    |         |
+| `--role`            | Pre-fill the wizard's role prompt                                                             |         |
+| `--module`          | Pre-fill the wizard's module prompt                                                           |         |
+| `--worktrees-root`  | Pre-fill the wizard's worktrees-root prompt (must be an absolute path outside the repo)       |         |
+| `--roles`           | Pre-fill the wizard's role-template choice (`enhanced` \| `default` \| `skip`)                |         |
+| `--no-daemon`       | Skip auto-starting the daemon at the end of the wizard                                        | `false` |
 
 #### Worktree base path migration (v0.9.3)
 
 The implicit fallback for `Worktrees.BasePath` migrated from
 `~/.workspaces/<project>` to `~/.thrum/worktrees/<project>`. Users with an
-explicit `Worktrees.BasePath` in `.thrum/config.json` are unaffected. If
-you relied on the legacy fallback and want to keep existing worktrees in
-place, set the override before the next `thrum worktree create`:
+explicit `Worktrees.BasePath` in `.thrum/config.json` are unaffected. If you
+relied on the legacy fallback and want to keep existing worktrees in place, set
+the override before the next `thrum worktree create`:
 
 ```bash
 thrum config set worktrees.base_path "$HOME/.workspaces/<project>"

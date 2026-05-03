@@ -41,21 +41,21 @@ make install  # Builds UI + Go binary, installs to ~/.local/bin
 
 ## Fast Path
 
-One command to scaffold the project, register your agent, configure
-worktrees, install role templates, and start the daemon:
+One command to scaffold the project, register your agent, configure worktrees,
+install role templates, and start the daemon:
 
 ```bash
 cd your-project
 thrum init
 ```
 
-On a TTY, `thrum init` launches an opinionated wizard that walks you
-through identity, worktrees root, role templates, and daemon start. Press
-enter through every prompt to accept the recommended defaults. When the
-wizard finishes you are fully registered and can send your first message.
+On a TTY, `thrum init` launches an opinionated wizard that walks you through
+identity, worktrees root, role templates, and daemon start. Press enter through
+every prompt to accept the recommended defaults. When the wizard finishes you
+are fully registered and can send your first message.
 
-Need a non-interactive run for CI or scripted setup? Pre-fill every prompt
-with flags (the wizard skips prompts whose value is supplied):
+Need a non-interactive run for CI or scripted setup? Pre-fill every prompt with
+flags (the wizard skips prompts whose value is supplied):
 
 ```bash
 thrum init --name myagent --role implementer --module auth \
@@ -63,11 +63,11 @@ thrum init --name myagent --role implementer --module auth \
            --roles=enhanced
 ```
 
-Force the legacy silent path explicitly with `--non-interactive` (existing
-CI scripts that pipe stdin already get this behavior automatically).
+Force the legacy silent path explicitly with `--non-interactive` (existing CI
+scripts that pipe stdin already get this behavior automatically).
 
-The sections below walk through each step individually if you want to
-understand what the wizard is doing.
+The sections below walk through each step individually if you want to understand
+what the wizard is doing.
 
 ## Step-by-Step Walkthrough
 
@@ -93,25 +93,24 @@ The wizard creates:
 - `Worktrees.BasePath` in `.thrum/config.json` set to the directory you pick
 - The daemon, started in the background
 
-The wizard also runs `thrum quickstart` for you, so you do not need to run
-it separately. The "Step 4: Register" section below applies only when you
-ran `thrum init --non-interactive` and want to register an agent later.
+The wizard also runs `thrum quickstart` for you, so you do not need to run it
+separately. The "Step 4: Register" section below applies only when you ran
+`thrum init --non-interactive` and want to register an agent later.
 
 #### Worktree base path migration
 
 In v0.9.3 the implicit fallback for `Worktrees.BasePath` migrated from
 `~/.workspaces/<project>` to `~/.thrum/worktrees/<project>`. Users with an
-explicit `Worktrees.BasePath` in `.thrum/config.json` are unaffected. If
-you relied on the legacy fallback and want to keep existing worktrees in
-place, set the override before your next `thrum worktree create`:
+explicit `Worktrees.BasePath` in `.thrum/config.json` are unaffected. If you
+relied on the legacy fallback and want to keep existing worktrees in place, set
+the override before your next `thrum worktree create`:
 
 ```bash
 thrum config set worktrees.base_path "$HOME/.workspaces/<project>"
 ```
 
-The wizard also offers to set this path interactively — press enter to
-accept the new default, or type the legacy path to preserve existing
-worktrees.
+The wizard also offers to set this path interactively — press enter to accept
+the new default, or type the legacy path to preserve existing worktrees.
 
 **v0.7.0 default:** New repos start in single-agent mode
 (`single_agent_mode: true`). This gives you context management (`thrum prime`,
