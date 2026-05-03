@@ -340,8 +340,18 @@ Examples:
 					rolesChoice, _ := cmd.Flags().GetString("roles")
 					noDaemon, _ := cmd.Flags().GetBool("no-daemon")
 
+					// Resolve to absolute so the wizard's later
+					// `thrum --repo <path> quickstart` subprocess passes
+					// an absolute path (the cobra handler's
+					// worktree.NormalizeWorktreePath rejects relative
+					// values like "." that the init PreRunE leaves alone).
+					wizardRepo, absErr := filepath.Abs(flagRepo)
+					if absErr != nil {
+						wizardRepo = flagRepo
+					}
+
 					return cli.RunWizard(&cli.WizardConfig{
-						RepoPath:      flagRepo,
+						RepoPath:      wizardRepo,
 						Prompter:      cli.NewScannerPrompter(os.Stdin, os.Stderr),
 						NameFlag:      name,
 						RoleFlag:      role,
