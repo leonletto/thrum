@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/leonletto/thrum/internal/config"
 )
 
 // setupTestRepoWithRemoteHEAD aliases the shared defaults_test helper so the
@@ -322,5 +324,70 @@ func TestWizard_SIGINT_RunsCleanup(t *testing.T) {
 	_ = cmd.Wait()
 	if _, err := os.Stat(filepath.Join(repo, ".thrum")); !os.IsNotExist(err) {
 		t.Errorf(".thrum should be removed after SIGINT; stat err=%v", err)
+	}
+}
+
+func TestWizard_ReInitMode_WorktreesRootSeededFromExistingConfig(t *testing.T) {
+	repo := setupTestRepo(t)
+	thrumDir := filepath.Join(repo, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	existing := &config.ThrumConfig{}
+	existing.Worktrees.BasePath = "/custom/wt/path"
+	if err := config.SaveThrumConfig(thrumDir, existing); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &WizardConfig{RepoPath: repo, Prompter: &FakePrompter{}, Force: true}
+	if err := loadReInitDefaults(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreesRoot != "/custom/wt/path" {
+		t.Errorf("WorktreesRoot = %q, want %q", cfg.WorktreesRoot, "/custom/wt/path")
+	}
+}
+
+func TestWizard_ReInitMode_NoOpWithoutForce(t *testing.T) {
+	repo := setupTestRepo(t)
+	thrumDir := filepath.Join(repo, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	existing := &config.ThrumConfig{}
+	existing.Worktrees.BasePath = "/custom/wt/path"
+	if err := config.SaveThrumConfig(thrumDir, existing); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &WizardConfig{RepoPath: repo, Prompter: &FakePrompter{}, Force: false}
+	if err := loadReInitDefaults(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreesRoot != "" {
+		t.Errorf("WorktreesRoot should remain empty without --force, got %q", cfg.WorktreesRoot)
+	}
+}
+
+func TestWizard_ReInitMode_FlagOverridesExistingConfig(t *testing.T) {
+	repo := setupTestRepo(t)
+	thrumDir := filepath.Join(repo, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	existing := &config.ThrumConfig{}
+	existing.Worktrees.BasePath = "/custom/wt/path"
+	if err := config.SaveThrumConfig(thrumDir, existing); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &WizardConfig{
+		RepoPath:      repo,
+		Prompter:      &FakePrompter{},
+		Force:         true,
+		WorktreesRoot: "/cli/override",
+	}
+	if err := loadReInitDefaults(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreesRoot != "/cli/override" {
+		t.Errorf("flag should win over re-init seed; got %q", cfg.WorktreesRoot)
 	}
 }

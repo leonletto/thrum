@@ -176,6 +176,40 @@ func stepDaemon(cfg *WizardConfig) error {
 	return nil
 }
 
+// loadReInitDefaults pre-seeds cfg fields from existing .thrum/ state when
+// running with --force (re-init mode). Each step's prompt fallback reads
+// cfg.NameFlag / cfg.RoleFlag / cfg.ModuleFlag / cfg.WorktreesRoot, so
+// pressing enter on every prompt becomes a no-op refresh of existing values.
+//
+// Errors loading existing state are intentionally swallowed: a partial or
+// missing config is the same as a fresh repo for re-init purposes — the
+// prompts will fall back to generic defaults instead of pre-seeded values.
+// Per-flag CLI overrides win over re-init seeds (already-set fields are
+// not overwritten).
+func loadReInitDefaults(cfg *WizardConfig) error {
+	if !cfg.Force {
+		return nil
+	}
+	thrumDir := filepath.Join(cfg.RepoPath, ".thrum")
+	if existingCfg, err := config.LoadThrumConfig(thrumDir); err == nil && existingCfg != nil {
+		if cfg.WorktreesRoot == "" {
+			cfg.WorktreesRoot = existingCfg.Worktrees.BasePath
+		}
+	}
+	if id, _, err := config.LoadIdentityWithPath(cfg.RepoPath); err == nil && id != nil {
+		if cfg.NameFlag == "" {
+			cfg.NameFlag = id.Agent.Name
+		}
+		if cfg.RoleFlag == "" {
+			cfg.RoleFlag = id.Agent.Role
+		}
+		if cfg.ModuleFlag == "" {
+			cfg.ModuleFlag = id.Agent.Module
+		}
+	}
+	return nil
+}
+
 // snapshotGitFiles captures .gitignore and .git/info/exclude before Init()
 // modifies them so rollback can restore them byte-for-byte. Missing files
 // are recorded as "did not exist", causing rollback to remove a file Init
@@ -252,9 +286,11 @@ func RunWizard(cfg *WizardConfig) error {
 		return err
 	}
 
-	// Splice point for Task .6 — loadReInitDefaults(cfg) belongs here, after
-	// tmuxGate and before Init, so existing values are captured even if
-	// Init's --force re-scaffold rewrites .thrum/.
+	// Re-init mode reads existing .thrum/ before Init's --force re-scaffold
+	// can touch it, so prompt defaults reflect the user's prior choices.
+	if err := loadReInitDefaults(cfg); err != nil {
+		return err
+	}
 
 	snapshotGitFiles(cfg)
 
