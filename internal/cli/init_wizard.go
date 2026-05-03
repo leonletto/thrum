@@ -29,6 +29,16 @@ type WizardConfig struct {
 	Force         bool
 	Stealth       bool
 	Runtime       string
+
+	// gitignoreSnapshot / excludeSnapshot capture the files Init() will
+	// append to so rollback can restore them byte-for-byte. nil means
+	// "file did not exist before Init"; in that case rollback removes the
+	// file rather than restoring nil bytes. Populated by snapshotGitFiles
+	// before Init runs.
+	gitignoreSnapshot    []byte
+	gitignoreExisted     bool
+	gitExcludeSnapshot   []byte
+	gitExcludeExisted    bool
 }
 
 // WizardIdentity is the result of Step 3 (identity prompts).
@@ -166,13 +176,44 @@ func stepDaemon(cfg *WizardConfig) error {
 	return nil
 }
 
-// rollback removes the .thrum/ directory created by Step 2 so the repo is
-// returned to its pre-wizard state when Steps 3-5 fail. Step 6 (daemon)
-// failures are recoverable and do NOT trigger rollback. Task .5 will extend
-// this to restore .gitignore / .git/info/exclude snapshots.
+// snapshotGitFiles captures .gitignore and .git/info/exclude before Init()
+// modifies them so rollback can restore them byte-for-byte. Missing files
+// are recorded as "did not exist", causing rollback to remove a file Init
+// created rather than writing back nil bytes.
+func snapshotGitFiles(cfg *WizardConfig) {
+	gi := filepath.Join(cfg.RepoPath, ".gitignore")
+	if data, err := os.ReadFile(gi); err == nil {
+		cfg.gitignoreSnapshot = data
+		cfg.gitignoreExisted = true
+	}
+	ex := filepath.Join(cfg.RepoPath, ".git", "info", "exclude")
+	if data, err := os.ReadFile(ex); err == nil {
+		cfg.gitExcludeSnapshot = data
+		cfg.gitExcludeExisted = true
+	}
+}
+
+// restoreSnapshot rewrites a single file from a captured snapshot, removing
+// it when the snapshot recorded "did not exist before Init".
+func restoreSnapshot(path string, data []byte, existedBefore bool) {
+	if existedBefore {
+		_ = os.WriteFile(path, data, 0o600)
+		return
+	}
+	_ = os.Remove(path)
+}
+
+// rollback returns the repo to its pre-wizard state when Steps 3-5 fail:
+// removes .thrum/ and restores .gitignore / .git/info/exclude from
+// snapshots taken before Init() ran. Step 6 (daemon) failures are
+// recoverable and do NOT trigger rollback.
 func rollback(cfg *WizardConfig, cause error) error {
 	thrumDir := filepath.Join(cfg.RepoPath, ".thrum")
 	_ = os.RemoveAll(thrumDir)
+	restoreSnapshot(filepath.Join(cfg.RepoPath, ".gitignore"),
+		cfg.gitignoreSnapshot, cfg.gitignoreExisted)
+	restoreSnapshot(filepath.Join(cfg.RepoPath, ".git", "info", "exclude"),
+		cfg.gitExcludeSnapshot, cfg.gitExcludeExisted)
 	return fmt.Errorf("wizard failed: %w (rolled back .thrum/)", cause)
 }
 
@@ -214,6 +255,8 @@ func RunWizard(cfg *WizardConfig) error {
 	// Splice point for Task .6 — loadReInitDefaults(cfg) belongs here, after
 	// tmuxGate and before Init, so existing values are captured even if
 	// Init's --force re-scaffold rewrites .thrum/.
+
+	snapshotGitFiles(cfg)
 
 	if err := Init(InitOptions{
 		RepoPath: cfg.RepoPath,
