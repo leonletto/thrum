@@ -87,12 +87,18 @@ func Reconcile(ctx context.Context, deps Deps) (Stats, error) {
 	}
 
 	for _, dir := range rpc.AllIdentityDirs(ctx, deps.ThrumDir) {
+		if err := ctx.Err(); err != nil {
+			return stats, err
+		}
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			// Missing dir is fine (some worktrees have no .thrum/identities/).
 			continue
 		}
 		for _, de := range entries {
+			if err := ctx.Err(); err != nil {
+				return stats, err
+			}
 			if de.IsDir() || filepath.Ext(de.Name()) != ".json" {
 				continue
 			}
@@ -163,6 +169,7 @@ func Reconcile(ctx context.Context, deps Deps) (Stats, error) {
 					return err
 				}
 				committed = true
+				// Only reached when the IIFE returned nil, i.e. the transaction committed.
 				stats.SessionsCreated++
 				stats.RefsCreated++
 				return nil

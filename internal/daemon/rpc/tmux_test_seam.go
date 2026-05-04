@@ -1,3 +1,7 @@
+// tmux_test_seam.go: cross-package test seams. Cannot live in a _test.go
+// file because internal/daemon/bootstrap's tests import these symbols at
+// the package boundary. Linker dead-code-elimination keeps them out of
+// the production binary (verified: not in `go tool nm bin/thrum`).
 package rpc
 
 // This file holds test-only seams for cross-package tests
