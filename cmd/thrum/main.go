@@ -32,6 +32,7 @@ import (
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/context/roleconfig"
 	"github.com/leonletto/thrum/internal/daemon"
+	"github.com/leonletto/thrum/internal/daemon/bootstrap"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
 	"github.com/leonletto/thrum/internal/daemon/inbox"
@@ -57,6 +58,7 @@ import (
 	"github.com/leonletto/thrum/internal/web"
 	"github.com/leonletto/thrum/internal/websocket"
 	"github.com/leonletto/thrum/internal/worktree"
+	"github.com/oklog/ulid/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -6866,6 +6868,43 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	if n := tmuxHandler.ReconcilePoller(ctx); n > 0 {
 		slog.Info("[poller] cold-start reconciliation complete", "enrolled", n)
 	}
+
+	// Boot reconcile pass: restore (sessions, session_refs) rows for every
+	// identity file on disk so write RPCs from any registered worktree
+	// succeed without re-running thrum quickstart. Local-only by design;
+	// see dev-docs/specs/2026-05-04-identity-reconcile-on-boot-design.md.
+	//
+	// The 10s timeout bounds boot in case `git worktree list` hangs (lock
+	// contention, NFS). Failure is non-fatal — daemon proceeds.
+	{
+		rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		// thrumDir is the function-local variable resolved earlier in
+		// daemonRun. DO NOT switch to os.Getenv("THRUM_HOME") or
+		// paths.EffectiveRepoPath — that re-introduces the v0.10.1
+		// regression hazard. *state.State has no ThrumDir() accessor;
+		// use the local variable directly.
+		rstats, rerr := bootstrap.Reconcile(rctx, bootstrap.Deps{
+			State:        st,
+			ThrumDir:     thrumDir,
+			TmuxHandler:  tmuxHandler,
+			Now:          time.Now,
+			NewSessionID: func() string { return ulid.Make().String() },
+			TmuxAlive:    ttmux.HasSession,
+			Log:          slog.Default(),
+		})
+		cancel()
+		if rerr != nil {
+			slog.Warn("[reconcile] boot reconcile failed", "err", rerr)
+		} else {
+			slog.Info("[reconcile] boot reconcile complete",
+				"scanned", rstats.Scanned,
+				"sessions_created", rstats.SessionsCreated,
+				"refs_created", rstats.RefsCreated,
+				"tmux_bindings_restored", rstats.TmuxBindingsRestored,
+				"errors", rstats.Errors)
+		}
+	}
+
 	// Start the poll loop. Stops when ctx is canceled by the daemon
 	// shutdown sequence.
 	go paneSilencePoller.Run(ctx, 10*time.Second)

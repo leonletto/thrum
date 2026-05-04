@@ -145,6 +145,16 @@ func (h *TmuxHandler) SetPermission(p *permission.Permission) {
 	h.permission = p
 }
 
+// RestoreBinding writes both the (session→cwd) and (cwd→session) entries
+// under the handler mutex. Used by the boot reconcile pass to rebuild the
+// tmux pane-nudge target map from identity files after daemon restart.
+func (h *TmuxHandler) RestoreBinding(session, cwd string) {
+	h.sessionMu.Lock()
+	defer h.sessionMu.Unlock()
+	h.sessionCwds[session] = cwd
+	h.cwdSessions[cwd] = session
+}
+
 // SetPoller installs the silence-hash poller that bypasses tmux's
 // alert-silence hook. Production daemon boot calls this so HandleLaunch
 // can enroll new sessions and HandleKill can unenroll terminated ones.
