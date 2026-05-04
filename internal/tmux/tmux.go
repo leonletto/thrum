@@ -39,17 +39,91 @@ func HasSession(name string) bool {
 }
 
 // CreateSession creates a new detached tmux session with a clean environment.
+//
+// THRUM_* env scrubbing happens in two complementary layers:
+//
+//  1. safecmd.cleanTmuxEnv (thrum-8nro.4) scrubs the tmux CLIENT's exec env
+//     so the daemon doesn't leak THRUM_* into a freshly-started tmux server's
+//     captured environ.
+//
+//  2. The `-e KEY=` flags built by buildCreateSessionArgs (thrum-t8mj) scrub
+//     at the SESSION level — long-running tmux servers retain whatever
+//     environ they captured at server-start time, and new sessions inherit
+//     those vars. Without this layer, a tmux server started before Gate 1's
+//     deploy (or from any other primed-shell ancestry) propagates stale
+//     THRUM_* values to every session created against it. This `-e` override
+//     is per-session, so it works regardless of server age.
+//
+// Discovery sources (union):
+//   - Daemon's own os.Environ() — covers the case where the daemon was
+//     launched from a primed shell. Gate 1 scrubs the env passed to tmux
+//     exec calls but not the daemon's own environ; that environ is the
+//     source of truth for which keys leaked from the launcher.
+//   - tmux server's global env via `tmux show-environment -g` — covers the
+//     case where the daemon's environ was scrubbed (e.g., started via
+//     `tmux-exec --clean` in the release-test fixture) but a long-running
+//     tmux server retains stale keys from a different launcher ancestry.
+//     This source is what makes the fix work for the v0.10.2 dev-box case.
 func CreateSession(name, cwd string) error {
-	name = SanitizeSessionName(name)
-	args := []string{"new-session", "-d", "-s", name}
-	if cwd != "" {
-		args = append(args, "-c", cwd)
+	envSources := os.Environ()
+	// Best-effort: if the tmux server isn't running yet, show-environment
+	// errors out and we fall back to just the daemon's environ. That's OK
+	// — when we run new-session below, tmux will start the server with the
+	// daemon's (Gate-1-scrubbed via safecmd.cleanTmuxEnv) env, so a fresh
+	// server has nothing to scrub at session level.
+	if out, err := safecmd.Tmux(context.Background(), "show-environment", "-g"); err == nil {
+		for _, line := range strings.Split(string(out), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			envSources = append(envSources, line)
+		}
 	}
+	args := buildCreateSessionArgs(SanitizeSessionName(name), cwd, envSources)
 	_, err := safecmd.Tmux(context.Background(), args...)
 	if err != nil {
 		return fmt.Errorf("tmux new-session failed: %w", err)
 	}
 	return nil
+}
+
+// buildCreateSessionArgs assembles the argv for `tmux new-session` with
+// per-session THRUM_* overrides. Caller passes the env slice(s) to scan
+// (CreateSession passes the union of os.Environ() and tmux's global env;
+// tests inject controlled values).
+//
+// Pass each discovered THRUM_* key as `-e KEY=` (empty value). thrum CLI
+// codepaths uniformly treat empty THRUM_* values as "not set" — verified
+// across paths.EffectiveRepoPath, config.Load, cmd/thrum/main.go
+// agent-name fallbacks, config_show env-source detection. Duplicates
+// across sources are deduped so we don't emit redundant -e flags.
+func buildCreateSessionArgs(name, cwd string, env []string) []string {
+	args := []string{"new-session", "-d", "-s", name}
+	if cwd != "" {
+		args = append(args, "-c", cwd)
+	}
+	seen := make(map[string]struct{})
+	for _, e := range env {
+		if !strings.HasPrefix(e, "THRUM_") {
+			continue
+		}
+		eq := strings.IndexByte(e, '=')
+		// eq < 0: malformed entry with no '=' (shouldn't reach here via
+		// os.Environ() but tmux show-environment can emit such lines on
+		// corrupt config — defensive). The eq == 0 case ("=VALUE") is
+		// unreachable: HasPrefix above already rejected leading-'=' entries.
+		if eq < 0 {
+			continue
+		}
+		key := e[:eq]
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		args = append(args, "-e", key+"=")
+	}
+	return args
 }
 
 // RenameWindow sets the window name for the first window in a session.
