@@ -64,7 +64,7 @@ func WorktreePaths(ctx context.Context, dir string) []string {
 }
 
 // Tmux runs a tmux command with a 5-second timeout and clean environment
-// (TMUX/TMUX_PANE stripped to avoid connecting to the wrong server).
+// (TMUX/TMUX_PANE and THRUM_* stripped — see cleanTmuxEnv for rationale).
 // All tmux operations should use this instead of exec.Command("tmux", ...).
 func Tmux(ctx context.Context, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -79,7 +79,9 @@ func Tmux(ctx context.Context, args ...string) ([]byte, error) {
 }
 
 // TmuxRun runs a tmux command with a 5-second timeout, discarding output.
-// Use for commands where only success/failure matters (has-session, set-option).
+// Uses the same clean environment as Tmux (TMUX/TMUX_PANE and THRUM_*
+// stripped — see cleanTmuxEnv). Use for commands where only success/failure
+// matters (has-session, set-option).
 func TmuxRun(ctx context.Context, args ...string) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
