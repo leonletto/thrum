@@ -188,8 +188,13 @@ fi
 if [ "${CHILD_ID_PRESENT}" -eq 1 ]; then
   r_exec 10 -- bash -lc "
     stored=\$(jq -r '.worktree // \"\"' '${WT_PATH}/.thrum/identities/${WT_AGENT}.json' 2>/dev/null)
-    expected=\$(cd '${WT_PATH}' && pwd)
-    resolved=\$(cd \"\$stored\" 2>/dev/null && pwd)
+    # thrum-vry8: canonicalize both 'expected' and 'resolved' via 'pwd -P'
+    # so the comparison works on macOS where /tmp is a symlink to
+    # /private/tmp. Without -P the logical 'expected' kept the /tmp form
+    # while the resolved 'stored' value canonicalized to /private/tmp,
+    # producing a spurious failure on macOS remotes only.
+    expected=\$(cd '${WT_PATH}' && pwd -P)
+    resolved=\$(cd \"\$stored\" 2>/dev/null && pwd -P)
     if [ -n \"\$resolved\" ] && [ \"\$resolved\" = \"\$expected\" ]; then
       echo OK
     else

@@ -413,8 +413,13 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 						JSONRPC: "2.0",
 						ID:      req.ID,
 						Error: &jsonRPCError{
-							Code:    -32002, // anonymous caller not permitted
-							Message: fmt.Sprintf("anonymous caller cannot invoke %q: cd into a registered agent worktree and retry", req.Method),
+							Code: -32002, // anonymous caller not permitted
+							// thrum-8nro.3: 'cd into a registered agent worktree'
+							// is misleading when the caller IS already in one
+							// but the daemon's binding cache hasn't been warmed
+							// (post-restart, post-edit, etc.). 'thrum prime' is
+							// the actual recovery in that case.
+							Message: fmt.Sprintf("anonymous caller cannot invoke %q: daemon hasn't bound this caller to a registered agent. If you ARE a registered agent in this worktree, run 'thrum prime' to warm the binding cache, then retry. Otherwise cd into the agent's worktree first.", req.Method),
 						},
 					}
 					if err := s.writeResponse(writer, resp); err != nil {
