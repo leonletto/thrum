@@ -383,10 +383,16 @@ identity guard "quickstart_self_rename" fired: caller_already_owns_identity
 
 #### What happened
 
-You called `thrum quickstart` but your ancestor PID chain already owns an
-identity file in this directory — registered under the name `furiosa`. G1a
-refuses to silently overwrite or re-register under a new name because that would
-abandon the existing identity without any record.
+You called `thrum quickstart --name <new-name>` but your ancestor PID chain
+already owns an identity file in this directory — registered under the name
+`furiosa`. G1a refuses to silently rename the existing identity (drop the old
+name, adopt a new one) because that would abandon the existing identity without
+any record.
+
+> **Same-name re-register is allowed** (since v0.10.2). Calling
+> `thrum quickstart --name furiosa` while you already own `furiosa` is a no-op
+> idempotent re-register and passes through without firing G1a. The guard only
+> fires when you request a **different** name (a real rename).
 
 This often happens when an orchestrator calls `thrum quickstart` multiple times
 with different `--name` values, rotating agent names.

@@ -52,30 +52,53 @@ checksum. If no release is available for your platform, it falls back to
 cd thrum
 make install  # Builds UI + Go binary, installs to ~/.local/bin</code></pre>
 <h2>Fast Path</h2>
-<p>One command to init, register, start a session, and set your intent:</p>
+<p>One command to scaffold the project, register your agent, configure worktrees,
+install role templates, and start the daemon:</p>
 <pre><code>cd your-project
-thrum init
-thrum quickstart --name myagent --role implementer --module auth --intent &quot;Working on auth&quot;</code></pre>
-<p>That&#39;s it. You&#39;re registered and ready to send messages. The sections below walk
-through each step individually if you want to understand what&#39;s happening.</p>
-<p>Quickstart also auto-creates an empty context file for session state
-persistence. See <a href="context.html">Agent Context Management</a> for details.</p>
+thrum init</code></pre>
+<p>On a TTY, <code>thrum init</code> launches an opinionated wizard that walks you through
+identity, worktrees root, role templates, and daemon start. Press enter through
+every prompt to accept the recommended defaults. When the wizard finishes you
+are fully registered and can send your first message.</p>
+<p>Need a non-interactive run for CI or scripted setup? Pre-fill every prompt with
+flags (the wizard skips prompts whose value is supplied):</p>
+<pre><code>thrum init --name myagent --role implementer --module auth \
+           --worktrees-root ~/.thrum/worktrees/myproj \
+           --roles=enhanced</code></pre>
+<p>Force the legacy silent path explicitly with <code>--non-interactive</code> (existing CI
+scripts that pipe stdin already get this behavior automatically).</p>
+<p>The sections below walk through each step individually if you want to understand
+what the wizard is doing.</p>
 <h2>Step-by-Step Walkthrough</h2>
 <h3>1. Initialize Repository</h3>
 <p>Navigate to your project and initialize Thrum:</p>
 <pre><code>cd your-project
 thrum init</code></pre>
-<p>This creates:</p>
+<p>The wizard creates:</p>
 <ul>
 <li><code>.thrum/</code> directory (gitignored entirely)</li>
 <li><code>.git/thrum-sync/a-sync/</code> sync worktree on the <code>a-sync</code> orphan branch (for
 JSONL event logs)</li>
-<li><code>.thrum/identities/</code> for agent identity files</li>
+<li><code>.thrum/identities/</code> for agent identity files (your initial identity is
+registered here automatically)</li>
 <li><code>.thrum/var/</code> for daemon runtime files</li>
+<li><code>.thrum/role_templates/</code> populated with the role templates you choose</li>
 <li><code>a-sync</code> orphan branch for message synchronization</li>
+<li><code>Worktrees.BasePath</code> in <code>.thrum/config.json</code> set to the directory you pick</li>
+<li>The daemon, started in the background</li>
 </ul>
-<p><code>thrum init</code> also starts the daemon automatically (since v0.4.5). You do not
-need a separate <code>thrum daemon start</code> step for first-time setup.</p>
+<p>The wizard also runs <code>thrum quickstart</code> for you, so you do not need to run it
+separately. The &quot;Step 4: Register&quot; section below applies only when you ran
+<code>thrum init --non-interactive</code> and want to register an agent later.</p>
+<h4>Worktree base path migration</h4>
+<p>In v0.10.0 the implicit fallback for <code>Worktrees.BasePath</code> migrated from
+<code>~/.workspaces/&lt;project&gt;</code> to <code>~/.thrum/worktrees/&lt;project&gt;</code>. Users with an
+explicit <code>Worktrees.BasePath</code> in <code>.thrum/config.json</code> are unaffected. If you
+relied on the legacy fallback and want to keep existing worktrees in place, set
+the override before your next <code>thrum worktree create</code>:</p>
+<pre><code>thrum config set worktrees.base_path &quot;$HOME/.workspaces/&lt;project&gt;&quot;</code></pre>
+<p>The wizard also offers to set this path interactively — press enter to accept
+the new default, or type the legacy path to preserve existing worktrees.</p>
 <p><strong>v0.7.0 default:</strong> New repos start in single-agent mode
 (<code>single_agent_mode: true</code>). This gives you context management (<code>thrum prime</code>,
 sessions, context save/show) without the messaging layer (no listener, no cron
@@ -278,12 +301,13 @@ thrum worktree create auth -b feature/auth \
 # Start the runtime in the tmux session
 thrum tmux launch auth</code></pre>
 <p>The worktree is created at <code>worktrees.base_path/&lt;name&gt;</code> (default
-<code>~/.workspaces/&lt;repo&gt;/&lt;name&gt;</code>). <code>thrum worktree create</code> handles the redirect
-file creation automatically — you don&#39;t need to run <code>thrum setup --main-repo</code>
-separately. If you pass <code>--name</code>, <code>--role</code>, and <code>--module</code>, it also creates a
-real tmux session and registers the agent inside it (PID-isolated, with retry if
-the shell init swallows the first attempt). The output tells you the agent is
-not running yet and shows the exact <code>thrum tmux launch</code> command to start it.</p>
+<code>~/.thrum/worktrees/&lt;repo&gt;/&lt;name&gt;</code>). <code>thrum worktree create</code> handles the
+redirect file creation automatically — you don&#39;t need to run
+<code>thrum setup --main-repo</code> separately. If you pass <code>--name</code>, <code>--role</code>, and
+<code>--module</code>, it also creates a real tmux session and registers the agent inside
+it (PID-isolated, with retry if the shell init swallows the first attempt). The
+output tells you the agent is not running yet and shows the exact
+<code>thrum tmux launch</code> command to start it.</p>
 <p>For an existing worktree that just needs redirect setup, you can still use the
 manual approach:</p>
 <pre><code>cd ~/project-features/auth
@@ -306,10 +330,10 @@ once:</p>
 appropriate redirect files. They skip worktrees that are already configured.</p>
 <h4>Set up a single worktree</h4>
 <pre><code># Thrum redirect for one worktree
-./scripts/setup-worktree-thrum.sh ~/.workspaces/thrum/my-feature
+./scripts/setup-worktree-thrum.sh ~/.thrum/worktrees/thrum/my-feature
 
 # Beads redirect for one worktree
-./scripts/setup-worktree-beads.sh ~/.workspaces/thrum/my-feature</code></pre>
+./scripts/setup-worktree-beads.sh ~/.thrum/worktrees/thrum/my-feature</code></pre>
 <h4>What the scripts create</h4>
 <p>Each script creates a redirect file pointing to the main repository:</p>
 <pre><code># In the worktree:

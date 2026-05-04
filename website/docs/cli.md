@@ -386,8 +386,12 @@ the `--name` flag or `THRUM_NAME` environment variable.
 
 **G1a guard (quickstart_self_rename):** If the caller's ancestor PID chain
 already owns an identity in this directory (i.e., this runtime has already
-registered), attempting to quickstart under a different name is refused. Pass
+registered), attempting to quickstart under a **different** name is refused —
+that's a rename and would abandon the existing identity without a record. Pass
 `--force` to rename the existing identity to `.deleted` and register fresh.
+Same-name re-register (calling `quickstart --name <existing-name>` when you
+already own `<existing-name>`) is allowed without `--force` — it's an idempotent
+no-op, used by `scripts/thrum-startup.sh` on every SessionStart.
 
 **G1b guard (quickstart_name_collision):** If the requested `--name` is held by
 a live process in a different worktree, the registration is refused. Pass

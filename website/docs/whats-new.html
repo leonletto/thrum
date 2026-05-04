@@ -42,6 +42,162 @@ a{color:#0366d6}
 breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG.md</a>.</p>
+<h2>v0.10.2 — 2026-05-04</h2>
+<p>Hotfix release closing two related foot-guns from the v0.10.x identity work:
+the SessionStart hook (<code>scripts/thrum-startup.sh</code>) breaking on every
+already-registered worktree, and a tmux env-hijack class that caused new
+panes to resolve identity to the daemon-starter&#39;s agent. Plus a long-standing
+<code>thrum purge</code> regression where message JSONL files weren&#39;t actually shrinking.</p>
+<h3>Fixed</h3>
+<ul>
+<li><p><strong><code>thrum quickstart</code> no longer rejects idempotent same-name re-register.</strong>
+The <code>quickstart_self_rename</code> guard was firing on every call where the
+caller already owned an identity, even when the requested <code>--name</code>
+matched the existing one. This broke <code>scripts/thrum-startup.sh</code> — the
+SessionStart hook on every claude session — at step 3 (<code>thrum quickstart</code>); <code>set -e</code> aborted before steps 4 (inbox check), 5
+(announce), and 6 (cron install) ran. <code>thrum tmux start</code> against an
+existing worktree hit the same guard and aborted before claude
+launched. <strong>Same-name re-register is now allowed without <code>--force</code></strong>
+(it&#39;s an idempotent no-op); a real rename (different <code>--name</code>) still
+requires <code>--force</code>.</p>
+</li>
+<li><p><strong><code>tmux.create</code>-spawned panes no longer inherit <code>THRUM_*</code> env from the
+daemon.</strong> When the daemon was started from a primed shell, every tmux
+pane it spawned inherited the daemon&#39;s <code>THRUM_AGENT_ID</code>, <code>THRUM_HOME</code>,
+etc. — causing the new pane&#39;s <code>thrum whoami</code> to resolve to the
+daemon-starter&#39;s identity instead of the pane&#39;s intended agent.
+Two-layer fix: scrub <code>THRUM_*</code> from the daemon&#39;s tmux exec env, AND
+pass per-session <code>-e KEY=</code> overrides so even long-running tmux servers
+(which cache the environ from server-start time) produce clean panes.</p>
+</li>
+<li><p><strong><code>thrum purge --confirm</code> now actually shrinks JSONL message files.</strong>
+The filter was passing the wrong field name (<code>&quot;created_at&quot;</code> vs the
+on-disk <code>&quot;timestamp&quot;</code>) when iterating message JSONLs, so every record
+was kept and on-disk files grew unboundedly. Verified live: <code>--before 30d</code> against a 335MB sync dir filtered 13 message files in 7.7s.</p>
+</li>
+<li><p><strong>Misleading <code>unauthenticated_rpc</code> deny message</strong> now points at <code>thrum prime</code> as the cache-warming recovery (was <code>cd into a registered agent worktree and retry</code>, which was the wrong fix when the caller already
+WAS in a registered worktree but the daemon&#39;s binding cache hadn&#39;t
+warmed after a restart).</p>
+</li>
+</ul>
+<h3>Internal</h3>
+<ul>
+<li>Release-test harness coord-whoami probe now retries 3× 30s instead of
+a single 60s wait — recovers from missed-keystroke races on saturated
+multi-agent dev boxes.</li>
+<li>Unit-test hardening: <code>internal/cli</code> and <code>internal/config</code> test
+packages now have <code>TestMain</code> env-isolation guards so tests don&#39;t
+silently inherit <code>THRUM_*</code> pollution from the operator&#39;s primed shell.</li>
+</ul>
+<h3>Upgrade Notes</h3>
+<ul>
+<li><strong>No CLI flag changes; no config changes.</strong> Drop-in upgrade from v0.10.1.</li>
+<li>After upgrade: <code>make install</code> (or download the new binary), then
+<code>thrum daemon restart</code> so the running daemon picks up the new binary.
+<strong>Also refresh the Claude Code plugin</strong> (<code>/plugin update thrum</code>, or
+remove + add the marketplace) — v0.10.2 ships an updated
+<code>inject-prime-context.sh</code> that improves the SessionStart context
+delivery banner.</li>
+</ul>
+<h2>v0.10.1 — 2026-05-03</h2>
+<p>Two related identity-resolver fixes shipped together. v0.10.0 is marked
+prerelease; upgrade to v0.10.1.</p>
+<h3>Fixed</h3>
+<ul>
+<li><p><strong><code>thrum quickstart</code> from a <code>.thrum/redirect</code>-using worktree no longer writes
+the agent identity into the parent repo.</strong> When <code>THRUM_HOME</code> was set (which
+the wizard&#39;s daemon-inline path effectively does for spawned panes),
+<code>quickstart</code> was hijacking the identity-write target to
+<code>$THRUM_HOME/.thrum/identities/</code> and recording the parent path as the agent&#39;s
+<code>worktree</code>. Subsequent identity-resolution from any peer worktree could then
+cross-claim, with symptoms like <code>thrum whoami</code> returning the wrong agent and
+<code>unauthenticated_rpc</code> guard denying writes.</p>
+</li>
+<li><p><strong>Boot-time identity reconcile</strong> so write RPCs from any registered worktree
+succeed after a daemon restart, without re-running <code>thrum quickstart</code>.
+Previously, the peercred resolver matched caller CWDs against
+<code>session_refs JOIN sessions WHERE ended_at IS NULL</code> — that view is durable in
+SQLite but loses rows on shutdown / cleanup / long quiescence, so disk truth
+(identity files) and resolver truth (DB rows) drifted apart. <code>thrum send</code>,
+<code>thrum tmux start</code>, and other write RPCs would fail with
+<code>anonymous caller cannot invoke X</code> from a worktree where an identity file
+clearly existed; only <code>thrum quickstart --force</code> re-populated the rows
+(<code>thrum prime</code> did not). The fix walks <code>.thrum/identities/*.json</code> at daemon
+boot and inserts the missing <code>(sessions, session_refs)</code> pairs via <code>safedb</code> in
+a per-identity transaction. Local-only by design — direct SQL, no JSONL
+events, no cross-machine sync — because <code>session_refs</code> is intentionally
+local-only state. The same pass restores in-memory tmux pane-nudge bindings
+for any identity whose <code>tmux_session</code> is still alive. Closes thrum-soj8 +
+thrum-6kk6.</p>
+</li>
+</ul>
+<h3>How to verify after upgrade</h3>
+<pre><code># Existing redirect-using worktrees: re-quickstart from inside the
+# worktree to refresh the identity file with the corrected location
+# and worktree value.
+cd &lt;child-worktree&gt;
+thrum quickstart --name &lt;name&gt; --role &lt;role&gt; --module &lt;module&gt; --force
+thrum whoami   # should report the child worktree, not THRUM_HOME</code></pre>
+<h3>v0.10.0 prerelease note</h3>
+<p>The v0.10.0 release page on GitHub is marked prerelease and the Homebrew tap was
+reverted to v0.9.2 during the fix window. v0.10.1 promotes back to &quot;latest&quot; with
+the regression closed.</p>
+<h2>v0.10.0 — 2026-05-03</h2>
+<p>The v0.10.0 work centers on <code>thrum init</code>. The first-run experience used to be a
+silent scaffold and a list of follow-up commands; now it walks you through
+identity, worktrees root, role templates, and daemon start in one interactive
+flow. Existing CI scripts keep working unchanged via the <code>--non-interactive</code>
+flag (or any non-TTY stdin).</p>
+<h3>New</h3>
+<ul>
+<li><strong><code>thrum init</code> interactive wizard.</strong> On a TTY, <code>thrum init</code> prompts for agent
+name / role / module, worktrees-root path, role-template choice (enhanced /
+default / skip), and starts the daemon — all in one flow. Press enter through
+every prompt to accept the recommended defaults.</li>
+<li><strong>Pre-fill any prompt with a flag.</strong> The wizard reads <code>--name</code>, <code>--role</code>,
+<code>--module</code>, <code>--worktrees-root</code>, <code>--roles=enhanced|default|skip</code>, and
+<code>--no-daemon</code> so you can script it end-to-end in fixtures.</li>
+<li><strong><code>--force</code> re-init pre-seeds prompts from existing values.</strong> Running
+<code>thrum init --force</code> on a previously-initialized repo loads identity and
+worktrees-root from the current <code>.thrum/</code> so pressing enter through the
+prompts is a no-op refresh.</li>
+<li><strong>Transactional rollback on failure or SIGINT.</strong> If any wizard step errors
+after <code>.gitignore</code> / <code>.git/info/exclude</code> were touched, the wizard restores
+them byte-for-byte. Ctrl-C during prompts cleans up cleanly.</li>
+<li><strong><code>implementer-worktree-write-only</code> role template.</strong> The wizard&#39;s &quot;enhanced&quot;
+choice ships a stricter implementer preamble that pins writes to the agent&#39;s
+own worktree and forbids drive-by edits to the main repo.</li>
+<li><strong>tmux gate.</strong> If <code>tmux</code> is not on <code>PATH</code> when the wizard reaches the
+daemon-start step, init exits early with an OS-appropriate install hint
+(<code>brew install tmux</code> / <code>apt install tmux</code>).</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+<li><strong>Default worktrees base path migrated.</strong> <code>worktrees.base_path</code> now defaults
+to <code>~/.thrum/worktrees/&lt;project&gt;</code> (was <code>~/.workspaces/&lt;project&gt;</code>). Repos with
+an explicit <code>Worktrees.BasePath</code> in <code>.thrum/config.json</code> are unaffected. If
+you relied on the implicit fallback and want existing worktrees to keep
+resolving, run
+<code>thrum config set worktrees.base_path &quot;$HOME/.workspaces/&lt;project&gt;&quot;</code> before
+the next worktree create. The wizard&#39;s worktrees-root prompt also accepts the
+legacy path.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li><strong><code>scripts/thrum-check-inbox.sh</code> excluded alongside <code>thrum-startup.sh</code>.</strong> Init
+now adds the inbox-check helper to <code>.gitignore</code> (and <code>.git/info/exclude</code> in
+stealth mode), preventing it from leaking into tracked changes.</li>
+</ul>
+<h3>Migration</h3>
+<ul>
+<li>If you scripted <code>thrum init</code> in CI: add <code>--non-interactive</code> (or rely on
+non-TTY stdin) — both keep the legacy silent path. The wizard never fires
+under those conditions.</li>
+<li>If your worktrees lived under <code>~/.workspaces/&lt;project&gt;</code> and you want them to
+stay there: pin the path with
+<code>thrum config set worktrees.base_path &quot;$HOME/.workspaces/&lt;project&gt;&quot;</code> before
+the next <code>thrum worktree create</code>.</li>
+</ul>
 <h2>v0.9.2 — 2026-04-29</h2>
 <p>The v0.9.2 work was mostly polish on agents and preambles — the parts of Thrum
 agents wake up with. If you&#39;ve been wishing role discipline survived restarts
@@ -58,25 +214,25 @@ re-run so you only re-confirm what you want to change. See
 <li><strong><code>thrum roles refresh</code></strong> — re-renders <code>.thrum/role_templates/&lt;role&gt;.md</code> from
 saved answers + the shipped templates embedded in the binary. Run this after
 upgrading Thrum without re-doing the interactive prompts.</li>
-<li><strong><code>thrum prime</code> surfaces drift hints.</strong> Three codes:
-<code>roles.config.migration</code> (rendered templates exist, no <code>role_config</code> block),
-<code>roles.config.schema-bump</code> (shipped schema newer than saved),
-<code>roles.config.body-diff</code> (shipped template body changed). Precedence is top
-to bottom; only one fires per repo.</li>
-<li><strong>User overlay composed into the rendered preamble.</strong> <code>.thrum/context/&lt;agent&gt;.md</code>
-is auto-created empty by <code>thrum quickstart</code>. Anything you write into it gets
-appended after <code>DefaultPreamble</code> with a <code>---</code> separator. Per-agent tweaks
-ride on top of the role discipline without forking the template.</li>
+<li><strong><code>thrum prime</code> surfaces drift hints.</strong> Three codes: <code>roles.config.migration</code>
+(rendered templates exist, no <code>role_config</code> block), <code>roles.config.schema-bump</code>
+(shipped schema newer than saved), <code>roles.config.body-diff</code> (shipped template
+body changed). Precedence is top to bottom; only one fires per repo.</li>
+<li><strong>User overlay composed into the rendered preamble.</strong>
+<code>.thrum/context/&lt;agent&gt;.md</code> is auto-created empty by <code>thrum quickstart</code>.
+Anything you write into it gets appended after <code>DefaultPreamble</code> with a <code>---</code>
+separator. Per-agent tweaks ride on top of the role discipline without forking
+the template.</li>
 <li><strong>Pane-side identity banner.</strong> Sessions launched via <code>thrum tmux create</code> and
 restarted via <code>thrum tmux restart</code> now display an Agent / Role / Worktree /
 Branch banner directly in the tmux pane, plus a <code>MUST READ</code> line pointing at
 the auto-loaded briefing. The banner only fires on runtimes that ship the
 SessionStart hook (Claude Code and Cursor today). See
 <a href="claude-code-plugin.html#pane-side-identity-banner">Claude Code Plugin → Pane-side identity banner</a>.</li>
-<li><strong>SessionStart hook injects <code>thrum prime</code> output.</strong> The Claude Code and
-Cursor plugins&#39; SessionStart hook now runs <code>thrum prime</code> and emits the full
-briefing inline as the hook&#39;s <code>additionalContext</code>. Restart-snapshot framing
-is hoisted to the top with a <code>🛑 ACTION REQUIRED</code> directive so it doesn&#39;t get
+<li><strong>SessionStart hook injects <code>thrum prime</code> output.</strong> The Claude Code and Cursor
+plugins&#39; SessionStart hook now runs <code>thrum prime</code> and emits the full briefing
+inline as the hook&#39;s <code>additionalContext</code>. Restart-snapshot framing is hoisted
+to the top with a <code>🛑 ACTION REQUIRED</code> directive so it doesn&#39;t get
 read-and-rationalized-away.</li>
 <li><strong>Role-skills layer.</strong> Ten new description-triggered skills deepen role
 discipline situationally without bloating the always-loaded preamble. Three
@@ -91,35 +247,36 @@ for researcher (<code>investigating</code>, <code>answering-queries</code>, <cod
 a persistent-session pool. The previous approach leaked pseudo-terminals on
 every respawn, eventually exhausting the per-process fd limit on long-running
 daemons.</li>
-<li><strong><code>thrum tmux status</code> and <code>thrum tmux connect</code> leaked sessions across
-daemons (thrum-zuz5).</strong> Pass 2 of <code>HandleStatus</code> was filtering on
-<code>@thrum-managed=1</code>, which every Thrum daemon stamps — so sessions from
-unrelated worktrees and projects leaked into the picker. <code>HandleCreate</code> now
-also stamps <code>@thrum-thrum-dir=&lt;this daemon&#39;s thrum_dir&gt;</code> and pass 2 filters
-on it. <strong>Migration:</strong> sessions created before v0.9.2 won&#39;t appear in pass-2
-output until you recreate them via <code>thrum tmux create</code>.</li>
+<li><strong><code>thrum tmux status</code> and <code>thrum tmux connect</code> leaked sessions across daemons
+(thrum-zuz5).</strong> Pass 2 of <code>HandleStatus</code> was filtering on <code>@thrum-managed=1</code>,
+which every Thrum daemon stamps — so sessions from unrelated worktrees and
+projects leaked into the picker. <code>HandleCreate</code> now also stamps
+<code>@thrum-thrum-dir=&lt;this daemon&#39;s thrum_dir&gt;</code> and pass 2 filters on it.
+<strong>Migration:</strong> sessions created before v0.9.2 won&#39;t appear in pass-2 output
+until you recreate them via <code>thrum tmux create</code>.</li>
 <li><strong><code>runPreambleInit</code> fallback ignored <code>.thrum/redirect</code> (thrum-5hhx).</strong>
 Worktree setups using the redirect indirection silently lost their custom
 preamble path. Fallback now follows the redirect.</li>
 <li><strong>Worktree preambles rendered relative strategy paths (thrum-rm4x,
-thrum-z9zl).</strong> Generated preambles referenced <code>strategies/&lt;file&gt;</code> relative
-to the rendering CWD, breaking when read from a different directory. Paths
-are now absolute against the project root.</li>
+thrum-z9zl).</strong> Generated preambles referenced <code>strategies/&lt;file&gt;</code> relative to
+the rendering CWD, breaking when read from a different directory. Paths are
+now absolute against the project root.</li>
 <li><strong><code>thrum context preamble --init</code> overwrote customized templates
 (thrum-pk2o).</strong> <code>--init</code> skipped <code>.thrum/role_templates/&lt;role&gt;.md</code> and went
 straight to the generic default. It now consults <code>RenderRoleTemplate</code> first
 and only falls back when no rendered template exists.</li>
-<li><strong>Peercred unknown-vs-anonymous (thrum-ndtw, backported from v0.9.1).</strong>
-v0.9.0 wrapped introspection failures (<code>tspeer.Get</code>, <code>gopsutil.Cwd</code>) with
+<li><strong>Peercred unknown-vs-anonymous (thrum-ndtw, backported from v0.9.1).</strong> v0.9.0
+wrapped introspection failures (<code>tspeer.Get</code>, <code>gopsutil.Cwd</code>) with
 <code>ErrAnonymous</code>, which rejected mutating RPCs from registered Bash subprocesses
 on macOS. Steps 1+2 now return raw errors and fall through to legacy
 client-asserted identity. Provably-anonymous paths (steps 3+5) still wrap.</li>
 </ul>
 <h2>v0.9.1 — 2026-04-24</h2>
 <ul>
-<li><strong><code>thrum setup claude-md --apply</code></strong> — the documented-but-unimplemented
-command from issue #8 now works. Bare <code>thrum setup claude-md</code> prints the
-template; <code>--apply</code> creates <code>CLAUDE.md</code> (or appends to existing); <code>--apply --force</code> replaces idempotently. Block markers: <code>&lt;!-- BEGIN THRUM --&gt;</code> /
+<li><strong><code>thrum setup claude-md --apply</code></strong> — the documented-but-unimplemented command
+from issue #8 now works. Bare <code>thrum setup claude-md</code> prints the template;
+<code>--apply</code> creates <code>CLAUDE.md</code> (or appends to existing); <code>--apply --force</code>
+replaces idempotently. Block markers: <code>&lt;!-- BEGIN THRUM --&gt;</code> /
 <code>&lt;!-- END THRUM --&gt;</code>.</li>
 <li><strong>Peercred resolver error taxonomy (thrum-ndtw).</strong> Same fix described under
 v0.9.2 above; landed first in v0.9.1.</li>
@@ -127,83 +284,82 @@ v0.9.2 above; landed first in v0.9.1.</li>
 <h2>v0.9.0 — 2026-04-23</h2>
 <h3>What&#39;s New</h3>
 <ul>
-<li><strong>Permission-prompt detection</strong> — the daemon detects when a tmux-managed
-agent hits a blocking permission prompt and routes an actionable nudge to
-configured supervisors. Approve or deny from the CLI, web UI, or Telegram.
-See <a href="permission-prompts.html">Permission Prompt Detection</a>.</li>
-<li><strong>Identity guards</strong> — cross-worktree CWD enforcement hard-errors on CWD
-drift instead of silently misattributing actions to the wrong agent. See
+<li><strong>Permission-prompt detection</strong> — the daemon detects when a tmux-managed agent
+hits a blocking permission prompt and routes an actionable nudge to configured
+supervisors. Approve or deny from the CLI, web UI, or Telegram. See
+<a href="permission-prompts.html">Permission Prompt Detection</a>.</li>
+<li><strong>Identity guards</strong> — cross-worktree CWD enforcement hard-errors on CWD drift
+instead of silently misattributing actions to the wrong agent. See
 <a href="troubleshooting-identity.html">Troubleshooting: Identity</a>.</li>
 <li><strong>CLI hints (Phase B)</strong> — contextual guidance printed before and after
 destructive or multi-step commands. See <a href="cli-hints.html">CLI Hints</a>.</li>
-<li><strong>Drift reconciliation</strong> — peers self-heal address drift automatically
-without re-pairing. See <a href="peers.html">Peers</a>.</li>
+<li><strong>Drift reconciliation</strong> — peers self-heal address drift automatically without
+re-pairing. See <a href="peers.html">Peers</a>.</li>
 <li><strong><code>thrum tmux quickstart</code></strong> — alias for <code>thrum tmux create</code>. Same command,
-clearer name. <code>thrum tmux create</code> now requires <code>--name</code>, <code>--role</code>,
-<code>--module</code> (or <code>--no-agent</code>) and runs quickstart inside the new pane
-automatically.</li>
-<li><strong><code>thrum worktree setup</code></strong> — alias for <code>thrum worktree create</code>. Both
-commands now accept optional quickstart flags (<code>--name</code>, <code>--role</code>,
-<code>--module</code>, <code>--intent</code>, <code>--runtime</code>). Provide all three required flags and
-it creates a real tmux session, runs quickstart inside it, and prints the
-next-step <code>thrum tmux launch &lt;name&gt;</code> command. The agent identity is
-registered, but the runtime is not started until <code>tmux launch</code> runs — a
-clean two-step pattern with no manual <code>thrum quickstart</code>.</li>
+clearer name. <code>thrum tmux create</code> now requires <code>--name</code>, <code>--role</code>, <code>--module</code>
+(or <code>--no-agent</code>) and runs quickstart inside the new pane automatically.</li>
+<li><strong><code>thrum worktree setup</code></strong> — alias for <code>thrum worktree create</code>. Both commands
+now accept optional quickstart flags (<code>--name</code>, <code>--role</code>, <code>--module</code>,
+<code>--intent</code>, <code>--runtime</code>). Provide all three required flags and it creates a
+real tmux session, runs quickstart inside it, and prints the next-step
+<code>thrum tmux launch &lt;name&gt;</code> command. The agent identity is registered, but the
+runtime is not started until <code>tmux launch</code> runs — a clean two-step pattern
+with no manual <code>thrum quickstart</code>.</li>
 <li><strong>Single identity per worktree</strong> — quickstart cleans up old identity files
 after writing the new one. You can&#39;t end up with a stale identity causing
 auto-select errors.</li>
 <li><strong><code>thrum tmux launch</code> hard-errors on missing identity</strong> — launch needs an
 agent identity to determine the runtime. Sessions created with <code>--no-agent</code>
-(or worktrees with no identity file) cannot be launched until you register
-an agent first.</li>
-<li><strong>Next-step guard messages</strong> — <code>agent register</code>, <code>worktree create</code> (no
-agent), <code>purge --confirm</code>, <code>daemon stop</code>, <code>tmux restart</code>, and <code>tmux launch</code>
-now print explicit hints about what to do next (or what just broke).</li>
+(or worktrees with no identity file) cannot be launched until you register an
+agent first.</li>
+<li><strong>Next-step guard messages</strong> — <code>agent register</code>, <code>worktree create</code> (no agent),
+<code>purge --confirm</code>, <code>daemon stop</code>, <code>tmux restart</code>, and <code>tmux launch</code> now print
+explicit hints about what to do next (or what just broke).</li>
 <li><strong>Monitor Jobs v1</strong> — <code>thrum monitor start/list/show/stop/logs/restart</code>.
-Attach a monitor to any long-running process and it emits matches as
-synthetic Thrum messages. Leading-edge debounce (default 60s, min 30s),
-auto-persist, local-socket-only.</li>
+Attach a monitor to any long-running process and it emits matches as synthetic
+Thrum messages. Leading-edge debounce (default 60s, min 30s), auto-persist,
+local-socket-only.</li>
 </ul>
 <h3>Breaking Changes</h3>
 <p>If you&#39;re upgrading from v0.8.x, read this section before starting the daemon.</p>
 <ul>
 <li><strong>Forged <code>caller_agent_id</code> rejected</strong> — pre-v0.9.0 callers could pass any
-<code>caller_agent_id</code> and it was accepted at face value. Now cross-checked
-against kernel-verified PID resolution. Mismatches get &quot;identity mismatch&quot;
-and are dropped.</li>
+<code>caller_agent_id</code> and it was accepted at face value. Now cross-checked against
+kernel-verified PID resolution. Mismatches get &quot;identity mismatch&quot; and are
+dropped.</li>
 <li><strong>WebSocket non-localhost origin → HTTP 403</strong> — pre-v0.9.0, <code>CheckOrigin</code>
-returned <code>true</code> for all origins. Browser pages on non-loopback origins can
-no longer upgrade to WebSocket.</li>
+returned <code>true</code> for all origins. Browser pages on non-loopback origins can no
+longer upgrade to WebSocket.</li>
 <li><strong><code>message.delete</code> by non-author rejected</strong> — only the original author can
 soft-delete their own messages.</li>
 <li><strong><code>message.deleteByAgent</code> requires caller == target</strong> — agents can only
 bulk-delete their own messages.</li>
-<li><strong><code>message.deleteByScope</code> is daemon-internal only</strong> — no longer callable
-from any external client (CLI, browser, or unix socket).</li>
+<li><strong><code>message.deleteByScope</code> is daemon-internal only</strong> — no longer callable from
+any external client (CLI, browser, or unix socket).</li>
 <li><strong>Legacy daemon_id auto-rotated</strong> — first v0.9.0 daemon start rotates
-pre-existing hostname-derived daemon IDs to ULID format. Existing peer
-pairs must be re-paired: <code>thrum peer remove &lt;name&gt;</code> then
+pre-existing hostname-derived daemon IDs to ULID format. Existing peer pairs
+must be re-paired: <code>thrum peer remove &lt;name&gt;</code> then
 <code>thrum peer add --type tailscale &lt;name&gt;</code> on each peer.</li>
-<li><strong>Downgrade blocked by migration guard</strong> — running a v0.8.x binary against
-a database migrated to schema v24 fails with a clear error. Recovery: stop
+<li><strong>Downgrade blocked by migration guard</strong> — running a v0.8.x binary against a
+database migrated to schema v24 fails with a clear error. Recovery: stop
 daemon → restore <code>thrum.db.pre-migration-v&lt;N&gt;-bak</code> → run the older binary.</li>
-<li><strong><code>~/.thrum/runtimes.json</code> replaces the old platform config path</strong> —
-silently dropped on upgrade; custom runtimes disappear. Move the file
-manually: Linux: <code>~/.config/thrum/runtimes.json</code> → <code>~/.thrum/runtimes.json</code>;
-macOS: <code>~/Library/Application Support/thrum/runtimes.json</code> →
+<li><strong><code>~/.thrum/runtimes.json</code> replaces the old platform config path</strong> — silently
+dropped on upgrade; custom runtimes disappear. Move the file manually: Linux:
+<code>~/.config/thrum/runtimes.json</code> → <code>~/.thrum/runtimes.json</code>; macOS:
+<code>~/Library/Application Support/thrum/runtimes.json</code> →
 <code>~/.thrum/runtimes.json</code>.</li>
 <li><strong><code>peer add --type</code> and <code>peer join --type</code> are now mandatory</strong> — the
-previously implicit <code>tailscale</code> default is gone. Add <code>--type tailscale</code> to
-any existing scripts that omit it.</li>
+previously implicit <code>tailscale</code> default is gone. Add <code>--type tailscale</code> to any
+existing scripts that omit it.</li>
 <li><strong><code>alert-silence</code> hook no longer triggers permission-prompt detection</strong> —
 daemon-side poller replaces it (~20s detection latency). Existing
 <code>alert-silence</code> config in <code>.tmux.conf</code> is inert for this purpose.</li>
-<li><strong>Identity guards hard-error on CWD drift</strong> — running thrum from the wrong
-CWD fails with <code>identity guard &quot;cross_worktree&quot; fired: pid_mismatch</code>
-instead of silently misattributing. Use <code>THRUM_HOME</code> to pin repo path. See
+<li><strong>Identity guards hard-error on CWD drift</strong> — running thrum from the wrong CWD
+fails with <code>identity guard &quot;cross_worktree&quot; fired: pid_mismatch</code> instead of
+silently misattributing. Use <code>THRUM_HOME</code> to pin repo path. See
 <a href="troubleshooting-identity.html">Troubleshooting: Identity</a>.</li>
-<li><strong><code>thrum daemon start</code> and <code>thrum init</code> refuse non-git directories</strong> —
-pass <code>--force</code> for non-anchored use.</li>
+<li><strong><code>thrum daemon start</code> and <code>thrum init</code> refuse non-git directories</strong> — pass
+<code>--force</code> for non-anchored use.</li>
 <li><strong><code>thrum quickstart</code> refuses self-rename / name collision</strong> — without
 <code>--force</code>. Previously a silent overwrite.</li>
 <li><strong>Telegram fresh-DM <code>y</code> resolves a pending nudge instead of routing to
@@ -216,24 +372,24 @@ delivering to the configured target agent.</li>
 <li><strong>Orchestrator role</strong> — a dedicated coordinator agent that reads your plan,
 claims tasks, spawns implementers, and stops at every review gate without
 touching the merge button; see <a href="orchestrator-role.html">Orchestrator Role</a></li>
-<li><strong>Multi-runtime support</strong> — Claude Code, Codex, OpenCode, etc. all work;
-Thrum picks the right tmux launch command for each; see
+<li><strong>Multi-runtime support</strong> — Claude Code, Codex, OpenCode, etc. all work; Thrum
+picks the right tmux launch command for each; see
 <a href="multi-runtime.html">Multi-Runtime</a></li>
-<li><strong>Peer mesh</strong> — agents on different machines join one team over Tailscale
-or local network with no extra servers; see <a href="peers.html">Peers</a></li>
-<li><strong>Single-agent mode</strong> — Thrum&#39;s context management and session tracking
-work without any messaging layer; it&#39;s now the default for new installs;
-see <a href="single-agent-mode.html">Single-Agent Mode</a></li>
+<li><strong>Peer mesh</strong> — agents on different machines join one team over Tailscale or
+local network with no extra servers; see <a href="peers.html">Peers</a></li>
+<li><strong>Single-agent mode</strong> — Thrum&#39;s context management and session tracking work
+without any messaging layer; it&#39;s now the default for new installs; see
+<a href="single-agent-mode.html">Single-Agent Mode</a></li>
 <li><strong>Daemon-managed tmux sessions</strong> — the daemon owns the session lifecycle,
-delivers messages the moment they arrive, and runs zero background
-listeners in the agent process; see <a href="tmux-sessions.html">Tmux Sessions</a></li>
-<li><strong>Command queue dispatch</strong> — coordinators submit commands to agent panes
-via <code>thrum tmux queue</code>, with completion tracking, <code>@system</code> notifications,
-and restart recovery; see
+delivers messages the moment they arrive, and runs zero background listeners
+in the agent process; see <a href="tmux-sessions.html">Tmux Sessions</a></li>
+<li><strong>Command queue dispatch</strong> — coordinators submit commands to agent panes via
+<code>thrum tmux queue</code>, with completion tracking, <code>@system</code> notifications, and
+restart recovery; see
 <a href="tmux-sessions.html#command-queue-dispatch">Tmux Sessions — Queue Dispatch</a></li>
 <li><strong>Worktree management</strong> — <code>thrum worktree create/teardown/list</code> (alias:
-<code>thrum worktree setup</code>) handles git worktree setup with automatic Thrum
-and Beads redirect wiring</li>
+<code>thrum worktree setup</code>) handles git worktree setup with automatic Thrum and
+Beads redirect wiring</li>
 <li><strong>Daemon logging</strong> — structured slog output with lumberjack rotation; view
 with <code>thrum daemon logs</code>; configurable via <code>daemon.log_level</code></li>
 </ul>

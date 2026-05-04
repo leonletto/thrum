@@ -13,7 +13,7 @@ and machines. You direct the work. The agents coordinate through Thrum. Messages
 persist through context compaction, session restarts, and machine changes —
 nothing gets lost.
 
-**v0.10.1 highlights:**
+**v0.10.2 highlights:**
 
 - **Hotfix: `thrum quickstart` from a redirect-using worktree no longer
   hijacks the agent identity to `$THRUM_HOME`.** v0.10.0 exposed a

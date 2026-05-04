@@ -57,7 +57,7 @@ config.json when you want to change something.</p>
     &quot;pairing_code_length&quot;: 16
   },
   &quot;worktrees&quot;: {
-    &quot;base_path&quot;: &quot;~/.workspaces/myproject&quot;,
+    &quot;base_path&quot;: &quot;~/.thrum/worktrees/myproject&quot;,
     &quot;beads_enabled&quot;: true,
     &quot;thrum_enabled&quot;: true
   },
@@ -177,7 +177,9 @@ how the orchestrator uses these.</p>
 <p>Directory where <code>thrum worktree create</code> puts new worktrees.</p>
 <ul>
 <li><strong>Type:</strong> string (absolute path)</li>
-<li><strong>Default:</strong> <code>~/.workspaces/&lt;project&gt;</code> (inferred from repo name)</li>
+<li><strong>Default:</strong> <code>~/.thrum/worktrees/&lt;project&gt;</code> (inferred from repo name; migrated
+from <code>~/.workspaces/&lt;project&gt;</code> in v0.10.0 — set the legacy path explicitly if
+you want to keep using it)</li>
 </ul>
 <h3><code>worktrees.beads_enabled</code></h3>
 <p>Whether to create <code>.beads/redirect</code> in new worktrees.</p>

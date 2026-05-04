@@ -6,6 +6,116 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.2] - 2026-05-04
+
+### Fixed
+
+- **`thrum quickstart` no longer rejects idempotent same-name re-register.**
+  The G1a `quickstart_self_rename` guard refused every re-register from a
+  caller who owned an existing identity, even when the requested `--name`
+  matched the owned identity. This broke `scripts/thrum-startup.sh` (the
+  SessionStart hook for every claude session) on already-registered
+  worktrees: step 3 (`thrum quickstart --name $AGENT_NAME`) errored, `set
+  -e` aborted, and steps 4 (inbox check), 5 (announce), and 6 (cron
+  install) never ran. `thrum tmux start` against an already-registered
+  worktree hit the same guard via `runInlineQuickstart`, aborting
+  `HandleCreate` before claude launched. Same-name re-register is now
+  allowed (idempotent); a real rename (different `--name`) still requires
+  `--force` (thrum-gmz2).
+
+- **`tmux.create`-spawned panes no longer inherit `THRUM_*` env vars from
+  the daemon.** When the daemon was started from a primed shell, every
+  tmux pane it spawned inherited `THRUM_AGENT_ID`, `THRUM_HOME`, etc. —
+  causing the pane's `thrum whoami` to resolve to the daemon-starter's
+  identity instead of the pane's intended agent. Fix scrubs `THRUM_*` at
+  the central tmux exec chokepoint (`safecmd.cleanTmuxEnv`), covering
+  every code path that goes through `safecmd.{Tmux,TmuxRun,TmuxExec}`
+  (thrum-8nro.4).
+
+- **Long-running tmux servers no longer leak stale `THRUM_*` env into new
+  sessions.** Companion to thrum-8nro.4. Tmux session env is sourced from
+  the SERVER's environ at server-start time, not the client connection.
+  So even after the daemon-side scrub, sessions created against a
+  long-running tmux server inherited whatever environ the server
+  captured weeks/months ago. Fix adds per-session `-e KEY=` overrides on
+  `tmux new-session` to neutralize server-cached `THRUM_*` values
+  (thrum-t8mj).
+
+- **`thrum purge --confirm` now actually shrinks JSONL message files.**
+  `filterSyncFiles` was passing the wrong field name (`"created_at"` vs
+  the actual on-disk `"timestamp"`) when filtering messages JSONLs, so
+  every record was kept and the on-disk files grew unboundedly. Verified
+  live: a `--before 30d` purge against this dev box's 335MB sync dir
+  filtered 13 message files in 7.7s, with `supervisor` going 145MB →
+  134MB and `system` going 80MB → 76MB (thrum-yzps).
+
+- **Release-test harness coord-whoami probe now retries on saturated dev
+  boxes.** The 60s timeout on `setup-repo.sh`'s coord whoami was firing
+  on saturated boxes (~60+ tmux sessions, long daemon uptime) due to a
+  missed-keystroke race when claude's interactive-input handler wasn't
+  bound at the moment the probe sent the bash-prefix. Fix replaces the
+  single 60s wait with a 3-attempt × 30s retry loop (90s total), each
+  attempt resending the idempotent `thrum whoami --json`. Pure
+  shell-loop, fixture-only, no daemon/tmux behavior change (thrum-vjqn).
+
+- **`unauthenticated_rpc` deny message now points at `thrum prime` as the
+  cache-warming recovery.** The prior remediation (`cd into a registered
+  agent worktree and retry`) was misleading when the caller WAS in a
+  registered worktree but the daemon's binding cache hadn't been warmed
+  (post-restart, post-edit, etc.). New text leads with `thrum prime` and
+  retains cd-into-worktree as the fallback (thrum-8nro.3).
+
+- **r02 remote scenario no longer fails on macOS `/tmp` symlinks.** The
+  worktree-field assertion now uses `pwd -P` on both sides of the
+  comparison so `/tmp` → `/private/tmp` symlink resolution doesn't trip
+  the test on macOS remotes (thrum-vry8).
+
+- **`release.yml` skips `publish-opencode-plugin` when version
+  unchanged.** Every thrum tag where `opencode-plugin/package.json`
+  wasn't bumped failed the publish job with HTTP 403 (`You cannot
+  publish over the previously published versions`), making release runs
+  look broken even when the rest of the pipeline succeeded. Pre-check
+  via `npm view` now gates the publish step; bumping the plugin's
+  version still triggers a real publish (thrum-ygf2).
+
+- **`setLocalAgentStatus` no longer applies `paths.EffectiveRepoPath`
+  asymmetrically.** Latent trap where the save site wrapped the path
+  through `EffectiveRepoPath` while the load site did not, leaving open
+  a scenario where a `THRUM_HOME`-set primed shell could write status
+  into the wrong worktree's identity file (thrum-8nro.1).
+
+### Added
+
+- **Manual release-test scenario** for the daemon-side `THRUM_*` env
+  scrub (`dev-docs/release-testing/full_test_plan.md` Step 10H).
+  Documents the procedure to confirm `thrum tmux start` produces a pane
+  whose `thrum whoami` resolves to the intended (per-pane) agent even
+  when launched from a daemon poisoned by an earlier primed shell.
+  Promotion to an automated scenario is tracked under thrum-yopu
+  (deferred to v0.10.3).
+
+### Internal
+
+- **G1a guard tests now exercise the rename-refusal path with an
+  explicit different `RequestedName`.** Pre-thrum-gmz2 the test fired
+  the guard with no `RequestedName` set, codifying the buggy behavior
+  as the spec. Now `TestG1a_CallerOwnsAnExistingIdentity_Refuses` uses
+  `RequestedName: "impl_bar"` (different from owned `"impl_foo"`) and a
+  new sibling `TestG1a_SameName_ReregisterIsIdempotent` pins the fixed
+  allow-path.
+
+- **Documents the daemon-side env-scrubbing chokepoint** with new doc
+  comments on `safecmd.Tmux`, `safecmd.TmuxRun`, and
+  `internal/daemon/rpc/tmux.go HandleCreate` so future readers see the
+  scrub trail without re-litigating the design choice.
+
+- **Test isolation hardening:** `internal/cli/client_test.go` and
+  `internal/config/config_test.go` now have package-level `TestMain`s
+  that `os.Unsetenv` `THRUM_*` before `m.Run()`, so tests don't
+  silently inherit operator-shell pollution. (Same pattern should be
+  added to `internal/identity/guard`, `internal/daemon/rpc`, etc. —
+  tracked under thrum-2jbv.)
+
 ## [0.10.1] - 2026-05-03
 
 ### Fixed

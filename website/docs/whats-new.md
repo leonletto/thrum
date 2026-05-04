@@ -16,6 +16,66 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 [CHANGELOG.md](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
+## v0.10.2 — 2026-05-04
+
+Hotfix release closing two related foot-guns from the v0.10.x identity work: the
+SessionStart hook (`scripts/thrum-startup.sh`) breaking on every
+already-registered worktree, and a tmux env-hijack class that caused new panes
+to resolve identity to the daemon-starter's agent. Plus a long-standing
+`thrum purge` regression where message JSONL files weren't actually shrinking.
+
+### Fixed
+
+- **`thrum quickstart` no longer rejects idempotent same-name re-register.** The
+  `quickstart_self_rename` guard was firing on every call where the caller
+  already owned an identity, even when the requested `--name` matched the
+  existing one. This broke `scripts/thrum-startup.sh` — the SessionStart hook on
+  every claude session — at step 3 (`thrum quickstart`); `set -e` aborted before
+  steps 4 (inbox check), 5 (announce), and 6 (cron install) ran.
+  `thrum tmux start` against an existing worktree hit the same guard and aborted
+  before claude launched. **Same-name re-register is now allowed without
+  `--force`** (it's an idempotent no-op); a real rename (different `--name`)
+  still requires `--force`.
+
+- **`tmux.create`-spawned panes no longer inherit `THRUM_*` env from the
+  daemon.** When the daemon was started from a primed shell, every tmux pane it
+  spawned inherited the daemon's `THRUM_AGENT_ID`, `THRUM_HOME`, etc. — causing
+  the new pane's `thrum whoami` to resolve to the daemon-starter's identity
+  instead of the pane's intended agent. Two-layer fix: scrub `THRUM_*` from the
+  daemon's tmux exec env, AND pass per-session `-e KEY=` overrides so even
+  long-running tmux servers (which cache the environ from server-start time)
+  produce clean panes.
+
+- **`thrum purge --confirm` now actually shrinks JSONL message files.** The
+  filter was passing the wrong field name (`"created_at"` vs the on-disk
+  `"timestamp"`) when iterating message JSONLs, so every record was kept and
+  on-disk files grew unboundedly. Verified live: `--before 30d` against a 335MB
+  sync dir filtered 13 message files in 7.7s.
+
+- **Misleading `unauthenticated_rpc` deny message** now points at `thrum prime`
+  as the cache-warming recovery (was
+  `cd into a registered agent worktree and retry`, which was the wrong fix when
+  the caller already WAS in a registered worktree but the daemon's binding cache
+  hadn't warmed after a restart).
+
+### Internal
+
+- Release-test harness coord-whoami probe now retries 3× 30s instead of a single
+  60s wait — recovers from missed-keystroke races on saturated multi-agent dev
+  boxes.
+- Unit-test hardening: `internal/cli` and `internal/config` test packages now
+  have `TestMain` env-isolation guards so tests don't silently inherit `THRUM_*`
+  pollution from the operator's primed shell.
+
+### Upgrade Notes
+
+- **No CLI flag changes; no config changes.** Drop-in upgrade from v0.10.1.
+- After upgrade: `make install` (or download the new binary), then
+  `thrum daemon restart` so the running daemon picks up the new binary. **Also
+  refresh the Claude Code plugin** (`/plugin update thrum`, or remove + add the
+  marketplace) — v0.10.2 ships an updated `inject-prime-context.sh` that
+  improves the SessionStart context delivery banner.
+
 ## v0.10.1 — 2026-05-03
 
 Two related identity-resolver fixes shipped together. v0.10.0 is marked
@@ -35,19 +95,19 @@ prerelease; upgrade to v0.10.1.
 - **Boot-time identity reconcile** so write RPCs from any registered worktree
   succeed after a daemon restart, without re-running `thrum quickstart`.
   Previously, the peercred resolver matched caller CWDs against
-  `session_refs JOIN sessions WHERE ended_at IS NULL` — that view is durable
-  in SQLite but loses rows on shutdown / cleanup / long quiescence, so disk
-  truth (identity files) and resolver truth (DB rows) drifted apart.
-  `thrum send`, `thrum tmux start`, and other write RPCs would fail with
+  `session_refs JOIN sessions WHERE ended_at IS NULL` — that view is durable in
+  SQLite but loses rows on shutdown / cleanup / long quiescence, so disk truth
+  (identity files) and resolver truth (DB rows) drifted apart. `thrum send`,
+  `thrum tmux start`, and other write RPCs would fail with
   `anonymous caller cannot invoke X` from a worktree where an identity file
   clearly existed; only `thrum quickstart --force` re-populated the rows
-  (`thrum prime` did not). The fix walks `.thrum/identities/*.json` at
-  daemon boot and inserts the missing `(sessions, session_refs)` pairs via
-  `safedb` in a per-identity transaction. Local-only by design — direct SQL,
-  no JSONL events, no cross-machine sync — because `session_refs` is
-  intentionally local-only state. The same pass restores in-memory tmux
-  pane-nudge bindings for any identity whose `tmux_session` is still alive.
-  Closes thrum-soj8 + thrum-6kk6.
+  (`thrum prime` did not). The fix walks `.thrum/identities/*.json` at daemon
+  boot and inserts the missing `(sessions, session_refs)` pairs via `safedb` in
+  a per-identity transaction. Local-only by design — direct SQL, no JSONL
+  events, no cross-machine sync — because `session_refs` is intentionally
+  local-only state. The same pass restores in-memory tmux pane-nudge bindings
+  for any identity whose `tmux_session` is still alive. Closes thrum-soj8 +
+  thrum-6kk6.
 
 ### How to verify after upgrade
 
