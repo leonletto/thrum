@@ -254,3 +254,138 @@ func TestReconcile_TmuxBindingSkippedWhenDead(t *testing.T) {
 		t.Fatalf("dead session binding leaked: %q", got)
 	}
 }
+
+func TestReconcile_PerIdentityErrorContinuesLoop(t *testing.T) {
+	dirA := t.TempDir()
+	thrumDir := filepath.Join(dirA, ".thrum")
+	idDir := filepath.Join(thrumDir, "identities")
+	if err := os.MkdirAll(idDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	// File 1: corrupt JSON.
+	if err := os.WriteFile(filepath.Join(idDir, "corrupt.json"),
+		[]byte("{not valid json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// File 2: valid identity, must still be processed.
+	writeIdentity(t, idDir, config.IdentityFile{
+		Version: 5, RepoID: "test",
+		Agent:     config.AgentConfig{Kind: "agent", Name: "agent_ok", Role: "tester"},
+		Worktree:  dirA,
+		UpdatedAt: time.Now().UTC(),
+	})
+	st := newTestState(t, thrumDir)
+
+	stats, err := Reconcile(context.Background(), Deps{
+		State: st, ThrumDir: thrumDir, Now: time.Now,
+		NewSessionID: func() string { return "ses_OK" },
+		TmuxAlive:    func(string) bool { return false },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if stats.Errors != 1 {
+		t.Fatalf("expected stats.Errors=1 from corrupt file, got %d", stats.Errors)
+	}
+	if stats.SessionsCreated != 1 {
+		t.Fatalf("expected SessionsCreated=1 from valid file, got %+v", stats)
+	}
+}
+
+// ulidLikeForTest returns a unique session ID per call. Helper kept local
+// to tests; production uses ulid.Make().String().
+var testSeq int
+
+func ulidLikeForTest() string {
+	testSeq++
+	return "ses_TEST_" + time.Now().Format("150405.000000000") + "_" + string(rune('A'+testSeq%26))
+}
+
+func TestReconcile_Idempotent(t *testing.T) {
+	dirA := t.TempDir()
+	thrumDir := filepath.Join(dirA, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeIdentity(t, filepath.Join(thrumDir, "identities"), config.IdentityFile{
+		Version: 5, RepoID: "test",
+		Agent:     config.AgentConfig{Kind: "agent", Name: "agent_i", Role: "tester"},
+		Worktree:  dirA,
+		UpdatedAt: time.Now().UTC(),
+	})
+	st := newTestState(t, thrumDir)
+
+	deps := Deps{
+		State: st, ThrumDir: thrumDir, Now: time.Now,
+		NewSessionID: ulidLikeForTest,
+		TmuxAlive:    func(string) bool { return false },
+	}
+
+	s1, err := Reconcile(context.Background(), deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s1.SessionsCreated != 1 {
+		t.Fatalf("first run: got %+v", s1)
+	}
+
+	s2, err := Reconcile(context.Background(), deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s2.SessionsCreated != 0 || s2.RefsCreated != 0 {
+		t.Fatalf("second run not idempotent: %+v", s2)
+	}
+}
+
+func TestReconcile_TransactionRollbackOnRefInsertFailure(t *testing.T) {
+	dirA := t.TempDir()
+	thrumDir := filepath.Join(dirA, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeIdentity(t, filepath.Join(thrumDir, "identities"), config.IdentityFile{
+		Version: 5, RepoID: "test",
+		Agent:     config.AgentConfig{Kind: "agent", Name: "agent_r", Role: "tester"},
+		Worktree:  dirA,
+		UpdatedAt: time.Now().UTC(),
+	})
+	st := newTestState(t, thrumDir)
+
+	// Force a ref-insert failure by dropping the session_refs table after
+	// state init but before reconcile runs. The transaction wrapping the
+	// (sessions, session_refs) pair must roll back the sessions insert
+	// when the session_refs insert errors.
+	if _, err := st.DB().ExecContext(context.Background(),
+		`DROP TABLE session_refs`); err != nil {
+		t.Fatal(err)
+	}
+
+	stats, err := Reconcile(context.Background(), Deps{
+		State: st, ThrumDir: thrumDir, Now: time.Now,
+		NewSessionID: func() string { return "ses_R_ROLLBACK" },
+		TmuxAlive:    func(string) bool { return false },
+	})
+	if err != nil {
+		t.Fatalf("Reconcile returned fatal err: %v", err)
+	}
+	if stats.Errors == 0 {
+		t.Fatalf("expected at least 1 error from dropped session_refs table, got %+v", stats)
+	}
+	if stats.SessionsCreated != 0 {
+		t.Fatalf("transaction did NOT roll back: SessionsCreated=%d (expected 0)", stats.SessionsCreated)
+	}
+
+	// Confirm no orphan session row remains in the sessions table.
+	var n int
+	if err := st.DB().QueryRowContext(context.Background(),
+		"SELECT COUNT(*) FROM sessions WHERE session_id='ses_R_ROLLBACK'").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("orphan session row left after rollback: count=%d", n)
+	}
+}
