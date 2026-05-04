@@ -43,6 +43,32 @@ and this project adheres to
   Refs: thrum-tc4w. v0.10.0 marked prerelease; users should upgrade to
   v0.10.1.
 
+- **Boot-time identity reconcile.** Write RPCs (`thrum send`, `thrum tmux
+  start`, etc.) from a worktree that holds a registered `.thrum/identities/
+  <name>.json` no longer fail with `anonymous caller cannot invoke X`
+  after a daemon restart or cold start. The peercred resolver matches
+  caller CWDs against `session_refs JOIN sessions WHERE ended_at IS NULL`
+  — that view is durable in SQLite but loses rows on shutdown / cleanup
+  / long quiescence, so disk-truth (identity files) and resolver-truth
+  (DB rows) drift apart. Previously, only `thrum quickstart --force`
+  re-populated the rows; `thrum prime` did not. The fix walks
+  `.thrum/identities/*.json` at daemon boot via
+  `internal/daemon/bootstrap/Reconcile` and inserts the missing
+  `(sessions, session_refs)` pairs through `safedb` in a per-identity
+  transaction with `INSERT OR IGNORE`. Local-only by design — direct
+  SQL only, no JSONL events, no cross-machine sync — because
+  `session_refs` is intentionally local-only state in the projector
+  rebuild path. The same pass restores the in-memory `sessionCwds`
+  pane-nudge map for any identity whose `tmux_session` is still alive,
+  closing a related restart gap. Defensive `filepath.IsAbs` guard skips
+  malformed identity files (resilience fixture stub `worktree: "test"`).
+  Wires into `cmd/thrum/main.go daemonRun` between
+  `tmuxHandler.ReconcilePoller` and `paneSilencePoller.Run` with a 10 s
+  `context.WithTimeout` boundary; failure is non-fatal at boot. New
+  release-test scenario
+  `tests/release/scenarios/109-reconcile-on-boot-restores-write-rpc.test.sh`
+  is the regression gate. Refs: thrum-xloz, thrum-soj8, thrum-6kk6.
+
 ## [0.10.0] - 2026-05-03
 
 ### Added

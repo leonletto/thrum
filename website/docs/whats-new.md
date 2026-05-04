@@ -18,8 +18,8 @@ machine-readable history lives in
 
 ## v0.10.1 — 2026-05-03
 
-A focused hotfix for a `thrum quickstart` bug that surfaced shortly after
-v0.10.0 shipped. v0.10.0 is marked prerelease; upgrade to v0.10.1.
+Two related identity-resolver fixes shipped together. v0.10.0 is marked
+prerelease; upgrade to v0.10.1.
 
 ### Fixed
 
@@ -31,6 +31,23 @@ v0.10.0 shipped. v0.10.0 is marked prerelease; upgrade to v0.10.1.
   `worktree`. Subsequent identity-resolution from any peer worktree could then
   cross-claim, with symptoms like `thrum whoami` returning the wrong agent and
   `unauthenticated_rpc` guard denying writes.
+
+- **Boot-time identity reconcile** so write RPCs from any registered worktree
+  succeed after a daemon restart, without re-running `thrum quickstart`.
+  Previously, the peercred resolver matched caller CWDs against
+  `session_refs JOIN sessions WHERE ended_at IS NULL` — that view is durable
+  in SQLite but loses rows on shutdown / cleanup / long quiescence, so disk
+  truth (identity files) and resolver truth (DB rows) drifted apart.
+  `thrum send`, `thrum tmux start`, and other write RPCs would fail with
+  `anonymous caller cannot invoke X` from a worktree where an identity file
+  clearly existed; only `thrum quickstart --force` re-populated the rows
+  (`thrum prime` did not). The fix walks `.thrum/identities/*.json` at
+  daemon boot and inserts the missing `(sessions, session_refs)` pairs via
+  `safedb` in a per-identity transaction. Local-only by design — direct SQL,
+  no JSONL events, no cross-machine sync — because `session_refs` is
+  intentionally local-only state. The same pass restores in-memory tmux
+  pane-nudge bindings for any identity whose `tmux_session` is still alive.
+  Closes thrum-soj8 + thrum-6kk6.
 
 ### How to verify after upgrade
 

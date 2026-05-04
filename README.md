@@ -27,6 +27,13 @@ nothing gets lost.
   `PersistentPreRunE`, plus passing explicit `--repo` from the daemon's
   inline-quickstart path. Two release-test scenarios (108 local, r02
   remote) added as a regression gate.
+- **Boot-time identity reconcile** restores write-RPC auth from any
+  registered worktree after a daemon restart, without requiring a
+  re-run of `thrum quickstart --force`. The fix walks
+  `.thrum/identities/*.json` at boot and inserts the missing
+  `(sessions, session_refs)` rows the peercred resolver needs.
+  Local-only by design (direct `safedb`, no events, no sync).
+  Closes thrum-soj8 + thrum-6kk6.
 
 **v0.10.0 highlights:**
 
