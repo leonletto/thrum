@@ -241,3 +241,17 @@ func TestWriteTmuxToIdentity_WorktreeMatch_Pass1HappyPathStillWorks(t *testing.T
 		t.Errorf("Runtime = %q, want codex after re-launch", got.Runtime)
 	}
 }
+
+func TestRestoreBinding_PopulatesBothMaps(t *testing.T) {
+	h := &TmuxHandler{
+		sessionCwds: make(map[string]string),
+		cwdSessions: make(map[string]string),
+	}
+	h.RestoreBinding("session-a", "/path/to/worktree-a")
+	if got := h.sessionCwds["session-a"]; got != "/path/to/worktree-a" {
+		t.Fatalf("sessionCwds[session-a] = %q, want %q", got, "/path/to/worktree-a")
+	}
+	if got := h.cwdSessions["/path/to/worktree-a"]; got != "session-a" {
+		t.Fatalf("cwdSessions[/path/to/worktree-a] = %q, want %q", got, "session-a")
+	}
+}
