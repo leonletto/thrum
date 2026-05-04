@@ -231,6 +231,40 @@ else
     "child identity file missing — see assertion identity-in-child-worktree"
 fi
 
+# Reconcile-on-boot policy assertion (thrum-soj8): the daemon's boot
+# reconcile pass treats every identity file on disk as authoritative.
+# The stale parent identity at $SUB_REPO/.thrum/identities/${WT_AGENT}.json
+# is therefore expected to have a session_ref pointing at $SUB_REPO. This
+# is policy: cleanup of stale identities is the operator's job (mv to
+# .deleted suffix). Documenting this post-v0.10.1 behavior so a future
+# regression that DROPS the row would be caught.
+#
+# Restart the daemon so reconcile runs with the stale parent file
+# already on disk; the parent daemon was started before pre-staging.
+"$TE" exec --cwd "$SUB_REPO" --clean -- thrum daemon restart >/dev/null 2>&1 || true
+sleep 1
+local DB="$SUB_REPO/.thrum/var/messages.db"
+if [ -f "$DB" ]; then
+  local REF_COUNT
+  REF_COUNT=$(sqlite3 "$DB" \
+    "SELECT COUNT(*) FROM session_refs sr
+       JOIN sessions s ON s.session_id = sr.session_id
+      WHERE sr.ref_type='worktree' AND s.ended_at IS NULL
+        AND sr.ref_value = '$SUB_REPO'
+        AND s.agent_id = '$WT_AGENT';" 2>/dev/null || echo "ERR")
+  if [ "$REF_COUNT" = "1" ]; then
+    emit_pass "$SID" "stale-parent-reconciled" \
+      "reconcile created session_ref for stale parent identity (expected post-v0.10.1)"
+  else
+    emit_fail "$SID" "stale-parent-reconciled" \
+      "expected 1 session_ref for stale parent" "$REF_COUNT" \
+      "scenarios/${SID}.test.sh:$LINENO"
+  fi
+else
+  emit_skip "$SID" "stale-parent-reconciled" \
+    "messages.db missing at ${DB}; cannot check post-reconcile state"
+fi
+
 }  # _run_scenario_108
 
 _run_scenario_108
