@@ -58,9 +58,9 @@ type Stats struct {
 // The latter is the v0.10.1 regression hazard; this code path is in the
 // THRUM_HOME blast radius and must not re-introduce it.
 type Deps struct {
-	State        *state.State           // SQL via state.DB() (*safedb.DB) ONLY
-	ThrumDir     string                 // function-local thrumDir from daemonRun
-	TmuxHandler  *rpc.TmuxHandler       // for the Tmux pass via RestoreBinding
+	State        *state.State     // SQL via state.DB() (*safedb.DB) ONLY
+	ThrumDir     string           // function-local thrumDir from daemonRun
+	TmuxHandler  *rpc.TmuxHandler // for the Tmux pass via RestoreBinding
 	Now          func() time.Time
 	NewSessionID func() string          // ulid.Make().String() in production
 	TmuxAlive    func(name string) bool // production: ttmux.HasSession
@@ -104,7 +104,7 @@ func Reconcile(ctx context.Context, deps Deps) (Stats, error) {
 			}
 			stats.Scanned++
 			path := filepath.Join(dir, de.Name())
-			data, err := os.ReadFile(path)
+			data, err := os.ReadFile(path) // #nosec G304 -- internal identity file under known thrumDir, mirrors identity_scan.go:83
 			if err != nil {
 				deps.Log.Warn("reconcile: read identity", "path", path, "err", err)
 				stats.Errors++
