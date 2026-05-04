@@ -126,7 +126,27 @@ Environment variables:
 		// accumulate into the hint buffer instead of corrupting stdout.
 		installSlogBridge(flagJSON, os.Stderr)
 
-		if !cmd.Flags().Changed("repo") {
+		// THRUM_HOME pins runtime commands to the agent's bound checkout
+		// even when cwd moves. For commands that REGISTER a new agent
+		// (init, quickstart) the user's actual cwd is the explicit
+		// "this is where I want the new agent" signal — applying
+		// EffectiveRepoPath here silently rewrites the identity-file
+		// destination to THRUM_HOME, producing cross-worktree identity
+		// files (thrum-tc4w). Skip the substitution for those commands;
+		// downstream still uses cwd-rooted FindThrumRoot below.
+		//
+		// cobra's cmd.Name() returns the leaf word, so this match also
+		// catches `thrum tmux quickstart` (the alias for `thrum tmux
+		// create` defined further down). Catching it is intentional and
+		// correct: the inline-quickstart route through HandleCreate
+		// passes --repo req.Cwd explicitly, so flagRepo's value at the
+		// cobra root is only used for the daemon-connection lookup,
+		// which still resolves correctly via FindThrumRoot below.
+		// Future readers: if a new `tmux init` or `tmux quickstart`
+		// subcommand is added with different semantics, audit this
+		// branch — the leaf-word match will catch it too.
+		registers := cmd.Name() == "init" || cmd.Name() == "quickstart"
+		if !registers && !cmd.Flags().Changed("repo") {
 			flagRepo = paths.EffectiveRepoPath(flagRepo)
 		}
 

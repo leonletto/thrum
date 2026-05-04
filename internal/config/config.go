@@ -310,7 +310,15 @@ func LoadIdentityFromWorktree(worktreePath string) (*IdentityFile, error) {
 // LoadIdentityWithPath loads the identity file and returns both the parsed identity
 // and the relative file path. Useful for commands that need to display which file was loaded.
 func LoadIdentityWithPath(repoPath string) (*IdentityFile, string, error) {
-	repoPath = paths.EffectiveRepoPath(repoPath)
+	// thrum-tc4w: do NOT re-apply paths.EffectiveRepoPath here. Callers
+	// pass a repoPath that has already been resolved at the cobra root
+	// (PersistentPreRunE) for runtime commands, OR is intentionally the
+	// raw caller-cwd for register paths (quickstart/init) that must
+	// land at the calling worktree, not THRUM_HOME. Re-applying
+	// EffectiveRepoPath inside this loader silently substitutes back
+	// to THRUM_HOME on the register paths — Step 2.5 enrichment in
+	// quickstart then reads from the wrong .thrum/identities/ and
+	// the new file is missing SessionID/Intent/Runtime fields.
 	thrumName := os.Getenv("THRUM_NAME")
 	identitiesDir := filepath.Join(repoPath, ".thrum", "identities")
 

@@ -15,11 +15,6 @@ func EnsureWorktreeRedirects(worktreePath, mainRepo string) error {
 	return worktree.EnsureRedirects(worktreePath, mainRepo)
 }
 
-// BuildQuickstartCmd delegates to worktree.BuildQuickstartCmd.
-func BuildQuickstartCmd(name, role, module, intent, runtime string, noAgentPID bool) string {
-	return worktree.BuildQuickstartCmd(name, role, module, intent, runtime, noAgentPID)
-}
-
 // PrintRedirectConfirmations writes one checkmark line per redirect
 // file EnsureRedirects actually created for worktreePath. Both the
 // thrum line and the beads line are artifact-driven — we stat the

@@ -221,6 +221,25 @@ func TestBuildInlineQuickstartCmd_AlwaysEmitsNoAgentPID(t *testing.T) {
 	}
 }
 
+// TestBuildInlineQuickstartCmd_AlwaysEmitsRepoFlag closes the regression
+// from thrum-tc4w: daemon-spawned panes inherit THRUM_HOME from the
+// daemon, and an inline `thrum quickstart` without --repo lets the
+// cobra root's EffectiveRepoPath substitute flagRepo to THRUM_HOME —
+// silently writing the new agent's identity into the wrong worktree.
+// HandleCreate must always forward req.Cwd as --repo.
+func TestBuildInlineQuickstartCmd_AlwaysEmitsRepoFlag(t *testing.T) {
+	req := TmuxCreateRequest{
+		Cwd:       "/path/to/worktree",
+		AgentName: "impl_test",
+		Role:      "implementer",
+		Module:    "testing",
+	}
+	cmd := buildInlineQuickstartCmd(req)
+	if !strings.HasPrefix(cmd, "thrum --repo '/path/to/worktree' quickstart ") {
+		t.Errorf("expected --repo <cwd> before quickstart, got: %s", cmd)
+	}
+}
+
 // TestBuildInlineQuickstartCmd_EmptyOptionalFields verifies the command
 // degrades gracefully when intent/runtime are not supplied.
 // HandleCreate happily accepts empty optional fields, so the emission
