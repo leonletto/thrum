@@ -95,8 +95,26 @@ run_setup() {
   # session; polling for a SessionStart attachment before the first `!` send
   # would be a chicken-and-egg deadlock. This whoami send IS what kicks the
   # session alive.
-  send_bash_and_wait coord "$REPO" "thrum whoami --json" "test_coordinator_main" 60 \
-    || { echo "ERROR: coord whoami did not return expected bash-stdout entry within 60s" >&2; return 1; }
+  #
+  # Retry-with-bounded-resend (thrum-vjqn): on saturated dev boxes (~60+
+  # tmux sessions, long daemon uptime) claude's interactive-input handler
+  # may not be bound when wait_for_pane_idle's 10s gate fires, so the `!`
+  # keystrokes get eaten and the bash-stdout JSONL line never appears.
+  # A pure timeout bump can't recover from a missed-keystroke race — but
+  # resending the idempotent `thrum whoami --json` after each round gives
+  # a swallowed keystroke a fresh chance once claude has had time to
+  # finish booting. 3 attempts × 30s = 90s budget, generous but bounded.
+  local attempt=1
+  while [ "$attempt" -le 3 ]; do
+    if send_bash_and_wait coord "$REPO" "thrum whoami --json" "test_coordinator_main" 30; then
+      break
+    fi
+    attempt=$((attempt + 1))
+  done
+  if [ "$attempt" -gt 3 ]; then
+    echo "ERROR: coord whoami did not return expected bash-stdout entry across 3 attempts (90s total)" >&2
+    return 1
+  fi
 
   # C. Implementer worktree
   # C.1 patch worktrees config so C.2 lands under $WORKTREE_BASE. quickstart
@@ -154,8 +172,23 @@ run_setup() {
     || { echo "ERROR: impl SessionStart did not appear within 60s" >&2; return 1; }
 
   # Verify impl identity from inside the pane.
-  send_bash_and_wait impl "$IMPL_WT" "thrum whoami --json" "test_implementer" 60 \
-    || { echo "ERROR: impl whoami did not return expected bash-stdout entry within 60s" >&2; return 1; }
+  #
+  # Same retry-with-bounded-resend as the coord probe (thrum-vjqn). The impl
+  # path is less prone to the missed-keystroke race because line above
+  # already confirmed SessionStart fired, but a saturated box can still
+  # delay the bash-prefix mode toggle past wait_for_pane_idle's 10s gate.
+  # Retry is benign on the happy path (first attempt succeeds in <10s).
+  attempt=1
+  while [ "$attempt" -le 3 ]; do
+    if send_bash_and_wait impl "$IMPL_WT" "thrum whoami --json" "test_implementer" 30; then
+      break
+    fi
+    attempt=$((attempt + 1))
+  done
+  if [ "$attempt" -gt 3 ]; then
+    echo "ERROR: impl whoami did not return expected bash-stdout entry across 3 attempts (90s total)" >&2
+    return 1
+  fi
 
   echo "=== setup A + B + C complete ==="
   echo "RUNID=$RUNID"
