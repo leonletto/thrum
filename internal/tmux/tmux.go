@@ -109,7 +109,11 @@ func buildCreateSessionArgs(name, cwd string, env []string) []string {
 			continue
 		}
 		eq := strings.IndexByte(e, '=')
-		if eq <= 0 {
+		// eq < 0: malformed entry with no '=' (shouldn't reach here via
+		// os.Environ() but tmux show-environment can emit such lines on
+		// corrupt config — defensive). The eq == 0 case ("=VALUE") is
+		// unreachable: HasPrefix above already rejected leading-'=' entries.
+		if eq < 0 {
 			continue
 		}
 		key := e[:eq]

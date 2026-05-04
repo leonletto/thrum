@@ -103,25 +103,62 @@ func TestBuildCreateSessionArgs_DedupsAcrossSources(t *testing.T) {
 	}
 }
 
-// TestBuildCreateSessionArgs_SkipsMalformedEnvEntries defends against env
-// entries without `=` or with empty key (shouldn't happen via os.Environ()
-// but cheap to pin).
+// TestBuildCreateSessionArgs_SkipsMalformedEnvEntries defends against
+// unusual env-entry shapes:
+//
+//   - `THRUM_NOEQUALS`        — exercises the `eq < 0` guard inside the loop.
+//   - `=THRUM_LEADING_EQ`     — exercises the HasPrefix("THRUM_") guard at
+//     the top of the loop (the leading `=` means the prefix doesn't match,
+//     so this entry never reaches the eq check). Pinned here for hygiene.
+//   - `-THRUM_HOME`           — negated form that `tmux show-environment -g`
+//     can emit when a key is explicitly removed from a session. Same
+//     HasPrefix guard catches it (starts with `-`, not `THRUM_`). Pinned so
+//     a future change to the prefix logic can't accidentally let `-` keys
+//     through and produce a -e flag for a phantom variable.
+//
+// None of these should reach the args list.
 func TestBuildCreateSessionArgs_SkipsMalformedEnvEntries(t *testing.T) {
 	env := []string{
 		"THRUM_HOME=/poisoned",
 		"THRUM_NOEQUALS",
 		"=THRUM_LEADING_EQ",
+		"-THRUM_HOME",
 	}
 	args := buildCreateSessionArgs("s", "", env)
 
+	// Sane entry survives.
 	if !hasFlagPair(args, "-e", "THRUM_HOME=") {
 		t.Errorf("expected THRUM_HOME= -e flag in args: %v", args)
 	}
-	for _, malformed := range []string{"THRUM_NOEQUALS", "=THRUM_LEADING_EQ", "="} {
+	// THRUM_HOME= flag should appear EXACTLY once even though the env list
+	// contains a sane THRUM_HOME=... and a malformed -THRUM_HOME variant
+	// (defensive against the negated-entry case slipping through and
+	// duplicating the override).
+	count := 0
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == "-e" && args[i+1] == "THRUM_HOME=" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("THRUM_HOME= -e flag emitted %d times, want 1: %v", count, args)
+	}
+
+	// None of the malformed forms (or partial forms of them) should leak
+	// into the args slice as a literal entry.
+	for _, malformed := range []string{
+		"THRUM_NOEQUALS", "=THRUM_LEADING_EQ", "=", "-THRUM_HOME",
+	} {
 		for i, a := range args {
 			if a == malformed {
 				t.Errorf("malformed entry %q leaked into args at index %d: %v", malformed, i, args)
 			}
+		}
+	}
+	// And no -e flag for the negated/malformed forms with empty value.
+	for _, ghost := range []string{"-THRUM_HOME=", "THRUM_NOEQUALS=", "=THRUM_LEADING_EQ="} {
+		if hasFlagPair(args, "-e", ghost) {
+			t.Errorf("ghost -e flag for malformed entry %q in args: %v", ghost, args)
 		}
 	}
 }
