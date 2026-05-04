@@ -102,11 +102,11 @@ fi
 # THRUM_HOME isolation paths flagged in dual review:
 #
 #   - cli/quickstart.go G1a/G1b guard: the guard's IdentitiesDir must
-#     resolve to the child's .thrum/identities/, NOT the parent's.
-#     If the guard reads the parent dir, this stale file's PID (an
-#     intentionally-dead PID 1 — process 1 is alive but is launchd, not
-#     a thrum runtime) could falsely fire G1b ("name held by foreign
-#     PID") OR be silently quarantined as a stale sibling.
+#     resolve to the child's .thrum/identities/, NOT the parent's. The
+#     pre-staged file below uses agent_pid: 0 (dead/unset, won't trigger
+#     G1b's liveness check). If the guard reads the parent dir, this
+#     stale file would falsely register as a sibling or be silently
+#     quarantined — depending on how the wrong dir is loaded.
 #   - config.LoadIdentityWithPath in Step 2.5: the load must read the
 #     child's dir. If it reads the parent's, Step 2.5 picks up this
 #     file's stale Intent ("PARENT-INTENT-SHOULD-NOT-LEAK") and writes
