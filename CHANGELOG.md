@@ -10,174 +10,165 @@ and this project adheres to
 
 ### Fixed
 
-- **`thrum quickstart` no longer rejects idempotent same-name re-register.**
-  The G1a `quickstart_self_rename` guard refused every re-register from a
-  caller who owned an existing identity, even when the requested `--name`
-  matched the owned identity. This broke `scripts/thrum-startup.sh` (the
-  SessionStart hook for every claude session) on already-registered
-  worktrees: step 3 (`thrum quickstart --name $AGENT_NAME`) errored, `set
-  -e` aborted, and steps 4 (inbox check), 5 (announce), and 6 (cron
-  install) never ran. `thrum tmux start` against an already-registered
-  worktree hit the same guard via `runInlineQuickstart`, aborting
-  `HandleCreate` before claude launched. Same-name re-register is now
-  allowed (idempotent); a real rename (different `--name`) still requires
-  `--force` (thrum-gmz2).
+- **`thrum quickstart` no longer rejects idempotent same-name re-register.** The
+  G1a `quickstart_self_rename` guard refused every re-register from a caller who
+  owned an existing identity, even when the requested `--name` matched the owned
+  identity. This broke `scripts/thrum-startup.sh` (the SessionStart hook for
+  every claude session) on already-registered worktrees: step 3
+  (`thrum quickstart --name $AGENT_NAME`) errored, `set -e` aborted, and steps 4
+  (inbox check), 5 (announce), and 6 (cron install) never ran.
+  `thrum tmux start` against an already-registered worktree hit the same guard
+  via `runInlineQuickstart`, aborting `HandleCreate` before claude launched.
+  Same-name re-register is now allowed (idempotent); a real rename (different
+  `--name`) still requires `--force` (thrum-gmz2).
 
-- **`tmux.create`-spawned panes no longer inherit `THRUM_*` env vars from
-  the daemon.** When the daemon was started from a primed shell, every
-  tmux pane it spawned inherited `THRUM_AGENT_ID`, `THRUM_HOME`, etc. —
-  causing the pane's `thrum whoami` to resolve to the daemon-starter's
-  identity instead of the pane's intended agent. Fix scrubs `THRUM_*` at
-  the central tmux exec chokepoint (`safecmd.cleanTmuxEnv`), covering
-  every code path that goes through `safecmd.{Tmux,TmuxRun,TmuxExec}`
-  (thrum-8nro.4).
+- **`tmux.create`-spawned panes no longer inherit `THRUM_*` env vars from the
+  daemon.** When the daemon was started from a primed shell, every tmux pane it
+  spawned inherited `THRUM_AGENT_ID`, `THRUM_HOME`, etc. — causing the pane's
+  `thrum whoami` to resolve to the daemon-starter's identity instead of the
+  pane's intended agent. Fix scrubs `THRUM_*` at the central tmux exec
+  chokepoint (`safecmd.cleanTmuxEnv`), covering every code path that goes
+  through `safecmd.{Tmux,TmuxRun,TmuxExec}` (thrum-8nro.4).
 
 - **Long-running tmux servers no longer leak stale `THRUM_*` env into new
-  sessions.** Companion to thrum-8nro.4. Tmux session env is sourced from
-  the SERVER's environ at server-start time, not the client connection.
-  So even after the daemon-side scrub, sessions created against a
-  long-running tmux server inherited whatever environ the server
-  captured weeks/months ago. Fix adds per-session `-e KEY=` overrides on
-  `tmux new-session` to neutralize server-cached `THRUM_*` values
-  (thrum-t8mj).
+  sessions.** Companion to thrum-8nro.4. Tmux session env is sourced from the
+  SERVER's environ at server-start time, not the client connection. So even
+  after the daemon-side scrub, sessions created against a long-running tmux
+  server inherited whatever environ the server captured weeks/months ago. Fix
+  adds per-session `-e KEY=` overrides on `tmux new-session` to neutralize
+  server-cached `THRUM_*` values (thrum-t8mj).
 
 - **`thrum purge --confirm` now actually shrinks JSONL message files.**
-  `filterSyncFiles` was passing the wrong field name (`"created_at"` vs
-  the actual on-disk `"timestamp"`) when filtering messages JSONLs, so
-  every record was kept and the on-disk files grew unboundedly. Verified
-  live: a `--before 30d` purge against this dev box's 335MB sync dir
-  filtered 13 message files in 7.7s, with `supervisor` going 145MB →
-  134MB and `system` going 80MB → 76MB (thrum-yzps).
+  `filterSyncFiles` was passing the wrong field name (`"created_at"` vs the
+  actual on-disk `"timestamp"`) when filtering messages JSONLs, so every record
+  was kept and the on-disk files grew unboundedly. Verified live: a
+  `--before 30d` purge against this dev box's 335MB sync dir filtered 13 message
+  files in 7.7s, with `supervisor` going 145MB → 134MB and `system` going 80MB →
+  76MB (thrum-yzps).
 
 - **Release-test harness coord-whoami probe now retries on saturated dev
-  boxes.** The 60s timeout on `setup-repo.sh`'s coord whoami was firing
-  on saturated boxes (~60+ tmux sessions, long daemon uptime) due to a
-  missed-keystroke race when claude's interactive-input handler wasn't
-  bound at the moment the probe sent the bash-prefix. Fix replaces the
-  single 60s wait with a 3-attempt × 30s retry loop (90s total), each
-  attempt resending the idempotent `thrum whoami --json`. Pure
-  shell-loop, fixture-only, no daemon/tmux behavior change (thrum-vjqn).
+  boxes.** The 60s timeout on `setup-repo.sh`'s coord whoami was firing on
+  saturated boxes (~60+ tmux sessions, long daemon uptime) due to a
+  missed-keystroke race when claude's interactive-input handler wasn't bound at
+  the moment the probe sent the bash-prefix. Fix replaces the single 60s wait
+  with a 3-attempt × 30s retry loop (90s total), each attempt resending the
+  idempotent `thrum whoami --json`. Pure shell-loop, fixture-only, no
+  daemon/tmux behavior change (thrum-vjqn).
 
 - **`unauthenticated_rpc` deny message now points at `thrum prime` as the
-  cache-warming recovery.** The prior remediation (`cd into a registered
-  agent worktree and retry`) was misleading when the caller WAS in a
-  registered worktree but the daemon's binding cache hadn't been warmed
-  (post-restart, post-edit, etc.). New text leads with `thrum prime` and
+  cache-warming recovery.** The prior remediation
+  (`cd into a registered agent worktree and retry`) was misleading when the
+  caller WAS in a registered worktree but the daemon's binding cache hadn't been
+  warmed (post-restart, post-edit, etc.). New text leads with `thrum prime` and
   retains cd-into-worktree as the fallback (thrum-8nro.3).
 
 - **r02 remote scenario no longer fails on macOS `/tmp` symlinks.** The
-  worktree-field assertion now uses `pwd -P` on both sides of the
-  comparison so `/tmp` → `/private/tmp` symlink resolution doesn't trip
-  the test on macOS remotes (thrum-vry8).
+  worktree-field assertion now uses `pwd -P` on both sides of the comparison so
+  `/tmp` → `/private/tmp` symlink resolution doesn't trip the test on macOS
+  remotes (thrum-vry8).
 
-- **`release.yml` skips `publish-opencode-plugin` when version
-  unchanged.** Every thrum tag where `opencode-plugin/package.json`
-  wasn't bumped failed the publish job with HTTP 403 (`You cannot
-  publish over the previously published versions`), making release runs
-  look broken even when the rest of the pipeline succeeded. Pre-check
-  via `npm view` now gates the publish step; bumping the plugin's
-  version still triggers a real publish (thrum-ygf2).
+- **`release.yml` skips `publish-opencode-plugin` when version unchanged.**
+  Every thrum tag where `opencode-plugin/package.json` wasn't bumped failed the
+  publish job with HTTP 403
+  (`You cannot publish over the previously published versions`), making release
+  runs look broken even when the rest of the pipeline succeeded. Pre-check via
+  `npm view` now gates the publish step; bumping the plugin's version still
+  triggers a real publish (thrum-ygf2).
 
 - **`setLocalAgentStatus` no longer applies `paths.EffectiveRepoPath`
-  asymmetrically.** Latent trap where the save site wrapped the path
-  through `EffectiveRepoPath` while the load site did not, leaving open
-  a scenario where a `THRUM_HOME`-set primed shell could write status
-  into the wrong worktree's identity file (thrum-8nro.1).
+  asymmetrically.** Latent trap where the save site wrapped the path through
+  `EffectiveRepoPath` while the load site did not, leaving open a scenario where
+  a `THRUM_HOME`-set primed shell could write status into the wrong worktree's
+  identity file (thrum-8nro.1).
 
 ### Added
 
-- **Manual release-test scenario** for the daemon-side `THRUM_*` env
-  scrub (`dev-docs/release-testing/full_test_plan.md` Step 10H).
-  Documents the procedure to confirm `thrum tmux start` produces a pane
-  whose `thrum whoami` resolves to the intended (per-pane) agent even
-  when launched from a daemon poisoned by an earlier primed shell.
-  Promotion to an automated scenario is tracked under thrum-yopu
-  (deferred to v0.10.3).
+- **Manual release-test scenario** for the daemon-side `THRUM_*` env scrub
+  (`dev-docs/release-testing/full_test_plan.md` Step 10H). Documents the
+  procedure to confirm `thrum tmux start` produces a pane whose `thrum whoami`
+  resolves to the intended (per-pane) agent even when launched from a daemon
+  poisoned by an earlier primed shell. Promotion to an automated scenario is
+  tracked under thrum-yopu (deferred to v0.10.3).
 
 ### Internal
 
-- **G1a guard tests now exercise the rename-refusal path with an
-  explicit different `RequestedName`.** Pre-thrum-gmz2 the test fired
-  the guard with no `RequestedName` set, codifying the buggy behavior
-  as the spec. Now `TestG1a_CallerOwnsAnExistingIdentity_Refuses` uses
-  `RequestedName: "impl_bar"` (different from owned `"impl_foo"`) and a
-  new sibling `TestG1a_SameName_ReregisterIsIdempotent` pins the fixed
-  allow-path.
+- **G1a guard tests now exercise the rename-refusal path with an explicit
+  different `RequestedName`.** Pre-thrum-gmz2 the test fired the guard with no
+  `RequestedName` set, codifying the buggy behavior as the spec. Now
+  `TestG1a_CallerOwnsAnExistingIdentity_Refuses` uses
+  `RequestedName: "impl_bar"` (different from owned `"impl_foo"`) and a new
+  sibling `TestG1a_SameName_ReregisterIsIdempotent` pins the fixed allow-path.
 
-- **Documents the daemon-side env-scrubbing chokepoint** with new doc
-  comments on `safecmd.Tmux`, `safecmd.TmuxRun`, and
-  `internal/daemon/rpc/tmux.go HandleCreate` so future readers see the
-  scrub trail without re-litigating the design choice.
+- **Documents the daemon-side env-scrubbing chokepoint** with new doc comments
+  on `safecmd.Tmux`, `safecmd.TmuxRun`, and
+  `internal/daemon/rpc/tmux.go HandleCreate` so future readers see the scrub
+  trail without re-litigating the design choice.
 
 - **Test isolation hardening:** `internal/cli/client_test.go` and
-  `internal/config/config_test.go` now have package-level `TestMain`s
-  that `os.Unsetenv` `THRUM_*` before `m.Run()`, so tests don't
-  silently inherit operator-shell pollution. (Same pattern should be
-  added to `internal/identity/guard`, `internal/daemon/rpc`, etc. —
-  tracked under thrum-2jbv.)
+  `internal/config/config_test.go` now have package-level `TestMain`s that
+  `os.Unsetenv` `THRUM_*` before `m.Run()`, so tests don't silently inherit
+  operator-shell pollution. (Same pattern should be added to
+  `internal/identity/guard`, `internal/daemon/rpc`, etc. — tracked under
+  thrum-2jbv.)
 
 ## [0.10.1] - 2026-05-03
 
 ### Fixed
 
-- **`thrum quickstart` from a `.thrum/redirect`-using worktree no longer
-  writes the agent identity to `$THRUM_HOME`.** Latent bug since
-  `299131e434` (Mar 6), surfaced in v0.10.0 because Epic-D's wizard +
-  worktree-create flow routes through `buildInlineQuickstartCmd` more
-  often, sending `thrum quickstart` into daemon-spawned panes that
-  inherit `THRUM_HOME` from the daemon's environ. The fix has three
-  parts:
-  - `cmd/thrum/main.go` PersistentPreRunE now exempts `init` and
-    `quickstart` from the `paths.EffectiveRepoPath` substitution that
-    `THRUM_HOME` triggers. Register-shape commands use cwd; runtime
-    commands continue to honor `THRUM_HOME`.
-  - `internal/worktree/worktree.go` `BuildQuickstartCmd` accepts a
-    `repoPath` argument and emits `thrum --repo <path> quickstart ...`.
-    `internal/daemon/rpc/tmux.go buildInlineQuickstartCmd` forwards
-    `req.Cwd` so daemon-inline quickstarts always pin the target
-    explicitly, regardless of the daemon process's environ.
-  - `internal/cli/quickstart.go` G1a/G1b guard and Step 2.5 enrichment
-    paths no longer re-apply `EffectiveRepoPath` to an already-resolved
-    `flagRepo`. `internal/config/config.go LoadIdentityWithPath` drops
-    its inner `EffectiveRepoPath` call.
-  Two release-test scenarios were added as a regression gate:
-  `tests/release/scenarios/108-quickstart-redirect-regression.test.sh`
-  (local sub-fixture) and
-  `tests/release/remote-scenarios/r02-quickstart-redirect-regression.test.sh`
-  (remote via run-remote.sh). The local scenario pre-stages a stale
-  parent identity with a known intent; the new
-  `parent-identity-untouched` and `child-intent-not-inherited-from-parent`
-  assertions catch both file-location and Step 2.5-enrichment paths
-  of the bug.
+- **`thrum quickstart` from a `.thrum/redirect`-using worktree no longer writes
+  the agent identity to `$THRUM_HOME`.** Latent bug since `299131e434` (Mar 6),
+  surfaced in v0.10.0 because Epic-D's wizard + worktree-create flow routes
+  through `buildInlineQuickstartCmd` more often, sending `thrum quickstart` into
+  daemon-spawned panes that inherit `THRUM_HOME` from the daemon's environ. The
+  fix has three parts:
+  - `cmd/thrum/main.go` PersistentPreRunE now exempts `init` and `quickstart`
+    from the `paths.EffectiveRepoPath` substitution that `THRUM_HOME` triggers.
+    Register-shape commands use cwd; runtime commands continue to honor
+    `THRUM_HOME`.
+  - `internal/worktree/worktree.go` `BuildQuickstartCmd` accepts a `repoPath`
+    argument and emits `thrum --repo <path> quickstart ...`.
+    `internal/daemon/rpc/tmux.go buildInlineQuickstartCmd` forwards `req.Cwd` so
+    daemon-inline quickstarts always pin the target explicitly, regardless of
+    the daemon process's environ.
+  - `internal/cli/quickstart.go` G1a/G1b guard and Step 2.5 enrichment paths no
+    longer re-apply `EffectiveRepoPath` to an already-resolved `flagRepo`.
+    `internal/config/config.go LoadIdentityWithPath` drops its inner
+    `EffectiveRepoPath` call. Two release-test scenarios were added as a
+    regression gate:
+    `tests/release/scenarios/108-quickstart-redirect-regression.test.sh` (local
+    sub-fixture) and
+    `tests/release/remote-scenarios/r02-quickstart-redirect-regression.test.sh`
+    (remote via run-remote.sh). The local scenario pre-stages a stale parent
+    identity with a known intent; the new `parent-identity-untouched` and
+    `child-intent-not-inherited-from-parent` assertions catch both file-location
+    and Step 2.5-enrichment paths of the bug.
 
-  Refs: thrum-tc4w. v0.10.0 marked prerelease; users should upgrade to
-  v0.10.1.
+  Refs: thrum-tc4w. v0.10.0 marked prerelease; users should upgrade to v0.10.1.
 
-- **Boot-time identity reconcile.** Write RPCs (`thrum send`, `thrum tmux
-  start`, etc.) from a worktree that holds a registered `.thrum/identities/
-  <name>.json` no longer fail with `anonymous caller cannot invoke X`
-  after a daemon restart or cold start. The peercred resolver matches
-  caller CWDs against `session_refs JOIN sessions WHERE ended_at IS NULL`
-  — that view is durable in SQLite but loses rows on shutdown / cleanup
-  / long quiescence, so disk-truth (identity files) and resolver-truth
-  (DB rows) drift apart. Previously, only `thrum quickstart --force`
-  re-populated the rows; `thrum prime` did not. The fix walks
-  `.thrum/identities/*.json` at daemon boot via
+- **Boot-time identity reconcile.** Write RPCs (`thrum send`,
+  `thrum tmux start`, etc.) from a worktree that holds a registered
+  `.thrum/identities/ <name>.json` no longer fail with
+  `anonymous caller cannot invoke X` after a daemon restart or cold start. The
+  peercred resolver matches caller CWDs against
+  `session_refs JOIN sessions WHERE ended_at IS NULL` — that view is durable in
+  SQLite but loses rows on shutdown / cleanup / long quiescence, so disk-truth
+  (identity files) and resolver-truth (DB rows) drift apart. Previously, only
+  `thrum quickstart --force` re-populated the rows; `thrum prime` did not. The
+  fix walks `.thrum/identities/*.json` at daemon boot via
   `internal/daemon/bootstrap/Reconcile` and inserts the missing
   `(sessions, session_refs)` pairs through `safedb` in a per-identity
-  transaction with `INSERT OR IGNORE`. Local-only by design — direct
-  SQL only, no JSONL events, no cross-machine sync — because
-  `session_refs` is intentionally local-only state in the projector
-  rebuild path. The same pass restores the in-memory `sessionCwds`
-  pane-nudge map for any identity whose `tmux_session` is still alive,
-  closing a related restart gap. Defensive `filepath.IsAbs` guard skips
-  malformed identity files (resilience fixture stub `worktree: "test"`).
-  Wires into `cmd/thrum/main.go daemonRun` between
+  transaction with `INSERT OR IGNORE`. Local-only by design — direct SQL only,
+  no JSONL events, no cross-machine sync — because `session_refs` is
+  intentionally local-only state in the projector rebuild path. The same pass
+  restores the in-memory `sessionCwds` pane-nudge map for any identity whose
+  `tmux_session` is still alive, closing a related restart gap. Defensive
+  `filepath.IsAbs` guard skips malformed identity files (resilience fixture stub
+  `worktree: "test"`). Wires into `cmd/thrum/main.go daemonRun` between
   `tmuxHandler.ReconcilePoller` and `paneSilencePoller.Run` with a 10 s
-  `context.WithTimeout` boundary; failure is non-fatal at boot. New
-  release-test scenario
-  `tests/release/scenarios/109-reconcile-on-boot-restores-write-rpc.test.sh`
-  is the regression gate. Refs: thrum-xloz, thrum-soj8, thrum-6kk6.
+  `context.WithTimeout` boundary; failure is non-fatal at boot. New release-test
+  scenario
+  `tests/release/scenarios/109-reconcile-on-boot-restores-write-rpc.test.sh` is
+  the regression gate. Refs: thrum-xloz, thrum-soj8, thrum-6kk6.
 
 ## [0.10.0] - 2026-05-03
 
