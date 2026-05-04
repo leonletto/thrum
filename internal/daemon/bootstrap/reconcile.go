@@ -11,6 +11,9 @@ package bootstrap
 
 import (
 	"context"
+	// database/sql is imported for *sql.Tx — the type returned by
+	// safedb.DB.BeginTx. safedb has no Tx wrapper; this is the safedb
+	// boundary, not a Rule 1 violation.
 	"database/sql"
 	"encoding/json"
 	"log/slog"
@@ -168,6 +171,13 @@ func Reconcile(ctx context.Context, deps Deps) (Stats, error) {
 				deps.Log.Warn("reconcile: auth pass failed",
 					"agent", idFile.Agent.Name, "worktree", idFile.Worktree, "err", authErr)
 				stats.Errors++
+			}
+
+			// Tmux pass — restore in-memory pane-nudge binding for live sessions.
+			if idFile.TmuxSession != "" && deps.TmuxHandler != nil &&
+				deps.TmuxAlive != nil && deps.TmuxAlive(idFile.TmuxSession) {
+				deps.TmuxHandler.RestoreBinding(idFile.TmuxSession, idFile.Worktree)
+				stats.TmuxBindingsRestored++
 			}
 		}
 	}

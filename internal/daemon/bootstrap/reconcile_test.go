@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/state"
 )
 
@@ -187,5 +188,69 @@ func TestReconcile_NoopWhenActiveSessionExists(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("sessions count for agent_n = %d, want 1", n)
+	}
+}
+
+func TestReconcile_TmuxBindingRestoredWhenAlive(t *testing.T) {
+	dirA := t.TempDir()
+	thrumDir := filepath.Join(dirA, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeIdentity(t, filepath.Join(thrumDir, "identities"), config.IdentityFile{
+		Version: 5, RepoID: "test",
+		Agent:       config.AgentConfig{Kind: "agent", Name: "agent_t", Role: "tester"},
+		Worktree:    dirA,
+		TmuxSession: "live-session:0.0",
+		UpdatedAt:   time.Now().UTC(),
+	})
+	st := newTestState(t, thrumDir)
+	th := rpc.NewTestTmuxHandlerForBootstrap()
+
+	stats, err := Reconcile(context.Background(), Deps{
+		State: st, ThrumDir: thrumDir, TmuxHandler: th, Now: time.Now,
+		NewSessionID: func() string { return "ses_T" },
+		TmuxAlive:    func(name string) bool { return name == "live-session:0.0" },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.TmuxBindingsRestored != 1 {
+		t.Fatalf("expected TmuxBindingsRestored=1, got %+v", stats)
+	}
+	if got := rpc.TmuxHandlerGetBindingForTest(th, "live-session:0.0"); got != dirA {
+		t.Fatalf("binding not restored: got %q, want %q", got, dirA)
+	}
+}
+
+func TestReconcile_TmuxBindingSkippedWhenDead(t *testing.T) {
+	dirA := t.TempDir()
+	thrumDir := filepath.Join(dirA, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeIdentity(t, filepath.Join(thrumDir, "identities"), config.IdentityFile{
+		Version: 5, RepoID: "test",
+		Agent:       config.AgentConfig{Kind: "agent", Name: "agent_d", Role: "tester"},
+		Worktree:    dirA,
+		TmuxSession: "dead-session:0.0",
+		UpdatedAt:   time.Now().UTC(),
+	})
+	st := newTestState(t, thrumDir)
+	th := rpc.NewTestTmuxHandlerForBootstrap()
+
+	stats, err := Reconcile(context.Background(), Deps{
+		State: st, ThrumDir: thrumDir, TmuxHandler: th, Now: time.Now,
+		NewSessionID: func() string { return "ses_D" },
+		TmuxAlive:    func(string) bool { return false }, // dead
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.TmuxBindingsRestored != 0 {
+		t.Fatalf("expected 0 tmux bindings, got %+v", stats)
+	}
+	if got := rpc.TmuxHandlerGetBindingForTest(th, "dead-session:0.0"); got != "" {
+		t.Fatalf("dead session binding leaked: %q", got)
 	}
 }
