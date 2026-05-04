@@ -78,6 +78,31 @@ func TestBuildCreateSessionArgs_OmitsCwdWhenEmpty(t *testing.T) {
 	}
 }
 
+// TestBuildCreateSessionArgs_DedupsAcrossSources pins behavior when the
+// caller passes the union of os.Environ() and tmux show-environment output
+// — both sources commonly contain the same THRUM_* keys. Duplicate `-e
+// KEY=` flags would be harmless but wasteful; we dedupe instead.
+func TestBuildCreateSessionArgs_DedupsAcrossSources(t *testing.T) {
+	// Same THRUM_HOME appears twice (e.g., once in daemon env, once in
+	// tmux server global env).
+	env := []string{
+		"THRUM_HOME=/from-daemon",
+		"THRUM_NAME=daemon-name",
+		"THRUM_HOME=/from-tmux-server",
+	}
+	args := buildCreateSessionArgs("s", "", env)
+
+	count := 0
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == "-e" && args[i+1] == "THRUM_HOME=" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("THRUM_HOME -e flag emitted %d times, want 1: %v", count, args)
+	}
+}
+
 // TestBuildCreateSessionArgs_SkipsMalformedEnvEntries defends against env
 // entries without `=` or with empty key (shouldn't happen via os.Environ()
 // but cheap to pin).
