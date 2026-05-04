@@ -91,13 +91,34 @@ func TmuxRun(ctx context.Context, args ...string) error {
 	return nil
 }
 
-// cleanTmuxEnv returns the current environment with TMUX and TMUX_PANE removed.
-// The daemon may inherit TMUX from its parent (e.g. tmux-exec), which causes
-// tmux commands to connect to the wrong server.
+// cleanTmuxEnv returns the current environment with TMUX, TMUX_PANE, and all
+// THRUM_* variables removed.
+//
+// Two distinct hazards motivate the scrub:
+//
+//  1. TMUX / TMUX_PANE: the daemon may inherit these from its parent
+//     (e.g. tmux-exec), which would cause tmux commands to connect to the
+//     wrong server.
+//
+//  2. THRUM_*: the daemon process inherits its launcher shell's environ. If
+//     the launcher had run `thrum prime` (or the user otherwise exported
+//     THRUM_AGENT_ID/NAME/ROLE/MODULE/INTENT/HOME), those values poison every
+//     tmux session the daemon creates. tmux propagates the client's environ
+//     to the new session as default-environment, and panes spawned in that
+//     session inherit it — so the pane's runtime CLI commands resolve
+//     identity to the daemon-launcher's agent instead of the pane's intended
+//     agent. Identity guards (cross_worktree, pid_mismatch,
+//     quickstart_name_collision) then fire constantly. See thrum-8nro.4.
+//
+// Scrubbing THRUM_* leaves the pane to resolve identity via peercred → cwd,
+// which is the design-intended path.
 func cleanTmuxEnv() []string {
 	var env []string
 	for _, e := range os.Environ() {
 		if strings.HasPrefix(e, "TMUX=") || strings.HasPrefix(e, "TMUX_PANE=") {
+			continue
+		}
+		if strings.HasPrefix(e, "THRUM_") {
 			continue
 		}
 		env = append(env, e)
