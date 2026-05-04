@@ -158,6 +158,25 @@ New in v0.10.1:
   enrichment paths drop redundant `EffectiveRepoPath` calls.
   Two release-test scenarios (108 local, r02 remote) added as a
   regression gate. v0.10.0 is marked prerelease; upgrade to v0.10.1.
+- Boot-time identity reconcile. Write RPCs (`thrum send`, `thrum tmux
+  start`) from a registered worktree no longer fail with `anonymous
+  caller cannot invoke X` after a daemon restart. The peercred
+  resolver matches caller CWDs against `session_refs JOIN sessions
+  WHERE ended_at IS NULL`; that view is durable in SQLite but loses
+  rows on shutdown / cleanup / long quiescence, so disk truth (identity
+  files) and resolver truth (DB rows) drifted apart. Previously only
+  `thrum quickstart --force` repopulated; `thrum prime` did not. New
+  package `internal/daemon/bootstrap/Reconcile` walks
+  `.thrum/identities/*.json` at boot and inserts the missing
+  `(sessions, session_refs)` pairs through `safedb` in a per-identity
+  transaction with `INSERT OR IGNORE`. Local-only — direct SQL, no
+  JSONL events, no cross-machine sync. Same pass also restores the
+  in-memory `sessionCwds` pane-nudge map for live tmux sessions.
+  Defensive `filepath.IsAbs` guard skips fixture stub `worktree:
+  "test"` files. Wires into `cmd/thrum/main.go daemonRun` between
+  `tmuxHandler.ReconcilePoller` and `paneSilencePoller.Run` with a
+  10s `context.WithTimeout`. New release scenario 109. Closes
+  thrum-soj8 + thrum-6kk6.
 
 New in v0.10.0:
 - `thrum init` interactive wizard — on a TTY, `thrum init` now launches a
