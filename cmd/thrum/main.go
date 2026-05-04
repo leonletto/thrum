@@ -3137,7 +3137,13 @@ func setLocalAgentStatus(status string) error {
 	}
 	idFile.AgentStatus = status
 	idFile.AgentStatusUpdatedAt = time.Now().UTC()
-	thrumDir := filepath.Join(paths.EffectiveRepoPath(flagRepo), ".thrum")
+	// flagRepo was already resolved by PersistentPreRunE upstream; do not
+	// re-wrap in EffectiveRepoPath here. Load via LoadIdentityWithPath
+	// (post-v0.10.1) no longer applies the inner resolution, so re-wrapping
+	// the save path was a load/save asymmetry that would silently target
+	// different directories if a future caller bypassed PersistentPreRunE.
+	// See thrum-8nro.1.
+	thrumDir := filepath.Join(flagRepo, ".thrum")
 	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
 		return fmt.Errorf("save identity: %w", err)
 	}
