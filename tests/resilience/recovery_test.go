@@ -4,11 +4,14 @@ package resilience
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/bootstrap"
 	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/projection"
 	"github.com/leonletto/thrum/internal/schema"
@@ -209,5 +212,83 @@ func TestRecovery_CorruptedMessageJSONL(t *testing.T) {
 	t.Logf("Messages projected despite corruption: %d", count)
 	if count == 0 {
 		t.Error("expected some messages to be projected despite corruption")
+	}
+}
+
+func TestRecovery_DaemonRestart_WriteRPCSucceeds(t *testing.T) {
+	// Build a fresh fixture with an absolute worktree path (the shared
+	// thrum-fixture.tar.gz uses worktree="test" which reconcile skips).
+	dirA := t.TempDir()
+	thrumDir := filepath.Join(dirA, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(thrumDir, "var"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write an identity for agent_w in dirA worktree.
+	idFile := config.IdentityFile{
+		Version: 5, RepoID: "test-recovery",
+		Agent:     config.AgentConfig{Kind: "agent", Name: "agent_w", Role: "tester"},
+		Worktree:  dirA,
+		UpdatedAt: time.Now().UTC(),
+	}
+	data, err := json.Marshal(idFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(thrumDir, "identities", "agent_w.json"),
+		data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// First daemon: simulate a registered agent that crashed before session.start,
+	// or whose session_refs row was lost in the v0.10.0 restart regression.
+	// Pre-register agent_w in the agents table directly (mimicking what a prior
+	// run's JSONL projection would produce) but leave session_refs empty.
+	st1, srv1, socketPath := startTestDaemon(t, thrumDir)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := st1.DB().ExecContext(context.Background(),
+		`INSERT INTO agents(agent_id, kind, role, module, registered_at)
+		 VALUES (?, ?, ?, ?, ?)`,
+		"agent_w", "agent", "tester", "test-recovery", now); err != nil {
+		t.Fatalf("seed agent: %v", err)
+	}
+	srv1.Stop()
+	st1.Close()
+	os.Remove(socketPath)
+
+	// Second daemon: open state, then run reconcile to mimic daemonRun.
+	st2, _, socketPath2 := startTestDaemon(t, thrumDir)
+
+	stats, err := bootstrap.Reconcile(context.Background(), bootstrap.Deps{
+		State:        st2,
+		ThrumDir:     thrumDir,
+		Now:          time.Now,
+		NewSessionID: func() string { return "ses_RECOVERY_" + time.Now().Format("150405.000") },
+		TmuxAlive:    func(string) bool { return false },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.RefsCreated != 1 {
+		t.Fatalf("expected reconcile to insert 1 ref, got %+v", stats)
+	}
+
+	// Verify a write RPC (message.send) now resolves agent_w via the
+	// session_refs row reconcile created. Self-send so the recipient is
+	// guaranteed valid; the property under test is auth resolution past
+	// peercred, not delivery semantics.
+	var sendResult map[string]any
+	rpcCall(t, socketPath2, "message.send", map[string]any{
+		"caller_agent_id": "agent_w",
+		"content":         "post-restart write",
+		"format":          "markdown",
+		"to":              "@agent_w",
+	}, &sendResult)
+	if _, ok := sendResult["message_id"]; !ok {
+		t.Fatalf("message.send did not return message_id: %+v", sendResult)
 	}
 }
