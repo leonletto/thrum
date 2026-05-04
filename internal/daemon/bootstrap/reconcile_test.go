@@ -92,3 +92,100 @@ func TestReconcile_SkipsNonAbsoluteWorktreePath(t *testing.T) {
 		t.Fatalf("expected 0 session_refs rows with ref_value='test', got %d", n)
 	}
 }
+
+func TestReconcile_RespectsStateRepoPath_NotTHRUMHome(t *testing.T) {
+	// dirA: real identity worktree.
+	dirA := t.TempDir()
+	thrumDir := filepath.Join(dirA, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeIdentity(t, filepath.Join(thrumDir, "identities"), config.IdentityFile{
+		Version: 5, RepoID: "test",
+		Agent:     config.AgentConfig{Kind: "agent", Name: "agent_a", Role: "tester"},
+		Worktree:  dirA,
+		UpdatedAt: time.Now().UTC(),
+	})
+
+	// dirB: bogus THRUM_HOME pointing at an unrelated temp dir.
+	dirB := t.TempDir()
+	t.Setenv("THRUM_HOME", dirB)
+
+	st := newTestState(t, thrumDir)
+
+	stats, err := Reconcile(context.Background(), Deps{
+		State:        st,
+		ThrumDir:     thrumDir, // sourced from daemonRun local, not env
+		Now:          time.Now,
+		NewSessionID: func() string { return "ses_TEST_A" },
+		TmuxAlive:    func(string) bool { return false },
+	})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if stats.RefsCreated != 1 {
+		t.Fatalf("expected 1 ref created, got %+v", stats)
+	}
+
+	var refValue string
+	if err := st.DB().QueryRowContext(context.Background(),
+		"SELECT ref_value FROM session_refs WHERE ref_type='worktree' LIMIT 1").Scan(&refValue); err != nil {
+		t.Fatal(err)
+	}
+	if refValue == dirB {
+		t.Fatalf("THRUM_HOME hijack: ref_value=%q matches dirB=%q", refValue, dirB)
+	}
+	if refValue != dirA {
+		t.Fatalf("ref_value=%q, want dirA=%q", refValue, dirA)
+	}
+}
+
+func TestReconcile_NoopWhenActiveSessionExists(t *testing.T) {
+	dirA := t.TempDir()
+	thrumDir := filepath.Join(dirA, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeIdentity(t, filepath.Join(thrumDir, "identities"), config.IdentityFile{
+		Version: 5, RepoID: "test",
+		Agent:     config.AgentConfig{Kind: "agent", Name: "agent_n", Role: "tester"},
+		Worktree:  dirA,
+		UpdatedAt: time.Now().UTC(),
+	})
+	st := newTestState(t, thrumDir)
+
+	// Pre-populate an active session+ref to mimic prior session.start.
+	pre := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := st.DB().ExecContext(context.Background(),
+		`INSERT INTO sessions(session_id, agent_id, started_at, last_seen_at) VALUES (?, ?, ?, ?)`,
+		"ses_PRE", "agent_n", pre, pre); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB().ExecContext(context.Background(),
+		`INSERT INTO session_refs(session_id, ref_type, ref_value, added_at) VALUES (?, 'worktree', ?, ?)`,
+		"ses_PRE", dirA, pre); err != nil {
+		t.Fatal(err)
+	}
+
+	deps := Deps{
+		State: st, ThrumDir: thrumDir, Now: time.Now,
+		NewSessionID: func() string { return "ses_NEW_SHOULD_NOT_APPEAR" },
+		TmuxAlive:    func(string) bool { return false },
+	}
+	stats, err := Reconcile(context.Background(), deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.SessionsCreated != 0 || stats.RefsCreated != 0 {
+		t.Fatalf("reconcile inserted rows when already active: %+v", stats)
+	}
+
+	var n int
+	if err := st.DB().QueryRowContext(context.Background(),
+		"SELECT COUNT(*) FROM sessions WHERE agent_id='agent_n'").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("sessions count for agent_n = %d, want 1", n)
+	}
+}

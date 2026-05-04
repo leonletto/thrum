@@ -11,6 +11,7 @@ package bootstrap
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"log/slog"
 	"os"
@@ -21,6 +22,21 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/state"
 )
+
+// hasActiveSessionRef reports whether (agent_id, worktree) already has an
+// active session_ref. Used by the auth pass to skip identities that already
+// resolve via peercred.
+func hasActiveSessionRef(ctx context.Context, tx *sql.Tx, agentID, worktree string) (bool, error) {
+	var exists bool
+	err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(
+            SELECT 1 FROM session_refs sr
+              JOIN sessions s ON s.session_id = sr.session_id
+             WHERE s.agent_id = ? AND sr.ref_type = 'worktree'
+               AND sr.ref_value = ? AND s.ended_at IS NULL)`,
+		agentID, worktree).Scan(&exists)
+	return exists, err
+}
 
 // Stats reports per-pass counts. Returned by Reconcile for observability.
 type Stats struct {
@@ -102,7 +118,57 @@ func Reconcile(ctx context.Context, deps Deps) (Stats, error) {
 				stats.Errors++
 				continue
 			}
-			// Auth + Tmux passes arrive in later tasks.
+
+			// Auth pass — single transaction per identity.
+			authErr := func() error {
+				tx, err := deps.State.DB().BeginTx(ctx, nil)
+				if err != nil {
+					return err
+				}
+				committed := false
+				defer func() {
+					if !committed {
+						_ = tx.Rollback()
+					}
+				}()
+
+				has, err := hasActiveSessionRef(ctx, tx, idFile.Agent.Name, idFile.Worktree)
+				if err != nil {
+					return err
+				}
+				if has {
+					return nil // no-op, already active
+				}
+
+				sessionID := deps.NewSessionID()
+				now := deps.Now().UTC().Format(time.RFC3339Nano)
+				// sessions schema requires session_id, agent_id, started_at,
+				// last_seen_at as NOT NULL. Match projector.go:519 shape.
+				if _, err := tx.ExecContext(ctx,
+					`INSERT OR IGNORE INTO sessions(session_id, agent_id, started_at, last_seen_at)
+                     VALUES (?, ?, ?, ?)`,
+					sessionID, idFile.Agent.Name, now, now); err != nil {
+					return err
+				}
+				if _, err := tx.ExecContext(ctx,
+					`INSERT OR IGNORE INTO session_refs(session_id, ref_type, ref_value, added_at)
+                     VALUES (?, 'worktree', ?, ?)`,
+					sessionID, idFile.Worktree, now); err != nil {
+					return err
+				}
+				if err := tx.Commit(); err != nil {
+					return err
+				}
+				committed = true
+				stats.SessionsCreated++
+				stats.RefsCreated++
+				return nil
+			}()
+			if authErr != nil {
+				deps.Log.Warn("reconcile: auth pass failed",
+					"agent", idFile.Agent.Name, "worktree", idFile.Worktree, "err", authErr)
+				stats.Errors++
+			}
 		}
 	}
 	return stats, nil
