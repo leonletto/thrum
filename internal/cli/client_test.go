@@ -342,8 +342,21 @@ func TestClient_CallWithParams(t *testing.T) {
 	}
 }
 
-// TestMain ensures cleanup.
+// TestMain ensures cleanup and isolates this package's tests from THRUM_* env
+// pollution in the operator's shell. A developer running the suite from a
+// primed shell would otherwise see TestConfigShow_NoConfigFile and
+// TestConfigShow_WithConfig fail because THRUM_WS_PORT (et al.) inherited
+// from the shell would override the defaults / file-sourced values the
+// tests assert on. Individual tests that need specific values still set them
+// via t.Setenv (which restores them at test end).
 func TestMain(m *testing.M) {
+	for _, k := range []string{
+		"THRUM_HOME", "THRUM_NAME", "THRUM_AGENT_ID",
+		"THRUM_ROLE", "THRUM_MODULE", "THRUM_DISPLAY", "THRUM_INTENT",
+		"THRUM_LOCAL", "THRUM_SYNC_INTERVAL", "THRUM_WS_PORT",
+	} {
+		_ = os.Unsetenv(k)
+	}
 	code := m.Run()
 	os.Exit(code)
 }
