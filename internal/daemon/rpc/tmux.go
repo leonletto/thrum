@@ -215,6 +215,11 @@ func (h *TmuxHandler) getQueue(session string) *SessionQueue {
 // HandleCreate creates a new detached tmux session with monitor-silence hook.
 // If quickstart flags are provided (agent_name, role, module), it also sets up
 // worktree redirects and runs quickstart inside the pane for PID isolation.
+//
+// THRUM_* and TMUX/TMUX_PANE env scrubbing happens in safecmd.cleanTmuxEnv
+// (covered by safecmd/cleantmuxenv_test.go). All daemon-spawned tmux execs
+// route through safecmd.{Tmux,TmuxRun,TmuxExec}, so the chokepoint catches
+// every code path here without per-callsite vigilance. See thrum-8nro.4.
 func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) (any, error) {
 	var req TmuxCreateRequest
 	if err := json.Unmarshal(params, &req); err != nil {

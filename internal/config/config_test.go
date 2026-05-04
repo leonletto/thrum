@@ -12,6 +12,26 @@ import (
 	"github.com/leonletto/thrum/internal/config"
 )
 
+// TestMain isolates this package's tests from THRUM_* env pollution in the
+// operator's shell. Without this, a developer running the suite from a primed
+// shell sees Load tests fail with "open .../coordinator_main.json: no such
+// file" because the test's tmpdir doesn't contain the operator's identity
+// file. The package previously protected only TestLoad_FromIdentityFile via
+// inline t.Setenv("", "") incantations; doing it once at TestMain covers every
+// test in the package and prevents new tests from forgetting the dance.
+//
+// Individual tests that need specific THRUM_* values still set them via
+// t.Setenv, which restores them at test end.
+func TestMain(m *testing.M) {
+	for _, k := range []string{
+		"THRUM_HOME", "THRUM_NAME", "THRUM_AGENT_ID",
+		"THRUM_ROLE", "THRUM_MODULE", "THRUM_DISPLAY", "THRUM_INTENT",
+	} {
+		_ = os.Unsetenv(k)
+	}
+	os.Exit(m.Run())
+}
+
 func TestLoad_FromEnvironmentVariables(t *testing.T) {
 	t.Setenv("THRUM_ROLE", "implementer")
 	t.Setenv("THRUM_MODULE", "auth")
@@ -37,14 +57,6 @@ func TestLoad_FromEnvironmentVariables(t *testing.T) {
 }
 
 func TestLoad_FromCLIFlags(t *testing.T) {
-	// Ensure no env vars interfere
-	_ = os.Unsetenv("THRUM_ROLE")
-	_ = os.Unsetenv("THRUM_MODULE")
-	defer func() {
-		_ = os.Unsetenv("THRUM_ROLE")
-		_ = os.Unsetenv("THRUM_MODULE")
-	}()
-
 	cfg, err := config.Load("reviewer", "sync-daemon")
 	if err != nil {
 		t.Fatalf("Load() failed: %v", err)
