@@ -1,8 +1,116 @@
 package tmux
 
 import (
+	"slices"
 	"testing"
 )
+
+// TestBuildCreateSessionArgs_ScrubsThrumVars pins thrum-t8mj: long-running
+// tmux servers retain stale THRUM_* environ that propagates to new sessions.
+// The `-e KEY=` flags assembled here override per-session, regardless of
+// server age.
+func TestBuildCreateSessionArgs_ScrubsThrumVars(t *testing.T) {
+	env := []string{
+		"PATH=/usr/bin",
+		"HOME=/Users/test",
+		"THRUM_HOME=/poisoned/path",
+		"THRUM_AGENT_ID=coordinator_main",
+		"THRUM_NAME=coordinator_main",
+		"THRUM_ROLE=coordinator",
+	}
+	args := buildCreateSessionArgs("coord", "/tmp/repo", env)
+
+	wantKeys := []string{"THRUM_HOME=", "THRUM_AGENT_ID=", "THRUM_NAME=", "THRUM_ROLE="}
+	for _, want := range wantKeys {
+		if !hasFlagPair(args, "-e", want) {
+			t.Errorf("missing -e %q in args: %v", want, args)
+		}
+	}
+
+	// Non-THRUM_* keys must NOT appear as -e flags.
+	for _, leak := range []string{"PATH=", "HOME=/Users/test"} {
+		if hasFlagPair(args, "-e", leak) {
+			t.Errorf("non-THRUM_ var leaked as -e flag %q in args: %v", leak, args)
+		}
+	}
+}
+
+// TestBuildCreateSessionArgs_NoThrumVars verifies that a clean environ
+// produces no -e flags. On a freshly-bounced machine where the daemon was
+// launched without THRUM_* in scope, no per-session override is needed.
+func TestBuildCreateSessionArgs_NoThrumVars(t *testing.T) {
+	env := []string{"PATH=/usr/bin", "HOME=/Users/test", "USER=test"}
+	args := buildCreateSessionArgs("coord", "/tmp/repo", env)
+
+	for i, a := range args {
+		if a == "-e" {
+			t.Errorf("unexpected -e flag at index %d in args: %v", i, args)
+		}
+	}
+}
+
+// TestBuildCreateSessionArgs_PreservesBaseFlags pins backwards compatibility:
+// the original `new-session -d -s NAME -c CWD` shape must remain.
+func TestBuildCreateSessionArgs_PreservesBaseFlags(t *testing.T) {
+	args := buildCreateSessionArgs("mysess", "/some/cwd", nil)
+
+	wantPrefix := []string{"new-session", "-d", "-s", "mysess", "-c", "/some/cwd"}
+	if !slices.Equal(args[:len(wantPrefix)], wantPrefix) {
+		t.Errorf("base args = %v, want prefix %v", args, wantPrefix)
+	}
+	if len(args) != len(wantPrefix) {
+		t.Errorf("nil env produced extra flags: %v", args[len(wantPrefix):])
+	}
+}
+
+// TestBuildCreateSessionArgs_OmitsCwdWhenEmpty matches the pre-fix behavior
+// where an empty cwd produced just the new-session base.
+func TestBuildCreateSessionArgs_OmitsCwdWhenEmpty(t *testing.T) {
+	args := buildCreateSessionArgs("mysess", "", []string{"THRUM_HOME=/x"})
+
+	for i, a := range args {
+		if a == "-c" {
+			t.Errorf("unexpected -c flag at index %d (cwd was empty): %v", i, args)
+		}
+	}
+	if !hasFlagPair(args, "-e", "THRUM_HOME=") {
+		t.Errorf("THRUM_HOME scrub missing when cwd empty: %v", args)
+	}
+}
+
+// TestBuildCreateSessionArgs_SkipsMalformedEnvEntries defends against env
+// entries without `=` or with empty key (shouldn't happen via os.Environ()
+// but cheap to pin).
+func TestBuildCreateSessionArgs_SkipsMalformedEnvEntries(t *testing.T) {
+	env := []string{
+		"THRUM_HOME=/poisoned",
+		"THRUM_NOEQUALS",
+		"=THRUM_LEADING_EQ",
+	}
+	args := buildCreateSessionArgs("s", "", env)
+
+	if !hasFlagPair(args, "-e", "THRUM_HOME=") {
+		t.Errorf("expected THRUM_HOME= -e flag in args: %v", args)
+	}
+	for _, malformed := range []string{"THRUM_NOEQUALS", "=THRUM_LEADING_EQ", "="} {
+		for i, a := range args {
+			if a == malformed {
+				t.Errorf("malformed entry %q leaked into args at index %d: %v", malformed, i, args)
+			}
+		}
+	}
+}
+
+// hasFlagPair returns true if args contains a consecutive [flag, value]
+// pair anywhere in the slice.
+func hasFlagPair(args []string, flag, value string) bool {
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == flag && args[i+1] == value {
+			return true
+		}
+	}
+	return false
+}
 
 func TestSanitizeSessionName(t *testing.T) {
 	tests := []struct {

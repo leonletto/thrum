@@ -39,17 +39,60 @@ func HasSession(name string) bool {
 }
 
 // CreateSession creates a new detached tmux session with a clean environment.
+//
+// THRUM_* env scrubbing happens in two complementary layers:
+//
+//  1. safecmd.cleanTmuxEnv (thrum-8nro.4) scrubs the tmux CLIENT's exec env
+//     so the daemon doesn't leak THRUM_* into a freshly-started tmux server's
+//     captured environ.
+//
+//  2. The `-e KEY=` flags built by buildCreateSessionArgs (thrum-t8mj) scrub
+//     at the SESSION level — long-running tmux servers retain whatever
+//     environ they captured at server-start time, and new sessions inherit
+//     those vars. Without this layer, a tmux server started before Gate 1's
+//     deploy (or from any other primed-shell ancestry) propagates stale
+//     THRUM_* values to every session created against it. This `-e` override
+//     is per-session, so it works regardless of server age.
 func CreateSession(name, cwd string) error {
-	name = SanitizeSessionName(name)
-	args := []string{"new-session", "-d", "-s", name}
-	if cwd != "" {
-		args = append(args, "-c", cwd)
-	}
+	args := buildCreateSessionArgs(SanitizeSessionName(name), cwd, os.Environ())
 	_, err := safecmd.Tmux(context.Background(), args...)
 	if err != nil {
 		return fmt.Errorf("tmux new-session failed: %w", err)
 	}
 	return nil
+}
+
+// buildCreateSessionArgs assembles the argv for `tmux new-session` with
+// per-session THRUM_* overrides. Caller passes an explicit env slice (use
+// os.Environ() in production; tests inject controlled values).
+//
+// We iterate the DAEMON's process environ — which intentionally still has
+// THRUM_* in it. Gate 1 only scrubbed the env passed to tmux exec calls;
+// the daemon's OWN environ is left intact because it's the source of truth
+// for which keys we need to override per-session. If the daemon was launched
+// from a primed shell, those THRUM_* keys are exactly what poisoned the
+// tmux server's environ via the same launcher chain. We use the daemon's
+// environ as the discovery list for the override set, and pass each as
+// `-e KEY=` (empty value). thrum CLI codepaths uniformly treat empty
+// THRUM_* values as "not set" (verified across paths.EffectiveRepoPath,
+// config.Load, cmd/thrum/main.go agent-name fallbacks, etc.).
+func buildCreateSessionArgs(name, cwd string, env []string) []string {
+	args := []string{"new-session", "-d", "-s", name}
+	if cwd != "" {
+		args = append(args, "-c", cwd)
+	}
+	for _, e := range env {
+		if !strings.HasPrefix(e, "THRUM_") {
+			continue
+		}
+		eq := strings.IndexByte(e, '=')
+		if eq <= 0 {
+			continue
+		}
+		// Pass "KEY=" (key plus '=' with empty value).
+		args = append(args, "-e", e[:eq+1])
+	}
+	return args
 }
 
 // RenameWindow sets the window name for the first window in a session.
