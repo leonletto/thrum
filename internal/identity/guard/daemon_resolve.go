@@ -178,7 +178,12 @@ func DaemonResolve(ctx context.Context, cfg Config, req DaemonResolveRequest, lo
 		e := &Error{
 			Guard:       "unauthenticated_rpc",
 			Reason:      "anonymous_mutating_rpc",
-			Remediation: "cd into a registered agent worktree and retry",
+			// thrum-8nro.3: the prior remediation ("cd into a registered
+			// agent worktree") was misleading when the caller WAS in a
+			// registered worktree but the daemon's binding cache hadn't
+			// been warmed (post-restart, post-edit, etc.). 'thrum prime'
+			// is the actual recovery in that case.
+			Remediation: "daemon hasn't bound this caller to a registered agent. If you ARE a registered agent in this worktree, run 'thrum prime' to warm the daemon's binding cache, then retry. Otherwise cd into the agent's worktree first.",
 		}
 		emitGuardFire(logger, cfg.UnauthenticatedRPC, "denied", e)
 		return ResolvedCaller{}, e
