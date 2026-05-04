@@ -36,7 +36,11 @@ func writeIdentity(t *testing.T, dir string, identity config.IdentityFile) strin
 // writes events and never touches sync state, so the empty values are safe.
 func newTestState(t *testing.T, thrumDir string) *state.State {
 	t.Helper()
-	st, err := state.NewState(thrumDir, "", "test-repo-id", "")
+	syncDir := filepath.Join(thrumDir, "var")
+	if err := os.MkdirAll(syncDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	st, err := state.NewState(thrumDir, syncDir, "test-repo-id", "")
 	if err != nil {
 		t.Fatal(err)
 	}
