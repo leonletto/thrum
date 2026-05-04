@@ -271,7 +271,12 @@ func (h *PurgeHandler) countSyncFiles(cutoff time.Time) (int, int, error) {
 			continue
 		}
 		path := filepath.Join(messagesDir, entry.Name())
-		removed, err := countJSONLBeforeTimestamp(path, "created_at", cutoff)
+		// Source JSONL serializes the message's timestamp under "timestamp"
+		// (see internal/types/events.go MessageCreateEvent). Earlier code passed
+		// "created_at" — the field name from the SQLite projection — which
+		// matched no records, so countJSONLBeforeTimestamp always returned 0
+		// and filesWithRemovals stayed at 0. See thrum-yzps.
+		removed, err := countJSONLBeforeTimestamp(path, "timestamp", cutoff)
 		if err != nil {
 			return 0, 0, fmt.Errorf("count %s: %w", entry.Name(), err)
 		}
@@ -309,7 +314,11 @@ func (h *PurgeHandler) filterSyncFiles(cutoff time.Time) (int, int, error) {
 			continue
 		}
 		path := filepath.Join(messagesDir, entry.Name())
-		removed, err := jsonl.RemoveBeforeTimestamp(path, "created_at", cutoff)
+		// "timestamp" matches the JSONL on-disk schema (see countSyncFiles
+		// for the rationale). Passing "created_at" here was the thrum-yzps
+		// regression: every line was kept because the field didn't exist on
+		// any record, so message JSONLs grew unboundedly across releases.
+		removed, err := jsonl.RemoveBeforeTimestamp(path, "timestamp", cutoff)
 		if err != nil {
 			return 0, 0, fmt.Errorf("filter %s: %w", entry.Name(), err)
 		}

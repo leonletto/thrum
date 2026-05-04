@@ -391,10 +391,15 @@ func TestPurgeHandler_SyncFiles(t *testing.T) {
 		t.Fatalf("write events.jsonl: %v", err)
 	}
 
-	// Write messages/agent_test.jsonl with one old + one new message
+	// Write messages/agent_test.jsonl with one old + one new message.
+	// The on-disk JSONL schema serializes the timestamp under "timestamp"
+	// (see internal/types/events.go MessageCreateEvent), NOT "created_at".
+	// thrum-yzps was caused by purge.go reading "created_at" against this
+	// real schema; the fix and this fixture now agree. If the production
+	// field name regresses, this test fails because no entries match.
 	msgPath := filepath.Join(messagesDir, "agent_test.jsonl")
-	msgContent := `{"message_id":"m1","created_at":"` + old + `"}` + "\n" +
-		`{"message_id":"m2","created_at":"` + new_ + `"}` + "\n"
+	msgContent := `{"message_id":"m1","timestamp":"` + old + `"}` + "\n" +
+		`{"message_id":"m2","timestamp":"` + new_ + `"}` + "\n"
 	if err := os.WriteFile(msgPath, []byte(msgContent), 0o600); err != nil {
 		t.Fatalf("write messages/agent_test.jsonl: %v", err)
 	}
@@ -463,9 +468,11 @@ func TestPurgeHandler_DryRun_SyncFiles(t *testing.T) {
 		t.Fatalf("write events.jsonl: %v", err)
 	}
 
-	// Write a message file with one old line
+	// Write a message file with one old line. The fixture uses the real
+	// on-disk schema field "timestamp" (see TestPurgeHandler_SyncFiles for
+	// the thrum-yzps rationale).
 	msgPath := filepath.Join(messagesDir, "dry_agent.jsonl")
-	msgContent := `{"message_id":"m_dry","created_at":"` + old + `"}` + "\n"
+	msgContent := `{"message_id":"m_dry","timestamp":"` + old + `"}` + "\n"
 	if err := os.WriteFile(msgPath, []byte(msgContent), 0o600); err != nil {
 		t.Fatalf("write messages/dry_agent.jsonl: %v", err)
 	}
@@ -486,6 +493,12 @@ func TestPurgeHandler_DryRun_SyncFiles(t *testing.T) {
 	if resp.SyncEventsFiltered != 1 {
 		t.Errorf("SyncEventsFiltered = %d, want 1", resp.SyncEventsFiltered)
 	}
+	// thrum-yzps regression guard: countSyncFiles must use the real on-disk
+	// field name ("timestamp") for messages JSONL. Without this assertion
+	// the bug (passing "created_at") silently returned 0 here too.
+	if resp.SyncMessageFiles != 1 {
+		t.Errorf("SyncMessageFiles = %d, want 1 (one file with at least one removable line)", resp.SyncMessageFiles)
+	}
 
 	// But the file contents should be untouched
 	eventsData, err := os.ReadFile(eventsPath)
@@ -495,6 +508,15 @@ func TestPurgeHandler_DryRun_SyncFiles(t *testing.T) {
 	lines := nonEmptyLines(string(eventsData))
 	if len(lines) != 2 {
 		t.Errorf("events.jsonl modified during dry run, have %d lines, want 2", len(lines))
+	}
+	// And the message file must remain on disk verbatim — dry run is
+	// projection-counting only, no JSONL rewrite.
+	msgData, err := os.ReadFile(msgPath)
+	if err != nil {
+		t.Fatalf("read messages/dry_agent.jsonl: %v", err)
+	}
+	if string(msgData) != msgContent {
+		t.Errorf("messages JSONL modified during dry run; got %q, want %q", string(msgData), msgContent)
 	}
 
 	_ = time.Now() // just to use the time import
