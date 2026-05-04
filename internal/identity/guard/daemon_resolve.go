@@ -176,8 +176,8 @@ func DaemonResolve(ctx context.Context, cfg Config, req DaemonResolveRequest, lo
 			return ResolvedCaller{AgentID: agentID}, nil
 		}
 		e := &Error{
-			Guard:       "unauthenticated_rpc",
-			Reason:      "anonymous_mutating_rpc",
+			Guard:  "unauthenticated_rpc",
+			Reason: "anonymous_mutating_rpc",
 			// thrum-8nro.3: the prior remediation ("cd into a registered
 			// agent worktree") was misleading when the caller WAS in a
 			// registered worktree but the daemon's binding cache hadn't

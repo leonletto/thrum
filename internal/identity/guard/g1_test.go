@@ -21,7 +21,17 @@ func TestG1a_NoExistingIdentities_Proceeds(t *testing.T) {
 func TestG1a_CallerOwnsAnExistingIdentity_Refuses(t *testing.T) {
 	dir := t.TempDir()
 	writeIdentityFile(t, dir, "impl_foo", 100, "claude")
-	err := G1a(&QuickstartContext{IdentitiesDir: dir, Chain: []int{100, 200}, Force: false})
+	// RequestedName "impl_bar" is intentionally different from the
+	// owned identity ("impl_foo") so the guard sees a real rename
+	// attempt and fires. Pre-thrum-gmz2, the guard fired regardless of
+	// RequestedName (even when it matched), which broke idempotent
+	// re-register paths — see TestG1a_SameName_ReregisterIsIdempotent.
+	err := G1a(&QuickstartContext{
+		IdentitiesDir: dir,
+		Chain:         []int{100, 200},
+		RequestedName: "impl_bar",
+		Force:         false,
+	})
 	var gErr *Error
 	if !errors.As(err, &gErr) {
 		t.Fatalf("want *Error, got %v", err)
@@ -31,6 +41,34 @@ func TestG1a_CallerOwnsAnExistingIdentity_Refuses(t *testing.T) {
 	}
 	if gErr.ExpectedAgent != "impl_foo" {
 		t.Errorf("expected_agent=%q", gErr.ExpectedAgent)
+	}
+}
+
+// TestG1a_SameName_ReregisterIsIdempotent pins the thrum-gmz2 fix:
+// when the caller already owns an identity AND the RequestedName matches
+// the owned identity, G1a must allow the call (idempotent re-register).
+// scripts/thrum-startup.sh and `thrum tmux start` both depend on this
+// path being a no-op. Pre-fix, the guard fired and broke every claude
+// SessionStart hook on already-registered worktrees.
+func TestG1a_SameName_ReregisterIsIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	writeIdentityFile(t, dir, "impl_foo", 100, "claude")
+	err := G1a(&QuickstartContext{
+		IdentitiesDir: dir,
+		Chain:         []int{100, 200},
+		RequestedName: "impl_foo", // same as the owned identity
+		Force:         false,
+	})
+	if err != nil {
+		t.Errorf("same-name re-register should be idempotent, got %v", err)
+	}
+	// File must NOT have been renamed to .deleted (force-rename path
+	// shouldn't fire for an idempotent re-register).
+	if _, statErr := os.Stat(filepath.Join(dir, "impl_foo.json")); statErr != nil {
+		t.Errorf("identity file disappeared during idempotent re-register: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "impl_foo.json.deleted")); !os.IsNotExist(statErr) {
+		t.Errorf("idempotent path must not produce a .deleted sidekick")
 	}
 }
 
