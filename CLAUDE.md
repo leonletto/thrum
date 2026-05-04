@@ -11,7 +11,7 @@ machines. The system consists of a Go CLI + embedded daemon with a React SPA web
 UI served over WebSocket.
 
 **Module:** `github.com/leonletto/thrum` **Go version:** 1.26 **Version:**
-v0.10.0
+v0.10.1
 
 ## On Session Start
 

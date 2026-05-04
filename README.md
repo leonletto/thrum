@@ -13,6 +13,21 @@ and machines. You direct the work. The agents coordinate through Thrum. Messages
 persist through context compaction, session restarts, and machine changes —
 nothing gets lost.
 
+**v0.10.1 highlights:**
+
+- **Hotfix: `thrum quickstart` from a redirect-using worktree no longer
+  hijacks the agent identity to `$THRUM_HOME`.** v0.10.0 exposed a
+  latent bug where running `thrum quickstart` (manually or via the
+  Epic-D wizard's inline path) inside a child worktree with
+  `.thrum/redirect` would write the identity file to the parent repo's
+  `.thrum/identities/` and store the parent path as the agent's
+  `worktree`. Subsequent peercred-based identity resolution then
+  cross-claimed between worktrees. Fixed by exempting `init` and
+  `quickstart` from the `THRUM_HOME` substitution in
+  `PersistentPreRunE`, plus passing explicit `--repo` from the daemon's
+  inline-quickstart path. Two release-test scenarios (108 local, r02
+  remote) added as a regression gate.
+
 **v0.10.0 highlights:**
 
 - **`thrum init` wizard** — `thrum init` on a TTY now launches an opinionated

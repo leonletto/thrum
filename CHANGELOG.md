@@ -6,6 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1] - 2026-05-03
+
+### Fixed
+
+- **`thrum quickstart` from a `.thrum/redirect`-using worktree no longer
+  writes the agent identity to `$THRUM_HOME`.** Latent bug since
+  `299131e434` (Mar 6), surfaced in v0.10.0 because Epic-D's wizard +
+  worktree-create flow routes through `buildInlineQuickstartCmd` more
+  often, sending `thrum quickstart` into daemon-spawned panes that
+  inherit `THRUM_HOME` from the daemon's environ. The fix has three
+  parts:
+  - `cmd/thrum/main.go` PersistentPreRunE now exempts `init` and
+    `quickstart` from the `paths.EffectiveRepoPath` substitution that
+    `THRUM_HOME` triggers. Register-shape commands use cwd; runtime
+    commands continue to honor `THRUM_HOME`.
+  - `internal/worktree/worktree.go` `BuildQuickstartCmd` accepts a
+    `repoPath` argument and emits `thrum --repo <path> quickstart ...`.
+    `internal/daemon/rpc/tmux.go buildInlineQuickstartCmd` forwards
+    `req.Cwd` so daemon-inline quickstarts always pin the target
+    explicitly, regardless of the daemon process's environ.
+  - `internal/cli/quickstart.go` G1a/G1b guard and Step 2.5 enrichment
+    paths no longer re-apply `EffectiveRepoPath` to an already-resolved
+    `flagRepo`. `internal/config/config.go LoadIdentityWithPath` drops
+    its inner `EffectiveRepoPath` call.
+  Two release-test scenarios were added as a regression gate:
+  `tests/release/scenarios/108-quickstart-redirect-regression.test.sh`
+  (local sub-fixture) and
+  `tests/release/remote-scenarios/r02-quickstart-redirect-regression.test.sh`
+  (remote via run-remote.sh). The local scenario pre-stages a stale
+  parent identity with a known intent; the new
+  `parent-identity-untouched` and `child-intent-not-inherited-from-parent`
+  assertions catch both file-location and Step 2.5-enrichment paths
+  of the bug.
+
+  Refs: thrum-tc4w. v0.10.0 marked prerelease; users should upgrade to
+  v0.10.1.
+
 ## [0.10.0] - 2026-05-03
 
 ### Added

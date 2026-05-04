@@ -5,6 +5,39 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 [CHANGELOG.md](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
+## v0.10.1 — 2026-05-03
+
+A focused hotfix for a `thrum quickstart` bug that surfaced shortly after
+v0.10.0 shipped. v0.10.0 is marked prerelease; upgrade to v0.10.1.
+
+### Fixed
+
+- **`thrum quickstart` from a `.thrum/redirect`-using worktree no longer writes
+  the agent identity into the parent repo.** When `THRUM_HOME` was set (which
+  the wizard's daemon-inline path effectively does for spawned panes),
+  `quickstart` was hijacking the identity-write target to
+  `$THRUM_HOME/.thrum/identities/` and recording the parent path as the agent's
+  `worktree`. Subsequent identity-resolution from any peer worktree could then
+  cross-claim, with symptoms like `thrum whoami` returning the wrong agent and
+  `unauthenticated_rpc` guard denying writes.
+
+### How to verify after upgrade
+
+```bash
+# Existing redirect-using worktrees: re-quickstart from inside the
+# worktree to refresh the identity file with the corrected location
+# and worktree value.
+cd <child-worktree>
+thrum quickstart --name <name> --role <role> --module <module> --force
+thrum whoami   # should report the child worktree, not THRUM_HOME
+```
+
+### v0.10.0 prerelease note
+
+The v0.10.0 release page on GitHub is marked prerelease and the Homebrew tap was
+reverted to v0.9.2 during the fix window. v0.10.1 promotes back to "latest" with
+the regression closed.
+
 ## v0.10.0 — 2026-05-03
 
 The v0.10.0 work centers on `thrum init`. The first-run experience used to be a

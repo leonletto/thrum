@@ -1,4 +1,4 @@
-# Thrum v0.10.0
+# Thrum v0.10.1
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -142,6 +142,22 @@ New in v0.9.1:
   duplicates content. The CLAUDE.md block is the alternative for other
   runtimes (codex, cursor, opencode, kiro, auggie) and for Claude Code
   without the plugin.
+
+New in v0.10.1:
+- Hotfix for v0.10.0 quickstart-redirect regression. `thrum quickstart`
+  from a worktree using `.thrum/redirect` was writing the agent's
+  identity file to `$THRUM_HOME/.thrum/identities/` instead of the
+  caller's worktree, with `worktree` field also set to `$THRUM_HOME`.
+  Latent bug since `299131e434` (Mar 6); surfaced because Epic-D's
+  wizard + worktree-create flow routes through `buildInlineQuickstartCmd`
+  more often, which sends `thrum quickstart` into daemon-spawned panes
+  that inherit `THRUM_HOME` from the daemon. Fix: PersistentPreRunE
+  exempts `init` and `quickstart` from `THRUM_HOME` substitution;
+  `BuildQuickstartCmd` now accepts and emits `--repo <path>` explicitly
+  on the daemon-inline path; `quickstart`'s G1a/G1b guard and Step 2.5
+  enrichment paths drop redundant `EffectiveRepoPath` calls.
+  Two release-test scenarios (108 local, r02 remote) added as a
+  regression gate. v0.10.0 is marked prerelease; upgrade to v0.10.1.
 
 New in v0.10.0:
 - `thrum init` interactive wizard — on a TTY, `thrum init` now launches a
