@@ -66,6 +66,16 @@ func G1a(qc *QuickstartContext) error {
 	if owned == "" {
 		return nil
 	}
+	// thrum-gmz2: same-name re-register is idempotent and must not trip
+	// the rename guard. Without this short-circuit, every SessionStart
+	// hook (scripts/thrum-startup.sh) and every `thrum tmux start`
+	// against an already-registered worktree fails — quickstart's
+	// re-write of the existing identity is the supported re-init path,
+	// not a rename. A real rename (different RequestedName) still falls
+	// through to the refusal / --force path below.
+	if owned == qc.RequestedName {
+		return nil
+	}
 	if qc.Force {
 		if err := os.Rename(ownedFile, ownedFile+".deleted"); err != nil {
 			return fmt.Errorf("rename to .deleted: %w", err)
