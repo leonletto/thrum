@@ -135,7 +135,29 @@ jobs:
           node-version: "22"
           registry-url: https://registry.npmjs.org
 
+      # thrum-ygf2: skip publish when the local package version is already
+      # published. Without this gate, every thrum tag where opencode-plugin's
+      # version hasn't been bumped failed with HTTP 403 ("You cannot publish
+      # over the previously published versions"). The main `release` job
+      # (binaries + Homebrew) succeeds regardless, but the red X on the run
+      # summary was misleading. Now: skip cleanly if version unchanged,
+      # publish if bumped, fail only on real publish errors. local_version
+      # is sourced from the in-repo package.json (no untrusted input).
+      - name: Check whether opencode-plugin version is new
+        id: version-check
+        working-directory: opencode-plugin
+        run: |
+          local_version=$(node -p "require('./package.json').version")
+          if npm view "opencode-thrum@${local_version}" version --silent 2>/dev/null | grep -q "^${local_version}$"; then
+            echo "Already published: opencode-thrum@${local_version}"
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Will publish: opencode-thrum@${local_version}"
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build and publish opencode-thrum
+        if: steps.version-check.outputs.should_publish == 'true'
         working-directory: opencode-plugin
         run: npm ci && npm run build && npm publish
         env:
