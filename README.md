@@ -13,28 +13,6 @@ and machines. You direct the work. The agents coordinate through Thrum. Messages
 persist through context compaction, session restarts, and machine changes —
 nothing gets lost.
 
-## What's new in v0.10.2
-
-A hotfix release closing two related identity foot-guns from the v0.10.x line,
-plus a long-standing `thrum purge` bug:
-
-- **`scripts/thrum-startup.sh` works again on existing worktrees.** The G1a
-  `quickstart_self_rename` guard was wrongly refusing same-name re-registers,
-  breaking the SessionStart hook on every already-registered claude session.
-  Same-name re-register is now an idempotent no-op.
-- **Daemon-spawned tmux panes get clean identity.** Two-layer fix scrubs
-  `THRUM_*` env both at the daemon's tmux exec call and per-session via
-  `-e KEY=` overrides, so even long-running tmux servers can't leak stale
-  identity into new panes.
-- **`thrum purge --confirm` actually shrinks JSONL message files** (was a
-  no-op due to a wrong field-name lookup; some operators saw 145MB+ files).
-
-Smaller fixes: clearer `unauthenticated_rpc` deny message, release-test
-harness retry on saturated boxes, opencode-plugin publish job stops failing
-red on unchanged versions.
-
-See [CHANGELOG.md](CHANGELOG.md) for full release history.
-
 ## Quick Start
 
 ```bash
