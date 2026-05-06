@@ -296,6 +296,12 @@ nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-h
 h2{margin-top:2rem}
 a{color:#0366d6}
 </style>
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+<script>
+window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+plausible.init()
+</script>
 </head>
 <body>
 <nav>
