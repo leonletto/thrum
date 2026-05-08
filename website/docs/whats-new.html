@@ -26,6 +26,7 @@ a{color:#0366d6}
   <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
 <strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+<strong>Guides</strong>: <a href="beta-channel.html">Beta Channel</a><br>
 <strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
 <strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
@@ -43,61 +44,63 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG.md</a>.</p>
 <h2>v0.10.2 — 2026-05-04</h2>
-<p>Hotfix release closing two related foot-guns from the v0.10.x identity work:
-the SessionStart hook (<code>scripts/thrum-startup.sh</code>) breaking on every
-already-registered worktree, and a tmux env-hijack class that caused new
-panes to resolve identity to the daemon-starter&#39;s agent. Plus a long-standing
+<p>Hotfix release closing two related foot-guns from the v0.10.x identity work: the
+SessionStart hook (<code>scripts/thrum-startup.sh</code>) breaking on every
+already-registered worktree, and a tmux env-hijack class that caused new panes
+to resolve identity to the daemon-starter&#39;s agent. Plus a long-standing
 <code>thrum purge</code> regression where message JSONL files weren&#39;t actually shrinking.</p>
 <h3>Fixed</h3>
 <ul>
-<li><p><strong><code>thrum quickstart</code> no longer rejects idempotent same-name re-register.</strong>
-The <code>quickstart_self_rename</code> guard was firing on every call where the
-caller already owned an identity, even when the requested <code>--name</code>
-matched the existing one. This broke <code>scripts/thrum-startup.sh</code> — the
-SessionStart hook on every claude session — at step 3 (<code>thrum quickstart</code>); <code>set -e</code> aborted before steps 4 (inbox check), 5
-(announce), and 6 (cron install) ran. <code>thrum tmux start</code> against an
-existing worktree hit the same guard and aborted before claude
-launched. <strong>Same-name re-register is now allowed without <code>--force</code></strong>
-(it&#39;s an idempotent no-op); a real rename (different <code>--name</code>) still
-requires <code>--force</code>.</p>
+<li><p><strong><code>thrum quickstart</code> no longer rejects idempotent same-name re-register.</strong> The
+<code>quickstart_self_rename</code> guard was firing on every call where the caller
+already owned an identity, even when the requested <code>--name</code> matched the
+existing one. This broke <code>scripts/thrum-startup.sh</code> — the SessionStart hook on
+every claude session — at step 3 (<code>thrum quickstart</code>); <code>set -e</code> aborted before
+steps 4 (inbox check), 5 (announce), and 6 (cron install) ran.
+<code>thrum tmux start</code> against an existing worktree hit the same guard and aborted
+before claude launched. <strong>Same-name re-register is now allowed without
+<code>--force</code></strong> (it&#39;s an idempotent no-op); a real rename (different <code>--name</code>)
+still requires <code>--force</code>.</p>
 </li>
 <li><p><strong><code>tmux.create</code>-spawned panes no longer inherit <code>THRUM_*</code> env from the
-daemon.</strong> When the daemon was started from a primed shell, every tmux
-pane it spawned inherited the daemon&#39;s <code>THRUM_AGENT_ID</code>, <code>THRUM_HOME</code>,
-etc. — causing the new pane&#39;s <code>thrum whoami</code> to resolve to the
-daemon-starter&#39;s identity instead of the pane&#39;s intended agent.
-Two-layer fix: scrub <code>THRUM_*</code> from the daemon&#39;s tmux exec env, AND
-pass per-session <code>-e KEY=</code> overrides so even long-running tmux servers
-(which cache the environ from server-start time) produce clean panes.</p>
+daemon.</strong> When the daemon was started from a primed shell, every tmux pane it
+spawned inherited the daemon&#39;s <code>THRUM_AGENT_ID</code>, <code>THRUM_HOME</code>, etc. — causing
+the new pane&#39;s <code>thrum whoami</code> to resolve to the daemon-starter&#39;s identity
+instead of the pane&#39;s intended agent. Two-layer fix: scrub <code>THRUM_*</code> from the
+daemon&#39;s tmux exec env, AND pass per-session <code>-e KEY=</code> overrides so even
+long-running tmux servers (which cache the environ from server-start time)
+produce clean panes.</p>
 </li>
-<li><p><strong><code>thrum purge --confirm</code> now actually shrinks JSONL message files.</strong>
-The filter was passing the wrong field name (<code>&quot;created_at&quot;</code> vs the
-on-disk <code>&quot;timestamp&quot;</code>) when iterating message JSONLs, so every record
-was kept and on-disk files grew unboundedly. Verified live: <code>--before 30d</code> against a 335MB sync dir filtered 13 message files in 7.7s.</p>
+<li><p><strong><code>thrum purge --confirm</code> now actually shrinks JSONL message files.</strong> The
+filter was passing the wrong field name (<code>&quot;created_at&quot;</code> vs the on-disk
+<code>&quot;timestamp&quot;</code>) when iterating message JSONLs, so every record was kept and
+on-disk files grew unboundedly. Verified live: <code>--before 30d</code> against a 335MB
+sync dir filtered 13 message files in 7.7s.</p>
 </li>
-<li><p><strong>Misleading <code>unauthenticated_rpc</code> deny message</strong> now points at <code>thrum prime</code> as the cache-warming recovery (was <code>cd into a registered agent worktree and retry</code>, which was the wrong fix when the caller already
-WAS in a registered worktree but the daemon&#39;s binding cache hadn&#39;t
-warmed after a restart).</p>
+<li><p><strong>Misleading <code>unauthenticated_rpc</code> deny message</strong> now points at <code>thrum prime</code>
+as the cache-warming recovery (was
+<code>cd into a registered agent worktree and retry</code>, which was the wrong fix when
+the caller already WAS in a registered worktree but the daemon&#39;s binding cache
+hadn&#39;t warmed after a restart).</p>
 </li>
 </ul>
 <h3>Internal</h3>
 <ul>
-<li>Release-test harness coord-whoami probe now retries 3× 30s instead of
-a single 60s wait — recovers from missed-keystroke races on saturated
-multi-agent dev boxes.</li>
-<li>Unit-test hardening: <code>internal/cli</code> and <code>internal/config</code> test
-packages now have <code>TestMain</code> env-isolation guards so tests don&#39;t
-silently inherit <code>THRUM_*</code> pollution from the operator&#39;s primed shell.</li>
+<li>Release-test harness coord-whoami probe now retries 3× 30s instead of a single
+60s wait — recovers from missed-keystroke races on saturated multi-agent dev
+boxes.</li>
+<li>Unit-test hardening: <code>internal/cli</code> and <code>internal/config</code> test packages now
+have <code>TestMain</code> env-isolation guards so tests don&#39;t silently inherit <code>THRUM_*</code>
+pollution from the operator&#39;s primed shell.</li>
 </ul>
 <h3>Upgrade Notes</h3>
 <ul>
 <li><strong>No CLI flag changes; no config changes.</strong> Drop-in upgrade from v0.10.1.</li>
 <li>After upgrade: <code>make install</code> (or download the new binary), then
-<code>thrum daemon restart</code> so the running daemon picks up the new binary.
-<strong>Also refresh the Claude Code plugin</strong> (<code>/plugin update thrum</code>, or
-remove + add the marketplace) — v0.10.2 ships an updated
-<code>inject-prime-context.sh</code> that improves the SessionStart context
-delivery banner.</li>
+<code>thrum daemon restart</code> so the running daemon picks up the new binary. <strong>Also
+refresh the Claude Code plugin</strong> (<code>/plugin update thrum</code>, or remove + add the
+marketplace) — v0.10.2 ships an updated <code>inject-prime-context.sh</code> that
+improves the SessionStart context delivery banner.</li>
 </ul>
 <h2>v0.10.1 — 2026-05-03</h2>
 <p>Two related identity-resolver fixes shipped together. v0.10.0 is marked
