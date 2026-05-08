@@ -57,6 +57,9 @@ release:
   github:
     owner: leonletto
     name: thrum
+  # Tags containing '-' (e.g. v0.11.0-rc.1) publish as GitHub prereleases.
+  # `auto` is the GoReleaser default; made explicit so the policy is visible.
+  prerelease: auto
 
 # Homebrew cask (modern approach for precompiled binaries, GoReleaser v2.10+)
 homebrew_casks:
@@ -68,6 +71,9 @@ homebrew_casks:
     homepage: "https://github.com/leonletto/thrum"
     description: "Git-backed agent messaging and coordination CLI"
     license: "MIT"
+    # Skip Homebrew tap upload for prerelease tags (-rc.N, -beta.N).
+    # Beta-channel users route through the curl install path with VERSION=.
+    skip_upload: auto
     commit_author:
       name: goreleaser
       email: goreleaser@leonletto.github.io
