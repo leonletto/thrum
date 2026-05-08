@@ -265,6 +265,12 @@ codex-plugin/        → OpenAI Codex plugin (skills)
 - **`website-dev`** — Long-lived branch for documentation site work. **Pushing
   `website-dev` to origin triggers `deploy-pages.yml` and deploys the website.**
   Only push `website-dev` when website changes are intentionally ready to ship.
+- **`release/vX.Y.Z`** — Created from `thrum-dev` at the start of every
+  release's pre-release cycle. Carries `*-rc.N` tags, accepts bugfix commits
+  during soak, gets merged to `main` at promotion (tagged `vX.Y.Z` on the
+  merge commit) and back to `thrum-dev`. **Kept indefinitely
+  post-promotion** — substrate for future hotfixes against the vX.Y.x line.
+  See [`dev-docs/PRE-RELEASE-STEPS.md`](dev-docs/PRE-RELEASE-STEPS.md).
 
 ### Branch push policy
 
@@ -273,6 +279,7 @@ codex-plugin/        → OpenAI Codex plugin (skills)
 | `thrum-dev`           | Every session end         | Authoritative pre-release truth; protects work                |
 | `feature/*` / `fix/*` | NEVER auto-push           | Local-only by design; reach origin via merge into `thrum-dev` |
 | `website-dev`         | Only when ready to deploy | Push triggers website deployment workflow                     |
+| `release/vX.Y.Z`      | At rc.N tag time          | Triggers GoReleaser to publish prerelease artifacts           |
 | `main`                | Only via release flow     | See `dev-docs/RELEASE-STEPS.md`                               |
 
 Long-running implementer worktrees (e.g. `team-fix`) often switch what they're
