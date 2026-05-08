@@ -265,6 +265,12 @@ codex-plugin/        → OpenAI Codex plugin (skills)
 - **`website-dev`** — Long-lived branch for documentation site work. **Pushing
   `website-dev` to origin triggers `deploy-pages.yml` and deploys the website.**
   Only push `website-dev` when website changes are intentionally ready to ship.
+- **`release/vX.Y.Z`** — Created from `thrum-dev` at the start of every
+  release's pre-release cycle. Carries `*-rc.N` tags, accepts bugfix commits
+  during soak, gets merged to `main` at promotion (tagged `vX.Y.Z` on the merge
+  commit) and back to `thrum-dev`. **Kept indefinitely post-promotion** —
+  substrate for future hotfixes against the vX.Y.x line. See
+  [`dev-docs/PRE-RELEASE-STEPS.md`](dev-docs/PRE-RELEASE-STEPS.md).
 
 ### Branch push policy
 
@@ -273,6 +279,7 @@ codex-plugin/        → OpenAI Codex plugin (skills)
 | `thrum-dev`           | Every session end         | Authoritative pre-release truth; protects work                |
 | `feature/*` / `fix/*` | NEVER auto-push           | Local-only by design; reach origin via merge into `thrum-dev` |
 | `website-dev`         | Only when ready to deploy | Push triggers website deployment workflow                     |
+| `release/vX.Y.Z`      | At rc.N tag time          | Triggers GoReleaser to publish prerelease artifacts           |
 | `main`                | Only via release flow     | See `dev-docs/RELEASE-STEPS.md`                               |
 
 Long-running implementer worktrees (e.g. `team-fix`) often switch what they're
@@ -282,14 +289,20 @@ merge-into-thrum-dev path as any other feature branch.
 
 ### Release workflow
 
-**See [`dev-docs/RELEASE-STEPS.md`](dev-docs/RELEASE-STEPS.md) for the complete
-release checklist.** That file is the source of truth and covers version bumps
-across all 8 files, CHANGELOG entry, doc audit, sync-docs, the full local CI
-gates (`make ci`, race tests, resilience tests, E2E, UI tests, optional manual
-test plan), the merge sequence, tagging, GoReleaser monitoring, release notes
-formatting, post-release verification, and troubleshooting.
+The release flow is split across two checklists, run in order:
 
-**Critical rules from that file:**
+1. **[`dev-docs/PRE-RELEASE-STEPS.md`](dev-docs/PRE-RELEASE-STEPS.md)** —
+   coordinator's RC soak cycle: cut `release/vX.Y.Z`, version bumps, CHANGELOG,
+   doc audit, sync-docs, full local CI gates (`make ci`, race tests, resilience,
+   E2E, UI, optional manual test plan), tag rc.N, the 48h soak (with risk-graded
+   re-soak when bugs surface), and the promotion-ready checklist.
+2. **[`dev-docs/RELEASE-STEPS.md`](dev-docs/RELEASE-STEPS.md)** — promotion-only
+   checklist after soak passes: verify soak (step 0), merge `release/vX.Y.Z` to
+   main, tag the merge commit, push, monitor GoReleaser, update release notes,
+   push website, post-release verify, close beads, merge release branch back to
+   `thrum-dev`.
+
+**Critical rules from those checklists:**
 
 - NEVER push to `main` without `make ci` passing locally first
 - NEVER run `goreleaser release` locally — GitHub Actions handles it
