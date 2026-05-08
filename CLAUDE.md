@@ -267,10 +267,10 @@ codex-plugin/        → OpenAI Codex plugin (skills)
   Only push `website-dev` when website changes are intentionally ready to ship.
 - **`release/vX.Y.Z`** — Created from `thrum-dev` at the start of every
   release's pre-release cycle. Carries `*-rc.N` tags, accepts bugfix commits
-  during soak, gets merged to `main` at promotion (tagged `vX.Y.Z` on the
-  merge commit) and back to `thrum-dev`. **Kept indefinitely
-  post-promotion** — substrate for future hotfixes against the vX.Y.x line.
-  See [`dev-docs/PRE-RELEASE-STEPS.md`](dev-docs/PRE-RELEASE-STEPS.md).
+  during soak, gets merged to `main` at promotion (tagged `vX.Y.Z` on the merge
+  commit) and back to `thrum-dev`. **Kept indefinitely post-promotion** —
+  substrate for future hotfixes against the vX.Y.x line. See
+  [`dev-docs/PRE-RELEASE-STEPS.md`](dev-docs/PRE-RELEASE-STEPS.md).
 
 ### Branch push policy
 
