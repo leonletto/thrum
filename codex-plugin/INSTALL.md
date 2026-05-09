@@ -26,8 +26,12 @@ From the Thrum repository root:
 This installs the current Codex bundle into:
 
 ```text
-${CODEX_HOME:-$HOME/.codex}/skills
+$HOME/.agents/skills
 ```
+
+Codex v0.130.0 ([PR #21485](https://github.com/openai/codex/pull/21485))
+removed the legacy `~/.codex/skills/` extra-roots mechanism. `$HOME/.agents/skills/`
+is the canonical user-skills path going forward.
 
 Installed skills:
 
@@ -50,10 +54,27 @@ Installed skills:
 ## Verify
 
 ```bash
-find "${CODEX_HOME:-$HOME/.codex}/skills" -maxdepth 1 -type d \( -name "thrum" -o -name "thrum-*" \) | sort
+find "$HOME/.agents/skills" -maxdepth 1 -type d \( -name "thrum" -o -name "thrum-*" \) | sort
 ```
 
 You should see 15 Thrum skill directories.
+
+## Migrating from `~/.codex/skills/` (codex 0.130.0+ upgraders)
+
+If you previously installed Thrum skills under `~/.codex/skills/` (the legacy
+path used before codex v0.130.0), move them to the new canonical location
+**before your next codex session** after upgrading codex past 0.130.0:
+
+```bash
+mkdir -p "$HOME/.agents/skills"
+mv ~/.codex/skills/thrum* "$HOME/.agents/skills/" 2>/dev/null || true
+```
+
+Codex 0.130.0 ([PR #21485](https://github.com/openai/codex/pull/21485)) removed
+the extra-roots loader that previously surfaced flat `~/.codex/skills/`
+installs. Skills left at the legacy path will silently stop loading. Rerunning
+`./codex-plugin/scripts/install-skills.sh --force` after the move ensures the
+bundle is current.
 
 ## Restart Codex
 
