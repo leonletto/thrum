@@ -51,14 +51,6 @@ Installed skills:
 - `thrum-configure-roles`
 - `thrum-project-setup`
 
-## Verify
-
-```bash
-find "$HOME/.agents/skills" -maxdepth 1 -type d \( -name "thrum" -o -name "thrum-*" \) | sort
-```
-
-You should see 15 Thrum skill directories.
-
 ## Migrating from `~/.codex/skills/` (codex 0.130.0+ upgraders)
 
 If you previously installed Thrum skills under `~/.codex/skills/` (the legacy
@@ -67,7 +59,8 @@ path used before codex v0.130.0), move them to the new canonical location
 
 ```bash
 mkdir -p "$HOME/.agents/skills"
-mv ~/.codex/skills/thrum* "$HOME/.agents/skills/" 2>/dev/null || true
+mv "$HOME/.codex/skills/thrum"* "$HOME/.agents/skills/" 2>/dev/null || true
+mv "$HOME/.codex/skills/orchestrate" "$HOME/.agents/skills/" 2>/dev/null || true
 ```
 
 Codex 0.130.0 ([PR #21485](https://github.com/openai/codex/pull/21485)) removed
@@ -75,6 +68,19 @@ the extra-roots loader that previously surfaced flat `~/.codex/skills/`
 installs. Skills left at the legacy path will silently stop loading. Rerunning
 `./codex-plugin/scripts/install-skills.sh --force` after the move ensures the
 bundle is current.
+
+If you previously relied on `CODEX_HOME` to relocate skills, note that the new
+canonical path is independent of `CODEX_HOME`. Pass `--dest "$CODEX_HOME/skills"`
+to `install-skills.sh` if you want the old behavior; the script will also warn
+on stderr when a non-default `CODEX_HOME` is set.
+
+## Verify
+
+```bash
+find "$HOME/.agents/skills" -maxdepth 1 -type d \( -name "thrum" -o -name "thrum-*" \) | sort
+```
+
+You should see 15 Thrum skill directories.
 
 ## Restart Codex
 
