@@ -4,8 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SRC_DIR="${PLUGIN_ROOT}/skills"
-DEST_ROOT="${CODEX_HOME:-${HOME}/.codex}"
-DEST_DIR="${DEST_ROOT}/skills"
+DEST_DIR="${HOME}/.agents/skills"
 FORCE=0
 LEGACY_SKILLS=(
   thrum-core
@@ -19,10 +18,10 @@ usage() {
   cat <<USAGE
 Usage: $(basename "$0") [--dest DIR] [--force]
 
-Install Codex skills from codex-plugin/skills into ~/.codex/skills.
+Install Codex skills from codex-plugin/skills into ~/.agents/skills.
 
 Options:
-  --dest DIR   Destination skills directory (default: \$CODEX_HOME/skills or ~/.codex/skills)
+  --dest DIR   Destination skills directory (default: \$HOME/.agents/skills)
   --force      Replace an existing installed skill
   -h, --help   Show this help text
 USAGE
@@ -49,6 +48,12 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "${CODEX_HOME:-}" && "${CODEX_HOME}" != "${HOME}/.codex" ]]; then
+  echo "warning: CODEX_HOME is set to '${CODEX_HOME}' but is no longer honored." >&2
+  echo "         Skills install to \$HOME/.agents/skills as of codex v0.130.0." >&2
+  echo "         Pass --dest \"\$CODEX_HOME/skills\" to restore the old behavior." >&2
+fi
 
 if [[ ! -d "${SRC_DIR}" ]]; then
   echo "Source skills directory not found: ${SRC_DIR}" >&2
