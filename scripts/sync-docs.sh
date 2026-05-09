@@ -26,6 +26,7 @@ if [ ! -d "$SRC" ]; then
 fi
 
 count=0
+SYNCED_FILES=()
 
 # Recursively find all .md files in website/docs/
 while IFS= read -r src_file; do
@@ -42,16 +43,28 @@ while IFS= read -r src_file; do
 
   # Strip YAML frontmatter if present (--- delimited block at start of file)
   if head -1 "$src_file" | grep -q '^---$'; then
-    # Find the closing --- and output everything after it
-    awk 'BEGIN{skip=0; found=0} /^---$/{if(!found){found=1; skip=1; next} else if(skip){skip=0; next}} !skip{print}' "$src_file" > "$dst_file"
+    # Render the stripped output into a tempfile, then only replace dst_file
+    # if the result actually differs — preserves mtimes for unchanged files
+    # so downstream tooling doesn't treat them as touched.
+    tmp_file="$(mktemp)"
+    awk 'BEGIN{skip=0; found=0} /^---$/{if(!found){found=1; skip=1; next} else if(skip){skip=0; next}} !skip{print}' "$src_file" > "$tmp_file"
+    if [ ! -f "$dst_file" ] || ! diff -q "$tmp_file" "$dst_file" >/dev/null 2>&1; then
+      mv "$tmp_file" "$dst_file"
+      SYNCED_FILES+=("$src_file" "$dst_file")
+    else
+      rm -f "$tmp_file"
+    fi
   else
-    cp "$src_file" "$dst_file"
+    if [ ! -f "$dst_file" ] || ! diff -q "$src_file" "$dst_file" >/dev/null 2>&1; then
+      cp "$src_file" "$dst_file"
+      SYNCED_FILES+=("$src_file" "$dst_file")
+    fi
   fi
 
   count=$((count + 1))
 done < <(find "$SRC" -name '*.md' -type f)
 
-echo "Synced $count files from website/docs/ to docs/"
+echo "Synced $count files from website/docs/ to docs/ (${#SYNCED_FILES[@]} actual changes)"
 
 # Sync llms.txt and llms-full.txt from website/ to repo root.
 # These are hand-crafted, not generated — website/ is the source of truth.
@@ -68,19 +81,20 @@ for llm_file in llms.txt llms-full.txt; do
     continue
   fi
 
+  if [ -f "$dst_llm" ] && diff -q "$src_llm" "$dst_llm" >/dev/null 2>&1; then
+    echo "  $llm_file: already in sync"
+    continue
+  fi
+
   if [ -f "$dst_llm" ] && [ "$dst_llm" -nt "$src_llm" ]; then
-    echo "Error: $dst_llm is newer than $src_llm" >&2
+    echo "Error: $dst_llm is newer than $src_llm and contents differ" >&2
     echo "  Someone may have edited the repo-root copy directly." >&2
     echo "  If website/ is correct, touch it first: touch $src_llm" >&2
     exit 1
   fi
 
-  if [ -f "$dst_llm" ] && diff -q "$src_llm" "$dst_llm" >/dev/null 2>&1; then
-    echo "  $llm_file: already in sync"
-  else
-    cp "$src_llm" "$dst_llm"
-    echo "  $llm_file: synced"
-  fi
+  cp "$src_llm" "$dst_llm"
+  echo "  $llm_file: synced"
 done
 
 # Sync website/llms.txt to internal/context/reference/llms.txt (the embedded
@@ -92,44 +106,50 @@ embed_src="$REPO_ROOT/website/llms.txt"
 embed_dst="$REPO_ROOT/internal/context/reference/llms.txt"
 if [ ! -f "$embed_src" ]; then
   echo "Warning: $embed_src not found; skipping embed sync" >&2
+elif [ -f "$embed_dst" ] && diff -q "$embed_src" "$embed_dst" >/dev/null 2>&1; then
+  echo "  llms.txt (embed): already in sync"
 elif [ -f "$embed_dst" ] && [ "$embed_dst" -nt "$embed_src" ]; then
-  echo "Error: $embed_dst is newer than $embed_src" >&2
+  echo "Error: $embed_dst is newer than $embed_src and contents differ" >&2
   echo "  Someone may have edited the embed copy directly." >&2
   echo "  If website/ is correct, touch it first: touch $embed_src" >&2
   exit 1
-elif [ -f "$embed_dst" ] && diff -q "$embed_src" "$embed_dst" >/dev/null 2>&1; then
-  echo "  llms.txt (embed): already in sync"
 else
   cp "$embed_src" "$embed_dst"
   echo "  llms.txt (embed): synced"
 fi
 
-# Run formatting and linting only on the synced doc trees so we don't touch
-# unrelated files elsewhere in the repo.
+# Run formatting and linting ONLY on files that actually changed in this sync.
+# (Previously this ran on the full website/docs and docs trees, which caused
+# every doc to be touched whenever sync-docs.sh ran — adding spurious blank
+# lines / formatting churn to files this sync didn't intend to modify.)
 echo ""
-echo "Formatting synced markdown in website/docs and docs..."
-if command -v prettier >/dev/null 2>&1; then
-  prettier --write "$SRC/**/*.md" "$DST/**/*.md" --prose-wrap always --ignore-path "$REPO_ROOT/.prettierignore" 2>/dev/null || true
-  echo "Formatting: OK"
+if [ "${#SYNCED_FILES[@]}" -eq 0 ]; then
+  echo "No file content changed; skipping format/lint."
 else
-  echo "Warning: prettier not found; skipping markdown formatting" >&2
-fi
+  echo "Formatting ${#SYNCED_FILES[@]} synced markdown file(s)..."
+  if command -v prettier >/dev/null 2>&1; then
+    prettier --write "${SYNCED_FILES[@]}" --prose-wrap always --ignore-path "$REPO_ROOT/.prettierignore" 2>/dev/null || true
+    echo "Formatting: OK"
+  else
+    echo "Warning: prettier not found; skipping markdown formatting" >&2
+  fi
 
-echo "Running markdownlint on website/docs and docs..."
-if ! command -v markdownlint >/dev/null 2>&1; then
-  echo "markdownlint not found. Installing ${MARKDOWNLINT_VERSION}..."
-  npm install -g "markdownlint-cli@${MARKDOWNLINT_VERSION}" || {
-    echo "Warning: failed to install markdownlint; skipping markdown lint fix" >&2
-    echo ""
-    echo "Sync complete. Synced files were copied, but markdown lint was skipped."
-    exit 0
-  }
-fi
+  echo "Running markdownlint --fix on synced files..."
+  if ! command -v markdownlint >/dev/null 2>&1; then
+    echo "markdownlint not found. Installing ${MARKDOWNLINT_VERSION}..."
+    npm install -g "markdownlint-cli@${MARKDOWNLINT_VERSION}" || {
+      echo "Warning: failed to install markdownlint; skipping markdown lint fix" >&2
+      echo ""
+      echo "Sync complete. Synced files were copied, but markdown lint was skipped."
+      exit 0
+    }
+  fi
 
-if markdownlint "$SRC" "$DST" --config "$REPO_ROOT/.markdownlint.json" --ignore-path "$REPO_ROOT/.markdownlintignore" --fix; then
-  echo "Markdown lint fix: OK"
-else
-  echo "Warning: markdown lint fix had issues (non-fatal)" >&2
+  if markdownlint "${SYNCED_FILES[@]}" --config "$REPO_ROOT/.markdownlint.json" --ignore-path "$REPO_ROOT/.markdownlintignore" --fix; then
+    echo "Markdown lint fix: OK"
+  else
+    echo "Warning: markdown lint fix had issues (non-fatal)" >&2
+  fi
 fi
 
 echo ""
