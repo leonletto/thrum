@@ -48,6 +48,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Load .env from the main repo so LLM_CLIENT_PATH and ZAI_API_KEY are
+# available to the LLM-judge auto-diagnose path. .env lives at the main
+# repo root (worktrees don't share gitignored files); locate it via
+# git rev-parse --git-common-dir whose parent is the main repo.
+_main_repo="$(cd "$REPO_ROOT" && cd "$(git rev-parse --git-common-dir)/.." && pwd 2>/dev/null || true)"
+if [[ -n "$_main_repo" && -f "$_main_repo/.env" ]]; then
+  set -a; source "$_main_repo/.env"; set +a
+fi
+
 # Preflight
 for tool in thrum tmux jq yq git "$RUNTIME"; do
   if ! command -v "$tool" >/dev/null 2>&1; then

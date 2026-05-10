@@ -13,6 +13,8 @@ source "${SCRIPT_DIR}/assert-fs.sh"
 source "${SCRIPT_DIR}/assert-daemon.sh"
 # shellcheck source=assert-tmux.sh
 source "${SCRIPT_DIR}/assert-tmux.sh"
+# shellcheck source=assert-llm.sh
+source "${SCRIPT_DIR}/assert-llm.sh"
 
 # Substitute ${UPPER_NAME} variables in a string from current env.
 _behavioral_substitute() {
@@ -136,9 +138,30 @@ _behavioral_run_assertion() {
       esac
       ;;
     llm_judge)
-      # Stub for thrum-9mnx.3 — for now always fail closed with a clear message.
-      echo "behavioral: kind=llm_judge not implemented yet (thrum-9mnx.3)" >&2
-      return 1
+      case "$predicate" in
+        transcript_satisfies_rubric)
+          local rubric session last_n threshold transcript_file rubric_file
+          rubric="$(yq -r ".steps[$step_idx].assert[$assert_idx].rubric" "$card")"
+          session="$(yq -r ".steps[$step_idx].assert[$assert_idx].transcript_source.session" "$card")"
+          last_n="$(yq -r ".steps[$step_idx].assert[$assert_idx].transcript_source.last_n_lines // 80" "$card")"
+          threshold="$(yq -r ".steps[$step_idx].assert[$assert_idx].threshold // 4" "$card")"
+
+          rubric_file="$(mktemp)"; printf '%s' "$rubric" > "$rubric_file"
+          transcript_file="$(mktemp)"
+          tmux capture-pane -p -t "$session" 2>/dev/null | tail -n "$last_n" > "$transcript_file" || true
+
+          local out rc
+          out=$(assert_llm_transcript_satisfies_rubric "$rubric_file" "$transcript_file" "$threshold")
+          rc=$?
+          rm -f "$rubric_file" "$transcript_file"
+          # Echo result on stderr so the polled-assertion runner can grab it
+          # via stdout-redirect; the JSONL writer downstream prefers a clean
+          # stdout for now. (Future: pipe into the JSONL record.)
+          [[ -n "$out" ]] && echo "$out" >&2
+          return $rc
+          ;;
+        *) echo "behavioral: unknown llm_judge predicate '$predicate'" >&2; return 1 ;;
+      esac
       ;;
     *)
       echo "behavioral: unknown kind '$kind'" >&2
@@ -167,6 +190,47 @@ _behavioral_run_step_assertions() {
     if [[ $(date +%s) -ge $deadline ]]; then return 1; fi
     sleep "$poll_interval"
   done
+}
+
+# Auto-diagnose hook: when a step FAILed, ask the LLM judge for a one-line
+# explanation, then patch the trailing JSONL record with .auto_diagnose
+# (and rewrite .diagnostic if the model produced a clearer one). Skipped
+# when:
+#   - NO_AUTO_DIAGNOSE=1
+#   - LLM_CLIENT_PATH unset (judge can't run without the upstream lib)
+#   - jq, tmux, or thrum unavailable (defensive)
+_behavioral_auto_diagnose() {
+  local card="$1" step_idx="$2" out="$3"
+  if [[ "${NO_AUTO_DIAGNOSE:-0}" == "1" ]]; then return 0; fi
+  if [[ -z "${LLM_CLIENT_PATH:-}" ]]; then return 0; fi
+  command -v jq >/dev/null 2>&1 || return 0
+
+  local td sd fp transcript_file state_file diag_out
+  td="$(yq -r '.description // ""' "$card")"
+  sd="$(yq -r ".steps[$step_idx].id // \"\"" "$card") — $(yq -r ".steps[$step_idx].diagnostic // \"\"" "$card")"
+  fp="$(yq -r ".steps[$step_idx].assert[0].kind // \"\"" "$card").$(yq -r ".steps[$step_idx].assert[0].predicate // \"\"" "$card")"
+  transcript_file="$(mktemp)"
+  tmux capture-pane -p -t coord 2>/dev/null | tail -200 > "$transcript_file" || true
+  state_file="$(mktemp)"
+  thrum --repo "${FIXTURE_REPO:-.}" agent list --json > "$state_file" 2>/dev/null || true
+
+  diag_out=$(llm_diagnose "$td" "$sd" "$fp" "$transcript_file" "$state_file" 2>/dev/null || true)
+  rm -f "$transcript_file" "$state_file"
+
+  [[ -z "$diag_out" ]] && return 0
+  local reasoning
+  reasoning=$(printf '%s' "$diag_out" | jq -r '.reasoning // ""' 2>/dev/null || echo "")
+  [[ -z "$reasoning" ]] && return 0
+
+  # Patch the trailing JSONL record: add .auto_diagnose and overwrite
+  # .diagnostic with the model's reasoning. macOS BSD head doesn't support
+  # negative -n, so use sed '$d' to drop the last line.
+  local last_line patched
+  last_line="$(tail -1 "$out")"
+  patched=$(printf '%s' "$last_line" | jq --arg r "$reasoning" --argjson d "$diag_out" \
+    '. + {"diagnostic": $r, "auto_diagnose": $d}' 2>/dev/null || true)
+  [[ -z "$patched" ]] && return 0
+  sed '$d' "$out" > "$out.tmp" && printf '%s\n' "$patched" >> "$out.tmp" && mv "$out.tmp" "$out"
 }
 
 # Public: run a single test card. Writes JSONL records to $out.
@@ -220,6 +284,7 @@ behavioral_run_card() {
       printf '{"test":"%s","step":"%s","outcome":"FAIL","duration_ms":%d,"diagnostic":%s}\n' \
         "$test_id" "$step_id" "$((end_ms - start_ms))" "$diagnostic_json" >> "$out"
       failed=$((failed+1))
+      _behavioral_auto_diagnose "$card" "$i" "$out"
     fi
   done
 
