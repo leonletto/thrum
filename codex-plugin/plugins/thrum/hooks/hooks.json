@@ -5,7 +5,7 @@
         "matcher": "startup|resume|clear",
         "hooks": [{
           "type": "command",
-          "command": "${CODEX_PLUGIN_ROOT}/scripts/inject-prime-context.sh",
+          "command": "${PLUGIN_ROOT}/scripts/inject-prime-context.sh",
           "statusMessage": "Loading Thrum prime context",
           "timeout": 30
         }]
@@ -16,7 +16,7 @@
         "matcher": "Bash",
         "hooks": [{
           "type": "command",
-          "command": "${CODEX_PLUGIN_ROOT}/scripts/block-sync-worktree-cd.sh",
+          "command": "${PLUGIN_ROOT}/scripts/block-sync-worktree-cd.sh",
           "timeout": 5
         }]
       }
@@ -25,7 +25,7 @@
       {
         "hooks": [{
           "type": "command",
-          "command": "${CODEX_PLUGIN_ROOT}/scripts/stop-check-messages.sh",
+          "command": "${PLUGIN_ROOT}/scripts/stop-check-messages.sh",
           "timeout": 15
         }]
       }
