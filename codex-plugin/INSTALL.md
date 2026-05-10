@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Codex installed (v0.130.0+)
-- `features.codex_hooks = true` in `~/.codex/config.toml` (auto-set by install if absent)
+- `features.hooks` is enabled by default on codex 0.130.0+; no action needed. (If somehow disabled: `codex -c features.hooks=true ...`.)
 - `thrum` CLI on `PATH`
 
 ## Recommended: Marketplace install
@@ -46,7 +46,7 @@ After install, restart codex. The next session opens with the Thrum prime briefi
 
 ```bash
 codex plugin marketplace list   # should include thrum-marketplace
-codex features list | grep codex_hooks    # should be: stable: true
+codex features list | grep '^hooks'    # should be: stable / true
 ls ~/.agents/skills | grep -E '^(thrum|adversarial-|coordinator-|implementer-|researcher-|configure-|efficient-|project-|verify-)'
 ```
 
