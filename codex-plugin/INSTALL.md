@@ -30,6 +30,14 @@ For users on a clone of the thrum repo or developing the plugin:
 
 Installs skills directly into `${HOME}/.agents/skills/` (canonical path as of codex v0.130.0).
 
+To wire the plugin's hooks/skills via the marketplace mechanism instead:
+
+```bash
+codex plugin marketplace add ./codex-plugin
+# Then enable the plugin (codex 0.130.0 does not auto-enable local sources):
+printf '\n[plugins."thrum@thrum-marketplace"]\nenabled = true\n' >> ~/.codex/config.toml
+```
+
 ## SessionStart auto-prime
 
 After install, restart codex. The next session opens with the Thrum prime briefing already in context — identity, project state, unread inbox.
