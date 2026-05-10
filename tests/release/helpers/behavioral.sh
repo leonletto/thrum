@@ -205,12 +205,17 @@ _behavioral_auto_diagnose() {
   if [[ -z "${LLM_CLIENT_PATH:-}" ]]; then return 0; fi
   command -v jq >/dev/null 2>&1 || return 0
 
-  local td sd fp transcript_file state_file diag_out
+  local td sd fp transcript_file state_file diag_out coord_session
   td="$(yq -r '.description // ""' "$card")"
   sd="$(yq -r ".steps[$step_idx].id // \"\"" "$card") — $(yq -r ".steps[$step_idx].diagnostic // \"\"" "$card")"
   fp="$(yq -r ".steps[$step_idx].assert[0].kind // \"\"" "$card").$(yq -r ".steps[$step_idx].assert[0].predicate // \"\"" "$card")"
+  # Resolve the coordinator session name. Prefer the YAML key whose role is
+  # "coordinator"; fall back to the first agent key, then to "coord". Allows
+  # cards that name the coord session something else without the auto-diagnose
+  # transcript silently being empty.
+  coord_session=$(yq -r '(.agents | to_entries | map(select(.value.role=="coordinator"))[0].key) // (.agents | keys[0]) // "coord"' "$card")
   transcript_file="$(mktemp)"
-  tmux capture-pane -p -t coord 2>/dev/null | tail -200 > "$transcript_file" || true
+  tmux capture-pane -p -t "$coord_session" 2>/dev/null | tail -200 > "$transcript_file" || true
   state_file="$(mktemp)"
   thrum --repo "${FIXTURE_REPO:-.}" agent list --json > "$state_file" 2>/dev/null || true
 

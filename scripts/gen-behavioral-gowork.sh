@@ -27,6 +27,12 @@ if [[ ! -d "${LLM_CLIENT_PATH}" ]]; then
   echo "ERROR: LLM_CLIENT_PATH does not exist: ${LLM_CLIENT_PATH}" >&2
   exit 2
 fi
+# go.work has no quoting; replace directives with spaces in the path
+# silently produce a malformed file. Reject early with a clear message.
+if [[ "${LLM_CLIENT_PATH}" =~ [[:space:]] ]]; then
+  echo "ERROR: LLM_CLIENT_PATH contains whitespace; go.work cannot quote replace directives: ${LLM_CLIENT_PATH}" >&2
+  exit 2
+fi
 if [[ ! -f "${LLM_CLIENT_PATH}/go.mod" ]]; then
   echo "ERROR: no go.mod in ${LLM_CLIENT_PATH}" >&2
   exit 2

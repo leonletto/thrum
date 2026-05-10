@@ -210,12 +210,31 @@ for card in "${cards[@]}"; do
     tc_file="$(mktemp)"
     extract_tool_calls "$RUNTIME" "${HOME}/.claude/projects" > "$tc_file"
     runtime_v="$(runtime_version "$RUNTIME" 2>/dev/null || echo "")"
-    jq -s --arg test "$test_id" --arg runtime "$RUNTIME" --arg rtv "$runtime_v" --slurpfile tc "$tc_file" \
+    # Build the preamble manifest: per-role {path, sha256} for the candidate
+    # preambles supplied via --preamble. Empty when only project baseline is
+    # in effect. Spec §--capture requires this for reproducibility.
+    pre_file="$(mktemp)"
+    {
+      echo "{"
+      first=1
+      for r in "${!PREAMBLES[@]}"; do
+        p="${PREAMBLES[$r]}"
+        sha=$(shasum -a 256 "$p" 2>/dev/null | awk '{print $1}')
+        [[ $first -eq 1 ]] || echo ","
+        first=0
+        printf '  "%s": {"path": %s, "sha256": "%s"}' "$r" "$(printf '%s' "$p" | jq -Rs .)" "$sha"
+      done
+      echo
+      echo "}"
+    } > "$pre_file"
+    jq -s --arg test "$test_id" --arg runtime "$RUNTIME" --arg rtv "$runtime_v" \
+          --slurpfile tc "$tc_file" --slurpfile pre "$pre_file" \
        '{ test: $test, runtime: $runtime, runtime_version: $rtv,
+          preamble: ($pre[0] // {}),
           steps: [.[]? | select(.step!="__summary__") | { step_id: .step, outcome: .outcome, duration_ms: .duration_ms }],
           tool_calls: ($tc[0] // []) }' \
        "$out" > "${baseline_dir}/${test_id}.json"
-    rm -f "$tc_file"
+    rm -f "$tc_file" "$pre_file"
     echo "    captured baseline → ${baseline_dir}/${test_id}.json"
   fi
 
