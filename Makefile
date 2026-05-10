@@ -386,3 +386,17 @@ setup-hooks:
 # processes, NOT part of `make ci`.
 release-tests: build
 	@./tests/release/run.sh
+
+# Behavioral test harness — drives two live agents through scripted YAML
+# cards with structural + LLM-judge assertions. Iterative dev tool for
+# preamble/plugin work; NOT part of `make ci`. See
+# tests/release/behavioral/README.md.
+.PHONY: behavioral-setup behavioral
+
+behavioral-setup:
+	@bash scripts/gen-behavioral-gowork.sh
+	@bash -c 'set -a; source "$$(cd "$$(git rev-parse --git-common-dir)/.." && pwd)/.env"; set +a; cd tests/release/cmd/llm-judge && go run . ping'
+	@echo "behavioral-setup OK"
+
+behavioral: behavioral-setup
+	./tests/release/behavioral/run-behavioral.sh

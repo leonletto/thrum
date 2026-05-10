@@ -48,6 +48,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Load .env from the main repo so LLM_CLIENT_PATH and ZAI_API_KEY are
+# available to the LLM-judge auto-diagnose path. .env lives at the main
+# repo root (worktrees don't share gitignored files); locate it via
+# git rev-parse --git-common-dir whose parent is the main repo.
+_main_repo="$(cd "$REPO_ROOT" && cd "$(git rev-parse --git-common-dir)/.." && pwd 2>/dev/null || true)"
+if [[ -n "$_main_repo" && -f "$_main_repo/.env" ]]; then
+  set -a; source "$_main_repo/.env"; set +a
+fi
+
 # Preflight
 for tool in thrum tmux jq yq git "$RUNTIME"; do
   if ! command -v "$tool" >/dev/null 2>&1; then
@@ -68,6 +77,9 @@ fi
 source "${HELPERS_DIR}/ephemeral-daemon.sh"
 source "${HELPERS_DIR}/render-preamble.sh"
 source "${HELPERS_DIR}/behavioral.sh"
+source "${HELPERS_DIR}/extract-tool-calls.sh"
+# runtime_version is defined in assert-tmux.sh (sourced transitively by
+# behavioral.sh).
 
 # Fixture lifecycle (one fixture for the whole run)
 RUN_TIMESTAMP="$(date -u +%Y-%m-%dT%H-%M-%S)"
@@ -161,17 +173,35 @@ _register_card_agents() {
     session_name="${agent_key}"
     agent_name="test_${role}"
     echo "  registering agent: name=${agent_name} role=${role} module=${module} session=${session_name}"
+    # `thrum tmux create` validates that --cwd is a registered worktree —
+    # the fixture is a standalone git repo, so that path errors with
+    # "not a worktree". Use the documented decomposed sequence instead:
+    # quickstart (register agent), bare `tmux new-session` (host pane),
+    # then `thrum tmux launch` (start the AI tool inside).
     ( cd "$FIXTURE_REPO" \
       && env -u THRUM_HOME -u THRUM_AGENT_ID -u THRUM_INTENT \
-         thrum --repo "$FIXTURE_REPO" tmux create "$session_name" \
+         thrum --repo "$FIXTURE_REPO" quickstart \
            --name "$agent_name" --role "$role" --module "$module" \
-           --runtime "$RUNTIME" --force >/dev/null 2>&1 ) || true
+           --force >/dev/null 2>&1 ) || true
+    tmux new-session -d -s "$session_name" -c "$FIXTURE_REPO" 2>/dev/null || true
     ( cd "$FIXTURE_REPO" \
       && env -u THRUM_HOME -u THRUM_AGENT_ID -u THRUM_INTENT \
          thrum --repo "$FIXTURE_REPO" tmux launch "$session_name" \
            --runtime "$RUNTIME" >/dev/null 2>&1 ) || true
   done < <(yq -r '.agents | keys // [] | .[]' "$card")
 }
+
+# Preflight: warn if any selected card declares an llm_judge predicate but
+# LLM_CLIENT_PATH/ZAI_API_KEY are unset. The predicate fails closed at
+# runtime; we surface the misconfiguration up front so the user knows
+# which steps will fail and why before committing 5+ minutes per card.
+if [[ -z "${LLM_CLIENT_PATH:-}" || -z "${ZAI_API_KEY:-}" ]]; then
+  for card in "${cards[@]}"; do
+    if yq -r '.steps[]?.assert[]?.kind' "$card" 2>/dev/null | grep -q '^llm_judge$'; then
+      echo "WARN: $(basename "$card") declares llm_judge predicate(s) but LLM_CLIENT_PATH or ZAI_API_KEY is unset; those steps will fail closed." >&2
+    fi
+  done
+fi
 
 total_pass=0
 for card in "${cards[@]}"; do
@@ -190,6 +220,71 @@ for card in "${cards[@]}"; do
   # Print brief per-test summary
   yq_summary="$(grep '"step":"__summary__"' "$out" | tail -1 || true)"
   echo "    ${yq_summary}"
+
+  # --capture: write a baseline JSON for this test
+  if [[ -n "$CAPTURE" ]]; then
+    baseline_dir="${RESULTS_DIR}/baselines/${CAPTURE}"
+    mkdir -p "$baseline_dir"
+    tc_file="$(mktemp)"
+    extract_tool_calls "$RUNTIME" "${HOME}/.claude/projects" > "$tc_file"
+    runtime_v="$(runtime_version "$RUNTIME" 2>/dev/null || echo "")"
+    # Build the preamble manifest: per-role {path, sha256} for the candidate
+    # preambles supplied via --preamble. Empty when only project baseline is
+    # in effect. Spec §--capture requires this for reproducibility.
+    pre_file="$(mktemp)"
+    {
+      echo "{"
+      first=1
+      for r in "${!PREAMBLES[@]}"; do
+        p="${PREAMBLES[$r]}"
+        sha=$(shasum -a 256 "$p" 2>/dev/null | awk '{print $1}')
+        [[ $first -eq 1 ]] || echo ","
+        first=0
+        printf '  "%s": {"path": %s, "sha256": "%s"}' "$r" "$(printf '%s' "$p" | jq -Rs .)" "$sha"
+      done
+      echo
+      echo "}"
+    } > "$pre_file"
+    transcripts_sidecar="${out%.jsonl}.transcripts.json"
+    [[ -f "$transcripts_sidecar" ]] || echo "{}" > "$transcripts_sidecar"
+    jq -s --arg test "$test_id" --arg runtime "$RUNTIME" --arg rtv "$runtime_v" \
+          --slurpfile tc "$tc_file" --slurpfile pre "$pre_file" --slurpfile tr "$transcripts_sidecar" \
+       '{ test: $test, runtime: $runtime, runtime_version: $rtv,
+          preamble: ($pre[0] // {}),
+          steps: [.[]? | select(.step!="__summary__")
+                  | { step_id: .step, outcome: .outcome, duration_ms: .duration_ms,
+                      transcript_excerpt: ($tr[0][.step] // "") }],
+          tool_calls: ($tc[0] // []) }' \
+       "$out" > "${baseline_dir}/${test_id}.json"
+    rm -f "$tc_file" "$pre_file"
+    echo "    captured baseline → ${baseline_dir}/${test_id}.json"
+  fi
+
+  # --compare: emit similarity.json by calling the judge per step
+  if [[ -n "$COMPARE" ]]; then
+    baseline_file="${RESULTS_DIR}/baselines/${COMPARE}/${test_id}.json"
+    if [[ ! -f "$baseline_file" ]]; then
+      echo "    --compare: no baseline at $baseline_file (skipping)" >&2
+    else
+      observed_file="$(mktemp)"
+      runtime_v="$(runtime_version "$RUNTIME" 2>/dev/null || echo "")"
+      jq -s --arg test "$test_id" --arg runtime "$RUNTIME" --arg rtv "$runtime_v" \
+         '{ test: $test, runtime: $runtime, runtime_version: $rtv,
+            steps: [.[]? | select(.step!="__summary__") | { step_id: .step, outcome: .outcome, duration_ms: .duration_ms }] }' \
+         "$out" > "$observed_file"
+      sim_out="${RUN_DIR}/${test_id}.similarity.json"
+      sim_judge_dir="${LLM_JUDGE_DIR:-${REPO_ROOT}/tests/release/cmd/llm-judge}"
+      step_intent="$(yq -r '.description // ""' "$card")"
+      ( cd "$sim_judge_dir" \
+        && go run . similarity \
+             --baseline "$baseline_file" \
+             --observed "$observed_file" \
+             --step-intent "$step_intent" 2>/dev/null > "$sim_out" ) || \
+        echo "    --compare: similarity call failed" >&2
+      rm -f "$observed_file"
+      [[ -s "$sim_out" ]] && echo "    similarity → $sim_out"
+    fi
+  fi
 done
 
 echo ""
