@@ -37,6 +37,7 @@ docs/plans/
 docs/superpowers/
 .agents/
 !codex-plugin/.agents/
+!/.agents/plugins/marketplace.json
 .beads/
 .beads_backup/
 .claude/
