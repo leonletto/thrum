@@ -1,0 +1,4 @@
+interface:
+  display_name: "Coordinator: Managing State"
+  short_description: "Use when ending a session, when updating project state, when managing beads epics, or before session close. Loads coordinator-specific discipline for owning project state and shepherding the team's lifecycle."
+  default_prompt: "Use when managing agent lifecycle and project state."

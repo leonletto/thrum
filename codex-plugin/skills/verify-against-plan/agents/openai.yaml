@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verify Against Plan"
+  short_description: "Use after implementation is complete to verify the code covers every requirement from the plan / design spec — runs alongside code-review as the second pass in the Code Review Protocol. Outputs structured findings: missing scope, unmet acceptance criteria, silent deviations from the spec, newly-introduced surprises."
+  default_prompt: "Use when verifying an implementation against a spec."

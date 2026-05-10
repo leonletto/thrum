@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implementer: Receiving Dispatch"
+  short_description: "Use when receiving a new task from the coordinator, starting implementation, scoping a fresh task, or receiving dispatch. Loads implementer-specific discipline for kicking off work cleanly."
+  default_prompt: "Use when picking up a new implementation task."
