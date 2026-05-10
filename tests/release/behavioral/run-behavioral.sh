@@ -77,6 +77,9 @@ fi
 source "${HELPERS_DIR}/ephemeral-daemon.sh"
 source "${HELPERS_DIR}/render-preamble.sh"
 source "${HELPERS_DIR}/behavioral.sh"
+source "${HELPERS_DIR}/extract-tool-calls.sh"
+# runtime_version is defined in assert-tmux.sh (sourced transitively by
+# behavioral.sh).
 
 # Fixture lifecycle (one fixture for the whole run)
 RUN_TIMESTAMP="$(date -u +%Y-%m-%dT%H-%M-%S)"
@@ -199,6 +202,48 @@ for card in "${cards[@]}"; do
   # Print brief per-test summary
   yq_summary="$(grep '"step":"__summary__"' "$out" | tail -1 || true)"
   echo "    ${yq_summary}"
+
+  # --capture: write a baseline JSON for this test
+  if [[ -n "$CAPTURE" ]]; then
+    baseline_dir="${RESULTS_DIR}/baselines/${CAPTURE}"
+    mkdir -p "$baseline_dir"
+    tc_file="$(mktemp)"
+    extract_tool_calls "$RUNTIME" "${HOME}/.claude/projects" > "$tc_file"
+    runtime_v="$(runtime_version "$RUNTIME" 2>/dev/null || echo "")"
+    jq -s --arg test "$test_id" --arg runtime "$RUNTIME" --arg rtv "$runtime_v" --slurpfile tc "$tc_file" \
+       '{ test: $test, runtime: $runtime, runtime_version: $rtv,
+          steps: [.[]? | select(.step!="__summary__") | { step_id: .step, outcome: .outcome, duration_ms: .duration_ms }],
+          tool_calls: ($tc[0] // []) }' \
+       "$out" > "${baseline_dir}/${test_id}.json"
+    rm -f "$tc_file"
+    echo "    captured baseline → ${baseline_dir}/${test_id}.json"
+  fi
+
+  # --compare: emit similarity.json by calling the judge per step
+  if [[ -n "$COMPARE" ]]; then
+    baseline_file="${RESULTS_DIR}/baselines/${COMPARE}/${test_id}.json"
+    if [[ ! -f "$baseline_file" ]]; then
+      echo "    --compare: no baseline at $baseline_file (skipping)" >&2
+    else
+      observed_file="$(mktemp)"
+      runtime_v="$(runtime_version "$RUNTIME" 2>/dev/null || echo "")"
+      jq -s --arg test "$test_id" --arg runtime "$RUNTIME" --arg rtv "$runtime_v" \
+         '{ test: $test, runtime: $runtime, runtime_version: $rtv,
+            steps: [.[]? | select(.step!="__summary__") | { step_id: .step, outcome: .outcome, duration_ms: .duration_ms }] }' \
+         "$out" > "$observed_file"
+      sim_out="${RUN_DIR}/${test_id}.similarity.json"
+      sim_judge_dir="${LLM_JUDGE_DIR:-${REPO_ROOT}/tests/release/cmd/llm-judge}"
+      step_intent="$(yq -r '.description // ""' "$card")"
+      ( cd "$sim_judge_dir" \
+        && go run . similarity \
+             --baseline "$baseline_file" \
+             --observed "$observed_file" \
+             --step-intent "$step_intent" 2>/dev/null > "$sim_out" ) || \
+        echo "    --compare: similarity call failed" >&2
+      rm -f "$observed_file"
+      [[ -s "$sim_out" ]] && echo "    similarity → $sim_out"
+    fi
+  fi
 done
 
 echo ""

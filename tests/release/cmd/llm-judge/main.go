@@ -253,9 +253,75 @@ func buildDiagnosePrompt(testDesc, stepDesc, failedPredicate, transcript, state 
 	return b.String()
 }
 
-// similarityCmd is implemented by thrum-9mnx.4.
+type similarityResult struct {
+	Score   int    `json:"score"`
+	Diff    string `json:"diff"`
+	PromptV int    `json:"prompt_v"`
+	Model   string `json:"model"`
+}
+
+const similarityPromptV = 1
+
 func similarityCmd(args []string) int {
-	_ = args
-	fmt.Fprintln(os.Stderr, "similarity: not implemented yet (thrum-9mnx.4)")
-	return 1
+	fs := flag.NewFlagSet("similarity", flag.ExitOnError)
+	baselineFile := fs.String("baseline", "", "baseline JSON path")
+	observedFile := fs.String("observed", "", "observed JSON path")
+	stepIntent := fs.String("step-intent", "", "what the step is supposed to verify")
+	_ = fs.Parse(args)
+
+	if *baselineFile == "" || *observedFile == "" {
+		fmt.Fprintln(os.Stderr, "similarity: --baseline and --observed required")
+		return 2
+	}
+	bl, err := os.ReadFile(*baselineFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "similarity: read baseline: %v\n", err)
+		return 1
+	}
+	ob, err := os.ReadFile(*observedFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "similarity: read observed: %v\n", err)
+		return 1
+	}
+
+	c, err := newClient()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "similarity: client: %v\n", err)
+		return 1
+	}
+
+	prompt := fmt.Sprintf(
+		"Score how similar the observed agent behavior is to the baseline (0-5).\n\nINTENT: %s\n\nBASELINE:\n%s\n\nOBSERVED:\n%s\n\nReturn ONLY JSON: {\"score\": <int>, \"diff\": \"<one-sentence diff>\"}.",
+		*stepIntent, string(bl), string(ob))
+
+	ctx, cancel := context.WithTimeout(context.Background(), chatTimeout)
+	defer cancel()
+	resp, err := c.Chat(ctx, modelName(), []llmclient.ChatMessage{
+		{Role: "user", Content: prompt},
+	}, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "similarity: %v\n", err)
+		return 1
+	}
+	text := strings.TrimSpace(resp.Content)
+	text = strings.TrimPrefix(text, "```json")
+	text = strings.TrimPrefix(text, "```")
+	text = strings.TrimSuffix(text, "```")
+	text = strings.TrimSpace(text)
+	var parsed struct {
+		Score int    `json:"score"`
+		Diff  string `json:"diff"`
+	}
+	if err := json.Unmarshal([]byte(text), &parsed); err != nil {
+		fmt.Fprintf(os.Stderr, "similarity: model returned non-JSON: %s\n", text)
+		return 1
+	}
+	out, _ := json.Marshal(similarityResult{
+		Score:   parsed.Score,
+		Diff:    parsed.Diff,
+		PromptV: similarityPromptV,
+		Model:   resp.Model,
+	})
+	fmt.Println(string(out))
+	return 0
 }
