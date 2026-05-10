@@ -4,18 +4,18 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/behavioral.sh"
 
-TMPDIR="$(mktemp -d)"
-trap 'rm -rf "$TMPDIR"' EXIT
+WORK_DIR="$(mktemp -d)"
+trap 'rm -rf "$WORK_DIR"' EXIT
 
 # Smoke fixture
-export FIXTURE_REPO="$TMPDIR/repo"
-export FIXTURE_WORKSPACES="$TMPDIR/workspaces"
+export FIXTURE_REPO="$WORK_DIR/repo"
+export FIXTURE_WORKSPACES="$WORK_DIR/workspaces"
 export FIXTURE_THRUM="$FIXTURE_REPO/.thrum"
 export RUNTIME=bash
 mkdir -p "$FIXTURE_REPO" "$FIXTURE_WORKSPACES"
 
 # Minimal card with one step that polls fs.dir_exists and passes.
-CARD="$TMPDIR/smoke.yaml"
+CARD="$WORK_DIR/smoke.yaml"
 cat > "$CARD" <<'EOF'
 id: smoke-driver
 description: driver smoke test
@@ -27,7 +27,7 @@ steps:
       - { kind: fs, predicate: dir_exists, path: "${FIXTURE_REPO}" }
 EOF
 
-OUT="$TMPDIR/out.jsonl"
+OUT="$WORK_DIR/out.jsonl"
 behavioral_run_card "$CARD" "$OUT" || { echo "FAIL: behavioral_run_card returned non-zero"; cat "$OUT"; exit 1; }
 
 # Verify JSONL has a PASS record for check-tmp

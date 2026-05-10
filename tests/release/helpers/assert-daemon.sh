@@ -10,19 +10,17 @@ _thrum() {
 }
 
 # Run thrum impersonating a specific agent (so 'inbox' returns that agent's
-# inbox view). Used by recipient-filtered predicates.
-#
-# thrum's cross_worktree identity guard compares the caller's PID ancestry
-# against the session the agent was registered in. When called from within a
-# Claude session the guard fires and inbox returns empty. We route through
-# ephemeral_te_exec (scripts/tmux-exec pool pane) to break the PID chain.
-# The cwd is set to FIXTURE_REPO so identity files resolve correctly.
+# inbox view). The guard's cross-worktree check is set to "warn" mode by
+# ephemeral_daemon_start so calls succeed; we still need to:
+#   1. cd to FIXTURE_REPO so identity-file lookup finds the right .thrum/
+#   2. unset THRUM_HOME so it doesn't override cwd back to the harness
+#      worktree (the caller is typically running inside a Claude session
+#      where THRUM_HOME points at the impl_behavioral worktree).
 _thrum_as() {
   local agent="$1"; shift
-  # ephemeral_te_exec runs with --cwd FIXTURE_REPO so thrum's git-discovery
-  # finds the right repo, but pass --repo explicitly to defend against any
-  # caller invoking us from a different cwd.
-  ephemeral_te_exec THRUM_NAME="$agent" -- thrum --repo "${FIXTURE_REPO:-.}" "$@"
+  ( cd "${FIXTURE_REPO:-.}" \
+    && env -u THRUM_HOME -u THRUM_AGENT_ID -u THRUM_INTENT THRUM_NAME="$agent" \
+       thrum --repo "${FIXTURE_REPO:-.}" "$@" )
 }
 
 assert_daemon_agent_registered() {
@@ -54,21 +52,22 @@ assert_daemon_message_delivered() {
   return 1
 }
 
+# A reply from R to original-sender O lives in O's inbox (NOT R's).
+# Caller must pass the original sender so we can scan the right inbox.
+# Signature: assert_daemon_agent_replied_to <replier> <replied_to_msg_id> <original_sender>
 assert_daemon_agent_replied_to() {
-  local replier="$1" replied_to="$2"
-  # The reply itself sits in the original sender's inbox. We don't always
-  # know that sender here, so search across all participants by querying
-  # the daemon's full message log via --all from the replier's view —
-  # the replier's outbox is reflected in their thread. If no reliable
-  # reply lookup CLI exists, fall back to scanning every known agent's
-  # inbox; for fixture tests this is bounded to ~3 agents.
+  local replier="$1" replied_to="$2" original_sender="${3:-}"
+  if [[ -z "$original_sender" ]]; then
+    echo "assert-daemon.agent_replied_to: original_sender argument required (replies sit in the original sender's inbox, not the replier's)" >&2
+    return 2
+  fi
   local match
-  match=$(_thrum_as "$replier" inbox --json --all 2>/dev/null \
+  match=$(_thrum_as "$original_sender" inbox --json --all 2>/dev/null \
     | jq -r --arg r "$replier" --arg m "$replied_to" \
         '(.messages // .) | .[]? | select(.agent_id==$r and .reply_to==$m) | .message_id' \
     || true)
   if [[ -n "$match" ]]; then return 0; fi
-  echo "assert-daemon.agent_replied_to: no reply from=$replier to=$replied_to (note: scoped to replier's inbox; may need cross-agent scan)" >&2
+  echo "assert-daemon.agent_replied_to: no reply from=$replier to_msg=$replied_to in inbox of=$original_sender" >&2
   return 1
 }
 
@@ -87,8 +86,12 @@ assert_daemon_agent_session_active() {
     echo "assert-daemon.agent_session_active: no last_seen_at for $agent" >&2
     return 1
   fi
+  # Portable epoch parse: prefer python3 (one path, GNU+BSD), fall back to
+  # date variants. Returns 0 on unparseable, which makes the agent appear
+  # stale rather than spuriously fresh.
   local last_epoch now_epoch delta
-  last_epoch=$(date -j -f '%Y-%m-%dT%H:%M:%S' "${last_seen%%.*}" +%s 2>/dev/null || \
+  last_epoch=$(python3 -c "import sys, datetime; s=sys.argv[1].split('.')[0].rstrip('Z'); print(int(datetime.datetime.fromisoformat(s).replace(tzinfo=datetime.timezone.utc).timestamp()))" "$last_seen" 2>/dev/null || \
+               date -j -f '%Y-%m-%dT%H:%M:%S' "${last_seen%%.*}" +%s 2>/dev/null || \
                date -d "$last_seen" +%s 2>/dev/null || echo 0)
   now_epoch=$(date +%s)
   delta=$((now_epoch - last_epoch))

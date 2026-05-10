@@ -136,8 +136,8 @@ _behavioral_run_assertion() {
       esac
       ;;
     llm_judge)
-      # Stub for Task 11 — for now always fail closed with a clear message.
-      echo "behavioral: kind=llm_judge not implemented yet (Task 11)" >&2
+      # Stub for thrum-9mnx.3 — for now always fail closed with a clear message.
+      echo "behavioral: kind=llm_judge not implemented yet (thrum-9mnx.3)" >&2
       return 1
       ;;
     *)
@@ -188,15 +188,24 @@ behavioral_run_card() {
     poll_interval="$(yq -r ".steps[$i].poll_interval // 3" "$card")"
     start_ms=$(_behavioral_epoch_ms)
 
-    # Optional send
+    # Optional send. Surface delivery failures as a FAIL JSONL record
+    # rather than silently swallowing them — otherwise a kickoff message
+    # that never lands would masquerade as "assertion timed out."
+    local send_failed=0 send_err=""
     if [[ "$(yq -r ".steps[$i].send" "$card")" != "null" ]]; then
       local to msg
       to="$(yq -r ".steps[$i].send.to" "$card")"
       msg="$(_behavioral_substitute "$(yq -r ".steps[$i].send.message" "$card")")"
-      thrum --repo "${FIXTURE_REPO:-.}" send --to "$to" "$msg" >/dev/null 2>&1 || true
+      send_err=$(thrum --repo "${FIXTURE_REPO:-.}" send --to "$to" "$msg" 2>&1 >/dev/null) || send_failed=1
     fi
 
-    if _behavioral_run_step_assertions "$card" "$i" "$timeout_s" "$poll_interval"; then
+    if [[ $send_failed -eq 1 ]]; then
+      local end_ms; end_ms=$(_behavioral_epoch_ms)
+      local err_json; err_json=$(printf '%s' "send failed: $send_err" | jq -Rs .)
+      printf '{"test":"%s","step":"%s","outcome":"FAIL","duration_ms":%d,"diagnostic":%s}\n' \
+        "$test_id" "$step_id" "$((end_ms - start_ms))" "$err_json" >> "$out"
+      failed=$((failed+1))
+    elif _behavioral_run_step_assertions "$card" "$i" "$timeout_s" "$poll_interval"; then
       local end_ms; end_ms=$(_behavioral_epoch_ms)
       printf '{"test":"%s","step":"%s","outcome":"PASS","duration_ms":%d}\n' \
         "$test_id" "$step_id" "$((end_ms - start_ms))" >> "$out"

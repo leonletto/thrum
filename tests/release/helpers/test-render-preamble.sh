@@ -4,11 +4,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/render-preamble.sh"
 
-TMPDIR="$(mktemp -d)"
-trap 'rm -rf "$TMPDIR"' EXIT
+WORK_DIR="$(mktemp -d)"
+trap 'rm -rf "$WORK_DIR"' EXIT
 
 # Source preamble with all five tokens
-SRC="$TMPDIR/src.md"
+SRC="$WORK_DIR/src.md"
 cat > "$SRC" <<'EOF'
 You are {{.AgentName}} working in module {{.Module}}.
 Worktree: {{.WorktreePath}}
@@ -17,7 +17,7 @@ Repo root: {{.RepoRoot}}
 EOF
 
 # Fixture
-export FIXTURE_REPO="$TMPDIR/fixture"
+export FIXTURE_REPO="$WORK_DIR/fixture"
 mkdir -p "$FIXTURE_REPO/.thrum/role_templates"
 
 # Render — coordinator role, agent_name=test_coordinator

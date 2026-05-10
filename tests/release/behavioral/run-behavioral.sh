@@ -89,7 +89,21 @@ mkdir -p "$RUN_DIR"
 # $TMPDIR push the .thrum/daemon.sock path past the limit and cause
 # "timeout waiting for daemon to start".
 FIXTURE_BASE="$(mktemp -d /tmp/bh-XXXXXX)"
-trap 'ephemeral_daemon_stop; rm -rf "$FIXTURE_BASE"' EXIT
+
+# Cleanup honors THRUM_BEHAVIORAL_NO_TEARDOWN=1 so failed runs preserve the
+# fixture for forensic inspection (mirrors the scenarios fixture pattern).
+total_fail=0
+_cleanup() {
+  if [[ "${THRUM_BEHAVIORAL_NO_TEARDOWN:-0}" == "1" && ${total_fail:-0} -gt 0 ]]; then
+    echo "THRUM_BEHAVIORAL_NO_TEARDOWN=1: fixture preserved at $FIXTURE_BASE (failures=${total_fail})" >&2
+    ephemeral_daemon_stop
+  else
+    ephemeral_daemon_stop
+    rm -rf "$FIXTURE_BASE"
+  fi
+}
+trap _cleanup EXIT
+
 if ! ephemeral_daemon_start "$FIXTURE_BASE"; then
   echo "ERROR: ephemeral-daemon setup failed" >&2
   exit 2
@@ -128,12 +142,44 @@ if [[ ${#cards[@]} -eq 0 ]]; then
   exit 2
 fi
 
-total_pass=0 total_fail=0
+# Register and tmux-launch any agents declared in the card's `agents:`
+# block. Convention: derive agent name as `test_<role>`, use the YAML
+# key as the tmux session name. Module defaults to "main" unless the
+# card specifies one. Each call is best-effort; if registration or
+# launch fails the dispatch step's send will surface it.
+_register_card_agents() {
+  local card="$1"
+  local agent_key role module session_name agent_name
+  while IFS= read -r agent_key; do
+    [[ -z "$agent_key" || "$agent_key" == "null" ]] && continue
+    role="$(yq -r ".agents.${agent_key}.role // \"\"" "$card")"
+    [[ -z "$role" || "$role" == "null" ]] && {
+      echo "WARN: agent '${agent_key}' has no role; skipping" >&2
+      continue
+    }
+    module="$(yq -r ".agents.${agent_key}.module // \"main\"" "$card")"
+    session_name="${agent_key}"
+    agent_name="test_${role}"
+    echo "  registering agent: name=${agent_name} role=${role} module=${module} session=${session_name}"
+    ( cd "$FIXTURE_REPO" \
+      && env -u THRUM_HOME -u THRUM_AGENT_ID -u THRUM_INTENT \
+         thrum --repo "$FIXTURE_REPO" tmux create "$session_name" \
+           --name "$agent_name" --role "$role" --module "$module" \
+           --runtime "$RUNTIME" --force >/dev/null 2>&1 ) || true
+    ( cd "$FIXTURE_REPO" \
+      && env -u THRUM_HOME -u THRUM_AGENT_ID -u THRUM_INTENT \
+         thrum --repo "$FIXTURE_REPO" tmux launch "$session_name" \
+           --runtime "$RUNTIME" >/dev/null 2>&1 ) || true
+  done < <(yq -r '.agents | keys // [] | .[]' "$card")
+}
+
+total_pass=0
 for card in "${cards[@]}"; do
   bash "${RUNNER_DIR}/validate-card.sh" "$card" || exit 2
   test_id="$(yq -r '.id' "$card")"
   out="${RUN_DIR}/${test_id}.jsonl"
   echo "==> ${test_id}"
+  _register_card_agents "$card"
   if behavioral_run_card "$card" "$out"; then
     pass=1
     total_pass=$((total_pass+1))
