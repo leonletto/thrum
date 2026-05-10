@@ -8,7 +8,7 @@
       "name": "thrum",
       "source": {
         "source": "local",
-        "path": "./"
+        "path": "./plugins/thrum"
       },
       "policy": {
         "installation": "AVAILABLE",

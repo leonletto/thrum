@@ -22,7 +22,7 @@ and one-time migration notes.
 | `hooks/hooks.json` | Wires SessionStart (`startup\|resume\|clear`), PreToolUse (Bash), Stop |
 | `scripts/` | Three lifecycle hook scripts ported from claude-plugin: `inject-prime-context.sh`, `block-sync-worktree-cd.sh`, `stop-check-messages.sh` |
 | `.codex-plugin/plugin.json` | Manifest (kept version-aligned with `claude-plugin/.claude-plugin/plugin.json` via `make ci`) |
-| `.agents/plugins/marketplace.json` | Marketplace wrapper (`source.path: "./"`) |
+| `../../.agents/plugins/marketplace.json` | Marketplace wrapper at `codex-plugin/.agents/plugins/marketplace.json`; `source.path: "./plugins/thrum"` (mirrors openai-bundled layout) |
 
 ## Repository
 

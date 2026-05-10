@@ -263,12 +263,16 @@ EOF
 # ─── Codex target ───────────────────────────────────────────────────────────
 
 sync_codex() {
-  local CODEX_PLUGIN="${REPO_ROOT}/codex-plugin"
+  # codex-plugin layout (matches openai-bundled marketplace shape):
+  # codex-plugin/.agents/plugins/marketplace.json points at ./plugins/thrum.
+  # All skills/hooks/scripts/manifest live under codex-plugin/plugins/thrum/.
+  local CODEX_MARKETPLACE="${REPO_ROOT}/codex-plugin"
+  local CODEX_PLUGIN="${CODEX_MARKETPLACE}/plugins/thrum"
   local CODEX_SKILLS="${CODEX_PLUGIN}/skills"
   local THRUM_RESOURCES="${CODEX_SKILLS}/thrum/resources"
 
   if [[ ! -d "${CODEX_PLUGIN}" ]]; then
-    echo "skip: codex-plugin/ not found"
+    echo "skip: codex-plugin/plugins/thrum/ not found"
     return
   fi
 

@@ -361,7 +361,7 @@ vulncheck:
 # Verify codex-plugin and claude-plugin manifest versions stay in sync.
 # Spec ref: dev-docs/specs/codex-plugin-first-class.md §6 (Versioning policy).
 check-plugin-versions:
-	@codex_v=$$(awk -F'"' '/"version"/ {print $$4; exit}' codex-plugin/.codex-plugin/plugin.json); \
+	@codex_v=$$(awk -F'"' '/"version"/ {print $$4; exit}' codex-plugin/plugins/thrum/.codex-plugin/plugin.json); \
 	claude_v=$$(awk -F'"' '/"version"/ {print $$4; exit}' claude-plugin/.claude-plugin/plugin.json); \
 	if [ "$$codex_v" != "$$claude_v" ]; then \
 		echo "ERROR: codex-plugin version ($$codex_v) != claude-plugin version ($$claude_v) — keep them in sync"; \

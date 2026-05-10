@@ -25,7 +25,7 @@ codex plugin marketplace upgrade thrum-marketplace
 For users on a clone of the thrum repo or developing the plugin:
 
 ```bash
-./codex-plugin/scripts/install-skills.sh --force
+./codex-plugin/plugins/thrum/scripts/install-skills.sh --force
 ```
 
 Installs skills directly into `${HOME}/.agents/skills/` (canonical path as of codex v0.130.0).
