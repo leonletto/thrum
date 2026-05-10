@@ -9,10 +9,14 @@
 # Dependencies: jq 1.6+ (for now/fromdate), thrum CLI
 # This is an instant check (no blocking wait) — runs in <1s per turn.
 
+# -e intentionally omitted: external commands use || true / || exit 0 guards.
+set -uo pipefail
+
 # Read hook input JSON — we need stop_hook_active to prevent infinite loops
 INPUT=$(cat)
 
-# Step 1: Parse cwd from stdin (codex always provides it in Stop hook input).
+# Phase 0 (per spec §3.3.1 step 1): Parse cwd from stdin
+# (codex always provides it in Stop hook input).
 CWD=$(echo "$INPUT" | jq -r '.cwd // "."')
 
 # Check if we're already in a stop-hook continuation cycle
