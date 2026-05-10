@@ -14,15 +14,50 @@
   ```
 - `thrum` CLI on `PATH`
 
-## Recommended: Marketplace install (Git source)
+## Recommended: One-shot install script
+
+Codex 0.130.0's `codex plugin marketplace add` registers third-party marketplaces but doesn't auto-populate the per-plugin cache (the directory under `~/.codex/plugins/cache/` that hooks load from). The plugin ships a script that handles the full install including the cache-staging step:
 
 ```bash
-codex plugin marketplace add leonletto/thrum --ref thrum-dev
-# Then enable the plugin:
-printf '\n[plugins."thrum@thrum-marketplace"]\nenabled = true\n' >> ~/.codex/config.toml
+# If you have the repo cloned:
+bash ./codex-plugin/plugins/thrum/scripts/install-plugin.sh
+
+# Or one-shot from anywhere:
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/codex-plugin/plugins/thrum/scripts/install-plugin.sh | bash
 ```
 
-This stages the thrum plugin into `~/.codex/plugins/cache/thrum-marketplace/thrum/<version>/` and registers the marketplace in `~/.codex/config.toml`. Use `--ref v0.10.3` (or any release tag) for stable installs; `--ref thrum-dev` for pre-release.
+The script is idempotent — re-run any time to pull the latest revision. Override the install ref with `THRUM_INSTALL_REF=v0.10.3` for a specific release tag.
+
+After the script completes, follow the "First-run hook approval" steps below.
+
+### Have an AI agent do it
+
+If you have an AI assistant (claude, codex, kiro, etc.) running locally, point it at the agent-instructions doc — it handles everything up to the manual `/hooks` approval:
+
+```
+Please install the Thrum codex plugin by following:
+https://github.com/leonletto/thrum/blob/thrum-dev/codex-plugin/plugins/thrum/agent-instructions.md
+```
+
+Your agent will read the file, run the installer, and tell you when it's time to restart codex and approve hooks.
+
+## Manual: low-level marketplace flow
+
+If you'd rather drive the install steps yourself:
+
+```bash
+# 1. Register marketplace
+codex plugin marketplace add leonletto/thrum --ref thrum-dev
+
+# 2. Stage cache (codex 0.130.0 doesn't do this for third-party marketplaces)
+VERSION=$(jq -r '.version' ~/.codex/.tmp/marketplaces/thrum-marketplace/codex-plugin/plugins/thrum/.codex-plugin/plugin.json)
+mkdir -p ~/.codex/plugins/cache/thrum-marketplace/thrum/$VERSION
+cp -R ~/.codex/.tmp/marketplaces/thrum-marketplace/codex-plugin/plugins/thrum/. ~/.codex/plugins/cache/thrum-marketplace/thrum/$VERSION/
+
+# 3. Enable plugin + plugin_hooks feature
+printf '\n[plugins."thrum@thrum-marketplace"]\nenabled = true\n' >> ~/.codex/config.toml
+# Then add plugin_hooks = true under [features] in ~/.codex/config.toml
+```
 
 The marketplace manifest at the repo root (`<repo>/.agents/plugins/marketplace.json`) points at `./codex-plugin/plugins/thrum` — codex's Git-source flow looks for marketplace.json at the staging root, so the repo-root manifest is required (the `codex-plugin/.agents/plugins/marketplace.json` is kept for local-source installs from a clone).
 
@@ -30,6 +65,7 @@ To upgrade later:
 
 ```bash
 codex plugin marketplace upgrade thrum-marketplace
+# Then re-stage the cache (steps 2-3 above), or just re-run install-plugin.sh.
 ```
 
 ## Alternative: Local-clone install (dev only)
