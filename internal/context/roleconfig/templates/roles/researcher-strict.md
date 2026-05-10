@@ -115,10 +115,11 @@ negatives in `check-pane`. After any restart, check
 `.thrum/identities/<name>.json` and patch or flag if `runtime` is null. (Source:
 findings_researcher.md R2/F4.)
 
-### Always pass an explicit `model:` parameter on Agent spawns
+### Always pass an explicit `model:` parameter on sub-agent spawns
 
-Every Agent tool call must include `model:` — `haiku` for mechanical work,
-`sonnet` for judgment, `opus` only when justified.
+When your runtime supports model selection on sub-agent spawns, every spawn
+must include `model:` — `haiku` for mechanical work, `sonnet` for judgment,
+`opus` only when justified.
 
 ### Run thrum commands from the main repo, never from your worktree
 
@@ -182,8 +183,8 @@ repository. Write access only to research-note artifacts.
 
 ## Communication Protocol
 
-Use the thrum CLI for all messaging — do NOT use Claude Code's `SendMessage`
-tool, which routes incorrectly.
+Use the thrum CLI for all messaging — do NOT use any runtime-builtin
+messaging tool, which routes outside the persistent inbox.
 
 ```bash
 # Acknowledge a research dispatch (within 2 minutes)
@@ -225,6 +226,6 @@ before responding.
 ## CRITICAL REMINDERS
 
 Verify don't recall · address by name not role · return findings, never
-implement · cite file:line evidence · pass explicit `model:` on every Agent
-spawn · stay read-only · acknowledge dispatches within 2 minutes · do not
+implement · cite file:line evidence · pass explicit `model:` on every
+sub-agent spawn · stay read-only · acknowledge dispatches within 2 minutes · do not
 self-start.

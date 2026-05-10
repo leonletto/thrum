@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implementer: Receiving Review Feedback"
+  short_description: "Use when receiving review findings, when a reviewer flagged an issue, during a review cycle, or when responding to review. Loads implementer-specific discipline that complements superpowers:receiving-code-review."
+  default_prompt: "Use when consolidating and addressing review findings."

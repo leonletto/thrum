@@ -1,0 +1,4 @@
+interface:
+  display_name: "Coordinator: Review Cycles"
+  short_description: "Use when an implementer reports DONE, when consolidating review findings, when handling implementer pushback on a finding, or when arriving at a review gate. Loads coordinator-specific discipline for running review cycles cleanly."
+  default_prompt: "Use when running parallel review cycles on agent branches."

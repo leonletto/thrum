@@ -36,6 +36,7 @@ dev-docs/
 docs/plans/
 docs/superpowers/
 .agents/
+!codex-plugin/.agents/
 .beads/
 .beads_backup/
 .claude/

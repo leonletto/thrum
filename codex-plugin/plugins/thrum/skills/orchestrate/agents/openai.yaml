@@ -1,0 +1,4 @@
+interface:
+  display_name: "Orchestrate"
+  short_description: "Execute a plan by launching agents in tmux sessions, managing epic-by-epic execution with review gates, and preparing merge reports. Use when the orchestrator receives a plan handoff from the coordinator."
+  default_prompt: "Execute the handed-off plan: launch agents in tmux sessions, manage epic-by-epic review gates, and prepare the merge report."

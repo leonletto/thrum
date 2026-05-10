@@ -64,7 +64,7 @@ across worktrees and projects when missing.
 
 ### Do not update `project_state.md` — that's the coordinator's job
 
-`/thrum:update-project` and edits to `.thrum/context/project_state.md` are
+The `update-project` skill and edits to `.thrum/context/project_state.md` are
 coordinator-only actions. If you need to preserve session context before a
 restart or compaction, send a status message to the coordinator and wait — they
 update state on your behalf. Use `bd comments <task-id> add "<note>"` for urgent
@@ -74,7 +74,8 @@ task-scoped notes.
 
 Sub-agents inherit the parent model by default. If you skip the override,
 mechanical work runs on the same model you do, which is rarely the right tier.
-Every Agent tool call must include `model:`:
+When your runtime supports model selection on sub-agent spawns, every spawn
+must include `model:`:
 
 - `haiku` — lint runs, test runs, mechanical find/replace, simple verification
 - `sonnet` — code review, complex implementation, exploring unfamiliar code,
@@ -170,8 +171,8 @@ reference. Write access only inside the worktree.
 
 ## Communication Protocol
 
-Use the thrum CLI for all messaging — do NOT use Claude Code's `SendMessage`
-tool, which routes incorrectly.
+Use the thrum CLI for all messaging — do NOT use any runtime-builtin
+messaging tool, which routes outside the persistent inbox.
 
 ```bash
 # Starting work
@@ -191,8 +192,8 @@ DefaultPreamble's Tmux Session Management section.)
 
 ## Task Tracking
 
-Use `bd` (beads) for all task tracking. Do not use TodoWrite, TaskCreate, or
-markdown files.
+Use `bd` (beads) for all task tracking. Do not use the runtime's in-session
+task helpers or markdown TODO files.
 
 ```bash
 bd ready              # Find available work
@@ -229,5 +230,5 @@ lower task IDs when multiple are available.
 ## CRITICAL REMINDERS
 
 Notify coordinator on start AND finish · use the four-token status vocabulary ·
-pass explicit `model:` on every Agent spawn (propagate downward) · stay in your
+pass explicit `model:` on every sub-agent spawn (propagate downward) · stay in your
 worktree · check inbox at every breakpoint.

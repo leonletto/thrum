@@ -14,7 +14,6 @@ CLAUDE_PLUGIN="${REPO_ROOT}/claude-plugin"
 CLAUDE_SKILLS="${CLAUDE_PLUGIN}/skills"
 CLAUDE_COMMANDS="${CLAUDE_PLUGIN}/commands"
 CLAUDE_RESOURCES="${CLAUDE_SKILLS}/thrum/resources"
-CLAUDE_PROJECT_RESOURCES="${CLAUDE_SKILLS}/project-setup/resources"
 
 sync_tree() {
   local src="$1"
@@ -197,38 +196,106 @@ EOF
   echo "  generated skill ${skill_name}"
 }
 
+replace_claude_skill_syntax() {
+  # Rewrite claude-specific skill-invocation syntax (/thrum:foo) to codex's
+  # flat-skill form ($thrum-foo). Operates on a single file in place.
+  # Spec ref: dev-docs/specs/codex-plugin-first-class.md anti-pattern #1.
+  local file="$1"
+  [[ -f "${file}" ]] || return 0
+  local tmp
+  tmp="$(mktemp)"
+  sed 's|/thrum:\([a-z][a-z0-9-]*\)|$thrum-\1|g' "${file}" > "${tmp}"
+  mv "${tmp}" "${file}"
+}
+
+adapt_codex_skill() {
+  local src_skill_dir="$1"
+  local dst_skill_dir="$2"
+  local display_name="$3"
+  local default_prompt="$4"
+  local skill_name src_skill_md description body_file
+
+  src_skill_md="${src_skill_dir}/SKILL.md"
+  if [[ ! -f "${src_skill_md}" ]]; then
+    echo "  skip: ${src_skill_dir} has no SKILL.md" >&2
+    return
+  fi
+
+  skill_name="$(basename "${src_skill_dir}")"
+
+  rm -rf "${dst_skill_dir}"
+  mkdir -p "${dst_skill_dir}/agents"
+
+  description="$(extract_frontmatter_value "${src_skill_md}" "description")"
+  [[ -n "${description}" ]] || description="${display_name}"
+
+  body_file="$(mktemp)"
+  cat > "${body_file}" <<EOF
+---
+name: ${skill_name}
+description: "${description//\"/\\\"}"
+# source: claude-plugin/skills/${skill_name}/SKILL.md
+# generated-by: scripts/sync-skills.sh
+---
+
+EOF
+  strip_frontmatter "${src_skill_md}" | normalize_headings >> "${body_file}"
+
+  mv "${body_file}" "${dst_skill_dir}/SKILL.md"
+  replace_claude_skill_syntax "${dst_skill_dir}/SKILL.md"
+
+  if [[ -d "${src_skill_dir}/resources" ]]; then
+    sync_tree "${src_skill_dir}/resources" "${dst_skill_dir}/resources"
+    while IFS= read -r -d '' rfile; do
+      replace_claude_skill_syntax "${rfile}"
+    done < <(find "${dst_skill_dir}/resources" -type f -print0)
+  fi
+
+  write_openai_metadata \
+    "${dst_skill_dir}" \
+    "${display_name}" \
+    "${description}" \
+    "${default_prompt}"
+
+  echo "  adapted skill ${skill_name}"
+}
+
 # ─── Codex target ───────────────────────────────────────────────────────────
 
 sync_codex() {
-  local CODEX_PLUGIN="${REPO_ROOT}/codex-plugin"
+  # codex-plugin layout (matches openai-bundled marketplace shape):
+  # codex-plugin/.agents/plugins/marketplace.json points at ./plugins/thrum.
+  # All skills/hooks/scripts/manifest live under codex-plugin/plugins/thrum/.
+  local CODEX_MARKETPLACE="${REPO_ROOT}/codex-plugin"
+  local CODEX_PLUGIN="${CODEX_MARKETPLACE}/plugins/thrum"
   local CODEX_SKILLS="${CODEX_PLUGIN}/skills"
   local THRUM_RESOURCES="${CODEX_SKILLS}/thrum/resources"
-  local PROJECT_RESOURCES="${CODEX_SKILLS}/thrum-project-setup/resources"
 
   if [[ ! -d "${CODEX_PLUGIN}" ]]; then
-    echo "skip: codex-plugin/ not found"
+    echo "skip: codex-plugin/plugins/thrum/ not found"
     return
   fi
 
   echo "── codex-plugin ──"
 
+  # Legacy directories from earlier naming schemes — adapted skills now use
+  # the canonical (unprefixed) names sourced from claude-plugin/skills/.
   rm -rf \
     "${CODEX_SKILLS}/thrum-core" \
     "${CODEX_SKILLS}/thrum-ops" \
     "${CODEX_SKILLS}/thrum-role-config" \
+    "${CODEX_SKILLS}/thrum-configure-roles" \
+    "${CODEX_SKILLS}/thrum-project-setup" \
     "${CODEX_SKILLS}/project-setup"
   rm -f "${CODEX_SKILLS}/update-project.md"
 
   if [[ -d "${CLAUDE_RESOURCES}" ]]; then
     mkdir -p "${CODEX_SKILLS}/thrum"
     sync_tree "${CLAUDE_RESOURCES}" "${THRUM_RESOURCES}"
+    while IFS= read -r -d '' rfile; do
+      replace_claude_skill_syntax "${rfile}"
+    done < <(find "${THRUM_RESOURCES}" -type f -print0)
     echo "  synced thrum resources -> thrum/resources/"
-  fi
-
-  if [[ -d "${CLAUDE_PROJECT_RESOURCES}" ]]; then
-    mkdir -p "${CODEX_SKILLS}/thrum-project-setup"
-    sync_tree "${CLAUDE_PROJECT_RESOURCES}" "${PROJECT_RESOURCES}"
-    echo "  synced project resources -> thrum-project-setup/resources/"
   fi
 
   if [[ -d "${CLAUDE_COMMANDS}" ]]; then
@@ -236,6 +303,41 @@ sync_codex() {
       generate_codex_command_skill "${cmd_file}" "${CODEX_SKILLS}"
     done
   fi
+
+  # Parity list: claude-plugin skills that aren't command-derived. Each entry:
+  #   <src-skill-name>|<display-name>|<default-prompt>
+  # The adapt loop drops the legacy thrum- prefix and produces SKILL.md +
+  # agents/openai.yaml + resources/ (when present in source).
+  local PARITY_SKILLS=(
+    "adversarial-critique|Adversarial Critique|Critique a plan or proposal adversarially before agreeing."
+    "configure-roles|Configure Roles|Configure thrum role templates for this project."
+    "coordinator-dispatching-work|Coordinator: Dispatching Work|Use before dispatching work to an implementer."
+    "coordinator-managing-state-and-lifecycle|Coordinator: Managing State|Use when managing agent lifecycle and project state."
+    "coordinator-running-review-cycles|Coordinator: Review Cycles|Use when running parallel review cycles on agent branches."
+    "efficient-multi-agent-research|Efficient Multi-Agent Research|Use when delegating research across multiple agents."
+    "implementer-receiving-dispatch|Implementer: Receiving Dispatch|Use when picking up a new implementation task."
+    "implementer-receiving-review-feedback|Implementer: Receiving Review Feedback|Use when consolidating and addressing review findings."
+    "implementer-status-and-handoff|Implementer: Status & Handoff|Use when reporting status or handing off work."
+    "implementer-tdd-and-quality|Implementer: TDD & Quality|Use when writing or modifying code with quality discipline."
+    "project-philosophy|Project Philosophy|Use when philosophical/architectural decisions need framing."
+    "project-setup|Project Setup|Use when setting up a new thrum project."
+    "researcher-answering-queries|Researcher: Answering Queries|Use when fielding a research request from another agent."
+    "researcher-investigating|Researcher: Investigating|Use when starting an investigation or exploration task."
+    "researcher-maintaining-memory|Researcher: Maintaining Memory|Use after research to update memory and indexes."
+    "verify-against-plan|Verify Against Plan|Use when verifying an implementation against a spec."
+  )
+
+  local entry skill_name display_name default_prompt src dst
+  for entry in "${PARITY_SKILLS[@]}"; do
+    IFS='|' read -r skill_name display_name default_prompt <<< "${entry}"
+    src="${CLAUDE_SKILLS}/${skill_name}"
+    dst="${CODEX_SKILLS}/${skill_name}"
+    if [[ -d "${src}" ]]; then
+      adapt_codex_skill "${src}" "${dst}" "${display_name}" "${default_prompt}"
+    else
+      echo "  skip: ${skill_name} (no source at ${src})" >&2
+    fi
+  done
 
   echo "  codex sync complete"
 }

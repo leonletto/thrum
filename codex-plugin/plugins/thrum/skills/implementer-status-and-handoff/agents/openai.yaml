@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implementer: Status & Handoff"
+  short_description: "Use when reporting status to the coordinator, marking a task done, or handing off completed work. Loads implementer-specific discipline for closing the loop cleanly."
+  default_prompt: "Use when reporting status or handing off work."

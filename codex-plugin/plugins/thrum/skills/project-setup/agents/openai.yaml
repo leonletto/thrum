@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Setup"
+  short_description: "Use when converting a plan file (from writing-plans skill) into beads epics, tasks, implementation prompts, and worktrees — before any coding begins"
+  default_prompt: "Use when setting up a new thrum project."

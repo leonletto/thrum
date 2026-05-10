@@ -1,0 +1,4 @@
+interface:
+  display_name: "Adversarial Critique"
+  short_description: "Use when an implementer is blocked mid-work by a design flaw, contradiction, or unforeseen fork with 2-3 ways to resolve it - produces a defended pick that unblocks the work and leaves an audit trail so the decision can be revisited if it later proves wrong"
+  default_prompt: "Critique a plan or proposal adversarially before agreeing."

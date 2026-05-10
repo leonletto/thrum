@@ -160,11 +160,12 @@ Flags:
 --name string            Human-readable agent name (defaults to role_hash)
 --display string         Display name for the agent
 --intent string          Initial work intent description
---runtime string         Runtime preset: claude, codex, cursor, gemini, auggie, cli-only
+--runtime string         Runtime preset: claude, codex, cursor, gemini, opencode, auggie, cli-only
 --preamble-file string   Custom preamble file to compose with default preamble
 --no-init                Skip runtime config generation, just register agent
 --force                  Overwrite existing runtime config files
 --dry-run                Preview changes without writing files or registering
+--no-agent-pid           Persist agent_pid=0 instead of detecting the runtime ancestor; defers PID claim to first /thrum:prime (used for inline tmux quickstart)
 ```
 
 ### agent register
@@ -410,10 +411,11 @@ thrum daemon status --json
 thrum daemon start --local                     # Local-only mode (no git push/fetch)
 ```
 
-The `--local` flag is available on all daemon subcommands:
+The `--local` and `--force` flags are available on all daemon subcommands:
 
 ```text
 --local   Local-only mode: skip git push/fetch in sync loop
+--force   Proceed even when the repo directory is not git-anchored (G2 override)
 ```
 
 Note: `--foreground` flag does NOT exist. Daemon always starts in background.
@@ -425,12 +427,14 @@ Note: `--foreground` flag does NOT exist. Daemon always starts in background.
 `thrum init` also automatically starts the daemon if it is not already running.
 
 ```bash
-thrum init                                     # Init + interactive runtime selection (also starts daemon)
-thrum init --runtime claude                    # Init + generate Claude configs
-thrum init --runtime codex --force             # Init + overwrite Codex configs
-thrum init --runtime all --dry-run             # Preview all runtime configs
+thrum init                                     # On a TTY: launches the interactive wizard. Non-TTY: legacy silent path.
+thrum init --runtime claude                    # Pin runtime (skips runtime prompt)
+thrum init --runtime codex --force             # Re-init: pre-seeds wizard prompts from existing values
+thrum init --runtime all --dry-run             # Preview all runtime configs (bypasses wizard)
+thrum init --non-interactive --runtime claude  # Force the legacy silent path even on a TTY
 thrum init --stealth                           # Zero tracked-file footprint
-thrum init --agent-role implementer --agent-module auth --agent-name alice
+thrum init --name alice --role implementer --module auth   # Pre-fill wizard identity prompts
+thrum init --no-daemon                         # Run wizard but skip starting the daemon
 thrum init --skills                            # Install thrum skill only (no MCP, no startup script)
 thrum init --skills --runtime cursor           # Install skill to Cursor's skill directory
 ```
@@ -438,24 +442,46 @@ thrum init --skills --runtime cursor           # Install skill to Cursor's skill
 Flags:
 
 ```text
---runtime string        Generate runtime-specific configs: claude|codex|cursor|gemini|cli-only|all
+--runtime string        Generate runtime-specific configs: claude|codex|cursor|gemini|opencode|cli-only|all
 --skills                Install thrum skill only (no MCP config, no startup script)
 --stealth               Use .git/info/exclude instead of .gitignore (zero footprint)
---force                 Force reinitialization / overwrite existing files
---dry-run               Preview changes without writing files
---agent-role string     Agent role for templates (default: implementer)
---agent-module string   Agent module for templates (default: main)
---agent-name string     Agent name for templates (default: default_agent)
+--force                 Force reinitialization. On a TTY this re-runs the wizard with existing values pre-seeded.
+--dry-run               Preview changes without writing files (bypasses the wizard)
+--non-interactive       Force the legacy silent path even on a TTY
+--no-daemon             Skip auto-starting the daemon at the end of the wizard
+--name string           Pre-fill the wizard's identity-name prompt
+--role string           Pre-fill the wizard's role prompt
+--module string         Pre-fill the wizard's module prompt
+--worktrees-root string Pre-fill the wizard's worktrees-root prompt (absolute path outside the repo)
+--roles string          Pre-fill the wizard's role-template choice: enhanced|default|skip
 ```
+
+**tmux gate:** if `tmux` is not on `PATH` when the wizard reaches the
+daemon-start step, init exits early with an OS-appropriate install hint
+(`brew install tmux` / `apt install tmux`).
 
 ---
 
 ## Setup
 
 ```bash
+thrum setup claude-md                          # Print Thrum CLAUDE.md block to stdout
+thrum setup claude-md --apply                  # Create or append CLAUDE.md block
+thrum setup claude-md --apply --force          # Replace existing Thrum block in place
 thrum worktree setup                           # Set up redirect in feature worktree (default)
 thrum worktree setup --main-repo /path/to/main
 ```
+
+`setup claude-md` flags:
+
+```text
+--apply   Write to ./CLAUDE.md (create or append); errors if block exists (use --force to replace)
+--force   Replace an existing Thrum block idempotently; no effect without --apply
+```
+
+Block is wrapped in `<!-- BEGIN THRUM -->` / `<!-- END THRUM -->` markers for
+detection. Use only if you are NOT running the Thrum Claude Code plugin — the
+plugin already injects equivalent content via its SessionStart hook.
 
 `worktree setup` flags:
 
@@ -587,7 +613,8 @@ thrum runtime show claude --json
 thrum runtime set-default <name>               # Set the default runtime preset
 ```
 
-Supported runtimes: `claude`, `codex`, `cursor`, `gemini`, `auggie`, `cli-only`
+Supported runtimes: `claude`, `codex`, `cursor`, `gemini`, `opencode`, `auggie`,
+`cli-only`
 
 ---
 
@@ -598,6 +625,9 @@ thrum roles list                               # List templates and matching age
 thrum roles deploy                             # Re-render preambles from templates (all agents)
 thrum roles deploy --agent alice               # Deploy for a specific agent
 thrum roles deploy --dry-run                   # Preview changes without writing files
+thrum roles refresh                            # Re-render templates from saved role_config answers
+thrum roles save-config                        # Write role_config to config.json from JSON on stdin
+thrum roles templates print <role>-<autonomy>  # Print an embedded shipped template to stdout
 ```
 
 `roles deploy` flags:
@@ -606,6 +636,14 @@ thrum roles deploy --dry-run                   # Preview changes without writing
 --agent string   Deploy for a specific agent only
 --dry-run        Preview changes without writing files
 ```
+
+`roles templates print` takes a single positional argument of the form
+`<role>-<autonomy>` (e.g. `implementer-autonomous`, `coordinator-strict`). Exit
+code is non-zero if the template name is not found.
+
+`roles save-config` reads a `RoleConfig` JSON object from stdin and atomically
+writes `role_config` to `.thrum/config.json`, preserving all other top-level
+keys. Used internally by `/thrum:configure-roles`.
 
 ---
 
@@ -666,7 +704,9 @@ Configure in `.claude/settings.json`:
 ## Tmux Sessions
 
 ```bash
-thrum tmux start                               # One-command: create + launch + prime + attach
+thrum tmux start                               # One-command in current worktree: launch + prime + attach
+thrum tmux start --name <session>              # Override session name
+thrum tmux start --runtime opencode            # Override runtime
 thrum tmux create <name> --cwd <path> \
   --name <agent> --role <role> --module <mod>  # Create session + register agent (flags required)
 thrum tmux create <name> --cwd <path> \
@@ -687,6 +727,13 @@ thrum tmux queue-status <session>              # Show active + queued commands
 thrum tmux cancel <command-id>                 # Cancel a queued or active command
 ```
 
+`tmux start` flags (operates on current working directory):
+
+```text
+--name string      Override session name (default: directory name)
+--runtime string   Override runtime (default: from config or claude)
+```
+
 `tmux create` / `tmux quickstart` flags:
 
 ```text
@@ -695,7 +742,7 @@ thrum tmux cancel <command-id>                 # Cancel a queued or active comma
 --role string      Agent role (required unless --no-agent)
 --module string    Agent module (required unless --no-agent)
 --intent string    Initial work intent description
---runtime string   Runtime preset: claude, codex, cursor, gemini, auggie
+--runtime string   Runtime preset: claude, codex, cursor, gemini, opencode, auggie
 --no-agent         Skip agent registration (create session only)
 --force            Overwrite existing runtime config files
 ```
@@ -751,7 +798,7 @@ thrum worktree list                            # List worktrees with agent info
 --role string         Agent role
 --module string       Agent module
 --intent string       Initial work intent description
---runtime string      Runtime preset: claude, codex, cursor, gemini, auggie
+--runtime string      Runtime preset: claude, codex, cursor, gemini, opencode, auggie
 --force               Overwrite existing runtime config files
 ```
 

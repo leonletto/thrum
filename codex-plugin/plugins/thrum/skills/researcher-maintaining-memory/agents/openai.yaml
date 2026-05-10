@@ -1,0 +1,4 @@
+interface:
+  display_name: "Researcher: Maintaining Memory"
+  short_description: "Use after completing research, when updating research memory, when verifying entries, or when working with the research index. Loads the format, seed-skeleton, and staleness-check protocol for the researcher's memory artifacts."
+  default_prompt: "Use after research to update memory and indexes."
