@@ -15,6 +15,7 @@
 #      briefing carries a `# Previous Session Context` block.
 #   4. Briefing envelope + full prime output.
 
+# -e intentionally omitted: external commands use || true guards.
 set -uo pipefail
 
 # Project doesn't use thrum — silent no-op.
