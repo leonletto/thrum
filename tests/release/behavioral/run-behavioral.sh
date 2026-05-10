@@ -2,10 +2,10 @@
 # tests/release/behavioral/run-behavioral.sh — entry-point runner.
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+RUNNER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${RUNNER_DIR}/../../.." && pwd)"
 HELPERS_DIR="${REPO_ROOT}/tests/release/helpers"
-CARDS_DIR="${SCRIPT_DIR}/cards"
+CARDS_DIR="${RUNNER_DIR}/cards"
 RESULTS_DIR_DEFAULT="${REPO_ROOT}/dev-docs/behavioral"
 
 # CLI defaults
@@ -61,13 +61,13 @@ if ! { grep -q 'mikefarah' <<<"$yq_v" && grep -q -E 'v?4\.' <<<"$yq_v"; }; then
   exit 2
 fi
 
-source "${HELPERS_DIR}/all.sh"          # paths.sh, drive.sh, assert.sh, output.sh
+# Intentionally NOT sourcing all.sh / setup-repo.sh / teardown.sh: those
+# wire up the scenarios fixture (fixed coord/impl panes via tmux-exec) and
+# their sourcing has side effects that conflict with the ephemeral-daemon
+# fixture. The behavioral harness sources only the helpers it needs.
 source "${HELPERS_DIR}/ephemeral-daemon.sh"
 source "${HELPERS_DIR}/render-preamble.sh"
 source "${HELPERS_DIR}/behavioral.sh"
-# Intentionally NOT sourcing setup-repo.sh / teardown.sh: those wire up
-# the scenarios fixture (fixed coord/impl panes via tmux-exec). The
-# behavioral harness uses the ephemeral-daemon helper instead.
 
 # Fixture lifecycle (one fixture for the whole run)
 RUN_TIMESTAMP="$(date -u +%Y-%m-%dT%H-%M-%S)"
@@ -83,7 +83,12 @@ fi
 RUN_DIR="${RESULTS_DIR}/runs/${RUN_TIMESTAMP}-${RUNTIME}-coord:${COORD_SHA}_impl:${IMPL_SHA}"
 mkdir -p "$RUN_DIR"
 
-FIXTURE_BASE="$(mktemp -d -t behavioral-fixture-XXXXXX)"
+# Use /tmp directly with a short prefix: macOS AF_UNIX socket path limit is
+# 104 bytes, and $TMPDIR on macOS is /var/folders/... (~50 bytes) which leaves
+# little room for the fixture's daemon socket. Long mktemp prefixes inside
+# $TMPDIR push the .thrum/daemon.sock path past the limit and cause
+# "timeout waiting for daemon to start".
+FIXTURE_BASE="$(mktemp -d /tmp/bh-XXXXXX)"
 trap 'ephemeral_daemon_stop; rm -rf "$FIXTURE_BASE"' EXIT
 if ! ephemeral_daemon_start "$FIXTURE_BASE"; then
   echo "ERROR: ephemeral-daemon setup failed" >&2
@@ -125,7 +130,7 @@ fi
 
 total_pass=0 total_fail=0
 for card in "${cards[@]}"; do
-  bash "${SCRIPT_DIR}/validate-card.sh" "$card" || exit 2
+  bash "${RUNNER_DIR}/validate-card.sh" "$card" || exit 2
   test_id="$(yq -r '.id' "$card")"
   out="${RUN_DIR}/${test_id}.jsonl"
   echo "==> ${test_id}"

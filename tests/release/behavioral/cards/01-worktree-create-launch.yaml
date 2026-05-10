@@ -6,7 +6,7 @@ description: |
   and live tmux session.
 
 agents:
-  coord: { role: coordinator, preamble: ${PREAMBLE_COORDINATOR} }
+  coord: { role: coordinator, preamble: "${PREAMBLE_COORDINATOR}" }
   # No pre-existing implementer — coord must create one.
 
 steps:
