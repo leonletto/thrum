@@ -20,6 +20,16 @@ _llm_judge() {
 
 assert_llm_transcript_satisfies_rubric() {
   local rubric_file="$1" transcript_file="$2" threshold="${3:-4}"
+  # Fail-closed when the judge can't run. Spec: llm_judge predicates must
+  # emit a clear error rather than silently fall back to structural-only.
+  if [[ -z "${LLM_CLIENT_PATH:-}" ]]; then
+    echo '{"error":"llm_judge unavailable: LLM_CLIENT_PATH not set in .env"}'
+    return 1
+  fi
+  if [[ -z "${ZAI_API_KEY:-}" ]]; then
+    echo '{"error":"llm_judge unavailable: ZAI_API_KEY not set in .env"}'
+    return 1
+  fi
   local out rc
   out=$(_llm_judge rubric \
     --rubric "$(cat "$rubric_file")" \
