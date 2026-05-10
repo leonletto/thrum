@@ -4,6 +4,14 @@
 
 - Codex installed (v0.130.0+)
 - `features.hooks` is enabled by default on codex 0.130.0+; no action needed. (If somehow disabled: `codex -c features.hooks=true ...`.)
+- `features.plugin_hooks = true` MUST be set in `~/.codex/config.toml` for the
+  plugin's SessionStart/PreToolUse/Stop hooks to register. As of codex
+  0.130.0 this feature is "under development" but functional. Add to your
+  `[features]` block:
+  ```toml
+  [features]
+  plugin_hooks = true
+  ```
 - `thrum` CLI on `PATH`
 
 ## Recommended: Marketplace install
@@ -38,9 +46,20 @@ codex plugin marketplace add ./codex-plugin
 printf '\n[plugins."thrum@thrum-marketplace"]\nenabled = true\n' >> ~/.codex/config.toml
 ```
 
+## First-run hook approval
+
+On the first codex session after install, codex will display:
+
+> ⚠ 3 hooks need review before they can run. Open /hooks to review them.
+
+Open `/hooks` and approve all three (SessionStart, PreToolUse, Stop). Codex
+remembers the approval for subsequent sessions.
+
 ## SessionStart auto-prime
 
-After install, restart codex. The next session opens with the Thrum prime briefing already in context — identity, project state, unread inbox.
+After install + hook approval, restart codex. The next session opens with the
+Thrum prime briefing already in context — identity, project state, unread
+inbox — courtesy of the SessionStart hook.
 
 ## Verification
 
