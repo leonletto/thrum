@@ -165,7 +165,7 @@ Flags:
 --no-init                Skip runtime config generation, just register agent
 --force                  Overwrite existing runtime config files
 --dry-run                Preview changes without writing files or registering
---no-agent-pid           Persist agent_pid=0 instead of detecting the runtime ancestor; defers PID claim to first /thrum:prime (used for inline tmux quickstart)
+--no-agent-pid           Persist agent_pid=0 instead of detecting the runtime ancestor; defers PID claim to first $thrum-prime (used for inline tmux quickstart)
 ```
 
 ### agent register
@@ -643,7 +643,7 @@ code is non-zero if the template name is not found.
 
 `roles save-config` reads a `RoleConfig` JSON object from stdin and atomically
 writes `role_config` to `.thrum/config.json`, preserving all other top-level
-keys. Used internally by `/thrum:configure-roles`.
+keys. Used internally by `$thrum-configure-roles`.
 
 ---
 

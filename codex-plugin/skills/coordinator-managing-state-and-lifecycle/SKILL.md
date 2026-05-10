@@ -16,7 +16,7 @@ role separation collapses: the implementer's view of state is their epic, not
 the team's. (Source: findings_coordinator.md — "Project state is the
 coordinator's responsibility — implementers don't update it".)
 
-**How to apply:** Only the coordinator runs `/thrum:update-project` or edits
+**How to apply:** Only the coordinator runs `$thrum-update-project` or edits
 `.thrum/context/project_state.md`. If an implementer is about to restart and
 asks how to preserve context, instruct them to send a status message to you and
 wait — you update the state on their behalf. Never run `thrum context save`

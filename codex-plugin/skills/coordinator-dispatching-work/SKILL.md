@@ -10,7 +10,7 @@ description: "Use when starting an epic, dispatching to an implementer, creating
 
 ### Use `thrum tmux launch` — not raw send-keys
 
-**Why:** Manual `tmux send-keys 'claude'` followed by `/thrum:prime` skips
+**Why:** Manual `tmux send-keys 'claude'` followed by `$thrum-prime` skips
 identity registration and produces silent CWD drift. The
 `thrum tmux launch <name>` flow registers the agent against the worktree path
 correctly and gives the daemon a real PID to track. (Source:

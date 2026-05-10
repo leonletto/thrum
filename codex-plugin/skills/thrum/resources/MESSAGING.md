@@ -68,7 +68,7 @@ needed. The UI groups conversations by `thread_id`.
 - Git context (branch, uncommitted files)
 - Daemon health and sync state
 
-The **SessionStart** hook prompts you to run `/thrum:prime`. The **PreCompact**
+The **SessionStart** hook prompts you to run `$thrum-prime`. The **PreCompact**
 hook auto-saves context to a backup file.
 
 ### After Compaction

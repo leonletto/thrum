@@ -196,6 +196,18 @@ EOF
   echo "  generated skill ${skill_name}"
 }
 
+replace_claude_skill_syntax() {
+  # Rewrite claude-specific skill-invocation syntax (/thrum:foo) to codex's
+  # flat-skill form ($thrum-foo). Operates on a single file in place.
+  # Spec ref: dev-docs/specs/codex-plugin-first-class.md anti-pattern #1.
+  local file="$1"
+  [[ -f "${file}" ]] || return 0
+  local tmp
+  tmp="$(mktemp)"
+  sed 's|/thrum:\([a-z][a-z0-9-]*\)|$thrum-\1|g' "${file}" > "${tmp}"
+  mv "${tmp}" "${file}"
+}
+
 adapt_codex_skill() {
   local src_skill_dir="$1"
   local dst_skill_dir="$2"
@@ -230,9 +242,13 @@ EOF
   strip_frontmatter "${src_skill_md}" | normalize_headings >> "${body_file}"
 
   mv "${body_file}" "${dst_skill_dir}/SKILL.md"
+  replace_claude_skill_syntax "${dst_skill_dir}/SKILL.md"
 
   if [[ -d "${src_skill_dir}/resources" ]]; then
     sync_tree "${src_skill_dir}/resources" "${dst_skill_dir}/resources"
+    while IFS= read -r -d '' rfile; do
+      replace_claude_skill_syntax "${rfile}"
+    done < <(find "${dst_skill_dir}/resources" -type f -print0)
   fi
 
   write_openai_metadata \
@@ -272,6 +288,9 @@ sync_codex() {
   if [[ -d "${CLAUDE_RESOURCES}" ]]; then
     mkdir -p "${CODEX_SKILLS}/thrum"
     sync_tree "${CLAUDE_RESOURCES}" "${THRUM_RESOURCES}"
+    while IFS= read -r -d '' rfile; do
+      replace_claude_skill_syntax "${rfile}"
+    done < <(find "${THRUM_RESOURCES}" -type f -print0)
     echo "  synced thrum resources -> thrum/resources/"
   fi
 
