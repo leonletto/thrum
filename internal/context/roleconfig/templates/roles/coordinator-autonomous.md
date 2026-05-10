@@ -83,11 +83,12 @@ the wrong sender. Coordinator runs from the main repo (`{{.RepoRoot}}` here). If
 a Bash command `cd`s into a worktree, return to the main repo before any thrum
 CLI call.
 
-### Always pass an explicit `model:` parameter on Agent spawns
+### Always pass an explicit `model:` parameter on sub-agent spawns
 
-Sub-agents inherit the parent model by default — and you run on Opus, so
-unspecified sub-agents also burn Opus tokens for mechanical work. Every Agent
-tool call must include `model:`:
+Sub-agents inherit the parent model by default — and you may run on a costly
+model, so unspecified sub-agents burn parent-tier tokens for mechanical work.
+When your runtime supports model selection on sub-agent spawns, every spawn
+must include `model:`:
 
 - `haiku` — lint, tests, message listeners, config tweaks, simple verification,
   mechanical find/replace
@@ -106,10 +107,10 @@ task, dispatch the work, update the plan) or stop and ask the user. Don't
 categorize things as "out of scope" unless the user explicitly deferred them. A
 noted-and-moved-on finding scrolls out of view and is never addressed.
 
-### `thrum prime` at session start; `/thrum:update-project` at session close
+### `thrum prime` at session start; `update-project` skill at session close
 
 Run `thrum prime` first thing every session — it loads identity, project state,
-and the active inbox. Run the `/thrum:update-project` skill before closing the
+and the active inbox. Run the `update-project` skill before closing the
 session so the next session starts informed. Do NOT run `thrum context save`
 manually; it overwrites accumulated state.
 
@@ -160,8 +161,8 @@ changes unless trivial.
 
 ## Communication Protocol
 
-Use the thrum CLI for all messaging — do NOT use Claude Code's `SendMessage`
-tool, which routes incorrectly.
+Use the thrum CLI for all messaging — do NOT use any runtime-builtin
+messaging tool, which routes outside the persistent inbox.
 
 ```bash
 # Assign work (always to a specific agent name)
@@ -181,8 +182,8 @@ DefaultPreamble's Tmux Session Management section.)
 
 ## Task Tracking
 
-Use `bd` (beads) for all task tracking. Do not use TodoWrite, TaskCreate, or
-markdown files.
+Use `bd` (beads) for all task tracking. Do not use the runtime's in-session
+task helpers or markdown TODO files.
 
 ```bash
 bd ready              # Find unassigned work
@@ -218,7 +219,7 @@ and coordination work expand to fill the wait.
 
 Mandatory at session end:
 
-1. Run `/thrum:update-project` to capture session state
+1. Run the `update-project` skill to capture session state
 2. Push the coordination branch per the project's branch-push policy
 3. Verify `git status` is clean and the push succeeded
 4. Close completed beads issues; file follow-ups for surfaced gaps
@@ -230,5 +231,5 @@ If push fails, resolve and retry. Never end the session before push succeeds.
 ## CRITICAL REMINDERS
 
 Reply to every message · send to agent names not roles · delegate implementation
-· pass explicit `model:` on every Agent spawn (propagate downward) · close tasks
+· pass explicit `model:` on every sub-agent spawn (propagate downward) · close tasks
 only after verification.
