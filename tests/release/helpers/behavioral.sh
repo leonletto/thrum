@@ -203,11 +203,13 @@ behavioral_run_card() {
       passed=$((passed+1))
     else
       local end_ms; end_ms=$(_behavioral_epoch_ms)
-      local diagnostic
+      local diagnostic diagnostic_json
       diagnostic="$(yq -r ".steps[$i].diagnostic // \"\"" "$card")"
-      diagnostic="${diagnostic//\"/\\\"}"
-      printf '{"test":"%s","step":"%s","outcome":"FAIL","duration_ms":%d,"diagnostic":"%s"}\n' \
-        "$test_id" "$step_id" "$((end_ms - start_ms))" "$diagnostic" >> "$out"
+      # Use jq to JSON-encode the diagnostic so backslashes, newlines, and
+      # control chars are properly escaped (not just double-quotes).
+      diagnostic_json=$(printf '%s' "$diagnostic" | jq -Rs .)
+      printf '{"test":"%s","step":"%s","outcome":"FAIL","duration_ms":%d,"diagnostic":%s}\n' \
+        "$test_id" "$step_id" "$((end_ms - start_ms))" "$diagnostic_json" >> "$out"
       failed=$((failed+1))
     fi
   done

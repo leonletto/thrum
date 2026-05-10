@@ -19,10 +19,10 @@ _thrum() {
 # The cwd is set to FIXTURE_REPO so identity files resolve correctly.
 _thrum_as() {
   local agent="$1"; shift
-  # We don't always know role/module here; the daemon resolves identity by
-  # name when the agent already exists. Pass them through if the caller set
-  # them in env (impersonation calls in the harness already do).
-  ephemeral_te_exec THRUM_NAME="$agent" -- thrum "$@"
+  # ephemeral_te_exec runs with --cwd FIXTURE_REPO so thrum's git-discovery
+  # finds the right repo, but pass --repo explicitly to defend against any
+  # caller invoking us from a different cwd.
+  ephemeral_te_exec THRUM_NAME="$agent" -- thrum --repo "${FIXTURE_REPO:-.}" "$@"
 }
 
 assert_daemon_agent_registered() {
