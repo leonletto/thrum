@@ -18,7 +18,7 @@ func TestBuildCreateSessionArgs_ScrubsThrumVars(t *testing.T) {
 		"THRUM_NAME=coordinator_main",
 		"THRUM_ROLE=coordinator",
 	}
-	args := buildCreateSessionArgs("coord", "/tmp/repo", env)
+	args := buildCreateSessionArgs("coord", "/tmp/repo", env, nil)
 
 	wantKeys := []string{"THRUM_HOME=", "THRUM_AGENT_ID=", "THRUM_NAME=", "THRUM_ROLE="}
 	for _, want := range wantKeys {
@@ -40,7 +40,7 @@ func TestBuildCreateSessionArgs_ScrubsThrumVars(t *testing.T) {
 // launched without THRUM_* in scope, no per-session override is needed.
 func TestBuildCreateSessionArgs_NoThrumVars(t *testing.T) {
 	env := []string{"PATH=/usr/bin", "HOME=/Users/test", "USER=test"}
-	args := buildCreateSessionArgs("coord", "/tmp/repo", env)
+	args := buildCreateSessionArgs("coord", "/tmp/repo", env, nil)
 
 	for i, a := range args {
 		if a == "-e" {
@@ -52,7 +52,7 @@ func TestBuildCreateSessionArgs_NoThrumVars(t *testing.T) {
 // TestBuildCreateSessionArgs_PreservesBaseFlags pins backwards compatibility:
 // the original `new-session -d -s NAME -c CWD` shape must remain.
 func TestBuildCreateSessionArgs_PreservesBaseFlags(t *testing.T) {
-	args := buildCreateSessionArgs("mysess", "/some/cwd", nil)
+	args := buildCreateSessionArgs("mysess", "/some/cwd", nil, nil)
 
 	wantPrefix := []string{"new-session", "-d", "-s", "mysess", "-c", "/some/cwd"}
 	if !slices.Equal(args[:len(wantPrefix)], wantPrefix) {
@@ -66,7 +66,7 @@ func TestBuildCreateSessionArgs_PreservesBaseFlags(t *testing.T) {
 // TestBuildCreateSessionArgs_OmitsCwdWhenEmpty matches the pre-fix behavior
 // where an empty cwd produced just the new-session base.
 func TestBuildCreateSessionArgs_OmitsCwdWhenEmpty(t *testing.T) {
-	args := buildCreateSessionArgs("mysess", "", []string{"THRUM_HOME=/x"})
+	args := buildCreateSessionArgs("mysess", "", []string{"THRUM_HOME=/x"}, nil)
 
 	for i, a := range args {
 		if a == "-c" {
@@ -90,7 +90,7 @@ func TestBuildCreateSessionArgs_DedupsAcrossSources(t *testing.T) {
 		"THRUM_NAME=daemon-name",
 		"THRUM_HOME=/from-tmux-server",
 	}
-	args := buildCreateSessionArgs("s", "", env)
+	args := buildCreateSessionArgs("s", "", env, nil)
 
 	count := 0
 	for i := 0; i < len(args)-1; i++ {
@@ -124,7 +124,7 @@ func TestBuildCreateSessionArgs_SkipsMalformedEnvEntries(t *testing.T) {
 		"=THRUM_LEADING_EQ",
 		"-THRUM_HOME",
 	}
-	args := buildCreateSessionArgs("s", "", env)
+	args := buildCreateSessionArgs("s", "", env, nil)
 
 	// Sane entry survives.
 	if !hasFlagPair(args, "-e", "THRUM_HOME=") {
@@ -159,6 +159,89 @@ func TestBuildCreateSessionArgs_SkipsMalformedEnvEntries(t *testing.T) {
 	for _, ghost := range []string{"-THRUM_HOME=", "THRUM_NOEQUALS=", "=THRUM_LEADING_EQ="} {
 		if hasFlagPair(args, "-e", ghost) {
 			t.Errorf("ghost -e flag for malformed entry %q in args: %v", ghost, args)
+		}
+	}
+}
+
+// TestBuildCreateSessionArgs_EnvOverridesWinOverScrub pins thrum-jj0a.1:
+// explicit per-session env (THRUM_NAME=value) must emit as
+// `-e KEY=VALUE` and the matching scrub entry from the inherited env
+// must NOT also fire — tmux honors the last -e for a given key, but
+// emitting a redundant empty-value scrub afterward would silently null
+// the override.
+func TestBuildCreateSessionArgs_EnvOverridesWinOverScrub(t *testing.T) {
+	env := []string{
+		"THRUM_NAME=stale_inherited",
+		"THRUM_HOME=/poisoned",
+	}
+	overrides := map[string]string{
+		"THRUM_NAME": "fresh_agent",
+		"THRUM_HOME": "/repo/clean",
+	}
+	args := buildCreateSessionArgs("sess", "/tmp/cwd", env, overrides)
+
+	if !hasFlagPair(args, "-e", "THRUM_NAME=fresh_agent") {
+		t.Errorf("missing override -e THRUM_NAME=fresh_agent in args: %v", args)
+	}
+	if !hasFlagPair(args, "-e", "THRUM_HOME=/repo/clean") {
+		t.Errorf("missing override -e THRUM_HOME=/repo/clean in args: %v", args)
+	}
+	// The empty-value scrub must NOT appear for overridden keys —
+	// emitting it after the override would null the value back out.
+	for _, ghost := range []string{"THRUM_NAME=", "THRUM_HOME="} {
+		if hasFlagPair(args, "-e", ghost) {
+			t.Errorf("scrub emitted alongside override for %q: %v", ghost, args)
+		}
+	}
+}
+
+// TestBuildCreateSessionArgs_EnvOverridesPreserveScrubForOthers verifies
+// that override of one key does not suppress the empty-value scrub for
+// other THRUM_* keys that are inherited but not authoritatively set.
+func TestBuildCreateSessionArgs_EnvOverridesPreserveScrubForOthers(t *testing.T) {
+	env := []string{
+		"THRUM_NAME=stale_inherited",
+		"THRUM_OLD_VAR=relic",
+	}
+	overrides := map[string]string{"THRUM_NAME": "fresh_agent"}
+	args := buildCreateSessionArgs("sess", "", env, overrides)
+
+	if !hasFlagPair(args, "-e", "THRUM_NAME=fresh_agent") {
+		t.Errorf("override missing: %v", args)
+	}
+	// Unrelated THRUM_* inherited key still gets the empty-value scrub.
+	if !hasFlagPair(args, "-e", "THRUM_OLD_VAR=") {
+		t.Errorf("expected empty-value scrub of THRUM_OLD_VAR: %v", args)
+	}
+}
+
+// TestValidateEnvOverrides_RejectsInvalidKeys verifies the safety check
+// fires on env keys outside the [A-Z_][A-Z0-9_]* pattern (would corrupt
+// the KEY=VALUE round-trip or pose a shell-injection risk).
+func TestValidateEnvOverrides_RejectsInvalidKeys(t *testing.T) {
+	bad := []map[string]string{
+		{"lower_case": "x"},
+		{"123STARTS_WITH_DIGIT": "x"},
+		{"HAS-DASH": "x"},
+		{"HAS SPACE": "x"},
+		{"": "x"},
+	}
+	for _, env := range bad {
+		if err := validateEnvOverrides(env); err == nil {
+			t.Errorf("expected error for %v, got nil", env)
+		}
+	}
+	if err := validateEnvOverrides(map[string]string{"THRUM_NAME": "ok"}); err != nil {
+		t.Errorf("expected valid env to pass, got %v", err)
+	}
+}
+
+// TestValidateEnvOverrides_RejectsInvalidValues verifies '=' or NUL in a
+// value causes rejection — both would corrupt KEY=VALUE parsing.
+func TestValidateEnvOverrides_RejectsInvalidValues(t *testing.T) {
+	for _, v := range []string{"has=equals", "has\x00null"} {
+		if err := validateEnvOverrides(map[string]string{"THRUM_NAME": v}); err == nil {
+			t.Errorf("expected error for value %q, got nil", v)
 		}
 	}
 }

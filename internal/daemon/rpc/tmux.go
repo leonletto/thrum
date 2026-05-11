@@ -276,7 +276,23 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 		_ = ttmux.KillSession(name)
 	}
 
-	if err := ttmux.CreateSession(name, req.Cwd); err != nil {
+	// thrum-jj0a.1/.2: plumb per-session identity env so the new
+	// session's initial shell sees its own THRUM_* values rather than
+	// inheriting whatever the shared tmux server captured at server-
+	// start time. Empty for --no-agent sessions; the scrub-only path
+	// in CreateSessionWithEnv preserves prior behavior in that case.
+	envOverrides := map[string]string{}
+	if !req.NoAgent {
+		envOverrides["THRUM_NAME"] = req.AgentName
+		envOverrides["THRUM_AGENT_ID"] = req.AgentName
+		envOverrides["THRUM_ROLE"] = req.Role
+		envOverrides["THRUM_MODULE"] = req.Module
+		envOverrides["THRUM_HOME"] = req.Cwd
+		if req.Intent != "" {
+			envOverrides["THRUM_INTENT"] = req.Intent
+		}
+	}
+	if err := ttmux.CreateSessionWithEnv(name, req.Cwd, envOverrides); err != nil {
 		return nil, err
 	}
 
