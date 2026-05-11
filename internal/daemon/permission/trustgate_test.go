@@ -34,6 +34,61 @@ Type a message and press Enter to start.
 
 const claudeIdlePane = `claude > _`
 
+// codexTrustPaneRealisticTail mirrors what `tmux capture-pane` returns
+// for a fresh codex session sitting at its first-launch trust prompt:
+// the dialog renders in the TOP ~10 lines of a 24-line pane, leaving
+// blank trailing lines below. Pins cluster-9: IsTrustGate must match
+// the full pane, not the bottomLines() window designed for the
+// scroll-up permission-prompt path.
+const codexTrustPaneRealisticTail = `> You are in /private/tmp/wdtest-x
+
+Do you trust the contents of this directory?
+
+Working with untrusted contents comes with higher risk of prompt
+injection. Trusting the directory allows project-local config, hooks,
+and exec policies to load.
+
+› 1. Yes, continue
+  2. No, quit
+
+Press enter to continue
+
+`
+
+// claudeTrustPaneRealisticTail mirrors the same shape for claude.
+const claudeTrustPaneRealisticTail = `Claude Code
+
+> Quick safety check
+
+Do you trust this folder?
+
+  1. Yes, proceed
+  2. No, exit
+
+Press enter to continue
+
+`
+
+// TestIsTrustGate_DetectsAtTopOfPaneWithBlankTail pins cluster-9:
+// IsTrustGate must NOT consult bottomLines() — that window was
+// designed for OnDetection's scroll-up case and silently truncates
+// trust prompts that render at the TOP of a fresh pane.
+func TestIsTrustGate_DetectsAtTopOfPaneWithBlankTail(t *testing.T) {
+	if !IsTrustGate("codex", codexTrustPaneRealisticTail) {
+		t.Errorf("codex trust prompt at top of pane with blank tail not detected")
+	}
+	if !IsTrustGate("claude", claudeTrustPaneRealisticTail) {
+		t.Errorf("claude trust prompt at top of pane with blank tail not detected")
+	}
+	// Generic detector (no runtime hint) must also see it.
+	if !IsTrustGate("", codexTrustPaneRealisticTail) {
+		t.Errorf("generic detector missed codex trust prompt at top of pane")
+	}
+	if !IsTrustGate("", claudeTrustPaneRealisticTail) {
+		t.Errorf("generic detector missed claude trust prompt at top of pane")
+	}
+}
+
 func TestIsTrustGate_CodexExact(t *testing.T) {
 	if !IsTrustGate("codex", codexTrustPane) {
 		t.Errorf("expected IsTrustGate true for codex trust dialog, got false")
