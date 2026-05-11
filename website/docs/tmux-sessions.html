@@ -125,6 +125,11 @@ the daemon recreates it first.</p>
 <p>This creates a detached tmux session with a clean environment (no inherited env
 vars), runs <code>thrum quickstart</code> inside the pane to register the agent identity,
 and sets up <code>monitor-silence</code> hooks for permission detection.</p>
+<p><strong>Environment scrubbing:</strong> <code>THRUM_*</code> variables and <code>CLAUDE_PROJECT_DIR</code> are
+stripped from new tmux sessions. <code>CLAUDE_PROJECT_DIR</code> is removed to prevent it
+leaking across worktrees on a shared tmux server, which caused phantom self-echo
+behavior (the kfn3 incident) when the wrong worktree&#39;s project dir was visible
+to a newly-launched agent.</p>
 <p>You must pass <code>--name</code>, <code>--role</code>, and <code>--module</code> — or <code>--no-agent</code> for a bare
 session. Bare <code>thrum tmux create</code> without either errors out.</p>
 <p><strong><code>thrum tmux quickstart</code> is an alias</strong> for the same command:</p>

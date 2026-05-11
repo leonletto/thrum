@@ -388,12 +388,23 @@ before falling back to force extraction.</p>
 <li><strong>Type:</strong> integer (seconds)</li>
 <li><strong>Default:</strong> <code>30</code></li>
 </ul>
+<h3><code>restart.silence_watchdog_seconds</code></h3>
+<p>How long after <code>thrum tmux launch</code> or <code>thrum tmux restart</code> the daemon waits for
+the agent pane to produce output before injecting a contextual nudge. The
+watchdog fires only if the pane is silent for the configured duration; an
+actively-producing agent is not interrupted.</p>
+<ul>
+<li><strong>Type:</strong> integer (seconds)</li>
+<li><strong>Default:</strong> <code>30</code></li>
+<li><strong>Special values:</strong> <code>0</code> → use default (30s); negative → disable the watchdog</li>
+</ul>
 <p>Example config with restart enabled:</p>
 <pre><code>{
   &quot;restart&quot;: {
     &quot;max_lines&quot;: 200,
     &quot;auto_threshold&quot;: 80,
-    &quot;graceful_timeout&quot;: 30
+    &quot;graceful_timeout&quot;: 30,
+    &quot;silence_watchdog_seconds&quot;: 30
   }
 }</code></pre>
 <h2>Daemon Identity</h2>

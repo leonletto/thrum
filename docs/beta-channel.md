@@ -5,6 +5,14 @@ before being promoted to stable. Beta users help catch regressions before they
 hit `releases/latest`. This guide covers how to opt in, what to expect, and how
 to report what you find.
 
+> **Current pre-release: `v0.10.3-rc.1`** (tagged 2026-05-11, in soak).
+> Highlights: codex plugin first-class, post-launch tmux silence watchdog,
+> first-launch trust-gate detection, self-echo nudge fix. Full notes:
+> [What's New](whats-new.md) and the
+> [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
+> To install:
+> `VERSION=v0.10.3-rc.1 curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh`.
+
 ## What this is
 
 When a new version is ready for soak, the coordinator cuts a `release/vX.Y.Z`

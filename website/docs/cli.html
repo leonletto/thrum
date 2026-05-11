@@ -507,6 +507,9 @@ pipe stdin to <code>thrum init</code> get this behavior unchanged.</p>
 <p>Pre-fill any wizard prompt with the corresponding flag (<code>--name</code>, <code>--role</code>,
 etc.); the wizard skips prompts whose value was supplied. With every prompt
 pre-filled, the wizard runs end-to-end without user input even on a TTY.</p>
+<p>The wizard&#39;s suggested default agent name is derived from the repo directory,
+lowercased and sanitized to satisfy the agent-name validator (a-z, 0-9,
+underscore only).</p>
 <p><strong>G2 guard:</strong> <code>thrum init</code> hard-errors if the current working directory is not
 inside a git repository. Pass <code>--force</code> to override for non-git environments
 (uncommon; the daemon cannot anchor identity without a git root).</p>
@@ -2881,7 +2884,7 @@ the main worktree into a &quot;feature&quot; worktree.</p>
 </tr>
 <tr>
 <td><code>--runtime</code></td>
-<td>Runtime preset: <code>claude</code>, <code>codex</code>, <code>cursor</code>, <code>gemini</code>, <code>auggie</code></td>
+<td>Runtime preset: <code>claude</code>, <code>codex</code>, <code>cursor</code>, <code>gemini</code>, <code>opencode</code>, <code>auggie</code></td>
 <td></td>
 </tr>
 <tr>
@@ -2892,6 +2895,9 @@ the main worktree into a &quot;feature&quot; worktree.</p>
 </tbody></table>
 <p>The worktree is created at <code>worktrees.base_path/&lt;name&gt;</code> (default:
 <code>~/.workspaces/&lt;project&gt;/&lt;name&gt;</code>). The name cannot contain <code>/</code>, <code>\</code>, or <code>..</code>.</p>
+<p>Hook scripts (<code>scripts/thrum-startup.sh</code>, <code>scripts/thrum-check-inbox.sh</code>) are
+copied from the main repo into the new worktree so SessionStart hooks fire
+correctly.</p>
 <p>Example:</p>
 <pre><code>$ thrum worktree create api-feature
 Worktree created: ~/.workspaces/thrum/api-feature
