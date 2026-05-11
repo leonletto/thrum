@@ -43,6 +43,27 @@ func TestCleanTmuxEnv_ScrubsTmuxVars(t *testing.T) {
 	}
 }
 
+// TestCleanTmuxEnv_ScrubsClaudeHarnessVars pins thrum-jj0a.6: the daemon's
+// tmux subprocess environ must not carry Claude Code harness vars
+// (CLAUDE_PROJECT_DIR, CLAUDE_SESSION_ID, CLAUDECODE, ...). Claude Code
+// resolves its hook scripts via ${CLAUDE_PROJECT_DIR}; a leak across a
+// shared tmux server makes Claude fire repo-A's hooks while running in
+// repo-B's pane — the kfn3 self-echo manifested via this path. Leaving
+// CLAUDE_* unscrubbed in the tmux env propagates to every new session as
+// default-environment.
+func TestCleanTmuxEnv_ScrubsClaudeHarnessVars(t *testing.T) {
+	t.Setenv("CLAUDE_PROJECT_DIR", "/Users/leon/dev/falcondev/falcon-backend")
+	t.Setenv("CLAUDE_SESSION_ID", "ses_01KR2GSHW8SAXMPAXE68EKGEM4")
+	t.Setenv("CLAUDECODE", "1")
+
+	env := cleanTmuxEnv()
+	for _, e := range env {
+		if strings.HasPrefix(e, "CLAUDE_") || strings.HasPrefix(e, "CLAUDECODE=") {
+			t.Errorf("cleanTmuxEnv leaked Claude harness var: %q", e)
+		}
+	}
+}
+
 // TestCleanTmuxEnv_PreservesUnrelatedVars ensures the scrub is targeted —
 // PATH, HOME, USER and other non-THRUM/non-TMUX vars must pass through, or
 // the daemon-spawned tmux session will be unable to find binaries or resolve

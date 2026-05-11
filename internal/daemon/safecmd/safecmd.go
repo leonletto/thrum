@@ -93,10 +93,10 @@ func TmuxRun(ctx context.Context, args ...string) error {
 	return nil
 }
 
-// cleanTmuxEnv returns the current environment with TMUX, TMUX_PANE, and all
-// THRUM_* variables removed.
+// cleanTmuxEnv returns the current environment with TMUX, TMUX_PANE, all
+// THRUM_* variables, and all CLAUDE_* / CLAUDECODE harness variables removed.
 //
-// Two distinct hazards motivate the scrub:
+// Three distinct hazards motivate the scrub:
 //
 //  1. TMUX / TMUX_PANE: the daemon may inherit these from its parent
 //     (e.g. tmux-exec), which would cause tmux commands to connect to the
@@ -112,8 +112,21 @@ func TmuxRun(ctx context.Context, args ...string) error {
 //     agent. Identity guards (cross_worktree, pid_mismatch,
 //     quickstart_name_collision) then fire constantly. See thrum-8nro.4.
 //
-// Scrubbing THRUM_* leaves the pane to resolve identity via peercred → cwd,
-// which is the design-intended path.
+//  3. CLAUDE_* / CLAUDECODE: same shared-tmux-server hazard as THRUM_* but
+//     for Claude Code's own harness vars. CLAUDE_PROJECT_DIR is the load-
+//     bearing one — Claude Code reads it to resolve hook paths
+//     (templates/claude/settings.json.tmpl points its hooks at
+//     ${CLAUDE_PROJECT_DIR}/scripts/thrum-check-inbox.sh). If repo A starts
+//     a tmux session first, repo B's later session inherits A's
+//     CLAUDE_PROJECT_DIR, and Claude Code fires A's hook scripts while
+//     running in B's pane. That manifested as the kfn3 self-echo phantom:
+//     every outbound `thrum send` from a B-pane Claude session produced a
+//     'New message from @<self>' system-reminder because A's hook was
+//     resolving against the wrong agent identity. See thrum-jj0a.6.
+//
+// Scrubbing THRUM_* and CLAUDE_*/CLAUDECODE leaves panes to resolve identity
+// and project-dir via the design-intended paths (peercred → cwd; harness
+// auto-detection from the pane's actual cwd).
 func cleanTmuxEnv() []string {
 	var env []string
 	for _, e := range os.Environ() {
@@ -121,6 +134,9 @@ func cleanTmuxEnv() []string {
 			continue
 		}
 		if strings.HasPrefix(e, "THRUM_") {
+			continue
+		}
+		if strings.HasPrefix(e, "CLAUDE_") || strings.HasPrefix(e, "CLAUDECODE=") {
 			continue
 		}
 		env = append(env, e)
