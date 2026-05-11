@@ -413,15 +413,21 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 			time.Sleep(10 * time.Second)
 			if runtimeHasSessionStartHook(runtime) {
 				h.emitIdentityBanner(name, target)
-				return
+			} else {
+				primeCmd := primeCommandForRuntime(runtime)
+				_ = ttmux.SendKeys(target, primeCmd)
+				_ = ttmux.SendSpecialKey(target, "Enter")
+				// TUI runtimes (e.g. OpenCode) may swallow the first Enter during
+				// startup. Retry after a brief pause as a fallback.
+				time.Sleep(3 * time.Second)
+				_ = ttmux.SendSpecialKey(target, "Enter")
 			}
-			primeCmd := primeCommandForRuntime(runtime)
-			_ = ttmux.SendKeys(target, primeCmd)
-			_ = ttmux.SendSpecialKey(target, "Enter")
-			// TUI runtimes (e.g. OpenCode) may swallow the first Enter during
-			// startup. Retry after a brief pause as a fallback.
-			time.Sleep(3 * time.Second)
-			_ = ttmux.SendSpecialKey(target, "Enter")
+			// thrum-puhr.10: post-launch silence watchdog. If the pane
+			// is still silent after the configured threshold (default
+			// 30s, set via restart.silence_watchdog_seconds), nudge the
+			// agent to read its inbox. Fresh codex agents in particular
+			// can sit at a welcome screen without engaging the dispatch.
+			nudgeSilentPaneAfter(target, h.thrumDir, "thrum inbox --unread")
 		}()
 	}
 
@@ -1201,15 +1207,22 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 			time.Sleep(10 * time.Second)
 			if runtimeHasSessionStartHook(runtime) {
 				h.emitIdentityBanner(name, target)
-				return
+			} else {
+				primeCmd := primeCommandForRuntime(runtime)
+				_ = ttmux.SendKeys(target, primeCmd)
+				_ = ttmux.SendSpecialKey(target, "Enter")
+				// TUI runtimes (e.g. OpenCode) may swallow the first Enter during
+				// startup. Retry after a brief pause as a fallback.
+				time.Sleep(3 * time.Second)
+				_ = ttmux.SendSpecialKey(target, "Enter")
 			}
-			primeCmd := primeCommandForRuntime(runtime)
-			_ = ttmux.SendKeys(target, primeCmd)
-			_ = ttmux.SendSpecialKey(target, "Enter")
-			// TUI runtimes (e.g. OpenCode) may swallow the first Enter during
-			// startup. Retry after a brief pause as a fallback.
-			time.Sleep(3 * time.Second)
-			_ = ttmux.SendSpecialKey(target, "Enter")
+			// thrum-puhr.10: post-restart silence watchdog. On a large-
+			// context restart the agent often doesn't read the
+			// auto-injected prime output. After the configured threshold
+			// (default 30s) of pane silence, nudge it to read the prime
+			// + resume plan and follow its instructions.
+			nudgeSilentPaneAfter(target, h.thrumDir,
+				"Read the prime output, which includes your resume plan, and then follow your instructions")
 		}()
 	}
 
@@ -1229,6 +1242,54 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 		Session:       name,
 		SnapshotLines: snapshotLines,
 	}, nil
+}
+
+// nudgeSilentPaneAfter implements thrum-puhr.10: after a post-launch /
+// post-restart inject (e.g. /thrum:prime keystroke or identity banner),
+// schedule a one-shot silence watchdog. Captures pane content as a
+// baseline, sleeps the configured threshold, captures again, and if the
+// two snapshots compare equal — meaning the agent never produced any
+// new output during the window — fires nudge via SendKeys + Enter.
+//
+// The threshold is read fresh per-call from .thrum/config.json
+// (restart.silence_watchdog_seconds, default 30s). Set the config key
+// to a negative value to disable the watchdog entirely.
+//
+// Runs in the caller's goroutine; callers always invoke this from a
+// detached goroutine so the RPC handler returns immediately. Tolerates
+// capture errors (logs and exits — better to skip a nudge than fire
+// against a torn-down pane).
+func nudgeSilentPaneAfter(target string, thrumDir string, nudge string) {
+	cfg, _ := config.LoadThrumConfig(thrumDir)
+	threshold, enabled := cfg.Restart.SilenceWatchdog()
+	if !enabled {
+		return
+	}
+	before, err := capturePaneFn(target, 50)
+	if err != nil {
+		slog.Info("[watchdog] capture baseline failed; skipping",
+			"target", target, "err", err)
+		return
+	}
+	sleepFn(time.Duration(threshold) * time.Second)
+	after, err := capturePaneFn(target, 50)
+	if err != nil {
+		slog.Info("[watchdog] capture post-wait failed; skipping",
+			"target", target, "err", err)
+		return
+	}
+	if before != after {
+		// Agent produced output during the window — silence not
+		// observed, no nudge needed.
+		return
+	}
+	slog.Info("[watchdog] pane silent post-action, nudging",
+		"target", target, "threshold_s", threshold)
+	if err := sendKeysFn(target, nudge); err != nil {
+		slog.Warn("[watchdog] SendKeys nudge failed", "target", target, "err", err)
+		return
+	}
+	_ = sendSpecialKeyFn(target, "Enter")
 }
 
 // runtimeToLaunchCmd converts a runtime name to the CLI command to launch it.
@@ -1414,6 +1475,8 @@ var (
 	listSessionsFn   = ttmux.ListSessions
 	getUserOptionFn  = ttmux.GetUserOption
 	setUserOptionFn  = ttmux.SetUserOption
+	capturePaneFn    = ttmux.CapturePane
+	sleepFn          = time.Sleep
 )
 
 // waitForIdentityFile blocks until the identity file at idPath appears

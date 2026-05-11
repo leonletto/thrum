@@ -83,6 +83,90 @@ func TestEnsureRedirects_SkipsBeadsWhenNotPresent(t *testing.T) {
 	}
 }
 
+// TestEnsureRedirects_CopiesHookScripts pins thrum-nne1: gitignored hook
+// scripts in the main repo's scripts/ dir must be copied into the worktree
+// at redirect-setup time so Claude Code SessionStart/PostToolUse hooks
+// (which dereference ${CLAUDE_PROJECT_DIR}/scripts/<name>.sh) don't fire
+// against a missing file in every worktree-created subdir.
+func TestEnsureRedirects_CopiesHookScripts(t *testing.T) {
+	mainRepo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(mainRepo, ".thrum"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	mainScriptsDir := filepath.Join(mainRepo, "scripts")
+	if err := os.MkdirAll(mainScriptsDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	startupBody := []byte("#!/usr/bin/env bash\necho startup\n")
+	inboxBody := []byte("#!/usr/bin/env bash\necho inbox\n")
+	if err := os.WriteFile(filepath.Join(mainScriptsDir, "thrum-startup.sh"), startupBody, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(mainScriptsDir, "thrum-check-inbox.sh"), inboxBody, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	wt := t.TempDir()
+	if err := os.WriteFile(filepath.Join(wt, ".git"),
+		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EnsureRedirects(wt, mainRepo); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for name, want := range map[string][]byte{
+		"thrum-startup.sh":     startupBody,
+		"thrum-check-inbox.sh": inboxBody,
+	} {
+		path := filepath.Join(wt, "scripts", name)
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("expected %s to be copied: %v", name, err)
+		}
+		if string(got) != string(want) {
+			t.Errorf("%s content mismatch: got %q, want %q", name, got, want)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm()&0o100 == 0 {
+			t.Errorf("%s missing user-exec bit: %v", name, info.Mode().Perm())
+		}
+	}
+}
+
+// TestEnsureRedirects_HookScripts_NoOpWhenSourceMissing verifies that an
+// operator who has removed a hook script from the main repo deliberately
+// does not break worktree setup.
+func TestEnsureRedirects_HookScripts_NoOpWhenSourceMissing(t *testing.T) {
+	mainRepo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(mainRepo, ".thrum"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	// No scripts/ in main repo.
+
+	wt := t.TempDir()
+	if err := os.WriteFile(filepath.Join(wt, ".git"),
+		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EnsureRedirects(wt, mainRepo); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// scripts/ dir gets created but stays empty; that's fine — the
+	// init flow on the main repo will eventually materialize them and
+	// the next EnsureRedirects call will copy them in.
+	if entries, err := os.ReadDir(filepath.Join(wt, "scripts")); err != nil {
+		t.Fatalf("scripts dir should exist: %v", err)
+	} else if len(entries) != 0 {
+		t.Errorf("scripts dir should be empty when main has no sources, got %d entries", len(entries))
+	}
+}
+
 func TestEnsureRedirects_FixesBrokenRedirect(t *testing.T) {
 	mainRepo := t.TempDir()
 	os.MkdirAll(filepath.Join(mainRepo, ".thrum"), 0750)

@@ -121,6 +121,24 @@ or send fix requests directly. Escalate to the user only for genuine design
 judgment calls or architectural ambiguity that requires direction input — not
 execution input.
 
+### Don't rush past hard work — the shortcut is usually wrong
+
+Autonomy is not a license to skip hard checks. When the path gets hard, the
+temptation is to ship a thinner fix and move on. Resist it.
+
+- Don't skip a review gate because the diff looks small or the agent seems
+  reliable. Both reviews (code-quality + plan-compliance) run on every branch.
+- Don't bucket review findings as "follow-ups" without evaluating file-scope +
+  fix-size + verification-cost. Default to fix-now when the file is already
+  being touched.
+- Don't ship a fix labeled X if you've concluded X's actual cause is something
+  else. Rename/refile so the work that ships matches what got fixed.
+- Don't declare DONE on a cluster without verifying the user-visible bug is
+  actually gone. A test passing is not the same as the symptom resolving.
+- Don't accept the cheapest path on autopilot. If evidence contradicts the
+  dispatched plan, surface it before executing — pushback before commit beats
+  rework after merge.
+
 ---
 
 ## Anti-Patterns
