@@ -1,6 +1,36 @@
 package permission
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
+
+// trustGateGenericRE matches the runtime-agnostic shape of a first-
+// launch trust/safety gate: a "1. Yes" / "2. No" option pair PLUS the
+// word "trust" (case-insensitive) appearing in the same captured window.
+// Either order is acceptable: trust phrase before or after the options.
+// (?is) = case-insensitive + dotall. The two ordering branches are
+// distinct so we don't accidentally match a non-trust panel that
+// merely contains "1. Yes / 2. No" alongside an unrelated mention of
+// "trust" elsewhere — the proximity constraint matters.
+var trustGateGenericRE = regexp.MustCompile(
+	`(?is)1\.\s*Yes[^\n]*\n[^\n]*2\.\s*No.{0,400}trust|` +
+		`trust.{0,400}1\.\s*Yes[^\n]*\n[^\n]*2\.\s*No`,
+)
+
+// codexTrustExactRE: per-runtime defensive precision for codex's
+// observed first-launch trust dialog. "Do you trust the contents of
+// this directory" is the exact prompt; matching this string is a
+// strong positive signal even if option shape drifts.
+var codexTrustExactRE = regexp.MustCompile(`(?i)Do you trust the contents of this directory`)
+
+// claudeTrustExactRE: per-runtime defensive precision for claude's
+// observed first-launch trust dialog. "Quick safety check" is the
+// header; "trust this folder" appears in the body; both anchored
+// together to suppress false positives where one phrase appears in
+// unrelated content. (?is) for case-insensitive + dotall so the two
+// phrases may live on separate lines in the captured window.
+var claudeTrustExactRE = regexp.MustCompile(`(?is)Quick safety check.{0,500}trust this folder`)
 
 // paneBottomMatchLines caps detection to the last N lines of the
 // captured pane tail. An ACTIVE permission prompt sits at the bottom
@@ -45,6 +75,80 @@ func DetectPaneState(runtime, paneContent string) string {
 		return ""
 	}
 	return "permission:" + runtime + "." + m.Name
+}
+
+// IsTrustGate reports whether the captured pane shows a first-launch
+// trust / safety gate where automated keystroke injection would either
+// (a) be typed into the trust dialog as garbage and approve/deny it
+// without the user's intent, or (b) cause the runtime to interpret the
+// keystroke as a quit signal and exit. Two recognition modes:
+//
+//  1. Generic — matches when the bottom of the pane contains a 1.Yes /
+//     2.No option pair AND (case-insensitive) the word "trust". This
+//     shape is shared across known runtimes (codex, claude) and is
+//     durable against minor UI text drift.
+//
+//  2. Per-runtime exact — defensive precision against false positives
+//     in unrelated panes that happen to contain "1. Yes / 2. No / trust"
+//     as plain text. When runtime is "codex" or "claude", the exact
+//     dialog phrase is checked as a second positive signal.
+//
+// Used by the four keystroke-injection sites in internal/daemon/rpc/tmux.go
+// (waitForPaneReady, emitIdentityBanner, the post-readiness /thrum:prime
+// send, and nudgeSilentPaneAfter) to gate SendKeys on a "safe to type"
+// decision. Trust dialogs are NOT routed through the permission-prompt
+// supervisor pipeline — they're a different class with no automated
+// answer, so this detector is intentionally separate from the per-runtime
+// Pattern library that drives OnDetection. See thrum-puhr.10 cluster 8.
+//
+// Empty paneContent returns false. Empty runtime is supported — generic
+// detection still runs (covers the case where the daemon hasn't populated
+// idFile.Runtime yet, e.g. pre-launch).
+func IsTrustGate(runtime, paneContent string) bool {
+	if paneContent == "" {
+		return false
+	}
+	// Deliberately match against the full captured pane, NOT
+	// bottomLines(paneContent, paneBottomMatchLines). Trust prompts
+	// render at the TOP of an otherwise-empty fresh pane (tmux pads
+	// the bottom with blank lines), so the bottomLines window
+	// designed for the OnDetection / scroll-up permission-prompt
+	// path cuts the trust-prompt text out and IsTrustGate returns a
+	// false negative — observed cluster-8 cluster-9 with codex's
+	// first-launch dialog. Trust gates have no spam-loop risk
+	// because IsTrustGate is consulted at one-shot injection events,
+	// not via OnDetection's repeated polling.
+	if trustGateGenericRE.MatchString(paneContent) {
+		return true
+	}
+	switch runtime {
+	case "codex":
+		return codexTrustExactRE.MatchString(paneContent)
+	case "claude":
+		return claudeTrustExactRE.MatchString(paneContent)
+	}
+	return false
+}
+
+// IsPaneSafeToType returns true when automated keystroke injection
+// into the captured pane is safe — i.e. there is no detected
+// permission prompt and no trust gate. Combines DetectPaneState (the
+// per-runtime supervisor-routed prompt detector) with IsTrustGate (the
+// runtime-agnostic / lightly-runtime-tagged trust dialog detector).
+//
+// This is the single chokepoint the four keystroke-injection sites
+// should consult before SendKeys. Returning false MUST cause the caller
+// to skip the inject AND log a structured info-level message that
+// names the site, so operators can correlate "no banner / no prime"
+// outcomes with the safety gate that suppressed them.
+func IsPaneSafeToType(runtime, paneContent string) bool {
+	if DetectPaneState(runtime, paneContent) != "" {
+		return false
+	}
+	if IsTrustGate(runtime, paneContent) {
+		return false
+	}
+	return true
 }
 
 // bottomLines returns the last n lines of content. If content has

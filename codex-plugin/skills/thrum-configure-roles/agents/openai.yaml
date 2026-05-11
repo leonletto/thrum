@@ -1,4 +1,0 @@
-interface:
-  display_name: "Thrum Configure Roles"
-  short_description: "Generate Thrum role templates for Codex agents"
-  default_prompt: "Inspect the repo and generate or update Thrum role templates with clear autonomy and scope rules."

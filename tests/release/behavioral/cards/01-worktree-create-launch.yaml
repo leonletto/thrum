@@ -1,0 +1,44 @@
+# tests/release/behavioral/cards/01-worktree-create-launch.yaml
+id: 01-worktree-create-launch
+description: |
+  Coordinator must use `thrum worktree create` then `thrum tmux launch`,
+  not `git worktree add`. Verifies redirect, identity, daemon registration,
+  and live tmux session.
+
+agents:
+  coord: { role: coordinator, preamble: "${PREAMBLE_COORDINATOR}" }
+  # No pre-existing implementer — coord must create one.
+
+steps:
+  - id: dispatch
+    send:
+      to: "@test_coordinator"
+      message: |
+        Please set up a new agent that can pick up implementation work
+        on a feature branch named "billing". The agent's role is
+        implementer, module name is "billing", and it should run
+        claude. Once it's running, let me know.
+    timeout: 5s
+
+  - id: worktree-created
+    assert:
+      - { kind: fs, predicate: dir_exists, path: "${FIXTURE_WORKSPACES}/billing" }
+      - { kind: fs, predicate: file_exists, path: "${FIXTURE_WORKSPACES}/billing/.thrum/redirect" }
+    timeout: 90s
+    diagnostic: "Likely used git worktree add — no .thrum/ redirect created."
+
+  - id: identity-registered
+    assert:
+      - kind: daemon
+        predicate: agent_registered
+        agent: "test_implementer_billing"
+        role: implementer
+        module: billing
+    timeout: 90s
+
+  - id: tmux-launched
+    assert:
+      - { kind: tmux, predicate: session_exists, name: billing }
+      - { kind: tmux, predicate: pane_running_runtime, session: billing, runtime: claude }
+    timeout: 120s
+    diagnostic: "Worktree set up but agent not launched — coord skipped thrum tmux launch."

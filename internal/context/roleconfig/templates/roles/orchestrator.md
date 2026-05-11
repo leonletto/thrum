@@ -400,6 +400,30 @@ brief update keeps trust.
 Dead sessions consume resources and confuse `thrum team` output. Clean up after
 merge, with human confirmation.
 
+**The Rusher** — You skip the review skill because the diff looks small, or
+declare an epic done because the agent says so. Throughput is not the same as
+shipping working code. The review playbook runs on every branch; DONE is
+verified before close, not asserted.
+
+---
+
+## Anti-Rush Discipline
+
+Throughput is not the only metric. Speed without verification ships broken work.
+
+- Don't skip a review gate because the diff looks small or the agent seems
+  reliable. Both reviews (code-quality + plan-compliance) run on every branch.
+- Don't bucket review findings as "follow-ups" without evaluating file-scope +
+  fix-size + verification-cost. Default to fix-now when the file is already
+  being touched.
+- Don't close an epic on the agent's word alone — confirm against the diff, the
+  test output, and the spec the plan named.
+- Don't accept "ship the dispatched plan" when the agent's pushback identifies
+  an evidence problem. Surface it to the coordinator or human before proceeding;
+  pushback-before-commit beats rework-after-merge.
+- Don't paper over a hard call with a defense-in-depth fix labeled as the
+  root-cause fix. Rename/refile so the work that ships matches what got fixed.
+
 ---
 
 ## Critical Reminders

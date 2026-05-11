@@ -13,71 +13,6 @@ and machines. You direct the work. The agents coordinate through Thrum. Messages
 persist through context compaction, session restarts, and machine changes —
 nothing gets lost.
 
-**v0.10.2 highlights:**
-
-- **Hotfix: `thrum quickstart` no longer rejects idempotent same-name
-  re-register.** The G1a `quickstart_self_rename` guard was firing on every
-  call where the caller already owned an identity, even when the requested
-  `--name` matched. This broke `scripts/thrum-startup.sh` (the SessionStart
-  hook for every claude session) on already-registered worktrees: step 3
-  errored, `set -e` aborted, and inbox-check / cron-install never ran.
-  `thrum tmux start` against an existing worktree hit the same guard.
-  Same-name re-register is now allowed without `--force` (idempotent
-  no-op); a real rename still requires `--force`.
-- **Hotfix: `tmux.create`-spawned panes no longer inherit `THRUM_*` env
-  from the daemon.** When the daemon was started from a primed shell,
-  every tmux pane it spawned inherited the daemon's `THRUM_AGENT_ID`,
-  `THRUM_HOME`, etc. — causing the new pane's `thrum whoami` to resolve
-  to the daemon-starter's identity. Two-layer fix: scrub `THRUM_*` from
-  the daemon's tmux exec env, AND pass per-session `-e KEY=` overrides
-  so even long-running tmux servers (which cache the environ from
-  server-start time) produce clean panes.
-- **`thrum purge --confirm` now actually shrinks JSONL message files.**
-  The filter was passing the wrong field name when iterating message
-  JSONLs, so on-disk files grew unboundedly. `--before 30d` against a
-  335MB sync dir filtered 13 message files in 7.7s post-fix.
-- Plus: `unauthenticated_rpc` deny-message now points at `thrum prime`
-  as the cache-warming recovery; release-test harness coord-whoami probe
-  retries 3× 30s instead of a single 60s wait; opencode-plugin publish
-  job no longer fails red on unchanged version.
-
-**v0.10.1 highlights:**
-
-- **Hotfix: `thrum quickstart` from a redirect-using worktree no longer
-  hijacks the agent identity to `$THRUM_HOME`.** v0.10.0 exposed a
-  latent bug where running `thrum quickstart` inside a child worktree
-  with `.thrum/redirect` would write the identity file to the parent
-  repo's `.thrum/identities/` and store the parent path as the agent's
-  `worktree`. Subsequent peercred-based identity resolution then
-  cross-claimed between worktrees.
-- **Boot-time identity reconcile** restores write-RPC auth from any
-  registered worktree after a daemon restart, without requiring a
-  re-run of `thrum quickstart --force`. The fix walks
-  `.thrum/identities/*.json` at boot and inserts the missing
-  `(sessions, session_refs)` rows the peercred resolver needs.
-  Local-only by design.
-
-**v0.10.0 highlights:**
-
-- **`thrum init` wizard** — `thrum init` on a TTY now launches an opinionated
-  interactive setup walking new users through identity, worktrees root, role
-  templates, and daemon start in one flow. Press enter through every prompt to
-  accept recommended defaults. The legacy silent path is preserved when stdin is
-  not a TTY or `--non-interactive` is set, so existing CI scripts keep working.
-  Pre-fill any prompt with `--name`, `--role`, `--module`, `--worktrees-root`,
-  `--roles=enhanced|default|skip`, and `--no-daemon` to script the wizard
-  end-to-end.
-- **New role template `implementer-worktree-write-only`** — the wizard's
-  "enhanced" choice pins implementers to writes inside their own worktree and
-  forbids drive-by edits to the main repo.
-- **Default worktree base path migrated** to `~/.thrum/worktrees/<project>` (was
-  `~/.workspaces/<project>`). Users with an explicit `Worktrees.BasePath` in
-  `.thrum/config.json` are unaffected; the wizard prompt accepts the legacy path
-  if you want to preserve it.
-- **`scripts/thrum-check-inbox.sh` correctly excluded** alongside
-  `thrum-startup.sh` in both `.gitignore` and `.git/info/exclude` (stealth
-  mode), preventing the inbox-check helper from leaking into tracked changes.
-
 ## Quick Start
 
 ```bash
@@ -154,6 +89,12 @@ git clone https://github.com/leonletto/thrum.git
 cd thrum
 make install    # Builds UI + Go binary → ~/.local/bin/thrum
 ```
+
+### Try beta releases
+
+Every release soaks for 48h+ as `-rc.N` before going stable. To help test
+releases before they're promoted, see
+[Beta channel](https://leonletto.github.io/thrum/docs/beta-channel.html).
 
 ## Daily Commands
 

@@ -46,14 +46,15 @@ var BuiltinPresets = map[string]RuntimePreset{
 		SetupNotes:          "Add thrum MCP server to .claude/settings.json",
 	},
 	"codex": {
-		Name:             "codex",
-		DisplayName:      "OpenAI Codex",
-		Command:          "codex",
-		MCPSupported:     true,
-		HooksSupported:   false,
-		InstructionsFile: "AGENTS.md",
-		MCPConfigPath:    "Run: codex mcp add thrum 'thrum mcp serve'",
-		SetupNotes:       "Use .codex/hooks/session-start for startup",
+		Name:                "codex",
+		DisplayName:         "OpenAI Codex",
+		Command:             "codex",
+		MCPSupported:        true,
+		HooksSupported:      false,
+		HasSessionStartHook: true, // pm7n.4: codex plugin ships codex-plugin/plugins/thrum/scripts/inject-prime-context.sh as a SessionStart hook
+		InstructionsFile:    "AGENTS.md",
+		MCPConfigPath:       "Run: codex mcp add thrum 'thrum mcp serve'",
+		SetupNotes:          "Use .codex/hooks/session-start for startup",
 	},
 	"opencode": {
 		Name:             "opencode",

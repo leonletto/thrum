@@ -44,10 +44,12 @@ Module-installed rules use the reserved sub-segment
 
 ---
 
-## Available skills (situational)
+## Available skills (situational — you MUST invoke when triggered)
 
-These skills load automatically when the runtime detects matching trigger
-phrases. You don't invoke them explicitly — they fire on context.
+These skills deepen role discipline for specific situations. They do NOT
+auto-load — when a trigger condition below applies, you MUST invoke the matching
+skill via the Skill tool BEFORE taking action. Treat the trigger phrases as
+MUST-INVOKE conditions, not optional suggestions.
 
 - `implementer-receiving-dispatch` — received a new task, starting
   implementation, scoping a task, received dispatch
@@ -66,7 +68,7 @@ These rules apply to every implementer session.
 
 ### Do not update `project_state.md` — that's the coordinator's job
 
-`/thrum:update-project` and edits to `.thrum/context/project_state.md` are
+The `update-project` skill and edits to `.thrum/context/project_state.md` are
 coordinator-only actions. If you need to preserve session context before a
 restart or compaction, send a status message to the coordinator and wait — they
 update state on your behalf. Use `bd comments <task-id> add "<note>"` for urgent
@@ -74,8 +76,8 @@ task-scoped notes.
 
 ### Always pass an explicit `model:` parameter on every sub-agent spawn
 
-Sub-agents inherit the parent model by default. Every Agent tool call must
-include `model:`:
+Sub-agents inherit the parent model by default. When your runtime supports model
+selection on sub-agent spawns, every spawn must include `model:`:
 
 - `haiku` — lint, tests, mechanical find/replace, simple verification
 - `sonnet` — code review, complex implementation, exploring unfamiliar code,
@@ -180,8 +182,8 @@ areas.
 
 ## Communication Protocol
 
-Use the thrum CLI for all messaging — do NOT use Claude Code's `SendMessage`
-tool, which routes incorrectly.
+Use the thrum CLI for all messaging — do NOT use any runtime-builtin messaging
+tool, which routes outside the persistent inbox.
 
 ```bash
 # Acknowledge task
@@ -231,5 +233,5 @@ explore, refactor, or start any work without explicit instruction from
 ## CRITICAL REMINDERS
 
 Acknowledge every task · use the four-token status vocabulary · pass explicit
-`model:` on every Agent spawn · stay in your worktree · do not self-assign ·
+`model:` on every sub-agent spawn · stay in your worktree · do not self-assign ·
 check inbox at every breakpoint.

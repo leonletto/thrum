@@ -18,6 +18,37 @@ func TestShippedTemplateInfo_ValidTemplate(t *testing.T) {
 	}
 }
 
+// TestListenerSpawnGuardedByTmuxCheck pins thrum-puhr.1: every shipped
+// role preamble that instructs the agent to spawn a background message
+// listener must carve out the "skip if in tmux" case so the listener
+// is not spawned redundantly inside a thrum-managed tmux pane. Without
+// the guard, agents launched via `thrum tmux start` / `thrum tmux
+// launch` under these role preambles spawn a listener that the base
+// DefaultPreamble's Tmux Session Management section already says is
+// unnecessary, burning context for no delivery benefit.
+func TestListenerSpawnGuardedByTmuxCheck(t *testing.T) {
+	templates, err := ListShippedTemplates()
+	if err != nil {
+		t.Fatalf("ListShippedTemplates: %v", err)
+	}
+	const spawnHeadline = "Spawn a background message listener IMMEDIATELY on session start"
+	const tmuxSkipMarker = "SKIP the listener"
+	for _, name := range templates {
+		role, autonomy, _ := strings.Cut(name, "-")
+		data, err := readShippedTemplateRaw(role, autonomy)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		body := string(data)
+		if !strings.Contains(body, spawnHeadline) {
+			continue
+		}
+		if !strings.Contains(body, tmuxSkipMarker) {
+			t.Errorf("%s instructs listener spawn without a tmux skip carveout (%q missing)", name, tmuxSkipMarker)
+		}
+	}
+}
+
 func TestShippedTemplateInfo_UnknownRole(t *testing.T) {
 	_, _, err := ShippedTemplateInfo("nonexistent", "strict")
 	if err == nil {

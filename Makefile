@@ -10,7 +10,7 @@ GOVULNCHECK_VERSION := latest
 BINARY_NAME := thrum
 BUILD_DIR := bin
 INSTALL_DIR := $(HOME)/.local/bin
-VERSION := 0.10.2
+VERSION := 0.10.3
 
 # Default target
 help:
@@ -358,8 +358,19 @@ vulncheck:
 	fi
 	govulncheck ./... || echo "⚠ govulncheck failed (may be Go toolchain incompatibility — check upstream)"
 
+# Verify codex-plugin and claude-plugin manifest versions stay in sync.
+# Spec ref: dev-docs/specs/codex-plugin-first-class.md §6 (Versioning policy).
+check-plugin-versions:
+	@codex_v=$$(awk -F'"' '/"version"/ {print $$4; exit}' codex-plugin/plugins/thrum/.codex-plugin/plugin.json); \
+	claude_v=$$(awk -F'"' '/"version"/ {print $$4; exit}' claude-plugin/.claude-plugin/plugin.json); \
+	if [ "$$codex_v" != "$$claude_v" ]; then \
+		echo "ERROR: codex-plugin version ($$codex_v) != claude-plugin version ($$claude_v) — keep them in sync"; \
+		exit 1; \
+	fi; \
+	echo "plugin manifests in sync ($$codex_v)"
+
 # Full CI checks locally
-ci: fmt-all lint-all vet test security build
+ci: fmt-all lint-all vet test security check-plugin-versions build
 	@echo "CI checks passed"
 
 # Aliases for convenience
@@ -386,3 +397,17 @@ setup-hooks:
 # processes, NOT part of `make ci`.
 release-tests: build
 	@./tests/release/run.sh
+
+# Behavioral test harness — drives two live agents through scripted YAML
+# cards with structural + LLM-judge assertions. Iterative dev tool for
+# preamble/plugin work; NOT part of `make ci`. See
+# tests/release/behavioral/README.md.
+.PHONY: behavioral-setup behavioral
+
+behavioral-setup:
+	@bash scripts/gen-behavioral-gowork.sh
+	@bash -c 'set -a; source "$$(cd "$$(git rev-parse --git-common-dir)/.." && pwd)/.env"; set +a; cd tests/release/cmd/llm-judge && go run . ping'
+	@echo "behavioral-setup OK"
+
+behavioral: behavioral-setup
+	./tests/release/behavioral/run-behavioral.sh

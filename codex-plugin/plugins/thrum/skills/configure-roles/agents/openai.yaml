@@ -1,0 +1,4 @@
+interface:
+  display_name: "Configure Roles"
+  short_description: ">"
+  default_prompt: "Configure thrum role templates for this project."

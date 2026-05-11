@@ -1,7 +1,8 @@
 ## Codex Plugin
 
 > **Prerequisites:** Thrum installed and initialized (`thrum init`), and Codex
-> installed with a local skills directory (`~/.codex/skills`).
+> installed with a local skills directory (`~/.agents/skills`, canonical as of
+> codex v0.130.0).
 
 ## Overview
 
@@ -11,6 +12,10 @@ Thrum integration is packaged as a **Codex skill bundle** in
 
 The Codex bundle mirrors the Claude plugin's `thrum:*` command surface as
 top-level Codex skills.
+
+The Codex runtime preset has `HasSessionStartHook: true` — the prime-context
+banner fires automatically on session start, on parity with the Claude plugin.
+No manual `thrum prime` is needed at session open.
 
 Registered skills:
 
@@ -34,7 +39,7 @@ Registered skills:
 
 - Thrum installed and available on `PATH`
 - Thrum initialized in the repo (`thrum init`)
-- Codex installed with local skills directory (`~/.codex/skills`)
+- Codex installed (v0.130.0+); user skills live in `~/.agents/skills`
 
 If you have not initialized Thrum yet:
 
@@ -44,6 +49,16 @@ thrum quickstart --name myagent --role implementer --module auth
 ```
 
 ## Installation
+
+### One-command install (recommended)
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+```
+
+This script handles the cache-staging gap in codex 0.130.0 where third-party
+marketplace entries aren't loaded until the cache is rebuilt — no manual steps
+needed after running it.
 
 ### From GitHub
 
@@ -67,14 +82,30 @@ cd /path/to/thrum
 ./codex-plugin/scripts/install-skills.sh
 ```
 
-This installs the bundled skills into `~/.codex/skills` (or `$CODEX_HOME/skills`
-if `CODEX_HOME` is set).
+This installs the bundled skills into `$HOME/.agents/skills`. Codex v0.130.0
+([PR #21485](https://github.com/openai/codex/pull/21485)) removed the legacy
+`~/.codex/skills/` extra-roots loader; `~/.agents/skills/` is the canonical
+user-skills path. If you previously installed under `~/.codex/skills/`, see
+[Migrating from `~/.codex/skills/`](#migrating-from-codexskills) below.
 
 ### Verify installed skills
 
 ```bash
-find "${CODEX_HOME:-$HOME/.codex}/skills" -maxdepth 1 -type d \( -name "thrum" -o -name "thrum-*" \)
+find "$HOME/.agents/skills" -maxdepth 1 -type d \( -name "thrum" -o -name "thrum-*" \)
 ```
+
+### Migrating from `~/.codex/skills/`
+
+If you upgraded codex past v0.130.0 with skills already installed at the legacy
+flat path, move them before your next codex session:
+
+```bash
+mkdir -p "$HOME/.agents/skills"
+mv "$HOME/.codex/skills/thrum"* "$HOME/.agents/skills/" 2>/dev/null || true
+mv "$HOME/.codex/skills/orchestrate" "$HOME/.agents/skills/" 2>/dev/null || true
+```
+
+Then rerun `./codex-plugin/scripts/install-skills.sh --force` to refresh.
 
 ### Restart Codex
 
@@ -115,16 +146,16 @@ scope boundaries.
 If you prefer manual copy instead of scripts:
 
 ```bash
-mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
-cp -R codex-plugin/skills/thrum "${CODEX_HOME:-$HOME/.codex}/skills/"
-cp -R codex-plugin/skills/thrum-* "${CODEX_HOME:-$HOME/.codex}/skills/"
+mkdir -p "$HOME/.agents/skills"
+cp -R codex-plugin/skills/thrum "$HOME/.agents/skills/"
+cp -R codex-plugin/skills/thrum-* "$HOME/.agents/skills/"
 ```
 
 ## Troubleshooting
 
 ### Skills do not appear in Codex
 
-- Confirm install destination: `echo "${CODEX_HOME:-$HOME/.codex}/skills"`
+- Confirm install destination: `echo "$HOME/.agents/skills"`
 - Re-run `./codex-plugin/scripts/install-skills.sh --force`
 - Restart Codex
 

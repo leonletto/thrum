@@ -204,4 +204,81 @@ else
     "remote-scenarios/${SID}.test.sh:${LINENO}"
 fi
 
+# ---------------------------------------------------------------------------
+# Step 5: Downgrade verification (best-effort).
+#
+# Per the pre-release process spec
+# (dev-docs/specs/2026-05-07-pre-release-process-design.md § "Rollback
+# policy"), every release's test cycle exercises rolling back from the
+# candidate version to the previous stable. The fixture above already
+# created a registered agent + sent a message + populated the team
+# projection — the natural seam for verifying that the previous stable
+# can still read state produced by the current binary.
+#
+# Failure of this step does NOT auto-block promotion at the run.sh level;
+# the coordinator decides whether to (a) make the rc.N migration
+# downgrade-safe, or (b) document the rollback failure mode in the rc.N
+# release notes per the spec.
+#
+# Skipped cleanly when no prior stable exists (first release on a host).
+# ---------------------------------------------------------------------------
+PREV_STABLE="$(gh release list --repo leonletto/thrum --exclude-pre-releases --limit 1 \
+                 2>/dev/null | awk 'NR==1 {print $1}')"
+
+if [ -z "${PREV_STABLE}" ]; then
+  emit_skip "${SID}" "remote-downgrade-verify" \
+    "no prior stable release found via gh — skipping downgrade step"
+else
+  # Reinstall previous stable on the remote via the curl install path with
+  # VERSION=. Match the documented beta-channel rollback flow exactly so
+  # this test exercises the user-visible path.
+  r_exec 120 -- bash -lc "
+    set -e
+    VERSION='${PREV_STABLE}' curl -fsSL \
+      https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh \
+      | sh
+  "
+  if [ "${RC}" -eq 0 ]; then
+    emit_pass "${SID}" "remote-downgrade-install"
+  else
+    emit_fail "${SID}" "remote-downgrade-install" \
+      "VERSION=${PREV_STABLE} install succeeded" \
+      "rc=${RC}; out: $(printf '%s' "${OUT}" | head -c 320)" \
+      "remote-scenarios/${SID}.test.sh:${LINENO}"
+  fi
+
+  # Restart the daemon under the previous-stable binary.
+  r_exec 30 -- bash -lc "cd '${REMOTE_REPO}' && thrum daemon restart"
+  if [ "${RC}" -eq 0 ]; then
+    emit_pass "${SID}" "remote-downgrade-daemon-restart"
+  else
+    emit_fail "${SID}" "remote-downgrade-daemon-restart" \
+      "thrum daemon restart succeeded after rollback to ${PREV_STABLE}" \
+      "rc=${RC}; out: $(printf '%s' "${OUT}" | head -c 240)" \
+      "remote-scenarios/${SID}.test.sh:${LINENO}"
+  fi
+
+  # Verify daemon reports running and the registered agent's identity is
+  # still readable (projection survived the downgrade).
+  r_exec 15 -- bash -lc "cd '${REMOTE_REPO}' && thrum daemon status --json | jq -r '.running'"
+  if [ "${RC}" -eq 0 ] && [ "$(printf '%s' "${OUT}" | tr -d '[:space:]')" = "true" ]; then
+    emit_pass "${SID}" "remote-downgrade-daemon-running"
+  else
+    emit_fail "${SID}" "remote-downgrade-daemon-running" \
+      "daemon.running == true under ${PREV_STABLE}" \
+      "rc=${RC}; got: $(printf '%s' "${OUT}" | head -c 240)" \
+      "remote-scenarios/${SID}.test.sh:${LINENO}"
+  fi
+
+  r_exec 15 -- bash -lc "cd '${REMOTE_REPO}' && thrum whoami --json | jq -r '.agent_id // empty'"
+  if [ "${RC}" -eq 0 ] && [ "$(printf '%s' "${OUT}" | tr -d '[:space:]')" = "${AGENT_NAME}" ]; then
+    emit_pass "${SID}" "remote-downgrade-state-readable"
+  else
+    emit_fail "${SID}" "remote-downgrade-state-readable" \
+      "whoami still returns ${AGENT_NAME} under ${PREV_STABLE}" \
+      "rc=${RC}; got: $(printf '%s' "${OUT}" | head -c 240)" \
+      "remote-scenarios/${SID}.test.sh:${LINENO}"
+  fi
+fi
+
 # Teardown via RETURN trap.

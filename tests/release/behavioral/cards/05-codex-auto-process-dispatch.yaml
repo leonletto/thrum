@@ -1,0 +1,54 @@
+# tests/release/behavioral/cards/05-codex-auto-process-dispatch.yaml
+#
+# Requires: --runtime=codex AND the Thrum codex plugin installed.
+#
+# Regression target: thrum-cs0w (currently OPEN, P2 bug). At session 62 we
+# observed that a codex agent launched via `thrum tmux launch` does NOT
+# auto-process incoming dispatch — the pane stays at the OpenAI Codex
+# welcome screen until a human types something. Root cause: codex-plugin
+# has no `thrum-startup.sh` equivalent that nudges the agent to begin
+# processing on launch.
+#
+# Expected status: this card FAILS until thrum-cs0w lands. That's
+# intentional — the card is the regression watcher. Once cs0w fixes the
+# auto-process behavior, this card will start passing and locks the fix
+# in place.
+
+id: 05-codex-auto-process-dispatch
+description: |
+  Codex agent launched into a tmux pane via `thrum tmux launch` must
+  auto-process a dispatch message sent shortly after launch — without a
+  human first typing in the pane. Tracks the thrum-cs0w fix.
+
+agents:
+  probe: { role: implementer, module: codex_probe, preamble: "${PREAMBLE_IMPLEMENTER}" }
+
+steps:
+  - id: pane-ready
+    assert:
+      - { kind: tmux, predicate: pane_running_runtime, session: probe, runtime: codex }
+    timeout: 60s
+
+  - id: dispatch-pre-engagement
+    # Sent BEFORE any human touches the pane. With cs0w open, the codex
+    # welcome screen swallows this nudge and the agent never starts.
+    send:
+      to: "@test_implementer"
+      message: |
+        Dispatch test: please reply with the word "engaged" so I can
+        verify you started processing on launch.
+    timeout: 5s
+
+  - id: agent-engaged
+    assert:
+      - kind: daemon
+        predicate: agent_replied_to
+        replier: test_implementer
+        original_sender: harness
+    timeout: 180s
+    diagnostic: |
+      EXPECTED FAILURE while thrum-cs0w is open. Codex pane stays at the
+      welcome screen and never reads the dispatch. Once cs0w lands (a
+      thrum-startup.sh equivalent for codex that nudges the agent on
+      launch), this assertion should start passing and the card flips
+      from regression-watcher to fix-lock.
