@@ -6,6 +6,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 )
 
@@ -30,7 +31,34 @@ type RuntimePreset struct {
 	// hard-code runtime names in cmd/thrum or daemon code; route
 	// through GetPreset and read this field. thrum-6hqy.
 	HasSessionStartHook bool `json:"has_session_start_hook,omitempty"`
+
+	// BottomAnchorRegex matches the horizontal-rule line that separates
+	// the conversation transcript from the runtime's input chrome (input
+	// box, footer, key hints). The post-launch silence watchdog uses this
+	// to locate the bottom of the agent-output region so it can decide
+	// whether to nudge. Nil means the runtime has no TUI chrome separator;
+	// the watchdog treats a missing anchor as "engaged" (don't nudge) —
+	// conservative default. thrum-84xc.
+	BottomAnchorRegex *regexp.Regexp `json:"-"`
+
+	// SpinnerRegex matches the animated thinking-indicator line that the
+	// runtime renders in the agent-output region while a turn is in
+	// flight. Matched lines are ignored by the silence watchdog (they are
+	// chrome, not real agent output). Nil means no spinner pattern —
+	// any non-blank line is treated as real output. thrum-84xc.
+	SpinnerRegex *regexp.Regexp `json:"-"`
 }
+
+// claudeBottomAnchorRegex matches the horizontal rule (U+2500 × 20+) that
+// Claude Code renders between the conversation transcript and the input chrome.
+// Used by the silence watchdog (thrum-84xc) to bound the agent-output region.
+var claudeBottomAnchorRegex = regexp.MustCompile(`^─{20,}$`)
+
+// claudeSpinnerRegex matches Claude Code's animated thinking indicator:
+// "✻ <verb> for <N>s" (✻ = U+273B). Present in the agent-output region while
+// a turn is in flight; the watchdog ignores these lines as chrome. Uses \S+
+// instead of \w+ because some verbs contain non-ASCII characters (e.g. "Sautéed").
+var claudeSpinnerRegex = regexp.MustCompile(`^✻ \S+ for \d+s$`)
 
 // BuiltinPresets contains the default presets for all known runtimes.
 var BuiltinPresets = map[string]RuntimePreset{
@@ -44,6 +72,8 @@ var BuiltinPresets = map[string]RuntimePreset{
 		InstructionsFile:    "CLAUDE.md",
 		MCPConfigPath:       ".claude/settings.json",
 		SetupNotes:          "Add thrum MCP server to .claude/settings.json",
+		BottomAnchorRegex:   claudeBottomAnchorRegex,
+		SpinnerRegex:        claudeSpinnerRegex,
 	},
 	"codex": {
 		Name:                "codex",

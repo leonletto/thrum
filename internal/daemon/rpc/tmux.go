@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -1367,57 +1368,151 @@ func waitForPaneReady(target, runtime string, stableFor int, ceilingSeconds int)
 	return permission.IsPaneSafeToType(runtime, prev)
 }
 
-// nudgeSilentPaneAfter implements thrum-puhr.10: after a post-launch /
-// post-restart inject (e.g. /thrum:prime keystroke or identity banner),
-// schedule a one-shot silence watchdog. Captures pane content as a
-// baseline, sleeps the configured threshold, captures again, and if the
-// two snapshots compare equal — meaning the agent never produced any
-// new output during the window — fires nudge via SendKeys + Enter.
+// paneAgentEngaged reports whether a captured pane snapshot contains real
+// agent output in the decision region bounded by two anchors. It is used by
+// nudgeSilentPaneAfter (thrum-84xc) to replace the naive byte-equality diff
+// that was defeated by Claude Code's 1Hz animated spinner.
 //
-// The threshold is read fresh per-call from .thrum/config.json
-// (restart.silence_watchdog_seconds, default 30s). Set the config key
-// to a negative value to disable the watchdog entirely.
+// The top anchor is identitybanner.PrimeTruncationSentinel — the last line of
+// the identity banner injected at launch/restart. The bottom anchor and spinner
+// regex are runtime-specific (from the preset).
+//
+// Decision algorithm:
+//  1. Find the LAST line containing the banner sentinel → topIdx.
+//  2. Find the LAST line matching bottomAnchorRe → bottomIdx.
+//  3. If either anchor is missing OR bottomIdx <= topIdx → return true
+//     (conservative: can't reason confidently, don't nudge).
+//  4. For each line in [topIdx+1 .. bottomIdx-1]:
+//     - Trim whitespace; if empty → ignore.
+//     - If spinnerRe != nil && spinnerRe.MatchString(trimmed) → ignore.
+//     - Else → real agent output → return true (engaged, no nudge).
+//  5. Loop completes with no real output → return false (not engaged, nudge).
+//
+// bottomAnchorRe and spinnerRe may be nil (e.g. runtimes without TUI chrome).
+// A nil bottomAnchorRe causes the anchor-missing path (step 3) → true.
+// A nil spinnerRe means no spinner filtering — any non-blank is real output.
+func paneAgentEngaged(captured string, bottomAnchorRe, spinnerRe *regexp.Regexp) bool {
+	topAnchor := identitybanner.PrimeTruncationSentinel
+	lines := strings.Split(captured, "\n")
+
+	topIdx := -1
+	for i, l := range lines {
+		if strings.Contains(l, topAnchor) {
+			topIdx = i
+		}
+	}
+	if topIdx < 0 {
+		return true // top anchor not found — conservative
+	}
+
+	bottomIdx := -1
+	if bottomAnchorRe != nil {
+		for i, l := range lines {
+			if bottomAnchorRe.MatchString(strings.TrimRight(l, " \t")) {
+				bottomIdx = i
+			}
+		}
+	}
+	if bottomIdx < 0 || bottomIdx <= topIdx {
+		return true // bottom anchor missing or inverted — conservative
+	}
+
+	for _, l := range lines[topIdx+1 : bottomIdx] {
+		trimmed := strings.TrimSpace(l)
+		if trimmed == "" {
+			continue
+		}
+		if spinnerRe != nil && spinnerRe.MatchString(trimmed) {
+			continue
+		}
+		return true // real agent output found
+	}
+	return false // only blanks/spinner between anchors — not engaged
+}
+
+// nudgeSilentPaneAfter implements thrum-puhr.10 + thrum-84xc: after a
+// post-launch / post-restart inject (e.g. identity banner), schedule a
+// one-shot silence watchdog. Instead of a fixed sleep + byte diff, it polls
+// tmux window_activity every 500ms, waiting for a sustained silence window of
+// at least silenceThreshold (5s). Once silence is detected, it captures the
+// pane and uses paneAgentEngaged (two-anchor semantic check) to decide whether
+// to nudge. If the agent is busy past the hard deadline
+// (restart.silence_watchdog_seconds, default 30s), the watchdog exits without
+// nudging — the agent is genuinely working.
+//
+// The threshold is read fresh per-call from .thrum/config.json. Set the
+// config key to a negative value to disable the watchdog entirely.
 //
 // Runs in the caller's goroutine; callers always invoke this from a
-// detached goroutine so the RPC handler returns immediately. Tolerates
-// capture errors (logs and exits — better to skip a nudge than fire
-// against a torn-down pane).
-func nudgeSilentPaneAfter(target, runtime, thrumDir, nudge string) {
+// detached goroutine so the RPC handler returns immediately.
+func nudgeSilentPaneAfter(target, runtimeName, thrumDir, nudge string) {
 	cfg, _ := config.LoadThrumConfig(thrumDir)
-	threshold, enabled := cfg.Restart.SilenceWatchdog()
+	deadlineSecs, enabled := cfg.Restart.SilenceWatchdog()
 	if !enabled {
 		return
 	}
-	before, err := capturePaneFn(target, 50)
-	if err != nil {
-		slog.Info("[watchdog] capture baseline failed; skipping",
-			"target", target, "err", err)
-		return
+	deadline := timeNowFn().Add(time.Duration(deadlineSecs) * time.Second)
+
+	// Poll window_activity until we observe silenceThreshold consecutive
+	// seconds of pane silence, or the hard deadline fires.
+	var consecutiveErrors int
+	for {
+		activity, err := tmuxLastActivityFn(target)
+		if err != nil {
+			consecutiveErrors++
+			if consecutiveErrors >= watchdogMaxConsecutiveErrors {
+				slog.Info("[watchdog] target gone (repeated activity errors); skipping",
+					"target", target, "err", err)
+				return
+			}
+			sleepFn(watchdogTickInterval)
+			continue
+		}
+		consecutiveErrors = 0
+
+		silenceFor := timeNowFn().Sub(activity)
+		if silenceFor >= silenceThreshold {
+			// Pane has been quiet long enough — run the semantic check.
+			break
+		}
+		if timeNowFn().After(deadline) {
+			slog.Info("[watchdog] no nudge: agent busy past deadline (no silence window)",
+				"target", target, "deadline_s", deadlineSecs)
+			return
+		}
+		sleepFn(watchdogTickInterval)
 	}
-	sleepFn(time.Duration(threshold) * time.Second)
+
 	after, err := capturePaneFn(target, 50)
 	if err != nil {
-		slog.Info("[watchdog] capture post-wait failed; skipping",
+		slog.Info("[watchdog] capture failed; skipping",
 			"target", target, "err", err)
 		return
 	}
-	if before != after {
-		// Agent produced output during the window — silence not
-		// observed, no nudge needed.
+
+	// Resolve per-runtime anchor/spinner regexes for the semantic engagement check.
+	var bottomAnchorRe, spinnerRe *regexp.Regexp
+	if preset, err := trt.GetPreset(runtimeName); err == nil {
+		bottomAnchorRe = preset.BottomAnchorRegex
+		spinnerRe = preset.SpinnerRegex
+	}
+
+	engaged := paneAgentEngaged(after, bottomAnchorRe, spinnerRe)
+	if engaged {
+		slog.Info("[watchdog] no nudge: agent output present",
+			"target", target, "runtime", runtimeName)
 		return
 	}
+
 	// thrum-puhr.10 cluster 8: guard against typing into a trust
-	// dialog or permission prompt. The pane being silent for the
-	// watchdog threshold does NOT mean it's safe to type — a fresh
-	// codex/claude session sitting at a first-launch trust gate is
-	// also silent.
-	if !permission.IsPaneSafeToType(runtime, after) {
+	// dialog or permission prompt.
+	if !permission.IsPaneSafeToType(runtimeName, after) {
 		slog.Info("[watchdog] skipping nudge: pane in detected prompt/trust-gate state",
-			"target", target, "runtime", runtime)
+			"target", target, "runtime", runtimeName)
 		return
 	}
-	slog.Info("[watchdog] pane silent post-action, nudging",
-		"target", target, "threshold_s", threshold)
+	slog.Info("[watchdog] nudging: only spinner/blanks below banner sentinel",
+		"target", target, "runtime", runtimeName, "deadline_s", deadlineSecs)
 	if err := sendKeysFn(target, nudge); err != nil {
 		slog.Warn("[watchdog] SendKeys nudge failed", "target", target, "err", err)
 		return
@@ -1601,16 +1696,32 @@ var identityPollInterval = 500 * time.Millisecond
 // (read @thrum-thrum-dir) and a second setUserOptionFn write
 // (stamp @thrum-thrum-dir) for daemon-scoped pass 2 filtering.
 var (
-	sendKeysFn       = ttmux.SendKeys
-	sendSpecialKeyFn = ttmux.SendSpecialKey
-	killSessionFn    = ttmux.KillSession
-	hasSessionFn     = ttmux.HasSession
-	listSessionsFn   = ttmux.ListSessions
-	getUserOptionFn  = ttmux.GetUserOption
-	setUserOptionFn  = ttmux.SetUserOption
-	capturePaneFn    = ttmux.CapturePane
-	sleepFn          = time.Sleep
+	sendKeysFn         = ttmux.SendKeys
+	sendSpecialKeyFn   = ttmux.SendSpecialKey
+	killSessionFn      = ttmux.KillSession
+	hasSessionFn       = ttmux.HasSession
+	listSessionsFn     = ttmux.ListSessions
+	getUserOptionFn    = ttmux.GetUserOption
+	setUserOptionFn    = ttmux.SetUserOption
+	capturePaneFn      = ttmux.CapturePane
+	sleepFn            = time.Sleep
+	tmuxLastActivityFn = ttmux.LastActivity
+	timeNowFn          = time.Now
 )
+
+// silenceThreshold is the consecutive-silence window the watchdog waits for
+// before running the engagement check. 5 seconds of pane silence means the
+// spinner has stopped ticking, so we can do a stable snapshot. thrum-84xc.
+const silenceThreshold = 5 * time.Second
+
+// watchdogTickInterval is how often the watchdog polls tmux window_activity
+// while waiting for a silence window. 500ms keeps latency low without
+// hammering the tmux server.
+const watchdogTickInterval = 500 * time.Millisecond
+
+// watchdogMaxConsecutiveErrors is how many consecutive tmuxLastActivityFn
+// errors the watchdog tolerates before assuming the target is gone and exiting.
+const watchdogMaxConsecutiveErrors = 3
 
 // waitForIdentityFile blocks until the identity file at idPath appears
 // on disk, or the combined initial+retry window expires. Between the
