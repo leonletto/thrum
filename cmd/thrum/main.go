@@ -5716,6 +5716,20 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				}
 			}()
 			for _, recipient := range evt.Recipients {
+				// thrum-kfn3: never write a spool entry to the sender's
+				// own dir. HandleSend is supposed to exclude callerID
+				// from Recipients, but role-group expansion and cross-
+				// daemon sync mirrors have leaked it in the past. This
+				// is a cheap last-line guard so a regression upstream
+				// can't reach the user-visible self-echo nudge again.
+				if recipient == evt.AgentID {
+					slog.Info("[nudge] spool.skip self",
+						"site", "main.go:WriteSpool",
+						"msg_id", evt.MessageID,
+						"sender", evt.AgentID,
+					)
+					continue
+				}
 				if !nudge.HasLocalIdentity(thrumDir, recipient) {
 					slog.Info("[nudge] spool.skip non-local",
 						"site", "main.go:WriteSpool",

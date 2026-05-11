@@ -41,6 +41,24 @@ shopt -s nullglob
 files=("$spool_dir"/*.json)
 [[ ${#files[@]} -eq 0 ]] && exit 0
 
+# thrum-kfn3: defense-in-depth filter for self-echo. The daemon should
+# never write a spool entry whose `from` matches the receiving agent —
+# but historical bugs in role-group expansion and cross-daemon sync
+# mirrors have leaked the sender into Recipients. Drop any self-echo
+# files unconditionally so a daemon-side regression can't reach the
+# user-visible "New message from @<self>" nudge.
+filtered=()
+for f in "${files[@]}"; do
+  from="$(sed -n 's/.*"from"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$f")"
+  if [[ "$from" == "@$agent_id" || "$from" == "$agent_id" ]]; then
+    rm -f "$f"
+    continue
+  fi
+  filtered+=("$f")
+done
+files=("${filtered[@]}")
+[[ ${#files[@]} -eq 0 ]] && exit 0
+
 # If tmux is alive, tmux nudge already delivered. Silently consume
 # spool files and exit with no output.
 tmux_alive="$(thrum whoami --field tmux_alive 2>/dev/null || echo false)"
