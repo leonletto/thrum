@@ -7,10 +7,9 @@ description: Show active team members
 
 # Thrum Team
 
-Use this skill when the user explicitly wants the `team` Thrum
-workflow. Prefer the umbrella `thrum` skill when the request spans multiple
-commands or needs broader coordination judgment.
-
+Use this skill when the user explicitly wants the `team` Thrum workflow. Prefer
+the umbrella `thrum` skill when the request spans multiple commands or needs
+broader coordination judgment.
 
 List all active agents with their roles, modules, and current intents.
 

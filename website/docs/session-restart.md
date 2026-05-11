@@ -307,7 +307,8 @@ its own snapshot before falling back to force extraction.
 `thrum tmux launch` or `thrum tmux restart`, the daemon monitors the agent pane
 for this many seconds. If the pane produces no output, a contextual nudge is
 sent so the agent doesn't sit idle having missed the prime output. An
-actively-producing pane is never interrupted. Set to a negative value to disable.
+actively-producing pane is never interrupted. Set to a negative value to
+disable.
 
 ---
 

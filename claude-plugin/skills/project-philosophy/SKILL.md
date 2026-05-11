@@ -192,8 +192,8 @@ quality comes from real answers, not filler.
 
 > **`AskUserQuestion` permits at most 4 options per question.** Exceeding the
 > limit triggers a runtime "Invalid tool parameters" / "expected array to have
-> <=4 items" error. Each of the categories above has a natural option count
-> that can grow past 4 once a real team's rules are listed — so use multiple
+> <=4 items" error. Each of the categories above has a natural option count that
+> can grow past 4 once a real team's rules are listed — so use multiple
 > sequential questions (e.g. "category?" → "specific item within category?")
 > rather than packing options into a single prompt. Prefer one prompt per
 > category over one prompt with all categories listed.

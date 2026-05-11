@@ -416,11 +416,11 @@ Throughput is not the only metric. Speed without verification ships broken work.
 - Don't bucket review findings as "follow-ups" without evaluating file-scope +
   fix-size + verification-cost. Default to fix-now when the file is already
   being touched.
-- Don't close an epic on the agent's word alone — confirm against the diff,
-  the test output, and the spec the plan named.
+- Don't close an epic on the agent's word alone — confirm against the diff, the
+  test output, and the spec the plan named.
 - Don't accept "ship the dispatched plan" when the agent's pushback identifies
-  an evidence problem. Surface it to the coordinator or human before
-  proceeding; pushback-before-commit beats rework-after-merge.
+  an evidence problem. Surface it to the coordinator or human before proceeding;
+  pushback-before-commit beats rework-after-merge.
 - Don't paper over a hard call with a defense-in-depth fix labeled as the
   root-cause fix. Rename/refile so the work that ships matches what got fixed.
 

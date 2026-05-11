@@ -1,4 +1,3 @@
-
 ## Thrum CLI Reference
 
 > **TL;DR:** You only need 8 commands for daily use — they're in the
@@ -2500,16 +2499,16 @@ the main worktree into a "feature" worktree.
 thrum worktree create <name> [flags]
 ```
 
-| Flag             | Description                                                     | Default          |
-| ---------------- | --------------------------------------------------------------- | ---------------- |
-| `--branch`, `-b` | Branch name                                                     | `feature/<name>` |
-| `--detach`       | Create detached HEAD worktree                                   | `false`          |
-| `--name`         | Agent name (triggers quickstart when combined with role+module) |                  |
-| `--role`         | Agent role                                                      |                  |
-| `--module`       | Agent module                                                    |                  |
-| `--intent`       | Initial work intent description                                 |                  |
+| Flag             | Description                                                                 | Default          |
+| ---------------- | --------------------------------------------------------------------------- | ---------------- |
+| `--branch`, `-b` | Branch name                                                                 | `feature/<name>` |
+| `--detach`       | Create detached HEAD worktree                                               | `false`          |
+| `--name`         | Agent name (triggers quickstart when combined with role+module)             |                  |
+| `--role`         | Agent role                                                                  |                  |
+| `--module`       | Agent module                                                                |                  |
+| `--intent`       | Initial work intent description                                             |                  |
 | `--runtime`      | Runtime preset: `claude`, `codex`, `cursor`, `gemini`, `opencode`, `auggie` |                  |
-| `--force`        | Overwrite existing runtime config files                         | `false`          |
+| `--force`        | Overwrite existing runtime config files                                     | `false`          |
 
 The worktree is created at `worktrees.base_path/<name>` (default:
 `~/.workspaces/<project>/<name>`). The name cannot contain `/`, `\`, or `..`.

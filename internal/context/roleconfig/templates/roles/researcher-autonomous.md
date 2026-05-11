@@ -62,9 +62,9 @@ v1, but the segment is reserved now to prevent silent overwrite later).
 ## Available skills (situational — you MUST invoke when triggered)
 
 These skills deepen role discipline for specific situations. They do NOT
-auto-load — when a trigger condition below applies, you MUST invoke the
-matching skill via the Skill tool BEFORE taking action. Treat the trigger
-phrases as MUST-INVOKE conditions, not optional suggestions.
+auto-load — when a trigger condition below applies, you MUST invoke the matching
+skill via the Skill tool BEFORE taking action. Treat the trigger phrases as
+MUST-INVOKE conditions, not optional suggestions.
 
 - `researcher-investigating` — investigating, exploring code, research task,
   find me X, investigate Y
@@ -119,9 +119,9 @@ findings_researcher.md R2/F4.)
 
 ### Always pass an explicit `model:` parameter on sub-agent spawns
 
-Sub-agents inherit the parent model by default. When your runtime supports
-model selection on sub-agent spawns, every spawn must include `model:` —
-`haiku` for mechanical work, `sonnet` for judgment, `opus` only when justified.
+Sub-agents inherit the parent model by default. When your runtime supports model
+selection on sub-agent spawns, every spawn must include `model:` — `haiku` for
+mechanical work, `sonnet` for judgment, `opus` only when justified.
 
 ### Run thrum commands from the main repo, never from your worktree
 
@@ -186,8 +186,8 @@ shared libraries. Write access only to docs/research notes.
 
 ## Communication Protocol
 
-Use the thrum CLI for all messaging — do NOT use any runtime-builtin
-messaging tool, which routes outside the persistent inbox.
+Use the thrum CLI for all messaging — do NOT use any runtime-builtin messaging
+tool, which routes outside the persistent inbox.
 
 ```bash
 # Acknowledge a research dispatch (within 2 minutes)
@@ -231,5 +231,5 @@ CC'd on by accident — check `--to` before responding.
 ## CRITICAL REMINDERS
 
 Verify don't recall · address by name not role · return findings, never
-implement · cite file:line evidence · pass explicit `model:` on every
-sub-agent spawn · stay read-only · acknowledge dispatches within 2 minutes.
+implement · cite file:line evidence · pass explicit `model:` on every sub-agent
+spawn · stay read-only · acknowledge dispatches within 2 minutes.

@@ -1,10 +1,14 @@
 ---
 name: project-philosophy
-description: "Use when a project needs its implementation philosophy established or updated — the canonical doc at .thrum/philosophy.md defining anti-patterns, red flags, and project-specific rules that implementation agents read at task-start time. First invocation generates from project inspection; subsequent invocations reconcile against current project state and propose diffs."
+description:
+  "Use when a project needs its implementation philosophy established or updated
+  — the canonical doc at .thrum/philosophy.md defining anti-patterns, red flags,
+  and project-specific rules that implementation agents read at task-start time.
+  First invocation generates from project inspection; subsequent invocations
+  reconcile against current project state and propose diffs."
 # source: claude-plugin/skills/project-philosophy/SKILL.md
 # generated-by: scripts/sync-skills.sh
 ---
-
 
 ## Project Philosophy
 
@@ -190,8 +194,8 @@ quality comes from real answers, not filler.
 
 > **`AskUserQuestion` permits at most 4 options per question.** Exceeding the
 > limit triggers a runtime "Invalid tool parameters" / "expected array to have
-> <=4 items" error. Each of the categories above has a natural option count
-> that can grow past 4 once a real team's rules are listed — so use multiple
+> <=4 items" error. Each of the categories above has a natural option count that
+> can grow past 4 once a real team's rules are listed — so use multiple
 > sequential questions (e.g. "category?" → "specific item within category?")
 > rather than packing options into a single prompt. Prefer one prompt per
 > category over one prompt with all categories listed.

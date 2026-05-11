@@ -80,10 +80,10 @@ func TestCleanTmuxEnv_PreservesOtherClaudeVars(t *testing.T) {
 
 	env := cleanTmuxEnv()
 	want := map[string]bool{
-		"CLAUDE_API_KEY=":     false,
-		"CLAUDE_SESSION_ID=":  false,
-		"CLAUDECODE=":         false,
-		"CLAUDE_CONFIG_DIR=":  false,
+		"CLAUDE_API_KEY=":    false,
+		"CLAUDE_SESSION_ID=": false,
+		"CLAUDECODE=":        false,
+		"CLAUDE_CONFIG_DIR=": false,
 	}
 	for _, e := range env {
 		for prefix := range want {

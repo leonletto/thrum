@@ -1,4 +1,3 @@
-
 ## What This Does
 
 Your agent hits a permission prompt in the middle of a long run. You're not
@@ -411,9 +410,9 @@ On first launch, codex and claude display a trust dialog before the normal
 session starts. Thrum's permission-prompt detector recognizes these first-launch
 trust dialogs as a distinct class. When one is detected, keystroke injection —
 banner delivery, prime nudge, watchdog nudge — is skipped so the user can answer
-the trust prompt manually without interference. Normal permission-prompt detection
-and the supervisor notify flow are unchanged; this only affects the injection
-paths that fire during session startup.
+the trust prompt manually without interference. Normal permission-prompt
+detection and the supervisor notify flow are unchanged; this only affects the
+injection paths that fire during session startup.
 
 ---
 

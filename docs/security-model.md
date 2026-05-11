@@ -1,4 +1,3 @@
-
 ## Local Security Model
 
 ### Overview
