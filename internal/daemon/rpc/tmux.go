@@ -410,19 +410,20 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 		//   /thrum:prime keystroke send unchanged — that's how those
 		//   runtimes get the briefing into context.
 		go func() {
-			time.Sleep(10 * time.Second)
+			// thrum-puhr.10 (cluster 5): pre-inject readiness via
+			// silence-detector. Replaces the legacy Sleep(10s); the
+			// pane is "ready" once two consecutive captures are
+			// byte-identical (TUI rendered, runtime at input-ready
+			// state). Stable-after=2, ceiling=60s.
+			waitForPaneReady(target, 2, 60)
 			if runtimeHasSessionStartHook(runtime) {
 				h.emitIdentityBanner(name, target)
 			} else {
 				primeCmd := primeCommandForRuntime(runtime)
 				_ = ttmux.SendKeys(target, primeCmd)
 				_ = ttmux.SendSpecialKey(target, "Enter")
-				// TUI runtimes (e.g. OpenCode) may swallow the first Enter during
-				// startup. Retry after a brief pause as a fallback.
-				time.Sleep(3 * time.Second)
-				_ = ttmux.SendSpecialKey(target, "Enter")
 			}
-			// thrum-puhr.10: post-launch silence watchdog. If the pane
+			// thrum-puhr.10: post-inject silence watchdog. If the pane
 			// is still silent after the configured threshold (default
 			// 30s, set via restart.silence_watchdog_seconds), nudge the
 			// agent to read its inbox. Fresh codex agents in particular
@@ -1204,16 +1205,15 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 		// For non-hook runtimes the post-restart /thrum:prime is what
 		// loads the snapshot — keep it.
 		go func() {
-			time.Sleep(10 * time.Second)
+			// thrum-puhr.10 (cluster 5): pre-inject readiness via
+			// silence-detector — same as HandleLaunch. Replaces the
+			// legacy Sleep(10s) at this site.
+			waitForPaneReady(target, 2, 60)
 			if runtimeHasSessionStartHook(runtime) {
 				h.emitIdentityBanner(name, target)
 			} else {
 				primeCmd := primeCommandForRuntime(runtime)
 				_ = ttmux.SendKeys(target, primeCmd)
-				_ = ttmux.SendSpecialKey(target, "Enter")
-				// TUI runtimes (e.g. OpenCode) may swallow the first Enter during
-				// startup. Retry after a brief pause as a fallback.
-				time.Sleep(3 * time.Second)
 				_ = ttmux.SendSpecialKey(target, "Enter")
 			}
 			// thrum-puhr.10: post-restart silence watchdog. On a large-
@@ -1242,6 +1242,60 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 		Session:       name,
 		SnapshotLines: snapshotLines,
 	}, nil
+}
+
+// waitForPaneReady polls the target tmux pane until two consecutive
+// captures (1s apart) return identical content. That's the signal
+// "TUI has finished rendering, the runtime is at an input-ready
+// state." Replaces the legacy hard-coded Sleep(10s) at the HandleLaunch
+// / HandleRestart post-action site: launchers that boot fast unblock
+// quickly, launchers that boot slow (large repo init, codex first run)
+// don't have their first keystroke swallowed by a still-rendering TUI.
+//
+// stableFor: consecutive identical captures required to declare ready
+// (default 2 → ~2s of no change after capture cadence).
+// ceilingSeconds: hard cap on total wait so a never-stable pane
+// (continuous animation, agent already engaged) doesn't block forever.
+//
+// On capture errors the function falls back to a short fixed sleep so
+// a transient tmux glitch doesn't break launch — better to inject
+// late than to skip injection entirely.
+func waitForPaneReady(target string, stableFor int, ceilingSeconds int) {
+	if stableFor <= 0 {
+		stableFor = 2
+	}
+	if ceilingSeconds <= 0 {
+		ceilingSeconds = 60
+	}
+	const interval = 1 * time.Second
+	prev, err := capturePaneFn(target, 50)
+	if err != nil {
+		slog.Info("[readiness] baseline capture failed; falling back to fixed sleep",
+			"target", target, "err", err)
+		sleepFn(10 * time.Second)
+		return
+	}
+	streak := 0
+	for i := 0; i < ceilingSeconds; i++ {
+		sleepFn(interval)
+		cur, err := capturePaneFn(target, 50)
+		if err != nil {
+			slog.Info("[readiness] mid-poll capture failed; bailing",
+				"target", target, "err", err)
+			return
+		}
+		if cur == prev {
+			streak++
+			if streak >= stableFor {
+				return
+			}
+			continue
+		}
+		streak = 0
+		prev = cur
+	}
+	slog.Info("[readiness] pane never stabilized within ceiling; proceeding",
+		"target", target, "ceiling_s", ceilingSeconds)
 }
 
 // nudgeSilentPaneAfter implements thrum-puhr.10: after a post-launch /
