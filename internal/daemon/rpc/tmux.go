@@ -1323,6 +1323,8 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 // runtime is required for permission-prompt detection (per-runtime
 // patterns); trust-gate detection works either way but is more
 // precise when runtime is known.
+//
+//nolint:unparam // stableFor is always 2 at call sites today; preserved as a parameter for the readiness-tuning seam future runtime presets will use.
 func waitForPaneReady(target, runtime string, stableFor int, ceilingSeconds int) bool {
 	if stableFor <= 0 {
 		stableFor = 2

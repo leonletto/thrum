@@ -14,18 +14,20 @@ and this project adheres to
   SessionStart auto-prime, PreToolUse safety block, and Stop unread-inbox hooks
   plus 14 role-discipline skills synced from `claude-plugin`. New install path
   is a one-command bootstrap:
-  ```
+
+  ```bash
   bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
   ```
+
   The script handles the per-plugin cache-staging gap codex 0.130.0 has for
   third-party marketplaces (thrum-pm7n.4).
 
 - **Tmux silence watchdog after launch and restart.** When `thrum tmux launch`
   or `thrum tmux restart` completes, the daemon watches the agent's pane for
   silence and sends a contextual nudge if the agent doesn't engage within the
-  configured threshold. Closes the long-standing UX gap where fresh codex
-  agents (and large-context restarts in claude) sat idle at a welcome banner
-  or post-restart screen. Configurable via the new
+  configured threshold. Closes the long-standing UX gap where fresh codex agents
+  (and large-context restarts in claude) sat idle at a welcome banner or
+  post-restart screen. Configurable via the new
   `restart.silence_watchdog_seconds` key (default 30s; negative disables).
   Eliminates the previous hardcoded 10-second pre-inject sleep in favor of a
   pane-stability readiness probe (thrum-puhr.10).
@@ -34,27 +36,26 @@ and this project adheres to
   `IsTrustGate` / `IsPaneSafeToType` detector in
   `internal/daemon/permission/detect.go` recognizes the trust prompts both
   runtimes show on first launch in a new directory. The watchdog, identity
-  banner, and `/thrum:prime` keystroke paths all consult this detector and
-  skip injection when a trust gate is active — preventing the agent from
-  being killed by stray keystrokes into a security gate. Match uses a
-  durable runtime-agnostic `1.Yes / 2.No / "trust"` proximity pattern plus
-  per-runtime exact phrases for defensive precision (thrum-puhr.10 cluster 8).
+  banner, and `/thrum:prime` keystroke paths all consult this detector and skip
+  injection when a trust gate is active — preventing the agent from being killed
+  by stray keystrokes into a security gate. Match uses a durable
+  runtime-agnostic `1.Yes / 2.No / "trust"` proximity pattern plus per-runtime
+  exact phrases for defensive precision (thrum-puhr.10 cluster 8).
 
 - **Per-session env scoping at session create.** `tmux.CreateSessionWithEnv`
   injects `THRUM_NAME/AGENT_ID/ROLE/MODULE/HOME/INTENT` per-session via
-  `tmux new-session -e KEY=VALUE` AND `tmux set-environment -t <session> KEY
-  VALUE` (so subsequent split-window / new-window panes inherit correctly).
-  Distinct sessions on a shared tmux server now present distinct identities
-  to their initial shells. Complements the existing `cleanTmuxEnv` source-side
-  scrub (thrum-jj0a.1).
+  `tmux new-session -e KEY=VALUE` AND
+  `tmux set-environment -t <session> KEY VALUE` (so subsequent split-window /
+  new-window panes inherit correctly). Distinct sessions on a shared tmux server
+  now present distinct identities to their initial shells. Complements the
+  existing `cleanTmuxEnv` source-side scrub (thrum-jj0a.1).
 
 - **Anti-rush / anti-shortcut discipline in coordinator + orchestrator
-  preambles.** Five operational rules codifying the patterns the project has
-  hit before — skipping review gates on small diffs, bucketing findings as
-  "follow-ups" without justification, shipping a fix labeled X when X's
-  actual cause is something else, declaring DONE without verifying the
-  user-visible bug is gone, accepting the cheapest path on autopilot
-  (thrum-fu9j).
+  preambles.** Five operational rules codifying the patterns the project has hit
+  before — skipping review gates on small diffs, bucketing findings as
+  "follow-ups" without justification, shipping a fix labeled X when X's actual
+  cause is something else, declaring DONE without verifying the user-visible bug
+  is gone, accepting the cheapest path on autopilot (thrum-fu9j).
 
 ### Changed
 
@@ -74,68 +75,67 @@ and this project adheres to
   cluster 5).
 
 - **Role preambles correct skill-invocation framing.** The "Available skills
-  (situational)" section in 7 role preambles no longer claims skills
-  "load automatically when the runtime detects matching trigger phrases" /
-  "fire on context". Skills do NOT auto-load: agents MUST explicitly invoke
-  them via the `Skill` tool when a trigger condition applies. Wording is now
-  directive, not descriptive (thrum-puhr.8).
+  (situational)" section in 7 role preambles no longer claims skills "load
+  automatically when the runtime detects matching trigger phrases" / "fire on
+  context". Skills do NOT auto-load: agents MUST explicitly invoke them via the
+  `Skill` tool when a trigger condition applies. Wording is now directive, not
+  descriptive (thrum-puhr.8).
 
 - **Enhanced role preambles regain the in-tmux listener-suppression.** 12
-  enhanced preambles (`deployer / documenter / monitor / planner / tester /
-  reviewer` × `strict / autonomous`) had restated the "spawn a listener
-  IMMEDIATELY on session start" instruction without preserving the tmux
-  carveout in the base `DefaultPreamble` — causing tmux-managed agents under
-  those roles to spawn a redundant background listener that burned context
-  for zero delivery benefit. Carveout restored; an embedded-template
-  regression test now fails any preamble that issues the spawn directive
-  without the SKIP-when-in-tmux qualifier (thrum-puhr.1).
+  enhanced preambles
+  (`deployer / documenter / monitor / planner / tester / reviewer` ×
+  `strict / autonomous`) had restated the "spawn a listener IMMEDIATELY on
+  session start" instruction without preserving the tmux carveout in the base
+  `DefaultPreamble` — causing tmux-managed agents under those roles to spawn a
+  redundant background listener that burned context for zero delivery benefit.
+  Carveout restored; an embedded-template regression test now fails any preamble
+  that issues the spawn directive without the SKIP-when-in-tmux qualifier
+  (thrum-puhr.1).
 
-- **`thrum worktree create` propagates SessionStart hook scripts** into the
-  new worktree's `scripts/` directory. `scripts/thrum-startup.sh` and
+- **`thrum worktree create` propagates SessionStart hook scripts** into the new
+  worktree's `scripts/` directory. `scripts/thrum-startup.sh` and
   `scripts/thrum-check-inbox.sh` are gitignored (added by `thrum init` to
-  `.gitignore` / `.git/info/exclude`), so `git worktree add` doesn't carry
-  them across. Without the per-worktree copy, every Claude Code SessionStart
-  hook in a worktree-created subdir fired against a missing script and
-  the agent never quickstarted or re-registered. Copy is idempotent on
-  size+mtime and best-effort on a removed source (thrum-nne1).
+  `.gitignore` / `.git/info/exclude`), so `git worktree add` doesn't carry them
+  across. Without the per-worktree copy, every Claude Code SessionStart hook in
+  a worktree-created subdir fired against a missing script and the agent never
+  quickstarted or re-registered. Copy is idempotent on size+mtime and
+  best-effort on a removed source (thrum-nne1).
 
-- **`codex` runtime preset is marked `HasSessionStartHook: true`** (parity
-  with `claude` and `cursor`). pm7n.4 shipped the codex
-  `inject-prime-context.sh` SessionStart hook but the preset was never
-  updated; HandleLaunch / HandleRestart were routing codex through the
-  non-hook branch (typing `/thrum:prime` into the TUI) instead of the
-  hook branch (emitting the identity banner after the runtime renders).
+- **`codex` runtime preset is marked `HasSessionStartHook: true`** (parity with
+  `claude` and `cursor`). pm7n.4 shipped the codex `inject-prime-context.sh`
+  SessionStart hook but the preset was never updated; HandleLaunch /
+  HandleRestart were routing codex through the non-hook branch (typing
+  `/thrum:prime` into the TUI) instead of the hook branch (emitting the identity
+  banner after the runtime renders).
 
 ### Fixed
 
-- **kfn3 self-echo phantom nudge.** Outbound `thrum send` from agent A to
-  agent B was producing a phantom `New message from @<A>` system-reminder
-  in A's own pane on every send. Root cause: `CLAUDE_PROJECT_DIR` leaks
-  through the shared tmux server's default-environment, so Claude Code in
-  repo-B's pane resolves the `${CLAUDE_PROJECT_DIR}/scripts/thrum-check-
-  inbox.sh` hook against repo-A's worktree. Fix scrubs `CLAUDE_PROJECT_DIR`
-  at the existing `cleanTmuxEnv` chokepoint, alongside the existing
-  `THRUM_*` and `TMUX/TMUX_PANE` scrubs. Scope intentionally narrow to
-  the single variable with documented leak evidence; `CLAUDE_API_KEY` and
-  other CLAUDE_* vars are explicitly preserved by a positive regression
-  test (thrum-jj0a.6).
+- **kfn3 self-echo phantom nudge.** Outbound `thrum send` from agent A to agent
+  B was producing a phantom `New message from @<A>` system-reminder in A's own
+  pane on every send. Root cause: `CLAUDE_PROJECT_DIR` leaks through the shared
+  tmux server's default-environment, so Claude Code in repo-B's pane resolves
+  the `${CLAUDE_PROJECT_DIR}/scripts/thrum-check- inbox.sh` hook against
+  repo-A's worktree. Fix scrubs `CLAUDE_PROJECT_DIR` at the existing
+  `cleanTmuxEnv` chokepoint, alongside the existing `THRUM_*` and
+  `TMUX/TMUX_PANE` scrubs. Scope intentionally narrow to the single variable
+  with documented leak evidence; `CLAUDE_API_KEY` and other CLAUDE\_\* vars are
+  explicitly preserved by a positive regression test (thrum-jj0a.6).
 
-- **Defense-in-depth self-echo guards.** Independent of the env-leak fix
-  above, both the daemon spool dispatcher (`cmd/thrum/main.go`) and the
-  inbox-check hook (`scripts/thrum-check-inbox.sh` + the shared template)
-  now drop any spool entry whose `from` field matches the receiving agent
-  ID — so a future regression upstream cannot reach the user-visible
-  self-echo nudge (thrum-44sy).
+- **Defense-in-depth self-echo guards.** Independent of the env-leak fix above,
+  both the daemon spool dispatcher (`cmd/thrum/main.go`) and the inbox-check
+  hook (`scripts/thrum-check-inbox.sh` + the shared template) now drop any spool
+  entry whose `from` field matches the receiving agent ID — so a future
+  regression upstream cannot reach the user-visible self-echo nudge
+  (thrum-44sy).
 
 - **`project-philosophy` skill respects `AskUserQuestion`'s 4-option limit.**
   Step 5 of the skill instructed implementers to surface project rules via
   prompts whose natural option counts exceeded the tool's hard limit of 4
   options. First prompt failed with `Invalid tool parameters` /
   `expected array to have <=4 items`, forcing visible retries. Step 5 now
-  directs implementers to use multiple sequential questions
-  (`category?` → `specific item within category?`) rather than packing
-  options into one prompt. Synced across all 4 runtime plugin copies
-  (thrum-2ut8).
+  directs implementers to use multiple sequential questions (`category?` →
+  `specific item within category?`) rather than packing options into one prompt.
+  Synced across all 4 runtime plugin copies (thrum-2ut8).
 
 ## [0.10.2] - 2026-05-04
 
