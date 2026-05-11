@@ -431,10 +431,32 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 			// pane is "ready" once two consecutive captures are
 			// byte-identical (TUI rendered, runtime at input-ready
 			// state). Stable-after=2, ceiling=60s.
-			waitForPaneReady(target, 2, 60)
+			//
+			// thrum-puhr.10 (cluster 8): waitForPaneReady returns
+			// false when the stabilized pane is in a permission
+			// prompt or trust-gate state. Skip ALL keystroke
+			// injection in that case — typing into a trust dialog
+			// would either select an option without the user's intent
+			// or cause the runtime to interpret garbage characters as
+			// a quit signal.
+			if !waitForPaneReady(target, runtime, 2, 60) {
+				slog.Info("[launch] skipping post-launch inject: pane in detected prompt/trust-gate state",
+					"target", target, "runtime", runtime)
+				return
+			}
 			if runtimeHasSessionStartHook(runtime) {
 				h.emitIdentityBanner(name, target)
 			} else {
+				// Defense-in-depth: re-check safety just before send.
+				// waitForPaneReady's exit window is brief but not
+				// atomic with this send — a trust gate could appear
+				// during the few microseconds in between (e.g. claude
+				// finishing render after readiness returned).
+				if cur, err := capturePaneFn(target, 50); err == nil && !permission.IsPaneSafeToType(runtime, cur) {
+					slog.Info("[launch] skipping /thrum:prime send: pane in detected prompt/trust-gate state",
+						"target", target, "runtime", runtime)
+					return
+				}
 				primeCmd := primeCommandForRuntime(runtime)
 				_ = ttmux.SendKeys(target, primeCmd)
 				_ = ttmux.SendSpecialKey(target, "Enter")
@@ -444,7 +466,7 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 			// 30s, set via restart.silence_watchdog_seconds), nudge the
 			// agent to read its inbox. Fresh codex agents in particular
 			// can sit at a welcome screen without engaging the dispatch.
-			nudgeSilentPaneAfter(target, h.thrumDir, "thrum inbox --unread")
+			nudgeSilentPaneAfter(target, runtime, h.thrumDir, "thrum inbox --unread")
 		}()
 	}
 
@@ -1224,10 +1246,23 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 			// thrum-puhr.10 (cluster 5): pre-inject readiness via
 			// silence-detector — same as HandleLaunch. Replaces the
 			// legacy Sleep(10s) at this site.
-			waitForPaneReady(target, 2, 60)
+			//
+			// thrum-puhr.10 (cluster 8): skip ALL keystroke injection
+			// when the readiness probe reports the pane is in a
+			// permission prompt or trust-gate state.
+			if !waitForPaneReady(target, runtime, 2, 60) {
+				slog.Info("[restart] skipping post-restart inject: pane in detected prompt/trust-gate state",
+					"target", target, "runtime", runtime)
+				return
+			}
 			if runtimeHasSessionStartHook(runtime) {
 				h.emitIdentityBanner(name, target)
 			} else {
+				if cur, err := capturePaneFn(target, 50); err == nil && !permission.IsPaneSafeToType(runtime, cur) {
+					slog.Info("[restart] skipping /thrum:prime send: pane in detected prompt/trust-gate state",
+						"target", target, "runtime", runtime)
+					return
+				}
 				primeCmd := primeCommandForRuntime(runtime)
 				_ = ttmux.SendKeys(target, primeCmd)
 				_ = ttmux.SendSpecialKey(target, "Enter")
@@ -1237,7 +1272,7 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 			// auto-injected prime output. After the configured threshold
 			// (default 30s) of pane silence, nudge it to read the prime
 			// + resume plan and follow its instructions.
-			nudgeSilentPaneAfter(target, h.thrumDir,
+			nudgeSilentPaneAfter(target, runtime, h.thrumDir,
 				"Read the prime output, which includes your resume plan, and then follow your instructions")
 		}()
 	}
@@ -1276,7 +1311,19 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 // On capture errors the function falls back to a short fixed sleep so
 // a transient tmux glitch doesn't break launch — better to inject
 // late than to skip injection entirely.
-func waitForPaneReady(target string, stableFor int, ceilingSeconds int) {
+// waitForPaneReady returns when the pane has been byte-identical across
+// stableFor consecutive captures (1s apart) OR ceilingSeconds elapses.
+//
+// The returned bool reports whether the pane is SAFE TO TYPE: false
+// when permission.IsPaneSafeToType detects a permission prompt or trust
+// gate (thrum-puhr.10 cluster 8). Callers MUST consult the result
+// before any SendKeys — a "ready but in a trust dialog" pane will
+// destroy the runtime if typed into.
+//
+// runtime is required for permission-prompt detection (per-runtime
+// patterns); trust-gate detection works either way but is more
+// precise when runtime is known.
+func waitForPaneReady(target, runtime string, stableFor int, ceilingSeconds int) bool {
 	if stableFor <= 0 {
 		stableFor = 2
 	}
@@ -1289,7 +1336,7 @@ func waitForPaneReady(target string, stableFor int, ceilingSeconds int) {
 		slog.Info("[readiness] baseline capture failed; falling back to fixed sleep",
 			"target", target, "err", err)
 		sleepFn(10 * time.Second)
-		return
+		return false
 	}
 	streak := 0
 	for i := 0; i < ceilingSeconds; i++ {
@@ -1298,12 +1345,12 @@ func waitForPaneReady(target string, stableFor int, ceilingSeconds int) {
 		if err != nil {
 			slog.Info("[readiness] mid-poll capture failed; bailing",
 				"target", target, "err", err)
-			return
+			return false
 		}
 		if cur == prev {
 			streak++
 			if streak >= stableFor {
-				return
+				return permission.IsPaneSafeToType(runtime, cur)
 			}
 			continue
 		}
@@ -1312,6 +1359,10 @@ func waitForPaneReady(target string, stableFor int, ceilingSeconds int) {
 	}
 	slog.Info("[readiness] pane never stabilized within ceiling; proceeding",
 		"target", target, "ceiling_s", ceilingSeconds)
+	// Even at the ceiling, consult the safety detector against the
+	// last capture so a long-rendering pane that ended up at a trust
+	// dialog doesn't get typed into.
+	return permission.IsPaneSafeToType(runtime, prev)
 }
 
 // nudgeSilentPaneAfter implements thrum-puhr.10: after a post-launch /
@@ -1329,7 +1380,7 @@ func waitForPaneReady(target string, stableFor int, ceilingSeconds int) {
 // detached goroutine so the RPC handler returns immediately. Tolerates
 // capture errors (logs and exits — better to skip a nudge than fire
 // against a torn-down pane).
-func nudgeSilentPaneAfter(target string, thrumDir string, nudge string) {
+func nudgeSilentPaneAfter(target, runtime, thrumDir, nudge string) {
 	cfg, _ := config.LoadThrumConfig(thrumDir)
 	threshold, enabled := cfg.Restart.SilenceWatchdog()
 	if !enabled {
@@ -1351,6 +1402,16 @@ func nudgeSilentPaneAfter(target string, thrumDir string, nudge string) {
 	if before != after {
 		// Agent produced output during the window — silence not
 		// observed, no nudge needed.
+		return
+	}
+	// thrum-puhr.10 cluster 8: guard against typing into a trust
+	// dialog or permission prompt. The pane being silent for the
+	// watchdog threshold does NOT mean it's safe to type — a fresh
+	// codex/claude session sitting at a first-launch trust gate is
+	// also silent.
+	if !permission.IsPaneSafeToType(runtime, after) {
+		slog.Info("[watchdog] skipping nudge: pane in detected prompt/trust-gate state",
+			"target", target, "runtime", runtime)
 		return
 	}
 	slog.Info("[watchdog] pane silent post-action, nudging",
@@ -1877,6 +1938,15 @@ func (h *TmuxHandler) emitIdentityBanner(session, target string) {
 	}
 	cmdLine := identitybanner.ShellCommand(idFile)
 	if cmdLine == "" {
+		return
+	}
+	// thrum-puhr.10 cluster 8: guard against typing into a trust gate
+	// or permission prompt. Banner SendKeys would corrupt either by
+	// injecting a shell-prompt command (the cmdLine starts with `:`
+	// or similar) into a dialog input field.
+	if cur, err := capturePaneFn(target, 50); err == nil && !permission.IsPaneSafeToType(idFile.Runtime, cur) {
+		slog.Info("[banner] skipping identity banner: pane in detected prompt/trust-gate state",
+			"target", target, "runtime", idFile.Runtime)
 		return
 	}
 	// Best-effort: SendKeys errors here shouldn't fail the launch.

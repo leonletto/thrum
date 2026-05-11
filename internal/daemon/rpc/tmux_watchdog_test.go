@@ -38,7 +38,7 @@ func TestNudgeSilentPaneAfter_NudgesWhenSilent(t *testing.T) {
 
 	thrumDir := t.TempDir()
 	// Default config (silence_watchdog_seconds == 0) → enabled, 30s.
-	nudgeSilentPaneAfter("sess:0.0", thrumDir, "thrum inbox --unread")
+	nudgeSilentPaneAfter("sess:0.0", "claude", thrumDir, "thrum inbox --unread")
 
 	got := sent.Load()
 	if got == nil || got.(string) != "sess:0.0|thrum inbox --unread" {
@@ -77,7 +77,7 @@ func TestNudgeSilentPaneAfter_SkipsWhenActive(t *testing.T) {
 	}
 	sendSpecialKeyFn = func(_, _ string) error { return nil }
 
-	nudgeSilentPaneAfter("sess:0.0", t.TempDir(), "thrum inbox --unread")
+	nudgeSilentPaneAfter("sess:0.0", "claude", t.TempDir(), "thrum inbox --unread")
 
 	if got := sendCount.Load(); got != 0 {
 		t.Errorf("expected no send-keys when pane changed; got %d", got)
@@ -107,7 +107,7 @@ func TestWaitForPaneReady_ReturnsWhenStable(t *testing.T) {
 	var slept atomic.Int32
 	sleepFn = func(d time.Duration) { slept.Add(int32(d / time.Second)) }
 
-	waitForPaneReady("sess:0.0", 2, 30)
+	waitForPaneReady("sess:0.0", "claude", 2, 30)
 
 	// Sequence: baseline("loading") + 4 polls. The third poll matches
 	// the second (both "ready") → streak=1; the fourth matches again
@@ -136,12 +136,80 @@ func TestWaitForPaneReady_BailsAtCeiling(t *testing.T) {
 	sleepFn = func(time.Duration) {}
 
 	start := time.Now()
-	waitForPaneReady("sess:0.0", 2, 5)
+	waitForPaneReady("sess:0.0", "claude", 2, 5)
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Errorf("waitForPaneReady should have returned quickly with mocked sleep, took %v", elapsed)
 	}
 	if got := i.Load(); got < 6 {
 		t.Errorf("expected ~ceiling+1 captures, got %d", got)
+	}
+}
+
+// TestNudgeSilentPaneAfter_SkipsOnTrustGate pins the cluster-8 guard:
+// even if the pane is silent for the watchdog threshold (true for any
+// fresh runtime sitting at a first-launch trust prompt), no nudge
+// keystroke fires when permission.IsPaneSafeToType reports the pane
+// as unsafe.
+func TestNudgeSilentPaneAfter_SkipsOnTrustGate(t *testing.T) {
+	prevCapture, prevSend, prevSpecial, prevSleep := capturePaneFn, sendKeysFn, sendSpecialKeyFn, sleepFn
+	t.Cleanup(func() {
+		capturePaneFn = prevCapture
+		sendKeysFn = prevSend
+		sendSpecialKeyFn = prevSpecial
+		sleepFn = prevSleep
+	})
+
+	const trust = "Do you trust the contents of this directory?\n  1. Yes\n  2. No"
+	capturePaneFn = func(_ string, _ int) (string, error) { return trust, nil }
+	sleepFn = func(time.Duration) {}
+
+	var sendCount atomic.Int32
+	sendKeysFn = func(_, _ string) error {
+		sendCount.Add(1)
+		return nil
+	}
+	sendSpecialKeyFn = func(_, _ string) error { return nil }
+
+	nudgeSilentPaneAfter("sess:0.0", "codex", t.TempDir(), "thrum inbox --unread")
+
+	if got := sendCount.Load(); got != 0 {
+		t.Errorf("watchdog typed into a trust gate; expected 0 send-keys, got %d", got)
+	}
+}
+
+// TestWaitForPaneReady_ReturnsUnsafeOnTrustGate pins the cluster-8
+// readiness-side guard: when the stabilized pane is at a trust gate
+// the function reports !safe so callers skip the inject.
+func TestWaitForPaneReady_ReturnsUnsafeOnTrustGate(t *testing.T) {
+	prevCapture, prevSleep := capturePaneFn, sleepFn
+	t.Cleanup(func() {
+		capturePaneFn = prevCapture
+		sleepFn = prevSleep
+	})
+
+	const trust = "Do you trust the contents of this directory?\n  1. Yes\n  2. No"
+	// Stabilizes immediately on the trust pane.
+	capturePaneFn = func(_ string, _ int) (string, error) { return trust, nil }
+	sleepFn = func(time.Duration) {}
+
+	safe := waitForPaneReady("sess:0.0", "codex", 2, 30)
+	if safe {
+		t.Errorf("waitForPaneReady reported safe on a trust gate; expected unsafe")
+	}
+}
+
+func TestWaitForPaneReady_ReturnsSafeOnIdlePane(t *testing.T) {
+	prevCapture, prevSleep := capturePaneFn, sleepFn
+	t.Cleanup(func() {
+		capturePaneFn = prevCapture
+		sleepFn = prevSleep
+	})
+
+	capturePaneFn = func(_ string, _ int) (string, error) { return "$ _", nil }
+	sleepFn = func(time.Duration) {}
+
+	if !waitForPaneReady("sess:0.0", "codex", 2, 30) {
+		t.Errorf("waitForPaneReady reported unsafe on idle pane; expected safe")
 	}
 }
 
@@ -169,7 +237,7 @@ func TestNudgeSilentPaneAfter_DisabledByConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nudgeSilentPaneAfter("sess:0.0", thrumDir, "thrum inbox --unread")
+	nudgeSilentPaneAfter("sess:0.0", "claude", thrumDir, "thrum inbox --unread")
 
 	if got := captureCount.Load(); got != 0 {
 		t.Errorf("expected no capture calls when watchdog disabled; got %d", got)
