@@ -416,6 +416,18 @@ the key to the single-invocation option, not to relax the test.
 
 ---
 
+## Trust-Gate Detection
+
+On first launch, codex and claude display a trust dialog before the normal
+session starts. Thrum's permission-prompt detector recognizes these first-launch
+trust dialogs as a distinct class. When one is detected, keystroke injection —
+banner delivery, prime nudge, watchdog nudge — is skipped so the user can answer
+the trust prompt manually without interference. Normal permission-prompt detection
+and the supervisor notify flow are unchanged; this only affects the injection
+paths that fire during session startup.
+
+---
+
 ## See Also
 
 - [tmux Sessions](tmux-sessions.md) — pane lifecycle, session enrollment

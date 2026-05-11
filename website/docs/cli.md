@@ -154,6 +154,10 @@ Pre-fill any wizard prompt with the corresponding flag (`--name`, `--role`,
 etc.); the wizard skips prompts whose value was supplied. With every prompt
 pre-filled, the wizard runs end-to-end without user input even on a TTY.
 
+The wizard's suggested default agent name is derived from the repo directory,
+lowercased and sanitized to satisfy the agent-name validator (a-z, 0-9,
+underscore only).
+
 **G2 guard:** `thrum init` hard-errors if the current working directory is not
 inside a git repository. Pass `--force` to override for non-git environments
 (uncommon; the daemon cannot anchor identity without a git root).
@@ -2512,11 +2516,15 @@ thrum worktree create <name> [flags]
 | `--role`         | Agent role                                                      |                  |
 | `--module`       | Agent module                                                    |                  |
 | `--intent`       | Initial work intent description                                 |                  |
-| `--runtime`      | Runtime preset: `claude`, `codex`, `cursor`, `gemini`, `auggie` |                  |
+| `--runtime`      | Runtime preset: `claude`, `codex`, `cursor`, `gemini`, `opencode`, `auggie` |                  |
 | `--force`        | Overwrite existing runtime config files                         | `false`          |
 
 The worktree is created at `worktrees.base_path/<name>` (default:
 `~/.workspaces/<project>/<name>`). The name cannot contain `/`, `\`, or `..`.
+
+Hook scripts (`scripts/thrum-startup.sh`, `scripts/thrum-check-inbox.sh`) are
+copied from the main repo into the new worktree so SessionStart hooks fire
+correctly.
 
 Example:
 

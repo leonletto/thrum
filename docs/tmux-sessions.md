@@ -1,3 +1,4 @@
+
 ## What This Is
 
 Tmux-managed sessions are how multi-agent orchestration frameworks run their
@@ -114,6 +115,12 @@ thrum tmux create implementer-api --cwd /path/to/worktree \
 This creates a detached tmux session with a clean environment (no inherited env
 vars), runs `thrum quickstart` inside the pane to register the agent identity,
 and sets up `monitor-silence` hooks for permission detection.
+
+**Environment scrubbing:** `THRUM_*` variables and `CLAUDE_PROJECT_DIR` are
+stripped from new tmux sessions. `CLAUDE_PROJECT_DIR` is removed to prevent it
+leaking across worktrees on a shared tmux server, which caused phantom
+self-echo behavior (the kfn3 incident) when the wrong worktree's project dir
+was visible to a newly-launched agent.
 
 You must pass `--name`, `--role`, and `--module` — or `--no-agent` for a bare
 session. Bare `thrum tmux create` without either errors out.

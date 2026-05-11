@@ -1,3 +1,4 @@
+
 ## Configuration
 
 Thrum uses `.thrum/config.json` as the single source of truth for user
@@ -385,6 +386,17 @@ before falling back to force extraction.
 - **Type:** integer (seconds)
 - **Default:** `30`
 
+### `restart.silence_watchdog_seconds`
+
+How long after `thrum tmux launch` or `thrum tmux restart` the daemon waits for
+the agent pane to produce output before injecting a contextual nudge. The
+watchdog fires only if the pane is silent for the configured duration; an
+actively-producing agent is not interrupted.
+
+- **Type:** integer (seconds)
+- **Default:** `30`
+- **Special values:** `0` → use default (30s); negative → disable the watchdog
+
 Example config with restart enabled:
 
 ```json
@@ -392,7 +404,8 @@ Example config with restart enabled:
   "restart": {
     "max_lines": 200,
     "auto_threshold": 80,
-    "graceful_timeout": 30
+    "graceful_timeout": 30,
+    "silence_watchdog_seconds": 30
   }
 }
 ```

@@ -1,3 +1,4 @@
+
 ## Team on Your Machine
 
 You run a coordinator agent that holds the plan, a few implementers working
