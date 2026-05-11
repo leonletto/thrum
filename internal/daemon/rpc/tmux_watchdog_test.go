@@ -84,6 +84,67 @@ func TestNudgeSilentPaneAfter_SkipsWhenActive(t *testing.T) {
 	}
 }
 
+// TestWaitForPaneReady_ReturnsWhenStable verifies the readiness helper
+// returns once the pane has been byte-identical for the configured
+// number of consecutive captures.
+func TestWaitForPaneReady_ReturnsWhenStable(t *testing.T) {
+	prevCapture, prevSleep := capturePaneFn, sleepFn
+	t.Cleanup(func() {
+		capturePaneFn = prevCapture
+		sleepFn = prevSleep
+	})
+
+	// Sequence: rendering... rendering... ready, ready, ready
+	captures := []string{"loading", "loading.", "ready", "ready", "ready"}
+	var idx atomic.Int32
+	capturePaneFn = func(_ string, _ int) (string, error) {
+		n := int(idx.Add(1)) - 1
+		if n >= len(captures) {
+			n = len(captures) - 1
+		}
+		return captures[n], nil
+	}
+	var slept atomic.Int32
+	sleepFn = func(d time.Duration) { slept.Add(int32(d / time.Second)) }
+
+	waitForPaneReady("sess:0.0", 2, 30)
+
+	// Sequence: baseline("loading") + 4 polls. The third poll matches
+	// the second (both "ready") → streak=1; the fourth matches again
+	// → streak=2 → return. Total: 5 captures.
+	if got := idx.Load(); got != 5 {
+		t.Errorf("expected 5 captures (baseline + 4 polls), got %d", got)
+	}
+	if got := slept.Load(); got > 5 {
+		t.Errorf("expected to return in <5 sleep-seconds when stable; got %d", got)
+	}
+}
+
+// TestWaitForPaneReady_BailsAtCeiling verifies the readiness helper
+// gives up after ceiling seconds when the pane never stabilizes.
+func TestWaitForPaneReady_BailsAtCeiling(t *testing.T) {
+	prevCapture, prevSleep := capturePaneFn, sleepFn
+	t.Cleanup(func() {
+		capturePaneFn = prevCapture
+		sleepFn = prevSleep
+	})
+
+	var i atomic.Int32
+	capturePaneFn = func(_ string, _ int) (string, error) {
+		return "changing-" + string(rune(int('a')+int(i.Add(1)))), nil
+	}
+	sleepFn = func(time.Duration) {}
+
+	start := time.Now()
+	waitForPaneReady("sess:0.0", 2, 5)
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("waitForPaneReady should have returned quickly with mocked sleep, took %v", elapsed)
+	}
+	if got := i.Load(); got < 6 {
+		t.Errorf("expected ~ceiling+1 captures, got %d", got)
+	}
+}
+
 // TestNudgeSilentPaneAfter_DisabledByConfig verifies the watchdog
 // short-circuits when restart.silence_watchdog_seconds is negative.
 func TestNudgeSilentPaneAfter_DisabledByConfig(t *testing.T) {
