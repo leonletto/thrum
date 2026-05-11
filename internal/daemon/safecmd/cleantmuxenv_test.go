@@ -43,23 +43,61 @@ func TestCleanTmuxEnv_ScrubsTmuxVars(t *testing.T) {
 	}
 }
 
-// TestCleanTmuxEnv_ScrubsClaudeHarnessVars pins thrum-jj0a.6: the daemon's
-// tmux subprocess environ must not carry Claude Code harness vars
-// (CLAUDE_PROJECT_DIR, CLAUDE_SESSION_ID, CLAUDECODE, ...). Claude Code
-// resolves its hook scripts via ${CLAUDE_PROJECT_DIR}; a leak across a
-// shared tmux server makes Claude fire repo-A's hooks while running in
-// repo-B's pane — the kfn3 self-echo manifested via this path. Leaving
-// CLAUDE_* unscrubbed in the tmux env propagates to every new session as
-// default-environment.
-func TestCleanTmuxEnv_ScrubsClaudeHarnessVars(t *testing.T) {
+// TestCleanTmuxEnv_ScrubsClaudeProjectDir pins thrum-jj0a.6 (scoped per
+// cluster 7): the daemon's tmux subprocess environ must not carry
+// CLAUDE_PROJECT_DIR. Claude Code resolves its hook scripts via
+// ${CLAUDE_PROJECT_DIR}; a leak across a shared tmux server makes
+// Claude fire repo-A's hooks while running in repo-B's pane — the
+// kfn3 self-echo manifested via this path.
+//
+// Scope intentionally narrow: scrub the ONE var with documented leak
+// evidence (CLAUDE_PROJECT_DIR), nothing else under the CLAUDE_*
+// prefix. The companion preserves-test guards against future
+// over-scrubs that would strip auth-bearing or required-for-launch
+// CLAUDE_* vars.
+func TestCleanTmuxEnv_ScrubsClaudeProjectDir(t *testing.T) {
 	t.Setenv("CLAUDE_PROJECT_DIR", "/Users/leon/dev/falcondev/falcon-backend")
-	t.Setenv("CLAUDE_SESSION_ID", "ses_01KR2GSHW8SAXMPAXE68EKGEM4")
-	t.Setenv("CLAUDECODE", "1")
 
 	env := cleanTmuxEnv()
 	for _, e := range env {
-		if strings.HasPrefix(e, "CLAUDE_") || strings.HasPrefix(e, "CLAUDECODE=") {
-			t.Errorf("cleanTmuxEnv leaked Claude harness var: %q", e)
+		if strings.HasPrefix(e, "CLAUDE_PROJECT_DIR=") {
+			t.Errorf("cleanTmuxEnv leaked CLAUDE_PROJECT_DIR: %q", e)
+		}
+	}
+}
+
+// TestCleanTmuxEnv_PreservesOtherClaudeVars is the positive regression
+// guard: CLAUDE_* vars OTHER than CLAUDE_PROJECT_DIR must pass through.
+// Over-scrubbing them risks stripping auth-bearing (CLAUDE_API_KEY) or
+// required-for-launch values that have no documented leak evidence,
+// quietly breaking claude in environments not covered by the leak case.
+func TestCleanTmuxEnv_PreservesOtherClaudeVars(t *testing.T) {
+	t.Setenv("CLAUDE_PROJECT_DIR", "/should/be/scrubbed")
+	t.Setenv("CLAUDE_API_KEY", "sk-redacted-keep-me")
+	t.Setenv("CLAUDE_SESSION_ID", "ses_keep_me")
+	t.Setenv("CLAUDECODE", "1")
+	t.Setenv("CLAUDE_CONFIG_DIR", "/Users/test/.claude")
+
+	env := cleanTmuxEnv()
+	want := map[string]bool{
+		"CLAUDE_API_KEY=":     false,
+		"CLAUDE_SESSION_ID=":  false,
+		"CLAUDECODE=":         false,
+		"CLAUDE_CONFIG_DIR=":  false,
+	}
+	for _, e := range env {
+		for prefix := range want {
+			if strings.HasPrefix(e, prefix) {
+				want[prefix] = true
+			}
+		}
+		if strings.HasPrefix(e, "CLAUDE_PROJECT_DIR=") {
+			t.Errorf("cleanTmuxEnv leaked CLAUDE_PROJECT_DIR: %q", e)
+		}
+	}
+	for prefix, found := range want {
+		if !found {
+			t.Errorf("cleanTmuxEnv over-scrubbed: %q missing from env (should be preserved)", prefix)
 		}
 	}
 }

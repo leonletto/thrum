@@ -94,7 +94,7 @@ func TmuxRun(ctx context.Context, args ...string) error {
 }
 
 // cleanTmuxEnv returns the current environment with TMUX, TMUX_PANE, all
-// THRUM_* variables, and all CLAUDE_* / CLAUDECODE harness variables removed.
+// THRUM_* variables, and CLAUDE_PROJECT_DIR removed.
 //
 // Three distinct hazards motivate the scrub:
 //
@@ -112,9 +112,9 @@ func TmuxRun(ctx context.Context, args ...string) error {
 //     agent. Identity guards (cross_worktree, pid_mismatch,
 //     quickstart_name_collision) then fire constantly. See thrum-8nro.4.
 //
-//  3. CLAUDE_* / CLAUDECODE: same shared-tmux-server hazard as THRUM_* but
-//     for Claude Code's own harness vars. CLAUDE_PROJECT_DIR is the load-
-//     bearing one — Claude Code reads it to resolve hook paths
+//  3. CLAUDE_PROJECT_DIR: same shared-tmux-server hazard as THRUM_* but for
+//     Claude Code's hook-resolution path. Claude Code reads
+//     CLAUDE_PROJECT_DIR to locate per-project hooks
 //     (templates/claude/settings.json.tmpl points its hooks at
 //     ${CLAUDE_PROJECT_DIR}/scripts/thrum-check-inbox.sh). If repo A starts
 //     a tmux session first, repo B's later session inherits A's
@@ -124,7 +124,14 @@ func TmuxRun(ctx context.Context, args ...string) error {
 //     'New message from @<self>' system-reminder because A's hook was
 //     resolving against the wrong agent identity. See thrum-jj0a.6.
 //
-// Scrubbing THRUM_* and CLAUDE_*/CLAUDECODE leaves panes to resolve identity
+//     Scope: ONLY CLAUDE_PROJECT_DIR. Other CLAUDE_* vars (CLAUDE_API_KEY,
+//     CLAUDE_CONFIG_DIR, etc.) have no documented leak evidence and may be
+//     auth-bearing or required-for-launch — over-scrubbing them could
+//     quietly break claude in user environments we haven't tested. The
+//     May-8 falcondev recurrence named CLAUDE_PROJECT_DIR specifically; the
+//     scrub stays narrow to that evidence.
+//
+// Scrubbing THRUM_* and CLAUDE_PROJECT_DIR leaves panes to resolve identity
 // and project-dir via the design-intended paths (peercred → cwd; harness
 // auto-detection from the pane's actual cwd).
 func cleanTmuxEnv() []string {
@@ -136,7 +143,7 @@ func cleanTmuxEnv() []string {
 		if strings.HasPrefix(e, "THRUM_") {
 			continue
 		}
-		if strings.HasPrefix(e, "CLAUDE_") || strings.HasPrefix(e, "CLAUDECODE=") {
+		if strings.HasPrefix(e, "CLAUDE_PROJECT_DIR=") {
 			continue
 		}
 		env = append(env, e)
