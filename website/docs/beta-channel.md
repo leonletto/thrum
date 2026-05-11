@@ -22,7 +22,7 @@ to report what you find.
 > [What's New](whats-new.md) and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 > To install:
-> `VERSION=v0.10.3-rc.1 curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh`.
+> `curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.1 sh`.
 
 ## What this is
 

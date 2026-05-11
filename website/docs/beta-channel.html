@@ -56,7 +56,7 @@ first-launch trust-gate detection, self-echo nudge fix. Full notes:
 <a href="whats-new.html">What&#39;s New</a> and the
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG <code>[Unreleased]</code> section</a>.
 To install:
-<code>VERSION=v0.10.3-rc.1 curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh</code>.</p>
+<code>curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.1 sh</code>.</p>
 </blockquote>
 <h2>What this is</h2>
 <p>When a new version is ready for soak, the coordinator cuts a <code>release/vX.Y.Z</code>
@@ -80,8 +80,10 @@ nothing changes for you.</li>
 </ul>
 <h2>How to install an RC</h2>
 <p>The curl install path supports a <code>VERSION=</code> env var for opting into a specific
-tag, including prereleases:</p>
-<pre><code>VERSION=vX.Y.Z-rc.N curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh</code></pre>
+tag, including prereleases. <strong>Place <code>VERSION=</code> on the <code>sh</code> side of the pipe, not
+the <code>curl</code> side</strong> — otherwise the variable is set on the <code>curl</code> process and the
+script never sees it (it falls back to <code>latest</code>):</p>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=vX.Y.Z-rc.N sh</code></pre>
 <p>To find the current RC tag, browse the
 <a href="https://github.com/leonletto/thrum/releases">GitHub releases page</a> and look for
 entries marked <strong>Pre-release</strong>. The RC pattern is <code>vX.Y.Z-rc.N</code> (e.g.
@@ -92,7 +94,7 @@ thrum version</code></pre>
 <h2>How to upgrade between RCs</h2>
 <p>When a new rc.N drops (e.g. rc.1 → rc.2 because a bugfix landed), re-run the
 same command with the new VERSION:</p>
-<pre><code>VERSION=vX.Y.Z-rc.N curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
+<pre><code>curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=vX.Y.Z-rc.N sh
 thrum daemon restart</code></pre>
 <p>You don&#39;t need to uninstall the previous RC first — the install script
 overwrites the binary in place.</p>
@@ -102,7 +104,7 @@ overwrites the binary in place.</p>
 <pre><code>cp -r .thrum .thrum.pre-rc-$(date +%F)</code></pre>
 <p>To roll back, install the previous stable version (use <code>vX.Y.Z</code> without the
 <code>-rc.N</code> suffix) and restart the daemon:</p>
-<pre><code>VERSION=v0.10.2 curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
+<pre><code>curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.2 sh
 thrum daemon restart</code></pre>
 <p>If you&#39;ve created data on an RC and want to revert, restoring <code>.thrum/</code> from
 your pre-RC backup is the safe path (see <em>Data safety</em> below).</p>
