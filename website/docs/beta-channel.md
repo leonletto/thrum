@@ -42,10 +42,12 @@ few days early in exchange for being on the leading edge.
 ## How to install an RC
 
 The curl install path supports a `VERSION=` env var for opting into a specific
-tag, including prereleases:
+tag, including prereleases. **Place `VERSION=` on the `sh` side of the pipe, not
+the `curl` side** — otherwise the variable is set on the `curl` process and the
+script never sees it (it falls back to `latest`):
 
 ```bash
-VERSION=vX.Y.Z-rc.N curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=vX.Y.Z-rc.N sh
 ```
 
 To find the current RC tag, browse the
@@ -66,7 +68,7 @@ When a new rc.N drops (e.g. rc.1 → rc.2 because a bugfix landed), re-run the
 same command with the new VERSION:
 
 ```bash
-VERSION=vX.Y.Z-rc.N curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=vX.Y.Z-rc.N sh
 thrum daemon restart
 ```
 
@@ -86,7 +88,7 @@ To roll back, install the previous stable version (use `vX.Y.Z` without the
 `-rc.N` suffix) and restart the daemon:
 
 ```bash
-VERSION=v0.10.2 curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.2 sh
 thrum daemon restart
 ```
 
