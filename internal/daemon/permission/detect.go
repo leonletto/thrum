@@ -108,15 +108,24 @@ func IsTrustGate(runtime, paneContent string) bool {
 	if paneContent == "" {
 		return false
 	}
-	window := bottomLines(paneContent, paneBottomMatchLines)
-	if trustGateGenericRE.MatchString(window) {
+	// Deliberately match against the full captured pane, NOT
+	// bottomLines(paneContent, paneBottomMatchLines). Trust prompts
+	// render at the TOP of an otherwise-empty fresh pane (tmux pads
+	// the bottom with blank lines), so the bottomLines window
+	// designed for the OnDetection / scroll-up permission-prompt
+	// path cuts the trust-prompt text out and IsTrustGate returns a
+	// false negative — observed cluster-8 cluster-9 with codex's
+	// first-launch dialog. Trust gates have no spam-loop risk
+	// because IsTrustGate is consulted at one-shot injection events,
+	// not via OnDetection's repeated polling.
+	if trustGateGenericRE.MatchString(paneContent) {
 		return true
 	}
 	switch runtime {
 	case "codex":
-		return codexTrustExactRE.MatchString(window)
+		return codexTrustExactRE.MatchString(paneContent)
 	case "claude":
-		return claudeTrustExactRE.MatchString(window)
+		return claudeTrustExactRE.MatchString(paneContent)
 	}
 	return false
 }
