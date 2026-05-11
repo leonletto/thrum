@@ -14,19 +14,25 @@
   ```
 - `thrum` CLI on `PATH`
 
-## Recommended: One-shot install script
-
-Codex 0.130.0's `codex plugin marketplace add` registers third-party marketplaces but doesn't auto-populate the per-plugin cache (the directory under `~/.codex/plugins/cache/` that hooks load from). The plugin ships a script that handles the full install including the cache-staging step:
+## Recommended: one-command install
 
 ```bash
-# If you have the repo cloned:
-bash ./codex-plugin/plugins/thrum/scripts/install-plugin.sh
-
-# Or one-shot from anywhere:
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/codex-plugin/plugins/thrum/scripts/install-plugin.sh | bash
+bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
 ```
 
-The script is idempotent — re-run any time to pull the latest revision. Override the install ref with `THRUM_INSTALL_REF=v0.10.3` for a specific release tag.
+That's it. The script registers the marketplace, stages the per-plugin cache (a step codex 0.130.0 doesn't do automatically for third-party marketplaces), enables the plugin, and turns on the `plugin_hooks` feature. It's idempotent — re-run any time to pull the latest revision.
+
+To pin a release tag instead of `thrum-dev`:
+
+```bash
+THRUM_INSTALL_REF=v0.10.3 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/v0.10.3/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+```
+
+If you have the repo cloned already, you can run it locally instead:
+
+```bash
+bash ./codex-plugin/plugins/thrum/scripts/install-plugin.sh
+```
 
 After the script completes, follow the "First-run hook approval" steps below.
 
@@ -110,9 +116,9 @@ inbox — courtesy of the SessionStart hook.
 ## Verification
 
 ```bash
-codex plugin marketplace list   # should include thrum-marketplace
-codex features list | grep '^hooks'    # should be: stable / true
-ls ~/.agents/skills | grep -E '^(thrum|adversarial-|coordinator-|implementer-|researcher-|configure-|efficient-|project-|verify-)'
+grep -A1 '^\[marketplaces.thrum-marketplace\]' ~/.codex/config.toml   # should print the registered source
+codex features list | grep -E '^(hooks|plugin_hooks) '                # hooks=stable/true; plugin_hooks=under development/true
+ls ~/.codex/plugins/cache/thrum-marketplace/thrum/                    # should list one or more <version> dirs
 ```
 
 You should see the thrum umbrella skill plus the role/discipline skills.

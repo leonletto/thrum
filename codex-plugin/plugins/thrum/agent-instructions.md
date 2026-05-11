@@ -1,65 +1,59 @@
 # Install Thrum Codex Plugin — Agent Instructions
 
-> Read this file end-to-end before acting. Your user wants you to install the Thrum codex plugin on their machine. The interactive steps at the end (codex restart + `/hooks` approval) must be done by the user — everything else you can handle deterministically with the Bash tool.
+> Read this file end-to-end before acting. Your user wants the Thrum codex plugin installed. The script does everything except the final interactive `/hooks` approval, which only the user can do.
 
 ## Context
 
 Thrum is a Git-backed messaging system for AI agent coordination. The Thrum codex plugin provides three lifecycle hooks (SessionStart auto-prime, PreToolUse safety block, Stop unread-inbox check) plus a library of role-discipline skills.
 
-Codex 0.130.0's `codex plugin marketplace add` registers a marketplace's metadata but does NOT auto-populate the per-plugin cache at `~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/`. Without that cache, codex can't load the plugin's hooks. The install script in this directory handles that gap.
+Codex 0.130.0's `codex plugin marketplace add` registers a marketplace's metadata but does NOT auto-populate the per-plugin cache at `~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/`. Without that cache, codex can't load the plugin's hooks. The installer below handles that gap; once codex ships cache auto-staging for third-party marketplaces, this whole flow collapses to a single `marketplace add`.
 
 ## Prereqs to verify
 
-Run these checks before proceeding. If any fail, stop and tell the user what's missing — don't try to install the prereqs yourself.
-
 ```bash
-command -v codex >/dev/null && echo "✓ codex" || echo "✗ codex CLI not on PATH"
-command -v jq    >/dev/null && echo "✓ jq"    || echo "✗ jq not on PATH (brew install jq)"
-test -f "$HOME/.codex/config.toml" && echo "✓ codex config" || echo "✗ codex config missing — run codex once to create it"
+command -v codex >/dev/null && echo "ok codex" || echo "MISSING codex CLI on PATH"
+command -v jq    >/dev/null && echo "ok jq"    || echo "MISSING jq (brew install jq)"
+test -f "$HOME/.codex/config.toml" && echo "ok codex config" || echo "MISSING codex config — run codex once to create it"
 codex --version 2>&1 | head -1
 ```
 
-Codex must be `0.130.0` or newer.
+Codex must be `0.130.0` or newer. If any prereq fails, stop and tell the user — don't try to install codex or jq yourself.
 
-## Run the installer
-
-The installer is shipped inside the plugin itself. The simplest path is to clone the repo (or use an already-cloned copy) and run it. The script is idempotent — safe to re-run.
+## Run the installer (one command)
 
 ```bash
-# If user already has the thrum repo cloned, use it:
-THRUM_REPO_PATH="${THRUM_REPO_PATH:-}"
-if [ -z "$THRUM_REPO_PATH" ]; then
-  # Otherwise, ephemerally clone to a temp dir
-  THRUM_REPO_PATH="$(mktemp -d)/thrum"
-  git clone --depth 1 --branch thrum-dev https://github.com/leonletto/thrum "$THRUM_REPO_PATH"
-fi
-
-bash "$THRUM_REPO_PATH/codex-plugin/plugins/thrum/scripts/install-plugin.sh"
+bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
 ```
 
-The script will:
+Defaults install from the `thrum-dev` branch. To pin a release tag instead:
 
-1. Verify codex + jq are installed
-2. Register the `thrum-marketplace` (or upgrade it if already registered) from `https://github.com/leonletto/thrum` at the configured ref (default: `thrum-dev`)
-3. Read the plugin version from the staged manifest
-4. Stage the plugin into `~/.codex/plugins/cache/thrum-marketplace/thrum/<version>/`
-5. Add `[plugins."thrum@thrum-marketplace"] enabled = true` to `~/.codex/config.toml`
-6. Add `plugin_hooks = true` under `[features]` in `~/.codex/config.toml`
+```bash
+THRUM_INSTALL_REF=v0.10.3 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/v0.10.3/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+```
 
-If any step fails, the script prints `ERROR: …` and exits non-zero. Report the failure to the user verbatim — do not retry without understanding the cause.
+The script is idempotent — re-running it pulls the latest revision of the configured ref and re-stages the cache. It will:
+
+1. Verify codex + jq are installed.
+2. Register `thrum-marketplace` from `https://github.com/leonletto/thrum` (or upgrade it if already registered).
+3. Read the plugin version from the staged manifest.
+4. Stage the plugin into `~/.codex/plugins/cache/thrum-marketplace/thrum/<version>/`.
+5. Add `[plugins."thrum@thrum-marketplace"] enabled = true` to `~/.codex/config.toml`.
+6. Add `plugin_hooks = true` under `[features]` in `~/.codex/config.toml`.
+
+If any step fails, the script prints `ERROR: …` and exits non-zero. Report the failure to the user verbatim — do not retry or invent workarounds.
 
 ## After the script succeeds
 
 The script prints a "Next steps" block. Surface that block to the user — it contains the interactive steps only they can do:
 
-1. Restart codex in a fresh shell (your codex agent, their IDE codex, whatever the user is running).
-2. On first launch codex shows: `⚠ 3 hooks need review before they can run. Open /hooks to review them.`
+1. Restart codex in a fresh shell (their terminal codex, IDE codex, whatever they're running).
+2. On first launch codex shows: `3 hooks need review before they can run. Open /hooks to review them.`
 3. The user runs `/hooks` in codex. For each of PreToolUse, SessionStart, Stop: press Enter to view, `t` to trust, Escape to go back.
 4. Restart codex once more. The SessionStart hook then auto-loads the thrum prime briefing on every future session.
 
 ## Tell the user when you're done
 
-Send a short status message:
+Send a short status:
 
 > Thrum codex plugin installed at `~/.codex/plugins/cache/thrum-marketplace/thrum/<version>/`. Restart codex and approve the 3 hooks via `/hooks` (one-time security gate). Detailed steps in the script's output above.
 
@@ -69,8 +63,6 @@ Send a short status message:
 - **`jq not found`**: tell the user `brew install jq` (macOS) or their platform equivalent.
 - **`plugin manifest not found at ...`**: codex's marketplace staging layout has likely changed. Stop and report this — it's a real plugin-side bug to file, not a user-fixable issue.
 - **`marketplace upgrade failed` / `marketplace add failed`**: usually a network or auth issue with GitHub. Report the underlying codex error verbatim.
-
-Do not invent workarounds. If the script fails in a way these instructions don't cover, report verbatim to the user and ask how to proceed.
 
 ## What you should NOT do
 

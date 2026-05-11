@@ -107,8 +107,8 @@ Next steps (interactive — only the user can do these):
      - Arrow down to Stop → Enter → 't' → Escape, Escape
   4. Restart codex again. SessionStart hook will auto-load the thrum prime briefing.
 
-To upgrade later:
-    ${0##*/}    # this script is idempotent — re-run any time.
+To upgrade later, re-run the one-shot installer (idempotent):
+    bash <(curl -fsSL https://raw.githubusercontent.com/${REPO}/${REF}/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
 
 To uninstall:
     codex plugin marketplace remove ${MARKETPLACE_NAME}
