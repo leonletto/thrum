@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/identity"
 )
 
 // setupTestRepoWithRemoteHEAD aliases the shared defaults_test helper so the
@@ -49,6 +50,31 @@ func TestWizard_StepIdentity_UsesDefaults(t *testing.T) {
 	}
 	if id.Module != "main" {
 		t.Errorf("module = %q, want main", id.Module)
+	}
+}
+
+// TestWizard_StepIdentity_DefaultNamePassesValidator verifies the default
+// agent name suggested for a repo whose basename contains capital letters
+// (e.g. "316Redesign") is itself a valid agent name. Regression for
+// thrum-puhr.2 where `thrum init` proposed "coord_316Redesign" that its own
+// validator then rejected.
+func TestWizard_StepIdentity_DefaultNamePassesValidator(t *testing.T) {
+	tmp := t.TempDir()
+	repo := filepath.Join(tmp, "316Redesign")
+	if err := os.MkdirAll(repo, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	fp := &FakePrompter{}
+	cfg := &WizardConfig{RepoPath: repo, Prompter: fp}
+	id, err := stepIdentity(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := identity.ValidateAgentName(id.Name); err != nil {
+		t.Errorf("default name %q failed validator: %v", id.Name, err)
+	}
+	if want := "coord_316redesign"; id.Name != want {
+		t.Errorf("name = %q, want %q (lowercased)", id.Name, want)
 	}
 }
 
