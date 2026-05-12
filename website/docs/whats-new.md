@@ -18,7 +18,7 @@ machine-readable history lives in
 
 ## v0.10.3 — In Soak (RC)
 
-v0.10.3 is currently a release candidate. The tag is `v0.10.3-rc.5`; see the
+v0.10.3 is currently a release candidate. The tag is `v0.10.3-rc.6`; see the
 [Beta Channel](beta-channel.md) guide for how to opt in. Stable promotion
 follows the standard 48-hour soak window once no P0/P1 bugs are open against the
 RC.

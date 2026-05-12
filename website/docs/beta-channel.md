@@ -16,18 +16,17 @@ before being promoted to stable. Beta users help catch regressions before they
 hit `releases/latest`. This guide covers how to opt in, what to expect, and how
 to report what you find.
 
-> **Current pre-release: `v0.10.3-rc.5`** (tagged 2026-05-12, in soak).
+> **Current pre-release: `v0.10.3-rc.6`** (tagged 2026-05-12, in soak).
 > Highlights: codex plugin first-class, post-launch tmux silence watchdog,
-> first-launch trust-gate detection, self-echo nudge fix. rc.5 fixes a
-> long-standing macOS-specific identity-resolution footgun. The daemon's
-> peer-credential cwd lookup was effectively a no-op on Darwin since sec.2
-> because the upstream library's Darwin path is unimplemented — stale
-> `THRUM_AGENT_ID` env vars inherited from parent shells silently overrode
-> cwd-based identity. Now uses `lsof` on macOS. Full notes:
+> first-launch trust-gate detection, self-echo nudge fix. rc.6 closes the CLI
+> half of the cross-worktree-misidentification fix from rc.5. The CLI now
+> prefers cwd-anchored identity over `THRUM_*` env vars; env vars are fallback
+> hints used only when cwd has no thrum worktree. Stale env from a parent shell
+> can no longer override the worktree the user is actually in. Full notes:
 > [What's New](whats-new.md) and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 > To install:
-> `curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.5 sh`.
+> `curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.6 sh`.
 
 ## What this is
 
