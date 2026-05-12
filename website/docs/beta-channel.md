@@ -16,16 +16,15 @@ before being promoted to stable. Beta users help catch regressions before they
 hit `releases/latest`. This guide covers how to opt in, what to expect, and how
 to report what you find.
 
-> **Current pre-release: `v0.10.3-rc.2`** (tagged 2026-05-12, in soak).
+> **Current pre-release: `v0.10.3-rc.3`** (tagged 2026-05-12, in soak).
 > Highlights: codex plugin first-class, post-launch tmux silence watchdog,
-> first-launch trust-gate detection, self-echo nudge fix. rc.2 fixes a
-> regression in rc.1 where the post-launch silence nudge never fired for Claude
-> Code or Codex agents because the runtimes' animated "thinking" spinner kept
-> the pane from ever appearing silent. Full notes: [What's New](whats-new.md)
-> and the
+> first-launch trust-gate detection, self-echo nudge fix. rc.3 fixes a follow-on
+> bug in rc.2's engagement check where Claude's footer-region tip lines
+> (rendered between the spinner and the divider) were misclassified as agent
+> output, suppressing the nudge. Full notes: [What's New](whats-new.md) and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 > To install:
-> `curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.2 sh`.
+> `curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.3 sh`.
 
 ## What this is
 
