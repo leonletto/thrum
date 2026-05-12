@@ -16,15 +16,16 @@ before being promoted to stable. Beta users help catch regressions before they
 hit `releases/latest`. This guide covers how to opt in, what to expect, and how
 to report what you find.
 
-> **Current pre-release: `v0.10.3-rc.3`** (tagged 2026-05-12, in soak).
+> **Current pre-release: `v0.10.3-rc.4`** (tagged 2026-05-12, in soak).
 > Highlights: codex plugin first-class, post-launch tmux silence watchdog,
-> first-launch trust-gate detection, self-echo nudge fix. rc.3 fixes a follow-on
-> bug in rc.2's engagement check where Claude's footer-region tip lines
-> (rendered between the spinner and the divider) were misclassified as agent
-> output, suppressing the nudge. Full notes: [What's New](whats-new.md) and the
+> first-launch trust-gate detection, self-echo nudge fix. rc.4 fixes two
+> follow-on bugs in rc.3's launch and restart paths: the pane-readiness gate
+> declared the runtime ready prematurely so the Enter keystroke after the banner
+> text was swallowed, and the launch nudge was sending a shell command instead
+> of a prompt. Full notes: [What's New](whats-new.md) and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 > To install:
-> `curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.3 sh`.
+> `curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.4 sh`.
 
 ## What this is
 

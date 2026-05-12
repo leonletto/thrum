@@ -50,16 +50,16 @@ before being promoted to stable. Beta users help catch regressions before they
 hit <code>releases/latest</code>. This guide covers how to opt in, what to expect, and how
 to report what you find.</p>
 <blockquote>
-<p><strong>Current pre-release: <code>v0.10.3-rc.3</code></strong> (tagged 2026-05-12, in soak).
+<p><strong>Current pre-release: <code>v0.10.3-rc.4</code></strong> (tagged 2026-05-12, in soak).
 Highlights: codex plugin first-class, post-launch tmux silence watchdog,
-first-launch trust-gate detection, self-echo nudge fix. rc.3 fixes a
-follow-on bug in rc.2&#39;s engagement check where Claude&#39;s footer-region tip
-lines (rendered between the spinner and the divider) were misclassified as
-agent output, suppressing the nudge. Full notes:
-<a href="whats-new.html">What&#39;s New</a> and the
+first-launch trust-gate detection, self-echo nudge fix. rc.4 fixes two
+follow-on bugs in rc.3&#39;s launch and restart paths: the pane-readiness gate
+declared the runtime ready prematurely so the Enter keystroke after the
+banner text was swallowed, and the launch nudge was sending a shell command
+instead of a prompt. Full notes: <a href="whats-new.html">What&#39;s New</a> and the
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG <code>[Unreleased]</code> section</a>.
 To install:
-<code>curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.3 sh</code>.</p>
+<code>curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.4 sh</code>.</p>
 </blockquote>
 <h2>What this is</h2>
 <p>When a new version is ready for soak, the coordinator cuts a <code>release/vX.Y.Z</code>
