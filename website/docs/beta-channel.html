@@ -50,13 +50,16 @@ before being promoted to stable. Beta users help catch regressions before they
 hit <code>releases/latest</code>. This guide covers how to opt in, what to expect, and how
 to report what you find.</p>
 <blockquote>
-<p><strong>Current pre-release: <code>v0.10.3-rc.1</code></strong> (tagged 2026-05-11, in soak).
+<p><strong>Current pre-release: <code>v0.10.3-rc.2</code></strong> (tagged 2026-05-12, in soak).
 Highlights: codex plugin first-class, post-launch tmux silence watchdog,
-first-launch trust-gate detection, self-echo nudge fix. Full notes:
+first-launch trust-gate detection, self-echo nudge fix. rc.2 fixes a
+regression in rc.1 where the post-launch silence nudge never fired for
+Claude Code or Codex agents because the runtimes&#39; animated &quot;thinking&quot;
+spinner kept the pane from ever appearing silent. Full notes:
 <a href="whats-new.html">What&#39;s New</a> and the
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG <code>[Unreleased]</code> section</a>.
 To install:
-<code>curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.1 sh</code>.</p>
+<code>curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.2 sh</code>.</p>
 </blockquote>
 <h2>What this is</h2>
 <p>When a new version is ready for soak, the coordinator cuts a <code>release/vX.Y.Z</code>

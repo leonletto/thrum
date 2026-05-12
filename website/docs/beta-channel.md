@@ -6,7 +6,7 @@ description:
 category: "guides"
 order: 50
 tags: ["beta", "pre-release", "rc", "install", "rollback", "soak"]
-last_updated: "2026-05-11"
+last_updated: "2026-05-12"
 ---
 
 ## Thrum Beta Channel
@@ -16,13 +16,16 @@ before being promoted to stable. Beta users help catch regressions before they
 hit `releases/latest`. This guide covers how to opt in, what to expect, and how
 to report what you find.
 
-> **Current pre-release: `v0.10.3-rc.1`** (tagged 2026-05-11, in soak).
+> **Current pre-release: `v0.10.3-rc.2`** (tagged 2026-05-12, in soak).
 > Highlights: codex plugin first-class, post-launch tmux silence watchdog,
-> first-launch trust-gate detection, self-echo nudge fix. Full notes:
-> [What's New](whats-new.md) and the
+> first-launch trust-gate detection, self-echo nudge fix. rc.2 fixes a
+> regression in rc.1 where the post-launch silence nudge never fired for Claude
+> Code or Codex agents because the runtimes' animated "thinking" spinner kept
+> the pane from ever appearing silent. Full notes: [What's New](whats-new.md)
+> and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 > To install:
-> `curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.1 sh`.
+> `curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.2 sh`.
 
 ## What this is
 
