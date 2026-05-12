@@ -137,6 +137,32 @@ and this project adheres to
   `specific item within category?`) rather than packing options into one prompt.
   Synced across all 4 runtime plugin copies (thrum-2ut8).
 
+- **Tmux silence watchdog now actually fires for Claude Code agents.** The
+  v0.10.3-rc.1 watchdog at `internal/daemon/rpc/tmux.go` compared two pane
+  snapshots taken 30s apart and bailed if they differed. Claude Code's 1Hz
+  animated thinking spinner (`✻ Sautéed for 4s` → `Churned for 5s`) makes
+  consecutive snapshots never byte-equal, so the nudge never fired even when
+  the agent had demonstrably not engaged. Codex shows the same shape. Replaced
+  with a two-anchor semantic engagement check: find the banner sentinel (top
+  anchor), find the per-runtime horizontal-rule chrome separator (bottom
+  anchor), inspect lines between them, ignore blanks and the runtime's spinner
+  pattern, treat anything else as "agent has engaged → no nudge". Trigger
+  switched from a blind 30s sleep to silence-driven polling of `tmux
+  display-message #{window_activity}` (500ms ticks, 5s silence threshold, 30s
+  hard deadline) — converges in 5-15s in the common case, exits silently when
+  the agent is genuinely busy past the deadline (no spurious nudge into real
+  work). Added observability logs on both decision branches so the silent bail
+  that hid this bug can't recur (thrum-84xc).
+
+- **Beta-channel install snippets place `VERSION=` on the correct side of the
+  shell pipe.** The published install commands at `website/docs/beta-channel.md`
+  used `VERSION=vX.Y.Z-rc.N curl ... | sh`, which sets the env var on the curl
+  process — sh never sees it and falls back to `latest`. Real-world hit during
+  rc.1 soak: the documented command installed v0.10.2 instead of v0.10.3-rc.1.
+  Snippets now use `curl ... | VERSION=vX.Y.Z-rc.N sh` and a callout explains
+  the gotcha. Same fix applied to the "Current pre-release" callout at the top
+  of the page.
+
 ## [0.10.2] - 2026-05-04
 
 ### Fixed
