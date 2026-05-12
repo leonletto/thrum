@@ -5154,19 +5154,37 @@ func getClientNoRefresh() (*cli.Client, error) {
 // resolveLocalAgentID resolves the agent ID from the local worktree's identity file.
 // This is used to pass caller identity to the daemon, which may be running in a
 // different worktree (via .thrum/redirect). Returns empty string if resolution fails.
+//
+// Priority order (rc.6 — thrum-qofl):
+//  1. Cwd-anchored config (`config.LoadWithPath(flagRepo, ...)`) when it
+//     resolves to a valid identity. Cwd has authority when it has thrum state.
+//  2. `THRUM_AGENT_ID` env var as a fallback when cwd-based config resolution
+//     fails (e.g., caller is outside any worktree, or worktree has no
+//     matching identity).
+//
+// This inverts the rc.5-and-earlier order (env wins). Old behavior produced
+// cross-worktree misidentification when stale `THRUM_AGENT_ID` was inherited
+// at fork time from a parent shell — e.g., a Claude process forked from a
+// shell anchored to `falcon_llm_client` but then operating in `falcon-agent`
+// would claim the wrong agent_id on every RPC. Cwd-first resolution closes
+// that footgun while keeping env as a legitimate fallback for callers outside
+// any worktree.
 func resolveLocalAgentID() (string, error) {
+	cfg, err := config.LoadWithPath(flagRepo, flagRole, flagModule)
+	if err == nil && cfg.Agent.Name != "" {
+		// For named agents, GenerateAgentID returns the name directly.
+		// For unnamed agents, it generates a deterministic hash-based ID.
+		return identity.GenerateAgentID(cfg.RepoID, cfg.Agent.Role, cfg.Agent.Module, cfg.Agent.Name), nil
+	}
+
 	if agentID := strings.TrimSpace(os.Getenv("THRUM_AGENT_ID")); agentID != "" {
 		return agentID, nil
 	}
 
-	cfg, err := config.LoadWithPath(flagRepo, flagRole, flagModule)
 	if err != nil {
 		return "", err
 	}
-	// For named agents, GenerateAgentID returns the name directly.
-	// For unnamed agents, it generates a deterministic hash-based ID.
-	repoID := cfg.RepoID
-	return identity.GenerateAgentID(repoID, cfg.Agent.Role, cfg.Agent.Module, cfg.Agent.Name), nil
+	return "", fmt.Errorf("no agent name in config and THRUM_AGENT_ID env var not set")
 }
 
 // resolveLocalMentionRole resolves the agent's role from the local worktree's identity file.

@@ -154,6 +154,31 @@ and this project adheres to
   real work). Added observability logs on both decision branches so the silent
   bail that hid this bug can't recur (thrum-84xc).
 
+- **CLI now prefers cwd-anchored identity over `THRUM_*` env vars.** Closes
+  the CLI half of the cross-worktree-misidentification footgun. The rc.5
+  daemon-side fix (peercred cwd resolution via lsof on macOS) made the
+  daemon correct — but the CLI side still consulted env vars FIRST when
+  deciding which worktree to dial and which agent_id to claim. Stale env
+  inherited at fork time from a parent shell anchored elsewhere caused the
+  CLI to dial a daemon socket that didn't exist (or worse, the wrong
+  daemon), bypassing rc.5's correct daemon identity resolution entirely.
+  Three coordinated changes in `internal/paths/paths.go`,
+  `internal/config/config.go`, and `cmd/thrum/main.go`:
+  - `EffectiveRepoPath` now walks up from the supplied repoPath looking for
+    a `.thrum/` ancestor; if found, that worktree wins. `THRUM_HOME` is now
+    a fallback hint used only when cwd has no thrum worktree at or above it
+    (preserves the legitimate "pin to bound checkout from outside any
+    worktree" use case).
+  - `resolveLocalAgentID` now loads cwd-anchored config first;
+    `THRUM_AGENT_ID` is a fallback when no cwd identity exists.
+  - `loadIdentityFromDir` now falls through to directory scan when
+    `THRUM_NAME` points at a file that doesn't exist in cwd's worktree
+    (instead of hard-erroring), so stale env hints don't block resolution.
+  Verified end-to-end on zarambp14 — a Claude process with stale
+  `THRUM_HOME` / `THRUM_AGENT_ID` pointing at `falcon_llm_client` while
+  cwd is in `falcon-agent` now correctly self-identifies as the
+  `falcon-agent` coordinator without needing `env -u THRUM_*` (thrum-qofl).
+
 - **macOS peer-credential cwd resolution finally actually works.** From sec.2
   (pre-v0.9.0) through v0.10.3-rc.4, the daemon's peer-credential identity
   resolver called `gopsutil.Process.Cwd()` to look up a caller's working
