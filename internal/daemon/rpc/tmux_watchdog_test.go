@@ -268,63 +268,67 @@ func TestNudgeSilentPaneAfter_SkipsWhenActive(t *testing.T) {
 }
 
 // TestWaitForPaneReady_ReturnsWhenStable verifies the readiness helper
-// returns once the pane has been byte-identical for the configured
-// number of consecutive captures.
+// returns once tmux reports the pane has been silent for at least
+// silenceThreshold (5s).
 func TestWaitForPaneReady_ReturnsWhenStable(t *testing.T) {
-	prevCapture, prevSleep := capturePaneFn, sleepFn
+	prevCapture, prevSleep, prevActivity := capturePaneFn, sleepFn, tmuxLastActivityFn
 	t.Cleanup(func() {
 		capturePaneFn = prevCapture
 		sleepFn = prevSleep
+		tmuxLastActivityFn = prevActivity
 	})
 
-	// Sequence: rendering... rendering... ready, ready, ready
-	captures := []string{"loading", "loading.", "ready", "ready", "ready"}
-	var idx atomic.Int32
+	// Pane already silent for > silenceThreshold → readiness fires on first poll.
+	tmuxLastActivityFn = stableActivity()
+	var captureCount atomic.Int32
 	capturePaneFn = func(_ string, _ int) (string, error) {
-		n := int(idx.Add(1)) - 1
-		if n >= len(captures) {
-			n = len(captures) - 1
-		}
-		return captures[n], nil
+		captureCount.Add(1)
+		return "$ _", nil // idle prompt — safe to type
 	}
-	var slept atomic.Int32
-	sleepFn = func(d time.Duration) { slept.Add(int32(d / time.Second)) }
+	sleepFn = func(time.Duration) {}
 
-	waitForPaneReady("sess:0.0", "claude", 2, 30)
-
-	// Sequence: baseline("loading") + 4 polls. The third poll matches
-	// the second (both "ready") → streak=1; the fourth matches again
-	// → streak=2 → return. Total: 5 captures.
-	if got := idx.Load(); got != 5 {
-		t.Errorf("expected 5 captures (baseline + 4 polls), got %d", got)
+	if !waitForPaneReady("sess:0.0", "claude", 2, 30) {
+		t.Errorf("waitForPaneReady should have reported ready on a silent idle pane")
 	}
-	if got := slept.Load(); got > 5 {
-		t.Errorf("expected to return in <5 sleep-seconds when stable; got %d", got)
+	// Silence-driven path captures once for the post-settle safety check.
+	if got := captureCount.Load(); got != 1 {
+		t.Errorf("expected 1 capture (post-settle safety check), got %d", got)
 	}
 }
 
 // TestWaitForPaneReady_BailsAtCeiling verifies the readiness helper
-// gives up after ceiling seconds when the pane never stabilizes.
+// gives up after ceiling seconds when the pane never goes silent.
 func TestWaitForPaneReady_BailsAtCeiling(t *testing.T) {
-	prevCapture, prevSleep := capturePaneFn, sleepFn
+	prevCapture, prevSleep, prevActivity, prevNow := capturePaneFn, sleepFn, tmuxLastActivityFn, timeNowFn
 	t.Cleanup(func() {
 		capturePaneFn = prevCapture
 		sleepFn = prevSleep
+		tmuxLastActivityFn = prevActivity
+		timeNowFn = prevNow
 	})
 
-	var i atomic.Int32
-	capturePaneFn = func(_ string, _ int) (string, error) {
-		return "changing-" + string(rune(int('a')+int(i.Add(1)))), nil
+	// Pane is constantly "active" (window_activity == now) — silence never reached.
+	// Advance simulated time on each tmuxLastActivityFn call so the deadline fires.
+	base := time.Now()
+	var ticks atomic.Int32
+	timeNowFn = func() time.Time {
+		return base.Add(time.Duration(ticks.Load()) * time.Second)
 	}
+	tmuxLastActivityFn = func(_ string) (time.Time, error) {
+		ticks.Add(1)
+		return timeNowFn(), nil // never silent
+	}
+	capturePaneFn = func(_ string, _ int) (string, error) { return "$ _", nil }
 	sleepFn = func(time.Duration) {}
 
 	start := time.Now()
-	waitForPaneReady("sess:0.0", "claude", 2, 5)
+	safe := waitForPaneReady("sess:0.0", "claude", 2, 5)
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Errorf("waitForPaneReady should have returned quickly with mocked sleep, took %v", elapsed)
 	}
-	if got := i.Load(); got < 6 {
-		t.Errorf("expected ~ceiling+1 captures, got %d", got)
+	// Ceiling fires → captures last pane for safety check → returns IsPaneSafeToType result.
+	if !safe {
+		t.Errorf("waitForPaneReady at ceiling on a safe pane should return true")
 	}
 }
 
@@ -362,17 +366,18 @@ func TestNudgeSilentPaneAfter_SkipsOnTrustGate(t *testing.T) {
 }
 
 // TestWaitForPaneReady_ReturnsUnsafeOnTrustGate pins the cluster-8
-// readiness-side guard: when the stabilized pane is at a trust gate
-// the function reports !safe so callers skip the inject.
+// readiness-side guard: when the silent pane is at a trust gate the
+// function reports !safe so callers skip the inject.
 func TestWaitForPaneReady_ReturnsUnsafeOnTrustGate(t *testing.T) {
-	prevCapture, prevSleep := capturePaneFn, sleepFn
+	prevCapture, prevSleep, prevActivity := capturePaneFn, sleepFn, tmuxLastActivityFn
 	t.Cleanup(func() {
 		capturePaneFn = prevCapture
 		sleepFn = prevSleep
+		tmuxLastActivityFn = prevActivity
 	})
 
 	const trust = "Do you trust the contents of this directory?\n  1. Yes\n  2. No"
-	// Stabilizes immediately on the trust pane.
+	tmuxLastActivityFn = stableActivity()
 	capturePaneFn = func(_ string, _ int) (string, error) { return trust, nil }
 	sleepFn = func(time.Duration) {}
 
@@ -383,12 +388,14 @@ func TestWaitForPaneReady_ReturnsUnsafeOnTrustGate(t *testing.T) {
 }
 
 func TestWaitForPaneReady_ReturnsSafeOnIdlePane(t *testing.T) {
-	prevCapture, prevSleep := capturePaneFn, sleepFn
+	prevCapture, prevSleep, prevActivity := capturePaneFn, sleepFn, tmuxLastActivityFn
 	t.Cleanup(func() {
 		capturePaneFn = prevCapture
 		sleepFn = prevSleep
+		tmuxLastActivityFn = prevActivity
 	})
 
+	tmuxLastActivityFn = stableActivity()
 	capturePaneFn = func(_ string, _ int) (string, error) { return "$ _", nil }
 	sleepFn = func(time.Duration) {}
 

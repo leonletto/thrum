@@ -159,11 +159,45 @@ and this project adheres to
   Claude renders contextual tip lines (e.g.
   `tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking`)
   in the band between the spinner and the horizontal-rule divider. The rc.2
-  algorithm treated those tips as real agent output → false-positive "engaged"
-  → no nudge. Fix: use the spinner line itself as the bottom anchor (with
-  divider as fallback for the brief pre-spinner window). Tips below the
-  spinner are now out of the decision region. Caught before any user hit it
-  via the deliberate post-publish manual verification step (thrum-84xc).
+  algorithm treated those tips as real agent output → false-positive "engaged" →
+  no nudge. Fix: use the spinner line itself as the bottom anchor (with divider
+  as fallback for the brief pre-spinner window). Tips below the spinner are now
+  out of the decision region. Caught before any user hit it via the deliberate
+  post-publish manual verification step (thrum-84xc).
+
+- **Pane-readiness detection rebuilt around tmux silence + 2s settle.** The rc.3
+  `waitForPaneReady` still used byte-equality on consecutive 1s pane captures —
+  the same broken pattern the watchdog rewrite already replaced. Result: on
+  Claude Code the function would either declare ready prematurely (returning
+  while a paint cycle was still in flight) or hit its 60s ceiling. Manual rc.3
+  verification on zarambp14 caught the symptom: `thrum tmux start` would put
+  the printf banner into Claude's input box but the immediately-following
+  Enter was swallowed because Claude was not yet input-ready. `thrum:restart`
+  exhibited the same shape (no banner emitted at all). Fix: replace the byte-
+  equality loop with the same silence-driven polling used by the watchdog
+  (`tmux #{window_activity}`, 5s silence threshold, 60s ceiling) plus a 2s
+  settle pause after silence is detected before declaring the pane ready for
+  keystroke injection. Both `HandleLaunch` and `HandleRestart` paths benefit
+  by construction (they share `waitForPaneReady`).
+
+- **TUI input submission no longer races with paste-mode detection.** Even
+  with chrome fully rendered, modern TUI runtimes (Claude Code, others)
+  interpret a long string immediately followed by Enter as "Enter inside
+  paste" rather than "submit", swallowing the submission. New helper
+  `sendKeysAndSubmit(target, text)` inserts a 200ms gap between text and the
+  Enter keystroke so the input widget exits paste-mode before Enter arrives.
+  Used everywhere the daemon submits input to a runtime pane: the identity-
+  banner emit (`emitIdentityBanner`), and the `/thrum:prime` send for non-
+  hook runtimes from both launch and restart paths.
+
+- **Launch and restart nudge text is now a direct prompt, not a shell
+  command.** rc.3 launched with `nudgeSilentPaneAfter` configured to send
+  `"thrum inbox --unread"` on the launch path — a shell command, not a prompt.
+  An agent receiving that text into its input box has no clear directive to
+  re-engage with the prime briefing. Both nudge sites now send a direct
+  imperative phrased to handle the partial-engagement case:
+  `"Finish reading the prime output and follow your instructions if you have not"`
+  (launch) and the same phrasing with the resume-plan reference for restart.
 
 - **Beta-channel install snippets place `VERSION=` on the correct side of the
   shell pipe.** The published install commands at `website/docs/beta-channel.md`

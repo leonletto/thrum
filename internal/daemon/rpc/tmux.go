@@ -459,15 +459,15 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 					return
 				}
 				primeCmd := primeCommandForRuntime(runtime)
-				_ = ttmux.SendKeys(target, primeCmd)
-				_ = ttmux.SendSpecialKey(target, "Enter")
+				_ = sendKeysAndSubmit(target, primeCmd)
 			}
 			// thrum-puhr.10: post-inject silence watchdog. If the pane
 			// is still silent after the configured threshold (default
 			// 30s, set via restart.silence_watchdog_seconds), nudge the
 			// agent to read its inbox. Fresh codex agents in particular
 			// can sit at a welcome screen without engaging the dispatch.
-			nudgeSilentPaneAfter(target, runtime, h.thrumDir, "thrum inbox --unread")
+			nudgeSilentPaneAfter(target, runtime, h.thrumDir,
+				"Finish reading the prime output and follow your instructions if you have not")
 		}()
 	}
 
@@ -1265,8 +1265,7 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 					return
 				}
 				primeCmd := primeCommandForRuntime(runtime)
-				_ = ttmux.SendKeys(target, primeCmd)
-				_ = ttmux.SendSpecialKey(target, "Enter")
+				_ = sendKeysAndSubmit(target, primeCmd)
 			}
 			// thrum-puhr.10: post-restart silence watchdog. On a large-
 			// context restart the agent often doesn't read the
@@ -1274,7 +1273,7 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 			// (default 30s) of pane silence, nudge it to read the prime
 			// + resume plan and follow its instructions.
 			nudgeSilentPaneAfter(target, runtime, h.thrumDir,
-				"Read the prime output, which includes your resume plan, and then follow your instructions")
+				"Finish reading the prime output, which includes your resume plan, and then follow your instructions if you have not")
 		}()
 	}
 
@@ -1325,47 +1324,83 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 // patterns); trust-gate detection works either way but is more
 // precise when runtime is known.
 //
-//nolint:unparam // stableFor is always 2 at call sites today; preserved as a parameter for the readiness-tuning seam future runtime presets will use.
+//nolint:unparam // stableFor is preserved as a parameter for the readiness-tuning seam future runtime presets will use; the silence-driven implementation does not consume it today.
 func waitForPaneReady(target, runtime string, stableFor int, ceilingSeconds int) bool {
-	if stableFor <= 0 {
-		stableFor = 2
-	}
+	_ = stableFor // preserved at call sites; silence-driven path doesn't use it
 	if ceilingSeconds <= 0 {
 		ceilingSeconds = 60
 	}
-	const interval = 1 * time.Second
-	prev, err := capturePaneFn(target, 50)
-	if err != nil {
-		slog.Info("[readiness] baseline capture failed; falling back to fixed sleep",
-			"target", target, "err", err)
-		sleepFn(10 * time.Second)
-		return false
-	}
-	streak := 0
-	for i := 0; i < ceilingSeconds; i++ {
-		sleepFn(interval)
-		cur, err := capturePaneFn(target, 50)
+	deadline := timeNowFn().Add(time.Duration(ceilingSeconds) * time.Second)
+
+	// Silence-driven readiness detection: poll tmux #{window_activity} until
+	// the pane has been silent for at least silenceThreshold (5s). This
+	// replaces the legacy byte-equality compare, which was defeated by Claude
+	// Code's animated thinking spinner (1Hz updates → consecutive captures
+	// never byte-equal). After silence is detected, an additional
+	// paneSettleAfterReady (2s) sleep gives the runtime time to wire up its
+	// keyboard handler before keystroke injection — Claude in particular
+	// will accept a long string into its input box but swallow the
+	// immediately-following Enter when not yet input-ready (thrum-84xc).
+	var consecutiveErrors int
+	for {
+		activity, err := tmuxLastActivityFn(target)
 		if err != nil {
-			slog.Info("[readiness] mid-poll capture failed; bailing",
-				"target", target, "err", err)
-			return false
-		}
-		if cur == prev {
-			streak++
-			if streak >= stableFor {
-				return permission.IsPaneSafeToType(runtime, cur)
+			consecutiveErrors++
+			if consecutiveErrors >= watchdogMaxConsecutiveErrors {
+				slog.Info("[readiness] target gone (repeated activity errors); skipping",
+					"target", target, "err", err)
+				return false
 			}
+			sleepFn(watchdogTickInterval)
 			continue
 		}
-		streak = 0
-		prev = cur
+		consecutiveErrors = 0
+
+		silenceFor := timeNowFn().Sub(activity)
+		if silenceFor >= silenceThreshold {
+			// Pane silent long enough — runtime done rendering. Settle
+			// pause, then capture for the final safety check.
+			sleepFn(paneSettleAfterReady)
+			cur, err := capturePaneFn(target, 50)
+			if err != nil {
+				slog.Info("[readiness] capture after silence failed; skipping inject",
+					"target", target, "err", err)
+				return false
+			}
+			return permission.IsPaneSafeToType(runtime, cur)
+		}
+		if timeNowFn().After(deadline) {
+			slog.Info("[readiness] pane never went silent within ceiling; proceeding cautiously",
+				"target", target, "ceiling_s", ceilingSeconds)
+			// Last-capture safety check so a long-rendering pane that
+			// ended up at a trust dialog doesn't get typed into.
+			cur, err := capturePaneFn(target, 50)
+			if err != nil {
+				return false
+			}
+			return permission.IsPaneSafeToType(runtime, cur)
+		}
+		sleepFn(watchdogTickInterval)
 	}
-	slog.Info("[readiness] pane never stabilized within ceiling; proceeding",
-		"target", target, "ceiling_s", ceilingSeconds)
-	// Even at the ceiling, consult the safety detector against the
-	// last capture so a long-rendering pane that ended up at a trust
-	// dialog doesn't get typed into.
-	return permission.IsPaneSafeToType(runtime, prev)
+}
+
+// sendKeysAndSubmit sends `text` to a tmux pane via send-keys, pauses
+// briefly (paneInputSubmitGap), then sends Enter. The pause exists because
+// modern TUI runtimes like Claude Code interpret a long string immediately
+// followed by Enter as "Enter within paste" rather than "submit", swallowing
+// the submission. The gap lets the input widget exit paste-mode before the
+// Enter arrives so it's processed as a discrete keypress.
+//
+// Returns the SendKeys error if it fails; the Enter is best-effort (any
+// error is silently ignored — the keystroke either landed or it didn't, and
+// retrying is more likely to compound damage than fix it).
+func sendKeysAndSubmit(target, text string) error {
+	if err := sendKeysFn(target, text); err != nil {
+		return err
+	}
+	sleepFn(paneInputSubmitGap)
+	_ = sendSpecialKeyFn(target, "Enter")
+	return nil
 }
 
 // paneAgentEngaged reports whether a captured pane snapshot contains real
@@ -1739,6 +1774,19 @@ const watchdogTickInterval = 500 * time.Millisecond
 // errors the watchdog tolerates before assuming the target is gone and exiting.
 const watchdogMaxConsecutiveErrors = 3
 
+// paneSettleAfterReady is the additional pause after silence-detection reports
+// the pane is rendered, before keystroke injection. Some TUI runtimes (Claude
+// Code in particular) accept text input into their input box but swallow the
+// immediately-following Enter when not yet input-ready. Two seconds is enough
+// for Claude to finish wiring its keyboard handler. thrum-84xc.
+const paneSettleAfterReady = 2 * time.Second
+
+// paneInputSubmitGap is the pause between sending text and sending Enter when
+// submitting input to a TUI pane. Modern runtimes detect a long string + Enter
+// pair as a paste-with-newline, not a submission. The gap lets the input
+// widget exit paste-mode before Enter arrives. thrum-84xc.
+const paneInputSubmitGap = 200 * time.Millisecond
+
 // waitForIdentityFile blocks until the identity file at idPath appears
 // on disk, or the combined initial+retry window expires. Between the
 // two windows, `resend` is invoked once — shell init (oh-my-zsh etc.)
@@ -2079,8 +2127,7 @@ func (h *TmuxHandler) emitIdentityBanner(session, target string) {
 		return
 	}
 	// Best-effort: SendKeys errors here shouldn't fail the launch.
-	if err := ttmux.SendKeys(target, cmdLine); err != nil {
-		return
-	}
-	_ = ttmux.SendSpecialKey(target, "Enter")
+	// sendKeysAndSubmit inserts paneInputSubmitGap between text and Enter so
+	// Claude doesn't swallow the Enter as paste-newline (thrum-84xc).
+	_ = sendKeysAndSubmit(target, cmdLine)
 }
