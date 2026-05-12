@@ -79,8 +79,11 @@ func (r *unixResolver) Resolve(conn net.Conn) (*ResolvedIdentity, error) {
 	// overrode cwd-based identity on every call. The footgun surfaced
 	// repeatedly as "agent is misidentified" symptoms that were diagnosed as
 	// other things (binding cache staleness, env-leak in tmux setup, etc.).
-	// rc.5 replaces the gopsutil delegation with a native libproc call
-	// (resolver_cwd_darwin.go) so macOS now resolves cwd as reliably as Linux.
+	// rc.5 replaces the gopsutil delegation on Darwin with an `lsof -p PID
+	// -Fn -d cwd` subprocess (resolver_cwd_darwin.go) — slow path (~30ms per
+	// call) but reliable; lsof is a system tool always present on macOS.
+	// v0.10.4 candidate: convert to native libproc proc_pidinfo via pure-Go
+	// syscall.Syscall6 or matrix-built cgo darwin runners.
 	//
 	// UNKNOWN state on failure — implementations can still miss for any of:
 	// process exited in the race window, permission model drift on macOS, etc.

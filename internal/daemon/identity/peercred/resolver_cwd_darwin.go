@@ -2,85 +2,78 @@
 
 package peercred
 
-/*
-#include <stdlib.h>
-#include <string.h>
-#include <sys/proc_info.h>
-#include <libproc.h>
-
-// thrum_proc_cwd retrieves the current working directory of the given pid
-// using macOS's libproc API. proc_pidinfo with PROC_PIDVNODEPATHINFO is the
-// same path used by `ps`, `lsof`, and Activity Monitor — fast (microseconds,
-// not a subprocess) and reliable. Replaces the gopsutil fallback which is
-// documented as "not implemented yet" on Darwin (returning that error sent
-// the daemon down a legacy client-asserted identity path that trusted stale
-// THRUM_AGENT_ID env vars; see thrum-84xc diagnostic thread + thrum-2t7d).
-//
-// Returns 0 on success with NUL-terminated path written to out (max outsize
-// bytes). Returns -1 on failure with errno set; caller treats errno-set
-// failures as transient and lets the request fall through to the legacy
-// client-asserted path.
-static int thrum_proc_cwd(pid_t pid, char *out, size_t outsize) {
-    struct proc_vnodepathinfo vpi;
-    int size = proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &vpi, sizeof(vpi));
-    if (size <= 0) {
-        // errno set by proc_pidinfo
-        return -1;
-    }
-    if (size < (int)sizeof(vpi)) {
-        // Short read — vpi is incomplete, cdir.vip_path may be uninitialized.
-        return -1;
-    }
-    if (vpi.pvi_cdir.vip_path[0] == '\0') {
-        // Process has no cwd resolution available (rare, e.g. mid-exec).
-        return -1;
-    }
-    size_t plen = strnlen(vpi.pvi_cdir.vip_path, sizeof(vpi.pvi_cdir.vip_path));
-    if (plen >= outsize) {
-        // Truncation would lose information; treat as failure rather than
-        // returning a partial path that won't match a real worktree.
-        return -1;
-    }
-    memcpy(out, vpi.pvi_cdir.vip_path, plen);
-    out[plen] = '\0';
-    return 0;
-}
-*/
-import "C"
-
 import (
+	"bufio"
+	"context"
+	"errors"
 	"fmt"
-	"unsafe"
+	"os/exec"
+	"strings"
+	"time"
 )
 
 // processCWD returns the current working directory of the process with the
-// given PID using macOS's libproc API directly. Gopsutil's Cwd() is
-// documented as "not implemented yet" on Darwin; that fallback put the
-// daemon on a legacy client-asserted-identity path that trusted stale
-// THRUM_AGENT_ID env vars and produced cross-worktree identity confusion.
-// libproc.proc_pidinfo(PROC_PIDVNODEPATHINFO) is the same path used by ps,
-// lsof, and Activity Monitor — fast, reliable, no subprocess overhead.
+// given PID on macOS.
+//
+// Implementation: shells out to `/usr/sbin/lsof -p PID -Fn -d cwd` and parses
+// the structured `-F` output for the `n` field. Slow path (~20-40ms per call)
+// but reliable: lsof is a system tool always present on macOS and the -F
+// output format is stable. The hot pre-rc.5 macOS path was effectively broken
+// because gopsutil's Cwd() is documented as "not implemented yet" on Darwin —
+// every call returned an error, the daemon fell through to legacy
+// client-asserted identity, and stale `THRUM_AGENT_ID` env vars silently
+// overrode cwd-based identity (long-standing footgun; see thrum-2t7d for the
+// full history). A correctly-working lsof path is strictly better than a
+// silent no-op even at 30ms.
+//
+// v0.10.4 candidate: replace with native libproc `proc_pidinfo`
+// (PROC_PIDVNODEPATHINFO) via either (a) pure-Go syscall.Syscall6 once the
+// proc_vnodepathinfo struct layout is locked down, or (b) cgo with goreleaser
+// switched to per-OS CGO_ENABLED settings + matrix-built darwin runners.
+//
+// Linux and other unix use gopsutil directly in resolver_cwd_other.go;
+// gopsutil works natively there so no subprocess is needed.
 func processCWD(pid int) (string, error) {
-	const maxPathLen = 4096 // PATH_MAX on Darwin (MAXPATHLEN is 1024 but vnode paths can be longer in edge cases)
-	buf := make([]byte, maxPathLen)
-	rc, err := C.thrum_proc_cwd(
-		C.pid_t(pid), //nolint:gosec // pid comes from kernel peer creds, always a valid pid_t
-		(*C.char)(unsafe.Pointer(&buf[0])),
-		C.size_t(maxPathLen),
-	)
-	if rc != 0 {
-		if err != nil {
-			return "", fmt.Errorf("libproc proc_pidinfo PROC_PIDVNODEPATHINFO pid=%d: %w", pid, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// -F n      structured output, field "n" carries the path
+	// -d cwd    only the cwd file descriptor entry
+	// -a        intersect filters (PID AND cwd-fd)
+	// -p PID    target process
+	// /usr/sbin/lsof is the system path; not subject to PATH manipulation.
+	cmd := exec.CommandContext(ctx, "/usr/sbin/lsof", "-Fn", "-d", "cwd", "-a", "-p", fmt.Sprintf("%d", pid)) //nolint:gosec // pid comes from kernel peer creds
+	cmd.Env = []string{}                                                                                      // no env inheritance — lsof doesn't need any
+
+	out, err := cmd.Output()
+	if err != nil {
+		// Non-zero exit may mean the PID doesn't exist or we lack permission
+		// (cross-user, sandboxed, etc.). Either way, we can't read cwd.
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return "", fmt.Errorf("lsof pid=%d exit=%d: %w", pid, exitErr.ExitCode(), err)
 		}
-		return "", fmt.Errorf("libproc proc_pidinfo PROC_PIDVNODEPATHINFO pid=%d: failed (no errno)", pid)
+		return "", fmt.Errorf("lsof pid=%d: %w", pid, err)
 	}
-	// buf is NUL-terminated by the C side; find the terminator.
-	n := 0
-	for n < len(buf) && buf[n] != 0 {
-		n++
+
+	// lsof -F output is line-oriented; each line starts with a 1-char field
+	// identifier. We want lines starting with 'n' (the name/path).
+	// Example output (for our purposes):
+	//   p70003
+	//   fcwd
+	//   n/Users/leon/dev/falcondev/falcon-agent
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if len(line) < 2 || line[0] != 'n' {
+			continue
+		}
+		path := line[1:]
+		if path == "" {
+			continue
+		}
+		return path, nil
 	}
-	if n == 0 {
-		return "", fmt.Errorf("libproc proc_pidinfo PROC_PIDVNODEPATHINFO pid=%d: empty path", pid)
-	}
-	return string(buf[:n]), nil
+
+	return "", fmt.Errorf("lsof pid=%d: no cwd field in output", pid)
 }

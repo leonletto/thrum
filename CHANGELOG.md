@@ -159,20 +159,21 @@ and this project adheres to
   resolver called `gopsutil.Process.Cwd()` to look up a caller's working
   directory — documented upstream as "not implemented yet" on Darwin and
   returning an error on EVERY call. That error wasn't `ErrAnonymous`, so the
-  daemon fell through to the legacy client-asserted-identity path that
-  trusts whatever `agent_id` the CLI sends. The CLI builds that claim from
-  `THRUM_AGENT_ID` env vars (when set) or a cwd-based identity file lookup,
-  so stale `THRUM_*` env vars inherited from parent shells silently overrode
+  daemon fell through to the legacy client-asserted-identity path that trusts
+  whatever `agent_id` the CLI sends. The CLI builds that claim from
+  `THRUM_AGENT_ID` env vars (when set) or a cwd-based identity file lookup, so
+  stale `THRUM_*` env vars inherited from parent shells silently overrode
   cwd-based identity on every macOS call. The footgun surfaced repeatedly as
   "agent is misidentified" symptoms that were diagnosed as other things
   (binding-cache staleness, tmux env-leak, etc.). Replaced the gopsutil
-  delegation with a direct libproc call (`proc_pidinfo` with
-  `PROC_PIDVNODEPATHINFO`) on Darwin via a thin cgo wrapper — the same path
-  `ps`, `lsof`, and Activity Monitor use. Microsecond-fast, no subprocess
-  overhead, identical reliability to the Linux gopsutil path. Linux and
-  other unix continue to use gopsutil unchanged. New unit test
-  (`TestProcessCWD_SelfPID`) exercises the real syscall against
-  `os.Getpid()` so the regression can't recur silently (thrum-2t7d).
+  delegation on Darwin with an `lsof -p PID -Fn -d cwd` subprocess — slow path
+  (~30ms per call) but reliable; lsof is a system tool always present on macOS
+  and the `-F` output format is stable. Linux and other unix continue to use
+  gopsutil unchanged. New unit test (`TestProcessCWD_SelfPID`) exercises the
+  real path against `os.Getpid()` so the regression can't recur silently. The
+  30ms cost will be reduced to microseconds in v0.10.4 by switching to native
+  libproc proc_pidinfo (via pure-Go syscall or matrix-built cgo darwin runners —
+  both options require goreleaser changes that exceed rc.5 scope) (thrum-2t7d).
 
 - **Watchdog engagement check now ignores Claude's footer-region tip lines.**
   Manual rc.2 verification surfaced a latent bug in the rc.2 engagement check:
