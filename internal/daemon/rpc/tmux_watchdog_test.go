@@ -76,12 +76,59 @@ func TestPaneAgentEngaged_NoTopAnchor(t *testing.T) {
 	}
 }
 
-// TestPaneAgentEngaged_NoBottomAnchor: no horizontal rule (nil re) → conservative true.
-func TestPaneAgentEngaged_NoBottomAnchor(t *testing.T) {
-	pane := identitybanner.PrimeTruncationSentinel + "\n\n✻ Churned for 1s\n\n"
-	got := paneAgentEngaged(pane, nil, testSpinnerRe)
+// TestPaneAgentEngaged_NoAnchorsAtAll: both bottom anchor and spinner regexes
+// nil → no way to bound the decision region → conservative true.
+func TestPaneAgentEngaged_NoAnchorsAtAll(t *testing.T) {
+	pane := identitybanner.PrimeTruncationSentinel + "\n\nSomething\n\n"
+	got := paneAgentEngaged(pane, nil, nil)
 	if !got {
-		t.Error("expected true (conservative) when bottom anchor regex is nil")
+		t.Error("expected true (conservative) when both bottom anchor and spinner regexes are nil")
+	}
+}
+
+// TestPaneAgentEngaged_TipBelowSpinner_NotEngaged pins the rc.3 fix: Claude
+// renders footer-region tip lines (e.g. "tmux focus-events off · add ...") in
+// the band between the spinner and the divider. The OLD algorithm walked the
+// entire (sentinel..divider) region and treated those tips as real agent output
+// → false-positive engaged → no nudge. The NEW algorithm uses the spinner as
+// the bottom anchor, so tips below the spinner are out of scope.
+func TestPaneAgentEngaged_TipBelowSpinner_NotEngaged(t *testing.T) {
+	pane := "Agent: @test-agent\n" +
+		identitybanner.PrimeTruncationSentinel + "\n" +
+		"\n" +
+		"\n" +
+		"✻ Cogitated for 3s\n" +
+		"\n\n\n\n\n\n\n\n\n\n\n\n\n" +
+		"tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking\n" +
+		"────────────────────────────────────────────────────────────────────────────────\n" +
+		"❯\n" +
+		"  Model: Opus 4.7 | Ctx: 34.7k | Sessio...\n" +
+		"  ⏵⏵ accept edits on (shift+tab to cycle)\n"
+	got := paneAgentEngaged(pane, testBottomAnchorRe, testSpinnerRe)
+	if got {
+		t.Error("expected false (not engaged) when only blanks between sentinel and spinner — tip below spinner must not count as agent output")
+	}
+}
+
+// TestPaneAgentEngaged_NoSpinnerYet_FallsBackToDivider: brief window after
+// banner injection but before the runtime has rendered any spinner. The
+// algorithm falls back to the divider as the bottom anchor.
+func TestPaneAgentEngaged_NoSpinnerYet_FallsBackToDivider(t *testing.T) {
+	pane := identitybanner.PrimeTruncationSentinel + "\n\n\n────────────────────────────────────────\n│ > │\n"
+	got := paneAgentEngaged(pane, testBottomAnchorRe, testSpinnerRe)
+	if got {
+		t.Error("expected false (not engaged) when no spinner yet and only blanks between sentinel and divider")
+	}
+}
+
+// TestPaneAgentEngaged_NoSpinnerYet_AgentRespondedFast: agent responded
+// before the spinner had a chance to render — divider fallback still
+// detects the response.
+func TestPaneAgentEngaged_NoSpinnerYet_AgentRespondedFast(t *testing.T) {
+	pane := identitybanner.PrimeTruncationSentinel + "\n\nReady.\n\n────────────────────────────────────────\n│ > │\n"
+	got := paneAgentEngaged(pane, testBottomAnchorRe, testSpinnerRe)
+	if !got {
+		t.Error("expected true (engaged) when agent responded before any spinner render")
 	}
 }
 

@@ -141,18 +141,29 @@ and this project adheres to
   v0.10.3-rc.1 watchdog at `internal/daemon/rpc/tmux.go` compared two pane
   snapshots taken 30s apart and bailed if they differed. Claude Code's 1Hz
   animated thinking spinner (`✻ Sautéed for 4s` → `Churned for 5s`) makes
-  consecutive snapshots never byte-equal, so the nudge never fired even when
-  the agent had demonstrably not engaged. Codex shows the same shape. Replaced
-  with a two-anchor semantic engagement check: find the banner sentinel (top
-  anchor), find the per-runtime horizontal-rule chrome separator (bottom
-  anchor), inspect lines between them, ignore blanks and the runtime's spinner
-  pattern, treat anything else as "agent has engaged → no nudge". Trigger
-  switched from a blind 30s sleep to silence-driven polling of `tmux
-  display-message #{window_activity}` (500ms ticks, 5s silence threshold, 30s
-  hard deadline) — converges in 5-15s in the common case, exits silently when
-  the agent is genuinely busy past the deadline (no spurious nudge into real
-  work). Added observability logs on both decision branches so the silent bail
-  that hid this bug can't recur (thrum-84xc).
+  consecutive snapshots never byte-equal, so the nudge never fired even when the
+  agent had demonstrably not engaged. Codex shows the same shape. Replaced with
+  a two-anchor semantic engagement check: find the banner sentinel (top anchor),
+  find the per-runtime horizontal-rule chrome separator (bottom anchor), inspect
+  lines between them, ignore blanks and the runtime's spinner pattern, treat
+  anything else as "agent has engaged → no nudge". Trigger switched from a blind
+  30s sleep to silence-driven polling of
+  `tmux display-message #{window_activity}` (500ms ticks, 5s silence threshold,
+  30s hard deadline) — converges in 5-15s in the common case, exits silently
+  when the agent is genuinely busy past the deadline (no spurious nudge into
+  real work). Added observability logs on both decision branches so the silent
+  bail that hid this bug can't recur (thrum-84xc).
+
+- **Watchdog engagement check now ignores Claude's footer-region tip lines.**
+  Manual rc.2 verification surfaced a latent bug in the rc.2 engagement check:
+  Claude renders contextual tip lines (e.g.
+  `tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking`)
+  in the band between the spinner and the horizontal-rule divider. The rc.2
+  algorithm treated those tips as real agent output → false-positive "engaged"
+  → no nudge. Fix: use the spinner line itself as the bottom anchor (with
+  divider as fallback for the brief pre-spinner window). Tips below the
+  spinner are now out of the decision region. Caught before any user hit it
+  via the deliberate post-publish manual verification step (thrum-84xc).
 
 - **Beta-channel install snippets place `VERSION=` on the correct side of the
   shell pipe.** The published install commands at `website/docs/beta-channel.md`

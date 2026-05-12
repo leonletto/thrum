@@ -1374,23 +1374,33 @@ func waitForPaneReady(target, runtime string, stableFor int, ceilingSeconds int)
 // that was defeated by Claude Code's 1Hz animated spinner.
 //
 // The top anchor is identitybanner.PrimeTruncationSentinel — the last line of
-// the identity banner injected at launch/restart. The bottom anchor and spinner
-// regex are runtime-specific (from the preset).
+// the identity banner injected at launch/restart. The bottom anchor is the
+// FIRST occurrence of the runtime's spinner pattern after the top anchor;
+// spinner-as-bottom-anchor cleanly excludes Claude's footer-region tip lines
+// (e.g. "tmux focus-events off · add ...") that appear above the divider but
+// below the spinner. If no spinner has rendered yet, fall back to the
+// runtime's bottom-anchor regex (horizontal-rule chrome separator).
 //
 // Decision algorithm:
 //  1. Find the LAST line containing the banner sentinel → topIdx.
-//  2. Find the LAST line matching bottomAnchorRe → bottomIdx.
-//  3. If either anchor is missing OR bottomIdx <= topIdx → return true
-//     (conservative: can't reason confidently, don't nudge).
+//  2. Find the FIRST line matching spinnerRe after topIdx → bottomIdx.
+//     If no spinner found, find the FIRST line matching bottomAnchorRe
+//     after topIdx → bottomIdx (fallback for fresh panes pre-spinner).
+//  3. If neither anchor found → return true (conservative: can't reason
+//     confidently, don't nudge).
 //  4. For each line in [topIdx+1 .. bottomIdx-1]:
 //     - Trim whitespace; if empty → ignore.
-//     - If spinnerRe != nil && spinnerRe.MatchString(trimmed) → ignore.
 //     - Else → real agent output → return true (engaged, no nudge).
 //  5. Loop completes with no real output → return false (not engaged, nudge).
 //
+// Why spinner-first: Claude renders chronologically — agent content appears
+// ABOVE the spinner (which marks the most-recent action), and chrome (tips,
+// divider, input box) appears BELOW. Using spinner as the bottom anchor puts
+// tips outside the decision region. Divider fallback covers the brief window
+// before the runtime has rendered any spinner yet.
+//
 // bottomAnchorRe and spinnerRe may be nil (e.g. runtimes without TUI chrome).
-// A nil bottomAnchorRe causes the anchor-missing path (step 3) → true.
-// A nil spinnerRe means no spinner filtering — any non-blank is real output.
+// If both are nil → no anchor found path (step 3) → true.
 func paneAgentEngaged(captured string, bottomAnchorRe, spinnerRe *regexp.Regexp) bool {
 	topAnchor := identitybanner.PrimeTruncationSentinel
 	lines := strings.Split(captured, "\n")
@@ -1405,29 +1415,35 @@ func paneAgentEngaged(captured string, bottomAnchorRe, spinnerRe *regexp.Regexp)
 		return true // top anchor not found — conservative
 	}
 
+	// Prefer spinner as bottom anchor (excludes footer-region tip lines).
+	// Fall back to divider/horizontal-rule when no spinner has rendered yet.
 	bottomIdx := -1
-	if bottomAnchorRe != nil {
-		for i, l := range lines {
-			if bottomAnchorRe.MatchString(strings.TrimRight(l, " \t")) {
+	if spinnerRe != nil {
+		for i := topIdx + 1; i < len(lines); i++ {
+			if spinnerRe.MatchString(strings.TrimSpace(lines[i])) {
 				bottomIdx = i
+				break
 			}
 		}
 	}
-	if bottomIdx < 0 || bottomIdx <= topIdx {
-		return true // bottom anchor missing or inverted — conservative
+	if bottomIdx < 0 && bottomAnchorRe != nil {
+		for i := topIdx + 1; i < len(lines); i++ {
+			if bottomAnchorRe.MatchString(strings.TrimRight(lines[i], " \t")) {
+				bottomIdx = i
+				break
+			}
+		}
+	}
+	if bottomIdx < 0 {
+		return true // no bottom anchor found — conservative
 	}
 
 	for _, l := range lines[topIdx+1 : bottomIdx] {
-		trimmed := strings.TrimSpace(l)
-		if trimmed == "" {
-			continue
+		if strings.TrimSpace(l) != "" {
+			return true // real agent output found
 		}
-		if spinnerRe != nil && spinnerRe.MatchString(trimmed) {
-			continue
-		}
-		return true // real agent output found
 	}
-	return false // only blanks/spinner between anchors — not engaged
+	return false // only blanks between sentinel and spinner/divider — not engaged
 }
 
 // nudgeSilentPaneAfter implements thrum-puhr.10 + thrum-84xc: after a
