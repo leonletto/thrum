@@ -154,6 +154,26 @@ and this project adheres to
   real work). Added observability logs on both decision branches so the silent
   bail that hid this bug can't recur (thrum-84xc).
 
+- **macOS peer-credential cwd resolution finally actually works.** From sec.2
+  (pre-v0.9.0) through v0.10.3-rc.4, the daemon's peer-credential identity
+  resolver called `gopsutil.Process.Cwd()` to look up a caller's working
+  directory — documented upstream as "not implemented yet" on Darwin and
+  returning an error on EVERY call. That error wasn't `ErrAnonymous`, so the
+  daemon fell through to the legacy client-asserted-identity path that
+  trusts whatever `agent_id` the CLI sends. The CLI builds that claim from
+  `THRUM_AGENT_ID` env vars (when set) or a cwd-based identity file lookup,
+  so stale `THRUM_*` env vars inherited from parent shells silently overrode
+  cwd-based identity on every macOS call. The footgun surfaced repeatedly as
+  "agent is misidentified" symptoms that were diagnosed as other things
+  (binding-cache staleness, tmux env-leak, etc.). Replaced the gopsutil
+  delegation with a direct libproc call (`proc_pidinfo` with
+  `PROC_PIDVNODEPATHINFO`) on Darwin via a thin cgo wrapper — the same path
+  `ps`, `lsof`, and Activity Monitor use. Microsecond-fast, no subprocess
+  overhead, identical reliability to the Linux gopsutil path. Linux and
+  other unix continue to use gopsutil unchanged. New unit test
+  (`TestProcessCWD_SelfPID`) exercises the real syscall against
+  `os.Getpid()` so the regression can't recur silently (thrum-2t7d).
+
 - **Watchdog engagement check now ignores Claude's footer-region tip lines.**
   Manual rc.2 verification surfaced a latent bug in the rc.2 engagement check:
   Claude renders contextual tip lines (e.g.
@@ -170,28 +190,28 @@ and this project adheres to
   the same broken pattern the watchdog rewrite already replaced. Result: on
   Claude Code the function would either declare ready prematurely (returning
   while a paint cycle was still in flight) or hit its 60s ceiling. Manual rc.3
-  verification on zarambp14 caught the symptom: `thrum tmux start` would put
-  the printf banner into Claude's input box but the immediately-following
-  Enter was swallowed because Claude was not yet input-ready. `thrum:restart`
-  exhibited the same shape (no banner emitted at all). Fix: replace the byte-
-  equality loop with the same silence-driven polling used by the watchdog
+  verification on zarambp14 caught the symptom: `thrum tmux start` would put the
+  printf banner into Claude's input box but the immediately-following Enter was
+  swallowed because Claude was not yet input-ready. `thrum:restart` exhibited
+  the same shape (no banner emitted at all). Fix: replace the byte- equality
+  loop with the same silence-driven polling used by the watchdog
   (`tmux #{window_activity}`, 5s silence threshold, 60s ceiling) plus a 2s
   settle pause after silence is detected before declaring the pane ready for
-  keystroke injection. Both `HandleLaunch` and `HandleRestart` paths benefit
-  by construction (they share `waitForPaneReady`).
+  keystroke injection. Both `HandleLaunch` and `HandleRestart` paths benefit by
+  construction (they share `waitForPaneReady`).
 
-- **TUI input submission no longer races with paste-mode detection.** Even
-  with chrome fully rendered, modern TUI runtimes (Claude Code, others)
-  interpret a long string immediately followed by Enter as "Enter inside
-  paste" rather than "submit", swallowing the submission. New helper
+- **TUI input submission no longer races with paste-mode detection.** Even with
+  chrome fully rendered, modern TUI runtimes (Claude Code, others) interpret a
+  long string immediately followed by Enter as "Enter inside paste" rather than
+  "submit", swallowing the submission. New helper
   `sendKeysAndSubmit(target, text)` inserts a 200ms gap between text and the
   Enter keystroke so the input widget exits paste-mode before Enter arrives.
   Used everywhere the daemon submits input to a runtime pane: the identity-
-  banner emit (`emitIdentityBanner`), and the `/thrum:prime` send for non-
-  hook runtimes from both launch and restart paths.
+  banner emit (`emitIdentityBanner`), and the `/thrum:prime` send for non- hook
+  runtimes from both launch and restart paths.
 
-- **Launch and restart nudge text is now a direct prompt, not a shell
-  command.** rc.3 launched with `nudgeSilentPaneAfter` configured to send
+- **Launch and restart nudge text is now a direct prompt, not a shell command.**
+  rc.3 launched with `nudgeSilentPaneAfter` configured to send
   `"thrum inbox --unread"` on the launch path — a shell command, not a prompt.
   An agent receiving that text into its input box has no clear directive to
   re-engage with the prime briefing. Both nudge sites now send a direct

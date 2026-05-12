@@ -9,8 +9,6 @@ import (
 	"net"
 
 	tspeer "github.com/tailscale/peercred"
-
-	goproc "github.com/shirou/gopsutil/v3/process"
 )
 
 // unixResolver is the Resolver implementation for unix platforms (Linux,
@@ -65,12 +63,31 @@ func (r *unixResolver) Resolve(conn net.Conn) (*ResolvedIdentity, error) {
 	}
 	slog.Debug("peercred.resolve step=pid", "pid", pid)
 
-	// Step 2: Resolve PID → CWD.
-	// UNKNOWN state on failure — gopsutil can miss for any of: process exited
-	// in the race window, permission model drift on macOS, short-lived shell
-	// subprocess, etc. We cannot prove the caller is anonymous, so return a
-	// raw error (NOT wrapped with ErrAnonymous) to route through server.go's
-	// legacy fallthrough.
+	// Step 2: Resolve PID → CWD via platform-specific implementation.
+	//
+	// Historical note (thrum-2t7d et al.): from sec.2 (pre-v0.9.0) through
+	// v0.10.3-rc.4, this call delegated to gopsutil.Process.Cwd() — which is
+	// documented upstream as "not implemented yet" on Darwin and returned an
+	// error on EVERY macOS invocation. That error wasn't ErrAnonymous, so
+	// server.go's `if resolveErr == nil || errors.Is(resolveErr, ErrAnonymous)`
+	// check fell through to the legacy client-asserted-identity path, which
+	// trusts whatever agent_id the CLI sends in its RPC payload. The CLI in
+	// turn builds that claim from THRUM_AGENT_ID env vars (when set) or a
+	// cwd-based identity file lookup. Result: on macOS, peer-credential cwd
+	// resolution was effectively a no-op for the entire history of this code,
+	// and stale THRUM_* env vars inherited from parent shells silently
+	// overrode cwd-based identity on every call. The footgun surfaced
+	// repeatedly as "agent is misidentified" symptoms that were diagnosed as
+	// other things (binding cache staleness, env-leak in tmux setup, etc.).
+	// rc.5 replaces the gopsutil delegation with a native libproc call
+	// (resolver_cwd_darwin.go) so macOS now resolves cwd as reliably as Linux.
+	//
+	// UNKNOWN state on failure — implementations can still miss for any of:
+	// process exited in the race window, permission model drift on macOS, etc.
+	// We cannot prove the caller is anonymous, so return a raw error (NOT
+	// wrapped with ErrAnonymous) to route through server.go's legacy
+	// fallthrough. The fallthrough is still useful for transient races even
+	// though it's no longer the everyday path on macOS.
 	cwd, err := processCWDFn(pid)
 	if err != nil {
 		slog.Warn("peercred.resolve step=cwd failed", "pid", pid, "err", err.Error())
@@ -126,19 +143,10 @@ func PIDFromConn(conn net.Conn) (int, error) {
 	return pid, nil
 }
 
-// processCWD returns the current working directory of the process with the
-// given PID. Returns an error if the process no longer exists.
-func processCWD(pid int) (string, error) {
-	p, err := goproc.NewProcess(int32(pid)) //nolint:gosec // pid comes from kernel peer creds, always valid int
-	if err != nil {
-		return "", fmt.Errorf("gopsutil NewProcess(%d): %w", pid, err)
-	}
-	cwd, err := p.Cwd()
-	if err != nil {
-		return "", fmt.Errorf("gopsutil Cwd(%d): %w", pid, err)
-	}
-	return cwd, nil
-}
+// processCWD is the platform-conditional CWD lookup. Implementations live in
+// resolver_cwd_darwin.go (libproc syscall via cgo — gopsutil's Cwd() is not
+// implemented for Darwin) and resolver_cwd_other.go (gopsutil on Linux and
+// other unix). Both signatures are identical so processCWDFn can take either.
 
 // ResolveCallerWorktree returns the git root containing the given PID's
 // current working directory, or an error wrapped around ErrAnonymous when
