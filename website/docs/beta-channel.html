@@ -187,14 +187,37 @@ If the bug is intermittent, note how often you&#39;ve seen it</li>
 soak — labelled issues block promotion at P0/P1; unlabelled bug reports may not
 be seen until after stable ships.</p>
 <h2>Leaving the beta channel</h2>
-<p>When you&#39;re done testing, install the latest stable and restart the daemon.
-You&#39;re done — no further configuration needed:</p>
+<p>When you&#39;re done testing, revert the binary and any plugins you installed from
+the release branch back to their stable counterparts.</p>
+<h3>Binary</h3>
 <pre><code>curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
 thrum daemon restart
 thrum version</code></pre>
 <p>Stable releases come without a <code>-rc.N</code> suffix. Once you&#39;re back on stable,
 you&#39;ll only receive non-prerelease updates until you opt back in with a specific
 <code>VERSION=</code>.</p>
+<h3>Claude Code plugin</h3>
+<p>If you installed the plugin from a release branch (via
+<code>leonletto/thrum#release/vX.Y.Z</code>), remove that marketplace and re-add the
+stable one before re-installing:</p>
+<pre><code>/plugin marketplace remove thrum
+/plugin marketplace add leonletto/thrum
+/plugin install thrum@thrum
+/reload-plugins</code></pre>
+<p>The remove step is required — Claude Code keeps the cached source URL with the
+branch ref pinned, so re-adding without removing first leaves you on the same
+beta source.</p>
+<h3>Codex plugin</h3>
+<p>Rerun the installer without <code>THRUM_INSTALL_REF</code>, pulling from <code>thrum-dev</code>:</p>
+<pre><code>bash &lt;(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/codex-plugin/plugins/thrum/scripts/install-plugin.sh)</code></pre>
+<p>The installer is idempotent and re-stages the cache, so the previous branch
+state is overwritten in place. No remove step is needed for the Codex plugin.</p>
+<blockquote>
+<p><strong>Note:</strong> the Codex plugin currently tracks <code>thrum-dev</code> rather than a
+versioned release tag. Once the plugin starts shipping versioned releases
+(the way the Claude plugin does via <code>marketplace.json</code>), the revert
+command here will gain a version pin similar to the Claude flow above.</p>
+</blockquote>
 <h2>Note for Homebrew users</h2>
 <p>The beta channel is curl-only. The Homebrew tap doesn&#39;t carry prereleases —
 <code>homebrew_casks.skip_upload: auto</code> in <code>.goreleaser.yaml</code> keeps RCs off the tap

@@ -217,8 +217,10 @@ be seen until after stable ships.
 
 ## Leaving the beta channel
 
-When you're done testing, install the latest stable and restart the daemon.
-You're done — no further configuration needed:
+When you're done testing, revert the binary and any plugins you installed from
+the release branch back to their stable counterparts.
+
+### Binary
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
@@ -229,6 +231,39 @@ thrum version
 Stable releases come without a `-rc.N` suffix. Once you're back on stable,
 you'll only receive non-prerelease updates until you opt back in with a specific
 `VERSION=`.
+
+### Claude Code plugin
+
+If you installed the plugin from a release branch (via
+`leonletto/thrum#release/vX.Y.Z`), remove that marketplace and re-add the stable
+one before re-installing:
+
+```text
+/plugin marketplace remove thrum
+/plugin marketplace add leonletto/thrum
+/plugin install thrum@thrum
+/reload-plugins
+```
+
+The remove step is required — Claude Code keeps the cached source URL with the
+branch ref pinned, so re-adding without removing first leaves you on the same
+beta source.
+
+### Codex plugin
+
+Rerun the installer without `THRUM_INSTALL_REF`, pulling from `thrum-dev`:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+```
+
+The installer is idempotent and re-stages the cache, so the previous branch
+state is overwritten in place. No remove step is needed for the Codex plugin.
+
+> **Note:** the Codex plugin currently tracks `thrum-dev` rather than a
+> versioned release tag. Once the plugin starts shipping versioned releases (the
+> way the Claude plugin does via `marketplace.json`), the revert command here
+> will gain a version pin similar to the Claude flow above.
 
 ## Note for Homebrew users
 
