@@ -20,6 +20,9 @@
  *   description: One-line summary used on the index card and meta tags
  *   tags:        Array of tag strings
  *   video:       Optional YouTube video ID for hero embed at top of post
+ *   draft:       If true, the post is skipped at build time (no HTML emitted,
+ *                not listed on the index). Flip to false (or remove the field)
+ *                to publish.
  *
  * Inline video shortcode in markdown body:
  *   {{< youtube VIDEO_ID >}}
@@ -151,6 +154,7 @@ async function parsePost(filePath) {
       description: frontmatter.description || '',
       tags: Array.isArray(frontmatter.tags) ? frontmatter.tags : [],
       video: frontmatter.video || '',
+      draft: frontmatter.draft === true,
     },
   };
 }
@@ -176,7 +180,7 @@ function renderPostPage(post) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark light">
-  <title>${escapeHtml(meta.title)} — Thrum Blog</title>
+  <title>${escapeHtml(meta.title)} · Thrum Blog</title>
   <meta name="description" content="${escapeAttr(meta.description)}">
   <link rel="canonical" href="${canonicalUrl}">
   <!-- Open Graph -->
@@ -254,7 +258,7 @@ ${body}
         <div class="footer-brand">
           <span class="logo-glyph">&gt;_</span>
           <span class="logo-text">thrum</span>
-          <span class="text-muted">&mdash; Persistent messaging for AI agents</span>
+          <span class="text-muted">&middot; Persistent messaging for AI agents</span>
         </div>
         <div class="footer-links">
           <a href="../docs.html">Documentation</a>
@@ -316,12 +320,12 @@ function renderIndexPage(posts) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark light">
-  <title>Blog — Thrum</title>
-  <meta name="description" content="Notes from the Thrum project — features, workflows, and how to coordinate AI agents without losing the plot.">
+  <title>Thrum Blog</title>
+  <meta name="description" content="How Thrum was built, what I went through along the way, and why it turned out the way it did.">
   <!-- Open Graph -->
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Blog — Thrum">
-  <meta property="og:description" content="Notes from the Thrum project — features, workflows, and how to coordinate AI agents without losing the plot.">
+  <meta property="og:title" content="Thrum Blog">
+  <meta property="og:description" content="How Thrum was built, what I went through along the way, and why it turned out the way it did.">
   <meta property="og:url" content="${CONFIG.siteUrl}/blog.html">
   <meta property="og:site_name" content="Thrum">
   <meta property="og:image" content="${CONFIG.siteUrl}/img/social-card.png">
@@ -329,8 +333,8 @@ function renderIndexPage(posts) {
   <meta property="og:image:height" content="630">
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Blog — Thrum">
-  <meta name="twitter:description" content="Notes from the Thrum project — features, workflows, and how to coordinate AI agents without losing the plot.">
+  <meta name="twitter:title" content="Thrum Blog">
+  <meta name="twitter:description" content="How Thrum was built, what I went through along the way, and why it turned out the way it did.">
   <meta name="twitter:image" content="${CONFIG.siteUrl}/img/social-card.png">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -370,9 +374,8 @@ function renderIndexPage(posts) {
     <div class="container-narrow">
       <h1 class="section-title">Blog</h1>
       <p class="section-lead" style="text-align: left;">
-        Notes from the Thrum project &mdash; how features work, how to use them,
-        and how to keep your head above water when several AI agents are working
-        for you at once. Some posts include short videos.
+        How Thrum was built, what I went through along the way, and why it
+        turned out the way it did.
       </p>
     </div>
   </section>
@@ -391,7 +394,7 @@ ${posts.length ? cards : empty}
         <div class="footer-brand">
           <span class="logo-glyph">&gt;_</span>
           <span class="logo-text">thrum</span>
-          <span class="text-muted">&mdash; Persistent messaging for AI agents</span>
+          <span class="text-muted">&middot; Persistent messaging for AI agents</span>
         </div>
         <div class="footer-links">
           <a href="docs.html">Documentation</a>
@@ -430,6 +433,17 @@ async function buildBlog() {
   const posts = [];
   for (const file of files) {
     const post = await parsePost(file);
+    if (post.meta.draft) {
+      console.log(`   · ${post.slug} (draft — skipped)`);
+      // Remove any stale rendered HTML from a previous publish so the post
+      // can't remain reachable at its slug URL after being marked draft.
+      const stalePath = path.join(CONFIG.blogDir, `${post.slug}.html`);
+      if (await fs.pathExists(stalePath)) {
+        await fs.remove(stalePath);
+        console.log(`     removed stale ${post.slug}.html`);
+      }
+      continue;
+    }
     posts.push(post);
     console.log(`   ✓ ${post.slug} (${post.meta.date})`);
   }
