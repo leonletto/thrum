@@ -113,13 +113,14 @@ overwrites the binary in place.</p>
 just installed. Install from that branch instead of the default marketplace so
 the plugin&#39;s slash commands, hooks, and skills stay in lockstep with the daemon.</p>
 <h3>Claude Code plugin</h3>
-<p>Inside Claude Code, add the marketplace pinned to the release branch using Git&#39;s
-<code>#ref</code> URL fragment, then install the plugin:</p>
-<pre><code>/plugin marketplace add https://github.com/leonletto/thrum.git#release/vX.Y.Z
+<p>Inside Claude Code, add the marketplace pinned to the release branch using the
+<code>&lt;github-user&gt;/&lt;repo&gt;#&lt;branch&gt;</code> shorthand, then install the plugin:</p>
+<pre><code>/plugin marketplace add leonletto/thrum#release/vX.Y.Z
 /plugin install thrum@thrum
 /reload-plugins</code></pre>
-<p>The <code>.git</code> suffix on the URL is required — without it Claude Code expects a
-hosted <code>marketplace.json</code> rather than cloning the repo.</p>
+<p>The first command registers the marketplace named <code>thrum</code> and pins it to the
+release branch. The second installs the <code>thrum</code> plugin from that marketplace
+(<code>&lt;plugin-name&gt;@&lt;marketplace-name&gt;</code>).</p>
 <p>When a new rc.N drops on the same release branch, refresh the marketplace
 without re-adding it:</p>
 <pre><code>/plugin marketplace update thrum
@@ -127,7 +128,7 @@ without re-adding it:</p>
 <p>If you&#39;ve previously installed the stable marketplace and want to switch back to
 it after a release ships, remove the beta marketplace first:</p>
 <pre><code>/plugin marketplace remove thrum
-/plugin marketplace add https://github.com/leonletto/thrum
+/plugin marketplace add leonletto/thrum
 /plugin install thrum@thrum</code></pre>
 <h3>Codex plugin</h3>
 <p>The Codex installer accepts a <code>THRUM_INSTALL_REF</code> env var. Set it to the release

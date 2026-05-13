@@ -100,17 +100,18 @@ the plugin's slash commands, hooks, and skills stay in lockstep with the daemon.
 
 ### Claude Code plugin
 
-Inside Claude Code, add the marketplace pinned to the release branch using Git's
-`#ref` URL fragment, then install the plugin:
+Inside Claude Code, add the marketplace pinned to the release branch using the
+`<github-user>/<repo>#<branch>` shorthand, then install the plugin:
 
 ```text
-/plugin marketplace add https://github.com/leonletto/thrum.git#release/vX.Y.Z
+/plugin marketplace add leonletto/thrum#release/vX.Y.Z
 /plugin install thrum@thrum
 /reload-plugins
 ```
 
-The `.git` suffix on the URL is required — without it Claude Code expects a
-hosted `marketplace.json` rather than cloning the repo.
+The first command registers the marketplace named `thrum` and pins it to the
+release branch. The second installs the `thrum` plugin from that marketplace
+(`<plugin-name>@<marketplace-name>`).
 
 When a new rc.N drops on the same release branch, refresh the marketplace
 without re-adding it:
@@ -125,7 +126,7 @@ it after a release ships, remove the beta marketplace first:
 
 ```text
 /plugin marketplace remove thrum
-/plugin marketplace add https://github.com/leonletto/thrum
+/plugin marketplace add leonletto/thrum
 /plugin install thrum@thrum
 ```
 
