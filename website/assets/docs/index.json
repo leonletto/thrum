@@ -147,22 +147,6 @@
     "lastUpdated": "2026-03-13"
   },
   {
-    "path": "beta-channel.html",
-    "title": "Beta Channel",
-    "description": "How to opt into Thrum pre-release builds, install RCs, report bugs against them, and roll back to stable",
-    "category": "guides",
-    "order": 50,
-    "tags": [
-      "beta",
-      "pre-release",
-      "rc",
-      "install",
-      "rollback",
-      "soak"
-    ],
-    "lastUpdated": "2026-05-12"
-  },
-  {
     "path": "identity.html",
     "title": "Agent Identity & Registration",
     "description": "Named agents, deterministic IDs, identity resolution, registration, conflicts, cleanup, and multi-agent worktrees",
@@ -686,20 +670,6 @@
       "landing"
     ],
     "lastUpdated": "2026-04-19"
-  },
-  {
-    "path": "whats-new.html",
-    "title": "What's New",
-    "description": "Release-by-release highlights, breaking changes, and migration notes for recent Thrum versions.",
-    "category": "overview",
-    "order": 2,
-    "tags": [
-      "release-notes",
-      "changelog",
-      "migration",
-      "version"
-    ],
-    "lastUpdated": "2026-05-11"
   },
   {
     "path": "quickstart.html",

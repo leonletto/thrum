@@ -31,9 +31,9 @@ jobs:
         working-directory: website
         run: npm install
 
-      - name: Build documentation
+      - name: Build documentation and blog
         working-directory: website
-        run: npm run build-docs
+        run: npm run build
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

@@ -65,8 +65,6 @@ need it.
 
 ## Further Reading
 
-- [What's New](whats-new.md) — release-by-release highlights, breaking changes,
-  and migration notes
 - [Why Thrum Exists](philosophy.md) — the reasoning behind human-directed agent
   coordination and what Thrum deliberately doesn't do
 - [Quickstart Guide](quickstart.md) — install Thrum, start the daemon, and get
