@@ -285,6 +285,24 @@ async function generateSEOPages(docs, docsDir) {
 <title>${doc.title} — Thrum</title>
 <meta name="description" content="${escapeAttr(doc.description)}">
 <link rel="canonical" href="${CONFIG.siteUrl}/docs.html#${doc.path}">
+<script type="application/ld+json">${JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'TechArticle',
+  headline: doc.title,
+  description: doc.description,
+  url: `${CONFIG.siteUrl}/docs.html#${doc.path}`,
+  author: { '@type': 'Person', name: 'Leon Letto' },
+  publisher: {
+    '@type': 'Organization',
+    name: 'Thrum',
+    url: `${CONFIG.siteUrl}/`,
+  },
+  isPartOf: {
+    '@type': 'TechArticle',
+    name: 'Thrum Documentation',
+    url: `${CONFIG.siteUrl}/docs.html`,
+  },
+})}</script>
 <style>
 body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
 pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
