@@ -31,6 +31,12 @@
   <script>
     (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
   </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
 </head>
 <body>
   <header class="site-header">
@@ -69,39 +75,150 @@
       <div class="post-tags"><span class="post-tag">release</span><span class="post-tag">v0.10</span><span class="post-tag">codex</span><span class="post-tag">testing</span></div>
       
       <div class="post-body">
-<p>The plan for v0.10 was a fresh-install experience that didn&#39;t feel like reading a man page. A real <code>thrum init</code> wizard, opinionated defaults for roles and worktrees, and a new role template that pinned implementer agents to their own worktree so they couldn&#39;t drive-by edit the main repo. That was the headline. It shipped on May 3 as v0.10.0.</p>
+<p>The plan for v0.10 was a fresh-install experience that didn&#39;t feel like reading
+a man page. A real <code>thrum init</code> wizard, opinionated defaults for roles and
+worktrees, and a new role template that pinned implementer agents to their own
+worktree so they couldn&#39;t drive-by edit the main repo. That was the headline. It
+shipped on May 3 as v0.10.0.</p>
 <p>It came back as v0.10.1 the same day.</p>
 <h2>What 0.10.0 Did</h2>
-<p>The wizard works. Pre-fill any prompt with <code>--name</code>, <code>--role</code>, <code>--module</code>, <code>--worktrees-root</code>, <code>--roles=enhanced|default|skip</code>, <code>--no-daemon</code>, and you can script the whole thing end-to-end. Worktrees moved from <code>~/.workspaces/&lt;project&gt;</code> to <code>~/.thrum/worktrees/&lt;project&gt;</code> so the project owns its own corner of the home directory instead of squatting in the namespace I happen to use.</p>
-<p>That part of 0.10.0 is still what 0.10.3 ships. The wizard didn&#39;t get rewritten. Everything around it did.</p>
+<p>The wizard works. Pre-fill any prompt with <code>--name</code>, <code>--role</code>, <code>--module</code>,
+<code>--worktrees-root</code>, <code>--roles=enhanced|default|skip</code>, <code>--no-daemon</code>, and you can
+script the whole thing end-to-end. Worktrees moved from
+<code>~/.workspaces/&lt;project&gt;</code> to <code>~/.thrum/worktrees/&lt;project&gt;</code> so the project owns
+its own corner of the home directory instead of squatting in the namespace I
+happen to use.</p>
+<p>That part of 0.10.0 is still what 0.10.3 ships. The wizard didn&#39;t get rewritten.
+Everything around it did.</p>
 <h2>Same-Day Patch</h2>
-<p>The wizard goes through a code path called <code>buildInlineQuickstartCmd</code>, which means daemon-spawned panes now run <code>thrum quickstart</code> far more often than they used to. Those panes inherit the daemon&#39;s environment. When you start the daemon from a primed shell, its environment contains <code>THRUM_HOME</code>, a pointer to whatever worktree you were standing in when you ran <code>thrum daemon start</code>.</p>
-<p>The result: a brand-new worktree would run <code>thrum quickstart</code>, and instead of writing its identity into its own <code>.thrum/</code>, it would write it into <code>$THRUM_HOME/.thrum/</code>. The parent worktree&#39;s identity. New agent overwrites old. Latent bug since March, surfaced because Epic-D moved more traffic through the affected path.</p>
-<p>The fix in 0.10.1 had three parts: exempt <code>init</code> and <code>quickstart</code> from the <code>THRUM_HOME</code> substitution that other commands rely on, plumb an explicit <code>--repo</code> into the daemon-inline quickstart so it doesn&#39;t have to consult the environ, and stop a few load-side paths from re-applying the substitution to an already-resolved repo path. Two new release-test scenarios codified the regression.</p>
-<p>Same release also added boot-time identity reconciliation. After a daemon restart, write RPCs (<code>thrum send</code>, <code>thrum tmux start</code>) from a registered worktree could fail with <code>anonymous caller cannot invoke X</code>. The peercred resolver looks up agents by joining <code>session_refs</code> against <code>sessions</code>, both of which are local-only durable state that can drift away from the identity files on disk. v0.10.1 walks <code>.thrum/identities/*.json</code> at boot and replays the rows.</p>
+<p>The wizard goes through a code path called <code>buildInlineQuickstartCmd</code>, which
+means daemon-spawned panes now run <code>thrum quickstart</code> far more often than they
+used to. Those panes inherit the daemon&#39;s environment. When you start the daemon
+from a primed shell, its environment contains <code>THRUM_HOME</code>, a pointer to
+whatever worktree you were standing in when you ran <code>thrum daemon start</code>.</p>
+<p>The result: a brand-new worktree would run <code>thrum quickstart</code>, and instead of
+writing its identity into its own <code>.thrum/</code>, it would write it into
+<code>$THRUM_HOME/.thrum/</code>. The parent worktree&#39;s identity. New agent overwrites old.
+Latent bug since March, surfaced because Epic-D moved more traffic through the
+affected path.</p>
+<p>The fix in 0.10.1 had three parts: exempt <code>init</code> and <code>quickstart</code> from the
+<code>THRUM_HOME</code> substitution that other commands rely on, plumb an explicit
+<code>--repo</code> into the daemon-inline quickstart so it doesn&#39;t have to consult the
+environ, and stop a few load-side paths from re-applying the substitution to an
+already-resolved repo path. Two new release-test scenarios codified the
+regression.</p>
+<p>Same release also added boot-time identity reconciliation. After a daemon
+restart, write RPCs (<code>thrum send</code>, <code>thrum tmux start</code>) from a registered
+worktree could fail with <code>anonymous caller cannot invoke X</code>. The peercred
+resolver looks up agents by joining <code>session_refs</code> against <code>sessions</code>, both of
+which are local-only durable state that can drift away from the identity files
+on disk. v0.10.1 walks <code>.thrum/identities/*.json</code> at boot and replays the rows.</p>
 <h2>Next Day, Different Env Leak</h2>
-<p>v0.10.2 came out on May 4. Most of it was variations on the same theme that bit 0.10.1: environment variables leaking through processes that should not have been talking to each other.</p>
-<p>The big one: tmux panes spawned by the daemon were inheriting <code>THRUM_*</code> env vars from the daemon&#39;s environ. A pane&#39;s <code>thrum whoami</code> would resolve to the daemon-starter&#39;s identity instead of the pane&#39;s intended agent. The fix scrubs <code>THRUM_*</code> at one chokepoint inside <code>safecmd</code> so every tmux exec path benefits at once.</p>
-<p>Then a sibling bug: even with the daemon-side scrub in place, long-running tmux servers still leaked. Tmux session env is sourced from the <em>server&#39;s</em> environ at server-start time, not from the client connection at session-create time. So after the daemon scrub, sessions created against a long-running tmux server were still inheriting whatever environ the server captured weeks or months ago. Fix: every <code>tmux new-session</code> now sets per-session <code>-e KEY=</code> overrides to neutralize whatever the server cached.</p>
-<p>There was also a quieter bug that had been losing me disk space for a while: <code>thrum purge --confirm</code> was passing the wrong field name to its JSONL filter (<code>created_at</code> vs. the actual <code>timestamp</code>), so every record passed the date check and nothing got pruned. Verified live: a <code>--before 30d</code> purge against my dev box&#39;s 335MB sync dir actually freed space for the first time in months.</p>
+<p>v0.10.2 came out on May 4. Most of it was variations on the same theme that bit
+0.10.1: environment variables leaking through processes that should not have
+been talking to each other.</p>
+<p>The big one: tmux panes spawned by the daemon were inheriting <code>THRUM_*</code> env vars
+from the daemon&#39;s environ. A pane&#39;s <code>thrum whoami</code> would resolve to the
+daemon-starter&#39;s identity instead of the pane&#39;s intended agent. The fix scrubs
+<code>THRUM_*</code> at one chokepoint inside <code>safecmd</code> so every tmux exec path benefits at
+once.</p>
+<p>Then a sibling bug: even with the daemon-side scrub in place, long-running tmux
+servers still leaked. Tmux session env is sourced from the <em>server&#39;s</em> environ at
+server-start time, not from the client connection at session-create time. So
+after the daemon scrub, sessions created against a long-running tmux server were
+still inheriting whatever environ the server captured weeks or months ago. Fix:
+every <code>tmux new-session</code> now sets per-session <code>-e KEY=</code> overrides to neutralize
+whatever the server cached.</p>
+<p>There was also a quieter bug that had been losing me disk space for a while:
+<code>thrum purge --confirm</code> was passing the wrong field name to its JSONL filter
+(<code>created_at</code> vs. the actual <code>timestamp</code>), so every record passed the date check
+and nothing got pruned. Verified live: a <code>--before 30d</code> purge against my dev
+box&#39;s 335MB sync dir actually freed space for the first time in months.</p>
 <h2>What 0.10.3 Was Supposed To Be</h2>
-<p>By the time v0.10.2 went out, 0.10.3 had already accumulated its own scope. Codex as a first-class citizen: full plugin parity with Claude Code, a <code>SessionStart</code> hook that auto-primes, a one-command install script, the 14 role-discipline skills synced over. And the release-test harness: a tmux-based test framework that runs full multi-agent scenarios end-to-end, the kind of testing that used to live in my head as &quot;do the manual test plan again.&quot;</p>
+<p>By the time v0.10.2 went out, 0.10.3 had already accumulated its own scope.
+Codex as a first-class citizen: full plugin parity with Claude Code, a
+<code>SessionStart</code> hook that auto-primes, a one-command install script, the 14
+role-discipline skills synced over. And the release-test harness: a tmux-based
+test framework that runs full multi-agent scenarios end-to-end, the kind of
+testing that used to live in my head as &quot;do the manual test plan again.&quot;</p>
 <p>This was a real release. It needed real testing.</p>
-<p>So for the first time, I cut a release candidate instead of a tag. Anyone who wanted the beta could get it from the <a href="../docs/beta-channel.html">beta channel</a>: one curl one-liner, pinned to <code>vX.Y.Z-rc.N</code>. The whole point of the beta channel was to slow down, run real workflows against the candidate, and find the things <code>make ci</code> doesn&#39;t.</p>
+<p>So for the first time, I cut a release candidate instead of a tag. Anyone who
+wanted the beta could get it from the <a href="../docs/beta-channel.html">beta channel</a>:
+one curl one-liner, pinned to <code>vX.Y.Z-rc.N</code>. The whole point of the beta channel
+was to slow down, run real workflows against the candidate, and find the things
+<code>make ci</code> doesn&#39;t.</p>
 <p>It worked. The RC chain ran from rc.1 through rc.6.</p>
 <h2>What the RC Phase Caught</h2>
-<p>rc.1 shipped the new tmux silence watchdog, the thing that nudges an agent if it doesn&#39;t engage with the prime briefing after launch. It never fired. Not once. The watchdog compared two pane snapshots taken 30 seconds apart and bailed if they differed. Claude Code&#39;s animated thinking spinner makes consecutive snapshots never byte-equal, so the watchdog always saw &quot;engaged&quot; and always bailed. The rewrite uses a two-anchor semantic check: find the banner sentinel at the top, find the runtime&#39;s chrome divider at the bottom, ignore the spinner pattern between them.</p>
-<p>rc.2 fixed that, then surfaced a tip-line false positive. Claude renders contextual tip lines between the spinner and the divider, exactly the band the rc.2 algorithm was inspecting. rc.3 moved the bottom anchor to the spinner itself.</p>
-<p>rc.3 also exposed that <code>waitForPaneReady</code>, the function that decides when a fresh pane is ready to receive a keystroke, was using the same broken byte-equality pattern the watchdog rewrite had just replaced. On Claude Code it would either declare ready prematurely (banner went into the input box but the following Enter was swallowed) or hit its 60-second ceiling. rc.4 rebuilt it around the same silence-driven pattern: poll <code>tmux #{window_activity}</code> until 5 seconds of silence, settle for 2 seconds, then declare ready.</p>
-<p>rc.4 surfaced one more in the same family: even with a fully-rendered pane, modern TUI runtimes treat a long string immediately followed by Enter as &quot;Enter inside paste&quot; and swallow the submission. A new helper inserts a 200ms gap between text and Enter so the input widget exits paste mode first.</p>
-<p>rc.5 was the big one. On macOS, every peer-credential lookup the daemon had ever done had been silently failing. <code>gopsutil.Process.Cwd()</code> is documented as &quot;not implemented yet&quot; on Darwin and returns an error on every call. That error wasn&#39;t recognized as anonymous-caller, so the daemon fell through to the legacy &quot;trust whatever agent_id the CLI sends&quot; path. The CLI built that claim from <code>THRUM_AGENT_ID</code> env vars when set. That&#39;s the same failure mode the env-scrub work in 0.10.1 and 0.10.2 had been trying to close, which is why this bug had looked so much like the others. It wasn&#39;t the same bug. The env-leak fixes in 0.10.1 and 0.10.2 were correct on their own merits, and they still ship. The peercred resolver had been doing quiet damage in parallel the whole time, and some of the &quot;agent is misidentified&quot; symptoms I&#39;d been carrying into rc.4 were downstream of this, not of the env-leak thread I&#39;d been blaming. Replaced the gopsutil delegation with an <code>lsof -p PID -Fn -d cwd</code> subprocess. Slow path, but reliable. A unit test exercises the real path against the test process&#39;s own PID so the regression can&#39;t recur silently.</p>
-<p>rc.6 closed the CLI half: even with the daemon-side fix, the CLI was still consulting env vars first when deciding which daemon socket to dial. Stale env from a parent shell anchored elsewhere bypassed the daemon&#39;s correct identity resolution entirely. The CLI now walks up from the supplied path looking for a <code>.thrum/</code> ancestor; <code>THRUM_HOME</code> is a fallback for the legitimate &quot;pin to a worktree from outside any worktree&quot; case. The same restructuring applies to <code>THRUM_AGENT_ID</code> and to identity-file lookup.</p>
-<p>And one small one I&#39;m fond of: the beta-channel install snippet on the docs page itself had <code>VERSION=</code> on the wrong side of the shell pipe. <code>VERSION=vX.Y.Z-rc.N curl ... | sh</code> sets the env var on <code>curl</code>, which sh never sees, so the installer fell back to <code>latest</code>. Real-world hit during rc.1 soak: the documented command installed v0.10.2 instead of v0.10.3-rc.1. Snippets now read <code>curl ... | VERSION=vX.Y.Z-rc.N sh</code>. The kind of bug you can only find by actually using the thing.</p>
+<p>rc.1 shipped the new tmux silence watchdog, the thing that nudges an agent if it
+doesn&#39;t engage with the prime briefing after launch. It never fired. Not once.
+The watchdog compared two pane snapshots taken 30 seconds apart and bailed if
+they differed. Claude Code&#39;s animated thinking spinner makes consecutive
+snapshots never byte-equal, so the watchdog always saw &quot;engaged&quot; and always
+bailed. The rewrite uses a two-anchor semantic check: find the banner sentinel
+at the top, find the runtime&#39;s chrome divider at the bottom, ignore the spinner
+pattern between them.</p>
+<p>rc.2 fixed that, then surfaced a tip-line false positive. Claude renders
+contextual tip lines between the spinner and the divider, exactly the band the
+rc.2 algorithm was inspecting. rc.3 moved the bottom anchor to the spinner
+itself.</p>
+<p>rc.3 also exposed that <code>waitForPaneReady</code>, the function that decides when a
+fresh pane is ready to receive a keystroke, was using the same broken
+byte-equality pattern the watchdog rewrite had just replaced. On Claude Code it
+would either declare ready prematurely (banner went into the input box but the
+following Enter was swallowed) or hit its 60-second ceiling. rc.4 rebuilt it
+around the same silence-driven pattern: poll <code>tmux #{window_activity}</code> until 5
+seconds of silence, settle for 2 seconds, then declare ready.</p>
+<p>rc.4 surfaced one more in the same family: even with a fully-rendered pane,
+modern TUI runtimes treat a long string immediately followed by Enter as &quot;Enter
+inside paste&quot; and swallow the submission. A new helper inserts a 200ms gap
+between text and Enter so the input widget exits paste mode first.</p>
+<p>rc.5 was the big one. On macOS, every peer-credential lookup the daemon had ever
+done had been silently failing. <code>gopsutil.Process.Cwd()</code> is documented as &quot;not
+implemented yet&quot; on Darwin and returns an error on every call. That error wasn&#39;t
+recognized as anonymous-caller, so the daemon fell through to the legacy &quot;trust
+whatever agent_id the CLI sends&quot; path. The CLI built that claim from
+<code>THRUM_AGENT_ID</code> env vars when set. That&#39;s the same failure mode the env-scrub
+work in 0.10.1 and 0.10.2 had been trying to close, which is why this bug had
+looked so much like the others. It wasn&#39;t the same bug. The env-leak fixes in
+0.10.1 and 0.10.2 were correct on their own merits, and they still ship. The
+peercred resolver had been doing quiet damage in parallel the whole time, and
+some of the &quot;agent is misidentified&quot; symptoms I&#39;d been carrying into rc.4 were
+downstream of this, not of the env-leak thread I&#39;d been blaming. Replaced the
+gopsutil delegation with an <code>lsof -p PID -Fn -d cwd</code> subprocess. Slow path, but
+reliable. A unit test exercises the real path against the test process&#39;s own PID
+so the regression can&#39;t recur silently.</p>
+<p>rc.6 closed the CLI half: even with the daemon-side fix, the CLI was still
+consulting env vars first when deciding which daemon socket to dial. Stale env
+from a parent shell anchored elsewhere bypassed the daemon&#39;s correct identity
+resolution entirely. The CLI now walks up from the supplied path looking for a
+<code>.thrum/</code> ancestor; <code>THRUM_HOME</code> is a fallback for the legitimate &quot;pin to a
+worktree from outside any worktree&quot; case. The same restructuring applies to
+<code>THRUM_AGENT_ID</code> and to identity-file lookup.</p>
+<p>And one small one I&#39;m fond of: the beta-channel install snippet on the docs page
+itself had <code>VERSION=</code> on the wrong side of the shell pipe.
+<code>VERSION=vX.Y.Z-rc.N curl ... | sh</code> sets the env var on <code>curl</code>, which sh never
+sees, so the installer fell back to <code>latest</code>. Real-world hit during rc.1 soak:
+the documented command installed v0.10.2 instead of v0.10.3-rc.1. Snippets now
+read <code>curl ... | VERSION=vX.Y.Z-rc.N sh</code>. The kind of bug you can only find by
+actually using the thing.</p>
 <h2>What This Cost, And Bought</h2>
-<p>Three patch releases over two days for what was supposed to be one feature drop. Six release candidates over the following week before any of it was something I&#39;d give to another human.</p>
-<p>In return: the macOS peercred resolver, which had been broken for as long as Thrum has had a peercred resolver, is finally fixed. The watchdog actually watches. The keystroke-submission path actually submits. The env-scrub story is complete from daemon environ to tmux server environ to CLI fallback chain. And the release-test harness now exists and ran against six candidates in a row.</p>
-<p>The thing I&#39;ll keep from this is the RC cycle. v0.10.3 is the first Thrum release that went through a real beta phase, and the reason that mattered is that everything caught in rc.1 through rc.6 would otherwise have been v0.10.4 through v0.10.9. Bug reports from real users. Footguns documented after they fired. Instead they&#39;re release notes on a candidate nobody depended on. I&#39;m going to do this for every minor release from here.</p>
-<p>If you want to follow along, the <a href="../docs/beta-channel.html">beta channel docs</a> describe how to install the current RC. The stable release ships when the soak is done.</p>
+<p>Three patch releases over two days for what was supposed to be one feature drop.
+Six release candidates over the following week before any of it was something
+I&#39;d give to another human.</p>
+<p>In return: the macOS peercred resolver, which had been broken for as long as
+Thrum has had a peercred resolver, is finally fixed. The watchdog actually
+watches. The keystroke-submission path actually submits. The env-scrub story is
+complete from daemon environ to tmux server environ to CLI fallback chain. And
+the release-test harness now exists and ran against six candidates in a row.</p>
+<p>The thing I&#39;ll keep from this is the RC cycle. v0.10.3 is the first Thrum
+release that went through a real beta phase, and the reason that mattered is
+that everything caught in rc.1 through rc.6 would otherwise have been v0.10.4
+through v0.10.9. Bug reports from real users. Footguns documented after they
+fired. Instead they&#39;re release notes on a candidate nobody depended on. I&#39;m
+going to do this for every minor release from here.</p>
+<p>If you want to follow along, the <a href="../docs/beta-channel.html">beta channel docs</a>
+describe how to install the current RC. The stable release ships when the soak
+is done.</p>
 
       </div>
       <hr class="post-divider">

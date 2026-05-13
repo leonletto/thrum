@@ -31,6 +31,12 @@
   <script>
     (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
   </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
 </head>
 <body>
   <header class="site-header">
@@ -69,55 +75,149 @@
       <div class="post-tags"><span class="post-tag">release</span><span class="post-tag">v0.6</span><span class="post-tag">telegram</span></div>
       
       <div class="post-body">
-<p>There was no roadmap for v0.6. There was a plan to keep the v0.5 work usable while I extended Tailscale peering to another repo. Ten days later, the line had grown to four patches. One of them a brand-new Telegram bridge that didn&#39;t exist when the line started. One of them a sync model that had never been introduced to the deletion model. One of them a watchdog pattern that got invented in the middle of a conversation at three in the morning.</p>
-<p>This is what shipping at the speed of friction looks like. Every patch in v0.6 came from hitting a wall in real use, not from a backlog.</p>
+<p>There was no roadmap for v0.6. There was a plan to keep the v0.5 work usable
+while I extended Tailscale peering to another repo. Ten days later, the line had
+grown to four patches. One of them a brand-new Telegram bridge that didn&#39;t exist
+when the line started. One of them a sync model that had never been introduced
+to the deletion model. One of them a watchdog pattern that got invented in the
+middle of a conversation at three in the morning.</p>
+<p>This is what shipping at the speed of friction looks like. Every patch in v0.6
+came from hitting a wall in real use, not from a backlog.</p>
 <h2>The Wrong Name for the Right Machine</h2>
-<p>The line opened with what was supposed to be a routine extension: Tailscale sync had been live on the main repo since v0.5.9, and the remote agent immediately asked whether <code>falcon-backend</code> could join the mesh too. It could. <code>.thrum/.env</code> on falcon-backend, port 9101 to avoid colliding with thrum on 9100, hostname <code>leons-mac-m1-pro-falcon</code>.</p>
-<p>Then the coordinator restarted the daemon. The wrong daemon. CWD was still pointing at the thrum repo, so that&#39;s what got restarted. Self-caught one command later, but it&#39;s the kind of mistake multi-repo coordination produces at every step, and the kind of mistake a tighter <code>--repo</code> story has to anticipate, because the next agent isn&#39;t going to catch it.</p>
-<p>The more substantive issue was a category error in the peer config. I&#39;d been using tsnet hostnames where I should have been using IPs.</p>
+<p>The line opened with what was supposed to be a routine extension: Tailscale sync
+had been live on the main repo since v0.5.9, and the remote agent immediately
+asked whether <code>falcon-backend</code> could join the mesh too. It could. <code>.thrum/.env</code>
+on falcon-backend, port 9101 to avoid colliding with thrum on 9100, hostname
+<code>leons-mac-m1-pro-falcon</code>.</p>
+<p>Then the coordinator restarted the daemon. The wrong daemon. CWD was still
+pointing at the thrum repo, so that&#39;s what got restarted. Self-caught one
+command later, but it&#39;s the kind of mistake multi-repo coordination produces at
+every step, and the kind of mistake a tighter <code>--repo</code> story has to anticipate,
+because the next agent isn&#39;t going to catch it.</p>
+<p>The more substantive issue was a category error in the peer config. I&#39;d been
+using tsnet hostnames where I should have been using IPs.</p>
 <blockquote>
-<p>&quot;we need to focus on using the tailscale IP for all real configuration and the names just as names and not hostnames. This is causing problems.&quot;</p>
+<p>&quot;we need to focus on using the tailscale IP for all real configuration and the
+names just as names and not hostnames. This is causing problems.&quot;</p>
 </blockquote>
-<p>Names are for display. They&#39;re not reliable network addresses when you&#39;re crossing machine boundaries through Tailscale. The correction landed in v0.6.0 as a real split: <code>peer add</code> stores tsnet hostnames for readability, <code>peer join</code> resolves to IPs for the actual connection. <code>peer join</code> also started accepting a peercode as a positional argument, not just <code>--peercode</code>. The remote agent had hit a &quot;flag needs an argument&quot; error trying to pipe the code. That&#39;s the kind of small friction that stops a workflow cold.</p>
+<p>Names are for display. They&#39;re not reliable network addresses when you&#39;re
+crossing machine boundaries through Tailscale. The correction landed in v0.6.0
+as a real split: <code>peer add</code> stores tsnet hostnames for readability, <code>peer join</code>
+resolves to IPs for the actual connection. <code>peer join</code> also started accepting a
+peercode as a positional argument, not just <code>--peercode</code>. The remote agent had
+hit a &quot;flag needs an argument&quot; error trying to pipe the code. That&#39;s the kind of
+small friction that stops a workflow cold.</p>
 <h2>Gated</h2>
-<p>On March 20 I was testing Anthropic&#39;s official Telegram Claude Code plugin. Outbound worked fine. Messages going the other direction, from Telegram into the session, weren&#39;t appearing.</p>
-<p>I checked the MCP server code. Verified the process connections. Confirmed the protocol was implemented correctly on our end. The inbound channel was closed.</p>
+<p>On March 20 I was testing Anthropic&#39;s official Telegram Claude Code plugin.
+Outbound worked fine. Messages going the other direction, from Telegram into the
+session, weren&#39;t appearing.</p>
+<p>I checked the MCP server code. Verified the process connections. Confirmed the
+protocol was implemented correctly on our end. The inbound channel was closed.</p>
 <blockquote>
-<p>&quot;The <code>--channels</code> feature is gated behind a server-side feature flag (<code>tengu_harbor</code>) that Anthropic controls. It&#39;s not enabled for most users yet.&quot;</p>
+<p>&quot;The <code>--channels</code> feature is gated behind a server-side feature flag
+(<code>tengu_harbor</code>) that Anthropic controls. It&#39;s not enabled for most users
+yet.&quot;</p>
 </blockquote>
-<p>A gated feature is a feature you don&#39;t have. I didn&#39;t want to wait for a rollout. The Grammy library powering the Telegram side is open source. Thrum already has a daemon with WebSocket RPC. The question was whether we could build the bridge ourselves.</p>
+<p>A gated feature is a feature you don&#39;t have. I didn&#39;t want to wait for a
+rollout. The Grammy library powering the Telegram side is open source. Thrum
+already has a daemon with WebSocket RPC. The question was whether we could build
+the bridge ourselves.</p>
 <blockquote>
-<p>&quot;Can you investigate how hard it would be to add this support to thrum using the same code since its open source and here?&quot;</p>
+<p>&quot;Can you investigate how hard it would be to add this support to thrum using
+the same code since its open source and here?&quot;</p>
 </blockquote>
-<p>A sub-agent explored Grammy alongside Thrum&#39;s daemon architecture. The answer was yes. Implement Telegram as an isolated WebSocket RPC client in the Go daemon, fail-closed security boundary, no internal Go imports, so a broken Telegram config can&#39;t take down the rest of the system.</p>
-<p>v0.6.0 shipped March 21 with the full bridge: bidirectional messaging, allowlist-based access control, per-user rate limiting, <code>thrum telegram configure/status/pair</code>, and a settings panel in the web UI. The same release also added role-aware preambles across nine roles and switched the default inbox to ConversationView.</p>
-<p>The Telegram bridge worked. But configuring it required a manual step that a developer can do and nobody else can: you had to look up your Telegram user ID yourself and paste it into the config. v0.6.1 closed that gap. <code>thrum telegram configure</code> now restarts the daemon into pairing mode and captures your user ID from the first message you send. You don&#39;t need to know what a Telegram user ID is. You send a message and it records who you are.</p>
+<p>A sub-agent explored Grammy alongside Thrum&#39;s daemon architecture. The answer
+was yes. Implement Telegram as an isolated WebSocket RPC client in the Go
+daemon, fail-closed security boundary, no internal Go imports, so a broken
+Telegram config can&#39;t take down the rest of the system.</p>
+<p>v0.6.0 shipped March 21 with the full bridge: bidirectional messaging,
+allowlist-based access control, per-user rate limiting,
+<code>thrum telegram configure/status/pair</code>, and a settings panel in the web UI. The
+same release also added role-aware preambles across nine roles and switched the
+default inbox to ConversationView.</p>
+<p>The Telegram bridge worked. But configuring it required a manual step that a
+developer can do and nobody else can: you had to look up your Telegram user ID
+yourself and paste it into the config. v0.6.1 closed that gap.
+<code>thrum telegram configure</code> now restarts the daemon into pairing mode and
+captures your user ID from the first message you send. You don&#39;t need to know
+what a Telegram user ID is. You send a message and it records who you are.</p>
 <h2>Purge Didn&#39;t Know About Sync</h2>
-<p>On March 25 I reported a problem that had been quietly bothering me in a multi-machine setup.</p>
+<p>On March 25 I reported a problem that had been quietly bothering me in a
+multi-machine setup.</p>
 <blockquote>
-<p>&quot;I have been using <code>thrum purge --before 1d --confirm</code> in another environment and the messages are not purging from all the agents fully. Also, when I delete an agent from the web console, sometimes it comes back and I have to delete it again. I think maybe the sync is the cause.&quot;</p>
+<p>&quot;I have been using <code>thrum purge --before 1d --confirm</code> in another environment
+and the messages are not purging from all the agents fully. Also, when I
+delete an agent from the web console, sometimes it comes back and I have to
+delete it again. I think maybe the sync is the cause.&quot;</p>
 </blockquote>
 <p>The guess was right.</p>
-<p>Thrum stores events in two places: an append-only JSONL log, and a SQLite database rebuilt from that log. When <code>purge</code> ran, it removed rows from SQLite. The JSONL log was untouched. Sync works by replaying JSONL events on peers. So a peer would sync, find those events in the log, replay them into SQLite, and the deleted messages and agents would come back. Every time. Purge was local. Sync wasn&#39;t. The two systems had never been introduced.</p>
-<p>The fix required teaching sync what deletion means. There is no clean way to represent &quot;this data should not exist&quot; in an append-only log without adding something. We added a <code>purge.executed</code> event type: when you run purge, it writes a tombstone event into the JSONL log. A new <code>purge_metadata</code> table (schema v15) stores the latest purge cutoff. When a peer syncs, <code>SyncApplier</code> checks that cutoff and rejects any incoming events older than it. The tombstone travels with the data; deletion propagates.</p>
-<p>Agent cleanup got the same treatment in v0.6.2: deleting an agent now fully scrubs its messages, sessions, and events, not just the agent row. That&#39;s what makes the tombstone stick.</p>
-<p>Seven tasks, five commits, a full test plan. The root cause was straightforward once named: purge had never been designed with sync in mind.</p>
+<p>Thrum stores events in two places: an append-only JSONL log, and a SQLite
+database rebuilt from that log. When <code>purge</code> ran, it removed rows from SQLite.
+The JSONL log was untouched. Sync works by replaying JSONL events on peers. So a
+peer would sync, find those events in the log, replay them into SQLite, and the
+deleted messages and agents would come back. Every time. Purge was local. Sync
+wasn&#39;t. The two systems had never been introduced.</p>
+<p>The fix required teaching sync what deletion means. There is no clean way to
+represent &quot;this data should not exist&quot; in an append-only log without adding
+something. We added a <code>purge.executed</code> event type: when you run purge, it writes
+a tombstone event into the JSONL log. A new <code>purge_metadata</code> table (schema v15)
+stores the latest purge cutoff. When a peer syncs, <code>SyncApplier</code> checks that
+cutoff and rejects any incoming events older than it. The tombstone travels with
+the data; deletion propagates.</p>
+<p>Agent cleanup got the same treatment in v0.6.2: deleting an agent now fully
+scrubs its messages, sessions, and events, not just the agent row. That&#39;s what
+makes the tombstone stick.</p>
+<p>Seven tasks, five commits, a full test plan. The root cause was straightforward
+once named: purge had never been designed with sync in mind.</p>
 <h2>What the Cron Job Was Actually For</h2>
-<p>A few days later I was looking at a different problem entirely. The night of March 27 into March 28, my coordinator session was manually re-arming a message listener every eight minutes. Five or six cycles of timeout, re-arm, wait, timeout. It worked. Every cycle was pure overhead: a new agent spawned, tokens spent, nothing learned.</p>
-<p>The agent proposed two options: increase the timeout, or make the listener loop internally. I pointed out that I&#39;d thought it already looped internally.</p>
+<p>A few days later I was looking at a different problem entirely. The night of
+March 27 into March 28, my coordinator session was manually re-arming a message
+listener every eight minutes. Five or six cycles of timeout, re-arm, wait,
+timeout. It worked. Every cycle was pure overhead: a new agent spawned, tokens
+spent, nothing learned.</p>
+<p>The agent proposed two options: increase the timeout, or make the listener loop
+internally. I pointed out that I&#39;d thought it already looped internally.</p>
 <blockquote>
 <p>&quot;I thought that was how it already worked?&quot;</p>
 </blockquote>
-<p>It was supposed to. The documentation said the listener loops up to ten cycles. The agent definition had a budget of 20 Bash calls, which did allow ten cycles, but at about 80 minutes total, not four hours. We updated budgets across five files: 20 Bash calls to 62, ten cycles to 30, listener window to roughly four hours. Better.</p>
-<p>Then I mentioned <code>/loop</code>, a skill from a separate project. Could it replace the background listener pattern entirely? The agent explored it. <code>/loop</code> runs a prompt on an interval, which sounded right. The problem showed up the moment we tried it with <code>thrum wait</code>: it fired into the foreground session and blocked it. I interrupted it mid-run.</p>
+<p>It was supposed to. The documentation said the listener loops up to ten cycles.
+The agent definition had a budget of 20 Bash calls, which did allow ten cycles,
+but at about 80 minutes total, not four hours. We updated budgets across five
+files: 20 Bash calls to 62, ten cycles to 30, listener window to roughly four
+hours. Better.</p>
+<p>Then I mentioned <code>/loop</code>, a skill from a separate project. Could it replace the
+background listener pattern entirely? The agent explored it. <code>/loop</code> runs a
+prompt on an interval, which sounded right. The problem showed up the moment we
+tried it with <code>thrum wait</code>: it fired into the foreground session and blocked it.
+I interrupted it mid-run.</p>
 <blockquote>
 <p>&quot;Is there no way for it to run backgrounded like before?&quot;</p>
 </blockquote>
-<p>That question opened the third option. Not &quot;increase the budget&quot; and not &quot;use <code>/loop</code> as the worker.&quot; Use a cron job as a guardian: check whether a listener is running, and if one isn&#39;t, spawn one. The cron job doesn&#39;t do the listening. It just makes sure something is.</p>
-<p>That&#39;s the watchdog. A <code>CronCreate</code> with the prompt &quot;If there is no background message listener running, spawn one now.&quot; We found the pattern, built it, and shipped it as v0.6.3 the same day. The CHANGELOG notes a 65% reduction in listener token consumption compared to the manual re-arm model. That number came after, not before. We were solving the problem in front of us. The efficiency was what fell out.</p>
+<p>That question opened the third option. Not &quot;increase the budget&quot; and not &quot;use
+<code>/loop</code> as the worker.&quot; Use a cron job as a guardian: check whether a listener
+is running, and if one isn&#39;t, spawn one. The cron job doesn&#39;t do the listening.
+It just makes sure something is.</p>
+<p>That&#39;s the watchdog. A <code>CronCreate</code> with the prompt &quot;If there is no background
+message listener running, spawn one now.&quot; We found the pattern, built it, and
+shipped it as v0.6.3 the same day. The CHANGELOG notes a 65% reduction in
+listener token consumption compared to the manual re-arm model. That number came
+after, not before. We were solving the problem in front of us. The efficiency
+was what fell out.</p>
 <h2>What Ten Days Cost, And Bought</h2>
-<p>Four patches in ten days is a cadence that only makes sense if you don&#39;t fight it. None of these patches were on a roadmap. All of them came from somebody (me, or a remote agent, or a coordinator on a sleepless overnight) hitting an edge during real use. The wrong-daemon restart, the gated inbound channel, the resurrecting agents, the listener that didn&#39;t loop as long as the docs claimed. They surfaced because the system was being used, not because I was hunting for them.</p>
-<p>The cost was a release line that didn&#39;t sit still. The benefit was that the v0.6 line ends as a substantially different product than it started: native Telegram instead of a gated dependency, sync that understands deletion, a watchdog pattern that I&#39;ve since reused for other long-running coordinator tasks. Friction-driven shipping isn&#39;t the cleanest model on paper. In practice, when you&#39;re the only person using the thing and you&#39;re the one who keeps hitting the walls, it&#39;s the model that has any chance of actually keeping up.</p>
+<p>Four patches in ten days is a cadence that only makes sense if you don&#39;t fight
+it. None of these patches were on a roadmap. All of them came from somebody (me,
+or a remote agent, or a coordinator on a sleepless overnight) hitting an edge
+during real use. The wrong-daemon restart, the gated inbound channel, the
+resurrecting agents, the listener that didn&#39;t loop as long as the docs claimed.
+They surfaced because the system was being used, not because I was hunting for
+them.</p>
+<p>The cost was a release line that didn&#39;t sit still. The benefit was that the v0.6
+line ends as a substantially different product than it started: native Telegram
+instead of a gated dependency, sync that understands deletion, a watchdog
+pattern that I&#39;ve since reused for other long-running coordinator tasks.
+Friction-driven shipping isn&#39;t the cleanest model on paper. In practice, when
+you&#39;re the only person using the thing and you&#39;re the one who keeps hitting the
+walls, it&#39;s the model that has any chance of actually keeping up.</p>
 
       </div>
       <hr class="post-divider">
