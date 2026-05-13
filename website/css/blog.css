@@ -1,0 +1,348 @@
+/**
+ * Thrum Blog Styles
+ *
+ * Sits on top of theme.css + landing.css. Adds layout for the blog index
+ * cards, post body typography, and responsive video embeds. Inherits the
+ * light/dark theming from theme.css via CSS variables.
+ */
+
+/* ============================================================================
+   BLOG INDEX
+   ========================================================================= */
+
+.blog-index-hero {
+  padding-top: 140px;
+  padding-bottom: var(--space-xl);
+}
+
+.blog-index-list {
+  padding-top: var(--space-2xl);
+  padding-bottom: var(--space-2xl);
+}
+
+.post-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-lg);
+}
+
+.post-card {
+  padding: 0;
+  transition: transform var(--transition-base), border-color var(--transition-base);
+  overflow: hidden;
+}
+
+.post-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+}
+
+.post-card-link {
+  display: block;
+  padding: var(--space-lg);
+  text-decoration: none;
+  color: inherit;
+}
+
+.post-card-link:hover {
+  text-decoration: none;
+}
+
+.post-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: var(--space-sm);
+}
+
+.post-card-title {
+  margin: 0 0 var(--space-sm);
+  font-size: 22px;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.post-card-description {
+  margin: 0 0 var(--space-md);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.post-card-readmore {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--primary);
+  margin-top: var(--space-sm);
+}
+
+.post-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: var(--primary);
+}
+
+/* ============================================================================
+   POST PAGE
+   ========================================================================= */
+
+.blog-post-section {
+  padding-top: 120px;
+  padding-bottom: var(--space-2xl);
+}
+
+.post-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  margin-bottom: var(--space-lg);
+}
+
+.post-eyebrow a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.post-eyebrow a:hover {
+  color: var(--primary);
+}
+
+.post-title {
+  font-size: 40px;
+  line-height: 1.15;
+  letter-spacing: -0.5px;
+  margin-bottom: var(--space-md);
+  color: var(--text-primary);
+}
+
+.post-meta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: var(--space-md);
+}
+
+.post-meta-sep {
+  margin: 0 0.4rem;
+  opacity: 0.5;
+}
+
+.post-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: var(--space-xl);
+}
+
+.post-tags-small {
+  margin-top: var(--space-sm);
+  margin-bottom: 0;
+}
+
+.post-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+/* Long-form prose body */
+.post-body {
+  font-size: 17px;
+  line-height: 1.75;
+  color: var(--text-secondary);
+}
+
+.post-body p {
+  margin: 0 0 1.2em;
+}
+
+.post-body h2 {
+  font-size: 26px;
+  line-height: 1.25;
+  margin: 2.2em 0 0.6em;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
+}
+
+.post-body h3 {
+  font-size: 20px;
+  line-height: 1.3;
+  margin: 1.8em 0 0.5em;
+  color: var(--text-primary);
+}
+
+.post-body h4 {
+  font-size: 16px;
+  margin: 1.4em 0 0.4em;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-family: var(--font-mono);
+}
+
+.post-body strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.post-body a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.post-body a:hover {
+  text-decoration-thickness: 2px;
+}
+
+.post-body ul,
+.post-body ol {
+  margin: 0 0 1.2em 1.2em;
+  padding: 0;
+}
+
+.post-body li {
+  margin-bottom: 0.5em;
+}
+
+.post-body blockquote {
+  margin: 1.5em 0;
+  padding: 0.6em 1.2em;
+  border-left: 3px solid var(--primary);
+  background: rgba(56, 189, 248, 0.04);
+  color: var(--text-primary);
+  font-style: italic;
+}
+
+.post-body code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  padding: 1px 6px;
+  background: rgba(148, 163, 184, 0.12);
+  border-radius: 4px;
+  color: var(--text-primary);
+}
+
+.post-body pre {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  overflow-x: auto;
+  margin: 1.5em 0;
+}
+
+.post-body pre code {
+  background: none;
+  padding: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.post-body hr {
+  margin: 2em 0;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+.post-divider {
+  margin: 3em 0 1.5em;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+.post-footer-nav {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.post-footer-nav a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.post-footer-nav a:hover {
+  color: var(--primary);
+}
+
+/* ============================================================================
+   VIDEO EMBED — responsive 16:9 wrapper
+   ========================================================================= */
+
+.video-embed {
+  position: relative;
+  padding-bottom: 56.25%;
+  height: 0;
+  margin: 1.5em 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #000;
+}
+
+.video-embed iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.video-embed-hero {
+  margin: 0 0 var(--space-2xl);
+}
+
+/* ============================================================================
+   RESPONSIVE
+   ========================================================================= */
+
+@media (min-width: 720px) {
+  .post-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .post-title {
+    font-size: 30px;
+  }
+  .post-body {
+    font-size: 16px;
+  }
+  .post-body h2 {
+    font-size: 22px;
+  }
+}
