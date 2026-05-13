@@ -42,7 +42,25 @@ const CONFIG = {
   websiteDir: path.join(__dirname, '..'),
   siteUrl: 'https://leonletto.github.io/thrum',
   defaultAuthor: 'Leon Letto',
+  defaultAuthorUrl: 'https://leonletto.github.io/',
+  // Default timezone offset used to turn a date-only frontmatter date into an
+  // ISO 8601 datetime for JSON-LD. Pacific Time matches the author's locale;
+  // the rendered "May 11, 2026" snippet is the same regardless.
+  defaultTimezoneOffset: '-07:00',
 };
+
+/**
+ * Promote a frontmatter date string into a valid ISO 8601 datetime with
+ * timezone, which is what schema.org's datePublished expects. Pass-through
+ * for inputs that already include a `T`; otherwise append a noon-local time
+ * so search engines render the publish date unambiguously.
+ */
+function toIsoDatetime(dateStr) {
+  if (!dateStr) return dateStr;
+  if (typeof dateStr !== 'string') return dateStr;
+  if (dateStr.includes('T')) return dateStr;
+  return `${dateStr}T12:00:00${CONFIG.defaultTimezoneOffset}`;
+}
 
 /**
  * Marked renderer with syntax highlighting (same approach as build-docs.js).
@@ -184,8 +202,9 @@ function renderPostPage(post) {
     author: {
       '@type': 'Person',
       name: meta.author,
+      url: CONFIG.defaultAuthorUrl,
     },
-    datePublished: meta.date,
+    datePublished: toIsoDatetime(meta.date),
     image: `${CONFIG.siteUrl}/img/social-card.png`,
     url: canonicalUrl,
     mainEntityOfPage: {
@@ -365,8 +384,12 @@ function renderIndexPage(posts) {
       '@type': 'BlogPosting',
       headline: post.meta.title,
       url: `${CONFIG.siteUrl}/blog/${post.slug}.html`,
-      datePublished: post.meta.date,
-      author: { '@type': 'Person', name: post.meta.author },
+      datePublished: toIsoDatetime(post.meta.date),
+      author: {
+        '@type': 'Person',
+        name: post.meta.author,
+        url: CONFIG.defaultAuthorUrl,
+      },
     })),
   };
 
