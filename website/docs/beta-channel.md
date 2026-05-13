@@ -25,12 +25,31 @@ to report what you find.
 > can no longer override the worktree the user is actually in. Full notes:
 > [What's New](whats-new.md) and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
-> To install the binary:
-> `curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.6 sh`.
-> If you use the Claude Code or Codex plugin, also install the matching plugin
-> from `release/v0.10.3` — see
-> [How to install the matching plugins](#how-to-install-the-matching-claude-code-and-codex-plugins)
-> below.
+
+### Quick install for `v0.10.3-rc.6`
+
+Binary and Codex plugin (run in your shell):
+
+```bash
+# Binary
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.6 sh
+
+# Codex plugin (matches release/v0.10.3)
+THRUM_INSTALL_REF=release/v0.10.3 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.3/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+```
+
+Claude Code plugin (run inside Claude):
+
+```text
+/plugin marketplace add leonletto/thrum#release/v0.10.3
+/plugin install thrum@thrum
+/reload-plugins
+```
+
+For refresh between rc.N bumps, switch-back to stable, and the parameterized
+versions of these commands, see
+[How to install the matching plugins](#how-to-install-the-matching-claude-code-and-codex-plugins)
+below.
 
 ## What this is
 

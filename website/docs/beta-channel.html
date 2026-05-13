@@ -59,14 +59,23 @@ prefers cwd-anchored identity over <code>THRUM_*</code> env vars; env vars are f
 hints used only when cwd has no thrum worktree. Stale env from a parent shell
 can no longer override the worktree the user is actually in. Full notes:
 <a href="whats-new.html">What&#39;s New</a> and the
-<a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG <code>[Unreleased]</code> section</a>.
-To install the binary:
-<code>curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.6 sh</code>.
-If you use the Claude Code or Codex plugin, also install the matching plugin
-from <code>release/v0.10.3</code> — see
+<a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG <code>[Unreleased]</code> section</a>.</p>
+</blockquote>
+<h3>Quick install for <code>v0.10.3-rc.6</code></h3>
+<p>Binary and Codex plugin (run in your shell):</p>
+<pre><code># Binary
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.6 sh
+
+# Codex plugin (matches release/v0.10.3)
+THRUM_INSTALL_REF=release/v0.10.3 bash &lt;(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.3/codex-plugin/plugins/thrum/scripts/install-plugin.sh)</code></pre>
+<p>Claude Code plugin (run inside Claude):</p>
+<pre><code>/plugin marketplace add leonletto/thrum#release/v0.10.3
+/plugin install thrum@thrum
+/reload-plugins</code></pre>
+<p>For refresh between rc.N bumps, switch-back to stable, and the parameterized
+versions of these commands, see
 <a href="#how-to-install-the-matching-claude-code-and-codex-plugins">How to install the matching plugins</a>
 below.</p>
-</blockquote>
 <h2>What this is</h2>
 <p>When a new version is ready for soak, the coordinator cuts a <code>release/vX.Y.Z</code>
 branch and tags <code>vX.Y.Z-rc.1</code>. GoReleaser publishes that tag as a <strong>GitHub
