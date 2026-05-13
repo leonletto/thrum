@@ -149,7 +149,7 @@
   {
     "path": "beta-channel.html",
     "title": "Beta Channel",
-    "description": "How to opt into Thrum pre-release builds, install RCs, report bugs against them, and roll back to stable",
+    "description": "How to opt into Thrum pre-release builds, install RCs and their matching plugins, report bugs against them, and roll back to stable",
     "category": "guides",
     "order": 50,
     "tags": [
@@ -158,9 +158,10 @@
       "rc",
       "install",
       "rollback",
-      "soak"
+      "soak",
+      "plugin"
     ],
-    "lastUpdated": "2026-05-12"
+    "lastUpdated": "2026-05-13"
   },
   {
     "path": "identity.html",

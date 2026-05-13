@@ -14,8 +14,12 @@ to report what you find.
 > can no longer override the worktree the user is actually in. Full notes:
 > [What's New](whats-new.md) and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
-> To install:
+> To install the binary:
 > `curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.6 sh`.
+> If you use the Claude Code or Codex plugin, also install the matching plugin
+> from `release/v0.10.3` — see
+> [How to install the matching plugins](#how-to-install-the-matching-claude-code-and-codex-plugins)
+> below.
 
 ## What this is
 
@@ -75,6 +79,65 @@ thrum daemon restart
 
 You don't need to uninstall the previous RC first — the install script
 overwrites the binary in place.
+
+## How to install the matching Claude Code and Codex plugins
+
+The plugins live in the same repo as the binary, so the release branch
+(`release/vX.Y.Z`) carries the plugin payload that matches the RC binary you
+just installed. Install from that branch instead of the default marketplace so
+the plugin's slash commands, hooks, and skills stay in lockstep with the daemon.
+
+### Claude Code plugin
+
+Inside Claude Code, add the marketplace pinned to the release branch using Git's
+`#ref` URL fragment, then install the plugin:
+
+```text
+/plugin marketplace add https://github.com/leonletto/thrum.git#release/vX.Y.Z
+/plugin install thrum@thrum
+/reload-plugins
+```
+
+The `.git` suffix on the URL is required — without it Claude Code expects a
+hosted `marketplace.json` rather than cloning the repo.
+
+When a new rc.N drops on the same release branch, refresh the marketplace
+without re-adding it:
+
+```text
+/plugin marketplace update thrum
+/reload-plugins
+```
+
+If you've previously installed the stable marketplace and want to switch back to
+it after a release ships, remove the beta marketplace first:
+
+```text
+/plugin marketplace remove thrum
+/plugin marketplace add https://github.com/leonletto/thrum
+/plugin install thrum@thrum
+```
+
+### Codex plugin
+
+The Codex installer accepts a `THRUM_INSTALL_REF` env var. Set it to the release
+branch and run the installer from that same branch so both the script and the
+plugin payload come from the same revision:
+
+```bash
+THRUM_INSTALL_REF=release/vX.Y.Z bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/vX.Y.Z/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+```
+
+When a new rc.N drops on the same release branch, re-run the same command — the
+installer is idempotent on size+mtime and re-stages the cache from the latest
+revision of the branch.
+
+To switch back to stable after a release ships, rerun the installer with the
+default ref:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+```
 
 ## How to roll back to stable
 

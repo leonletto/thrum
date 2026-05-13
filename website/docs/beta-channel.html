@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <title>Beta Channel — Thrum</title>
-<meta name="description" content="How to opt into Thrum pre-release builds, install RCs, report bugs against them, and roll back to stable">
+<meta name="description" content="How to opt into Thrum pre-release builds, install RCs and their matching plugins, report bugs against them, and roll back to stable">
 <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#beta-channel.html">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Beta Channel","description":"How to opt into Thrum pre-release builds, install RCs, report bugs against them, and roll back to stable","url":"https://leonletto.github.io/thrum/docs.html#beta-channel.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://leonletto.github.io/thrum/docs.html"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Beta Channel","description":"How to opt into Thrum pre-release builds, install RCs and their matching plugins, report bugs against them, and roll back to stable","url":"https://leonletto.github.io/thrum/docs.html#beta-channel.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://leonletto.github.io/thrum/docs.html"}}</script>
 <style>
 body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
 pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
@@ -60,8 +60,12 @@ hints used only when cwd has no thrum worktree. Stale env from a parent shell
 can no longer override the worktree the user is actually in. Full notes:
 <a href="whats-new.html">What&#39;s New</a> and the
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG <code>[Unreleased]</code> section</a>.
-To install:
-<code>curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.6 sh</code>.</p>
+To install the binary:
+<code>curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.6 sh</code>.
+If you use the Claude Code or Codex plugin, also install the matching plugin
+from <code>release/v0.10.3</code> — see
+<a href="#how-to-install-the-matching-claude-code-and-codex-plugins">How to install the matching plugins</a>
+below.</p>
 </blockquote>
 <h2>What this is</h2>
 <p>When a new version is ready for soak, the coordinator cuts a <code>release/vX.Y.Z</code>
@@ -103,6 +107,39 @@ same command with the new VERSION:</p>
 thrum daemon restart</code></pre>
 <p>You don&#39;t need to uninstall the previous RC first — the install script
 overwrites the binary in place.</p>
+<h2>How to install the matching Claude Code and Codex plugins</h2>
+<p>The plugins live in the same repo as the binary, so the release branch
+(<code>release/vX.Y.Z</code>) carries the plugin payload that matches the RC binary you
+just installed. Install from that branch instead of the default marketplace so
+the plugin&#39;s slash commands, hooks, and skills stay in lockstep with the daemon.</p>
+<h3>Claude Code plugin</h3>
+<p>Inside Claude Code, add the marketplace pinned to the release branch using Git&#39;s
+<code>#ref</code> URL fragment, then install the plugin:</p>
+<pre><code>/plugin marketplace add https://github.com/leonletto/thrum.git#release/vX.Y.Z
+/plugin install thrum@thrum
+/reload-plugins</code></pre>
+<p>The <code>.git</code> suffix on the URL is required — without it Claude Code expects a
+hosted <code>marketplace.json</code> rather than cloning the repo.</p>
+<p>When a new rc.N drops on the same release branch, refresh the marketplace
+without re-adding it:</p>
+<pre><code>/plugin marketplace update thrum
+/reload-plugins</code></pre>
+<p>If you&#39;ve previously installed the stable marketplace and want to switch back to
+it after a release ships, remove the beta marketplace first:</p>
+<pre><code>/plugin marketplace remove thrum
+/plugin marketplace add https://github.com/leonletto/thrum
+/plugin install thrum@thrum</code></pre>
+<h3>Codex plugin</h3>
+<p>The Codex installer accepts a <code>THRUM_INSTALL_REF</code> env var. Set it to the release
+branch and run the installer from that same branch so both the script and the
+plugin payload come from the same revision:</p>
+<pre><code>THRUM_INSTALL_REF=release/vX.Y.Z bash &lt;(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/vX.Y.Z/codex-plugin/plugins/thrum/scripts/install-plugin.sh)</code></pre>
+<p>When a new rc.N drops on the same release branch, re-run the same command — the
+installer is idempotent on size+mtime and re-stages the cache from the latest
+revision of the branch.</p>
+<p>To switch back to stable after a release ships, rerun the installer with the
+default ref:</p>
+<pre><code>bash &lt;(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/codex-plugin/plugins/thrum/scripts/install-plugin.sh)</code></pre>
 <h2>How to roll back to stable</h2>
 <p>Before opting into the beta channel for the first time, take a backup of your
 <code>.thrum/</code> state directory in case you need to revert:</p>
