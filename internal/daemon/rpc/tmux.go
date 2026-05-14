@@ -405,27 +405,27 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 
 	launchCmd := runtimeToLaunchCmd(runtime)
 	if launchCmd != "" {
-		if err := ttmux.SendKeys(target, launchCmd); err != nil {
+		// Hook runtimes (claude / codex / cursor — HasSessionStartHook=true
+		// on the preset): emit the pane-side identity banner BEFORE the
+		// launch keystrokes so the printf lands at the shell prompt rather
+		// than inside the runtime's `❯` input box. The
+		// PrimeTruncationSentinel stays in scrollback after the runtime
+		// takes over so paneAgentEngaged can still find the top anchor.
+		// Non-hook runtimes get only the launchCmd here; their
+		// `/thrum:prime` keystroke fires from the post-launch goroutine
+		// below once the runtime is input-ready. thrum-8dl3 Fix #1.
+		if err := h.launchRuntimeWithBanner(name, target, runtime, launchCmd); err != nil {
 			return nil, fmt.Errorf("launch send-keys: %w", err)
 		}
-		if err := ttmux.SendSpecialKey(target, "Enter"); err != nil {
-			return nil, fmt.Errorf("launch enter: %w", err)
-		}
 
-		// Post-launch slot (10s after launchCmd, in a goroutine so the RPC
-		// returns immediately). Two branches:
-		//
-		//   Hook runtimes (claude/cursor — HasSessionStartHook=true on the
-		//   preset): the SessionStart hook already auto-injects the
-		//   briefing during runtime startup, so /thrum:prime would be
-		//   redundant. Instead, send the pane-side identity banner here —
-		//   landing AFTER the runtime has finished rendering the briefing
-		//   so the banner is the LAST visible content in the pane (not the
-		//   first; thrum-6hqy.1).
-		//
-		//   Non-hook runtimes (codex/opencode/auggie/kiro/etc): keep the
-		//   /thrum:prime keystroke send unchanged — that's how those
-		//   runtimes get the briefing into context.
+		// Post-launch slot (in a goroutine so the RPC returns
+		// immediately). For hook runtimes there's nothing more to inject
+		// — the SessionStart hook auto-injects the briefing and the
+		// pre-launch banner sits in scrollback. For non-hook runtimes,
+		// send `/thrum:prime` once the pane is input-ready. In either
+		// case the silence watchdog fires after the configured threshold
+		// (default 30s) of pane silence to nudge agents that didn't
+		// engage on their own.
 		go func() {
 			// thrum-puhr.10 (cluster 5): pre-inject readiness via
 			// silence-detector. Replaces the legacy Sleep(10s); the
@@ -445,9 +445,7 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 					"target", target, "runtime", runtime)
 				return
 			}
-			if runtimeHasSessionStartHook(runtime) {
-				h.emitIdentityBanner(name, target)
-			} else {
+			if !runtimeHasSessionStartHook(runtime) {
 				// Defense-in-depth: re-check safety just before send.
 				// waitForPaneReady's exit window is brief but not
 				// atomic with this send — a trust gate could appear
@@ -1226,23 +1224,24 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 	target := name + ":0.0"
 	launchCmd := runtimeToLaunchCmd(runtime)
 	if launchCmd != "" {
-		if err := ttmux.SendKeys(target, launchCmd); err != nil {
+		// Hook runtimes: emit the pane-side identity banner BEFORE the
+		// launch keystrokes — see HandleLaunch for the full rationale.
+		// On restart this matters even more: the SessionStart hook also
+		// renders the restart snapshot (Previous Session Context block,
+		// which inject-prime-context.sh hoists into the loud preamble),
+		// but without the pre-launch banner the silence watchdog's
+		// PrimeTruncationSentinel anchor never reaches scrollback and
+		// `paneAgentEngaged` returns conservative-true → no nudge → the
+		// agent sits at the welcome screen forever. thrum-8dl3 Fix #1.
+		if err := h.launchRuntimeWithBanner(name, target, runtime, launchCmd); err != nil {
 			return nil, fmt.Errorf("send launch command: %w", err)
 		}
-		if err := ttmux.SendSpecialKey(target, "Enter"); err != nil {
-			return nil, fmt.Errorf("send enter: %w", err)
-		}
 
-		// Post-launch slot (10s in a goroutine). Mirrors HandleLaunch —
-		// see that function for the full rationale. For hook runtimes
-		// the SessionStart hook auto-injects the briefing AND renders
-		// the restart snapshot (the # Previous Session Context block,
-		// which inject-prime-context.sh hoists into the loud preamble),
-		// so /thrum:prime is redundant — emit the pane-side identity
-		// banner instead, landing AFTER the runtime has rendered so the
-		// banner is the last visible content in the pane (thrum-6hqy.1).
-		// For non-hook runtimes the post-restart /thrum:prime is what
-		// loads the snapshot — keep it.
+		// Post-launch slot (in a goroutine). For hook runtimes there's
+		// nothing more to inject — the SessionStart hook handles the
+		// briefing + snapshot, and the pre-launch banner sits in
+		// scrollback. For non-hook runtimes the post-restart
+		// `/thrum:prime` is what loads the snapshot — keep it.
 		go func() {
 			// thrum-puhr.10 (cluster 5): pre-inject readiness via
 			// silence-detector — same as HandleLaunch. Replaces the
@@ -1256,9 +1255,7 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 					"target", target, "runtime", runtime)
 				return
 			}
-			if runtimeHasSessionStartHook(runtime) {
-				h.emitIdentityBanner(name, target)
-			} else {
+			if !runtimeHasSessionStartHook(runtime) {
 				if cur, err := capturePaneFn(target, 50); err == nil && !permission.IsPaneSafeToType(runtime, cur) {
 					slog.Info("[restart] skipping /thrum:prime send: pane in detected prompt/trust-gate state",
 						"target", target, "runtime", runtime)
@@ -2094,14 +2091,48 @@ func runtimeHasSessionStartHook(runtime string) bool {
 	return preset.HasSessionStartHook
 }
 
+// launchRuntimeWithBanner is the synchronous pre-goroutine portion of
+// HandleLaunch + HandleRestart: for hook runtimes (claude / codex /
+// cursor — HasSessionStartHook=true) it emits the pane-side identity
+// banner FIRST so the printf-style send-keys lands at the shell prompt
+// (and the PrimeTruncationSentinel ends up in scrollback where the
+// silence watchdog can still anchor on it), then sends the runtime
+// launch command + Enter. For non-hook runtimes the banner step is
+// skipped; the launch keystrokes are sent unchanged.
+//
+// Pre thrum-8dl3 Fix #1 the banner was emitted from inside the post-
+// launch goroutine, AFTER the runtime had taken over the pane — so the
+// banner printf went into the runtime's `❯` input box instead of the
+// shell, never reached scrollback, and the watchdog's top anchor
+// vanished (paneAgentEngaged hit topIdx<0 → conservative true → no
+// nudge → agent sat at welcome screen forever).
+//
+// Both SendKeys calls route through the package-level test seams
+// (sendKeysFn / sendSpecialKeyFn) so unit tests can assert call order.
+// Banner emission via emitIdentityBanner is best-effort by design —
+// missing identity files don't block the launch.
+func (h *TmuxHandler) launchRuntimeWithBanner(session, target, runtime, launchCmd string) error {
+	if runtimeHasSessionStartHook(runtime) {
+		h.emitIdentityBanner(session, target)
+	}
+	if launchCmd == "" {
+		return nil
+	}
+	if err := sendKeysFn(target, launchCmd); err != nil {
+		return err
+	}
+	return sendSpecialKeyFn(target, "Enter")
+}
+
 // emitIdentityBanner sends the identity banner for the agent registered
 // at the session's stored cwd into the pane via tmux send-keys + Enter.
 // Best-effort: silently no-ops when no cwd is stored, no identity is
 // found, or identitybanner.ShellCommand returns empty (e.g. a bare
-// session created with --no-agent). Called before runtime launch in
-// HandleLaunch + HandleRestart so the banner lands at the shell prompt
-// and stays in the pane's scrollback after the runtime takes over the
-// screen. thrum-6hqy.
+// session created with --no-agent). Called from launchRuntimeWithBanner
+// (HandleLaunch + HandleRestart) BEFORE the runtime launch keystrokes
+// so the banner lands at the shell prompt and stays in the pane's
+// scrollback after the runtime takes over the screen.
+// thrum-6hqy / thrum-8dl3.
 func (h *TmuxHandler) emitIdentityBanner(session, target string) {
 	h.sessionMu.RLock()
 	cwd, ok := h.sessionCwds[session]
