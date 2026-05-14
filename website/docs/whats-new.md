@@ -6,7 +6,7 @@ description:
 category: "overview"
 order: 2
 tags: ["release-notes", "changelog", "migration", "version"]
-last_updated: "2026-05-11"
+last_updated: "2026-05-14"
 ---
 
 ## What's New
@@ -18,7 +18,7 @@ machine-readable history lives in
 
 ## v0.10.3 — In Soak (RC)
 
-v0.10.3 is currently a release candidate. The tag is `v0.10.3-rc.6`; see the
+v0.10.3 is currently a release candidate. The tag is `v0.10.3-rc.7`; see the
 [Beta Channel](beta-channel.md) guide for how to opt in. Stable promotion
 follows the standard 48-hour soak window once no P0/P1 bugs are open against the
 RC.
@@ -139,6 +139,15 @@ quieter fixes around env scoping, self-echo, and preamble framing rounds it out.
   sequential questions (`category?` → `specific item within category?`) when the
   natural option count exceeds four. Synced across all four runtime plugin
   copies.
+
+- **`thrum init --force` no longer silently disables messaging.** A hard-coded
+  assignment in the runtime-selection step was overwriting `single_agent_mode`
+  to `true` on every init run, which disables the inbox listener and stop-hook
+  checks. Agents appeared healthy in `thrum team` but inbound messages never
+  arrived and replies silently dropped. Affected users upgrading via the common
+  `thrum init --force` refresh path; fresh installs were unaffected. If you hit
+  this on an earlier release, open the project's `.thrum/config.json` and flip
+  `single_agent_mode` back to `false`.
 
 ### Upgrade Notes
 
