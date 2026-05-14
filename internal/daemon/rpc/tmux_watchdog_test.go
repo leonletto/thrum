@@ -174,6 +174,85 @@ func TestPaneAgentEngaged_MultipleSpinnerLines(t *testing.T) {
 	}
 }
 
+// buildClaude2_1_141FreshPane simulates the Claude Code v2.1.141 welcome
+// layout AFTER thrum-8dl3 Fix #1 lands (identity banner emitted pre-launch,
+// so its sentinel sits in scrollback above the alt-screen). The 2.1.141
+// input box is bracketed by TWO horizontal-rule lines (`─{20,}`) — the
+// bottom-anchor walk must lock onto the FIRST one (top rule), not the
+// global last, otherwise the top rule falls INSIDE the walk window and
+// gets trimmed to non-empty → false-engaged → no nudge. Fix #3 pins this.
+func buildClaude2_1_141FreshPane() string {
+	return identitybanner.PrimeTruncationSentinel + "\n" +
+		"\n" +
+		"\n" +
+		"✻ Churned for 3s\n" +
+		"\n" +
+		"\n" +
+		"────────────────────────────────────────\n" + // TOP rule of input box
+		"❯                                       \n" +
+		"────────────────────────────────────────\n" + // BOTTOM rule of input box
+		"  Model: Opus 4.7 | Ctx: 0 | ~/dev\n" +
+		"  ⏵⏵ accept edits on (shift+tab to cycle)\n"
+}
+
+// buildClaude2_1_141RespondedPane is the with-content twin of
+// buildClaude2_1_141FreshPane: agent has produced prior-turn content above
+// the spinner, so the walk window legitimately contains non-blank lines.
+func buildClaude2_1_141RespondedPane() string {
+	return identitybanner.PrimeTruncationSentinel + "\n" +
+		"\n" +
+		"I'll read the prime now.\n" +
+		"\n" +
+		"✻ Cooked for 42s\n" +
+		"\n" +
+		"\n" +
+		"────────────────────────────────────────\n" +
+		"❯                                       \n" +
+		"────────────────────────────────────────\n" +
+		"  Model: Opus 4.7 | Ctx: 0.5k | ~/dev\n"
+}
+
+// TestPaneAgentEngaged_Claude2_1_141_FreshPane_NotEngaged pins thrum-8dl3
+// Fix #3: the bottom-anchor walk locks onto the FIRST `─{20,}` match after
+// the top anchor (the top rule of the input box), NOT the last (the bottom
+// rule). Walking past the top rule into the input-box interior would count
+// the top rule itself as "real agent output" and suppress the nudge.
+func TestPaneAgentEngaged_Claude2_1_141_FreshPane_NotEngaged(t *testing.T) {
+	got := paneAgentEngaged(buildClaude2_1_141FreshPane(), testBottomAnchorRe, testSpinnerRe)
+	if got {
+		t.Error("expected false (not engaged) for fresh 2.1.141 pane — bottom-anchor walk must stop at the FIRST horizontal rule after the top anchor, not include the input-box interior")
+	}
+}
+
+// TestPaneAgentEngaged_Claude2_1_141_RespondedPane_Engaged is the positive
+// counterpart: real agent content above the spinner must keep the watchdog
+// from firing.
+func TestPaneAgentEngaged_Claude2_1_141_RespondedPane_Engaged(t *testing.T) {
+	got := paneAgentEngaged(buildClaude2_1_141RespondedPane(), testBottomAnchorRe, testSpinnerRe)
+	if !got {
+		t.Error("expected true (engaged) when agent prior-turn content sits between sentinel and spinner on a 2.1.141 pane")
+	}
+}
+
+// TestPaneAgentEngaged_Claude2_1_141_NoSpinnerYet_NotEngaged covers the
+// brief window after pre-launch banner injection where the runtime has
+// rendered the welcome chrome (two horizontal rules) but hasn't started a
+// turn yet (no spinner line). The divider-fallback path must still pick
+// the TOP rule as bottomIdx so the input-box interior stays out of scope.
+func TestPaneAgentEngaged_Claude2_1_141_NoSpinnerYet_NotEngaged(t *testing.T) {
+	pane := identitybanner.PrimeTruncationSentinel + "\n" +
+		"\n" +
+		"\n" +
+		"────────────────────────────────────────\n" + // TOP rule
+		"❯                                       \n" +
+		"────────────────────────────────────────\n" + // BOTTOM rule
+		"  Model: Opus 4.7 | Ctx: 0 | ~/dev\n"
+	got := paneAgentEngaged(pane, testBottomAnchorRe, testSpinnerRe)
+	if got {
+		t.Error("expected false (not engaged) for 2.1.141 fresh pane with no spinner yet — divider fallback must pick the FIRST rule (top of input box), not the last")
+	}
+}
+
 // TestPaneAgentEngaged_MultiLineResponse: multi-line agent prose → engaged.
 func TestPaneAgentEngaged_MultiLineResponse(t *testing.T) {
 	pane := identitybanner.PrimeTruncationSentinel +
