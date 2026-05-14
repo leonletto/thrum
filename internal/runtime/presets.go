@@ -54,11 +54,16 @@ type RuntimePreset struct {
 // Used by the silence watchdog (thrum-84xc) to bound the agent-output region.
 var claudeBottomAnchorRegex = regexp.MustCompile(`^─{20,}$`)
 
-// claudeSpinnerRegex matches Claude Code's animated thinking indicator:
-// "✻ <verb> for <N>s" (✻ = U+273B). Present in the agent-output region while
-// a turn is in flight; the watchdog ignores these lines as chrome. Uses \S+
-// instead of \w+ because some verbs contain non-ASCII characters (e.g. "Sautéed").
-var claudeSpinnerRegex = regexp.MustCompile(`^✻ \S+ for \d+s$`)
+// claudeSpinnerRegex matches Claude Code's animated thinking indicator.
+// Two observed durations:
+//   - Short form (<1m):  "✻ <verb> for <N>s"       — e.g. "✻ Churned for 17s"
+//   - Long form  (≥1m):  "✻ <verb> for <Nm Ns>"    — e.g. "✻ Baked for 1m 45s"
+//
+// ✻ = U+273B. Present in the agent-output region while a turn is in flight;
+// the watchdog ignores these lines as chrome. Uses \S+ instead of \w+ because
+// some verbs contain non-ASCII characters (e.g. "Sautéed"). The long-form
+// branch is non-capturing so the regex stays anchored at line end. thrum-8dl3.
+var claudeSpinnerRegex = regexp.MustCompile(`^✻ \S+ for \d+(?:m \d+)?s$`)
 
 // BuiltinPresets contains the default presets for all known runtimes.
 var BuiltinPresets = map[string]RuntimePreset{

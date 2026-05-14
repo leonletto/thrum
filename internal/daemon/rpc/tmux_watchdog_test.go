@@ -45,8 +45,10 @@ func buildClaudeRespondedPane() string {
 
 var (
 	testBottomAnchorRe = regexp.MustCompile(`^─{20,}$`)
-	// testSpinnerRe uses \S+ (not \w+) to handle unicode verb suffixes like "Sautéed".
-	testSpinnerRe = regexp.MustCompile(`^✻ \S+ for \d+s$`)
+	// testSpinnerRe uses \S+ (not \w+) to handle unicode verb suffixes like
+	// "Sautéed", and accepts both short ("for 17s") and long ("for 1m 45s")
+	// duration formats. Mirrors claudeSpinnerRegex in internal/runtime/presets.go.
+	testSpinnerRe = regexp.MustCompile(`^✻ \S+ for \d+(?:m \d+)?s$`)
 )
 
 // ── paneAgentEngaged unit tests ──────────────────────────────────────────────
