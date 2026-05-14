@@ -469,7 +469,10 @@ Examples:
 					cfg = &config.ThrumConfig{}
 				}
 				cfg.Runtime.Primary = selectedRuntime
-				cfg.Daemon.SingleAgentMode = true // Default: single-agent mode
+				// Do NOT force SingleAgentMode here — that destructively overwrites the
+				// user's existing setting on `thrum init --force` and silently breaks
+				// messaging after upgrade. cfg already carries the loaded value from
+				// LoadThrumConfig; zero-value (false) applies for fresh installs.
 				if cfg.Worktrees.BasePath == "" {
 					cfg.Worktrees = config.WorktreesConfig{
 						BasePath:     inferWorktreeBasePath(flagRepo),
