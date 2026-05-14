@@ -87,12 +87,13 @@ model selection on sub-agent spawns, every spawn must include `model:`:
 
 This rule propagates downward: anything you delegate must follow it.
 
-### Run thrum commands from the main repo, never from your worktree
+### Run thrum commands from your worktree, never from the main repo or another worktree
 
-Worktree directories contain their own `.thrum/` identity files. Running thrum
-CLI from a worktree picks up the worktree's identity and routes messages under
-the wrong sender. Run from the main repo, or anchor with
-`--repo /path/to/main/repo`.
+Your worktree (`{{.RepoRoot}}` here) is your home — the `.thrum/` identity
+file lives here. Running thrum CLI from the main repo would pick up the
+coordinator's identity and route messages under the wrong sender. Same
+hazard if you `cd` into another agent's worktree. Always run from
+`{{.RepoRoot}}`, or anchor explicitly with `--repo {{.RepoRoot}}`.
 
 ### Send to specific agent names, never to role names
 

@@ -25,12 +25,12 @@ digraph when_to_use {
     "Have a design doc?" [shape=diamond];
     "Have a plan file?" [shape=diamond];
     "Need epics & tasks?" [shape=diamond];
-    "Use brainstorming skill first" [shape=box];
+    "Use coordinator-running-brainstorm-cycles skill first" [shape=box];
     "Use writing-plans skill first" [shape=box];
     "Already have tasks in beads" [shape=box];
     "Run project-setup" [shape=doublecircle];
 
-    "Have a design doc?" -> "Use brainstorming skill first" [label="no"];
+    "Have a design doc?" -> "Use coordinator-running-brainstorm-cycles skill first" [label="no"];
     "Have a design doc?" -> "Have a plan file?" [label="yes"];
     "Have a plan file?" -> "Use writing-plans skill first" [label="no"];
     "Have a plan file?" -> "Need epics & tasks?" [label="yes"];
@@ -41,7 +41,10 @@ digraph when_to_use {
 
 **Don't use when:**
 
-- No design doc exists yet — use brainstorming skill first
+- No design doc exists yet — use the `coordinator-running-brainstorm-cycles`
+  skill first (spawns a researcher in an isolated worktree, runs the
+  brainstorm interactively with the user, iterates dual-review cycles, then
+  hands off back to project-setup)
 - No plan file exists yet — use writing-plans skill first
 - Tasks already exist in beads — go straight to creating the implementation
   prompt closely following the template (implementation-agent.md)

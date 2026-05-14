@@ -123,10 +123,14 @@ When your runtime supports model selection on sub-agent spawns, every spawn
 must include `model:` — `haiku` for mechanical work, `sonnet` for judgment,
 `opus` only when justified.
 
-### Run thrum commands from the main repo, never from your worktree
+### Run thrum commands from your worktree, never from the main repo or another worktree
 
-Worktree directories carry their own `.thrum/` identity files. Run thrum CLI
-from the main repo, or anchor with `--repo /path/to/main/repo`.
+Your worktree (`{{.RepoRoot}}` here) is your home — the `.thrum/` identity
+file lives here, and routing depends on the CLI's CWD. Running thrum CLI
+from the main repo would resolve identity to the coordinator and route
+every message under their name, polluting audit trails. Same hazard if you
+`cd` into another agent's worktree. Always run from `{{.RepoRoot}}`, or
+anchor explicitly with `--repo {{.RepoRoot}}`.
 
 ---
 
