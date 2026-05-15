@@ -216,6 +216,12 @@ type EditResponse struct {
 type MarkReadRequest struct {
 	MessageIDs    []string `json:"message_ids"` // Batch support
 	CallerAgentID string   `json:"caller_agent_id,omitempty"`
+	// MarkedBefore, when non-empty, restricts the operation to messages
+	// whose created_at <= this RFC3339Nano timestamp. IDs that exist but
+	// have created_at after the watermark are silently skipped (no error)
+	// and do not contribute to MarkedCount. Used by `thrum message read
+	// --all` to prevent racing concurrent arrivals into the marked set.
+	MarkedBefore string `json:"marked_before,omitempty"`
 }
 
 // MarkReadResponse represents the response from message.markRead RPC.
@@ -2277,17 +2283,50 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// Parse the watermark once outside the loop. On parse failure, fall
+	// through to unfiltered behavior — conservative: a malformed
+	// watermark must not silently mark messages it was supposed to
+	// protect.
+	var watermark time.Time
+	var watermarkValid bool
+	if req.MarkedBefore != "" {
+		if parsed, perr := time.Parse(time.RFC3339Nano, req.MarkedBefore); perr == nil {
+			watermark = parsed
+			watermarkValid = true
+		}
+		// perr != nil: watermarkValid stays false → no filtering applied.
+	}
+
 	// For each message_id
 	for _, messageID := range req.MessageIDs {
-		// Check if message exists and get thread_id (skip if not found, don't error)
+		// Check if message exists and get thread_id + created_at (skip if not found, don't error)
 		var msgThreadID sql.NullString
-		err = tx.QueryRow("SELECT thread_id FROM messages WHERE message_id = ?", messageID).Scan(&msgThreadID)
+		var msgCreatedAt string
+		err = tx.QueryRow("SELECT thread_id, created_at FROM messages WHERE message_id = ?", messageID).Scan(&msgThreadID, &msgCreatedAt)
 		if err == sql.ErrNoRows {
 			// Skip non-existent messages
 			continue
 		}
 		if err != nil {
 			return nil, fmt.Errorf("check message exists: %w", err)
+		}
+
+		// Watermark filter: if a parsed watermark is set and this message
+		// was created strictly after it, skip silently. The race fix for
+		// `read --all`. String compare on RFC3339Nano is INCORRECT —
+		// time.Format trims trailing fractional zeros, so a whole-second
+		// timestamp "...:00Z" sorts AFTER a sub-second "...:00.001Z" by
+		// ASCII ('Z' 0x5A > '.' 0x2E). Parse both sides into time.Time
+		// and compare via .After.
+		if watermarkValid {
+			if msgCreated, perr := time.Parse(time.RFC3339Nano, msgCreatedAt); perr == nil {
+				if msgCreated.After(watermark) {
+					continue
+				}
+			}
+			// perr != nil: row's created_at is unparseable. Conservative:
+			// don't skip (mark proceeds), matching the parse-failure
+			// policy on the request side.
 		}
 
 		// Track affected thread

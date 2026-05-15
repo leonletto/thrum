@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"testing"
 	"time"
@@ -279,6 +280,109 @@ func TestSessionSetTask_TouchesLastSeen(t *testing.T) {
 	got := readLastSeen(t, st, senderID)
 	if got == stalePast {
 		t.Errorf("last_seen_at unchanged after session.setTask; want advanced from %q", stalePast)
+	}
+}
+
+// TestHandleMarkRead_MarkedBefore_FiltersNewMessages verifies that
+// marked_before excludes messages with created_at > marked_before from the
+// mark operation, even when their IDs are passed in the request. Anchors
+// the E2 race fix for `thrum message read --all`: an arrival landing
+// between the unread listing and the mark call must not be silently marked.
+func TestHandleMarkRead_MarkedBefore_FiltersNewMessages(t *testing.T) {
+	st, senderID, targetID, handler := setupTwoAgents(t, "sender", "target")
+	t.Cleanup(func() { _ = st.Close() })
+
+	// Send msg_old at t=0; capture watermark; send msg_new at t=1.
+	oldSendParams, _ := json.Marshal(SendRequest{
+		Content:       "old",
+		To:            "@" + targetID,
+		CallerAgentID: senderID,
+	})
+	oldResp, err := handler.HandleSend(context.Background(), oldSendParams)
+	if err != nil {
+		t.Fatalf("HandleSend(old): %v", err)
+	}
+	oldMsgID := oldResp.(*SendResponse).MessageID
+
+	watermark := time.Now().UTC().Format(time.RFC3339Nano)
+	time.Sleep(10 * time.Millisecond) // gap large enough to be reliable under CI load
+
+	newSendParams, _ := json.Marshal(SendRequest{
+		Content:       "new",
+		To:            "@" + targetID,
+		CallerAgentID: senderID,
+	})
+	newResp, err := handler.HandleSend(context.Background(), newSendParams)
+	if err != nil {
+		t.Fatalf("HandleSend(new): %v", err)
+	}
+	newMsgID := newResp.(*SendResponse).MessageID
+
+	// Mark both with marked_before = watermark. Only msg_old should be marked.
+	markParams, _ := json.Marshal(MarkReadRequest{
+		MessageIDs:    []string{oldMsgID, newMsgID},
+		MarkedBefore:  watermark,
+		CallerAgentID: targetID,
+	})
+	markResp, err := handler.HandleMarkRead(context.Background(), markParams)
+	if err != nil {
+		t.Fatalf("HandleMarkRead: %v", err)
+	}
+	if got := markResp.(*MarkReadResponse).MarkedCount; got != 1 {
+		t.Fatalf("expected marked_count=1, got %d", got)
+	}
+
+	// Verify durable state: old has read_at; new does not.
+	for _, tc := range []struct {
+		id       string
+		wantRead bool
+	}{
+		{oldMsgID, true},
+		{newMsgID, false},
+	} {
+		var readAt sql.NullString
+		if err := st.RawDB().QueryRow(
+			`SELECT read_at FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ?`,
+			tc.id, targetID).Scan(&readAt); err != nil {
+			t.Fatalf("query read_at for %s: %v", tc.id, err)
+		}
+		if tc.wantRead && !readAt.Valid {
+			t.Fatalf("expected %s to have read_at, got NULL", tc.id)
+		}
+		if !tc.wantRead && readAt.Valid {
+			t.Fatalf("expected %s to have NULL read_at, got %s", tc.id, readAt.String)
+		}
+	}
+}
+
+// TestHandleMarkRead_NoMarkedBefore_BackwardCompat verifies that omitting
+// marked_before preserves current behavior (mark all supplied IDs).
+func TestHandleMarkRead_NoMarkedBefore_BackwardCompat(t *testing.T) {
+	st, senderID, targetID, handler := setupTwoAgents(t, "sender", "target")
+	t.Cleanup(func() { _ = st.Close() })
+
+	sendParams, _ := json.Marshal(SendRequest{
+		Content:       "x",
+		To:            "@" + targetID,
+		CallerAgentID: senderID,
+	})
+	sendResp, err := handler.HandleSend(context.Background(), sendParams)
+	if err != nil {
+		t.Fatalf("HandleSend: %v", err)
+	}
+	msgID := sendResp.(*SendResponse).MessageID
+
+	markParams, _ := json.Marshal(MarkReadRequest{
+		MessageIDs:    []string{msgID},
+		CallerAgentID: targetID,
+		// MarkedBefore intentionally unset.
+	})
+	markResp, err := handler.HandleMarkRead(context.Background(), markParams)
+	if err != nil {
+		t.Fatalf("HandleMarkRead: %v", err)
+	}
+	if got := markResp.(*MarkReadResponse).MarkedCount; got != 1 {
+		t.Fatalf("expected marked_count=1, got %d", got)
 	}
 }
 
