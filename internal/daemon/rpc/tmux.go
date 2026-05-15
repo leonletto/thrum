@@ -1579,9 +1579,12 @@ func nudgeSilentPaneAfter(target, runtimeName, thrumDir, nudge string) {
 	}
 
 	engaged := paneAgentEngaged(after, bottomAnchorRe, spinnerRe)
+	hasSentinel := strings.Contains(after, identitybanner.PrimeTruncationSentinel)
 	if engaged {
-		slog.Info("[watchdog] no nudge: agent output present",
-			"target", target, "runtime", runtimeName)
+		slog.Info("[watchdog] no nudge: paneAgentEngaged=true",
+			"target", target, "runtime", runtimeName,
+			"top_anchor_found", hasSentinel,
+			"pane_tail_excerpt", truncate(tailLines(after, 6), 240))
 		return
 	}
 
@@ -1589,11 +1592,14 @@ func nudgeSilentPaneAfter(target, runtimeName, thrumDir, nudge string) {
 	// dialog or permission prompt.
 	if !permission.IsPaneSafeToType(runtimeName, after) {
 		slog.Info("[watchdog] skipping nudge: pane in detected prompt/trust-gate state",
-			"target", target, "runtime", runtimeName)
+			"target", target, "runtime", runtimeName,
+			"pane_excerpt", truncate(after, 120))
 		return
 	}
 	slog.Info("[watchdog] nudging: only spinner/blanks below banner sentinel",
-		"target", target, "runtime", runtimeName, "deadline_s", deadlineSecs)
+		"target", target, "runtime", runtimeName, "deadline_s", deadlineSecs,
+		"top_anchor_found", hasSentinel,
+		"pane_tail_excerpt", truncate(tailLines(after, 6), 240))
 	if err := sendKeysFn(target, nudge); err != nil {
 		slog.Warn("[watchdog] SendKeys nudge failed", "target", target, "err", err)
 		return
@@ -2146,6 +2152,9 @@ func runtimeHasSessionStartHook(runtime string) bool {
 //
 //nolint:revive // many args: each is independent identity-file state and packaging into a struct would obscure the production call site.
 func (h *TmuxHandler) ensureShellReadyAfterCreate(ctx context.Context, target, cwd, agentName, role, module, runtime string) error {
+	slog.Info("[restart] shell-ready probe: entry",
+		"target", target, "runtime", runtime, "agent", agentName, "cwd", cwd, "role", role, "module", module)
+
 	idDir := filepath.Join(cwd, ".thrum", "identities")
 	if resolved, err := filepath.EvalSymlinks(idDir); err == nil {
 		idDir = resolved
@@ -2161,6 +2170,8 @@ func (h *TmuxHandler) ensureShellReadyAfterCreate(ctx context.Context, target, c
 	if err := os.Rename(idPath, backupPath); err == nil {
 		movedAside = true
 	}
+	slog.Info("[restart] shell-ready probe: rename-aside",
+		"target", target, "runtime", runtime, "agent", agentName, "moved_aside", movedAside, "id_path", idPath)
 
 	// Restore-or-cleanup the backup. Deferred so any return path
 	// (send error, ctx cancel, timeout, success) leaves the filesystem
@@ -2176,6 +2187,8 @@ func (h *TmuxHandler) ensureShellReadyAfterCreate(ctx context.Context, target, c
 			// Probe didn't produce a fresh file — restore so the agent
 			// retains its pre-restart identity.
 			_ = os.Rename(backupPath, idPath)
+			slog.Info("[restart] shell-ready probe: backup restored on probe failure",
+				"target", target, "agent", agentName)
 			return
 		}
 		// Fresh file present — drop the backup.
@@ -2183,24 +2196,63 @@ func (h *TmuxHandler) ensureShellReadyAfterCreate(ctx context.Context, target, c
 	}()
 
 	quickstartCmd := worktree.BuildQuickstartCmd(cwd, agentName, role, module, "", runtime, true)
+	slog.Info("[restart] shell-ready probe: sending quickstart",
+		"target", target, "runtime", runtime, "agent", agentName,
+		"cmd_preview", truncate(quickstartCmd, 120))
 
 	if err := sendKeysFn(target, quickstartCmd); err != nil {
+		slog.Warn("[restart] shell-ready probe: send-keys quickstart failed",
+			"target", target, "runtime", runtime, "agent", agentName, "err", err)
 		return fmt.Errorf("send quickstart probe: %w", err)
 	}
 	if err := sendSpecialKeyFn(target, "Enter"); err != nil {
+		slog.Warn("[restart] shell-ready probe: send-enter quickstart failed",
+			"target", target, "runtime", runtime, "agent", agentName, "err", err)
 		return fmt.Errorf("send enter: %w", err)
 	}
 
 	resend := func() error {
-		slog.Info("tmux.restart.shell-ready-resending",
-			slog.String("agent", agentName), slog.String("target", target),
+		slog.Info("[restart] shell-ready probe: resending (first send-keys likely swallowed by shell init)",
+			"target", target, "runtime", runtime, "agent", agentName,
 		)
 		if err := sendKeysFn(target, quickstartCmd); err != nil {
 			return err
 		}
 		return sendSpecialKeyFn(target, "Enter")
 	}
-	return waitForIdentityFile(ctx, idPath, shellReadyInitialWait, shellReadyRetryWait, resend)
+	err := waitForIdentityFile(ctx, idPath, shellReadyInitialWait, shellReadyRetryWait, resend)
+	if err != nil {
+		slog.Warn("[restart] shell-ready probe: identity file never appeared",
+			"target", target, "runtime", runtime, "agent", agentName, "err", err)
+		return err
+	}
+	slog.Info("[restart] shell-ready probe: identity file written — shell is responsive",
+		"target", target, "runtime", runtime, "agent", agentName, "id_path", idPath)
+	return nil
+}
+
+// truncate returns s clipped to maxLen runes with a trailing "…" if it
+// was longer. Used for log previews of potentially long strings like
+// quickstart commands and pane captures. Operates on runes (not bytes)
+// so unicode in pane content (✻, ─, etc.) doesn't split mid-codepoint.
+func truncate(s string, maxLen int) string {
+	rs := []rune(s)
+	if len(rs) <= maxLen {
+		return s
+	}
+	return string(rs[:maxLen]) + "…"
+}
+
+// tailLines returns the last n lines of s joined with " / " for compact
+// single-line log emission. Used by watchdog logging so reviewers can
+// see exactly what region paneAgentEngaged was inspecting without
+// reading a multi-line pane dump.
+func tailLines(s string, n int) string {
+	lines := strings.Split(s, "\n")
+	if len(lines) <= n {
+		return strings.Join(lines, " / ")
+	}
+	return strings.Join(lines[len(lines)-n:], " / ")
 }
 
 // shellReadyInitialWait / shellReadyRetryWait govern the two-stage budget
@@ -2241,16 +2293,36 @@ var (
 // HasSessionStartHook=true and Command="" can't leak a banner into a bare
 // shell.
 func (h *TmuxHandler) launchRuntimeWithBanner(session, target, runtime, launchCmd string) error {
+	slog.Info("[launch] launchRuntimeWithBanner: entry",
+		"session", session, "target", target, "runtime", runtime, "launch_cmd", launchCmd)
 	if launchCmd == "" {
+		slog.Info("[launch] launchRuntimeWithBanner: empty launchCmd — short-circuit before banner emit",
+			"session", session, "target", target, "runtime", runtime)
 		return nil
 	}
 	if runtimeHasSessionStartHook(runtime) {
+		slog.Info("[launch] launchRuntimeWithBanner: hook runtime — emitting banner pre-launch",
+			"session", session, "target", target, "runtime", runtime)
 		h.emitIdentityBanner(session, target)
+	} else {
+		slog.Info("[launch] launchRuntimeWithBanner: non-hook runtime — skipping pre-launch banner (post-launch /thrum:prime path will handle context)",
+			"session", session, "target", target, "runtime", runtime)
 	}
+	slog.Info("[launch] launchRuntimeWithBanner: sending launchCmd via sendKeysFn",
+		"session", session, "target", target, "runtime", runtime, "launch_cmd", launchCmd)
 	if err := sendKeysFn(target, launchCmd); err != nil {
+		slog.Warn("[launch] launchRuntimeWithBanner: sendKeysFn(launchCmd) failed",
+			"session", session, "target", target, "runtime", runtime, "err", err)
 		return err
 	}
-	return sendSpecialKeyFn(target, "Enter")
+	if err := sendSpecialKeyFn(target, "Enter"); err != nil {
+		slog.Warn("[launch] launchRuntimeWithBanner: sendSpecialKeyFn(Enter) failed",
+			"session", session, "target", target, "runtime", runtime, "err", err)
+		return err
+	}
+	slog.Info("[launch] launchRuntimeWithBanner: launchCmd + Enter sent successfully",
+		"session", session, "target", target, "runtime", runtime)
+	return nil
 }
 
 // emitIdentityBanner sends the identity banner for the agent registered
@@ -2263,18 +2335,31 @@ func (h *TmuxHandler) launchRuntimeWithBanner(session, target, runtime, launchCm
 // scrollback after the runtime takes over the screen.
 // thrum-6hqy / thrum-8dl3.
 func (h *TmuxHandler) emitIdentityBanner(session, target string) {
+	slog.Info("[banner] emitIdentityBanner: entry", "session", session, "target", target)
+
 	h.sessionMu.RLock()
 	cwd, ok := h.sessionCwds[session]
 	h.sessionMu.RUnlock()
 	if !ok || cwd == "" {
+		slog.Info("[banner] skipping identity banner: no cwd registered for session",
+			"session", session, "target", target, "map_hit", ok)
 		return
 	}
 	idFile, _, err := config.LoadIdentityWithPath(cwd)
-	if err != nil || idFile == nil {
+	if err != nil {
+		slog.Info("[banner] skipping identity banner: identity load error",
+			"session", session, "target", target, "cwd", cwd, "err", err)
+		return
+	}
+	if idFile == nil {
+		slog.Info("[banner] skipping identity banner: no identity file for cwd",
+			"session", session, "target", target, "cwd", cwd)
 		return
 	}
 	cmdLine := identitybanner.ShellCommand(idFile)
 	if cmdLine == "" {
+		slog.Info("[banner] skipping identity banner: ShellCommand returned empty (no agent name)",
+			"session", session, "target", target, "cwd", cwd, "agent_name", idFile.Agent.Name)
 		return
 	}
 	// thrum-puhr.10 cluster 8: guard against typing into a trust gate
@@ -2283,11 +2368,21 @@ func (h *TmuxHandler) emitIdentityBanner(session, target string) {
 	// or similar) into a dialog input field.
 	if cur, err := capturePaneFn(target, 50); err == nil && !permission.IsPaneSafeToType(idFile.Runtime, cur) {
 		slog.Info("[banner] skipping identity banner: pane in detected prompt/trust-gate state",
-			"target", target, "runtime", idFile.Runtime)
+			"session", session, "target", target, "runtime", idFile.Runtime,
+			"pane_excerpt", truncate(cur, 120))
 		return
 	}
+	slog.Info("[banner] emitting identity banner via sendKeysAndSubmit",
+		"session", session, "target", target, "runtime", idFile.Runtime,
+		"agent_name", idFile.Agent.Name, "cmd_preview", truncate(cmdLine, 120))
 	// Best-effort: SendKeys errors here shouldn't fail the launch.
 	// sendKeysAndSubmit inserts paneInputSubmitGap between text and Enter so
 	// Claude doesn't swallow the Enter as paste-newline (thrum-84xc).
-	_ = sendKeysAndSubmit(target, cmdLine)
+	if err := sendKeysAndSubmit(target, cmdLine); err != nil {
+		slog.Warn("[banner] sendKeysAndSubmit returned error (banner may not have landed)",
+			"session", session, "target", target, "err", err)
+		return
+	}
+	slog.Info("[banner] emitIdentityBanner: sendKeysAndSubmit completed",
+		"session", session, "target", target, "runtime", idFile.Runtime)
 }
