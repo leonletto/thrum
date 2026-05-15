@@ -22,9 +22,8 @@ AGENT=$(thrum whoami --field agent_id) || { echo "ERROR: agent not registered"; 
 mkdir -p "${REPO}/.thrum/restart"
 ```
 
-Then compose your continuation and write it directly — **do not run this
-heredoc literally; compose the body from your own working context before
-writing**:
+Then compose your continuation and write it directly — **do not run this heredoc
+literally; compose the body from your own working context before writing**:
 
 ```bash
 cat > "${REPO}/.thrum/restart/${AGENT}.md" <<'EOF'
