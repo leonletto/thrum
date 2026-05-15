@@ -16,25 +16,27 @@ before being promoted to stable. Beta users help catch regressions before they
 hit `releases/latest`. This guide covers how to opt in, what to expect, and how
 to report what you find.
 
-> **Current pre-release: `v0.10.3-rc.7`** (tagged 2026-05-13, in soak).
+> **Current pre-release: `v0.10.3-rc.8`** (tagged 2026-05-14, in soak).
 > Highlights: codex plugin first-class, post-launch tmux silence watchdog,
 > first-launch trust-gate detection, self-echo nudge fix, cwd-anchored identity
-> precedence. rc.7 fixes a silent upgrade footgun: `thrum init --force` (the
-> usual way to pull new preambles after upgrading) was overwriting
-> `single_agent_mode` to `true`, which disables the inbox listener and stop-hook
-> checks. Agents looked healthy in `thrum team` but messages dropped. If you've
-> been bitten, check the project's `.thrum/config.json` and flip
-> `single_agent_mode` back to `false`. Full notes: [What's New](whats-new.md)
-> and the
+> precedence. rc.8 fixes the restart watchdog for Claude Code 2.1.141.
+> `thrum tmux restart` against a claude pane was leaving the agent stuck at the
+> welcome screen — the "Read the prime output" nudge never fired because Claude
+> 2.1.141 changed the spinner glyph format and the daemon's restore-bindings had
+> a tmux target-normalization gap that masked the lookup after a daemon restart.
+> Restarts now probe shell readiness, launch claude, then emit the identity
+> banner as a user turn so it lands in claude's input prompt (matching the path
+> `thrum tmux start` already uses). Full notes: [What's New](whats-new.md) and
+> the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-### Quick install for `v0.10.3-rc.7`
+### Quick install for `v0.10.3-rc.8`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.7 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.8 sh
 
 # Codex plugin (matches release/v0.10.3)
 THRUM_INSTALL_REF=release/v0.10.3 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.3/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
