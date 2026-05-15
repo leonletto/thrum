@@ -187,11 +187,16 @@ type MarkReadResponse struct {
 	AlsoReadBy  map[string][]string `json:"also_read_by,omitempty"`
 }
 
-// MessageMarkRead marks messages as read.
-func MessageMarkRead(client *Client, messageIDs []string, callerAgentID string) (*MarkReadResponse, error) {
+// MessageMarkRead marks messages as read. When markedBefore is non-empty,
+// the daemon skips any supplied IDs whose created_at exceeds that
+// RFC3339Nano timestamp (the `read --all` race fix).
+func MessageMarkRead(client *Client, messageIDs []string, callerAgentID, markedBefore string) (*MarkReadResponse, error) {
 	req := map[string]any{"message_ids": messageIDs}
 	if callerAgentID != "" {
 		req["caller_agent_id"] = callerAgentID
+	}
+	if markedBefore != "" {
+		req["marked_before"] = markedBefore
 	}
 	var resp MarkReadResponse
 	if err := client.Call("message.markRead", req, &resp); err != nil {

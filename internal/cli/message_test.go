@@ -692,7 +692,7 @@ func TestMessageMarkRead(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	result, err := MessageMarkRead(client, []string{"msg_01", "msg_02", "msg_03"}, "")
+	result, err := MessageMarkRead(client, []string{"msg_01", "msg_02", "msg_03"}, "", "")
 	if err != nil {
 		t.Fatalf("MessageMarkRead() error = %v", err)
 	}
@@ -707,5 +707,101 @@ func TestMessageMarkRead(t *testing.T) {
 
 	if agents, ok := result.AlsoReadBy["msg_01"]; !ok || len(agents) != 1 {
 		t.Errorf("AlsoReadBy[msg_01] = %v, want 1 agent", agents)
+	}
+}
+
+// TestMarkRead_PassesMarkedBefore verifies the watermark argument reaches
+// the wire under the marked_before JSON key when non-empty. (Name kept
+// short to fit macOS's sun_path limit on t.TempDir-derived socket paths.)
+func TestMarkRead_PassesMarkedBefore(t *testing.T) {
+	daemon, socketPath := newMockDaemon(t)
+	defer daemon.stop()
+
+	var seenParams map[string]any
+	daemon.start(t, func(conn net.Conn) {
+		defer func() { _ = conn.Close() }()
+
+		decoder := json.NewDecoder(conn)
+		encoder := json.NewEncoder(conn)
+
+		var request map[string]any
+		if err := decoder.Decode(&request); err != nil {
+			return
+		}
+
+		if request["method"] != "message.markRead" {
+			t.Errorf("expected method message.markRead, got %v", request["method"])
+		}
+		if params, ok := request["params"].(map[string]any); ok {
+			seenParams = params
+		}
+
+		_ = encoder.Encode(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      request["id"],
+			"result":  map[string]any{"marked_count": 1},
+		})
+	})
+
+	<-daemon.Ready()
+
+	client, err := NewClient(socketPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	if _, err := MessageMarkRead(client, []string{"msg_01"}, "alice", "2026-05-14T15:00:00Z"); err != nil {
+		t.Fatalf("MessageMarkRead: %v", err)
+	}
+
+	if got, ok := seenParams["marked_before"]; !ok || got != "2026-05-14T15:00:00Z" {
+		t.Fatalf("expected marked_before=2026-05-14T15:00:00Z in params, got %v (ok=%v)", got, ok)
+	}
+}
+
+// TestMarkRead_OmitsMarkedBefore verifies the helper does NOT send the
+// marked_before key when the argument is empty, preserving pre-rc.9 wire
+// compatibility for callers that never opt in.
+func TestMarkRead_OmitsMarkedBefore(t *testing.T) {
+	daemon, socketPath := newMockDaemon(t)
+	defer daemon.stop()
+
+	var seenParams map[string]any
+	daemon.start(t, func(conn net.Conn) {
+		defer func() { _ = conn.Close() }()
+
+		decoder := json.NewDecoder(conn)
+		encoder := json.NewEncoder(conn)
+
+		var request map[string]any
+		if err := decoder.Decode(&request); err != nil {
+			return
+		}
+		if params, ok := request["params"].(map[string]any); ok {
+			seenParams = params
+		}
+
+		_ = encoder.Encode(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      request["id"],
+			"result":  map[string]any{"marked_count": 1},
+		})
+	})
+
+	<-daemon.Ready()
+
+	client, err := NewClient(socketPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	if _, err := MessageMarkRead(client, []string{"msg_01"}, "alice", ""); err != nil {
+		t.Fatalf("MessageMarkRead: %v", err)
+	}
+
+	if _, present := seenParams["marked_before"]; present {
+		t.Fatalf("expected marked_before to be omitted from params, got: %v", seenParams)
 	}
 }

@@ -1226,8 +1226,10 @@ The daemon must be running and you must have an active session.`,
 				for i, m := range result.Messages {
 					ids[i] = m.MessageID
 				}
-				// Best-effort: don't fail the command if mark-read fails
-				_, _ = cli.MessageMarkRead(client, ids, agentID)
+				// Best-effort: don't fail the command if mark-read fails.
+				// IDs come from the listing we just rendered — closed set,
+				// no race surface; no watermark needed.
+				_, _ = cli.MessageMarkRead(client, ids, agentID, "")
 			}
 
 			return nil
@@ -3515,8 +3517,9 @@ Examples:
 				return err
 			}
 
-			// Auto mark-as-read: mark the replied-to message as read
-			_, _ = cli.MessageMarkRead(client, []string{opts.MessageID}, agentID)
+			// Auto mark-as-read: mark the replied-to message as read.
+			// Single explicit ID; no race surface; no watermark needed.
+			_, _ = cli.MessageMarkRead(client, []string{opts.MessageID}, agentID, "")
 
 			if flagJSON {
 				return cli.EmitJSON(result)
@@ -3562,7 +3565,8 @@ func messageCmd() *cobra.Command {
 					fmt.Fprintf(os.Stderr, "Warning: Could not mark as read (no identity): %v\n", err)
 				}
 			} else {
-				_, _ = cli.MessageMarkRead(client, []string{args[0]}, agentID)
+				// User named the exact ID; no race surface; no watermark.
+				_, _ = cli.MessageMarkRead(client, []string{args[0]}, agentID, "")
 			}
 
 			if flagJSON {
@@ -3708,7 +3712,9 @@ Examples:
 					messageIDs[i] = m.MessageID
 				}
 
-				result, err := cli.MessageMarkRead(client, messageIDs, agentID)
+				// Temporarily passing "" — Task 3 replaces this with the
+				// pre-listing watermark to close the read --all race.
+				result, err := cli.MessageMarkRead(client, messageIDs, agentID, "")
 				if err != nil {
 					return err
 				}
@@ -3730,7 +3736,8 @@ Examples:
 			if err != nil {
 				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
 			}
-			result, err := cli.MessageMarkRead(client, messageIDs, agentID)
+			// User provided the closed set of IDs; no race surface; no watermark.
+			result, err := cli.MessageMarkRead(client, messageIDs, agentID, "")
 			if err != nil {
 				return err
 			}
