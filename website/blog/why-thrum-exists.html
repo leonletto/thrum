@@ -21,6 +21,8 @@
   <meta name="twitter:title" content="Why Thrum Exists">
   <meta name="twitter:description" content="I started Thrum because I was tired of being the integration layer between my own agents. This is the story of what that actually looked like.">
   <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <!-- JSON-LD structured data (BlogPosting) -->
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"Why Thrum Exists","description":"I started Thrum because I was tired of being the integration layer between my own agents. This is the story of what that actually looked like.","author":{"@type":"Person","name":"Leon Letto","url":"https://leonletto.github.io/"},"datePublished":"2026-02-12T12:00:00-07:00","image":"https://leonletto.github.io/thrum/img/social-card.png","url":"https://leonletto.github.io/thrum/blog/why-thrum-exists.html","mainEntityOfPage":{"@type":"WebPage","@id":"https://leonletto.github.io/thrum/blog/why-thrum-exists.html"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum"},"keywords":"origin, intro"}</script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -30,6 +32,12 @@
   <link rel="stylesheet" href="../css/blog.css">
   <script>
     (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
   </script>
 </head>
 <body>
@@ -69,27 +77,94 @@
       <div class="post-tags"><span class="post-tag">origin</span><span class="post-tag">intro</span></div>
       
       <div class="post-body">
-<p>If you&#39;ve ever tried to run more than two AI coding agents at once, you already know the shape of the problem. Terminals everywhere, none of them quite remembering what the others are doing, and you in the middle with a coffee, copy-pasting status updates between panes like a confused operator at a 1960s telephone switchboard.</p>
-<p>This is the first post on the Thrum blog. I figured it should be about why Thrum exists at all, because if you&#39;re new here that&#39;s the only question that matters. The <a href="../docs/philosophy.html">philosophy page</a> has the structured answer. This post is the unstructured one, the version that sounds like I&#39;m telling it to you across a kitchen table.</p>
+<p>If you&#39;ve ever tried to run more than two AI coding agents at once, you already
+know the shape of the problem. Terminals everywhere, none of them quite
+remembering what the others are doing, and you in the middle with a coffee,
+copy-pasting status updates between panes like a confused operator at a 1960s
+telephone switchboard.</p>
+<p>This is the first post on the Thrum blog. I figured it should be about why Thrum
+exists at all, because if you&#39;re new here that&#39;s the only question that matters.
+The <a href="../docs/philosophy.html">philosophy page</a> has the structured answer. This
+post is the unstructured one, the version that sounds like I&#39;m telling it to you
+across a kitchen table.</p>
 <h2>The Switchboard</h2>
-<p>Picture four worktrees of the same repo. One agent is refactoring the auth middleware. Another is writing the tests that the first one&#39;s changes will break. A third is upgrading a dependency that touches both. A fourth is supposedly cleaning up a legacy file but is actually frozen on a permission prompt I can&#39;t see because the pane is two screens away.</p>
-<p>This is faster than doing the work alone. By a lot. That&#39;s what makes it tempting to keep doing it. But the speed is constantly leaking out through me, because every decision one agent makes that the others need to know about goes through my hands. I read the message in pane 1, switch to pane 3, summarize, hit enter. Forty seconds. I do that fifty times a day and I haven&#39;t actually built anything. I&#39;ve just been a bus.</p>
-<p>The agents weren&#39;t the bottleneck. I was. And the worst part wasn&#39;t the time I spent shuttling messages around. It was the times I didn&#39;t, the decisions I forgot to relay, the conflict I only noticed at merge time because nobody told nobody.</p>
+<p>Picture four worktrees of the same repo. One agent is refactoring the auth
+middleware. Another is writing the tests that the first one&#39;s changes will
+break. A third is upgrading a dependency that touches both. A fourth is
+supposedly cleaning up a legacy file but is actually frozen on a permission
+prompt I can&#39;t see because the pane is two screens away.</p>
+<p>This is faster than doing the work alone. By a lot. That&#39;s what makes it
+tempting to keep doing it. But the speed is constantly leaking out through me,
+because every decision one agent makes that the others need to know about goes
+through my hands. I read the message in pane 1, switch to pane 3, summarize, hit
+enter. Forty seconds. I do that fifty times a day and I haven&#39;t actually built
+anything. I&#39;ve just been a bus.</p>
+<p>The agents weren&#39;t the bottleneck. I was. And the worst part wasn&#39;t the time I
+spent shuttling messages around. It was the times I didn&#39;t, the decisions I
+forgot to relay, the conflict I only noticed at merge time because nobody told
+nobody.</p>
 <h2>The Realization</h2>
-<p>The thing the agents needed wasn&#39;t more autonomy. They didn&#39;t need to be smarter or more independent. They needed a place to put messages where the other agents would see them, and where the messages would survive a context compaction or a session restart.</p>
-<p>That&#39;s it. That was the whole insight. Most of what I&#39;d been doing manually was just message routing. Agents already know how to write text. They already know how to read it. They just had nowhere to put it that the other agents could find.</p>
-<p>The first thing I tried was the most obvious thing: agents writing into shared files in a folder, other agents reading them. That fell apart almost immediately, and not for the reason I expected. The reading was fine. The problem was everything around the reading: managing the files, expiring old messages so the folder didn&#39;t sprawl, and keeping any single agent from blowing its context window the moment it tried to ingest the pile. There was no clean answer to &quot;what&#39;s new since I last looked&quot; without writing a small index, and once you&#39;re writing an index you&#39;re halfway to building the thing on purpose.</p>
-<p>I was also starting to use <a href="https://github.com/leonletto/beads">Beads</a> for issue tracking during the same stretch of experimentation. At the time, Beads stored issues as JSONL: one file, append-only, easy to <code>cat</code>. I liked that a lot. It was the first thing in my agent toolchain that felt simple in a way I trusted. When I sat down to design a proper messaging system, that pattern was sitting right there.</p>
-<p>The other constraint that decided the rest of the architecture was that I wanted this to work the way I work: in Git, on whatever machine I happen to be on, no cloud account, no online service to keep in contact with. If my laptop is offline on a flight, the agents on it should still be able to message each other and have the messages flush to the rest of the team when the connection comes back. That ruled out anything that wasn&#39;t fundamentally local-first.</p>
-<p>So Thrum is what fell out of those two ideas combined. Messages are append-only JSONL on a Git branch. Sync is <code>git push</code> and <code>git pull</code>. The state you query is a SQLite database that gets rebuilt from the JSONL. You can delete it any time and it comes back. There&#39;s no service to host. No account to make. If something looks wrong you <code>cat</code> a file.</p>
+<p>The thing the agents needed wasn&#39;t more autonomy. They didn&#39;t need to be smarter
+or more independent. They needed a place to put messages where the other agents
+would see them, and where the messages would survive a context compaction or a
+session restart.</p>
+<p>That&#39;s it. That was the whole insight. Most of what I&#39;d been doing manually was
+just message routing. Agents already know how to write text. They already know
+how to read it. They just had nowhere to put it that the other agents could
+find.</p>
+<p>The first thing I tried was the most obvious thing: agents writing into shared
+files in a folder, other agents reading them. That fell apart almost
+immediately, and not for the reason I expected. The reading was fine. The
+problem was everything around the reading: managing the files, expiring old
+messages so the folder didn&#39;t sprawl, and keeping any single agent from blowing
+its context window the moment it tried to ingest the pile. There was no clean
+answer to &quot;what&#39;s new since I last looked&quot; without writing a small index, and
+once you&#39;re writing an index you&#39;re halfway to building the thing on purpose.</p>
+<p>I was also starting to use <a href="https://github.com/leonletto/beads">Beads</a> for issue
+tracking during the same stretch of experimentation. At the time, Beads stored
+issues as JSONL: one file, append-only, easy to <code>cat</code>. I liked that a lot. It
+was the first thing in my agent toolchain that felt simple in a way I trusted.
+When I sat down to design a proper messaging system, that pattern was sitting
+right there.</p>
+<p>The other constraint that decided the rest of the architecture was that I wanted
+this to work the way I work: in Git, on whatever machine I happen to be on, no
+cloud account, no online service to keep in contact with. If my laptop is
+offline on a flight, the agents on it should still be able to message each other
+and have the messages flush to the rest of the team when the connection comes
+back. That ruled out anything that wasn&#39;t fundamentally local-first.</p>
+<p>So Thrum is what fell out of those two ideas combined. Messages are append-only
+JSONL on a Git branch. Sync is <code>git push</code> and <code>git pull</code>. The state you query is
+a SQLite database that gets rebuilt from the JSONL. You can delete it any time
+and it comes back. There&#39;s no service to host. No account to make. If something
+looks wrong you <code>cat</code> a file.</p>
 <h2>What This Means in Practice</h2>
-<p>I&#39;m not going to walk through the whole workflow here. The <a href="../docs/quickstart.html">quickstart</a> does that better, and the philosophy page covers how it fits into a research-plan-implement-review loop. The shorter version of what changed for me is this: I stopped being the bus.</p>
-<p>The agents tell each other when they start work. They tell each other what they&#39;re touching, so two of them don&#39;t accidentally rewrite the same file. They tell each other when they&#39;re stuck, and the others can pick up the thread. When one of them restarts and loses its in-context memory, it reads the messages it missed and knows where things are. I check in via <code>thrum team</code> or the web UI, ask questions where I want to, and otherwise stay out of it.</p>
-<p>The plan is still mine. The decisions are still mine. I read the code before it merges. None of that changed. What changed is the forty seconds, fifty times a day.</p>
+<p>I&#39;m not going to walk through the whole workflow here. The
+<a href="../docs/quickstart.html">quickstart</a> does that better, and the philosophy page
+covers how it fits into a research-plan-implement-review loop. The shorter
+version of what changed for me is this: I stopped being the bus.</p>
+<p>The agents tell each other when they start work. They tell each other what
+they&#39;re touching, so two of them don&#39;t accidentally rewrite the same file. They
+tell each other when they&#39;re stuck, and the others can pick up the thread. When
+one of them restarts and loses its in-context memory, it reads the messages it
+missed and knows where things are. I check in via <code>thrum team</code> or the web UI,
+ask questions where I want to, and otherwise stay out of it.</p>
+<p>The plan is still mine. The decisions are still mine. I read the code before it
+merges. None of that changed. What changed is the forty seconds, fifty times a
+day.</p>
 <h2>What the Blog Is For</h2>
-<p>Thrum has gotten big enough that it&#39;s hard to take in all at once. The reference docs cover the surface area, but they don&#39;t tell you which features exist for which problems, or what it actually feels like to use them, or why a particular decision is the way it is.</p>
-<p>That&#39;s what this blog is for. Going forward I&#39;ll write one feature at a time: what it does, the problem it solves, how to use it, and where the rough edges still are. Some posts will have short videos when watching is easier than reading. Most won&#39;t. I&#39;ll also write about the design decisions that don&#39;t belong in reference docs but are worth saying out loud: what I considered, what I rejected, what I&#39;d do differently now.</p>
-<p>If you&#39;re brand new, <a href="../docs/quickstart.html">install it</a> and send a message between two agents. That takes about five minutes and tells you more than I can in a post.</p>
+<p>Thrum has gotten big enough that it&#39;s hard to take in all at once. The reference
+docs cover the surface area, but they don&#39;t tell you which features exist for
+which problems, or what it actually feels like to use them, or why a particular
+decision is the way it is.</p>
+<p>That&#39;s what this blog is for. Going forward I&#39;ll write one feature at a time:
+what it does, the problem it solves, how to use it, and where the rough edges
+still are. Some posts will have short videos when watching is easier than
+reading. Most won&#39;t. I&#39;ll also write about the design decisions that don&#39;t
+belong in reference docs but are worth saying out loud: what I considered, what
+I rejected, what I&#39;d do differently now.</p>
+<p>If you&#39;re brand new, <a href="../docs/quickstart.html">install it</a> and send a message
+between two agents. That takes about five minutes and tells you more than I can
+in a post.</p>
 <p>More soon.</p>
 
       </div>

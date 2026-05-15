@@ -21,6 +21,8 @@
   <meta name="twitter:title" content="What Agents Remember">
   <meta name="twitter:description" content="v0.9.2 was supposed to be one feature: a way for agents in a new repo to inherit what agents in my other repos had already figured out. By the end of the week the release also included a bug fix to a feature that ate its own configuration, a months-old UX papercut nobody had filed, and the first post on the blog you are reading right now.">
   <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <!-- JSON-LD structured data (BlogPosting) -->
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"What Agents Remember","description":"v0.9.2 was supposed to be one feature: a way for agents in a new repo to inherit what agents in my other repos had already figured out. By the end of the week the release also included a bug fix to a feature that ate its own configuration, a months-old UX papercut nobody had filed, and the first post on the blog you are reading right now.","author":{"@type":"Person","name":"Leon Letto","url":"https://leonletto.github.io/"},"datePublished":"2026-04-29T12:00:00-07:00","image":"https://leonletto.github.io/thrum/img/social-card.png","url":"https://leonletto.github.io/thrum/blog/v0-9-2-release.html","mainEntityOfPage":{"@type":"WebPage","@id":"https://leonletto.github.io/thrum/blog/v0-9-2-release.html"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum"},"keywords":"release, v0.9.2, role-skills, blog"}</script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -30,6 +32,12 @@
   <link rel="stylesheet" href="../css/blog.css">
   <script>
     (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
   </script>
 </head>
 <body>
@@ -69,70 +77,193 @@
       <div class="post-tags"><span class="post-tag">release</span><span class="post-tag">v0.9.2</span><span class="post-tag">role-skills</span><span class="post-tag">blog</span></div>
       
       <div class="post-body">
-<p>v0.9.2 was supposed to be one feature. The role-skills layer: a way for agents in a brand-new repo to inherit the things agents in my other repos had already figured out the hard way. By the end of the week the release also included a fix for a feature that ate its own configuration, a months-old UX papercut I&#39;d been blaming on myself, several days of release-test plumbing, and the first post on the blog you are reading right now. Only the role-skills layer was on the plan when April 24 started.</p>
+<p>v0.9.2 was supposed to be one feature. The role-skills layer: a way for agents
+in a brand-new repo to inherit the things agents in my other repos had already
+figured out the hard way. By the end of the week the release also included a fix
+for a feature that ate its own configuration, a months-old UX papercut I&#39;d been
+blaming on myself, several days of release-test plumbing, and the first post on
+the blog you are reading right now. Only the role-skills layer was on the plan
+when April 24 started.</p>
 <p>The week ran from v0.9.1 (April 24) through v0.9.2 (April 29).</p>
 <h2>The Brainstorm</h2>
-<p>Every time I started Thrum in a new repo, the agents on it began from zero. They didn&#39;t know any of the things the agents on my other repos had already learned. The coordinator on a fresh project would re-discover the same review patterns, re-derive the same dispatch discipline, hit the same dead ends. Every fresh install paid a learning tax.</p>
-<p>The obvious answer was to put all the rules into the role preamble that always loads. I&#39;d been doing that, more or less, with CLAUDE.md. The problem was that most of the rules in the giant block didn&#39;t apply to most of the work the agent was doing in any given session. Loading them all at the top of every conversation was burning context for nothing.</p>
-<p>I sat down with the coordinator on the morning of April 24 to think it through. The conversation was unusually clean. I made four decisions in a row and they all stuck.</p>
-<p>First, the researcher should be a long-lived agent that other agents send to, not a discipline that every agent practices. Specialization, not duplication.</p>
-<p>Second, the skills shouldn&#39;t all live in the preamble. They should live in the plugin, each with a description that says when it&#39;s useful, and the agent pulls them in only when the situation matches. The preamble itself stays small. I told the agent:</p>
+<p>Every time I started Thrum in a new repo, the agents on it began from zero. They
+didn&#39;t know any of the things the agents on my other repos had already learned.
+The coordinator on a fresh project would re-discover the same review patterns,
+re-derive the same dispatch discipline, hit the same dead ends. Every fresh
+install paid a learning tax.</p>
+<p>The obvious answer was to put all the rules into the role preamble that always
+loads. I&#39;d been doing that, more or less, with CLAUDE.md. The problem was that
+most of the rules in the giant block didn&#39;t apply to most of the work the agent
+was doing in any given session. Loading them all at the top of every
+conversation was burning context for nothing.</p>
+<p>I sat down with the coordinator on the morning of April 24 to think it through.
+The conversation was unusually clean. I made four decisions in a row and they
+all stuck.</p>
+<p>First, the researcher should be a long-lived agent that other agents send to,
+not a discipline that every agent practices. Specialization, not duplication.</p>
+<p>Second, the skills shouldn&#39;t all live in the preamble. They should live in the
+plugin, each with a description that says when it&#39;s useful, and the agent pulls
+them in only when the situation matches. The preamble itself stays small. I told
+the agent:</p>
 <blockquote>
-<p>&quot;I think the main preamble needs to be expanded because even now it&#39;s very small compared to the size of the project state or the memory files that are loaded. I don&#39;t think there&#39;s a problem with making the preamble bigger.&quot;</p>
+<p>&quot;I think the main preamble needs to be expanded because even now it&#39;s very
+small compared to the size of the project state or the memory files that are
+loaded. I don&#39;t think there&#39;s a problem with making the preamble bigger.&quot;</p>
 </blockquote>
-<p>So the preamble grew but not unboundedly. It holds identity, message protocol, and status discipline. Everything else is invokable.</p>
-<p>Third, the skills should sync across all the runtimes I support, not just Claude Code. The conversion is lossy in places, especially on runtimes whose plugin systems are younger than Claude Code&#39;s, but the syncing primitive should exist:</p>
+<p>So the preamble grew but not unboundedly. It holds identity, message protocol,
+and status discipline. Everything else is invokable.</p>
+<p>Third, the skills should sync across all the runtimes I support, not just Claude
+Code. The conversion is lossy in places, especially on runtimes whose plugin
+systems are younger than Claude Code&#39;s, but the syncing primitive should exist:</p>
 <blockquote>
-<p>&quot;Codex now has a plugin ecosystem so sync-skills.sh will have to mature into a bigger script to convert everything properly to the other systems as they mature.&quot;</p>
+<p>&quot;Codex now has a plugin ecosystem so sync-skills.sh will have to mature into a
+bigger script to convert everything properly to the other systems as they
+mature.&quot;</p>
 </blockquote>
-<p>Fourth, the researcher&#39;s memory shouldn&#39;t live in one giant file. It should be a thin index pointing at <code>bd memories research-*</code> entries, so other agents can query the same store. That decision had a nice side effect:</p>
+<p>Fourth, the researcher&#39;s memory shouldn&#39;t live in one giant file. It should be a
+thin index pointing at <code>bd memories research-*</code> entries, so other agents can
+query the same store. That decision had a nice side effect:</p>
 <blockquote>
-<p>&quot;We could even ship specialized thrum modules later in this way since they could be installed with a simple script to add the beads memories.&quot;</p>
+<p>&quot;We could even ship specialized thrum modules later in this way since they
+could be installed with a simple script to add the beads memories.&quot;</p>
 </blockquote>
-<p>The shape that landed in v0.9.2: ten new skills (three for the coordinator, four for the implementer, three for the researcher), six revised role preambles, and a sync into the OpenCode and Codex plugin trees. The shipped skills are the universal floor. Project-specific corrections live in beads under a <code>&lt;role&gt;-rule-*</code> namespace and accumulate in-session whenever I tell an agent to stop doing something. The two layers compose: universal rules from the plugin, local rules from your repo.</p>
-<p>The names of the skills aren&#39;t the point. The point was to stop bloating every conversation with knowledge it didn&#39;t need yet.</p>
+<p>The shape that landed in v0.9.2: ten new skills (three for the coordinator, four
+for the implementer, three for the researcher), six revised role preambles, and
+a sync into the OpenCode and Codex plugin trees. The shipped skills are the
+universal floor. Project-specific corrections live in beads under a
+<code>&lt;role&gt;-rule-*</code> namespace and accumulate in-session whenever I tell an agent to
+stop doing something. The two layers compose: universal rules from the plugin,
+local rules from your repo.</p>
+<p>The names of the skills aren&#39;t the point. The point was to stop bloating every
+conversation with knowledge it didn&#39;t need yet.</p>
 <h2>The Bug That Introduced Itself</h2>
-<p>The next day I was on my other machine doing live validation. I ran <code>/thrum:configure-roles</code>, picked my autonomy and scope settings, watched the templates render, and then ran <code>thrum context preamble --init</code> to write the preamble out.</p>
-<p>The preamble it wrote was the generic default. The configuration I&#39;d just done was gone.</p>
+<p>The next day I was on my other machine doing live validation. I ran
+<code>/thrum:configure-roles</code>, picked my autonomy and scope settings, watched the
+templates render, and then ran <code>thrum context preamble --init</code> to write the
+preamble out.</p>
+<p>The preamble it wrote was the generic default. The configuration I&#39;d just done
+was gone.</p>
 <p>I messaged the coordinator:</p>
 <blockquote>
-<p>&quot;I found one bug. If I run <code>thrum context preamble --init</code> it writes the version without the new roles rather than the ones I just configured with /thrum:configure-roles. I think there needs to be a way for thrum to know that I ran that and what my choices were so that the other thrum commands don&#39;t revert my changes.&quot;</p>
+<p>&quot;I found one bug. If I run <code>thrum context preamble --init</code> it writes the
+version without the new roles rather than the ones I just configured with
+/thrum:configure-roles. I think there needs to be a way for thrum to know that
+I ran that and what my choices were so that the other thrum commands don&#39;t
+revert my changes.&quot;</p>
 </blockquote>
-<p>The implementer found the cause inside an hour. There were two code paths that wrote the preamble. The path used by <code>thrum roles deploy</code> called <code>RenderRoleTemplate</code>, which knew about the configuration. The path used by <code>--init</code> called <code>RoleAwarePreamble(role)</code>, the hardcoded fallback. The two had been written months apart and nobody had ever run them in sequence, because nobody had ever needed to. The new <code>configure-roles</code> flow was the first time both got exercised in the same session, and the second one silently undid the first.</p>
-<p>Patching the call site was the easy part. The harder question came one beat later, when I asked the agent where my configure-roles answers were actually being stored:</p>
+<p>The implementer found the cause inside an hour. There were two code paths that
+wrote the preamble. The path used by <code>thrum roles deploy</code> called
+<code>RenderRoleTemplate</code>, which knew about the configuration. The path used by
+<code>--init</code> called <code>RoleAwarePreamble(role)</code>, the hardcoded fallback. The two had
+been written months apart and nobody had ever run them in sequence, because
+nobody had ever needed to. The new <code>configure-roles</code> flow was the first time
+both got exercised in the same session, and the second one silently undid the
+first.</p>
+<p>Patching the call site was the easy part. The harder question came one beat
+later, when I asked the agent where my configure-roles answers were actually
+being stored:</p>
 <blockquote>
-<p>&quot;Where is the decisions I made configured and stored? Is it in .thrum/config.json?&quot;</p>
+<p>&quot;Where is the decisions I made configured and stored? Is it in
+.thrum/config.json?&quot;</p>
 </blockquote>
-<p>The answer was: nowhere. The skill rendered the templates and that was it. Nothing on disk had any structured record of which choices I&#39;d made. So <code>--init</code> couldn&#39;t have respected them even if the call site had been right; there was nothing for it to respect. The bug wasn&#39;t in the call site. It was that the configuration was a process, not a thing.</p>
+<p>The answer was: nowhere. The skill rendered the templates and that was it.
+Nothing on disk had any structured record of which choices I&#39;d made. So <code>--init</code>
+couldn&#39;t have respected them even if the call site had been right; there was
+nothing for it to respect. The bug wasn&#39;t in the call site. It was that the
+configuration was a process, not a thing.</p>
 <p>I told the agent where the answer should live:</p>
 <blockquote>
-<p>&quot;I think any configuration like this should live here .thrum/config.json not in a new file.&quot;</p>
+<p>&quot;I think any configuration like this should live here .thrum/config.json not
+in a new file.&quot;</p>
 </blockquote>
-<p>That decision is what most of v0.9.2&#39;s CLI surface comes from. A <code>role_config</code> key in <code>.thrum/config.json</code> holds the answers. <code>thrum roles refresh</code> re-renders templates when the config changes. A drift hint in <code>thrum prime</code> fires when the config and the rendered templates disagree. And the role templates themselves are now embedded in the binary, so they don&#39;t break when the filesystem path moves.</p>
-<p>So: building the role-skills layer was a brainstorm. Making it survive contact with a real machine was a separate week of work, and the bug that triggered it took ten seconds to hit.</p>
+<p>That decision is what most of v0.9.2&#39;s CLI surface comes from. A <code>role_config</code>
+key in <code>.thrum/config.json</code> holds the answers. <code>thrum roles refresh</code> re-renders
+templates when the config changes. A drift hint in <code>thrum prime</code> fires when the
+config and the rendered templates disagree. And the role templates themselves
+are now embedded in the binary, so they don&#39;t break when the filesystem path
+moves.</p>
+<p>So: building the role-skills layer was a brainstorm. Making it survive contact
+with a real machine was a separate week of work, and the bug that triggered it
+took ten seconds to hit.</p>
 <h2>The Papercut I&#39;d Been Quietly Tolerating</h2>
-<p>A day or two later, the coordinator was telling me about a bug in <code>make ci</code>. Tests were failing when there were live tmux sessions on the machine, because something wasn&#39;t isolating itself properly. I read the description and asked offhand:</p>
+<p>A day or two later, the coordinator was telling me about a bug in <code>make ci</code>.
+Tests were failing when there were live tmux sessions on the machine, because
+something wasn&#39;t isolating itself properly. I read the description and asked
+offhand:</p>
 <blockquote>
 <p>&quot;Is that why when I run thrum tmux connect I see sessions from other repos?&quot;</p>
 </blockquote>
-<p>There was a pause. Yes, it was. The session-listing code scanned every tmux session on the machine that carried the <code>@thrum-managed=1</code> tag, and the tag was set by every Thrum daemon, not scoped to the daemon that set it. The test failure and the picker bug were the same bug. There was even a comment in the code that said &quot;filter out unrelated sessions on the same tmux socket,&quot; and the filter underneath the comment didn&#39;t actually do that.</p>
-<p>The fix added a second tmux option, <code>@thrum-thrum-dir</code>, that records which Thrum project a session belongs to. The picker filters by that. Sessions that predate the change get gracefully skipped. The implementer turned it around in seven minutes.</p>
-<p>This is the kind of bug that had been mildly annoying me for a while, and I&#39;d never bothered to file it because I assumed I was holding it wrong. Hearing the test failure described made it click. It wasn&#39;t user error. It was actually wrong. Months of low-grade friction resolved by saying it out loud.</p>
+<p>There was a pause. Yes, it was. The session-listing code scanned every tmux
+session on the machine that carried the <code>@thrum-managed=1</code> tag, and the tag was
+set by every Thrum daemon, not scoped to the daemon that set it. The test
+failure and the picker bug were the same bug. There was even a comment in the
+code that said &quot;filter out unrelated sessions on the same tmux socket,&quot; and the
+filter underneath the comment didn&#39;t actually do that.</p>
+<p>The fix added a second tmux option, <code>@thrum-thrum-dir</code>, that records which Thrum
+project a session belongs to. The picker filters by that. Sessions that predate
+the change get gracefully skipped. The implementer turned it around in seven
+minutes.</p>
+<p>This is the kind of bug that had been mildly annoying me for a while, and I&#39;d
+never bothered to file it because I assumed I was holding it wrong. Hearing the
+test failure described made it click. It wasn&#39;t user error. It was actually
+wrong. Months of low-grade friction resolved by saying it out loud.</p>
 <h2>The Plumbing That Took the Longest</h2>
-<p>The work that nobody is going to ask about absorbed most of the week, which is how it usually goes. The release-test framework took about ten merges over five days: porting scenarios that used to live in a manual test plan into a bash harness that runs them automatically. MCP routing, plugin slash commands, cross-session messaging, context and compaction, restart snapshots, worktree setup, multi-runtime, orchestrator, monitor jobs, snapshot CLI. Each one trivial in isolation. Together, a release-readiness story that no longer depends on me remembering to run the manual plan.</p>
-<p>There were also a handful of SessionStart hook fixes. The identity banner wasn&#39;t always firing. The pane-side banner that goes up when you start or restart a session inside tmux had timing issues. The hook payload was getting truncated in some runtimes because nothing was watching its size. None of these are flashy. They&#39;re the sort of things that, when broken, make the agent feel slightly off in a way you can&#39;t quite point at, and then one day you fix them and the off feeling is gone and you stop noticing.</p>
-<p>I don&#39;t have a clean narrative for this part of the release. I just want to say it took longer than any of the named features did.</p>
+<p>The work that nobody is going to ask about absorbed most of the week, which is
+how it usually goes. The release-test framework took about ten merges over five
+days: porting scenarios that used to live in a manual test plan into a bash
+harness that runs them automatically. MCP routing, plugin slash commands,
+cross-session messaging, context and compaction, restart snapshots, worktree
+setup, multi-runtime, orchestrator, monitor jobs, snapshot CLI. Each one trivial
+in isolation. Together, a release-readiness story that no longer depends on me
+remembering to run the manual plan.</p>
+<p>There were also a handful of SessionStart hook fixes. The identity banner wasn&#39;t
+always firing. The pane-side banner that goes up when you start or restart a
+session inside tmux had timing issues. The hook payload was getting truncated in
+some runtimes because nothing was watching its size. None of these are flashy.
+They&#39;re the sort of things that, when broken, make the agent feel slightly off
+in a way you can&#39;t quite point at, and then one day you fix them and the off
+feeling is gone and you stop noticing.</p>
+<p>I don&#39;t have a clean narrative for this part of the release. I just want to say
+it took longer than any of the named features did.</p>
 <h2>And Then the Release Happened, and Then This Blog Happened</h2>
-<p>I cut the v0.9.2 tag on the morning of April 29. The release came up clean. GoReleaser pushed binaries for darwin, linux, windows. The Homebrew tap updated. The GitHub release notes formatted properly. While I was watching that go through, I opened the docs site and noticed the Overview page was leading with a long &quot;what&#39;s new in v0.9.2&quot; block that didn&#39;t belong there.</p>
-<p>I sent a Telegram message to the coordinator to fix it. The first fix it came back with was a new <code>whats-new.html</code> page. While I was looking at that, I had a second thought:</p>
+<p>I cut the v0.9.2 tag on the morning of April 29. The release came up clean.
+GoReleaser pushed binaries for darwin, linux, windows. The Homebrew tap updated.
+The GitHub release notes formatted properly. While I was watching that go
+through, I opened the docs site and noticed the Overview page was leading with a
+long &quot;what&#39;s new in v0.9.2&quot; block that didn&#39;t belong there.</p>
+<p>I sent a Telegram message to the coordinator to fix it. The first fix it came
+back with was a new <code>whats-new.html</code> page. While I was looking at that, I had a
+second thought:</p>
 <blockquote>
-<p>&quot;I have a vision of a releases page which is really a blog page if you understand my meaning. Each release gets its own page that reads like a blog post talking about why it was built, why the changes were made, and what the benefits are. This way the expectations for the blog posts are not really that they&#39;re going to be super bloggy. And it also allows us to go back and use the session history of the Claude agents like you during the planning session. That can be the basis for the release posts about why it was built.&quot;</p>
+<p>&quot;I have a vision of a releases page which is really a blog page if you
+understand my meaning. Each release gets its own page that reads like a blog
+post talking about why it was built, why the changes were made, and what the
+benefits are. This way the expectations for the blog posts are not really that
+they&#39;re going to be super bloggy. And it also allows us to go back and use the
+session history of the Claude agents like you during the planning session.
+That can be the basis for the release posts about why it was built.&quot;</p>
 </blockquote>
-<p>That&#39;s what this is. The whats-new page got deleted in the same session that wrote the first post.</p>
+<p>That&#39;s what this is. The whats-new page got deleted in the same session that
+wrote the first post.</p>
 <h2>What a Week Cost and Bought</h2>
-<p>The cost was that one planned feature became four shipped things, and the original feature took twice the time to land because half of it was discovered the moment a real user ran the first command. The role-skills layer is the headliner of v0.9.2, but the part of v0.9.2 that makes the layer actually work, the persistent <code>role_config</code> in <code>.thrum/config.json</code>, the refresh subcommand, the drift hint in prime, came entirely from a ten-second test on a different machine.</p>
-<p>The benefit was that the release is traceable end to end to one design session at the start of the week, plus one bug from trying to use what got built, plus one offhand question that fixed a thing I&#39;d been quietly tolerating, plus a website pivot that produced this blog. The big planned work was the role-skills layer. Most of what makes v0.9.2 useful is the stuff that came from running into things while building it.</p>
-<p>The heuristic from this line: build configurations as things, not processes. A process leaves no record of what was decided. A thing can be respected, refreshed, audited, asked about. <code>configure-roles</code> ate its own config because the answers existed only in the moment the skill ran, and that turned out not to count as a configuration.</p>
+<p>The cost was that one planned feature became four shipped things, and the
+original feature took twice the time to land because half of it was discovered
+the moment a real user ran the first command. The role-skills layer is the
+headliner of v0.9.2, but the part of v0.9.2 that makes the layer actually work,
+the persistent <code>role_config</code> in <code>.thrum/config.json</code>, the refresh subcommand,
+the drift hint in prime, came entirely from a ten-second test on a different
+machine.</p>
+<p>The benefit was that the release is traceable end to end to one design session
+at the start of the week, plus one bug from trying to use what got built, plus
+one offhand question that fixed a thing I&#39;d been quietly tolerating, plus a
+website pivot that produced this blog. The big planned work was the role-skills
+layer. Most of what makes v0.9.2 useful is the stuff that came from running into
+things while building it.</p>
+<p>The heuristic from this line: build configurations as things, not processes. A
+process leaves no record of what was decided. A thing can be respected,
+refreshed, audited, asked about. <code>configure-roles</code> ate its own config because
+the answers existed only in the moment the skill ran, and that turned out not to
+count as a configuration.</p>
 
       </div>
       <hr class="post-divider">
