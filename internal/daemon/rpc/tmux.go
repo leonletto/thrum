@@ -149,7 +149,22 @@ func (h *TmuxHandler) SetPermission(p *permission.Permission) {
 // RestoreBinding writes both the (session→cwd) and (cwd→session) entries
 // under the handler mutex. Used by the boot reconcile pass to rebuild the
 // tmux pane-nudge target map from identity files after daemon restart.
+//
+// Identity files store `tmux_session` as the full tmux target ("name:N.M")
+// but every reader of sessionCwds / cwdSessions — HandleCreate at
+// session-cwd lookup (tmux.go:182), HandleRestart's stored-cwd read
+// (tmux.go:1961), emitIdentityBanner's session→cwd resolution
+// (tmux.go:2145), and HandleKill's mapping cleanup (tmux.go:513) — uses
+// the bare session name with no suffix. Normalizing at this API boundary
+// keeps the map keys canonical regardless of caller. Pre-thrum-8dl3 the
+// reconcile pass populated `sessionCwds["email-brainstorm:0.0"]` and the
+// banner emitter then looked up `sessionCwds["email-brainstorm"]` →
+// miss → silent no-op → no banner in scrollback → watchdog's top anchor
+// missing → conservative-true → no nudge → idle agent post-restart.
 func (h *TmuxHandler) RestoreBinding(session, cwd string) {
+	if i := strings.IndexByte(session, ':'); i >= 0 {
+		session = session[:i]
+	}
 	h.sessionMu.Lock()
 	defer h.sessionMu.Unlock()
 	h.sessionCwds[session] = cwd
