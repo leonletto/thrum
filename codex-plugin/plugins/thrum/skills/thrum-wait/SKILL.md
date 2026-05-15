@@ -7,9 +7,10 @@ description: Block until a message arrives
 
 # Thrum Wait
 
-Use this skill when the user explicitly wants the `wait` Thrum workflow. Prefer
-the umbrella `thrum` skill when the request spans multiple commands or needs
-broader coordination judgment.
+Use this skill when the user explicitly wants the `wait` Thrum
+workflow. Prefer the umbrella `thrum` skill when the request spans multiple
+commands or needs broader coordination judgment.
+
 
 Block until a message arrives or timeout expires. Used by the message-listener
 pattern.

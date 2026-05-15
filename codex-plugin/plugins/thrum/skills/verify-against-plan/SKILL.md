@@ -1,14 +1,10 @@
 ---
 name: verify-against-plan
-description:
-  "Use after implementation is complete to verify the code covers every
-  requirement from the plan / design spec — runs alongside code-review as the
-  second pass in the Code Review Protocol. Outputs structured findings: missing
-  scope, unmet acceptance criteria, silent deviations from the spec,
-  newly-introduced surprises."
+description: "Use after implementation is complete to verify the code covers every requirement from the plan / design spec — runs alongside code-review as the second pass in the Code Review Protocol. Outputs structured findings: missing scope, unmet acceptance criteria, silent deviations from the spec, newly-introduced surprises."
 # source: claude-plugin/skills/verify-against-plan/SKILL.md
 # generated-by: scripts/sync-skills.sh
 ---
+
 
 ## Verify Against Plan
 

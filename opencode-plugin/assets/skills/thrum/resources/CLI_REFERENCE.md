@@ -456,6 +456,10 @@ Flags:
 --roles string          Pre-fill the wizard's role-template choice: enhanced|default|skip
 ```
 
+The wizard's suggested default agent name is derived from the repo directory,
+lowercased and sanitized to satisfy the agent-name validator (a-z, 0-9,
+underscore only).
+
 **tmux gate:** if `tmux` is not on `PATH` when the wizard reaches the
 daemon-start step, init exits early with an OS-appropriate install hint
 (`brew install tmux` / `apt install tmux`).
