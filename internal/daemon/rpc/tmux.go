@@ -1237,6 +1237,24 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 	_ = ttmux.SetMonitorSilence(name, 60, thrumBin, h.thrumDir)
 
 	target := name + ":0.0"
+
+	// thrum-8dl3: shell-readiness probe. HandleRestart's CreateSession
+	// returns BEFORE the new pane's shell finishes init (zsh/oh-my-zsh
+	// sources dotfiles, wires prompt). Any SendKeys arriving during init
+	// is silently swallowed. HandleCreate masks this via
+	// runInlineQuickstart's resend-on-fail; without an equivalent here
+	// the banner SendKeys from launchRuntimeWithBanner (Fix #1) is the
+	// first keystroke after CreateSession — exactly the one most at
+	// risk of being eaten. Probe: re-run the agent's quickstart and
+	// wait for the identity file to materialize. Side-effect: refreshes
+	// runtime/branch fields on the identity for the new pane. Failure
+	// here is logged but non-fatal — restart has already done the
+	// destructive snapshot+kill work; best-effort proceed.
+	if err := h.ensureShellReadyAfterCreate(ctx, target, cwd, agentName, idFile.Agent.Role, idFile.Agent.Module, runtime); err != nil {
+		slog.Warn("[restart] shell readiness probe failed; proceeding cautiously — banner emit may be swallowed",
+			"session", name, "target", target, "err", err)
+	}
+
 	launchCmd := runtimeToLaunchCmd(runtime)
 	if launchCmd != "" {
 		// Hook runtimes: emit the pane-side identity banner BEFORE the
@@ -2105,6 +2123,95 @@ func runtimeHasSessionStartHook(runtime string) bool {
 	}
 	return preset.HasSessionStartHook
 }
+
+// ensureShellReadyAfterCreate proves the freshly-created pane's shell
+// is past init and accepting keystrokes by re-running the agent's
+// inline quickstart and waiting for the identity file to materialize.
+// The probe doubles as an identity refresh — quickstart rewrites
+// runtime/branch/tmux_session for the new pane.
+//
+// Strategy: move the existing identity file aside before sending the
+// probe, then wait for a fresh file to appear (reuses
+// runInlineQuickstart's existence-based waitForIdentityFile path).
+// On success the aside backup is removed; on failure (timeout, send
+// error) the backup is restored so the agent's pre-restart identity
+// survives a wedged restart.
+//
+// Returns an error on timeout or send failure but does NOT kill the
+// session — HandleRestart has already done destructive snapshot+kill
+// work; the caller logs the error and proceeds. The downstream banner
+// emit may still land at the shell prompt if the shell becomes
+// responsive between probe-timeout and banner-send (rare but possible
+// on a transient init stall). thrum-8dl3.
+//
+//nolint:revive // many args: each is independent identity-file state and packaging into a struct would obscure the production call site.
+func (h *TmuxHandler) ensureShellReadyAfterCreate(ctx context.Context, target, cwd, agentName, role, module, runtime string) error {
+	idDir := filepath.Join(cwd, ".thrum", "identities")
+	if resolved, err := filepath.EvalSymlinks(idDir); err == nil {
+		idDir = resolved
+	}
+	idPath := filepath.Join(idDir, agentName+".json")
+	backupPath := idPath + ".pre-restart-probe"
+
+	// Clean any leftover from a prior wedged restart attempt before
+	// moving the current identity aside, otherwise os.Rename would fail
+	// on the second restart of a daemon-crashed session.
+	_ = os.Remove(backupPath)
+	movedAside := false
+	if err := os.Rename(idPath, backupPath); err == nil {
+		movedAside = true
+	}
+
+	// Restore-or-cleanup the backup. Deferred so any return path
+	// (send error, ctx cancel, timeout, success) leaves the filesystem
+	// in a coherent state. The restore only fires if quickstart didn't
+	// produce a fresh file — a successful probe means idPath exists
+	// with the new content and we just clean up the backup.
+	defer func() {
+		if !movedAside {
+			_ = os.Remove(backupPath) // safety cleanup
+			return
+		}
+		if _, err := os.Stat(idPath); err != nil {
+			// Probe didn't produce a fresh file — restore so the agent
+			// retains its pre-restart identity.
+			_ = os.Rename(backupPath, idPath)
+			return
+		}
+		// Fresh file present — drop the backup.
+		_ = os.Remove(backupPath)
+	}()
+
+	quickstartCmd := worktree.BuildQuickstartCmd(cwd, agentName, role, module, "", runtime, true)
+
+	if err := sendKeysFn(target, quickstartCmd); err != nil {
+		return fmt.Errorf("send quickstart probe: %w", err)
+	}
+	if err := sendSpecialKeyFn(target, "Enter"); err != nil {
+		return fmt.Errorf("send enter: %w", err)
+	}
+
+	resend := func() error {
+		slog.Info("tmux.restart.shell-ready-resending",
+			slog.String("agent", agentName), slog.String("target", target),
+		)
+		if err := sendKeysFn(target, quickstartCmd); err != nil {
+			return err
+		}
+		return sendSpecialKeyFn(target, "Enter")
+	}
+	return waitForIdentityFile(ctx, idPath, shellReadyInitialWait, shellReadyRetryWait, resend)
+}
+
+// shellReadyInitialWait / shellReadyRetryWait govern the two-stage budget
+// ensureShellReadyAfterCreate uses while waiting for the quickstart probe
+// to land an identity file. Mirrors runInlineQuickstart's 5s+5s budget.
+// Tests shrink these via t.Cleanup'd assignment so timeout cases don't
+// burn 10+ real seconds.
+var (
+	shellReadyInitialWait = 5 * time.Second
+	shellReadyRetryWait   = 5 * time.Second
+)
 
 // launchRuntimeWithBanner is the synchronous pre-goroutine portion of
 // HandleLaunch + HandleRestart: for hook runtimes (claude / codex /
