@@ -710,10 +710,10 @@ func TestMessageMarkRead(t *testing.T) {
 	}
 }
 
-// TestMarkRead_PassesMarkedBefore verifies the watermark argument reaches
-// the wire under the marked_before JSON key when non-empty. (Name kept
-// short to fit macOS's sun_path limit on t.TempDir-derived socket paths.)
-func TestMarkRead_PassesMarkedBefore(t *testing.T) {
+// TestMarkBefore verifies the watermark argument reaches the wire under
+// the marked_before JSON key when non-empty. (Name kept short to fit
+// macOS's sun_path 104-char limit on t.TempDir-derived socket paths.)
+func TestMarkBefore(t *testing.T) {
 	daemon, socketPath := newMockDaemon(t)
 	defer daemon.stop()
 
@@ -760,10 +760,10 @@ func TestMarkRead_PassesMarkedBefore(t *testing.T) {
 	}
 }
 
-// TestMarkRead_OmitsMarkedBefore verifies the helper does NOT send the
-// marked_before key when the argument is empty, preserving pre-rc.9 wire
-// compatibility for callers that never opt in.
-func TestMarkRead_OmitsMarkedBefore(t *testing.T) {
+// TestMarkNoBefore verifies the helper does NOT send the marked_before
+// key when the argument is empty, preserving pre-rc.9 wire compatibility
+// for callers that never opt in. (Short name to fit sun_path limit.)
+func TestMarkNoBefore(t *testing.T) {
 	daemon, socketPath := newMockDaemon(t)
 	defer daemon.stop()
 
