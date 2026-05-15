@@ -3691,6 +3691,15 @@ Examples:
 					return fmt.Errorf("failed to resolve agent role: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
 				}
 
+				// Capture watermark BEFORE listing. The daemon will skip any
+				// supplied IDs whose created_at exceeds this when we mark,
+				// so messages arriving during the list+mark gap stay unread
+				// and remain visible on the next inbox check. The listing
+				// itself intentionally does NOT receive the watermark — we
+				// want the user to see everything that's arrived up to query
+				// time; the watermark only guards what gets *marked*.
+				markedBefore := time.Now().UTC().Format(time.RFC3339Nano)
+
 				// Fetch all unread message IDs (capped at 100 per page)
 				inboxResult, err := cli.Inbox(client, cli.InboxOptions{
 					Unread:            true,
@@ -3712,9 +3721,7 @@ Examples:
 					messageIDs[i] = m.MessageID
 				}
 
-				// Temporarily passing "" — Task 3 replaces this with the
-				// pre-listing watermark to close the read --all race.
-				result, err := cli.MessageMarkRead(client, messageIDs, agentID, "")
+				result, err := cli.MessageMarkRead(client, messageIDs, agentID, markedBefore)
 				if err != nil {
 					return err
 				}

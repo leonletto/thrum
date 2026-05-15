@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/state"
+	"github.com/leonletto/thrum/internal/identity"
 )
 
 // TestMessageSend_TouchesLastSeen covers thrum-7nuj: message.send from a
@@ -351,6 +352,100 @@ func TestHandleMarkRead_MarkedBefore_FiltersNewMessages(t *testing.T) {
 		}
 		if !tc.wantRead && readAt.Valid {
 			t.Fatalf("expected %s to have NULL read_at, got %s", tc.id, readAt.String)
+		}
+	}
+}
+
+// TestHandleMarkRead_CrossAgentRace_NewMessageStaysUnread exercises the
+// actual rc.9 motivation. Two distinct external senders deliver to the
+// same target; the watermark is captured between them. When the target
+// runs `read --all` semantics (mark both supplied IDs with the captured
+// watermark), only the pre-watermark message must be marked. The post-
+// watermark arrival stays unread and remains visible on the next inbox
+// check.
+func TestHandleMarkRead_CrossAgentRace_NewMessageStaysUnread(t *testing.T) {
+	st, senderID, targetID, handler := setupTwoAgents(t, "bob", "alice")
+	t.Cleanup(func() { _ = st.Close() })
+
+	// Register a second, distinct sender ("carol") inline so the post-
+	// watermark arrival is genuinely cross-agent — the bug we're closing
+	// involves arrivals from a different agent landing during the read
+	// --all round-trip.
+	repoID := "r_TEST12345678" // matches setupTwoAgents
+	carolID := identity.GenerateAgentID(repoID, "carol", "test-module", "")
+	agentHandler := NewAgentHandler(st)
+	sessionHandler := NewSessionHandler(st)
+	carolRegParams, _ := json.Marshal(RegisterRequest{Role: "carol", Module: "test-module"})
+	if _, err := agentHandler.HandleRegister(context.Background(), carolRegParams); err != nil {
+		t.Fatalf("register carol: %v", err)
+	}
+	carolSessionParams, _ := json.Marshal(SessionStartRequest{AgentID: carolID})
+	if _, err := sessionHandler.HandleStart(context.Background(), carolSessionParams); err != nil {
+		t.Fatalf("start carol session: %v", err)
+	}
+
+	// msg_a: from bob → alice at t=0
+	aParams, _ := json.Marshal(SendRequest{
+		Content:       "from bob",
+		To:            "@" + targetID,
+		CallerAgentID: senderID,
+	})
+	aResp, err := handler.HandleSend(context.Background(), aParams)
+	if err != nil {
+		t.Fatalf("HandleSend(a): %v", err)
+	}
+	aMsgID := aResp.(*SendResponse).MessageID
+
+	// Capture watermark
+	watermark := time.Now().UTC().Format(time.RFC3339Nano)
+	time.Sleep(10 * time.Millisecond)
+
+	// msg_b: from carol → alice (the racing arrival)
+	bParams, _ := json.Marshal(SendRequest{
+		Content:       "from carol",
+		To:            "@" + targetID,
+		CallerAgentID: carolID,
+	})
+	bResp, err := handler.HandleSend(context.Background(), bParams)
+	if err != nil {
+		t.Fatalf("HandleSend(b): %v", err)
+	}
+	bMsgID := bResp.(*SendResponse).MessageID
+
+	// Mark both IDs with the pre-list watermark — alice's read --all flow.
+	markParams, _ := json.Marshal(MarkReadRequest{
+		MessageIDs:    []string{aMsgID, bMsgID},
+		MarkedBefore:  watermark,
+		CallerAgentID: targetID,
+	})
+	markResp, err := handler.HandleMarkRead(context.Background(), markParams)
+	if err != nil {
+		t.Fatalf("HandleMarkRead: %v", err)
+	}
+	if got := markResp.(*MarkReadResponse).MarkedCount; got != 1 {
+		t.Fatalf("expected marked_count=1 (only msg_a, pre-watermark), got %d", got)
+	}
+
+	// Verify state directly: msg_a has read_at; msg_b does not.
+	for _, tc := range []struct {
+		id       string
+		wantRead bool
+		label    string
+	}{
+		{aMsgID, true, "from bob (pre-watermark)"},
+		{bMsgID, false, "from carol (post-watermark)"},
+	} {
+		var readAt sql.NullString
+		if err := st.RawDB().QueryRow(
+			`SELECT read_at FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ?`,
+			tc.id, targetID).Scan(&readAt); err != nil {
+			t.Fatalf("query %s (%s): %v", tc.id, tc.label, err)
+		}
+		if tc.wantRead && !readAt.Valid {
+			t.Fatalf("%s: expected read_at, got NULL", tc.label)
+		}
+		if !tc.wantRead && readAt.Valid {
+			t.Fatalf("%s: expected NULL read_at, got %s", tc.label, readAt.String)
 		}
 	}
 }
