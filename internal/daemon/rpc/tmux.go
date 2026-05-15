@@ -420,68 +420,32 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 
 	launchCmd := runtimeToLaunchCmd(runtime)
 	if launchCmd != "" {
-		// Hook runtimes (claude / codex / cursor — HasSessionStartHook=true
-		// on the preset): emit the pane-side identity banner BEFORE the
-		// launch keystrokes so the printf lands at the shell prompt rather
-		// than inside the runtime's `❯` input box. The
-		// PrimeTruncationSentinel stays in scrollback after the runtime
-		// takes over so paneAgentEngaged can still find the top anchor.
-		// Non-hook runtimes get only the launchCmd here; their
-		// `/thrum:prime` keystroke fires from the post-launch goroutine
-		// below once the runtime is input-ready. thrum-8dl3 Fix #1.
-		if err := h.launchRuntimeWithBanner(name, target, runtime, launchCmd); err != nil {
+		// Send the runtime launch keystrokes. Routed through the
+		// sendKeysFn / sendSpecialKeyFn seams so unit tests can capture
+		// the sequence; production behavior is identical to ttmux.SendKeys
+		// + ttmux.SendSpecialKey.
+		if err := sendKeysFn(target, launchCmd); err != nil {
 			return nil, fmt.Errorf("launch send-keys: %w", err)
 		}
+		if err := sendSpecialKeyFn(target, "Enter"); err != nil {
+			return nil, fmt.Errorf("launch enter: %w", err)
+		}
 
-		// Post-launch slot (in a goroutine so the RPC returns
-		// immediately). For hook runtimes there's nothing more to inject
-		// — the SessionStart hook auto-injects the briefing and the
-		// pre-launch banner sits in scrollback. For non-hook runtimes,
-		// send `/thrum:prime` once the pane is input-ready. In either
-		// case the silence watchdog fires after the configured threshold
-		// (default 30s) of pane silence to nudge agents that didn't
-		// engage on their own.
-		go func() {
-			// thrum-puhr.10 (cluster 5): pre-inject readiness via
-			// silence-detector. Replaces the legacy Sleep(10s); the
-			// pane is "ready" once two consecutive captures are
-			// byte-identical (TUI rendered, runtime at input-ready
-			// state). Stable-after=2, ceiling=60s.
-			//
-			// thrum-puhr.10 (cluster 8): waitForPaneReady returns
-			// false when the stabilized pane is in a permission
-			// prompt or trust-gate state. Skip ALL keystroke
-			// injection in that case — typing into a trust dialog
-			// would either select an option without the user's intent
-			// or cause the runtime to interpret garbage characters as
-			// a quit signal.
-			if !waitForPaneReady(target, runtime, 2, 60) {
-				slog.Info("[launch] skipping post-launch inject: pane in detected prompt/trust-gate state",
-					"target", target, "runtime", runtime)
-				return
-			}
-			if !runtimeHasSessionStartHook(runtime) {
-				// Defense-in-depth: re-check safety just before send.
-				// waitForPaneReady's exit window is brief but not
-				// atomic with this send — a trust gate could appear
-				// during the few microseconds in between (e.g. claude
-				// finishing render after readiness returned).
-				if cur, err := capturePaneFn(target, 50); err == nil && !permission.IsPaneSafeToType(runtime, cur) {
-					slog.Info("[launch] skipping /thrum:prime send: pane in detected prompt/trust-gate state",
-						"target", target, "runtime", runtime)
-					return
-				}
-				primeCmd := primeCommandForRuntime(runtime)
-				_ = sendKeysAndSubmit(target, primeCmd)
-			}
-			// thrum-puhr.10: post-inject silence watchdog. If the pane
-			// is still silent after the configured threshold (default
-			// 30s, set via restart.silence_watchdog_seconds), nudge the
-			// agent to read its inbox. Fresh codex agents in particular
-			// can sit at a welcome screen without engaging the dispatch.
-			nudgeSilentPaneAfter(target, runtime, h.thrumDir,
-				"Finish reading the prime output and follow your instructions if you have not")
-		}()
+		// Post-launch slot, in a goroutine so the RPC returns
+		// immediately. After waitForPaneReady reports the runtime is
+		// input-ready, hook runtimes get the pane-side identity banner
+		// emitted INTO the running runtime's input prompt (printf is
+		// treated as a user turn — the runtime echoes / responds with
+		// the banner text, which is how PrimeTruncationSentinel reaches
+		// the pane in a form paneAgentEngaged can find), while non-hook
+		// runtimes get `/thrum:prime`. The silence watchdog runs in
+		// either case so an agent that never engages still gets a nudge.
+		// thrum-8dl3 (post-revert ordering — the pre-launch banner emit
+		// attempted in the original Fix #1 was eaten by claude's
+		// alt-screen takeover; logs confirmed the printf never reached
+		// the pane).
+		go h.runPostLaunchInject("launch", name, target, runtime,
+			"Finish reading the prime output and follow your instructions if you have not")
 	}
 
 	// Preamble: null the stored agent_pid if it belongs to an exited
@@ -1257,54 +1221,23 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 
 	launchCmd := runtimeToLaunchCmd(runtime)
 	if launchCmd != "" {
-		// Hook runtimes: emit the pane-side identity banner BEFORE the
-		// launch keystrokes — see HandleLaunch for the full rationale.
-		// On restart this matters even more: the SessionStart hook also
-		// renders the restart snapshot (Previous Session Context block,
-		// which inject-prime-context.sh hoists into the loud preamble),
-		// but without the pre-launch banner the silence watchdog's
-		// PrimeTruncationSentinel anchor never reaches scrollback and
-		// `paneAgentEngaged` returns conservative-true → no nudge → the
-		// agent sits at the welcome screen forever. thrum-8dl3 Fix #1.
-		if err := h.launchRuntimeWithBanner(name, target, runtime, launchCmd); err != nil {
+		// Send the runtime launch keystrokes via the test seams — see
+		// HandleLaunch for the full rationale. ensureShellReadyAfterCreate
+		// above has already proven the new pane's shell processes
+		// commands, so the launchCmd itself won't be swallowed by zsh
+		// init. The pane-side identity banner is emitted POST-launch
+		// from the goroutine below (post-revert of the original Fix #1:
+		// the alt-screen takeover by claude eats anything sent into the
+		// pre-launch shell, including printf).
+		if err := sendKeysFn(target, launchCmd); err != nil {
 			return nil, fmt.Errorf("send launch command: %w", err)
 		}
+		if err := sendSpecialKeyFn(target, "Enter"); err != nil {
+			return nil, fmt.Errorf("send enter: %w", err)
+		}
 
-		// Post-launch slot (in a goroutine). For hook runtimes there's
-		// nothing more to inject — the SessionStart hook handles the
-		// briefing + snapshot, and the pre-launch banner sits in
-		// scrollback. For non-hook runtimes the post-restart
-		// `/thrum:prime` is what loads the snapshot — keep it.
-		go func() {
-			// thrum-puhr.10 (cluster 5): pre-inject readiness via
-			// silence-detector — same as HandleLaunch. Replaces the
-			// legacy Sleep(10s) at this site.
-			//
-			// thrum-puhr.10 (cluster 8): skip ALL keystroke injection
-			// when the readiness probe reports the pane is in a
-			// permission prompt or trust-gate state.
-			if !waitForPaneReady(target, runtime, 2, 60) {
-				slog.Info("[restart] skipping post-restart inject: pane in detected prompt/trust-gate state",
-					"target", target, "runtime", runtime)
-				return
-			}
-			if !runtimeHasSessionStartHook(runtime) {
-				if cur, err := capturePaneFn(target, 50); err == nil && !permission.IsPaneSafeToType(runtime, cur) {
-					slog.Info("[restart] skipping /thrum:prime send: pane in detected prompt/trust-gate state",
-						"target", target, "runtime", runtime)
-					return
-				}
-				primeCmd := primeCommandForRuntime(runtime)
-				_ = sendKeysAndSubmit(target, primeCmd)
-			}
-			// thrum-puhr.10: post-restart silence watchdog. On a large-
-			// context restart the agent often doesn't read the
-			// auto-injected prime output. After the configured threshold
-			// (default 30s) of pane silence, nudge it to read the prime
-			// + resume plan and follow its instructions.
-			nudgeSilentPaneAfter(target, runtime, h.thrumDir,
-				"Finish reading the prime output, which includes your resume plan, and then follow your instructions if you have not")
-		}()
+		go h.runPostLaunchInject("restart", name, target, runtime,
+			"Finish reading the prime output, which includes your resume plan, and then follow your instructions if you have not")
 	}
 
 	// Write tmux_session and runtime to the agent's identity file
@@ -2265,74 +2198,90 @@ var (
 	shellReadyRetryWait   = 5 * time.Second
 )
 
-// launchRuntimeWithBanner is the synchronous pre-goroutine portion of
-// HandleLaunch + HandleRestart: for hook runtimes (claude / codex /
-// cursor — HasSessionStartHook=true) it emits the pane-side identity
-// banner FIRST so the printf-style send-keys lands at the shell prompt
-// (and the PrimeTruncationSentinel ends up in scrollback where the
-// silence watchdog can still anchor on it), then sends the runtime
-// launch command + Enter. For non-hook runtimes the banner step is
-// skipped; the launch keystrokes are sent unchanged.
+// runPostLaunchInject is the body of the goroutine spawned by both
+// HandleLaunch and HandleRestart after the runtime launch keystrokes.
+// Waits for the pane to be input-ready, then either emits the identity
+// banner (hook runtimes — printf is sent into the running runtime's
+// input prompt as a user message; the runtime echoes / responds with the
+// banner text including `PrimeTruncationSentinel`, which is the form
+// `paneAgentEngaged` can find in the captured pane) or sends
+// `/thrum:prime` (non-hook runtimes whose context isn't auto-loaded).
+// Finally schedules the silence watchdog regardless of branch.
 //
-// Pre thrum-8dl3 Fix #1 the banner was emitted from inside the post-
-// launch goroutine, AFTER the runtime had taken over the pane — so the
-// banner printf went into the runtime's `❯` input box instead of the
-// shell, never reached scrollback, and the watchdog's top anchor
-// vanished (paneAgentEngaged hit topIdx<0 → conservative true → no
-// nudge → agent sat at welcome screen forever).
+// `site` is "launch" or "restart" and is woven into the slog logs for
+// post-hoc correlation. `nudgeText` is the SendKeys payload the watchdog
+// fires when the agent doesn't engage on its own.
 //
-// Both SendKeys calls route through the package-level test seams
-// (sendKeysFn / sendSpecialKeyFn) so unit tests can assert call order.
-// Banner emission via emitIdentityBanner is best-effort by design —
-// missing identity files don't block the launch.
-//
-// The empty-launchCmd short-circuit runs BEFORE banner emission so the
-// helper never emits a banner into a pane where no runtime will follow.
-// Production callers already gate `if launchCmd != ""` before calling, but
-// the in-helper guard tightens the contract: a future preset with
-// HasSessionStartHook=true and Command="" can't leak a banner into a bare
-// shell.
-func (h *TmuxHandler) launchRuntimeWithBanner(session, target, runtime, launchCmd string) error {
-	slog.Info("[launch] launchRuntimeWithBanner: entry",
-		"session", session, "target", target, "runtime", runtime, "launch_cmd", launchCmd)
-	if launchCmd == "" {
-		slog.Info("[launch] launchRuntimeWithBanner: empty launchCmd — short-circuit before banner emit",
-			"session", session, "target", target, "runtime", runtime)
-		return nil
+// History: the original thrum-8dl3 Fix #1 hoisted `emitIdentityBanner`
+// to BEFORE the launch keystrokes on the theory that the post-launch
+// printf was landing inside claude's input box and silently corrupting
+// the banner. End-to-end retesting with observability logs proved the
+// opposite — claude's alt-screen takeover (ESC[?1049h + ESC[2J + ESC[3J)
+// CLEARS pre-launch shell output, so the pre-launch printf vanishes.
+// The working mechanism is the post-launch emit: claude treats the
+// printf as a user turn and responds with the banner content, which is
+// how the sentinel reaches the captured pane in a form the watchdog can
+// find. release-dashboard's scrollback shows this in action.
+func (h *TmuxHandler) runPostLaunchInject(site, name, target, runtime, nudgeText string) {
+	slog.Info("["+site+"] post-launch inject: entry",
+		"name", name, "target", target, "runtime", runtime)
+	// thrum-puhr.10 (cluster 5+8): silence-driven readiness probe with
+	// trust-gate / permission-prompt guard. False return means the pane
+	// is in a non-typable state (or never went silent) — skip all
+	// SendKeys to avoid corrupting a dialog.
+	if !waitForPaneReady(target, runtime, 2, 60) {
+		slog.Info("["+site+"] skipping post-launch inject: pane in detected prompt/trust-gate state or never settled",
+			"target", target, "runtime", runtime)
+		return
 	}
 	if runtimeHasSessionStartHook(runtime) {
-		slog.Info("[launch] launchRuntimeWithBanner: hook runtime — emitting banner pre-launch",
-			"session", session, "target", target, "runtime", runtime)
-		h.emitIdentityBanner(session, target)
+		// Banner emitted INTO the running runtime's input prompt. See
+		// emitIdentityBanner for why this is the working mechanism.
+		h.emitIdentityBanner(name, target)
 	} else {
-		slog.Info("[launch] launchRuntimeWithBanner: non-hook runtime — skipping pre-launch banner (post-launch /thrum:prime path will handle context)",
-			"session", session, "target", target, "runtime", runtime)
+		// Defense-in-depth: re-check safety just before send. The
+		// readiness gate's exit window is brief but not atomic with
+		// this send.
+		if cur, err := capturePaneFn(target, 50); err == nil && !permission.IsPaneSafeToType(runtime, cur) {
+			slog.Info("["+site+"] skipping /thrum:prime send: pane in detected prompt/trust-gate state",
+				"target", target, "runtime", runtime,
+				"pane_excerpt", truncate(cur, 120))
+			return
+		}
+		primeCmd := primeCommandForRuntime(runtime)
+		_ = sendKeysAndSubmit(target, primeCmd)
 	}
-	slog.Info("[launch] launchRuntimeWithBanner: sending launchCmd via sendKeysFn",
-		"session", session, "target", target, "runtime", runtime, "launch_cmd", launchCmd)
-	if err := sendKeysFn(target, launchCmd); err != nil {
-		slog.Warn("[launch] launchRuntimeWithBanner: sendKeysFn(launchCmd) failed",
-			"session", session, "target", target, "runtime", runtime, "err", err)
-		return err
-	}
-	if err := sendSpecialKeyFn(target, "Enter"); err != nil {
-		slog.Warn("[launch] launchRuntimeWithBanner: sendSpecialKeyFn(Enter) failed",
-			"session", session, "target", target, "runtime", runtime, "err", err)
-		return err
-	}
-	slog.Info("[launch] launchRuntimeWithBanner: launchCmd + Enter sent successfully",
-		"session", session, "target", target, "runtime", runtime)
-	return nil
+	// Silence watchdog: nudge the agent if the pane stays quiet past
+	// the configured threshold (default 30s). Independent of the
+	// banner / prime path above.
+	nudgeSilentPaneAfter(target, runtime, h.thrumDir, nudgeText)
 }
 
 // emitIdentityBanner sends the identity banner for the agent registered
 // at the session's stored cwd into the pane via tmux send-keys + Enter.
 // Best-effort: silently no-ops when no cwd is stored, no identity is
 // found, or identitybanner.ShellCommand returns empty (e.g. a bare
-// session created with --no-agent). Called from launchRuntimeWithBanner
-// (HandleLaunch + HandleRestart) BEFORE the runtime launch keystrokes
-// so the banner lands at the shell prompt and stays in the pane's
-// scrollback after the runtime takes over the screen.
+// session created with --no-agent). Called from runPostLaunchInject
+// (HandleLaunch + HandleRestart) AFTER waitForPaneReady reports the
+// runtime is input-ready.
+//
+// Mechanism: for hook runtimes (claude / codex / cursor) the runtime is
+// already running and showing its input prompt when this fires. The
+// printf SendKeys lands INSIDE the runtime's input box and the runtime
+// treats it as a user turn — claude in particular echoes the input as
+// `❯ printf '%s\n' ...` then responds with `⏺ Agent: @<name> ...`
+// containing the full banner text including the PrimeTruncationSentinel.
+// That response in the captured pane is what `paneAgentEngaged` uses as
+// its top anchor.
+//
+// Pre-launch banner emission (the original thrum-8dl3 Fix #1) DOES NOT
+// WORK: claude's alt-screen entry clears the visible region AND the
+// in-flight pre-launch printf SendKeys, so the banner never reaches the
+// pane in any form. End-to-end retesting on stalled-sweep-brainstorm and
+// skills-brainstorm confirmed the pre-launch path silently drops the
+// banner; the post-launch path is the working production mechanism (see
+// release-dashboard's scrollback, which has the banner sentinel in
+// claude's response form).
 // thrum-6hqy / thrum-8dl3.
 func (h *TmuxHandler) emitIdentityBanner(session, target string) {
 	slog.Info("[banner] emitIdentityBanner: entry", "session", session, "target", target)

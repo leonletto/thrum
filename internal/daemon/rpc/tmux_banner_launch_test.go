@@ -1,6 +1,8 @@
 package rpc
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -8,18 +10,16 @@ import (
 )
 
 // recordedCall captures a single sendKeysFn / sendSpecialKeyFn invocation
-// so the order test can assert banner-before-launch ordering. The two
-// kinds use distinct prefixes so an assertion on the sequence is
-// straightforward without an enum.
+// so tests can assert call shape and ordering.
 type recordedCall struct {
-	kind string // "send" (SendKeys text) or "enter" (SendSpecialKey Enter)
-	text string // SendKeys payload, or "Enter" for enter calls
+	kind string // "send" (SendKeys text) or "enter" (SendSpecialKey)
+	text string
 }
 
 // recordSendKeys swaps in fakes for sendKeysFn / sendSpecialKeyFn that
-// append every invocation to a shared slice. Returns a cleanup that the
-// caller MUST register with t.Cleanup, plus a getter for the accumulated
-// sequence so the test reads it under the same mutex the closure uses.
+// append every invocation to a shared slice. Returns a cleanup the
+// caller MUST register with t.Cleanup, plus a getter that reads the
+// accumulated sequence under the same mutex the closure uses.
 func recordSendKeys(t *testing.T) (restore func(), calls func() []recordedCall) {
 	t.Helper()
 	prevSend := sendKeysFn
@@ -42,8 +42,8 @@ func recordSendKeys(t *testing.T) (restore func(), calls func() []recordedCall) 
 		return nil
 	}
 	// emitIdentityBanner's sendKeysAndSubmit inserts paneInputSubmitGap
-	// between text and Enter. Without a mocked sleepFn this test would
-	// take 200ms+ per banner emission and add real-clock dependency.
+	// between text and Enter. Mock so the test doesn't burn 200ms+ per
+	// banner emit and doesn't depend on real time.
 	sleepFn = func(time.Duration) {}
 
 	restore = func() {
@@ -61,32 +61,51 @@ func recordSendKeys(t *testing.T) (restore func(), calls func() []recordedCall) 
 	return restore, calls
 }
 
-// installSafePaneCapture installs a capturePaneFn that returns a content
-// emitIdentityBanner's safety check classifies as safe-to-type (plain
-// shell prompt — no trust gate, no permission prompt). Returns the
-// cleanup so callers register it with t.Cleanup.
-func installSafePaneCapture(t *testing.T) func() {
+// installReadyPane installs fakes that make waitForPaneReady's silence
+// loop fire on the first probe and capturePaneFn return a safe-to-type
+// pane (plain shell prompt). Returns the cleanup so callers register it
+// with t.Cleanup.
+func installReadyPane(t *testing.T) func() {
 	t.Helper()
-	prev := capturePaneFn
-	capturePaneFn = func(_ string, _ int) (string, error) {
-		return "$ \n", nil
+	prevActivity := tmuxLastActivityFn
+	prevCapture := capturePaneFn
+
+	past := time.Now().Add(-(silenceThreshold + time.Second))
+	tmuxLastActivityFn = func(_ string) (time.Time, error) { return past, nil }
+	capturePaneFn = func(_ string, _ int) (string, error) { return "$ \n", nil }
+
+	return func() {
+		tmuxLastActivityFn = prevActivity
+		capturePaneFn = prevCapture
 	}
-	return func() { capturePaneFn = prev }
 }
 
-// TestLaunchRuntimeWithBanner_HookRuntime_BannerBeforeLaunch pins thrum-8dl3
-// Fix #1: for ALL hook runtimes (claude / codex / cursor — those whose
-// preset has HasSessionStartHook=true) the pane-side identity banner MUST
-// land at the shell prompt BEFORE the runtime launch keystrokes so the
-// PrimeTruncationSentinel ends up in scrollback rather than inside the
-// runtime's `❯` input box. Pre-fix the banner emitted post-launch from
-// the watchdog goroutine, which silently corrupted the banner and stripped
-// the watchdog's top anchor → false-engaged → no nudge → idle agent.
+// disableWatchdog writes a thrum config that turns the silence watchdog
+// off (silence_watchdog_seconds=-1) so nudgeSilentPaneAfter is a no-op
+// inside runPostLaunchInject's tail. Otherwise the watchdog would fire
+// its own SendKeys and pollute the assertion sequence. Returns the
+// thrumDir so callers can hand it to NewTmuxHandler.
+func disableWatchdog(t *testing.T) string {
+	t.Helper()
+	thrumDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(thrumDir, "config.json"),
+		[]byte(`{"restart":{"silence_watchdog_seconds":-1}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return thrumDir
+}
+
+// TestRunPostLaunchInject_HookRuntime_EmitsBannerAfterReady pins the
+// post-revert invariant: for hook runtimes the identity banner is
+// emitted via emitIdentityBanner ONLY after waitForPaneReady reports
+// the pane is input-ready. Banner SendKeys lands as a user-message
+// into the running runtime's input prompt; the runtime responds with
+// the banner text which is what reaches the captured pane.
 //
-// Parametrized across every built-in hook runtime so a preset
-// misconfiguration that flips HasSessionStartHook on one of them is caught
-// here instead of in production.
-func TestLaunchRuntimeWithBanner_HookRuntime_BannerBeforeLaunch(t *testing.T) {
+// Parametrized over every built-in hook runtime so a preset
+// misconfiguration that flips HasSessionStartHook on one of them is
+// caught here.
+func TestRunPostLaunchInject_HookRuntime_EmitsBannerAfterReady(t *testing.T) {
 	for _, runtime := range []string{"claude", "codex", "cursor"} {
 		t.Run(runtime, func(t *testing.T) {
 			cwd := t.TempDir()
@@ -94,184 +113,107 @@ func TestLaunchRuntimeWithBanner_HookRuntime_BannerBeforeLaunch(t *testing.T) {
 
 			restoreSend, calls := recordSendKeys(t)
 			t.Cleanup(restoreSend)
-			t.Cleanup(installSafePaneCapture(t))
+			t.Cleanup(installReadyPane(t))
+			thrumDir := disableWatchdog(t)
 
-			h := NewTmuxHandler(t.TempDir(), nil)
+			h := NewTmuxHandler(thrumDir, nil)
 			h.sessionMu.Lock()
 			h.sessionCwds = map[string]string{"sess": cwd}
 			h.sessionMu.Unlock()
 
-			launchCmd := runtimeToLaunchCmd(runtime)
-			if launchCmd == "" {
-				t.Fatalf("runtimeToLaunchCmd(%q) returned empty — preset missing?", runtime)
-			}
-			if err := h.launchRuntimeWithBanner("sess", "sess:0.0", runtime, launchCmd); err != nil {
-				t.Fatalf("launchRuntimeWithBanner: %v", err)
-			}
+			h.runPostLaunchInject("launch", "sess", "sess:0.0", runtime, "nudge")
 
 			seq := calls()
-			if len(seq) < 3 {
-				t.Fatalf("expected banner SendKeys + banner Enter + launch SendKeys; got %d calls: %+v", len(seq), seq)
+			if len(seq) == 0 {
+				t.Fatalf("expected banner SendKeys but no calls recorded — runPostLaunchInject early-bailed")
 			}
-
-			// First call must be the banner printf — not the runtime launch.
+			// Banner emission's first SendKeys carries the printf payload
+			// — that's the proof the post-readiness banner emit fired.
 			if seq[0].kind != "send" || !strings.HasPrefix(seq[0].text, "printf ") {
-				t.Fatalf("expected first call to be banner printf send-keys, got %+v", seq[0])
+				t.Fatalf("expected first call to be banner printf SendKeys, got %+v", seq[0])
 			}
 			if !strings.Contains(seq[0].text, "impl_test") {
-				t.Errorf("banner SendKeys did not include agent name; got %q", seq[0].text)
-			}
-
-			// The launch send-keys must come AFTER the banner Enter —
-			// otherwise the runtime takes over the pane before the
-			// banner printf is submitted and the banner lands in the
-			// runtime's input box.
-			launchAt := -1
-			for i, c := range seq {
-				if c.kind == "send" && c.text == launchCmd {
-					launchAt = i
-					break
-				}
-			}
-			if launchAt < 0 {
-				t.Fatalf("launch SendKeys (text=%q) not found in sequence: %+v", launchCmd, seq)
-			}
-			if launchAt == 0 {
-				t.Fatalf("launch SendKeys appeared FIRST — banner must precede it. Sequence: %+v", seq)
-			}
-			// Defensive: the banner's Enter must have been submitted
-			// before the launch SendKeys so the printf actually runs at
-			// the shell prompt.
-			sawBannerEnterBeforeLaunch := false
-			for i := 0; i < launchAt; i++ {
-				if seq[i].kind == "enter" {
-					sawBannerEnterBeforeLaunch = true
-					break
-				}
-			}
-			if !sawBannerEnterBeforeLaunch {
-				t.Errorf("banner Enter was not submitted before the launch SendKeys; the printf would land inside the runtime instead of the shell. Sequence: %+v", seq)
+				t.Errorf("banner SendKeys missing agent name; got %q", seq[0].text)
 			}
 		})
 	}
 }
 
-// TestLaunchRuntimeWithBanner_HookRuntime_EmptyLaunchCmd_NoBanner pins
-// the helper's in-function safety guard: a hook runtime whose preset has
-// `Command: ""` (hypothetical future misconfiguration) must NOT emit a
-// banner into a bare shell pane. The launchCmd short-circuit runs BEFORE
-// the banner emit so the helper has no way to leak a banner without a
-// runtime taking over the pane afterward.
-func TestLaunchRuntimeWithBanner_HookRuntime_EmptyLaunchCmd_NoBanner(t *testing.T) {
+// TestRunPostLaunchInject_NonHookRuntime_SendsPrime: non-hook runtimes
+// (opencode / auggie / amp / gemini / kiro-cli) don't have a
+// SessionStart hook to auto-inject the briefing, so runPostLaunchInject
+// fires `/thrum:prime` instead of the banner. Asserts the prime payload
+// reaches sendKeysFn after readiness.
+func TestRunPostLaunchInject_NonHookRuntime_SendsPrime(t *testing.T) {
 	cwd := t.TempDir()
 	writeTestIdentityFile(t, cwd, "impl_test", 0, "")
 
 	restoreSend, calls := recordSendKeys(t)
 	t.Cleanup(restoreSend)
-	t.Cleanup(installSafePaneCapture(t))
+	t.Cleanup(installReadyPane(t))
+	thrumDir := disableWatchdog(t)
 
-	h := NewTmuxHandler(t.TempDir(), nil)
+	h := NewTmuxHandler(thrumDir, nil)
 	h.sessionMu.Lock()
 	h.sessionCwds = map[string]string{"sess": cwd}
 	h.sessionMu.Unlock()
 
-	// claude is a hook runtime; empty launchCmd simulates a preset with
-	// Command="" — the helper must short-circuit before banner emit.
-	if err := h.launchRuntimeWithBanner("sess", "sess:0.0", "claude", ""); err != nil {
-		t.Fatalf("launchRuntimeWithBanner: %v", err)
-	}
-
-	if got := calls(); len(got) != 0 {
-		t.Errorf("expected zero send-keys for hook runtime with empty launchCmd; got: %+v", got)
-	}
-}
-
-// TestLaunchRuntimeWithBanner_NonHookRuntime_LaunchOnly verifies the helper
-// does NOT emit the pane-side banner for runtimes whose preset has
-// HasSessionStartHook=false. Those runtimes get the `/thrum:prime`
-// keystroke from the post-launch goroutine instead — emitting a pre-launch
-// banner here would be redundant and noisy.
-func TestLaunchRuntimeWithBanner_NonHookRuntime_LaunchOnly(t *testing.T) {
-	cwd := t.TempDir()
-	writeTestIdentityFile(t, cwd, "impl_test", 0, "")
-
-	restoreSend, calls := recordSendKeys(t)
-	t.Cleanup(restoreSend)
-	t.Cleanup(installSafePaneCapture(t))
-
-	h := NewTmuxHandler(t.TempDir(), nil)
-	h.sessionMu.Lock()
-	h.sessionCwds = map[string]string{"sess": cwd}
-	h.sessionMu.Unlock()
-
-	if err := h.launchRuntimeWithBanner("sess", "sess:0.0", "opencode", "opencode"); err != nil {
-		t.Fatalf("launchRuntimeWithBanner: %v", err)
-	}
+	h.runPostLaunchInject("launch", "sess", "sess:0.0", "opencode", "nudge")
 
 	seq := calls()
-	if len(seq) != 2 {
-		t.Fatalf("expected exactly launch SendKeys + Enter (no banner) for non-hook runtime; got %d calls: %+v", len(seq), seq)
+	if len(seq) == 0 {
+		t.Fatal("expected /thrum:prime SendKeys but no calls recorded")
 	}
-	if seq[0].kind != "send" || seq[0].text != "opencode" {
-		t.Errorf("expected first call to be launch SendKeys 'opencode'; got %+v", seq[0])
-	}
-	if seq[1].kind != "enter" {
-		t.Errorf("expected second call to be Enter; got %+v", seq[1])
+	if !strings.Contains(seq[0].text, "thrum") && !strings.Contains(seq[0].text, "prime") {
+		t.Errorf("expected first call to look like a /thrum:prime payload; got %+v", seq[0])
 	}
 }
 
-// TestLaunchRuntimeWithBanner_EmptyLaunchCmd_NoSendKeys covers the
-// shell-runtime path: runtimeToLaunchCmd("shell") returns "" and the
-// helper must short-circuit without sending any keystrokes. The shell
-// preset has HasSessionStartHook=false so no banner emits either.
-func TestLaunchRuntimeWithBanner_EmptyLaunchCmd_NoSendKeys(t *testing.T) {
+// TestRunPostLaunchInject_NotReady_NoSendKeys: when waitForPaneReady
+// returns false (e.g. pane stuck on a trust gate or never settled),
+// runPostLaunchInject bails out with zero keystrokes. Critical safety
+// invariant: never type into a dialog or a not-yet-rendered TUI.
+func TestRunPostLaunchInject_NotReady_NoSendKeys(t *testing.T) {
 	cwd := t.TempDir()
 	writeTestIdentityFile(t, cwd, "impl_test", 0, "")
 
 	restoreSend, calls := recordSendKeys(t)
 	t.Cleanup(restoreSend)
-	t.Cleanup(installSafePaneCapture(t))
+	thrumDir := disableWatchdog(t)
 
-	h := NewTmuxHandler(t.TempDir(), nil)
+	// No installReadyPane: simulate a never-silent pane that blows the
+	// readiness ceiling, plus a trust-gate capture so the post-settle
+	// safety check trips. shrunk via a synthetic clock — sleepFn is
+	// already mocked by recordSendKeys.
+	prevActivity, prevCapture, prevNow := tmuxLastActivityFn, capturePaneFn, timeNowFn
+	t.Cleanup(func() {
+		tmuxLastActivityFn = prevActivity
+		capturePaneFn = prevCapture
+		timeNowFn = prevNow
+	})
+
+	base := time.Now()
+	tickSec := 0
+	timeNowFn = func() time.Time { return base.Add(time.Duration(tickSec) * time.Second) }
+	tmuxLastActivityFn = func(_ string) (time.Time, error) {
+		tickSec++
+		return timeNowFn(), nil // never silent
+	}
+	// A trust-gate-like pane string ensures the final-capture safety
+	// check (which fires at the ceiling) classifies as unsafe-to-type
+	// so waitForPaneReady returns false.
+	capturePaneFn = func(_ string, _ int) (string, error) {
+		return "Do you trust the contents of this directory?\n  1. Yes\n  2. No", nil
+	}
+
+	h := NewTmuxHandler(thrumDir, nil)
 	h.sessionMu.Lock()
 	h.sessionCwds = map[string]string{"sess": cwd}
 	h.sessionMu.Unlock()
 
-	if err := h.launchRuntimeWithBanner("sess", "sess:0.0", "shell", ""); err != nil {
-		t.Fatalf("launchRuntimeWithBanner: %v", err)
-	}
+	h.runPostLaunchInject("launch", "sess", "sess:0.0", "claude", "nudge")
 
 	if got := calls(); len(got) != 0 {
-		t.Errorf("expected zero send-keys for empty launchCmd + non-hook shell runtime; got: %+v", got)
-	}
-}
-
-// TestLaunchRuntimeWithBanner_HookRuntime_MissingIdentity_StillLaunches:
-// the helper degrades gracefully when no identity file is present in the
-// stored cwd — emitIdentityBanner silently no-ops, and the launch still
-// proceeds. Important for the "session created with --no-agent" path.
-func TestLaunchRuntimeWithBanner_HookRuntime_MissingIdentity_StillLaunches(t *testing.T) {
-	cwd := t.TempDir() // no identity file written
-
-	restoreSend, calls := recordSendKeys(t)
-	t.Cleanup(restoreSend)
-	t.Cleanup(installSafePaneCapture(t))
-
-	h := NewTmuxHandler(t.TempDir(), nil)
-	h.sessionMu.Lock()
-	h.sessionCwds = map[string]string{"sess": cwd}
-	h.sessionMu.Unlock()
-
-	if err := h.launchRuntimeWithBanner("sess", "sess:0.0", "claude", "claude"); err != nil {
-		t.Fatalf("launchRuntimeWithBanner: %v", err)
-	}
-
-	seq := calls()
-	// No banner (no identity file) but the launch still fires.
-	if len(seq) != 2 {
-		t.Fatalf("expected launch SendKeys + Enter (banner skipped, no identity); got %d: %+v", len(seq), seq)
-	}
-	if seq[0].kind != "send" || seq[0].text != "claude" {
-		t.Errorf("expected first call to be launch SendKeys 'claude' when banner is skipped; got %+v", seq[0])
+		t.Errorf("expected zero send-keys when pane is in trust-gate state; got %d: %+v", len(got), got)
 	}
 }
