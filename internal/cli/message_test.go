@@ -805,3 +805,50 @@ func TestMarkNoBefore(t *testing.T) {
 		t.Fatalf("expected marked_before to be omitted from params, got: %v", seenParams)
 	}
 }
+
+// TestMarkSkipped verifies the daemon's skipped_count field is decoded
+// into MarkReadResponse.SkippedCount — the CLI relies on this to print
+// the read --all late-arrival warning. (Addendum A.)
+func TestMarkSkipped(t *testing.T) {
+	daemon, socketPath := newMockDaemon(t)
+	defer daemon.stop()
+
+	daemon.start(t, func(conn net.Conn) {
+		defer func() { _ = conn.Close() }()
+
+		decoder := json.NewDecoder(conn)
+		encoder := json.NewEncoder(conn)
+
+		var request map[string]any
+		if err := decoder.Decode(&request); err != nil {
+			return
+		}
+		_ = encoder.Encode(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      request["id"],
+			"result": map[string]any{
+				"marked_count":  1,
+				"skipped_count": 2,
+			},
+		})
+	})
+
+	<-daemon.Ready()
+
+	client, err := NewClient(socketPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	resp, err := MessageMarkRead(client, []string{"msg_01"}, "alice", "2026-05-14T15:00:00Z")
+	if err != nil {
+		t.Fatalf("MessageMarkRead: %v", err)
+	}
+	if resp.SkippedCount != 2 {
+		t.Fatalf("expected SkippedCount=2 from wire, got %d", resp.SkippedCount)
+	}
+	if resp.MarkedCount != 1 {
+		t.Fatalf("expected MarkedCount=1 from wire, got %d", resp.MarkedCount)
+	}
+}

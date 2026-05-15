@@ -3735,6 +3735,20 @@ Examples:
 					if remaining > 0 {
 						fmt.Printf("  %d unread messages remaining (run again to mark more)\n", remaining)
 					}
+					// Addendum A: late-arrival warning. SkippedCount counts
+					// IDs the daemon refused via the marked_before watermark
+					// — those are messages that arrived between when we
+					// captured the watermark and when the daemon evaluated
+					// the mark. They stay unread and the user should
+					// re-check the inbox.
+					if result.SkippedCount > 0 {
+						msgWord := "messages"
+						if result.SkippedCount == 1 {
+							msgWord = "message"
+						}
+						fmt.Printf("  %d new %s arrived since you started reading — run `thrum inbox --unread` to see them.\n",
+							result.SkippedCount, msgWord)
+					}
 				}
 				return nil
 			}

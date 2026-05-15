@@ -329,8 +329,16 @@ func TestHandleMarkRead_MarkedBefore_FiltersNewMessages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HandleMarkRead: %v", err)
 	}
-	if got := markResp.(*MarkReadResponse).MarkedCount; got != 1 {
-		t.Fatalf("expected marked_count=1, got %d", got)
+	mr := markResp.(*MarkReadResponse)
+	if mr.MarkedCount != 1 {
+		t.Fatalf("expected marked_count=1, got %d", mr.MarkedCount)
+	}
+	// Addendum A: late-arrival warning surface. SkippedCount must reflect
+	// the count of supplied IDs the daemon refused to mark due to the
+	// watermark — the CLI uses this to print the "N new messages
+	// arrived" hint.
+	if mr.SkippedCount != 1 {
+		t.Fatalf("expected skipped_count=1 (msg_new is post-watermark), got %d", mr.SkippedCount)
 	}
 
 	// Verify durable state: old has read_at; new does not.
@@ -422,8 +430,14 @@ func TestHandleMarkRead_CrossAgentRace_NewMessageStaysUnread(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HandleMarkRead: %v", err)
 	}
-	if got := markResp.(*MarkReadResponse).MarkedCount; got != 1 {
-		t.Fatalf("expected marked_count=1 (only msg_a, pre-watermark), got %d", got)
+	mr := markResp.(*MarkReadResponse)
+	if mr.MarkedCount != 1 {
+		t.Fatalf("expected marked_count=1 (only msg_a, pre-watermark), got %d", mr.MarkedCount)
+	}
+	// Addendum A: the watermark-skipped count drives the CLI's
+	// late-arrival warning. Cross-agent late arrival must be counted.
+	if mr.SkippedCount != 1 {
+		t.Fatalf("expected skipped_count=1 (msg_b is post-watermark, cross-agent), got %d", mr.SkippedCount)
 	}
 
 	// Verify state directly: msg_a has read_at; msg_b does not.
@@ -476,8 +490,15 @@ func TestHandleMarkRead_NoMarkedBefore_BackwardCompat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HandleMarkRead: %v", err)
 	}
-	if got := markResp.(*MarkReadResponse).MarkedCount; got != 1 {
-		t.Fatalf("expected marked_count=1, got %d", got)
+	mr := markResp.(*MarkReadResponse)
+	if mr.MarkedCount != 1 {
+		t.Fatalf("expected marked_count=1, got %d", mr.MarkedCount)
+	}
+	// Addendum A: without a watermark, no message should be reported as
+	// watermark-skipped — the CLI must NOT print a late-arrival warning
+	// for legacy non-watermark callers.
+	if mr.SkippedCount != 0 {
+		t.Fatalf("expected skipped_count=0 (no watermark), got %d", mr.SkippedCount)
 	}
 }
 

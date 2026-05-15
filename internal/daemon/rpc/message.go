@@ -229,6 +229,12 @@ type MarkReadRequest struct {
 type MarkReadResponse struct {
 	MarkedCount int                 `json:"marked_count"`
 	AlsoReadBy  map[string][]string `json:"also_read_by,omitempty"` // Key: message_id, Value: list of other agent_ids
+	// SkippedCount is the number of supplied IDs that existed in the
+	// daemon but were refused by the marked_before watermark (created_at
+	// > watermark). NOT counted: IDs that didn't exist (sql.ErrNoRows),
+	// IDs already read, or parse failures (conservative fall-through).
+	// Drives the CLI's "N new messages arrived" hint after read --all.
+	SkippedCount int `json:"skipped_count,omitempty"`
 }
 
 // ArchiveRequest represents the request for message.archive RPC.
@@ -1209,6 +1215,20 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	// apply so the count stays bounded to messages this agent could see —
 	// not every unread row in the daemon. Only meaningful when the
 	// for-agent filter is actually active; otherwise structurally zero.
+	//
+	// Asymmetry note (rc.9 dual-review finding, deferred to v0.10.4): the
+	// gate intentionally treats `for_agent` as the only filter we can
+	// "measure hiding by." A standalone `--mention` filter (no
+	// for_agent) does NOT surface a hidden count, even though mention
+	// filtering also hides messages. Rationale: the rc.9 primary path
+	// (`thrum inbox` and `read --all`) always operates with a for_agent
+	// filter, and exposing mention-only hidden counts would require
+	// distinguishing "messages this agent could see if not filtered by
+	// mention" vs "messages this agent could see if not filtered by
+	// for_agent" without conflating the two. Plumbing that distinction
+	// into the response (separate fields, or a per-filter breakdown) is
+	// the v0.10.4 expansion path. For rc.9 the silent-zero for
+	// mention-only callers is intentional.
 	hiddenByFilter := 0
 	if currentAgentID != "" && forAgentClause != "" {
 		hiddenQuery := "SELECT COUNT(*) FROM messages m" + joins + " WHERE 1=1"
@@ -2319,8 +2339,11 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 	// Prepare timestamp
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	// Track marked count, collaboration info, and affected threads
+	// Track marked count, collaboration info, and affected threads.
+	// skippedCount tracks supplied IDs that existed but were refused by
+	// the watermark; it drives the CLI's late-arrival warning.
 	markedCount := 0
+	skippedCount := 0
 	alsoReadBy := make(map[string][]string)
 	affectedThreads := make(map[string]bool)
 	var receiptEvents []types.MessageReceiptEvent
@@ -2373,6 +2396,10 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 		if watermarkValid {
 			if msgCreated, perr := time.Parse(time.RFC3339Nano, msgCreatedAt); perr == nil {
 				if msgCreated.After(watermark) {
+					// Track only watermark-skipped IDs (not parse
+					// failures, not non-existent IDs) so the CLI
+					// late-arrival warning is precise about the race.
+					skippedCount++
 					continue
 				}
 			}
@@ -2454,7 +2481,8 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 
 	// Build response
 	resp := &MarkReadResponse{
-		MarkedCount: markedCount,
+		MarkedCount:  markedCount,
+		SkippedCount: skippedCount,
 	}
 	if len(alsoReadBy) > 0 {
 		resp.AlsoReadBy = alsoReadBy

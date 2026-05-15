@@ -183,8 +183,9 @@ func FormatMessageDelete(resp *MessageDeleteResponse) string {
 
 // MarkReadResponse represents the response from message.markRead RPC.
 type MarkReadResponse struct {
-	MarkedCount int                 `json:"marked_count"`
-	AlsoReadBy  map[string][]string `json:"also_read_by,omitempty"`
+	MarkedCount  int                 `json:"marked_count"`
+	AlsoReadBy   map[string][]string `json:"also_read_by,omitempty"`
+	SkippedCount int                 `json:"skipped_count,omitempty"` // IDs refused by marked_before watermark; drives the read --all late-arrival warning
 }
 
 // MessageMarkRead marks messages as read. When markedBefore is non-empty,
