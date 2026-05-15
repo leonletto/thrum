@@ -61,10 +61,10 @@ var commandHints = map[string][]string{
 		"Tip: Filter by scope with '--scope type:value'",
 		"Tip: See only unread with '--unread' (does not mark as read)",
 		"Tip: Reply to a message with 'thrum reply msg_id \"text\"'",
-		"Tip: Use 'thrum message read --all' to mark all messages as read",
+		"Tip: Mark specific messages with 'thrum message read <msg_id>'; bulk-clear safely with 'thrum message read --all'",
 	},
 	"inbox.unread": {
-		"ACTION: After processing, mark these messages read so they don't keep reappearing:\n  thrum message read --all\n  (or: thrum message read <msg_id> [<msg_id>...] for specific messages)",
+		"ACTION: After processing, mark these messages read:\n  thrum message read <msg_id> [<msg_id>...]\n  (or: thrum message read --all to bulk-clear; safe — marks only messages already visible at the time you ran this listing)",
 	},
 	"agent.list": {
 		"Tip: See work contexts with 'thrum agent list --context'",
@@ -80,7 +80,7 @@ var commandHints = map[string][]string{
 		"Tip: See team activity with 'thrum agent list --context'",
 		"Tip: Check inbox with 'thrum inbox'",
 		"Tip: Use 'thrum inbox --unread' to peek without marking messages as read",
-		"Tip: Use 'thrum message read --all' to mark all messages as read",
+		"Tip: Mark specific messages with 'thrum message read <msg_id>'; bulk-clear safely with 'thrum message read --all'",
 	},
 	"quickstart": {
 		"Tip: Send your first message with 'thrum send \"hello team\"'",
@@ -91,7 +91,7 @@ var commandHints = map[string][]string{
 		"Tip: Dive deeper with 'thrum agent context @role' for specific agents",
 		"Tip: Check messages with 'thrum inbox'",
 		"Tip: Use 'thrum inbox --unread' to peek without marking messages as read",
-		"Tip: Use 'thrum message read --all' to mark all messages as read",
+		"Tip: Mark specific messages with 'thrum message read <msg_id>'; bulk-clear safely with 'thrum message read --all'",
 	},
 	"who-has": {
 		"Tip: See all agent contexts with 'thrum agent list --context'",

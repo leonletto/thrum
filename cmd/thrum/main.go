@@ -1226,8 +1226,10 @@ The daemon must be running and you must have an active session.`,
 				for i, m := range result.Messages {
 					ids[i] = m.MessageID
 				}
-				// Best-effort: don't fail the command if mark-read fails
-				_, _ = cli.MessageMarkRead(client, ids, agentID)
+				// Best-effort: don't fail the command if mark-read fails.
+				// IDs come from the listing we just rendered — closed set,
+				// no race surface; no watermark needed.
+				_, _ = cli.MessageMarkRead(client, ids, agentID, "")
 			}
 
 			return nil
@@ -3515,8 +3517,9 @@ Examples:
 				return err
 			}
 
-			// Auto mark-as-read: mark the replied-to message as read
-			_, _ = cli.MessageMarkRead(client, []string{opts.MessageID}, agentID)
+			// Auto mark-as-read: mark the replied-to message as read.
+			// Single explicit ID; no race surface; no watermark needed.
+			_, _ = cli.MessageMarkRead(client, []string{opts.MessageID}, agentID, "")
 
 			if flagJSON {
 				return cli.EmitJSON(result)
@@ -3562,7 +3565,8 @@ func messageCmd() *cobra.Command {
 					fmt.Fprintf(os.Stderr, "Warning: Could not mark as read (no identity): %v\n", err)
 				}
 			} else {
-				_, _ = cli.MessageMarkRead(client, []string{args[0]}, agentID)
+				// User named the exact ID; no race surface; no watermark.
+				_, _ = cli.MessageMarkRead(client, []string{args[0]}, agentID, "")
 			}
 
 			if flagJSON {
@@ -3687,6 +3691,15 @@ Examples:
 					return fmt.Errorf("failed to resolve agent role: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
 				}
 
+				// Capture watermark BEFORE listing. The daemon will skip any
+				// supplied IDs whose created_at exceeds this when we mark,
+				// so messages arriving during the list+mark gap stay unread
+				// and remain visible on the next inbox check. The listing
+				// itself intentionally does NOT receive the watermark — we
+				// want the user to see everything that's arrived up to query
+				// time; the watermark only guards what gets *marked*.
+				markedBefore := time.Now().UTC().Format(time.RFC3339Nano)
+
 				// Fetch all unread message IDs (capped at 100 per page)
 				inboxResult, err := cli.Inbox(client, cli.InboxOptions{
 					Unread:            true,
@@ -3708,7 +3721,7 @@ Examples:
 					messageIDs[i] = m.MessageID
 				}
 
-				result, err := cli.MessageMarkRead(client, messageIDs, agentID)
+				result, err := cli.MessageMarkRead(client, messageIDs, agentID, markedBefore)
 				if err != nil {
 					return err
 				}
@@ -3722,6 +3735,20 @@ Examples:
 					if remaining > 0 {
 						fmt.Printf("  %d unread messages remaining (run again to mark more)\n", remaining)
 					}
+					// Addendum A: late-arrival warning. SkippedCount counts
+					// IDs the daemon refused via the marked_before watermark
+					// — those are messages that arrived between when we
+					// captured the watermark and when the daemon evaluated
+					// the mark. They stay unread and the user should
+					// re-check the inbox.
+					if result.SkippedCount > 0 {
+						msgWord := "messages"
+						if result.SkippedCount == 1 {
+							msgWord = "message"
+						}
+						fmt.Printf("  %d new %s arrived since you started reading — run `thrum inbox --unread` to see them.\n",
+							result.SkippedCount, msgWord)
+					}
 				}
 				return nil
 			}
@@ -3730,7 +3757,8 @@ Examples:
 			if err != nil {
 				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
 			}
-			result, err := cli.MessageMarkRead(client, messageIDs, agentID)
+			// User provided the closed set of IDs; no race surface; no watermark.
+			result, err := cli.MessageMarkRead(client, messageIDs, agentID, "")
 			if err != nil {
 				return err
 			}
