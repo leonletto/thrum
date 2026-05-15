@@ -8,6 +8,31 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- **`/thrum:restart` skill rewritten with a v2 prose-continuation body.**
+  Replaces the JSON-snapshot Resume Plan template + `thrum tmux snapshot save` +
+  append flow with a direct-write of an in-context-composed prose continuation
+  to `.thrum/restart/<agent_id>.md`. Skill drops from 134 lines to ~95.
+  Continuation files are smaller and higher-signal than the prior structured
+  template + lossy tail capture combined — field-tested across 7 v0.11
+  substrate agent restart cycles on 2026-05-15; continuations averaged ~200
+  lines. Coordinator-notify and non-tmux operator fallback preserved verbatim.
+  Synced to opencode, codex, and cursor plugins via `scripts/sync-skills.sh`
+  (thrum-7b84.1).
+
+### Fixed
+
+- **Claude 2.1.141 `· Twisting…` spinner glyph now matched by
+  `claudeSpinnerRegex`.** The existing regex covered the `✻ <verb> for <N>s`
+  shape but missed the new `· <verb>…` variant introduced in Claude Code
+  2.1.141. The watchdog (`nudgeSilentPaneAfter`) and pane-state detection
+  (`paneAgentEngaged`) misclassified panes spinning with the dot-glyph as
+  silent, leading to occasional spurious nudges on actively-thinking agents.
+  Extended the regex with an alternation branch covering the dot-glyph form;
+  added `TestClaudeSpinnerRegex_DotGlyph` with 5 variant samples
+  (thrum-fyza).
+
 ### Added
 
 - **Codex plugin first-class support.** `codex-plugin/plugins/thrum/` ships
