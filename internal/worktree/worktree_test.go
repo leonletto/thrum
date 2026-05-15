@@ -99,10 +99,10 @@ func TestEnsureRedirects_CopiesHookScripts(t *testing.T) {
 	}
 	startupBody := []byte("#!/usr/bin/env bash\necho startup\n")
 	inboxBody := []byte("#!/usr/bin/env bash\necho inbox\n")
-	if err := os.WriteFile(filepath.Join(mainScriptsDir, "thrum-startup.sh"), startupBody, 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(mainScriptsDir, "thrum-startup.sh"), startupBody, 0o600); err != nil { //nolint:gosec // test fixture: copy verifies bytes only, not exec bit
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(mainScriptsDir, "thrum-check-inbox.sh"), inboxBody, 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(mainScriptsDir, "thrum-check-inbox.sh"), inboxBody, 0o600); err != nil { //nolint:gosec // test fixture: copy verifies bytes only, not exec bit
 		t.Fatal(err)
 	}
 

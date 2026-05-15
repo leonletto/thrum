@@ -5,7 +5,6 @@ description: ">"
 # generated-by: scripts/sync-skills.sh
 ---
 
-
 ## Configure Roles
 
 Generate role-based preamble templates customized to your project environment.

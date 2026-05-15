@@ -2,11 +2,13 @@ package rpc
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/state"
+	"github.com/leonletto/thrum/internal/identity"
 )
 
 // TestMessageSend_TouchesLastSeen covers thrum-7nuj: message.send from a
@@ -279,6 +281,224 @@ func TestSessionSetTask_TouchesLastSeen(t *testing.T) {
 	got := readLastSeen(t, st, senderID)
 	if got == stalePast {
 		t.Errorf("last_seen_at unchanged after session.setTask; want advanced from %q", stalePast)
+	}
+}
+
+// TestHandleMarkRead_MarkedBefore_FiltersNewMessages verifies that
+// marked_before excludes messages with created_at > marked_before from the
+// mark operation, even when their IDs are passed in the request. Anchors
+// the E2 race fix for `thrum message read --all`: an arrival landing
+// between the unread listing and the mark call must not be silently marked.
+func TestHandleMarkRead_MarkedBefore_FiltersNewMessages(t *testing.T) {
+	st, senderID, targetID, handler := setupTwoAgents(t, "sender", "target")
+	t.Cleanup(func() { _ = st.Close() })
+
+	// Send msg_old at t=0; capture watermark; send msg_new at t=1.
+	oldSendParams, _ := json.Marshal(SendRequest{
+		Content:       "old",
+		To:            "@" + targetID,
+		CallerAgentID: senderID,
+	})
+	oldResp, err := handler.HandleSend(context.Background(), oldSendParams)
+	if err != nil {
+		t.Fatalf("HandleSend(old): %v", err)
+	}
+	oldMsgID := oldResp.(*SendResponse).MessageID
+
+	watermark := time.Now().UTC().Format(time.RFC3339Nano)
+	time.Sleep(10 * time.Millisecond) // gap large enough to be reliable under CI load
+
+	newSendParams, _ := json.Marshal(SendRequest{
+		Content:       "new",
+		To:            "@" + targetID,
+		CallerAgentID: senderID,
+	})
+	newResp, err := handler.HandleSend(context.Background(), newSendParams)
+	if err != nil {
+		t.Fatalf("HandleSend(new): %v", err)
+	}
+	newMsgID := newResp.(*SendResponse).MessageID
+
+	// Mark both with marked_before = watermark. Only msg_old should be marked.
+	markParams, _ := json.Marshal(MarkReadRequest{
+		MessageIDs:    []string{oldMsgID, newMsgID},
+		MarkedBefore:  watermark,
+		CallerAgentID: targetID,
+	})
+	markResp, err := handler.HandleMarkRead(context.Background(), markParams)
+	if err != nil {
+		t.Fatalf("HandleMarkRead: %v", err)
+	}
+	mr := markResp.(*MarkReadResponse)
+	if mr.MarkedCount != 1 {
+		t.Fatalf("expected marked_count=1, got %d", mr.MarkedCount)
+	}
+	// Addendum A: late-arrival warning surface. SkippedCount must reflect
+	// the count of supplied IDs the daemon refused to mark due to the
+	// watermark — the CLI uses this to print the "N new messages
+	// arrived" hint.
+	if mr.SkippedCount != 1 {
+		t.Fatalf("expected skipped_count=1 (msg_new is post-watermark), got %d", mr.SkippedCount)
+	}
+
+	// Verify durable state: old has read_at; new does not.
+	for _, tc := range []struct {
+		id       string
+		wantRead bool
+	}{
+		{oldMsgID, true},
+		{newMsgID, false},
+	} {
+		var readAt sql.NullString
+		if err := st.RawDB().QueryRow(
+			`SELECT read_at FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ?`,
+			tc.id, targetID).Scan(&readAt); err != nil {
+			t.Fatalf("query read_at for %s: %v", tc.id, err)
+		}
+		if tc.wantRead && !readAt.Valid {
+			t.Fatalf("expected %s to have read_at, got NULL", tc.id)
+		}
+		if !tc.wantRead && readAt.Valid {
+			t.Fatalf("expected %s to have NULL read_at, got %s", tc.id, readAt.String)
+		}
+	}
+}
+
+// TestHandleMarkRead_CrossAgentRace_NewMessageStaysUnread exercises the
+// actual rc.9 motivation. Two distinct external senders deliver to the
+// same target; the watermark is captured between them. When the target
+// runs `read --all` semantics (mark both supplied IDs with the captured
+// watermark), only the pre-watermark message must be marked. The post-
+// watermark arrival stays unread and remains visible on the next inbox
+// check.
+func TestHandleMarkRead_CrossAgentRace_NewMessageStaysUnread(t *testing.T) {
+	st, senderID, targetID, handler := setupTwoAgents(t, "bob", "alice")
+	t.Cleanup(func() { _ = st.Close() })
+
+	// Register a second, distinct sender ("carol") inline so the post-
+	// watermark arrival is genuinely cross-agent — the bug we're closing
+	// involves arrivals from a different agent landing during the read
+	// --all round-trip.
+	repoID := "r_TEST12345678" // matches setupTwoAgents
+	carolID := identity.GenerateAgentID(repoID, "carol", "test-module", "")
+	agentHandler := NewAgentHandler(st)
+	sessionHandler := NewSessionHandler(st)
+	carolRegParams, _ := json.Marshal(RegisterRequest{Role: "carol", Module: "test-module"})
+	if _, err := agentHandler.HandleRegister(context.Background(), carolRegParams); err != nil {
+		t.Fatalf("register carol: %v", err)
+	}
+	carolSessionParams, _ := json.Marshal(SessionStartRequest{AgentID: carolID})
+	if _, err := sessionHandler.HandleStart(context.Background(), carolSessionParams); err != nil {
+		t.Fatalf("start carol session: %v", err)
+	}
+
+	// msg_a: from bob → alice at t=0
+	aParams, _ := json.Marshal(SendRequest{
+		Content:       "from bob",
+		To:            "@" + targetID,
+		CallerAgentID: senderID,
+	})
+	aResp, err := handler.HandleSend(context.Background(), aParams)
+	if err != nil {
+		t.Fatalf("HandleSend(a): %v", err)
+	}
+	aMsgID := aResp.(*SendResponse).MessageID
+
+	// Capture watermark
+	watermark := time.Now().UTC().Format(time.RFC3339Nano)
+	time.Sleep(10 * time.Millisecond)
+
+	// msg_b: from carol → alice (the racing arrival)
+	bParams, _ := json.Marshal(SendRequest{
+		Content:       "from carol",
+		To:            "@" + targetID,
+		CallerAgentID: carolID,
+	})
+	bResp, err := handler.HandleSend(context.Background(), bParams)
+	if err != nil {
+		t.Fatalf("HandleSend(b): %v", err)
+	}
+	bMsgID := bResp.(*SendResponse).MessageID
+
+	// Mark both IDs with the pre-list watermark — alice's read --all flow.
+	markParams, _ := json.Marshal(MarkReadRequest{
+		MessageIDs:    []string{aMsgID, bMsgID},
+		MarkedBefore:  watermark,
+		CallerAgentID: targetID,
+	})
+	markResp, err := handler.HandleMarkRead(context.Background(), markParams)
+	if err != nil {
+		t.Fatalf("HandleMarkRead: %v", err)
+	}
+	mr := markResp.(*MarkReadResponse)
+	if mr.MarkedCount != 1 {
+		t.Fatalf("expected marked_count=1 (only msg_a, pre-watermark), got %d", mr.MarkedCount)
+	}
+	// Addendum A: the watermark-skipped count drives the CLI's
+	// late-arrival warning. Cross-agent late arrival must be counted.
+	if mr.SkippedCount != 1 {
+		t.Fatalf("expected skipped_count=1 (msg_b is post-watermark, cross-agent), got %d", mr.SkippedCount)
+	}
+
+	// Verify state directly: msg_a has read_at; msg_b does not.
+	for _, tc := range []struct {
+		id       string
+		wantRead bool
+		label    string
+	}{
+		{aMsgID, true, "from bob (pre-watermark)"},
+		{bMsgID, false, "from carol (post-watermark)"},
+	} {
+		var readAt sql.NullString
+		if err := st.RawDB().QueryRow(
+			`SELECT read_at FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ?`,
+			tc.id, targetID).Scan(&readAt); err != nil {
+			t.Fatalf("query %s (%s): %v", tc.id, tc.label, err)
+		}
+		if tc.wantRead && !readAt.Valid {
+			t.Fatalf("%s: expected read_at, got NULL", tc.label)
+		}
+		if !tc.wantRead && readAt.Valid {
+			t.Fatalf("%s: expected NULL read_at, got %s", tc.label, readAt.String)
+		}
+	}
+}
+
+// TestHandleMarkRead_NoMarkedBefore_BackwardCompat verifies that omitting
+// marked_before preserves current behavior (mark all supplied IDs).
+func TestHandleMarkRead_NoMarkedBefore_BackwardCompat(t *testing.T) {
+	st, senderID, targetID, handler := setupTwoAgents(t, "sender", "target")
+	t.Cleanup(func() { _ = st.Close() })
+
+	sendParams, _ := json.Marshal(SendRequest{
+		Content:       "x",
+		To:            "@" + targetID,
+		CallerAgentID: senderID,
+	})
+	sendResp, err := handler.HandleSend(context.Background(), sendParams)
+	if err != nil {
+		t.Fatalf("HandleSend: %v", err)
+	}
+	msgID := sendResp.(*SendResponse).MessageID
+
+	markParams, _ := json.Marshal(MarkReadRequest{
+		MessageIDs:    []string{msgID},
+		CallerAgentID: targetID,
+		// MarkedBefore intentionally unset.
+	})
+	markResp, err := handler.HandleMarkRead(context.Background(), markParams)
+	if err != nil {
+		t.Fatalf("HandleMarkRead: %v", err)
+	}
+	mr := markResp.(*MarkReadResponse)
+	if mr.MarkedCount != 1 {
+		t.Fatalf("expected marked_count=1, got %d", mr.MarkedCount)
+	}
+	// Addendum A: without a watermark, no message should be reported as
+	// watermark-skipped — the CLI must NOT print a late-arrival warning
+	// for legacy non-watermark callers.
+	if mr.SkippedCount != 0 {
+		t.Fatalf("expected skipped_count=0 (no watermark), got %d", mr.SkippedCount)
 	}
 }
 

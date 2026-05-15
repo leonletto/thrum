@@ -19,7 +19,8 @@ and the code does another, the docs are wrong — update them.
 
 **Your startup behavior:**
 
-1. Spawn message listener (background, only if outside tmux — see Message Listener section)
+1. Spawn message listener (background, only if outside tmux — see Message
+   Listener section)
 2. Check inbox — if a documentation request is waiting, START IMMEDIATELY
 3. If no request, stand by
 
@@ -168,9 +169,14 @@ thrum sent --unread
 
 ## Message Listener
 
-**If your session is running inside a thrum-managed tmux pane (typical for agents launched via `thrum tmux start` / `thrum tmux launch`), SKIP the listener.** The daemon nudges your pane directly on every message — a background listener is redundant and burns context. The `thrum-check-inbox.sh` hook surfaces unread messages on every PostToolUse/Stop.
+**If your session is running inside a thrum-managed tmux pane (typical for
+agents launched via `thrum tmux start` / `thrum tmux launch`), SKIP the
+listener.** The daemon nudges your pane directly on every message — a background
+listener is redundant and burns context. The `thrum-check-inbox.sh` hook
+surfaces unread messages on every PostToolUse/Stop.
 
-**Otherwise (running outside tmux, rare): spawn a background message listener IMMEDIATELY on session start.**
+**Otherwise (running outside tmux, rare): spawn a background message listener
+IMMEDIATELY on session start.**
 
 Re-arm it every time it returns — both when messages arrive AND on timeout.
 Without the listener, you miss documentation requests.

@@ -183,15 +183,21 @@ func FormatMessageDelete(resp *MessageDeleteResponse) string {
 
 // MarkReadResponse represents the response from message.markRead RPC.
 type MarkReadResponse struct {
-	MarkedCount int                 `json:"marked_count"`
-	AlsoReadBy  map[string][]string `json:"also_read_by,omitempty"`
+	MarkedCount  int                 `json:"marked_count"`
+	AlsoReadBy   map[string][]string `json:"also_read_by,omitempty"`
+	SkippedCount int                 `json:"skipped_count,omitempty"` // IDs refused by marked_before watermark; drives the read --all late-arrival warning
 }
 
-// MessageMarkRead marks messages as read.
-func MessageMarkRead(client *Client, messageIDs []string, callerAgentID string) (*MarkReadResponse, error) {
+// MessageMarkRead marks messages as read. When markedBefore is non-empty,
+// the daemon skips any supplied IDs whose created_at exceeds that
+// RFC3339Nano timestamp (the `read --all` race fix).
+func MessageMarkRead(client *Client, messageIDs []string, callerAgentID, markedBefore string) (*MarkReadResponse, error) {
 	req := map[string]any{"message_ids": messageIDs}
 	if callerAgentID != "" {
 		req["caller_agent_id"] = callerAgentID
+	}
+	if markedBefore != "" {
+		req["marked_before"] = markedBefore
 	}
 	var resp MarkReadResponse
 	if err := client.Call("message.markRead", req, &resp); err != nil {
