@@ -129,12 +129,13 @@ type ListMessagesRequest struct {
 
 // ListMessagesResponse represents the response from message.list RPC.
 type ListMessagesResponse struct {
-	Messages   []MessageSummary `json:"messages"`
-	Total      int              `json:"total"`
-	Unread     int              `json:"unread"`
-	Page       int              `json:"page"`
-	PageSize   int              `json:"page_size"`
-	TotalPages int              `json:"total_pages"`
+	Messages       []MessageSummary `json:"messages"`
+	Total          int              `json:"total"`
+	Unread         int              `json:"unread"`
+	HiddenByFilter int              `json:"hidden_by_filter,omitempty"` // unread count that would be visible without the for-agent filter
+	Page           int              `json:"page"`
+	PageSize       int              `json:"page_size"`
+	TotalPages     int              `json:"total_pages"`
 }
 
 // MessageSummary represents a summary of a message for listing.
@@ -1201,13 +1202,64 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		_ = h.state.DB().QueryRowContext(ctx, unreadQuery, unreadArgs...).Scan(&unread)
 	}
 
+	// Calculate hidden_by_filter: unread messages this agent could see if
+	// the for-agent filter weren't applied. Same WHERE assembly as the
+	// unread query above, except we omit the for-agent clause.
+	// Identity-relevant filters (mentions, scope, ref, thread, etc.) still
+	// apply so the count stays bounded to messages this agent could see —
+	// not every unread row in the daemon. Only meaningful when the
+	// for-agent filter is actually active; otherwise structurally zero.
+	hiddenByFilter := 0
+	if currentAgentID != "" && forAgentClause != "" {
+		hiddenQuery := "SELECT COUNT(*) FROM messages m" + joins + " WHERE 1=1"
+		hiddenArgs := []any{}
+		if req.ThreadID != "" {
+			hiddenQuery += " AND m.thread_id = ?"
+			hiddenArgs = append(hiddenArgs, req.ThreadID)
+		}
+		if excludeAgentID != "" {
+			hiddenQuery += " AND m.agent_id != ?"
+			hiddenArgs = append(hiddenArgs, excludeAgentID)
+		}
+		if req.Scope != nil {
+			hiddenQuery += " AND ms.scope_type = ? AND ms.scope_value = ?"
+			hiddenArgs = append(hiddenArgs, req.Scope.Type, req.Scope.Value)
+		}
+		if req.Ref != nil {
+			hiddenQuery += " AND mr.ref_type = ? AND mr.ref_value = ?"
+			hiddenArgs = append(hiddenArgs, req.Ref.Type, req.Ref.Value)
+		}
+		// Intentionally omits forAgentClause — that's the filter we're
+		// measuring "hidden by." mentionClause stays because it's an
+		// identity-relevant filter (mentions of THIS agent's role).
+		if mentionClause != "" {
+			hiddenQuery += mentionClause
+			hiddenArgs = append(hiddenArgs, mentionArgs...)
+		}
+		hiddenQuery += createdAfterClause
+		hiddenArgs = append(hiddenArgs, createdAfterArgs...)
+		hiddenQuery += " AND m.message_id NOT IN (SELECT md3.message_id FROM message_deliveries md3 WHERE md3.recipient_agent_id = ? AND md3.read_at IS NOT NULL)"
+		hiddenArgs = append(hiddenArgs, currentAgentID)
+
+		var totalUnreadWithoutForAgent int
+		_ = h.state.DB().QueryRowContext(ctx, hiddenQuery, hiddenArgs...).Scan(&totalUnreadWithoutForAgent)
+		// Subtraction guard: under SQLite's snapshot semantics within a
+		// single RLock the superset should never report fewer rows than
+		// the subset, but an explicit guard prevents a negative count
+		// ever appearing in JSON.
+		if totalUnreadWithoutForAgent > unread {
+			hiddenByFilter = totalUnreadWithoutForAgent - unread
+		}
+	}
+
 	return &ListMessagesResponse{
-		Messages:   messages,
-		Total:      total,
-		Unread:     unread,
-		Page:       page,
-		PageSize:   pageSize,
-		TotalPages: totalPages,
+		Messages:       messages,
+		Total:          total,
+		Unread:         unread,
+		HiddenByFilter: hiddenByFilter,
+		Page:           page,
+		PageSize:       pageSize,
+		TotalPages:     totalPages,
 	}, nil
 }
 
