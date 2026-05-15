@@ -6,7 +6,7 @@ description:
 category: "overview"
 order: 2
 tags: ["release-notes", "changelog", "migration", "version"]
-last_updated: "2026-05-14"
+last_updated: "2026-05-15"
 ---
 
 ## What's New
@@ -18,7 +18,9 @@ machine-readable history lives in
 
 ## v0.10.3 — In Soak (RC)
 
-v0.10.3 is currently a release candidate. The tag is `v0.10.3-rc.7`; see the
+v0.10.3 is currently a release candidate. The latest tag is `v0.10.3-rc.9`,
+which closes the cross-agent inbox read-race silent-loss class (watermark-gated
+`markRead` plus an honest "hidden by filter" count on inbox listings). See the
 [Beta Channel](beta-channel.md) guide for how to opt in. Stable promotion
 follows the standard 48-hour soak window once no P0/P1 bugs are open against the
 RC.

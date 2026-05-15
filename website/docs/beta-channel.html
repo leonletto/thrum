@@ -51,24 +51,24 @@ before being promoted to stable. Beta users help catch regressions before they
 hit <code>releases/latest</code>. This guide covers how to opt in, what to expect, and how
 to report what you find.</p>
 <blockquote>
-<p><strong>Current pre-release: <code>v0.10.3-rc.8</code></strong> (tagged 2026-05-14, in soak).
-Highlights: codex plugin first-class, post-launch tmux silence watchdog,
-first-launch trust-gate detection, self-echo nudge fix, cwd-anchored identity
-precedence. rc.8 fixes the restart watchdog for Claude Code 2.1.141.
-<code>thrum tmux restart</code> against a claude pane was leaving the agent stuck at
-the welcome screen — the &quot;Read the prime output&quot; nudge never fired because
-Claude 2.1.141 changed the spinner glyph format and the daemon&#39;s
-restore-bindings had a tmux target-normalization gap that masked the lookup
-after a daemon restart. Restarts now probe shell readiness, launch claude,
-then emit the identity banner as a user turn so it lands in claude&#39;s input
-prompt (matching the path <code>thrum tmux start</code> already uses). Full notes:
+<p><strong>Current pre-release:
+<a href="https://github.com/leonletto/thrum/releases/tag/v0.10.3-rc.9"><code>v0.10.3-rc.9</code></a></strong>
+(tagged 2026-05-15, in soak). Highlights: codex plugin first-class,
+post-launch tmux silence watchdog, first-launch trust-gate detection,
+self-echo nudge fix, cwd-anchored identity precedence. rc.9 closes the inbox
+read-race silent-loss class: <code>message.markRead</code> now accepts an optional
+<code>marked_before</code> RFC3339Nano watermark, and the CLI captures the listing
+timestamp before display so messages arriving in the listing→mark gap don&#39;t
+get silently marked read. Inbox listings also carry a <code>HiddenByFilter</code> count,
+so the unread footer is honest when a for-agent filter is hiding more. All
+wire-additive — pre-rc.9 clients see byte-identical RPC behavior. Full notes:
 <a href="whats-new.html">What&#39;s New</a> and the
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG <code>[Unreleased]</code> section</a>.</p>
 </blockquote>
-<h3>Quick install for <code>v0.10.3-rc.8</code></h3>
+<h3>Quick install for <code>v0.10.3-rc.9</code></h3>
 <p>Binary and Codex plugin (run in your shell):</p>
 <pre><code># Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.8 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.9 sh
 
 # Codex plugin (matches release/v0.10.3)
 THRUM_INSTALL_REF=release/v0.10.3 bash &lt;(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.3/codex-plugin/plugins/thrum/scripts/install-plugin.sh)</code></pre>

@@ -51,10 +51,12 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG.md</a>.</p>
 <h2>v0.10.3 — In Soak (RC)</h2>
-<p>v0.10.3 is currently a release candidate. The tag is <code>v0.10.3-rc.7</code>; see the
+<p>v0.10.3 is currently a release candidate. The latest tag is <code>v0.10.3-rc.9</code>,
+which closes the cross-agent inbox read-race silent-loss class (watermark-gated
+<code>markRead</code> plus an honest &quot;hidden by filter&quot; count on inbox listings). See the
 <a href="beta-channel.html">Beta Channel</a> guide for how to opt in. Stable promotion
-follows the standard 48-hour soak window once no P0/P1 bugs are open against the
-RC.</p>
+follows the standard 48-hour soak window once no P0/P1 bugs are open against
+the RC.</p>
 <p>This release is largely about the runtime experience: codex gains the same
 first-class plugin treatment claude has had, fresh and restarted tmux panes no
 longer sit idle when an agent misses its prime banner, and the first-launch

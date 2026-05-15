@@ -6,7 +6,7 @@ description:
 category: "guides"
 order: 50
 tags: ["beta", "pre-release", "rc", "install", "rollback", "soak", "plugin"]
-last_updated: "2026-05-14"
+last_updated: "2026-05-15"
 ---
 
 ## Thrum Beta Channel
@@ -16,27 +16,27 @@ before being promoted to stable. Beta users help catch regressions before they
 hit `releases/latest`. This guide covers how to opt in, what to expect, and how
 to report what you find.
 
-> **Current pre-release: `v0.10.3-rc.8`** (tagged 2026-05-14, in soak).
-> Highlights: codex plugin first-class, post-launch tmux silence watchdog,
-> first-launch trust-gate detection, self-echo nudge fix, cwd-anchored identity
-> precedence. rc.8 fixes the restart watchdog for Claude Code 2.1.141.
-> `thrum tmux restart` against a claude pane was leaving the agent stuck at the
-> welcome screen — the "Read the prime output" nudge never fired because Claude
-> 2.1.141 changed the spinner glyph format and the daemon's restore-bindings had
-> a tmux target-normalization gap that masked the lookup after a daemon restart.
-> Restarts now probe shell readiness, launch claude, then emit the identity
-> banner as a user turn so it lands in claude's input prompt (matching the path
-> `thrum tmux start` already uses). Full notes: [What's New](whats-new.md) and
-> the
+> **Current pre-release:
+> [`v0.10.3-rc.9`](https://github.com/leonletto/thrum/releases/tag/v0.10.3-rc.9)**
+> (tagged 2026-05-15, in soak). Highlights: codex plugin first-class,
+> post-launch tmux silence watchdog, first-launch trust-gate detection,
+> self-echo nudge fix, cwd-anchored identity precedence. rc.9 closes the inbox
+> read-race silent-loss class: `message.markRead` now accepts an optional
+> `marked_before` RFC3339Nano watermark, and the CLI captures the listing
+> timestamp before display so messages arriving in the listing→mark gap don't
+> get silently marked read. Inbox listings also carry a `HiddenByFilter` count,
+> so the unread footer is honest when a for-agent filter is hiding more. All
+> wire-additive — pre-rc.9 clients see byte-identical RPC behavior. Full notes:
+> [What's New](whats-new.md) and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-### Quick install for `v0.10.3-rc.8`
+### Quick install for `v0.10.3-rc.9`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.8 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.9 sh
 
 # Codex plugin (matches release/v0.10.3)
 THRUM_INSTALL_REF=release/v0.10.3 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.3/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
