@@ -17,26 +17,25 @@ hit `releases/latest`. This guide covers how to opt in, what to expect, and how
 to report what you find.
 
 > **Current pre-release:
-> [`v0.10.3-rc.9`](https://github.com/leonletto/thrum/releases/tag/v0.10.3-rc.9)**
-> (tagged 2026-05-15, in soak). Highlights: codex plugin first-class,
-> post-launch tmux silence watchdog, first-launch trust-gate detection,
-> self-echo nudge fix, cwd-anchored identity precedence. rc.9 closes the inbox
-> read-race silent-loss class: `message.markRead` now accepts an optional
-> `marked_before` RFC3339Nano watermark, and the CLI captures the listing
-> timestamp before display so messages arriving in the listing→mark gap don't
-> get silently marked read. Inbox listings also carry a `HiddenByFilter` count,
-> so the unread footer is honest when a for-agent filter is hiding more. All
-> wire-additive — pre-rc.9 clients see byte-identical RPC behavior. Full notes:
+> [`v0.10.3-rc.10`](https://github.com/leonletto/thrum/releases/tag/v0.10.3-rc.10)**
+> (tagged 2026-05-15, in soak). rc.10 ships two small fixes from rc.9 soak: the
+> `/thrum:restart` skill is rewritten around prose continuations (drops from
+> ~134 lines to ~50 — faster restart, higher-signal context), and the silence
+> watchdog now recognizes Claude Code 2.1.141's new `·` thinking spinner so
+> spinning panes aren't misclassified as silent. Rolls up the rc.1–rc.9
+> highlights: codex plugin first-class, post-launch tmux silence watchdog,
+> first-launch trust-gate detection, self-echo nudge fix, cwd-anchored identity
+> precedence, inbox read-race silent-loss class closed. Full notes:
 > [What's New](whats-new.md) and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-### Quick install for `v0.10.3-rc.9`
+### Quick install for `v0.10.3-rc.10`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.9 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.10 sh
 
 # Codex plugin (matches release/v0.10.3)
 THRUM_INSTALL_REF=release/v0.10.3 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.3/codex-plugin/plugins/thrum/scripts/install-plugin.sh)

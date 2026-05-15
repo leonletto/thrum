@@ -7,12 +7,12 @@ machine-readable history lives in
 
 ## v0.10.3 — In Soak (RC)
 
-v0.10.3 is currently a release candidate. The latest tag is `v0.10.3-rc.9`,
-which closes the cross-agent inbox read-race silent-loss class (watermark-gated
-`markRead` plus an honest "hidden by filter" count on inbox listings). See the
-[Beta Channel](beta-channel.md) guide for how to opt in. Stable promotion
-follows the standard 48-hour soak window once no P0/P1 bugs are open against the
-RC.
+v0.10.3 is currently a release candidate. The latest tag is `v0.10.3-rc.10`,
+which rewrites the `/thrum:restart` skill around prose continuations and extends
+the silence watchdog to recognize Claude Code 2.1.141's new `·` thinking-spinner
+glyph. See the [Beta Channel](beta-channel.md) guide for how to opt in. Stable
+promotion follows the standard 48-hour soak window once no P0/P1 bugs are open
+against the RC.
 
 This release is largely about the runtime experience: codex gains the same
 first-class plugin treatment claude has had, fresh and restarted tmux panes no
@@ -107,6 +107,15 @@ quieter fixes around env scoping, self-echo, and preamble framing rounds it out.
   through the non-hook branch (typing `/thrum:prime` into the TUI) instead of
   emitting the identity banner once the runtime rendered.
 
+- **`/thrum:restart` skill rewritten around prose continuations.** The skill
+  dropped from ~134 lines to ~50 by replacing the JSON-snapshot Resume Plan
+  template + `thrum tmux snapshot save` + append flow with a direct write of an
+  in-context-composed prose continuation to `.thrum/restart/<agent_id>.md`.
+  Auto-prime pickup is unchanged; coordinator-notify and the non-tmux operator
+  fallback are preserved. Field-tested across 7 v0.11 substrate agent restart
+  cycles — continuations averaged ~200 lines with high signal density. Synced
+  across the codex, opencode, cursor, and claude runtime plugins.
+
 ### Fixed
 
 - **Self-echo phantom nudge.** Outbound `thrum send` from agent A to agent B was
@@ -139,6 +148,14 @@ quieter fixes around env scoping, self-echo, and preamble framing rounds it out.
   `thrum init --force` refresh path; fresh installs were unaffected. If you hit
   this on an earlier release, open the project's `.thrum/config.json` and flip
   `single_agent_mode` back to `false`.
+
+- **Watchdog now recognizes Claude Code 2.1.141's `·` thinking-spinner glyph.**
+  Claude 2.1.141 introduced a `·` prefix on some thinking-spinner states
+  alongside the existing `✻` glyph. The watchdog's `claudeSpinnerRegex` only
+  matched `✻`, so panes showing the new spinner were classified as silent —
+  over-triggering nudges into still-thinking agents. The regex now covers both
+  glyph forms; a regression test pins five observed `· <verb>…` variants against
+  the live Claude TUI.
 
 ### Upgrade Notes
 

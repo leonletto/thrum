@@ -51,12 +51,12 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG.md</a>.</p>
 <h2>v0.10.3 — In Soak (RC)</h2>
-<p>v0.10.3 is currently a release candidate. The latest tag is <code>v0.10.3-rc.9</code>,
-which closes the cross-agent inbox read-race silent-loss class (watermark-gated
-<code>markRead</code> plus an honest &quot;hidden by filter&quot; count on inbox listings). See the
-<a href="beta-channel.html">Beta Channel</a> guide for how to opt in. Stable promotion
-follows the standard 48-hour soak window once no P0/P1 bugs are open against
-the RC.</p>
+<p>v0.10.3 is currently a release candidate. The latest tag is <code>v0.10.3-rc.10</code>,
+which rewrites the <code>/thrum:restart</code> skill around prose continuations and
+extends the silence watchdog to recognize Claude Code 2.1.141&#39;s new <code>·</code>
+thinking-spinner glyph. See the <a href="beta-channel.html">Beta Channel</a> guide for how
+to opt in. Stable promotion follows the standard 48-hour soak window once no
+P0/P1 bugs are open against the RC.</p>
 <p>This release is largely about the runtime experience: codex gains the same
 first-class plugin treatment claude has had, fresh and restarted tmux panes no
 longer sit idle when an agent misses its prime banner, and the first-launch
@@ -147,6 +147,15 @@ preset wasn&#39;t updated, so <code>HandleLaunch</code> / <code>HandleRestart</c
 through the non-hook branch (typing <code>/thrum:prime</code> into the TUI) instead of
 emitting the identity banner once the runtime rendered.</p>
 </li>
+<li><p><strong><code>/thrum:restart</code> skill rewritten around prose continuations.</strong> The skill
+dropped from ~134 lines to ~50 by replacing the JSON-snapshot Resume Plan
+template + <code>thrum tmux snapshot save</code> + append flow with a direct write of
+an in-context-composed prose continuation to <code>.thrum/restart/&lt;agent_id&gt;.md</code>.
+Auto-prime pickup is unchanged; coordinator-notify and the non-tmux operator
+fallback are preserved. Field-tested across 7 v0.11 substrate agent restart
+cycles — continuations averaged ~200 lines with high signal density. Synced
+across the codex, opencode, cursor, and claude runtime plugins.</p>
+</li>
 </ul>
 <h3>Fixed</h3>
 <ul>
@@ -180,6 +189,14 @@ arrived and replies silently dropped. Affected users upgrading via the common
 <code>thrum init --force</code> refresh path; fresh installs were unaffected. If you hit
 this on an earlier release, open the project&#39;s <code>.thrum/config.json</code> and flip
 <code>single_agent_mode</code> back to <code>false</code>.</p>
+</li>
+<li><p><strong>Watchdog now recognizes Claude Code 2.1.141&#39;s <code>·</code> thinking-spinner glyph.</strong>
+Claude 2.1.141 introduced a <code>·</code> prefix on some thinking-spinner states
+alongside the existing <code>✻</code> glyph. The watchdog&#39;s <code>claudeSpinnerRegex</code> only
+matched <code>✻</code>, so panes showing the new spinner were classified as silent —
+over-triggering nudges into still-thinking agents. The regex now covers both
+glyph forms; a regression test pins five observed <code>· &lt;verb&gt;…</code> variants
+against the live Claude TUI.</p>
 </li>
 </ul>
 <h3>Upgrade Notes</h3>
