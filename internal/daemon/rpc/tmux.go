@@ -2111,12 +2111,19 @@ func runtimeHasSessionStartHook(runtime string) bool {
 // (sendKeysFn / sendSpecialKeyFn) so unit tests can assert call order.
 // Banner emission via emitIdentityBanner is best-effort by design —
 // missing identity files don't block the launch.
+//
+// The empty-launchCmd short-circuit runs BEFORE banner emission so the
+// helper never emits a banner into a pane where no runtime will follow.
+// Production callers already gate `if launchCmd != ""` before calling, but
+// the in-helper guard tightens the contract: a future preset with
+// HasSessionStartHook=true and Command="" can't leak a banner into a bare
+// shell.
 func (h *TmuxHandler) launchRuntimeWithBanner(session, target, runtime, launchCmd string) error {
-	if runtimeHasSessionStartHook(runtime) {
-		h.emitIdentityBanner(session, target)
-	}
 	if launchCmd == "" {
 		return nil
+	}
+	if runtimeHasSessionStartHook(runtime) {
+		h.emitIdentityBanner(session, target)
 	}
 	if err := sendKeysFn(target, launchCmd); err != nil {
 		return err

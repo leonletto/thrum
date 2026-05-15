@@ -234,6 +234,32 @@ func TestPaneAgentEngaged_Claude2_1_141_RespondedPane_Engaged(t *testing.T) {
 	}
 }
 
+// TestPaneAgentEngaged_Claude2_1_141_LongFormSpinner_NotEngaged is the
+// integration counterpart to TestClaudeSpinnerRegex_MatchesAllObservedFormats:
+// the regex itself accepts the multi-minute form, but if a future refactor
+// negates spinner detection inside paneAgentEngaged the isolated regex test
+// would still pass while the watchdog regresses silently — the exact shape
+// of the original thrum-8dl3 bug. This test wires the full path: feed a
+// synthetic 2.1.141 pane whose only "agent output" candidate is a long-form
+// spinner (`✻ Baked for 1m 45s`) and assert paneAgentEngaged returns false
+// (not engaged → watchdog should nudge).
+func TestPaneAgentEngaged_Claude2_1_141_LongFormSpinner_NotEngaged(t *testing.T) {
+	pane := identitybanner.PrimeTruncationSentinel + "\n" +
+		"\n" +
+		"\n" +
+		"✻ Baked for 1m 45s\n" + // long-form duration past 60s
+		"\n" +
+		"\n" +
+		"────────────────────────────────────────\n" +
+		"❯                                       \n" +
+		"────────────────────────────────────────\n" +
+		"  Model: Opus 4.7 | Ctx: 0 | ~/dev\n"
+	got := paneAgentEngaged(pane, testBottomAnchorRe, testSpinnerRe)
+	if got {
+		t.Error("expected false (not engaged) when only a long-form spinner (`✻ Baked for 1m 45s`) sits between sentinel and divider — Fix #2's regex extension must propagate to the watchdog's engagement check")
+	}
+}
+
 // TestPaneAgentEngaged_Claude2_1_141_NoSpinnerYet_NotEngaged covers the
 // brief window after pre-launch banner injection where the runtime has
 // rendered the welcome chrome (two horizontal rules) but hasn't started a

@@ -75,13 +75,94 @@ func installSafePaneCapture(t *testing.T) func() {
 }
 
 // TestLaunchRuntimeWithBanner_HookRuntime_BannerBeforeLaunch pins thrum-8dl3
-// Fix #1: for hook runtimes (claude / codex / cursor) the pane-side identity
-// banner MUST land at the shell prompt BEFORE the runtime launch keystrokes
-// so the PrimeTruncationSentinel ends up in scrollback rather than inside
-// the runtime's `❯` input box. Pre-fix the banner emitted post-launch from
+// Fix #1: for ALL hook runtimes (claude / codex / cursor — those whose
+// preset has HasSessionStartHook=true) the pane-side identity banner MUST
+// land at the shell prompt BEFORE the runtime launch keystrokes so the
+// PrimeTruncationSentinel ends up in scrollback rather than inside the
+// runtime's `❯` input box. Pre-fix the banner emitted post-launch from
 // the watchdog goroutine, which silently corrupted the banner and stripped
 // the watchdog's top anchor → false-engaged → no nudge → idle agent.
+//
+// Parametrized across every built-in hook runtime so a preset
+// misconfiguration that flips HasSessionStartHook on one of them is caught
+// here instead of in production.
 func TestLaunchRuntimeWithBanner_HookRuntime_BannerBeforeLaunch(t *testing.T) {
+	for _, runtime := range []string{"claude", "codex", "cursor"} {
+		t.Run(runtime, func(t *testing.T) {
+			cwd := t.TempDir()
+			writeTestIdentityFile(t, cwd, "impl_test", 0, "")
+
+			restoreSend, calls := recordSendKeys(t)
+			t.Cleanup(restoreSend)
+			t.Cleanup(installSafePaneCapture(t))
+
+			h := NewTmuxHandler(t.TempDir(), nil)
+			h.sessionMu.Lock()
+			h.sessionCwds = map[string]string{"sess": cwd}
+			h.sessionMu.Unlock()
+
+			launchCmd := runtimeToLaunchCmd(runtime)
+			if launchCmd == "" {
+				t.Fatalf("runtimeToLaunchCmd(%q) returned empty — preset missing?", runtime)
+			}
+			if err := h.launchRuntimeWithBanner("sess", "sess:0.0", runtime, launchCmd); err != nil {
+				t.Fatalf("launchRuntimeWithBanner: %v", err)
+			}
+
+			seq := calls()
+			if len(seq) < 3 {
+				t.Fatalf("expected banner SendKeys + banner Enter + launch SendKeys; got %d calls: %+v", len(seq), seq)
+			}
+
+			// First call must be the banner printf — not the runtime launch.
+			if seq[0].kind != "send" || !strings.HasPrefix(seq[0].text, "printf ") {
+				t.Fatalf("expected first call to be banner printf send-keys, got %+v", seq[0])
+			}
+			if !strings.Contains(seq[0].text, "impl_test") {
+				t.Errorf("banner SendKeys did not include agent name; got %q", seq[0].text)
+			}
+
+			// The launch send-keys must come AFTER the banner Enter —
+			// otherwise the runtime takes over the pane before the
+			// banner printf is submitted and the banner lands in the
+			// runtime's input box.
+			launchAt := -1
+			for i, c := range seq {
+				if c.kind == "send" && c.text == launchCmd {
+					launchAt = i
+					break
+				}
+			}
+			if launchAt < 0 {
+				t.Fatalf("launch SendKeys (text=%q) not found in sequence: %+v", launchCmd, seq)
+			}
+			if launchAt == 0 {
+				t.Fatalf("launch SendKeys appeared FIRST — banner must precede it. Sequence: %+v", seq)
+			}
+			// Defensive: the banner's Enter must have been submitted
+			// before the launch SendKeys so the printf actually runs at
+			// the shell prompt.
+			sawBannerEnterBeforeLaunch := false
+			for i := 0; i < launchAt; i++ {
+				if seq[i].kind == "enter" {
+					sawBannerEnterBeforeLaunch = true
+					break
+				}
+			}
+			if !sawBannerEnterBeforeLaunch {
+				t.Errorf("banner Enter was not submitted before the launch SendKeys; the printf would land inside the runtime instead of the shell. Sequence: %+v", seq)
+			}
+		})
+	}
+}
+
+// TestLaunchRuntimeWithBanner_HookRuntime_EmptyLaunchCmd_NoBanner pins
+// the helper's in-function safety guard: a hook runtime whose preset has
+// `Command: ""` (hypothetical future misconfiguration) must NOT emit a
+// banner into a bare shell pane. The launchCmd short-circuit runs BEFORE
+// the banner emit so the helper has no way to leak a banner without a
+// runtime taking over the pane afterward.
+func TestLaunchRuntimeWithBanner_HookRuntime_EmptyLaunchCmd_NoBanner(t *testing.T) {
 	cwd := t.TempDir()
 	writeTestIdentityFile(t, cwd, "impl_test", 0, "")
 
@@ -94,50 +175,14 @@ func TestLaunchRuntimeWithBanner_HookRuntime_BannerBeforeLaunch(t *testing.T) {
 	h.sessionCwds = map[string]string{"sess": cwd}
 	h.sessionMu.Unlock()
 
-	if err := h.launchRuntimeWithBanner("sess", "sess:0.0", "claude", "claude"); err != nil {
+	// claude is a hook runtime; empty launchCmd simulates a preset with
+	// Command="" — the helper must short-circuit before banner emit.
+	if err := h.launchRuntimeWithBanner("sess", "sess:0.0", "claude", ""); err != nil {
 		t.Fatalf("launchRuntimeWithBanner: %v", err)
 	}
 
-	seq := calls()
-	if len(seq) < 3 {
-		t.Fatalf("expected banner SendKeys + banner Enter + launch SendKeys; got %d calls: %+v", len(seq), seq)
-	}
-
-	// First call must be the banner printf — not the runtime launch.
-	if seq[0].kind != "send" || !strings.HasPrefix(seq[0].text, "printf ") {
-		t.Fatalf("expected first call to be banner printf send-keys, got %+v", seq[0])
-	}
-	if !strings.Contains(seq[0].text, "impl_test") {
-		t.Errorf("banner SendKeys did not include agent name; got %q", seq[0].text)
-	}
-
-	// The launch send-keys ("claude") must come AFTER the banner Enter
-	// — otherwise the runtime takes over the pane before the banner
-	// printf is submitted and the banner lands in the runtime's input box.
-	var launchAt = -1
-	for i, c := range seq {
-		if c.kind == "send" && c.text == "claude" {
-			launchAt = i
-			break
-		}
-	}
-	if launchAt < 0 {
-		t.Fatalf("launch SendKeys (text=%q) not found in sequence: %+v", "claude", seq)
-	}
-	if launchAt == 0 {
-		t.Fatalf("launch SendKeys appeared FIRST — banner must precede it. Sequence: %+v", seq)
-	}
-	// Defensive: the banner's Enter must have been submitted before the
-	// launch SendKeys so the printf actually runs at the shell prompt.
-	sawBannerEnterBeforeLaunch := false
-	for i := 0; i < launchAt; i++ {
-		if seq[i].kind == "enter" {
-			sawBannerEnterBeforeLaunch = true
-			break
-		}
-	}
-	if !sawBannerEnterBeforeLaunch {
-		t.Errorf("banner Enter was not submitted before the launch SendKeys; the printf would land inside the runtime instead of the shell. Sequence: %+v", seq)
+	if got := calls(); len(got) != 0 {
+		t.Errorf("expected zero send-keys for hook runtime with empty launchCmd; got: %+v", got)
 	}
 }
 
