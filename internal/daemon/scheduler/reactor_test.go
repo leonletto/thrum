@@ -2,10 +2,27 @@ package scheduler
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+// panicHandler always panics on Dispatch. Used to exercise the reactor's
+// defer-recover wrapper.
+type panicHandler struct{ msg string }
+
+func (p *panicHandler) Dispatch(_ context.Context, _ JobSpec, _ string, _ StateReporter, _ <-chan *Completion) error {
+	panic(p.msg)
+}
+
+func (p *panicHandler) Reconcile(_ context.Context, _ JobSpec, _ string, _ State) (State, error) {
+	return StateFailed, nil
+}
+
+func (p *panicHandler) Stages() map[string]time.Duration {
+	return map[string]time.Duration{"executing": time.Minute}
+}
 
 // recordingHandler is a test-only Handler that calls onDispatch on each
 // Dispatch. Real handler-behavior coverage lives in E1.3.
@@ -143,10 +160,58 @@ loop:
 	if row.NextScheduledAt != nil {
 		t.Errorf("post-fire next_scheduled_at = %v; want nil for one-shot terminal row", row.NextScheduledAt)
 	}
-	if row.CurrentState != StateDispatched {
-		// Task 11 only progresses to 'dispatched'; the handler upcall to
-		// 'completed' lands in E1.3. Pin the current floor.
-		t.Errorf("post-fire state = %q; want %q for Task 11 floor", row.CurrentState, StateDispatched)
+	// Task 13's launchRun auto-transitions dispatched → completed when the
+	// handler returns nil without an explicit terminal transition; the
+	// recordingHandler used here does exactly that.
+	if row.CurrentState != StateCompleted {
+		t.Errorf("post-fire state = %q; want %q", row.CurrentState, StateCompleted)
+	}
+}
+
+// TestReactor_HandlerPanic_TransitionsToFailed: a handler that panics must
+// not crash the daemon. Run transitions to StateFailed with the panic
+// message in last_error; reactor continues processing other jobs.
+func TestReactor_HandlerPanic_TransitionsToFailed(t *testing.T) {
+	s := New(Config{DB: setupStateTestDB(t), DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	s.RegisterInternal("internal.panic", "@every 50ms", InternalOpts{RunAtStart: true}, &panicHandler{msg: "boom from handler"})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	if err := s.Start(ctx); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	// Give the run a moment to dispatch, panic, and transition.
+	time.Sleep(150 * time.Millisecond)
+
+	row, err := s.state.GetState(context.Background(), "internal.panic")
+	if err != nil {
+		t.Fatalf("get state: %v", err)
+	}
+	if row.CurrentState != StateFailed {
+		t.Errorf("state = %q; want %q", row.CurrentState, StateFailed)
+	}
+	if !strings.Contains(row.LastError, "handler panic") {
+		t.Errorf("last_error doesn't mention panic: %q", row.LastError)
+	}
+
+	// Scheduler is still running — register a second job and verify the
+	// reactor still ticks after the prior panic.
+	fired := make(chan string, 1)
+	s.RegisterInternal("internal.alive", "@every 30ms", InternalOpts{RunAtStart: true},
+		&recordingHandler{onDispatch: func(id string) {
+			select {
+			case fired <- id:
+			default:
+			}
+		}})
+	select {
+	case <-fired:
+		// reactor still works
+	case <-time.After(150 * time.Millisecond):
+		t.Error("reactor stuck after panic in another handler")
 	}
 }
 

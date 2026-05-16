@@ -3,8 +3,11 @@ package scheduler
 import (
 	"container/heap"
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/scheduler/schedule"
@@ -144,7 +147,7 @@ func (s *Scheduler) dispatchOne(ctx context.Context, state *reactorState, item *
 	// Overlap-skip: if the prior run is still in `running`, append an
 	// overlapping_skipped event and decline to enter the run path.
 	existing, err := s.state.GetState(ctx, spec.ID)
-	if err != nil && err != ErrJobNotFound {
+	if err != nil && !errors.Is(err, ErrJobNotFound) {
 		log.Printf("scheduler: GetState %s: %v", spec.ID, err)
 		// Soldier on — treat as no-prior-row.
 		existing = nil
@@ -285,14 +288,178 @@ func createdAtOrNow(existing *StateRow, now time.Time) time.Time {
 	return existing.CreatedAt
 }
 
-// launchRun starts the per-run goroutine. Task 13 replaces this stub with a
-// panic-recover wrapper + signal-channel + cancel-func registry wiring;
-// for Task 11 we only need the dispatch to fire so the reactor tests
-// observe ordering and one-shot semantics.
+// launchRun starts a per-run goroutine wrapped in `defer recover()`. On
+// panic, writes a StateFailed transition with `handler panic: <msg>` plus
+// the stack trace in event details — the daemon stays up.
+//
+// Registers cancel-func + signal-channel on entry; deregisters on exit
+// (whether terminal-transition completion or post-panic cleanup).
+//
+// Substrate-owned (command, thrum_command) and B-B1's scheduled_agent
+// handler are responsible for the dispatched → running transition via
+// reporter.Transition(StateRunning, ...); the `nudge` handler skips
+// `running` per Q5.2. If the handler returns nil without a terminal
+// transition, treat as completed. If the handler returns an error
+// without a terminal transition, treat as failed.
 func (s *Scheduler) launchRun(ctx context.Context, spec JobSpec, runID string, h Handler) {
+	runCtx, cancel := context.WithCancel(ctx)
+	signals := s.runReg.register(runID, cancel)
+	reporter := &stateReporter{
+		store: s.state,
+		jobID: spec.ID,
+		runID: runID,
+	}
+
 	go func() {
-		_ = h.Dispatch(ctx, spec, runID, nil, nil)
+		// Always deregister at goroutine exit so the registry doesn't leak
+		// even if the handler panics or returns without a terminal
+		// transition.
+		defer s.runReg.deregister(runID)
+		defer func() {
+			if r := recover(); r != nil {
+				_ = reporter.Transition(StateFailed,
+					fmt.Sprintf("handler panic: %v", r),
+					map[string]any{"stack": string(debug.Stack())})
+				log.Printf("scheduler: handler panic for run %s: %v", runID, r)
+			}
+		}()
+
+		err := h.Dispatch(runCtx, spec, runID, reporter, signals)
+		if err != nil {
+			row, _ := s.state.GetState(context.Background(), spec.ID)
+			if row != nil && !isTerminal(row.CurrentState) {
+				_ = reporter.Transition(StateFailed,
+					fmt.Sprintf("handler returned err: %v", err), nil)
+			}
+			return
+		}
+		// Handler returned nil; if no terminal transition was emitted,
+		// treat as completed.
+		row, _ := s.state.GetState(context.Background(), spec.ID)
+		if row != nil && !isTerminal(row.CurrentState) {
+			_ = reporter.Transition(StateCompleted, "handler returned without explicit completion", nil)
+		}
 	}()
+}
+
+// stateReporter is the substrate-side StateReporter implementation — one
+// per run. Writes both the latest-state row and the event-log row for
+// every transition; the two writes are not yet wrapped in a single SQLite
+// transaction (E1.3 may refactor).
+//
+// E1.3 will move stateReporter alongside the canonical StateReporter
+// interface in handler.go; it lives here in E1.1 to keep the reactor's
+// panic-recover wrapper self-contained.
+type stateReporter struct {
+	store *StateStore
+	jobID string
+	runID string
+}
+
+// Transition records a state change. Idempotent w.r.t. terminal states:
+// the reactor.launchRun deferred path may call this after the handler has
+// already emitted a terminal transition, in which case we no-op rather
+// than over-write.
+func (r *stateReporter) Transition(to State, reason string, details map[string]any) error {
+	ctx := context.Background()
+	existing, err := r.store.GetState(ctx, r.jobID)
+	if err != nil && !errors.Is(err, ErrJobNotFound) {
+		return err
+	}
+	if existing == nil {
+		// Shouldn't happen — dispatchOne writes 'dispatched' before
+		// invoking the handler. Defensive: surface the anomaly rather
+		// than panic on the nil deref.
+		return fmt.Errorf("scheduler: no state row for %q at Transition(%q)", r.jobID, to)
+	}
+
+	now := time.Now()
+	fromState := existing.CurrentState
+	newRow := *existing
+	newRow.CurrentState = to
+	newRow.UpdatedAt = now
+
+	switch to {
+	case StateRunning:
+		// No special bookkeeping; stage/timing recorded via Stage().
+	case StateCompleted, StateFailed, StateCancelled, StateOverBudget:
+		newRow.LastCompletedAt = &now
+		newRow.LastCompletionState = to
+		switch to {
+		case StateCompleted:
+			newRow.ConsecutiveFailures = 0
+			newRow.EscalationSent = false
+			newRow.LastError = ""
+		case StateFailed:
+			newRow.ConsecutiveFailures = existing.ConsecutiveFailures + 1
+			if reason != "" {
+				newRow.LastError = reason
+			}
+			// Canonical §6.3 marker-readback: if the failure carries an
+			// escalation_emitted_by marker matching `b-b1.*`, suppress
+			// A-B1's own escalation emit (E1.3 owns the emit side).
+			if details != nil {
+				if marker, ok := details["escalation_emitted_by"].(string); ok && strings.HasPrefix(marker, "b-b1.") {
+					newRow.EscalationSent = true
+				}
+			}
+		}
+	}
+
+	if err := r.store.UpsertState(ctx, &newRow); err != nil {
+		return err
+	}
+	return r.store.AppendEvent(ctx, &Event{
+		JobID:     r.jobID,
+		RunID:     r.runID,
+		EventTime: now,
+		FromState: fromState,
+		ToState:   to,
+		Reason:    reason,
+		Details:   details,
+	})
+}
+
+// Stage records entry into a named stage (e.g. "executing"). Empty name
+// clears the stage marker. State remains whatever it was; the event log
+// captures the stage entry for job.show / job.history.
+func (r *stateReporter) Stage(name string) error {
+	ctx := context.Background()
+	existing, err := r.store.GetState(ctx, r.jobID)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	newRow := *existing
+	newRow.CurrentStage = name
+	if name == "" {
+		newRow.StageEnteredAt = nil
+	} else {
+		newRow.StageEnteredAt = &now
+	}
+	newRow.UpdatedAt = now
+	if err := r.store.UpsertState(ctx, &newRow); err != nil {
+		return err
+	}
+	return r.store.AppendEvent(ctx, &Event{
+		JobID:     r.jobID,
+		RunID:     r.runID,
+		EventTime: now,
+		FromState: existing.CurrentState,
+		ToState:   existing.CurrentState,
+		Reason:    "stage: " + name,
+	})
+}
+
+// isTerminal reports whether `s` is a terminal state — one that closes a
+// run. Includes StateOverlappingSkipped because overlap-skip never enters
+// the run path in the first place.
+func isTerminal(s State) bool {
+	switch s {
+	case StateCompleted, StateFailed, StateCancelled, StateOverBudget, StateOverlappingSkipped:
+		return true
+	}
+	return false
 }
 
 // heapItem is one entry in the reactor's min-heap.
