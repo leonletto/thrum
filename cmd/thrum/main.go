@@ -76,6 +76,13 @@ var (
 	flagJSON    bool
 	flagQuiet   bool
 	flagVerbose bool
+
+	// currentCobraCmd is set by rootCmd.PersistentPreRunE before every
+	// leaf RunE so getClient() can consult the leaf's
+	// cross_worktree_response annotation. cobra invokes one leaf per
+	// execve so a package-level handle is safe across the request
+	// lifecycle (thrum-7b84.6).
+	currentCobraCmd *cobra.Command
 )
 
 func main() {
@@ -122,6 +129,13 @@ Environment variables:
 	// Resolve flagRepo to the nearest parent containing .thrum/ (git-style traversal).
 	// Skip for "init" which creates .thrum/ and doesn't need it to exist.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		// thrum-7b84.6: stash the current command so getClient() can
+		// inspect its cross_worktree_response annotation. cobra's
+		// flow is single-command-per-invocation so a package-level
+		// var is safe; PersistentPreRunE on rootCmd fires before
+		// every leaf RunE.
+		currentCobraCmd = cmd
+
 		// Install slog bridge FIRST so any code running during repo
 		// resolution (worktree lookups, identity refresh) already has the
 		// correct stderr/JSON routing — in --json mode slog.Warn records
@@ -5150,8 +5164,28 @@ func sessionHeartbeatRunE(cmd *cobra.Command, args []string) error {
 // every command except daemon lifecycle, init, and quickstart — those
 // should call getClientNoRefresh().
 //
-// Refresh failures are non-fatal: they log to stderr and the underlying
-// command proceeds normally. See RefreshLocalIdentity doc for details.
+// Refresh failures are non-fatal by default: they log to stderr and the
+// underlying command proceeds normally. See RefreshLocalIdentity doc for
+// details.
+//
+// thrum-7b84.6 (Enhanced Policy 2): strict-mode cross_worktree guard
+// fires get per-class treatment based on the calling leaf's
+// crossWorktreeResponseKey annotation:
+//   - abort (default): close the client and propagate refreshErr; the
+//     command exits non-zero with the 4-line guard error on stderr and
+//     an empty stdout. Wrong-identity writes are permanent and
+//     ~undetectable.
+//   - diagnostic_banner: emit a one-line stderr banner BEFORE any
+//     stdout write, then let the command proceed. For team / daemon * /
+//     agent list / version where output is useful from the wrong cwd.
+//   - whoami: emit the banner on BOTH stderr and stdout (prepended to
+//     the identity block in non-JSON mode). Whoami's stdout asserts
+//     identity, so the cross-worktree context belongs inline. In --json
+//     mode the stdout banner is suppressed (would corrupt the JSON
+//     contract); the slog bridge surfaces the warn via the hints array.
+//
+// Other guard reasons (dead_pid_auto_reclaim etc.) keep the original
+// log-and-proceed contract regardless of class.
 func getClient() (*cli.Client, error) {
 	client, err := getClientNoRefresh()
 	if err != nil {
@@ -5164,9 +5198,64 @@ func getClient() (*cli.Client, error) {
 	}
 	if _, refreshErr := cli.RefreshLocalIdentity(client, repoPath); refreshErr != nil {
 		fmt.Fprintf(os.Stderr, "thrum: identity refresh failed: %v\n", refreshErr)
+
+		var ge *guard.Error
+		if errors.As(refreshErr, &ge) && ge.Guard == "cross_worktree" {
+			switch crossWorktreeResponseFor(currentCobraCmd) {
+			case CrossWorktreeResponseDiagnosticBanner:
+				emitCrossWorktreeBanner(ge, false)
+			case CrossWorktreeResponseWhoami:
+				emitCrossWorktreeBanner(ge, true)
+			default: // CrossWorktreeResponseAbort (and any unknown value)
+				_ = client.Close()
+				return nil, refreshErr
+			}
+		}
 	}
 
 	return client, nil
+}
+
+// crossWorktreeResponseFor returns the leaf's annotated response class
+// or CrossWorktreeResponseAbort as the safe default when the cmd is
+// nil (e.g., called outside the normal cobra flow) or the annotation
+// is missing.
+func crossWorktreeResponseFor(cmd *cobra.Command) string {
+	if cmd == nil {
+		return CrossWorktreeResponseAbort
+	}
+	if resp, ok := cmd.Annotations[crossWorktreeResponseKey]; ok && resp != "" {
+		return resp
+	}
+	return CrossWorktreeResponseAbort
+}
+
+// emitCrossWorktreeBanner writes the Enhanced Policy 2 cross-worktree
+// banner. Stderr is always written (and flushed first per the
+// pipe/tee ordering contract). When stdoutToo is true (Class C —
+// whoami) AND the caller is not in --json mode, the same banner is
+// also written to stdout above the upcoming identity block. --json
+// mode suppresses the stdout write to preserve the single-document
+// JSON contract; the slog bridge surfaces equivalent context via the
+// hints array.
+func emitCrossWorktreeBanner(ge *guard.Error, stdoutToo bool) {
+	expected := ge.ExpectedAgent
+	if expected == "" {
+		expected = "another agent"
+	}
+	banner := fmt.Sprintf(
+		"⚠ Cross-worktree: you are running this from %s's worktree. "+
+			"cd to your own worktree or run 'thrum prime' to re-claim before further commands.",
+		expected,
+	)
+	// Stderr write first, with an explicit Sync so the banner reaches
+	// the terminal before any subsequent stdout from the RunE body.
+	fmt.Fprintln(os.Stderr, banner)
+	_ = os.Stderr.Sync()
+	if stdoutToo && !flagJSON {
+		fmt.Fprintln(os.Stdout, banner)
+		_ = os.Stdout.Sync()
+	}
 }
 
 // getClientNoRefresh opens a daemon connection without running the identity
