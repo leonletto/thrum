@@ -168,6 +168,144 @@ loop:
 	}
 }
 
+// TestReactor_CatchUp_SkipDefault: when daemon was down and the prior
+// next_scheduled_at is in the past, default CatchUp="skip" rolls the
+// next_scheduled_at forward without firing.
+func TestReactor_CatchUp_SkipDefault(t *testing.T) {
+	db := setupStateTestDB(t)
+	store := NewStateStore(db)
+	ctx := context.Background()
+
+	pastFire := time.Now().Add(-time.Hour)
+	if err := store.UpsertState(ctx, &StateRow{
+		JobID: "internal.lagged", Generation: 1,
+		CurrentState: StateScheduled, NextScheduledAt: &pastFire,
+		CreatedAt: pastFire, UpdatedAt: pastFire,
+	}); err != nil {
+		t.Fatalf("seed past-due row: %v", err)
+	}
+
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+	fired := make(chan string, 5)
+	h := &recordingHandler{onDispatch: func(id string) {
+		select {
+		case fired <- id:
+		default:
+		}
+	}}
+	s.RegisterInternal("internal.lagged", "@every 5m", InternalOpts{
+		RunAtStart: false, CatchUp: "skip",
+	}, h)
+
+	runCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	if err := s.Start(runCtx); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	select {
+	case id := <-fired:
+		t.Errorf("catch_up=skip but fired anyway: %q", id)
+	case <-runCtx.Done():
+		// Expected: no fire.
+	}
+	row, err := store.GetState(ctx, "internal.lagged")
+	if err != nil {
+		t.Fatalf("get state: %v", err)
+	}
+	if row.NextScheduledAt == nil || !row.NextScheduledAt.After(time.Now()) {
+		t.Errorf("next_scheduled_at didn't roll forward: %v", row.NextScheduledAt)
+	}
+}
+
+// TestReactor_CatchUp_RunMostRecent: a past-due job with
+// CatchUp="run_most_recent" fires once at startup.
+func TestReactor_CatchUp_RunMostRecent(t *testing.T) {
+	db := setupStateTestDB(t)
+	store := NewStateStore(db)
+	ctx := context.Background()
+
+	pastFire := time.Now().Add(-time.Hour)
+	if err := store.UpsertState(ctx, &StateRow{
+		JobID: "internal.runmost", Generation: 1,
+		CurrentState: StateScheduled, NextScheduledAt: &pastFire,
+		CreatedAt: pastFire, UpdatedAt: pastFire,
+	}); err != nil {
+		t.Fatalf("seed past-due row: %v", err)
+	}
+
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+	fired := make(chan string, 5)
+	h := &recordingHandler{onDispatch: func(id string) {
+		select {
+		case fired <- id:
+		default:
+		}
+	}}
+	s.RegisterInternal("internal.runmost", "@every 5m", InternalOpts{
+		RunAtStart: false, CatchUp: "run_most_recent",
+	}, h)
+
+	runCtx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	if err := s.Start(runCtx); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	select {
+	case id := <-fired:
+		if id != "internal.runmost" {
+			t.Errorf("fired = %q", id)
+		}
+	case <-runCtx.Done():
+		t.Error("catch_up=run_most_recent didn't fire on startup")
+	}
+}
+
+// TestReactor_RunAtStart_WinsOverCatchUp: RunAtStart=true forces an
+// immediate fire even when CatchUp=skip would otherwise suppress it.
+func TestReactor_RunAtStart_WinsOverCatchUp(t *testing.T) {
+	db := setupStateTestDB(t)
+	ctx := context.Background()
+
+	pastFire := time.Now().Add(-time.Hour)
+	store := NewStateStore(db)
+	if err := store.UpsertState(ctx, &StateRow{
+		JobID: "internal.ras", Generation: 1,
+		CurrentState: StateScheduled, NextScheduledAt: &pastFire,
+		CreatedAt: pastFire, UpdatedAt: pastFire,
+	}); err != nil {
+		t.Fatalf("seed past-due row: %v", err)
+	}
+
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+	fired := make(chan string, 1)
+	h := &recordingHandler{onDispatch: func(id string) {
+		select {
+		case fired <- id:
+		default:
+		}
+	}}
+	s.RegisterInternal("internal.ras", "@every 1h", InternalOpts{
+		RunAtStart: true, CatchUp: "skip",
+	}, h)
+
+	runCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	if err := s.Start(runCtx); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	select {
+	case <-fired:
+		// run_at_start beat catch_up=skip — good.
+	case <-runCtx.Done():
+		t.Error("run_at_start should have won over catch_up=skip")
+	}
+}
+
 // TestReactor_HandlerPanic_TransitionsToFailed: a handler that panics must
 // not crash the daemon. Run transitions to StateFailed with the panic
 // message in last_error; reactor continues processing other jobs.

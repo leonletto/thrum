@@ -82,10 +82,23 @@ func (s *Scheduler) runReactor(ctx context.Context) {
 // seedHeap walks the spec map and adds any not-yet-tracked enabled jobs to
 // the heap. Honors RunAtStart by pinning the first fire to now. Idempotent
 // — re-running on reactorWake only adds newly-registered jobs.
+//
+// Catch-up policy per spec §8.3.11 + Q6: when a state row has a past-due
+// next_scheduled_at (daemon was down through one or more fires), the
+// per-job CatchUp policy decides what to do:
+//
+//   - "skip" (default): roll next_scheduled_at forward to the next fire
+//     after now, persist, and fire there. The missed fires are dropped.
+//   - "run_most_recent": fire once at startup, then resume the schedule.
+//
+// RunAtStart=true wins over any CatchUp policy per Q6.5 — operators who
+// explicitly opt into run-at-start get the immediate fire regardless of
+// historical lag.
 func (s *Scheduler) seedHeap(state *reactorState) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	now := time.Now()
 	for jobID, spec := range s.specs {
 		if !spec.Enabled {
 			continue
@@ -105,16 +118,11 @@ func (s *Scheduler) seedHeap(state *reactorState) {
 		}
 		state.schedules[jobID] = sched
 
-		var fireAt time.Time
-		if spec.RunAtStart {
-			fireAt = time.Now()
-		} else {
-			fireAt = sched.Next(time.Now())
-			if fireAt.IsZero() {
-				// One-shot with no future fire (already-fired @at in the past).
-				continue
-			}
+		fireAt, skip := s.computeSeedFireAt(jobID, spec, sched, now)
+		if skip {
+			continue
 		}
+
 		// Jitter is reactor-applied. For one-shot schedules the period
 		// collapses to 0 (DeterministicJitter returns 0); for recurring
 		// the per-job Jitter override controls bounds (0 = default ±3%).
@@ -124,6 +132,54 @@ func (s *Scheduler) seedHeap(state *reactorState) {
 			fireAt = fireAt.Add(jit)
 		}
 		heap.Push(state.heap, &heapItem{fireAt: fireAt, jobID: jobID})
+	}
+}
+
+// computeSeedFireAt resolves the seed-time fire-at for a single job,
+// applying RunAtStart + catch-up policy. Returns (zero, true) when the
+// job should be skipped (one-shot already fired, schedule exhausted).
+func (s *Scheduler) computeSeedFireAt(jobID string, spec JobSpec, sched schedule.Schedule, now time.Time) (time.Time, bool) {
+	// RunAtStart wins over catch-up (Q6.5).
+	if spec.RunAtStart {
+		return now, false
+	}
+
+	existing, err := s.state.GetState(context.Background(), jobID)
+	if err != nil && !errors.Is(err, ErrJobNotFound) {
+		log.Printf("scheduler: GetState %s during seed: %v", jobID, err)
+		// Soldier on as if no prior row existed.
+		existing = nil
+	}
+
+	pastDue := existing != nil && existing.NextScheduledAt != nil && !existing.NextScheduledAt.After(now)
+	if !pastDue {
+		next := sched.Next(now)
+		if next.IsZero() {
+			// One-shot with no future fire (already-fired @at in the past).
+			return time.Time{}, true
+		}
+		return next, false
+	}
+
+	// Past-due. Apply CatchUp policy.
+	switch spec.CatchUp {
+	case "run_most_recent":
+		return now, false
+	default:
+		// "skip" (and any unknown value — validator rejects unknowns).
+		next := sched.Next(now)
+		if next.IsZero() {
+			return time.Time{}, true
+		}
+		// Persist the rolled-forward next_scheduled_at so post-restart
+		// inspection (thrum job show / job.history) reflects the
+		// skip rather than the stale past-due value.
+		existing.NextScheduledAt = &next
+		existing.UpdatedAt = now
+		if err := s.state.UpsertState(context.Background(), existing); err != nil {
+			log.Printf("scheduler: UpsertState rollforward %s: %v", jobID, err)
+		}
+		return next, false
 	}
 }
 
