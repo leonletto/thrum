@@ -24,42 +24,14 @@ they're parameterized over `VERSION` and the release branch.
 
 ## Stable-track current pre-release
 
-> **Current pre-release:
-> [`v0.10.3-rc.11`](https://github.com/leonletto/thrum/releases/tag/v0.10.3-rc.11)**
-> (tagged 2026-05-15, in soak). rc.11 is a plugin-only polish on the rc.10 v2
-> `/thrum:restart` skill, surfaced by its first live invocation on a coordinator
-> pane: Step 3's `thrum send --to @coordinator_main` no longer self-targets when
-> the invoker IS the coordinator (new branch emits cross-pane
-> `thrum tmux restart --force` instructions instead), a stale reference to the
-> pre-rc.10 `thrum tmux snapshot restore` was dropped in favor of "auto-loaded
-> by `thrum prime`", and Step 1's fragile heredoc-with-discipline pattern was
-> restructured into a prose composition guide plus a direct-Write step. No Go
-> code changes. Rolls up the rc.1–rc.10 highlights: codex plugin first-class,
-> post-launch tmux silence watchdog (with `·` glyph support), first-launch
-> trust-gate detection, self-echo nudge fix, cwd-anchored identity precedence,
-> inbox read-race silent-loss class closed, prose-continuation restart skill.
-> Full notes: [What's New](whats-new.md) and the
-> [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
-
-### Quick install for `v0.10.3-rc.11`
-
-Binary and Codex plugin (run in your shell):
-
-```bash
-# Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.11 sh
-
-# Codex plugin (matches release/v0.10.3)
-THRUM_INSTALL_REF=release/v0.10.3 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.3/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
-```
-
-Claude Code plugin (run inside Claude):
-
-```text
-/plugin marketplace add leonletto/thrum#release/v0.10.3
-/plugin install thrum@thrum
-/reload-plugins
-```
+> [`v0.10.3`](https://github.com/leonletto/thrum/releases/tag/v0.10.3) shipped
+> 2026-05-16 after an 11-RC soak cycle. No stable-track pre-release at the
+> moment. Install the released binary via the standard
+> [install script](quickstart.md#installation) — the stable-track only carries a
+> pre-release between cuts. See [What's New](whats-new.md) for the v0.10.3
+> highlights and the
+> [release notes](https://github.com/leonletto/thrum/releases/tag/v0.10.3) for
+> the long-form story.
 
 ## Substrate-track current pre-release
 

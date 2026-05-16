@@ -52,15 +52,15 @@ plausible.init()
 <p>Thrum&#39;s role is to be the substrate that lets any harness implement
 personal-agent patterns cleanly — not to become a harness itself.</p>
 </blockquote>
-<p>That framing locked in May 2026. v0.10 gave you the messaging foundation
-(direct messages, role routing, critical broadcast, sync, peers, Telegram).
-v0.11 adds the layer above it: scheduling, scheduled-agent lifecycle, a
-per-project skill library that agents can extend at runtime, an email
-transport alongside Telegram, and a unified reminder substrate.</p>
+<p>That framing locked in May 2026. v0.10 gave you the messaging foundation (direct
+messages, role routing, critical broadcast, sync, peers, Telegram). v0.11 adds
+the layer above it: scheduling, scheduled-agent lifecycle, a per-project skill
+library that agents can extend at runtime, an email transport alongside
+Telegram, and a unified reminder substrate.</p>
 <p>If you&#39;re using thrum today for agent coordination, none of this is required
-reading — the v0.10 messaging surface keeps working. The substrate is for
-anyone wanting to build (or use) a personal-agent harness — Pi, Hermes, Open
-Claw, Replicant, or your own — on top of thrum.</p>
+reading — the v0.10 messaging surface keeps working. The substrate is for anyone
+wanting to build (or use) a personal-agent harness — Pi, Hermes, Open Claw,
+Replicant, or your own — on top of thrum.</p>
 <h2>The three-layer decomposition</h2>
 <p>Personal-agent frameworks decompose cleanly into three layers:</p>
 <table>
@@ -83,11 +83,11 @@ Claw, Replicant, or your own — on top of thrum.</p>
 <td>Underlying LLM CLI (Claude, Codex, Kiro, Cursor)</td>
 </tr>
 </tbody></table>
-<p>A concrete trace: Pi schedules its next wake by calling the thrum daemon.
-The daemon handles persistence and cron-style scheduling and idle-nudge
-escalation. The runtime is whichever LLM CLI you&#39;ve configured. Pi itself
-contains only the behavior layer — the meta-skills that decide what to do
-on each wake. Thrum carries the rest.</p>
+<p>A concrete trace: Pi schedules its next wake by calling the thrum daemon. The
+daemon handles persistence and cron-style scheduling and idle-nudge escalation.
+The runtime is whichever LLM CLI you&#39;ve configured. Pi itself contains only the
+behavior layer — the meta-skills that decide what to do on each wake. Thrum
+carries the rest.</p>
 <p>Each layer stays focused. The substrate makes the patterns possible across
 runtimes; the harness picks which patterns to use; the runtime executes.</p>
 <h2>The Pi / Hermes / Open Claw / Replicant pattern</h2>
@@ -100,76 +100,73 @@ runtimes; the harness picks which patterns to use; the runtime executes.</p>
 <li><strong>Skill accumulation</strong> (the agent grows new capabilities over time)</li>
 </ul>
 <p>Thrum already had four of the five before v0.11. Messaging gave it identity
-isolation and state persistence; the daemon and sync gave it transport
-plumbing; the role-templates and skill plugins gave it accumulation. The
-gap was the unified scheduler and the runtime-skill-registration plumbing.
-v0.11 fills that gap.</p>
-<p>The Pi/Hermes phrase &quot;the agent that builds itself&quot; maps to the three
-layers above: the runtime executes, the harness&#39;s meta-skills decide
-<em>what</em> to build (and when), and the substrate makes the new skill
-discoverable next session. v0.11 ships the substrate piece. The harnesses
-keep their own behaviour.</p>
+isolation and state persistence; the daemon and sync gave it transport plumbing;
+the role-templates and skill plugins gave it accumulation. The gap was the
+unified scheduler and the runtime-skill-registration plumbing. v0.11 fills that
+gap.</p>
+<p>The Pi/Hermes phrase &quot;the agent that builds itself&quot; maps to the three layers
+above: the runtime executes, the harness&#39;s meta-skills decide <em>what</em> to build
+(and when), and the substrate makes the new skill discoverable next session.
+v0.11 ships the substrate piece. The harnesses keep their own behaviour.</p>
 <h2>What v0.11 adds</h2>
 <p>The five feature families in v0.11 — each gets its own page once the
 implementation lands.</p>
 <ul>
-<li><p><strong><a href="scheduler.html">Scheduler primitive</a></strong> — a single daemon-side
-scheduling abstraction. Consolidates three existing ticker loops (backup,
-periodic sync, inbox poll) and gives the rest of the substrate (scheduled
-agents, email poll, telemetry, skill staleness, stalled-agent sweep) one
-bus to bind against.</p>
+<li><p><strong><a href="scheduler.html">Scheduler primitive</a></strong> — a single daemon-side scheduling
+abstraction. Consolidates three existing ticker loops (backup, periodic sync,
+inbox poll) and gives the rest of the substrate (scheduled agents, email poll,
+telemetry, skill staleness, stalled-agent sweep) one bus to bind against.</p>
 </li>
 <li><p><strong><a href="scheduled-agents.html">Scheduled-agent lifecycle</a></strong> — wake, run, sleep,
-observe as a first-class flow. Spawn an agent on a schedule, give it a
-prompt, watch what it does via inbox + beads memories, let it sleep until
-the next wake. Fresh-context-each-wake or resume-prior-session, configurable
-per agent.</p>
+observe as a first-class flow. Spawn an agent on a schedule, give it a prompt,
+watch what it does via inbox + beads memories, let it sleep until the next
+wake. Fresh-context-each-wake or resume-prior-session, configurable per agent.</p>
 </li>
 <li><p><strong><a href="skill-library.html">Skill library + registration API</a></strong> — first-class
 per-project skill library (mirroring what works organically in repos that
 hand-rolled it). The registration API lets a meta-skill author a new skill
 mid-session and have future sessions discover it without restart.</p>
 </li>
-<li><p><strong><a href="email-transport.html">Email transport</a></strong> — IMAP/SMTP adapter alongside
-the existing Telegram bridge. A single shared mailbox can serve multiple
-repos; subject-line conventions encode repo identity for demux. Reply
-threading uses email&#39;s native In-Reply-To header.</p>
+<li><p><strong><a href="email-transport.html">Email transport</a></strong> — IMAP/SMTP adapter alongside the
+existing Telegram bridge. A single shared mailbox can serve multiple repos;
+subject-line conventions encode repo identity for demux. Reply threading uses
+email&#39;s native In-Reply-To header.</p>
 </li>
 <li><p><strong><a href="reminders.html">Reminders + stalled-agent sweep</a></strong> — a unified reminder
-substrate. Time-triggered reminders (an agent or user defers an action)
-share the same table as condition-triggered ones (the daemon notices an
-agent has been silent too long and pings the coordinator).</p>
+substrate. Time-triggered reminders (an agent or user defers an action) share
+the same table as condition-triggered ones (the daemon notices an agent has
+been silent too long and pings the coordinator).</p>
 </li>
-<li><p><strong><a href="headless-worktrees.html">Headless worktree API</a></strong> — internal plumbing
-for scheduled agents to consume ephemeral worktrees without operator
-involvement. Mostly an implementation detail; brief note for anyone
-digging into the substrate internals.</p>
+<li><p><strong><a href="headless-worktrees.html">Headless worktree API</a></strong> — internal plumbing for
+scheduled agents to consume ephemeral worktrees without operator involvement.
+Mostly an implementation detail; brief note for anyone digging into the
+substrate internals.</p>
 </li>
 </ul>
 <h2>How v0.11 relates to v0.10</h2>
 <p>The two releases stack:</p>
 <ul>
-<li><p><strong>v0.10 messaging</strong> is the bus. Agents send each other directed messages
-or broadcast critical events; the daemon syncs across machines and bridges
-out to Telegram if you&#39;ve paired it. Identity isolation, peer transport,
-sync, persistence — all of it landed pre-v0.11.</p>
+<li><p><strong>v0.10 messaging</strong> is the bus. Agents send each other directed messages or
+broadcast critical events; the daemon syncs across machines and bridges out to
+Telegram if you&#39;ve paired it. Identity isolation, peer transport, sync,
+persistence — all of it landed pre-v0.11.</p>
 </li>
-<li><p><strong>v0.11 substrate</strong> is the runtime that consumes that bus. A scheduled
-agent uses messaging to report back. A skill registered at runtime arrives
-via the same identity-resolved RPC plumbing. The email transport reuses
-the Telegram bridge&#39;s relay shape, just over IMAP/SMTP.</p>
+<li><p><strong>v0.11 substrate</strong> is the runtime that consumes that bus. A scheduled agent
+uses messaging to report back. A skill registered at runtime arrives via the
+same identity-resolved RPC plumbing. The email transport reuses the Telegram
+bridge&#39;s relay shape, just over IMAP/SMTP.</p>
 </li>
 </ul>
 <p>You don&#39;t need v0.11 to use v0.10&#39;s messaging features. You do need v0.10&#39;s
 messaging to use v0.11&#39;s substrate features. The dependency is one-way.</p>
 <h2>Status</h2>
-<p>v0.11 is in development. The substrate-track pre-release cycle starts when
-the first <code>v0.11.0-rc.1</code> tag publishes from the <code>thrum-agents</code> branch — see
-the <a href="../beta-channel.html">Beta Channel</a> page for substrate-track install
-instructions when it&#39;s ready.</p>
-<p>The feature pages above will fill in as each piece lands and gets shaken
-out in soak. Until then, the parent epic and per-feature locked plans live
-in the source tree under <code>dev-docs/</code> for anyone who wants to dig.</p>
+<p>v0.11 is in development. The substrate-track pre-release cycle starts when the
+first <code>v0.11.0-rc.1</code> tag publishes from the <code>thrum-agents</code> branch — see the
+<a href="../beta-channel.html">Beta Channel</a> page for substrate-track install instructions
+when it&#39;s ready.</p>
+<p>The feature pages above will fill in as each piece lands and gets shaken out in
+soak. Until then, the parent epic and per-feature locked plans live in the
+source tree under <code>dev-docs/</code> for anyone who wants to dig.</p>
 
 </main>
 <footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">

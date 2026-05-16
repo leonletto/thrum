@@ -6,7 +6,7 @@ description:
 category: "overview"
 order: 2
 tags: ["release-notes", "changelog", "migration", "version"]
-last_updated: "2026-05-15"
+last_updated: "2026-05-16"
 ---
 
 ## What's New
@@ -16,15 +16,14 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 [CHANGELOG.md](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-## v0.10.3 — In Soak (RC)
+## v0.10.3
 
-v0.10.3 is currently a release candidate. The latest tag is `v0.10.3-rc.11`,
-which polishes three rough edges in the rc.10 v2 `/thrum:restart` skill
-(coordinator self-restart branch, dropped stale snapshot-restore reference,
-restructured Step 1 to remove the heredoc-with-discipline pattern). See the
-[Beta Channel](beta-channel.md) guide for how to opt in. Stable promotion
-follows the standard 48-hour soak window once no P0/P1 bugs are open against the
-RC.
+[`v0.10.3`](https://github.com/leonletto/thrum/releases/tag/v0.10.3) shipped
+2026-05-16 after a 5-day, 11-RC soak cycle. Each rc.N closed exactly one bug the
+previous candidate surfaced under real use — none of them dramatic on their own,
+every one the kind of thing that turns into "thrum is flaky" if it ships
+uncaught. The full story is in the blog post
+[The Release That Wouldn't Land](/thrum/blog/v0-10-the-release-that-wouldnt-land.html).
 
 This release is largely about the runtime experience: codex gains the same
 first-class plugin treatment claude has had, fresh and restarted tmux panes no

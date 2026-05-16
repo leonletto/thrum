@@ -55,58 +55,38 @@ to report what you find.</p>
 <p>Thrum currently runs two parallel pre-release tracks. Pick one — they install
 the same binary, so you can only be on one track at a time.</p>
 <ul>
-<li><strong>Stable-track</strong> (<code>v0.10.x</code> cycle) — bug-fix and small-feature RCs against
-the current stable line. Recommended for production use; lower churn.</li>
+<li><strong>Stable-track</strong> (<code>v0.10.x</code> cycle) — bug-fix and small-feature RCs against the
+current stable line. Recommended for production use; lower churn.</li>
 <li><strong>Substrate-track</strong> (<code>v0.11.x</code> cycle) — the
 <a href="substrate/overview.html">Personal Agent Substrate</a> work: unified scheduler,
-scheduled-agent lifecycle, skill library, email transport, reminders.
-Rapid iteration; expect breakage. Recommended only if you&#39;re actively
-helping shake the substrate out.</li>
+scheduled-agent lifecycle, skill library, email transport, reminders. Rapid
+iteration; expect breakage. Recommended only if you&#39;re actively helping shake
+the substrate out.</li>
 </ul>
 <p>The sections below cover the current pre-release on each track. Install
 mechanics (binary + plugins + rollback) are shared further down the page —
 they&#39;re parameterized over <code>VERSION</code> and the release branch.</p>
 <h2>Stable-track current pre-release</h2>
 <blockquote>
-<p><strong>Current pre-release:
-<a href="https://github.com/leonletto/thrum/releases/tag/v0.10.3-rc.11"><code>v0.10.3-rc.11</code></a></strong>
-(tagged 2026-05-15, in soak). rc.11 is a plugin-only polish on the rc.10 v2
-<code>/thrum:restart</code> skill, surfaced by its first live invocation on a coordinator
-pane: Step 3&#39;s <code>thrum send --to @coordinator_main</code> no longer self-targets when
-the invoker IS the coordinator (new branch emits cross-pane
-<code>thrum tmux restart --force</code> instructions instead), a stale reference to the
-pre-rc.10 <code>thrum tmux snapshot restore</code> was dropped in favor of &quot;auto-loaded
-by <code>thrum prime</code>&quot;, and Step 1&#39;s fragile heredoc-with-discipline pattern was
-restructured into a prose composition guide plus a direct-Write step. No Go
-code changes. Rolls up the rc.1–rc.10 highlights: codex plugin first-class,
-post-launch tmux silence watchdog (with <code>·</code> glyph support), first-launch
-trust-gate detection, self-echo nudge fix, cwd-anchored identity precedence,
-inbox read-race silent-loss class closed, prose-continuation restart skill.
-Full notes: <a href="whats-new.html">What&#39;s New</a> and the
-<a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG <code>[Unreleased]</code> section</a>.</p>
+<p><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.3"><code>v0.10.3</code></a> shipped
+2026-05-16 after an 11-RC soak cycle. No stable-track pre-release at the
+moment. Install the released binary via the standard
+<a href="quickstart.html#installation">install script</a> — the stable-track only carries
+a pre-release between cuts. See <a href="whats-new.html">What&#39;s New</a> for the v0.10.3
+highlights and the
+<a href="https://github.com/leonletto/thrum/releases/tag/v0.10.3">release notes</a> for
+the long-form story.</p>
 </blockquote>
-<h3>Quick install for <code>v0.10.3-rc.11</code></h3>
-<p>Binary and Codex plugin (run in your shell):</p>
-<pre><code># Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.11 sh
-
-# Codex plugin (matches release/v0.10.3)
-THRUM_INSTALL_REF=release/v0.10.3 bash &lt;(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.3/codex-plugin/plugins/thrum/scripts/install-plugin.sh)</code></pre>
-<p>Claude Code plugin (run inside Claude):</p>
-<pre><code>/plugin marketplace add leonletto/thrum#release/v0.10.3
-/plugin install thrum@thrum
-/reload-plugins</code></pre>
 <h2>Substrate-track current pre-release</h2>
 <blockquote>
 <p>No substrate-track pre-release yet. First will be <code>v0.11.0-rc.1</code>.</p>
 </blockquote>
 <p>When <code>v0.11.0-rc.1</code> publishes, this section will carry the substrate-track
-callout + Quick install block pinned to the <code>release/v0.11.0</code> branch. Watch
-the <a href="https://github.com/leonletto/thrum/releases">GitHub releases</a> page or
-the <a href="substrate/overview.html">Personal Agent Substrate</a> intro for the
-announcement.</p>
-<p>For refresh between rc.N bumps, switching tracks, switching back to stable,
-and the parameterized versions of these commands, see
+callout + Quick install block pinned to the <code>release/v0.11.0</code> branch. Watch the
+<a href="https://github.com/leonletto/thrum/releases">GitHub releases</a> page or the
+<a href="substrate/overview.html">Personal Agent Substrate</a> intro for the announcement.</p>
+<p>For refresh between rc.N bumps, switching tracks, switching back to stable, and
+the parameterized versions of these commands, see
 <a href="#how-to-install-the-matching-claude-code-and-codex-plugins">How to install the matching plugins</a>
 below.</p>
 <h2>What this is</h2>
@@ -227,11 +207,11 @@ curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/instal
 thrum daemon restart
 # Then refresh plugins against release/v0.10.3 (see Claude Code + Codex
 # sections above)</code></pre>
-<p>The binary and plugins share the same install paths regardless of track, so
-the switch is &quot;install the other track&#39;s version&quot; rather than uninstall +
-reinstall. The plugin remove-and-re-add step in the &quot;Leaving the beta
-channel&quot; section below applies in the same way if Claude Code has cached the
-previous track&#39;s marketplace ref.</p>
+<p>The binary and plugins share the same install paths regardless of track, so the
+switch is &quot;install the other track&#39;s version&quot; rather than uninstall + reinstall.
+The plugin remove-and-re-add step in the &quot;Leaving the beta channel&quot; section
+below applies in the same way if Claude Code has cached the previous track&#39;s
+marketplace ref.</p>
 <h2>Leaving the beta channel</h2>
 <p>When you&#39;re done testing, revert the binary and any plugins you installed from
 the release branch back to their stable counterparts.</p>

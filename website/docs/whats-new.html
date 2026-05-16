@@ -51,14 +51,13 @@ plausible.init()
 breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG.md</a>.</p>
-<h2>v0.10.3 — In Soak (RC)</h2>
-<p>v0.10.3 is currently a release candidate. The latest tag is <code>v0.10.3-rc.11</code>,
-which polishes three rough edges in the rc.10 v2 <code>/thrum:restart</code> skill
-(coordinator self-restart branch, dropped stale snapshot-restore reference,
-restructured Step 1 to remove the heredoc-with-discipline pattern). See the
-<a href="beta-channel.html">Beta Channel</a> guide for how to opt in. Stable promotion
-follows the standard 48-hour soak window once no P0/P1 bugs are open against the
-RC.</p>
+<h2>v0.10.3</h2>
+<p><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.3"><code>v0.10.3</code></a> shipped
+2026-05-16 after a 5-day, 11-RC soak cycle. Each rc.N closed exactly one bug
+the previous candidate surfaced under real use — none of them dramatic on
+their own, every one the kind of thing that turns into &quot;thrum is flaky&quot; if it
+ships uncaught. The full story is in the blog post
+<a href="/thrum/blog/v0-10-the-release-that-wouldnt-land.html">The Release That Wouldn&#39;t Land</a>.</p>
 <p>This release is largely about the runtime experience: codex gains the same
 first-class plugin treatment claude has had, fresh and restarted tmux panes no
 longer sit idle when an agent misses its prime banner, and the first-launch
