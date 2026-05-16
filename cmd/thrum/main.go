@@ -475,7 +475,7 @@ Examples:
 				// LoadThrumConfig; zero-value (false) applies for fresh installs.
 				if cfg.Worktrees.BasePath == "" {
 					cfg.Worktrees = config.WorktreesConfig{
-						BasePath:     inferWorktreeBasePath(flagRepo),
+						BasePath:     worktree.InferBasePath(flagRepo),
 						BeadsEnabled: true,
 						ThrumEnabled: true,
 					}
@@ -2719,17 +2719,6 @@ Examples:
 	return cmd
 }
 
-// inferWorktreeBasePath returns the conventional worktree base path for a repo.
-// Returns ~/.thrum/worktrees/<project>; returns it whether or not it exists yet.
-func inferWorktreeBasePath(repoPath string) string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	projectName := filepath.Base(repoPath)
-	return filepath.Join(home, ".thrum", "worktrees", projectName)
-}
-
 func worktreeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "worktree",
@@ -2775,7 +2764,7 @@ func worktreeCreateCmd() *cobra.Command {
 
 			basePath := cfg.Worktrees.BasePath
 			if basePath == "" {
-				basePath = inferWorktreeBasePath(repoPath)
+				basePath = worktree.InferBasePath(repoPath)
 			}
 			// Ensure base_path includes the repo name to prevent worktrees
 			// from different repos colliding in a flat directory. Stale configs
@@ -2798,27 +2787,46 @@ func worktreeCreateCmd() *cobra.Command {
 				return fmt.Errorf("worktrees.base_path %q resolves to the repo root — worktrees must be created outside the repo", basePath)
 			}
 
-			// 1. Create git worktree
-			gitArgs := []string{"worktree", "add"}
+			// Phase B: call headless primitive (spec §4.1 3-case mapping).
 			if detach {
-				gitArgs = append(gitArgs, "--detach")
+				// Cobra-only detach path: skip worktree.Create, run git
+				// worktree add --detach inline + EnsureRedirects. The
+				// headless API has no detach mode (B-B1 never needs it).
+				if out, err := safecmd.Git(cmd.Context(), repoPath,
+					"worktree", "add", "--detach", worktreePath); err != nil {
+					return fmt.Errorf("git worktree add --detach: %s\n%s", err, out)
+				}
+				fmt.Printf("✓ Worktree created at %s (detached)\n", worktreePath)
+				if err := cli.EnsureWorktreeRedirects(worktreePath, repoPath); err != nil {
+					return fmt.Errorf("redirect setup: %w", err)
+				}
 			} else {
+				// Branch-mode: delegate to worktree.Create with BranchOverride.
+				// The cobra layer populates BasePath explicitly from config
+				// (already computed above) — redundant with Create's
+				// three-tier fallback but makes intent self-evident at the
+				// call site. The daemon scheduler may pass BasePath:"" and
+				// rely on Create's tier-2/tier-3 fallback.
 				if branch == "" {
 					branch = "feature/" + name
 				}
-				gitArgs = append(gitArgs, "-b", branch)
-			}
-			gitArgs = append(gitArgs, worktreePath)
-
-			out, err := safecmd.Git(cmd.Context(), repoPath, gitArgs...)
-			if err != nil {
-				return fmt.Errorf("git worktree add: %s\n%s", err, out)
-			}
-			fmt.Printf("✓ Worktree created at %s\n", worktreePath)
-
-			// 2. Set up redirects (.thrum/ and optionally .beads/)
-			if err := cli.EnsureWorktreeRedirects(worktreePath, repoPath); err != nil {
-				return fmt.Errorf("redirect setup: %w", err)
+				result, err := worktree.Create(cmd.Context(), worktree.CreateOpts{
+					RepoPath:       repoPath,
+					BasePath:       basePath, // explicit; cobra always knows
+					AgentName:      name,
+					Persistent:     true,
+					BranchOverride: branch,
+				})
+				if err != nil {
+					return fmt.Errorf("create worktree: %w", err)
+				}
+				worktreePath = result.Path
+				branch = result.Branch
+				if result.Reused {
+					fmt.Printf("✓ Worktree reused at %s (branch %s)\n", worktreePath, branch)
+				} else {
+					fmt.Printf("✓ Worktree created at %s\n", worktreePath)
+				}
 			}
 			cli.PrintRedirectConfirmations(os.Stdout, worktreePath)
 
@@ -2903,7 +2911,7 @@ func worktreeCreateCmd() *cobra.Command {
 }
 
 func worktreeTeardownCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "teardown <name>",
 		Short: "Remove a worktree and clean up thrum/beads artifacts",
 		Args:  cobra.ExactArgs(1),
@@ -2912,6 +2920,8 @@ func worktreeTeardownCmd() *cobra.Command {
 			if strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
 				return fmt.Errorf("invalid worktree name %q: must not contain /, \\, or parent references", name)
 			}
+			deleteBranchFlag, _ := cmd.Flags().GetBool("delete-branch")
+
 			repoPath := paths.EffectiveRepoPath(flagRepo)
 			thrumDir := filepath.Join(repoPath, ".thrum")
 			cfg, err := config.LoadThrumConfig(thrumDir)
@@ -2921,7 +2931,7 @@ func worktreeTeardownCmd() *cobra.Command {
 
 			basePath := cfg.Worktrees.BasePath
 			if basePath == "" {
-				basePath = inferWorktreeBasePath(repoPath)
+				basePath = worktree.InferBasePath(repoPath)
 			}
 			repoName := filepath.Base(repoPath)
 			if filepath.Base(basePath) != repoName {
@@ -2956,16 +2966,50 @@ func worktreeTeardownCmd() *cobra.Command {
 				_ = cli.TmuxKill(client, name)
 			}
 
-			// Remove git worktree
-			out, err := safecmd.Git(cmd.Context(), repoPath, "worktree", "remove", "--force", worktreePath)
+			// Phase C: call headless primitive (spec §4.2 mapping table).
+			// Resolve the worktree's HEAD branch when --delete-branch
+			// is set so the operator doesn't have to type the branch
+			// name. Per Leon Q2 lock (2026-05-15): default flag-absent
+			// path passes Branch:"" so the branch stays after removal
+			// (pre-refactor parity); flag-on path passes the resolved
+			// HEAD short-name so worktree.Destroy deletes it.
+			var branchToDelete string
+			if deleteBranchFlag {
+				out, err := safecmd.Git(cmd.Context(), worktreePath,
+					"rev-parse", "--abbrev-ref", "HEAD")
+				if err != nil {
+					fmt.Fprintf(os.Stderr,
+						"  Warning: --delete-branch given but HEAD resolution failed: %v (branch left in place)\n", err)
+				} else {
+					branchToDelete = strings.TrimSpace(string(out))
+				}
+			}
+			res, err := worktree.Destroy(cmd.Context(), worktree.DestroyOpts{
+				RepoPath:     repoPath,
+				WorktreePath: worktreePath,
+				Branch:       branchToDelete, // "" when flag absent
+				Force:        true,
+			})
 			if err != nil {
-				return fmt.Errorf("git worktree remove: %s\n%s", err, out)
+				return fmt.Errorf("destroy worktree: %w", err)
 			}
 
 			fmt.Printf("✓ Worktree %s removed\n", name)
+			if branchToDelete != "" {
+				if res.BranchDeleted {
+					fmt.Printf("✓ Branch deleted: %s\n", branchToDelete)
+				} else {
+					fmt.Fprintf(os.Stderr,
+						"  Warning: branch %s not deleted (best-effort delete failed; see daemon logs)\n",
+						branchToDelete)
+				}
+			}
 			return nil
 		},
 	}
+	cmd.Flags().Bool("delete-branch", false,
+		"Delete the worktree's branch after removing the worktree (default: false; branch stays)")
+	return cmd
 }
 
 func worktreeListCmd() *cobra.Command {
