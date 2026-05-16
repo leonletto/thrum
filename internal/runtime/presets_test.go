@@ -261,6 +261,25 @@ func TestClaudeSpinnerRegex_MatchesAllObservedFormats(t *testing.T) {
 	}
 }
 
+// TestClaudeSpinnerRegex_DotGlyph pins thrum-fyza: Claude Code 2.1.141
+// introduced a new spinner glyph variant ("· <verb>…") that the original
+// regex missed, causing the watchdog to treat an actively-spinning pane as
+// silent and over-trigger nudges.
+func TestClaudeSpinnerRegex_DotGlyph(t *testing.T) {
+	cases := []string{
+		"· Twisting…",
+		"· Thinking…",
+		"· Computing…",
+		"· Processing…",
+		"· Analyzing…",
+	}
+	for _, c := range cases {
+		if !claudeSpinnerRegex.MatchString(c) {
+			t.Errorf("claudeSpinnerRegex should match dot-glyph variant %q (chrome line) but did not", c)
+		}
+	}
+}
+
 // TestClaudeSpinnerRegex_RejectsNonSpinnerLines pins the negative side:
 // real agent output and malformed pseudo-spinner lines must NOT match so
 // the watchdog still counts them as engagement.

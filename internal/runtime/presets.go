@@ -55,15 +55,17 @@ type RuntimePreset struct {
 var claudeBottomAnchorRegex = regexp.MustCompile(`^─{20,}$`)
 
 // claudeSpinnerRegex matches Claude Code's animated thinking indicator.
-// Two observed durations:
+// Three observed forms:
 //   - Short form (<1m):  "✻ <verb> for <N>s"       — e.g. "✻ Churned for 17s"
 //   - Long form  (≥1m):  "✻ <verb> for <Nm Ns>"    — e.g. "✻ Baked for 1m 45s"
+//   - Dot form  (2.1.141+): "· <verb>…"             — e.g. "· Twisting…"
 //
-// ✻ = U+273B. Present in the agent-output region while a turn is in flight;
-// the watchdog ignores these lines as chrome. Uses \S+ instead of \w+ because
-// some verbs contain non-ASCII characters (e.g. "Sautéed"). The long-form
-// branch is non-capturing so the regex stays anchored at line end. thrum-8dl3.
-var claudeSpinnerRegex = regexp.MustCompile(`^✻ \S+ for \d+(?:m \d+)?s$`)
+// ✻ = U+273B, · = U+00B7, … = U+2026. Present in the agent-output region
+// while a turn is in flight; the watchdog ignores these lines as chrome.
+// Uses \S+ instead of \w+ because some verbs contain non-ASCII characters
+// (e.g. "Sautéed"). The long-form branch is non-capturing so the regex stays
+// anchored at line end. thrum-8dl3, thrum-fyza.
+var claudeSpinnerRegex = regexp.MustCompile(`^(?:✻ \S+ for \d+(?:m \d+)?s|· \S+…)$`)
 
 // BuiltinPresets contains the default presets for all known runtimes.
 var BuiltinPresets = map[string]RuntimePreset{
