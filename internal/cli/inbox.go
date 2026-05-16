@@ -19,6 +19,7 @@ type InboxOptions struct {
 	CallerMentionRole string // Caller's role (for mentions filter)
 	ForAgent          string // Auto-filter: agent name (messages mentioning this name + broadcasts)
 	ForAgentRole      string // Auto-filter: agent role (messages mentioning this role + broadcasts)
+	AuthorID          string // Filter messages by author (--from); daemon-side filter (author_id)
 }
 
 // Message represents a message from the inbox.
@@ -90,6 +91,10 @@ func Inbox(client *Client, opts InboxOptions) (*InboxResult, error) {
 
 	if opts.ForAgentRole != "" {
 		params["for_agent_role"] = opts.ForAgentRole
+	}
+
+	if opts.AuthorID != "" {
+		params["author_id"] = opts.AuthorID
 	}
 
 	if opts.PageSize > 0 {

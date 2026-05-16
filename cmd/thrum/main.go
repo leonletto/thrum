@@ -32,6 +32,7 @@ import (
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/context/roleconfig"
 	"github.com/leonletto/thrum/internal/daemon"
+	"github.com/leonletto/thrum/internal/daemon/backstop"
 	"github.com/leonletto/thrum/internal/daemon/bootstrap"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
@@ -178,7 +179,11 @@ Environment variables:
 	rootCmd.AddCommand(whoamiCmd())
 	rootCmd.AddCommand(versionCmd())
 	rootCmd.AddCommand(waitCmd())
-	rootCmd.AddCommand(cronCmd())
+	// thrum-7b84.3.5: `thrum cron install-inbox-poll` deprecated — the
+	// daemon-side backstop ticker (internal/daemon/backstop) now handles
+	// the 15-minute stale-unread reminder for all alive agents. No
+	// per-agent CronCreate required; removing the registration retires
+	// the durable:false cron on each runtime's next session boot.
 
 	// Composite commands
 	rootCmd.AddCommand(primeCmd())
@@ -1152,10 +1157,16 @@ The daemon must be running and you must have an active session.`,
 			showAll, _ := cmd.Flags().GetBool("all")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 			page, _ := cmd.Flags().GetInt("page")
+			fromAgent, _ := cmd.Flags().GetString("from")
 
 			// --limit is an alias for --page-size
 			if cmd.Flags().Changed("limit") {
 				pageSize, _ = cmd.Flags().GetInt("limit")
+			}
+
+			// Strip optional leading @ on --from value.
+			if len(fromAgent) > 0 && fromAgent[0] == '@' {
+				fromAgent = fromAgent[1:]
 			}
 
 			agentID, err := resolveLocalAgentID()
@@ -1175,6 +1186,7 @@ The daemon must be running and you must have an active session.`,
 				Page:              page,
 				CallerAgentID:     agentID,
 				CallerMentionRole: agentRole,
+				AuthorID:          fromAgent,
 			}
 
 			// Auto-filter: when identity is resolved and --all is not set,
@@ -1189,6 +1201,26 @@ The daemon must be running and you must have an active session.`,
 				return fmt.Errorf("failed to connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
+
+			// Validate --from agent exists. Mirrors --to behavior: fast-fail
+			// with a clear error rather than silently returning an empty
+			// inbox on a typo.
+			if fromAgent != "" {
+				agentsResp, listErr := cli.AgentList(client, cli.AgentListOptions{})
+				if listErr != nil {
+					return fmt.Errorf("validate --from @%s: %w", fromAgent, listErr)
+				}
+				known := false
+				for _, a := range agentsResp.Agents {
+					if a.AgentID == fromAgent {
+						known = true
+						break
+					}
+				}
+				if !known {
+					return fmt.Errorf("unknown agent: @%s (use 'thrum team --all' to see registered agents)", fromAgent)
+				}
+			}
 
 			result, err := cli.Inbox(client, opts)
 			if err != nil {
@@ -1243,6 +1275,7 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().Int("page-size", 10, "Results per page")
 	cmd.Flags().Int("limit", 0, "Alias for --page-size")
 	cmd.Flags().Int("page", 1, "Page number")
+	cmd.Flags().String("from", "", "Filter inbox to messages from a specific agent (use @agent_name or agent_name)")
 
 	return cmd
 }
@@ -1272,55 +1305,6 @@ func versionCmd() *cobra.Command {
 	}
 	return cmd
 }
-
-// cronCmd is the root of the `thrum cron` subtree. Currently houses
-// only install-inbox-poll. Subcommands here emit runtime-specific
-// scheduling instructions for the calling agent to execute — they do
-// not schedule anything directly; the daemon has no cron primitive.
-func cronCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "cron",
-		Short: "Manage cron-style scheduled tasks (runtime-specific emitters)",
-	}
-	cmd.AddCommand(cronInstallInboxPollCmd())
-	return cmd
-}
-
-// cronInstallInboxPollCmd emits an instruction block that the
-// SessionStart hook forwards to Claude Code, which reads it and calls
-// CronCreate to schedule the 15-minute inbox-check poll. The command
-// itself prints to stdout and exits — it does NOT call the daemon,
-// touch identity, or invoke any runtime API directly. That's why it's
-// classified as bypass.
-func cronInstallInboxPollCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "install-inbox-poll",
-		Short: "Emit a CronCreate instruction to schedule the 15-minute inbox-check poll",
-		Long: `Prints an instruction block for the running runtime agent to schedule
-the 15-minute inbox-check cron. Emitted to stdout; the SessionStart hook
-forwards it into the agent's context, where the runtime acts on it.
-
-This command is print-only. It does NOT call the daemon, touch identity
-state, or invoke any runtime scheduling API directly.`,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			_, err := fmt.Fprintln(cmd.OutOrStdout(), inboxPollCronInstruction)
-			return err
-		},
-	}
-}
-
-// inboxPollCronInstruction is the instruction block consumed by
-// Claude Code's SessionStart hook → context-injection pipeline.
-// The format intentionally mirrors other hook-output instructions:
-// a delimited banner, explicit kv lines, and a closing banner so
-// the runtime can parse it unambiguously.
-const inboxPollCronInstruction = `===== SCHEDULE CRON (hook-inbox-delivery) =====
-Please call CronCreate with the following parameters:
-  cron: "7,22,37,52 * * * *"
-  prompt: "Background inbox check. Run ` + "`thrum inbox --unread`" + ` once. If messages are present, process them; if not, return to idle without further action."
-  recurring: true
-  durable: false
-===============================================`
 
 // printAgentSummaryField emits the bare value of a single field from
 // AgentSummary, newline-terminated. Unknown fields return an error so
@@ -6895,6 +6879,24 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		},
 	)
 	go spoolJanitor.Start(ctx)
+
+	// thrum-7b84.3 E3: backstop ticker. Every 15 minutes, scan
+	// message_deliveries for unread rows older than the AgeCutoff for
+	// alive agents, and re-fire the existing tmux nudge. Catches the
+	// push-delivery cases that tmux/spool missed (wedged pane, hook
+	// didn't fire, agent in a long bash invocation that didn't yield).
+	// Pattern mirrors PeriodicSyncScheduler + BackupScheduler — own
+	// goroutine, own ticker. The Dispatcher is a thin shim around
+	// nudge.DispatchTmux + inbox.WriteSpool that explicitly bypasses
+	// OutboundRelay/Telegram (this is a forgotten-mail reminder, not a
+	// paging signal).
+	bs := &backstop.Backstop{
+		DB:        st.DB(),
+		Dispatch:  newBackstopDispatcher(thrumDir),
+		AgeCutoff: 15 * time.Minute,
+		Interval:  15 * time.Minute,
+	}
+	go bs.Run(ctx)
 
 	// Telegram bridge RPC handlers + goroutine
 	telegramHandler := rpc.NewTelegramHandler(absPath)

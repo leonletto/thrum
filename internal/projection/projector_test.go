@@ -92,6 +92,93 @@ func TestProjector_ApplyMessageCreate(t *testing.T) {
 	}
 }
 
+// TestApplyMessageCreate_SelfDelivery_StampsReadAt verifies the projector stamps
+// read_at and seen_at on the author's own delivery row when the author appears
+// in event.Recipients (a deliberate self-mention reached via HandleSend's
+// direct-targeting paths). This drops the message out of --unread queries
+// without requiring an explicit markRead round-trip.
+func TestApplyMessageCreate_SelfDelivery_StampsReadAt(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	agentID := "coordinator_main"
+	now := "2026-05-14T15:00:00Z"
+
+	event := types.MessageCreateEvent{
+		Type:       "message.create",
+		Timestamp:  now,
+		MessageID:  "msg_self_001",
+		AgentID:    agentID,
+		SessionID:  "ses_self",
+		Body:       types.MessageBody{Format: "markdown", Content: "note"},
+		Recipients: []string{agentID},
+		Refs:       []types.Ref{{Type: "mention", Value: agentID}},
+	}
+
+	data, _ := json.Marshal(event)
+	if err := p.Apply(context.Background(), data); err != nil {
+		t.Fatalf("Apply() failed: %v", err)
+	}
+
+	var deliveredAt, readAt, seenAt sql.NullString
+	err := db.QueryRow(
+		`SELECT delivered_at, read_at, seen_at FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ?`,
+		"msg_self_001", agentID,
+	).Scan(&deliveredAt, &readAt, &seenAt)
+	if err != nil {
+		t.Fatalf("query delivery row: %v", err)
+	}
+	if !readAt.Valid || readAt.String != now {
+		t.Fatalf("expected read_at=%q, got valid=%v value=%q", now, readAt.Valid, readAt.String)
+	}
+	if !seenAt.Valid || seenAt.String != now {
+		t.Fatalf("expected seen_at=%q, got valid=%v value=%q", now, seenAt.Valid, seenAt.String)
+	}
+}
+
+// TestApplyMessageCreate_OtherRecipient_DoesNotStampReadAt verifies that non-self
+// recipients still get NULL read_at/seen_at — the self-delivery branch must not
+// leak into the standard delivery path.
+func TestApplyMessageCreate_OtherRecipient_DoesNotStampReadAt(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	event := types.MessageCreateEvent{
+		Type:       "message.create",
+		Timestamp:  "2026-05-14T15:00:00Z",
+		MessageID:  "msg_other_001",
+		AgentID:    "coordinator_main",
+		SessionID:  "ses_sender",
+		Body:       types.MessageBody{Format: "markdown", Content: "hi alice"},
+		Recipients: []string{"alice"},
+		Refs:       []types.Ref{{Type: "mention", Value: "alice"}},
+	}
+
+	data, _ := json.Marshal(event)
+	if err := p.Apply(context.Background(), data); err != nil {
+		t.Fatalf("Apply() failed: %v", err)
+	}
+
+	var readAt, seenAt sql.NullString
+	err := db.QueryRow(
+		`SELECT read_at, seen_at FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ?`,
+		"msg_other_001", "alice",
+	).Scan(&readAt, &seenAt)
+	if err != nil {
+		t.Fatalf("query delivery row: %v", err)
+	}
+	if readAt.Valid {
+		t.Fatalf("expected NULL read_at for non-self recipient, got %q", readAt.String)
+	}
+	if seenAt.Valid {
+		t.Fatalf("expected NULL seen_at for non-self recipient, got %q", seenAt.String)
+	}
+}
+
 func TestProjector_ApplyMessageEdit(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
