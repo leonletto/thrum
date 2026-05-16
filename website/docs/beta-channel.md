@@ -250,11 +250,12 @@ To move between the two tracks, install the binary with the target track's
 `VERSION=` and refresh both plugins against the matching release branch.
 
 ```bash
-# Example: substrate-track → stable-track
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.11 sh
+# Example: substrate-track → stable-track (when stable-track has a pre-release;
+# otherwise just install the latest stable release without VERSION=)
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
 thrum daemon restart
-# Then refresh plugins against release/v0.10.3 (see Claude Code + Codex
-# sections above)
+# Then refresh plugins against the release branch (see Claude Code + Codex
+# sections above) — currently the stable line is the v0.10.3 release.
 ```
 
 The binary and plugins share the same install paths regardless of track, so the
