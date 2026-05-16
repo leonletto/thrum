@@ -16,6 +16,8 @@ type ThrumConfig struct {
 	Daemon        DaemonConfig        `json:"daemon"`
 	Backup        BackupConfig        `json:"backup"`
 	Telegram      TelegramConfig      `json:"telegram"`
+	Email         EmailConfig          `json:"email,omitzero"` // omitzero: Go 1.24+; entire block dropped when at zero value
+	Users         map[string]UserPrefs `json:"users,omitempty"`
 	Peers         PeersConfig         `json:"peers"`
 	Restart       RestartConfig       `json:"restart"`
 	Worktrees     WorktreesConfig     `json:"worktrees,omitempty"`
@@ -302,6 +304,13 @@ func LoadThrumConfig(thrumDir string) (*ThrumConfig, error) {
 		return nil, err
 	}
 
+	// D-B1.2: fail fast if config.json contains a known-secret field name
+	// (imap_password / smtp_password / oauth.refresh_token). Credentials
+	// belong in .thrum/secrets/email.json.
+	if err := CheckForSecretNames(data); err != nil {
+		return nil, err
+	}
+
 	// thrum-1k00: detect whether the "peers" key is present in the raw
 	// JSON. A stanza present with zero-values is distinguishable from
 	// an absent stanza only at the raw JSON level — json.Unmarshal
@@ -457,6 +466,28 @@ func SaveThrumConfig(thrumDir string, cfg *ThrumConfig) error {
 		var telegramMap any
 		_ = json.Unmarshal(telegramBytes, &telegramMap)
 		existing["telegram"] = telegramMap
+	}
+
+	// Marshal and merge the email section (omit when at zero value).
+	if !isZeroEmail(cfg.Email) {
+		emailBytes, err := json.Marshal(cfg.Email)
+		if err != nil {
+			return err
+		}
+		var emailMap any
+		_ = json.Unmarshal(emailBytes, &emailMap)
+		existing["email"] = emailMap
+	}
+
+	// Marshal and merge the users section (only if any entry).
+	if len(cfg.Users) > 0 {
+		usersBytes, err := json.Marshal(cfg.Users)
+		if err != nil {
+			return err
+		}
+		var usersMap any
+		_ = json.Unmarshal(usersBytes, &usersMap)
+		existing["users"] = usersMap
 	}
 
 	// Marshal and merge the worktrees section (only if base_path is set)

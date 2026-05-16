@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -813,5 +814,147 @@ func TestValidatePermissionSupervisors(t *testing.T) {
 					tt.entries, got, tt.wantOK)
 			}
 		})
+	}
+}
+
+// --- D-B1.2: EmailConfig round-trip + absent-block tolerance + users default ---
+
+// fullEmailConfig returns a fully-populated EmailConfig + UsersConfig that
+// exercises every field from design-spec §4. Used by the round-trip test.
+func fullEmailConfig() (config.EmailConfig, map[string]config.UserPrefs) {
+	email := config.EmailConfig{
+		Enabled: true,
+		IMAP: config.EmailIMAP{
+			Host:        "imap.gmail.com",
+			Port:        993,
+			UseStartTLS: false,
+			UseIDLE:     true,
+		},
+		SMTP: config.EmailSMTP{
+			Host:        "smtp.gmail.com",
+			Port:        587,
+			UseStartTLS: true,
+		},
+		AuthMethod:            "password",
+		Username:              "thrum-mesh@gmail.com",
+		FromAddress:           "thrum-mesh@gmail.com",
+		FromDisplayNameFormat: "{agent} @ {handle}",
+		DaemonHandle:          "laptop-falcon",
+		TargetUser:            "leon-letto",
+		TargetEmail:           "leon@example.com",
+		DefaultMention:        "@coordinator_main",
+		AllowFrom:             []string{"leon@example.com", "thrum-mesh@gmail.com"},
+		PollIntervalSeconds:   60,
+		EmbedShortID:          true,
+		UnknownRecipient:      "drop",
+		MaxOutboundBytes:      102400,
+		RateLimits: config.EmailRateLimits{
+			OutboundPerPeerPerHour: 30,
+			InboundPerPeerPerHour:  60,
+			GlobalInboundPerMinute: 120,
+		},
+		Mesh: config.EmailMesh{
+			VouchAcceptance:         "auto_with_notify",
+			VouchTTLHours:           0,
+			AllowTransitiveVouching: true,
+			RevocationPropagation:   "gossip",
+			HopCountCeiling:         5,
+		},
+		Queue: config.EmailQueue{
+			MaxAttempts:           10,
+			BackoffInitialSeconds: 5,
+			BackoffCapSeconds:     300,
+		},
+		Peers: []config.EmailPeer{
+			{
+				Handle:       "laptop-thrum",
+				DaemonID:     "ab12cd34-...",
+				ContactEmail: "thrum-mesh@gmail.com",
+				VouchedBy:    "self",
+				AddedAt:      "2026-05-13T17:42:00Z",
+				Trust:        "full",
+			},
+		},
+	}
+	users := map[string]config.UserPrefs{
+		"leon-letto": {PreferredChannel: "both"},
+	}
+	return email, users
+}
+
+func TestEmailConfig_LoadRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	email, users := fullEmailConfig()
+	cfg := &config.ThrumConfig{
+		Daemon: config.DaemonConfig{LocalOnly: true},
+		Email:  email,
+		Users:  users,
+	}
+	if err := config.SaveThrumConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	loaded, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if !reflect.DeepEqual(loaded.Email, email) {
+		t.Errorf("Email round-trip mismatch:\nwant: %#v\ngot:  %#v", email, loaded.Email)
+	}
+	if !reflect.DeepEqual(loaded.Users, users) {
+		t.Errorf("Users round-trip mismatch:\nwant: %#v\ngot:  %#v", users, loaded.Users)
+	}
+}
+
+func TestEmailConfig_AbsentEmailBlock(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"daemon":{"local_only":true}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Email.Enabled {
+		t.Error("expected Email.Enabled=false when email block absent")
+	}
+	if cfg.Email.IMAP.Host != "" || cfg.Email.SMTP.Host != "" {
+		t.Errorf("expected zero-value Email when block absent; got IMAP.Host=%q SMTP.Host=%q",
+			cfg.Email.IMAP.Host, cfg.Email.SMTP.Host)
+	}
+	if cfg.Users != nil {
+		t.Errorf("expected nil Users map when users block absent; got %v", cfg.Users)
+	}
+}
+
+func TestEmailConfig_PreferredChannelDefault(t *testing.T) {
+	// users.<name> present but preferred_channel absent → PreferredChannel == "".
+	// Q11 outbound relay treats "" as "both"; the struct preserves operator
+	// intent rather than backfilling at load.
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	data := `{
+		"daemon": {"local_only": true},
+		"users": {
+			"leon-letto": {}
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	u, ok := cfg.Users["leon-letto"]
+	if !ok {
+		t.Fatalf("expected user leon-letto in Users map; got %v", cfg.Users)
+	}
+	if u.PreferredChannel != "" {
+		t.Errorf("expected PreferredChannel='' (operator omitted); got %q", u.PreferredChannel)
 	}
 }
