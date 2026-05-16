@@ -1,10 +1,13 @@
 ---
 name: adversarial-critique
-description: "Use when an implementer is blocked mid-work by a design flaw, contradiction, or unforeseen fork with 2-3 ways to resolve it - produces a defended pick that unblocks the work and leaves an audit trail so the decision can be revisited if it later proves wrong"
+description:
+  "Use when an implementer is blocked mid-work by a design flaw, contradiction,
+  or unforeseen fork with 2-3 ways to resolve it - produces a defended pick that
+  unblocks the work and leaves an audit trail so the decision can be revisited
+  if it later proves wrong"
 # source: claude-plugin/skills/adversarial-critique/SKILL.md
 # generated-by: scripts/sync-skills.sh
 ---
-
 
 ## Adversarial Critique
 

@@ -154,11 +154,18 @@ func loadIdentityFile(path string) (*IdentityFile, error) {
 }
 
 // loadIdentityFromDir scans the identities directory and returns the identity based on priority:
-// 1. If thrumName is provided (from THRUM_NAME env var), load that specific identity file
-// 2. If only one identity file exists, load it (solo-agent worktree backward compat)
-// 3. Otherwise, error.
+//  1. If thrumName is provided (from THRUM_NAME env var) AND a matching file
+//     exists in dirPath, load it. If thrumName points to a missing file,
+//     fall through to directory scan (thrum-qofl rc.6: treat env as a hint,
+//     not authority — a stale THRUM_NAME inherited at fork time pointing at
+//     an identity that doesn't exist in cwd's worktree should not block
+//     resolution; the cwd worktree's own identity is the source of truth).
+//  2. If only one identity file exists, load it (solo-agent worktree).
+//  3. Otherwise, error.
 func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error) {
-	// If THRUM_NAME is specified, validate and load that specific identity file
+	// If THRUM_NAME is specified, validate and try to load that specific
+	// identity file. Missing-file is non-fatal here: fall through to
+	// directory scan so cwd's actual identity can win (rc.6 thrum-qofl).
 	if thrumName != "" {
 		if err := identity.ValidateAgentName(thrumName); err != nil {
 			return nil, fmt.Errorf("invalid THRUM_NAME: %w", err)
@@ -166,10 +173,11 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 
 		identityPath := filepath.Join(dirPath, thrumName+".json")
 		identityFile, err := loadIdentityFile(identityPath)
-		if err != nil {
-			return nil, fmt.Errorf("load identity file %s: %w", thrumName+".json", err)
+		if err == nil {
+			return identityFile, nil
 		}
-		return identityFile, nil
+		// File missing or unreadable — env hint doesn't apply here. Fall
+		// through to directory scan instead of erroring.
 	}
 
 	// Otherwise, scan directory for identity files

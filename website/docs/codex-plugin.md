@@ -24,6 +24,10 @@ Thrum integration is packaged as a **Codex skill bundle** in
 The Codex bundle mirrors the Claude plugin's `thrum:*` command surface as
 top-level Codex skills.
 
+The Codex runtime preset has `HasSessionStartHook: true` — the prime-context
+banner fires automatically on session start, on parity with the Claude plugin.
+No manual `thrum prime` is needed at session open.
+
 Registered skills:
 
 - `thrum`
@@ -56,6 +60,16 @@ thrum quickstart --name myagent --role implementer --module auth
 ```
 
 ## Installation
+
+### One-command install (recommended)
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+```
+
+This script handles the cache-staging gap in codex 0.130.0 where third-party
+marketplace entries aren't loaded until the cache is rebuilt — no manual steps
+needed after running it.
 
 ### From GitHub
 

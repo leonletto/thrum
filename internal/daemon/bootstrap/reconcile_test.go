@@ -218,8 +218,21 @@ func TestReconcile_TmuxBindingRestoredWhenAlive(t *testing.T) {
 	if stats.TmuxBindingsRestored != 1 {
 		t.Fatalf("expected TmuxBindingsRestored=1, got %+v", stats)
 	}
-	if got := rpc.TmuxHandlerGetBindingForTest(th, "live-session:0.0"); got != dirA {
-		t.Fatalf("binding not restored: got %q, want %q", got, dirA)
+	// Lookup MUST use the bare session name (no :N.M suffix). The identity
+	// file stores tmux_session as "live-session:0.0" but every reader of
+	// sessionCwds (HandleCreate / HandleRestart / emitIdentityBanner /
+	// HandleKill) uses the bare name. RestoreBinding strips the suffix at
+	// the API boundary; this assertion pins that canonicalization end-to-end
+	// through the reconcile pass. Pre-thrum-8dl3 this test asserted on the
+	// suffixed key, which silently agreed with the buggy storage and let
+	// emitIdentityBanner miss on every post-restart pane.
+	if got := rpc.TmuxHandlerGetBindingForTest(th, "live-session"); got != dirA {
+		t.Fatalf("binding not restored under bare session key: got %q, want %q", got, dirA)
+	}
+	// Defense-in-depth: the suffixed form must NOT be present — that would
+	// mean the strip silently failed and the bug regressed.
+	if got := rpc.TmuxHandlerGetBindingForTest(th, "live-session:0.0"); got != "" {
+		t.Fatalf("suffixed binding leaked through RestoreBinding: got %q, want \"\"", got)
 	}
 }
 

@@ -24,10 +24,10 @@ func TestTwoSessionsKeepDistinctIdentityEnv(t *testing.T) {
 	}
 
 	const (
-		sessA  = "thrum-jj0a-sess-a"
-		sessB  = "thrum-jj0a-sess-b"
-		nameA  = "agent_alpha"
-		nameB  = "agent_bravo"
+		sessA = "thrum-jj0a-sess-a"
+		sessB = "thrum-jj0a-sess-b"
+		nameA = "agent_alpha"
+		nameB = "agent_bravo"
 	)
 
 	// Cleanup, in case a prior run left them around.

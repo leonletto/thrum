@@ -468,6 +468,72 @@ func TestSingleAgentModeConfig_RoundTrip(t *testing.T) {
 	}
 }
 
+// TestSingleAgentModeConfig_LoadModifyOtherSavePreserves locks the
+// load-modify-save invariant that init code paths must preserve
+// SingleAgentMode when only modifying unrelated fields.
+//
+// Regression test for the upgrade footgun: `thrum init --force` re-runs
+// after an upgrade and used to destructively overwrite SingleAgentMode
+// to true, silently breaking messaging for any user who had previously
+// set it to false (or omitted it entirely). The fix removed the
+// destructive assignment; this test pins that the surface contract
+// is now: callers must not touch SingleAgentMode unless that's
+// explicitly the field they're changing.
+func TestSingleAgentModeConfig_LoadModifyOtherSavePreserves(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Case A: existing config has single_agent_mode:false → must stay false
+	// after a load + unrelated-field modification + save cycle.
+	cfgJSON := `{"daemon":{"single_agent_mode":false,"local_only":true}}`
+	configPath := filepath.Join(tmpDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(cfgJSON), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if loaded.Daemon.SingleAgentMode {
+		t.Fatal("setup: expected SingleAgentMode=false from initial load")
+	}
+
+	// Simulate the init code path: modify an unrelated field, then save.
+	// The fix removed the line that destructively set SingleAgentMode=true here.
+	loaded.Runtime.Primary = "claude"
+
+	if err := config.SaveThrumConfig(tmpDir, loaded); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	reloaded, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if reloaded.Daemon.SingleAgentMode {
+		t.Error("SingleAgentMode flipped to true after load+unrelated-modify+save (upgrade footgun)")
+	}
+
+	// Case B: fresh install (no config file) → modify + save must
+	// produce single_agent_mode:false (zero value), not true.
+	freshDir := t.TempDir()
+	freshCfg, err := config.LoadThrumConfig(freshDir)
+	if err != nil {
+		t.Fatalf("load fresh: %v", err)
+	}
+	freshCfg.Runtime.Primary = "claude"
+	if err := config.SaveThrumConfig(freshDir, freshCfg); err != nil {
+		t.Fatalf("save fresh: %v", err)
+	}
+	reloadFresh, err := config.LoadThrumConfig(freshDir)
+	if err != nil {
+		t.Fatalf("reload fresh: %v", err)
+	}
+	if reloadFresh.Daemon.SingleAgentMode {
+		t.Error("SingleAgentMode true on fresh install — should default false")
+	}
+}
+
 func TestTelegramConfig_FindGroup(t *testing.T) {
 	cfg := config.TelegramConfig{
 		Groups: []config.TelegramGroup{

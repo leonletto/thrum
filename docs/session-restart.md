@@ -276,6 +276,7 @@ restart:
   max_lines: 200 # Max lines in snapshot (default: 200)
   auto_threshold: 0 # Context % trigger, 0 = disabled (default: 0)
   graceful_timeout: 30 # Seconds to wait for graceful save (default: 30)
+  silence_watchdog_seconds: 30 # Post-launch silence threshold (default: 30)
 ```
 
 `max_lines` controls how much conversation history to keep. 200 lines captures
@@ -290,6 +291,13 @@ automatic restart. Set to 0 to disable (the default). A value like 80 means
 
 `graceful_timeout` is how long `thrum tmux restart` waits for the agent to save
 its own snapshot before falling back to force extraction.
+
+`silence_watchdog_seconds` controls the post-launch silence watchdog. After
+`thrum tmux launch` or `thrum tmux restart`, the daemon monitors the agent pane
+for this many seconds. If the pane produces no output, a contextual nudge is
+sent so the agent doesn't sit idle having missed the prime output. An
+actively-producing pane is never interrupted. Set to a negative value to
+disable.
 
 ---
 

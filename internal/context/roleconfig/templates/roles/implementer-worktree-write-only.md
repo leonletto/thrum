@@ -55,9 +55,9 @@ Module-installed rules use the reserved sub-segment
 ## Available skills (situational — you MUST invoke when triggered)
 
 These skills deepen role discipline for specific situations. They do NOT
-auto-load — when a trigger condition below applies, you MUST invoke the
-matching skill via the Skill tool BEFORE taking action. Treat the trigger
-phrases as MUST-INVOKE conditions, not optional suggestions.
+auto-load — when a trigger condition below applies, you MUST invoke the matching
+skill via the Skill tool BEFORE taking action. Treat the trigger phrases as
+MUST-INVOKE conditions, not optional suggestions.
 
 - `implementer-receiving-dispatch` — received a new task, starting
   implementation, scoping a task, received dispatch

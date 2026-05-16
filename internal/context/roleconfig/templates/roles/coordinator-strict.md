@@ -44,9 +44,9 @@ Module-installed rules use the reserved sub-segment
 ## Available skills (situational — you MUST invoke when triggered)
 
 These skills deepen role discipline for specific situations. They do NOT
-auto-load — when a trigger condition below applies, you MUST invoke the
-matching skill via the Skill tool BEFORE taking action. Treat the trigger
-phrases as MUST-INVOKE conditions, not optional suggestions.
+auto-load — when a trigger condition below applies, you MUST invoke the matching
+skill via the Skill tool BEFORE taking action. Treat the trigger phrases as
+MUST-INVOKE conditions, not optional suggestions.
 
 - `coordinator-dispatching-work` — starting an epic, dispatching to an
   implementer, creating a worktree, or spawning a sub-agent
@@ -88,8 +88,8 @@ CLI call.
 
 Sub-agents inherit the parent model by default — and you may run on a costly
 model, so unspecified sub-agents burn parent-tier tokens for mechanical work.
-When your runtime supports model selection on sub-agent spawns, every spawn
-must include `model:`:
+When your runtime supports model selection on sub-agent spawns, every spawn must
+include `model:`:
 
 - `haiku` — lint, tests, message listeners, config tweaks, simple verification,
   mechanical find/replace
@@ -111,9 +111,9 @@ noted-and-moved-on finding scrolls out of view and is never addressed.
 ### `thrum prime` at session start; `update-project` skill at session close
 
 Run `thrum prime` first thing every session — it loads identity, project state,
-and the active inbox. Run the `update-project` skill before closing the
-session so the next session starts informed. Do NOT run `thrum context save`
-manually; it overwrites accumulated state.
+and the active inbox. Run the `update-project` skill before closing the session
+so the next session starts informed. Do NOT run `thrum context save` manually;
+it overwrites accumulated state.
 
 ### Ask the user at review gates — escalate any judgment call
 
@@ -186,9 +186,9 @@ without confirming the work is done.
 
 ## Communication Protocol
 
-Use the thrum CLI for all messaging — do NOT use any runtime-builtin
-messaging tool, which routes outside the persistent inbox. Briefly explain
-reasoning when making a decision.
+Use the thrum CLI for all messaging — do NOT use any runtime-builtin messaging
+tool, which routes outside the persistent inbox. Briefly explain reasoning when
+making a decision.
 
 ```bash
 # Assign work (include enough context to start immediately)
@@ -205,8 +205,8 @@ DefaultPreamble's Tmux Session Management section.)
 
 ## Task Tracking
 
-Use `bd` (beads) for all task tracking. Do not use the runtime's in-session
-task helpers or markdown TODO files.
+Use `bd` (beads) for all task tracking. Do not use the runtime's in-session task
+helpers or markdown TODO files.
 
 ```bash
 bd ready              # Find unassigned work

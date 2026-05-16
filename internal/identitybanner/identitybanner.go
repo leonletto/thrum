@@ -19,6 +19,12 @@ import (
 	"github.com/leonletto/thrum/internal/config"
 )
 
+// PrimeTruncationSentinel is the must-read directive line emitted at the end
+// of the identity banner by ShellCommand. The post-launch silence watchdog
+// imports this constant to locate the banner sentinel in a captured pane so
+// that banner-emit and watchdog detection can never drift apart.
+const PrimeTruncationSentinel = "If the prime output was truncated, you must read it now."
+
 // Compose returns the multi-line banner text rendered for the given
 // identity, or "" if the identity is nil / has no agent name (no banner is
 // emitted in that degraded case — the daemon should fall through silently
@@ -79,7 +85,7 @@ func ShellCommand(id *config.IdentityFile) string {
 	// it through the same input channel as user prompts, which the model
 	// treats more imperatively. Idempotent for small briefings (no
 	// truncation → "if truncated" is vacuous).
-	args = append(args, shellSingleQuote("If the prime output was truncated, you must read it now."))
+	args = append(args, shellSingleQuote(PrimeTruncationSentinel))
 	// Trailing blank line for visual separation from runtime output.
 	args = append(args, "''")
 	return "printf '%s\\n' " + strings.Join(args, " ")

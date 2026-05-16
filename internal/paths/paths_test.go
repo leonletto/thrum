@@ -8,6 +8,113 @@ import (
 	"testing"
 )
 
+// TestEffectiveRepoPath_CwdWinsOverEnv pins the rc.6 fix (thrum-qofl):
+// when cwd is inside a thrum worktree AND a stale THRUM_HOME is set pointing
+// elsewhere, cwd takes precedence. Old behavior (rc.5 and earlier) silently
+// substituted THRUM_HOME, causing cross-worktree misidentification when env
+// vars were inherited at fork time from a parent shell anchored elsewhere.
+func TestEffectiveRepoPath_CwdWinsOverEnv(t *testing.T) {
+	// Set up two temp dirs: cwd has .thrum/, stale env points to a different
+	// dir that also has .thrum/.
+	cwdDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(cwdDir, ".thrum"), 0750); err != nil {
+		t.Fatalf("create cwd .thrum: %v", err)
+	}
+	staleHomeDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(staleHomeDir, ".thrum"), 0750); err != nil {
+		t.Fatalf("create stale .thrum: %v", err)
+	}
+
+	t.Setenv("THRUM_HOME", staleHomeDir)
+
+	got := EffectiveRepoPath(cwdDir)
+	wantCanonical, _ := filepath.EvalSymlinks(cwdDir)
+	gotCanonical, _ := filepath.EvalSymlinks(got)
+	if gotCanonical != wantCanonical {
+		t.Errorf("cwd %q should win over stale THRUM_HOME %q; got %q (canonical %q), want %q (canonical %q)",
+			cwdDir, staleHomeDir, got, gotCanonical, cwdDir, wantCanonical)
+	}
+}
+
+// TestEffectiveRepoPath_CwdInSubdirOfWorktree verifies that when cwd is a
+// sub-directory of a thrum worktree (not the root), the function walks up
+// to find the worktree root. Same logic as FindThrumRoot — git-style
+// traversal — but exposed via EffectiveRepoPath.
+func TestEffectiveRepoPath_CwdInSubdirOfWorktree(t *testing.T) {
+	rootDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(rootDir, ".thrum"), 0750); err != nil {
+		t.Fatalf("create .thrum: %v", err)
+	}
+	subDir := filepath.Join(rootDir, "src", "subpkg")
+	if err := os.MkdirAll(subDir, 0750); err != nil {
+		t.Fatalf("create subdir: %v", err)
+	}
+
+	t.Setenv("THRUM_HOME", "") // ensure no env interference
+
+	got := EffectiveRepoPath(subDir)
+	wantCanonical, _ := filepath.EvalSymlinks(rootDir)
+	gotCanonical, _ := filepath.EvalSymlinks(got)
+	if gotCanonical != wantCanonical {
+		t.Errorf("subdir %q should resolve to worktree root %q; got %q",
+			subDir, rootDir, got)
+	}
+}
+
+// TestEffectiveRepoPath_FallbackToEnv verifies that when cwd is NOT inside
+// any thrum worktree but THRUM_HOME is set, the env var wins as a fallback.
+// This preserves the legitimate "pin to bound checkout when cwd is outside
+// any worktree" use case (e.g., a script run from /tmp that explicitly wants
+// to operate on a specific worktree via env).
+func TestEffectiveRepoPath_FallbackToEnv(t *testing.T) {
+	cwdDir := t.TempDir() // no .thrum/ here
+	homeDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(homeDir, ".thrum"), 0750); err != nil {
+		t.Fatalf("create home .thrum: %v", err)
+	}
+
+	t.Setenv("THRUM_HOME", homeDir)
+
+	got := EffectiveRepoPath(cwdDir)
+	if got != homeDir {
+		t.Errorf("cwd without .thrum should fall back to THRUM_HOME; got %q, want %q", got, homeDir)
+	}
+}
+
+// TestEffectiveRepoPath_NeitherCwdNorEnv verifies that when neither cwd nor
+// env give a thrum worktree, the function returns repoPath unchanged.
+func TestEffectiveRepoPath_NeitherCwdNorEnv(t *testing.T) {
+	cwdDir := t.TempDir() // no .thrum/ here
+	t.Setenv("THRUM_HOME", "")
+
+	got := EffectiveRepoPath(cwdDir)
+	if got != cwdDir {
+		t.Errorf("with neither cwd nor env, should return repoPath unchanged; got %q, want %q", got, cwdDir)
+	}
+}
+
+// TestEffectiveRepoPath_EmptyRepoPath verifies the function tolerates an
+// empty `repoPath` argument (which can happen when callers haven't yet
+// resolved cwd). Falls straight through to env or empty.
+func TestEffectiveRepoPath_EmptyRepoPath(t *testing.T) {
+	homeDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(homeDir, ".thrum"), 0750); err != nil {
+		t.Fatalf("create home .thrum: %v", err)
+	}
+	t.Setenv("THRUM_HOME", homeDir)
+
+	got := EffectiveRepoPath("")
+	if got != homeDir {
+		t.Errorf("empty repoPath with THRUM_HOME set should return env; got %q, want %q", got, homeDir)
+	}
+
+	t.Setenv("THRUM_HOME", "")
+	got = EffectiveRepoPath("")
+	if got != "" {
+		t.Errorf("empty repoPath with no env should return empty; got %q", got)
+	}
+}
+
 func TestResolveThrumDir_NoRedirect(t *testing.T) {
 	// Create temp dir with .thrum/ but no redirect file
 	tmpDir := t.TempDir()

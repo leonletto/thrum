@@ -20,9 +20,28 @@ const (
 )
 
 // EffectiveRepoPath returns the bound repo path for the current process.
-// THRUM_HOME pins Thrum commands to a specific checkout even when the shell cwd
-// moves into another worktree.
+//
+// Priority order (rc.6 — thrum-qofl):
+//  1. If `repoPath` (or any ancestor) contains a `.thrum/` directory, return
+//     that worktree root. Cwd has authority when it has thrum state.
+//  2. Else, if `THRUM_HOME` env var is set, return it as a fallback hint.
+//  3. Else, return `repoPath` unchanged.
+//
+// This inverts the priority from rc.5 and earlier (where THRUM_HOME always
+// won). The old behavior misidentified callers when stale `THRUM_HOME` was
+// inherited at fork time from a parent shell anchored to a different worktree
+// — a long-standing footgun observed during v0.10.3-rc.5 soak verification on
+// zarambp14. The legitimate "pin to bound checkout when cwd is outside any
+// worktree" use case is preserved by step 2 (THRUM_HOME still wins when cwd
+// has no thrum worktree at or above it). Code paths that need to bypass cwd
+// inference entirely (e.g., daemon spawn-from-pane scenarios) should use the
+// raw env var via `os.Getenv("THRUM_HOME")` directly.
 func EffectiveRepoPath(repoPath string) string {
+	if repoPath != "" {
+		if root, err := FindThrumRoot(repoPath); err == nil {
+			return root
+		}
+	}
 	if home := strings.TrimSpace(os.Getenv("THRUM_HOME")); home != "" {
 		return home
 	}

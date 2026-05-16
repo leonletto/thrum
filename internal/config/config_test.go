@@ -222,66 +222,123 @@ func TestLoad_ThrumNameEnvVar_SelectsSpecificIdentity(t *testing.T) {
 	}
 }
 
-func TestLoadWithPath_UsesThrumHome(t *testing.T) {
-	mainRepo := t.TempDir()
-	worktreeRepo := t.TempDir()
+// TestLoadWithPath_CwdWinsOverThrumHome pins the rc.6 fix (thrum-qofl):
+// when LoadWithPath is called with a worktreeRepo that has its OWN .thrum/
+// identity, the worktree's identity wins even if THRUM_HOME points
+// elsewhere. This inverts pre-rc.6 behavior (env-wins) which silently
+// misidentified callers when stale env vars were inherited at fork time
+// from a parent shell anchored to a different worktree.
+//
+// The legitimate "pin via THRUM_HOME when cwd is outside any worktree" use
+// case is verified separately in TestLoadWithPath_FallsBackToThrumHomeWhenCwdHasNothing.
+func TestLoadWithPath_CwdWinsOverThrumHome(t *testing.T) {
+	staleEnvRepo := t.TempDir()
+	cwdRepo := t.TempDir()
 
-	mainIdentity := &config.IdentityFile{
+	staleIdentity := &config.IdentityFile{
 		Version: 1,
-		RepoID:  "r_MAIN123",
+		RepoID:  "r_STALE123",
 		Agent: config.AgentConfig{
 			Kind:    "agent",
-			Name:    "coordinator_main",
+			Name:    "coordinator_stale",
 			Role:    "coordinator",
 			Module:  "testing",
-			Display: "Coordinator",
+			Display: "Stale Coordinator",
 		},
 		UpdatedAt: time.Now().UTC(),
 	}
-	if err := config.SaveIdentityFile(filepath.Join(mainRepo, ".thrum"), mainIdentity); err != nil {
-		t.Fatalf("save main identity: %v", err)
+	if err := config.SaveIdentityFile(filepath.Join(staleEnvRepo, ".thrum"), staleIdentity); err != nil {
+		t.Fatalf("save stale identity: %v", err)
 	}
 
-	worktreeIdentity := &config.IdentityFile{
+	cwdIdentity := &config.IdentityFile{
 		Version: 1,
-		RepoID:  "r_WORK123",
+		RepoID:  "r_CWD123",
 		Agent: config.AgentConfig{
 			Kind:    "agent",
-			Name:    "implementer_testing",
+			Name:    "implementer_cwd",
 			Role:    "implementer",
 			Module:  "testing",
-			Display: "Implementer",
+			Display: "Cwd Implementer",
 		},
 		UpdatedAt: time.Now().UTC(),
 	}
-	if err := config.SaveIdentityFile(filepath.Join(worktreeRepo, ".thrum"), worktreeIdentity); err != nil {
-		t.Fatalf("save worktree identity: %v", err)
+	if err := config.SaveIdentityFile(filepath.Join(cwdRepo, ".thrum"), cwdIdentity); err != nil {
+		t.Fatalf("save cwd identity: %v", err)
 	}
 
-	t.Setenv("THRUM_HOME", mainRepo)
-	t.Setenv("THRUM_NAME", "coordinator_main")
+	t.Setenv("THRUM_HOME", staleEnvRepo)
+	t.Setenv("THRUM_NAME", "coordinator_stale")
 
-	cfg, err := config.LoadWithPath(worktreeRepo, "", "")
+	cfg, err := config.LoadWithPath(cwdRepo, "", "")
 	if err != nil {
 		t.Fatalf("LoadWithPath() failed: %v", err)
 	}
 
-	if cfg.RepoID != "r_MAIN123" {
-		t.Errorf("RepoID = %q, want r_MAIN123", cfg.RepoID)
+	if cfg.RepoID != "r_CWD123" {
+		t.Errorf("RepoID = %q, want r_CWD123 (cwd should win over stale THRUM_HOME)", cfg.RepoID)
 	}
-	if cfg.Agent.Name != "coordinator_main" {
-		t.Errorf("Agent.Name = %q, want coordinator_main", cfg.Agent.Name)
+	if cfg.Agent.Name != "implementer_cwd" {
+		t.Errorf("Agent.Name = %q, want implementer_cwd", cfg.Agent.Name)
 	}
-	if cfg.Agent.Role != "coordinator" {
-		t.Errorf("Agent.Role = %q, want coordinator", cfg.Agent.Role)
+	if cfg.Agent.Role != "implementer" {
+		t.Errorf("Agent.Role = %q, want implementer", cfg.Agent.Role)
 	}
 }
 
-func TestLoad_ThrumNameEnvVar_ErrorOnNonexistent(t *testing.T) {
+// TestLoadWithPath_FallsBackToThrumHomeWhenCwdHasNothing verifies the
+// legitimate THRUM_HOME use case is preserved: when the caller's cwd has no
+// .thrum/ at or above it, THRUM_HOME still wins as a fallback. This is
+// important for scripts run from /tmp or other non-worktree contexts that
+// intentionally use THRUM_HOME to route commands to a bound worktree.
+func TestLoadWithPath_FallsBackToThrumHomeWhenCwdHasNothing(t *testing.T) {
+	homeRepo := t.TempDir()
+	cwdNoThrum := t.TempDir() // no .thrum/
+
+	homeIdentity := &config.IdentityFile{
+		Version: 1,
+		RepoID:  "r_HOME123",
+		Agent: config.AgentConfig{
+			Kind:    "agent",
+			Name:    "coordinator_home",
+			Role:    "coordinator",
+			Module:  "main",
+			Display: "Home Coordinator",
+		},
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := config.SaveIdentityFile(filepath.Join(homeRepo, ".thrum"), homeIdentity); err != nil {
+		t.Fatalf("save home identity: %v", err)
+	}
+
+	t.Setenv("THRUM_HOME", homeRepo)
+	t.Setenv("THRUM_NAME", "coordinator_home")
+
+	cfg, err := config.LoadWithPath(cwdNoThrum, "", "")
+	if err != nil {
+		t.Fatalf("LoadWithPath() failed: %v", err)
+	}
+
+	if cfg.RepoID != "r_HOME123" {
+		t.Errorf("RepoID = %q, want r_HOME123 (THRUM_HOME should win when cwd has no .thrum/)", cfg.RepoID)
+	}
+	if cfg.Agent.Name != "coordinator_home" {
+		t.Errorf("Agent.Name = %q, want coordinator_home", cfg.Agent.Name)
+	}
+}
+
+// TestLoad_ThrumNameEnvVar_FallsThroughOnNonexistent pins the rc.6 fix:
+// when THRUM_NAME points to an identity file that doesn't exist in cwd's
+// worktree, the loader falls through to directory scan instead of erroring.
+// Old behavior (rc.5 and earlier): hard error on missing env-named file —
+// which broke legitimate uses where stale THRUM_NAME was inherited from a
+// parent shell. With a single identity in cwd, that one identity wins.
+func TestLoad_ThrumNameEnvVar_FallsThroughOnNonexistent(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	// Create one identity file
+	// Create one identity file in cwd
 	identity := &config.IdentityFile{
 		Version: 1,
 		RepoID:  "r_TEST123",
@@ -297,12 +354,16 @@ func TestLoad_ThrumNameEnvVar_ErrorOnNonexistent(t *testing.T) {
 		t.Fatalf("Failed to save identity: %v", err)
 	}
 
-	// Set THRUM_NAME to nonexistent agent
+	// Set THRUM_NAME to a name that doesn't exist in this worktree
+	// (simulates stale inherited env from a parent shell anchored elsewhere)
 	t.Setenv("THRUM_NAME", "nonexistent")
 
-	_, err := config.LoadWithPath(tmpDir, "", "")
-	if err == nil {
-		t.Fatal("Expected error when THRUM_NAME points to nonexistent file, got nil")
+	cfg, err := config.LoadWithPath(tmpDir, "", "")
+	if err != nil {
+		t.Fatalf("LoadWithPath should fall through to directory scan when THRUM_NAME doesn't match: %v", err)
+	}
+	if cfg.Agent.Name != "existing" {
+		t.Errorf("Agent.Name = %q, want existing (cwd's single identity should win when env hint doesn't match)", cfg.Agent.Name)
 	}
 }
 
