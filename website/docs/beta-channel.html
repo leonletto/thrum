@@ -54,19 +54,18 @@ to report what you find.</p>
 <p><strong>Current pre-release:
 <a href="https://github.com/leonletto/thrum/releases/tag/v0.10.3-rc.11"><code>v0.10.3-rc.11</code></a></strong>
 (tagged 2026-05-15, in soak). rc.11 is a plugin-only polish on the rc.10 v2
-<code>/thrum:restart</code> skill, surfaced by its first live invocation on a
-coordinator pane: Step 3&#39;s <code>thrum send --to @coordinator_main</code> no longer
-self-targets when the invoker IS the coordinator (new branch emits
-cross-pane <code>thrum tmux restart --force</code> instructions instead), a stale
-reference to the pre-rc.10 <code>thrum tmux snapshot restore</code> was dropped in
-favor of &quot;auto-loaded by <code>thrum prime</code>&quot;, and Step 1&#39;s fragile
-heredoc-with-discipline pattern was restructured into a prose composition
-guide plus a direct-Write step. No Go code changes. Rolls up the rc.1–rc.10
-highlights: codex plugin first-class, post-launch tmux silence watchdog
-(with <code>·</code> glyph support), first-launch trust-gate detection, self-echo
-nudge fix, cwd-anchored identity precedence, inbox read-race silent-loss
-class closed, prose-continuation restart skill. Full notes:
-<a href="whats-new.html">What&#39;s New</a> and the
+<code>/thrum:restart</code> skill, surfaced by its first live invocation on a coordinator
+pane: Step 3&#39;s <code>thrum send --to @coordinator_main</code> no longer self-targets when
+the invoker IS the coordinator (new branch emits cross-pane
+<code>thrum tmux restart --force</code> instructions instead), a stale reference to the
+pre-rc.10 <code>thrum tmux snapshot restore</code> was dropped in favor of &quot;auto-loaded
+by <code>thrum prime</code>&quot;, and Step 1&#39;s fragile heredoc-with-discipline pattern was
+restructured into a prose composition guide plus a direct-Write step. No Go
+code changes. Rolls up the rc.1–rc.10 highlights: codex plugin first-class,
+post-launch tmux silence watchdog (with <code>·</code> glyph support), first-launch
+trust-gate detection, self-echo nudge fix, cwd-anchored identity precedence,
+inbox read-race silent-loss class closed, prose-continuation restart skill.
+Full notes: <a href="whats-new.html">What&#39;s New</a> and the
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG <code>[Unreleased]</code> section</a>.</p>
 </blockquote>
 <h3>Quick install for <code>v0.10.3-rc.11</code></h3>
