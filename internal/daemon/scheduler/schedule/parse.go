@@ -86,16 +86,56 @@ func (c *cronSchedule) Next(after time.Time) time.Time {
 	return c.sched.Next(after.In(c.loc))
 }
 
-// parseAt is the @at <iso8601> handler. Body lands in Task 7 (thrum-6qmf.6.6);
-// stub returns an error so Task 6 ships routing without claiming functionality
-// it does not have.
-func parseAt(_ string) (Schedule, error) {
-	return nil, errors.New("schedule.Parse: @at <iso8601> not yet implemented (Task 7)")
+// parseAt handles "@at <iso8601-with-tz>". Returns oneShotAt with the
+// parsed instant. Canonical §4.1.1 requires an explicit TZ — naive
+// timestamps without offset or Z are rejected so the operator cannot
+// accidentally schedule a fire at the daemon's local clock when they meant
+// UTC (and vice-versa).
+func parseAt(s string) (*oneShotAt, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, errors.New("schedule.Parse: '@at' requires an ISO 8601 timestamp")
+	}
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		t, err = time.Parse(time.RFC3339, s)
+		if err != nil {
+			return nil, fmt.Errorf("schedule.Parse '@at %s': must be RFC3339 with explicit TZ (e.g. '2026-05-15T09:00:00Z' or '...+00:00'): %w", s, err)
+		}
+	}
+	return &oneShotAt{when: t}, nil
 }
 
-// oneShotOnce is the @once handler. Body lands in Task 7; stub's Next()
-// returns the zero time so callers see "no further fire" — safe sentinel
-// while the real impl is pending.
-type oneShotOnce struct{}
+// oneShotAt fires once at `when`, then never again.
+//
+// The `fired` field is plain bool — single-reactor design (E1.1 Task 11:
+// one goroutine owns the heap + per-job Schedule lookups) means only one
+// caller invokes Next() for a given job. A future multi-reactor / RPC-driven
+// preview refactor must wrap this in sync/atomic.Bool or a Mutex.
+type oneShotAt struct {
+	when  time.Time
+	fired bool
+}
 
-func (*oneShotOnce) Next(_ time.Time) time.Time { return time.Time{} }
+func (o *oneShotAt) Next(_ time.Time) time.Time {
+	if o.fired {
+		return time.Time{}
+	}
+	o.fired = true
+	return o.when
+}
+
+// oneShotOnce fires at the reactor's "after" time (now) once, then never
+// again. Reactor adds jitter at registration, not here. Same single-caller
+// concurrency contract as oneShotAt.
+type oneShotOnce struct {
+	fired bool
+}
+
+func (o *oneShotOnce) Next(after time.Time) time.Time {
+	if o.fired {
+		return time.Time{}
+	}
+	o.fired = true
+	return after
+}
