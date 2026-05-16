@@ -30,7 +30,7 @@ const CONFIG = {
   docsDir: path.join(__dirname, '../docs'),
   outputDir: path.join(__dirname, '../assets/docs'),
   websiteDir: path.join(__dirname, '..'),
-  siteUrl: 'https://leonletto.github.io/thrum'
+  siteUrl: 'https://thrum.team'
 };
 
 /**

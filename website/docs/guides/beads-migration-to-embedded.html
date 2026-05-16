@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <title>Beads Migration to Embedded Mode (bd 1.0+) — Thrum</title>
 <meta name="description" content="Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.">
-<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#guides/beads-migration-to-embedded.html">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Beads Migration to Embedded Mode (bd 1.0+)","description":"Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.","url":"https://leonletto.github.io/thrum/docs.html#guides/beads-migration-to-embedded.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://leonletto.github.io/thrum/docs.html"}}</script>
+<link rel="canonical" href="https://thrum.team/docs.html#guides/beads-migration-to-embedded.html">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Beads Migration to Embedded Mode (bd 1.0+)","description":"Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.","url":"https://thrum.team/docs.html#guides/beads-migration-to-embedded.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://thrum.team/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://thrum.team/docs.html"}}</script>
 <style>
 body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
 pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
@@ -752,7 +752,7 @@ script (Step 1) to find every stale repo, migrate each one, then do the
 global memory audit last. Cleaner if you have ≤10 repos.</li>
 <li><strong>Update global files immediately, but annotate them</strong> with &quot;requires bd 1.0+
 embedded mode; see the
-<a href="https://leonletto.github.io/thrum/guides/beads-migration-to-embedded.html">migration guide</a>
+<a href="https://thrum.team/docs/guides/beads-migration-to-embedded.html">migration guide</a>
 (or its long-form version on the
 <a href="https://gist.github.com/leonletto/606e8afbb3603870d14b4123707416a2">public gist</a>)&quot;.
 Unmigrated repos will still break, but you won&#39;t accumulate drift across

@@ -892,7 +892,7 @@ Two safe orderings:
    global memory audit last. Cleaner if you have ≤10 repos.
 2. **Update global files immediately, but annotate them** with "requires bd 1.0+
    embedded mode; see the
-   [migration guide](https://leonletto.github.io/thrum/guides/beads-migration-to-embedded.html)
+   [migration guide](https://thrum.team/docs/guides/beads-migration-to-embedded.html)
    (or its long-form version on the
    [public gist](https://gist.github.com/leonletto/606e8afbb3603870d14b4123707416a2))".
    Unmigrated repos will still break, but you won't accumulate drift across

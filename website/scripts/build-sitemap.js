@@ -15,7 +15,7 @@ const path = require('path');
 
 const CONFIG = {
   websiteDir: path.join(__dirname, '..'),
-  siteUrl: 'https://leonletto.github.io/thrum',
+  siteUrl: 'https://thrum.team',
   // Top-level HTML files to include. 404.html and the like are excluded.
   rootPages: ['index.html', 'docs.html', 'about.html', 'blog.html'],
   // Subdirs to walk for additional HTML pages.
@@ -148,44 +148,6 @@ async function buildSitemap() {
   console.log('   ✓ Wrote robots.txt');
 
   console.log('✅ Sitemap build complete!');
-
-  // Refresh the parent leonletto.github.io sitemap so it includes the
-  // Thrum URLs we just generated. Non-fatal: any failure (no Jekyll repo
-  // on this machine, push auth issue, etc.) logs and continues.
-  await syncParentSitemap();
-}
-
-/**
- * Optionally regenerate the leonletto.github.io sitemap.xml with the Thrum
- * URLs we just built. The merged sitemap lives at the hostname root so a
- * single Search Console submission covers every URL under the domain.
- *
- * Delegates to scripts/sync-parent-sitemap.sh which handles repo detection,
- * regen, and conditional commit+push. This wrapper just invokes the script
- * and swallows errors — the Thrum build should never fail because of a
- * cross-repo sync problem.
- */
-async function syncParentSitemap() {
-  const { spawnSync } = require('child_process');
-  const syncScript = path.join(
-    CONFIG.websiteDir,
-    '..',
-    'scripts',
-    'sync-parent-sitemap.sh'
-  );
-  if (!(await fs.pathExists(syncScript))) {
-    return;
-  }
-  console.log('🔗 Syncing parent leonletto.github.io sitemap...');
-  const result = spawnSync('bash', [syncScript], {
-    stdio: 'inherit',
-    timeout: 30_000,
-  });
-  if (result.status !== 0) {
-    console.warn(
-      `   ⚠ Parent sitemap sync exited with status ${result.status}; continuing.`
-    );
-  }
 }
 
 if (require.main === module) {

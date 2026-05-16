@@ -40,7 +40,7 @@ const hljs = require('highlight.js');
 const CONFIG = {
   blogDir: path.join(__dirname, '../blog'),
   websiteDir: path.join(__dirname, '..'),
-  siteUrl: 'https://leonletto.github.io/thrum',
+  siteUrl: 'https://thrum.team',
   defaultAuthor: 'Leon Letto',
   defaultAuthorUrl: 'https://leonletto.github.io/',
   // Default timezone offset used to turn a date-only frontmatter date into an
