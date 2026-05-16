@@ -66,14 +66,17 @@ func TestStateReporter_Transition_IsAtomic(t *testing.T) {
 // TestStateReporter_EscalationMarkerSuppresses pins canonical §6.3
 // read-side: a StateFailed transition with details["escalation_emitted_by"]
 // matching `b-b1.*` sets escalation_sent=true on the state row so A-B1's
-// own emit path can short-circuit.
+// own emit path can short-circuit. Critically, consecutive_failures is
+// STILL incremented — the marker only suppresses the redundant escalation
+// emit, not the failure accounting (§8.4.5 invariant).
 func TestStateReporter_EscalationMarkerSuppresses(t *testing.T) {
 	store := NewStateStore(setupStateTestDB(t))
 	ctx := context.Background()
 	now := time.Now()
 	if err := store.UpsertState(ctx, &StateRow{
 		JobID: "agent-x", Generation: 1, CurrentState: StateRunning,
-		CreatedAt: now, UpdatedAt: now,
+		ConsecutiveFailures: 2, // pre-existing accounting from prior failures
+		CreatedAt:           now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -90,6 +93,12 @@ func TestStateReporter_EscalationMarkerSuppresses(t *testing.T) {
 	if !row.EscalationSent {
 		t.Error("escalation_sent should be true when B-B1 emit marker is present")
 	}
+	if row.ConsecutiveFailures != 3 {
+		t.Errorf("consecutive_failures = %d; want 3 (marker suppresses emit, NOT accounting)", row.ConsecutiveFailures)
+	}
+	if row.CurrentState != StateFailed {
+		t.Errorf("state = %q; want failed", row.CurrentState)
+	}
 
 	// Non-matching prefix: marker should NOT set escalation_sent.
 	if err := store.UpsertState(ctx, &StateRow{
@@ -105,6 +114,65 @@ func TestStateReporter_EscalationMarkerSuppresses(t *testing.T) {
 	row, _ = store.GetState(ctx, "agent-y")
 	if row.EscalationSent {
 		t.Error("escalation_sent must NOT be set for non-b-b1 markers")
+	}
+}
+
+// TestStateReporter_NoMarker_NoSuppression: a failure with no details map
+// (or with details that lack escalation_emitted_by) leaves escalation_sent
+// at its prior value (false on first failure). consecutive_failures still
+// increments — the readback only affects the escalation flag.
+func TestStateReporter_NoMarker_NoSuppression(t *testing.T) {
+	store := NewStateStore(setupStateTestDB(t))
+	ctx := context.Background()
+	now := time.Now()
+	if err := store.UpsertState(ctx, &StateRow{
+		JobID: "agent-z", Generation: 1, CurrentState: StateRunning,
+		ConsecutiveFailures: 0, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	reporter := &stateReporter{store: store, jobID: "agent-z", runID: "rid"}
+	if err := reporter.Transition(StateFailed, "handler error", nil); err != nil {
+		t.Fatalf("transition: %v", err)
+	}
+	row, _ := store.GetState(ctx, "agent-z")
+	if row.EscalationSent {
+		t.Error("escalation_sent should be false without b-b1.* marker")
+	}
+	if row.ConsecutiveFailures != 1 {
+		t.Errorf("consecutive_failures = %d; want 1", row.ConsecutiveFailures)
+	}
+}
+
+// TestStateReporter_CompletedClearsEscalationFlag: per §6.3 / §8.4.5, a
+// successful run resets the escalation state — escalation_sent goes back
+// to false, consecutive_failures back to 0, last_error cleared.
+func TestStateReporter_CompletedClearsEscalationFlag(t *testing.T) {
+	store := NewStateStore(setupStateTestDB(t))
+	ctx := context.Background()
+	now := time.Now()
+	if err := store.UpsertState(ctx, &StateRow{
+		JobID: "agent-r", Generation: 1, CurrentState: StateRunning,
+		ConsecutiveFailures: 3, EscalationSent: true,
+		LastError: "prior failure", CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	reporter := &stateReporter{store: store, jobID: "agent-r", runID: "rid"}
+	if err := reporter.Transition(StateCompleted, "recovered", nil); err != nil {
+		t.Fatalf("transition: %v", err)
+	}
+	row, _ := store.GetState(ctx, "agent-r")
+	if row.EscalationSent {
+		t.Error("escalation_sent should reset on completion")
+	}
+	if row.ConsecutiveFailures != 0 {
+		t.Errorf("consecutive_failures = %d; want 0 after completion", row.ConsecutiveFailures)
+	}
+	if row.LastError != "" {
+		t.Errorf("last_error = %q; want empty after completion", row.LastError)
 	}
 }
 
