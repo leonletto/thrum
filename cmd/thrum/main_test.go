@@ -169,3 +169,82 @@ func TestWorktreeCreate_DefaultBranch(t *testing.T) {
 	// regardless of assertion shape.
 	_ = worktree.InferBasePath
 }
+
+func TestWorktreeTeardown_BranchStaysByDefault(t *testing.T) {
+	repoPath, basePath := newTempRepoForCobraTest(t)
+	flagRepo = repoPath
+	t.Cleanup(func() { flagRepo = "" })
+
+	// Mirror the cobra wrapper's repoName-suffix appending so the
+	// assertion below targets the actual final path.
+	repoName := filepath.Base(repoPath)
+	if filepath.Base(basePath) != repoName {
+		basePath = filepath.Join(basePath, repoName)
+	}
+
+	// Create a worktree first.
+	createCmd := worktreeCreateCmd()
+	createCmd.SetArgs([]string{"td-default"})
+	if err := createCmd.Execute(); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Teardown without --delete-branch (default path).
+	tdCmd := worktreeTeardownCmd()
+	tdCmd.SetArgs([]string{"td-default"})
+	if err := tdCmd.Execute(); err != nil {
+		t.Fatalf("teardown: %v", err)
+	}
+
+	// Worktree gone.
+	if _, err := os.Stat(filepath.Join(basePath, "td-default")); !os.IsNotExist(err) {
+		t.Errorf("worktree path: got err=%v, want IsNotExist", err)
+	}
+	// Branch STILL present (pre-refactor parity per acceptance
+	// criterion #10 default-path row).
+	out, err := exec.Command("git", "-C", repoPath,
+		"branch", "--list", "feature/td-default").CombinedOutput()
+	if err != nil {
+		t.Fatalf("git branch --list: %v\n%s", err, out)
+	}
+	if len(out) == 0 {
+		t.Errorf("branch absent after default teardown: want feature/td-default present")
+	}
+}
+
+func TestWorktreeTeardown_DeleteBranchFlag(t *testing.T) {
+	repoPath, basePath := newTempRepoForCobraTest(t)
+	flagRepo = repoPath
+	t.Cleanup(func() { flagRepo = "" })
+
+	repoName := filepath.Base(repoPath)
+	if filepath.Base(basePath) != repoName {
+		basePath = filepath.Join(basePath, repoName)
+	}
+
+	createCmd := worktreeCreateCmd()
+	createCmd.SetArgs([]string{"td-flag"})
+	if err := createCmd.Execute(); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	tdCmd := worktreeTeardownCmd()
+	tdCmd.SetArgs([]string{"td-flag", "--delete-branch"})
+	if err := tdCmd.Execute(); err != nil {
+		t.Fatalf("teardown --delete-branch: %v", err)
+	}
+
+	// Worktree gone.
+	if _, err := os.Stat(filepath.Join(basePath, "td-flag")); !os.IsNotExist(err) {
+		t.Errorf("worktree path: got err=%v, want IsNotExist", err)
+	}
+	// Branch GONE (Leon Q2 lock path).
+	out, err := exec.Command("git", "-C", repoPath,
+		"branch", "--list", "feature/td-flag").CombinedOutput()
+	if err != nil {
+		t.Fatalf("git branch --list: %v\n%s", err, out)
+	}
+	if len(out) != 0 {
+		t.Errorf("branch still present after --delete-branch: %s", out)
+	}
+}
