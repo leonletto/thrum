@@ -6,7 +6,7 @@ description:
 category: "overview"
 order: 2
 tags: ["release-notes", "changelog", "migration", "version"]
-last_updated: "2026-05-03"
+last_updated: "2026-05-15"
 ---
 
 ## What's New
@@ -15,6 +15,152 @@ This page tracks the user-visible changes in recent Thrum releases — highlight
 breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 [CHANGELOG.md](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
+
+## v0.10.3 — In Soak (RC)
+
+v0.10.3 is currently a release candidate. The latest tag is `v0.10.3-rc.9`,
+which closes the cross-agent inbox read-race silent-loss class (watermark-gated
+`markRead` plus an honest "hidden by filter" count on inbox listings). See the
+[Beta Channel](beta-channel.md) guide for how to opt in. Stable promotion
+follows the standard 48-hour soak window once no P0/P1 bugs are open against the
+RC.
+
+This release is largely about the runtime experience: codex gains the same
+first-class plugin treatment claude has had, fresh and restarted tmux panes no
+longer sit idle when an agent misses its prime banner, and the first-launch
+trust dialogs both codex and claude show are now recognized as a distinct class
+so Thrum's startup keystrokes don't accidentally answer them. A bundle of
+quieter fixes around env scoping, self-echo, and preamble framing rounds it out.
+
+### Added
+
+- **Codex plugin first-class support.** `codex-plugin/plugins/thrum/` now ships
+  the same hook surface the Claude plugin has: SessionStart auto-prime,
+  PreToolUse safety block, and a Stop hook that flags unread inbox messages.
+  Fourteen role-discipline skills sync over from `claude-plugin`. Installation
+  is a one-command bootstrap that also handles a third-party cache-staging gap
+  in codex 0.130.0, so you can install and start using it in the same step:
+
+  ```bash
+  bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+  ```
+
+- **Tmux silence watchdog after launch and restart.** When `thrum tmux launch`
+  or `thrum tmux restart` returns, the daemon watches the agent's pane for
+  silence and sends a contextual nudge if the agent hasn't engaged within the
+  configured threshold. Closes the long-standing gap where fresh codex agents
+  (and large-context restarts in claude) would sit idle at a welcome banner or
+  post-restart screen because they'd missed the prime instruction. Configurable
+  via the new `restart.silence_watchdog_seconds` key (default 30s; negative
+  disables; see [Configuration](configuration.md)). Internally this also
+  replaces the previous hardcoded 10-second pre-inject sleep with a
+  pane-stability readiness probe.
+
+- **Trust-gate detection for codex and claude first-launch dialogs.** Thrum
+  recognizes the trust prompt both runtimes show on first launch in a new
+  directory as a distinct class. When a trust gate is up, keystroke injection
+  paths (identity banner, prime nudge, watchdog nudge) are skipped so the user
+  can answer the prompt without interference from Thrum. Normal
+  permission-prompt handling and supervisor notify are unchanged — see
+  [Trust-Gate Detection](permission-prompts.md#trust-gate-detection).
+
+- **Per-session env scoping at session create.** `tmux.CreateSessionWithEnv`
+  passes `THRUM_NAME/AGENT_ID/ROLE/MODULE/HOME/INTENT` per-session, so distinct
+  tmux sessions on a shared server present distinct identities to their initial
+  shells. Subsequent split-window and new-window panes inherit correctly.
+
+- **Anti-rush discipline in coordinator and orchestrator preambles.** Five
+  operational rules codify patterns the project has hit before — skipping review
+  gates on small diffs, bucketing findings as "follow-ups" without
+  justification, shipping a fix labeled X when the actual cause is something
+  else, declaring DONE without verifying the user-visible bug is gone, and
+  taking the cheapest path on autopilot.
+
+### Changed
+
+- **`thrum init` lowercases the default agent name.** The wizard previously
+  derived names like `coord_316Redesign` from a capitalized repo directory and
+  then rejected its own suggestion at the validator (`a-z`, `0-9`, `_` only).
+  The default is now always validator-compatible.
+
+- **Pre-launch readiness is gated on pane stability, not a fixed sleep.** The
+  post-launch / post-restart inject path polls the tmux pane every second and
+  proceeds once two consecutive captures are byte-identical (TUI rendered,
+  runtime at input-ready), with a 60s ceiling. Replaces the brittle
+  `Sleep(10s) + retry` pattern that drove an earlier trust-prompt regression.
+
+- **Role preambles now say skills MUST be invoked, not auto-loaded.** The
+  "Available skills (situational)" section in seven role preambles previously
+  implied skills fire automatically when the runtime matches trigger phrases.
+  Skills do not auto-load — agents must invoke them explicitly via the `Skill`
+  tool. Wording is now directive rather than descriptive.
+
+- **Enhanced role preambles regain the in-tmux listener-suppression carveout.**
+  Twelve enhanced preambles
+  (`deployer / documenter / monitor / planner / tester / reviewer` ×
+  `strict / autonomous`) had restated the "spawn a listener on session start"
+  instruction without preserving the tmux carveout from the base preamble,
+  causing tmux-managed agents to spawn a redundant background listener that
+  burned context for zero delivery benefit. Carveout restored; a regression test
+  now fails any preamble that issues the spawn directive without the
+  SKIP-when-in-tmux qualifier.
+
+- **`thrum worktree create` propagates SessionStart hook scripts** into the new
+  worktree's `scripts/` directory. `scripts/thrum-startup.sh` and
+  `scripts/thrum-check-inbox.sh` are gitignored, so `git worktree add` doesn't
+  carry them across; without the per-worktree copy, the Claude Code SessionStart
+  hook fired against a missing script and the agent never quickstarted in
+  worktree-created subdirs. Copy is idempotent on size+mtime.
+
+- **`codex` runtime preset is marked `HasSessionStartHook: true`** (parity with
+  `claude` and `cursor`). The codex SessionStart hook shipped earlier but the
+  preset wasn't updated, so `HandleLaunch` / `HandleRestart` were routing codex
+  through the non-hook branch (typing `/thrum:prime` into the TUI) instead of
+  emitting the identity banner once the runtime rendered.
+
+### Fixed
+
+- **Self-echo phantom nudge.** Outbound `thrum send` from agent A to agent B was
+  producing a phantom `New message from @<A>` reminder in A's own pane on every
+  send. Root cause: `CLAUDE_PROJECT_DIR` leaks through a shared tmux server's
+  default-environment, so Claude Code in B's pane was resolving the
+  `${CLAUDE_PROJECT_DIR}/scripts/thrum-check-inbox.sh` hook against A's
+  worktree. Fix scrubs `CLAUDE_PROJECT_DIR` at the existing `cleanTmuxEnv`
+  chokepoint, alongside the `THRUM_*` and `TMUX/TMUX_PANE` scrubs. Scope is
+  narrow to the single variable with documented leak evidence; `CLAUDE_API_KEY`
+  and other `CLAUDE_*` vars are explicitly preserved by a regression test.
+
+- **Defense-in-depth self-echo guards.** Independent of the env-leak fix, both
+  the daemon spool dispatcher and the inbox-check hook now drop any spool entry
+  whose `from` matches the receiving agent ID — so a future regression upstream
+  cannot reach the user-visible self-echo nudge.
+
+- **`project-philosophy` skill respects `AskUserQuestion`'s 4-option limit.**
+  Step 5 of the skill prompted with option lists that could exceed the tool's
+  hard cap of 4, failing with `Invalid tool parameters`. The skill now uses
+  sequential questions (`category?` → `specific item within category?`) when the
+  natural option count exceeds four. Synced across all four runtime plugin
+  copies.
+
+- **`thrum init --force` no longer silently disables messaging.** A hard-coded
+  assignment in the runtime-selection step was overwriting `single_agent_mode`
+  to `true` on every init run, which disables the inbox listener and stop-hook
+  checks. Agents appeared healthy in `thrum team` but inbound messages never
+  arrived and replies silently dropped. Affected users upgrading via the common
+  `thrum init --force` refresh path; fresh installs were unaffected. If you hit
+  this on an earlier release, open the project's `.thrum/config.json` and flip
+  `single_agent_mode` back to `false`.
+
+### Upgrade Notes
+
+- **One new config key.** `restart.silence_watchdog_seconds` (default 30s,
+  negative disables) — only relevant if you want to tune the post-launch /
+  post-restart nudge cadence.
+- **Codex users:** the one-command installer above is the easiest path. The
+  legacy `~/.codex/skills/` extra-roots loader is gone as of codex 0.130.0; if
+  you previously installed there, see the migration note in
+  [Codex Plugin](codex-plugin.md).
+- **No CLI flag removals or behavior reversals** since v0.10.2.
 
 ## v0.10.2 — 2026-05-04
 

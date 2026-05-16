@@ -5,6 +5,7 @@
 <title>CLI Reference — Thrum</title>
 <meta name="description" content="Complete reference for the thrum command-line interface — all commands, flags, and usage examples">
 <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#cli.html">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"CLI Reference","description":"Complete reference for the thrum command-line interface — all commands, flags, and usage examples","url":"https://leonletto.github.io/thrum/docs.html#cli.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://leonletto.github.io/thrum/docs.html"}}</script>
 <style>
 body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
 pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
@@ -16,12 +17,18 @@ nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-h
 h2{margin-top:2rem}
 a{color:#0366d6}
 </style>
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+<script>
+window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+plausible.init()
+</script>
 </head>
 <body>
 <nav>
 <strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Reference &rsaquo; CLI Reference
 <hr>
-<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="whats-new.html">What's New</a><br>
 <strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
   <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
 <strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
@@ -501,6 +508,9 @@ pipe stdin to <code>thrum init</code> get this behavior unchanged.</p>
 <p>Pre-fill any wizard prompt with the corresponding flag (<code>--name</code>, <code>--role</code>,
 etc.); the wizard skips prompts whose value was supplied. With every prompt
 pre-filled, the wizard runs end-to-end without user input even on a TTY.</p>
+<p>The wizard&#39;s suggested default agent name is derived from the repo directory,
+lowercased and sanitized to satisfy the agent-name validator (a-z, 0-9,
+underscore only).</p>
 <p><strong>G2 guard:</strong> <code>thrum init</code> hard-errors if the current working directory is not
 inside a git repository. Pass <code>--force</code> to override for non-git environments
 (uncommon; the daemon cannot anchor identity without a git root).</p>
@@ -2875,7 +2885,7 @@ the main worktree into a &quot;feature&quot; worktree.</p>
 </tr>
 <tr>
 <td><code>--runtime</code></td>
-<td>Runtime preset: <code>claude</code>, <code>codex</code>, <code>cursor</code>, <code>gemini</code>, <code>auggie</code></td>
+<td>Runtime preset: <code>claude</code>, <code>codex</code>, <code>cursor</code>, <code>gemini</code>, <code>opencode</code>, <code>auggie</code></td>
 <td></td>
 </tr>
 <tr>
@@ -2886,6 +2896,9 @@ the main worktree into a &quot;feature&quot; worktree.</p>
 </tbody></table>
 <p>The worktree is created at <code>worktrees.base_path/&lt;name&gt;</code> (default:
 <code>~/.workspaces/&lt;project&gt;/&lt;name&gt;</code>). The name cannot contain <code>/</code>, <code>\</code>, or <code>..</code>.</p>
+<p>Hook scripts (<code>scripts/thrum-startup.sh</code>, <code>scripts/thrum-check-inbox.sh</code>) are
+copied from the main repo into the new worktree so SessionStart hooks fire
+correctly.</p>
 <p>Example:</p>
 <pre><code>$ thrum worktree create api-feature
 Worktree created: ~/.workspaces/thrum/api-feature

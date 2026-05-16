@@ -5,6 +5,7 @@
 <title>What's New — Thrum</title>
 <meta name="description" content="Release-by-release highlights, breaking changes, and migration notes for recent Thrum versions.">
 <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#whats-new.html">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"What's New","description":"Release-by-release highlights, breaking changes, and migration notes for recent Thrum versions.","url":"https://leonletto.github.io/thrum/docs.html#whats-new.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://leonletto.github.io/thrum/docs.html"}}</script>
 <style>
 body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
 pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
@@ -16,6 +17,12 @@ nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-h
 h2{margin-top:2rem}
 a{color:#0366d6}
 </style>
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+<script>
+window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+plausible.init()
+</script>
 </head>
 <body>
 <nav>
@@ -43,6 +50,149 @@ a{color:#0366d6}
 breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG.md</a>.</p>
+<h2>v0.10.3 — In Soak (RC)</h2>
+<p>v0.10.3 is currently a release candidate. The latest tag is <code>v0.10.3-rc.9</code>,
+which closes the cross-agent inbox read-race silent-loss class (watermark-gated
+<code>markRead</code> plus an honest &quot;hidden by filter&quot; count on inbox listings). See the
+<a href="beta-channel.html">Beta Channel</a> guide for how to opt in. Stable promotion
+follows the standard 48-hour soak window once no P0/P1 bugs are open against
+the RC.</p>
+<p>This release is largely about the runtime experience: codex gains the same
+first-class plugin treatment claude has had, fresh and restarted tmux panes no
+longer sit idle when an agent misses its prime banner, and the first-launch
+trust dialogs both codex and claude show are now recognized as a distinct class
+so Thrum&#39;s startup keystrokes don&#39;t accidentally answer them. A bundle of
+quieter fixes around env scoping, self-echo, and preamble framing rounds it out.</p>
+<h3>Added</h3>
+<ul>
+<li><p><strong>Codex plugin first-class support.</strong> <code>codex-plugin/plugins/thrum/</code> now ships
+the same hook surface the Claude plugin has: SessionStart auto-prime,
+PreToolUse safety block, and a Stop hook that flags unread inbox messages.
+Fourteen role-discipline skills sync over from <code>claude-plugin</code>. Installation
+is a one-command bootstrap that also handles a third-party cache-staging gap
+in codex 0.130.0, so you can install and start using it in the same step:</p>
+<pre><code>bash &lt;(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/codex-plugin/plugins/thrum/scripts/install-plugin.sh)</code></pre>
+</li>
+<li><p><strong>Tmux silence watchdog after launch and restart.</strong> When <code>thrum tmux launch</code>
+or <code>thrum tmux restart</code> returns, the daemon watches the agent&#39;s pane for
+silence and sends a contextual nudge if the agent hasn&#39;t engaged within the
+configured threshold. Closes the long-standing gap where fresh codex agents
+(and large-context restarts in claude) would sit idle at a welcome banner or
+post-restart screen because they&#39;d missed the prime instruction. Configurable
+via the new <code>restart.silence_watchdog_seconds</code> key (default 30s; negative
+disables; see <a href="configuration.html">Configuration</a>). Internally this also
+replaces the previous hardcoded 10-second pre-inject sleep with a
+pane-stability readiness probe.</p>
+</li>
+<li><p><strong>Trust-gate detection for codex and claude first-launch dialogs.</strong> Thrum
+recognizes the trust prompt both runtimes show on first launch in a new
+directory as a distinct class. When a trust gate is up, keystroke injection
+paths (identity banner, prime nudge, watchdog nudge) are skipped so the user
+can answer the prompt without interference from Thrum. Normal
+permission-prompt handling and supervisor notify are unchanged — see
+<a href="permission-prompts.html#trust-gate-detection">Trust-Gate Detection</a>.</p>
+</li>
+<li><p><strong>Per-session env scoping at session create.</strong> <code>tmux.CreateSessionWithEnv</code>
+passes <code>THRUM_NAME/AGENT_ID/ROLE/MODULE/HOME/INTENT</code> per-session, so distinct
+tmux sessions on a shared server present distinct identities to their initial
+shells. Subsequent split-window and new-window panes inherit correctly.</p>
+</li>
+<li><p><strong>Anti-rush discipline in coordinator and orchestrator preambles.</strong> Five
+operational rules codify patterns the project has hit before — skipping review
+gates on small diffs, bucketing findings as &quot;follow-ups&quot; without
+justification, shipping a fix labeled X when the actual cause is something
+else, declaring DONE without verifying the user-visible bug is gone, and
+taking the cheapest path on autopilot.</p>
+</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+<li><p><strong><code>thrum init</code> lowercases the default agent name.</strong> The wizard previously
+derived names like <code>coord_316Redesign</code> from a capitalized repo directory and
+then rejected its own suggestion at the validator (<code>a-z</code>, <code>0-9</code>, <code>_</code> only).
+The default is now always validator-compatible.</p>
+</li>
+<li><p><strong>Pre-launch readiness is gated on pane stability, not a fixed sleep.</strong> The
+post-launch / post-restart inject path polls the tmux pane every second and
+proceeds once two consecutive captures are byte-identical (TUI rendered,
+runtime at input-ready), with a 60s ceiling. Replaces the brittle
+<code>Sleep(10s) + retry</code> pattern that drove an earlier trust-prompt regression.</p>
+</li>
+<li><p><strong>Role preambles now say skills MUST be invoked, not auto-loaded.</strong> The
+&quot;Available skills (situational)&quot; section in seven role preambles previously
+implied skills fire automatically when the runtime matches trigger phrases.
+Skills do not auto-load — agents must invoke them explicitly via the <code>Skill</code>
+tool. Wording is now directive rather than descriptive.</p>
+</li>
+<li><p><strong>Enhanced role preambles regain the in-tmux listener-suppression carveout.</strong>
+Twelve enhanced preambles
+(<code>deployer / documenter / monitor / planner / tester / reviewer</code> ×
+<code>strict / autonomous</code>) had restated the &quot;spawn a listener on session start&quot;
+instruction without preserving the tmux carveout from the base preamble,
+causing tmux-managed agents to spawn a redundant background listener that
+burned context for zero delivery benefit. Carveout restored; a regression test
+now fails any preamble that issues the spawn directive without the
+SKIP-when-in-tmux qualifier.</p>
+</li>
+<li><p><strong><code>thrum worktree create</code> propagates SessionStart hook scripts</strong> into the new
+worktree&#39;s <code>scripts/</code> directory. <code>scripts/thrum-startup.sh</code> and
+<code>scripts/thrum-check-inbox.sh</code> are gitignored, so <code>git worktree add</code> doesn&#39;t
+carry them across; without the per-worktree copy, the Claude Code SessionStart
+hook fired against a missing script and the agent never quickstarted in
+worktree-created subdirs. Copy is idempotent on size+mtime.</p>
+</li>
+<li><p><strong><code>codex</code> runtime preset is marked <code>HasSessionStartHook: true</code></strong> (parity with
+<code>claude</code> and <code>cursor</code>). The codex SessionStart hook shipped earlier but the
+preset wasn&#39;t updated, so <code>HandleLaunch</code> / <code>HandleRestart</code> were routing codex
+through the non-hook branch (typing <code>/thrum:prime</code> into the TUI) instead of
+emitting the identity banner once the runtime rendered.</p>
+</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li><p><strong>Self-echo phantom nudge.</strong> Outbound <code>thrum send</code> from agent A to agent B was
+producing a phantom <code>New message from @&lt;A&gt;</code> reminder in A&#39;s own pane on every
+send. Root cause: <code>CLAUDE_PROJECT_DIR</code> leaks through a shared tmux server&#39;s
+default-environment, so Claude Code in B&#39;s pane was resolving the
+<code>${CLAUDE_PROJECT_DIR}/scripts/thrum-check-inbox.sh</code> hook against A&#39;s
+worktree. Fix scrubs <code>CLAUDE_PROJECT_DIR</code> at the existing <code>cleanTmuxEnv</code>
+chokepoint, alongside the <code>THRUM_*</code> and <code>TMUX/TMUX_PANE</code> scrubs. Scope is
+narrow to the single variable with documented leak evidence; <code>CLAUDE_API_KEY</code>
+and other <code>CLAUDE_*</code> vars are explicitly preserved by a regression test.</p>
+</li>
+<li><p><strong>Defense-in-depth self-echo guards.</strong> Independent of the env-leak fix, both
+the daemon spool dispatcher and the inbox-check hook now drop any spool entry
+whose <code>from</code> matches the receiving agent ID — so a future regression upstream
+cannot reach the user-visible self-echo nudge.</p>
+</li>
+<li><p><strong><code>project-philosophy</code> skill respects <code>AskUserQuestion</code>&#39;s 4-option limit.</strong>
+Step 5 of the skill prompted with option lists that could exceed the tool&#39;s
+hard cap of 4, failing with <code>Invalid tool parameters</code>. The skill now uses
+sequential questions (<code>category?</code> → <code>specific item within category?</code>) when the
+natural option count exceeds four. Synced across all four runtime plugin
+copies.</p>
+</li>
+<li><p><strong><code>thrum init --force</code> no longer silently disables messaging.</strong> A hard-coded
+assignment in the runtime-selection step was overwriting <code>single_agent_mode</code>
+to <code>true</code> on every init run, which disables the inbox listener and stop-hook
+checks. Agents appeared healthy in <code>thrum team</code> but inbound messages never
+arrived and replies silently dropped. Affected users upgrading via the common
+<code>thrum init --force</code> refresh path; fresh installs were unaffected. If you hit
+this on an earlier release, open the project&#39;s <code>.thrum/config.json</code> and flip
+<code>single_agent_mode</code> back to <code>false</code>.</p>
+</li>
+</ul>
+<h3>Upgrade Notes</h3>
+<ul>
+<li><strong>One new config key.</strong> <code>restart.silence_watchdog_seconds</code> (default 30s,
+negative disables) — only relevant if you want to tune the post-launch /
+post-restart nudge cadence.</li>
+<li><strong>Codex users:</strong> the one-command installer above is the easiest path. The
+legacy <code>~/.codex/skills/</code> extra-roots loader is gone as of codex 0.130.0; if
+you previously installed there, see the migration note in
+<a href="codex-plugin.html">Codex Plugin</a>.</li>
+<li><strong>No CLI flag removals or behavior reversals</strong> since v0.10.2.</li>
+</ul>
 <h2>v0.10.2 — 2026-05-04</h2>
 <p>Hotfix release closing two related foot-guns from the v0.10.x identity work: the
 SessionStart hook (<code>scripts/thrum-startup.sh</code>) breaking on every

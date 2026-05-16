@@ -42,7 +42,25 @@ const CONFIG = {
   websiteDir: path.join(__dirname, '..'),
   siteUrl: 'https://leonletto.github.io/thrum',
   defaultAuthor: 'Leon Letto',
+  defaultAuthorUrl: 'https://leonletto.github.io/',
+  // Default timezone offset used to turn a date-only frontmatter date into an
+  // ISO 8601 datetime for JSON-LD. Pacific Time matches the author's locale;
+  // the rendered "May 11, 2026" snippet is the same regardless.
+  defaultTimezoneOffset: '-07:00',
 };
+
+/**
+ * Promote a frontmatter date string into a valid ISO 8601 datetime with
+ * timezone, which is what schema.org's datePublished expects. Pass-through
+ * for inputs that already include a `T`; otherwise append a noon-local time
+ * so search engines render the publish date unambiguously.
+ */
+function toIsoDatetime(dateStr) {
+  if (!dateStr) return dateStr;
+  if (typeof dateStr !== 'string') return dateStr;
+  if (dateStr.includes('T')) return dateStr;
+  return `${dateStr}T12:00:00${CONFIG.defaultTimezoneOffset}`;
+}
 
 /**
  * Marked renderer with syntax highlighting (same approach as build-docs.js).
@@ -174,6 +192,33 @@ function renderPostPage(post) {
 
   const canonicalUrl = `${CONFIG.siteUrl}/blog/${slug}.html`;
 
+  // JSON-LD structured data so Google can render rich results (author byline,
+  // dates, headline) on blog post entries. Keywords mirror the visible tags.
+  const blogPostingJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: meta.title,
+    description: meta.description,
+    author: {
+      '@type': 'Person',
+      name: meta.author,
+      url: CONFIG.defaultAuthorUrl,
+    },
+    datePublished: toIsoDatetime(meta.date),
+    image: `${CONFIG.siteUrl}/img/social-card.png`,
+    url: canonicalUrl,
+    mainEntityOfPage: {
+      '@type': 'WebPage',
+      '@id': canonicalUrl,
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: 'Thrum',
+      url: CONFIG.siteUrl,
+    },
+    keywords: meta.tags.join(', '),
+  };
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -197,6 +242,8 @@ function renderPostPage(post) {
   <meta name="twitter:title" content="${escapeAttr(meta.title)}">
   <meta name="twitter:description" content="${escapeAttr(meta.description)}">
   <meta name="twitter:image" content="${CONFIG.siteUrl}/img/social-card.png">
+  <!-- JSON-LD structured data (BlogPosting) -->
+  <script type="application/ld+json">${JSON.stringify(blogPostingJsonLd)}</script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -206,6 +253,12 @@ function renderPostPage(post) {
   <link rel="stylesheet" href="../css/blog.css">
   <script>
     (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
   </script>
 </head>
 <body>
@@ -314,6 +367,32 @@ function renderIndexPage(posts) {
 
   const empty = `<p class="text-muted" style="text-align:center;">No posts yet. Check back soon.</p>`;
 
+  // JSON-LD for the blog index: a Blog containing the published posts.
+  const blogJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Blog',
+    name: 'Thrum Blog',
+    description:
+      'How Thrum was built, what I went through along the way, and why it turned out the way it did.',
+    url: `${CONFIG.siteUrl}/blog.html`,
+    publisher: {
+      '@type': 'Organization',
+      name: 'Thrum',
+      url: CONFIG.siteUrl,
+    },
+    blogPost: posts.map((post) => ({
+      '@type': 'BlogPosting',
+      headline: post.meta.title,
+      url: `${CONFIG.siteUrl}/blog/${post.slug}.html`,
+      datePublished: toIsoDatetime(post.meta.date),
+      author: {
+        '@type': 'Person',
+        name: post.meta.author,
+        url: CONFIG.defaultAuthorUrl,
+      },
+    })),
+  };
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -322,6 +401,7 @@ function renderIndexPage(posts) {
   <meta name="color-scheme" content="dark light">
   <title>Thrum Blog</title>
   <meta name="description" content="How Thrum was built, what I went through along the way, and why it turned out the way it did.">
+  <link rel="canonical" href="${CONFIG.siteUrl}/blog.html">
   <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:title" content="Thrum Blog">
@@ -336,6 +416,8 @@ function renderIndexPage(posts) {
   <meta name="twitter:title" content="Thrum Blog">
   <meta name="twitter:description" content="How Thrum was built, what I went through along the way, and why it turned out the way it did.">
   <meta name="twitter:image" content="${CONFIG.siteUrl}/img/social-card.png">
+  <!-- JSON-LD structured data (Blog) -->
+  <script type="application/ld+json">${JSON.stringify(blogJsonLd)}</script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -345,6 +427,12 @@ function renderIndexPage(posts) {
   <link rel="stylesheet" href="css/blog.css">
   <script>
     (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
   </script>
 </head>
 <body>
