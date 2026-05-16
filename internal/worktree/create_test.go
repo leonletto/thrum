@@ -304,3 +304,97 @@ func TestCreate_BasePathInferredWhenEmpty(t *testing.T) {
 			result.Path, wantPath)
 	}
 }
+
+func TestCreate_PersistentReuse(t *testing.T) {
+	repoPath, basePath := newTestRepo(t)
+	ctx := context.Background()
+
+	// First call: fresh create.
+	r1, err := Create(ctx, CreateOpts{
+		RepoPath: repoPath, BasePath: basePath,
+		AgentName: "docs_bot", Persistent: true,
+		BaseBranch: "main",
+	})
+	if err != nil {
+		t.Fatalf("first Create: %v", err)
+	}
+	if r1.Reused {
+		t.Error("first call Reused: got true, want false")
+	}
+
+	// Second call: idempotent reuse with err == nil.
+	r2, err := Create(ctx, CreateOpts{
+		RepoPath: repoPath, BasePath: basePath,
+		AgentName: "docs_bot", Persistent: true,
+		BaseBranch: "main",
+	})
+	if err != nil {
+		t.Fatalf("second Create: %v", err)
+	}
+	if !r2.Reused {
+		t.Error("second call Reused: got false, want true")
+	}
+	if r2.Path != r1.Path || r2.Branch != r1.Branch {
+		t.Errorf("reuse mismatch: r1={%s,%s} r2={%s,%s}",
+			r1.Path, r1.Branch, r2.Path, r2.Branch)
+	}
+}
+
+func TestCreate_PersistentBranchMismatch(t *testing.T) {
+	repoPath, basePath := newTestRepo(t)
+	ctx := context.Background()
+
+	// Create a persistent worktree, then `git switch` it to an
+	// unexpected branch to simulate operator squatting.
+	r, err := Create(ctx, CreateOpts{
+		RepoPath: repoPath, BasePath: basePath,
+		AgentName: "docs_bot", Persistent: true,
+		BaseBranch: "main",
+	})
+	if err != nil {
+		t.Fatalf("setup Create: %v", err)
+	}
+	// Switch to a freshly-created different branch in the worktree.
+	cmd := exec.Command("git", "switch", "-c", "operator-branch")
+	cmd.Dir = r.Path
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git switch: %v\n%s", err, out)
+	}
+
+	// Second Create on the same agent should now error.
+	_, err = Create(ctx, CreateOpts{
+		RepoPath: repoPath, BasePath: basePath,
+		AgentName: "docs_bot", Persistent: true,
+		BaseBranch: "main",
+	})
+	if err == nil {
+		t.Fatal("Create with mismatched branch: got nil err, want ErrPersistentBranchMismatch")
+	}
+	if !errors.Is(err, ErrPersistentBranchMismatch) {
+		t.Errorf("err = %v, want errors.Is(ErrPersistentBranchMismatch) true", err)
+	}
+}
+
+func TestCreate_EphemeralPathExists(t *testing.T) {
+	repoPath, basePath := newTestRepo(t)
+	ctx := context.Background()
+
+	// Pre-create the expected ephemeral path so the next Create
+	// hits the pre-existence check.
+	preExist := filepath.Join(basePath, "x-j-1")
+	if err := os.MkdirAll(preExist, 0750); err != nil {
+		t.Fatalf("pre-create: %v", err)
+	}
+
+	_, err := Create(ctx, CreateOpts{
+		RepoPath: repoPath, BasePath: basePath,
+		AgentName: "x", JobID: "j", WakeTimestamp: 1,
+		Persistent: false, BaseBranch: "main",
+	})
+	if err == nil {
+		t.Fatal("Create with pre-existing ephemeral path: got nil, want ErrPathExists")
+	}
+	if !errors.Is(err, ErrPathExists) {
+		t.Errorf("err = %v, want errors.Is(ErrPathExists) true", err)
+	}
+}
