@@ -11,7 +11,13 @@ tags: ["release", "v0.10.4", "agents", "discipline"]
 draft: false
 ---
 
-Two hours after I posted the
+Agents are literal and helpful. Those are usually virtues. They're what made a
+fix I shipped two hours after declaring victory give every agent that hit the
+guard a precise map to bypass it.
+
+![Sideshow Bob steps on a rake, recoils, then steps on another rake.](https://media.giphy.com/media/RSOUOj8H9A3Xq/giphy.gif)
+
+After I posted the
 [v0.10 retrospective](v0-10-the-release-that-wouldnt-land.html) saying I was
 done, an implementer started misbehaving on a multi-agent repo. It was sending
 messages under the coordinator's identity. The cross-worktree guard had been
@@ -52,8 +58,6 @@ without operator intervention. Three options got listed:
 - run `thrum prime` to re-claim
 - pass `--repo <path>` to anchor to a specific repo
 
-![Sideshow Bob steps on a rake, recoils, then steps on another rake.](https://media.giphy.com/media/RSOUOj8H9A3Xq/giphy.gif)
-
 ## The Second Foot
 
 The first two are what agents should do. The third was never supposed to be
@@ -89,8 +93,3 @@ sparing `--repo-path` which is a separate flag. And a code comment at the
 flag registration site noting the testing-only intent, so the next thing that
 touches it sees the anchor in-source.
 
-## The Rule
-
-The discipline humans don't need to state explicitly has to be stated
-explicitly, because agents trying to be helpful won't have the
-intuition.
