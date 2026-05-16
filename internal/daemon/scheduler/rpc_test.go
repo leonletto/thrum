@@ -400,6 +400,151 @@ func TestRPC_JobDelete_RejectsInternal(t *testing.T) {
 	}
 }
 
+// TestRPC_JobEnable_Disable: flipping Enabled writes back to the spec
+// map under the config mutex.
+func TestRPC_JobEnable_Disable(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	s.mu.Lock()
+	s.specs["docs-bot"] = JobSpec{
+		ID: "docs-bot", Type: "scheduled_agent",
+		Schedule: "0 9 * * *", Enabled: true,
+	}
+	s.mu.Unlock()
+
+	if _, err := s.RPC_JobDisable(context.Background(), EnableDisableRequest{JobID: "docs-bot"}); err != nil {
+		t.Fatalf("disable: %v", err)
+	}
+	sp, _ := s.JobSpec("docs-bot")
+	if sp.Enabled {
+		t.Error("Enabled should be false after disable")
+	}
+
+	if _, err := s.RPC_JobEnable(context.Background(), EnableDisableRequest{JobID: "docs-bot"}); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+	sp, _ = s.JobSpec("docs-bot")
+	if !sp.Enabled {
+		t.Error("Enabled should be true after enable")
+	}
+}
+
+// TestRPC_JobEnable_Disable_RejectsInternal: operator-facing
+// enable/disable can't touch internal jobs.
+func TestRPC_JobEnable_Disable_RejectsInternal(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+	s.RegisterInternal("internal.bg", "@every 1h", InternalOpts{}, &noopHandler{})
+
+	if _, err := s.RPC_JobDisable(context.Background(), EnableDisableRequest{JobID: "internal.bg"}); err == nil {
+		t.Error("expected rejection of internal disable")
+	}
+	if _, err := s.RPC_JobEnable(context.Background(), EnableDisableRequest{JobID: "internal.bg"}); err == nil {
+		t.Error("expected rejection of internal enable")
+	}
+}
+
+// TestRPC_JobEnable_NotFound returns an error rather than silently
+// creating the spec.
+func TestRPC_JobEnable_NotFound(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	if _, err := s.RPC_JobEnable(context.Background(), EnableDisableRequest{JobID: "missing"}); err == nil {
+		t.Error("expected not-found error")
+	}
+}
+
+// TestRPC_JobCancel_NoActiveRun: when the state row is in a terminal
+// state, cancel returns (Cancelled=false, Reason="no active run").
+func TestRPC_JobCancel_NoActiveRun(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	s.mu.Lock()
+	s.specs["docs-bot"] = JobSpec{
+		ID: "docs-bot", Type: "scheduled_agent",
+		Schedule: "0 9 * * *", Enabled: true,
+	}
+	s.mu.Unlock()
+	if err := s.state.UpsertState(context.Background(), &StateRow{
+		JobID: "docs-bot", Generation: 1, CurrentState: StateCompleted,
+		CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	resp, err := s.RPC_JobCancel(context.Background(), CancelJobRequest{JobID: "docs-bot"})
+	if err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	if resp.Cancelled {
+		t.Error("Cancelled should be false when no active run")
+	}
+	if resp.Reason != "no active run" {
+		t.Errorf("Reason = %q; want %q", resp.Reason, "no active run")
+	}
+}
+
+// TestRPC_JobCancel_ActiveRun: with an active run registered in the
+// runRegistry, cancel invokes the registered cancel-func and returns
+// Cancelled=true.
+func TestRPC_JobCancel_ActiveRun(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	s.mu.Lock()
+	s.specs["docs-bot"] = JobSpec{
+		ID: "docs-bot", Type: "scheduled_agent",
+		Schedule: "0 9 * * *", Enabled: true,
+	}
+	s.mu.Unlock()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	s.runReg.register("docs-bot-g1-100", cancel)
+	if err := s.state.UpsertState(context.Background(), &StateRow{
+		JobID: "docs-bot", Generation: 1, CurrentState: StateRunning,
+		LastRunID: "docs-bot-g1-100",
+		CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	resp, err := s.RPC_JobCancel(context.Background(), CancelJobRequest{JobID: "docs-bot"})
+	if err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	if !resp.Cancelled {
+		t.Error("Cancelled should be true when active run was cancelled")
+	}
+	if resp.RunID != "docs-bot-g1-100" {
+		t.Errorf("RunID = %q", resp.RunID)
+	}
+	select {
+	case <-ctx.Done():
+		// good — the registered cancel-func fired
+	case <-time.After(100 * time.Millisecond):
+		t.Error("registered cancel-func wasn't invoked")
+	}
+}
+
+// TestRPC_JobCancel_NotFound: unknown job_id returns an error.
+func TestRPC_JobCancel_NotFound(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	if _, err := s.RPC_JobCancel(context.Background(), CancelJobRequest{JobID: "missing"}); err == nil {
+		t.Error("expected not-found error")
+	}
+}
+
 // TestRPC_JobShow_RegisteredButNoState: a freshly-registered job whose
 // reactor hasn't fired yet has no state row. show returns spec + nil
 // State + empty RecentEvents.

@@ -244,3 +244,89 @@ func (s *Scheduler) validateSpec(spec JobSpec) error {
 	}
 	return errors.New(strings.Join(msgs, "\n"))
 }
+
+// EnableDisableRequest carries the lookup key for job.enable / job.disable.
+type EnableDisableRequest struct {
+	JobID string `json:"job_id"`
+}
+
+// EnableDisableResponse echoes the new enabled flag.
+type EnableDisableResponse struct {
+	JobID   string `json:"job_id"`
+	Enabled bool   `json:"enabled"`
+}
+
+// RPC_JobEnable flips the Enabled flag on. Internal jobs are rejected
+// (their lifecycle is daemon-controlled).
+func (s *Scheduler) RPC_JobEnable(_ context.Context, req EnableDisableRequest) (EnableDisableResponse, error) {
+	return s.setEnabled(req.JobID, true)
+}
+
+// RPC_JobDisable flips the Enabled flag off. Future fires are suppressed;
+// to stop a currently-running fire, the operator pairs with job.cancel.
+func (s *Scheduler) RPC_JobDisable(_ context.Context, req EnableDisableRequest) (EnableDisableResponse, error) {
+	return s.setEnabled(req.JobID, false)
+}
+
+// setEnabled is the shared body for the enable/disable RPCs.
+func (s *Scheduler) setEnabled(jobID string, on bool) (EnableDisableResponse, error) {
+	if strings.HasPrefix(jobID, InternalPrefix) {
+		return EnableDisableResponse{}, fmt.Errorf("cannot enable/disable internal job %q", jobID)
+	}
+	s.mu.Lock()
+	spec, exists := s.specs[jobID]
+	if !exists {
+		s.mu.Unlock()
+		return EnableDisableResponse{}, fmt.Errorf("id %q not found", jobID)
+	}
+	spec.Enabled = on
+	s.specs[jobID] = spec
+	s.mu.Unlock()
+	s.wakeReactor()
+	return EnableDisableResponse{JobID: jobID, Enabled: on}, nil
+}
+
+// CancelJobRequest carries the lookup key for job.cancel.
+type CancelJobRequest struct {
+	JobID string `json:"job_id"`
+}
+
+// CancelJobResponse reports whether a cancel actually fired. Cancelled
+// is false when no active run is present; Reason explains why.
+type CancelJobResponse struct {
+	JobID     string `json:"job_id"`
+	Cancelled bool   `json:"cancelled"`
+	RunID     string `json:"run_id,omitempty"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+// RPC_JobCancel invokes the registered cancel-func for the active run.
+// Per Q8.2 + MINOR-19: when no active run exists, returns
+// (Cancelled=false, Reason="no active run") rather than an error — the
+// operator-facing surface treats cancel-of-idle as a no-op.
+//
+// Pair with job.disable to stop both future fires AND the current run.
+func (s *Scheduler) RPC_JobCancel(ctx context.Context, req CancelJobRequest) (CancelJobResponse, error) {
+	if _, ok := s.JobSpec(req.JobID); !ok {
+		return CancelJobResponse{}, fmt.Errorf("id %q not found", req.JobID)
+	}
+	row, err := s.state.GetState(ctx, req.JobID)
+	if errors.Is(err, ErrJobNotFound) {
+		return CancelJobResponse{JobID: req.JobID, Reason: "no active run"}, nil
+	}
+	if err != nil {
+		return CancelJobResponse{}, err
+	}
+
+	switch row.CurrentState {
+	case StateDispatched, StateRunning:
+		ok := s.runReg.cancel(row.LastRunID)
+		return CancelJobResponse{
+			JobID: req.JobID, Cancelled: ok, RunID: row.LastRunID,
+		}, nil
+	default:
+		return CancelJobResponse{
+			JobID: req.JobID, Reason: "no active run",
+		}, nil
+	}
+}
