@@ -100,6 +100,47 @@ func (s *Scheduler) escalateReloadError(configPath string, errs []error) {
 	})
 }
 
+// AtomicWriteConfig writes `data` to `path` via the .tmp → fsync → rename
+// pattern per spec §8.6.4. Failures leave the prior file at `path`
+// intact; the .tmp file is cleaned up on any error and on the
+// pre-rename close failure path.
+//
+// Used by any code that mutates config from inside the daemon (e.g.
+// future job.create / job.update RPCs that persist back to disk) AND by
+// operators who can write configs from outside the daemon. The fsync
+// makes the new content durable before the rename, so a power loss
+// between rename and OS buffer flush still finds either the old file
+// (rename hadn't committed) or the new file with valid content
+// (rename committed; data was already on disk).
+func AtomicWriteConfig(path string, data []byte) error {
+	tmpPath := path + ".tmp"
+	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) //nolint:gosec // tmpPath is daemon-owned config path
+	if err != nil {
+		return fmt.Errorf("atomic write %s: open tmp: %w", path, err)
+	}
+	cleanup := func() { _ = os.Remove(tmpPath) }
+
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		cleanup()
+		return fmt.Errorf("atomic write %s: write tmp: %w", path, err)
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		cleanup()
+		return fmt.Errorf("atomic write %s: sync tmp: %w", path, err)
+	}
+	if err := f.Close(); err != nil {
+		cleanup()
+		return fmt.Errorf("atomic write %s: close tmp: %w", path, err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		cleanup()
+		return fmt.Errorf("atomic write %s: rename: %w", path, err)
+	}
+	return nil
+}
+
 // WatchConfig starts a config-file watcher and registers a SIGHUP fallback.
 // Calls onReload once per detected change. Stops when ctx is cancelled.
 //

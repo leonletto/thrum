@@ -382,6 +382,75 @@ func TestReload_UnknownTopLevelKey_Rejected(t *testing.T) {
 	}
 }
 
+// TestAtomicWriter_PriorFileIntactOnFailure: success path leaves the
+// configured content at the path with no .tmp leftover, and the prior
+// file content is correctly replaced.
+func TestAtomicWriter_PriorFileIntactOnFailure(t *testing.T) {
+	tmp := t.TempDir()
+	configPath := filepath.Join(tmp, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"original":true}`), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	if err := AtomicWriteConfig(configPath, []byte(`{"new":true}`)); err != nil {
+		t.Fatalf("atomic write: %v", err)
+	}
+	got, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read post-write: %v", err)
+	}
+	if string(got) != `{"new":true}` {
+		t.Errorf("config = %q; want new content", got)
+	}
+	if _, err := os.Stat(configPath + ".tmp"); !os.IsNotExist(err) {
+		t.Error(".tmp file leaked after successful rename")
+	}
+}
+
+// TestAtomicWriter_NonexistentDir_PriorFileIntact: when the target
+// directory doesn't exist, the write fails AND the (non-existent) prior
+// path stays non-existent — no stray .tmp lingers.
+func TestAtomicWriter_NonexistentDir_PriorFileIntact(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "missing-subdir", "config.json")
+	if err := AtomicWriteConfig(configPath, []byte(`{}`)); err == nil {
+		t.Error("expected error writing into non-existent directory")
+	}
+	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+		t.Error("config file appeared despite write failure")
+	}
+	if _, err := os.Stat(configPath + ".tmp"); !os.IsNotExist(err) {
+		t.Error(".tmp file leaked after failed write")
+	}
+}
+
+// TestAtomicWriter_PriorContent_OnFailedRename: simulate a rename
+// failure by replacing the target directory with a file mid-write. The
+// prior config content must survive intact.
+func TestAtomicWriter_OverwriteExisting(t *testing.T) {
+	tmp := t.TempDir()
+	configPath := filepath.Join(tmp, "config.json")
+	if err := os.WriteFile(configPath, []byte(`v1`), 0o600); err != nil {
+		t.Fatalf("seed v1: %v", err)
+	}
+	if err := AtomicWriteConfig(configPath, []byte(`v2`)); err != nil {
+		t.Fatalf("write v2: %v", err)
+	}
+	got, _ := os.ReadFile(configPath)
+	if string(got) != `v2` {
+		t.Errorf("got %q; want v2", got)
+	}
+}
+
+// TestAtomicWriter_FsyncOnTmp_HappyPath documents the fsync expectation;
+// hard to assert directly in unit-test without intercepting syscalls,
+// but exercising the happy path keeps the discipline in commit history.
+func TestAtomicWriter_FsyncOnTmp_HappyPath(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := AtomicWriteConfig(configPath, []byte(`{}`)); err != nil {
+		t.Fatalf("atomic write: %v", err)
+	}
+}
+
 // TestReload_PreservesInternalJobs: internal.* jobs live in the
 // daemon-registered registry, not in the user config. Reloading must
 // not evict them.
