@@ -179,7 +179,11 @@ Environment variables:
 	rootCmd.AddCommand(whoamiCmd())
 	rootCmd.AddCommand(versionCmd())
 	rootCmd.AddCommand(waitCmd())
-	rootCmd.AddCommand(cronCmd())
+	// thrum-7b84.3.5: `thrum cron install-inbox-poll` deprecated — the
+	// daemon-side backstop ticker (internal/daemon/backstop) now handles
+	// the 15-minute stale-unread reminder for all alive agents. No
+	// per-agent CronCreate required; removing the registration retires
+	// the durable:false cron on each runtime's next session boot.
 
 	// Composite commands
 	rootCmd.AddCommand(primeCmd())
@@ -1301,55 +1305,6 @@ func versionCmd() *cobra.Command {
 	}
 	return cmd
 }
-
-// cronCmd is the root of the `thrum cron` subtree. Currently houses
-// only install-inbox-poll. Subcommands here emit runtime-specific
-// scheduling instructions for the calling agent to execute — they do
-// not schedule anything directly; the daemon has no cron primitive.
-func cronCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "cron",
-		Short: "Manage cron-style scheduled tasks (runtime-specific emitters)",
-	}
-	cmd.AddCommand(cronInstallInboxPollCmd())
-	return cmd
-}
-
-// cronInstallInboxPollCmd emits an instruction block that the
-// SessionStart hook forwards to Claude Code, which reads it and calls
-// CronCreate to schedule the 15-minute inbox-check poll. The command
-// itself prints to stdout and exits — it does NOT call the daemon,
-// touch identity, or invoke any runtime API directly. That's why it's
-// classified as bypass.
-func cronInstallInboxPollCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "install-inbox-poll",
-		Short: "Emit a CronCreate instruction to schedule the 15-minute inbox-check poll",
-		Long: `Prints an instruction block for the running runtime agent to schedule
-the 15-minute inbox-check cron. Emitted to stdout; the SessionStart hook
-forwards it into the agent's context, where the runtime acts on it.
-
-This command is print-only. It does NOT call the daemon, touch identity
-state, or invoke any runtime scheduling API directly.`,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			_, err := fmt.Fprintln(cmd.OutOrStdout(), inboxPollCronInstruction)
-			return err
-		},
-	}
-}
-
-// inboxPollCronInstruction is the instruction block consumed by
-// Claude Code's SessionStart hook → context-injection pipeline.
-// The format intentionally mirrors other hook-output instructions:
-// a delimited banner, explicit kv lines, and a closing banner so
-// the runtime can parse it unambiguously.
-const inboxPollCronInstruction = `===== SCHEDULE CRON (hook-inbox-delivery) =====
-Please call CronCreate with the following parameters:
-  cron: "7,22,37,52 * * * *"
-  prompt: "Background inbox check. Run ` + "`thrum inbox --unread`" + ` once. If messages are present, process them; if not, return to idle without further action."
-  recurring: true
-  durable: false
-===============================================`
 
 // printAgentSummaryField emits the bare value of a single field from
 // AgentSummary, newline-terminated. Unknown fields return an error so
