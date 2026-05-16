@@ -20,15 +20,15 @@ import (
 // A-B4. Adding fields is backwards-compatible; renaming or removing fields
 // requires coordinator coordination.
 type JobSpec struct {
-	ID          string `json:"id"`
-	Type        string `json:"type"` // "command" | "thrum_command" | "scheduled_agent" | "nudge" | "internal"
-	Schedule    string `json:"schedule"` // raw schedule string per canonical §4.1.1
-	Enabled     bool   `json:"enabled"`
-	Description string `json:"description,omitempty"`
-	RunAtStart  bool   `json:"run_at_start,omitempty"`
-	Jitter      time.Duration `json:"jitter,omitempty"` // 0 = use scheduler default
-	ScheduleTZ  string `json:"schedule_tz,omitempty"`    // empty = use daemon.schedule_tz
-	CatchUp     string `json:"catch_up,omitempty"`       // "skip" | "run_most_recent"
+	ID          string        `json:"id"`
+	Type        string        `json:"type"`     // "command" | "thrum_command" | "scheduled_agent" | "nudge" | "internal"
+	Schedule    string        `json:"schedule"` // raw schedule string per canonical §4.1.1
+	Enabled     bool          `json:"enabled"`
+	Description string        `json:"description,omitempty"`
+	RunAtStart  bool          `json:"run_at_start,omitempty"`
+	Jitter      time.Duration `json:"jitter,omitempty"`      // 0 = use scheduler default
+	ScheduleTZ  string        `json:"schedule_tz,omitempty"` // empty = use daemon.schedule_tz
+	CatchUp     string        `json:"catch_up,omitempty"`    // "skip" | "run_most_recent"
 	// Per-type sub-trees — exactly one is populated based on Type.
 	Command        *CommandSpec             `json:"command,omitempty"`
 	ThrumCommand   *ThrumCommandSpec        `json:"thrum_command,omitempty"`
@@ -65,7 +65,7 @@ type ThrumCommandSpec struct {
 type ScheduledAgentSpec struct {
 	Target               string `json:"target"`
 	Primer               string `json:"primer"`
-	BaseBranch           string `json:"base_branch,omitempty"`            // default "main"
+	BaseBranch           string `json:"base_branch,omitempty"` // default "main"
 	WorktreePersistent   bool   `json:"worktree_persistent,omitempty"`
 	IdleNudgeSeconds     int    `json:"idle_nudge_seconds,omitempty"`     // default 90
 	MaxIdleNudges        int    `json:"max_idle_nudges,omitempty"`        // default 5

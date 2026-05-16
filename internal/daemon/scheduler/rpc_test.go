@@ -260,7 +260,7 @@ func TestRPC_JobCreate_DuplicateRejected(t *testing.T) {
 
 	good := CreateJobRequest{
 		JobID: "x",
-		Spec: JobSpec{Type: "command", Schedule: "@every 5m", Enabled: true, Command: &CommandSpec{Exec: "/bin/true"}},
+		Spec:  JobSpec{Type: "command", Schedule: "@every 5m", Enabled: true, Command: &CommandSpec{Exec: "/bin/true"}},
 	}
 	if _, err := s.RPC_JobCreate(context.Background(), good); err != nil {
 		t.Fatalf("first create: %v", err)
@@ -295,7 +295,7 @@ func TestRPC_JobUpdate_Happy(t *testing.T) {
 
 	create := CreateJobRequest{
 		JobID: "x",
-		Spec: JobSpec{Type: "command", Schedule: "@every 5m", Enabled: true, Command: &CommandSpec{Exec: "/bin/true"}},
+		Spec:  JobSpec{Type: "command", Schedule: "@every 5m", Enabled: true, Command: &CommandSpec{Exec: "/bin/true"}},
 	}
 	if _, err := s.RPC_JobCreate(context.Background(), create); err != nil {
 		t.Fatalf("seed create: %v", err)
@@ -303,7 +303,7 @@ func TestRPC_JobUpdate_Happy(t *testing.T) {
 
 	update := UpdateJobRequest{
 		JobID: "x",
-		Spec: JobSpec{Type: "command", Schedule: "@every 10m", Enabled: false, Command: &CommandSpec{Exec: "/bin/false"}},
+		Spec:  JobSpec{Type: "command", Schedule: "@every 10m", Enabled: false, Command: &CommandSpec{Exec: "/bin/false"}},
 	}
 	if _, err := s.RPC_JobUpdate(context.Background(), update); err != nil {
 		t.Fatalf("update: %v", err)

@@ -120,8 +120,8 @@ func TestValidator_RequiresSchedule(t *testing.T) {
 func TestValidator_RejectsRunAtStartWithOneShot(t *testing.T) {
 	s := New(Config{Location: time.UTC})
 	cases := map[string]string{
-		"once":  "@once",
-		"at":    "@at 2026-05-15T09:00:00Z",
+		"once": "@once",
+		"at":   "@at 2026-05-15T09:00:00Z",
 	}
 	for name, sched := range cases {
 		userJobs := map[string]JobSpec{
