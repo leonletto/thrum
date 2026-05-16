@@ -60,6 +60,16 @@ type CreateResult struct {
 	Reused bool
 }
 
+// DestroyResult describes a completed destruction. Spec §3.2.
+type DestroyResult struct {
+	// BranchDeleted is true when opts.Branch was non-empty AND the
+	// `git branch -D` call succeeded. Callers (cobra wrapper) can
+	// use this to print accurate confirmation text instead of
+	// assuming success from a nil error (branch deletion is
+	// best-effort and logs but does not return on failure).
+	BranchDeleted bool
+}
+
 // DestroyOpts configures a worktree destruction. Spec §3.2.
 type DestroyOpts struct {
 	// RepoPath is the absolute path to the main repository root.

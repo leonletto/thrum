@@ -25,7 +25,7 @@ func TestDestroy_HappyPath(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	err = Destroy(ctx, DestroyOpts{
+	_, err = Destroy(ctx, DestroyOpts{
 		RepoPath:     repoPath,
 		WorktreePath: r.Path,
 		Branch:       r.Branch,
@@ -54,7 +54,7 @@ func TestDestroy_Idempotent(t *testing.T) {
 	ctx := context.Background()
 
 	// Destroy a path that doesn't exist → returns nil.
-	err := Destroy(ctx, DestroyOpts{
+	res, err := Destroy(ctx, DestroyOpts{
 		RepoPath:     repoPath,
 		WorktreePath: filepath.Join(basePath, "never-existed"),
 		Branch:       "agent/x/job-j-1",
@@ -62,6 +62,11 @@ func TestDestroy_Idempotent(t *testing.T) {
 	})
 	if err != nil {
 		t.Errorf("Destroy on missing path: got err=%v, want nil (idempotent)", err)
+	}
+	if res == nil {
+		t.Error("Destroy on missing path: got nil result, want zero-value DestroyResult")
+	} else if res.BranchDeleted {
+		t.Error("BranchDeleted: got true, want false (path absent → branch untouched)")
 	}
 }
 
@@ -78,7 +83,7 @@ func TestDestroy_BranchStaysWhenBlank(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	err = Destroy(ctx, DestroyOpts{
+	_, err = Destroy(ctx, DestroyOpts{
 		RepoPath:     repoPath,
 		WorktreePath: r.Path,
 		Branch:       "", // intentionally blank
@@ -114,7 +119,7 @@ func TestDestroy_BranchDeleteFailureNonFatal(t *testing.T) {
 	// `git branch -D` will fail with "branch not found"; Destroy
 	// must log the failure but still return nil (best-effort
 	// branch deletion per spec §3.2).
-	err = Destroy(ctx, DestroyOpts{
+	_, err = Destroy(ctx, DestroyOpts{
 		RepoPath:     repoPath,
 		WorktreePath: r.Path,
 		Branch:       "agent/nonexistent/job-zzz-9", // bogus branch
@@ -142,7 +147,7 @@ func TestDestroy_NotAWorktree(t *testing.T) {
 		t.Fatalf("mkdir fake: %v", err)
 	}
 
-	err := Destroy(ctx, DestroyOpts{
+	_, err := Destroy(ctx, DestroyOpts{
 		RepoPath:     repoPath,
 		WorktreePath: fakePath,
 		Force:        true,
@@ -164,10 +169,19 @@ func TestDestroy_Validation(t *testing.T) {
 	}{
 		{"empty RepoPath", DestroyOpts{WorktreePath: "/w"}},
 		{"empty WorktreePath", DestroyOpts{RepoPath: "/r"}},
+		{"WorktreePath with .. segment", DestroyOpts{
+			RepoPath: "/r", WorktreePath: "/base/../escape",
+		}},
+		{"WorktreePath relative ..", DestroyOpts{
+			RepoPath: "/r", WorktreePath: "../escape",
+		}},
+		{"WorktreePath equals RepoPath (would delete repo)", DestroyOpts{
+			RepoPath: "/r", WorktreePath: "/r",
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			err := Destroy(ctx, c.opts)
+			_, err := Destroy(ctx, c.opts)
 			if !errors.Is(err, ErrInvalidOpts) {
 				t.Errorf("err = %v, want errors.Is(ErrInvalidOpts) true", err)
 			}

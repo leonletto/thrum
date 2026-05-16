@@ -143,25 +143,36 @@ func Create(ctx context.Context, opts CreateOpts) (*CreateResult, error) {
 		return nil, fmt.Errorf("%w: BasePath unresolved (RepoPath=%s)",
 			ErrInvalidOpts, opts.RepoPath)
 	}
+	// Post-resolution BasePath length re-check: validateOpts caps
+	// caller-supplied BasePath, but the tier-2 / tier-3 paths
+	// (config + InferBasePath) can also blow the 200-byte working
+	// budget. Re-checking here keeps the contract symmetric across
+	// the three priority tiers.
+	if len(opts.BasePath) > 200 {
+		return nil, fmt.Errorf("%w: resolved BasePath length %d exceeds 200-byte working budget",
+			ErrInvalidOpts, len(opts.BasePath))
+	}
 
 	path, branch := derivePathAndBranch(opts)
-
-	// Spec §3.6: slog.Info at entry with agent, job_id, mode, path.
 	mode := "ephemeral"
 	if opts.Persistent {
 		mode = "persistent"
 	}
+
+	// 255-byte path-length guard (spec §3.4). Run BEFORE the entry
+	// slog so a too-long path is rejected without a stray log entry
+	// claiming the call is proceeding.
+	if len(path) > 255 {
+		return nil, fmt.Errorf("%w: resulting path %d bytes exceeds 255-byte filesystem limit",
+			ErrInvalidOpts, len(path))
+	}
+
+	// Spec §3.6: slog.Info at entry with agent, job_id, mode, path.
 	slog.Info("worktree.Create beginning",
 		slog.String("agent", opts.AgentName),
 		slog.String("job_id", opts.JobID),
 		slog.String("mode", mode),
 		slog.String("path", path))
-
-	// 255-byte path-length guard (spec §3.4).
-	if len(path) > 255 {
-		return nil, fmt.Errorf("%w: resulting path %d bytes exceeds 255-byte filesystem limit",
-			ErrInvalidOpts, len(path))
-	}
 
 	baseBranch := opts.BaseBranch
 	if baseBranch == "" {

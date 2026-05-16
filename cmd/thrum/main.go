@@ -2822,7 +2822,11 @@ func worktreeCreateCmd() *cobra.Command {
 				}
 				worktreePath = result.Path
 				branch = result.Branch
-				fmt.Printf("✓ Worktree created at %s\n", worktreePath)
+				if result.Reused {
+					fmt.Printf("✓ Worktree reused at %s (branch %s)\n", worktreePath, branch)
+				} else {
+					fmt.Printf("✓ Worktree created at %s\n", worktreePath)
+				}
 			}
 			cli.PrintRedirectConfirmations(os.Stdout, worktreePath)
 
@@ -2980,18 +2984,25 @@ func worktreeTeardownCmd() *cobra.Command {
 					branchToDelete = strings.TrimSpace(string(out))
 				}
 			}
-			if err := worktree.Destroy(cmd.Context(), worktree.DestroyOpts{
+			res, err := worktree.Destroy(cmd.Context(), worktree.DestroyOpts{
 				RepoPath:     repoPath,
 				WorktreePath: worktreePath,
 				Branch:       branchToDelete, // "" when flag absent
 				Force:        true,
-			}); err != nil {
+			})
+			if err != nil {
 				return fmt.Errorf("destroy worktree: %w", err)
 			}
 
 			fmt.Printf("✓ Worktree %s removed\n", name)
 			if branchToDelete != "" {
-				fmt.Printf("✓ Branch deleted: %s\n", branchToDelete)
+				if res.BranchDeleted {
+					fmt.Printf("✓ Branch deleted: %s\n", branchToDelete)
+				} else {
+					fmt.Fprintf(os.Stderr,
+						"  Warning: branch %s not deleted (best-effort delete failed; see daemon logs)\n",
+						branchToDelete)
+				}
 			}
 			return nil
 		},
