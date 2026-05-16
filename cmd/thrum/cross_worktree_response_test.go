@@ -308,6 +308,14 @@ func TestRealCobraLeaves_HaveExpectedClasses(t *testing.T) {
 		"thrum daemon start":   CrossWorktreeResponseDiagnosticBanner,
 		"thrum daemon status":  CrossWorktreeResponseDiagnosticBanner,
 		"thrum daemon stop":    CrossWorktreeResponseDiagnosticBanner,
+		// Class B — status-verb siblings (ratified by
+		// @researcher_inbox_race third-pass review): all identity-
+		// agnostic daemon/system status reporters belong here.
+		"thrum peer status":     CrossWorktreeResponseDiagnosticBanner,
+		"thrum sync status":     CrossWorktreeResponseDiagnosticBanner,
+		"thrum backup status":   CrossWorktreeResponseDiagnosticBanner,
+		"thrum telegram status": CrossWorktreeResponseDiagnosticBanner,
+		"thrum tmux status":     CrossWorktreeResponseDiagnosticBanner,
 
 		// Class C — Whoami
 		"thrum whoami":       CrossWorktreeResponseWhoami,

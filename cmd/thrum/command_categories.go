@@ -73,16 +73,27 @@ const (
 // CrossWorktreeResponseDiagnosticBanner: identity-agnostic diagnostic
 // verbs whose output is useful even under a cross_worktree fire. Class
 // B per the Enhanced Policy 2 spec (thrum-7b84.6).
+//
+// The status-verb siblings (peer/sync/backup/telegram/tmux status)
+// were ratified by @researcher_inbox_race in third-pass review: the
+// dispatch's "status" was ambiguous; all identity-agnostic
+// daemon/system status reporters belong in Class B since none filter
+// by caller identity.
 var diagnosticBannerLeaves = map[string]bool{
-	"thrum team":           true,
-	"thrum agent list":     true,
-	"thrum version":        true,
-	"thrum daemon logs":    true,
-	"thrum daemon restart": true,
-	"thrum daemon run":     true,
-	"thrum daemon start":   true,
-	"thrum daemon status":  true,
-	"thrum daemon stop":    true,
+	"thrum team":            true,
+	"thrum agent list":      true,
+	"thrum version":         true,
+	"thrum daemon logs":     true,
+	"thrum daemon restart":  true,
+	"thrum daemon run":      true,
+	"thrum daemon start":    true,
+	"thrum daemon status":   true,
+	"thrum daemon stop":     true,
+	"thrum peer status":     true,
+	"thrum sync status":     true,
+	"thrum backup status":   true,
+	"thrum telegram status": true,
+	"thrum tmux status":     true,
 }
 
 // whoamiLeaves enumerates leaves that get CrossWorktreeResponseWhoami:
