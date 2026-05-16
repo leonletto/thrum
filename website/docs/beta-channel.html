@@ -83,6 +83,10 @@ housekeeping scripts (e.g., updating thrum + restarting daemons across N
 repos) still succeed cleanly.</p>
 <p>The remediation is straightforward: cd back to the agent&#39;s own worktree, or
 run <code>thrum prime</code> to re-claim the identity if the pane binding has drifted.</p>
+<p>The full backstory — including the meta-lesson about how rc.1 shipped with
+the wrong remediation text, the chain that caught it, and the design call
+between the three response classes — is in
+<a href="https://thrum.team/blog/shooting-yourself-in-both-feet.html">Shooting Yourself in Both Feet</a>.</p>
 <p>Why a shortened soak window? The fix is small (4 files, ~270 LOC), the
 regression-test fingerprint is mechanical, and the bug is a known footgun
 missed in the original identity-guard work — not a discovered new regression.

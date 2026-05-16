@@ -43,6 +43,11 @@ they're parameterized over `VERSION` and the release branch.
 > The remediation is straightforward: cd back to the agent's own worktree, or
 > run `thrum prime` to re-claim the identity if the pane binding has drifted.
 >
+> The full backstory — including the meta-lesson about how rc.1 shipped with the
+> wrong remediation text, the chain that caught it, and the design call between
+> the three response classes — is in
+> [Shooting Yourself in Both Feet](https://thrum.team/blog/shooting-yourself-in-both-feet.html).
+>
 > Why a shortened soak window? The fix is small (4 files, ~270 LOC), the
 > regression-test fingerprint is mechanical, and the bug is a known footgun
 > missed in the original identity-guard work — not a discovered new regression.

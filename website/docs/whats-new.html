@@ -57,7 +57,8 @@ tagged 2026-05-16 and sitting in a compressed 4-hour soak window.</p>
 <p><strong>Standard thrum functionality is unchanged.</strong> v0.10.4 only fixes confusing
 messages agents get when they cd into the wrong worktree by accident. Normal
 same-worktree day-to-day use is unaffected. This is UX and safety hardening, not
-a regression fix.</p>
+a regression fix. Full backstory:
+<a href="https://thrum.team/blog/shooting-yourself-in-both-feet.html">Shooting Yourself in Both Feet</a>.</p>
 <p>The bug was a known footgun in the original identity-guard work (thrum-7b84.6):
 when an agent&#39;s CLI command ran from a worktree that didn&#39;t match its pane-bound
 identity, mutating commands could silently send under the wrong identity.
