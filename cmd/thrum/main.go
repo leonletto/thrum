@@ -115,7 +115,17 @@ Environment variables:
 	// Global flags available to all commands
 	rootCmd.PersistentFlags().StringVar(&flagRole, "role", "", "Agent role (or THRUM_ROLE env var)")
 	rootCmd.PersistentFlags().StringVar(&flagModule, "module", "", "Agent module (or THRUM_MODULE env var)")
+	// --repo: intentionally hidden from --help. The flag is for testing
+	// helpers (tests/resilience, tests/e2e) and ad-hoc scripting only. It
+	// is NOT a user-facing operator override and MUST NOT appear in
+	// user-facing documentation (CLI reference, llms.txt, website docs)
+	// — advertising it would recruit agents to bypass the cross_worktree
+	// guard from a wrong cwd, which is the exact anti-pattern the guard
+	// exists to prevent. Source-divers can discover + use it for tests
+	// and scripts; that's fine. See thrum-7b84.6 cycle 2026-05-16 for
+	// the full context.
 	rootCmd.PersistentFlags().StringVar(&flagRepo, "repo", ".", "Repository path")
+	_ = rootCmd.PersistentFlags().MarkHidden("repo")
 	rootCmd.PersistentFlags().BoolVar(&flagJSON, "json", false, "JSON output for scripting")
 	rootCmd.PersistentFlags().BoolVar(&flagQuiet, "quiet", false, "Suppress non-essential output")
 	rootCmd.PersistentFlags().BoolVar(&flagVerbose, "verbose", false, "Debug output")
