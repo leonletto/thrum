@@ -138,3 +138,40 @@ func TestHandleSend_ImplicitBroadcast_StripsSelf(t *testing.T) {
 		}
 	}
 }
+
+// TestSelfMention_FullPath_NotInUnread verifies the full HandleSend → projector
+// roundtrip: sending --to @self creates a delivery row stamped with read_at,
+// so the message does not appear in the author's --unread inbox even though
+// the author is now in the recipient set.
+func TestSelfMention_FullPath_NotInUnread(t *testing.T) {
+	st, agentID, h := setupSingleAgent(t, "coordinator")
+	defer func() { _ = st.Close() }()
+
+	// Send to self via --to.
+	_ = callSend(t, h, SendRequest{
+		To:            agentID,
+		Content:       "remind me about X",
+		CallerAgentID: agentID,
+	})
+
+	// List unread, excluding self-authored. The self-mention should NOT
+	// surface here: the projector pre-stamped read_at on the author's
+	// delivery row.
+	listParams, _ := json.Marshal(ListMessagesRequest{
+		Unread:        true,
+		ExcludeSelf:   true,
+		CallerAgentID: agentID,
+		ForAgent:      agentID,
+	})
+	resp, err := h.HandleList(context.Background(), listParams)
+	if err != nil {
+		t.Fatalf("HandleList failed: %v", err)
+	}
+	listResp, ok := resp.(*ListMessagesResponse)
+	if !ok {
+		t.Fatalf("expected *ListMessagesResponse, got %T", resp)
+	}
+	if listResp.Unread != 0 {
+		t.Fatalf("expected 0 unread (self-mention pre-stamped read_at), got %d", listResp.Unread)
+	}
+}
