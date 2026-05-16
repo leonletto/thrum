@@ -99,6 +99,14 @@ func validateOpts(opts CreateOpts) error {
 	return nil
 }
 
+// testInjectAfterAdd is a package-private test hook. When non-nil,
+// it is invoked by Create AFTER git worktree add succeeds but
+// BEFORE the ctx.Err() check + EnsureRedirects, with the new
+// worktree path. Tests use it to inject fault conditions (e.g.,
+// chmod, force a cancel) that exercise the failure-contract
+// cleanup paths. Production code MUST keep this nil.
+var testInjectAfterAdd func(worktreePath string)
+
 // Create creates (or, for persistent mode, reuses) a git worktree
 // configured with thrum/beads redirects and hook scripts. See spec
 // §3.1 for the full contract.
@@ -186,6 +194,10 @@ func Create(ctx context.Context, opts CreateOpts) (*CreateResult, error) {
 	if out, err := safecmd.Git(ctx, opts.RepoPath,
 		"worktree", "add", "-b", branch, path, baseBranch); err != nil {
 		return nil, fmt.Errorf("git worktree add: %s: %w", out, err)
+	}
+
+	if testInjectAfterAdd != nil {
+		testInjectAfterAdd(path)
 	}
 
 	// Best-effort cleanup wrapper for any subsequent error.

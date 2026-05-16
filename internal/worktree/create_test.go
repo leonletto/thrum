@@ -398,3 +398,143 @@ func TestCreate_EphemeralPathExists(t *testing.T) {
 		t.Errorf("err = %v, want errors.Is(ErrPathExists) true", err)
 	}
 }
+
+func TestCreate_BestEffortCleanupOnRedirectFailure(t *testing.T) {
+	repoPath, basePath := newTestRepo(t)
+	ctx := context.Background()
+
+	expectedPath := filepath.Join(basePath, "x-j-1")
+
+	// Fixture: post git worktree add, create the worktree's
+	// .thrum/ entry as a FILE so EnsureRedirects's MkdirAll
+	// fails with "not a directory." The worktree dir itself
+	// remains writable so cleanup's `git worktree remove
+	// --force` succeeds.
+	testInjectAfterAdd = func(worktreePath string) {
+		thrumPath := filepath.Join(worktreePath, ".thrum")
+		if err := os.WriteFile(thrumPath, []byte("blocker"), 0600); err != nil {
+			t.Fatalf("inject blocker: %v", err)
+		}
+	}
+	t.Cleanup(func() { testInjectAfterAdd = nil })
+
+	_, err := Create(ctx, CreateOpts{
+		RepoPath: repoPath, BasePath: basePath,
+		AgentName: "x", JobID: "j", WakeTimestamp: 1,
+		Persistent: false, BaseBranch: "main",
+	})
+	if err == nil {
+		t.Fatal("Create with failing EnsureRedirects: got nil, want error")
+	}
+	if !strings.Contains(err.Error(), "ensure redirects") {
+		t.Errorf("err = %v, want wrap with 'ensure redirects'", err)
+	}
+
+	// Assert cleanup ran successfully: worktree dir gone,
+	// branch deleted. (Per spec §3.5 best-effort cleanup
+	// contract — non-cancellation error MUST leave zero
+	// residue.)
+	if _, statErr := os.Stat(expectedPath); !os.IsNotExist(statErr) {
+		t.Errorf("worktree path: got err=%v (still present), want IsNotExist", statErr)
+	}
+	out, gerr := exec.Command("git", "-C", repoPath,
+		"branch", "--list", "agent/x/job-j-1").CombinedOutput()
+	if gerr != nil {
+		t.Fatalf("git branch --list: %v\n%s", gerr, out)
+	}
+	if len(strings.TrimSpace(string(out))) != 0 {
+		t.Errorf("branch still present: %s", out)
+	}
+}
+
+func TestCreate_CleanupFails_ResidueInError(t *testing.T) {
+	repoPath, basePath := newTestRepo(t)
+	ctx := context.Background()
+
+	expectedPath := filepath.Join(basePath, "x-j-1")
+	expectedBranch := "agent/x/job-j-1"
+
+	// Two-stage fixture:
+	//   1. Force EnsureRedirects to fail via .thrum=file trick.
+	//   2. After triggering that failure, the cleanup path tries
+	//      `git worktree remove --force` against expectedPath.
+	//      Make THAT fail by chmod'ing the parent BasePath to
+	//      0500 (read+execute only) inside the same inject hook
+	//      so the unlink syscall returns EACCES.
+	testInjectAfterAdd = func(worktreePath string) {
+		thrumPath := filepath.Join(worktreePath, ".thrum")
+		if err := os.WriteFile(thrumPath, []byte("blocker"), 0600); err != nil {
+			t.Fatalf("inject blocker: %v", err)
+		}
+		if err := os.Chmod(basePath, 0500); err != nil {
+			t.Fatalf("chmod basePath: %v", err)
+		}
+	}
+	t.Cleanup(func() {
+		testInjectAfterAdd = nil
+		// Restore parent perms so t.TempDir cleanup works.
+		_ = os.Chmod(basePath, 0700)
+	})
+
+	_, err := Create(ctx, CreateOpts{
+		RepoPath: repoPath, BasePath: basePath,
+		AgentName: "x", JobID: "j", WakeTimestamp: 1,
+		Persistent: false, BaseBranch: "main",
+	})
+	if err == nil {
+		t.Fatal("Create with cleanup-fails: got nil err, want wrapped error with residue info")
+	}
+	msg := err.Error()
+	// Spec §3.5 contract: residue info MUST be embedded in the
+	// returned error string. Both path and branch must appear.
+	if !strings.Contains(msg, "residue") {
+		t.Errorf("err = %q, missing 'residue' marker per §3.5 contract", msg)
+	}
+	if !strings.Contains(msg, expectedPath) {
+		t.Errorf("err = %q, missing residue worktree path %q", msg, expectedPath)
+	}
+	if !strings.Contains(msg, expectedBranch) {
+		t.Errorf("err = %q, missing residue branch %q", msg, expectedBranch)
+	}
+}
+
+func TestCreate_CancelPostAddSkipsCleanup(t *testing.T) {
+	repoPath, basePath := newTestRepo(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Hook fires the cancel AFTER git worktree add succeeds.
+	// ctx.Err() check inside Create then short-circuits before
+	// EnsureRedirects runs.
+	testInjectAfterAdd = func(worktreePath string) {
+		cancel()
+	}
+	t.Cleanup(func() { testInjectAfterAdd = nil })
+
+	expectedPath := filepath.Join(basePath, "x-j-1")
+
+	_, err := Create(ctx, CreateOpts{
+		RepoPath: repoPath, BasePath: basePath,
+		AgentName: "x", JobID: "j", WakeTimestamp: 1,
+		Persistent: false, BaseBranch: "main",
+	})
+	if err == nil {
+		t.Fatal("Create with canceled ctx: got nil err, want context.Canceled")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want errors.Is(context.Canceled) true", err)
+	}
+
+	// Residue class #4: worktree dir AND branch BOTH still present.
+	if _, statErr := os.Stat(expectedPath); statErr != nil {
+		t.Errorf("worktree path: got err=%v, want present (cleanup must be skipped on cancel)",
+			statErr)
+	}
+	out, gerr := exec.Command("git", "-C", repoPath, "branch", "--list", "agent/x/job-j-1").CombinedOutput()
+	if gerr != nil {
+		t.Fatalf("git branch --list: %v\n%s", gerr, out)
+	}
+	if len(strings.TrimSpace(string(out))) == 0 {
+		t.Errorf("branch absent: cleanup must be skipped on cancel; got empty branch list")
+	}
+}
