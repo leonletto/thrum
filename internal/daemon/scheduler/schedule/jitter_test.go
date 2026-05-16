@@ -19,8 +19,8 @@ func TestJitter_Deterministic(t *testing.T) {
 func TestJitter_Bounded_3PercentDefault(t *testing.T) {
 	period := 100 * time.Minute
 	j := DeterministicJitter("docs-bot", "daemon-abc", period, 0)
-	max := 3 * time.Minute // 3% of 100m
-	if j < -max || j > max {
+	bound := 3 * time.Minute // 3% of 100m
+	if j < -bound || j > bound {
 		t.Errorf("jitter %v out of [-3m, 3m] for 100m period", j)
 	}
 }
