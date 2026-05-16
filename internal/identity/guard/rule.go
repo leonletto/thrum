@@ -195,7 +195,7 @@ func Rule(cc *CheckContext) error {
 		ExpectedAgent: cc.ExpectedAgent,
 		DetectedAgent: detected,
 		ExpectedPID:   cc.IdentityAgentPID,
-		Remediation:   "cd to the correct worktree, run 'thrum prime' to re-claim, or pass --repo <path> to anchor to a specific repo",
+		Remediation:   "cd to the correct worktree or run 'thrum prime' to re-claim",
 	}
 	if cc.Mode == ModeWarn {
 		emitGuardFire(cc.warnLogger, cc.Mode, "allowed", e)
