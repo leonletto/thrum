@@ -1,7 +1,7 @@
 ---
 title: "The Release That Wouldn't Land"
 slug: "v0-10-the-release-that-wouldnt-land"
-date: "2026-05-11"
+date: "2026-05-15"
 author: "Leon Letto"
 description:
   "v0.10 was supposed to be the big one. It took four versions to actually ship,
@@ -187,3 +187,16 @@ going to do this for every minor release from here.
 If you want to follow along, the [beta channel docs](../docs/beta-channel.html)
 describe how to install the current RC. The stable release ships when the soak
 is done.
+
+## What Came After
+
+When I posted this, the chain stopped at rc.6. Five more candidates went out
+over the next few days, each one closing one small bug the previous candidate
+had surfaced under real use. An init flag the wizard would clobber on upgrade.
+A `message read --all` race where messages arriving between listing and reading
+got swept up and silently marked read. A spinner regex that didn't recognize
+Claude 2.1.141's twisting glyph. None of them were dramatic on their own. Each
+one was the kind of thing that turns into "thrum is flaky" if you ship it
+without catching it first.
+
+I'm done now. We'll be releasing in the next day or so.
