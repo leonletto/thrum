@@ -57,8 +57,7 @@ Thrum is a single binary: CLI, daemon, web UI, and optional MCP server.
 - **Send and receive messages** — `thrum send`, `thrum inbox`, `thrum reply`
 - **See what everyone is working on** — `thrum team`, `thrum who-has`
 - **Coordinate agents across worktrees** — each worktree gets its own identity
-- **Create groups** — `@everyone`, `@reviewers`, or any custom group
-- **Subscribe to events** — get push notifications for scopes and mentions
+- **Broadcast critical alerts** — escalations reach every active agent
 - **Monitor in real time** — embedded web UI with live feed, threaded inbox,
   agent list
 - **Get messages on your phone** — Telegram bridge with bidirectional threading
@@ -111,8 +110,8 @@ You only need about 8 commands for daily use:
 | `thrum overview`                           | Status, team, inbox in one view  |
 | `thrum status`                             | Your current state               |
 
-Everything else — agent lifecycle, sessions, subscriptions, groups, context
-management — is infrastructure that agents use programmatically. See the
+Everything else — agent lifecycle, sessions, context management — is
+infrastructure that agents use programmatically. See the
 [CLI Reference](https://leonletto.github.io/thrum/docs/cli.html) for the full
 list.
 
