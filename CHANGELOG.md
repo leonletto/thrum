@@ -37,16 +37,16 @@ and this project adheres to
     peer/sync/backup/telegram/tmux status) → exit 0, normal stdout, one-line
     `⚠ Cross-worktree` banner on stderr (flushed before any stdout writes) —
     supports cross-repo housekeeping flows (e.g., updating thrum + restarting
-    daemons across N repos) without forcing `--repo` on every command.
+    daemons across N repos) without aborting.
   - **Class C — Whoami**: `thrum whoami` + `thrum agent whoami` alias → exit 0,
     banner prepended to BOTH stdout and stderr — whoami's stdout is
     identity-affirming and downstream tooling parsing stdout must see the
     warning inline. `--json` mode correctly suppresses the stdout banner to
     preserve the single-document JSON contract; equivalent context routes
     through the slog bridge's hints array.
-  - The `cross_worktree` guard's remediation message extends to mention
-    `--repo <path>` as the third escape hatch alongside cd-into-correct-worktree
-    and `thrum prime`.
+  - The `cross_worktree` guard's remediation message reads
+    `cd to the correct worktree or run 'thrum prime' to re-claim`. Agents
+    that hit the abort should fix their cwd; there is no user-facing bypass.
   - `TestEveryLeafHasCrossWorktreeResponse` CI gate fails the build if any new
     cobra leaf lacks a class annotation — prevents silent taxonomy drift.
 
