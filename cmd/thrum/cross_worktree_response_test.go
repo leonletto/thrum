@@ -190,58 +190,66 @@ func TestEmitCrossWorktreeBanner_NoExpectedAgent(t *testing.T) {
 	}
 }
 
-// TestHandleCrossWorktreeRefresh covers the decision matrix in
-// handleCrossWorktreeRefresh: which error/class combinations propagate
-// (fail closed) vs absorb (banner emitted, continue). The negative-
-// evidence fingerprint from the dispatch (wrong-cwd send → exit 1, no
+// TestClassifyRefreshError covers the decision matrix in
+// classifyRefreshError: which error/class combinations propagate
+// (fail closed) vs absorb (banner emitted, continue) vs neither
+// (pass through to legacy log-and-proceed). The negative-evidence
+// fingerprint from the dispatch (wrong-cwd send → exit 1, no
 // `✓ Message sent`, no entry in `thrum sent`) follows from the
-// propagation arm here — getClient closes the client and returns the
+// fatalErr arm here — getClient closes the client and returns the
 // error, callers exit 1, no RPC ever fires.
-func TestHandleCrossWorktreeRefresh(t *testing.T) {
+func TestClassifyRefreshError(t *testing.T) {
 	xworktreeErr := &guard.Error{Guard: "cross_worktree", Reason: "pid_mismatch", ExpectedAgent: "alice"}
 	otherGuardErr := &guard.Error{Guard: "dead_pid_auto_reclaim", Reason: "dead_owner_reclaimed"}
 
 	cases := []struct {
-		name           string
-		cmdResp        string
-		refreshErr     error
-		wantPropagated bool // true → handleCrossWorktreeRefresh returns non-nil (fail closed)
+		name         string
+		cmdResp      string
+		refreshErr   error
+		wantFatal    bool
+		wantAbsorbed bool
 	}{
 		{
-			name:           "abort class on cross_worktree fails closed",
-			cmdResp:        CrossWorktreeResponseAbort,
-			refreshErr:     xworktreeErr,
-			wantPropagated: true,
+			name:         "abort class on cross_worktree fails closed",
+			cmdResp:      CrossWorktreeResponseAbort,
+			refreshErr:   xworktreeErr,
+			wantFatal:    true,
+			wantAbsorbed: false,
 		},
 		{
-			name:           "missing annotation defaults to abort",
-			cmdResp:        "",
-			refreshErr:     xworktreeErr,
-			wantPropagated: true,
+			name:         "missing annotation defaults to abort",
+			cmdResp:      "",
+			refreshErr:   xworktreeErr,
+			wantFatal:    true,
+			wantAbsorbed: false,
 		},
 		{
-			name:           "diagnostic_banner class absorbs cross_worktree",
-			cmdResp:        CrossWorktreeResponseDiagnosticBanner,
-			refreshErr:     xworktreeErr,
-			wantPropagated: false,
+			name:         "diagnostic_banner class absorbs cross_worktree",
+			cmdResp:      CrossWorktreeResponseDiagnosticBanner,
+			refreshErr:   xworktreeErr,
+			wantFatal:    false,
+			wantAbsorbed: true,
 		},
 		{
-			name:           "whoami class absorbs cross_worktree",
-			cmdResp:        CrossWorktreeResponseWhoami,
-			refreshErr:     xworktreeErr,
-			wantPropagated: false,
+			name:         "whoami class absorbs cross_worktree",
+			cmdResp:      CrossWorktreeResponseWhoami,
+			refreshErr:   xworktreeErr,
+			wantFatal:    false,
+			wantAbsorbed: true,
 		},
 		{
-			name:           "non-cross_worktree guard error always absorbed (existing log-and-proceed contract)",
-			cmdResp:        CrossWorktreeResponseAbort,
-			refreshErr:     otherGuardErr,
-			wantPropagated: false,
+			name:         "non-cross_worktree guard error passes through (legacy log-and-proceed)",
+			cmdResp:      CrossWorktreeResponseAbort,
+			refreshErr:   otherGuardErr,
+			wantFatal:    false,
+			wantAbsorbed: false,
 		},
 		{
-			name:           "plain non-guard error absorbed",
-			cmdResp:        CrossWorktreeResponseAbort,
-			refreshErr:     io.EOF, // any non-*guard.Error
-			wantPropagated: false,
+			name:         "plain non-guard error passes through",
+			cmdResp:      CrossWorktreeResponseAbort,
+			refreshErr:   io.EOF, // any non-*guard.Error
+			wantFatal:    false,
+			wantAbsorbed: false,
 		},
 	}
 
@@ -253,10 +261,13 @@ func TestHandleCrossWorktreeRefresh(t *testing.T) {
 			}
 			// Drain banner output so test logs stay clean.
 			_, _ = captureStdStreams(t, func() {
-				got := handleCrossWorktreeRefresh(cmd, tc.refreshErr)
-				if (got != nil) != tc.wantPropagated {
-					t.Errorf("handleCrossWorktreeRefresh propagated=%v (err=%v), want propagated=%v",
-						got != nil, got, tc.wantPropagated)
+				gotFatal, gotAbsorbed := classifyRefreshError(cmd, tc.refreshErr)
+				if (gotFatal != nil) != tc.wantFatal {
+					t.Errorf("classifyRefreshError fatal=%v (err=%v), want fatal=%v",
+						gotFatal != nil, gotFatal, tc.wantFatal)
+				}
+				if gotAbsorbed != tc.wantAbsorbed {
+					t.Errorf("classifyRefreshError absorbed=%v, want absorbed=%v", gotAbsorbed, tc.wantAbsorbed)
 				}
 			})
 		})
@@ -272,20 +283,20 @@ func TestRealCobraLeaves_HaveExpectedClasses(t *testing.T) {
 	root := buildRootCmd()
 	expectations := map[string]string{
 		// Class A — Abortable (sample; full list is tagged by default)
-		"thrum send":          CrossWorktreeResponseAbort,
-		"thrum reply":         CrossWorktreeResponseAbort,
-		"thrum inbox":         CrossWorktreeResponseAbort,
-		"thrum sent":          CrossWorktreeResponseAbort,
-		"thrum wait":          CrossWorktreeResponseAbort,
-		"thrum message read":  CrossWorktreeResponseAbort,
-		"thrum message edit":  CrossWorktreeResponseAbort,
-		"thrum quickstart":    CrossWorktreeResponseAbort,
-		"thrum prime":         CrossWorktreeResponseAbort,
-		"thrum tmux send":     CrossWorktreeResponseAbort,
-		"thrum tmux create":   CrossWorktreeResponseAbort,
-		"thrum context save":  CrossWorktreeResponseAbort,
+		"thrum send":           CrossWorktreeResponseAbort,
+		"thrum reply":          CrossWorktreeResponseAbort,
+		"thrum inbox":          CrossWorktreeResponseAbort,
+		"thrum sent":           CrossWorktreeResponseAbort,
+		"thrum wait":           CrossWorktreeResponseAbort,
+		"thrum message read":   CrossWorktreeResponseAbort,
+		"thrum message edit":   CrossWorktreeResponseAbort,
+		"thrum quickstart":     CrossWorktreeResponseAbort,
+		"thrum prime":          CrossWorktreeResponseAbort,
+		"thrum tmux send":      CrossWorktreeResponseAbort,
+		"thrum tmux create":    CrossWorktreeResponseAbort,
+		"thrum context save":   CrossWorktreeResponseAbort,
 		"thrum agent register": CrossWorktreeResponseAbort,
-		"thrum session start": CrossWorktreeResponseAbort,
+		"thrum session start":  CrossWorktreeResponseAbort,
 
 		// Class B — DiagnosticBanner
 		"thrum team":           CrossWorktreeResponseDiagnosticBanner,
