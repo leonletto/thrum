@@ -20,30 +20,30 @@ import (
 // A-B4. Adding fields is backwards-compatible; renaming or removing fields
 // requires coordinator coordination.
 type JobSpec struct {
-	ID          string
-	Type        string // "command" | "thrum_command" | "scheduled_agent" | "nudge" | "internal"
-	Schedule    string // raw schedule string per canonical §4.1.1
-	Enabled     bool
-	Description string
-	RunAtStart  bool
-	Jitter      time.Duration // 0 = use scheduler default
-	ScheduleTZ  string        // empty = use daemon.schedule_tz
-	CatchUp     string        // "skip" | "run_most_recent"
+	ID          string `json:"id"`
+	Type        string `json:"type"` // "command" | "thrum_command" | "scheduled_agent" | "nudge" | "internal"
+	Schedule    string `json:"schedule"` // raw schedule string per canonical §4.1.1
+	Enabled     bool   `json:"enabled"`
+	Description string `json:"description,omitempty"`
+	RunAtStart  bool   `json:"run_at_start,omitempty"`
+	Jitter      time.Duration `json:"jitter,omitempty"` // 0 = use scheduler default
+	ScheduleTZ  string `json:"schedule_tz,omitempty"`    // empty = use daemon.schedule_tz
+	CatchUp     string `json:"catch_up,omitempty"`       // "skip" | "run_most_recent"
 	// Per-type sub-trees — exactly one is populated based on Type.
-	Command        *CommandSpec
-	ThrumCommand   *ThrumCommandSpec
-	ScheduledAgent *ScheduledAgentSpec
-	Nudge          *NudgeSpec
-	StageTimeouts  map[string]time.Duration // per-stage override; spec §6.4
+	Command        *CommandSpec             `json:"command,omitempty"`
+	ThrumCommand   *ThrumCommandSpec        `json:"thrum_command,omitempty"`
+	ScheduledAgent *ScheduledAgentSpec      `json:"scheduled_agent,omitempty"`
+	Nudge          *NudgeSpec               `json:"nudge,omitempty"`
+	StageTimeouts  map[string]time.Duration `json:"stage_timeouts,omitempty"` // per-stage override; spec §6.4
 }
 
 // CommandSpec is the type:command sub-tree (canonical §4.1).
 type CommandSpec struct {
-	Exec                 string
-	WorkingDir           string
-	Env                  map[string]string
-	TimeoutSeconds       int
-	FailureEscalateAfter int // default 3 per Q7.2
+	Exec                 string            `json:"exec"`
+	WorkingDir           string            `json:"working_dir,omitempty"`
+	Env                  map[string]string `json:"env,omitempty"`
+	TimeoutSeconds       int               `json:"timeout_seconds,omitempty"`
+	FailureEscalateAfter int               `json:"failure_escalate_after,omitempty"` // default 3 per Q7.2
 
 	// Args is INTERNAL-ONLY. Not part of the user-facing JSON schema
 	// (canonical §4.1.1 type:command row). The thrum_command handler
@@ -57,30 +57,30 @@ type CommandSpec struct {
 
 // ThrumCommandSpec is the type:thrum_command sub-tree.
 type ThrumCommandSpec struct {
-	Args                 []string
-	FailureEscalateAfter int // default 3
+	Args                 []string `json:"args"`
+	FailureEscalateAfter int      `json:"failure_escalate_after,omitempty"` // default 3
 }
 
 // ScheduledAgentSpec is the type:scheduled_agent sub-tree (B-B1 consumes).
 type ScheduledAgentSpec struct {
-	Target               string
-	Primer               string
-	BaseBranch           string // default "main"
-	WorktreePersistent   bool
-	IdleNudgeSeconds     int    // default 90
-	MaxIdleNudges        int    // default 5
-	TeardownGraceSeconds int    // default 10
-	FailureEscalateAfter int    // default 3
-	BudgetMode           string // "notify" | "block"; default = daemon.billing_mode
-	DailyTokenBudget     int
-	MonthlyTokenBudget   int
+	Target               string `json:"target"`
+	Primer               string `json:"primer"`
+	BaseBranch           string `json:"base_branch,omitempty"`            // default "main"
+	WorktreePersistent   bool   `json:"worktree_persistent,omitempty"`
+	IdleNudgeSeconds     int    `json:"idle_nudge_seconds,omitempty"`     // default 90
+	MaxIdleNudges        int    `json:"max_idle_nudges,omitempty"`        // default 5
+	TeardownGraceSeconds int    `json:"teardown_grace_seconds,omitempty"` // default 10
+	FailureEscalateAfter int    `json:"failure_escalate_after,omitempty"` // default 3
+	BudgetMode           string `json:"budget_mode,omitempty"`            // "notify" | "block"; default = daemon.billing_mode
+	DailyTokenBudget     int    `json:"daily_token_budget,omitempty"`
+	MonthlyTokenBudget   int    `json:"monthly_token_budget,omitempty"`
 }
 
 // NudgeSpec is the type:nudge sub-tree (B-B1 consumes).
 type NudgeSpec struct {
-	Target               string
-	Message              string
-	FailureEscalateAfter int // default 3
+	Target               string `json:"target"`
+	Message              string `json:"message"`
+	FailureEscalateAfter int    `json:"failure_escalate_after,omitempty"` // default 3
 }
 
 // InternalOpts carries per-internal-job options that aren't part of the

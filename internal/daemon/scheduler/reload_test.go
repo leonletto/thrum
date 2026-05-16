@@ -451,6 +451,113 @@ func TestAtomicWriter_FsyncOnTmp_HappyPath(t *testing.T) {
 	}
 }
 
+// TestReload_DuringActiveRun_DoesNotDisturb: in-flight runs continue
+// under the dispatched spec; a concurrent ReloadConfig that REMOVES the
+// job from user config must not cancel or restart the running handler.
+// The handler's snapshot of JobSpec is taken at dispatch time; the
+// per-run goroutine never touches the live spec map.
+//
+// Spec §8.6.5 acceptance criterion. The full operator-facing path
+// (job.cancel mid-run + job.delete refusal) is covered by the E2E
+// smoke at §8.8 step 6 — this test pins the in-process safety
+// invariant the unit layer can verify without an RPC round-trip.
+func TestReload_DuringActiveRun_DoesNotDisturb(t *testing.T) {
+	tmp := t.TempDir()
+	configPath := filepath.Join(tmp, "config.json")
+
+	// Seed with one user job pointing at a slow handler so we have time
+	// to reload while it runs.
+	initial := `{
+		"jobs": {
+			"slow-job": {
+				"id": "slow-job", "type": "scheduled_agent",
+				"schedule": "@every 1h", "enabled": true,
+				"scheduled_agent": {"target": "@x", "primer": "do work"}
+			}
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(initial), 0o600); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+
+	s := New(Config{DB: setupStateTestDB(t), DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	// Slow handler stays "running" 400ms then completes.
+	slow := &slowHandler{wait: 400 * time.Millisecond}
+	if err := s.RegisterTypeHandler("scheduled_agent", slow); err != nil {
+		t.Fatalf("register scheduled_agent: %v", err)
+	}
+
+	if err := s.ReloadConfig(context.Background(), configPath); err != nil {
+		t.Fatalf("initial reload: %v", err)
+	}
+	if _, ok := s.JobSpec("slow-job"); !ok {
+		t.Fatal("slow-job not loaded")
+	}
+
+	// Manually dispatch the slow job in a goroutine so we don't depend
+	// on reactor tick timing.
+	doneRunning := make(chan struct{})
+	go func() {
+		spec, _ := s.JobSpec("slow-job")
+		// Seed a state row so the reporter has something to update.
+		now := time.Now()
+		_ = s.state.UpsertState(context.Background(), &StateRow{
+			JobID: spec.ID, Generation: 1, CurrentState: StateDispatched,
+			CreatedAt: now, UpdatedAt: now,
+		})
+		s.launchRun(context.Background(), spec, "slow-job-g1-1", slow)
+		// Poll for completion.
+		for i := 0; i < 100; i++ {
+			row, _ := s.state.GetState(context.Background(), spec.ID)
+			if row != nil && isTerminal(row.CurrentState) {
+				close(doneRunning)
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		t.Errorf("slow-job did not reach terminal state within poll window")
+		close(doneRunning)
+	}()
+
+	// Wait for the handler to enter running.
+	time.Sleep(50 * time.Millisecond)
+
+	// Reload with an EMPTY user-config; this should evict slow-job from
+	// s.specs but MUST NOT cancel the in-flight handler. The handler
+	// holds its own JobSpec snapshot from dispatch time.
+	emptyConfig := `{"jobs":{}}`
+	if err := os.WriteFile(configPath, []byte(emptyConfig), 0o600); err != nil {
+		t.Fatalf("rewrite empty: %v", err)
+	}
+	if err := s.ReloadConfig(context.Background(), configPath); err != nil {
+		t.Fatalf("reload empty: %v", err)
+	}
+
+	// Confirm slow-job evicted from specs.
+	if _, ok := s.JobSpec("slow-job"); ok {
+		t.Error("slow-job should be evicted after reload with empty config")
+	}
+
+	// Wait for the in-flight handler to complete.
+	select {
+	case <-doneRunning:
+	case <-time.After(2 * time.Second):
+		t.Fatal("dispatch goroutine never reported completion")
+	}
+
+	// Final state must be StateCompleted — the handler ran to its own
+	// success path, undisturbed by the reload.
+	row, err := s.state.GetState(context.Background(), "slow-job")
+	if err != nil {
+		t.Fatalf("get state: %v", err)
+	}
+	if row.CurrentState != StateCompleted {
+		t.Errorf("post-reload state = %q; want %q (in-flight run should have completed normally)", row.CurrentState, StateCompleted)
+	}
+}
+
 // TestReload_PreservesInternalJobs: internal.* jobs live in the
 // daemon-registered registry, not in the user config. Reloading must
 // not evict them.
