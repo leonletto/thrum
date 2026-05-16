@@ -16,6 +16,43 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 [CHANGELOG.md](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
+## v0.10.4 — rc.2 in soak (Quick Footgun Release)
+
+[`v0.10.4-rc.2`](https://github.com/leonletto/thrum/releases/tag/v0.10.4-rc.2)
+tagged 2026-05-16 and sitting in a compressed 4-hour soak window.
+
+**Standard thrum functionality is unchanged.** v0.10.4 only fixes confusing
+messages agents get when they cd into the wrong worktree by accident. Normal
+same-worktree day-to-day use is unaffected. This is UX and safety hardening, not
+a regression fix.
+
+The bug was a known footgun in the original identity-guard work (thrum-7b84.6):
+when an agent's CLI command ran from a worktree that didn't match its pane-bound
+identity, mutating commands could silently send under the wrong identity.
+v0.10.4 splits CLI commands into three behaviour classes:
+
+- **Class A — mutating commands (send, reply, message read, inbox markRead,
+  context save, etc.):** fail closed with a clear error message naming both the
+  expected worktree and the actual cwd. Nothing leaves under the wrong identity.
+- **Class B — diagnostic commands (team, status, daemon, whoami, version):**
+  keep working but emit a one-line banner before the output: "you're in another
+  worktree — running against your registered agent at …". Lets cross-repo
+  housekeeping scripts (updating thrum + restarting daemons across N repos)
+  still succeed without spurious failures.
+- **Class C — purely informational reads (inbox listing without markRead, list
+  helpers):** same banner as Class B, no other change.
+
+The remediation: cd back to the agent's own worktree, or run `thrum prime` to
+re-claim the identity if the pane binding has drifted.
+
+Why a shortened soak window? The fix is small (4 files, ~270 LOC), the
+regression-test fingerprint is mechanical, and the bug is a known footgun missed
+in the original identity-guard work, not a discovered new regression. v0.10.4
+follows the standard pre-release process but with a 4-hour soak floor instead of
+the usual 48h.
+
+See the [Beta Channel](beta-channel.md) page for install commands.
+
 ## v0.10.3
 
 [`v0.10.3`](https://github.com/leonletto/thrum/releases/tag/v0.10.3) shipped

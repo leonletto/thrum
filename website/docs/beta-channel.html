@@ -68,15 +68,41 @@ mechanics (binary + plugins + rollback) are shared further down the page —
 they&#39;re parameterized over <code>VERSION</code> and the release branch.</p>
 <h2>Stable-track current pre-release</h2>
 <blockquote>
-<p><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.3"><code>v0.10.3</code></a> shipped
-2026-05-16 after an 11-RC soak cycle. No stable-track pre-release at the
-moment. Install the released binary via the standard
-<a href="quickstart.html#installation">install script</a> — the stable-track only carries a
-pre-release between cuts. See <a href="whats-new.html">What&#39;s New</a> for the v0.10.3
-highlights and the
-<a href="https://github.com/leonletto/thrum/releases/tag/v0.10.3">release notes</a> for
-the long-form story.</p>
+<p><strong>Quick Footgun Release:
+<a href="https://github.com/leonletto/thrum/releases/tag/v0.10.4-rc.2"><code>v0.10.4-rc.2</code></a></strong>
+(2026-05-16, in 4h soak).</p>
+<p>Standard thrum functionality is unchanged. v0.10.4 only fixes confusing
+messages agents get when they cd into the wrong worktree by accident. Normal
+same-worktree day-to-day use is unaffected.</p>
+<p>What&#39;s fixed: when an agent&#39;s CLI command runs from a worktree that doesn&#39;t
+match its pane-bound identity, mutating commands (send, reply, inbox, etc.)
+now fail loudly with a clear error message instead of silently sending under
+the wrong identity. Diagnostic commands (team, status, daemon, whoami) keep
+working but show a &quot;you&#39;re in another worktree&quot; banner so cross-repo
+housekeeping scripts (e.g., updating thrum + restarting daemons across N
+repos) still succeed cleanly.</p>
+<p>The remediation is straightforward: cd back to the agent&#39;s own worktree, or
+run <code>thrum prime</code> to re-claim the identity if the pane binding has drifted.</p>
+<p>Why a shortened soak window? The fix is small (4 files, ~270 LOC), the
+regression-test fingerprint is mechanical, and the bug is a known footgun
+missed in the original identity-guard work — not a discovered new
+regression. v0.10.4 follows the standard pre-release process but with a
+compressed 4-hour soak window instead of the usual 48h floor.</p>
+<p>Previous stable:
+<a href="https://github.com/leonletto/thrum/releases/tag/v0.10.3"><code>v0.10.3</code></a> — see
+<a href="whats-new.html">What&#39;s New</a> for the v0.10.3 highlights.</p>
 </blockquote>
+<h3>Quick install for <code>v0.10.4-rc.2</code></h3>
+<p>Binary and Codex plugin (run in your shell):</p>
+<pre><code># Binary
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.4-rc.2 sh
+
+# Codex plugin (matches release/v0.10.4)
+THRUM_INSTALL_REF=release/v0.10.4 bash &lt;(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.4/codex-plugin/plugins/thrum/scripts/install-plugin.sh)</code></pre>
+<p>Claude Code plugin (run inside Claude):</p>
+<pre><code>/plugin marketplace add leonletto/thrum#release/v0.10.4
+/plugin install thrum@thrum
+/reload-plugins</code></pre>
 <h2>Substrate-track current pre-release</h2>
 <blockquote>
 <p>No substrate-track pre-release yet. First will be <code>v0.11.0-rc.1</code>.</p>
