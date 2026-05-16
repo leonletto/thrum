@@ -83,3 +83,74 @@ func TestPrimePathLeavesAreCovered(t *testing.T) {
 		}
 	}
 }
+
+// TestEveryLeafHasCrossWorktreeResponse pins the thrum-7b84.6 Enhanced
+// Policy 2 invariant: every cobra leaf must carry a
+// cross_worktree_response annotation drawn from the abort /
+// diagnostic_banner / whoami vocabulary. The default-fallthrough
+// classification is abort (safe — fail closed on guard fire), so any
+// new leaf added without explicit classification still produces a
+// defensible runtime response. This test guards against the
+// classification being silently dropped (e.g., if tagGuardCategories
+// is refactored and a branch forgets the new annotation).
+func TestEveryLeafHasCrossWorktreeResponse(t *testing.T) {
+	valid := map[string]bool{
+		CrossWorktreeResponseAbort:             true,
+		CrossWorktreeResponseDiagnosticBanner:  true,
+		CrossWorktreeResponseWhoami:            true,
+	}
+
+	root := buildRootCmd()
+	var missing, wrong []string
+
+	walkLeaves(root, func(leaf *cobra.Command) {
+		path := leaf.CommandPath()
+		resp, ok := leaf.Annotations[crossWorktreeResponseKey]
+		if !ok || resp == "" {
+			missing = append(missing, path)
+			return
+		}
+		if !valid[resp] {
+			wrong = append(wrong, path+" (got "+resp+")")
+		}
+	})
+
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		t.Errorf("missing cross_worktree_response annotation on %d leaf command(s):\n  %s\n\n"+
+			"Fix: ensure tagGuardCategories in cmd/thrum/command_categories.go sets "+
+			"the annotation on every leaf. The default is "+CrossWorktreeResponseAbort+
+			"; add to diagnosticBannerLeaves or whoamiLeaves to override.",
+			len(missing), strings.Join(missing, "\n  "))
+	}
+	if len(wrong) > 0 {
+		sort.Strings(wrong)
+		t.Errorf("leaves carry unknown cross_worktree_response (must be %s / %s / %s):\n  %s",
+			CrossWorktreeResponseAbort, CrossWorktreeResponseDiagnosticBanner, CrossWorktreeResponseWhoami,
+			strings.Join(wrong, "\n  "))
+	}
+}
+
+// TestCrossWorktreeBannerLeavesAreCovered mirrors TestPrimePathLeaves
+// Are Covered: a typo in diagnosticBannerLeaves / whoamiLeaves would
+// silently classify the leaf as abort (a valid response but the wrong
+// taxonomy). Explicit existence check on each banner-class entry.
+func TestCrossWorktreeBannerLeavesAreCovered(t *testing.T) {
+	root := buildRootCmd()
+	seen := map[string]bool{}
+	walkLeaves(root, func(leaf *cobra.Command) {
+		seen[leaf.CommandPath()] = true
+	})
+	for path := range diagnosticBannerLeaves {
+		if !seen[path] {
+			t.Errorf("diagnosticBannerLeaves references %q but that path is not a leaf in the cobra tree "+
+				"(typo, rename, or stale entry — remove or fix in command_categories.go)", path)
+		}
+	}
+	for path := range whoamiLeaves {
+		if !seen[path] {
+			t.Errorf("whoamiLeaves references %q but that path is not a leaf in the cobra tree "+
+				"(typo, rename, or stale entry — remove or fix in command_categories.go)", path)
+		}
+	}
+}
