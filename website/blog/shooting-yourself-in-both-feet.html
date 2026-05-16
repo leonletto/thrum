@@ -77,7 +77,11 @@
       <div class="post-tags"><span class="post-tag">release</span><span class="post-tag">v0.10.4</span><span class="post-tag">agents</span><span class="post-tag">discipline</span></div>
       
       <div class="post-body">
-<p>Two hours after I posted the
+<p>Agents are literal and helpful. Those are usually virtues. They&#39;re what made a
+fix I shipped two hours after declaring victory give every agent that hit the
+guard a precise map to bypass it.</p>
+<p><img src="https://media.giphy.com/media/RSOUOj8H9A3Xq/giphy.gif" alt="Sideshow Bob steps on a rake, recoils, then steps on another rake."></p>
+<p>After I posted the
 <a href="v0-10-the-release-that-wouldnt-land.html">v0.10 retrospective</a> saying I was
 done, an implementer started misbehaving on a multi-agent repo. It was sending
 messages under the coordinator&#39;s identity. The cross-worktree guard had been
@@ -110,7 +114,6 @@ without operator intervention. Three options got listed:</p>
 <li>run <code>thrum prime</code> to re-claim</li>
 <li>pass <code>--repo &lt;path&gt;</code> to anchor to a specific repo</li>
 </ul>
-<p><img src="https://media.giphy.com/media/RSOUOj8H9A3Xq/giphy.gif" alt="Sideshow Bob steps on a rake, recoils, then steps on another rake."></p>
 <h2>The Second Foot</h2>
 <p>The first two are what agents should do. The third was never supposed to be
 agent-facing at all.</p>
@@ -137,10 +140,6 @@ test harnesses). Thirteen documentation files got swept: website docs,
 sparing <code>--repo-path</code> which is a separate flag. And a code comment at the
 flag registration site noting the testing-only intent, so the next thing that
 touches it sees the anchor in-source.</p>
-<h2>The Rule</h2>
-<p>The discipline humans don&#39;t need to state explicitly has to be stated
-explicitly, because agents trying to be helpful won&#39;t have the
-intuition.</p>
 
       </div>
       <hr class="post-divider">
