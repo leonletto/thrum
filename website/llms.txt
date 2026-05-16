@@ -250,7 +250,6 @@ All commands accept these flags:
 
   --role VALUE        Agent role (or THRUM_ROLE env var)
   --module VALUE      Agent module (or THRUM_MODULE env var)
-  --repo PATH         Repository path (default: ".")
   --json              JSON output for scripting
   --quiet             Suppress non-essential output
   --verbose           Debug output
