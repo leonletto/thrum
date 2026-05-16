@@ -274,6 +274,101 @@ func TestClassifyRefreshError(t *testing.T) {
 	}
 }
 
+// cmdWithRepoFlag builds a cobra command carrying the same persistent
+// --repo flag rootCmd installs, with Changed mirroring whether the
+// user explicitly passed it. Used by --repo bypass tests.
+func cmdWithRepoFlag(t *testing.T, resp string, repoSet bool) *cobra.Command {
+	t.Helper()
+	cmd := &cobra.Command{}
+	if resp != "" {
+		cmd.Annotations = map[string]string{crossWorktreeResponseKey: resp}
+	}
+	var repo string
+	cmd.Flags().StringVar(&repo, "repo", ".", "Repository path")
+	if repoSet {
+		if err := cmd.Flags().Set("repo", "/tmp/test-override"); err != nil {
+			t.Fatalf("set repo flag: %v", err)
+		}
+	}
+	return cmd
+}
+
+// TestClassifyRefreshError_RepoFlagBypassesAbort pins the --repo
+// escape hatch (thrum-7b84.6 follow-up: PRE-7 resilience tests caught
+// that the remediation message PROMISED --repo as the escape hatch
+// but the implementation didn't honor it). When the user explicitly
+// passes --repo, classifyRefreshError must absorb the cross_worktree
+// fire regardless of response class — the user is asserting
+// operator-override intent.
+func TestClassifyRefreshError_RepoFlagBypassesAbort(t *testing.T) {
+	xworktreeErr := &guard.Error{Guard: "cross_worktree", Reason: "pid_mismatch", ExpectedAgent: "alice"}
+
+	cases := []struct {
+		name    string
+		cmdResp string
+	}{
+		{"abort class with --repo absorbs (operator override)", CrossWorktreeResponseAbort},
+		{"diagnostic_banner class with --repo absorbs (no banner needed)", CrossWorktreeResponseDiagnosticBanner},
+		{"whoami class with --repo absorbs (no banner needed)", CrossWorktreeResponseWhoami},
+		{"missing annotation with --repo absorbs", ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := cmdWithRepoFlag(t, tc.cmdResp, true)
+			_, _ = captureStdStreams(t, func() {
+				fatalErr, absorbed := classifyRefreshError(cmd, xworktreeErr)
+				if fatalErr != nil {
+					t.Errorf("--repo override must suppress fatal abort, got err=%v", fatalErr)
+				}
+				if !absorbed {
+					t.Errorf("--repo override must mark absorbed=true so caller suppresses raw dump")
+				}
+			})
+		})
+	}
+}
+
+// TestClassifyRefreshError_RepoFlagUnsetKeepsAbort verifies the
+// negative case: without --repo, abort-class commands still fail
+// closed (the existing Class A contract is unchanged for the default
+// path).
+func TestClassifyRefreshError_RepoFlagUnsetKeepsAbort(t *testing.T) {
+	xworktreeErr := &guard.Error{Guard: "cross_worktree", Reason: "pid_mismatch", ExpectedAgent: "alice"}
+
+	cmd := cmdWithRepoFlag(t, CrossWorktreeResponseAbort, false) // --repo NOT set
+	_, _ = captureStdStreams(t, func() {
+		fatalErr, absorbed := classifyRefreshError(cmd, xworktreeErr)
+		if fatalErr == nil {
+			t.Errorf("without --repo, abort class must still fail closed; got fatalErr=nil")
+		}
+		if absorbed {
+			t.Errorf("without --repo + abort class, absorbed must be false (caller prints raw dump)")
+		}
+	})
+}
+
+// TestExplicitRepoFlag covers the helper directly: nil cmd, no flag
+// installed, flag installed but not Changed, flag installed and
+// Changed.
+func TestExplicitRepoFlag(t *testing.T) {
+	if explicitRepoFlag(nil) {
+		t.Error("nil cmd must report false")
+	}
+	bare := &cobra.Command{}
+	if explicitRepoFlag(bare) {
+		t.Error("cmd without --repo flag must report false")
+	}
+	withFlag := cmdWithRepoFlag(t, "", false)
+	if explicitRepoFlag(withFlag) {
+		t.Error("--repo present but not Changed must report false")
+	}
+	changed := cmdWithRepoFlag(t, "", true)
+	if !explicitRepoFlag(changed) {
+		t.Error("--repo explicitly set must report true")
+	}
+}
+
 // TestRealCobraLeaves_HaveExpectedClasses cross-checks the live cobra
 // tree against the Enhanced Policy 2 spec lists (thrum-7b84.6).
 // Equivalent to TestEveryLeafHasCrossWorktreeResponse but asserts the

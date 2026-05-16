@@ -5222,11 +5222,21 @@ func getClient() (*cli.Client, error) {
 // returned an error. Returns:
 //   - fatalErr non-nil: getClient must close the client and propagate
 //     (Class A abort path).
-//   - absorbed=true: a Class B / Class C banner was emitted; the caller
-//     should NOT print the raw refresh error (the banner replaces it).
+//   - absorbed=true: a Class B / Class C banner was emitted, or the
+//     user explicitly passed --repo as an operator override; the
+//     caller should NOT print the raw refresh error.
 //   - fatalErr=nil + absorbed=false: not a cross_worktree fire; caller
 //     keeps the legacy log-and-proceed contract for other guard
 //     reasons (dead_pid_auto_reclaim etc.).
+//
+// --repo escape hatch: when the user explicitly passes --repo on the
+// command line, they are asserting "I'm intentionally operating on
+// this other repo" — the same operator-override intent the
+// cross_worktree remediation message advertises. Suppress the guard
+// fire in that case regardless of response class. Other guard
+// reasons (dead_pid_auto_reclaim) still pass through to legacy
+// log-and-proceed since they're unrelated to the cross-worktree
+// scenario --repo overrides.
 //
 // Factored out of getClient for unit testability — the policy
 // decision is exercised independently of the daemon connection.
@@ -5234,6 +5244,13 @@ func classifyRefreshError(cmd *cobra.Command, refreshErr error) (fatalErr error,
 	var ge *guard.Error
 	if !errors.As(refreshErr, &ge) || ge.Guard != "cross_worktree" {
 		return nil, false
+	}
+	if explicitRepoFlag(cmd) {
+		// Operator override: --repo is the documented escape
+		// hatch for cross-worktree calls. Absorb the guard fire
+		// silently and let the command proceed against the
+		// user-specified repo.
+		return nil, true
 	}
 	switch crossWorktreeResponseFor(cmd) {
 	case CrossWorktreeResponseDiagnosticBanner:
@@ -5245,6 +5262,20 @@ func classifyRefreshError(cmd *cobra.Command, refreshErr error) (fatalErr error,
 	default: // CrossWorktreeResponseAbort (and any unknown value)
 		return refreshErr, false
 	}
+}
+
+// explicitRepoFlag reports whether the caller explicitly passed
+// --repo on the command line (vs. the default "."). Inherits the
+// persistent flag from root; safe on nil cmd.
+func explicitRepoFlag(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	f := cmd.Flags().Lookup("repo")
+	if f == nil {
+		return false
+	}
+	return f.Changed
 }
 
 // crossWorktreeResponseFor returns the leaf's annotated response class
