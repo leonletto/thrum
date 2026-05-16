@@ -5,6 +5,14 @@ import (
 	"time"
 )
 
+func mustLoadLocation(name string) *time.Location {
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		panic(err)
+	}
+	return loc
+}
+
 func TestParse_5FieldCron(t *testing.T) {
 	s, err := Parse("0 9 * * *", ParseOpts{Location: time.UTC})
 	if err != nil {
@@ -153,5 +161,74 @@ func TestParse_Once_FiresOnceThenZero(t *testing.T) {
 	next2 := s.Next(now.Add(time.Second))
 	if !next2.IsZero() {
 		t.Errorf("second Next should be zero; got %v", next2)
+	}
+}
+
+// TestParse_DST_SpringForward_LA: 2026-03-08 02:00 PST → 03:00 PDT in
+// America/Los_Angeles. A `0 9 * * *` schedule must still fire at 09:00
+// local on the DST day; robfig handles the wall-clock advancement.
+func TestParse_DST_SpringForward_LA(t *testing.T) {
+	loc := mustLoadLocation("America/Los_Angeles")
+	s, err := Parse("0 9 * * *", ParseOpts{Location: loc})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	now := time.Date(2026, 3, 7, 23, 0, 0, 0, loc)
+	next := s.Next(now)
+	want := time.Date(2026, 3, 8, 9, 0, 0, 0, loc)
+	if !next.Equal(want) {
+		t.Errorf("DST forward: next = %v, want %v", next, want)
+	}
+}
+
+// TestParse_DST_FallBack_LA: 2026-11-01 02:00 PDT → 01:00 PST. A
+// `0 1 * * *` schedule must still resolve to a single fire on the DST day.
+func TestParse_DST_FallBack_LA(t *testing.T) {
+	loc := mustLoadLocation("America/Los_Angeles")
+	s, err := Parse("0 1 * * *", ParseOpts{Location: loc})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	now := time.Date(2026, 11, 1, 0, 30, 0, 0, loc)
+	next := s.Next(now)
+	if next.Year() != 2026 || next.Month() != 11 || next.Day() != 1 {
+		t.Errorf("DST back: unexpected next %v", next)
+	}
+}
+
+// TestParse_StartupDiagnosticHelper covers the spec §4.2 requirement that
+// the parser expose a Diagnostic with the resolved location name + the next
+// 3 fire times.
+func TestParse_StartupDiagnosticHelper(t *testing.T) {
+	loc := mustLoadLocation("UTC")
+	_, info, err := ParseWithDiagnostic("0 9 * * *", ParseOpts{Location: loc})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if info.LocationName != "UTC" {
+		t.Errorf("location = %q, want UTC", info.LocationName)
+	}
+	if len(info.NextThree) != 3 {
+		t.Errorf("expected 3 next-fire times, got %d", len(info.NextThree))
+	}
+}
+
+// TestParse_DiagnosticPreservesReactorSchedule: one-shot @once is
+// state-bearing; if the diagnostic computation consumed the reactor's
+// Schedule, the reactor would never see a fire-time. Verify both copies
+// remain usable.
+func TestParse_DiagnosticPreservesReactorSchedule(t *testing.T) {
+	sched, info, err := ParseWithDiagnostic("@once", ParseOpts{Location: time.UTC})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	// Diagnostic should have one entry (one-shot fires once, then break).
+	if len(info.NextThree) != 1 {
+		t.Errorf("expected 1 fire time for @once diagnostic, got %d", len(info.NextThree))
+	}
+	// The returned reactor Schedule should still fire on its first Next() call.
+	now := time.Date(2026, 5, 15, 9, 0, 0, 0, time.UTC)
+	if got := sched.Next(now); got.IsZero() {
+		t.Error("reactor Schedule already consumed by diagnostic — should still fire once")
 	}
 }

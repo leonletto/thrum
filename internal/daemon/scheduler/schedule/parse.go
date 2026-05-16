@@ -139,3 +139,46 @@ func (o *oneShotOnce) Next(after time.Time) time.Time {
 	o.fired = true
 	return after
 }
+
+// Diagnostic carries info useful for the per-job startup log line
+// mandated by spec §4.2: the resolved location name and the next 3 fire
+// times after `time.Now()`. Operators use this to sanity-check that
+// a freshly-loaded `schedule:` field resolves to the times they expect,
+// especially in DST-sensitive timezones.
+type Diagnostic struct {
+	LocationName string
+	NextThree    []time.Time
+}
+
+// ParseWithDiagnostic returns the Schedule the reactor will consume plus a
+// Diagnostic for startup logging.
+//
+// IMPORTANT: one-shot Schedules (@at / @once) are state-bearing — calling
+// Next() three times flips them to fired and they will never produce a
+// fire-time again. To avoid burning the reactor's Schedule on diagnostic
+// computation, this parses TWICE: one Schedule is consumed for the
+// Diagnostic, the other is returned for the reactor.
+func ParseWithDiagnostic(s string, opts ParseOpts) (Schedule, Diagnostic, error) {
+	sched, err := Parse(s, opts)
+	if err != nil {
+		return nil, Diagnostic{}, err
+	}
+	diagSched, err := Parse(s, opts)
+	if err != nil {
+		// The first Parse succeeded; this second one should too. If not, the
+		// inputs are non-deterministic — propagate the error rather than
+		// silently returning an empty Diagnostic.
+		return nil, Diagnostic{}, err
+	}
+	diag := Diagnostic{LocationName: opts.Location.String()}
+	now := time.Now()
+	for i := 0; i < 3; i++ {
+		next := diagSched.Next(now)
+		if next.IsZero() {
+			break
+		}
+		diag.NextThree = append(diag.NextThree, next)
+		now = next.Add(time.Second)
+	}
+	return sched, diag, nil
+}
