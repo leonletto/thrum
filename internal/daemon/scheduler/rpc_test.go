@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -181,6 +182,221 @@ func TestRPC_JobShow_UnknownJob(t *testing.T) {
 
 	if _, err := s.RPC_JobShow(context.Background(), ShowJobRequest{JobID: "nonexistent"}); err == nil {
 		t.Error("expected error for unknown job_id")
+	}
+}
+
+// TestRPC_JobCreate_Happy: a valid spec lands in the spec map and seeds
+// a StateScheduled row.
+func TestRPC_JobCreate_Happy(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+	_ = s.RegisterTypeHandler("scheduled_agent", &noopHandler{})
+
+	req := CreateJobRequest{
+		JobID: "docs-bot",
+		Spec: JobSpec{
+			Type: "scheduled_agent", Schedule: "0 9 * * *", Enabled: true,
+			ScheduledAgent: &ScheduledAgentSpec{
+				Target: "docs_bot", Primer: "Update API docs",
+			},
+		},
+	}
+	resp, err := s.RPC_JobCreate(context.Background(), req)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if resp.JobID != "docs-bot" {
+		t.Errorf("resp = %+v", resp)
+	}
+
+	spec, ok := s.JobSpec("docs-bot")
+	if !ok {
+		t.Fatal("spec not registered")
+	}
+	if spec.Type != "scheduled_agent" {
+		t.Errorf("spec.Type = %q", spec.Type)
+	}
+	if spec.ID != "docs-bot" {
+		t.Errorf("spec.ID = %q (should be normalized from JobID)", spec.ID)
+	}
+
+	row, err := s.state.GetState(context.Background(), "docs-bot")
+	if err != nil {
+		t.Fatalf("get state: %v", err)
+	}
+	if row.CurrentState != StateScheduled {
+		t.Errorf("seeded state = %q; want scheduled", row.CurrentState)
+	}
+}
+
+// TestRPC_JobCreate_RejectsInternalPrefix: operator-facing RPC must
+// refuse `internal.*` IDs (bridges use the Go API).
+func TestRPC_JobCreate_RejectsInternalPrefix(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	req := CreateJobRequest{
+		JobID: "internal.evil",
+		Spec: JobSpec{
+			Type: "command", Schedule: "@every 5m", Enabled: true,
+			Command: &CommandSpec{Exec: "/bin/echo"},
+		},
+	}
+	if _, err := s.RPC_JobCreate(context.Background(), req); err == nil {
+		t.Error("expected rejection of internal.* prefix via user RPC")
+	}
+}
+
+// TestRPC_JobCreate_DuplicateRejected: creating a job_id that already
+// exists must fail with a use-update directive in the error message.
+func TestRPC_JobCreate_DuplicateRejected(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	good := CreateJobRequest{
+		JobID: "x",
+		Spec: JobSpec{Type: "command", Schedule: "@every 5m", Enabled: true, Command: &CommandSpec{Exec: "/bin/true"}},
+	}
+	if _, err := s.RPC_JobCreate(context.Background(), good); err != nil {
+		t.Fatalf("first create: %v", err)
+	}
+	if _, err := s.RPC_JobCreate(context.Background(), good); err == nil {
+		t.Error("expected duplicate-id rejection")
+	}
+}
+
+// TestRPC_JobCreate_InvalidSpecReturnsValidatorErrors: a malformed spec
+// surfaces every validator finding via validateSpec.
+func TestRPC_JobCreate_InvalidSpecReturnsValidatorErrors(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	req := CreateJobRequest{
+		JobID: "BadID",
+		Spec:  JobSpec{Type: "command", Schedule: "not a cron", Enabled: true, Command: &CommandSpec{Exec: "/bin/echo"}},
+	}
+	_, err := s.RPC_JobCreate(context.Background(), req)
+	if err == nil {
+		t.Error("expected validator error for BadID + bad schedule")
+	}
+}
+
+// TestRPC_JobUpdate_Happy: update replaces the spec for an existing job.
+func TestRPC_JobUpdate_Happy(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	create := CreateJobRequest{
+		JobID: "x",
+		Spec: JobSpec{Type: "command", Schedule: "@every 5m", Enabled: true, Command: &CommandSpec{Exec: "/bin/true"}},
+	}
+	if _, err := s.RPC_JobCreate(context.Background(), create); err != nil {
+		t.Fatalf("seed create: %v", err)
+	}
+
+	update := UpdateJobRequest{
+		JobID: "x",
+		Spec: JobSpec{Type: "command", Schedule: "@every 10m", Enabled: false, Command: &CommandSpec{Exec: "/bin/false"}},
+	}
+	if _, err := s.RPC_JobUpdate(context.Background(), update); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	spec, _ := s.JobSpec("x")
+	if spec.Schedule != "@every 10m" || spec.Enabled {
+		t.Errorf("post-update spec = %+v", spec)
+	}
+}
+
+// TestRPC_JobUpdate_NotFound: update on an unregistered id returns an
+// error (it does NOT silently create — that's what job.create is for).
+func TestRPC_JobUpdate_NotFound(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	req := UpdateJobRequest{
+		JobID: "missing",
+		Spec:  JobSpec{Type: "command", Schedule: "@every 5m", Enabled: true, Command: &CommandSpec{Exec: "/bin/true"}},
+	}
+	if _, err := s.RPC_JobUpdate(context.Background(), req); err == nil {
+		t.Error("expected not-found error")
+	}
+}
+
+// TestRPC_JobDelete_RefusesActiveRun: spec §5.1 — delete is refused
+// while the run is dispatched or running.
+func TestRPC_JobDelete_RefusesActiveRun(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	s.mu.Lock()
+	s.specs["docs-bot"] = JobSpec{
+		ID: "docs-bot", Type: "scheduled_agent",
+		Schedule: "0 9 * * *", Enabled: true,
+	}
+	s.mu.Unlock()
+
+	if err := s.state.UpsertState(context.Background(), &StateRow{
+		JobID: "docs-bot", Generation: 1, CurrentState: StateRunning,
+		CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}); err != nil {
+		t.Fatalf("seed state: %v", err)
+	}
+
+	_, err := s.RPC_JobDelete(context.Background(), DeleteJobRequest{JobID: "docs-bot"})
+	if !errors.Is(err, ErrJobActive) {
+		t.Errorf("err = %v; want ErrJobActive", err)
+	}
+}
+
+// TestRPC_JobDelete_RemovesIdle: with the state row in a terminal state
+// (or no state row), the spec is removed.
+func TestRPC_JobDelete_RemovesIdle(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	s.mu.Lock()
+	s.specs["docs-bot"] = JobSpec{
+		ID: "docs-bot", Type: "scheduled_agent",
+		Schedule: "0 9 * * *", Enabled: true,
+	}
+	s.mu.Unlock()
+	if err := s.state.UpsertState(context.Background(), &StateRow{
+		JobID: "docs-bot", Generation: 1, CurrentState: StateCompleted,
+		CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}); err != nil {
+		t.Fatalf("seed state: %v", err)
+	}
+
+	if _, err := s.RPC_JobDelete(context.Background(), DeleteJobRequest{JobID: "docs-bot"}); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, ok := s.JobSpec("docs-bot"); ok {
+		t.Error("spec still present after delete")
+	}
+}
+
+// TestRPC_JobDelete_RejectsInternal: operator-facing delete must NOT
+// touch internal jobs.
+func TestRPC_JobDelete_RejectsInternal(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	s.RegisterInternal("internal.persist", "@every 1h", InternalOpts{}, &noopHandler{})
+	if _, err := s.RPC_JobDelete(context.Background(), DeleteJobRequest{JobID: "internal.persist"}); err == nil {
+		t.Error("expected rejection of internal.* delete via RPC")
+	}
+	// Spec must still be registered.
+	if _, ok := s.JobSpec("internal.persist"); !ok {
+		t.Error("internal.persist evicted despite delete refusal")
 	}
 }
 

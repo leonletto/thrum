@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -107,4 +108,139 @@ func (s *Scheduler) RPC_JobShow(ctx context.Context, req ShowJobRequest) (ShowJo
 		return ShowJobResponse{}, fmt.Errorf("job %q load events: %w", req.JobID, err)
 	}
 	return ShowJobResponse{Spec: spec, State: state, RecentEvents: events}, nil
+}
+
+// CreateJobRequest is the input to job.create. Spec.ID is normalized to
+// JobID so the request key is the single source of truth.
+type CreateJobRequest struct {
+	JobID string  `json:"job_id"`
+	Spec  JobSpec `json:"spec"`
+}
+
+// CreateJobResponse echoes the created job_id.
+type CreateJobResponse struct {
+	JobID string `json:"job_id"`
+}
+
+// RPC_JobCreate implements the job.create JSON-RPC method. Validates via
+// the whole-config validator (E1.5 Task 30) against a single-job map so
+// every operator-facing create surfaces the same diagnostics that
+// ReloadConfig would produce for the equivalent disk config. Rejects
+// internal.* IDs at this surface — bridges register internal jobs via
+// the Go API (RegisterInternal), not RPC.
+func (s *Scheduler) RPC_JobCreate(ctx context.Context, req CreateJobRequest) (CreateJobResponse, error) {
+	if strings.HasPrefix(req.JobID, InternalPrefix) {
+		return CreateJobResponse{}, fmt.Errorf("job.create: id %q has reserved %q prefix", req.JobID, InternalPrefix)
+	}
+	spec := req.Spec
+	spec.ID = req.JobID
+	if err := s.validateSpec(spec); err != nil {
+		return CreateJobResponse{}, fmt.Errorf("job.create: %w", err)
+	}
+
+	s.mu.Lock()
+	if _, exists := s.specs[req.JobID]; exists {
+		s.mu.Unlock()
+		return CreateJobResponse{}, fmt.Errorf("job.create: id %q already exists; use job.update", req.JobID)
+	}
+	s.specs[req.JobID] = spec
+	s.mu.Unlock()
+
+	now := time.Now()
+	_ = s.state.UpsertState(ctx, &StateRow{
+		JobID: spec.ID, Generation: 1, CurrentState: StateScheduled,
+		CreatedAt: now, UpdatedAt: now,
+	})
+	// Persistence to disk via AtomicWriteConfig is a daemon-side wiring
+	// step — the substrate exposes the in-memory mutation; the daemon
+	// chooses when to flush the updated jobs map back to .thrum/config.json.
+	s.wakeReactor()
+	return CreateJobResponse{JobID: req.JobID}, nil
+}
+
+// UpdateJobRequest is the input to job.update.
+type UpdateJobRequest struct {
+	JobID string  `json:"job_id"`
+	Spec  JobSpec `json:"spec"`
+}
+
+// UpdateJobResponse echoes the updated job_id.
+type UpdateJobResponse struct {
+	JobID string `json:"job_id"`
+}
+
+// RPC_JobUpdate replaces an existing spec. Validates via the same
+// whole-config validator as create. internal.* IDs rejected.
+func (s *Scheduler) RPC_JobUpdate(_ context.Context, req UpdateJobRequest) (UpdateJobResponse, error) {
+	if strings.HasPrefix(req.JobID, InternalPrefix) {
+		return UpdateJobResponse{}, fmt.Errorf("job.update: cannot mutate internal job %q", req.JobID)
+	}
+	spec := req.Spec
+	spec.ID = req.JobID
+	if err := s.validateSpec(spec); err != nil {
+		return UpdateJobResponse{}, fmt.Errorf("job.update: %w", err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.specs[req.JobID]; !exists {
+		return UpdateJobResponse{}, fmt.Errorf("job.update: id %q not found", req.JobID)
+	}
+	s.specs[req.JobID] = spec
+	s.wakeReactor()
+	return UpdateJobResponse{JobID: req.JobID}, nil
+}
+
+// DeleteJobRequest carries the lookup key for job.delete.
+type DeleteJobRequest struct {
+	JobID string `json:"job_id"`
+}
+
+// DeleteJobResponse echoes the deleted job_id.
+type DeleteJobResponse struct {
+	JobID string `json:"job_id"`
+}
+
+// RPC_JobDelete removes a user job. Refuses with ErrJobActive when the
+// state row is in StateDispatched or StateRunning (per spec §5.1: a
+// running job must be cancelled first). internal.* IDs rejected.
+func (s *Scheduler) RPC_JobDelete(ctx context.Context, req DeleteJobRequest) (DeleteJobResponse, error) {
+	if strings.HasPrefix(req.JobID, InternalPrefix) {
+		return DeleteJobResponse{}, fmt.Errorf("job.delete: cannot delete internal job %q", req.JobID)
+	}
+	if row, err := s.state.GetState(ctx, req.JobID); err == nil {
+		switch row.CurrentState {
+		case StateDispatched, StateRunning:
+			return DeleteJobResponse{}, ErrJobActive
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.specs[req.JobID]; !exists {
+		return DeleteJobResponse{}, fmt.Errorf("job.delete: id %q not found", req.JobID)
+	}
+	delete(s.specs, req.JobID)
+	delete(s.handlers, req.JobID) // no-op for user jobs; defensive
+	s.wakeReactor()
+	return DeleteJobResponse(req), nil
+}
+
+// validateSpec runs the whole-config validator (Task 30) against a
+// single-job map. Used by every mutate RPC so operator-facing creates /
+// updates surface the same diagnostics as a config-file reload.
+//
+// Returns a multi-line error when there are multiple findings, so JSON-RPC
+// clients see every problem in one round-trip.
+func (s *Scheduler) validateSpec(spec JobSpec) error {
+	errs := s.ValidateWholeConfig(map[string]JobSpec{spec.ID: spec})
+	if len(errs) == 0 {
+		return nil
+	}
+	msgs := make([]string, 0, len(errs)+1)
+	msgs = append(msgs, fmt.Sprintf("%d validation error(s):", len(errs)))
+	for _, e := range errs {
+		msgs = append(msgs, "  - "+e.Error())
+	}
+	return errors.New(strings.Join(msgs, "\n"))
 }
