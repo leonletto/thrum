@@ -20,7 +20,13 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 25
+//
+// Gap 25-27 is intentional: the v0.11 substrate brainstorm LOCKED the
+// numbering across parallel epics so the migrations don't reshuffle on
+// each merge. A-B1 owns 25/26/27/29; A-B4 owns 28; D-B1 owns 30-32. A-B4
+// lands first locally so the bump jumps 24→28; the intervening branches
+// fill in via cascade when A-B1 + B-B1 merge to thrum-agents.
+const CurrentVersion = 28
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -370,7 +376,7 @@ func createTables(tx *sql.Tx) error {
 			created_at   INTEGER NOT NULL
 		)`,
 
-		// Reminders table (v25, A-B4 unified reminder substrate). Single
+		// Reminders table (v28, A-B4 unified reminder substrate). Single
 		// polymorphic table for time-triggered reminders (agent/user self-set,
 		// daemon-authored staleness pings) and condition-triggered stalled-agent
 		// sweep entries. Polymorphism discriminated by (source, trigger_kind);
@@ -468,7 +474,7 @@ func createIndexes(tx *sql.Tx) error {
 		// Telegram msg map reverse-lookup index (v24, thrum-48kt.2)
 		"CREATE INDEX IF NOT EXISTS idx_telegram_msg_map_thrum ON telegram_msg_map(thrum_msg_id)",
 
-		// Reminders indexes (v25, A-B4). Mirrors canonical §3.5. Partial indexes
+		// Reminders indexes (v28, A-B4). Mirrors canonical §3.5. Partial indexes
 		// (WHERE state='open') keep dispatch + per-target lookups O(open-set)
 		// rather than O(total-reminders); the (source, trigger_kind) index
 		// accelerates sweep observability queries.
@@ -1115,7 +1121,7 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		}
 	}
 
-	// Migration from version 24 to 25: A-B4 unified reminder substrate.
+	// Migration from version 24 to 28: A-B4 unified reminder substrate.
 	// Authoritative DDL: dev-docs/thrum-agents/substrate-canonical-reference.md §3.5.
 	// Single polymorphic table carries both time-triggered reminders (agent/user
 	// self-set, daemon-authored staleness pings) and condition-triggered
@@ -1123,10 +1129,13 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 	// trigger_kind); validation enforced at mint time in
 	// internal/daemon/reminders/validator.go (A-B4 Task 4).
 	//
-	// Plan v2.1 calls this "Migration 28" assuming A-B1/B-B1 land first; the
-	// canonical reference is the DDL, the version number adjusts at dispatch
-	// time. CurrentVersion was 24 at A-B4 dispatch → this is v25.
-	if startVersion < 25 && endVersion >= 25 {
+	// Version numbering is LOCKED per the v0.11 substrate plan: A-B1 owns
+	// 25/26/27/29, A-B4 owns 28, D-B1 owns 30-32. A-B4 may land before
+	// A-B1/B-B1 on thrum-agents — in that case CurrentVersion bumps 24→28
+	// with intervening branches absent until the A-B1/B-B1 cascade fills
+	// them in. runMigrations handles gapped sequences naturally (each branch
+	// is independent; missing v25-v27 branches just no-op).
+	if startVersion < 28 && endVersion >= 28 {
 		_, err = tx.Exec(`
 			CREATE TABLE IF NOT EXISTS reminders (
 				id                  TEXT    PRIMARY KEY,
@@ -1151,23 +1160,23 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 			)
 		`)
 		if err != nil {
-			return fmt.Errorf("migration 24→25: create reminders table: %w", err)
+			return fmt.Errorf("migration 24→28: create reminders table: %w", err)
 		}
 		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_reminders_next ON reminders(next_reminder_at) WHERE state = 'open'`)
 		if err != nil {
-			return fmt.Errorf("migration 24→25: create idx_reminders_next: %w", err)
+			return fmt.Errorf("migration 24→28: create idx_reminders_next: %w", err)
 		}
 		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_reminders_state ON reminders(state)`)
 		if err != nil {
-			return fmt.Errorf("migration 24→25: create idx_reminders_state: %w", err)
+			return fmt.Errorf("migration 24→28: create idx_reminders_state: %w", err)
 		}
 		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_reminders_target ON reminders(target_agent) WHERE state = 'open'`)
 		if err != nil {
-			return fmt.Errorf("migration 24→25: create idx_reminders_target: %w", err)
+			return fmt.Errorf("migration 24→28: create idx_reminders_target: %w", err)
 		}
 		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_reminders_source_kind ON reminders(source, trigger_kind)`)
 		if err != nil {
-			return fmt.Errorf("migration 24→25: create idx_reminders_source_kind: %w", err)
+			return fmt.Errorf("migration 24→28: create idx_reminders_source_kind: %w", err)
 		}
 	}
 

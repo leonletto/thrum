@@ -1049,9 +1049,9 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	}
 }
 
-func TestSchema_V25_CurrentVersion(t *testing.T) {
-	if schema.CurrentVersion != 25 {
-		t.Errorf("CurrentVersion = %d, want 25", schema.CurrentVersion)
+func TestSchema_V28_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 28 {
+		t.Errorf("CurrentVersion = %d, want 28", schema.CurrentVersion)
 	}
 }
 
@@ -1543,7 +1543,7 @@ func TestMigrate_V20_AgentWithoutRegisterEvent_KeepsEmptyOriginDaemon(t *testing
 	}
 }
 
-// TestMigration_RemindersTable verifies the v25 reminders substrate creates
+// TestMigration_RemindersTable verifies the v28 reminders substrate creates
 // the locked column set per substrate-canonical-reference.md §3.5. Plan
 // thrum-6qmf.3.13 Step 1.
 func TestMigration_RemindersTable(t *testing.T) {
@@ -1599,7 +1599,7 @@ func TestMigration_RemindersTable(t *testing.T) {
 
 // TestMigration_RemindersFreshInstallEquivalentToUpgrade enforces canonical
 // §3.11 Guard 1: fresh-install (InitDB → createTables) and incremental
-// upgrade (Migrate from a pre-v25 version) produce identical reminders
+// upgrade (Migrate from a pre-v28 version) produce identical reminders
 // schema. Plan thrum-6qmf.3.13 Step 1, second test.
 func TestMigration_RemindersFreshInstallEquivalentToUpgrade(t *testing.T) {
 	fresh := setupTestDB(t)
@@ -1706,7 +1706,9 @@ func boolString(b bool) string {
 
 // upgradedRemindersDB bootstraps a database at v24 with the v24 schema
 // shape, then runs Migrate to bring it to CurrentVersion. Tests that the
-// migration path lands at the same reminders shape as fresh-install.
+// migration path lands at the same reminders shape as fresh-install,
+// including across the intentional v25-v27 gap (A-B1/B-B1 migrations land
+// later via cascade).
 func upgradedRemindersDB(t *testing.T) *sql.DB {
 	t.Helper()
 	tmpDir := t.TempDir()
@@ -1719,8 +1721,8 @@ func upgradedRemindersDB(t *testing.T) *sql.DB {
 	t.Cleanup(func() { _ = db.Close() })
 
 	// Seed the schema_version table at v24 — we only need the version
-	// marker so Migrate runs the 24→25 branch. Other tables are not
-	// required for the reminders migration.
+	// marker so Migrate runs the v28 reminders branch (v25/v26/v27 branches
+	// will land in later A-B1/B-B1 merges and are absent here).
 	if _, err := db.Exec(`CREATE TABLE schema_version (
 		version INTEGER NOT NULL,
 		applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
