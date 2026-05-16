@@ -3,6 +3,7 @@ module github.com/leonletto/thrum
 go 1.25.7
 
 require (
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/modelcontextprotocol/go-sdk v1.2.0
