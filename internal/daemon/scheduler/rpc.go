@@ -300,6 +300,39 @@ type CancelJobResponse struct {
 	Reason    string `json:"reason,omitempty"`
 }
 
+// JobDoneRequest is the input to job.done — the agent-facing RPC a
+// scheduled_agent's handler invokes to signal completion.
+type JobDoneRequest struct {
+	CallerAgentID string `json:"caller_agent_id"`
+	RunID         string `json:"run_id"`
+	Summary       string `json:"summary,omitempty"`
+}
+
+// JobDoneResponse is intentionally empty — job.done is a fire-and-forget
+// signal from the agent's POV.
+type JobDoneResponse struct{}
+
+// RPC_JobDone delivers a Completion to the per-run signal channel via
+// the run registry (canonical §6.1 Alt-A). Returns:
+//
+//   - ErrUnknownRun: no run with that run_id is registered. The run
+//     already completed, was cancelled, or the agent is reporting against
+//     a stale run_id.
+//   - ErrCompletionAlreadyDelivered: a prior Completion is still
+//     pending on the signal channel (buffered cap=1). The handler
+//     already received an earlier done signal but hasn't drained it.
+//
+// Cross-epic stability commitment: this is the fourth load-bearing
+// surface (RegisterInternal, JobSpec(id), Handler, JobDone). B-B1's
+// scheduled_agent handler binds against this signature; do not break.
+func (s *Scheduler) RPC_JobDone(_ context.Context, req JobDoneRequest) (JobDoneResponse, error) {
+	err := s.runReg.deliverCompletion(req.RunID, &Completion{
+		Reason:  "agent reported done",
+		Summary: req.Summary,
+	})
+	return JobDoneResponse{}, err
+}
+
 // JobHistoryRequest carries the lookup key and optional limit for
 // job.history. Default limit is 50; capped at 500 to bound network
 // payload and SQLite scan cost.

@@ -613,6 +613,74 @@ func TestRPC_JobHistory_NotFound(t *testing.T) {
 	}
 }
 
+// TestRPC_JobDone_DeliversCompletion: job.done writes a Completion to
+// the registered signal channel; the agent's handler receives it on
+// its `signals <-chan *Completion` parameter.
+func TestRPC_JobDone_DeliversCompletion(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	_, cancel := context.WithCancel(context.Background())
+	sig := s.runReg.register("docs-bot-g1-100", cancel)
+
+	if _, err := s.RPC_JobDone(context.Background(), JobDoneRequest{
+		CallerAgentID: "@docs_bot",
+		RunID:         "docs-bot-g1-100",
+		Summary:       "All updates done.",
+	}); err != nil {
+		t.Fatalf("job.done: %v", err)
+	}
+
+	select {
+	case c := <-sig:
+		if c.Summary != "All updates done." {
+			t.Errorf("summary = %q", c.Summary)
+		}
+		if c.Reason != "agent reported done" {
+			t.Errorf("reason = %q", c.Reason)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Error("completion not delivered")
+	}
+}
+
+// TestRPC_JobDone_UnknownRun: an unregistered run_id returns
+// ErrUnknownRun (sentinel — downstream consumers may `errors.Is` against
+// it).
+func TestRPC_JobDone_UnknownRun(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	_, err := s.RPC_JobDone(context.Background(), JobDoneRequest{
+		CallerAgentID: "@docs_bot", RunID: "nonexistent-run",
+	})
+	if !errors.Is(err, ErrUnknownRun) {
+		t.Errorf("err = %v; want ErrUnknownRun", err)
+	}
+}
+
+// TestRPC_JobDone_DuplicateDelivery: signal channel is cap=1; a second
+// call with the handler still holding the first Completion returns
+// ErrCompletionAlreadyDelivered.
+func TestRPC_JobDone_DuplicateDelivery(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	_, cancel := context.WithCancel(context.Background())
+	s.runReg.register("docs-bot-g1-100", cancel)
+
+	if _, err := s.RPC_JobDone(context.Background(), JobDoneRequest{RunID: "docs-bot-g1-100"}); err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	_, err := s.RPC_JobDone(context.Background(), JobDoneRequest{RunID: "docs-bot-g1-100"})
+	if !errors.Is(err, ErrCompletionAlreadyDelivered) {
+		t.Errorf("second call err = %v; want ErrCompletionAlreadyDelivered", err)
+	}
+}
+
 // TestRPC_JobShow_RegisteredButNoState: a freshly-registered job whose
 // reactor hasn't fired yet has no state row. show returns spec + nil
 // State + empty RecentEvents.
