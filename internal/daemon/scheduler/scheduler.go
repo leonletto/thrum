@@ -245,20 +245,8 @@ func (s *Scheduler) Stop(_ context.Context) error {
 	return nil
 }
 
-// runReactor is the reactor goroutine entry point. Task 10 stub waits for
-// shutdown; Task 11 replaces with the min-heap tick loop.
-func (s *Scheduler) runReactor(ctx context.Context) {
-	for {
-		select {
-		case <-s.stopCh:
-			return
-		case <-ctx.Done():
-			return
-		case <-s.reactorWake:
-			// Task 11: re-scan heap on wake. Stub: ignore.
-		}
-	}
-}
+// runReactor body lives in reactor.go (Task 11). It's the single goroutine
+// that owns the heap and dispatches.
 
 // Handler is the per-job dispatch interface implemented by substrate-owned
 // handlers (command, thrum_command), internal-job handlers

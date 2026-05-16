@@ -52,6 +52,33 @@ func TestParse_EveryDuration(t *testing.T) {
 	}
 }
 
+// TestParse_EveryDuration_SubSecond pins the native sub-second @every path:
+// robfig's ConstantDelaySchedule rounds delays under 1s up to 1s; spec
+// §4.1.1 promises Go duration syntax without that floor, so the parser
+// short-circuits to a native ConstantDelaySchedule for d < 1s.
+func TestParse_EveryDuration_SubSecond(t *testing.T) {
+	for _, expr := range []struct {
+		spec string
+		want time.Duration
+	}{
+		{"@every 100ms", 100 * time.Millisecond},
+		{"@every 500ms", 500 * time.Millisecond},
+		{"@every 1ms", time.Millisecond},
+	} {
+		s, err := Parse(expr.spec, ParseOpts{Location: time.UTC})
+		if err != nil {
+			t.Errorf("parse %q: %v", expr.spec, err)
+			continue
+		}
+		now := time.Date(2026, 5, 15, 9, 0, 0, 500_000_000, time.UTC) // mid-second to catch rounding bugs
+		next := s.Next(now)
+		got := next.Sub(now)
+		if got != expr.want {
+			t.Errorf("%q: delta = %v, want %v", expr.spec, got, expr.want)
+		}
+	}
+}
+
 func TestParse_RobfigMacros(t *testing.T) {
 	cases := map[string]struct {
 		now, want time.Time

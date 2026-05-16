@@ -57,7 +57,24 @@ func Parse(s string, opts ParseOpts) (Schedule, error) {
 	if rest, ok := strings.CutPrefix(s, "@at "); ok {
 		return parseAt(rest)
 	}
-	// Cron + @every + robfig macros all route through robfig/cron's parser.
+	// Sub-second `@every <duration>` short-circuits robfig: that library's
+	// ConstantDelaySchedule rounds delays under 1s up to 1s ("does not
+	// support jobs more frequent than once a second"). Spec §4.1.1
+	// promises "Go duration syntax" without a 1s floor, so sub-second
+	// durations get a small native ConstantDelaySchedule that does
+	// `t.Add(d)` without robfig's rounding.
+	if rest, ok := strings.CutPrefix(s, "@every "); ok {
+		d, err := time.ParseDuration(rest)
+		if err != nil {
+			return nil, fmt.Errorf("schedule.Parse(%q): @every duration: %w", s, err)
+		}
+		if d > 0 && d < time.Second {
+			return &subSecondEvery{delay: d}, nil
+		}
+		// Fall through to robfig for >= 1s durations so DST + per-second
+		// rounding semantics match the rest of the cron-style parsing.
+	}
+	// Cron + @every (>=1s) + robfig macros all route through robfig/cron's parser.
 	// 6-field forms need cron.Second; 5-field don't. Detect by token count
 	// — robfig macros (@every, @daily, etc.) pass through Descriptor.
 	parserOpts := cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor
@@ -70,6 +87,18 @@ func Parse(s string, opts ParseOpts) (Schedule, error) {
 		return nil, fmt.Errorf("schedule.Parse(%q): %w", s, err)
 	}
 	return &cronSchedule{sched: sched, loc: opts.Location}, nil
+}
+
+// subSecondEvery is the native sub-second `@every <duration>` schedule.
+// robfig's ConstantDelaySchedule rounds up to 1s; this carries the exact
+// duration. Stateless — safe to share across goroutines (though the
+// project uses one reactor goroutine per scheduler anyway).
+type subSecondEvery struct {
+	delay time.Duration
+}
+
+func (e *subSecondEvery) Next(after time.Time) time.Time {
+	return after.Add(e.delay)
 }
 
 // cronSchedule wraps robfig/cron's Schedule and pins next-fire computation
