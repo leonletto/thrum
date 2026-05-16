@@ -168,6 +168,84 @@ loop:
 	}
 }
 
+// slowHandler blocks for `wait` in Dispatch so subsequent ticks see the
+// run in StateRunning and the reactor exercises its overlap-skip path.
+type slowHandler struct{ wait time.Duration }
+
+func (sh *slowHandler) Dispatch(ctx context.Context, _ JobSpec, _ string, reporter StateReporter, _ <-chan *Completion) error {
+	_ = reporter.Transition(StateRunning, "started", nil)
+	select {
+	case <-time.After(sh.wait):
+	case <-ctx.Done():
+	}
+	return reporter.Transition(StateCompleted, "slow handler done", nil)
+}
+
+func (sh *slowHandler) Reconcile(_ context.Context, _ JobSpec, _ string, _ State) (State, error) {
+	return StateCompleted, nil
+}
+
+func (sh *slowHandler) Stages() map[string]time.Duration {
+	return map[string]time.Duration{"executing": time.Minute}
+}
+
+// TestReactor_OverlapSkip: while a prior run is in StateRunning, every
+// scheduled tick records an overlapping_skipped event WITHOUT entering
+// the run path. total_runs does NOT increment for those ticks.
+//
+// Timing: handler waits 400ms; ctx times out at 250ms (well before the
+// handler completes) so all ticks during the window see state=running.
+// This avoids the flaky overlap-window race where the handler might
+// complete exactly when a new tick arrives.
+func TestReactor_OverlapSkip(t *testing.T) {
+	db := setupStateTestDB(t)
+	store := NewStateStore(db)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	s.RegisterInternal("internal.overlap", "@every 50ms", InternalOpts{RunAtStart: true}, &slowHandler{wait: 400 * time.Millisecond})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 240*time.Millisecond)
+	defer cancel()
+	if err := s.Start(ctx); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	<-ctx.Done()
+	// Let any in-flight transition / event write land.
+	time.Sleep(80 * time.Millisecond)
+
+	events, err := store.RecentEvents(context.Background(), "internal.overlap", 50)
+	if err != nil {
+		t.Fatalf("recent events: %v", err)
+	}
+	var overlapCount, dispatchedCount int
+	for _, e := range events {
+		switch e.ToState {
+		case StateOverlappingSkipped:
+			overlapCount++
+		case StateDispatched:
+			dispatchedCount++
+		}
+	}
+	if dispatchedCount != 1 {
+		t.Errorf("dispatched count = %d; want 1 (only the first tick enters the run path)", dispatchedCount)
+	}
+	// In 240ms, at 50ms cadence after a runtime-zero first fire, the
+	// reactor schedules ticks at ~50, ~100, ~150, ~200ms — 4 ticks during
+	// the window; assert >= 3 to absorb scheduling jitter.
+	if overlapCount < 3 {
+		t.Errorf("overlap count = %d; want >= 3 (one per 50ms tick while prior run is running)", overlapCount)
+	}
+
+	row, err := store.GetState(context.Background(), "internal.overlap")
+	if err != nil {
+		t.Fatalf("get state: %v", err)
+	}
+	if row.TotalRuns != 1 {
+		t.Errorf("total_runs = %d; want 1 (overlap-skip does NOT increment)", row.TotalRuns)
+	}
+}
+
 // TestReactor_CatchUp_SkipDefault: when daemon was down and the prior
 // next_scheduled_at is in the past, default CatchUp="skip" rolls the
 // next_scheduled_at forward without firing.
