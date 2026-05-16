@@ -219,7 +219,7 @@ func newTestRepo(t *testing.T) (repoPath, basePath string) {
 	runCmd("git", "config", "user.name", "Test")
 	// Initial commit so worktree add has a HEAD to branch from.
 	if err := os.WriteFile(filepath.Join(repoPath, "README.md"),
-		[]byte("init\n"), 0644); err != nil {
+		[]byte("init\n"), 0600); err != nil {
 		t.Fatalf("write README: %v", err)
 	}
 	runCmd("git", "add", "README.md")
@@ -466,14 +466,14 @@ func TestCreate_CleanupFails_ResidueInError(t *testing.T) {
 		if err := os.WriteFile(thrumPath, []byte("blocker"), 0600); err != nil {
 			t.Fatalf("inject blocker: %v", err)
 		}
-		if err := os.Chmod(basePath, 0500); err != nil {
+		if err := os.Chmod(basePath, 0500); err != nil { //#nosec G302 -- intentionally read-only to force cleanup-fails test path
 			t.Fatalf("chmod basePath: %v", err)
 		}
 	}
 	t.Cleanup(func() {
 		testInjectAfterAdd = nil
 		// Restore parent perms so t.TempDir cleanup works.
-		_ = os.Chmod(basePath, 0700)
+		_ = os.Chmod(basePath, 0700) //#nosec G302 -- restoring test dir for t.TempDir cleanup
 	})
 
 	_, err := Create(ctx, CreateOpts{
