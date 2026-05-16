@@ -124,35 +124,41 @@ func (s *StateStore) UpsertState(ctx context.Context, r *StateRow) error {
 	return nil
 }
 
-// GetState reads one state row by job_id, or returns ErrJobNotFound.
-func (s *StateStore) GetState(ctx context.Context, jobID string) (*StateRow, error) {
+// stateColumns is the column list returned by every SELECT that fills a
+// StateRow. Centralised so callers (GetState, NonTerminalAtBoot, future
+// per-handler queries) cannot drift.
+const stateColumns = `
+		job_id, job_generation, current_state, current_stage,
+		stage_entered_at, last_run_id, last_fired_at,
+		last_completed_at, last_completion_state, last_error,
+		next_scheduled_at, consecutive_failures, escalation_sent,
+		total_runs, created_at, updated_at`
+
+// rowScanner is the subset of *sql.Row / *sql.Rows that scanStateRow needs.
+// GetState passes the former; NonTerminalAtBoot passes the latter.
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+// scanStateRow decodes one StateRow from a query result. Shared between
+// GetState (single-row) and NonTerminalAtBoot (bulk-row iteration).
+func scanStateRow(rs rowScanner) (*StateRow, error) {
 	var (
-		r                                                              StateRow
-		currentState                                                   string
-		currentStage, lastRunID, lastError, lastCompletionState        sql.NullString
-		stageEnteredAt, lastFiredAt, lastCompletedAt, nextScheduledAt  sql.NullInt64
-		escalationSent                                                 int
-		createdAt, updatedAt                                           int64
+		r                                                             StateRow
+		currentState                                                  string
+		currentStage, lastRunID, lastError, lastCompletionState       sql.NullString
+		stageEnteredAt, lastFiredAt, lastCompletedAt, nextScheduledAt sql.NullInt64
+		escalationSent                                                int
+		createdAt, updatedAt                                          int64
 	)
-	err := s.db.QueryRowContext(ctx, `
-		SELECT job_id, job_generation, current_state, current_stage,
-		       stage_entered_at, last_run_id, last_fired_at,
-		       last_completed_at, last_completion_state, last_error,
-		       next_scheduled_at, consecutive_failures, escalation_sent,
-		       total_runs, created_at, updated_at
-		  FROM scheduler_job_state WHERE job_id = ?
-	`, jobID).Scan(
+	if err := rs.Scan(
 		&r.JobID, &r.Generation, &currentState, &currentStage,
 		&stageEnteredAt, &lastRunID, &lastFiredAt,
 		&lastCompletedAt, &lastCompletionState, &lastError,
 		&nextScheduledAt, &r.ConsecutiveFailures, &escalationSent,
 		&r.TotalRuns, &createdAt, &updatedAt,
-	)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrJobNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("get state %q: %w", jobID, err)
+	); err != nil {
+		return nil, err
 	}
 	r.CurrentState = State(currentState)
 	r.CurrentStage = currentStage.String
@@ -181,6 +187,49 @@ func (s *StateStore) GetState(ctx context.Context, jobID string) (*StateRow, err
 	r.CreatedAt = time.Unix(createdAt, 0)
 	r.UpdatedAt = time.Unix(updatedAt, 0)
 	return &r, nil
+}
+
+// GetState reads one state row by job_id, or returns ErrJobNotFound.
+func (s *StateStore) GetState(ctx context.Context, jobID string) (*StateRow, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+stateColumns+` FROM scheduler_job_state WHERE job_id = ?`,
+		jobID)
+	r, err := scanStateRow(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrJobNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get state %q: %w", jobID, err)
+	}
+	return r, nil
+}
+
+// NonTerminalAtBoot returns every state row in scheduled / dispatched /
+// running. E1.3's reconciliation walker calls this at daemon start to
+// identify jobs that need recovery — the daemon crashed mid-flight so the
+// row's last reactor-observed state can't be trusted as live.
+func (s *StateStore) NonTerminalAtBoot(ctx context.Context) ([]*StateRow, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+stateColumns+`
+		   FROM scheduler_job_state
+		  WHERE current_state IN ('scheduled','dispatched','running')`)
+	if err != nil {
+		return nil, fmt.Errorf("non-terminal scan: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []*StateRow
+	for rows.Next() {
+		r, err := scanStateRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan non-terminal row: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate non-terminal rows: %w", err)
+	}
+	return out, nil
 }
 
 // nullStr returns nil for empty strings so SQLite stores NULL rather than ''.

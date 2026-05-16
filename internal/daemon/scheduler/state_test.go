@@ -238,3 +238,47 @@ func TestEventLog_DetailsRoundTrip(t *testing.T) {
 		t.Errorf("max_idle_nudges = %v (type %T), want 5", events[0].Details["max_idle_nudges"], events[0].Details["max_idle_nudges"])
 	}
 }
+
+// TestStateStore_NonTerminalAtBoot verifies the reconciliation walker
+// returns only scheduled / dispatched / running rows; terminal states
+// (completed, failed) are excluded.
+func TestStateStore_NonTerminalAtBoot(t *testing.T) {
+	store := NewStateStore(setupStateTestDB(t))
+	ctx := context.Background()
+
+	now := time.Unix(1747353600, 0)
+	rows := []*StateRow{
+		{JobID: "running-1", Generation: 1, CurrentState: StateRunning, NextScheduledAt: timePtr(now), CreatedAt: now, UpdatedAt: now},
+		{JobID: "scheduled-1", Generation: 1, CurrentState: StateScheduled, NextScheduledAt: timePtr(now.Add(time.Minute)), CreatedAt: now, UpdatedAt: now},
+		{JobID: "dispatched-1", Generation: 1, CurrentState: StateDispatched, NextScheduledAt: timePtr(now), CreatedAt: now, UpdatedAt: now},
+		{JobID: "completed-1", Generation: 1, CurrentState: StateCompleted, NextScheduledAt: nil, CreatedAt: now, UpdatedAt: now},
+		{JobID: "failed-1", Generation: 1, CurrentState: StateFailed, NextScheduledAt: timePtr(now.Add(time.Minute)), CreatedAt: now, UpdatedAt: now},
+	}
+	for _, r := range rows {
+		if err := store.UpsertState(ctx, r); err != nil {
+			t.Fatalf("upsert %s: %v", r.JobID, err)
+		}
+	}
+
+	nonTerminal, err := store.NonTerminalAtBoot(ctx)
+	if err != nil {
+		t.Fatalf("non-terminal: %v", err)
+	}
+	got := make(map[string]bool)
+	for _, r := range nonTerminal {
+		got[r.JobID] = true
+	}
+	for _, want := range []string{"running-1", "scheduled-1", "dispatched-1"} {
+		if !got[want] {
+			t.Errorf("missing %q from non-terminal set", want)
+		}
+	}
+	for _, dont := range []string{"completed-1", "failed-1"} {
+		if got[dont] {
+			t.Errorf("terminal job %q should NOT be in non-terminal set", dont)
+		}
+	}
+	if len(nonTerminal) != 3 {
+		t.Errorf("non-terminal count = %d, want 3", len(nonTerminal))
+	}
+}
