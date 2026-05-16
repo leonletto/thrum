@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -280,5 +281,66 @@ func TestStateStore_NonTerminalAtBoot(t *testing.T) {
 	}
 	if len(nonTerminal) != 3 {
 		t.Errorf("non-terminal count = %d, want 3", len(nonTerminal))
+	}
+}
+
+// TestStateStore_ConcurrentUpdates_RaceClean: 10 goroutines × 100 iterations
+// each performing UpsertState + GetState against the same row. SQLite under
+// WAL serializes writes (busy_timeout=5s prevents SQLITE_BUSY cascades);
+// this test pins that the Go layer doesn't add unsafe shared state on top.
+// Must pass with -race.
+func TestStateStore_ConcurrentUpdates_RaceClean(t *testing.T) {
+	store := NewStateStore(setupStateTestDB(t))
+	ctx := context.Background()
+	now := time.Unix(1747353600, 0)
+
+	if err := store.UpsertState(ctx, &StateRow{
+		JobID:           "race-job",
+		Generation:      1,
+		CurrentState:    StateScheduled,
+		NextScheduledAt: timePtr(now),
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	const goroutines = 10
+	const iterations = 100
+
+	var wg sync.WaitGroup
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				err := store.UpsertState(ctx, &StateRow{
+					JobID:           "race-job",
+					Generation:      1,
+					CurrentState:    StateRunning,
+					NextScheduledAt: timePtr(now),
+					TotalRuns:       i*iterations + j,
+					CreatedAt:       now,
+					UpdatedAt:       now.Add(time.Duration(i*iterations+j) * time.Millisecond),
+				})
+				if err != nil {
+					t.Errorf("upsert g=%d j=%d: %v", i, j, err)
+					return
+				}
+				if _, err := store.GetState(ctx, "race-job"); err != nil {
+					t.Errorf("get g=%d j=%d: %v", i, j, err)
+					return
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	got, err := store.GetState(ctx, "race-job")
+	if err != nil {
+		t.Fatalf("final get: %v", err)
+	}
+	if got.CurrentState != StateRunning {
+		t.Errorf("final state = %q, want %q", got.CurrentState, StateRunning)
 	}
 }
