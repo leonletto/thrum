@@ -81,35 +81,35 @@ func NewStateStore(db *safedb.DB) *StateStore {
 // StateStore from new call sites.
 func (s *StateStore) DB() *safedb.DB { return s.db }
 
-// UpsertState writes a state row, creating-or-updating on job_id conflict.
-// The whole row is rewritten on every call; callers are responsible for
-// passing the post-transition values (consecutive_failures already
-// incremented, etc.).
-func (s *StateStore) UpsertState(ctx context.Context, r *StateRow) error {
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO scheduler_job_state (
-			job_id, job_generation, current_state, current_stage,
-			stage_entered_at, last_run_id, last_fired_at,
-			last_completed_at, last_completion_state, last_error,
-			next_scheduled_at, consecutive_failures, escalation_sent,
-			total_runs, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(job_id) DO UPDATE SET
-			job_generation        = excluded.job_generation,
-			current_state         = excluded.current_state,
-			current_stage         = excluded.current_stage,
-			stage_entered_at      = excluded.stage_entered_at,
-			last_run_id           = excluded.last_run_id,
-			last_fired_at         = excluded.last_fired_at,
-			last_completed_at     = excluded.last_completed_at,
-			last_completion_state = excluded.last_completion_state,
-			last_error            = excluded.last_error,
-			next_scheduled_at     = excluded.next_scheduled_at,
-			consecutive_failures  = excluded.consecutive_failures,
-			escalation_sent       = excluded.escalation_sent,
-			total_runs            = excluded.total_runs,
-			updated_at            = excluded.updated_at
-	`,
+// upsertStateSQL is the INSERT-or-update statement used by both
+// UpsertState (auto-commit) and UpsertStateAndEvent (transactional).
+const upsertStateSQL = `
+INSERT INTO scheduler_job_state (
+	job_id, job_generation, current_state, current_stage,
+	stage_entered_at, last_run_id, last_fired_at,
+	last_completed_at, last_completion_state, last_error,
+	next_scheduled_at, consecutive_failures, escalation_sent,
+	total_runs, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(job_id) DO UPDATE SET
+	job_generation        = excluded.job_generation,
+	current_state         = excluded.current_state,
+	current_stage         = excluded.current_stage,
+	stage_entered_at      = excluded.stage_entered_at,
+	last_run_id           = excluded.last_run_id,
+	last_fired_at         = excluded.last_fired_at,
+	last_completed_at     = excluded.last_completed_at,
+	last_completion_state = excluded.last_completion_state,
+	last_error            = excluded.last_error,
+	next_scheduled_at     = excluded.next_scheduled_at,
+	consecutive_failures  = excluded.consecutive_failures,
+	escalation_sent       = excluded.escalation_sent,
+	total_runs            = excluded.total_runs,
+	updated_at            = excluded.updated_at`
+
+// upsertStateArgs builds the SQL parameter list for upsertStateSQL.
+func upsertStateArgs(r *StateRow) []any {
+	return []any{
 		r.JobID, r.Generation, string(r.CurrentState),
 		nullStr(r.CurrentStage), nullTime(r.StageEnteredAt),
 		nullStr(r.LastRunID), nullTime(r.LastFiredAt),
@@ -117,11 +117,46 @@ func (s *StateStore) UpsertState(ctx context.Context, r *StateRow) error {
 		nullStr(r.LastError), nullTime(r.NextScheduledAt),
 		r.ConsecutiveFailures, boolToInt(r.EscalationSent),
 		r.TotalRuns, r.CreatedAt.Unix(), r.UpdatedAt.Unix(),
-	)
+	}
+}
+
+// UpsertState writes a state row, creating-or-updating on job_id conflict.
+// The whole row is rewritten on every call; callers are responsible for
+// passing the post-transition values (consecutive_failures already
+// incremented, etc.).
+func (s *StateStore) UpsertState(ctx context.Context, r *StateRow) error {
+	_, err := s.db.ExecContext(ctx, upsertStateSQL, upsertStateArgs(r)...)
 	if err != nil {
 		return fmt.Errorf("upsert state %q: %w", r.JobID, err)
 	}
 	return nil
+}
+
+// UpsertStateAndEvent writes the state row AND an event-log row in a
+// single SQLite transaction per spec §8.4.2. The two writes commit
+// atomically — a daemon crash between them cannot leave the state row
+// updated while the audit-log row is missing.
+//
+// Used by stateReporter.Transition and stateReporter.Stage so every
+// per-run state transition has a matching event-log entry.
+func (s *StateStore) UpsertStateAndEvent(ctx context.Context, r *StateRow, ev *Event) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx for %q: %w", r.JobID, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, upsertStateSQL, upsertStateArgs(r)...); err != nil {
+		return fmt.Errorf("upsert state %q in tx: %w", r.JobID, err)
+	}
+	eventArgs, err := appendEventArgs(ev)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, appendEventSQL, eventArgs...); err != nil {
+		return fmt.Errorf("append event for %q/%q in tx: %w", ev.JobID, ev.RunID, err)
+	}
+	return tx.Commit()
 }
 
 // stateColumns is the column list returned by every SELECT that fills a
@@ -271,27 +306,38 @@ type Event struct {
 	Details   map[string]any
 }
 
-// AppendEvent inserts one row into scheduler_job_events. The Details map is
-// JSON-marshalled; nil maps store SQL NULL.
-func (s *StateStore) AppendEvent(ctx context.Context, e *Event) error {
+// appendEventSQL is the INSERT used by both AppendEvent (auto-commit) and
+// UpsertStateAndEvent (transactional).
+const appendEventSQL = `
+INSERT INTO scheduler_job_events
+	(job_id, run_id, event_time, from_state, to_state, reason, details)
+VALUES (?, ?, ?, ?, ?, ?, ?)`
+
+// appendEventArgs builds the SQL parameter list for appendEventSQL.
+// JSON-marshals the Details map; nil maps store SQL NULL.
+func appendEventArgs(e *Event) ([]any, error) {
 	var detailsJSON []byte
 	if e.Details != nil {
 		var err error
 		detailsJSON, err = json.Marshal(e.Details)
 		if err != nil {
-			return fmt.Errorf("marshal details: %w", err)
+			return nil, fmt.Errorf("marshal details for %q/%q: %w", e.JobID, e.RunID, err)
 		}
 	}
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO scheduler_job_events
-			(job_id, run_id, event_time, from_state, to_state, reason, details)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`,
+	return []any{
 		e.JobID, e.RunID, e.EventTime.Unix(),
 		nullStr(string(e.FromState)), string(e.ToState),
 		nullStr(e.Reason), nullJSON(detailsJSON),
-	)
+	}, nil
+}
+
+// AppendEvent inserts one row into scheduler_job_events.
+func (s *StateStore) AppendEvent(ctx context.Context, e *Event) error {
+	args, err := appendEventArgs(e)
 	if err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, appendEventSQL, args...); err != nil {
 		return fmt.Errorf("append event for %q/%q: %w", e.JobID, e.RunID, err)
 	}
 	return nil

@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -248,42 +247,9 @@ func (s *Scheduler) Stop(_ context.Context) error {
 // runReactor body lives in reactor.go (Task 11). It's the single goroutine
 // that owns the heap and dispatches.
 
-// Handler is the per-job dispatch interface implemented by substrate-owned
-// handlers (command, thrum_command), internal-job handlers
-// (registered via RegisterInternal), and user-job handlers registered via
-// RegisterTypeHandler.
-//
-// E1.1 stub: this canonical definition lives temporarily here so scheduler.go
-// compiles before E1.3 lands handler.go. **At E1.3 merge time, delete this
-// stub from scheduler.go and rely on handler.go's canonical version** (same
-// package — no import needed). Drop this note at E1.3 merge time.
-type Handler interface {
-	Dispatch(ctx context.Context, job JobSpec, runID string, reporter StateReporter, signals <-chan *Completion) error
-	Reconcile(ctx context.Context, job JobSpec, runID string, lastState State) (State, error)
-	Stages() map[string]time.Duration
-}
-
-// StateReporter is the upcall interface a Handler.Dispatch uses to report
-// state transitions and stage entries back to the scheduler.
-type StateReporter interface {
-	Transition(to State, reason string, details map[string]any) error
-	Stage(name string) error
-}
-
-// Completion is the structured-payload form of a per-run signal delivered
-// to Handler.Dispatch via the `signals` channel.
-type Completion struct {
-	Reason  string
-	Summary string
-}
-
-// Sentinel errors for the cross-epic stability surface.
-var (
-	ErrUnknownRun                 = errors.New("scheduler: unknown run id")
-	ErrCompletionAlreadyDelivered = errors.New("scheduler: completion already delivered")
-	ErrJobActive                  = errors.New("scheduler: job has active run; cancel first")
-	ErrLostTrack                  = errors.New("scheduler: handler lost track across daemon restart")
-)
+// Handler / StateReporter / Completion / sentinel errors live in handler.go
+// (canonical home). E1.1 Task 10 originally put them here for self-contained
+// compilation; E1.3 Task 19 moved them to handler.go for downstream consumers.
 
 // runRegistry + newRunRegistry live in registry.go (Task 12). The struct
 // tracks per-run cancel-func + signal-channel maps for in-flight dispatches;

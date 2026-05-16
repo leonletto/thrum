@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"runtime/debug"
-	"strings"
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/scheduler/schedule"
@@ -398,125 +397,11 @@ func (s *Scheduler) launchRun(ctx context.Context, spec JobSpec, runID string, h
 	}()
 }
 
-// stateReporter is the substrate-side StateReporter implementation — one
-// per run. Writes both the latest-state row and the event-log row for
-// every transition; the two writes are not yet wrapped in a single SQLite
-// transaction (E1.3 may refactor).
-//
-// E1.3 will move stateReporter alongside the canonical StateReporter
-// interface in handler.go; it lives here in E1.1 to keep the reactor's
-// panic-recover wrapper self-contained.
-type stateReporter struct {
-	store *StateStore
-	jobID string
-	runID string
-}
-
-// Transition records a state change. Idempotent w.r.t. terminal states:
-// the reactor.launchRun deferred path may call this after the handler has
-// already emitted a terminal transition, in which case we no-op rather
-// than over-write.
-func (r *stateReporter) Transition(to State, reason string, details map[string]any) error {
-	ctx := context.Background()
-	existing, err := r.store.GetState(ctx, r.jobID)
-	if err != nil && !errors.Is(err, ErrJobNotFound) {
-		return err
-	}
-	if existing == nil {
-		// Shouldn't happen — dispatchOne writes 'dispatched' before
-		// invoking the handler. Defensive: surface the anomaly rather
-		// than panic on the nil deref.
-		return fmt.Errorf("scheduler: no state row for %q at Transition(%q)", r.jobID, to)
-	}
-
-	now := time.Now()
-	fromState := existing.CurrentState
-	newRow := *existing
-	newRow.CurrentState = to
-	newRow.UpdatedAt = now
-
-	switch to {
-	case StateRunning:
-		// No special bookkeeping; stage/timing recorded via Stage().
-	case StateCompleted, StateFailed, StateCancelled, StateOverBudget:
-		newRow.LastCompletedAt = &now
-		newRow.LastCompletionState = to
-		switch to {
-		case StateCompleted:
-			newRow.ConsecutiveFailures = 0
-			newRow.EscalationSent = false
-			newRow.LastError = ""
-		case StateFailed:
-			newRow.ConsecutiveFailures = existing.ConsecutiveFailures + 1
-			if reason != "" {
-				newRow.LastError = reason
-			}
-			// Canonical §6.3 marker-readback: if the failure carries an
-			// escalation_emitted_by marker matching `b-b1.*`, suppress
-			// A-B1's own escalation emit (E1.3 owns the emit side).
-			if details != nil {
-				if marker, ok := details["escalation_emitted_by"].(string); ok && strings.HasPrefix(marker, "b-b1.") {
-					newRow.EscalationSent = true
-				}
-			}
-		}
-	}
-
-	if err := r.store.UpsertState(ctx, &newRow); err != nil {
-		return err
-	}
-	return r.store.AppendEvent(ctx, &Event{
-		JobID:     r.jobID,
-		RunID:     r.runID,
-		EventTime: now,
-		FromState: fromState,
-		ToState:   to,
-		Reason:    reason,
-		Details:   details,
-	})
-}
-
-// Stage records entry into a named stage (e.g. "executing"). Empty name
-// clears the stage marker. State remains whatever it was; the event log
-// captures the stage entry for job.show / job.history.
-func (r *stateReporter) Stage(name string) error {
-	ctx := context.Background()
-	existing, err := r.store.GetState(ctx, r.jobID)
-	if err != nil {
-		return err
-	}
-	now := time.Now()
-	newRow := *existing
-	newRow.CurrentStage = name
-	if name == "" {
-		newRow.StageEnteredAt = nil
-	} else {
-		newRow.StageEnteredAt = &now
-	}
-	newRow.UpdatedAt = now
-	if err := r.store.UpsertState(ctx, &newRow); err != nil {
-		return err
-	}
-	return r.store.AppendEvent(ctx, &Event{
-		JobID:     r.jobID,
-		RunID:     r.runID,
-		EventTime: now,
-		FromState: existing.CurrentState,
-		ToState:   existing.CurrentState,
-		Reason:    "stage: " + name,
-	})
-}
-
-// isTerminal reports whether `s` is a terminal state — one that closes a
-// run. Includes StateOverlappingSkipped because overlap-skip never enters
-// the run path in the first place.
-func isTerminal(s State) bool {
-	switch s {
-	case StateCompleted, StateFailed, StateCancelled, StateOverBudget, StateOverlappingSkipped:
-		return true
-	}
-	return false
-}
+// stateReporter, isTerminal, and the Transition/Stage methods live in
+// handler.go (canonical home for the per-run state-machine driver). E1.1
+// Task 13 originally put them here so the panic-recover wrapper could
+// be self-contained; E1.3 Task 19 promoted them alongside the StateReporter
+// interface — and made Transition/Stage atomic per spec §8.4.2.
 
 // heapItem is one entry in the reactor's min-heap.
 type heapItem struct {
