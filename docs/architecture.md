@@ -10,13 +10,12 @@ server all go through it.
 
 ### Core Services
 
-| Service                     | Purpose                                       | Benefit                       |
-| --------------------------- | --------------------------------------------- | ----------------------------- |
-| **RPC Server**              | JSON-RPC 2.0 API over Unix socket             | CLI and programmatic access   |
-| **WebSocket Server**        | Real-time bidirectional communication         | Web UI and live updates       |
-| **Sync Loop**               | Automatic Git fetch/merge/push (60s interval) | Cross-machine synchronization |
-| **Subscription Dispatcher** | Route notifications to interested clients     | Targeted communication        |
-| **State Management**        | JSONL log + SQLite projection                 | Persistence + fast queries    |
+| Service              | Purpose                                       | Benefit                       |
+| -------------------- | --------------------------------------------- | ----------------------------- |
+| **RPC Server**       | JSON-RPC 2.0 API over Unix socket             | CLI and programmatic access   |
+| **WebSocket Server** | Real-time bidirectional communication         | Web UI and live updates       |
+| **Sync Loop**        | Automatic Git fetch/merge/push (60s interval) | Cross-machine synchronization |
+| **State Management** | JSONL log + SQLite projection                 | Persistence + fast queries    |
 
 ### RPC Accept Loop
 
@@ -81,8 +80,8 @@ messages and agent activity. Served from the same port as WebSocket (default
 **MCP Server** (`thrum mcp serve`): Exposes Thrum functionality as native MCP
 tools over stdio, enabling LLM agents (e.g., Claude Code) to communicate
 directly through MCP protocol without CLI shell-outs. Connects to the daemon via
-Unix socket for RPC and WebSocket for real-time push notifications. Provides 4
-core messaging tools: `send_message`, `check_messages`, `wait_for_message`, and
+Unix socket for RPC and WebSocket for real-time message updates. Provides 4 core
+messaging tools: `send_message`, `check_messages`, `wait_for_message`, and
 `list_agents`.
 
 ## Key Features
@@ -130,7 +129,7 @@ operations happen within the worktree:
 │  2. Fetch remote in worktree                                 │
 │  3. Merge JSONL (append-only dedup by event ID)             │
 │  4. Project new events into SQLite                           │
-│  5. Notify subscribers of new events                         │
+│  5. Notify connected WebSocket clients of new events         │
 │  6. Commit & push local changes in worktree                  │
 │  7. Release lock                                             │
 └─────────────────────────────────────────────────────────────┘
@@ -171,11 +170,11 @@ thrum agent cleanup --dry-run        # Preview orphaned agents
 thrum agent cleanup --force          # Delete all orphaned agents
 ```
 
-### 4. Subscription-Based Notifications
+### 4. Live Inbox
 
-The daemon pushes real-time notifications to connected clients when messages
-match an active subscription. From the CLI, use `thrum wait` to block until a
-message arrives:
+The daemon pushes new messages to connected WebSocket clients in real time (used
+by the Web UI and the MCP `wait_for_message` tool). From the CLI, use
+`thrum wait` to block until a message arrives addressed to you:
 
 ```bash
 # Block until a message arrives (30s default timeout)
@@ -183,24 +182,6 @@ thrum wait
 
 # Block up to 5 minutes, include messages from the last 30s
 thrum wait --timeout 5m --after -30s
-```
-
-The underlying `subscribe`, `unsubscribe`, and `subscriptions.list` RPC methods
-are internal — used by the MCP server and WebSocket clients, not the CLI.
-
-When matching messages arrive, subscribers receive real-time notifications:
-
-```json
-{
-  "method": "notification.message",
-  "params": {
-    "message_id": "msg_01HXE...",
-    "preview": "Auth implementation complete...",
-    "matched_subscription": {
-      "match_type": "scope"
-    }
-  }
-}
 ```
 
 ### 5. Live Git State Tracking
@@ -240,8 +221,6 @@ The daemon serves the WebSocket API and embedded Web UI SPA on the same port
   `session.setIntent`, `session.setTask`
 - `message.send`, `message.get`, `message.list`, `message.edit`,
   `message.delete`, `message.markRead`
-- `subscribe`, `unsubscribe`, `subscriptions.list` (internal — used by MCP
-  server and WebSocket clients)
 - `sync.force`, `sync.status`
 - `peer.start_pairing`, `peer.wait_pairing`, `peer.join`, `peer.list`,
   `peer.status`, `peer.remove`, `peer.configure`, `peer.address_changed`
@@ -267,7 +246,7 @@ Lightweight commands for checking team activity:
 
 ```bash
 thrum who-has auth.go           # Which agents are editing a file?
-thrum ping @reviewer            # Is an agent online? Show last-seen time
+thrum ping @impl_auth           # Is an agent online? Show last-seen time
 ```
 
 These query agent work contexts to provide quick answers without full status
@@ -331,7 +310,7 @@ works without network.
 | ------------------------------------------------- | ------------------------------------------------------------- |
 | `thrum send "Hello"`                              | `message.send` RPC + auto-sync                                |
 | `thrum inbox`                                     | `message.list` RPC with filtering                             |
-| `thrum wait`                                      | `subscribe` RPC + push notifications (internal RPC)           |
+| `thrum wait`                                      | WebSocket session + `notification.message` push events        |
 | `thrum agent list --context`                      | `agent.listContext` RPC (live git state)                      |
 | `thrum who-has FILE`                              | `agent.listContext` RPC filtered by file                      |
 | `thrum ping @role`                                | `agent.list` + `agent.listContext` RPCs                       |
@@ -684,10 +663,7 @@ agents              # Registered agents (kind: "agent" or "user")
 sessions            # Agent work periods
 session_scopes      # Session context scopes
 session_refs        # Session context references
-subscriptions       # Push notification subscriptions
 agent_work_contexts # Live git state per session
-groups              # Named collections for targeted messaging
-group_members       # Group membership (agents and roles)
 events              # Sequence-ordered, deduplicated event log (for sync)
 sync_checkpoints    # Per-peer sync progress tracking
 command_queue       # Queue dispatch for tmux sessions
@@ -708,8 +684,6 @@ Key migrations:
 - v5 -> v6: Agent work contexts table, message reads, session scopes/refs
 - v6 -> v7: Event ID backfill (ULID `event_id` on all JSONL events), JSONL
   sharding migration
-- v7 -> v8: Groups feature (`groups` and `group_members` tables), `@everyone`
-  built-in group
 - v8 -> v9: `events` and `sync_checkpoints` tables added for Tailscale-style
   daemon-to-daemon sync (sequence-ordered deduplicated event log)
 - v9 -> v10: `file_changes` column added to `agent_work_contexts`
@@ -804,18 +778,16 @@ ordering.
 
 ### Event Types
 
-| Event                 | Action                                               |
-| --------------------- | ---------------------------------------------------- |
-| `message.create`      | Insert into messages, scopes, refs                   |
-| `message.edit`        | Update body_content, updated_at, record edit history |
-| `message.delete`      | Set deleted=1, deleted_at, delete_reason             |
-| `thread.updated`      | Notify subscribers of thread activity (UI push)      |
-| `group.create`        | Insert into groups                                   |
-| `group.delete`        | Delete group and members                             |
-| `agent.register`      | Insert/replace agent                                 |
-| `agent.update`        | Merge work contexts for agent                        |
-| `agent.session.start` | Insert session                                       |
-| `agent.session.end`   | Update ended_at, end_reason                          |
+| Event                 | Action                                                |
+| --------------------- | ----------------------------------------------------- |
+| `message.create`      | Insert into messages, scopes, refs                    |
+| `message.edit`        | Update body_content, updated_at, record edit history  |
+| `message.delete`      | Set deleted=1, deleted_at, delete_reason              |
+| `thread.updated`      | Notify connected WebSocket clients of thread activity |
+| `agent.register`      | Insert/replace agent                                  |
+| `agent.update`        | Merge work contexts for agent                         |
+| `agent.session.start` | Insert session                                        |
+| `agent.session.end`   | Update ended_at, end_reason                           |
 
 ### Forward Compatibility
 
@@ -908,9 +880,8 @@ Thrum provides built-in backup and restore via `thrum backup` /
 
 - **JSONL event logs** — `events.jsonl` and `messages/*.jsonl` copied from the
   sync worktree (source of truth)
-- **Local-only SQLite tables** — `message_reads`, `subscriptions`, and
-  `sync_checkpoints` exported as JSONL (these are not in the git-synced JSONL
-  logs)
+- **Local-only SQLite tables** — `message_reads` and `sync_checkpoints` exported
+  as JSONL (these are not in the git-synced JSONL logs)
 - **Config files** — `.thrum/config.json` and related runtime config
 
 **Backup layout** (`~/.thrum-backups/<repo>/`):

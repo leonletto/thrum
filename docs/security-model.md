@@ -112,7 +112,7 @@ the dispatcher with a clear error before the handler runs.
 | Observability / liveness     | `health`, `daemon.status`, `sync.status`, `tsync.peers.list`, `peer.list`, `peer.status`, `telegram.status` |
 | Agent / team / session reads | `agent.list`, `agent.whoami`, `agent.listContext`, `team.list`, `session.list`                              |
 | Context reads                | `context.show`, `context.preamble.show`                                                                     |
-| Message / group reads        | `message.get`, `message.list`, `message.outbox`, `group.list`, `group.info`, `group.members`                |
+| Message reads                | `message.get`, `message.list`, `message.outbox`                                                             |
 | Monitor reads                | `monitor.list`, `monitor.show`, `monitor.logs`                                                              |
 | Tmux reads                   | `tmux.status`, `tmux.capture`, `tmux.check-pane`, `tmux.queue-status`, `tmux.queue-wait`                    |
 | User identify                | `user.identify`                                                                                             |

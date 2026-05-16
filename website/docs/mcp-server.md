@@ -20,8 +20,8 @@ category: "integrations"
 The MCP (Model Context Protocol) server enables Claude Code agents to send and
 receive messages using native MCP tools instead of shelling out to CLI commands.
 It runs as a long-lived child process (`thrum mcp serve`) communicating over
-stdio with JSON-RPC, and connects to the Thrum daemon via Unix socket for
-message operations and via WebSocket for real-time push notifications.
+stdio with JSON-RPC, and connects to the Thrum daemon via Unix socket for all
+message operations.
 
 The server provides 5 MCP tools: 4 for core messaging operations and 1
 deprecated broadcast tool.
@@ -40,16 +40,9 @@ Claude Code (Opus/Sonnet)
   |     |
   |     +-- Daemon Client (Unix socket, per-call)
   |     |   +-- message.send     -> send_message tool
-  |     |   +-- message.list     -> check_messages tool
+  |     |   +-- message.list     -> check_messages tool + wait_for_message poll
   |     |   +-- message.markRead -> check_messages tool (auto-mark consumed)
   |     |   +-- agent.list       -> list_agents tool
-  |     |
-  |     +-- WebSocket Client (ws://localhost:{port}/ws)
-  |     |   +-- user.identify + user.register -> session setup
-  |     |   +-- subscribe (mention_role=@{role}) -> notification stream
-  |     |   +-- notification.message -> unblocks wait_for_message
-  |     |
-  |     +-- Internal Notification Queue (max 1000, FIFO, drops oldest)
   |     |
   |     +-- Identity: .thrum/identities/{name}.json
   |
@@ -82,13 +75,8 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command
 7. Create MCP server with the official Go SDK
    (`github.com/modelcontextprotocol/go-sdk/mcp`)
 8. Register all 5 tool handlers (4 core messaging + 1 deprecated)
-9. Initialize WebSocket waiter (best-effort -- reads port from
-   `.thrum/var/ws.port`)
-   - Connect to `ws://localhost:{port}/ws`
-   - Send `user.identify` to get git username
-   - Send `user.register` with the username
-   - Send `subscribe` with `mention_role` for this agent's role
-   - Start background `readLoop` goroutine for incoming notifications
+9. Initialize polling waiter (no network connection at construction;
+   `wait_for_message` opens lazy Unix socket connections per call)
 10. Start MCP stdio server (blocks until client disconnects or context
     cancelled)
 
@@ -98,8 +86,7 @@ When Claude Code terminates the process (closes stdin) or a signal is received
 (SIGINT/SIGTERM):
 
 - Context is cancelled
-- Waiter closes WebSocket connection (daemon auto-unregisters)
-- Waiter's `readLoop` exits, unblocking any active `wait_for_message` call
+- Any active `wait_for_message` polling loop exits on the next tick
 - Unix socket connections are closed (per-call, so nothing to clean up)
 - Process exits
 
@@ -114,9 +101,11 @@ When Claude Code terminates the process (closes stdin) or a signal is received
 - **Single-waiter enforcement**: Only one `wait_for_message` can be active at a
   time per server instance. A second call returns an error. Enforced with a
   mutex.
-- **Best-effort WebSocket**: If the WebSocket connection fails at startup, the
-  MCP server still operates -- only `wait_for_message` returns errors. The other
-  tools work via Unix socket RPC.
+- **Polling-only delivery**: `wait_for_message` polls `message.list` via Unix
+  socket on a 500ms ticker (mirroring the CLI `thrum wait` path), reconnecting
+  on transport errors. The previous WebSocket subscribe approach was removed
+  alongside the subscribe RPC; polling shares the same `message.list` path the
+  CLI already exercises.
 
 ## Usage
 
@@ -340,45 +329,29 @@ using `identity.GenerateAgentID()`, consistent with daemon RPC handlers.
 each must have a distinct identity file. Use `THRUM_NAME` env var or
 `--agent-id` flag to select.
 
-## WebSocket Waiter
+## Polling Waiter
 
-The `Waiter` struct (`internal/mcp/waiter.go`) manages the WebSocket connection
-for real-time message notifications.
+The `Waiter` struct (`internal/mcp/waiter.go`) powers `wait_for_message` by
+polling the daemon inbox over the Unix socket. There is no WebSocket
+subscription — the previous design registered a `subscribe` RPC that was removed
+when the CLI subscribe commands were retired. Polling shares the same
+`message.list` path the CLI `thrum wait` already relies on.
 
-### Connection Setup
+### Polling Loop
 
-On initialization, the waiter:
+On `wait_for_message`, the waiter:
 
-1. Connects to the daemon WebSocket at `ws://localhost:{port}/ws`
-2. Sends `user.identify` to get the git username
-3. Sends `user.register` with that username
-4. Sends `subscribe` with `mention_role` set to the agent's role
-5. Starts a background `readLoop` goroutine
+1. Opens a fresh `cli.Client` Unix socket connection (lazy, per call)
+2. Calls `message.list --unread --for-agent <id>` on a 500ms ticker
+3. Returns the first unseen message addressed to this agent (by name, role, or
+   `@everyone` broadcast)
+4. Times out and returns empty after the supplied `timeout` (default 30s, max
+   300s)
+5. Reconnects on transport errors without dropping the wait
 
-### Notification Flow
-
-```text
-Daemon WebSocket -> readLoop -> queue ([]MessageNotification) -> waiterCh -> WaitForMessage
-```
-
-The `readLoop` goroutine:
-
-- Reads WebSocket messages continuously
-- Filters for `notification.message` method
-- Parses the notification into a `MessageNotification` (message_id, preview,
-  agent_id, timestamp)
-- Appends to the internal queue (max 1000 items; drops oldest on overflow)
-- Closes the `waiterCh` channel to wake any blocked `WaitForMessage` call
-
-On connection loss, `readLoop` closes `waiterCh` (if set) before exiting, which
-unblocks any active waiter with a timeout-like response rather than hanging
-forever.
-
-### JSON-RPC over WebSocket
-
-The waiter uses JSON-RPC 2.0 for setup RPCs. Request IDs are atomically
-incremented (`atomic.Int64`). During `wsRPC` calls, incoming notifications are
-skipped (they have no `id` field and a non-empty `method` field).
+Single-waiter enforcement: only one `wait_for_message` call may be active per
+`Waiter` instance. A second concurrent call returns an error. The context passed
+to `WaitForMessage` is honored — cancelling it stops the loop on the next tick.
 
 ## Integration
 
@@ -433,10 +406,10 @@ The project `CLAUDE.md` includes instructions for agents to use MCP tools:
 **Core messaging:**
 
 ```text
-mcp__thrum__send_message(to="@reviewer", content="...")
+mcp__thrum__send_message(to="@reviewer_main", content="...")  # prefer specific names
 mcp__thrum__check_messages()
 mcp__thrum__list_agents()
-mcp__thrum__send_message(to="@everyone", content="...")  # broadcast to all agents
+mcp__thrum__send_message(to="@everyone", content="...")  # critical broadcast to all
 mcp__thrum__wait_for_message(timeout=300)
 ```
 

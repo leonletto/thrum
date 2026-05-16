@@ -530,13 +530,12 @@ send messages.
 ### Scopes
 
 Scopes tag messages by context — `module:auth`, `file:src/auth.go`, and so on.
-Use them to filter your inbox and target subscriptions.
+Use them to filter your inbox.
 
-### Subscriptions
+### Live Inbox
 
-The daemon pushes real-time notifications to connected clients when messages
-match a subscription. Use `thrum wait` to block until a message arrives from the
-CLI.
+The daemon pushes new messages to connected WebSocket clients in real time. From
+the CLI, use `thrum wait` to block until a message arrives addressed to you.
 
 ### Sync
 

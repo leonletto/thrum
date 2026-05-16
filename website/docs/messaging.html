@@ -31,13 +31,13 @@ plausible.init()
 <strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="whats-new.html">What's New</a><br>
 <strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
   <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
-<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <strong>Messaging</strong><br>
+<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <strong>Messaging</strong><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
 <strong>Guides</strong>: <a href="beta-channel.html">Beta Channel</a><br>
 <strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
 <strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
-<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
 <strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
@@ -173,16 +173,20 @@ SQLite.</p>
 </tr>
 </tbody></table>
 <h3>Direct Messaging with --to</h3>
-<p><code>--to</code> is shorthand for directing a message to a specific agent, role, or group.
-Under the hood, <code>--to @reviewer</code> appends <code>@reviewer</code> to the mentions list,
-stored as a <code>mention</code> ref on the message.</p>
-<pre><code># These are equivalent:
+<p><code>--to</code> is shorthand for directing a message to a specific agent name (e.g.
+<code>@coordinator_main</code>). Role-name targets like <code>@reviewer</code> also resolve, but
+they fan out to every agent with that role and cause cross-talk in
+multi-agent setups — <strong>prefer specific agent names</strong> for day-to-day routing.</p>
+<pre><code># Preferred: target a specific agent by name
+thrum send &quot;Please review PR #42&quot; --to @reviewer_main
+
+# Role-name routing works but is discouraged (fans out to all reviewers)
 thrum send &quot;Please review PR #42&quot; --to @reviewer
-thrum send &quot;Please review PR #42&quot; --mention @reviewer
 
 # Broadcast to all agents
 thrum send &quot;Deploy complete&quot; --to @everyone</code></pre>
-<p>The <code>@</code> prefix is optional -- <code>--to reviewer</code> and <code>--to @reviewer</code> both work.</p>
+<p>The <code>@</code> prefix is optional — <code>--to reviewer_main</code> and <code>--to @reviewer_main</code>
+both work.</p>
 <h3>Mention Routing</h3>
 <p>When a message has mentions (via <code>--to</code>, <code>--mention</code>, or <code>@role</code> in the mentions
 list), Thrum stores each one as a ref with type <code>mention</code> and the role name as
@@ -205,15 +209,15 @@ or a role:</p>
 </thead>
 <tbody><tr>
 <td><code>@furiosa</code></td>
-<td>Routes directly to agent named <code>furiosa</code></td>
+<td>Routes directly to agent named <code>furiosa</code> (<strong>preferred</strong>)</td>
 </tr>
 <tr>
 <td><code>@reviewer</code></td>
-<td>Routes via the auto-created <code>reviewer</code> role group (all agents with role reviewer)</td>
+<td>Fans out to every agent with role <code>reviewer</code> (works but discouraged — causes cross-talk)</td>
 </tr>
 <tr>
 <td><code>@everyone</code></td>
-<td>Broadcasts to all agents</td>
+<td>Broadcasts to all agents (critical-broadcast scope)</td>
 </tr>
 <tr>
 <td><code>@sf:coordinator</code></td>
@@ -227,9 +231,10 @@ groups first.</p>
 <code>--name coord_main --role coordinator</code>, not
 <code>--name coordinator --role coordinator</code>.</p>
 <h3>Example: Agent-to-Agent Coordination</h3>
-<pre><code># Implementer finishes a task and notifies the reviewer
+<pre><code># Implementer finishes a task and notifies the reviewer (use the specific
+# reviewer agent name, not the role, to avoid cross-talk)
 thrum send &quot;Auth module complete, all tests passing&quot; \
-  --to @reviewer \
+  --to @reviewer_main \
   --scope module:auth \
   --ref issue:beads-42
 
@@ -237,7 +242,7 @@ thrum send &quot;Auth module complete, all tests passing&quot; \
 thrum inbox --mentions
 
 # Implementer verifies the outgoing message recipients and receipts
-thrum sent --to @reviewer
+thrum sent --to @reviewer_main
 
 # Reviewer replies to the message
 thrum reply msg_01HXE... &quot;Looks good, merging now&quot;</code></pre>
@@ -385,7 +390,7 @@ Auth module complete, all tests passing</code></pre>
 <pre><code>&gt; Message edited: msg_01HXE... (version 2)</code></pre>
 <p>Each edit lands in the <code>message_edits</code> table with before/after content, the
 editor&#39;s session, and a timestamp. The version number is the total number of
-edits on that message. Edits trigger subscription notifications just like new
+edits on that message. Edits trigger live updates to connected WebSocket clients just like new
 messages.</p>
 <h3>Delete</h3>
 <p>Soft-delete a message. Requires the <code>--force</code> flag as a safety confirmation.</p>
@@ -723,7 +728,7 @@ read state persists across session restarts for the same agent.</p>
 similar environments native messaging tools. It exposes 4 MCP tools:
 <code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>, and <code>list_agents</code>. MCP
 tools run the same underlying RPC methods but add <code>@role</code> addressing and
-real-time WebSocket push notifications.</p>
+real-time WebSocket updates.</p>
 <p>See <a href="mcp-server.html">MCP Server</a> for the complete tools reference and
 configuration.</p>
 <h2>Agent Identity</h2>
@@ -741,8 +746,6 @@ resolves in this priority order:</p>
 <h2>Next Steps</h2>
 <ul>
 <li><a href="peers.html">Peers</a> — pair daemons to route messages across repos and machines</li>
-<li><a href="subscriptions.html">Subscriptions &amp; Notifications</a> — subscribe to scopes and
-mentions so messages arrive as push notifications instead of requiring polling</li>
 <li><a href="mcp-server.html">MCP Server</a> — optional native tool integration for
 environments that support MCP</li>
 <li><a href="agent-coordination.html">Agent Coordination</a> — practical multi-agent workflows

@@ -175,12 +175,6 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://leonletto.github.io/thrum/docs/event-streaming.html</loc>
-    <lastmod>2026-05-16</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
     <loc>https://leonletto.github.io/thrum/docs/guides/beads-migration-to-embedded.html</loc>
     <lastmod>2026-05-16</lastmod>
     <changefreq>weekly</changefreq>
@@ -380,12 +374,6 @@
   </url>
   <url>
     <loc>https://leonletto.github.io/thrum/docs/strategies/thrum-registration.html</loc>
-    <lastmod>2026-05-16</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://leonletto.github.io/thrum/docs/subscriptions.html</loc>
     <lastmod>2026-05-16</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>

@@ -31,13 +31,13 @@ plausible.init()
 <strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="whats-new.html">What's New</a><br>
 <strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
   <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
-<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
+<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
 <strong>Guides</strong>: <a href="beta-channel.html">Beta Channel</a><br>
 <strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
 <strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
-<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <strong>MCP Server</strong><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
 <strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
@@ -57,8 +57,8 @@ MCP server connects to, <a href="identity.html">Identity</a> for agent identity 
 <p>The MCP (Model Context Protocol) server enables Claude Code agents to send and
 receive messages using native MCP tools instead of shelling out to CLI commands.
 It runs as a long-lived child process (<code>thrum mcp serve</code>) communicating over
-stdio with JSON-RPC, and connects to the Thrum daemon via Unix socket for
-message operations and via WebSocket for real-time push notifications.</p>
+stdio with JSON-RPC, and connects to the Thrum daemon via Unix socket for all
+message operations.</p>
 <p>The server provides 5 MCP tools: 4 for core messaging operations and 1
 deprecated broadcast tool.</p>
 <p>The primary motivation is eliminating polling overhead. Without MCP, agents must
@@ -72,16 +72,9 @@ instantly when a message arrives.</p>
   |     |
   |     +-- Daemon Client (Unix socket, per-call)
   |     |   +-- message.send     -&gt; send_message tool
-  |     |   +-- message.list     -&gt; check_messages tool
+  |     |   +-- message.list     -&gt; check_messages tool + wait_for_message poll
   |     |   +-- message.markRead -&gt; check_messages tool (auto-mark consumed)
   |     |   +-- agent.list       -&gt; list_agents tool
-  |     |
-  |     +-- WebSocket Client (ws://localhost:{port}/ws)
-  |     |   +-- user.identify + user.register -&gt; session setup
-  |     |   +-- subscribe (mention_role=@{role}) -&gt; notification stream
-  |     |   +-- notification.message -&gt; unblocks wait_for_message
-  |     |
-  |     +-- Internal Notification Queue (max 1000, FIFO, drops oldest)
   |     |
   |     +-- Identity: .thrum/identities/{name}.json
   |
@@ -108,15 +101,8 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <li>Create MCP server with the official Go SDK
 (<code>github.com/modelcontextprotocol/go-sdk/mcp</code>)</li>
 <li>Register all 5 tool handlers (4 core messaging + 1 deprecated)</li>
-<li>Initialize WebSocket waiter (best-effort -- reads port from
-<code>.thrum/var/ws.port</code>)<ul>
-<li>Connect to <code>ws://localhost:{port}/ws</code></li>
-<li>Send <code>user.identify</code> to get git username</li>
-<li>Send <code>user.register</code> with the username</li>
-<li>Send <code>subscribe</code> with <code>mention_role</code> for this agent&#39;s role</li>
-<li>Start background <code>readLoop</code> goroutine for incoming notifications</li>
-</ul>
-</li>
+<li>Initialize polling waiter (no network connection at construction; <code>wait_for_message</code>
+opens lazy Unix socket connections per call)</li>
 <li>Start MCP stdio server (blocks until client disconnects or context
 cancelled)</li>
 </ol>
@@ -125,8 +111,7 @@ cancelled)</li>
 (SIGINT/SIGTERM):</p>
 <ul>
 <li>Context is cancelled</li>
-<li>Waiter closes WebSocket connection (daemon auto-unregisters)</li>
-<li>Waiter&#39;s <code>readLoop</code> exits, unblocking any active <code>wait_for_message</code> call</li>
+<li>Any active <code>wait_for_message</code> polling loop exits on the next tick</li>
 <li>Unix socket connections are closed (per-call, so nothing to clean up)</li>
 <li>Process exits</li>
 </ul>
@@ -141,9 +126,11 @@ calls.</li>
 <li><strong>Single-waiter enforcement</strong>: Only one <code>wait_for_message</code> can be active at a
 time per server instance. A second call returns an error. Enforced with a
 mutex.</li>
-<li><strong>Best-effort WebSocket</strong>: If the WebSocket connection fails at startup, the
-MCP server still operates -- only <code>wait_for_message</code> returns errors. The other
-tools work via Unix socket RPC.</li>
+<li><strong>Polling-only delivery</strong>: <code>wait_for_message</code> polls <code>message.list</code> via Unix
+socket on a 500ms ticker (mirroring the CLI <code>thrum wait</code> path), reconnecting
+on transport errors. The previous WebSocket subscribe approach was removed
+alongside the subscribe RPC; polling shares the same <code>message.list</code> path the
+CLI already exercises.</li>
 </ul>
 <h2>Usage</h2>
 <h3>Command</h3>
@@ -531,36 +518,27 @@ using <code>identity.GenerateAgentID()</code>, consistent with daemon RPC handle
 <p><strong>Multi-agent worktrees:</strong> When multiple agents operate in the same worktree,
 each must have a distinct identity file. Use <code>THRUM_NAME</code> env var or
 <code>--agent-id</code> flag to select.</p>
-<h2>WebSocket Waiter</h2>
-<p>The <code>Waiter</code> struct (<code>internal/mcp/waiter.go</code>) manages the WebSocket connection
-for real-time message notifications.</p>
-<h3>Connection Setup</h3>
-<p>On initialization, the waiter:</p>
+<h2>Polling Waiter</h2>
+<p>The <code>Waiter</code> struct (<code>internal/mcp/waiter.go</code>) powers <code>wait_for_message</code> by
+polling the daemon inbox over the Unix socket. There is no WebSocket
+subscription — the previous design registered a <code>subscribe</code> RPC that was
+removed when the CLI subscribe commands were retired. Polling shares the same
+<code>message.list</code> path the CLI <code>thrum wait</code> already relies on.</p>
+<h3>Polling Loop</h3>
+<p>On <code>wait_for_message</code>, the waiter:</p>
 <ol>
-<li>Connects to the daemon WebSocket at <code>ws://localhost:{port}/ws</code></li>
-<li>Sends <code>user.identify</code> to get the git username</li>
-<li>Sends <code>user.register</code> with that username</li>
-<li>Sends <code>subscribe</code> with <code>mention_role</code> set to the agent&#39;s role</li>
-<li>Starts a background <code>readLoop</code> goroutine</li>
+<li>Opens a fresh <code>cli.Client</code> Unix socket connection (lazy, per call)</li>
+<li>Calls <code>message.list --unread --for-agent &lt;id&gt;</code> on a 500ms ticker</li>
+<li>Returns the first unseen message addressed to this agent (by name, role,
+or <code>@everyone</code> broadcast)</li>
+<li>Times out and returns empty after the supplied <code>timeout</code> (default 30s,
+max 300s)</li>
+<li>Reconnects on transport errors without dropping the wait</li>
 </ol>
-<h3>Notification Flow</h3>
-<pre><code>Daemon WebSocket -&gt; readLoop -&gt; queue ([]MessageNotification) -&gt; waiterCh -&gt; WaitForMessage</code></pre>
-<p>The <code>readLoop</code> goroutine:</p>
-<ul>
-<li>Reads WebSocket messages continuously</li>
-<li>Filters for <code>notification.message</code> method</li>
-<li>Parses the notification into a <code>MessageNotification</code> (message_id, preview,
-agent_id, timestamp)</li>
-<li>Appends to the internal queue (max 1000 items; drops oldest on overflow)</li>
-<li>Closes the <code>waiterCh</code> channel to wake any blocked <code>WaitForMessage</code> call</li>
-</ul>
-<p>On connection loss, <code>readLoop</code> closes <code>waiterCh</code> (if set) before exiting, which
-unblocks any active waiter with a timeout-like response rather than hanging
-forever.</p>
-<h3>JSON-RPC over WebSocket</h3>
-<p>The waiter uses JSON-RPC 2.0 for setup RPCs. Request IDs are atomically
-incremented (<code>atomic.Int64</code>). During <code>wsRPC</code> calls, incoming notifications are
-skipped (they have no <code>id</code> field and a non-empty <code>method</code> field).</p>
+<p>Single-waiter enforcement: only one <code>wait_for_message</code> call may be active per
+<code>Waiter</code> instance. A second concurrent call returns an error. The context
+passed to <code>WaitForMessage</code> is honored — cancelling it stops the loop on the
+next tick.</p>
 <h2>Integration</h2>
 <h3>Message-Listener Sub-Agent</h3>
 <p>The recommended pattern for receiving messages in Claude Code is a background
@@ -597,10 +575,10 @@ coordinator and stop the listener</li>
 <h3>CLAUDE.md Protocol</h3>
 <p>The project <code>CLAUDE.md</code> includes instructions for agents to use MCP tools:</p>
 <p><strong>Core messaging:</strong></p>
-<pre><code>mcp__thrum__send_message(to=&quot;@reviewer&quot;, content=&quot;...&quot;)
+<pre><code>mcp__thrum__send_message(to=&quot;@reviewer_main&quot;, content=&quot;...&quot;)  # prefer specific names
 mcp__thrum__check_messages()
 mcp__thrum__list_agents()
-mcp__thrum__send_message(to=&quot;@everyone&quot;, content=&quot;...&quot;)  # broadcast to all agents
+mcp__thrum__send_message(to=&quot;@everyone&quot;, content=&quot;...&quot;)  # critical broadcast to all
 mcp__thrum__wait_for_message(timeout=300)</code></pre>
 <h2>Development</h2>
 <h3>Source Files</h3>

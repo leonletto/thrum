@@ -31,13 +31,13 @@ plausible.init()
 <strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="whats-new.html">What's New</a><br>
 <strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
   <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
-<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
+<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
 <strong>Guides</strong>: <a href="beta-channel.html">Beta Channel</a><br>
 <strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
 <strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
-<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
 <strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
@@ -74,11 +74,6 @@ server all go through it.</p>
 <td><strong>Sync Loop</strong></td>
 <td>Automatic Git fetch/merge/push (60s interval)</td>
 <td>Cross-machine synchronization</td>
-</tr>
-<tr>
-<td><strong>Subscription Dispatcher</strong></td>
-<td>Route notifications to interested clients</td>
-<td>Targeted communication</td>
 </tr>
 <tr>
 <td><strong>State Management</strong></td>
@@ -144,7 +139,7 @@ messages and agent activity. Served from the same port as WebSocket (default
 <p><strong>MCP Server</strong> (<code>thrum mcp serve</code>): Exposes Thrum functionality as native MCP
 tools over stdio, enabling LLM agents (e.g., Claude Code) to communicate
 directly through MCP protocol without CLI shell-outs. Connects to the daemon via
-Unix socket for RPC and WebSocket for real-time push notifications. Provides 4
+Unix socket for RPC and WebSocket for real-time message updates. Provides 4
 core messaging tools: <code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>, and
 <code>list_agents</code>.</p>
 <h2>Key Features</h2>
@@ -182,7 +177,7 @@ operations happen within the worktree:</p>
 │  2. Fetch remote in worktree                                 │
 │  3. Merge JSONL (append-only dedup by event ID)             │
 │  4. Project new events into SQLite                           │
-│  5. Notify subscribers of new events                         │
+│  5. Notify connected WebSocket clients of new events         │
 │  6. Commit &amp; push local changes in worktree                  │
 │  7. Release lock                                             │
 └─────────────────────────────────────────────────────────────┘</code></pre>
@@ -205,28 +200,15 @@ thrum session end     # Finish</code></pre>
 <pre><code>thrum agent delete furiosa           # Delete a specific agent
 thrum agent cleanup --dry-run        # Preview orphaned agents
 thrum agent cleanup --force          # Delete all orphaned agents</code></pre>
-<h3>4. Subscription-Based Notifications</h3>
-<p>The daemon pushes real-time notifications to connected clients when messages
-match an active subscription. From the CLI, use <code>thrum wait</code> to block until a
-message arrives:</p>
+<h3>4. Live Inbox</h3>
+<p>The daemon pushes new messages to connected WebSocket clients in real time
+(used by the Web UI and the MCP <code>wait_for_message</code> tool). From the CLI, use
+<code>thrum wait</code> to block until a message arrives addressed to you:</p>
 <pre><code># Block until a message arrives (30s default timeout)
 thrum wait
 
 # Block up to 5 minutes, include messages from the last 30s
 thrum wait --timeout 5m --after -30s</code></pre>
-<p>The underlying <code>subscribe</code>, <code>unsubscribe</code>, and <code>subscriptions.list</code> RPC methods
-are internal — used by the MCP server and WebSocket clients, not the CLI.</p>
-<p>When matching messages arrive, subscribers receive real-time notifications:</p>
-<pre><code>{
-  &quot;method&quot;: &quot;notification.message&quot;,
-  &quot;params&quot;: {
-    &quot;message_id&quot;: &quot;msg_01HXE...&quot;,
-    &quot;preview&quot;: &quot;Auth implementation complete...&quot;,
-    &quot;matched_subscription&quot;: {
-      &quot;match_type&quot;: &quot;scope&quot;
-    }
-  }
-}</code></pre>
 <h3>5. Live Git State Tracking</h3>
 <p>The daemon tracks what each agent is working on in real-time:</p>
 <pre><code>-- agent_work_contexts table
@@ -274,8 +256,6 @@ work, intelligent handoffs.</p>
 <code>session.setIntent</code>, <code>session.setTask</code></li>
 <li><code>message.send</code>, <code>message.get</code>, <code>message.list</code>, <code>message.edit</code>,
 <code>message.delete</code>, <code>message.markRead</code></li>
-<li><code>subscribe</code>, <code>unsubscribe</code>, <code>subscriptions.list</code> (internal — used by MCP
-server and WebSocket clients)</li>
 <li><code>sync.force</code>, <code>sync.status</code></li>
 <li><code>peer.start_pairing</code>, <code>peer.wait_pairing</code>, <code>peer.join</code>, <code>peer.list</code>,
 <code>peer.status</code>, <code>peer.remove</code>, <code>peer.configure</code>, <code>peer.address_changed</code></li>
@@ -292,7 +272,7 @@ thrum message delete MSG_ID     # Delete a message (requires --force)</code></pr
 <h3>8. Coordination Commands</h3>
 <p>Lightweight commands for checking team activity:</p>
 <pre><code>thrum who-has auth.go           # Which agents are editing a file?
-thrum ping @reviewer            # Is an agent online? Show last-seen time</code></pre>
+thrum ping @impl_auth           # Is an agent online? Show last-seen time</code></pre>
 <p>These query agent work contexts to provide quick answers without full status
 output.</p>
 <h3>9. Agent Context Management</h3>
@@ -352,7 +332,7 @@ works without network.</p>
 </tr>
 <tr>
 <td><code>thrum wait</code></td>
-<td><code>subscribe</code> RPC + push notifications (internal RPC)</td>
+<td>WebSocket session + <code>notification.message</code> push events</td>
 </tr>
 <tr>
 <td><code>thrum agent list --context</code></td>
@@ -745,10 +725,7 @@ agents              # Registered agents (kind: &quot;agent&quot; or &quot;user&q
 sessions            # Agent work periods
 session_scopes      # Session context scopes
 session_refs        # Session context references
-subscriptions       # Push notification subscriptions
 agent_work_contexts # Live git state per session
-groups              # Named collections for targeted messaging
-group_members       # Group membership (agents and roles)
 events              # Sequence-ordered, deduplicated event log (for sync)
 sync_checkpoints    # Per-peer sync progress tracking
 command_queue       # Queue dispatch for tmux sessions
@@ -765,8 +742,6 @@ schema_version      # Migration tracking</code></pre>
 <li>v5 -&gt; v6: Agent work contexts table, message reads, session scopes/refs</li>
 <li>v6 -&gt; v7: Event ID backfill (ULID <code>event_id</code> on all JSONL events), JSONL
 sharding migration</li>
-<li>v7 -&gt; v8: Groups feature (<code>groups</code> and <code>group_members</code> tables), <code>@everyone</code>
-built-in group</li>
 <li>v8 -&gt; v9: <code>events</code> and <code>sync_checkpoints</code> tables added for Tailscale-style
 daemon-to-daemon sync (sequence-ordered deduplicated event log)</li>
 <li>v9 -&gt; v10: <code>file_changes</code> column added to <code>agent_work_contexts</code></li>
@@ -864,15 +839,7 @@ ordering.</p>
 </tr>
 <tr>
 <td><code>thread.updated</code></td>
-<td>Notify subscribers of thread activity (UI push)</td>
-</tr>
-<tr>
-<td><code>group.create</code></td>
-<td>Insert into groups</td>
-</tr>
-<tr>
-<td><code>group.delete</code></td>
-<td>Delete group and members</td>
+<td>Notify connected WebSocket clients of thread activity</td>
 </tr>
 <tr>
 <td><code>agent.register</code></td>
@@ -960,9 +927,8 @@ dispatch operations.</p>
 <ul>
 <li><strong>JSONL event logs</strong> — <code>events.jsonl</code> and <code>messages/*.jsonl</code> copied from the
 sync worktree (source of truth)</li>
-<li><strong>Local-only SQLite tables</strong> — <code>message_reads</code>, <code>subscriptions</code>, and
-<code>sync_checkpoints</code> exported as JSONL (these are not in the git-synced JSONL
-logs)</li>
+<li><strong>Local-only SQLite tables</strong> — <code>message_reads</code> and <code>sync_checkpoints</code>
+exported as JSONL (these are not in the git-synced JSONL logs)</li>
 <li><strong>Config files</strong> — <code>.thrum/config.json</code> and related runtime config</li>
 </ul>
 <p><strong>Backup layout</strong> (<code>~/.thrum-backups/&lt;repo&gt;/</code>):</p>

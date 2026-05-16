@@ -525,19 +525,21 @@ thrum send MESSAGE [flags]
 | `--format`     | Message format (`markdown`, `plain`, `json`)           | `markdown` |
 
 The `--to` flag adds the recipient as a mention, making it a directed message.
-Recipients can be agents (`@alice`), roles (`@reviewer`), or `@everyone` for
-broadcast.
+Recipients are usually agents (`@alice`, `@reviewer_main`); `@everyone` is the
+critical-broadcast target. Role-name targets like `@reviewer` also work but are
+discouraged because they fan out to every agent with that role and cause
+cross-talk.
 
 This command emits contextual hints — see [CLI Hints](cli-hints.md).
 
 Example:
 
 ```text
-$ thrum send "PR ready for review" --to @reviewer --scope module:auth --ref pr:42
+$ thrum send "PR ready for review" --to @reviewer_main --scope module:auth --ref pr:42
 ✓ Message sent: msg_01HXE8Z7...
   Created: 2026-02-03T10:00:00Z
 
-# Send to all agents
+# Critical broadcast to all agents
 $ thrum send "Deploy complete" --to @everyone
 ✓ Message sent: msg_01HXE8Z8...
 ```

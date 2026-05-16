@@ -78,7 +78,6 @@ thrum/
 │   ├── paths/               # Path resolution, .thrum/redirect, sync worktree path
 │   ├── projection/          # JSONL to SQLite event replay (projector)
 │   ├── schema/              # SQLite schema, DDL, and migrations (v24)
-│   ├── subscriptions/       # Notification dispatcher and subscription service
 │   ├── sync/                # Sync engine (loop, merge, push, dedup, branch management)
 │   ├── tmux/                # Tmux operations, nudge delivery, session management (v0.7.1)
 │   ├── restart/             # JSONL conversation extraction, restart snapshots (v0.7.1)
@@ -526,7 +525,7 @@ socket, with a WebSocket server and embedded SPA all on a single port (default
   and SQLite projection. `NewState(thrumDir, syncDir, repoID)` separates runtime
   state from sync data.
 - **RPC handlers** (`internal/daemon/rpc/`): Method implementations for agent,
-  session, message, thread, health, sync, subscribe, queue, and user operations
+  session, message, thread, health, sync, queue, and user operations
 - **Queue** (`internal/daemon/rpc/queue.go`, `queue_rpc.go`): Command queue
   dispatch for tmux sessions — per-session FIFO, silence-based completion
   detection, `@system` notifications, restart recovery

@@ -60,8 +60,10 @@ Use `--to @everyone` to reach all agents at once:
 thrum send "Deploy complete, all clear" --to @everyone
 ```
 
-`@reviewer` always routes to all agents with the `reviewer` role — that happens
-automatically, no group setup needed.
+Role-name targets like `@reviewer` fan out to every agent with that role — that
+works but is discouraged for day-to-day routing because it causes cross-talk.
+Prefer specific agent names (`@reviewer_main`, `@reviewer_backend`) for normal
+coordination.
 
 ---
 
@@ -395,8 +397,8 @@ Block until a matching message arrives or a timeout expires. This is the
 foundation of the message-listener pattern for async agent coordination.
 
 `thrum wait` always filters by the calling agent's identity — it only returns
-messages directed to this agent (by name or role group). There's no `--all`
-flag; use subscriptions if you need a firehose.
+messages directed to this agent (by name, role, or `@everyone` broadcast).
+There's no `--all` flag.
 
 ```bash
 # Wait for any message addressed to this agent
@@ -430,15 +432,16 @@ thrum wait --mention @reviewer --timeout 5m
 ### Workflow 1: Notifying Reviewers
 
 ```bash
-# 1. Implementer finishes work and notifies all reviewers
+# 1. Implementer finishes work and notifies the specific reviewer
+#    (prefer named targets over role fan-out)
 thrum send "PR #42 ready for review: JWT auth implementation" \
-  --to @reviewer --ref pr:42
+  --to @reviewer_main --ref pr:42
 
-# 2. Reviewers check their inbox
+# 2. The reviewer checks their inbox
 thrum inbox --mentions
 
 # 2b. Implementer verifies the review request was sent
-thrum sent --to @reviewer
+thrum sent --to @reviewer_main
 
 # 3. Reviewer responds
 thrum reply msg_01HXE... "Reviewed. LGTM with minor comments on error handling."

@@ -77,20 +77,24 @@ SQLite.
 
 ### Direct Messaging with --to
 
-`--to` is shorthand for directing a message to a specific agent, role, or group.
-Under the hood, `--to @reviewer` appends `@reviewer` to the mentions list,
-stored as a `mention` ref on the message.
+`--to` is shorthand for directing a message to a specific agent name (e.g.
+`@coordinator_main`). Role-name targets like `@reviewer` also resolve, but they
+fan out to every agent with that role and cause cross-talk in multi-agent setups
+— **prefer specific agent names** for day-to-day routing.
 
 ```bash
-# These are equivalent:
+# Preferred: target a specific agent by name
+thrum send "Please review PR #42" --to @reviewer_main
+
+# Role-name routing works but is discouraged (fans out to all reviewers)
 thrum send "Please review PR #42" --to @reviewer
-thrum send "Please review PR #42" --mention @reviewer
 
 # Broadcast to all agents
 thrum send "Deploy complete" --to @everyone
 ```
 
-The `@` prefix is optional -- `--to reviewer` and `--to @reviewer` both work.
+The `@` prefix is optional — `--to reviewer_main` and `--to @reviewer_main` both
+work.
 
 ### Mention Routing
 
@@ -117,12 +121,12 @@ role.
 Thrum routes `@mentions` differently depending on whether the target is a name
 or a role:
 
-| Target            | Routing behaviour                                                                 |
-| ----------------- | --------------------------------------------------------------------------------- |
-| `@furiosa`        | Routes directly to agent named `furiosa`                                          |
-| `@reviewer`       | Routes via the auto-created `reviewer` role group (all agents with role reviewer) |
-| `@everyone`       | Broadcasts to all agents                                                          |
-| `@sf:coordinator` | Routes to proxy agent `sf:coordinator` (cross-repo via peer transport, v0.7.0)    |
+| Target            | Routing behaviour                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| `@furiosa`        | Routes directly to agent named `furiosa` (**preferred**)                                 |
+| `@reviewer`       | Fans out to every agent with role `reviewer` (works but discouraged — causes cross-talk) |
+| `@everyone`       | Broadcasts to all agents (critical-broadcast scope)                                      |
+| `@sf:coordinator` | Routes to proxy agent `sf:coordinator` (cross-repo via peer transport, v0.7.0)           |
 
 **Important:** Sending to an unknown name or group is a **hard error** — the
 message is rejected and not stored. Create unknown recipients as agents or
@@ -135,9 +139,10 @@ groups first.
 ### Example: Agent-to-Agent Coordination
 
 ```bash
-# Implementer finishes a task and notifies the reviewer
+# Implementer finishes a task and notifies the reviewer (use the specific
+# reviewer agent name, not the role, to avoid cross-talk)
 thrum send "Auth module complete, all tests passing" \
-  --to @reviewer \
+  --to @reviewer_main \
   --scope module:auth \
   --ref issue:beads-42
 
@@ -145,7 +150,7 @@ thrum send "Auth module complete, all tests passing" \
 thrum inbox --mentions
 
 # Implementer verifies the outgoing message recipients and receipts
-thrum sent --to @reviewer
+thrum sent --to @reviewer_main
 
 # Reviewer replies to the message
 thrum reply msg_01HXE... "Looks good, merging now"
@@ -326,8 +331,8 @@ thrum message edit msg_01HXE... "Updated: auth module complete with rate limitin
 
 Each edit lands in the `message_edits` table with before/after content, the
 editor's session, and a timestamp. The version number is the total number of
-edits on that message. Edits trigger subscription notifications just like new
-messages.
+edits on that message. Edits trigger live updates to connected WebSocket clients
+just like new messages.
 
 ### Delete
 
@@ -666,7 +671,7 @@ The MCP server (`thrum mcp serve`) gives AI agents running in Claude Code or
 similar environments native messaging tools. It exposes 4 MCP tools:
 `send_message`, `check_messages`, `wait_for_message`, and `list_agents`. MCP
 tools run the same underlying RPC methods but add `@role` addressing and
-real-time WebSocket push notifications.
+real-time WebSocket updates.
 
 See [MCP Server](mcp-server.md) for the complete tools reference and
 configuration.
@@ -689,8 +694,6 @@ In multi-agent worktrees, each agent gets its own identity file and JSONL shard.
 ## Next Steps
 
 - [Peers](peers.md) — pair daemons to route messages across repos and machines
-- [Subscriptions & Notifications](subscriptions.md) — subscribe to scopes and
-  mentions so messages arrive as push notifications instead of requiring polling
 - [MCP Server](mcp-server.md) — optional native tool integration for
   environments that support MCP
 - [Agent Coordination](agent-coordination.md) — practical multi-agent workflows

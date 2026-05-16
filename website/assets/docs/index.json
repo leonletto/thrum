@@ -245,22 +245,6 @@
     "lastUpdated": "2026-02-10"
   },
   {
-    "path": "event-streaming.html",
-    "title": "Event Streaming",
-    "description": "Real-time push notifications via Broadcaster and Dispatcher - subscription matching, delivery, and client registries",
-    "category": "infrastructure",
-    "order": 2,
-    "tags": [
-      "events",
-      "streaming",
-      "notifications",
-      "websocket",
-      "broadcaster",
-      "dispatcher"
-    ],
-    "lastUpdated": "2026-02-08"
-  },
-  {
     "path": "configuration.html",
     "title": "Configuration",
     "description": "Thrum configuration model — config.json schema, runtime tiers, priority chain, and the config show command",
@@ -410,22 +394,6 @@
       "tailscale",
       "pairing",
       "sync"
-    ],
-    "lastUpdated": "2026-04-19"
-  },
-  {
-    "path": "subscriptions.html",
-    "title": "Subscriptions & Notifications",
-    "description": "Real-time push notification system with scope, mention, and all-message filters - subscription lifecycle and dispatch",
-    "category": "messaging",
-    "order": 2,
-    "tags": [
-      "subscriptions",
-      "notifications",
-      "push",
-      "filtering",
-      "dispatcher",
-      "broadcaster"
     ],
     "lastUpdated": "2026-04-19"
   },
