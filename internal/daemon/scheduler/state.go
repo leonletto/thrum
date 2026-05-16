@@ -232,7 +232,7 @@ func (s *StateStore) NonTerminalAtBoot(ctx context.Context) ([]*StateRow, error)
 	return out, nil
 }
 
-// nullStr returns nil for empty strings so SQLite stores NULL rather than ''.
+// nullStr returns nil for empty strings so SQLite stores NULL rather than ”.
 // Keeps NULLability semantics consistent with PRAGMA-declared columns.
 func nullStr(s string) any {
 	if s == "" {
