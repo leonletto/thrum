@@ -285,10 +285,6 @@ var (
 	ErrLostTrack                  = errors.New("scheduler: handler lost track across daemon restart")
 )
 
-// runRegistry tracks per-run cancel-func + signal-channel maps for in-flight
-// dispatches. Task 11 fleshes out the real registry (with the mu / cancels
-// / signalsByRun fields it needs); this empty struct satisfies the New()
-// initializer until then.
-type runRegistry struct{}
-
-func newRunRegistry() *runRegistry { return &runRegistry{} }
+// runRegistry + newRunRegistry live in registry.go (Task 12). The struct
+// tracks per-run cancel-func + signal-channel maps for in-flight dispatches;
+// see registry.go for the canonical definition + methods.
