@@ -10,6 +10,21 @@ and this project adheres to
 
 ### Changed
 
+- **`/thrum:restart` skill: coordinator self-restart branch + drop residue.**
+  Three rough edges in the rc.10 v2 prose-continuation skill surfaced by its
+  first live invocation on the coordinator pane: (1) Step 3
+  unconditionally sent "Restart snapshot saved..." to `@coordinator_main`,
+  which self-targeted and stalled when the invoker was the coordinator —
+  new Step 5 branches on `thrum whoami --field role` and emits cross-pane
+  `thrum tmux restart --force` instructions for coordinators; (2) Step 4
+  referenced a stale `thrum tmux snapshot restore` command from the
+  pre-rc.10 structured-template flow — removed in favor of "auto-loaded by
+  `thrum prime`"; (3) Step 1 embedded the CRITICAL DISCIPLINE block inside
+  a `cat > file <<'EOF'` heredoc with a "do not run this literally"
+  caveat — restructured into separate composition-guide (Step 2) and
+  direct-`Write`-tool (Step 3) steps. Synced to opencode, codex, and
+  cursor plugins via `scripts/sync-skills.sh` (thrum-7b84.2).
+
 - **`/thrum:restart` skill rewritten with a v2 prose-continuation body.**
   Replaces the JSON-snapshot Resume Plan template + `thrum tmux snapshot save` +
   append flow with a direct-write of an in-context-composed prose continuation
