@@ -11,6 +11,7 @@ package scheduler
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -204,4 +205,99 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// Event mirrors one row in scheduler_job_events (canonical-ref §3.2). The
+// table is append-only: every state transition appends a row carrying the
+// run_id that produced it. Reads are paginated DESC by event_time for the
+// future job.show / job.history RPCs.
+type Event struct {
+	ID        int64
+	JobID     string
+	RunID     string
+	EventTime time.Time
+	FromState State // empty on the first event of a run (column is NULLable)
+	ToState   State
+	Reason    string
+	Details   map[string]any
+}
+
+// AppendEvent inserts one row into scheduler_job_events. The Details map is
+// JSON-marshalled; nil maps store SQL NULL.
+func (s *StateStore) AppendEvent(ctx context.Context, e *Event) error {
+	var detailsJSON []byte
+	if e.Details != nil {
+		var err error
+		detailsJSON, err = json.Marshal(e.Details)
+		if err != nil {
+			return fmt.Errorf("marshal details: %w", err)
+		}
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO scheduler_job_events
+			(job_id, run_id, event_time, from_state, to_state, reason, details)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`,
+		e.JobID, e.RunID, e.EventTime.Unix(),
+		nullStr(string(e.FromState)), string(e.ToState),
+		nullStr(e.Reason), nullJSON(detailsJSON),
+	)
+	if err != nil {
+		return fmt.Errorf("append event for %q/%q: %w", e.JobID, e.RunID, err)
+	}
+	return nil
+}
+
+// RecentEvents reads the most-recent `limit` events for a job, DESC by
+// event_time (ties broken by id DESC).
+func (s *StateStore) RecentEvents(ctx context.Context, jobID string, limit int) ([]Event, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, job_id, run_id, event_time, from_state, to_state, reason, details
+		  FROM scheduler_job_events
+		 WHERE job_id = ?
+		 ORDER BY event_time DESC, id DESC
+		 LIMIT ?
+	`, jobID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("recent events for %q: %w", jobID, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var events []Event
+	for rows.Next() {
+		var (
+			e                          Event
+			eventTime                  int64
+			toState                    string
+			fromState, reason, details sql.NullString
+		)
+		if err := rows.Scan(&e.ID, &e.JobID, &e.RunID, &eventTime,
+			&fromState, &toState, &reason, &details); err != nil {
+			return nil, fmt.Errorf("scan event: %w", err)
+		}
+		e.EventTime = time.Unix(eventTime, 0)
+		e.FromState = State(fromState.String)
+		e.ToState = State(toState)
+		e.Reason = reason.String
+		if details.Valid && details.String != "" {
+			if err := json.Unmarshal([]byte(details.String), &e.Details); err != nil {
+				return nil, fmt.Errorf("unmarshal details for event %d: %w", e.ID, err)
+			}
+		}
+		events = append(events, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate events: %w", err)
+	}
+	return events, nil
+}
+
+// nullJSON returns nil for empty byte slices so SQLite stores NULL rather
+// than an empty string. Mirrors nullStr / nullTime for the JSON-encoded
+// details column.
+func nullJSON(b []byte) any {
+	if len(b) == 0 {
+		return nil
+	}
+	return string(b)
 }

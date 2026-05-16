@@ -145,3 +145,96 @@ func TestStateRow_OneShotTerminal_NullableNextScheduled(t *testing.T) {
 		t.Errorf("CurrentState = %q, want %q", got.CurrentState, StateCompleted)
 	}
 }
+
+// TestEventLog_AppendAndRead verifies append-only event INSERT and that
+// RecentEvents returns rows DESC by event_time.
+func TestEventLog_AppendAndRead(t *testing.T) {
+	store := NewStateStore(setupStateTestDB(t))
+	ctx := context.Background()
+
+	now := time.Unix(1747353600, 0)
+	e1 := Event{
+		JobID:     "docs-bot",
+		RunID:     "docs-bot-g1-1747353600",
+		EventTime: now,
+		FromState: "",
+		ToState:   StateDispatched,
+		Reason:    "tick fired",
+	}
+	if err := store.AppendEvent(ctx, &e1); err != nil {
+		t.Fatalf("append e1: %v", err)
+	}
+
+	e2 := Event{
+		JobID:     "docs-bot",
+		RunID:     "docs-bot-g1-1747353600",
+		EventTime: now.Add(time.Second),
+		FromState: StateDispatched,
+		ToState:   StateRunning,
+		Reason:    "handler invoked",
+	}
+	if err := store.AppendEvent(ctx, &e2); err != nil {
+		t.Fatalf("append e2: %v", err)
+	}
+
+	events, err := store.RecentEvents(ctx, "docs-bot", 10)
+	if err != nil {
+		t.Fatalf("recent events: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("got %d events, want 2", len(events))
+	}
+	// RecentEvents returns DESC by event_time; newest first.
+	if events[0].ToState != StateRunning {
+		t.Errorf("events[0].ToState = %q, want %q", events[0].ToState, StateRunning)
+	}
+	if events[1].ToState != StateDispatched {
+		t.Errorf("events[1].ToState = %q, want %q", events[1].ToState, StateDispatched)
+	}
+	// First event has empty FromState (NULL column); second has Dispatched.
+	if events[1].FromState != "" {
+		t.Errorf("events[1].FromState = %q, want empty", events[1].FromState)
+	}
+	if events[0].FromState != StateDispatched {
+		t.Errorf("events[0].FromState = %q, want %q", events[0].FromState, StateDispatched)
+	}
+}
+
+// TestEventLog_DetailsRoundTrip verifies the Details map marshals and
+// unmarshals correctly through SQLite. The plan picks the structured payload
+// from the B-B1 idle-nudge-exhaustion escalation as a realistic example.
+func TestEventLog_DetailsRoundTrip(t *testing.T) {
+	store := NewStateStore(setupStateTestDB(t))
+	ctx := context.Background()
+
+	e := Event{
+		JobID:     "docs-bot",
+		RunID:     "docs-bot-g1-1747353600",
+		EventTime: time.Unix(1747353600, 0),
+		FromState: StateRunning,
+		ToState:   StateFailed,
+		Reason:    "idle nudge exhausted",
+		Details: map[string]any{
+			"escalation_emitted_by": "b-b1.idle_nudge",
+			"max_idle_nudges":       5,
+		},
+	}
+	if err := store.AppendEvent(ctx, &e); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+
+	events, err := store.RecentEvents(ctx, "docs-bot", 1)
+	if err != nil {
+		t.Fatalf("recent events: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	if events[0].Details["escalation_emitted_by"] != "b-b1.idle_nudge" {
+		t.Errorf("details round-trip failed: %v", events[0].Details)
+	}
+	// JSON unmarshal turns integers into float64; assert via that type.
+	if got, ok := events[0].Details["max_idle_nudges"].(float64); !ok || got != 5 {
+		t.Errorf("max_idle_nudges = %v (type %T), want 5", events[0].Details["max_idle_nudges"], events[0].Details["max_idle_nudges"])
+	}
+}
