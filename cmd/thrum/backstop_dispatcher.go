@@ -24,9 +24,11 @@ import (
 //     opens their inbox the same way regardless of source.
 //  2. Always write a synthetic spool envelope as a backstop reminder so
 //     dead-pane agents pick it up on next SessionStart. The msg_id is
-//     deterministic per (agent, day, hour) so repeated ticks within a
-//     polling window dedupe naturally and the spool janitor reaps it
-//     when the underlying messages are read.
+//     deterministic per (agent, minute) so rapid re-calls within the
+//     same minute collapse to one file. The spool janitor skips
+//     "backstop-"-prefixed entries (internal/daemon/inbox/janitor.go)
+//     so they survive past the next sweep and are overwritten by the
+//     next tick when the underlying messages are still unread.
 //
 // OutboundRelay/Telegram is intentionally NOT involved: backstops are a
 // forgotten-mail reminder for the local recipient, not a paging signal.
@@ -47,16 +49,15 @@ func (d *backstopDispatcher) Dispatch(_ context.Context, agentID string, unreadC
 
 	// Always also write a spool envelope so the next SessionStart hook
 	// will surface the reminder for an agent whose pane wasn't reachable.
-	// The envelope uses a synthetic msg_id keyed to the polling window so
-	// repeated ticks within a single window collapse to one file. The
-	// spool janitor only reaps envelopes whose underlying messages are
-	// read, so a synthetic envelope that doesn't correspond to a real
-	// message stays put until the agent runs `thrum inbox --unread`.
+	// The envelope uses a synthetic msg_id keyed to the minute so
+	// repeated calls within the same minute collapse to one file. The
+	// spool janitor skips entries with the "backstop-" prefix
+	// (internal/daemon/inbox/janitor.go) so these envelopes survive past
+	// the hourly sweep — the dispatcher's per-tick re-write naturally
+	// replaces them when the underlying messages remain unread.
 	//
-	// We tag it with the unread_count via the From field so the
-	// check-inbox.sh hook can include it in the surfaced notification
-	// (existing scripts already format "New message from @<from>", which
-	// remains correct for human reading).
+	// From is set to "thrum-backstop" so the check-inbox.sh hook
+	// surfaces a recognizable sender name in its notification text.
 	now := time.Now().UTC()
 	env := inbox.Envelope{
 		MsgID:      "backstop-" + now.Format("20060102T1504"),
