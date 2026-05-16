@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 )
@@ -347,6 +348,25 @@ func GetUserOption(session, key string) (string, error) {
 		return "", fmt.Errorf("tmux show-option %s: %w", key, err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// LastActivity returns the time of the last activity in the tmux window
+// containing the given target pane. Uses `tmux display-message -p
+// '#{window_activity}'` which returns the Unix epoch second at which the
+// window last recorded output. Returns an error if the target is gone or
+// the output cannot be parsed; callers should treat errors as transient and
+// retry rather than bailing immediately. thrum-84xc.
+func LastActivity(target string) (time.Time, error) {
+	out, err := safecmd.Tmux(context.Background(), "display-message", "-p", "-t", target, "#{window_activity}")
+	if err != nil {
+		return time.Time{}, fmt.Errorf("tmux display-message #{window_activity}: %w", err)
+	}
+	raw := strings.TrimSpace(string(out))
+	var epoch int64
+	if _, err := fmt.Sscanf(raw, "%d", &epoch); err != nil {
+		return time.Time{}, fmt.Errorf("parse window_activity %q: %w", raw, err)
+	}
+	return time.Unix(epoch, 0), nil
 }
 
 // ListSessions returns the names of all tmux sessions visible on the

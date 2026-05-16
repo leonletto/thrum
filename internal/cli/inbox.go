@@ -40,12 +40,13 @@ type Message struct {
 
 // InboxResult contains the result of listing messages.
 type InboxResult struct {
-	Messages   []Message `json:"messages"`
-	Total      int       `json:"total"`
-	Unread     int       `json:"unread"`
-	Page       int       `json:"page"`
-	PageSize   int       `json:"page_size"`
-	TotalPages int       `json:"total_pages"`
+	Messages       []Message `json:"messages"`
+	Total          int       `json:"total"`
+	Unread         int       `json:"unread"`
+	HiddenByFilter int       `json:"hidden_by_filter,omitempty"`
+	Page           int       `json:"page"`
+	PageSize       int       `json:"page_size"`
+	TotalPages     int       `json:"total_pages"`
 }
 
 // Inbox retrieves messages from the inbox.
@@ -233,6 +234,16 @@ func FormatInboxWithOptions(result *InboxResult, opts InboxFormatOptions) string
 	}
 
 	output.WriteString(footer + "\n")
+
+	// Surface the "hidden by filter" count when non-zero. Regular agents
+	// shouldn't normally see this footer, but when the inbox claims "N
+	// unread" while M additional unread exist outside the for-agent
+	// filter, the agent (or operator reading the agent's inbox) deserves
+	// a one-line nudge. Points at the future operator landscape-view CLI.
+	if result.HiddenByFilter > 0 {
+		fmt.Fprintf(&output, "  %d additional unread messages exist outside your filter — see thrum messages (coming soon) for the full landscape view.\n",
+			result.HiddenByFilter)
+	}
 
 	return output.String()
 }

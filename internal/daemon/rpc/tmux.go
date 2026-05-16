@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -148,7 +149,22 @@ func (h *TmuxHandler) SetPermission(p *permission.Permission) {
 // RestoreBinding writes both the (session→cwd) and (cwd→session) entries
 // under the handler mutex. Used by the boot reconcile pass to rebuild the
 // tmux pane-nudge target map from identity files after daemon restart.
+//
+// Identity files store `tmux_session` as the full tmux target ("name:N.M")
+// but every reader of sessionCwds / cwdSessions — HandleCreate at
+// session-cwd lookup (tmux.go:182), HandleRestart's stored-cwd read
+// (tmux.go:1961), emitIdentityBanner's session→cwd resolution
+// (tmux.go:2145), and HandleKill's mapping cleanup (tmux.go:513) — uses
+// the bare session name with no suffix. Normalizing at this API boundary
+// keeps the map keys canonical regardless of caller. Pre-thrum-8dl3 the
+// reconcile pass populated `sessionCwds["email-brainstorm:0.0"]` and the
+// banner emitter then looked up `sessionCwds["email-brainstorm"]` →
+// miss → silent no-op → no banner in scrollback → watchdog's top anchor
+// missing → conservative-true → no nudge → idle agent post-restart.
 func (h *TmuxHandler) RestoreBinding(session, cwd string) {
+	if i := strings.IndexByte(session, ':'); i >= 0 {
+		session = session[:i]
+	}
 	h.sessionMu.Lock()
 	defer h.sessionMu.Unlock()
 	h.sessionCwds[session] = cwd
@@ -404,70 +420,32 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 
 	launchCmd := runtimeToLaunchCmd(runtime)
 	if launchCmd != "" {
-		if err := ttmux.SendKeys(target, launchCmd); err != nil {
+		// Send the runtime launch keystrokes. Routed through the
+		// sendKeysFn / sendSpecialKeyFn seams so unit tests can capture
+		// the sequence; production behavior is identical to ttmux.SendKeys
+		// + ttmux.SendSpecialKey.
+		if err := sendKeysFn(target, launchCmd); err != nil {
 			return nil, fmt.Errorf("launch send-keys: %w", err)
 		}
-		if err := ttmux.SendSpecialKey(target, "Enter"); err != nil {
+		if err := sendSpecialKeyFn(target, "Enter"); err != nil {
 			return nil, fmt.Errorf("launch enter: %w", err)
 		}
 
-		// Post-launch slot (10s after launchCmd, in a goroutine so the RPC
-		// returns immediately). Two branches:
-		//
-		//   Hook runtimes (claude/cursor — HasSessionStartHook=true on the
-		//   preset): the SessionStart hook already auto-injects the
-		//   briefing during runtime startup, so /thrum:prime would be
-		//   redundant. Instead, send the pane-side identity banner here —
-		//   landing AFTER the runtime has finished rendering the briefing
-		//   so the banner is the LAST visible content in the pane (not the
-		//   first; thrum-6hqy.1).
-		//
-		//   Non-hook runtimes (codex/opencode/auggie/kiro/etc): keep the
-		//   /thrum:prime keystroke send unchanged — that's how those
-		//   runtimes get the briefing into context.
-		go func() {
-			// thrum-puhr.10 (cluster 5): pre-inject readiness via
-			// silence-detector. Replaces the legacy Sleep(10s); the
-			// pane is "ready" once two consecutive captures are
-			// byte-identical (TUI rendered, runtime at input-ready
-			// state). Stable-after=2, ceiling=60s.
-			//
-			// thrum-puhr.10 (cluster 8): waitForPaneReady returns
-			// false when the stabilized pane is in a permission
-			// prompt or trust-gate state. Skip ALL keystroke
-			// injection in that case — typing into a trust dialog
-			// would either select an option without the user's intent
-			// or cause the runtime to interpret garbage characters as
-			// a quit signal.
-			if !waitForPaneReady(target, runtime, 2, 60) {
-				slog.Info("[launch] skipping post-launch inject: pane in detected prompt/trust-gate state",
-					"target", target, "runtime", runtime)
-				return
-			}
-			if runtimeHasSessionStartHook(runtime) {
-				h.emitIdentityBanner(name, target)
-			} else {
-				// Defense-in-depth: re-check safety just before send.
-				// waitForPaneReady's exit window is brief but not
-				// atomic with this send — a trust gate could appear
-				// during the few microseconds in between (e.g. claude
-				// finishing render after readiness returned).
-				if cur, err := capturePaneFn(target, 50); err == nil && !permission.IsPaneSafeToType(runtime, cur) {
-					slog.Info("[launch] skipping /thrum:prime send: pane in detected prompt/trust-gate state",
-						"target", target, "runtime", runtime)
-					return
-				}
-				primeCmd := primeCommandForRuntime(runtime)
-				_ = ttmux.SendKeys(target, primeCmd)
-				_ = ttmux.SendSpecialKey(target, "Enter")
-			}
-			// thrum-puhr.10: post-inject silence watchdog. If the pane
-			// is still silent after the configured threshold (default
-			// 30s, set via restart.silence_watchdog_seconds), nudge the
-			// agent to read its inbox. Fresh codex agents in particular
-			// can sit at a welcome screen without engaging the dispatch.
-			nudgeSilentPaneAfter(target, runtime, h.thrumDir, "thrum inbox --unread")
-		}()
+		// Post-launch slot, in a goroutine so the RPC returns
+		// immediately. After waitForPaneReady reports the runtime is
+		// input-ready, hook runtimes get the pane-side identity banner
+		// emitted INTO the running runtime's input prompt (printf is
+		// treated as a user turn — the runtime echoes / responds with
+		// the banner text, which is how PrimeTruncationSentinel reaches
+		// the pane in a form paneAgentEngaged can find), while non-hook
+		// runtimes get `/thrum:prime`. The silence watchdog runs in
+		// either case so an agent that never engages still gets a nudge.
+		// thrum-8dl3 (post-revert ordering — the pre-launch banner emit
+		// attempted in the original Fix #1 was eaten by claude's
+		// alt-screen takeover; logs confirmed the printf never reached
+		// the pane).
+		go h.runPostLaunchInject("launch", name, target, runtime,
+			"Finish reading the prime output and follow your instructions if you have not")
 	}
 
 	// Preamble: null the stored agent_pid if it belongs to an exited
@@ -1223,58 +1201,43 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 	_ = ttmux.SetMonitorSilence(name, 60, thrumBin, h.thrumDir)
 
 	target := name + ":0.0"
+
+	// thrum-8dl3: shell-readiness probe. HandleRestart's CreateSession
+	// returns BEFORE the new pane's shell finishes init (zsh/oh-my-zsh
+	// sources dotfiles, wires prompt). Any SendKeys arriving during init
+	// is silently swallowed. HandleCreate masks this via
+	// runInlineQuickstart's resend-on-fail; without an equivalent here
+	// the banner SendKeys from launchRuntimeWithBanner (Fix #1) is the
+	// first keystroke after CreateSession — exactly the one most at
+	// risk of being eaten. Probe: re-run the agent's quickstart and
+	// wait for the identity file to materialize. Side-effect: refreshes
+	// runtime/branch fields on the identity for the new pane. Failure
+	// here is logged but non-fatal — restart has already done the
+	// destructive snapshot+kill work; best-effort proceed.
+	if err := h.ensureShellReadyAfterCreate(ctx, target, cwd, agentName, idFile.Agent.Role, idFile.Agent.Module, runtime); err != nil {
+		slog.Warn("[restart] shell readiness probe failed; proceeding cautiously — banner emit may be swallowed",
+			"session", name, "target", target, "err", err)
+	}
+
 	launchCmd := runtimeToLaunchCmd(runtime)
 	if launchCmd != "" {
-		if err := ttmux.SendKeys(target, launchCmd); err != nil {
+		// Send the runtime launch keystrokes via the test seams — see
+		// HandleLaunch for the full rationale. ensureShellReadyAfterCreate
+		// above has already proven the new pane's shell processes
+		// commands, so the launchCmd itself won't be swallowed by zsh
+		// init. The pane-side identity banner is emitted POST-launch
+		// from the goroutine below (post-revert of the original Fix #1:
+		// the alt-screen takeover by claude eats anything sent into the
+		// pre-launch shell, including printf).
+		if err := sendKeysFn(target, launchCmd); err != nil {
 			return nil, fmt.Errorf("send launch command: %w", err)
 		}
-		if err := ttmux.SendSpecialKey(target, "Enter"); err != nil {
+		if err := sendSpecialKeyFn(target, "Enter"); err != nil {
 			return nil, fmt.Errorf("send enter: %w", err)
 		}
 
-		// Post-launch slot (10s in a goroutine). Mirrors HandleLaunch —
-		// see that function for the full rationale. For hook runtimes
-		// the SessionStart hook auto-injects the briefing AND renders
-		// the restart snapshot (the # Previous Session Context block,
-		// which inject-prime-context.sh hoists into the loud preamble),
-		// so /thrum:prime is redundant — emit the pane-side identity
-		// banner instead, landing AFTER the runtime has rendered so the
-		// banner is the last visible content in the pane (thrum-6hqy.1).
-		// For non-hook runtimes the post-restart /thrum:prime is what
-		// loads the snapshot — keep it.
-		go func() {
-			// thrum-puhr.10 (cluster 5): pre-inject readiness via
-			// silence-detector — same as HandleLaunch. Replaces the
-			// legacy Sleep(10s) at this site.
-			//
-			// thrum-puhr.10 (cluster 8): skip ALL keystroke injection
-			// when the readiness probe reports the pane is in a
-			// permission prompt or trust-gate state.
-			if !waitForPaneReady(target, runtime, 2, 60) {
-				slog.Info("[restart] skipping post-restart inject: pane in detected prompt/trust-gate state",
-					"target", target, "runtime", runtime)
-				return
-			}
-			if runtimeHasSessionStartHook(runtime) {
-				h.emitIdentityBanner(name, target)
-			} else {
-				if cur, err := capturePaneFn(target, 50); err == nil && !permission.IsPaneSafeToType(runtime, cur) {
-					slog.Info("[restart] skipping /thrum:prime send: pane in detected prompt/trust-gate state",
-						"target", target, "runtime", runtime)
-					return
-				}
-				primeCmd := primeCommandForRuntime(runtime)
-				_ = ttmux.SendKeys(target, primeCmd)
-				_ = ttmux.SendSpecialKey(target, "Enter")
-			}
-			// thrum-puhr.10: post-restart silence watchdog. On a large-
-			// context restart the agent often doesn't read the
-			// auto-injected prime output. After the configured threshold
-			// (default 30s) of pane silence, nudge it to read the prime
-			// + resume plan and follow its instructions.
-			nudgeSilentPaneAfter(target, runtime, h.thrumDir,
-				"Read the prime output, which includes your resume plan, and then follow your instructions")
-		}()
+		go h.runPostLaunchInject("restart", name, target, runtime,
+			"Finish reading the prime output, which includes your resume plan, and then follow your instructions if you have not")
 	}
 
 	// Write tmux_session and runtime to the agent's identity file
@@ -1324,100 +1287,252 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 // patterns); trust-gate detection works either way but is more
 // precise when runtime is known.
 //
-//nolint:unparam // stableFor is always 2 at call sites today; preserved as a parameter for the readiness-tuning seam future runtime presets will use.
+//nolint:unparam // stableFor is preserved as a parameter for the readiness-tuning seam future runtime presets will use; the silence-driven implementation does not consume it today.
 func waitForPaneReady(target, runtime string, stableFor int, ceilingSeconds int) bool {
-	if stableFor <= 0 {
-		stableFor = 2
-	}
+	_ = stableFor // preserved at call sites; silence-driven path doesn't use it
 	if ceilingSeconds <= 0 {
 		ceilingSeconds = 60
 	}
-	const interval = 1 * time.Second
-	prev, err := capturePaneFn(target, 50)
-	if err != nil {
-		slog.Info("[readiness] baseline capture failed; falling back to fixed sleep",
-			"target", target, "err", err)
-		sleepFn(10 * time.Second)
-		return false
-	}
-	streak := 0
-	for i := 0; i < ceilingSeconds; i++ {
-		sleepFn(interval)
-		cur, err := capturePaneFn(target, 50)
+	deadline := timeNowFn().Add(time.Duration(ceilingSeconds) * time.Second)
+
+	// Silence-driven readiness detection: poll tmux #{window_activity} until
+	// the pane has been silent for at least silenceThreshold (5s). This
+	// replaces the legacy byte-equality compare, which was defeated by Claude
+	// Code's animated thinking spinner (1Hz updates → consecutive captures
+	// never byte-equal). After silence is detected, an additional
+	// paneSettleAfterReady (2s) sleep gives the runtime time to wire up its
+	// keyboard handler before keystroke injection — Claude in particular
+	// will accept a long string into its input box but swallow the
+	// immediately-following Enter when not yet input-ready (thrum-84xc).
+	var consecutiveErrors int
+	for {
+		activity, err := tmuxLastActivityFn(target)
 		if err != nil {
-			slog.Info("[readiness] mid-poll capture failed; bailing",
-				"target", target, "err", err)
-			return false
-		}
-		if cur == prev {
-			streak++
-			if streak >= stableFor {
-				return permission.IsPaneSafeToType(runtime, cur)
+			consecutiveErrors++
+			if consecutiveErrors >= watchdogMaxConsecutiveErrors {
+				slog.Info("[readiness] target gone (repeated activity errors); skipping",
+					"target", target, "err", err)
+				return false
 			}
+			sleepFn(watchdogTickInterval)
 			continue
 		}
-		streak = 0
-		prev = cur
+		consecutiveErrors = 0
+
+		silenceFor := timeNowFn().Sub(activity)
+		if silenceFor >= silenceThreshold {
+			// Pane silent long enough — runtime done rendering. Settle
+			// pause, then capture for the final safety check.
+			sleepFn(paneSettleAfterReady)
+			cur, err := capturePaneFn(target, 50)
+			if err != nil {
+				slog.Info("[readiness] capture after silence failed; skipping inject",
+					"target", target, "err", err)
+				return false
+			}
+			return permission.IsPaneSafeToType(runtime, cur)
+		}
+		if timeNowFn().After(deadline) {
+			slog.Info("[readiness] pane never went silent within ceiling; proceeding cautiously",
+				"target", target, "ceiling_s", ceilingSeconds)
+			// Last-capture safety check so a long-rendering pane that
+			// ended up at a trust dialog doesn't get typed into.
+			cur, err := capturePaneFn(target, 50)
+			if err != nil {
+				return false
+			}
+			return permission.IsPaneSafeToType(runtime, cur)
+		}
+		sleepFn(watchdogTickInterval)
 	}
-	slog.Info("[readiness] pane never stabilized within ceiling; proceeding",
-		"target", target, "ceiling_s", ceilingSeconds)
-	// Even at the ceiling, consult the safety detector against the
-	// last capture so a long-rendering pane that ended up at a trust
-	// dialog doesn't get typed into.
-	return permission.IsPaneSafeToType(runtime, prev)
 }
 
-// nudgeSilentPaneAfter implements thrum-puhr.10: after a post-launch /
-// post-restart inject (e.g. /thrum:prime keystroke or identity banner),
-// schedule a one-shot silence watchdog. Captures pane content as a
-// baseline, sleeps the configured threshold, captures again, and if the
-// two snapshots compare equal — meaning the agent never produced any
-// new output during the window — fires nudge via SendKeys + Enter.
+// sendKeysAndSubmit sends `text` to a tmux pane via send-keys, pauses
+// briefly (paneInputSubmitGap), then sends Enter. The pause exists because
+// modern TUI runtimes like Claude Code interpret a long string immediately
+// followed by Enter as "Enter within paste" rather than "submit", swallowing
+// the submission. The gap lets the input widget exit paste-mode before the
+// Enter arrives so it's processed as a discrete keypress.
 //
-// The threshold is read fresh per-call from .thrum/config.json
-// (restart.silence_watchdog_seconds, default 30s). Set the config key
-// to a negative value to disable the watchdog entirely.
+// Returns the SendKeys error if it fails; the Enter is best-effort (any
+// error is silently ignored — the keystroke either landed or it didn't, and
+// retrying is more likely to compound damage than fix it).
+func sendKeysAndSubmit(target, text string) error {
+	if err := sendKeysFn(target, text); err != nil {
+		return err
+	}
+	sleepFn(paneInputSubmitGap)
+	_ = sendSpecialKeyFn(target, "Enter")
+	return nil
+}
+
+// paneAgentEngaged reports whether a captured pane snapshot contains real
+// agent output in the decision region bounded by two anchors. It is used by
+// nudgeSilentPaneAfter (thrum-84xc) to replace the naive byte-equality diff
+// that was defeated by Claude Code's 1Hz animated spinner.
+//
+// The top anchor is identitybanner.PrimeTruncationSentinel — the last line of
+// the identity banner injected at launch/restart. The bottom anchor is the
+// FIRST occurrence of the runtime's spinner pattern after the top anchor;
+// spinner-as-bottom-anchor cleanly excludes Claude's footer-region tip lines
+// (e.g. "tmux focus-events off · add ...") that appear above the divider but
+// below the spinner. If no spinner has rendered yet, fall back to the
+// runtime's bottom-anchor regex (horizontal-rule chrome separator).
+//
+// Decision algorithm:
+//  1. Find the LAST line containing the banner sentinel → topIdx.
+//  2. Find the FIRST line matching spinnerRe after topIdx → bottomIdx.
+//     If no spinner found, find the FIRST line matching bottomAnchorRe
+//     after topIdx → bottomIdx (fallback for fresh panes pre-spinner).
+//  3. If neither anchor found → return true (conservative: can't reason
+//     confidently, don't nudge).
+//  4. For each line in [topIdx+1 .. bottomIdx-1]:
+//     - Trim whitespace; if empty → ignore.
+//     - Else → real agent output → return true (engaged, no nudge).
+//  5. Loop completes with no real output → return false (not engaged, nudge).
+//
+// Why spinner-first: Claude renders chronologically — agent content appears
+// ABOVE the spinner (which marks the most-recent action), and chrome (tips,
+// divider, input box) appears BELOW. Using spinner as the bottom anchor puts
+// tips outside the decision region. Divider fallback covers the brief window
+// before the runtime has rendered any spinner yet.
+//
+// bottomAnchorRe and spinnerRe may be nil (e.g. runtimes without TUI chrome).
+// If both are nil → no anchor found path (step 3) → true.
+func paneAgentEngaged(captured string, bottomAnchorRe, spinnerRe *regexp.Regexp) bool {
+	topAnchor := identitybanner.PrimeTruncationSentinel
+	lines := strings.Split(captured, "\n")
+
+	topIdx := -1
+	for i, l := range lines {
+		if strings.Contains(l, topAnchor) {
+			topIdx = i
+		}
+	}
+	if topIdx < 0 {
+		return true // top anchor not found — conservative
+	}
+
+	// Prefer spinner as bottom anchor (excludes footer-region tip lines).
+	// Fall back to divider/horizontal-rule when no spinner has rendered yet.
+	bottomIdx := -1
+	if spinnerRe != nil {
+		for i := topIdx + 1; i < len(lines); i++ {
+			if spinnerRe.MatchString(strings.TrimSpace(lines[i])) {
+				bottomIdx = i
+				break
+			}
+		}
+	}
+	if bottomIdx < 0 && bottomAnchorRe != nil {
+		for i := topIdx + 1; i < len(lines); i++ {
+			if bottomAnchorRe.MatchString(strings.TrimRight(lines[i], " \t")) {
+				bottomIdx = i
+				break
+			}
+		}
+	}
+	if bottomIdx < 0 {
+		return true // no bottom anchor found — conservative
+	}
+
+	for _, l := range lines[topIdx+1 : bottomIdx] {
+		if strings.TrimSpace(l) != "" {
+			return true // real agent output found
+		}
+	}
+	return false // only blanks between sentinel and spinner/divider — not engaged
+}
+
+// nudgeSilentPaneAfter implements thrum-puhr.10 + thrum-84xc: after a
+// post-launch / post-restart inject (e.g. identity banner), schedule a
+// one-shot silence watchdog. Instead of a fixed sleep + byte diff, it polls
+// tmux window_activity every 500ms, waiting for a sustained silence window of
+// at least silenceThreshold (5s). Once silence is detected, it captures the
+// pane and uses paneAgentEngaged (two-anchor semantic check) to decide whether
+// to nudge. If the agent is busy past the hard deadline
+// (restart.silence_watchdog_seconds, default 30s), the watchdog exits without
+// nudging — the agent is genuinely working.
+//
+// The threshold is read fresh per-call from .thrum/config.json. Set the
+// config key to a negative value to disable the watchdog entirely.
 //
 // Runs in the caller's goroutine; callers always invoke this from a
-// detached goroutine so the RPC handler returns immediately. Tolerates
-// capture errors (logs and exits — better to skip a nudge than fire
-// against a torn-down pane).
-func nudgeSilentPaneAfter(target, runtime, thrumDir, nudge string) {
+// detached goroutine so the RPC handler returns immediately.
+func nudgeSilentPaneAfter(target, runtimeName, thrumDir, nudge string) {
 	cfg, _ := config.LoadThrumConfig(thrumDir)
-	threshold, enabled := cfg.Restart.SilenceWatchdog()
+	deadlineSecs, enabled := cfg.Restart.SilenceWatchdog()
 	if !enabled {
 		return
 	}
-	before, err := capturePaneFn(target, 50)
-	if err != nil {
-		slog.Info("[watchdog] capture baseline failed; skipping",
-			"target", target, "err", err)
-		return
+	deadline := timeNowFn().Add(time.Duration(deadlineSecs) * time.Second)
+
+	// Poll window_activity until we observe silenceThreshold consecutive
+	// seconds of pane silence, or the hard deadline fires.
+	var consecutiveErrors int
+	for {
+		activity, err := tmuxLastActivityFn(target)
+		if err != nil {
+			consecutiveErrors++
+			if consecutiveErrors >= watchdogMaxConsecutiveErrors {
+				slog.Info("[watchdog] target gone (repeated activity errors); skipping",
+					"target", target, "err", err)
+				return
+			}
+			sleepFn(watchdogTickInterval)
+			continue
+		}
+		consecutiveErrors = 0
+
+		silenceFor := timeNowFn().Sub(activity)
+		if silenceFor >= silenceThreshold {
+			// Pane has been quiet long enough — run the semantic check.
+			break
+		}
+		if timeNowFn().After(deadline) {
+			slog.Info("[watchdog] no nudge: agent busy past deadline (no silence window)",
+				"target", target, "deadline_s", deadlineSecs)
+			return
+		}
+		sleepFn(watchdogTickInterval)
 	}
-	sleepFn(time.Duration(threshold) * time.Second)
+
 	after, err := capturePaneFn(target, 50)
 	if err != nil {
-		slog.Info("[watchdog] capture post-wait failed; skipping",
+		slog.Info("[watchdog] capture failed; skipping",
 			"target", target, "err", err)
 		return
 	}
-	if before != after {
-		// Agent produced output during the window — silence not
-		// observed, no nudge needed.
+
+	// Resolve per-runtime anchor/spinner regexes for the semantic engagement check.
+	var bottomAnchorRe, spinnerRe *regexp.Regexp
+	if preset, err := trt.GetPreset(runtimeName); err == nil {
+		bottomAnchorRe = preset.BottomAnchorRegex
+		spinnerRe = preset.SpinnerRegex
+	}
+
+	engaged := paneAgentEngaged(after, bottomAnchorRe, spinnerRe)
+	hasSentinel := strings.Contains(after, identitybanner.PrimeTruncationSentinel)
+	if engaged {
+		slog.Info("[watchdog] no nudge: paneAgentEngaged=true",
+			"target", target, "runtime", runtimeName,
+			"top_anchor_found", hasSentinel,
+			"pane_tail_excerpt", truncate(tailLines(after, 6), 240))
 		return
 	}
+
 	// thrum-puhr.10 cluster 8: guard against typing into a trust
-	// dialog or permission prompt. The pane being silent for the
-	// watchdog threshold does NOT mean it's safe to type — a fresh
-	// codex/claude session sitting at a first-launch trust gate is
-	// also silent.
-	if !permission.IsPaneSafeToType(runtime, after) {
+	// dialog or permission prompt.
+	if !permission.IsPaneSafeToType(runtimeName, after) {
 		slog.Info("[watchdog] skipping nudge: pane in detected prompt/trust-gate state",
-			"target", target, "runtime", runtime)
+			"target", target, "runtime", runtimeName,
+			"pane_excerpt", truncate(after, 120))
 		return
 	}
-	slog.Info("[watchdog] pane silent post-action, nudging",
-		"target", target, "threshold_s", threshold)
+	slog.Info("[watchdog] nudging: only spinner/blanks below banner sentinel",
+		"target", target, "runtime", runtimeName, "deadline_s", deadlineSecs,
+		"top_anchor_found", hasSentinel,
+		"pane_tail_excerpt", truncate(tailLines(after, 6), 240))
 	if err := sendKeysFn(target, nudge); err != nil {
 		slog.Warn("[watchdog] SendKeys nudge failed", "target", target, "err", err)
 		return
@@ -1601,16 +1716,45 @@ var identityPollInterval = 500 * time.Millisecond
 // (read @thrum-thrum-dir) and a second setUserOptionFn write
 // (stamp @thrum-thrum-dir) for daemon-scoped pass 2 filtering.
 var (
-	sendKeysFn       = ttmux.SendKeys
-	sendSpecialKeyFn = ttmux.SendSpecialKey
-	killSessionFn    = ttmux.KillSession
-	hasSessionFn     = ttmux.HasSession
-	listSessionsFn   = ttmux.ListSessions
-	getUserOptionFn  = ttmux.GetUserOption
-	setUserOptionFn  = ttmux.SetUserOption
-	capturePaneFn    = ttmux.CapturePane
-	sleepFn          = time.Sleep
+	sendKeysFn         = ttmux.SendKeys
+	sendSpecialKeyFn   = ttmux.SendSpecialKey
+	killSessionFn      = ttmux.KillSession
+	hasSessionFn       = ttmux.HasSession
+	listSessionsFn     = ttmux.ListSessions
+	getUserOptionFn    = ttmux.GetUserOption
+	setUserOptionFn    = ttmux.SetUserOption
+	capturePaneFn      = ttmux.CapturePane
+	sleepFn            = time.Sleep
+	tmuxLastActivityFn = ttmux.LastActivity
+	timeNowFn          = time.Now
 )
+
+// silenceThreshold is the consecutive-silence window the watchdog waits for
+// before running the engagement check. 5 seconds of pane silence means the
+// spinner has stopped ticking, so we can do a stable snapshot. thrum-84xc.
+const silenceThreshold = 5 * time.Second
+
+// watchdogTickInterval is how often the watchdog polls tmux window_activity
+// while waiting for a silence window. 500ms keeps latency low without
+// hammering the tmux server.
+const watchdogTickInterval = 500 * time.Millisecond
+
+// watchdogMaxConsecutiveErrors is how many consecutive tmuxLastActivityFn
+// errors the watchdog tolerates before assuming the target is gone and exiting.
+const watchdogMaxConsecutiveErrors = 3
+
+// paneSettleAfterReady is the additional pause after silence-detection reports
+// the pane is rendered, before keystroke injection. Some TUI runtimes (Claude
+// Code in particular) accept text input into their input box but swallow the
+// immediately-following Enter when not yet input-ready. Two seconds is enough
+// for Claude to finish wiring its keyboard handler. thrum-84xc.
+const paneSettleAfterReady = 2 * time.Second
+
+// paneInputSubmitGap is the pause between sending text and sending Enter when
+// submitting input to a TUI pane. Modern runtimes detect a long string + Enter
+// pair as a paste-with-newline, not a submission. The gap lets the input
+// widget exit paste-mode before Enter arrives. thrum-84xc.
+const paneInputSubmitGap = 200 * time.Millisecond
 
 // waitForIdentityFile blocks until the identity file at idPath appears
 // on disk, or the combined initial+retry window expires. Between the
@@ -1919,27 +2063,252 @@ func runtimeHasSessionStartHook(runtime string) bool {
 	return preset.HasSessionStartHook
 }
 
+// ensureShellReadyAfterCreate proves the freshly-created pane's shell
+// is past init and accepting keystrokes by re-running the agent's
+// inline quickstart and waiting for the identity file to materialize.
+// The probe doubles as an identity refresh — quickstart rewrites
+// runtime/branch/tmux_session for the new pane.
+//
+// Strategy: move the existing identity file aside before sending the
+// probe, then wait for a fresh file to appear (reuses
+// runInlineQuickstart's existence-based waitForIdentityFile path).
+// On success the aside backup is removed; on failure (timeout, send
+// error) the backup is restored so the agent's pre-restart identity
+// survives a wedged restart.
+//
+// Returns an error on timeout or send failure but does NOT kill the
+// session — HandleRestart has already done destructive snapshot+kill
+// work; the caller logs the error and proceeds. The downstream banner
+// emit may still land at the shell prompt if the shell becomes
+// responsive between probe-timeout and banner-send (rare but possible
+// on a transient init stall). thrum-8dl3.
+//
+//nolint:revive // many args: each is independent identity-file state and packaging into a struct would obscure the production call site.
+func (h *TmuxHandler) ensureShellReadyAfterCreate(ctx context.Context, target, cwd, agentName, role, module, runtime string) error {
+	slog.Info("[restart] shell-ready probe: entry",
+		"target", target, "runtime", runtime, "agent", agentName, "cwd", cwd, "role", role, "module", module)
+
+	idDir := filepath.Join(cwd, ".thrum", "identities")
+	if resolved, err := filepath.EvalSymlinks(idDir); err == nil {
+		idDir = resolved
+	}
+	idPath := filepath.Join(idDir, agentName+".json")
+	backupPath := idPath + ".pre-restart-probe"
+
+	// Clean any leftover from a prior wedged restart attempt before
+	// moving the current identity aside, otherwise os.Rename would fail
+	// on the second restart of a daemon-crashed session.
+	_ = os.Remove(backupPath)
+	movedAside := false
+	if err := os.Rename(idPath, backupPath); err == nil {
+		movedAside = true
+	}
+	slog.Info("[restart] shell-ready probe: rename-aside",
+		"target", target, "runtime", runtime, "agent", agentName, "moved_aside", movedAside, "id_path", idPath)
+
+	// Restore-or-cleanup the backup. Deferred so any return path
+	// (send error, ctx cancel, timeout, success) leaves the filesystem
+	// in a coherent state. The restore only fires if quickstart didn't
+	// produce a fresh file — a successful probe means idPath exists
+	// with the new content and we just clean up the backup.
+	defer func() {
+		if !movedAside {
+			_ = os.Remove(backupPath) // safety cleanup
+			return
+		}
+		if _, err := os.Stat(idPath); err != nil {
+			// Probe didn't produce a fresh file — restore so the agent
+			// retains its pre-restart identity.
+			_ = os.Rename(backupPath, idPath)
+			slog.Info("[restart] shell-ready probe: backup restored on probe failure",
+				"target", target, "agent", agentName)
+			return
+		}
+		// Fresh file present — drop the backup.
+		_ = os.Remove(backupPath)
+	}()
+
+	quickstartCmd := worktree.BuildQuickstartCmd(cwd, agentName, role, module, "", runtime, true)
+	slog.Info("[restart] shell-ready probe: sending quickstart",
+		"target", target, "runtime", runtime, "agent", agentName,
+		"cmd_preview", truncate(quickstartCmd, 120))
+
+	if err := sendKeysFn(target, quickstartCmd); err != nil {
+		slog.Warn("[restart] shell-ready probe: send-keys quickstart failed",
+			"target", target, "runtime", runtime, "agent", agentName, "err", err)
+		return fmt.Errorf("send quickstart probe: %w", err)
+	}
+	if err := sendSpecialKeyFn(target, "Enter"); err != nil {
+		slog.Warn("[restart] shell-ready probe: send-enter quickstart failed",
+			"target", target, "runtime", runtime, "agent", agentName, "err", err)
+		return fmt.Errorf("send enter: %w", err)
+	}
+
+	resend := func() error {
+		slog.Info("[restart] shell-ready probe: resending (first send-keys likely swallowed by shell init)",
+			"target", target, "runtime", runtime, "agent", agentName,
+		)
+		if err := sendKeysFn(target, quickstartCmd); err != nil {
+			return err
+		}
+		return sendSpecialKeyFn(target, "Enter")
+	}
+	err := waitForIdentityFile(ctx, idPath, shellReadyInitialWait, shellReadyRetryWait, resend)
+	if err != nil {
+		slog.Warn("[restart] shell-ready probe: identity file never appeared",
+			"target", target, "runtime", runtime, "agent", agentName, "err", err)
+		return err
+	}
+	slog.Info("[restart] shell-ready probe: identity file written — shell is responsive",
+		"target", target, "runtime", runtime, "agent", agentName, "id_path", idPath)
+	return nil
+}
+
+// truncate returns s clipped to maxLen runes with a trailing "…" if it
+// was longer. Used for log previews of potentially long strings like
+// quickstart commands and pane captures. Operates on runes (not bytes)
+// so unicode in pane content (✻, ─, etc.) doesn't split mid-codepoint.
+func truncate(s string, maxLen int) string {
+	rs := []rune(s)
+	if len(rs) <= maxLen {
+		return s
+	}
+	return string(rs[:maxLen]) + "…"
+}
+
+// tailLines returns the last n lines of s joined with " / " for compact
+// single-line log emission. Used by watchdog logging so reviewers can
+// see exactly what region paneAgentEngaged was inspecting without
+// reading a multi-line pane dump.
+func tailLines(s string, n int) string {
+	lines := strings.Split(s, "\n")
+	if len(lines) <= n {
+		return strings.Join(lines, " / ")
+	}
+	return strings.Join(lines[len(lines)-n:], " / ")
+}
+
+// shellReadyInitialWait / shellReadyRetryWait govern the two-stage budget
+// ensureShellReadyAfterCreate uses while waiting for the quickstart probe
+// to land an identity file. Mirrors runInlineQuickstart's 5s+5s budget.
+// Tests shrink these via t.Cleanup'd assignment so timeout cases don't
+// burn 10+ real seconds.
+var (
+	shellReadyInitialWait = 5 * time.Second
+	shellReadyRetryWait   = 5 * time.Second
+)
+
+// runPostLaunchInject is the body of the goroutine spawned by both
+// HandleLaunch and HandleRestart after the runtime launch keystrokes.
+// Waits for the pane to be input-ready, then either emits the identity
+// banner (hook runtimes — printf is sent into the running runtime's
+// input prompt as a user message; the runtime echoes / responds with the
+// banner text including `PrimeTruncationSentinel`, which is the form
+// `paneAgentEngaged` can find in the captured pane) or sends
+// `/thrum:prime` (non-hook runtimes whose context isn't auto-loaded).
+// Finally schedules the silence watchdog regardless of branch.
+//
+// `site` is "launch" or "restart" and is woven into the slog logs for
+// post-hoc correlation. `nudgeText` is the SendKeys payload the watchdog
+// fires when the agent doesn't engage on its own.
+//
+// History: the original thrum-8dl3 Fix #1 hoisted `emitIdentityBanner`
+// to BEFORE the launch keystrokes on the theory that the post-launch
+// printf was landing inside claude's input box and silently corrupting
+// the banner. End-to-end retesting with observability logs proved the
+// opposite — claude's alt-screen takeover (ESC[?1049h + ESC[2J + ESC[3J)
+// CLEARS pre-launch shell output, so the pre-launch printf vanishes.
+// The working mechanism is the post-launch emit: claude treats the
+// printf as a user turn and responds with the banner content, which is
+// how the sentinel reaches the captured pane in a form the watchdog can
+// find. release-dashboard's scrollback shows this in action.
+func (h *TmuxHandler) runPostLaunchInject(site, name, target, runtime, nudgeText string) {
+	slog.Info("["+site+"] post-launch inject: entry",
+		"name", name, "target", target, "runtime", runtime)
+	// thrum-puhr.10 (cluster 5+8): silence-driven readiness probe with
+	// trust-gate / permission-prompt guard. False return means the pane
+	// is in a non-typable state (or never went silent) — skip all
+	// SendKeys to avoid corrupting a dialog.
+	if !waitForPaneReady(target, runtime, 2, 60) {
+		slog.Info("["+site+"] skipping post-launch inject: pane in detected prompt/trust-gate state or never settled",
+			"target", target, "runtime", runtime)
+		return
+	}
+	if runtimeHasSessionStartHook(runtime) {
+		// Banner emitted INTO the running runtime's input prompt. See
+		// emitIdentityBanner for why this is the working mechanism.
+		h.emitIdentityBanner(name, target)
+	} else {
+		// Defense-in-depth: re-check safety just before send. The
+		// readiness gate's exit window is brief but not atomic with
+		// this send.
+		if cur, err := capturePaneFn(target, 50); err == nil && !permission.IsPaneSafeToType(runtime, cur) {
+			slog.Info("["+site+"] skipping /thrum:prime send: pane in detected prompt/trust-gate state",
+				"target", target, "runtime", runtime,
+				"pane_excerpt", truncate(cur, 120))
+			return
+		}
+		primeCmd := primeCommandForRuntime(runtime)
+		_ = sendKeysAndSubmit(target, primeCmd)
+	}
+	// Silence watchdog: nudge the agent if the pane stays quiet past
+	// the configured threshold (default 30s). Independent of the
+	// banner / prime path above.
+	nudgeSilentPaneAfter(target, runtime, h.thrumDir, nudgeText)
+}
+
 // emitIdentityBanner sends the identity banner for the agent registered
 // at the session's stored cwd into the pane via tmux send-keys + Enter.
 // Best-effort: silently no-ops when no cwd is stored, no identity is
 // found, or identitybanner.ShellCommand returns empty (e.g. a bare
-// session created with --no-agent). Called before runtime launch in
-// HandleLaunch + HandleRestart so the banner lands at the shell prompt
-// and stays in the pane's scrollback after the runtime takes over the
-// screen. thrum-6hqy.
+// session created with --no-agent). Called from runPostLaunchInject
+// (HandleLaunch + HandleRestart) AFTER waitForPaneReady reports the
+// runtime is input-ready.
+//
+// Mechanism: for hook runtimes (claude / codex / cursor) the runtime is
+// already running and showing its input prompt when this fires. The
+// printf SendKeys lands INSIDE the runtime's input box and the runtime
+// treats it as a user turn — claude in particular echoes the input as
+// `❯ printf '%s\n' ...` then responds with `⏺ Agent: @<name> ...`
+// containing the full banner text including the PrimeTruncationSentinel.
+// That response in the captured pane is what `paneAgentEngaged` uses as
+// its top anchor.
+//
+// Pre-launch banner emission (the original thrum-8dl3 Fix #1) DOES NOT
+// WORK: claude's alt-screen entry clears the visible region AND the
+// in-flight pre-launch printf SendKeys, so the banner never reaches the
+// pane in any form. End-to-end retesting on stalled-sweep-brainstorm and
+// skills-brainstorm confirmed the pre-launch path silently drops the
+// banner; the post-launch path is the working production mechanism (see
+// release-dashboard's scrollback, which has the banner sentinel in
+// claude's response form).
+// thrum-6hqy / thrum-8dl3.
 func (h *TmuxHandler) emitIdentityBanner(session, target string) {
+	slog.Info("[banner] emitIdentityBanner: entry", "session", session, "target", target)
+
 	h.sessionMu.RLock()
 	cwd, ok := h.sessionCwds[session]
 	h.sessionMu.RUnlock()
 	if !ok || cwd == "" {
+		slog.Info("[banner] skipping identity banner: no cwd registered for session",
+			"session", session, "target", target, "map_hit", ok)
 		return
 	}
 	idFile, _, err := config.LoadIdentityWithPath(cwd)
-	if err != nil || idFile == nil {
+	if err != nil {
+		slog.Info("[banner] skipping identity banner: identity load error",
+			"session", session, "target", target, "cwd", cwd, "err", err)
+		return
+	}
+	if idFile == nil {
+		slog.Info("[banner] skipping identity banner: no identity file for cwd",
+			"session", session, "target", target, "cwd", cwd)
 		return
 	}
 	cmdLine := identitybanner.ShellCommand(idFile)
 	if cmdLine == "" {
+		slog.Info("[banner] skipping identity banner: ShellCommand returned empty (no agent name)",
+			"session", session, "target", target, "cwd", cwd, "agent_name", idFile.Agent.Name)
 		return
 	}
 	// thrum-puhr.10 cluster 8: guard against typing into a trust gate
@@ -1948,12 +2317,21 @@ func (h *TmuxHandler) emitIdentityBanner(session, target string) {
 	// or similar) into a dialog input field.
 	if cur, err := capturePaneFn(target, 50); err == nil && !permission.IsPaneSafeToType(idFile.Runtime, cur) {
 		slog.Info("[banner] skipping identity banner: pane in detected prompt/trust-gate state",
-			"target", target, "runtime", idFile.Runtime)
+			"session", session, "target", target, "runtime", idFile.Runtime,
+			"pane_excerpt", truncate(cur, 120))
 		return
 	}
+	slog.Info("[banner] emitting identity banner via sendKeysAndSubmit",
+		"session", session, "target", target, "runtime", idFile.Runtime,
+		"agent_name", idFile.Agent.Name, "cmd_preview", truncate(cmdLine, 120))
 	// Best-effort: SendKeys errors here shouldn't fail the launch.
-	if err := ttmux.SendKeys(target, cmdLine); err != nil {
+	// sendKeysAndSubmit inserts paneInputSubmitGap between text and Enter so
+	// Claude doesn't swallow the Enter as paste-newline (thrum-84xc).
+	if err := sendKeysAndSubmit(target, cmdLine); err != nil {
+		slog.Warn("[banner] sendKeysAndSubmit returned error (banner may not have landed)",
+			"session", session, "target", target, "err", err)
 		return
 	}
-	_ = ttmux.SendSpecialKey(target, "Enter")
+	slog.Info("[banner] emitIdentityBanner: sendKeysAndSubmit completed",
+		"session", session, "target", target, "runtime", idFile.Runtime)
 }

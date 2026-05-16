@@ -93,3 +93,24 @@ func TestLegacyHintCommands(t *testing.T) {
 		}
 	}
 }
+
+// TestHints_InboxUnread_MentionsBothMarkPatterns pins the rc.9 hint
+// rebalance: the inbox.unread ACTION hint must lead with per-ID marking
+// (the principal pattern) and reference --all only as the safe bulk-clear.
+func TestHints_InboxUnread_MentionsBothMarkPatterns(t *testing.T) {
+	h := LegacyHint("inbox.unread", false, false)
+	if h == "" {
+		t.Fatal("expected non-empty inbox.unread hint")
+	}
+	if !strings.Contains(h, "thrum message read <msg_id>") {
+		t.Errorf("expected per-ID guidance in inbox.unread hint, got: %s", h)
+	}
+	if !strings.Contains(h, "thrum message read --all") {
+		t.Errorf("expected --all guidance in inbox.unread hint, got: %s", h)
+	}
+	// The pre-rc.9 copy used "so they don't keep reappearing" — the
+	// rebalance removed that nudge toward bulk-clear-as-default.
+	if strings.Contains(h, "so they don't keep reappearing") {
+		t.Errorf("hint still contains pre-rc.9 nudge toward bulk-clear, got: %s", h)
+	}
+}

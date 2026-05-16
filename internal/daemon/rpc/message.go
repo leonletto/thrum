@@ -129,12 +129,13 @@ type ListMessagesRequest struct {
 
 // ListMessagesResponse represents the response from message.list RPC.
 type ListMessagesResponse struct {
-	Messages   []MessageSummary `json:"messages"`
-	Total      int              `json:"total"`
-	Unread     int              `json:"unread"`
-	Page       int              `json:"page"`
-	PageSize   int              `json:"page_size"`
-	TotalPages int              `json:"total_pages"`
+	Messages       []MessageSummary `json:"messages"`
+	Total          int              `json:"total"`
+	Unread         int              `json:"unread"`
+	HiddenByFilter int              `json:"hidden_by_filter,omitempty"` // unread count that would be visible without the for-agent filter
+	Page           int              `json:"page"`
+	PageSize       int              `json:"page_size"`
+	TotalPages     int              `json:"total_pages"`
 }
 
 // MessageSummary represents a summary of a message for listing.
@@ -216,12 +217,24 @@ type EditResponse struct {
 type MarkReadRequest struct {
 	MessageIDs    []string `json:"message_ids"` // Batch support
 	CallerAgentID string   `json:"caller_agent_id,omitempty"`
+	// MarkedBefore, when non-empty, restricts the operation to messages
+	// whose created_at <= this RFC3339Nano timestamp. IDs that exist but
+	// have created_at after the watermark are silently skipped (no error)
+	// and do not contribute to MarkedCount. Used by `thrum message read
+	// --all` to prevent racing concurrent arrivals into the marked set.
+	MarkedBefore string `json:"marked_before,omitempty"`
 }
 
 // MarkReadResponse represents the response from message.markRead RPC.
 type MarkReadResponse struct {
 	MarkedCount int                 `json:"marked_count"`
 	AlsoReadBy  map[string][]string `json:"also_read_by,omitempty"` // Key: message_id, Value: list of other agent_ids
+	// SkippedCount is the number of supplied IDs that existed in the
+	// daemon but were refused by the marked_before watermark (created_at
+	// > watermark). NOT counted: IDs that didn't exist (sql.ErrNoRows),
+	// IDs already read, or parse failures (conservative fall-through).
+	// Drives the CLI's "N new messages arrived" hint after read --all.
+	SkippedCount int `json:"skipped_count,omitempty"`
 }
 
 // ArchiveRequest represents the request for message.archive RPC.
@@ -1195,13 +1208,78 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		_ = h.state.DB().QueryRowContext(ctx, unreadQuery, unreadArgs...).Scan(&unread)
 	}
 
+	// Calculate hidden_by_filter: unread messages this agent could see if
+	// the for-agent filter weren't applied. Same WHERE assembly as the
+	// unread query above, except we omit the for-agent clause.
+	// Identity-relevant filters (mentions, scope, ref, thread, etc.) still
+	// apply so the count stays bounded to messages this agent could see —
+	// not every unread row in the daemon. Only meaningful when the
+	// for-agent filter is actually active; otherwise structurally zero.
+	//
+	// Asymmetry note (rc.9 dual-review finding, deferred to v0.10.4): the
+	// gate intentionally treats `for_agent` as the only filter we can
+	// "measure hiding by." A standalone `--mention` filter (no
+	// for_agent) does NOT surface a hidden count, even though mention
+	// filtering also hides messages. Rationale: the rc.9 primary path
+	// (`thrum inbox` and `read --all`) always operates with a for_agent
+	// filter, and exposing mention-only hidden counts would require
+	// distinguishing "messages this agent could see if not filtered by
+	// mention" vs "messages this agent could see if not filtered by
+	// for_agent" without conflating the two. Plumbing that distinction
+	// into the response (separate fields, or a per-filter breakdown) is
+	// the v0.10.4 expansion path. For rc.9 the silent-zero for
+	// mention-only callers is intentional.
+	hiddenByFilter := 0
+	if currentAgentID != "" && forAgentClause != "" {
+		hiddenQuery := "SELECT COUNT(*) FROM messages m" + joins + " WHERE 1=1"
+		hiddenArgs := []any{}
+		if req.ThreadID != "" {
+			hiddenQuery += " AND m.thread_id = ?"
+			hiddenArgs = append(hiddenArgs, req.ThreadID)
+		}
+		if excludeAgentID != "" {
+			hiddenQuery += " AND m.agent_id != ?"
+			hiddenArgs = append(hiddenArgs, excludeAgentID)
+		}
+		if req.Scope != nil {
+			hiddenQuery += " AND ms.scope_type = ? AND ms.scope_value = ?"
+			hiddenArgs = append(hiddenArgs, req.Scope.Type, req.Scope.Value)
+		}
+		if req.Ref != nil {
+			hiddenQuery += " AND mr.ref_type = ? AND mr.ref_value = ?"
+			hiddenArgs = append(hiddenArgs, req.Ref.Type, req.Ref.Value)
+		}
+		// Intentionally omits forAgentClause — that's the filter we're
+		// measuring "hidden by." mentionClause stays because it's an
+		// identity-relevant filter (mentions of THIS agent's role).
+		if mentionClause != "" {
+			hiddenQuery += mentionClause
+			hiddenArgs = append(hiddenArgs, mentionArgs...)
+		}
+		hiddenQuery += createdAfterClause
+		hiddenArgs = append(hiddenArgs, createdAfterArgs...)
+		hiddenQuery += " AND m.message_id NOT IN (SELECT md3.message_id FROM message_deliveries md3 WHERE md3.recipient_agent_id = ? AND md3.read_at IS NOT NULL)"
+		hiddenArgs = append(hiddenArgs, currentAgentID)
+
+		var totalUnreadWithoutForAgent int
+		_ = h.state.DB().QueryRowContext(ctx, hiddenQuery, hiddenArgs...).Scan(&totalUnreadWithoutForAgent)
+		// Subtraction guard: under SQLite's snapshot semantics within a
+		// single RLock the superset should never report fewer rows than
+		// the subset, but an explicit guard prevents a negative count
+		// ever appearing in JSON.
+		if totalUnreadWithoutForAgent > unread {
+			hiddenByFilter = totalUnreadWithoutForAgent - unread
+		}
+	}
+
 	return &ListMessagesResponse{
-		Messages:   messages,
-		Total:      total,
-		Unread:     unread,
-		Page:       page,
-		PageSize:   pageSize,
-		TotalPages: totalPages,
+		Messages:       messages,
+		Total:          total,
+		Unread:         unread,
+		HiddenByFilter: hiddenByFilter,
+		Page:           page,
+		PageSize:       pageSize,
+		TotalPages:     totalPages,
 	}, nil
 }
 
@@ -2261,8 +2339,11 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 	// Prepare timestamp
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	// Track marked count, collaboration info, and affected threads
+	// Track marked count, collaboration info, and affected threads.
+	// skippedCount tracks supplied IDs that existed but were refused by
+	// the watermark; it drives the CLI's late-arrival warning.
 	markedCount := 0
+	skippedCount := 0
 	alsoReadBy := make(map[string][]string)
 	affectedThreads := make(map[string]bool)
 	var receiptEvents []types.MessageReceiptEvent
@@ -2277,17 +2358,54 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// Parse the watermark once outside the loop. On parse failure, fall
+	// through to unfiltered behavior — conservative: a malformed
+	// watermark must not silently mark messages it was supposed to
+	// protect.
+	var watermark time.Time
+	var watermarkValid bool
+	if req.MarkedBefore != "" {
+		if parsed, perr := time.Parse(time.RFC3339Nano, req.MarkedBefore); perr == nil {
+			watermark = parsed
+			watermarkValid = true
+		}
+		// perr != nil: watermarkValid stays false → no filtering applied.
+	}
+
 	// For each message_id
 	for _, messageID := range req.MessageIDs {
-		// Check if message exists and get thread_id (skip if not found, don't error)
+		// Check if message exists and get thread_id + created_at (skip if not found, don't error)
 		var msgThreadID sql.NullString
-		err = tx.QueryRow("SELECT thread_id FROM messages WHERE message_id = ?", messageID).Scan(&msgThreadID)
+		var msgCreatedAt string
+		err = tx.QueryRow("SELECT thread_id, created_at FROM messages WHERE message_id = ?", messageID).Scan(&msgThreadID, &msgCreatedAt)
 		if err == sql.ErrNoRows {
 			// Skip non-existent messages
 			continue
 		}
 		if err != nil {
 			return nil, fmt.Errorf("check message exists: %w", err)
+		}
+
+		// Watermark filter: if a parsed watermark is set and this message
+		// was created strictly after it, skip silently. The race fix for
+		// `read --all`. String compare on RFC3339Nano is INCORRECT —
+		// time.Format trims trailing fractional zeros, so a whole-second
+		// timestamp "...:00Z" sorts AFTER a sub-second "...:00.001Z" by
+		// ASCII ('Z' 0x5A > '.' 0x2E). Parse both sides into time.Time
+		// and compare via .After.
+		if watermarkValid {
+			if msgCreated, perr := time.Parse(time.RFC3339Nano, msgCreatedAt); perr == nil {
+				if msgCreated.After(watermark) {
+					// Track only watermark-skipped IDs (not parse
+					// failures, not non-existent IDs) so the CLI
+					// late-arrival warning is precise about the race.
+					skippedCount++
+					continue
+				}
+			}
+			// perr != nil: row's created_at is unparseable. Conservative:
+			// don't skip (mark proceeds), matching the parse-failure
+			// policy on the request side.
 		}
 
 		// Track affected thread
@@ -2363,7 +2481,8 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 
 	// Build response
 	resp := &MarkReadResponse{
-		MarkedCount: markedCount,
+		MarkedCount:  markedCount,
+		SkippedCount: skippedCount,
 	}
 	if len(alsoReadBy) > 0 {
 		resp.AlsoReadBy = alsoReadBy

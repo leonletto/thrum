@@ -297,6 +297,59 @@ func TestFormatInbox_EmptyWithFilter(t *testing.T) {
 	}
 }
 
+// TestFormatInbox_HiddenByFilter_RendersWarning pins the rc.9 E5 footer:
+// when the for-agent filter is hiding additional unread messages from
+// view, the inbox listing renders a one-line "N additional unread
+// messages exist outside your filter" hint.
+func TestFormatInbox_HiddenByFilter_RendersWarning(t *testing.T) {
+	// Body intentionally omitted — cli.Message.Body is an anonymous struct
+	// and footer rendering doesn't depend on any message body content.
+	msg := Message{
+		MessageID: "msg_a",
+		AgentID:   "bob",
+		IsRead:    false,
+		CreatedAt: "2026-05-14T15:00:00Z",
+	}
+	result := &InboxResult{
+		Messages:       []Message{msg},
+		Total:          1,
+		Unread:         1,
+		HiddenByFilter: 5,
+		Page:           1,
+		PageSize:       10,
+		TotalPages:     1,
+	}
+	out := FormatInboxWithOptions(result, InboxFormatOptions{ForAgent: "alice"})
+	if !strings.Contains(out, "5 additional unread messages exist outside your filter") {
+		t.Fatalf("expected hidden-count hint in footer, got:\n%s", out)
+	}
+}
+
+// TestFormatInbox_NoHidden_NoWarning verifies the footer hint is omitted
+// when HiddenByFilter is zero — output stays byte-identical to pre-rc.9
+// for the no-hidden case.
+func TestFormatInbox_NoHidden_NoWarning(t *testing.T) {
+	msg := Message{
+		MessageID: "msg_a",
+		AgentID:   "bob",
+		IsRead:    false,
+		CreatedAt: "2026-05-14T15:00:00Z",
+	}
+	result := &InboxResult{
+		Messages:       []Message{msg},
+		Total:          1,
+		Unread:         1,
+		HiddenByFilter: 0,
+		Page:           1,
+		PageSize:       10,
+		TotalPages:     1,
+	}
+	out := FormatInboxWithOptions(result, InboxFormatOptions{ForAgent: "alice"})
+	if strings.Contains(out, "outside your filter") {
+		t.Fatalf("unexpected hidden-count hint with HiddenByFilter=0, got:\n%s", out)
+	}
+}
+
 func TestFormatInbox_UnreadEmpty_IsSilent(t *testing.T) {
 	// --unread with zero messages should produce no output so that
 	// hook/cron driven bash calls stay quiet when there's nothing new.
