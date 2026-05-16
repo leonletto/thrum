@@ -22,12 +22,12 @@ mkdir -p "${REPO}/.thrum/restart"
 
 ### 2. Compose your continuation
 
-Your context is high and we want to restart without losing the decisions
-we've made. Write a rich continuation that future-you will read as the first
-action after restart.
+Your context is high and we want to restart without losing the decisions we've
+made. Write a rich continuation that future-you will read as the first action
+after restart.
 
-CRITICAL DISCIPLINE — compose from your own working context only. To
-preserve the remaining runway:
+CRITICAL DISCIPLINE — compose from your own working context only. To preserve
+the remaining runway:
 
 - Do NOT dispatch sub-agents (Agent, Explore, etc.)
 - Do NOT re-read files you've already read this session
@@ -35,34 +35,33 @@ preserve the remaining runway:
 - Do NOT run lengthy investigations (git log spelunking, codebase searches,
   multi-file grep walks)
 
-Each of those costs context you don't have to spend, and the cost compounds —
-a sub-agent that returns 6K tokens of summary doesn't just cost the dispatch,
-it pollutes the dying session further. If a fact isn't already in your
-working context, label it "unknown" or "verify post-restart" rather than
-fetching it now. Trust your in-context state.
+Each of those costs context you don't have to spend, and the cost compounds — a
+sub-agent that returns 6K tokens of summary doesn't just cost the dispatch, it
+pollutes the dying session further. If a fact isn't already in your working
+context, label it "unknown" or "verify post-restart" rather than fetching it
+now. Trust your in-context state.
 
 Write for a competent stranger in your role — someone who has the runtime
 briefing (`thrum prime`, role preamble, project state) but none of this
-session's conversation context. Refer to the previous session in third
-person.
+session's conversation context. Refer to the previous session in third person.
 
-Cover whatever matters most: the big picture, where every artifact stands,
-who the players are and what they're contributing, decisions made (with the
-context that drove each), questions awaiting human input, outstanding work
-you owe, patterns that worked or burned us, file paths future-you will
-reopen, and a numbered resume plan. Skip sections that don't apply. An
-honest "N/A" beats fabrication.
+Cover whatever matters most: the big picture, where every artifact stands, who
+the players are and what they're contributing, decisions made (with the context
+that drove each), questions awaiting human input, outstanding work you owe,
+patterns that worked or burned us, file paths future-you will reopen, and a
+numbered resume plan. Skip sections that don't apply. An honest "N/A" beats
+fabrication.
 
 ### 3. Write the continuation directly to your restart file
 
 Use your Write tool to save the composed continuation to:
 
-```
+```text
 ${REPO}/.thrum/restart/${AGENT}.md
 ```
 
-`thrum prime` will auto-inject this file at next session start. No bash
-heredoc or `cat <<EOF` redirection is needed — write the file directly.
+`thrum prime` will auto-inject this file at next session start. No bash heredoc
+or `cat <<EOF` redirection is needed — write the file directly.
 
 ### 4. Check session type and your role
 
@@ -79,7 +78,7 @@ restart. Print these instructions for the operator and stop:
 > Restart snapshot saved at `.thrum/restart/${AGENT}.md`. To restart me, run
 > from another pane:
 >
-> ```
+> ```bash
 > thrum tmux restart <session-name> --force
 > ```
 
@@ -96,8 +95,8 @@ instructions below.
 
 **Else (no tmux session)** — print these instructions for the operator:
 
-> Restart snapshot saved at `.thrum/restart/${AGENT}.md`. To continue in a
-> new session:
+> Restart snapshot saved at `.thrum/restart/${AGENT}.md`. To continue in a new
+> session:
 >
 > 1. Exit this session
 > 2. Start a new session in the same directory

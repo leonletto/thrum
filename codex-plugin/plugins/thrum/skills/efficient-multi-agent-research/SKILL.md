@@ -1,10 +1,13 @@
 ---
 name: efficient-multi-agent-research
-description: "Use when investigating, auditing, or reviewing more than 6 items across a codebase - function call sites, pattern usage, file reviews, or any research task with partitionable items that would pollute the main agent's context if read directly"
+description:
+  "Use when investigating, auditing, or reviewing more than 6 items across a
+  codebase - function call sites, pattern usage, file reviews, or any research
+  task with partitionable items that would pollute the main agent's context if
+  read directly"
 # source: claude-plugin/skills/efficient-multi-agent-research/SKILL.md
 # generated-by: scripts/sync-skills.sh
 ---
-
 
 ## Efficient Multi-Agent Research
 

@@ -12,92 +12,28 @@ and this project adheres to
 
 - **`/thrum:restart` skill: coordinator self-restart branch + drop residue.**
   Three rough edges in the rc.10 v2 prose-continuation skill surfaced by its
-  first live invocation on the coordinator pane: (1) Step 3
-  unconditionally sent "Restart snapshot saved..." to `@coordinator_main`,
-  which self-targeted and stalled when the invoker was the coordinator —
-  new Step 5 branches on `thrum whoami --field role` and emits cross-pane
-  `thrum tmux restart --force` instructions for coordinators; (2) Step 4
-  referenced a stale `thrum tmux snapshot restore` command from the
-  pre-rc.10 structured-template flow — removed in favor of "auto-loaded by
-  `thrum prime`"; (3) Step 1 embedded the CRITICAL DISCIPLINE block inside
-  a `cat > file <<'EOF'` heredoc with a "do not run this literally"
-  caveat — restructured into separate composition-guide (Step 2) and
-  direct-`Write`-tool (Step 3) steps. Synced to opencode, codex, and
-  cursor plugins via `scripts/sync-skills.sh` (thrum-7b84.2).
+  first live invocation on the coordinator pane: (1) Step 3 unconditionally sent
+  "Restart snapshot saved..." to `@coordinator_main`, which self-targeted and
+  stalled when the invoker was the coordinator — new Step 5 branches on
+  `thrum whoami --field role` and emits cross-pane `thrum tmux restart --force`
+  instructions for coordinators; (2) Step 4 referenced a stale
+  `thrum tmux snapshot restore` command from the pre-rc.10 structured-template
+  flow — removed in favor of "auto-loaded by `thrum prime`"; (3) Step 1 embedded
+  the CRITICAL DISCIPLINE block inside a `cat > file <<'EOF'` heredoc with a "do
+  not run this literally" caveat — restructured into separate composition-guide
+  (Step 2) and direct-`Write`-tool (Step 3) steps. Synced to opencode, codex,
+  and cursor plugins via `scripts/sync-skills.sh` (thrum-7b84.2).
 
 - **`/thrum:restart` skill rewritten with a v2 prose-continuation body.**
   Replaces the JSON-snapshot Resume Plan template + `thrum tmux snapshot save` +
   append flow with a direct-write of an in-context-composed prose continuation
   to `.thrum/restart/<agent_id>.md`. Skill drops from 134 lines to ~95.
   Continuation files are smaller and higher-signal than the prior structured
-  template + lossy tail capture combined — field-tested across 7 v0.11
-  substrate agent restart cycles on 2026-05-15; continuations averaged ~200
-  lines. Coordinator-notify and non-tmux operator fallback preserved verbatim.
-  Synced to opencode, codex, and cursor plugins via `scripts/sync-skills.sh`
+  template + lossy tail capture combined — field-tested across 7 v0.11 substrate
+  agent restart cycles on 2026-05-15; continuations averaged ~200 lines.
+  Coordinator-notify and non-tmux operator fallback preserved verbatim. Synced
+  to opencode, codex, and cursor plugins via `scripts/sync-skills.sh`
   (thrum-7b84.1).
-
-### Fixed
-
-- **Claude 2.1.141 `· Twisting…` spinner glyph now matched by
-  `claudeSpinnerRegex`.** The existing regex covered the `✻ <verb> for <N>s`
-  shape but missed the new `· <verb>…` variant introduced in Claude Code
-  2.1.141. The watchdog (`nudgeSilentPaneAfter`) and pane-state detection
-  (`paneAgentEngaged`) misclassified panes spinning with the dot-glyph as
-  silent, leading to occasional spurious nudges on actively-thinking agents.
-  Extended the regex with an alternation branch covering the dot-glyph form;
-  added `TestClaudeSpinnerRegex_DotGlyph` with 5 variant samples
-  (thrum-fyza).
-
-### Added
-
-- **Codex plugin first-class support.** `codex-plugin/plugins/thrum/` ships
-  SessionStart auto-prime, PreToolUse safety block, and Stop unread-inbox hooks
-  plus 14 role-discipline skills synced from `claude-plugin`. New install path
-  is a one-command bootstrap:
-
-  ```bash
-  bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
-  ```
-
-  The script handles the per-plugin cache-staging gap codex 0.130.0 has for
-  third-party marketplaces (thrum-pm7n.4).
-
-- **Tmux silence watchdog after launch and restart.** When `thrum tmux launch`
-  or `thrum tmux restart` completes, the daemon watches the agent's pane for
-  silence and sends a contextual nudge if the agent doesn't engage within the
-  configured threshold. Closes the long-standing UX gap where fresh codex agents
-  (and large-context restarts in claude) sat idle at a welcome banner or
-  post-restart screen. Configurable via the new
-  `restart.silence_watchdog_seconds` key (default 30s; negative disables).
-  Eliminates the previous hardcoded 10-second pre-inject sleep in favor of a
-  pane-stability readiness probe (thrum-puhr.10).
-
-- **Trust-gate detection for codex and claude first-launch dialogs.** A new
-  `IsTrustGate` / `IsPaneSafeToType` detector in
-  `internal/daemon/permission/detect.go` recognizes the trust prompts both
-  runtimes show on first launch in a new directory. The watchdog, identity
-  banner, and `/thrum:prime` keystroke paths all consult this detector and skip
-  injection when a trust gate is active — preventing the agent from being killed
-  by stray keystrokes into a security gate. Match uses a durable
-  runtime-agnostic `1.Yes / 2.No / "trust"` proximity pattern plus per-runtime
-  exact phrases for defensive precision (thrum-puhr.10 cluster 8).
-
-- **Per-session env scoping at session create.** `tmux.CreateSessionWithEnv`
-  injects `THRUM_NAME/AGENT_ID/ROLE/MODULE/HOME/INTENT` per-session via
-  `tmux new-session -e KEY=VALUE` AND
-  `tmux set-environment -t <session> KEY VALUE` (so subsequent split-window /
-  new-window panes inherit correctly). Distinct sessions on a shared tmux server
-  now present distinct identities to their initial shells. Complements the
-  existing `cleanTmuxEnv` source-side scrub (thrum-jj0a.1).
-
-- **Anti-rush / anti-shortcut discipline in coordinator + orchestrator
-  preambles.** Five operational rules codifying the patterns the project has hit
-  before — skipping review gates on small diffs, bucketing findings as
-  "follow-ups" without justification, shipping a fix labeled X when X's actual
-  cause is something else, declaring DONE without verifying the user-visible bug
-  is gone, accepting the cheapest path on autopilot (thrum-fu9j).
-
-### Changed
 
 - **`thrum init` lowercases the default agent name** before suggesting it.
   Previously the wizard auto-derived a default like `coord_316Redesign` from a
@@ -149,6 +85,15 @@ and this project adheres to
   banner after the runtime renders).
 
 ### Fixed
+
+- **Claude 2.1.141 `· Twisting…` spinner glyph now matched by
+  `claudeSpinnerRegex`.** The existing regex covered the `✻ <verb> for <N>s`
+  shape but missed the new `· <verb>…` variant introduced in Claude Code
+  2.1.141. The watchdog (`nudgeSilentPaneAfter`) and pane-state detection
+  (`paneAgentEngaged`) misclassified panes spinning with the dot-glyph as
+  silent, leading to occasional spurious nudges on actively-thinking agents.
+  Extended the regex with an alternation branch covering the dot-glyph form;
+  added `TestClaudeSpinnerRegex_DotGlyph` with 5 variant samples (thrum-fyza).
 
 - **kfn3 self-echo phantom nudge.** Outbound `thrum send` from agent A to agent
   B was producing a phantom `New message from @<A>` system-reminder in A's own
@@ -293,6 +238,55 @@ and this project adheres to
   Snippets now use `curl ... | VERSION=vX.Y.Z-rc.N sh` and a callout explains
   the gotcha. Same fix applied to the "Current pre-release" callout at the top
   of the page.
+
+### Added
+
+- **Codex plugin first-class support.** `codex-plugin/plugins/thrum/` ships
+  SessionStart auto-prime, PreToolUse safety block, and Stop unread-inbox hooks
+  plus 14 role-discipline skills synced from `claude-plugin`. New install path
+  is a one-command bootstrap:
+
+  ```bash
+  bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+  ```
+
+  The script handles the per-plugin cache-staging gap codex 0.130.0 has for
+  third-party marketplaces (thrum-pm7n.4).
+
+- **Tmux silence watchdog after launch and restart.** When `thrum tmux launch`
+  or `thrum tmux restart` completes, the daemon watches the agent's pane for
+  silence and sends a contextual nudge if the agent doesn't engage within the
+  configured threshold. Closes the long-standing UX gap where fresh codex agents
+  (and large-context restarts in claude) sat idle at a welcome banner or
+  post-restart screen. Configurable via the new
+  `restart.silence_watchdog_seconds` key (default 30s; negative disables).
+  Eliminates the previous hardcoded 10-second pre-inject sleep in favor of a
+  pane-stability readiness probe (thrum-puhr.10).
+
+- **Trust-gate detection for codex and claude first-launch dialogs.** A new
+  `IsTrustGate` / `IsPaneSafeToType` detector in
+  `internal/daemon/permission/detect.go` recognizes the trust prompts both
+  runtimes show on first launch in a new directory. The watchdog, identity
+  banner, and `/thrum:prime` keystroke paths all consult this detector and skip
+  injection when a trust gate is active — preventing the agent from being killed
+  by stray keystrokes into a security gate. Match uses a durable
+  runtime-agnostic `1.Yes / 2.No / "trust"` proximity pattern plus per-runtime
+  exact phrases for defensive precision (thrum-puhr.10 cluster 8).
+
+- **Per-session env scoping at session create.** `tmux.CreateSessionWithEnv`
+  injects `THRUM_NAME/AGENT_ID/ROLE/MODULE/HOME/INTENT` per-session via
+  `tmux new-session -e KEY=VALUE` AND
+  `tmux set-environment -t <session> KEY VALUE` (so subsequent split-window /
+  new-window panes inherit correctly). Distinct sessions on a shared tmux server
+  now present distinct identities to their initial shells. Complements the
+  existing `cleanTmuxEnv` source-side scrub (thrum-jj0a.1).
+
+- **Anti-rush / anti-shortcut discipline in coordinator + orchestrator
+  preambles.** Five operational rules codifying the patterns the project has hit
+  before — skipping review gates on small diffs, bucketing findings as
+  "follow-ups" without justification, shipping a fix labeled X when X's actual
+  cause is something else, declaring DONE without verifying the user-visible bug
+  is gone, accepting the cheapest path on autopilot (thrum-fu9j).
 
 ## [0.10.2] - 2026-05-04
 
