@@ -237,6 +237,68 @@ func TestSetDefaultRuntime_Invalid(t *testing.T) {
 	}
 }
 
+// TestClaudeSpinnerRegex_MatchesAllObservedFormats pins thrum-8dl3 Fix #2.
+// Claude Code renders its animated thinking indicator as either
+// "✻ <verb> for <N>s" (short form, under one minute) or
+// "✻ <verb> for <Nm Ns>" (long form, ≥1 minute). The watchdog's
+// paneAgentEngaged ignores lines matching this regex as chrome; once
+// the agent thinks past 60s the line flips to the long form and used
+// to fall through the ignore filter, getting counted as real agent
+// output → false-engaged → no nudge.
+func TestClaudeSpinnerRegex_MatchesAllObservedFormats(t *testing.T) {
+	cases := []string{
+		"✻ Cogitated for 10s",
+		"✻ Sautéed for 31s",
+		"✻ Churned for 17s",
+		"✻ Baked for 15s",
+		"✻ Baked for 1m 45s",
+		"✻ Cooked for 2m 6s",
+	}
+	for _, c := range cases {
+		if !claudeSpinnerRegex.MatchString(c) {
+			t.Errorf("claudeSpinnerRegex should match %q (chrome line) but did not", c)
+		}
+	}
+}
+
+// TestClaudeSpinnerRegex_DotGlyph pins thrum-fyza: Claude Code 2.1.141
+// introduced a new spinner glyph variant ("· <verb>…") that the original
+// regex missed, causing the watchdog to treat an actively-spinning pane as
+// silent and over-trigger nudges.
+func TestClaudeSpinnerRegex_DotGlyph(t *testing.T) {
+	cases := []string{
+		"· Twisting…",
+		"· Thinking…",
+		"· Computing…",
+		"· Processing…",
+		"· Analyzing…",
+	}
+	for _, c := range cases {
+		if !claudeSpinnerRegex.MatchString(c) {
+			t.Errorf("claudeSpinnerRegex should match dot-glyph variant %q (chrome line) but did not", c)
+		}
+	}
+}
+
+// TestClaudeSpinnerRegex_RejectsNonSpinnerLines pins the negative side:
+// real agent output and malformed pseudo-spinner lines must NOT match so
+// the watchdog still counts them as engagement.
+func TestClaudeSpinnerRegex_RejectsNonSpinnerLines(t *testing.T) {
+	cases := []string{
+		"Some agent text",
+		"✻ Churned for",       // missing duration
+		"✻ for 10s",           // missing verb
+		"✻✻ Baked for 5s",     // double glyph (not a spinner line)
+		"✻ Baked for 1m45s",   // missing space between Nm and Ns
+		"✻ Baked for 1m 4.5s", // fractional seconds
+	}
+	for _, c := range cases {
+		if claudeSpinnerRegex.MatchString(c) {
+			t.Errorf("claudeSpinnerRegex should NOT match %q but did", c)
+		}
+	}
+}
+
 func TestRuntimePreset_JSON(t *testing.T) {
 	preset := BuiltinPresets["claude"]
 

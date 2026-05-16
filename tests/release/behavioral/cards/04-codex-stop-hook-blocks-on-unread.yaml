@@ -1,0 +1,57 @@
+# tests/release/behavioral/cards/04-codex-stop-hook-blocks-on-unread.yaml
+#
+# Requires: --runtime=codex AND the Thrum codex plugin installed + hooks
+# approved (see card 02 header).
+#
+# Regression target: Stop hook. stop-check-messages.sh prevents codex from
+# going idle while there are unread thrum messages. Contract is the codex
+# Stop hook shape — {"decision":"block","reason":"..."} on stdout + exit 0
+# — which causes codex to re-inject the reason as a continuation prompt.
+# The observable effect: an agent who would otherwise stop after a turn
+# instead processes the unread inbox first, replying to the sender.
+#
+# This is the inverse of card 05: 05 verifies the agent acts on a tmux
+# nudge mid-task; this card verifies the agent cannot skip its inbox by
+# going idle.
+
+id: 04-codex-stop-hook-blocks-on-unread
+description: |
+  Send a thrum message to a fresh codex agent then let them settle. The
+  Stop hook must block the natural idle transition until the agent reads
+  and replies to the message. Verifies the {"decision":"block"} stdout
+  contract on stop-check-messages.sh.
+
+agents:
+  probe: { role: implementer, module: codex_probe, preamble: "${PREAMBLE_IMPLEMENTER}" }
+
+steps:
+  - id: pane-ready
+    assert:
+      - { kind: tmux, predicate: pane_running_runtime, session: probe, runtime: codex }
+    timeout: 60s
+
+  - id: send-message
+    send:
+      to: "@test_implementer"
+      message: |
+        Status check: please reply with the word "received" so I know your
+        inbox is working.
+    timeout: 5s
+
+  - id: agent-replied
+    assert:
+      - kind: daemon
+        predicate: agent_replied_to
+        replier: test_implementer
+        original_sender: harness
+        # Note: the runner's `send` step uses the harness as sender; the
+        # reply lands in the harness inbox, asserted via _thrum_as harness.
+        # If the assertion fails because the message is unanswered, the
+        # Stop hook is letting the agent idle without inbox processing.
+    timeout: 180s
+    diagnostic: |
+      Agent went idle without replying. Stop hook didn't block. Likely
+      causes: (a) stop-check-messages.sh exit-0-on-no-agent fallback fired
+      (the hook ran from the wrong cwd and couldn't resolve identity);
+      (b) {"decision":"block"} stdout not parsed by codex (contract drift);
+      (c) features.plugin_hooks=false on the host.

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 )
@@ -65,6 +66,43 @@ func HasSession(name string) bool {
 //     tmux server retains stale keys from a different launcher ancestry.
 //     This source is what makes the fix work for the v0.10.2 dev-box case.
 func CreateSession(name, cwd string) error {
+	return CreateSessionWithEnv(name, cwd, nil)
+}
+
+// CreateSessionWithEnv is the explicit-env variant of CreateSession.
+// envOverrides supplies per-session environment values that the new
+// session must receive — values that would otherwise be scrubbed (or
+// leaked from a stale tmux-server captured environ) get authoritatively
+// set to the supplied value. Used by HandleCreate (thrum-jj0a.2) to
+// pass THRUM_NAME/THRUM_ROLE/THRUM_MODULE/THRUM_AGENT_ID/THRUM_HOME/
+// THRUM_INTENT specific to the agent the session is being created for,
+// so that on a shared tmux server distinct sessions present distinct
+// identities to their initial shells.
+//
+// Two complementary tmux mechanisms:
+//
+//  1. `tmux new-session -e KEY=VALUE …` writes to the initial pane's
+//     environ. This is the load-bearing one — without it the initial
+//     shell never sees the override.
+//  2. `tmux set-environment -t <session> KEY VALUE` writes to tmux's
+//     per-session environment, which propagates to subsequent panes
+//     created via split-window or new-window. Without this layer, the
+//     initial pane is correct but a split-window pane in the same
+//     session falls back to the server's global environ (the leak
+//     source jj0a.1 exists to close).
+//
+// Key validation: matches [A-Z_][A-Z0-9_]*. Values must not contain
+// '=' or NUL — both would corrupt the `KEY=VALUE` round-trip.
+//
+// envOverrides may be nil; behavior is identical to legacy
+// CreateSession(name, cwd) in that case.
+func CreateSessionWithEnv(name, cwd string, envOverrides map[string]string) error {
+	sanitizedName := SanitizeSessionName(name)
+	// Validate envOverrides up front so we can fail fast rather than
+	// leave a half-built session on disk.
+	if err := validateEnvOverrides(envOverrides); err != nil {
+		return err
+	}
 	envSources := os.Environ()
 	// Best-effort: if the tmux server isn't running yet, show-environment
 	// errors out and we fall back to just the daemon's environ. That's OK
@@ -80,10 +118,38 @@ func CreateSession(name, cwd string) error {
 			envSources = append(envSources, line)
 		}
 	}
-	args := buildCreateSessionArgs(SanitizeSessionName(name), cwd, envSources)
+	args := buildCreateSessionArgs(sanitizedName, cwd, envSources, envOverrides)
 	_, err := safecmd.Tmux(context.Background(), args...)
 	if err != nil {
 		return fmt.Errorf("tmux new-session failed: %w", err)
+	}
+	// Layer 2: per-session environment for subsequent split/new-window
+	// panes. Empty-value scrubs are skipped — set-environment with no
+	// value is `-u KEY` (unset), which we already inherit by default.
+	for key, value := range envOverrides {
+		if err := safecmd.TmuxRun(context.Background(),
+			"set-environment", "-t", sanitizedName, key, value); err != nil {
+			// Non-fatal: the initial pane has the right env via -e.
+			// Subsequent panes losing the override is a degradation,
+			// not a failure of the create flow.
+			continue
+		}
+	}
+	return nil
+}
+
+var envKeyRe = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
+
+// validateEnvOverrides enforces the key/value safety invariants
+// documented on CreateSessionWithEnv. Returns nil for an empty/nil map.
+func validateEnvOverrides(env map[string]string) error {
+	for k, v := range env {
+		if !envKeyRe.MatchString(k) {
+			return fmt.Errorf("invalid env key %q: must match [A-Z_][A-Z0-9_]*", k)
+		}
+		if strings.ContainsAny(v, "=\x00") {
+			return fmt.Errorf("invalid env value for %s: must not contain '=' or NUL", k)
+		}
 	}
 	return nil
 }
@@ -91,19 +157,32 @@ func CreateSession(name, cwd string) error {
 // buildCreateSessionArgs assembles the argv for `tmux new-session` with
 // per-session THRUM_* overrides. Caller passes the env slice(s) to scan
 // (CreateSession passes the union of os.Environ() and tmux's global env;
-// tests inject controlled values).
+// tests inject controlled values) plus an envOverrides map carrying the
+// explicit per-session values to set.
 //
-// Pass each discovered THRUM_* key as `-e KEY=` (empty value). thrum CLI
-// codepaths uniformly treat empty THRUM_* values as "not set" — verified
-// across paths.EffectiveRepoPath, config.Load, cmd/thrum/main.go
-// agent-name fallbacks, config_show env-source detection. Duplicates
-// across sources are deduped so we don't emit redundant -e flags.
-func buildCreateSessionArgs(name, cwd string, env []string) []string {
+// envOverrides win over the empty-scrub path: a key present in
+// envOverrides emits `-e KEY=VALUE` and the scrub loop skips it. Keys
+// only seen in env get the empty-value scrub `-e KEY=` so a long-lived
+// tmux server's captured environ doesn't leak THRUM_* into the new
+// session. thrum CLI codepaths uniformly treat empty THRUM_* values as
+// "not set" — verified across paths.EffectiveRepoPath, config.Load,
+// cmd/thrum/main.go agent-name fallbacks, config_show env-source
+// detection. Duplicates across sources are deduped so we don't emit
+// redundant -e flags.
+func buildCreateSessionArgs(name, cwd string, env []string, envOverrides map[string]string) []string {
 	args := []string{"new-session", "-d", "-s", name}
 	if cwd != "" {
 		args = append(args, "-c", cwd)
 	}
 	seen := make(map[string]struct{})
+	// Layer A: explicit per-session env. These KEY=VALUE pairs land on
+	// the initial pane's environ via tmux -e.
+	for key, value := range envOverrides {
+		args = append(args, "-e", key+"="+value)
+		seen[key] = struct{}{}
+	}
+	// Layer B: scrub any THRUM_* key inherited from the daemon environ
+	// or the tmux server's global env that wasn't authoritatively set.
 	for _, e := range env {
 		if !strings.HasPrefix(e, "THRUM_") {
 			continue
@@ -269,6 +348,25 @@ func GetUserOption(session, key string) (string, error) {
 		return "", fmt.Errorf("tmux show-option %s: %w", key, err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// LastActivity returns the time of the last activity in the tmux window
+// containing the given target pane. Uses `tmux display-message -p
+// '#{window_activity}'` which returns the Unix epoch second at which the
+// window last recorded output. Returns an error if the target is gone or
+// the output cannot be parsed; callers should treat errors as transient and
+// retry rather than bailing immediately. thrum-84xc.
+func LastActivity(target string) (time.Time, error) {
+	out, err := safecmd.Tmux(context.Background(), "display-message", "-p", "-t", target, "#{window_activity}")
+	if err != nil {
+		return time.Time{}, fmt.Errorf("tmux display-message #{window_activity}: %w", err)
+	}
+	raw := strings.TrimSpace(string(out))
+	var epoch int64
+	if _, err := fmt.Sscanf(raw, "%d", &epoch); err != nil {
+		return time.Time{}, fmt.Errorf("parse window_activity %q: %w", raw, err)
+	}
+	return time.Unix(epoch, 0), nil
 }
 
 // ListSessions returns the names of all tmux sessions visible on the

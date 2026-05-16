@@ -245,6 +245,11 @@ type RestartConfig struct {
 	MaxLines        int `json:"max_lines,omitempty"`        // Max lines in snapshot (default: 200)
 	AutoThreshold   int `json:"auto_threshold,omitempty"`   // Context % trigger, 0 = disabled
 	GracefulTimeout int `json:"graceful_timeout,omitempty"` // Seconds to wait for graceful save
+	// SilenceWatchdogSeconds controls thrum-puhr.10: how long to wait
+	// after a post-launch / post-restart injection before checking the
+	// pane for activity and nudging it if still silent. 0 = use default
+	// (30s). Negative = disabled (no watchdog).
+	SilenceWatchdogSeconds int `json:"silence_watchdog_seconds,omitempty"`
 }
 
 // RestartMaxLines returns the configured max lines, defaulting to 200.
@@ -264,6 +269,20 @@ func (r RestartConfig) RestartGracefulTimeout() int {
 		return 30
 	}
 	return r.GracefulTimeout
+}
+
+// SilenceWatchdog returns (seconds, enabled). seconds == 0 + enabled ==
+// true means "watchdog disabled by explicit user choice" (negative
+// config value); a positive return is the threshold the post-action
+// goroutine should wait before sampling pane activity. Default 30s.
+func (r RestartConfig) SilenceWatchdog() (seconds int, enabled bool) {
+	if r.SilenceWatchdogSeconds < 0 {
+		return 0, false
+	}
+	if r.SilenceWatchdogSeconds == 0 {
+		return 30, true
+	}
+	return r.SilenceWatchdogSeconds, true
 }
 
 // LoadThrumConfig reads .thrum/config.json from the given thrum directory.

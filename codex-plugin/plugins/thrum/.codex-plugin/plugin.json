@@ -1,0 +1,30 @@
+{
+  "name": "thrum",
+  "version": "0.10.3",
+  "description": "Git-backed messaging for AI agent coordination across sessions, worktrees, and machines. Coordinator/implementer/researcher role discipline, persistent inbox, multi-runtime parity.",
+  "author": {
+    "name": "Leon Letto",
+    "url": "https://github.com/leonletto"
+  },
+  "homepage": "https://leonletto.github.io/thrum",
+  "repository": "https://github.com/leonletto/thrum",
+  "license": "MIT",
+  "keywords": ["messaging", "multi-agent", "coordination", "git-sync", "thrum"],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Thrum",
+    "shortDescription": "Multi-agent coordination via Git-backed messaging",
+    "longDescription": "Thrum gives Codex agents persistent identity, role discipline, an inbox for cross-session/cross-worktree messages, and a SessionStart auto-prime that loads project state and unread mail before the agent's first turn. Designed for fleets of cooperating Codex/Claude/OpenCode agents.",
+    "developerName": "Leon Letto",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write", "Interactive"],
+    "websiteURL": "https://leonletto.github.io/thrum",
+    "defaultPrompt": [
+      "Run $thrum-overview and process any unread messages.",
+      "Update project state and prepare for session restart."
+    ],
+    "brandColor": "#2563EB",
+    "screenshots": []
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Coordinator: Dispatching Work"
+  short_description: "Use when starting an epic, dispatching to an implementer, creating a worktree for an agent, or spawning a sub-agent. Loads coordinator-specific discipline for kicking off implementation work."
+  default_prompt: "Use before dispatching work to an implementer."

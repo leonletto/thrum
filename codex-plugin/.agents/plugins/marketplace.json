@@ -1,0 +1,20 @@
+{
+  "name": "thrum-marketplace",
+  "interface": {
+    "displayName": "Thrum"
+  },
+  "plugins": [
+    {
+      "name": "thrum",
+      "source": {
+        "source": "local",
+        "path": "./plugins/thrum"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

@@ -41,10 +41,12 @@ Module-installed rules use the reserved sub-segment
 
 ---
 
-## Available skills (situational)
+## Available skills (situational — you MUST invoke when triggered)
 
-These skills load automatically when the runtime detects matching trigger
-phrases. You don't invoke them explicitly — they fire on context.
+These skills deepen role discipline for specific situations. They do NOT
+auto-load — when a trigger condition below applies, you MUST invoke the matching
+skill via the Skill tool BEFORE taking action. Treat the trigger phrases as
+MUST-INVOKE conditions, not optional suggestions.
 
 - `implementer-receiving-dispatch` — received a new task, starting
   implementation, scoping a task, received dispatch
@@ -64,7 +66,7 @@ across worktrees and projects when missing.
 
 ### Do not update `project_state.md` — that's the coordinator's job
 
-`/thrum:update-project` and edits to `.thrum/context/project_state.md` are
+The `update-project` skill and edits to `.thrum/context/project_state.md` are
 coordinator-only actions. If you need to preserve session context before a
 restart or compaction, send a status message to the coordinator and wait — they
 update state on your behalf. Use `bd comments <task-id> add "<note>"` for urgent
@@ -74,7 +76,8 @@ task-scoped notes.
 
 Sub-agents inherit the parent model by default. If you skip the override,
 mechanical work runs on the same model you do, which is rarely the right tier.
-Every Agent tool call must include `model:`:
+When your runtime supports model selection on sub-agent spawns, every spawn must
+include `model:`:
 
 - `haiku` — lint runs, test runs, mechanical find/replace, simple verification
 - `sonnet` — code review, complex implementation, exploring unfamiliar code,
@@ -170,8 +173,8 @@ reference. Write access only inside the worktree.
 
 ## Communication Protocol
 
-Use the thrum CLI for all messaging — do NOT use Claude Code's `SendMessage`
-tool, which routes incorrectly.
+Use the thrum CLI for all messaging — do NOT use any runtime-builtin messaging
+tool, which routes outside the persistent inbox.
 
 ```bash
 # Starting work
@@ -191,8 +194,8 @@ DefaultPreamble's Tmux Session Management section.)
 
 ## Task Tracking
 
-Use `bd` (beads) for all task tracking. Do not use TodoWrite, TaskCreate, or
-markdown files.
+Use `bd` (beads) for all task tracking. Do not use the runtime's in-session task
+helpers or markdown TODO files.
 
 ```bash
 bd ready              # Find available work
@@ -229,5 +232,5 @@ lower task IDs when multiple are available.
 ## CRITICAL REMINDERS
 
 Notify coordinator on start AND finish · use the four-token status vocabulary ·
-pass explicit `model:` on every Agent spawn (propagate downward) · stay in your
-worktree · check inbox at every breakpoint.
+pass explicit `model:` on every sub-agent spawn (propagate downward) · stay in
+your worktree · check inbox at every breakpoint.

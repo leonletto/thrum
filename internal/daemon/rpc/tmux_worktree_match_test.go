@@ -255,3 +255,50 @@ func TestRestoreBinding_PopulatesBothMaps(t *testing.T) {
 		t.Fatalf("cwdSessions[/path/to/worktree-a] = %q, want %q", got, "session-a")
 	}
 }
+
+// TestRestoreBinding_StripsTargetSuffix pins thrum-8dl3's downstream fix:
+// identity files store `tmux_session` as the full tmux target ("name:N.M")
+// but every reader of sessionCwds / cwdSessions uses the bare session name.
+// Boot reconcile passes the verbatim identity-file value into RestoreBinding,
+// so without the suffix-strip the map keys diverge from caller expectations
+// and emitIdentityBanner / HandleRestart / HandleKill all silently miss the
+// entry. Caught end-to-end on email-brainstorm during rc.8 verification.
+func TestRestoreBinding_StripsTargetSuffix(t *testing.T) {
+	h := &TmuxHandler{
+		sessionCwds: make(map[string]string),
+		cwdSessions: make(map[string]string),
+	}
+	h.RestoreBinding("foo:0.0", "/path/foo")
+
+	// Map key must be the bare session name — that's the canonical form
+	// every reader uses (HandleCreate stores `name` not `name:0.0` so
+	// reconcile-side writes must match).
+	if got, ok := h.sessionCwds["foo"]; !ok || got != "/path/foo" {
+		t.Errorf("sessionCwds[foo] = (%q, ok=%v), want (%q, true) after RestoreBinding stripped the :0.0 suffix",
+			got, ok, "/path/foo")
+	}
+	// The suffixed form must NOT be present — that would mean the strip
+	// silently failed and we'd have stale + correct entries side-by-side.
+	if _, ok := h.sessionCwds["foo:0.0"]; ok {
+		t.Errorf("sessionCwds[foo:0.0] still present; expected RestoreBinding to strip :N.M before writing")
+	}
+	// cwdSessions VALUE (not key) must also be normalized — readers that
+	// look up "what session owns this cwd" expect the bare name.
+	if got := h.cwdSessions["/path/foo"]; got != "foo" {
+		t.Errorf("cwdSessions[/path/foo] = %q, want %q (bare session name, no :N.M suffix)", got, "foo")
+	}
+}
+
+// TestRestoreBinding_PaneSuffix covers the less-common ":0.N" form
+// (window 0, pane N) — the strip must clip at the first colon so both
+// shapes normalize identically.
+func TestRestoreBinding_PaneSuffix(t *testing.T) {
+	h := &TmuxHandler{
+		sessionCwds: make(map[string]string),
+		cwdSessions: make(map[string]string),
+	}
+	h.RestoreBinding("bar:0.3", "/path/bar")
+	if got := h.sessionCwds["bar"]; got != "/path/bar" {
+		t.Errorf("sessionCwds[bar] = %q, want %q", got, "/path/bar")
+	}
+}

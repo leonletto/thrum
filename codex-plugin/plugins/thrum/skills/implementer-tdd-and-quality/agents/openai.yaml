@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implementer: TDD & Quality"
+  short_description: "Use when writing tests, running tests, hitting a quality gate, or before reporting a task done. Loads project-specific test and quality discipline that complements superpowers:test-driven-development."
+  default_prompt: "Use when writing or modifying code with quality discipline."

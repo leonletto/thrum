@@ -119,6 +119,26 @@ func EnsureRedirects(worktreePath, mainRepo string) error {
 		}
 	}
 
+	// Hook scripts (thrum-nne1): copy scripts/thrum-startup.sh and
+	// scripts/thrum-check-inbox.sh from the main repo into the worktree.
+	// `thrum init` writes these scripts to the main repo's scripts/ dir
+	// and adds them to .gitignore (per release-steps), so `git worktree
+	// add` does not propagate them. The Claude Code SessionStart and
+	// PostToolUse hooks in .claude/settings.json reference
+	// ${CLAUDE_PROJECT_DIR}/scripts/<name>.sh — without a per-worktree
+	// copy, every claude session in a worktree-created subdirectory
+	// fires a hook against a missing script, so the agent never
+	// quickstarts/re-registers and the post-restart inbox check never
+	// runs. Best-effort: a missing source script is logged but does not
+	// fail worktree setup (an operator may have removed them
+	// deliberately; the redirect setup itself still succeeded).
+	if err := copyHookScripts(worktreePath, mainRepo); err != nil {
+		slog.Warn("worktree.EnsureRedirects could not copy hook scripts",
+			slog.String("worktree", worktreePath),
+			slog.String("main", mainRepo),
+			slog.String("error", err.Error()))
+	}
+
 	// Beads redirect (conditional)
 	mainBeadsDir := filepath.Join(mainRepo, ".beads")
 	if _, err := os.Stat(mainBeadsDir); err == nil {
@@ -135,6 +155,64 @@ func EnsureRedirects(worktreePath, mainRepo string) error {
 		}
 	}
 
+	return nil
+}
+
+// hookScripts is the canonical list of per-worktree hook scripts that
+// `thrum init` writes to the main repo's scripts/ dir and that the
+// Claude Code (and other runtime) settings templates reference via
+// ${CLAUDE_PROJECT_DIR}/scripts/<name>.sh. They are gitignored, so
+// `git worktree add` does not propagate them — EnsureRedirects copies
+// them in. See thrum-nne1.
+var hookScripts = []string{
+	"thrum-startup.sh",
+	"thrum-check-inbox.sh",
+}
+
+// copyHookScripts copies the gitignored per-worktree hook scripts from
+// the main repo's scripts/ dir into the worktree. Idempotent: skips
+// when the destination is already up-to-date with the source. Missing
+// source scripts are logged by EnsureRedirects but treated as a no-op
+// here (returning nil for that script) so an operator who has removed
+// a script deliberately is not blocked. Scripts are written with 0755
+// since they execute as hook entry points.
+func copyHookScripts(worktreePath, mainRepo string) error {
+	wtScriptsDir := filepath.Join(worktreePath, "scripts")
+	if err := os.MkdirAll(wtScriptsDir, 0o750); err != nil {
+		return fmt.Errorf("create scripts dir: %w", err)
+	}
+	for _, name := range hookScripts {
+		src := filepath.Join(mainRepo, "scripts", name)
+		dst := filepath.Join(wtScriptsDir, name)
+
+		srcInfo, err := os.Stat(src)
+		if err != nil {
+			if os.IsNotExist(err) {
+				slog.Info("worktree.copyHookScripts skipping missing source",
+					slog.String("src", src))
+				continue
+			}
+			return fmt.Errorf("stat %s: %w", src, err)
+		}
+		// Skip if destination matches source size+mtime (cheap
+		// idempotency check; the full content compare is unnecessary
+		// for hook scripts that are only updated alongside thrum init
+		// runs).
+		if dstInfo, err := os.Stat(dst); err == nil {
+			if dstInfo.Size() == srcInfo.Size() && dstInfo.ModTime().Equal(srcInfo.ModTime()) {
+				continue
+			}
+		}
+		data, err := os.ReadFile(src) // #nosec G304 -- src is mainRepo/scripts/<known-name>
+		if err != nil {
+			return fmt.Errorf("read %s: %w", src, err)
+		}
+		if err := os.WriteFile(dst, data, 0o755); err != nil { // #nosec G306 -- hook scripts need exec bit
+			return fmt.Errorf("write %s: %w", dst, err)
+		}
+		// Preserve mtime so the next call short-circuits.
+		_ = os.Chtimes(dst, time.Now(), srcInfo.ModTime())
+	}
 	return nil
 }
 

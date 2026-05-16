@@ -1,0 +1,54 @@
+# tests/release/behavioral/cards/02-codex-session-start-auto-prime.yaml
+#
+# Requires: --runtime=codex AND the Thrum codex plugin already installed on
+# the host (run codex-plugin/plugins/thrum/scripts/install-plugin.sh once,
+# then approve all 3 hooks via codex's /hooks UI). Codex's hook trust gate
+# is global (~/.codex/config.toml), so the fixture inherits the approval.
+#
+# Regression target: thrum-pm7n.4 happy-path. The implementer's empirical
+# verification was that a fresh codex agent recognizes the auto-injected
+# Thrum prime briefing without having to run `$thrum-prime` manually. The
+# SessionStart hook (inject-prime-context.sh) writes the identity banner
+# to stdout; codex 0.130.0 surfaces that as the first model-visible system
+# context.
+
+id: 02-codex-session-start-auto-prime
+description: |
+  Fresh codex agent launched into a worktree must receive the Thrum prime
+  briefing automatically via the SessionStart hook. Verifies the
+  CODEX_PLUGIN_ROOT env-var resolution (regression of 391cf57c9c) and the
+  inject-prime-context.sh stdout contract. Codex-runtime only.
+
+agents:
+  probe: { role: implementer, module: codex_probe, preamble: "${PREAMBLE_IMPLEMENTER}" }
+
+steps:
+  - id: pane-running-codex
+    assert:
+      - { kind: tmux, predicate: session_exists, name: probe }
+      - { kind: tmux, predicate: pane_running_runtime, session: probe, runtime: codex }
+    timeout: 60s
+    diagnostic: "codex did not launch in the probe pane — check that the codex CLI is on PATH and ~/.codex/config.toml exists."
+
+  - id: identity-banner-injected
+    assert:
+      - kind: tmux
+        predicate: pane_contains
+        session: probe
+        pattern: "@test_implementer"
+    timeout: 90s
+    diagnostic: |
+      SessionStart hook did not inject the identity banner. Likely causes:
+      (a) hooks not approved via /hooks on this host; (b) plugin_hooks
+      feature flag missing from ~/.codex/config.toml; (c) CODEX_PLUGIN_ROOT
+      regression in hooks.json (must NOT be ${PLUGIN_ROOT} or
+      ${CLAUDE_PLUGIN_ROOT}).
+
+  - id: prime-briefing-injected
+    assert:
+      - kind: tmux
+        predicate: pane_contains
+        session: probe
+        pattern: "Worktree:"
+    timeout: 90s
+    diagnostic: "Identity banner present but project briefing missing — inject-prime-context.sh truncated or misrouted its output."

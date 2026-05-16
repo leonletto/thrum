@@ -88,9 +88,14 @@ func stepIdentity(cfg *WizardConfig) (WizardIdentity, error) {
 
 var sanitizeRE = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 
-// sanitize replaces any non-alphanumeric/underscore/dash character with a
-// dash so a repo basename is safe to use inside a default agent name.
-func sanitize(s string) string { return sanitizeRE.ReplaceAllString(s, "-") }
+// sanitize lowercases s and replaces any non-alphanumeric/underscore/dash
+// character with a dash so a repo basename is safe to use inside a default
+// agent name. Lowercasing matches identity.ValidateAgentName, which rejects
+// capital letters — without it, a repo dir like "316Redesign" would yield a
+// default of "coord_316Redesign" that the validator immediately rejects.
+func sanitize(s string) string {
+	return sanitizeRE.ReplaceAllString(strings.ToLower(s), "-")
+}
 
 // stepWorktreesRoot runs Step 4: pick the directory under which agent
 // worktrees are created. Default is ~/.thrum/worktrees/<repo>. Validates

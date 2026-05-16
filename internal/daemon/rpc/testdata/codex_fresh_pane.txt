@@ -1,0 +1,50 @@
+codex
+❯ codex
+╭──────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.130.0)                   │
+│                                              │
+│ model:     gpt-5.5 medium   /model to change │
+│ directory: ~/dev/opensource/thrum            │
+╰──────────────────────────────────────────────╯
+
+  Tip: Try the Codex App. Run 'codex app' or visit https://chatgpt.com/codex?app-landing-page=true
+
+⚠ Under-development features enabled: plugin_hooks. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true`
+  in /Users/leon/.codex/config.toml.
+
+
+› Improve documentation in @filename
+
+  gpt-5.5 medium · ~/dev/opensource/thrum
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

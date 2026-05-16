@@ -89,6 +89,12 @@ cd thrum
 make install    # Builds UI + Go binary → ~/.local/bin/thrum
 ```
 
+### Try beta releases
+
+Every release soaks for 48h+ as `-rc.N` before going stable. To help test
+releases before they're promoted, see
+[Beta channel](https://leonletto.github.io/thrum/docs/beta-channel.html).
+
 ## Daily Commands
 
 You only need about 8 commands for daily use:

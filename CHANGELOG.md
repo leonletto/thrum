@@ -6,6 +6,288 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **`/thrum:restart` skill: coordinator self-restart branch + drop residue.**
+  Three rough edges in the rc.10 v2 prose-continuation skill surfaced by its
+  first live invocation on the coordinator pane: (1) Step 3 unconditionally sent
+  "Restart snapshot saved..." to `@coordinator_main`, which self-targeted and
+  stalled when the invoker was the coordinator — new Step 5 branches on
+  `thrum whoami --field role` and emits cross-pane `thrum tmux restart --force`
+  instructions for coordinators; (2) Step 4 referenced a stale
+  `thrum tmux snapshot restore` command from the pre-rc.10 structured-template
+  flow — removed in favor of "auto-loaded by `thrum prime`"; (3) Step 1 embedded
+  the CRITICAL DISCIPLINE block inside a `cat > file <<'EOF'` heredoc with a "do
+  not run this literally" caveat — restructured into separate composition-guide
+  (Step 2) and direct-`Write`-tool (Step 3) steps. Synced to opencode, codex,
+  and cursor plugins via `scripts/sync-skills.sh` (thrum-7b84.2).
+
+- **`/thrum:restart` skill rewritten with a v2 prose-continuation body.**
+  Replaces the JSON-snapshot Resume Plan template + `thrum tmux snapshot save` +
+  append flow with a direct-write of an in-context-composed prose continuation
+  to `.thrum/restart/<agent_id>.md`. Skill drops from 134 lines to ~95.
+  Continuation files are smaller and higher-signal than the prior structured
+  template + lossy tail capture combined — field-tested across 7 v0.11 substrate
+  agent restart cycles on 2026-05-15; continuations averaged ~200 lines.
+  Coordinator-notify and non-tmux operator fallback preserved verbatim. Synced
+  to opencode, codex, and cursor plugins via `scripts/sync-skills.sh`
+  (thrum-7b84.1).
+
+- **`thrum init` lowercases the default agent name** before suggesting it.
+  Previously the wizard auto-derived a default like `coord_316Redesign` from a
+  repo dir with capital letters, then rejected the same default at submit time
+  via `identity.ValidateAgentName` (a-z, 0-9, `_` only). The default is now
+  always validator-compatible (thrum-puhr.2).
+
+- **Pre-launch readiness gates on pane stability, not a hardcoded sleep.** The
+  post-launch / post-restart inject path now polls the tmux pane every 1s and
+  proceeds only once two consecutive captures are byte-identical (TUI rendered,
+  runtime at input-ready) — with a 60s ceiling. Replaces the brittle
+  `Sleep(10s) + Sleep(3s) retry` pattern that drove the cluster-1/5 trust-prompt
+  regression. Same primitive as the post-inject watchdog, inverted: stability
+  signals "ready to type", silence signals "agent didn't engage" (puhr.10
+  cluster 5).
+
+- **Role preambles correct skill-invocation framing.** The "Available skills
+  (situational)" section in 7 role preambles no longer claims skills "load
+  automatically when the runtime detects matching trigger phrases" / "fire on
+  context". Skills do NOT auto-load: agents MUST explicitly invoke them via the
+  `Skill` tool when a trigger condition applies. Wording is now directive, not
+  descriptive (thrum-puhr.8).
+
+- **Enhanced role preambles regain the in-tmux listener-suppression.** 12
+  enhanced preambles
+  (`deployer / documenter / monitor / planner / tester / reviewer` ×
+  `strict / autonomous`) had restated the "spawn a listener IMMEDIATELY on
+  session start" instruction without preserving the tmux carveout in the base
+  `DefaultPreamble` — causing tmux-managed agents under those roles to spawn a
+  redundant background listener that burned context for zero delivery benefit.
+  Carveout restored; an embedded-template regression test now fails any preamble
+  that issues the spawn directive without the SKIP-when-in-tmux qualifier
+  (thrum-puhr.1).
+
+- **`thrum worktree create` propagates SessionStart hook scripts** into the new
+  worktree's `scripts/` directory. `scripts/thrum-startup.sh` and
+  `scripts/thrum-check-inbox.sh` are gitignored (added by `thrum init` to
+  `.gitignore` / `.git/info/exclude`), so `git worktree add` doesn't carry them
+  across. Without the per-worktree copy, every Claude Code SessionStart hook in
+  a worktree-created subdir fired against a missing script and the agent never
+  quickstarted or re-registered. Copy is idempotent on size+mtime and
+  best-effort on a removed source (thrum-nne1).
+
+- **`codex` runtime preset is marked `HasSessionStartHook: true`** (parity with
+  `claude` and `cursor`). pm7n.4 shipped the codex `inject-prime-context.sh`
+  SessionStart hook but the preset was never updated; HandleLaunch /
+  HandleRestart were routing codex through the non-hook branch (typing
+  `/thrum:prime` into the TUI) instead of the hook branch (emitting the identity
+  banner after the runtime renders).
+
+### Fixed
+
+- **Claude 2.1.141 `· Twisting…` spinner glyph now matched by
+  `claudeSpinnerRegex`.** The existing regex covered the `✻ <verb> for <N>s`
+  shape but missed the new `· <verb>…` variant introduced in Claude Code
+  2.1.141. The watchdog (`nudgeSilentPaneAfter`) and pane-state detection
+  (`paneAgentEngaged`) misclassified panes spinning with the dot-glyph as
+  silent, leading to occasional spurious nudges on actively-thinking agents.
+  Extended the regex with an alternation branch covering the dot-glyph form;
+  added `TestClaudeSpinnerRegex_DotGlyph` with 5 variant samples (thrum-fyza).
+
+- **kfn3 self-echo phantom nudge.** Outbound `thrum send` from agent A to agent
+  B was producing a phantom `New message from @<A>` system-reminder in A's own
+  pane on every send. Root cause: `CLAUDE_PROJECT_DIR` leaks through the shared
+  tmux server's default-environment, so Claude Code in repo-B's pane resolves
+  the `${CLAUDE_PROJECT_DIR}/scripts/thrum-check- inbox.sh` hook against
+  repo-A's worktree. Fix scrubs `CLAUDE_PROJECT_DIR` at the existing
+  `cleanTmuxEnv` chokepoint, alongside the existing `THRUM_*` and
+  `TMUX/TMUX_PANE` scrubs. Scope intentionally narrow to the single variable
+  with documented leak evidence; `CLAUDE_API_KEY` and other CLAUDE\_\* vars are
+  explicitly preserved by a positive regression test (thrum-jj0a.6).
+
+- **Defense-in-depth self-echo guards.** Independent of the env-leak fix above,
+  both the daemon spool dispatcher (`cmd/thrum/main.go`) and the inbox-check
+  hook (`scripts/thrum-check-inbox.sh` + the shared template) now drop any spool
+  entry whose `from` field matches the receiving agent ID — so a future
+  regression upstream cannot reach the user-visible self-echo nudge
+  (thrum-44sy).
+
+- **`project-philosophy` skill respects `AskUserQuestion`'s 4-option limit.**
+  Step 5 of the skill instructed implementers to surface project rules via
+  prompts whose natural option counts exceeded the tool's hard limit of 4
+  options. First prompt failed with `Invalid tool parameters` /
+  `expected array to have <=4 items`, forcing visible retries. Step 5 now
+  directs implementers to use multiple sequential questions (`category?` →
+  `specific item within category?`) rather than packing options into one prompt.
+  Synced across all 4 runtime plugin copies (thrum-2ut8).
+
+- **Tmux silence watchdog now actually fires for Claude Code agents.** The
+  v0.10.3-rc.1 watchdog at `internal/daemon/rpc/tmux.go` compared two pane
+  snapshots taken 30s apart and bailed if they differed. Claude Code's 1Hz
+  animated thinking spinner (`✻ Sautéed for 4s` → `Churned for 5s`) makes
+  consecutive snapshots never byte-equal, so the nudge never fired even when the
+  agent had demonstrably not engaged. Codex shows the same shape. Replaced with
+  a two-anchor semantic engagement check: find the banner sentinel (top anchor),
+  find the per-runtime horizontal-rule chrome separator (bottom anchor), inspect
+  lines between them, ignore blanks and the runtime's spinner pattern, treat
+  anything else as "agent has engaged → no nudge". Trigger switched from a blind
+  30s sleep to silence-driven polling of
+  `tmux display-message #{window_activity}` (500ms ticks, 5s silence threshold,
+  30s hard deadline) — converges in 5-15s in the common case, exits silently
+  when the agent is genuinely busy past the deadline (no spurious nudge into
+  real work). Added observability logs on both decision branches so the silent
+  bail that hid this bug can't recur (thrum-84xc).
+
+- **CLI now prefers cwd-anchored identity over `THRUM_*` env vars.** Closes the
+  CLI half of the cross-worktree-misidentification footgun. The rc.5 daemon-side
+  fix (peercred cwd resolution via lsof on macOS) made the daemon correct — but
+  the CLI side still consulted env vars FIRST when deciding which worktree to
+  dial and which agent_id to claim. Stale env inherited at fork time from a
+  parent shell anchored elsewhere caused the CLI to dial a daemon socket that
+  didn't exist (or worse, the wrong daemon), bypassing rc.5's correct daemon
+  identity resolution entirely. Three coordinated changes in
+  `internal/paths/paths.go`, `internal/config/config.go`, and
+  `cmd/thrum/main.go`:
+  - `EffectiveRepoPath` now walks up from the supplied repoPath looking for a
+    `.thrum/` ancestor; if found, that worktree wins. `THRUM_HOME` is now a
+    fallback hint used only when cwd has no thrum worktree at or above it
+    (preserves the legitimate "pin to bound checkout from outside any worktree"
+    use case).
+  - `resolveLocalAgentID` now loads cwd-anchored config first; `THRUM_AGENT_ID`
+    is a fallback when no cwd identity exists.
+  - `loadIdentityFromDir` now falls through to directory scan when `THRUM_NAME`
+    points at a file that doesn't exist in cwd's worktree (instead of
+    hard-erroring), so stale env hints don't block resolution. Verified
+    end-to-end on zarambp14 — a Claude process with stale `THRUM_HOME` /
+    `THRUM_AGENT_ID` pointing at `falcon_llm_client` while cwd is in
+    `falcon-agent` now correctly self-identifies as the `falcon-agent`
+    coordinator without needing `env -u THRUM_*` (thrum-qofl).
+
+- **macOS peer-credential cwd resolution finally actually works.** From sec.2
+  (pre-v0.9.0) through v0.10.3-rc.4, the daemon's peer-credential identity
+  resolver called `gopsutil.Process.Cwd()` to look up a caller's working
+  directory — documented upstream as "not implemented yet" on Darwin and
+  returning an error on EVERY call. That error wasn't `ErrAnonymous`, so the
+  daemon fell through to the legacy client-asserted-identity path that trusts
+  whatever `agent_id` the CLI sends. The CLI builds that claim from
+  `THRUM_AGENT_ID` env vars (when set) or a cwd-based identity file lookup, so
+  stale `THRUM_*` env vars inherited from parent shells silently overrode
+  cwd-based identity on every macOS call. The footgun surfaced repeatedly as
+  "agent is misidentified" symptoms that were diagnosed as other things
+  (binding-cache staleness, tmux env-leak, etc.). Replaced the gopsutil
+  delegation on Darwin with an `lsof -p PID -Fn -d cwd` subprocess — slow path
+  (~30ms per call) but reliable; lsof is a system tool always present on macOS
+  and the `-F` output format is stable. Linux and other unix continue to use
+  gopsutil unchanged. New unit test (`TestProcessCWD_SelfPID`) exercises the
+  real path against `os.Getpid()` so the regression can't recur silently. The
+  30ms cost will be reduced to microseconds in v0.10.4 by switching to native
+  libproc proc_pidinfo (via pure-Go syscall or matrix-built cgo darwin runners —
+  both options require goreleaser changes that exceed rc.5 scope) (thrum-2t7d).
+
+- **Watchdog engagement check now ignores Claude's footer-region tip lines.**
+  Manual rc.2 verification surfaced a latent bug in the rc.2 engagement check:
+  Claude renders contextual tip lines (e.g.
+  `tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking`)
+  in the band between the spinner and the horizontal-rule divider. The rc.2
+  algorithm treated those tips as real agent output → false-positive "engaged" →
+  no nudge. Fix: use the spinner line itself as the bottom anchor (with divider
+  as fallback for the brief pre-spinner window). Tips below the spinner are now
+  out of the decision region. Caught before any user hit it via the deliberate
+  post-publish manual verification step (thrum-84xc).
+
+- **Pane-readiness detection rebuilt around tmux silence + 2s settle.** The rc.3
+  `waitForPaneReady` still used byte-equality on consecutive 1s pane captures —
+  the same broken pattern the watchdog rewrite already replaced. Result: on
+  Claude Code the function would either declare ready prematurely (returning
+  while a paint cycle was still in flight) or hit its 60s ceiling. Manual rc.3
+  verification on zarambp14 caught the symptom: `thrum tmux start` would put the
+  printf banner into Claude's input box but the immediately-following Enter was
+  swallowed because Claude was not yet input-ready. `thrum:restart` exhibited
+  the same shape (no banner emitted at all). Fix: replace the byte- equality
+  loop with the same silence-driven polling used by the watchdog
+  (`tmux #{window_activity}`, 5s silence threshold, 60s ceiling) plus a 2s
+  settle pause after silence is detected before declaring the pane ready for
+  keystroke injection. Both `HandleLaunch` and `HandleRestart` paths benefit by
+  construction (they share `waitForPaneReady`).
+
+- **TUI input submission no longer races with paste-mode detection.** Even with
+  chrome fully rendered, modern TUI runtimes (Claude Code, others) interpret a
+  long string immediately followed by Enter as "Enter inside paste" rather than
+  "submit", swallowing the submission. New helper
+  `sendKeysAndSubmit(target, text)` inserts a 200ms gap between text and the
+  Enter keystroke so the input widget exits paste-mode before Enter arrives.
+  Used everywhere the daemon submits input to a runtime pane: the identity-
+  banner emit (`emitIdentityBanner`), and the `/thrum:prime` send for non- hook
+  runtimes from both launch and restart paths.
+
+- **Launch and restart nudge text is now a direct prompt, not a shell command.**
+  rc.3 launched with `nudgeSilentPaneAfter` configured to send
+  `"thrum inbox --unread"` on the launch path — a shell command, not a prompt.
+  An agent receiving that text into its input box has no clear directive to
+  re-engage with the prime briefing. Both nudge sites now send a direct
+  imperative phrased to handle the partial-engagement case:
+  `"Finish reading the prime output and follow your instructions if you have not"`
+  (launch) and the same phrasing with the resume-plan reference for restart.
+
+- **Beta-channel install snippets place `VERSION=` on the correct side of the
+  shell pipe.** The published install commands at `website/docs/beta-channel.md`
+  used `VERSION=vX.Y.Z-rc.N curl ... | sh`, which sets the env var on the curl
+  process — sh never sees it and falls back to `latest`. Real-world hit during
+  rc.1 soak: the documented command installed v0.10.2 instead of v0.10.3-rc.1.
+  Snippets now use `curl ... | VERSION=vX.Y.Z-rc.N sh` and a callout explains
+  the gotcha. Same fix applied to the "Current pre-release" callout at the top
+  of the page.
+
+### Added
+
+- **Codex plugin first-class support.** `codex-plugin/plugins/thrum/` ships
+  SessionStart auto-prime, PreToolUse safety block, and Stop unread-inbox hooks
+  plus 14 role-discipline skills synced from `claude-plugin`. New install path
+  is a one-command bootstrap:
+
+  ```bash
+  bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+  ```
+
+  The script handles the per-plugin cache-staging gap codex 0.130.0 has for
+  third-party marketplaces (thrum-pm7n.4).
+
+- **Tmux silence watchdog after launch and restart.** When `thrum tmux launch`
+  or `thrum tmux restart` completes, the daemon watches the agent's pane for
+  silence and sends a contextual nudge if the agent doesn't engage within the
+  configured threshold. Closes the long-standing UX gap where fresh codex agents
+  (and large-context restarts in claude) sat idle at a welcome banner or
+  post-restart screen. Configurable via the new
+  `restart.silence_watchdog_seconds` key (default 30s; negative disables).
+  Eliminates the previous hardcoded 10-second pre-inject sleep in favor of a
+  pane-stability readiness probe (thrum-puhr.10).
+
+- **Trust-gate detection for codex and claude first-launch dialogs.** A new
+  `IsTrustGate` / `IsPaneSafeToType` detector in
+  `internal/daemon/permission/detect.go` recognizes the trust prompts both
+  runtimes show on first launch in a new directory. The watchdog, identity
+  banner, and `/thrum:prime` keystroke paths all consult this detector and skip
+  injection when a trust gate is active — preventing the agent from being killed
+  by stray keystrokes into a security gate. Match uses a durable
+  runtime-agnostic `1.Yes / 2.No / "trust"` proximity pattern plus per-runtime
+  exact phrases for defensive precision (thrum-puhr.10 cluster 8).
+
+- **Per-session env scoping at session create.** `tmux.CreateSessionWithEnv`
+  injects `THRUM_NAME/AGENT_ID/ROLE/MODULE/HOME/INTENT` per-session via
+  `tmux new-session -e KEY=VALUE` AND
+  `tmux set-environment -t <session> KEY VALUE` (so subsequent split-window /
+  new-window panes inherit correctly). Distinct sessions on a shared tmux server
+  now present distinct identities to their initial shells. Complements the
+  existing `cleanTmuxEnv` source-side scrub (thrum-jj0a.1).
+
+- **Anti-rush / anti-shortcut discipline in coordinator + orchestrator
+  preambles.** Five operational rules codifying the patterns the project has hit
+  before — skipping review gates on small diffs, bucketing findings as
+  "follow-ups" without justification, shipping a fix labeled X when X's actual
+  cause is something else, declaring DONE without verifying the user-visible bug
+  is gone, accepting the cheapest path on autopilot (thrum-fu9j).
+
 ## [0.10.2] - 2026-05-04
 
 ### Fixed

@@ -216,26 +216,32 @@ func TestClient_Call_Error(t *testing.T) {
 }
 
 func TestDefaultSocketPath(t *testing.T) {
+	// thrum-qofl (rc.6): EffectiveRepoPath now walks up from the supplied
+	// repoPath looking for a thrum worktree root. For pass-through tests
+	// we use temp dirs that have no .thrum/ at any ancestor (under /tmp or
+	// /var/folders, which are outside any thrum repo) so the walk falls
+	// through to the unchanged repoPath.
 	t.Setenv("THRUM_HOME", "")
+	isolatedNonThrumDir := t.TempDir()
 	tests := []struct {
 		name     string
 		repoPath string
 		want     string
 	}{
 		{
-			name:     "current directory",
-			repoPath: ".",
-			want:     filepath.Join(".", ".thrum", "var", "thrum.sock"),
+			name:     "isolated path with no thrum ancestor",
+			repoPath: isolatedNonThrumDir,
+			want:     filepath.Join(isolatedNonThrumDir, ".thrum", "var", "thrum.sock"),
 		},
 		{
-			name:     "absolute path",
+			name:     "absolute path with no thrum ancestor",
 			repoPath: "/home/user/repo",
 			want:     filepath.Join("/home/user/repo", ".thrum", "var", "thrum.sock"),
 		},
 		{
-			name:     "relative path",
-			repoPath: "../project",
-			want:     filepath.Join("..", "project", ".thrum", "var", "thrum.sock"),
+			name:     "another isolated path",
+			repoPath: filepath.Join(isolatedNonThrumDir, "subpkg"),
+			want:     filepath.Join(isolatedNonThrumDir, "subpkg", ".thrum", "var", "thrum.sock"),
 		},
 	}
 
