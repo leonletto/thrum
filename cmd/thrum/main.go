@@ -2787,27 +2787,42 @@ func worktreeCreateCmd() *cobra.Command {
 				return fmt.Errorf("worktrees.base_path %q resolves to the repo root — worktrees must be created outside the repo", basePath)
 			}
 
-			// 1. Create git worktree
-			gitArgs := []string{"worktree", "add"}
+			// Phase B: call headless primitive (spec §4.1 3-case mapping).
 			if detach {
-				gitArgs = append(gitArgs, "--detach")
+				// Cobra-only detach path: skip worktree.Create, run git
+				// worktree add --detach inline + EnsureRedirects. The
+				// headless API has no detach mode (B-B1 never needs it).
+				if out, err := safecmd.Git(cmd.Context(), repoPath,
+					"worktree", "add", "--detach", worktreePath); err != nil {
+					return fmt.Errorf("git worktree add --detach: %s\n%s", err, out)
+				}
+				fmt.Printf("✓ Worktree created at %s (detached)\n", worktreePath)
+				if err := cli.EnsureWorktreeRedirects(worktreePath, repoPath); err != nil {
+					return fmt.Errorf("redirect setup: %w", err)
+				}
 			} else {
+				// Branch-mode: delegate to worktree.Create with BranchOverride.
+				// The cobra layer populates BasePath explicitly from config
+				// (already computed above) — redundant with Create's
+				// three-tier fallback but makes intent self-evident at the
+				// call site. The daemon scheduler may pass BasePath:"" and
+				// rely on Create's tier-2/tier-3 fallback.
 				if branch == "" {
 					branch = "feature/" + name
 				}
-				gitArgs = append(gitArgs, "-b", branch)
-			}
-			gitArgs = append(gitArgs, worktreePath)
-
-			out, err := safecmd.Git(cmd.Context(), repoPath, gitArgs...)
-			if err != nil {
-				return fmt.Errorf("git worktree add: %s\n%s", err, out)
-			}
-			fmt.Printf("✓ Worktree created at %s\n", worktreePath)
-
-			// 2. Set up redirects (.thrum/ and optionally .beads/)
-			if err := cli.EnsureWorktreeRedirects(worktreePath, repoPath); err != nil {
-				return fmt.Errorf("redirect setup: %w", err)
+				result, err := worktree.Create(cmd.Context(), worktree.CreateOpts{
+					RepoPath:       repoPath,
+					BasePath:       basePath, // explicit; cobra always knows
+					AgentName:      name,
+					Persistent:     true,
+					BranchOverride: branch,
+				})
+				if err != nil {
+					return fmt.Errorf("create worktree: %w", err)
+				}
+				worktreePath = result.Path
+				branch = result.Branch
+				fmt.Printf("✓ Worktree created at %s\n", worktreePath)
 			}
 			cli.PrintRedirectConfirmations(os.Stdout, worktreePath)
 
