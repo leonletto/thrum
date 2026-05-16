@@ -2907,7 +2907,7 @@ func worktreeCreateCmd() *cobra.Command {
 }
 
 func worktreeTeardownCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "teardown <name>",
 		Short: "Remove a worktree and clean up thrum/beads artifacts",
 		Args:  cobra.ExactArgs(1),
@@ -2916,6 +2916,8 @@ func worktreeTeardownCmd() *cobra.Command {
 			if strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
 				return fmt.Errorf("invalid worktree name %q: must not contain /, \\, or parent references", name)
 			}
+			deleteBranchFlag, _ := cmd.Flags().GetBool("delete-branch")
+
 			repoPath := paths.EffectiveRepoPath(flagRepo)
 			thrumDir := filepath.Join(repoPath, ".thrum")
 			cfg, err := config.LoadThrumConfig(thrumDir)
@@ -2960,16 +2962,43 @@ func worktreeTeardownCmd() *cobra.Command {
 				_ = cli.TmuxKill(client, name)
 			}
 
-			// Remove git worktree
-			out, err := safecmd.Git(cmd.Context(), repoPath, "worktree", "remove", "--force", worktreePath)
-			if err != nil {
-				return fmt.Errorf("git worktree remove: %s\n%s", err, out)
+			// Phase C: call headless primitive (spec §4.2 mapping table).
+			// Resolve the worktree's HEAD branch when --delete-branch
+			// is set so the operator doesn't have to type the branch
+			// name. Per Leon Q2 lock (2026-05-15): default flag-absent
+			// path passes Branch:"" so the branch stays after removal
+			// (pre-refactor parity); flag-on path passes the resolved
+			// HEAD short-name so worktree.Destroy deletes it.
+			var branchToDelete string
+			if deleteBranchFlag {
+				out, err := safecmd.Git(cmd.Context(), worktreePath,
+					"rev-parse", "--abbrev-ref", "HEAD")
+				if err != nil {
+					fmt.Fprintf(os.Stderr,
+						"  Warning: --delete-branch given but HEAD resolution failed: %v (branch left in place)\n", err)
+				} else {
+					branchToDelete = strings.TrimSpace(string(out))
+				}
+			}
+			if err := worktree.Destroy(cmd.Context(), worktree.DestroyOpts{
+				RepoPath:     repoPath,
+				WorktreePath: worktreePath,
+				Branch:       branchToDelete, // "" when flag absent
+				Force:        true,
+			}); err != nil {
+				return fmt.Errorf("destroy worktree: %w", err)
 			}
 
 			fmt.Printf("✓ Worktree %s removed\n", name)
+			if branchToDelete != "" {
+				fmt.Printf("✓ Branch deleted: %s\n", branchToDelete)
+			}
 			return nil
 		},
 	}
+	cmd.Flags().Bool("delete-branch", false,
+		"Delete the worktree's branch after removing the worktree (default: false; branch stays)")
+	return cmd
 }
 
 func worktreeListCmd() *cobra.Command {
