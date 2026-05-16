@@ -49,7 +49,10 @@ function cloneAndInit(bare: string, name: string): string {
 
 /** Run thrum in a specific directory. */
 function thrumIn(cwd: string, args: string[]): string {
-  return execFileSync(BIN, args, {
+  // Prepend --repo to anchor identity resolution to the target worktree,
+  // bypassing the strict cross_worktree guard (v0.10.4+) when the test
+  // process's pane has a different agent identity than `cwd`.
+  return execFileSync(BIN, ['--repo', cwd, ...args], {
     cwd,
     encoding: 'utf-8',
     timeout: 15_000,
