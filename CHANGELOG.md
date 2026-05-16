@@ -1460,7 +1460,7 @@ these pins.
 
 The web dashboard has been rebuilt from scratch as a Slack-style 3-panel
 interface. Full documentation:
-**[Web UI Guide](https://leonletto.github.io/thrum/docs.html#web-ui.html)**
+**[Web UI Guide](https://thrum.team/docs.html#web-ui.html)**
 
 ### Added
 

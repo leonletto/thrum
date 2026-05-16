@@ -118,7 +118,7 @@ Environment variables:
 	rootCmd.Version = Version
 	rootCmd.SetVersionTemplate("thrum v{{.Version}} (build: " + Build + ", " + goruntime.Version() + ")\n" +
 		"\x1b]8;;https://github.com/leonletto/thrum\x07https://github.com/leonletto/thrum\x1b]8;;\x07\n" +
-		"\x1b]8;;https://leonletto.github.io/thrum\x07https://leonletto.github.io/thrum\x1b]8;;\x07\n")
+		"\x1b]8;;https://thrum.team\x07https://thrum.team\x1b]8;;\x07\n")
 
 	// Resolve flagRepo to the nearest parent containing .thrum/ (git-style traversal).
 	// Skip for "init" which creates .thrum/ and doesn't need it to exist.
@@ -1292,14 +1292,14 @@ func versionCmd() *cobra.Command {
 					"build":       Build,
 					"go_version":  goruntime.Version(),
 					"repo_url":    "https://github.com/leonletto/thrum",
-					"website_url": "https://leonletto.github.io/thrum",
+					"website_url": "https://thrum.team",
 				})
 			}
 			// Human-readable output with OSC 8 hyperlinks
 			// Format: ESC ] 8 ; ; URL ESC \ TEXT ESC ] 8 ; ; ESC \
 			fmt.Printf("thrum v%s (build: %s, %s)\n", Version, Build, goruntime.Version())
 			fmt.Printf("\x1b]8;;https://github.com/leonletto/thrum\x07https://github.com/leonletto/thrum\x1b]8;;\x07\n")
-			fmt.Printf("\x1b]8;;https://leonletto.github.io/thrum\x07https://leonletto.github.io/thrum\x1b]8;;\x07\n")
+			fmt.Printf("\x1b]8;;https://thrum.team\x07https://thrum.team\x1b]8;;\x07\n")
 			return nil
 		},
 	}
