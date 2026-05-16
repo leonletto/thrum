@@ -3,6 +3,8 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 )
@@ -678,6 +680,116 @@ func TestRPC_JobDone_DuplicateDelivery(t *testing.T) {
 	_, err := s.RPC_JobDone(context.Background(), JobDoneRequest{RunID: "docs-bot-g1-100"})
 	if !errors.Is(err, ErrCompletionAlreadyDelivered) {
 		t.Errorf("second call err = %v; want ErrCompletionAlreadyDelivered", err)
+	}
+}
+
+// TestRPC_ConcurrentUpdates_NoTornWrites: 20 concurrent job.update
+// calls against the same job_id serialize cleanly under the config
+// mutex. The final spec is well-defined (one of the 20 wins) but no
+// torn write — Type stays "command" and the spec is whole. Spec
+// §8.5.5 acceptance.
+func TestRPC_ConcurrentUpdates_NoTornWrites(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	if _, err := s.RPC_JobCreate(context.Background(), CreateJobRequest{
+		JobID: "docs-job",
+		Spec: JobSpec{
+			Type: "command", Schedule: "@every 5m", Enabled: true,
+			Command: &CommandSpec{Exec: "/bin/true"},
+		},
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	const goroutines = 20
+	var wg sync.WaitGroup
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, _ = s.RPC_JobUpdate(context.Background(), UpdateJobRequest{
+				JobID: "docs-job",
+				Spec: JobSpec{
+					Type:     "command",
+					Schedule: fmt.Sprintf("@every %dm", 5+i),
+					Enabled:  i%2 == 0,
+					Command:  &CommandSpec{Exec: "/bin/true"},
+				},
+			})
+		}(i)
+	}
+	wg.Wait()
+
+	spec, ok := s.JobSpec("docs-job")
+	if !ok {
+		t.Fatal("docs-job evicted by concurrent updates")
+	}
+	if spec.Type != "command" {
+		t.Errorf("torn write detected: Type = %q; want command", spec.Type)
+	}
+	if spec.Command == nil || spec.Command.Exec != "/bin/true" {
+		t.Errorf("torn write: Command = %+v", spec.Command)
+	}
+}
+
+// TestRPC_ConcurrentReadsAndWrites: mix RPC_JobList (read), RPC_JobShow
+// (read), and RPC_JobUpdate (write) across 30 goroutines. The
+// RWMutex pattern means readers can run in parallel; writers block
+// both. Race-detector run pins clean.
+func TestRPC_ConcurrentReadsAndWrites(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	if _, err := s.RPC_JobCreate(context.Background(), CreateJobRequest{
+		JobID: "x",
+		Spec: JobSpec{
+			Type: "command", Schedule: "@every 5m", Enabled: true,
+			Command: &CommandSpec{Exec: "/bin/true"},
+		},
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = s.RPC_JobList(context.Background(), ListJobsRequest{})
+		}()
+	}
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = s.RPC_JobShow(context.Background(), ShowJobRequest{JobID: "x"})
+		}()
+	}
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, _ = s.RPC_JobUpdate(context.Background(), UpdateJobRequest{
+				JobID: "x",
+				Spec: JobSpec{
+					Type: "command", Schedule: "@every 5m",
+					Enabled: i%2 == 0,
+					Command: &CommandSpec{Exec: "/bin/true"},
+				},
+			})
+		}(i)
+	}
+	wg.Wait()
+
+	spec, ok := s.JobSpec("x")
+	if !ok {
+		t.Fatal("x evicted by concurrent ops")
+	}
+	if spec.Type != "command" {
+		t.Errorf("torn write: Type = %q", spec.Type)
 	}
 }
 
