@@ -42,6 +42,7 @@ plausible.init()
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
 <strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <strong>Architecture</strong> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>substrate</strong>: <a href="substrate/overview.html">Personal Agent Substrate</a><br>
 <strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
@@ -139,8 +140,8 @@ messages and agent activity. Served from the same port as WebSocket (default
 <p><strong>MCP Server</strong> (<code>thrum mcp serve</code>): Exposes Thrum functionality as native MCP
 tools over stdio, enabling LLM agents (e.g., Claude Code) to communicate
 directly through MCP protocol without CLI shell-outs. Connects to the daemon via
-Unix socket for RPC and WebSocket for real-time message updates. Provides 4
-core messaging tools: <code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>, and
+Unix socket for RPC and WebSocket for real-time message updates. Provides 4 core
+messaging tools: <code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>, and
 <code>list_agents</code>.</p>
 <h2>Key Features</h2>
 <h3>1. Persistent Messaging</h3>
@@ -201,8 +202,8 @@ thrum session end     # Finish</code></pre>
 thrum agent cleanup --dry-run        # Preview orphaned agents
 thrum agent cleanup --force          # Delete all orphaned agents</code></pre>
 <h3>4. Live Inbox</h3>
-<p>The daemon pushes new messages to connected WebSocket clients in real time
-(used by the Web UI and the MCP <code>wait_for_message</code> tool). From the CLI, use
+<p>The daemon pushes new messages to connected WebSocket clients in real time (used
+by the Web UI and the MCP <code>wait_for_message</code> tool). From the CLI, use
 <code>thrum wait</code> to block until a message arrives addressed to you:</p>
 <pre><code># Block until a message arrives (30s default timeout)
 thrum wait
@@ -927,8 +928,8 @@ dispatch operations.</p>
 <ul>
 <li><strong>JSONL event logs</strong> — <code>events.jsonl</code> and <code>messages/*.jsonl</code> copied from the
 sync worktree (source of truth)</li>
-<li><strong>Local-only SQLite tables</strong> — <code>message_reads</code> and <code>sync_checkpoints</code>
-exported as JSONL (these are not in the git-synced JSONL logs)</li>
+<li><strong>Local-only SQLite tables</strong> — <code>message_reads</code> and <code>sync_checkpoints</code> exported
+as JSONL (these are not in the git-synced JSONL logs)</li>
 <li><strong>Config files</strong> — <code>.thrum/config.json</code> and related runtime config</li>
 </ul>
 <p><strong>Backup layout</strong> (<code>~/.thrum-backups/&lt;repo&gt;/</code>):</p>

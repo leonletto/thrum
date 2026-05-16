@@ -149,7 +149,7 @@
   {
     "path": "beta-channel.html",
     "title": "Beta Channel",
-    "description": "How to opt into Thrum pre-release builds, install RCs and their matching plugins, report bugs against them, and roll back to stable",
+    "description": "How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable",
     "category": "guides",
     "order": 50,
     "tags": [
@@ -159,9 +159,10 @@
       "install",
       "rollback",
       "soak",
-      "plugin"
+      "plugin",
+      "substrate"
     ],
-    "lastUpdated": "2026-05-15"
+    "lastUpdated": "2026-05-16"
   },
   {
     "path": "identity.html",
@@ -772,6 +773,21 @@
     "order": 999,
     "tags": [],
     "lastUpdated": "2026-04-20"
+  },
+  {
+    "path": "substrate/overview.html",
+    "title": "Personal Agent Substrate",
+    "description": "v0.11 turns thrum into the substrate beneath personal-agent harnesses (scheduling, scheduled-agent lifecycle, skill registration, email transport, reminders). What it is, why it exists, and how the pieces fit together.",
+    "category": "substrate",
+    "order": 1,
+    "tags": [
+      "v0.11",
+      "substrate",
+      "personal-agent",
+      "scheduler",
+      "skills"
+    ],
+    "lastUpdated": "2026-05-16"
   },
   {
     "path": "guides/recommended-tools.html",

@@ -42,6 +42,7 @@ plausible.init()
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
 <strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>substrate</strong>: <a href="substrate/overview.html">Personal Agent Substrate</a><br>
 <strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
@@ -101,8 +102,8 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <li>Create MCP server with the official Go SDK
 (<code>github.com/modelcontextprotocol/go-sdk/mcp</code>)</li>
 <li>Register all 5 tool handlers (4 core messaging + 1 deprecated)</li>
-<li>Initialize polling waiter (no network connection at construction; <code>wait_for_message</code>
-opens lazy Unix socket connections per call)</li>
+<li>Initialize polling waiter (no network connection at construction;
+<code>wait_for_message</code> opens lazy Unix socket connections per call)</li>
 <li>Start MCP stdio server (blocks until client disconnects or context
 cancelled)</li>
 </ol>
@@ -521,24 +522,23 @@ each must have a distinct identity file. Use <code>THRUM_NAME</code> env var or
 <h2>Polling Waiter</h2>
 <p>The <code>Waiter</code> struct (<code>internal/mcp/waiter.go</code>) powers <code>wait_for_message</code> by
 polling the daemon inbox over the Unix socket. There is no WebSocket
-subscription — the previous design registered a <code>subscribe</code> RPC that was
-removed when the CLI subscribe commands were retired. Polling shares the same
+subscription — the previous design registered a <code>subscribe</code> RPC that was removed
+when the CLI subscribe commands were retired. Polling shares the same
 <code>message.list</code> path the CLI <code>thrum wait</code> already relies on.</p>
 <h3>Polling Loop</h3>
 <p>On <code>wait_for_message</code>, the waiter:</p>
 <ol>
 <li>Opens a fresh <code>cli.Client</code> Unix socket connection (lazy, per call)</li>
 <li>Calls <code>message.list --unread --for-agent &lt;id&gt;</code> on a 500ms ticker</li>
-<li>Returns the first unseen message addressed to this agent (by name, role,
-or <code>@everyone</code> broadcast)</li>
-<li>Times out and returns empty after the supplied <code>timeout</code> (default 30s,
-max 300s)</li>
+<li>Returns the first unseen message addressed to this agent (by name, role, or
+<code>@everyone</code> broadcast)</li>
+<li>Times out and returns empty after the supplied <code>timeout</code> (default 30s, max
+300s)</li>
 <li>Reconnects on transport errors without dropping the wait</li>
 </ol>
 <p>Single-waiter enforcement: only one <code>wait_for_message</code> call may be active per
-<code>Waiter</code> instance. A second concurrent call returns an error. The context
-passed to <code>WaitForMessage</code> is honored — cancelling it stops the loop on the
-next tick.</p>
+<code>Waiter</code> instance. A second concurrent call returns an error. The context passed
+to <code>WaitForMessage</code> is honored — cancelling it stops the loop on the next tick.</p>
 <h2>Integration</h2>
 <h3>Message-Listener Sub-Agent</h3>
 <p>The recommended pattern for receiving messages in Claude Code is a background

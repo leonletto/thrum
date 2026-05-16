@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Personal Agent Substrate — Thrum</title>
+<meta name="description" content="v0.11 turns thrum into the substrate beneath personal-agent harnesses (scheduling, scheduled-agent lifecycle, skill registration, email transport, reminders). What it is, why it exists, and how the pieces fit together.">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#substrate/overview.html">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Personal Agent Substrate","description":"v0.11 turns thrum into the substrate beneath personal-agent harnesses (scheduling, scheduled-agent lifecycle, skill registration, email transport, reminders). What it is, why it exists, and how the pieces fit together.","url":"https://leonletto.github.io/thrum/docs.html#substrate/overview.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://leonletto.github.io/thrum/docs.html"}}</script>
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+<script>
+window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+plausible.init()
+</script>
+</head>
+<body>
+<nav>
+<strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; substrate &rsaquo; Personal Agent Substrate
+<hr>
+<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a> | <a href="../overview.html">Overview</a> | <a href="../whats-new.html">What's New</a><br>
+<strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <a href="../guides/beads-setup.html">Beads Setup Guide</a> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="../guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Messaging</strong>: <a href="../peers.html">Peers</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../telegram-bridge.html">Telegram Bridge</a> | <a href="../telegram-groups.html">Telegram Groups</a> | <a href="../messaging.html">Messaging</a><br>
+<strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../role-templates.html">Role-Based Preamble Templates</a><br>
+<strong>Guides</strong>: <a href="../beta-channel.html">Beta Channel</a><br>
+<strong>API Reference</strong>: <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <a href="../api/websocket.html">WebSocket API</a><br>
+<strong>agent-protocols</strong>: <a href="../strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="../strategies/thrum-registration.html">Thrum Registration</a> | <a href="../strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>coordination</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../context.html">Agent Context Management</a> | <a href="../guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="../guides/review-workflow.html">Code Review Workflow</a><br>
+<strong>infrastructure</strong>: <a href="../daemon.html">Daemon Architecture</a> | <a href="../sync.html">Sync Protocol</a> | <a href="../configuration.html">Configuration</a> | <a href="../guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>integrations</strong>: <a href="../web-ui.html">Web UI</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../cursor-plugin.html">Cursor Plugin</a> | <a href="../mcp-server.html">MCP Server</a><br>
+<strong>onboarding</strong>: <a href="../scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="../scenarios/team.html">Team on Your Machine</a> | <a href="../scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="../scenarios/orchestration.html">Automated Plan Execution</a><br>
+<strong>orchestration</strong>: <a href="../orchestrator-role.html">Orchestrator Role</a> | <a href="../tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="../monitor-jobs.html">Monitor Jobs</a> | <a href="../multi-runtime.html">Multi-Runtime Support</a> | <a href="../single-agent-mode.html">Single-Agent Mode</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../permission-prompts.html">Permission Prompts</a> | <a href="../session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="../development.html">Development Guide</a> | <a href="../cli-hints.html">CLI Hints</a> | <a href="../security-cicd.html">Security & CI/CD</a> | <a href="../security-model.html">Local Security Model</a> | <a href="../architecture.html">Architecture</a> | <a href="../cli.html">CLI Reference</a> | <a href="../rpc-api.html">RPC API</a><br>
+<strong>substrate</strong>: <strong>Personal Agent Substrate</strong><br>
+<strong>troubleshooting</strong>: <a href="../troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
+</nav>
+<main>
+<h2>Personal Agent Substrate</h2>
+<p>v0.11 is a structural release. The pitch in one sentence:</p>
+<blockquote>
+<p>Thrum&#39;s role is to be the substrate that lets any harness implement
+personal-agent patterns cleanly — not to become a harness itself.</p>
+</blockquote>
+<p>That framing locked in May 2026. v0.10 gave you the messaging foundation
+(direct messages, role routing, critical broadcast, sync, peers, Telegram).
+v0.11 adds the layer above it: scheduling, scheduled-agent lifecycle, a
+per-project skill library that agents can extend at runtime, an email
+transport alongside Telegram, and a unified reminder substrate.</p>
+<p>If you&#39;re using thrum today for agent coordination, none of this is required
+reading — the v0.10 messaging surface keeps working. The substrate is for
+anyone wanting to build (or use) a personal-agent harness — Pi, Hermes, Open
+Claw, Replicant, or your own — on top of thrum.</p>
+<h2>The three-layer decomposition</h2>
+<p>Personal-agent frameworks decompose cleanly into three layers:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>What it provides</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Substrate</strong></td>
+<td>Messaging, scheduling, skill registry, state persistence, identity isolation, transport plumbing</td>
+</tr>
+<tr>
+<td><strong>Behavior</strong></td>
+<td>Harness-provided meta-skills (&quot;when/how/what to build&quot;)</td>
+</tr>
+<tr>
+<td><strong>Runtime</strong></td>
+<td>Underlying LLM CLI (Claude, Codex, Kiro, Cursor)</td>
+</tr>
+</tbody></table>
+<p>A concrete trace: Pi schedules its next wake by calling the thrum daemon.
+The daemon handles persistence and cron-style scheduling and idle-nudge
+escalation. The runtime is whichever LLM CLI you&#39;ve configured. Pi itself
+contains only the behavior layer — the meta-skills that decide what to do
+on each wake. Thrum carries the rest.</p>
+<p>Each layer stays focused. The substrate makes the patterns possible across
+runtimes; the harness picks which patterns to use; the runtime executes.</p>
+<h2>The Pi / Hermes / Open Claw / Replicant pattern</h2>
+<p>The recent crop of personal-agent frameworks have a common shape:</p>
+<ul>
+<li>A <strong>scheduler</strong> (what to do, when)</li>
+<li>A <strong>wake trigger</strong> (something fires; the agent runs)</li>
+<li>An <strong>ephemeral runtime</strong> (a fresh LLM session, sometimes with continuity)</li>
+<li><strong>State persistence</strong> (what the agent learned, scheduled, deferred)</li>
+<li><strong>Skill accumulation</strong> (the agent grows new capabilities over time)</li>
+</ul>
+<p>Thrum already had four of the five before v0.11. Messaging gave it identity
+isolation and state persistence; the daemon and sync gave it transport
+plumbing; the role-templates and skill plugins gave it accumulation. The
+gap was the unified scheduler and the runtime-skill-registration plumbing.
+v0.11 fills that gap.</p>
+<p>The Pi/Hermes phrase &quot;the agent that builds itself&quot; maps to the three
+layers above: the runtime executes, the harness&#39;s meta-skills decide
+<em>what</em> to build (and when), and the substrate makes the new skill
+discoverable next session. v0.11 ships the substrate piece. The harnesses
+keep their own behaviour.</p>
+<h2>What v0.11 adds</h2>
+<p>The five feature families in v0.11 — each gets its own page once the
+implementation lands.</p>
+<ul>
+<li><p><strong><a href="scheduler.html">Scheduler primitive</a></strong> — a single daemon-side
+scheduling abstraction. Consolidates three existing ticker loops (backup,
+periodic sync, inbox poll) and gives the rest of the substrate (scheduled
+agents, email poll, telemetry, skill staleness, stalled-agent sweep) one
+bus to bind against.</p>
+</li>
+<li><p><strong><a href="scheduled-agents.html">Scheduled-agent lifecycle</a></strong> — wake, run, sleep,
+observe as a first-class flow. Spawn an agent on a schedule, give it a
+prompt, watch what it does via inbox + beads memories, let it sleep until
+the next wake. Fresh-context-each-wake or resume-prior-session, configurable
+per agent.</p>
+</li>
+<li><p><strong><a href="skill-library.html">Skill library + registration API</a></strong> — first-class
+per-project skill library (mirroring what works organically in repos that
+hand-rolled it). The registration API lets a meta-skill author a new skill
+mid-session and have future sessions discover it without restart.</p>
+</li>
+<li><p><strong><a href="email-transport.html">Email transport</a></strong> — IMAP/SMTP adapter alongside
+the existing Telegram bridge. A single shared mailbox can serve multiple
+repos; subject-line conventions encode repo identity for demux. Reply
+threading uses email&#39;s native In-Reply-To header.</p>
+</li>
+<li><p><strong><a href="reminders.html">Reminders + stalled-agent sweep</a></strong> — a unified reminder
+substrate. Time-triggered reminders (an agent or user defers an action)
+share the same table as condition-triggered ones (the daemon notices an
+agent has been silent too long and pings the coordinator).</p>
+</li>
+<li><p><strong><a href="headless-worktrees.html">Headless worktree API</a></strong> — internal plumbing
+for scheduled agents to consume ephemeral worktrees without operator
+involvement. Mostly an implementation detail; brief note for anyone
+digging into the substrate internals.</p>
+</li>
+</ul>
+<h2>How v0.11 relates to v0.10</h2>
+<p>The two releases stack:</p>
+<ul>
+<li><p><strong>v0.10 messaging</strong> is the bus. Agents send each other directed messages
+or broadcast critical events; the daemon syncs across machines and bridges
+out to Telegram if you&#39;ve paired it. Identity isolation, peer transport,
+sync, persistence — all of it landed pre-v0.11.</p>
+</li>
+<li><p><strong>v0.11 substrate</strong> is the runtime that consumes that bus. A scheduled
+agent uses messaging to report back. A skill registered at runtime arrives
+via the same identity-resolved RPC plumbing. The email transport reuses
+the Telegram bridge&#39;s relay shape, just over IMAP/SMTP.</p>
+</li>
+</ul>
+<p>You don&#39;t need v0.11 to use v0.10&#39;s messaging features. You do need v0.10&#39;s
+messaging to use v0.11&#39;s substrate features. The dependency is one-way.</p>
+<h2>Status</h2>
+<p>v0.11 is in development. The substrate-track pre-release cycle starts when
+the first <code>v0.11.0-rc.1</code> tag publishes from the <code>thrum-agents</code> branch — see
+the <a href="../beta-channel.html">Beta Channel</a> page for substrate-track install
+instructions when it&#39;s ready.</p>
+<p>The feature pages above will fill in as each piece lands and gets shaken
+out in soak. Until then, the parent epic and per-feature locked plans live
+in the source tree under <code>dev-docs/</code> for anyone who wants to dig.</p>
+
+</main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../../llms.txt">llms.txt</a> | <a href="../../llms-full.txt">llms-full.txt</a> | <a href="../../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../../docs.html#substrate/overview.html')}</script>
+</body>
+</html>

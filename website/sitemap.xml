@@ -379,6 +379,12 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://leonletto.github.io/thrum/docs/substrate/overview.html</loc>
+    <lastmod>2026-05-16</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://leonletto.github.io/thrum/docs/sync.html</loc>
     <lastmod>2026-05-16</lastmod>
     <changefreq>weekly</changefreq>

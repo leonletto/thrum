@@ -42,6 +42,7 @@ plausible.init()
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
 <strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>substrate</strong>: <a href="substrate/overview.html">Personal Agent Substrate</a><br>
 <strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
@@ -86,10 +87,10 @@ efficient message waiting</li>
 <h2>Broadcast</h2>
 <p>Use <code>--to @everyone</code> to reach all agents at once:</p>
 <pre><code>thrum send &quot;Deploy complete, all clear&quot; --to @everyone</code></pre>
-<p>Role-name targets like <code>@reviewer</code> fan out to every agent with that role —
-that works but is discouraged for day-to-day routing because it causes
-cross-talk. Prefer specific agent names (<code>@reviewer_main</code>,
-<code>@reviewer_backend</code>) for normal coordination.</p>
+<p>Role-name targets like <code>@reviewer</code> fan out to every agent with that role — that
+works but is discouraged for day-to-day routing because it causes cross-talk.
+Prefer specific agent names (<code>@reviewer_main</code>, <code>@reviewer_backend</code>) for normal
+coordination.</p>
 <hr>
 <h2>Runtime Presets</h2>
 <p>Thrum supports multiple AI coding platforms through a runtime preset system.

@@ -5,6 +5,25 @@ before being promoted to stable. Beta users help catch regressions before they
 hit `releases/latest`. This guide covers how to opt in, what to expect, and how
 to report what you find.
 
+## Choose a track
+
+Thrum currently runs two parallel pre-release tracks. Pick one — they install
+the same binary, so you can only be on one track at a time.
+
+- **Stable-track** (`v0.10.x` cycle) — bug-fix and small-feature RCs against the
+  current stable line. Recommended for production use; lower churn.
+- **Substrate-track** (`v0.11.x` cycle) — the
+  [Personal Agent Substrate](substrate/overview.md) work: unified scheduler,
+  scheduled-agent lifecycle, skill library, email transport, reminders. Rapid
+  iteration; expect breakage. Recommended only if you're actively helping shake
+  the substrate out.
+
+The sections below cover the current pre-release on each track. Install
+mechanics (binary + plugins + rollback) are shared further down the page —
+they're parameterized over `VERSION` and the release branch.
+
+## Stable-track current pre-release
+
 > **Current pre-release:
 > [`v0.10.3-rc.11`](https://github.com/leonletto/thrum/releases/tag/v0.10.3-rc.11)**
 > (tagged 2026-05-15, in soak). rc.11 is a plugin-only polish on the rc.10 v2
@@ -42,8 +61,17 @@ Claude Code plugin (run inside Claude):
 /reload-plugins
 ```
 
-For refresh between rc.N bumps, switch-back to stable, and the parameterized
-versions of these commands, see
+## Substrate-track current pre-release
+
+> No substrate-track pre-release yet. First will be `v0.11.0-rc.1`.
+
+When `v0.11.0-rc.1` publishes, this section will carry the substrate-track
+callout + Quick install block pinned to the `release/v0.11.0` branch. Watch the
+[GitHub releases](https://github.com/leonletto/thrum/releases) page or the
+[Personal Agent Substrate](substrate/overview.md) intro for the announcement.
+
+For refresh between rc.N bumps, switching tracks, switching back to stable, and
+the parameterized versions of these commands, see
 [How to install the matching plugins](#how-to-install-the-matching-claude-code-and-codex-plugins)
 below.
 
@@ -221,6 +249,25 @@ Include:
 The `rc-feedback` label is what the coordinator filters on when triaging during
 soak — labelled issues block promotion at P0/P1; unlabelled bug reports may not
 be seen until after stable ships.
+
+## Switching between stable-track and substrate-track
+
+To move between the two tracks, install the binary with the target track's
+`VERSION=` and refresh both plugins against the matching release branch.
+
+```bash
+# Example: substrate-track → stable-track
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.11 sh
+thrum daemon restart
+# Then refresh plugins against release/v0.10.3 (see Claude Code + Codex
+# sections above)
+```
+
+The binary and plugins share the same install paths regardless of track, so the
+switch is "install the other track's version" rather than uninstall + reinstall.
+The plugin remove-and-re-add step in the "Leaving the beta channel" section
+below applies in the same way if Claude Code has cached the previous track's
+marketplace ref.
 
 ## Leaving the beta channel
 

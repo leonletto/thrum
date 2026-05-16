@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <title>Beta Channel — Thrum</title>
-<meta name="description" content="How to opt into Thrum pre-release builds, install RCs and their matching plugins, report bugs against them, and roll back to stable">
+<meta name="description" content="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">
 <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#beta-channel.html">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Beta Channel","description":"How to opt into Thrum pre-release builds, install RCs and their matching plugins, report bugs against them, and roll back to stable","url":"https://leonletto.github.io/thrum/docs.html#beta-channel.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://leonletto.github.io/thrum/docs.html"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Beta Channel","description":"How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable","url":"https://leonletto.github.io/thrum/docs.html#beta-channel.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://leonletto.github.io/thrum/docs.html"}}</script>
 <style>
 body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
 pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
@@ -42,6 +42,7 @@ plausible.init()
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
 <strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>substrate</strong>: <a href="substrate/overview.html">Personal Agent Substrate</a><br>
 <strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
@@ -50,6 +51,22 @@ plausible.init()
 before being promoted to stable. Beta users help catch regressions before they
 hit <code>releases/latest</code>. This guide covers how to opt in, what to expect, and how
 to report what you find.</p>
+<h2>Choose a track</h2>
+<p>Thrum currently runs two parallel pre-release tracks. Pick one — they install
+the same binary, so you can only be on one track at a time.</p>
+<ul>
+<li><strong>Stable-track</strong> (<code>v0.10.x</code> cycle) — bug-fix and small-feature RCs against
+the current stable line. Recommended for production use; lower churn.</li>
+<li><strong>Substrate-track</strong> (<code>v0.11.x</code> cycle) — the
+<a href="substrate/overview.html">Personal Agent Substrate</a> work: unified scheduler,
+scheduled-agent lifecycle, skill library, email transport, reminders.
+Rapid iteration; expect breakage. Recommended only if you&#39;re actively
+helping shake the substrate out.</li>
+</ul>
+<p>The sections below cover the current pre-release on each track. Install
+mechanics (binary + plugins + rollback) are shared further down the page —
+they&#39;re parameterized over <code>VERSION</code> and the release branch.</p>
+<h2>Stable-track current pre-release</h2>
 <blockquote>
 <p><strong>Current pre-release:
 <a href="https://github.com/leonletto/thrum/releases/tag/v0.10.3-rc.11"><code>v0.10.3-rc.11</code></a></strong>
@@ -79,8 +96,17 @@ THRUM_INSTALL_REF=release/v0.10.3 bash &lt;(curl -fsSL https://raw.githubusercon
 <pre><code>/plugin marketplace add leonletto/thrum#release/v0.10.3
 /plugin install thrum@thrum
 /reload-plugins</code></pre>
-<p>For refresh between rc.N bumps, switch-back to stable, and the parameterized
-versions of these commands, see
+<h2>Substrate-track current pre-release</h2>
+<blockquote>
+<p>No substrate-track pre-release yet. First will be <code>v0.11.0-rc.1</code>.</p>
+</blockquote>
+<p>When <code>v0.11.0-rc.1</code> publishes, this section will carry the substrate-track
+callout + Quick install block pinned to the <code>release/v0.11.0</code> branch. Watch
+the <a href="https://github.com/leonletto/thrum/releases">GitHub releases</a> page or
+the <a href="substrate/overview.html">Personal Agent Substrate</a> intro for the
+announcement.</p>
+<p>For refresh between rc.N bumps, switching tracks, switching back to stable,
+and the parameterized versions of these commands, see
 <a href="#how-to-install-the-matching-claude-code-and-codex-plugins">How to install the matching plugins</a>
 below.</p>
 <h2>What this is</h2>
@@ -193,6 +219,19 @@ If the bug is intermittent, note how often you&#39;ve seen it</li>
 <p>The <code>rc-feedback</code> label is what the coordinator filters on when triaging during
 soak — labelled issues block promotion at P0/P1; unlabelled bug reports may not
 be seen until after stable ships.</p>
+<h2>Switching between stable-track and substrate-track</h2>
+<p>To move between the two tracks, install the binary with the target track&#39;s
+<code>VERSION=</code> and refresh both plugins against the matching release branch.</p>
+<pre><code># Example: substrate-track → stable-track
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.11 sh
+thrum daemon restart
+# Then refresh plugins against release/v0.10.3 (see Claude Code + Codex
+# sections above)</code></pre>
+<p>The binary and plugins share the same install paths regardless of track, so
+the switch is &quot;install the other track&#39;s version&quot; rather than uninstall +
+reinstall. The plugin remove-and-re-add step in the &quot;Leaving the beta
+channel&quot; section below applies in the same way if Claude Code has cached the
+previous track&#39;s marketplace ref.</p>
 <h2>Leaving the beta channel</h2>
 <p>When you&#39;re done testing, revert the binary and any plugins you installed from
 the release branch back to their stable counterparts.</p>
