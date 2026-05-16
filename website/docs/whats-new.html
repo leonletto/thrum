@@ -51,12 +51,13 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG.md</a>.</p>
 <h2>v0.10.3 — In Soak (RC)</h2>
-<p>v0.10.3 is currently a release candidate. The latest tag is <code>v0.10.3-rc.10</code>,
-which rewrites the <code>/thrum:restart</code> skill around prose continuations and
-extends the silence watchdog to recognize Claude Code 2.1.141&#39;s new <code>·</code>
-thinking-spinner glyph. See the <a href="beta-channel.html">Beta Channel</a> guide for how
-to opt in. Stable promotion follows the standard 48-hour soak window once no
-P0/P1 bugs are open against the RC.</p>
+<p>v0.10.3 is currently a release candidate. The latest tag is <code>v0.10.3-rc.11</code>,
+which polishes three rough edges in the rc.10 v2 <code>/thrum:restart</code> skill
+(coordinator self-restart branch, dropped stale snapshot-restore reference,
+restructured Step 1 to remove the heredoc-with-discipline pattern). See the
+<a href="beta-channel.html">Beta Channel</a> guide for how to opt in. Stable promotion
+follows the standard 48-hour soak window once no P0/P1 bugs are open against
+the RC.</p>
 <p>This release is largely about the runtime experience: codex gains the same
 first-class plugin treatment claude has had, fresh and restarted tmux panes no
 longer sit idle when an agent misses its prime banner, and the first-launch
@@ -149,8 +150,8 @@ emitting the identity banner once the runtime rendered.</p>
 </li>
 <li><p><strong><code>/thrum:restart</code> skill rewritten around prose continuations.</strong> The skill
 dropped from ~134 lines to ~50 by replacing the JSON-snapshot Resume Plan
-template + <code>thrum tmux snapshot save</code> + append flow with a direct write of
-an in-context-composed prose continuation to <code>.thrum/restart/&lt;agent_id&gt;.md</code>.
+template + <code>thrum tmux snapshot save</code> + append flow with a direct write of an
+in-context-composed prose continuation to <code>.thrum/restart/&lt;agent_id&gt;.md</code>.
 Auto-prime pickup is unchanged; coordinator-notify and the non-tmux operator
 fallback are preserved. Field-tested across 7 v0.11 substrate agent restart
 cycles — continuations averaged ~200 lines with high signal density. Synced
@@ -195,8 +196,8 @@ Claude 2.1.141 introduced a <code>·</code> prefix on some thinking-spinner stat
 alongside the existing <code>✻</code> glyph. The watchdog&#39;s <code>claudeSpinnerRegex</code> only
 matched <code>✻</code>, so panes showing the new spinner were classified as silent —
 over-triggering nudges into still-thinking agents. The regex now covers both
-glyph forms; a regression test pins five observed <code>· &lt;verb&gt;…</code> variants
-against the live Claude TUI.</p>
+glyph forms; a regression test pins five observed <code>· &lt;verb&gt;…</code> variants against
+the live Claude TUI.</p>
 </li>
 </ul>
 <h3>Upgrade Notes</h3>

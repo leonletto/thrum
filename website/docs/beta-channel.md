@@ -17,25 +17,29 @@ hit `releases/latest`. This guide covers how to opt in, what to expect, and how
 to report what you find.
 
 > **Current pre-release:
-> [`v0.10.3-rc.10`](https://github.com/leonletto/thrum/releases/tag/v0.10.3-rc.10)**
-> (tagged 2026-05-15, in soak). rc.10 ships two small fixes from rc.9 soak: the
-> `/thrum:restart` skill is rewritten around prose continuations (drops from
-> ~134 lines to ~50 — faster restart, higher-signal context), and the silence
-> watchdog now recognizes Claude Code 2.1.141's new `·` thinking spinner so
-> spinning panes aren't misclassified as silent. Rolls up the rc.1–rc.9
-> highlights: codex plugin first-class, post-launch tmux silence watchdog,
-> first-launch trust-gate detection, self-echo nudge fix, cwd-anchored identity
-> precedence, inbox read-race silent-loss class closed. Full notes:
-> [What's New](whats-new.md) and the
+> [`v0.10.3-rc.11`](https://github.com/leonletto/thrum/releases/tag/v0.10.3-rc.11)**
+> (tagged 2026-05-15, in soak). rc.11 is a plugin-only polish on the rc.10 v2
+> `/thrum:restart` skill, surfaced by its first live invocation on a coordinator
+> pane: Step 3's `thrum send --to @coordinator_main` no longer self-targets when
+> the invoker IS the coordinator (new branch emits cross-pane
+> `thrum tmux restart --force` instructions instead), a stale reference to the
+> pre-rc.10 `thrum tmux snapshot restore` was dropped in favor of "auto-loaded
+> by `thrum prime`", and Step 1's fragile heredoc-with-discipline pattern was
+> restructured into a prose composition guide plus a direct-Write step. No Go
+> code changes. Rolls up the rc.1–rc.10 highlights: codex plugin first-class,
+> post-launch tmux silence watchdog (with `·` glyph support), first-launch
+> trust-gate detection, self-echo nudge fix, cwd-anchored identity precedence,
+> inbox read-race silent-loss class closed, prose-continuation restart skill.
+> Full notes: [What's New](whats-new.md) and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-### Quick install for `v0.10.3-rc.10`
+### Quick install for `v0.10.3-rc.11`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.10 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.11 sh
 
 # Codex plugin (matches release/v0.10.3)
 THRUM_INSTALL_REF=release/v0.10.3 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.3/codex-plugin/plugins/thrum/scripts/install-plugin.sh)

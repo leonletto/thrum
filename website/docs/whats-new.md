@@ -18,12 +18,13 @@ machine-readable history lives in
 
 ## v0.10.3 — In Soak (RC)
 
-v0.10.3 is currently a release candidate. The latest tag is `v0.10.3-rc.10`,
-which rewrites the `/thrum:restart` skill around prose continuations and extends
-the silence watchdog to recognize Claude Code 2.1.141's new `·` thinking-spinner
-glyph. See the [Beta Channel](beta-channel.md) guide for how to opt in. Stable
-promotion follows the standard 48-hour soak window once no P0/P1 bugs are open
-against the RC.
+v0.10.3 is currently a release candidate. The latest tag is `v0.10.3-rc.11`,
+which polishes three rough edges in the rc.10 v2 `/thrum:restart` skill
+(coordinator self-restart branch, dropped stale snapshot-restore reference,
+restructured Step 1 to remove the heredoc-with-discipline pattern). See the
+[Beta Channel](beta-channel.md) guide for how to opt in. Stable promotion
+follows the standard 48-hour soak window once no P0/P1 bugs are open against the
+RC.
 
 This release is largely about the runtime experience: codex gains the same
 first-class plugin treatment claude has had, fresh and restarted tmux panes no
