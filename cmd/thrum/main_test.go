@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -78,4 +80,92 @@ func TestInferWorktreeBasePath_DefaultsToThrumWorktrees(t *testing.T) {
 	if got != want {
 		t.Errorf("worktree.InferBasePath = %q, want %q", got, want)
 	}
+}
+
+// newTempRepoForCobraTest mirrors internal/worktree.newTestRepo
+// but lives in package main since this test exercises the cobra
+// command end-to-end. Pre-populates Worktrees.BasePath in the
+// thrum config so the cobra wrapper's basePath resolution picks
+// it up.
+func newTempRepoForCobraTest(t *testing.T) (repoPath, basePath string) {
+	t.Helper()
+	repoPath = t.TempDir()
+	basePath = t.TempDir()
+	runCmd := func(name string, args ...string) {
+		cmd := exec.Command(name, args...)
+		cmd.Dir = repoPath
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%s %v: %v\n%s", name, args, err, out)
+		}
+	}
+	runCmd("git", "init")
+	runCmd("git", "config", "user.email", "test@example.com")
+	runCmd("git", "config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(repoPath, "README.md"),
+		[]byte("init\n"), 0600); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+	runCmd("git", "add", "README.md")
+	runCmd("git", "commit", "-m", "init")
+	runCmd("git", "branch", "-M", "main")
+	if err := os.MkdirAll(filepath.Join(repoPath, ".thrum"), 0750); err != nil {
+		t.Fatalf("mkdir .thrum: %v", err)
+	}
+	cfgPath := filepath.Join(repoPath, ".thrum", "config.json")
+	cfgJSON := `{"worktrees":{"base_path":"` + basePath + `"}}`
+	if err := os.WriteFile(cfgPath, []byte(cfgJSON), 0600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	return repoPath, basePath
+}
+
+func TestWorktreeCreate_DefaultBranch(t *testing.T) {
+	repoPath, basePath := newTempRepoForCobraTest(t)
+
+	// Point flagRepo at the test repo. The existing pattern at
+	// main_test.go:55 mutates the package-level flagRepo var
+	// before invoking cmd.RunE; we mirror that here.
+	flagRepo = repoPath
+	t.Cleanup(func() { flagRepo = "" })
+
+	// Ensure basePath includes the repo name suffix because the
+	// cobra wrapper at line 2773 auto-appends it; mirror that
+	// here so the assertion below matches the actual placement.
+	repoName := filepath.Base(repoPath)
+	if filepath.Base(basePath) != repoName {
+		basePath = filepath.Join(basePath, repoName)
+	}
+
+	cmd := worktreeCreateCmd()
+	cmd.SetArgs([]string{"smoke-test"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("worktree create: %v", err)
+	}
+
+	// Worktree exists at base_path/<name>.
+	wantPath := filepath.Join(basePath, "smoke-test")
+	if _, err := os.Stat(wantPath); err != nil {
+		t.Errorf("worktree path %q: %v", wantPath, err)
+	}
+	// Branch is feature/<name> (default per spec §4.1 + Leon Q1).
+	out, err := exec.Command("git", "-C", repoPath,
+		"branch", "--list", "feature/smoke-test").CombinedOutput()
+	if err != nil {
+		t.Fatalf("git branch --list: %v\n%s", err, out)
+	}
+	if len(out) == 0 {
+		t.Errorf("expected branch feature/smoke-test present, got empty")
+	}
+	// Redirect file points at the main repo's .thrum dir.
+	redirect, err := os.ReadFile(filepath.Join(wantPath, ".thrum", "redirect"))
+	if err != nil {
+		t.Fatalf("read redirect: %v", err)
+	}
+	wantRedirect := filepath.Join(repoPath, ".thrum") + "\n"
+	if string(redirect) != wantRedirect {
+		t.Errorf("redirect: got %q, want %q", redirect, wantRedirect)
+	}
+	// Reference worktree package to confirm import is needed
+	// regardless of assertion shape.
+	_ = worktree.InferBasePath
 }
