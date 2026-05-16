@@ -1152,10 +1152,16 @@ The daemon must be running and you must have an active session.`,
 			showAll, _ := cmd.Flags().GetBool("all")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 			page, _ := cmd.Flags().GetInt("page")
+			fromAgent, _ := cmd.Flags().GetString("from")
 
 			// --limit is an alias for --page-size
 			if cmd.Flags().Changed("limit") {
 				pageSize, _ = cmd.Flags().GetInt("limit")
+			}
+
+			// Strip optional leading @ on --from value.
+			if len(fromAgent) > 0 && fromAgent[0] == '@' {
+				fromAgent = fromAgent[1:]
 			}
 
 			agentID, err := resolveLocalAgentID()
@@ -1175,6 +1181,7 @@ The daemon must be running and you must have an active session.`,
 				Page:              page,
 				CallerAgentID:     agentID,
 				CallerMentionRole: agentRole,
+				AuthorID:          fromAgent,
 			}
 
 			// Auto-filter: when identity is resolved and --all is not set,
@@ -1189,6 +1196,26 @@ The daemon must be running and you must have an active session.`,
 				return fmt.Errorf("failed to connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
+
+			// Validate --from agent exists. Mirrors --to behavior: fast-fail
+			// with a clear error rather than silently returning an empty
+			// inbox on a typo.
+			if fromAgent != "" {
+				agentsResp, listErr := cli.AgentList(client, cli.AgentListOptions{})
+				if listErr != nil {
+					return fmt.Errorf("validate --from @%s: %w", fromAgent, listErr)
+				}
+				known := false
+				for _, a := range agentsResp.Agents {
+					if a.AgentID == fromAgent {
+						known = true
+						break
+					}
+				}
+				if !known {
+					return fmt.Errorf("unknown agent: @%s (use 'thrum team --all' to see registered agents)", fromAgent)
+				}
+			}
 
 			result, err := cli.Inbox(client, opts)
 			if err != nil {
@@ -1243,6 +1270,7 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().Int("page-size", 10, "Results per page")
 	cmd.Flags().Int("limit", 0, "Alias for --page-size")
 	cmd.Flags().Int("page", 1, "Page number")
+	cmd.Flags().String("from", "", "Filter inbox to messages from a specific agent (use @agent_name or agent_name)")
 
 	return cmd
 }
