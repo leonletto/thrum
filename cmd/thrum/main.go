@@ -32,6 +32,7 @@ import (
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/context/roleconfig"
 	"github.com/leonletto/thrum/internal/daemon"
+	"github.com/leonletto/thrum/internal/daemon/backstop"
 	"github.com/leonletto/thrum/internal/daemon/bootstrap"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
@@ -6879,6 +6880,24 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		},
 	)
 	go spoolJanitor.Start(ctx)
+
+	// thrum-7b84.3 E3: backstop ticker. Every 15 minutes, scan
+	// message_deliveries for unread rows older than the AgeCutoff for
+	// alive agents, and re-fire the existing tmux nudge. Catches the
+	// push-delivery cases that tmux/spool missed (wedged pane, hook
+	// didn't fire, agent in a long bash invocation that didn't yield).
+	// Pattern mirrors PeriodicSyncScheduler + BackupScheduler — own
+	// goroutine, own ticker. The Dispatcher is a thin shim around
+	// nudge.DispatchTmux + inbox.WriteSpool that explicitly bypasses
+	// OutboundRelay/Telegram (this is a forgotten-mail reminder, not a
+	// paging signal).
+	bs := &backstop.Backstop{
+		DB:        st.DB(),
+		Dispatch:  newBackstopDispatcher(thrumDir),
+		AgeCutoff: 15 * time.Minute,
+		Interval:  15 * time.Minute,
+	}
+	go bs.Run(ctx)
 
 	// Telegram bridge RPC handlers + goroutine
 	telegramHandler := rpc.NewTelegramHandler(absPath)
