@@ -663,6 +663,36 @@ func TestRPC_JobDone_UnknownRun(t *testing.T) {
 	}
 }
 
+// TestScheduler_JobDone_GoLevelSurface: pins the Go-level
+// Scheduler.JobDone(ctx, runID, summary) method that B-B1's
+// scheduled_agent handler binds against directly (NOT via JSON-RPC).
+// Plan's "Stability commitments" header lists this as one of the four
+// load-bearing surfaces.
+func TestScheduler_JobDone_GoLevelSurface(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	_, cancel := context.WithCancel(context.Background())
+	sig := s.runReg.register("docs-bot-g1-200", cancel)
+
+	if err := s.JobDone(context.Background(), "docs-bot-g1-200", "agent finished cleanly"); err != nil {
+		t.Fatalf("JobDone: %v", err)
+	}
+	select {
+	case c := <-sig:
+		if c.Summary != "agent finished cleanly" {
+			t.Errorf("summary = %q", c.Summary)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Error("completion not delivered via Go-level surface")
+	}
+	// Unknown run propagates ErrUnknownRun.
+	if err := s.JobDone(context.Background(), "missing-run", ""); !errors.Is(err, ErrUnknownRun) {
+		t.Errorf("err = %v; want ErrUnknownRun", err)
+	}
+}
+
 // TestRPC_JobDone_DuplicateDelivery: signal channel is cap=1; a second
 // call with the handler still holding the first Completion returns
 // ErrCompletionAlreadyDelivered.

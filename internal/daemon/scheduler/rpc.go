@@ -146,11 +146,20 @@ func (s *Scheduler) RPC_JobCreate(ctx context.Context, req CreateJobRequest) (Cr
 	s.specs[req.JobID] = spec
 	s.mu.Unlock()
 
+	// Seed the state row so the reactor's overlap-skip check + subsequent
+	// RPC_JobShow have a row to read. Failure here is a real problem —
+	// the in-memory spec is registered but persistence is broken — so
+	// roll back the spec write and surface the error to the caller.
 	now := time.Now()
-	_ = s.state.UpsertState(ctx, &StateRow{
+	if err := s.state.UpsertState(ctx, &StateRow{
 		JobID: spec.ID, Generation: 1, CurrentState: StateScheduled,
 		CreatedAt: now, UpdatedAt: now,
-	})
+	}); err != nil {
+		s.mu.Lock()
+		delete(s.specs, req.JobID)
+		s.mu.Unlock()
+		return CreateJobResponse{}, fmt.Errorf("job.create: seed state for %q: %w", req.JobID, err)
+	}
 	// Persistence to disk via AtomicWriteConfig is a daemon-side wiring
 	// step — the substrate exposes the in-memory mutation; the daemon
 	// chooses when to flush the updated jobs map back to .thrum/config.json.
@@ -312,24 +321,27 @@ type JobDoneRequest struct {
 // signal from the agent's POV.
 type JobDoneResponse struct{}
 
-// RPC_JobDone delivers a Completion to the per-run signal channel via
-// the run registry (canonical §6.1 Alt-A). Returns:
+// JobDone is the Go-level cross-epic stability surface for signalling
+// run completion. B-B1's scheduled_agent handler calls this directly
+// (Go method) when it observes its target agent reach DONE / FAILED;
+// RPC_JobDone is the wire adapter that delegates here for JSON-RPC
+// callers.
 //
-//   - ErrUnknownRun: no run with that run_id is registered. The run
-//     already completed, was cancelled, or the agent is reporting against
-//     a stale run_id.
-//   - ErrCompletionAlreadyDelivered: a prior Completion is still
-//     pending on the signal channel (buffered cap=1). The handler
-//     already received an earlier done signal but hasn't drained it.
-//
-// Cross-epic stability commitment: this is the fourth load-bearing
-// surface (RegisterInternal, JobSpec(id), Handler, JobDone). B-B1's
-// scheduled_agent handler binds against this signature; do not break.
-func (s *Scheduler) RPC_JobDone(_ context.Context, req JobDoneRequest) (JobDoneResponse, error) {
-	err := s.runReg.deliverCompletion(req.RunID, &Completion{
+// Cross-epic stability commitment per plan "Stability commitments"
+// section: signature is `(ctx context.Context, runID, summary string) error`.
+// Returns ErrUnknownRun / ErrCompletionAlreadyDelivered per the
+// runRegistry contract (canonical §6.1 Alt-A).
+func (s *Scheduler) JobDone(_ context.Context, runID, summary string) error {
+	return s.runReg.deliverCompletion(runID, &Completion{
 		Reason:  "agent reported done",
-		Summary: req.Summary,
+		Summary: summary,
 	})
+}
+
+// RPC_JobDone is the JSON-RPC wire adapter for the Go-level JobDone
+// surface. Bridges JSON params → typed call.
+func (s *Scheduler) RPC_JobDone(ctx context.Context, req JobDoneRequest) (JobDoneResponse, error) {
+	err := s.JobDone(ctx, req.RunID, req.Summary)
 	return JobDoneResponse{}, err
 }
 
