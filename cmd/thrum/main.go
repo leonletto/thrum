@@ -5199,21 +5199,38 @@ func getClient() (*cli.Client, error) {
 	if _, refreshErr := cli.RefreshLocalIdentity(client, repoPath); refreshErr != nil {
 		fmt.Fprintf(os.Stderr, "thrum: identity refresh failed: %v\n", refreshErr)
 
-		var ge *guard.Error
-		if errors.As(refreshErr, &ge) && ge.Guard == "cross_worktree" {
-			switch crossWorktreeResponseFor(currentCobraCmd) {
-			case CrossWorktreeResponseDiagnosticBanner:
-				emitCrossWorktreeBanner(ge, false)
-			case CrossWorktreeResponseWhoami:
-				emitCrossWorktreeBanner(ge, true)
-			default: // CrossWorktreeResponseAbort (and any unknown value)
-				_ = client.Close()
-				return nil, refreshErr
-			}
+		if fatalErr := handleCrossWorktreeRefresh(currentCobraCmd, refreshErr); fatalErr != nil {
+			_ = client.Close()
+			return nil, fatalErr
 		}
 	}
 
 	return client, nil
+}
+
+// handleCrossWorktreeRefresh decides what to do when RefreshLocalIdentity
+// returned an error. Returns non-nil to instruct getClient to fail
+// closed (and propagate the error to the caller); returns nil when the
+// error has been absorbed (banner emitted or wasn't a cross_worktree
+// fire). Factored out of getClient for unit testability — the policy
+// decision is exercised independently of the daemon connection.
+func handleCrossWorktreeRefresh(cmd *cobra.Command, refreshErr error) error {
+	var ge *guard.Error
+	if !errors.As(refreshErr, &ge) || ge.Guard != "cross_worktree" {
+		// Not a cross_worktree fire — keep the original log-and-proceed
+		// contract for dead_pid_auto_reclaim and other guard reasons.
+		return nil
+	}
+	switch crossWorktreeResponseFor(cmd) {
+	case CrossWorktreeResponseDiagnosticBanner:
+		emitCrossWorktreeBanner(ge, false)
+		return nil
+	case CrossWorktreeResponseWhoami:
+		emitCrossWorktreeBanner(ge, true)
+		return nil
+	default: // CrossWorktreeResponseAbort (and any unknown value)
+		return refreshErr
+	}
 }
 
 // crossWorktreeResponseFor returns the leaf's annotated response class
@@ -5250,10 +5267,10 @@ func emitCrossWorktreeBanner(ge *guard.Error, stdoutToo bool) {
 	)
 	// Stderr write first, with an explicit Sync so the banner reaches
 	// the terminal before any subsequent stdout from the RunE body.
-	fmt.Fprintln(os.Stderr, banner)
+	_, _ = fmt.Fprintln(os.Stderr, banner)
 	_ = os.Stderr.Sync()
 	if stdoutToo && !flagJSON {
-		fmt.Fprintln(os.Stdout, banner)
+		_, _ = fmt.Fprintln(os.Stdout, banner)
 		_ = os.Stdout.Sync()
 	}
 }
