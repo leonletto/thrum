@@ -545,6 +545,74 @@ func TestRPC_JobCancel_NotFound(t *testing.T) {
 	}
 }
 
+// TestRPC_JobHistory_ByJobID: returns scheduler_job_events for a single
+// job_id, DESC by event_time.
+func TestRPC_JobHistory_ByJobID(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	s.mu.Lock()
+	s.specs["docs-bot"] = JobSpec{
+		ID: "docs-bot", Type: "scheduled_agent",
+		Schedule: "0 9 * * *", Enabled: true,
+	}
+	s.mu.Unlock()
+
+	now := time.Now()
+	for i := 0; i < 5; i++ {
+		if err := s.state.AppendEvent(context.Background(), &Event{
+			JobID: "docs-bot", RunID: "docs-bot-g1-100",
+			EventTime: now.Add(time.Duration(i) * time.Second),
+			FromState: StateScheduled, ToState: StateDispatched,
+			Reason: "tick",
+		}); err != nil {
+			t.Fatalf("seed event %d: %v", i, err)
+		}
+	}
+
+	resp, err := s.RPC_JobHistory(context.Background(), JobHistoryRequest{JobID: "docs-bot"})
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	if len(resp.Events) != 5 {
+		t.Errorf("got %d events; want 5", len(resp.Events))
+	}
+}
+
+// TestRPC_JobHistory_LimitCapped: req.Limit > 500 clamps to 500;
+// req.Limit <= 0 defaults to 50.
+func TestRPC_JobHistory_LimitCapped(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	s.mu.Lock()
+	s.specs["x"] = JobSpec{ID: "x", Type: "command", Schedule: "@every 1h", Enabled: true}
+	s.mu.Unlock()
+
+	resp, err := s.RPC_JobHistory(context.Background(), JobHistoryRequest{JobID: "x", Limit: 10000})
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	// Empty event log → 0 events regardless; this just verifies no error
+	// on the cap path.
+	if len(resp.Events) != 0 {
+		t.Errorf("got %d events; want 0", len(resp.Events))
+	}
+}
+
+// TestRPC_JobHistory_NotFound: unknown job_id returns an error.
+func TestRPC_JobHistory_NotFound(t *testing.T) {
+	db := setupStateTestDB(t)
+	s := New(Config{DB: db, DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	if _, err := s.RPC_JobHistory(context.Background(), JobHistoryRequest{JobID: "missing"}); err == nil {
+		t.Error("expected not-found error")
+	}
+}
+
 // TestRPC_JobShow_RegisteredButNoState: a freshly-registered job whose
 // reactor hasn't fired yet has no state row. show returns spec + nil
 // State + empty RecentEvents.

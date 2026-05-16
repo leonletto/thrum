@@ -300,6 +300,40 @@ type CancelJobResponse struct {
 	Reason    string `json:"reason,omitempty"`
 }
 
+// JobHistoryRequest carries the lookup key and optional limit for
+// job.history. Default limit is 50; capped at 500 to bound network
+// payload and SQLite scan cost.
+type JobHistoryRequest struct {
+	JobID string `json:"job_id"`
+	Limit int    `json:"limit,omitempty"`
+}
+
+// JobHistoryResponse carries the requested events.
+type JobHistoryResponse struct {
+	Events []Event `json:"events"`
+}
+
+// RPC_JobHistory reads events from scheduler_job_events for a single
+// job_id. Bounded by retention (Task 35's cleanup handler prunes events
+// older than daemon.scheduler.event_retention_days; default 7 days).
+func (s *Scheduler) RPC_JobHistory(ctx context.Context, req JobHistoryRequest) (JobHistoryResponse, error) {
+	if _, ok := s.JobSpec(req.JobID); !ok {
+		return JobHistoryResponse{}, fmt.Errorf("id %q not found", req.JobID)
+	}
+	limit := req.Limit
+	switch {
+	case limit <= 0:
+		limit = 50
+	case limit > 500:
+		limit = 500
+	}
+	events, err := s.state.RecentEvents(ctx, req.JobID, limit)
+	if err != nil {
+		return JobHistoryResponse{}, err
+	}
+	return JobHistoryResponse{Events: events}, nil
+}
+
 // RPC_JobCancel invokes the registered cancel-func for the active run.
 // Per Q8.2 + MINOR-19: when no active run exists, returns
 // (Cancelled=false, Reason="no active run") rather than an error — the
