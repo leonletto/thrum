@@ -165,8 +165,8 @@ func (s *Scheduler) RegisterInternal(id, schedule string, opts InternalOpts, h H
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if _, exists := s.specs[id]; exists {
+		s.mu.Unlock()
 		panic(fmt.Sprintf("scheduler: duplicate RegisterInternal for %q", id))
 	}
 	catchUp := opts.CatchUp
@@ -183,6 +183,19 @@ func (s *Scheduler) RegisterInternal(id, schedule string, opts InternalOpts, h H
 		CatchUp:    catchUp,
 	}
 	s.handlers[id] = h
+	s.mu.Unlock()
+
+	// Per-handler-registration reconcile (spec §8.4.4): if the bridge
+	// called RegisterInternal AFTER ReconcileBoot ran, the matching
+	// non-terminal row never got handed a handler. Reconcile it here
+	// once; the steady-state reactor does NOT re-call Reconcile.
+	if row, err := s.state.GetState(context.Background(), id); err == nil {
+		switch row.CurrentState {
+		case StateScheduled, StateDispatched, StateRunning:
+			s.reconcileOne(context.Background(), row)
+		}
+	}
+
 	s.wakeReactor()
 }
 
@@ -194,11 +207,34 @@ func (s *Scheduler) RegisterInternal(id, schedule string, opts InternalOpts, h H
 // Cross-epic stability commitment: B-B1 E6.1 and E6.3 consume this.
 func (s *Scheduler) RegisterTypeHandler(jobType string, h Handler) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if _, exists := s.typeHandlers[jobType]; exists {
+		s.mu.Unlock()
 		return fmt.Errorf("scheduler: type handler for %q already registered", jobType)
 	}
 	s.typeHandlers[jobType] = h
+	// Snapshot the job IDs whose Type matches so we can reconcile them
+	// without holding the write lock.
+	var matchingIDs []string
+	for id, spec := range s.specs {
+		if spec.Type == jobType {
+			matchingIDs = append(matchingIDs, id)
+		}
+	}
+	s.mu.Unlock()
+
+	// Per-handler-registration reconcile (spec §8.4.4): walk specs whose
+	// Type matches the newly-registered handler and reconcile any
+	// non-terminal state rows.
+	for _, id := range matchingIDs {
+		row, err := s.state.GetState(context.Background(), id)
+		if err != nil {
+			continue
+		}
+		switch row.CurrentState {
+		case StateScheduled, StateDispatched, StateRunning:
+			s.reconcileOne(context.Background(), row)
+		}
+	}
 	return nil
 }
 
