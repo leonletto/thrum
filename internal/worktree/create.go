@@ -1,11 +1,17 @@
 package worktree
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"log/slog"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/identity"
 )
 
@@ -91,4 +97,153 @@ func validateOpts(opts CreateOpts) error {
 			ErrInvalidOpts, len(opts.BasePath))
 	}
 	return nil
+}
+
+// Create creates (or, for persistent mode, reuses) a git worktree
+// configured with thrum/beads redirects and hook scripts. See spec
+// §3.1 for the full contract.
+//
+// BasePath resolution priority (spec §3.4): opts.BasePath →
+// config.Worktrees.BasePath → InferBasePath(opts.RepoPath). The
+// fallback chain lives inside Create because the daemon scheduler
+// (B-B1 E6.1) bypasses cobra; putting it only in the cobra wrapper
+// would silently skip operator config for scheduler-driven creates.
+//
+// Failure contract (spec §3.5): every non-cancellation error path
+// after `git worktree add` attempts inline best-effort cleanup
+// (`git worktree remove --force` + `git branch -D`). Context
+// cancellation post-add is the ONE intentional shortcut (residue
+// class #4) — daemon shutdown stays fast and B-B1's Q10 sweep
+// handles the orphan.
+func Create(ctx context.Context, opts CreateOpts) (*CreateResult, error) {
+	if err := validateOpts(opts); err != nil {
+		return nil, err
+	}
+
+	// Resolve BasePath in the three-tier priority order from spec §3.4.
+	if opts.BasePath == "" {
+		thrumDir := filepath.Join(opts.RepoPath, ".thrum")
+		if cfg, cfgErr := config.LoadThrumConfig(thrumDir); cfgErr == nil &&
+			cfg.Worktrees.BasePath != "" {
+			opts.BasePath = cfg.Worktrees.BasePath
+		}
+	}
+	if opts.BasePath == "" {
+		opts.BasePath = InferBasePath(opts.RepoPath)
+	}
+	if opts.BasePath == "" {
+		return nil, fmt.Errorf("%w: BasePath unresolved (RepoPath=%s)",
+			ErrInvalidOpts, opts.RepoPath)
+	}
+
+	path, branch := derivePathAndBranch(opts)
+
+	// Spec §3.6: slog.Info at entry with agent, job_id, mode, path.
+	mode := "ephemeral"
+	if opts.Persistent {
+		mode = "persistent"
+	}
+	slog.Info("worktree.Create beginning",
+		slog.String("agent", opts.AgentName),
+		slog.String("job_id", opts.JobID),
+		slog.String("mode", mode),
+		slog.String("path", path))
+
+	// 255-byte path-length guard (spec §3.4).
+	if len(path) > 255 {
+		return nil, fmt.Errorf("%w: resulting path %d bytes exceeds 255-byte filesystem limit",
+			ErrInvalidOpts, len(path))
+	}
+
+	baseBranch := opts.BaseBranch
+	if baseBranch == "" {
+		baseBranch = "main"
+	}
+
+	// Persistent reuse pre-check.
+	if opts.Persistent {
+		reused, err := persistentReuseCheck(ctx, path, branch)
+		if err != nil {
+			return nil, err
+		}
+		if reused {
+			slog.Info("worktree.Create done (reused)",
+				slog.String("agent", opts.AgentName),
+				slog.String("mode", mode),
+				slog.String("path", path),
+				slog.String("branch", branch),
+				slog.Bool("reused", true))
+			return &CreateResult{Path: path, Branch: branch, Reused: true}, nil
+		}
+	} else {
+		// Ephemeral mode: path-already-exists is a typed error.
+		if _, err := os.Stat(path); err == nil {
+			return nil, fmt.Errorf("%w: %s", ErrPathExists, path)
+		}
+	}
+
+	// git worktree add -b <branch> <path> <baseBranch>
+	if out, err := safecmd.Git(ctx, opts.RepoPath,
+		"worktree", "add", "-b", branch, path, baseBranch); err != nil {
+		return nil, fmt.Errorf("git worktree add: %s: %w", out, err)
+	}
+
+	// Best-effort cleanup wrapper for any subsequent error.
+	cleanup := func(origErr error) error {
+		// Cancellation: skip cleanup per spec §3.7 (residue class #4).
+		if errors.Is(origErr, context.Canceled) ||
+			errors.Is(origErr, context.DeadlineExceeded) {
+			return origErr
+		}
+		// Best-effort: remove worktree + delete branch.
+		_, removeErr := safecmd.Git(context.Background(), opts.RepoPath,
+			"worktree", "remove", "--force", path)
+		_, branchErr := safecmd.Git(context.Background(), opts.RepoPath,
+			"branch", "-D", branch)
+		if removeErr != nil || branchErr != nil {
+			return fmt.Errorf("%w (residue: worktree=%s branch=%s remove_err=%v branch_err=%v)",
+				origErr, path, branch, removeErr, branchErr)
+		}
+		return origErr
+	}
+
+	if err := ctx.Err(); err != nil {
+		return nil, cleanup(err)
+	}
+
+	// EnsureRedirects on the freshly-created worktree.
+	if err := EnsureRedirects(path, opts.RepoPath); err != nil {
+		return nil, cleanup(fmt.Errorf("ensure redirects: %w", err))
+	}
+
+	slog.Info("worktree.Create done",
+		slog.String("agent", opts.AgentName),
+		slog.String("job_id", opts.JobID),
+		slog.String("mode", mode),
+		slog.String("path", path),
+		slog.String("branch", branch),
+		slog.Bool("reused", false))
+	return &CreateResult{Path: path, Branch: branch, Reused: false}, nil
+}
+
+// persistentReuseCheck returns (true, nil) when path already exists
+// and contains the expected branch (idempotent reuse). Returns
+// (false, ErrPersistentBranchMismatch) when path exists with a
+// different branch. Returns (false, nil) when path does not exist
+// (fresh persistent create proceeds).
+func persistentReuseCheck(ctx context.Context, path, branch string) (bool, error) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return false, nil
+	}
+	// Path exists; resolve its current branch via git rev-parse.
+	out, err := safecmd.Git(ctx, path, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return false, fmt.Errorf("rev-parse existing worktree: %w", err)
+	}
+	actual := strings.TrimSpace(string(out))
+	if actual != branch {
+		return false, fmt.Errorf("%w: path=%s expected=%s actual=%s",
+			ErrPersistentBranchMismatch, path, branch, actual)
+	}
+	return true, nil
 }

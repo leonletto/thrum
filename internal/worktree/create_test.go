@@ -1,7 +1,11 @@
 package worktree
 
 import (
+	"context"
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -191,5 +195,112 @@ func TestValidateOpts(t *testing.T) {
 				t.Errorf("got err %v, want errors.Is(%v) true", err, c.wantErr)
 			}
 		})
+	}
+}
+
+// newTestRepo bootstraps a temporary git repo with a thrum init
+// state suitable for worktree-add operations. Returns the repo
+// path and the worktree-base path (also temp).
+func newTestRepo(t *testing.T) (repoPath, basePath string) {
+	t.Helper()
+	repoPath = t.TempDir()
+	basePath = t.TempDir()
+
+	runCmd := func(name string, args ...string) {
+		cmd := exec.Command(name, args...)
+		cmd.Dir = repoPath
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("%s %v: %v\n%s", name, args, err, out)
+		}
+	}
+	runCmd("git", "init")
+	runCmd("git", "config", "user.email", "test@example.com")
+	runCmd("git", "config", "user.name", "Test")
+	// Initial commit so worktree add has a HEAD to branch from.
+	if err := os.WriteFile(filepath.Join(repoPath, "README.md"),
+		[]byte("init\n"), 0644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+	runCmd("git", "add", "README.md")
+	runCmd("git", "commit", "-m", "init")
+	runCmd("git", "branch", "-M", "main")
+
+	// Minimal .thrum/ dir so EnsureRedirects has a main-repo target.
+	if err := os.MkdirAll(filepath.Join(repoPath, ".thrum"), 0750); err != nil {
+		t.Fatalf("mkdir .thrum: %v", err)
+	}
+	return repoPath, basePath
+}
+
+func TestCreate_EphemeralHappyPath(t *testing.T) {
+	repoPath, basePath := newTestRepo(t)
+
+	ctx := context.Background()
+	result, err := Create(ctx, CreateOpts{
+		RepoPath:      repoPath,
+		BasePath:      basePath,
+		AgentName:     "docs_bot",
+		JobID:         "job_01HABCDE",
+		WakeTimestamp: 1715731200,
+		BaseBranch:    "main",
+		Persistent:    false,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if result.Reused {
+		t.Error("Reused: got true, want false")
+	}
+	wantPath := filepath.Join(basePath,
+		"docs_bot-job_01HABCDE-1715731200")
+	if result.Path != wantPath {
+		t.Errorf("Path: got %q, want %q", result.Path, wantPath)
+	}
+	wantBranch := "agent/docs_bot/job-job_01HABCDE-1715731200"
+	if result.Branch != wantBranch {
+		t.Errorf("Branch: got %q, want %q", result.Branch, wantBranch)
+	}
+	// Worktree directory exists.
+	if _, err := os.Stat(result.Path); err != nil {
+		t.Errorf("worktree path: %v", err)
+	}
+	// .thrum/redirect inside the new worktree.
+	redirect := filepath.Join(result.Path, ".thrum", "redirect")
+	if _, err := os.Stat(redirect); err != nil {
+		t.Errorf("redirect: %v", err)
+	}
+}
+
+// TestCreate_BasePathInferredWhenEmpty covers spec §3.5 priority
+// chain tier 3: opts.BasePath unset AND no config.Worktrees.BasePath
+// → fall back to InferBasePath(RepoPath). Uses an env-stubbed
+// $HOME for determinism.
+func TestCreate_BasePathInferredWhenEmpty(t *testing.T) {
+	repoPath, _ := newTestRepo(t)
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	// Linux/darwin honor $HOME for os.UserHomeDir. Test confirms
+	// InferBasePath returns $HOME/.thrum/worktrees/<project>.
+
+	ctx := context.Background()
+	result, err := Create(ctx, CreateOpts{
+		RepoPath:      repoPath,
+		BasePath:      "", // intentionally empty
+		AgentName:     "x",
+		JobID:         "j",
+		WakeTimestamp: 1,
+		BaseBranch:    "main",
+		Persistent:    false,
+	})
+	if err != nil {
+		t.Fatalf("Create with empty BasePath: %v", err)
+	}
+	projectName := filepath.Base(repoPath)
+	wantBase := filepath.Join(fakeHome, ".thrum", "worktrees", projectName)
+	wantPath := filepath.Join(wantBase, "x-j-1")
+	if result.Path != wantPath {
+		t.Errorf("Path: got %q, want %q (BasePath should fall through to InferBasePath)",
+			result.Path, wantPath)
 	}
 }
