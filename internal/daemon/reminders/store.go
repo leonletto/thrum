@@ -448,18 +448,82 @@ func isConditionKind(k TriggerKind) bool {
 	return strings.HasPrefix(string(k), "condition_")
 }
 
-// MintConditionForAgent will be added by thrum-6qmf.3.24. Stub returns an
-// error so the Store interface is still satisfied for compile-time
-// checks while the idempotency-match-key logic lands separately.
+// MintConditionForAgent enforces the brainstorm Q3.8 idempotency
+// match-key: (target_agent, trigger_kind='condition_pane_quiet',
+// state='open'). At most ONE open condition_pane_quiet reminder per
+// target_agent at any time — repeated calls during the same stall
+// episode return the existing row rather than fan out duplicates.
+//
+// Returns (row, minted, err):
+//   - minted=true means a fresh row was INSERTed and `row` is the new one.
+//   - minted=false means an open row already existed and `row` is the
+//     existing one — caller should treat as a no-op rather than retry.
+//
+// Cleared / cancelled / fired rows are NOT terminal blockers — once a
+// row leaves state=open, the next call mints a new row. This is the
+// expected behavior when a stall recurs after the operator has cleared
+// the prior reminder.
+//
+// The lookup + mint is not atomic at the DB layer (no UPSERT here);
+// concurrent sweep ticks for the same agent could theoretically race and
+// produce two open rows. Acceptable in practice because:
+//  1. The sweep is a single goroutine on a fixed cadence (15min default)
+//     — concurrent calls for the same agent are not part of the
+//     intended call pattern.
+//  2. The partial-unique-index defense-in-depth lives in canonical §3.5
+//     scope (the index is documented as a potential future tightening
+//     in the Implementation Standards #5 rationale but is not yet in the
+//     locked DDL).
+//  3. Worst-case: two open rows; both fire; operator clears both. Not
+//     correctness-critical.
 func (s *SQLStore) MintConditionForAgent(
-	_ context.Context,
-	_ string,
-	_ json.RawMessage,
-	_ []string,
-	_ string,
-	_ time.Time,
+	ctx context.Context,
+	agent string,
+	meta json.RawMessage,
+	chain []string,
+	snapshot string,
+	nextReminderAt time.Time,
 ) (*Reminder, bool, error) {
-	return nil, false, errors.New("MintConditionForAgent not yet implemented; see thrum-6qmf.3.24")
+	if existing, err := s.openConditionRowFor(ctx, agent); err != nil {
+		return nil, false, err
+	} else if existing != nil {
+		return existing, false, nil
+	}
+	r := &Reminder{
+		Source:         SourceDaemon,
+		TriggerKind:    TriggerConditionPaneQuiet,
+		TriggerMeta:    meta,
+		TargetChain:    chain,
+		TargetAgent:    agent,
+		PaneSnapshot:   snapshot,
+		NextReminderAt: &nextReminderAt,
+	}
+	if err := s.Mint(ctx, r); err != nil {
+		return nil, false, err
+	}
+	return r, true, nil
+}
+
+// openConditionRowFor returns the single open condition_pane_quiet
+// reminder for `agent`, or (nil, nil) when none exists. Backed by
+// idx_reminders_target (partial on state='open') combined with the
+// trigger_kind discriminator.
+func (s *SQLStore) openConditionRowFor(ctx context.Context, agent string) (*Reminder, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id FROM reminders
+		WHERE target_agent = ?
+		  AND trigger_kind = 'condition_pane_quiet'
+		  AND state = 'open'
+		LIMIT 1
+	`, agent)
+	var id string
+	if err := row.Scan(&id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return s.Get(ctx, id)
 }
 
 // Compile-time interface satisfaction check.

@@ -411,6 +411,84 @@ func TestStore_Get_NotFoundReturnsErrNoRows(t *testing.T) {
 	}
 }
 
+// ----- MintConditionForAgent idempotency (brainstorm Q3.8 match-key) -----
+
+func TestStore_MintConditionForAgent_Idempotent(t *testing.T) {
+	s := newTestStore(t)
+	snap := "pane snapshot bytes"
+	chain := []string{"@coordinator_main"}
+	meta := json.RawMessage(`{"agent":"docs_bot","quiet_since":1700000000}`)
+
+	r1, minted1, err := s.MintConditionForAgent(ctx, "docs_bot", meta, chain, snap, time.Now().Add(15*time.Minute))
+	if err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	if !minted1 {
+		t.Fatal("first call should mint")
+	}
+	if r1.ID == "" {
+		t.Fatal("first call should return populated id")
+	}
+
+	r2, minted2, err := s.MintConditionForAgent(ctx, "docs_bot", meta, chain, snap, time.Now().Add(20*time.Minute))
+	if err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	if minted2 {
+		t.Fatal("second call should NOT mint (existing open row)")
+	}
+	if r2.ID != r1.ID {
+		t.Errorf("second call returned %s; want existing %s", r2.ID, r1.ID)
+	}
+}
+
+func TestStore_MintConditionForAgent_RemintsAfterClear(t *testing.T) {
+	s := newTestStore(t)
+	chain := []string{"@coord"}
+	meta := json.RawMessage(`{"agent":"docs_bot"}`)
+
+	r1, minted, err := s.MintConditionForAgent(ctx, "docs_bot", meta, chain, "snap", time.Now().Add(time.Minute))
+	if err != nil || !minted {
+		t.Fatalf("first mint: minted=%v err=%v", minted, err)
+	}
+	if err := s.Clear(ctx, r1.ID, "leon"); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	r2, minted2, err := s.MintConditionForAgent(ctx, "docs_bot", meta, chain, "snap2", time.Now().Add(time.Minute))
+	if err != nil {
+		t.Fatalf("re-mint after clear: %v", err)
+	}
+	if !minted2 {
+		t.Fatal("re-mint after clear should mint a new row")
+	}
+	if r2.ID == r1.ID {
+		t.Errorf("re-mint returned same id %s; expected new row", r2.ID)
+	}
+}
+
+// MintConditionForAgent is scoped per target_agent — different agents
+// don't share the idempotency match-key.
+func TestStore_MintConditionForAgent_PerAgentScoping(t *testing.T) {
+	s := newTestStore(t)
+	chain := []string{"@coord"}
+	meta := json.RawMessage(`{}`)
+
+	_, mintedA, err := s.MintConditionForAgent(ctx, "alice", meta, chain, "x", time.Now().Add(time.Minute))
+	if err != nil || !mintedA {
+		t.Fatalf("alice mint: minted=%v err=%v", mintedA, err)
+	}
+	rB, mintedB, err := s.MintConditionForAgent(ctx, "bob", meta, chain, "y", time.Now().Add(time.Minute))
+	if err != nil || !mintedB {
+		t.Fatalf("bob mint: minted=%v err=%v", mintedB, err)
+	}
+	if !mintedB {
+		t.Error("bob should mint independently of alice's open row")
+	}
+	if rB.TargetAgent != "bob" {
+		t.Errorf("bob row TargetAgent = %q", rB.TargetAgent)
+	}
+}
+
 // ----- Exhaustive negative-transition matrix (dual-review IMPORTANT #8) -----
 // fired / cleared / cancelled are terminal. All five mutation ops must
 // reject when targeting a terminal row (3 states × 5 ops = 15 cases).
