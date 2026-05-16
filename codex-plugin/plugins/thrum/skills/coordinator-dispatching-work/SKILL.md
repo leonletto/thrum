@@ -1,12 +1,10 @@
 ---
 name: coordinator-dispatching-work
-description:
-  "Use when starting an epic, dispatching to an implementer, creating a worktree
-  for an agent, or spawning a sub-agent. Loads coordinator-specific discipline
-  for kicking off implementation work."
+description: "Use when starting an epic, dispatching to an implementer, creating a worktree for an agent, or spawning a sub-agent. Loads coordinator-specific discipline for kicking off implementation work."
 # source: claude-plugin/skills/coordinator-dispatching-work/SKILL.md
 # generated-by: scripts/sync-skills.sh
 ---
+
 
 ## Coordinator: Dispatching Work
 
