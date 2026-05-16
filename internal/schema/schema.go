@@ -20,7 +20,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 24
+const CurrentVersion = 25
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -369,6 +369,34 @@ func createTables(tx *sql.Tx) error {
 			thrum_msg_id TEXT NOT NULL,
 			created_at   INTEGER NOT NULL
 		)`,
+
+		// Reminders table (v25, A-B4 unified reminder substrate). Single
+		// polymorphic table for time-triggered reminders (agent/user self-set,
+		// daemon-authored staleness pings) and condition-triggered stalled-agent
+		// sweep entries. Polymorphism discriminated by (source, trigger_kind);
+		// validation enforced at mint time in internal/daemon/reminders/.
+		// Authoritative DDL: dev-docs/thrum-agents/substrate-canonical-reference.md §3.5.
+		`CREATE TABLE IF NOT EXISTS reminders (
+			id                  TEXT    PRIMARY KEY,
+			source              TEXT    NOT NULL,
+			source_agent        TEXT,
+			trigger_kind        TEXT    NOT NULL,
+			trigger_at          INTEGER,
+			trigger_meta        TEXT,
+			target_agent        TEXT,
+			target_chain        TEXT,
+			body                TEXT,
+			raised_at           INTEGER NOT NULL,
+			next_reminder_at    INTEGER,
+			last_fired_at       INTEGER,
+			state               TEXT    NOT NULL,
+			pane_snapshot       TEXT,
+			defer_history       TEXT    NOT NULL DEFAULT '[]',
+			cleared_at          INTEGER,
+			cancelled_at        INTEGER,
+			created_at          INTEGER NOT NULL,
+			updated_at          INTEGER NOT NULL
+		)`,
 	}
 
 	for _, sql := range tables {
@@ -439,6 +467,15 @@ func createIndexes(tx *sql.Tx) error {
 
 		// Telegram msg map reverse-lookup index (v24, thrum-48kt.2)
 		"CREATE INDEX IF NOT EXISTS idx_telegram_msg_map_thrum ON telegram_msg_map(thrum_msg_id)",
+
+		// Reminders indexes (v25, A-B4). Mirrors canonical §3.5. Partial indexes
+		// (WHERE state='open') keep dispatch + per-target lookups O(open-set)
+		// rather than O(total-reminders); the (source, trigger_kind) index
+		// accelerates sweep observability queries.
+		"CREATE INDEX IF NOT EXISTS idx_reminders_next ON reminders(next_reminder_at) WHERE state = 'open'",
+		"CREATE INDEX IF NOT EXISTS idx_reminders_state ON reminders(state)",
+		"CREATE INDEX IF NOT EXISTS idx_reminders_target ON reminders(target_agent) WHERE state = 'open'",
+		"CREATE INDEX IF NOT EXISTS idx_reminders_source_kind ON reminders(source, trigger_kind)",
 	}
 
 	for _, sql := range indexes {
@@ -1075,6 +1112,62 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_telegram_msg_map_thrum ON telegram_msg_map(thrum_msg_id)`)
 		if err != nil {
 			return fmt.Errorf("migration 23→24: create idx_telegram_msg_map_thrum: %w", err)
+		}
+	}
+
+	// Migration from version 24 to 25: A-B4 unified reminder substrate.
+	// Authoritative DDL: dev-docs/thrum-agents/substrate-canonical-reference.md §3.5.
+	// Single polymorphic table carries both time-triggered reminders (agent/user
+	// self-set, daemon-authored staleness pings) and condition-triggered
+	// stalled-agent sweep entries. Polymorphism discriminated by (source,
+	// trigger_kind); validation enforced at mint time in
+	// internal/daemon/reminders/validator.go (A-B4 Task 4).
+	//
+	// Plan v2.1 calls this "Migration 28" assuming A-B1/B-B1 land first; the
+	// canonical reference is the DDL, the version number adjusts at dispatch
+	// time. CurrentVersion was 24 at A-B4 dispatch → this is v25.
+	if startVersion < 25 && endVersion >= 25 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS reminders (
+				id                  TEXT    PRIMARY KEY,
+				source              TEXT    NOT NULL,
+				source_agent        TEXT,
+				trigger_kind        TEXT    NOT NULL,
+				trigger_at          INTEGER,
+				trigger_meta        TEXT,
+				target_agent        TEXT,
+				target_chain        TEXT,
+				body                TEXT,
+				raised_at           INTEGER NOT NULL,
+				next_reminder_at    INTEGER,
+				last_fired_at       INTEGER,
+				state               TEXT    NOT NULL,
+				pane_snapshot       TEXT,
+				defer_history       TEXT    NOT NULL DEFAULT '[]',
+				cleared_at          INTEGER,
+				cancelled_at        INTEGER,
+				created_at          INTEGER NOT NULL,
+				updated_at          INTEGER NOT NULL
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 24→25: create reminders table: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_reminders_next ON reminders(next_reminder_at) WHERE state = 'open'`)
+		if err != nil {
+			return fmt.Errorf("migration 24→25: create idx_reminders_next: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_reminders_state ON reminders(state)`)
+		if err != nil {
+			return fmt.Errorf("migration 24→25: create idx_reminders_state: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_reminders_target ON reminders(target_agent) WHERE state = 'open'`)
+		if err != nil {
+			return fmt.Errorf("migration 24→25: create idx_reminders_target: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_reminders_source_kind ON reminders(source, trigger_kind)`)
+		if err != nil {
+			return fmt.Errorf("migration 24→25: create idx_reminders_source_kind: %w", err)
 		}
 	}
 

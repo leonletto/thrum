@@ -1049,9 +1049,9 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	}
 }
 
-func TestSchema_V24_CurrentVersion(t *testing.T) {
-	if schema.CurrentVersion != 24 {
-		t.Errorf("CurrentVersion = %d, want 24", schema.CurrentVersion)
+func TestSchema_V25_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 25 {
+		t.Errorf("CurrentVersion = %d, want 25", schema.CurrentVersion)
 	}
 }
 
@@ -1541,4 +1541,198 @@ func TestMigrate_V20_AgentWithoutRegisterEvent_KeepsEmptyOriginDaemon(t *testing
 	if origin != "" {
 		t.Errorf("legacy agent origin_daemon = %q after migration, want '' (no matching event)", origin)
 	}
+}
+
+// TestMigration_RemindersTable verifies the v25 reminders substrate creates
+// the locked column set per substrate-canonical-reference.md §3.5. Plan
+// thrum-6qmf.3.13 Step 1.
+func TestMigration_RemindersTable(t *testing.T) {
+	db := setupTestDB(t)
+
+	var version int
+	if err := db.QueryRow("SELECT version FROM schema_version").Scan(&version); err != nil {
+		t.Fatalf("read schema_version: %v", err)
+	}
+	if version != schema.CurrentVersion {
+		t.Fatalf("schema_version = %d, want CurrentVersion = %d", version, schema.CurrentVersion)
+	}
+
+	got, err := columnInfo(db, "reminders")
+	if err != nil {
+		t.Fatalf("PRAGMA reminders: %v", err)
+	}
+
+	expected := []string{
+		"id", "source", "source_agent", "trigger_kind", "trigger_at",
+		"trigger_meta", "target_agent", "target_chain", "body",
+		"raised_at", "next_reminder_at", "last_fired_at", "state",
+		"pane_snapshot", "defer_history", "cleared_at", "cancelled_at",
+		"created_at", "updated_at",
+	}
+	for _, col := range expected {
+		if _, ok := got[col]; !ok {
+			t.Errorf("missing reminders column: %s", col)
+		}
+	}
+	if len(got) != len(expected) {
+		t.Errorf("reminders column count = %d, want %d (got=%v)", len(got), len(expected), got)
+	}
+
+	// Verify all four indexes exist (matches canonical §3.5 index set).
+	for _, idx := range []string{
+		"idx_reminders_next",
+		"idx_reminders_state",
+		"idx_reminders_target",
+		"idx_reminders_source_kind",
+	} {
+		var name string
+		err := db.QueryRow(
+			"SELECT name FROM sqlite_master WHERE type='index' AND name=?", idx,
+		).Scan(&name)
+		if err == sql.ErrNoRows {
+			t.Errorf("missing reminders index: %s", idx)
+		} else if err != nil {
+			t.Fatalf("query index %s: %v", idx, err)
+		}
+	}
+}
+
+// TestMigration_RemindersFreshInstallEquivalentToUpgrade enforces canonical
+// §3.11 Guard 1: fresh-install (InitDB → createTables) and incremental
+// upgrade (Migrate from a pre-v25 version) produce identical reminders
+// schema. Plan thrum-6qmf.3.13 Step 1, second test.
+func TestMigration_RemindersFreshInstallEquivalentToUpgrade(t *testing.T) {
+	fresh := setupTestDB(t)
+	upgraded := upgradedRemindersDB(t)
+
+	freshCols, err := columnInfo(fresh, "reminders")
+	if err != nil {
+		t.Fatalf("fresh PRAGMA: %v", err)
+	}
+	upgradedCols, err := columnInfo(upgraded, "reminders")
+	if err != nil {
+		t.Fatalf("upgraded PRAGMA: %v", err)
+	}
+
+	if len(freshCols) != len(upgradedCols) {
+		t.Fatalf("column count mismatch: fresh=%d upgraded=%d", len(freshCols), len(upgradedCols))
+	}
+	for name, freshInfo := range freshCols {
+		upInfo, ok := upgradedCols[name]
+		if !ok {
+			t.Errorf("column %s present in fresh but missing in upgraded", name)
+			continue
+		}
+		if freshInfo != upInfo {
+			t.Errorf("column %s shape diverges: fresh=%q upgraded=%q", name, freshInfo, upInfo)
+		}
+	}
+
+	// Indexes must also match across paths — partial-index WHERE clauses
+	// must be byte-identical or the planner picks different access paths.
+	for _, idx := range []string{
+		"idx_reminders_next",
+		"idx_reminders_state",
+		"idx_reminders_target",
+		"idx_reminders_source_kind",
+	} {
+		freshSQL, err := indexSQL(fresh, idx)
+		if err != nil {
+			t.Fatalf("fresh index %s: %v", idx, err)
+		}
+		upSQL, err := indexSQL(upgraded, idx)
+		if err != nil {
+			t.Fatalf("upgraded index %s: %v", idx, err)
+		}
+		if freshSQL != upSQL {
+			t.Errorf("index %s SQL diverges:\n fresh:    %s\n upgraded: %s", idx, freshSQL, upSQL)
+		}
+	}
+}
+
+// columnInfo returns {column_name: "type|notnull|default|pk"} for a table —
+// captures the full column shape so equivalence tests catch NULLability +
+// default drift, not just column presence.
+func columnInfo(db *sql.DB, table string) (map[string]string, error) {
+	//nolint:gosec // trusted table name from test code
+	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := map[string]string{}
+	for rows.Next() {
+		var (
+			cid     int
+			name    string
+			ctype   string
+			notnull int
+			dflt    sql.NullString
+			pk      int
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return nil, err
+		}
+		dfltStr := ""
+		if dflt.Valid {
+			dfltStr = dflt.String
+		}
+		out[name] = ctype + "|" + boolString(notnull == 1) + "|" + dfltStr + "|" + boolString(pk > 0)
+	}
+	return out, rows.Err()
+}
+
+func indexSQL(db *sql.DB, name string) (string, error) {
+	var sqlText sql.NullString
+	err := db.QueryRow(
+		"SELECT sql FROM sqlite_master WHERE type='index' AND name=?", name,
+	).Scan(&sqlText)
+	if err != nil {
+		return "", err
+	}
+	if !sqlText.Valid {
+		return "", nil
+	}
+	return sqlText.String, nil
+}
+
+func boolString(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
+}
+
+// upgradedRemindersDB bootstraps a database at v24 with the v24 schema
+// shape, then runs Migrate to bring it to CurrentVersion. Tests that the
+// migration path lands at the same reminders shape as fresh-install.
+func upgradedRemindersDB(t *testing.T) *sql.DB {
+	t.Helper()
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "upgrade.db")
+
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	// Seed the schema_version table at v24 — we only need the version
+	// marker so Migrate runs the 24→25 branch. Other tables are not
+	// required for the reminders migration.
+	if _, err := db.Exec(`CREATE TABLE schema_version (
+		version INTEGER NOT NULL,
+		applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("create schema_version: %v", err)
+	}
+	if _, err := db.Exec("INSERT INTO schema_version (version) VALUES (24)"); err != nil {
+		t.Fatalf("seed v24: %v", err)
+	}
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v24→%d: %v", schema.CurrentVersion, err)
+	}
+	return db
 }
