@@ -1,4 +1,3 @@
-
 ## Beads Migration to Embedded Mode (bd 1.0+)
 
 > **Field report, not official beads documentation.** This is a user-written

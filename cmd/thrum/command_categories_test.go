@@ -95,9 +95,9 @@ func TestPrimePathLeavesAreCovered(t *testing.T) {
 // is refactored and a branch forgets the new annotation).
 func TestEveryLeafHasCrossWorktreeResponse(t *testing.T) {
 	valid := map[string]bool{
-		CrossWorktreeResponseAbort:             true,
-		CrossWorktreeResponseDiagnosticBanner:  true,
-		CrossWorktreeResponseWhoami:            true,
+		CrossWorktreeResponseAbort:            true,
+		CrossWorktreeResponseDiagnosticBanner: true,
+		CrossWorktreeResponseWhoami:           true,
 	}
 
 	root := buildRootCmd()
