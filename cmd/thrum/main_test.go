@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/leonletto/thrum/internal/cli"
+	"github.com/leonletto/thrum/internal/worktree"
 )
 
 func TestPrintAgentSummaryField(t *testing.T) {
@@ -72,9 +73,9 @@ func TestCronInstallInboxPoll_EmitsInstruction(t *testing.T) {
 func TestInferWorktreeBasePath_DefaultsToThrumWorktrees(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	got := inferWorktreeBasePath("/some/path/falcon-backend")
+	got := worktree.InferBasePath("/some/path/falcon-backend")
 	want := filepath.Join(home, ".thrum", "worktrees", "falcon-backend")
 	if got != want {
-		t.Errorf("inferWorktreeBasePath = %q, want %q", got, want)
+		t.Errorf("worktree.InferBasePath = %q, want %q", got, want)
 	}
 }

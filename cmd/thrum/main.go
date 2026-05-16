@@ -475,7 +475,7 @@ Examples:
 				// LoadThrumConfig; zero-value (false) applies for fresh installs.
 				if cfg.Worktrees.BasePath == "" {
 					cfg.Worktrees = config.WorktreesConfig{
-						BasePath:     inferWorktreeBasePath(flagRepo),
+						BasePath:     worktree.InferBasePath(flagRepo),
 						BeadsEnabled: true,
 						ThrumEnabled: true,
 					}
@@ -2719,17 +2719,6 @@ Examples:
 	return cmd
 }
 
-// inferWorktreeBasePath returns the conventional worktree base path for a repo.
-// Returns ~/.thrum/worktrees/<project>; returns it whether or not it exists yet.
-func inferWorktreeBasePath(repoPath string) string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	projectName := filepath.Base(repoPath)
-	return filepath.Join(home, ".thrum", "worktrees", projectName)
-}
-
 func worktreeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "worktree",
@@ -2775,7 +2764,7 @@ func worktreeCreateCmd() *cobra.Command {
 
 			basePath := cfg.Worktrees.BasePath
 			if basePath == "" {
-				basePath = inferWorktreeBasePath(repoPath)
+				basePath = worktree.InferBasePath(repoPath)
 			}
 			// Ensure base_path includes the repo name to prevent worktrees
 			// from different repos colliding in a flat directory. Stale configs
@@ -2921,7 +2910,7 @@ func worktreeTeardownCmd() *cobra.Command {
 
 			basePath := cfg.Worktrees.BasePath
 			if basePath == "" {
-				basePath = inferWorktreeBasePath(repoPath)
+				basePath = worktree.InferBasePath(repoPath)
 			}
 			repoName := filepath.Base(repoPath)
 			if filepath.Base(basePath) != repoName {
