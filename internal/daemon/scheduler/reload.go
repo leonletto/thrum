@@ -1,16 +1,104 @@
 package scheduler
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 )
+
+// ReloadEscalation is emitted via Scheduler.OnReloadError when a reload's
+// JSON-parse or validator step fails. Carries the failing config path,
+// every validator finding (whole-config — not just the first), and the
+// timestamp the failure was detected. The daemon's escalation routing
+// (B-B1 / D-B1 channels) consumes and surfaces this to the operator.
+type ReloadEscalation struct {
+	ConfigPath string
+	Errors     []error
+	Timestamp  time.Time
+}
+
+// ConfigFile is the on-disk JSON shape the scheduler cares about. Other
+// top-level keys (daemon, sync, etc.) are decoded elsewhere by their
+// respective owners; the scheduler only touches `jobs`.
+type ConfigFile struct {
+	Jobs map[string]JobSpec `json:"jobs"`
+}
+
+// ReloadConfig loads configPath from disk, validates with
+// ValidateWholeConfig (Task 30), and either swaps the user-jobs portion
+// of the spec map (success) or preserves last-good config (validator
+// failure). On failure it logs every diagnostic AND invokes
+// OnReloadError so the daemon's escalation channel sees the event.
+//
+// Spec §8.6.3: validator error MUST NOT crash the daemon nor corrupt
+// previously-valid config. internal.* jobs are preserved across reload
+// — they live in the daemon-registered registry, not in the user config.
+func (s *Scheduler) ReloadConfig(_ context.Context, configPath string) error {
+	data, err := os.ReadFile(configPath) //nolint:gosec // configPath is daemon-owned config file path
+	if err != nil {
+		return fmt.Errorf("ReloadConfig: read %s: %w", configPath, err)
+	}
+
+	var parsed ConfigFile
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&parsed); err != nil {
+		s.escalateReloadError(configPath, []error{err})
+		log.Printf("scheduler.ReloadConfig: parse error: %v", err)
+		return fmt.Errorf("ReloadConfig: json: %w", err)
+	}
+
+	// Whole-config validator (Task 30) — reports ALL errors in one pass.
+	if errs := s.ValidateWholeConfig(parsed.Jobs); len(errs) > 0 {
+		s.escalateReloadError(configPath, errs)
+		for _, e := range errs {
+			log.Printf("scheduler.ReloadConfig: validator: %v", e)
+		}
+		return fmt.Errorf("ReloadConfig: %d validator error(s); config NOT swapped, daemon keeps last-good", len(errs))
+	}
+
+	// Validation passed — swap in user jobs under the config mutex.
+	// Internal jobs (internal.* prefix) are preserved; only user jobs
+	// rotate.
+	s.mu.Lock()
+	for id := range s.specs {
+		if !strings.HasPrefix(id, InternalPrefix) {
+			delete(s.specs, id)
+		}
+	}
+	for id, spec := range parsed.Jobs {
+		spec.ID = id // ensure the spec's own ID matches the map key
+		s.specs[id] = spec
+	}
+	s.mu.Unlock()
+	s.wakeReactor()
+	return nil
+}
+
+// escalateReloadError invokes OnReloadError (if set) with the per-config
+// escalation payload. Centralised so both the json-parse path and the
+// validator-failure path emit the same shape.
+func (s *Scheduler) escalateReloadError(configPath string, errs []error) {
+	if s.OnReloadError == nil {
+		return
+	}
+	s.OnReloadError(ReloadEscalation{
+		ConfigPath: configPath,
+		Errors:     errs,
+		Timestamp:  time.Now(),
+	})
+}
 
 // WatchConfig starts a config-file watcher and registers a SIGHUP fallback.
 // Calls onReload once per detected change. Stops when ctx is cancelled.

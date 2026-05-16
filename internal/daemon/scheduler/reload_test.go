@@ -218,3 +218,188 @@ func TestReload_StopsOnContextCancel(t *testing.T) {
 		t.Errorf("post-cancel reload count = %d; want 0 (fsnotify watcher should be closed)", reloadCount)
 	}
 }
+
+// TestReload_ValidConfigSwapsIn: a fresh config with one user job lands
+// in s.specs after ReloadConfig.
+func TestReload_ValidConfigSwapsIn(t *testing.T) {
+	tmp := t.TempDir()
+	configPath := filepath.Join(tmp, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"jobs":{}}`), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	s := New(Config{DB: setupStateTestDB(t), DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	if err := s.ReloadConfig(context.Background(), configPath); err != nil {
+		t.Fatalf("reload empty: %v", err)
+	}
+	if _, ok := s.JobSpec("docs-bot"); ok {
+		t.Error("docs-bot should NOT be present yet")
+	}
+
+	valid := `{
+		"jobs": {
+			"docs-bot": {
+				"id": "docs-bot", "type": "command",
+				"schedule": "@every 5m", "enabled": true,
+				"command": {"exec": "/bin/true"}
+			}
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(valid), 0o600); err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+	if err := s.ReloadConfig(context.Background(), configPath); err != nil {
+		t.Fatalf("reload valid: %v", err)
+	}
+
+	spec, ok := s.JobSpec("docs-bot")
+	if !ok {
+		t.Fatal("docs-bot not swapped in")
+	}
+	if spec.Schedule != "@every 5m" {
+		t.Errorf("schedule = %q", spec.Schedule)
+	}
+}
+
+// TestReload_InvalidConfigKeepsLastGood: a validator failure preserves
+// the prior good config — neither the bad job is swapped in nor is the
+// prior good job evicted.
+func TestReload_InvalidConfigKeepsLastGood(t *testing.T) {
+	tmp := t.TempDir()
+	configPath := filepath.Join(tmp, "config.json")
+	valid := `{
+		"jobs": {
+			"good-job": {
+				"id": "good-job", "type": "command",
+				"schedule": "@every 5m", "enabled": true,
+				"command": {"exec": "/bin/true"}
+			}
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(valid), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	s := New(Config{DB: setupStateTestDB(t), DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	if err := s.ReloadConfig(context.Background(), configPath); err != nil {
+		t.Fatalf("first reload: %v", err)
+	}
+	if _, ok := s.JobSpec("good-job"); !ok {
+		t.Fatal("good-job not loaded initially")
+	}
+
+	invalid := `{
+		"jobs": {
+			"bad-job": {
+				"id": "bad-job", "type": "command",
+				"schedule": "not a cron", "enabled": true,
+				"command": {"exec": "/bin/true"}
+			}
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(invalid), 0o600); err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+
+	if err := s.ReloadConfig(context.Background(), configPath); err == nil {
+		t.Error("expected validator error from ReloadConfig")
+	}
+	if _, ok := s.JobSpec("good-job"); !ok {
+		t.Error("last-good config evicted on validator failure")
+	}
+	if _, ok := s.JobSpec("bad-job"); ok {
+		t.Error("bad-job swapped in despite validator error")
+	}
+}
+
+// TestReload_InvalidConfigEmitsEscalation: OnReloadError callback fires
+// with the failing config path and all validator findings.
+func TestReload_InvalidConfigEmitsEscalation(t *testing.T) {
+	tmp := t.TempDir()
+	configPath := filepath.Join(tmp, "config.json")
+	bad := `{
+		"jobs": {
+			"bad": {
+				"id": "bad", "type": "command",
+				"schedule": "not a cron", "enabled": true,
+				"command": {"exec": "/bin/true"}
+			}
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(bad), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	s := New(Config{DB: setupStateTestDB(t), DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	var escalations []ReloadEscalation
+	s.OnReloadError = func(e ReloadEscalation) {
+		escalations = append(escalations, e)
+	}
+
+	_ = s.ReloadConfig(context.Background(), configPath)
+
+	if len(escalations) == 0 {
+		t.Fatal("expected escalation event for validator failure")
+	}
+	if escalations[0].ConfigPath != configPath {
+		t.Errorf("escalation.ConfigPath = %q; want %q", escalations[0].ConfigPath, configPath)
+	}
+	if len(escalations[0].Errors) == 0 {
+		t.Error("escalation.Errors should carry validator diagnostics")
+	}
+}
+
+// TestReload_UnknownTopLevelKey_Rejected: rule 8 — unknown JSON keys
+// under jobs.<id> fail the json.Decoder.DisallowUnknownFields() pass
+// before the validator ever sees the spec.
+func TestReload_UnknownTopLevelKey_Rejected(t *testing.T) {
+	tmp := t.TempDir()
+	configPath := filepath.Join(tmp, "config.json")
+	bad := `{
+		"jobs": {
+			"x": {
+				"id": "x", "type": "command", "schedule": "@every 5m",
+				"enabled": true, "command": {"exec": "/bin/true"},
+				"totally_unknown_field": "boom"
+			}
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(bad), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	s := New(Config{DB: setupStateTestDB(t), DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	if err := s.ReloadConfig(context.Background(), configPath); err == nil {
+		t.Error("expected error on unknown top-level key")
+	}
+}
+
+// TestReload_PreservesInternalJobs: internal.* jobs live in the
+// daemon-registered registry, not in the user config. Reloading must
+// not evict them.
+func TestReload_PreservesInternalJobs(t *testing.T) {
+	tmp := t.TempDir()
+	configPath := filepath.Join(tmp, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"jobs":{}}`), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	s := New(Config{DB: setupStateTestDB(t), DaemonID: "test", Location: time.UTC})
+	defer func() { _ = s.Stop(context.Background()) }()
+	s.RegisterInternal("internal.backup", "@every 1h", InternalOpts{}, &noopHandler{})
+
+	if err := s.ReloadConfig(context.Background(), configPath); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if _, ok := s.JobSpec("internal.backup"); !ok {
+		t.Error("internal.backup should be preserved across reload")
+	}
+}

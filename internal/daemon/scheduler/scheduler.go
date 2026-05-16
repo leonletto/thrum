@@ -112,6 +112,13 @@ type Scheduler struct {
 	reactorWake  chan struct{}      // closed/sent-to on registration to wake the reactor
 	runReg       *runRegistry       // per-run cancel-func + signal-channel registries
 
+	// OnReloadError is invoked by ReloadConfig (Task 32) on validator
+	// failure. The substrate doesn't pick the delivery channel — the
+	// daemon-startup wiring binds this to the existing escalation
+	// pipeline (B-B1 / D-B1 routes). Nil = no escalation; failures are
+	// logged but not propagated.
+	OnReloadError func(ReloadEscalation)
+
 	stopCh   chan struct{}
 	stopOnce sync.Once
 }
