@@ -11,7 +11,6 @@ These flags apply to every command:
 --json            JSON output for scripting
 --quiet           Suppress non-essential output
 --verbose         Debug output
---repo <path>     Repository path (default: ".")
 --role <role>     Agent role (or THRUM_ROLE env var)
 --module <mod>    Agent module (or THRUM_MODULE env var)
 ```

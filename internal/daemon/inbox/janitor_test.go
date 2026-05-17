@@ -61,3 +61,34 @@ func TestReconcile_MissingSpoolDirIsNoOp(t *testing.T) {
 	j := NewSpoolJanitor(dir, func() []string { return []string{"nobody"} }, fake.State)
 	j.Reconcile() // should not panic or error
 }
+
+// TestReconcile_PreservesBackstopEnvelopes pins the thrum-7b84.3 E3
+// invariant: the daemon-side backstop dispatcher writes synthetic
+// "backstop-<min>.json" envelopes that intentionally have no
+// corresponding messages row. Without an explicit skip the janitor
+// would resolve them to StateMissing and reap them, breaking the
+// dead-pane backstop path. Lock the skip in.
+func TestReconcile_PreservesBackstopEnvelopes(t *testing.T) {
+	dir := t.TempDir()
+	agentID := "carol"
+
+	env := Envelope{MsgID: "backstop-20260516T1534", From: "thrum-backstop", ReceivedAt: time.Now()}
+	if err := WriteSpool(dir, agentID, env); err != nil {
+		t.Fatalf("seed backstop envelope: %v", err)
+	}
+
+	// Reader would report StateMissing for a backstop msg_id since
+	// there's no underlying row in `messages`. If the janitor consults
+	// readState for this entry, the test fails — the skip must happen
+	// before readState is called.
+	fake := &fakeReadState{
+		missing: map[string]bool{"backstop-20260516T1534": true},
+	}
+	j := NewSpoolJanitor(dir, func() []string { return []string{agentID} }, fake.State)
+	j.Reconcile()
+
+	spoolDir := filepath.Join(dir, "spool", agentID)
+	if _, err := os.Stat(filepath.Join(spoolDir, "backstop-20260516T1534.json")); err != nil {
+		t.Fatalf("backstop envelope must survive reconcile: %v", err)
+	}
+}

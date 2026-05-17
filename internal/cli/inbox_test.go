@@ -189,6 +189,129 @@ func TestInbox_WithFilters(t *testing.T) {
 	}
 }
 
+// TestInbox_FromPassesAuthorID verifies the --from author filter is
+// plumbed through InboxOptions.AuthorID → params["author_id"] for the
+// daemon's existing message.list filter.
+func TestInbox_FromPassesAuthorID(t *testing.T) {
+	daemon, socketPath := newMockDaemon(t)
+	defer daemon.stop()
+
+	var receivedParams map[string]any
+
+	daemon.start(t, func(conn net.Conn) {
+		defer func() { _ = conn.Close() }()
+
+		decoder := json.NewDecoder(conn)
+		encoder := json.NewEncoder(conn)
+
+		var request map[string]any
+		if err := decoder.Decode(&request); err != nil {
+			return
+		}
+
+		var ok bool
+		receivedParams, ok = request["params"].(map[string]any)
+		if !ok {
+			t.Error("params should be map[string]any")
+			return
+		}
+
+		response := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      request["id"],
+			"result": map[string]any{
+				"messages":    []map[string]any{},
+				"total":       0,
+				"unread":      0,
+				"page":        1,
+				"page_size":   10,
+				"total_pages": 0,
+			},
+		}
+		_ = encoder.Encode(response)
+	})
+
+	<-daemon.Ready()
+
+	client, err := NewClient(socketPath)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	if _, err := Inbox(client, InboxOptions{
+		CallerAgentID: "alice",
+		AuthorID:      "bob",
+	}); err != nil {
+		t.Fatalf("Inbox failed: %v", err)
+	}
+
+	got, ok := receivedParams["author_id"].(string)
+	if !ok || got != "bob" {
+		t.Fatalf("expected author_id=bob in params, got %v", receivedParams["author_id"])
+	}
+}
+
+// TestInbox_NoFromOmitsAuthorID verifies the author_id param is not sent
+// when AuthorID is empty — keeps existing inbox calls unchanged.
+func TestInbox_NoFromOmitsAuthorID(t *testing.T) {
+	daemon, socketPath := newMockDaemon(t)
+	defer daemon.stop()
+
+	var receivedParams map[string]any
+
+	daemon.start(t, func(conn net.Conn) {
+		defer func() { _ = conn.Close() }()
+
+		decoder := json.NewDecoder(conn)
+		encoder := json.NewEncoder(conn)
+
+		var request map[string]any
+		if err := decoder.Decode(&request); err != nil {
+			return
+		}
+
+		var ok bool
+		receivedParams, ok = request["params"].(map[string]any)
+		if !ok {
+			t.Error("params should be map[string]any")
+			return
+		}
+
+		response := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      request["id"],
+			"result": map[string]any{
+				"messages":    []map[string]any{},
+				"total":       0,
+				"unread":      0,
+				"page":        1,
+				"page_size":   10,
+				"total_pages": 0,
+			},
+		}
+		_ = encoder.Encode(response)
+	})
+
+	<-daemon.Ready()
+
+	client, err := NewClient(socketPath)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	if _, err := Inbox(client, InboxOptions{
+		CallerAgentID: "alice",
+	}); err != nil {
+		t.Fatalf("Inbox failed: %v", err)
+	}
+
+	if _, present := receivedParams["author_id"]; present {
+		t.Fatalf("expected author_id absent when AuthorID is empty, got %v", receivedParams["author_id"])
+	}
+}
+
 func TestFormatInbox(t *testing.T) {
 	result := &InboxResult{
 		Messages: []Message{
