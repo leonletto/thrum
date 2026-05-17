@@ -6288,14 +6288,28 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// E10.9-commit time) landed at A-B4; this is the wiring that flips
 	// the substrate from "constructed but dead-code" to live.
 	skillLibrary := skills.NewLibrary(st.RepoPath())
+	// Resolve the staleness-reminder window from operator config with
+	// a 48h fallback per canonical default. Phase 3 dual-reviewer
+	// finding — the config field existed but wasn't being read.
+	skillPendingAfter := 48 * time.Hour
+	pendingStr := thrumCfg.Skills.PendingReminderAfter
+	if pendingStr == "" {
+		pendingStr = config.DefaultSkillsPendingReminderAfter
+	}
+	if d, parseErr := time.ParseDuration(pendingStr); parseErr == nil {
+		skillPendingAfter = d
+	} else {
+		slog.Warn("skill substrate: invalid skills.pending_reminder_after; falling back to 48h",
+			"value", pendingStr, "err", parseErr)
+	}
 	skillSubstrate, err := buildSkillSubstrate(ctx, skillSubstrateOpts{
 		RepoPath:       st.RepoPath(),
 		ThrumDir:       thrumDir,
 		Library:        skillLibrary,
 		Permission:     permPkg,
 		RemindersStore: remindersStore,
-		DB:             st.RawDB(),
-		PendingAfter:   48 * time.Hour,
+		DB:             st.DB(),
+		PendingAfter:   skillPendingAfter,
 	})
 	if err != nil {
 		return fmt.Errorf("build skill substrate: %w", err)
@@ -6303,12 +6317,18 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	defer func() {
 		// Shut down in reverse order: Watcher first (stops emitting new
 		// events into the Worker), then Worker (drains in-flight applies
-		// up to StopTimeout).
+		// up to StopTimeout). Stop errors are surfaced via slog so
+		// operators can diagnose fsnotify-close failures rather than
+		// having the shutdown silently swallow them. Phase 3 finding.
 		if skillSubstrate.Watcher != nil {
-			_ = skillSubstrate.Watcher.Stop()
+			if stopErr := skillSubstrate.Watcher.Stop(); stopErr != nil {
+				slog.Warn("skill watcher shutdown", "err", stopErr)
+			}
 		}
 		if skillSubstrate.Worker != nil {
-			_ = skillSubstrate.Worker.Stop()
+			if stopErr := skillSubstrate.Worker.Stop(); stopErr != nil {
+				slog.Warn("skill mirror worker shutdown", "err", stopErr)
+			}
 		}
 	}()
 

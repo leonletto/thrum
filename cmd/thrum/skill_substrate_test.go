@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,11 +34,11 @@ func TestBuildSkillSubstrate_WiresAllCollaboratorsNonNil(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(thrumDir, "agents"), 0o750); err != nil {
 		t.Fatalf("mkdir thrum/agents: %v", err)
 	}
-	// Initialize a git repo so enumerateRepoWorktrees has something to
+	// Initialize a git repo so safecmd.WorktreePaths has something to
 	// walk; if git is unavailable the substrate-builder falls back to
 	// [repoPath] which is fine for the wiring test (we're not asserting
 	// destinations, just non-nil collaborators).
-	_ = exec_git(t, repoPath, "init", "--quiet")
+	_, _ = safecmd.Git(context.Background(), repoPath, "init", "--quiet")
 
 	db, err := schema.OpenDB(filepath.Join(t.TempDir(), "wiring.db"))
 	if err != nil {
@@ -68,7 +68,7 @@ func TestBuildSkillSubstrate_WiresAllCollaboratorsNonNil(t *testing.T) {
 		Library:        library,
 		Permission:     permPkg,
 		RemindersStore: store,
-		DB:             st.RawDB(),
+		DB:             st.DB(),
 		PendingAfter:   48 * time.Hour,
 	})
 	if err != nil {
@@ -125,7 +125,7 @@ func TestBuildSkillSubstrate_RejectsNilCollaborators(t *testing.T) {
 		Library:        library,
 		Permission:     permPkg,
 		RemindersStore: store,
-		DB:             st.RawDB(),
+		DB:             st.DB(),
 		PendingAfter:   48 * time.Hour,
 	}
 
@@ -147,7 +147,7 @@ func TestBuildSkillSubstrate_RejectsNilCollaborators(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected error mentioning %q; got nil", c.want)
 			}
-			if !contains(err.Error(), c.want) {
+			if !strings.Contains(err.Error(), c.want) {
 				t.Errorf("err = %q; want it to mention %q", err.Error(), c.want)
 			}
 		})
@@ -184,7 +184,7 @@ func TestNewSkillChainResolver_ReturnsCoordinatorAgents(t *testing.T) {
 		}
 	}
 
-	resolver := newSkillChainResolver(db)
+	resolver := newSkillChainResolver(safedb.New(db))
 	chain, err := resolver(context.Background())
 	if err != nil {
 		t.Fatalf("resolver: %v", err)
@@ -243,27 +243,3 @@ func TestDestinationsForWorktrees_SkipsMissingWorktrees(t *testing.T) {
 	}
 }
 
-// exec_git runs a git command in repoPath; returns error so tests can
-// best-effort skip if git is unavailable. Snake-case to differentiate
-// from the package's existing `git` helpers.
-func exec_git(t *testing.T, repoPath string, args ...string) error {
-	t.Helper()
-	_, err := safecmd.Git(context.Background(), repoPath, args...)
-	return err
-}
-
-// contains is a tiny substring helper used in the rejection-test
-// assertions — avoids importing the heavier strings package here just
-// for this one usage in test code.
-func contains(haystack, needle string) bool {
-	for i := 0; i+len(needle) <= len(haystack); i++ {
-		if haystack[i:i+len(needle)] == needle {
-			return true
-		}
-	}
-	return false
-}
-
-// Compile-time guard: errors.Is import is kept available for future
-// substrate-error type pivots.
-var _ = errors.Is
