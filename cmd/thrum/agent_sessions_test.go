@@ -543,6 +543,13 @@ func TestListAllAgentsFromThrumRoot_JSON_GlobalSort(t *testing.T) {
 }
 
 // === §6.7 error-case sweep (Task 13) ===
+//
+// NOTE: tests in this section call os.Chdir to exercise the
+// cwd-based path resolution in runAgentSessionsList. os.Chdir
+// mutates process-global state. Tests in this file MUST NOT call
+// t.Parallel() — a parallel test interleaving with the chdir
+// would observe the wrong cwd. The t.Cleanup-driven restore
+// runs even after panic, so within-test ordering is safe.
 
 // TestRunAgentSessionsList_NoneYet_MessageAndZeroExit covers spec
 // §6.7 case 1: an agent with no sessions/ folder yet should print
@@ -640,7 +647,13 @@ func TestLoadSessionsFromThrumRoot_UnreadableFolder_FriendlyError(t *testing.T) 
 	if err := os.Chmod(sessionsDir, 0o000); err != nil {
 		t.Fatalf("chmod 0000: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(sessionsDir, 0o700) }) // restore so t.TempDir cleanup works
+	// Restore traversal mode so t.TempDir's recursive cleanup can
+	// descend back into the directory and remove its contents. 0o700
+	// is required (execute bit) — 0o600 would block traversal and
+	// leak the temp tree. The #nosec annotation acknowledges
+	// gosec G302 which flags 0o700 on chmod as "too permissive";
+	// here it's load-bearing for the cleanup invariant.
+	t.Cleanup(func() { _ = os.Chmod(sessionsDir, 0o700) }) // #nosec G302 -- test cleanup invariant
 
 	_, err := loadSessionsFromThrumRoot(thrumRoot, "alpha")
 	if err == nil {

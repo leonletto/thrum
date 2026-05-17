@@ -53,16 +53,19 @@ func RenderDiscoveryHint(sessionsDir string, archiveResult *ArchiveResult) strin
 	return line1 + "\nLast big picture: " + truncateForHint(*archiveResult.BigPicture, 120)
 }
 
-// truncateForHint truncates s to roughly max display characters,
+// truncateForHint truncates s to roughly maxRunes display characters,
 // suffixing the Unicode ellipsis "…" (U+2026, 3 bytes UTF-8) when
 // truncation occurred. Uses rune count so the visual length is
 // stable regardless of multi-byte chars in the §1 body.
-func truncateForHint(s string, max int) string {
+//
+// Parameter named maxRunes (not `max`) to avoid shadowing the Go
+// 1.21+ builtin per the project's linter convention.
+func truncateForHint(s string, maxRunes int) string {
 	runes := []rune(s)
-	if len(runes) <= max {
+	if len(runes) <= maxRunes {
 		return s
 	}
-	return string(runes[:max-1]) + "…"
+	return string(runes[:maxRunes-1]) + "…"
 }
 
 // listSessions reads the agent's sessions/ directory and returns

@@ -99,7 +99,7 @@ func TestArchive_ValidSnapshot_PopulatesContent(t *testing.T) {
 
 func TestArchive_EmptySnapshot_RemovesAndReturnsNull(t *testing.T) {
 	mainRepo := filepath.Join(t.TempDir(), ".thrum")
-	if err := os.MkdirAll(mainRepo, 0o755); err != nil {
+	if err := os.MkdirAll(mainRepo, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 

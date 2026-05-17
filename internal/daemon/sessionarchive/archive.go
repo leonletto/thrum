@@ -61,10 +61,20 @@ var agentMutexes sync.Map
 
 func mutexFor(agentID string) *sync.Mutex {
 	if m, ok := agentMutexes.Load(agentID); ok {
-		return m.(*sync.Mutex)
+		// Safe assertion: this map only ever Stores *sync.Mutex (see
+		// LoadOrStore below). A panic here would indicate a code bug
+		// in this file, not a runtime data issue.
+		if mu, ok := m.(*sync.Mutex); ok {
+			return mu
+		}
 	}
 	actual, _ := agentMutexes.LoadOrStore(agentID, &sync.Mutex{})
-	return actual.(*sync.Mutex)
+	if mu, ok := actual.(*sync.Mutex); ok {
+		return mu
+	}
+	// Unreachable: LoadOrStore returned a non-*sync.Mutex value, which
+	// means something else wrote to agentMutexes. Fail loudly.
+	panic("session-archive: agentMutexes contained non-*sync.Mutex value")
 }
 
 // Archive moves a /thrum:restart snapshot from srcPath into the

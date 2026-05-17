@@ -143,7 +143,7 @@ func runAgentSessionsList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if len(sessions) == 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), "Sessions for %s: none yet.\n", agentID)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Sessions for %s: none yet.\n", agentID)
 		return nil
 	}
 
@@ -180,15 +180,15 @@ func runAgentSessionsArchive(cmd *cobra.Command, args []string) error {
 
 	out := cmd.OutOrStdout()
 	if resp.ArchivedPath == nil {
-		fmt.Fprintf(out, "No snapshot to archive for %s.\n", agentID)
+		_, _ = fmt.Fprintf(out, "No snapshot to archive for %s.\n", agentID)
 		return nil
 	}
-	fmt.Fprintf(out, "Archived: %s\n", *resp.ArchivedPath)
+	_, _ = fmt.Fprintf(out, "Archived: %s\n", *resp.ArchivedPath)
 	if resp.BigPicture != nil {
-		fmt.Fprintf(out, "Big picture: %s\n", *resp.BigPicture)
+		_, _ = fmt.Fprintf(out, "Big picture: %s\n", *resp.BigPicture)
 	}
 	if resp.DiscoveryHint != nil {
-		fmt.Fprintln(out, *resp.DiscoveryHint)
+		_, _ = fmt.Fprintln(out, *resp.DiscoveryHint)
 	}
 	return nil
 }
@@ -200,15 +200,15 @@ func runAgentSessionsArchive(cmd *cobra.Command, args []string) error {
 // the no-skill-flow path).
 func renderDefault(cmd *cobra.Command, agentID string, sessions []SessionEntry) error {
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "Sessions for %s (%d total, most recent %s):\n\n",
+	_, _ = fmt.Fprintf(out, "Sessions for %s (%d total, most recent %s):\n\n",
 		agentID, len(sessions), sessions[0].Timestamp.Format("2006-01-02"))
-	fmt.Fprintf(out, "%-28s %-7s %-9s %s\n", "TIMESTAMP", "SIZE", "REASON", "SUMMARY")
+	_, _ = fmt.Fprintf(out, "%-28s %-7s %-9s %s\n", "TIMESTAMP", "SIZE", "REASON", "SUMMARY")
 	for _, s := range sessions {
 		summary := firstLine(s.BigPictureNormalized)
 		if summary == "" {
 			summary = "(no big-picture summary)"
 		}
-		fmt.Fprintf(out, "%-28s %-7s %-9s %s\n",
+		_, _ = fmt.Fprintf(out, "%-28s %-7s %-9s %s\n",
 			s.Timestamp.Format(time.RFC3339),
 			humanSize(s.Size),
 			s.Reason,
@@ -225,20 +225,20 @@ func renderDefault(cmd *cobra.Command, agentID string, sessions []SessionEntry) 
 // Task 14 skill template) render a "(no §1 section)" placeholder.
 func renderVerbose(cmd *cobra.Command, agentID string, sessions []SessionEntry) error {
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "Sessions for %s (%d total, most recent %s):\n\n",
+	_, _ = fmt.Fprintf(out, "Sessions for %s (%d total, most recent %s):\n\n",
 		agentID, len(sessions), sessions[0].Timestamp.Format("2006-01-02"))
 	for i, s := range sessions {
-		fmt.Fprintf(out, "[%d] %s · %s · %s\n",
+		_, _ = fmt.Fprintf(out, "[%d] %s · %s · %s\n",
 			i+1, s.Timestamp.Format(time.RFC3339), s.Reason, humanSize(s.Size))
 		if s.BigPictureRaw == "" {
-			fmt.Fprintln(out, "    (no §1 section in this session)")
+			_, _ = fmt.Fprintln(out, "    (no §1 section in this session)")
 		} else {
-			fmt.Fprintln(out, "    Big picture:")
+			_, _ = fmt.Fprintln(out, "    Big picture:")
 			for line := range strings.SplitSeq(s.BigPictureRaw, "\n") {
-				fmt.Fprintf(out, "      %s\n", line)
+				_, _ = fmt.Fprintf(out, "      %s\n", line)
 			}
 		}
-		fmt.Fprintln(out)
+		_, _ = fmt.Fprintln(out)
 	}
 	return nil
 }
@@ -309,7 +309,7 @@ func listAllAgentsFromThrumRoot(cmd *cobra.Command, thrumRoot string, verbose, a
 	idDir := filepath.Join(thrumRoot, "identities")
 	entries, err := os.ReadDir(idDir)
 	if errors.Is(err, os.ErrNotExist) {
-		fmt.Fprintln(cmd.OutOrStdout(), "No agents registered.")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No agents registered.")
 		return nil
 	}
 	if err != nil {
@@ -330,10 +330,14 @@ func listAllAgentsFromThrumRoot(cmd *cobra.Command, thrumRoot string, verbose, a
 		agentID := strings.TrimSuffix(e.Name(), ".json")
 		sessions, err := loadSessionsFromThrumRoot(thrumRoot, agentID)
 		if err != nil {
-			// Skip agents we can't read — corrupt identity files,
-			// transient FS errors. Filing under best-effort: a
-			// single bad agent shouldn't blank out the whole
-			// `--all` list.
+			// Surface the skip on stderr so operators running --all
+			// on a degraded installation see why an expected agent
+			// is absent from the listing. Continues to the next
+			// agent — a single bad agent shouldn't blank out the
+			// whole list. In --json mode this lands on stderr and
+			// the stdout NDJSON stream stays clean.
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+				"warning: skipping agent %q: %v\n", agentID, err)
 			continue
 		}
 		if len(sessions) == 0 {
@@ -351,7 +355,7 @@ func listAllAgentsFromThrumRoot(cmd *cobra.Command, thrumRoot string, verbose, a
 	}
 
 	if len(blocks) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "No agents with archived sessions.")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No agents with archived sessions.")
 		return nil
 	}
 
@@ -364,7 +368,7 @@ func listAllAgentsFromThrumRoot(cmd *cobra.Command, thrumRoot string, verbose, a
 	out := cmd.OutOrStdout()
 	for i, block := range blocks {
 		if i > 0 {
-			fmt.Fprintln(out)
+			_, _ = fmt.Fprintln(out)
 		}
 		if verbose {
 			if err := renderVerbose(cmd, block.AgentID, block.Sessions); err != nil {
