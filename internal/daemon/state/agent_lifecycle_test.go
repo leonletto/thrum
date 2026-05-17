@@ -3,6 +3,9 @@ package state_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -244,5 +247,152 @@ func TestAgentLifecycleStore_PruneOlderThan(t *testing.T) {
 		if ev.EventKind == state.EventCrashDetected {
 			t.Errorf("old crash event survived prune: %v", ev)
 		}
+	}
+}
+
+// TestAgentLifecycleStore_AppendRejectsInvalidDetectionMethod pins
+// brainstormer-third B1: Append() validates detection_method at the
+// Go layer (defense-in-depth on top of the SQL CHECK constraint).
+// The SQL CHECK is the durable guard, but a Go-layer rejection gives
+// callers a clean error message and avoids burning a DB round-trip.
+func TestAgentLifecycleStore_AppendRejectsInvalidDetectionMethod(t *testing.T) {
+	s := state.NewAgentLifecycleStore(newLifecycleStoreDB(t))
+	ctx := context.Background()
+
+	_, err := s.Append(ctx, state.AgentLifecycleEvent{
+		AgentName:       "victim",
+		EventKind:       state.EventCrashDetected,
+		EventTime:       time.Now(),
+		DetectionMethod: "totally_made_up",
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid detection_method, got nil")
+	}
+	// Error must name the offending field so operators can self-correct
+	// without grepping the codebase.
+	if !strings.Contains(err.Error(), "detection_method") {
+		t.Errorf("err = %q; want substring 'detection_method'", err.Error())
+	}
+
+	// Verify no row was persisted (Go-layer rejection short-circuits
+	// before the INSERT, so the failed attempt leaves no audit trail).
+	events, err := s.ListByAgent(ctx, "victim", 10)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(events) != 0 {
+		t.Errorf("invalid append leaked a row: %d events", len(events))
+	}
+
+	// Canonical values + empty (→ NULL) must still pass.
+	for _, dm := range []state.DetectionMethod{
+		"",
+		state.DetectionHealthCheckTick,
+		state.DetectionRestartReconciliation,
+		state.DetectionRPCObservation,
+	} {
+		_, err := s.Append(ctx, state.AgentLifecycleEvent{
+			AgentName:       "victim",
+			EventKind:       state.EventCrashDetected,
+			EventTime:       time.Now(),
+			DetectionMethod: dm,
+		})
+		if err != nil {
+			t.Errorf("canonical detection_method %q rejected: %v", dm, err)
+		}
+	}
+}
+
+// TestAgentLifecycleStore_ConcurrentAppendWriters pins brainstormer-
+// third B2 + bd AC 9.1.7: the Store is safe to call from multiple
+// goroutines simultaneously. Spawns 10 writers each appending 5 events
+// against the same agent_name; verifies the run is race-detector clean
+// and all 50 rows land without loss.
+//
+// SQLite serializes writes per connection; safedb provides the
+// connection. This test pins both the SQLite-level safety and the
+// absence of Go-level data races on shared fields.
+func TestAgentLifecycleStore_ConcurrentAppendWriters(t *testing.T) {
+	s := state.NewAgentLifecycleStore(newLifecycleStoreDB(t))
+	ctx := context.Background()
+	now := time.Now()
+
+	const writers = 10
+	const perWriter = 5
+
+	var wg sync.WaitGroup
+	wg.Add(writers)
+	for w := 0; w < writers; w++ {
+		go func(writer int) {
+			defer wg.Done()
+			for i := 0; i < perWriter; i++ {
+				if _, err := s.Append(ctx, state.AgentLifecycleEvent{
+					AgentName: "shared_agent",
+					EventKind: state.EventRespawnFired,
+					EventTime: now.Add(time.Duration(writer*perWriter+i) * time.Second),
+					Reason:    fmt.Sprintf("writer=%d i=%d", writer, i),
+				}); err != nil {
+					t.Errorf("writer %d append %d: %v", writer, i, err)
+				}
+			}
+		}(w)
+	}
+	wg.Wait()
+
+	events, err := s.ListByAgent(ctx, "shared_agent", 1000)
+	if err != nil {
+		t.Fatalf("list after concurrent writes: %v", err)
+	}
+	if got := len(events); got != writers*perWriter {
+		t.Errorf("concurrent writers persisted %d events; want %d", got, writers*perWriter)
+	}
+}
+
+// TestAgentLifecycleStore_PruneOlderThan_BoundaryEventSurvives pins
+// brainstormer-third I3 strict-less-than semantics: PruneOlderThan
+// deletes rows with event_time < cutoff. An event at event_time ==
+// cutoff is OUTSIDE the deletion range and MUST survive. Critical for
+// the cleanup-handler contract: a daily prune that runs at exactly
+// 7 days * 24 hours after an event must keep that event, not delete it.
+func TestAgentLifecycleStore_PruneOlderThan_BoundaryEventSurvives(t *testing.T) {
+	s := state.NewAgentLifecycleStore(newLifecycleStoreDB(t))
+	ctx := context.Background()
+
+	// Pick a fixed cutoff (truncated to seconds since SQLite stores
+	// unix-seconds) and seed exactly one event AT the boundary.
+	cutoff := time.Now().Add(-7 * 24 * time.Hour).Truncate(time.Second)
+	if _, err := s.Append(ctx, state.AgentLifecycleEvent{
+		AgentName: "boundary",
+		EventKind: state.EventRespawnFired,
+		EventTime: cutoff, // exactly at the cutoff
+	}); err != nil {
+		t.Fatalf("append boundary event: %v", err)
+	}
+	// Plus a clearly-older event (one second BEFORE cutoff) that
+	// must be pruned, to prove the predicate actually fires.
+	if _, err := s.Append(ctx, state.AgentLifecycleEvent{
+		AgentName: "boundary",
+		EventKind: state.EventRespawnFired,
+		EventTime: cutoff.Add(-1 * time.Second),
+	}); err != nil {
+		t.Fatalf("append older event: %v", err)
+	}
+
+	rows, err := s.PruneOlderThan(ctx, cutoff)
+	if err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+	if rows != 1 {
+		t.Errorf("expected to prune 1 row (the older one); pruned %d", rows)
+	}
+	remaining, err := s.ListByAgent(ctx, "boundary", 10)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(remaining) != 1 {
+		t.Fatalf("boundary event was deleted; remaining=%d", len(remaining))
+	}
+	if !remaining[0].EventTime.Equal(cutoff.UTC()) {
+		t.Errorf("surviving event time = %v; want %v", remaining[0].EventTime, cutoff.UTC())
 	}
 }

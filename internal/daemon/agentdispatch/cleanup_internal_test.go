@@ -3,6 +3,7 @@ package agentdispatch_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -201,5 +202,46 @@ func TestCleanupHandler_Stages(t *testing.T) {
 	}
 	if dur <= 0 {
 		t.Errorf("pruning stage duration = %v; want positive", dur)
+	}
+}
+
+// TestDispatch_RespectsContextCancellation pins brainstormer-third I2:
+// a cancelled context propagates cleanly through Dispatch's storage
+// path. SQLite's ExecContext honors ctx.Done(); on cancel the prune
+// fails and the handler reports StateFailed (not StateCompleted) so
+// the scheduler audit trail reflects what actually happened.
+func TestDispatch_RespectsContextCancellation(t *testing.T) {
+	store := newLifecycleStore(t)
+	h := agentdispatch.NewCleanupHandler(store, 7)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // pre-cancel so the first DB op observes Done
+
+	rep := &stubReporter{}
+	err := h.Dispatch(ctx, scheduler.JobSpec{}, "r-cancel", rep, nil)
+	if err != nil {
+		// Dispatch returns the reporter.Transition(Failed) call's error;
+		// our stub returns nil so a successful "I marked it failed"
+		// surfaces as nil here. That's the canonical pattern from
+		// A-B1's cleanup handler.
+		t.Fatalf("Dispatch: unexpected outer err=%v", err)
+	}
+
+	// Sequence pins the cancellation path:
+	//   Transition(Running) → Stage(pruning) → runOnce fails on cancelled ctx
+	//   → Transition(Failed, "prune error: ...").
+	// We expect at least 2 transitions: Running then Failed.
+	if len(rep.transitions) < 2 {
+		t.Fatalf("transitions=%v; want at least [Running, Failed]", rep.transitions)
+	}
+	if rep.transitions[0] != scheduler.StateRunning {
+		t.Errorf("transitions[0]=%q; want Running", rep.transitions[0])
+	}
+	last := rep.transitions[len(rep.transitions)-1]
+	if last != scheduler.StateFailed {
+		t.Errorf("final transition=%q; want Failed (ctx cancelled)", last)
+	}
+	if !strings.Contains(rep.reasons[len(rep.reasons)-1], "prune error") {
+		t.Errorf("final reason=%q; want substring 'prune error'", rep.reasons[len(rep.reasons)-1])
 	}
 }

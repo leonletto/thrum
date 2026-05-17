@@ -102,6 +102,26 @@ func nullString(s string) sql.NullString {
 }
 
 func (s *agentLifecycleStore) Append(ctx context.Context, e AgentLifecycleEvent) (int64, error) {
+	// Defense-in-depth per spec §3.2 + brainstormer-third B1: reject
+	// unknown detection_method values at the Go layer so callers get a
+	// clean error before round-tripping bad data through the SQLite
+	// CHECK constraint. Empty string is permitted — it maps to SQL
+	// NULL via nullString() for event_kinds that carry no detection
+	// method (e.g. operator-ack events).
+	switch e.DetectionMethod {
+	case "",
+		DetectionHealthCheckTick,
+		DetectionRestartReconciliation,
+		DetectionRPCObservation:
+		// OK
+	default:
+		return 0, fmt.Errorf("invalid detection_method %q (allowed: empty, %q, %q, %q)",
+			e.DetectionMethod,
+			DetectionHealthCheckTick,
+			DetectionRestartReconciliation,
+			DetectionRPCObservation)
+	}
+
 	detailsJSON := e.Details
 	if len(detailsJSON) == 0 {
 		detailsJSON = json.RawMessage("null")

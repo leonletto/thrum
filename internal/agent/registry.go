@@ -6,9 +6,10 @@ import (
 )
 
 // Mode and Identity canonical vocabularies per substrate-canonical-
-// reference.md §3.3. The validator at agent.create / agent.update
-// (E6.0 Task 5) enforces these values; storing any other string here
-// is a code bug, not a user-facing surface.
+// reference.md §3.3. The validator at agent.register (E6.0 Task 5,
+// the only RPC that gates this interface today) enforces these
+// values; storing any other string here is a code bug, not a
+// user-facing surface.
 const (
 	ModePersistent = "persistent"
 	ModeEphemeral  = "ephemeral"
