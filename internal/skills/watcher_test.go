@@ -359,13 +359,16 @@ func TestWatcher_AddsNewAuthorDir(t *testing.T) {
 	}, "mint for new-author proposal")
 }
 
-func TestWatcher_FrontmatterInvalidStillNotifies(t *testing.T) {
+// Plan-AC name: TestWatcher_FrontmatterInvalidFlagSet. The test
+// covers two requirements: the watcher still emits the notification
+// when frontmatter is malformed, AND the emitted WatcherEvent's
+// FrontmatterValid flag (via the parsed Frontmatter zero-value)
+// matches the invalid state.
+func TestWatcher_FrontmatterInvalidFlagSet(t *testing.T) {
 	t.Parallel()
 
 	libraryRoot, proposalRoot := fixtureRoots(t)
-	// Pre-create the author dir + a malformed SKILL.md so the
-	// boot-reconcile pass exercises the invalid-frontmatter path.
-	badProposal := writeProposal(t, proposalRoot, "alice", "bad", `---
+	writeProposal(t, proposalRoot, "alice", "bad", `---
 name: bad
 description: [malformed YAML
 thrum: bogus
@@ -373,24 +376,37 @@ thrum: bogus
 
 body
 `)
-	_ = badProposal
 
 	staleness := &fakeStaleness{}
 	supervisor := &fakeSupervisor{}
 	w := NewWatcher(defaultOpts(libraryRoot, proposalRoot, &fakeMirror{}, staleness, supervisor))
+	sub := w.Subscribe()
 	if err := w.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	defer w.Stop()
 
-	// Bad frontmatter doesn't block mint/notify — the watcher
-	// surfaces the proposal anyway so a coordinator sees it and
-	// requests a fix.
 	if staleness.mintCount() != 1 {
 		t.Errorf("expected 1 mint despite malformed frontmatter, got %d", staleness.mintCount())
 	}
 	if supervisor.count() != 1 {
 		t.Errorf("expected 1 supervisor notification, got %d", supervisor.count())
+	}
+
+	// The emitted WatcherEvent's parsed Frontmatter must be a
+	// zero-value Frontmatter — splitFrontmatter returns the empty
+	// struct on YAML parse error. This is the on-the-wire signal
+	// that the proposal needs revision.
+	select {
+	case ev := <-sub:
+		if ev.Kind != "proposal_new" {
+			t.Errorf("expected proposal_new event, got %q", ev.Kind)
+		}
+		if ev.Frontmatter.Name != "" || ev.Frontmatter.Description != "" {
+			t.Errorf("expected zero-value Frontmatter for malformed YAML, got %+v", ev.Frontmatter)
+		}
+	case <-time.After(1 * time.Second):
+		t.Errorf("no WatcherEvent received within 1s")
 	}
 }
 
@@ -418,12 +434,7 @@ func TestWatcher_StartTwiceReturnsErr(t *testing.T) {
 	defer w.Stop()
 
 	err := w.Start(context.Background())
-	if err == nil || !errors.Is(err, errors.New("skills: watcher already started")) {
-		// errors.Is on errors.New comparison returns false; we
-		// settle for a non-nil error here (the exact match is
-		// caller's choice).
-		if err == nil {
-			t.Fatalf("second Start: expected error, got nil")
-		}
+	if !errors.Is(err, ErrWatcherAlreadyStarted) {
+		t.Fatalf("second Start: expected ErrWatcherAlreadyStarted, got %v", err)
 	}
 }

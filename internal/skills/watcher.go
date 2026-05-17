@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,6 +100,7 @@ type WatcherEvent struct {
 // layer constructs and owns it.
 type Watcher struct {
 	opts    WatcherOpts
+	logger  *slog.Logger
 	fsw     *fsnotify.Watcher
 	started atomic.Bool
 	wg      sync.WaitGroup
@@ -109,9 +111,17 @@ type Watcher struct {
 	subsMu  sync.Mutex
 }
 
-// ErrWatcherNotStarted fires when Stop or Subscribe is called before
-// Start. Matches the worker's once-started contract idiom.
-var ErrWatcherNotStarted = errors.New("skills: watcher not started")
+// Watcher sentinels. Stable contract for callers that switch on
+// state via errors.Is.
+var (
+	// ErrWatcherNotStarted fires when Stop or Subscribe is called
+	// before Start.
+	ErrWatcherNotStarted = errors.New("skills: watcher not started")
+
+	// ErrWatcherAlreadyStarted fires on a second Start call. The
+	// once-started contract guards the per-Watcher state.
+	ErrWatcherAlreadyStarted = errors.New("skills: watcher already started")
+)
 
 // NewWatcher validates WatcherOpts and constructs a Watcher. Panics
 // on missing required fields (every field is required; see WatcherOpts
@@ -139,6 +149,7 @@ func NewWatcher(opts WatcherOpts) *Watcher {
 	}
 	return &Watcher{
 		opts:    opts,
+		logger:  slog.Default(),
 		authors: make(map[string]struct{}),
 	}
 }
@@ -160,7 +171,7 @@ func (w *Watcher) Subscribe() <-chan WatcherEvent {
 // events, and launches the event-distribution goroutine.
 func (w *Watcher) Start(ctx context.Context) error {
 	if !w.started.CompareAndSwap(false, true) {
-		return errors.New("skills: watcher already started")
+		return ErrWatcherAlreadyStarted
 	}
 
 	fsw, err := fsnotify.NewWatcher()
@@ -317,12 +328,19 @@ func (w *Watcher) run(ctx context.Context) {
 				return
 			}
 			w.dispatch(ctx, ev)
-		case _, ok := <-w.fsw.Errors:
+		case fsErr, ok := <-w.fsw.Errors:
 			if !ok {
 				return
 			}
-			// fsnotify errors are non-fatal; the next event repairs
-			// state. Loop continues.
+			// fsnotify errors are non-fatal in principle (the next
+			// event repairs state), but a persistent error (kernel
+			// inotify limit reached, file-descriptor exhaustion)
+			// means we silently miss every subsequent event. Log
+			// at warn so the daemon's diagnostics layer surfaces
+			// it; broadcast on the test channel for harness
+			// assertions.
+			w.logger.Warn("skills.watcher fsnotify error", "err", fsErr)
+			w.broadcast(WatcherEvent{Kind: "fsnotify_error", Err: fsErr})
 		case <-ctx.Done():
 			return
 		}

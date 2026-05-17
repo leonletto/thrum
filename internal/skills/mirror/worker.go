@@ -1,6 +1,7 @@
 package mirror
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -78,8 +79,16 @@ type WorkerOpts struct {
 // exposed via MutexRegistry() so E9.5's synchronous EnsureMirrored can
 // acquire the same lock the async path uses.
 type Worker struct {
-	opts     WorkerOpts
-	started  atomic.Bool
+	opts    WorkerOpts
+	started atomic.Bool
+
+	// stateMu guards channels, worktree, and registered against the
+	// Stop / Enqueue race: Stop closes channels and reassigns the
+	// maps while Enqueue may be mid-flight. Without this mutex, an
+	// Enqueue that passed the started.Load() check could send to a
+	// closed channel and panic. Stop takes the write lock; Enqueue,
+	// Reconcile, and EnsureMirrored take the read lock.
+	stateMu  sync.RWMutex
 	channels map[Destination]chan mirrorTask
 	worktree map[string][]Destination
 	// registered tracks every worktreePath the caller asked to mirror,
@@ -88,9 +97,10 @@ type Worker struct {
 	// (caller bug)" from "registered worktree with no v0.11 mirror
 	// surface (success-skip)".
 	registered map[string]struct{}
-	mutexes    sync.Map
-	wg         sync.WaitGroup
-	cancel     context.CancelFunc
+
+	mutexes sync.Map
+	wg      sync.WaitGroup
+	cancel  context.CancelFunc
 }
 
 // mirrorTask is the per-event payload that travels on the
@@ -185,13 +195,23 @@ func (w *Worker) Start(ctx context.Context) error {
 // force-cancelled via the per-Start context. After Stop returns the
 // worker can be Start'd again with new opts (callers typically just
 // discard the Worker).
+//
+// Ordering against Enqueue: stateMu blocks new Enqueues from seeing
+// the maps mid-transition. Inside the lock we flip started→false
+// FIRST (so any Enqueue waiting on the lock bails out with
+// ErrWorkerNotStarted instead of sending to a closed channel), then
+// close the channels and reassign the maps.
 func (w *Worker) Stop() error {
 	if !w.started.Load() {
 		return nil
 	}
+
+	w.stateMu.Lock()
+	w.started.Store(false)
 	for _, ch := range w.channels {
 		close(ch)
 	}
+	w.stateMu.Unlock()
 
 	done := make(chan struct{})
 	go func() {
@@ -205,10 +225,12 @@ func (w *Worker) Stop() error {
 		w.cancel()
 		<-done
 	}
-	w.started.Store(false)
+
+	w.stateMu.Lock()
 	w.channels = make(map[Destination]chan mirrorTask)
 	w.worktree = make(map[string][]Destination)
 	w.registered = make(map[string]struct{})
+	w.stateMu.Unlock()
 	return nil
 }
 
@@ -223,6 +245,8 @@ func (w *Worker) Stop() error {
 // events. A full channel surfaces ErrBackpressure rather than
 // blocking the caller (the watcher's fsnotify loop must never block).
 func (w *Worker) Enqueue(event skills.MirrorEvent, worktreePath string) error {
+	w.stateMu.RLock()
+	defer w.stateMu.RUnlock()
 	if !w.started.Load() {
 		return ErrWorkerNotStarted
 	}
@@ -542,7 +566,7 @@ func (w *Worker) copyFile(src, dst string) error {
 	// differs. Identical files are a no-op (avoids spurious warns on
 	// reconcile-at-restart where every file looks "already there").
 	if existing, readErr := os.ReadFile(dst); readErr == nil { // #nosec G304 -- dst derived from caller-supplied worktree + adapter MirrorPath
-		if !bytesEqual(existing, srcData) {
+		if !bytes.Equal(existing, srcData) {
 			w.opts.Logger.Warn(
 				"skills mirror overwriting hand-edited file",
 				"path", dst,
@@ -559,20 +583,6 @@ func (w *Worker) copyFile(src, dst string) error {
 		return fmt.Errorf("%w: write %s: %w", ErrMirrorWrite, dst, err)
 	}
 	return nil
-}
-
-// bytesEqual is a tiny helper to keep copyFile readable. bytes.Equal
-// would force an import for a 1-line helper.
-func bytesEqual(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 // Compile-time interface guards make the public surface explicit so

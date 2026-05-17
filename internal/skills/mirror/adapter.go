@@ -45,6 +45,25 @@ var adapterTable = map[string]*AdapterEntry{
 // Goroutine-safe by construction: adapterTable is package-level and
 // never mutated after init, so concurrent reads are safe per Go's
 // map-no-writers guarantee. No mutex.
+//
+// Adapter.Lookup is the plan-AC method form (plan §E9.1); the bare
+// Lookup function below delegates to it for callers that don't want
+// to instantiate an Adapter value.
+type Adapter struct{}
+
+// DefaultAdapter is the singleton callers reach for when they don't
+// need to override the table. Future test-injected variants could
+// embed a custom table, but v0.11 has one canonical adapter set.
+var DefaultAdapter Adapter
+
+// Lookup is the method form referenced in plan §E9.1.
+func (Adapter) Lookup(runtime string) (*AdapterEntry, error) {
+	return Lookup(runtime)
+}
+
+// Lookup is the package-level function form. Internal callers
+// (Worker, EnsureMirrored) use it directly; external callers may
+// prefer the method form via DefaultAdapter.Lookup for clarity.
 func Lookup(runtime string) (*AdapterEntry, error) {
 	entry, ok := adapterTable[runtime]
 	if !ok {
