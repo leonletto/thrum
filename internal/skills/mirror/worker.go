@@ -282,6 +282,47 @@ func (w *Worker) Enqueue(event skills.MirrorEvent, worktreePath string) error {
 	return nil
 }
 
+// EnqueueAll dispatches an event to every registered worktree that
+// has at least one destination (null-adapter worktrees are silently
+// skipped). Returns the count of successfully-enqueued worktrees and
+// the first error encountered (callers log + continue on subsequent
+// failures — the next Reconcile pass repairs drift).
+//
+// Intended for the skill.delete handler at E10.6: a coordinator-issued
+// delete must propagate Kind=delete to every destination, but the
+// handler doesn't know the worktree list. This method encapsulates
+// both the worktree enumeration and the per-worktree enqueue under a
+// single lock-acquisition boundary.
+func (w *Worker) EnqueueAll(event skills.MirrorEvent) (int, error) {
+	w.stateMu.RLock()
+	if !w.started.Load() {
+		w.stateMu.RUnlock()
+		return 0, ErrWorkerNotStarted
+	}
+	wtrees := make([]string, 0, len(w.worktree))
+	for wtree := range w.worktree {
+		wtrees = append(wtrees, wtree)
+	}
+	w.stateMu.RUnlock()
+
+	var count int
+	var firstErr error
+	for _, wtree := range wtrees {
+		if err := w.Enqueue(event, wtree); err != nil {
+			// ErrUnknownWorktree shouldn't surface here (we just
+			// snapshotted from w.worktree), but a concurrent Stop +
+			// Start could race. Treat as silent skip + record as the
+			// firstErr for caller diagnostics.
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		count++
+	}
+	return count, firstErr
+}
+
 // MutexRegistry exposes the per-destination mutex map so E9.5's
 // synchronous EnsureMirrored can serialize against the async worker.
 // Keys are destinationKey(Destination) strings; values are

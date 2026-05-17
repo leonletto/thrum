@@ -28,6 +28,15 @@ type SkillSupervisorMessenger interface {
 	SendSupervisorMessage(ctx context.Context, to, body, threadID string) (string, error)
 }
 
+// SkillMirrorEnqueuer is the subset of internal/skills/mirror.Worker
+// consumed by HandleDelete to fan out a Kind=delete event across every
+// destination worktree. Defined as a local interface (rather than
+// taking *mirror.Worker directly) so tests can inject a recording
+// fake without spinning up the full worker lifecycle.
+type SkillMirrorEnqueuer interface {
+	EnqueueAll(event skills.MirrorEvent) (int, error)
+}
+
 // SkillHandler wires the skill.* JSON-RPC surface (design-spec §7) to
 // the internal/skills helpers. Constructed once at daemon boot via
 // NewSkillHandler and registered against the JSON-RPC server in
@@ -44,6 +53,7 @@ type SkillHandler struct {
 	perm       SkillSupervisorMessenger
 	staleness  skills.ProposalReminderer
 	worker     *mirror.Worker
+	enqueuer   SkillMirrorEnqueuer // defaults to worker via ensurePromoteDefaults
 	db         *sql.DB
 	stamper    *skills.Stamper
 	scanner    *skills.Scanner
@@ -209,6 +219,11 @@ const (
 	// via the structured response so the CLI distinguishes
 	// "you typed a bad path" from a wire / DB failure.
 	ErrProposalNotFoundCode = "proposal_not_found"
+	// ErrSkillNotFoundCode signals skill.delete was called with a name
+	// that has no matching .thrum/skills/<name>/SKILL.md. Surfaced via
+	// the structured response so the CLI surfaces a clear error rather
+	// than wrapping a Library sentinel through the wire.
+	ErrSkillNotFoundCode = "skill_not_found"
 )
 
 // AllowedPatternWire is the JSON shape for one entry in
@@ -805,6 +820,105 @@ func (h *SkillHandler) ensurePromoteDefaults() {
 	if h.renameFunc == nil {
 		h.renameFunc = os.Rename
 	}
+	// enqueuer defaults to the concrete worker when present. When
+	// worker is also nil, leave enqueuer nil — HandleDelete checks
+	// before invoking, treating "no enqueuer" as a no-op mirror
+	// cleanup (the post-restart Reconcile pass picks up the drift).
+	if h.enqueuer == nil && h.worker != nil {
+		h.enqueuer = h.worker
+	}
+}
+
+// --- HandleDelete ---
+
+// SkillDeleteRequest is the params shape for skill.delete (design-spec §7.6).
+type SkillDeleteRequest struct {
+	CallerAgentID string `json:"caller_agent_id"`
+	Name          string `json:"name"`
+	Force         bool   `json:"force,omitempty"`
+	Reason        string `json:"reason,omitempty"`
+}
+
+// SkillDeleteResponse is the JSON shape for skill.delete. DeletedAt is
+// populated on success. MirrorsCleared is the count of destination
+// worktrees that received the Delete event (0 when no enqueuer is
+// wired — production wiring lands at the lifecycle integration point).
+// Error populates on a logical-failure path (skill_not_found) so the
+// CLI can distinguish bad input from a system error.
+type SkillDeleteResponse struct {
+	DeletedAt      time.Time `json:"deleted_at,omitzero"`
+	MirrorsCleared int       `json:"mirrors_cleared"`
+	Error          string    `json:"error,omitempty"`
+}
+
+// HandleDelete serves skill.delete (design-spec §7.6 / §13.4).
+// Coordinator-only. Removes .thrum/skills/<name>/ recursively, then
+// fans a Kind=delete mirror event to every destination worktree
+// (eager cleanup per §12.4). force is RPC-side a no-op — it gates the
+// CLI confirmation prompt only.
+func (h *SkillHandler) HandleDelete(ctx context.Context, params json.RawMessage) (any, error) {
+	var req SkillDeleteRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+	if err := h.requireCoordinator(ctx, req.CallerAgentID); err != nil {
+		return nil, err
+	}
+	if req.Name == "" {
+		return nil, errors.New("invalid request: name is required")
+	}
+
+	h.ensurePromoteDefaults()
+
+	// Verify the skill exists. Library.Get returns ErrSkillNotFound
+	// for a missing name — map to the structured response so the CLI
+	// gets a clear error code rather than a wrapped library sentinel.
+	if _, err := h.library.Get(ctx, req.Name); err != nil {
+		if errors.Is(err, skills.ErrSkillNotFound) {
+			return SkillDeleteResponse{Error: ErrSkillNotFoundCode}, nil
+		}
+		return nil, fmt.Errorf("lookup skill: %w", err)
+	}
+
+	// Serialize against concurrent promotes for the same name so a
+	// promote can't race with a delete on the same target.
+	mu := h.promoteMutex(req.Name)
+	mu.Lock()
+	defer mu.Unlock()
+
+	skillDir := filepath.Join(h.library.RepoRoot(), ".thrum", "skills", req.Name)
+	if err := os.RemoveAll(skillDir); err != nil {
+		return nil, fmt.Errorf("remove canonical: %w", err)
+	}
+
+	// Fan Delete event to every destination worktree via the enqueuer.
+	// Best-effort — a failing enqueue logs + continues; the post-
+	// restart Reconcile pass repairs drift.
+	var mirrorsCleared int
+	if h.enqueuer != nil {
+		count, enqErr := h.enqueuer.EnqueueAll(skills.MirrorEvent{
+			Kind:      skills.MirrorEventKindDelete,
+			SkillName: req.Name,
+			Trigger:   skills.TriggerManualSync,
+		})
+		mirrorsCleared = count
+		if enqErr != nil {
+			h.logger.Warn("skill delete: mirror enqueue partial failure", "name", req.Name, "err", enqErr)
+		}
+	}
+
+	h.logger.Info("skill deleted",
+		"name", req.Name,
+		"caller", req.CallerAgentID,
+		"reason", req.Reason,
+		"force", req.Force,
+		"mirrors_cleared", mirrorsCleared,
+	)
+
+	return SkillDeleteResponse{
+		DeletedAt:      h.clock(),
+		MirrorsCleared: mirrorsCleared,
+	}, nil
 }
 
 // --- HandleRevise ---

@@ -591,15 +591,96 @@ func skillDeleteCmd() *cobra.Command {
 eager-cleanup to every active worktree's mirror destination per the
 adapter table.
 
-Without --force, prompts for confirmation. --force skips the
-prompt + emits an audit log line.`,
+Without --force, prompts for confirmation when stdin is a TTY. Non-
+interactive callers (piped stdin, CI) skip the prompt unconditionally
+— --force makes the skip explicit for interactive sessions.`,
 		Args: cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return fmt.Errorf("skill.delete RPC body lands at E10.6 (thrum-6qmf.2.19)")
+		RunE: func(cmd *cobra.Command, args []string) error {
+			force, _ := cmd.Flags().GetBool("force")
+			reason, _ := cmd.Flags().GetString("reason")
+			return runSkillDelete(cmd.InOrStdin(), cmd.OutOrStdout(), args[0], force, reason)
 		},
 	}
-	cmd.Flags().Bool("force", false, "Skip the confirmation prompt")
+	cmd.Flags().Bool("force", false, "Skip the confirmation prompt (also skipped on non-TTY stdin)")
+	cmd.Flags().String("reason", "", "Operator-supplied reason for the delete; audit-logged with the operation")
 	return cmd
+}
+
+// runSkillDelete dispatches the skill.delete RPC. Honors the AC's
+// --force prompt-skip behavior at the CLI layer (the daemon ignores
+// the Force field). A non-TTY stdin (piped, CI) also skips the prompt
+// so non-interactive callers don't have to set --force just to avoid
+// a hang.
+func runSkillDelete(in io.Reader, out io.Writer, name string, force bool, reason string) error {
+	if !force && isDeletePromptInteractive(in) {
+		if _, err := fmt.Fprintf(out, "Delete promoted skill %q? [y/N]: ", name); err != nil {
+			return fmt.Errorf("write prompt: %w", err)
+		}
+		var answer string
+		// Single line read; any non-y/yes answer aborts. EOF aborts too.
+		if _, err := fmt.Fscanln(in, &answer); err != nil {
+			return fmt.Errorf("delete aborted: %w", err)
+		}
+		answer = strings.ToLower(strings.TrimSpace(answer))
+		if answer != "y" && answer != "yes" {
+			return errors.New("delete aborted by operator")
+		}
+	}
+
+	agentID, err := resolveLocalAgentID()
+	if err != nil {
+		return fmt.Errorf("failed to resolve agent identity: %w", err)
+	}
+	client, err := getClient()
+	if err != nil {
+		return fmt.Errorf("failed to connect to daemon: %w", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	req := map[string]any{
+		"caller_agent_id": agentID,
+		"name":            name,
+		"force":           force,
+	}
+	if reason != "" {
+		req["reason"] = reason
+	}
+	var resp rpc.SkillDeleteResponse
+	if err := client.Call("skill.delete", req, &resp); err != nil {
+		return fmt.Errorf("skill.delete RPC failed: %w", err)
+	}
+	if flagJSON {
+		return cli.EmitJSON(resp)
+	}
+	w := skillWriter{w: out}
+	if resp.Error != "" {
+		w.Fprintf("DELETE BLOCKED: %s\n", resp.Error)
+		if w.err != nil {
+			return w.err
+		}
+		return errors.New(resp.Error)
+	}
+	w.Fprintf("DELETED: %s\n", name)
+	w.Fprintf("  deleted_at:      %s\n", resp.DeletedAt.Format("2006-01-02T15:04:05Z07:00"))
+	w.Fprintf("  mirrors_cleared: %d\n", resp.MirrorsCleared)
+	return w.err
+}
+
+// isDeletePromptInteractive returns true when the supplied reader appears to be a
+// TTY. The cobra cmd's `cmd.InOrStdin()` returns the configured input
+// reader; only when it's *os.Stdin AND that fd is a terminal do we
+// emit a prompt. Test invocations supply a non-os.Stdin reader (bytes.
+// Buffer, strings.Reader), which always returns false here.
+func isDeletePromptInteractive(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return (info.Mode() & os.ModeCharDevice) != 0
 }
 
 // skillReviseCmd implements `thrum skill revise <path> <body>` per

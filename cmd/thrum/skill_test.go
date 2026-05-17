@@ -175,3 +175,56 @@ func TestSkillCheck_CLIExitsCode2(t *testing.T) {
 		})
 	}
 }
+
+// TestSkillDelete_ForceSkipsPrompt pins the AC E10.6 line 1776
+// "non-interactive mode + --force → succeeds" invariant at the CLI
+// layer. The cobra cmd's stdin (a bytes.Buffer here) is non-interactive
+// so the prompt branch is bypassed unconditionally; the test verifies
+// no "Delete promoted skill" text appears in the cmd output AND the
+// returned error is the daemon-connection failure path (not the
+// prompt-abort path).
+func TestSkillDelete_ForceSkipsPrompt(t *testing.T) {
+	t.Parallel()
+
+	cmd := skillCmd()
+	out := &bytes.Buffer{}
+	errBuf := &bytes.Buffer{}
+	cmd.SetOut(out)
+	cmd.SetErr(errBuf)
+	cmd.SetIn(&bytes.Buffer{})
+	cmd.SetArgs([]string{"delete", "ghost", "--force"})
+
+	err := cmd.Execute()
+	// Cmd will fail at getClient() or resolveLocalAgentID() in the
+	// test environment — that's expected; we only care that we DIDN'T
+	// emit the interactive prompt or take the "delete aborted by
+	// operator" path.
+	if strings.Contains(out.String(), "Delete promoted skill") {
+		t.Errorf("prompt text appeared despite --force; out: %s", out.String())
+	}
+	if err != nil && strings.Contains(err.Error(), "delete aborted") {
+		t.Errorf("prompt path was taken: %v", err)
+	}
+}
+
+// TestSkillDelete_NonInteractiveStdinSkipsPrompt confirms that without
+// --force, a non-TTY stdin (every cobra-test invocation) skips the
+// prompt — the same behavior we'd want from CI pipes. This is the
+// stronger guarantee behind --force: --force is a deliberate skip
+// during interactive sessions, but non-interactive callers always
+// skip regardless.
+func TestSkillDelete_NonInteractiveStdinSkipsPrompt(t *testing.T) {
+	t.Parallel()
+
+	cmd := skillCmd()
+	out := &bytes.Buffer{}
+	cmd.SetOut(out)
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetIn(&bytes.Buffer{})
+	cmd.SetArgs([]string{"delete", "ghost"})
+
+	_ = cmd.Execute()
+	if strings.Contains(out.String(), "Delete promoted skill") {
+		t.Errorf("prompt text appeared on non-TTY stdin; out: %s", out.String())
+	}
+}
