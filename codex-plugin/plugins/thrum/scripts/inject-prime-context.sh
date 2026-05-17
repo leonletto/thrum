@@ -55,6 +55,14 @@ AGENT_WORKTREE=$(printf '%s' "$WHOAMI_JSON" | jq -r '.worktree // empty' 2>/dev/
 AGENT_BRANCH=$(printf '%s' "$WHOAMI_JSON" | jq -r '.branch // empty' 2>/dev/null || true)
 AGENT_MODULE=$(printf '%s' "$WHOAMI_JSON" | jq -r '.module // empty' 2>/dev/null || true)
 
+# thrum-x7rb: strip any backticks from identity fields before
+# interpolating into the markdown inline-code span in ACK_INSTRUCTION
+# below. The identity validator blocks backticks upstream, so this is
+# pure defensive hardening.
+AGENT_ID="${AGENT_ID//\`/}"
+AGENT_ROLE="${AGENT_ROLE//\`/}"
+AGENT_MODULE="${AGENT_MODULE//\`/}"
+
 PRIME_OUTPUT=$(thrum prime 2>/dev/null || true)
 
 if [ -z "$PRIME_OUTPUT" ]; then
