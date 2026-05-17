@@ -114,8 +114,11 @@ type Store interface {
 	// Defer appends to defer_history and updates next_reminder_at.
 	Defer(ctx context.Context, id string, until time.Time, by string) error
 
-	// Clear transitions an open or fired row to state='cleared' with
-	// cleared_at=now. Caller authorization enforced at RPC layer.
+	// Clear transitions an open row to state='cleared' with
+	// cleared_at=now. Rejects terminal states (fired/cleared/cancelled)
+	// with ErrTerminalState per canonical §3.5 state machine —
+	// terminal states accept no further transitions. Caller
+	// authorization enforced at RPC layer.
 	Clear(ctx context.Context, id string, by string) error
 
 	// Cancel transitions an open row to state='cancelled' with

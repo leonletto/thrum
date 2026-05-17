@@ -96,10 +96,19 @@ type FileChange struct {
 // unconditionally — empty reminders hide the row entirely (most agents
 // have none and rendering "(none)" everywhere would dilute the signal).
 //
-// Multi-line layout matches the Files: block convention (header line +
-// indented entries). IDs come from the daemon already ordered (by
-// next_reminder_at ASC NULLS LAST per Store.OpenForAgent), so this
-// renderer just preserves the order.
+// Layout deviation from A-B4 plan E4.4 acceptance criterion #1: plan
+// calls for inline `reminders: [id, id]` "compact view" + separate
+// multi-line "expanded view" gated on a `thrum team --agent <name>`
+// flag that doesn't exist in current cobra tree. Current `thrum team`
+// is uniformly multi-line for every field (Inbox, Branch, Files), so a
+// single-line `reminders: [...]` row would be stylistically jarring
+// and inconsistent with the rest of the output. Implemented as a
+// single multi-line block matching the Files: convention; the Q8
+// invariant "IDs only, no body/count/truncation" is honored.
+//
+// IDs come from the daemon already ordered (by next_reminder_at ASC
+// NULLS LAST per Store.OpenForAgent), so this renderer just preserves
+// the order.
 //
 // The synthetic "... +N more" marker from the daemon's
 // teamReminderCompactCap passes through unchanged; consumers reading

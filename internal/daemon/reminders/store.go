@@ -363,35 +363,85 @@ func (s *SQLStore) Defer(ctx context.Context, id string, until time.Time, by str
 	return err
 }
 
+// terminalKind is a sealed sentinel that identifies which terminal
+// timestamp column to populate. The zero value is invalid; only the
+// package-internal constants below are legal — Go's unexported type
+// makes external misuse impossible at compile time.
+//
+// This exists because transitionToTerminal needs a column name to
+// splice into SQL. Plain `string` would let a future caller pass user
+// input by mistake; the sealed type closes that footgun even though
+// the current call sites (Clear, Cancel) only pass hardcoded values.
+type terminalKind int
+
+const (
+	terminalCleared terminalKind = iota + 1
+	terminalCancelled
+)
+
+// timestampColumn returns the scheduler_job_state column name for this
+// terminal kind. Keeping the mapping in one place (rather than per
+// call site) means the SQL-spliced value is unambiguously a controlled
+// literal, not a parameter.
+func (k terminalKind) timestampColumn() string {
+	switch k {
+	case terminalCleared:
+		return "cleared_at"
+	case terminalCancelled:
+		return "cancelled_at"
+	default:
+		// Unreachable: the constructor pattern ensures only the named
+		// constants flow in. Panic loudly rather than corrupt SQL.
+		panic(fmt.Sprintf("reminders: unknown terminalKind %d", k))
+	}
+}
+
+// state returns the canonical State that pairs with this terminal kind.
+func (k terminalKind) state() State {
+	switch k {
+	case terminalCleared:
+		return StateCleared
+	case terminalCancelled:
+		return StateCancelled
+	default:
+		panic(fmt.Sprintf("reminders: unknown terminalKind %d", k))
+	}
+}
+
 // Clear transitions an open row to state='cleared' with cleared_at=now
 // and next_reminder_at=NULL. Per canonical §3.5 state machine, terminal
 // rows cannot be re-cleared.
 func (s *SQLStore) Clear(ctx context.Context, id string, by string) error {
-	return s.transitionToTerminal(ctx, id, StateCleared, "cleared_at", by)
+	return s.transitionToTerminal(ctx, id, terminalCleared, by)
 }
 
 // Cancel transitions an open row to state='cancelled' with
 // cancelled_at=now and next_reminder_at=NULL.
 func (s *SQLStore) Cancel(ctx context.Context, id string, by string) error {
-	return s.transitionToTerminal(ctx, id, StateCancelled, "cancelled_at", by)
+	return s.transitionToTerminal(ctx, id, terminalCancelled, by)
 }
 
-// transitionToTerminal is the shared body for Clear and Cancel — only the
-// new state and the timestamp column differ. `by` is currently unused on
-// the row (no audit column for "cleared_by" in the canonical DDL); kept
-// in the signature for future expansion and parity with Defer.
-func (s *SQLStore) transitionToTerminal(ctx context.Context, id string, newState State, tsCol string, _ string) error {
+// transitionToTerminal is the shared body for Clear and Cancel. The
+// `kind` parameter is a sealed sentinel (terminalKind) — only the
+// package-internal constants are legal, so the SQL-spliced column
+// name is unambiguously controlled at compile time.
+//
+// `by` is currently unused on the row (no audit column for "cleared_by"
+// in the canonical DDL); kept in the signature for future expansion
+// and parity with Defer.
+func (s *SQLStore) transitionToTerminal(ctx context.Context, id string, kind terminalKind, _ string) error {
 	cur, err := s.Get(ctx, id)
 	if err != nil {
 		return err
 	}
 	if cur.State != StateOpen {
-		return fmt.Errorf("%w: %s on %s (id=%s)", ErrTerminalState, newState, cur.State, id)
+		return fmt.Errorf("%w: %s on %s (id=%s)", ErrTerminalState, kind.state(), cur.State, id)
 	}
 	now := time.Now().UTC().Unix()
-	// tsCol is a hardcoded literal from Clear/Cancel — never user input.
-	q := `UPDATE reminders SET state = ?, ` + tsCol + ` = ?, next_reminder_at = NULL, updated_at = ? WHERE id = ?`
-	_, err = s.db.ExecContext(ctx, q, string(newState), now, now, id)
+	// kind.timestampColumn() returns one of two package-internal
+	// literal strings; never user-supplied.
+	q := `UPDATE reminders SET state = ?, ` + kind.timestampColumn() + ` = ?, next_reminder_at = NULL, updated_at = ? WHERE id = ?`
+	_, err = s.db.ExecContext(ctx, q, string(kind.state()), now, now, id)
 	return err
 }
 

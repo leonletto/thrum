@@ -125,7 +125,8 @@ func (d *DeliverySink) fanToChain(ctx context.Context, r *Reminder) error {
 
 	var (
 		delivered int
-		errs      []string
+		skipped   int      // log+continue paths (email-nil, unknown shape)
+		errs      []string // hard errors from sender/queue
 	)
 	for _, entry := range r.TargetChain {
 		switch {
@@ -140,6 +141,7 @@ func (d *DeliverySink) fanToChain(ctx context.Context, r *Reminder) error {
 			if d.email == nil {
 				log.Printf("[reminders] %s: email entry %q in chain but no EmailQueue wired; skipping",
 					r.ID, entry)
+				skipped++
 				continue
 			}
 			if err := d.email.QueueReminderEmail(ctx, entry, subject, emailBody); err != nil {
@@ -150,16 +152,30 @@ func (d *DeliverySink) fanToChain(ctx context.Context, r *Reminder) error {
 		default:
 			log.Printf("[reminders] %s: chain entry %q has unrecognized shape (not @agent, not email); skipping",
 				r.ID, entry)
+			skipped++
 		}
 	}
 
 	if delivered == 0 {
-		return fmt.Errorf("DeliverySink.fanToChain: no recipients reached for %s; errors: %s",
-			r.ID, strings.Join(errs, "; "))
+		// Distinguish skip-only ("no one is wired to receive this") from
+		// hard-failure ("we tried, the recipients are down"). Caller
+		// (Dispatcher) re-fires on either — the message clarifies which
+		// situation operators need to fix.
+		switch {
+		case len(errs) == 0 && skipped > 0:
+			return fmt.Errorf("DeliverySink.fanToChain: no recipients reached for %s (all %d chain entries skipped — no wired delivery path)",
+				r.ID, skipped)
+		case len(errs) > 0 && skipped == 0:
+			return fmt.Errorf("DeliverySink.fanToChain: no recipients reached for %s (errors: %s)",
+				r.ID, strings.Join(errs, "; "))
+		default:
+			return fmt.Errorf("DeliverySink.fanToChain: no recipients reached for %s (%d skipped, errors: %s)",
+				r.ID, skipped, strings.Join(errs, "; "))
+		}
 	}
 	if len(errs) > 0 {
-		log.Printf("[reminders] %s: partial chain delivery (%d ok, %d failed): %s",
-			r.ID, delivered, len(errs), strings.Join(errs, "; "))
+		log.Printf("[reminders] %s: partial chain delivery (%d ok, %d failed, %d skipped): %s",
+			r.ID, delivered, len(errs), skipped, strings.Join(errs, "; "))
 	}
 	return nil
 }

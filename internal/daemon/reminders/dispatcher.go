@@ -177,6 +177,12 @@ func (h *dispatcherHandler) Stages() map[string]time.Duration {
 	return map[string]time.Duration{"scanning": 5 * time.Minute}
 }
 
+// Compile-time check that dispatcherHandler satisfies scheduler.Handler.
+// Mirrors the pattern in sweep.Handler — catches signature drift in
+// the scheduler.Handler interface at compile time rather than at
+// daemon-boot registration time.
+var _ scheduler.Handler = (*dispatcherHandler)(nil)
+
 // fireOne fires a single reminder and applies the appropriate state
 // transition. Sink failure aborts the transition so the row re-fires on
 // the next tick (at-least-once delivery semantics).

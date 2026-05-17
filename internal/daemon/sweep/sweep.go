@@ -181,6 +181,12 @@ func (h *Handler) runOnce(ctx context.Context) error {
 
 	chain, err := h.chain.Resolve(ctx)
 	if err != nil {
+		// Per E4.3 acceptance: configuration errors are explicitly
+		// logged at the daemon stdout layer so operators see
+		// chain-misconfig without consulting scheduler_job_events.
+		// No reminders mint this tick — better to skip the sweep
+		// than fan stalled-agent alerts to nobody.
+		log.Printf("[sweep] target chain resolve failed: %v (no reminders minted this tick)", err)
 		return fmt.Errorf("sweep: resolve target chain: %w", err)
 	}
 

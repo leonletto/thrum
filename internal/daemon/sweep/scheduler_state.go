@@ -8,6 +8,16 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
 )
 
+// Package-placement note: the A-B4 plan §Task 18 suggests this
+// adapter live in `internal/daemon/scheduler/store.go` (or hedge
+// "wherever A-B1 ships the read API"). It lives here in the sweep
+// package instead — the consuming-epic placement keeps A-B1's
+// substrate package isolated from cross-epic joins and matches the
+// "narrow seam" testability rationale that drove the
+// JobSpecAccessor interface. Coordinator may relocate this file to
+// internal/daemon/scheduler/ later if the cross-package join becomes
+// shared across multiple consumers; for now A-B4 is the sole consumer.
+
 // JobSpecAccessor is the minimal interface this adapter needs from
 // A-B1's *scheduler.Scheduler. Defined here as a narrow seam so
 // tests can stub without spinning up a real Scheduler.

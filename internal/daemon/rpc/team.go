@@ -283,19 +283,24 @@ func (h *TeamHandler) decorateWithReminders(ctx context.Context, members []TeamM
 	return members
 }
 
-// capReminderIDs returns ids unchanged when len(ids) <= cap. Above the
-// cap it returns the first (cap-1) IDs plus a synthetic "... +N more"
-// marker so the slice length stays at cap exactly. The marker is a
-// human-facing convenience; consumers parsing this slice should still
-// fall back to a full lookup via `thrum agent reminder list` when they
-// need the complete set.
-func capReminderIDs(ids []string, cap int) []string {
-	if len(ids) <= cap {
+// capReminderIDs returns ids unchanged when len(ids) <= limit. Above
+// the limit it returns the first (limit-1) IDs plus a synthetic
+// "... +N more" marker so the slice length stays at limit exactly.
+// The marker is a human-facing convenience; consumers parsing this
+// slice should still fall back to a full lookup via
+// `thrum agent reminder list` when they need the complete set.
+//
+// Parameter intentionally named `limit` rather than `cap` so it
+// doesn't shadow the built-in `cap()` function — even though `cap`
+// isn't used inside this body today, the shadow would surprise a
+// future maintainer extending the function.
+func capReminderIDs(ids []string, limit int) []string {
+	if len(ids) <= limit {
 		return ids
 	}
-	out := make([]string, 0, cap)
-	out = append(out, ids[:cap-1]...)
-	more := len(ids) - (cap - 1)
+	out := make([]string, 0, limit)
+	out = append(out, ids[:limit-1]...)
+	more := len(ids) - (limit - 1)
 	out = append(out, fmt.Sprintf("... +%d more", more))
 	return out
 }
