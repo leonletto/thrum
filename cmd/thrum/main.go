@@ -6250,6 +6250,12 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	server.RegisterHandler("session.setIntent", sessionHandler.HandleSetIntent)
 	server.RegisterHandler("session.setTask", sessionHandler.HandleSetTask)
 
+	// Session archive (thrum-6qmf.15 / v0.11): persist /thrum:restart
+	// snapshots into .thrum/agents/<id>/sessions/ instead of deleting
+	// them at prime time.
+	sessionArchiveHandler := rpc.NewSessionArchiveHandler(st, thrumDir)
+	server.RegisterHandler("session.archive", sessionArchiveHandler.HandleArchive)
+
 	// Group management
 	groupHandler := rpc.NewGroupHandler(st)
 	server.RegisterHandler("group.create", groupHandler.HandleCreate)
@@ -7201,6 +7207,7 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	wsRegistry.Register("session.heartbeat", websocket.Handler(sessionHandler.HandleHeartbeat))
 	wsRegistry.Register("session.setIntent", websocket.Handler(sessionHandler.HandleSetIntent))
 	wsRegistry.Register("session.setTask", websocket.Handler(sessionHandler.HandleSetTask))
+	wsRegistry.Register("session.archive", websocket.Handler(sessionArchiveHandler.HandleArchive))
 	wsRegistry.Register("group.create", websocket.Handler(groupHandler.HandleCreate))
 	wsRegistry.Register("group.delete", websocket.Handler(groupHandler.HandleDelete))
 	wsRegistry.Register("group.member.add", websocket.Handler(groupHandler.HandleMemberAdd))
