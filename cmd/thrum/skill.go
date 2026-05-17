@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -12,6 +14,11 @@ import (
 	"github.com/leonletto/thrum/internal/cli"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 )
+
+// osExit is a seam for tests — production code uses os.Exit; tests
+// override to capture the exit-code request without terminating the
+// test process.
+var osExit = os.Exit
 
 // skillCmd is the parent cobra command for the C-B1 skill registration
 // surface. Subcommands wrap the skill.* JSON-RPC methods over the
@@ -317,13 +324,68 @@ meta-skill itself ships at C-B2. The current behavior returns
 bypass the admission gate during the stub window via
 'thrum skill promote --force <path>'.`,
 		Args: cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return fmt.Errorf("skill.check RPC stub lands at E10.3 (thrum-6qmf.2.11)")
+		RunE: func(cmd *cobra.Command, args []string) error {
+			wait, _ := cmd.Flags().GetBool("wait")
+			err := runSkillCheck(args[0], wait)
+			// Stub-mode exit-code-2: the v0.11 first-ship path returns
+			// ErrCheckTheSkillNotAvailable from the daemon. Print the
+			// verbatim canonical §8.3 message to stderr and exit 2
+			// (per spec §7.3); any other error falls through to cobra's
+			// default exit-1 path.
+			if code := classifySkillCheckError(err); code == 2 {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), rpc.CheckSkillNotAvailableMessage)
+				osExit(2)
+			}
+			return err
 		},
 	}
 	cmd.Flags().Bool("wait", false, "Block up to 30s for short interactive runs; longer runs return pending + check-id for polling")
 	cmd.AddCommand(skillCheckStatusCmd())
 	return cmd
+}
+
+// runSkillCheck dispatches skill.check. Always returns the daemon's
+// error in the v0.11 stub window (HandleCheck returns
+// ErrCheckTheSkillNotAvailable); the caller classifies via
+// classifySkillCheckError to choose between exit-code-2 (stub error)
+// and the default cobra exit-1 path (any other failure).
+func runSkillCheck(path string, wait bool) error {
+	agentID, err := resolveLocalAgentID()
+	if err != nil {
+		return fmt.Errorf("failed to resolve agent identity: %w", err)
+	}
+	client, err := getClient()
+	if err != nil {
+		return fmt.Errorf("failed to connect to daemon: %w", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	req := map[string]any{
+		"caller_agent_id": agentID,
+		"path":            path,
+		"wait":            wait,
+	}
+	// Stub mode never returns a populated result; the live form post-
+	// C-B2 will populate {check_id, status, estimated_complete_at}.
+	// Using map[string]any keeps the result handling agnostic to the
+	// flip from stub to live.
+	var result map[string]any
+	return client.Call("skill.check", req, &result)
+}
+
+// classifySkillCheckError returns the exit code the CLI should use
+// for a given skill.check error. 0 for nil, 2 for the v0.11 stub
+// error (per spec §7.3), 1 for any other error. Pure function —
+// the unit test in skill_test.go drives this directly rather than
+// invoking the CLI as a subprocess.
+func classifySkillCheckError(err error) int {
+	if err == nil {
+		return 0
+	}
+	if strings.Contains(err.Error(), rpc.CheckSkillNotAvailableMessage) {
+		return 2
+	}
+	return 1
 }
 
 // skillCheckStatusCmd implements `thrum skill check status <check-id>`

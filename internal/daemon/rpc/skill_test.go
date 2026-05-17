@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -270,6 +271,89 @@ func TestSkillList_MissingCallerAgentID(t *testing.T) {
 	_, err := h.HandleList(context.Background(), params)
 	if err == nil || !strings.Contains(err.Error(), "caller_agent_id") {
 		t.Errorf("want unauthorized error mentioning caller_agent_id, got: %v", err)
+	}
+}
+
+// TestSkillCheck_StubErrorText pins the verbatim canonical §8.3
+// stub message returned by HandleCheck. The full message text lives
+// as a package-level const so this test compares against the same
+// string the CLI uses for exit-code-2 classification — a future
+// drift in the message text fails both the daemon-side test and
+// the CLI matcher in one place.
+func TestSkillCheck_StubErrorText(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	h := newSkillHandlerForTest(t, root)
+	params, _ := json.Marshal(SkillCheckRequest{
+		CallerAgentID: "@coordinator_main",
+		Path:          "/some/path/to/SKILL.md",
+	})
+	_, err := h.HandleCheck(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected stub error, got nil")
+	}
+	if !errors.Is(err, ErrCheckTheSkillNotAvailable) {
+		t.Errorf("err is not ErrCheckTheSkillNotAvailable: %v", err)
+	}
+	if err.Error() != CheckSkillNotAvailableMessage {
+		t.Errorf("err.Error() = %q\nwant %q", err.Error(), CheckSkillNotAvailableMessage)
+	}
+}
+
+// TestSkillCheck_CoordinatorOnlyAuth verifies the spec §7.10
+// coordinator-only auth rule with a DB-backed role check. The nil-DB
+// shortcut still applies (test-bypass per requireCoordinator docstring)
+// so this test exercises the with-DB branch by wiring a real sqlite-in-
+// memory and inserting a non-coordinator agent row.
+func TestSkillCheck_CoordinatorOnlyAuth(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	db := openTestEmailDB(t)
+	insertTestAgent(t, db, "@researcher_skills", "researcher")
+	h := NewSkillHandler(skills.NewLibrary(root), nil, nil, nil, nil, db)
+	params, _ := json.Marshal(SkillCheckRequest{
+		CallerAgentID: "@researcher_skills",
+		Path:          "/some/path/to/SKILL.md",
+	})
+	_, err := h.HandleCheck(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected unauthorized error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unauthorized") {
+		t.Errorf("err = %v, want unauthorized", err)
+	}
+	// Coordinator-role caller, by contrast, gets through auth and
+	// receives the canonical stub error.
+	insertTestAgent(t, db, "@coordinator_main", "coordinator")
+	params2, _ := json.Marshal(SkillCheckRequest{
+		CallerAgentID: "@coordinator_main",
+		Path:          "/some/path/to/SKILL.md",
+	})
+	_, err = h.HandleCheck(context.Background(), params2)
+	if !errors.Is(err, ErrCheckTheSkillNotAvailable) {
+		t.Errorf("coordinator path: err = %v, want stub", err)
+	}
+}
+
+// TestSkillCheck_WaitFlagIgnored confirms the --wait flag is accepted
+// in stub mode without changing behavior — both Wait=true and
+// Wait=false return the same canonical stub error. This pins the
+// forward-compat contract: the live form post-C-B2 will respect Wait,
+// but the stub must not crash or drift.
+func TestSkillCheck_WaitFlagIgnored(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	h := newSkillHandlerForTest(t, root)
+	for _, wait := range []bool{false, true} {
+		params, _ := json.Marshal(SkillCheckRequest{
+			CallerAgentID: "@coordinator_main",
+			Path:          "/path/SKILL.md",
+			Wait:          wait,
+		})
+		_, err := h.HandleCheck(context.Background(), params)
+		if !errors.Is(err, ErrCheckTheSkillNotAvailable) {
+			t.Errorf("wait=%v: err = %v, want stub", wait, err)
+		}
 	}
 }
 

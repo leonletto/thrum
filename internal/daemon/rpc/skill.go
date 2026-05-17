@@ -144,9 +144,25 @@ type SkillCheckStatusResponse struct {
 
 // ErrCheckSkillNotAvailableCode is the canonical wire-level error
 // identifier for the check-the-skill stub (design-spec §7.4 / canonical
-// §8.3). Exported so E10.3's HandleCheck can reuse the identifier when
-// it also returns the same code.
+// §8.3). Returned by HandleCheckStatus as the `error` field of the
+// success-response stub shape; embedded by HandleCheck inside the
+// human-readable message via ErrCheckTheSkillNotAvailable.
 const ErrCheckSkillNotAvailableCode = "check_the_skill_not_available"
+
+// CheckSkillNotAvailableMessage is the canonical §8.3 / spec §7.3
+// verbatim error text returned by HandleCheck in the v0.11 stub
+// window. Exported so the CLI can string-match the message to drive
+// exit-code-2 classification (the JSON-RPC envelope's `error.code`
+// field is generic -32000, so the message text is the only
+// available discriminator after the error crosses the wire).
+const CheckSkillNotAvailableMessage = "check-the-skill meta-skill not implemented in this build. Use 'thrum skill promote --force <path>' to bypass the admission gate, or wait for C-B2 to ship."
+
+// ErrCheckTheSkillNotAvailable is the daemon-side sentinel error
+// returned by HandleCheck while C-B2 (the live check-the-skill
+// meta-skill) is unimplemented. Tests compare via errors.Is.
+//
+//nolint:staticcheck // ST1005: error message is the canonical §8.3 verbatim text — punctuation is spec-mandated.
+var ErrCheckTheSkillNotAvailable = errors.New(CheckSkillNotAvailableMessage)
 
 // --- HandleList ---
 
@@ -274,6 +290,40 @@ func (h *SkillHandler) HandleShow(ctx context.Context, params json.RawMessage) (
 		resp.Raw = string(raw)
 	}
 	return resp, nil
+}
+
+// --- HandleCheck ---
+
+// SkillCheckRequest is the params shape for skill.check (design-spec
+// §7.3). The Wait flag is accepted in the stub window for forward-
+// compat with the live form (post-C-B2 blocks up to 30s); the stub
+// ignores it and returns the canonical error immediately.
+type SkillCheckRequest struct {
+	CallerAgentID string `json:"caller_agent_id"`
+	Path          string `json:"path"`
+	Wait          bool   `json:"wait,omitempty"`
+}
+
+// HandleCheck serves skill.check (design-spec §7.3). Coordinator-only
+// per spec §7.10. In the v0.11 first-ship window — per canonical
+// §8.3's stub-and-ship-broken decision — the handler returns the
+// ErrCheckTheSkillNotAvailable sentinel without ever invoking a
+// check-the-skill meta-skill. When C-B2 ships, this entry point
+// flips to live invocation with zero CLI / RPC contract change
+// (verb, request shape, response shape, and async/inbox path are
+// already wired).
+func (h *SkillHandler) HandleCheck(ctx context.Context, params json.RawMessage) (any, error) {
+	var req SkillCheckRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+	if err := h.requireCoordinator(ctx, req.CallerAgentID); err != nil {
+		return nil, err
+	}
+	// Path is structurally required by the spec but the stub does no
+	// filesystem work — accept any non-empty value; a future live
+	// handler will validate path containment via the library.
+	return nil, ErrCheckTheSkillNotAvailable
 }
 
 // --- HandleCheckStatus ---

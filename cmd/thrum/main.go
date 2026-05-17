@@ -6284,6 +6284,7 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	skillHandler := rpc.NewSkillHandler(skillLibrary, nil, nil, nil, nil, st.RawDB())
 	server.RegisterHandler("skill.list", skillHandler.HandleList)
 	server.RegisterHandler("skill.show", skillHandler.HandleShow)
+	server.RegisterHandler("skill.check", skillHandler.HandleCheck)
 	server.RegisterHandler("skill.check_status", skillHandler.HandleCheckStatus)
 
 	// Monitor jobs — SECURITY: these handlers spawn child processes with the

@@ -2,8 +2,12 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/leonletto/thrum/internal/daemon/rpc"
 )
 
 // TestSkillCmd_HelpListsAllNineVerbs pins the public command tree
@@ -132,5 +136,42 @@ func TestSkillCmd_VerbsRegistered(t *testing.T) {
 		if !have[want] {
 			t.Errorf("missing subcommand: %s", want)
 		}
+	}
+}
+
+// TestSkillCheck_CLIExitsCode2 drives the pure classifier function
+// that decides the CLI exit code for a given daemon error. The
+// canonical §8.3 stub message → exit 2; any other error → exit 1;
+// nil → 0. The cobra RunE delegates to osExit() with this code,
+// so testing the classifier covers the exit-code-2 plan AC for
+// `thrum skill check` (per spec §7.3) without invoking the CLI as
+// a subprocess.
+func TestSkillCheck_CLIExitsCode2(t *testing.T) {
+	t.Parallel()
+
+	// The daemon's RPC error message is wrapped by the JSON-RPC
+	// client as "RPC error -32000: <verbatim message>". The
+	// classifier must match against the verbatim substring so the
+	// wrap doesn't defeat the match.
+	wrappedStubErr := fmt.Errorf("RPC error -32000: %s", rpc.CheckSkillNotAvailableMessage)
+
+	cases := []struct {
+		name string
+		err  error
+		want int
+	}{
+		{name: "stub-error", err: wrappedStubErr, want: 2},
+		{name: "stub-sentinel", err: rpc.ErrCheckTheSkillNotAvailable, want: 2},
+		{name: "nil", err: nil, want: 0},
+		{name: "connect-error", err: errors.New("failed to connect to daemon: connection refused"), want: 1},
+		{name: "unauthorized", err: errors.New("RPC error -32000: unauthorized: coordinator-role required"), want: 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := classifySkillCheckError(c.err)
+			if got != c.want {
+				t.Errorf("classify(%q) = %d, want %d", c.err, got, c.want)
+			}
+		})
 	}
 }
