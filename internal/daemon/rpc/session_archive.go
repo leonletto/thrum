@@ -20,20 +20,28 @@ type SessionArchiveRequest struct {
 	AgentID string `json:"agent_id"`
 }
 
-// SessionArchiveResponse is the spec §3.1 return shape extended with
-// `content` for the Task 7 CLI-side prime adaptation (spec §3.6 was
-// written assuming a daemon-orchestrated prime builder; the actual
-// code is CLI-orchestrated). The CLI calls session.archive and uses
-// `content` as the snapshot body it inserts into prime output,
-// replacing the prior restart.ConsumeInPrime+CleanupConsumed two-step.
+// SessionArchiveResponse is the spec §3.1 return shape, extended for
+// the Task 7 CLI-orchestrated prime flow (spec §3.6 was written
+// assuming a daemon-orchestrated prime builder; the actual code is
+// CLI-orchestrated). The CLI calls session.archive and uses:
+//
+//   - `content`         as the snapshot body to insert into prime output
+//   - `discovery_hint`  as the past-sessions reminder line(s) to emit
+//
+// This replaces the prior restart.ConsumeInPrime+CleanupConsumed
+// two-step entirely and centralizes both the archive timing AND the
+// discovery-hint rendering in the daemon.
 //
 // All fields are pointer-strings so they serialize as JSON null when
-// absent. content is null iff archived_path is null (missing or
-// empty source).
+// absent. content/discovery_hint are null when the source snapshot
+// was missing or empty. discovery_hint may be null even with a valid
+// archive if the agent has no past sessions yet (just-created folder
+// with no prior content matching the *-restart.md grammar).
 type SessionArchiveResponse struct {
-	ArchivedPath *string `json:"archived_path"`
-	BigPicture   *string `json:"big_picture"`
-	Content      *string `json:"content"`
+	ArchivedPath  *string `json:"archived_path"`
+	BigPicture    *string `json:"big_picture"`
+	Content       *string `json:"content"`
+	DiscoveryHint *string `json:"discovery_hint"`
 }
 
 // SessionArchiveHandler wraps sessionarchive.Archive for the daemon's
@@ -112,11 +120,22 @@ func (h *SessionArchiveHandler) HandleArchive(ctx context.Context, params json.R
 	if result == nil {
 		return &SessionArchiveResponse{}, nil
 	}
-	return &SessionArchiveResponse{
+
+	// Discovery-hint rendering happens here (not inside Archive) so the
+	// session-archive primitive stays focused on move semantics; the
+	// RPC layer composes Archive + RenderDiscoveryHint. Hint reads
+	// SessionsDir(agent, ...) which is the same destination Archive
+	// just wrote into — fresh archives are included in the count.
+	resp := &SessionArchiveResponse{
 		ArchivedPath: result.ArchivedPath,
 		BigPicture:   result.BigPicture,
 		Content:      result.Content,
-	}, nil
+	}
+	sessionsDir := sessionarchive.SessionsDir(a, h.thrumDir, worktreeThrumDir)
+	if hint := sessionarchive.RenderDiscoveryHint(sessionsDir, result); hint != "" {
+		resp.DiscoveryHint = &hint
+	}
+	return resp, nil
 }
 
 // resolveWorktreeThrumDir locates the .thrum/ directory of the worktree

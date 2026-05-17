@@ -4902,30 +4902,34 @@ Examples:
 					}
 				}
 
-				// Wire RestartSnapshot via session.archive RPC (Q-Spec-1
-				// adaptation per Task 7 — daemon-side archive supplants
-				// CLI-side ConsumeInPrime+CleanupConsumed; single source
-				// of truth on archive timing). The daemon reads the
+				// Wire RestartSnapshot + SessionDiscoveryHint via
+				// session.archive RPC (Q-Spec-1 adaptation per Task 7
+				// — daemon-side archive supplants CLI-side
+				// ConsumeInPrime+CleanupConsumed; single source of
+				// truth on archive timing). The daemon reads the
 				// snapshot, parses §1 big picture, moves the file to
-				// .thrum/agents/<id>/sessions/, and returns the content
-				// for CLI inclusion in prime output. Failures here are
-				// non-fatal — prime continues without snapshot context
-				// and the daemon logs the underlying error.
+				// .thrum/agents/<id>/sessions/, renders the past-
+				// sessions discovery hint, and returns all three
+				// fields to the CLI for inclusion in prime output.
+				// Failures here are non-fatal — prime continues
+				// without snapshot context and the daemon logs the
+				// underlying error.
 				if result.Identity != nil {
 					var archiveResp struct {
-						ArchivedPath *string `json:"archived_path"`
-						BigPicture   *string `json:"big_picture"`
-						Content      *string `json:"content"`
+						ArchivedPath  *string `json:"archived_path"`
+						BigPicture    *string `json:"big_picture"`
+						Content       *string `json:"content"`
+						DiscoveryHint *string `json:"discovery_hint"`
 					}
 					archiveReq := map[string]string{"agent_id": result.Identity.AgentID}
 					if err := client.Call("session.archive", archiveReq, &archiveResp); err == nil {
 						if archiveResp.Content != nil {
 							result.RestartSnapshot = *archiveResp.Content
 						}
+						if archiveResp.DiscoveryHint != nil {
+							result.SessionDiscoveryHint = *archiveResp.DiscoveryHint
+						}
 					}
-					// big_picture: Task 8 (E2.3) renders the discovery
-					// hint that consumes it. Captured here once Task 8
-					// lands the rendering surface.
 				}
 
 				// Identity refresh and TmuxMode detection are now handled

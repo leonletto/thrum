@@ -189,6 +189,37 @@ func TestHandleSessionArchive_NoSnapshot_NullContent(t *testing.T) {
 	if r.Content != nil {
 		t.Errorf("expected nil Content for missing snapshot, got %v", *r.Content)
 	}
+	if r.DiscoveryHint != nil {
+		t.Errorf("expected nil DiscoveryHint for missing snapshot + empty sessions/, got %v", *r.DiscoveryHint)
+	}
+}
+
+// TestHandleSessionArchive_PopulatesDiscoveryHint covers the Task 8
+// addition: after a successful archive, the response should include
+// the rendered "Past sessions: ..." hint. Just-archived snapshots
+// count toward the sessions tally — N=1 after a fresh archive,
+// since the freshly-moved file IS the lone past session.
+func TestHandleSessionArchive_PopulatesDiscoveryHint(t *testing.T) {
+	h, agentID, srcPath := newArchiveTestHandler(t, "persistent")
+	writeArchiveSnapshot(t, srcPath, "2026-05-17T15:32:18.421Z", "Locked the spec.")
+
+	params, _ := json.Marshal(SessionArchiveRequest{AgentID: agentID})
+	resp, err := h.HandleArchive(context.Background(), params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	r := resp.(*SessionArchiveResponse)
+
+	if r.DiscoveryHint == nil {
+		t.Fatal("expected DiscoveryHint after archive, got nil")
+	}
+	hint := *r.DiscoveryHint
+	if !strings.Contains(hint, "Past sessions: 1 saved") {
+		t.Errorf("hint missing 'Past sessions: 1 saved': %q", hint)
+	}
+	if !strings.Contains(hint, "Last big picture: Locked the spec.") {
+		t.Errorf("hint missing line 2: %q", hint)
+	}
 }
 
 func TestHandleSessionArchive_EphemeralAgent_ValidSnapshot_Archives(t *testing.T) {
