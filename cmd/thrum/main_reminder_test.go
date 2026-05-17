@@ -399,10 +399,51 @@ func TestReminderCmd_NoArgsPrintsHelp(t *testing.T) {
 	cmd.SetArgs([]string{})
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
+	cmd.SetOut(new(strings.Builder)) // suppress help-text from test log
 	// Help output goes to stdout by default. The test only verifies
 	// that no error is returned and the help path was taken — actual
 	// help-text golden tests live in thrum-6qmf.3.22.
 	if err := cmd.Execute(); err != nil {
 		t.Errorf("no-args should print help and return nil; got %v", err)
+	}
+}
+
+// --- mutual exclusion of --defer / --clear / --cancel ---
+
+func TestReminderCmd_MutuallyExclusiveActionFlags(t *testing.T) {
+	combos := [][]string{
+		{"reminder-x-1-2", "--defer", "1h", "--clear"},
+		{"reminder-x-1-2", "--defer", "1h", "--cancel"},
+		{"reminder-x-1-2", "--clear", "--cancel"},
+		{"reminder-x-1-2", "--defer", "1h", "--clear", "--cancel"},
+	}
+	for _, combo := range combos {
+		t.Run(strings.Join(combo[1:], "_"), func(t *testing.T) {
+			cmd := reminderCmd()
+			cmd.SetArgs(combo)
+			cmd.SilenceErrors = true
+			cmd.SilenceUsage = true
+			cmd.SetOut(new(strings.Builder))
+			cmd.SetErr(new(strings.Builder))
+			err := cmd.Execute()
+			if err == nil {
+				t.Errorf("expected mutual-exclusivity error for %v", combo)
+			}
+		})
+	}
+}
+
+func TestReminderCmd_DeferInvalidDuration(t *testing.T) {
+	cmd := reminderCmd()
+	cmd.SetArgs([]string{"reminder-x-1-2", "--defer", "-1h"})
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	cmd.SetOut(new(strings.Builder))
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for negative defer duration")
+	}
+	if !strings.Contains(err.Error(), "--defer invalid") {
+		t.Errorf("error should mention '--defer invalid'; got %v", err)
 	}
 }

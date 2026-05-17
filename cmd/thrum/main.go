@@ -2744,10 +2744,18 @@ func reminderCmd() *cobra.Command {
 			"Set one with 'thrum agent reminder set --in 1h --body \"finish release notes\"'.\n" +
 			"Look one up with 'thrum agent reminder <id>' — that's the forcing-function\n" +
 			"anchor: the fire message tells you \"run `thrum agent reminder <id>`\" and\n" +
-			"that lookup is where the full body + activity-since-raised banner lives.",
+			"that lookup is where the full body + activity-since-raised banner lives.\n\n" +
+			"From the lookup, take action with one of:\n" +
+			"  --defer <duration>  snooze the next fire (e.g. --defer 30m)\n" +
+			"  --clear             situation resolved; you're done with it\n" +
+			"  --cancel            reminder set in error / no longer wanted",
 		Args: cobra.MaximumNArgs(1),
 		RunE: runReminderLookup,
 	}
+	cmd.Flags().String("defer", "", "snooze the reminder by a duration (e.g. 30m, 1h, 2d)")
+	cmd.Flags().Bool("clear", false, "mark the reminder as resolved")
+	cmd.Flags().Bool("cancel", false, "withdraw the reminder (set in error / no longer wanted)")
+	cmd.MarkFlagsMutuallyExclusive("defer", "clear", "cancel")
 	cmd.AddCommand(reminderSetCmd())
 	cmd.AddCommand(reminderListCmd())
 	return cmd
@@ -2755,13 +2763,18 @@ func reminderCmd() *cobra.Command {
 
 // runReminderLookup handles `thrum agent reminder <id>` when the arg
 // doesn't match a known subcommand (set / list). With zero args it
-// prints help. Action flags (--defer / --clear / --cancel) land in
-// thrum-6qmf.3.20 — this commit ships the bare lookup view.
+// prints help. With an id and no action flag, renders the lookup
+// view. With --defer / --clear / --cancel (mutually exclusive — cobra
+// enforces this at parse time), dispatches the corresponding RPC.
 func runReminderLookup(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return cmd.Help()
 	}
 	id := args[0]
+
+	deferStr, _ := cmd.Flags().GetString("defer")
+	clearFlag, _ := cmd.Flags().GetBool("clear")
+	cancelFlag, _ := cmd.Flags().GetBool("cancel")
 
 	client, err := getClient()
 	if err != nil {
@@ -2769,6 +2782,36 @@ func runReminderLookup(cmd *cobra.Command, args []string) error {
 	}
 	defer func() { _ = client.Close() }()
 
+	switch {
+	case deferStr != "":
+		d, err := parseFutureDuration(deferStr)
+		if err != nil {
+			return fmt.Errorf("--defer invalid: %w", err)
+		}
+		until := time.Now().UTC().Add(d)
+		by, _ := resolveLocalAgentID() // best-effort; empty is fine for audit label
+		if err := cli.ReminderDefer(client, id, until, by); err != nil {
+			return err
+		}
+		fmt.Printf("Deferred to %s\n", until.Format(time.RFC3339))
+		return nil
+	case clearFlag:
+		by, _ := resolveLocalAgentID()
+		if err := cli.ReminderClear(client, id, by); err != nil {
+			return err
+		}
+		fmt.Println("Cleared.")
+		return nil
+	case cancelFlag:
+		by, _ := resolveLocalAgentID()
+		if err := cli.ReminderCancel(client, id, by); err != nil {
+			return err
+		}
+		fmt.Println("Cancelled.")
+		return nil
+	}
+
+	// No action flag → lookup view.
 	r, err := cli.ReminderGet(client, id)
 	if err != nil {
 		return err
