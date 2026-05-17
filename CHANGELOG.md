@@ -8,6 +8,50 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- **`thrum` mutating commands now fail closed under cross-worktree identity
+  drift instead of silently sending/marking-read under the wrong identity**
+  (thrum-7b84.6). Before v0.10.4, an agent CLI invocation from a worktree that
+  didn't match the caller's PID-bound identity silently swallowed the
+  `cross_worktree` guard error and proceeded — including silent wrong-author
+  `thrum send`/`thrum reply` and destructive wrong-agent `thrum inbox`
+  auto-marks-as-read. The bug surfaced in the wild on 2026-05-16 when an
+  architect's review was attributed to the implementer it was reviewing —
+  JSON-verified message attribution was wrong; the user only noticed because the
+  reply made no sense in context. **Standard same-cwd flow is unchanged.**
+
+### Changed
+
+- **Cross-worktree guard response now classified per verb on an orthogonal
+  `cross_worktree_response` axis** (thrum-7b84.6). Every cobra leaf gets one of
+  three classes:
+  - **Class A — Abortable**: mutating + identity-filtered (send, reply, inbox,
+    sent, wait, message edit/delete/mark-read/mark-unread, message get, context
+    get/save/delete, session start/set-intent/end/heartbeat, agent
+    register/touch/set-intent/set-status, quickstart, prime, tmux
+    send/create/restart/kill) → fails closed (exit 1, empty stdout, 4-line guard
+    error on stderr).
+  - **Class B — DiagnosticBanner**: identity-agnostic diagnostics (team, agent
+    list, version, daemon logs/restart/run/start/stop/status,
+    peer/sync/backup/telegram/tmux status) → exit 0, normal stdout, one-line
+    `⚠ Cross-worktree` banner on stderr (flushed before any stdout writes) —
+    supports cross-repo housekeeping flows (e.g., updating thrum + restarting
+    daemons across N repos) without aborting.
+  - **Class C — Whoami**: `thrum whoami` + `thrum agent whoami` alias → exit 0,
+    banner prepended to BOTH stdout and stderr — whoami's stdout is
+    identity-affirming and downstream tooling parsing stdout must see the
+    warning inline. `--json` mode correctly suppresses the stdout banner to
+    preserve the single-document JSON contract; equivalent context routes
+    through the slog bridge's hints array.
+  - The `cross_worktree` guard's remediation message reads
+    `cd to the correct worktree or run 'thrum prime' to re-claim`. Agents
+    that hit the abort should fix their cwd; there is no user-facing bypass.
+  - `TestEveryLeafHasCrossWorktreeResponse` CI gate fails the build if any new
+    cobra leaf lacks a class annotation — prevents silent taxonomy drift.
+
+## [0.10.3] - 2026-05-16
+
 ### Changed
 
 - **`/thrum:restart` skill: coordinator self-restart branch + drop residue.**
@@ -1460,7 +1504,7 @@ these pins.
 
 The web dashboard has been rebuilt from scratch as a Slack-style 3-panel
 interface. Full documentation:
-**[Web UI Guide](https://leonletto.github.io/thrum/docs.html#web-ui.html)**
+**[Web UI Guide](https://thrum.team/docs.html#web-ui.html)**
 
 ### Added
 
