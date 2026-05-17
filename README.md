@@ -93,7 +93,7 @@ make install    # Builds UI + Go binary → ~/.local/bin/thrum
 
 Every release soaks for 48h+ as `-rc.N` before going stable. To help test
 releases before they're promoted, see
-[Beta channel](https://leonletto.github.io/thrum/docs/beta-channel.html).
+[Beta channel](https://thrum.team/docs/beta-channel.html).
 
 ## Daily Commands
 
@@ -112,7 +112,7 @@ You only need about 8 commands for daily use:
 
 Everything else — agent lifecycle, sessions, context management — is
 infrastructure that agents use programmatically. See the
-[CLI Reference](https://leonletto.github.io/thrum/docs/cli.html) for the full
+[CLI Reference](https://thrum.team/docs/cli.html) for the full
 list.
 
 ## Agent Setup
@@ -139,7 +139,7 @@ claude plugin install thrum
 ```
 
 See
-[Claude Code Plugin](https://leonletto.github.io/thrum/docs/claude-code-plugin.html).
+[Claude Code Plugin](https://thrum.team/docs/claude-code-plugin.html).
 If the plugin is already installed, `thrum init --skills` will detect it and
 skip the install.
 
@@ -151,19 +151,19 @@ required — just call `thrum` from the command line.
 ## Documentation
 
 Full documentation:
-**[leonletto.github.io/thrum](https://leonletto.github.io/thrum)**
+**[thrum.team](https://thrum.team)**
 
-- [Overview](https://leonletto.github.io/thrum/docs/overview.html) |
-  [Quickstart](https://leonletto.github.io/thrum/docs/quickstart.html) |
-  [CLI Reference](https://leonletto.github.io/thrum/docs/cli.html) |
-  [Architecture](https://leonletto.github.io/thrum/docs/architecture.html)
-- [Messaging](https://leonletto.github.io/thrum/docs/messaging.html) |
-  [Agent Coordination](https://leonletto.github.io/thrum/docs/agent-coordination.html)
-  | [Multi-Agent](https://leonletto.github.io/thrum/docs/multi-agent.html) |
-  [Sync](https://leonletto.github.io/thrum/docs/sync.html)
-- [Telegram Bridge](https://leonletto.github.io/thrum/docs/telegram-bridge.html)
-  | [Tailscale Sync](https://leonletto.github.io/thrum/docs/tailscale-sync.html)
-  | [Web UI](https://leonletto.github.io/thrum/docs/web-ui.html)
+- [Overview](https://thrum.team/docs/overview.html) |
+  [Quickstart](https://thrum.team/docs/quickstart.html) |
+  [CLI Reference](https://thrum.team/docs/cli.html) |
+  [Architecture](https://thrum.team/docs/architecture.html)
+- [Messaging](https://thrum.team/docs/messaging.html) |
+  [Agent Coordination](https://thrum.team/docs/agent-coordination.html)
+  | [Multi-Agent](https://thrum.team/docs/multi-agent.html) |
+  [Sync](https://thrum.team/docs/sync.html)
+- [Telegram Bridge](https://thrum.team/docs/telegram-bridge.html)
+  | [Tailscale Sync](https://thrum.team/docs/tailscale-sync.html)
+  | [Web UI](https://thrum.team/docs/web-ui.html)
 
 ## License
 

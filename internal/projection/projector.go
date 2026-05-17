@@ -214,13 +214,28 @@ func (p *Projector) applyMessageCreate(ctx context.Context, data json.RawMessage
 		}
 	}
 
-	// Insert durable recipient snapshot
+	// Insert durable recipient snapshot. When the author appears in their own
+	// recipient list, the delivery row represents a deliberate self-mention
+	// reached via HandleSend's direct-targeting paths (--to @self, role
+	// mention, group expansion). The author has already "seen" their own
+	// send, so stamp read_at + seen_at = delivered_at on insert. The message
+	// remains visible via --all and message.get but naturally drops out of
+	// --unread queries without a markRead round-trip. Broadcasts strip self
+	// at HandleSend, so this branch does not fire for echo cases.
 	for _, recipientAgentID := range event.Recipients {
-		_, err = tx.Exec(`
-			INSERT OR IGNORE INTO message_deliveries (
-				message_id, recipient_agent_id, delivered_at
-			) VALUES (?, ?, ?)
-		`, event.MessageID, recipientAgentID, event.Timestamp)
+		if recipientAgentID == event.AgentID {
+			_, err = tx.Exec(`
+				INSERT OR IGNORE INTO message_deliveries (
+					message_id, recipient_agent_id, delivered_at, seen_at, read_at
+				) VALUES (?, ?, ?, ?, ?)
+			`, event.MessageID, recipientAgentID, event.Timestamp, event.Timestamp, event.Timestamp)
+		} else {
+			_, err = tx.Exec(`
+				INSERT OR IGNORE INTO message_deliveries (
+					message_id, recipient_agent_id, delivered_at
+				) VALUES (?, ?, ?)
+			`, event.MessageID, recipientAgentID, event.Timestamp)
+		}
 		if err != nil {
 			return fmt.Errorf("insert message delivery: %w", err)
 		}

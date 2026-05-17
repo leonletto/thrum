@@ -95,6 +95,16 @@ func (j *SpoolJanitor) Reconcile() {
 			if !strings.HasSuffix(name, ".json") || strings.HasPrefix(name, ".tmp-") {
 				continue
 			}
+			// thrum-7b84.3 E3: backstop envelopes use a synthetic msg_id
+			// ("backstop-<min>") that has no corresponding messages row.
+			// readState would return StateMissing and the janitor would
+			// reap the file before its check-inbox.sh consumer could see
+			// it. The backstop dispatcher writes a fresh envelope every
+			// tick, so a per-minute file that survives until the next
+			// tick is correct behavior; the janitor must not delete it.
+			if strings.HasPrefix(name, "backstop-") {
+				continue
+			}
 			msgID := strings.TrimSuffix(name, ".json")
 			switch j.readState(msgID, agentID) {
 			case StateRead, StateMissing:

@@ -32,6 +32,80 @@ const (
 	guardCategoryKey = "guard_category"
 )
 
+// Cross-worktree response classes (thrum-7b84.6 Enhanced Policy 2).
+//
+// Orthogonal axis to GuardCategory*: the old axis governs WHO calls
+// guard.Check (Bypass/Prime/Guarded — plumbing); this axis governs
+// WHAT to do when guard.Check fires under strict-mode cross_worktree.
+// Only consulted by getClient() after RefreshLocalIdentity returns a
+// *guard.Error for the cross_worktree guard, so the annotation is
+// inert for Bypass/Prime leaves (kept on them for audit consistency).
+const (
+	// CrossWorktreeResponseAbort fails closed: getClient returns
+	// (nil, refreshErr) so the command exits non-zero with the
+	// existing 4-line guard error block on stderr and an empty
+	// stdout. The safe default for mutating + identity-filtered
+	// verbs where a wrong-identity write is permanent and
+	// ~undetectable.
+	CrossWorktreeResponseAbort = "abort"
+
+	// CrossWorktreeResponseDiagnosticBanner allows the command to
+	// proceed but emits a one-line stderr banner BEFORE any stdout
+	// write. For identity-agnostic diagnostic verbs (team, daemon
+	// *, agent list, version) where the operator wants the output
+	// even though they're in the wrong worktree.
+	CrossWorktreeResponseDiagnosticBanner = "diagnostic_banner"
+
+	// CrossWorktreeResponseWhoami allows the command to proceed
+	// and emits the banner on BOTH stdout (prepended to the
+	// identity block) AND stderr. Specific to whoami — the
+	// caller's stdout consumer is reading "who am I" and needs to
+	// see the cross-worktree context inline, not just in stderr.
+	CrossWorktreeResponseWhoami = "whoami"
+
+	// crossWorktreeResponseKey is the Annotations map key for the
+	// cross-worktree response class. Separate from guardCategoryKey
+	// so the two axes evolve independently.
+	crossWorktreeResponseKey = "cross_worktree_response"
+)
+
+// diagnosticBannerLeaves enumerates leaves that get
+// CrossWorktreeResponseDiagnosticBanner: identity-agnostic diagnostic
+// verbs whose output is useful even under a cross_worktree fire. Class
+// B per the Enhanced Policy 2 spec (thrum-7b84.6).
+//
+// The status-verb siblings (peer/sync/backup/telegram/tmux status)
+// were ratified by @researcher_inbox_race in third-pass review: the
+// dispatch's "status" was ambiguous; all identity-agnostic
+// daemon/system status reporters belong in Class B since none filter
+// by caller identity.
+var diagnosticBannerLeaves = map[string]bool{
+	"thrum team":            true,
+	"thrum agent list":      true,
+	"thrum version":         true,
+	"thrum daemon logs":     true,
+	"thrum daemon restart":  true,
+	"thrum daemon run":      true,
+	"thrum daemon start":    true,
+	"thrum daemon status":   true,
+	"thrum daemon stop":     true,
+	"thrum peer status":     true,
+	"thrum sync status":     true,
+	"thrum backup status":   true,
+	"thrum telegram status": true,
+	"thrum tmux status":     true,
+}
+
+// whoamiLeaves enumerates leaves that get CrossWorktreeResponseWhoami:
+// commands whose stdout asserts identity and therefore needs the
+// banner prepended inline. Class C per the Enhanced Policy 2 spec
+// (thrum-7b84.6). Both the top-level `thrum whoami` and the
+// `thrum agent whoami` alias qualify.
+var whoamiLeaves = map[string]bool{
+	"thrum whoami":       true,
+	"thrum agent whoami": true,
+}
+
 // primePathLeaves is the exhaustive list of leaf-command paths (the
 // string returned by cmd.CommandPath()) that create or refresh
 // identity files. Any leaf path appearing here gets
@@ -52,8 +126,7 @@ var primePathLeaves = map[string]bool{
 // name-match rather than a full path key so upstream cobra renames
 // do not break the taxonomy.
 var bypassLeaves = map[string]bool{
-	"thrum cron install-inbox-poll": true, // print-only, no daemon I/O
-	"thrum version":                 true,
+	"thrum version": true,
 }
 
 // tagGuardCategories walks the entire tree rooted at root and
@@ -86,9 +159,23 @@ func tagGuardCategories(root *cobra.Command) {
 			cat = GuardCategoryBypass
 		}
 		if leaf.Annotations == nil {
-			leaf.Annotations = make(map[string]string, 1)
+			leaf.Annotations = make(map[string]string, 2)
 		}
 		leaf.Annotations[guardCategoryKey] = cat
+
+		// thrum-7b84.6: cross-worktree response axis. Defaults to
+		// abort (safe — fail closed on guard fire); diagnostic and
+		// whoami leaves are pulled from explicit maps. Help and
+		// completion don't connect to the daemon at all, so the
+		// classification is moot but kept consistent with abort.
+		resp := CrossWorktreeResponseAbort
+		switch {
+		case whoamiLeaves[path]:
+			resp = CrossWorktreeResponseWhoami
+		case diagnosticBannerLeaves[path]:
+			resp = CrossWorktreeResponseDiagnosticBanner
+		}
+		leaf.Annotations[crossWorktreeResponseKey] = resp
 	})
 }
 
