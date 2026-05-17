@@ -4,8 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/leonletto/thrum/internal/daemon/safedb"
+	"github.com/leonletto/thrum/internal/daemon/scheduler"
+	"github.com/leonletto/thrum/internal/schema"
 )
 
 // fakeFireSink records every Fire call and optionally returns an error.
@@ -222,3 +227,142 @@ func TestSweepInterval_NextAfter(t *testing.T) {
 }
 
 func stateRef(s State) *State { return &s }
+
+// --- scheduler.RegisterInternal binding (thrum-6qmf.3.27) ---
+
+// newSchedulerForTest sets up a real A-B1 scheduler.Scheduler backed by an
+// on-disk SQLite DB (in-memory doesn't survive multi-connection access).
+// Returns the scheduler + a cleanup that Stops it.
+func newSchedulerForTest(t *testing.T) *scheduler.Scheduler {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "scheduler.db")
+	raw, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	if err := schema.InitDB(raw); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+	t.Cleanup(func() { _ = raw.Close() })
+	s := scheduler.New(scheduler.Config{
+		DB:       safedb.New(raw),
+		DaemonID: "test-daemon",
+	})
+	t.Cleanup(func() { _ = s.Stop(context.Background()) })
+	return s
+}
+
+func TestDispatcher_RegistersInternalJob(t *testing.T) {
+	s := newSchedulerForTest(t)
+	store := newTestStore(t)
+	d := NewDispatcher(store, NoopFireSink{}, SweepInterval{Interval: 15 * time.Minute})
+	d.Register(s, 30)
+
+	spec, ok := s.JobSpec(internalReminderJobID)
+	if !ok {
+		t.Fatalf("JobSpec(%q) not found after Register", internalReminderJobID)
+	}
+	if spec.ID != internalReminderJobID {
+		t.Errorf("spec.ID = %q, want %q", spec.ID, internalReminderJobID)
+	}
+	if spec.Type != "internal" {
+		t.Errorf("spec.Type = %q, want internal", spec.Type)
+	}
+	if spec.Schedule != "@every 30s" {
+		t.Errorf("spec.Schedule = %q, want '@every 30s'", spec.Schedule)
+	}
+	if !spec.Enabled {
+		t.Error("internal job should be enabled by default")
+	}
+	if spec.CatchUp != "skip" {
+		t.Errorf("spec.CatchUp = %q, want 'skip' (missed-tick storm prevention)", spec.CatchUp)
+	}
+	if spec.RunAtStart {
+		t.Error("RunAtStart should be false (fresh boot waits for first tick rather than firing all reminders at once)")
+	}
+}
+
+func TestDispatcher_Register_RejectsNonPositiveInterval(t *testing.T) {
+	s := newSchedulerForTest(t)
+	store := newTestStore(t)
+	d := NewDispatcher(store, NoopFireSink{}, SweepInterval{Interval: 15 * time.Minute})
+
+	for _, badInterval := range []int{0, -1, -30} {
+		t.Run("interval", func(t *testing.T) {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Errorf("expected panic for intervalSeconds=%d", badInterval)
+				}
+			}()
+			d.Register(s, badInterval)
+		})
+	}
+}
+
+func TestDispatcher_Register_DuplicatePanics(t *testing.T) {
+	s := newSchedulerForTest(t)
+	store := newTestStore(t)
+	d := NewDispatcher(store, NoopFireSink{}, SweepInterval{Interval: 15 * time.Minute})
+	d.Register(s, 30)
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("second Register should panic (scheduler.RegisterInternal panics on duplicate)")
+		}
+	}()
+	d.Register(s, 30)
+}
+
+// dispatcherHandler interface implementation — direct unit tests on the
+// adapter rather than going through the scheduler's run lifecycle.
+// recordingReporter captures Transition calls.
+type recordingReporter struct {
+	transitions []scheduler.State
+	reasons     []string
+}
+
+func (r *recordingReporter) Transition(to scheduler.State, reason string, _ map[string]any) error {
+	r.transitions = append(r.transitions, to)
+	r.reasons = append(r.reasons, reason)
+	return nil
+}
+func (r *recordingReporter) Stage(_ string) error { return nil }
+
+func TestDispatcherHandler_Dispatch_HappyPath(t *testing.T) {
+	store := newTestStore(t)
+	d := NewDispatcher(store, NoopFireSink{}, SweepInterval{Interval: 15 * time.Minute})
+	h := &dispatcherHandler{d: d}
+	reporter := &recordingReporter{}
+
+	err := h.Dispatch(ctx, scheduler.JobSpec{ID: internalReminderJobID}, "run-1", reporter, nil)
+	if err != nil {
+		t.Fatalf("Dispatch: %v", err)
+	}
+	if len(reporter.transitions) != 2 {
+		t.Fatalf("transitions = %v, want [Running, Completed]", reporter.transitions)
+	}
+	if reporter.transitions[0] != scheduler.StateRunning {
+		t.Errorf("first transition = %q, want Running", reporter.transitions[0])
+	}
+	if reporter.transitions[1] != scheduler.StateCompleted {
+		t.Errorf("second transition = %q, want Completed", reporter.transitions[1])
+	}
+}
+
+func TestDispatcherHandler_Stages_NonEmpty(t *testing.T) {
+	h := &dispatcherHandler{}
+	stages := h.Stages()
+	if len(stages) == 0 {
+		t.Error("Stages() must be non-empty (scheduler API contract)")
+	}
+}
+
+func TestDispatcherHandler_Reconcile_ReportsCompleted(t *testing.T) {
+	h := &dispatcherHandler{}
+	got, err := h.Reconcile(ctx, scheduler.JobSpec{}, "run-1", scheduler.StateRunning)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if got != scheduler.StateCompleted {
+		t.Errorf("Reconcile state = %q, want Completed (idempotent — next tick picks up any rows that didn't transition)", got)
+	}
+}
