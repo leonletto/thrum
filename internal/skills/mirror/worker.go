@@ -82,9 +82,15 @@ type Worker struct {
 	started  atomic.Bool
 	channels map[Destination]chan mirrorTask
 	worktree map[string][]Destination
-	mutexes  sync.Map
-	wg       sync.WaitGroup
-	cancel   context.CancelFunc
+	// registered tracks every worktreePath the caller asked to mirror,
+	// including those whose runtime resolved to a null-adapter entry.
+	// EnsureMirrored uses this to distinguish "unknown worktree
+	// (caller bug)" from "registered worktree with no v0.11 mirror
+	// surface (success-skip)".
+	registered map[string]struct{}
+	mutexes    sync.Map
+	wg         sync.WaitGroup
+	cancel     context.CancelFunc
 }
 
 // mirrorTask is the per-event payload that travels on the
@@ -117,9 +123,10 @@ func New(opts WorkerOpts) *Worker {
 		opts.Logger = slog.Default()
 	}
 	return &Worker{
-		opts:     opts,
-		channels: make(map[Destination]chan mirrorTask),
-		worktree: make(map[string][]Destination),
+		opts:       opts,
+		channels:   make(map[Destination]chan mirrorTask),
+		worktree:   make(map[string][]Destination),
+		registered: make(map[string]struct{}),
 	}
 }
 
@@ -144,6 +151,10 @@ func (w *Worker) Start(ctx context.Context) error {
 			w.started.Store(false)
 			return fmt.Errorf("mirror: start destination %+v: %w", dest, err)
 		}
+		// Mark the worktree as registered regardless of adapter
+		// state so EnsureMirrored can distinguish "unknown" from
+		// "null-adapter success-skip".
+		w.registered[dest.WorktreePath] = struct{}{}
 		if entry == nil {
 			// Null adapter — runtime is registered but has no v0.11
 			// mirror surface. Skip silently per spec §11.
@@ -197,6 +208,7 @@ func (w *Worker) Stop() error {
 	w.started.Store(false)
 	w.channels = make(map[Destination]chan mirrorTask)
 	w.worktree = make(map[string][]Destination)
+	w.registered = make(map[string]struct{})
 	return nil
 }
 
@@ -325,10 +337,11 @@ func (w *Worker) runDestination(
 			if task.reconcileWG != nil {
 				// Reconcile tick: flush any pending debounced work
 				// first, then run a full canonical-vs-destination
-				// diff under the destination mutex. Signal
-				// completion to Worker.Reconcile via wg.Done.
+				// diff under the destination mutex. Errors are
+				// logged inside reconcileDestination; Reconcile's
+				// caller is best-effort.
 				flush()
-				w.reconcileDestination(dest, entry)
+				_ = w.reconcileDestination(dest, entry)
 				task.reconcileWG.Done()
 				continue
 			}
@@ -396,7 +409,13 @@ func (w *Worker) Reconcile(ctx context.Context) error {
 // + apply under the destination mutex. Holds the lock for the
 // entire pass so EnsureMirrored (E9.5) can't see a half-reconciled
 // state.
-func (w *Worker) reconcileDestination(dest Destination, entry *AdapterEntry) {
+//
+// Returns the first filesystem error encountered. The async
+// Reconcile caller logs + swallows the error (best-effort drift
+// correction); the synchronous EnsureMirrored caller surfaces it so
+// B-B1's stage-3 wake handler can roll back. Wrapped errors satisfy
+// errors.Is(_, ErrMirrorWrite).
+func (w *Worker) reconcileDestination(dest Destination, entry *AdapterEntry) error {
 	mu := w.destMutex(dest)
 	mu.Lock()
 	defer mu.Unlock()
@@ -418,10 +437,14 @@ func (w *Worker) reconcileDestination(dest Destination, entry *AdapterEntry) {
 	destDir := filepath.Join(dest.WorktreePath, entry.MirrorPath)
 
 	// Copy / refresh every canonical skill.
+	var firstErr error
 	for name := range canonical {
 		srcDir := filepath.Join(w.opts.SourceRoot, name)
 		dstDir := filepath.Join(destDir, name)
 		if err := w.copyDir(srcDir, dstDir); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
 			w.opts.Logger.Warn(
 				"skills mirror reconcile apply failed",
 				"worktree", dest.WorktreePath,
@@ -443,6 +466,9 @@ func (w *Worker) reconcileDestination(dest Destination, entry *AdapterEntry) {
 			}
 			stale := filepath.Join(destDir, e.Name())
 			if rmErr := os.RemoveAll(stale); rmErr != nil {
+				if firstErr == nil {
+					firstErr = fmt.Errorf("%w: remove %s: %w", ErrMirrorWrite, stale, rmErr)
+				}
 				w.opts.Logger.Warn(
 					"skills mirror reconcile remove failed",
 					"path", stale,
@@ -451,6 +477,7 @@ func (w *Worker) reconcileDestination(dest Destination, entry *AdapterEntry) {
 			}
 		}
 	}
+	return firstErr
 }
 
 // applyOne performs the filesystem mutation for a single event under
