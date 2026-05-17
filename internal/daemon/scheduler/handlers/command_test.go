@@ -11,6 +11,12 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
 )
 
+// Compile-time assertion: CommandHandler satisfies scheduler.Handler.
+// Drift in either side (plan Task 19 Step 1 + spec §8.4.1 interface
+// signatures) fails the build at this line. Mirrors the in-package
+// `_ StateReporter = (*stateReporter)(nil)` pin in handler_test.go.
+var _ scheduler.Handler = (*CommandHandler)(nil)
+
 // captureReporter is a test StateReporter recording the transition history
 // + the details payload for the final transition. Mirrors the substrate's
 // real stateReporter API just enough for the handler-side test surface.

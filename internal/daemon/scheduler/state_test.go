@@ -240,6 +240,73 @@ func TestEventLog_DetailsRoundTrip(t *testing.T) {
 	}
 }
 
+// TestStateStore_TickLoopPredicate exercises the reactor's canonical
+// tick-loop query shape from spec §8.1.3:
+//
+//	WHERE next_scheduled_at IS NOT NULL AND next_scheduled_at <= ?
+//
+// Mixed NULL/non-NULL rows: NULL rows (one-shot terminal) must be
+// excluded EVEN if the cutoff would otherwise match; past-due
+// non-NULL rows match; future non-NULL rows don't. The idx_scheduler
+// state_next index covers this query (canonical §3.2).
+func TestStateStore_TickLoopPredicate(t *testing.T) {
+	store := NewStateStore(setupStateTestDB(t))
+	ctx := context.Background()
+	now := time.Unix(1747353600, 0)
+	past := now.Add(-10 * time.Minute)
+	future := now.Add(10 * time.Minute)
+
+	rows := []*StateRow{
+		// Past-due non-NULL: SHOULD match.
+		{JobID: "due-1", Generation: 1, CurrentState: StateScheduled, NextScheduledAt: &past, CreatedAt: past, UpdatedAt: past},
+		{JobID: "due-2", Generation: 1, CurrentState: StateScheduled, NextScheduledAt: &past, CreatedAt: past, UpdatedAt: past},
+		// Future non-NULL: SHOULD NOT match.
+		{JobID: "future-1", Generation: 1, CurrentState: StateScheduled, NextScheduledAt: &future, CreatedAt: now, UpdatedAt: now},
+		// NULL (one-shot terminal): MUST be excluded regardless of cutoff.
+		{JobID: "oneshot-done", Generation: 1, CurrentState: StateCompleted, NextScheduledAt: nil, TotalRuns: 1, LastCompletedAt: &past, CreatedAt: past, UpdatedAt: past},
+		{JobID: "oneshot-failed", Generation: 1, CurrentState: StateFailed, NextScheduledAt: nil, TotalRuns: 1, LastCompletedAt: &past, CreatedAt: past, UpdatedAt: past},
+	}
+	for _, r := range rows {
+		if err := store.UpsertState(ctx, r); err != nil {
+			t.Fatalf("seed %s: %v", r.JobID, err)
+		}
+	}
+
+	// Exercise the canonical predicate directly via the underlying
+	// safedb handle (mirrors the shape the reactor would use).
+	queryRows, err := store.DB().QueryContext(ctx,
+		`SELECT job_id FROM scheduler_job_state
+		 WHERE next_scheduled_at IS NOT NULL AND next_scheduled_at <= ?`,
+		now.Unix())
+	if err != nil {
+		t.Fatalf("tick-loop predicate query: %v", err)
+	}
+	defer func() { _ = queryRows.Close() }()
+
+	got := map[string]bool{}
+	for queryRows.Next() {
+		var id string
+		if err := queryRows.Scan(&id); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		got[id] = true
+	}
+	if err := queryRows.Err(); err != nil {
+		t.Fatalf("iterate: %v", err)
+	}
+
+	for _, want := range []string{"due-1", "due-2"} {
+		if !got[want] {
+			t.Errorf("missing due row %q from predicate match", want)
+		}
+	}
+	for _, exclude := range []string{"future-1", "oneshot-done", "oneshot-failed"} {
+		if got[exclude] {
+			t.Errorf("predicate matched %q; should be excluded", exclude)
+		}
+	}
+}
+
 // TestStateStore_NonTerminalAtBoot verifies the reconciliation walker
 // returns only scheduled / dispatched / running rows; terminal states
 // (completed, failed) are excluded.

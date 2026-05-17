@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -54,9 +55,10 @@ func (s *Scheduler) ReloadConfig(_ context.Context, configPath string) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&parsed); err != nil {
-		s.escalateReloadError(configPath, []error{err})
-		log.Printf("scheduler.ReloadConfig: parse error: %v", err)
-		return fmt.Errorf("ReloadConfig: json: %w", err)
+		wrapped := normalizeJSONDecodeError(err)
+		s.escalateReloadError(configPath, []error{wrapped})
+		log.Printf("scheduler.ReloadConfig: parse error: %v", wrapped)
+		return fmt.Errorf("ReloadConfig: json: %w", wrapped)
 	}
 
 	// Whole-config validator (Task 30) — reports ALL errors in one pass.
@@ -84,6 +86,33 @@ func (s *Scheduler) ReloadConfig(_ context.Context, configPath string) error {
 	s.mu.Unlock()
 	s.wakeReactor()
 	return nil
+}
+
+// unknownFieldRE extracts the unknown field name from Go's encoding/json
+// DisallowUnknownFields error message: `json: unknown field "<name>"`.
+// Used to reformat into the spec §4.1 rule-8 operator-facing shape.
+var unknownFieldRE = regexp.MustCompile(`unknown field "([^"]+)"`)
+
+// normalizeJSONDecodeError reshapes Go's raw json.Decoder errors into the
+// spec §4.1 operator-facing format `jobs.<id>.<unknown_key>: not a
+// recognized field`. For DisallowUnknownFields rejections this means
+// emitting the structured `<key>: not a recognized field` form; other
+// JSON errors (syntax, type mismatch) pass through unchanged because
+// the spec only mandates a structured shape for rule 8.
+//
+// We don't always have the jobs.<id> path context here (Go's
+// DisallowUnknownFields error doesn't carry the offending path), so the
+// wrapped error names the unknown field and lets the operator locate the
+// jobs entry. ReloadConfig log + OnReloadError escalation both see this
+// shape.
+func normalizeJSONDecodeError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if match := unknownFieldRE.FindStringSubmatch(err.Error()); match != nil {
+		return fmt.Errorf("jobs.<id>.%s: not a recognized field", match[1])
+	}
+	return err
 }
 
 // escalateReloadError invokes OnReloadError (if set) with the per-config

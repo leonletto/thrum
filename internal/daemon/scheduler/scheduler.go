@@ -43,6 +43,7 @@ type CommandSpec struct {
 	WorkingDir           string            `json:"working_dir,omitempty"`
 	Env                  map[string]string `json:"env,omitempty"`
 	TimeoutSeconds       int               `json:"timeout_seconds,omitempty"`
+	TeardownGraceSeconds int               `json:"teardown_grace_seconds,omitempty"` // default 5 per spec §8.3.8
 	FailureEscalateAfter int               `json:"failure_escalate_after,omitempty"` // default 3 per Q7.2
 
 	// Args is INTERNAL-ONLY. Not part of the user-facing JSON schema
@@ -123,9 +124,15 @@ type Scheduler struct {
 	stopOnce sync.Once
 }
 
-// idRE pins the kebab-case ID shape from canonical §4.1: lowercase
-// alphanumeric + hyphen, must begin with a letter, max 64 chars.
-var idRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
+// idRE pins the relaxed ID shape from canonical §4.1: lowercase
+// alphanumeric plus hyphen OR underscore, must begin with a letter,
+// max 64 chars. Originally documented as kebab-only, but every
+// downstream canonical job ID (internal.scheduler_event_cleanup,
+// internal.email_poll, internal.stalled_agent_sweep,
+// internal.skill_staleness_check, internal.telemetry_persistent_poll,
+// internal.peer_sync) uses snake_case. The relaxed regex accepts both
+// so RegisterInternal calls match the canonical IDs verbatim.
+var idRE = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 
 // InternalPrefix reserves the `internal.*` namespace for daemon-essential
 // jobs. The user-job validator (E1.5 Task 30) rejects any user job with

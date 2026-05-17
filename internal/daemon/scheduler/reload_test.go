@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -357,7 +358,9 @@ func TestReload_InvalidConfigEmitsEscalation(t *testing.T) {
 
 // TestReload_UnknownTopLevelKey_Rejected: rule 8 — unknown JSON keys
 // under jobs.<id> fail the json.Decoder.DisallowUnknownFields() pass
-// before the validator ever sees the spec.
+// before the validator ever sees the spec. The error is normalized
+// into the spec §4.1 operator-facing format
+// `jobs.<id>.<key>: not a recognized field`.
 func TestReload_UnknownTopLevelKey_Rejected(t *testing.T) {
 	tmp := t.TempDir()
 	configPath := filepath.Join(tmp, "config.json")
@@ -377,8 +380,26 @@ func TestReload_UnknownTopLevelKey_Rejected(t *testing.T) {
 	s := New(Config{DB: setupStateTestDB(t), DaemonID: "test", Location: time.UTC})
 	defer func() { _ = s.Stop(context.Background()) }()
 
-	if err := s.ReloadConfig(context.Background(), configPath); err == nil {
-		t.Error("expected error on unknown top-level key")
+	var captured []ReloadEscalation
+	s.OnReloadError = func(e ReloadEscalation) { captured = append(captured, e) }
+
+	err := s.ReloadConfig(context.Background(), configPath)
+	if err == nil {
+		t.Fatal("expected error on unknown top-level key")
+	}
+	// Spec §4.1 rule-8 operator-facing format. The path's <id> is filled
+	// as the literal token (Go's DisallowUnknownFields error doesn't
+	// carry the offending jobs entry); the field name MUST appear so
+	// operators can locate the typo.
+	want := "totally_unknown_field: not a recognized field"
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("err = %q; want it to contain %q", err.Error(), want)
+	}
+	if len(captured) != 1 {
+		t.Fatalf("escalation count = %d; want 1", len(captured))
+	}
+	if !strings.Contains(captured[0].Errors[0].Error(), want) {
+		t.Errorf("escalation.Errors[0] = %q; want it to contain %q", captured[0].Errors[0].Error(), want)
 	}
 }
 

@@ -9,6 +9,10 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
 )
 
+// Compile-time assertion: ThrumCommandHandler satisfies scheduler.Handler.
+// Plan Task 19 Step 1 + spec §8.4.1.
+var _ scheduler.Handler = (*ThrumCommandHandler)(nil)
+
 // newTestThrumCommandHandler constructs a ThrumCommandHandler with a
 // hardwired bin path so tests don't rely on os.Executable (which in `go
 // test` returns the test binary, not the thrum binary).

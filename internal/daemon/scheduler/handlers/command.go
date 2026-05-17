@@ -81,6 +81,18 @@ func (c *CommandHandler) Dispatch(ctx context.Context, job scheduler.JobSpec, _ 
 	// Args empty and the binary is invoked via Exec only (no shell parse
 	// here — the plan defers shell-parsing to a follow-up; substrate cuts a
 	// clean line at "binary path + optional internal args").
+	//
+	// Scope contrast with internal/daemon/safecmd: safecmd exists to corral
+	// daemon-INTERNAL git / tmux invocations where attacker-controlled args
+	// reaching exec.Command have caused production hangs (timeout enforcement,
+	// signal handling, env scrubbing). type:command is the user-facing
+	// subprocess surface BY DESIGN — the whole purpose of a `command` job is
+	// to run an operator-supplied program with operator-supplied args.
+	// Wrapping in safecmd would either add nothing (we already have ctx
+	// timeout, signal handling, env isolation here) or break the contract
+	// (safecmd's git/tmux assumptions don't apply). The #nosec annotation
+	// reflects "this is the user-facing exec point by design", not "we
+	// ignored a real risk."
 	//nolint:gosec // G204: spec.Exec is operator-controlled job config by design
 	cmd := exec.CommandContext(execCtx, spec.Exec, spec.Args...)
 	if spec.WorkingDir != "" {
@@ -118,13 +130,20 @@ func (c *CommandHandler) Dispatch(ctx context.Context, job scheduler.JobSpec, _ 
 
 	case <-execCtx.Done():
 		// Timeout or parent cancel. SIGTERM, then SIGKILL after grace.
+		// Per spec §8.3.8, the grace is per-job-configurable via
+		// spec.TeardownGraceSeconds; 0 / missing falls back to the
+		// substrate default (5s).
 		if cmd.Process != nil {
 			_ = cmd.Process.Signal(syscall.SIGTERM)
+		}
+		grace := defaultTeardownGrace
+		if spec.TeardownGraceSeconds > 0 {
+			grace = time.Duration(spec.TeardownGraceSeconds) * time.Second
 		}
 		select {
 		case <-done:
 			// Exited within grace.
-		case <-time.After(defaultTeardownGrace):
+		case <-time.After(grace):
 			if cmd.Process != nil {
 				_ = cmd.Process.Kill()
 			}

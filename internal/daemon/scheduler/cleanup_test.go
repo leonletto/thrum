@@ -80,11 +80,11 @@ func TestCleanupHandler_RegistersViaRegisterInternal(t *testing.T) {
 	defer func() { _ = s.Stop(context.Background()) }()
 
 	h := NewCleanupHandler(s.state, 7)
-	s.RegisterInternal("internal.scheduler-event-cleanup", "@daily", InternalOpts{
+	s.RegisterInternal("internal.scheduler_event_cleanup", "@daily", InternalOpts{
 		RunAtStart: false, CatchUp: "skip",
 	}, h)
 
-	spec, ok := s.JobSpec("internal.scheduler-event-cleanup")
+	spec, ok := s.JobSpec("internal.scheduler_event_cleanup")
 	if !ok {
 		t.Fatal("not registered")
 	}
@@ -108,33 +108,33 @@ func TestCleanupHandler_DispatchTransitions(t *testing.T) {
 	// Seed: 2 old events + 2 new.
 	for i := 0; i < 2; i++ {
 		_ = store.AppendEvent(ctx, &Event{
-			JobID: "internal.scheduler-event-cleanup", RunID: "r-old",
+			JobID: "internal.scheduler_event_cleanup", RunID: "r-old",
 			EventTime: now.Add(-30 * 24 * time.Hour),
 			FromState: "", ToState: StateDispatched, Reason: "old",
 		})
 	}
 	for i := 0; i < 2; i++ {
 		_ = store.AppendEvent(ctx, &Event{
-			JobID: "internal.scheduler-event-cleanup", RunID: "r-new",
+			JobID: "internal.scheduler_event_cleanup", RunID: "r-new",
 			EventTime: now.Add(-1 * time.Hour),
 			FromState: "", ToState: StateDispatched, Reason: "new",
 		})
 	}
 	// Seed the state row so the reporter has something to update.
 	if err := store.UpsertState(ctx, &StateRow{
-		JobID: "internal.scheduler-event-cleanup", Generation: 1,
+		JobID: "internal.scheduler_event_cleanup", Generation: 1,
 		CurrentState: StateDispatched, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("seed state: %v", err)
 	}
 
-	reporter := &stateReporter{store: store, jobID: "internal.scheduler-event-cleanup", runID: "r-test"}
+	reporter := &stateReporter{store: store, jobID: "internal.scheduler_event_cleanup", runID: "r-test"}
 	h := NewCleanupHandler(store, 7)
-	if err := h.Dispatch(ctx, JobSpec{ID: "internal.scheduler-event-cleanup", Type: "internal"}, "r-test", reporter, nil); err != nil {
+	if err := h.Dispatch(ctx, JobSpec{ID: "internal.scheduler_event_cleanup", Type: "internal"}, "r-test", reporter, nil); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
 
-	row, err := store.GetState(ctx, "internal.scheduler-event-cleanup")
+	row, err := store.GetState(ctx, "internal.scheduler_event_cleanup")
 	if err != nil {
 		t.Fatalf("get state: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestCleanupHandler_DispatchTransitions(t *testing.T) {
 		t.Errorf("post-dispatch state = %q; want completed", row.CurrentState)
 	}
 	// Only the 2 recent events survive; 2 old were pruned.
-	events, _ := store.RecentEvents(ctx, "internal.scheduler-event-cleanup", 100)
+	events, _ := store.RecentEvents(ctx, "internal.scheduler_event_cleanup", 100)
 	// Note: the dispatch path itself appends transition events (running,
 	// stage:pruning, completed). Count the original-content events only.
 	originals := 0

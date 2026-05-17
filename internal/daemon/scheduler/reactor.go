@@ -369,6 +369,18 @@ func (s *Scheduler) launchRun(ctx context.Context, spec JobSpec, runID string, h
 		// Always deregister at goroutine exit so the registry doesn't leak
 		// even if the handler panics or returns without a terminal
 		// transition.
+		//
+		// Intentional deviation from the plan template (Task 13): the
+		// plan suggested a per-transition `terminal` callback wired onto
+		// stateReporter that fires at each terminal state. That pattern
+		// has two bugs vs the deferred unconditional deregister we use
+		// here: (a) a handler that panics BEFORE emitting a terminal
+		// transition would leak its registry entry under the callback
+		// model; (b) callers would have to thread the cleanup through
+		// every Transition invocation, multiplying the surface area
+		// for future drift. Unconditional defer is both more correct
+		// (covers panic AND error-return AND clean-exit paths uniformly)
+		// and simpler. Plan template will be updated post-merge.
 		defer s.runReg.deregister(runID)
 		defer func() {
 			if r := recover(); r != nil {

@@ -78,11 +78,49 @@ func TestScheduler_RegisterInternal_PanicsOnBadSuffix(t *testing.T) {
 
 	defer func() {
 		if r := recover(); r == nil {
-			t.Error("expected panic on bad suffix (must match idRE kebab-case)")
+			t.Error("expected panic on bad suffix (must match idRE — uppercase letters rejected)")
 		}
 	}()
-	// Trailing-hyphen + uppercase both violate idRE; pick something obviously bad.
-	s.RegisterInternal("internal.Bad_ID", "@every 1m", InternalOpts{}, &noopHandler{})
+	// Uppercase violates idRE; lowercase + underscores + hyphens are all accepted
+	// by the relaxed regex (canonical IDs use both styles), so the suffix needs
+	// a hard-disqualifying character to exercise the panic.
+	s.RegisterInternal("internal.BadID", "@every 1m", InternalOpts{}, &noopHandler{})
+}
+
+// TestScheduler_RegisterInternal_AcceptsSnakeAndKebab pins the relaxed
+// idRE contract: both `internal.scheduler_event_cleanup` (snake — the
+// canonical-ref shape used by the cleanup job, email_poll,
+// stalled_agent_sweep, skill_staleness_check, telemetry_persistent_poll,
+// peer_sync, etc.) AND `internal.my-job` (kebab — older docs) must
+// register without panicking.
+func TestScheduler_RegisterInternal_AcceptsSnakeAndKebab(t *testing.T) {
+	cases := []string{
+		"internal.scheduler_event_cleanup",  // canonical snake — Task 35
+		"internal.email_poll",                // D-B1 RegisterInternal target
+		"internal.stalled_agent_sweep",       // A-B4 RegisterInternal target
+		"internal.skill_staleness_check",     // C-B1 RegisterInternal target
+		"internal.telemetry_persistent_poll", // MB-1.S6 RegisterInternal target
+		"internal.peer_sync",                 // A-B2 RegisterInternal target
+		"internal.backup",                    // A-B2 RegisterInternal target
+		"internal.kebab-style-job",           // kebab form still works
+		"internal.mixed_kebab-and_snake",     // both separators in one id
+	}
+	for _, id := range cases {
+		s := New(Config{DB: setupStateTestDB(t), DaemonID: "test"})
+		// Use a recover-wrapped call so one bad id doesn't kill the whole loop.
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("RegisterInternal(%q) panicked: %v", id, r)
+				}
+				_ = s.Stop(context.Background())
+			}()
+			s.RegisterInternal(id, "@every 1h", InternalOpts{}, &noopHandler{})
+			if _, ok := s.JobSpec(id); !ok {
+				t.Errorf("RegisterInternal(%q): spec not stored", id)
+			}
+		}()
+	}
 }
 
 func TestScheduler_RegisterTypeHandler_BasicHappy(t *testing.T) {

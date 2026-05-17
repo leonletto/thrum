@@ -62,14 +62,16 @@ func (s *Scheduler) validateOneJob(id string, spec JobSpec) []error {
 		}
 	}
 
-	// Rule 3: collision with internal-registry handler. Defensive — rule 1
-	// catches the prefix case, but if a future change loosened rule 1 this
-	// guard would still surface the collision against the daemon's live
-	// internal registry.
+	// Rule 3: collision with daemon-registered handler. Rule 1 already
+	// rejects user IDs with the internal.* prefix; this rule covers the
+	// orthogonal case where a user supplies an ID that happens to match
+	// a registered handler (currently only possible if rule 1 is bypassed
+	// or relaxed, but kept as defense-in-depth so the validator's
+	// "collision" diagnostic always surfaces when the ID is double-bound).
 	s.mu.RLock()
 	_, internalCollision := s.handlers[id]
 	s.mu.RUnlock()
-	if internalCollision && strings.HasPrefix(id, InternalPrefix) {
+	if internalCollision {
 		errs = append(errs, fmt.Errorf("jobs.%s.id: collides with daemon-registered internal job", id))
 	}
 
