@@ -8,37 +8,59 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"sync"
 	"time"
 
-	"github.com/leonletto/thrum/internal/daemon/permission"
 	"github.com/leonletto/thrum/internal/skills"
 	"github.com/leonletto/thrum/internal/skills/mirror"
 )
+
+// SkillSupervisorMessenger is the subset of internal/daemon/permission.
+// Permission consumed by HandlePromote for the inbox-fanout broadcast.
+// Defined locally (rather than reusing internal/skills.SupervisorMessenger)
+// because the skills-package interface drops the message-ID return for
+// watcher-side parity, and HandlePromote depends on the daemon-side
+// permission.Permission's full signature for future audit linkage.
+type SkillSupervisorMessenger interface {
+	SendSupervisorMessage(ctx context.Context, to, body, threadID string) (string, error)
+}
 
 // SkillHandler wires the skill.* JSON-RPC surface (design-spec §7) to
 // the internal/skills helpers. Constructed once at daemon boot via
 // NewSkillHandler and registered against the JSON-RPC server in
 // cmd/thrum/main.go alongside the other rpc handler families.
 //
-// Fields beyond library are stored as-supplied at E10.2 — the methods
-// landing in later C-B1 tasks (E10.4 promote, E10.6 delete) add their
-// own nil-checks at the entry points that consume them, so the
-// defensive panic on missing wiring still fires at first-use rather
-// than silently NPE'ing inside a goroutine.
-//
-// Plan-errata vs E10.2 AC: the constructor adds a *sql.DB param the
-// plan AC omitted. The DB is required for the coordinator-role check
-// on check_status (spec §7.10) — there's no other path to look up an
-// agent's role from inside the rpc package. Mirrors the same pattern
-// in internal/daemon/rpc/email.go (NewEmailHandler also takes a
-// *sql.DB for its requireCoordinatorOrUser auth helper).
+// Required-at-construction collaborators are validated by the
+// constructor (only library is required across every entry point at
+// E10.2–E10.3). Required-at-entry collaborators are guarded at the
+// HandlePromote/HandleDelete/etc entry points as those tasks land —
+// this keeps the constructor stable while the surface grows.
 type SkillHandler struct {
-	library   *skills.Library
-	validator *skills.Validator
-	perm      *permission.Permission
-	staleness skills.ProposalReminderer
-	worker    *mirror.Worker
-	db        *sql.DB
+	library    *skills.Library
+	validator  *skills.Validator
+	perm       SkillSupervisorMessenger
+	staleness  skills.ProposalReminderer
+	worker     *mirror.Worker
+	db         *sql.DB
+	stamper    *skills.Stamper
+	scanner    *skills.Scanner
+	clock      func() time.Time
+	logger     *slog.Logger
+	renameFunc func(oldpath, newpath string) error
+
+	// promoteMutexes serializes concurrent skill.promote calls for the
+	// same skill name. Without this, two coordinators (or one
+	// coordinator firing two RPCs in flight) racing on the same name
+	// can interleave the `<name>.tmp/` write and `<name>.old/` backup
+	// rename in ways that defer-rollback cannot untangle — the second
+	// promote may see the first's in-progress backup as a stale
+	// leftover and clean it up mid-flight. Per-name mutex is the
+	// minimum-scope serialization that allows unrelated promotes to
+	// proceed in parallel.
+	promoteMutexes sync.Map // name string → *sync.Mutex
 }
 
 // NewSkillHandler constructs a SkillHandler. library is required —
@@ -46,16 +68,22 @@ type SkillHandler struct {
 // daemon refuses to start with broken wiring (the watcher's
 // internal/skills/watcher.go WatcherOpts uses the same pattern).
 // The remaining collaborators are validated at the handlers that
-// consume them: perm + staleness at E10.4 (promote), worker at E10.6
-// (delete). db is consumed by requireCoordinator on check_status.
-func NewSkillHandler(library *skills.Library, validator *skills.Validator, perm *permission.Permission, staleness skills.ProposalReminderer, worker *mirror.Worker, db *sql.DB) *SkillHandler {
+// consume them: messenger + staleness at E10.4 (promote), worker at
+// E10.6 (delete). db is consumed by requireCoordinator on check_status
+// and by the agent-fanout query in HandlePromote.
+//
+// stamper / scanner / clock / logger / renameFunc are optional —
+// HandlePromote installs deterministic defaults on first use so the
+// production wiring stays terse and tests can override per-field by
+// direct struct assignment in the same package.
+func NewSkillHandler(library *skills.Library, validator *skills.Validator, messenger SkillSupervisorMessenger, staleness skills.ProposalReminderer, worker *mirror.Worker, db *sql.DB) *SkillHandler {
 	if library == nil {
 		panic("rpc: NewSkillHandler: library is required")
 	}
 	return &SkillHandler{
 		library:   library,
 		validator: validator,
-		perm:      perm,
+		perm:      messenger,
 		staleness: staleness,
 		worker:    worker,
 		db:        db,
@@ -163,6 +191,103 @@ const CheckSkillNotAvailableMessage = "check-the-skill meta-skill not implemente
 //
 //nolint:staticcheck // ST1005: error message is the canonical §8.3 verbatim text — punctuation is spec-mandated.
 var ErrCheckTheSkillNotAvailable = errors.New(CheckSkillNotAvailableMessage)
+
+// Promote error-code constants. Returned via SkillPromoteResponse.Error
+// (not the Go error path) so structured detail (findings, override
+// records) can travel with the response.
+const (
+	ErrFrontmatterInvalidCode = "frontmatter_invalid"
+	ErrSecretScanBlockedCode  = "secret_scan_blocked"
+	ErrCheckRequiredCode      = "check_required"
+	// ErrInvalidPatternCode signals a malformed AllowSecretPatterns
+	// regex. Surfaced via the structured response (matching every
+	// other coordinator-facing logical failure) so the CLI can distinguish
+	// a typo in --allow-secret from a real scanner I/O failure.
+	ErrInvalidPatternCode = "invalid_pattern"
+)
+
+// AllowedPatternWire is the JSON shape for one entry in
+// SkillPromoteRequest.AllowSecretPatterns. Mirrors
+// skills.AllowedPattern but lives in the rpc package so the wire-side
+// JSON tagging stays explicit.
+type AllowedPatternWire struct {
+	Pattern string `json:"pattern"`
+	Reason  string `json:"reason"`
+}
+
+// SkillPromoteRequest is the params shape for skill.promote
+// (design-spec §7.5).
+type SkillPromoteRequest struct {
+	CallerAgentID       string               `json:"caller_agent_id"`
+	Path                string               `json:"path"`
+	Force               bool                 `json:"force,omitempty"`
+	ForceReason         string               `json:"force_reason,omitempty"`
+	AllowSecretPatterns []AllowedPatternWire `json:"allow_secret_patterns,omitempty"`
+	// MsgThreadID is the inbound revision message's thread ID, captured
+	// on an edit-promote as part of the new RevisionEntry. Empty for a
+	// create-promote.
+	MsgThreadID string `json:"msg_thread_id,omitempty"`
+}
+
+// PromoteReview is the review-block subset returned in
+// SkillPromoteResponse. Mirrors skills.ReviewBlock but with stable JSON
+// tags pinned to the spec §7.5 sample.
+type PromoteReview struct {
+	ReviewedBy          string                       `json:"reviewed_by"`
+	ReviewedAt          time.Time                    `json:"reviewed_at"`
+	CheckSkillVersion   string                       `json:"check_skill_version"`
+	Revisions           []skills.RevisionEntry       `json:"revisions"`
+	SecretScanOverrides []skills.SecretScanOverride  `json:"secret_scan_overrides,omitempty"`
+	ForceOverride       string                       `json:"force_override,omitempty"`
+}
+
+// PromoteSecretFinding is the JSON shape for one secret-scan hit in
+// SkillPromoteResponse.SecretFindings. Mirrors skills.SecretFinding but
+// keeps the wire-side JSON tagging explicit. The matched string is
+// never included per spec §14.3 (privacy guarantee).
+type PromoteSecretFinding struct {
+	Path            string `json:"path"`
+	Line            int    `json:"line"`
+	PatternCategory string `json:"pattern_category"`
+}
+
+// PromoteFrontmatterFinding is the JSON shape for one validator
+// finding surfaced in SkillPromoteResponse.FrontmatterFindings on a
+// frontmatter_invalid error.
+type PromoteFrontmatterFinding struct {
+	Kind   string `json:"kind"`
+	Path   string `json:"path,omitempty"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// PromoteInvalidPattern is the JSON shape for one offending pattern
+// surfaced when AllowSecretPatterns contains a regex that fails to
+// compile. The Pattern field is the operator-supplied string verbatim
+// — we deliberately do NOT include the regexp.Compile error detail
+// because Go's regexp error text can echo back fragments of the
+// pattern in an inconsistent shape across versions, and the operator
+// already knows what they typed.
+type PromoteInvalidPattern struct {
+	Pattern string `json:"pattern"`
+	Error   string `json:"error,omitempty"`
+}
+
+// SkillPromoteResponse is the JSON shape for skill.promote (design-spec
+// §7.5). Success populates PromotedPath / PromotedAt / Mode / Review.
+// Logical errors (frontmatter_invalid, secret_scan_blocked,
+// check_required) populate Error + the corresponding detail field
+// instead — auth failures still travel via the Go error return per
+// the established HandleCheck pattern.
+type SkillPromoteResponse struct {
+	PromotedPath        string                      `json:"promoted_path,omitempty"`
+	PromotedAt          time.Time                   `json:"promoted_at,omitzero"`
+	Mode                string                      `json:"mode,omitempty"`
+	Review              *PromoteReview              `json:"review,omitempty"`
+	Error               string                      `json:"error,omitempty"`
+	FrontmatterFindings []PromoteFrontmatterFinding `json:"frontmatter_findings,omitempty"`
+	SecretFindings      []PromoteSecretFinding      `json:"secret_findings,omitempty"`
+	InvalidPatterns     []PromoteInvalidPattern     `json:"invalid_patterns,omitempty"`
+}
 
 // --- HandleList ---
 
@@ -353,6 +478,398 @@ func (h *SkillHandler) HandleCheckStatus(ctx context.Context, params json.RawMes
 		Status: "error",
 		Error:  ErrCheckSkillNotAvailableCode,
 	}, nil
+}
+
+// --- HandlePromote ---
+
+// HandlePromote serves skill.promote (design-spec §7.5). Coordinator-
+// only per spec §7.10. The flow:
+//
+//  1. Auth + load proposal
+//  2. Validate frontmatter (returns frontmatter_invalid on failure)
+//  3. Secret-scan with caller-supplied allow_secret_patterns overrides
+//     (returns secret_scan_blocked on remaining findings)
+//  4. Determine mode: edit (existing .thrum/skills/<name>/SKILL.md) vs
+//     create
+//  5. Stamp provenance via skills.Stamper (StampCreate or StampEdit,
+//     plus RecordSecretScanOverride for each override that fired)
+//  6. Atomic on-disk move via temp dir + rename, with defer-rollback
+//     when the rename fails after the existing target was backed aside
+//  7. Best-effort: cancel staleness reminder, fanout inbox notifications
+//     to every non-supervisor/non-user agent in the repo
+//  8. Emit slog.Info audit line
+//
+// In the v0.11 stub window, the `force` flag is plumbed through but
+// has no functional effect — the check-the-skill gate it would bypass
+// is itself the stub from canonical §8.3 (returns
+// check_the_skill_not_available unconditionally). The flag is recorded
+// in the audit log for forward-compat with C-B2; secret-scan ALWAYS
+// runs regardless of force per AC.
+func (h *SkillHandler) HandlePromote(ctx context.Context, params json.RawMessage) (any, error) {
+	var req SkillPromoteRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+	if err := h.requireCoordinator(ctx, req.CallerAgentID); err != nil {
+		return nil, err
+	}
+	if req.Path == "" {
+		return nil, errors.New("invalid request: path is required")
+	}
+
+	h.ensurePromoteDefaults()
+
+	// Pre-compile every override regex BEFORE doing any filesystem work.
+	// A typo in --allow-secret must surface as a structured response
+	// error (matching every other coordinator-facing logical failure on
+	// this verb), not as an opaque Go error wrapped through the scanner.
+	if invalid := compileAllowedPatterns(req.AllowSecretPatterns); len(invalid) > 0 {
+		return SkillPromoteResponse{
+			Error:           ErrInvalidPatternCode,
+			InvalidPatterns: invalid,
+		}, nil
+	}
+
+	proposed, err := h.library.GetProposed(ctx, req.Path)
+	if err != nil {
+		return nil, fmt.Errorf("load proposal: %w", err)
+	}
+
+	// Serialize concurrent promotes for the SAME skill name. Unrelated
+	// names proceed in parallel. The mutex is acquired before the
+	// pre-stage RemoveAll so the entire `.tmp/` + `.old/` + rename
+	// sequence is atomic from any other promote's perspective.
+	mu := h.promoteMutex(proposed.Name)
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Validation: surface findings via response.Error (frontmatter_invalid)
+	// rather than the Go error path so the structured detail can travel
+	// with the response payload.
+	//
+	// The proposed-skill carries operator-controlled fields only; the
+	// promote-stamped fields (promoted_by / review.*) are filled in by
+	// the stamper below. So the pre-stamp check uses ValidateProposed
+	// (loose form: name + description + thrum.proposed_by +
+	// thrum.trigger_reason), and a post-stamp ValidatePromoted runs
+	// after the stamper as a belt-and-suspenders sanity check that
+	// catches stamper bugs before the on-disk write.
+	if h.validator != nil {
+		findings := h.validator.ValidateProposed(proposed)
+		if len(findings) > 0 {
+			out := make([]PromoteFrontmatterFinding, 0, len(findings))
+			for _, f := range findings {
+				out = append(out, PromoteFrontmatterFinding{Kind: f.Kind, Path: f.Path, Detail: f.Detail})
+			}
+			return SkillPromoteResponse{
+				Error:               ErrFrontmatterInvalidCode,
+				FrontmatterFindings: out,
+			}, nil
+		}
+	}
+
+	// Secret-scan: ALWAYS runs, even with force=true per AC line 1631.
+	skillDir := filepath.Dir(proposed.Path)
+	overrides := make([]skills.AllowedPattern, 0, len(req.AllowSecretPatterns))
+	for _, a := range req.AllowSecretPatterns {
+		overrides = append(overrides, skills.AllowedPattern{Pattern: a.Pattern, Reason: a.Reason})
+	}
+	active, _, scanErr := h.scanner.ScanWithOverrides(skillDir, overrides)
+	if scanErr != nil {
+		return nil, fmt.Errorf("secret scan: %w", scanErr)
+	}
+	if len(active) > 0 {
+		out := make([]PromoteSecretFinding, 0, len(active))
+		for _, f := range active {
+			out = append(out, PromoteSecretFinding{
+				Path:            f.Path,
+				Line:            f.Line,
+				PatternCategory: f.PatternCategory,
+			})
+		}
+		return SkillPromoteResponse{
+			Error:          ErrSecretScanBlockedCode,
+			SecretFindings: out,
+		}, nil
+	}
+
+	// Mode discriminator: existing promoted skill at the canonical path
+	// means edit-promote per spec §13.3 Q8 symmetry.
+	finalDir := filepath.Join(h.library.RepoRoot(), ".thrum", "skills", proposed.Name)
+	finalPath := filepath.Join(finalDir, "SKILL.md")
+	mode := "create"
+	var existingCreatedAt time.Time
+	var existingReview skills.ReviewBlock
+	if existing, getErr := h.library.Get(ctx, proposed.Name); getErr == nil && existing != nil {
+		mode = "edit"
+		existingCreatedAt = existing.Frontmatter.Thrum.CreatedAt
+		existingReview = existing.Frontmatter.Thrum.Review
+	}
+
+	// Stamp provenance into the proposed-skill struct in memory. The
+	// stamped frontmatter is the bytes we'll re-encode and write below.
+	stamped := proposed.Skill
+	stamped.Frontmatter.Thrum.Review = existingReview // baseline (empty on create)
+	stamped.Path = finalPath
+	if mode == "edit" {
+		if err := h.stamper.StampEdit(&stamped, existingCreatedAt, skills.RevisionEntry{
+			MsgThreadID: req.MsgThreadID,
+			ProposedBy:  proposed.Author,
+			At:          h.clock(),
+		}); err != nil {
+			return nil, fmt.Errorf("stamp edit: %w", err)
+		}
+		// On edit, preserve the original promoted_by / proposed_by /
+		// reviewed_by / check_skill_version unless they were absent on
+		// the prior frontmatter — StampEdit deliberately leaves those
+		// alone, but the proposed-skill's frontmatter usually has empty
+		// values for them which need backfilling from the existing skill.
+		if stamped.Frontmatter.Thrum.PromotedBy == "" {
+			stamped.Frontmatter.Thrum.PromotedBy = req.CallerAgentID
+		}
+		if stamped.Frontmatter.Thrum.Review.ReviewedBy == "" {
+			stamped.Frontmatter.Thrum.Review.ReviewedBy = req.CallerAgentID
+		}
+		if stamped.Frontmatter.Thrum.Review.CheckSkillVersion == "" {
+			stamped.Frontmatter.Thrum.Review.CheckSkillVersion = skills.CheckSkillStubVersion
+		}
+	} else {
+		if err := h.stamper.StampCreate(&stamped, req.CallerAgentID, skills.CheckSkillStubVersion); err != nil {
+			return nil, fmt.Errorf("stamp create: %w", err)
+		}
+	}
+	// Record any overrides that fired during the scan as audit entries
+	// on the review block. The scanner already filtered them out of
+	// `active`; we record what the caller supplied so the audit trail
+	// captures the operator's intent regardless of whether the pattern
+	// actually matched anything in this proposal.
+	for _, ov := range req.AllowSecretPatterns {
+		if recErr := h.stamper.RecordSecretScanOverride(&stamped, ov.Pattern, ov.Reason, req.CallerAgentID); recErr != nil {
+			return nil, fmt.Errorf("record override: %w", recErr)
+		}
+	}
+	// Record the force-override reason on the stamped review block per
+	// plan AC line 1172 / 1632. A blank ForceReason gets a non-empty
+	// default so the audit string is never silently empty when
+	// force=true (the on-disk frontmatter is the only durable record
+	// of WHY force was used).
+	if req.Force {
+		reason := strings.TrimSpace(req.ForceReason)
+		if reason == "" {
+			reason = "force override at promote time (no reason supplied)"
+		}
+		stamped.Frontmatter.Thrum.Review.ForceOverride = fmt.Sprintf("%s — %s", req.CallerAgentID, reason)
+	}
+
+	// Atomic on-disk move: build the new skill bytes, write to a temp
+	// dir, swap with the existing target (when present), and rename.
+	encoded, err := skills.EncodeFrontmatter(&stamped.Frontmatter)
+	if err != nil {
+		return nil, fmt.Errorf("encode frontmatter: %w", err)
+	}
+	fullContent := append(encoded, proposed.Body...)
+
+	tmpDir := finalDir + ".tmp"
+	backupDir := finalDir + ".old"
+
+	// Clean any stale leftovers from a prior crash before staging.
+	_ = os.RemoveAll(tmpDir)
+	_ = os.RemoveAll(backupDir)
+
+	if err := os.MkdirAll(tmpDir, 0o750); err != nil {
+		return nil, fmt.Errorf("mkdir tmp: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "SKILL.md"), fullContent, 0o600); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		return nil, fmt.Errorf("write tmp skill: %w", err)
+	}
+
+	// Edit-mode: rename existing target aside so we can rollback on
+	// rename failure. Create-mode: no backup needed.
+	if mode == "edit" {
+		if renameErr := h.renameFunc(finalDir, backupDir); renameErr != nil {
+			_ = os.RemoveAll(tmpDir)
+			return nil, fmt.Errorf("backup existing: %w", renameErr)
+		}
+	}
+
+	// Critical rename. On failure, restore the backup (edit mode) and
+	// clean up the tmp dir.
+	if renameErr := h.renameFunc(tmpDir, finalDir); renameErr != nil {
+		_ = os.RemoveAll(tmpDir)
+		if mode == "edit" {
+			// Best-effort restore. If this fails, the original is at
+			// backupDir and an operator can recover manually — we
+			// surface the original error so the caller knows the
+			// promote failed even when restore succeeded.
+			_ = os.Rename(backupDir, finalDir)
+		}
+		return nil, fmt.Errorf("rename promote: %w", renameErr)
+	}
+
+	// Successful rename: clean up the backup (edit mode only).
+	if mode == "edit" {
+		if rmErr := os.RemoveAll(backupDir); rmErr != nil {
+			// Non-fatal: the promote landed; backup-cleanup failure is a
+			// disk-state warning, not a promote failure. Surface in the
+			// audit log so operators can clear it manually.
+			h.logger.Warn("skill promote: backup cleanup failed", "path", backupDir, "err", rmErr)
+		}
+	}
+
+	// Best-effort: cancel the staleness reminder for this proposal.
+	if h.staleness != nil {
+		if cancelErr := h.staleness.CancelProposalReminder(ctx, req.Path); cancelErr != nil {
+			h.logger.Warn("skill promote: cancel staleness reminder failed", "path", req.Path, "err", cancelErr)
+		}
+	}
+
+	// Inbox fanout: notify every non-supervisor / non-user agent in
+	// the repo. Best-effort — individual send failures log + continue.
+	// When force=true, the body prepends a FORCE OVERRIDE marker per
+	// plan AC line 1632-1634 so every recipient's inbox surfaces the
+	// admission-gate bypass on a normal triage glance.
+	if h.perm != nil && h.db != nil {
+		recipients, lookupErr := h.listRepoAgents(ctx)
+		if lookupErr != nil {
+			h.logger.Warn("skill promote: agent fanout list failed", "err", lookupErr)
+		} else {
+			body := fmt.Sprintf("Skill %q promoted by %s (mode=%s) at %s", proposed.Name, req.CallerAgentID, mode, finalPath)
+			if req.Force {
+				body = "[FORCE OVERRIDE: " + stamped.Frontmatter.Thrum.Review.ForceOverride + "] " + body
+			}
+			for _, agentID := range recipients {
+				if _, sendErr := h.perm.SendSupervisorMessage(ctx, agentID, body, ""); sendErr != nil {
+					h.logger.Warn("skill promote: supervisor send failed", "to", agentID, "err", sendErr)
+				}
+			}
+		}
+	}
+
+	h.logger.Info("skill promoted",
+		"name", proposed.Name,
+		"mode", mode,
+		"force", req.Force,
+		"caller", req.CallerAgentID,
+		"path", finalPath,
+	)
+
+	resp := SkillPromoteResponse{
+		PromotedPath: finalPath,
+		PromotedAt:   h.clock(),
+		Mode:         mode,
+		Review: &PromoteReview{
+			ReviewedBy:          stamped.Frontmatter.Thrum.Review.ReviewedBy,
+			ReviewedAt:          stamped.Frontmatter.Thrum.Review.ReviewedAt,
+			CheckSkillVersion:   stamped.Frontmatter.Thrum.Review.CheckSkillVersion,
+			Revisions:           stamped.Frontmatter.Thrum.Review.Revisions,
+			SecretScanOverrides: stamped.Frontmatter.Thrum.Review.SecretScanOverrides,
+			ForceOverride:       stamped.Frontmatter.Thrum.Review.ForceOverride,
+		},
+	}
+	// Always emit a non-nil Revisions slice so the wire shape is
+	// stable (encoding/json marshals nil slice as `null`, which the
+	// CLI / web UI then has to special-case). StampCreate already
+	// installs an empty slice; StampEdit appends to whatever was
+	// there. The defensive belt-and-suspenders is here so a future
+	// refactor of either stamper can't silently break the shape.
+	if resp.Review.Revisions == nil {
+		resp.Review.Revisions = []skills.RevisionEntry{}
+	}
+	return resp, nil
+}
+
+// ensurePromoteDefaults installs deterministic defaults for the
+// optional collaborators consumed by HandlePromote (and future promote-
+// adjacent handlers). Each is no-op when already set; production code
+// supplies nothing and gets stable defaults, tests assign fakes before
+// calling.
+func (h *SkillHandler) ensurePromoteDefaults() {
+	if h.clock == nil {
+		h.clock = time.Now
+	}
+	if h.stamper == nil {
+		h.stamper = skills.NewStamper(h.clock)
+	}
+	if h.scanner == nil {
+		h.scanner = skills.NewScanner()
+	}
+	if h.logger == nil {
+		h.logger = slog.Default()
+	}
+	if h.renameFunc == nil {
+		h.renameFunc = os.Rename
+	}
+}
+
+// compileAllowedPatterns pre-compiles every override regex and returns
+// a list of the offending entries (empty when all compile clean). The
+// internal scan path eventually re-compiles via the scanner, but pre-
+// validating here lets HandlePromote return the structured
+// invalid_pattern error before any filesystem work happens.
+func compileAllowedPatterns(in []AllowedPatternWire) []PromoteInvalidPattern {
+	var bad []PromoteInvalidPattern
+	for _, p := range in {
+		if _, err := regexp.Compile(p.Pattern); err != nil {
+			bad = append(bad, PromoteInvalidPattern{
+				Pattern: p.Pattern,
+				// regexp error text is bounded + descriptive; safe to
+				// surface because no scan has run yet (no matched
+				// secret to leak).
+				Error: err.Error(),
+			})
+		}
+	}
+	return bad
+}
+
+// promoteMutex returns the per-skill-name mutex used to serialize
+// concurrent promote calls. The first call for a given name installs
+// a fresh *sync.Mutex via sync.Map.LoadOrStore; subsequent calls
+// reuse it. Mutexes are never deleted — the per-name footprint is
+// negligible (one pointer + Mutex header) and the GC complexity of
+// safely removing a busy mutex outweighs the memory saved.
+func (h *SkillHandler) promoteMutex(name string) *sync.Mutex {
+	v, _ := h.promoteMutexes.LoadOrStore(name, &sync.Mutex{})
+	mu, ok := v.(*sync.Mutex)
+	if !ok {
+		// Unreachable: every LoadOrStore call stores *sync.Mutex.
+		panic("rpc: promoteMutex: registry value is not *sync.Mutex")
+	}
+	return mu
+}
+
+// listRepoAgents enumerates the agent IDs eligible to receive a
+// skill-promote inbox notification. Filters out user:-prefixed humans
+// and the supervisor pseudo-agent — they do not consume inbox notify
+// like a normal agent does, and routing to them would either fail
+// (humans aren't in the daemon's agent registry as message recipients
+// in the conventional sense) or short-circuit (supervisor messages
+// originate FROM the supervisor; sending one TO it creates self-talk).
+func (h *SkillHandler) listRepoAgents(ctx context.Context) ([]string, error) {
+	rows, err := h.db.QueryContext(ctx, `SELECT agent_id FROM agents`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var id string
+		if scanErr := rows.Scan(&id); scanErr != nil {
+			return nil, scanErr
+		}
+		if strings.HasPrefix(id, "user:") {
+			continue
+		}
+		if strings.HasPrefix(id, "supervisor_") || id == "supervisor" {
+			continue
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // requireCoordinator gates RPCs whose spec auth is coordinator-only.

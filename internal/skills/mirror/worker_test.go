@@ -562,6 +562,61 @@ func TestWorker_ReconcileBeforeStartReturnsErr(t *testing.T) {
 	}
 }
 
+// TestWorker_ReconcileRemovesStaleTmpDirs covers the E10.4 SIGKILL
+// backstop: a promote that was killed between writing the temp dir and
+// renaming it into place leaves `.thrum/skills/<name>.tmp/` on disk.
+// Defer-rollback inside HandlePromote is the primary defense; this is
+// the daemon-restart safety-net per plan AC line 1608-1617.
+func TestWorker_ReconcileRemovesStaleTmpDirs(t *testing.T) {
+	t.Parallel()
+
+	wtree := t.TempDir()
+	logBuf := &threadSafeBuffer{}
+	w := New(WorkerOpts{
+		SourceRoot:   filepath.Join(t.TempDir(), ".thrum", "skills"),
+		Destinations: []Destination{claudeDest(wtree)},
+		Debounce:     30 * time.Millisecond,
+		StopTimeout:  2 * time.Second,
+		Logger:       slog.New(slog.NewTextHandler(logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
+	})
+	if err := os.MkdirAll(w.opts.SourceRoot, 0o750); err != nil {
+		t.Fatalf("mkdir source: %v", err)
+	}
+	if err := w.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer func() { _ = w.Stop() }()
+
+	// Simulate two prior-crash leftovers: one tmp dir, one .old backup
+	// dir (also a defer-rollback artifact that the SIGKILL bypassed).
+	tmpDir := filepath.Join(w.opts.SourceRoot, "leftover-skill.tmp")
+	oldDir := filepath.Join(w.opts.SourceRoot, "another-skill.old")
+	if err := os.MkdirAll(tmpDir, 0o750); err != nil {
+		t.Fatalf("mkdir leftover tmp: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "SKILL.md"), []byte("garbage"), 0o600); err != nil {
+		t.Fatalf("write leftover tmp: %v", err)
+	}
+	if err := os.MkdirAll(oldDir, 0o750); err != nil {
+		t.Fatalf("mkdir leftover old: %v", err)
+	}
+
+	if err := w.Reconcile(context.Background()); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	if _, err := os.Stat(tmpDir); !os.IsNotExist(err) {
+		t.Errorf("stale .tmp/ should be removed by Reconcile; stat err=%v", err)
+	}
+	if _, err := os.Stat(oldDir); !os.IsNotExist(err) {
+		t.Errorf("stale .old/ should be removed by Reconcile; stat err=%v", err)
+	}
+	logs := logBuf.String()
+	if !contains(logs, "stale tmp dir") && !contains(logs, "stale backup dir") {
+		t.Errorf("expected warn log about stale promote leftover; got: %s", logs)
+	}
+}
+
 // TestWorker_UnknownRuntimeRefusesStart confirms misconfiguration
 // (typo at the CLI / config layer) surfaces as ErrUnknownRuntime on
 // Start rather than a silent no-op.

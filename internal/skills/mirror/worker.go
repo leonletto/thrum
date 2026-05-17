@@ -422,6 +422,17 @@ func (w *Worker) Reconcile(ctx context.Context) error {
 	}
 	w.stateMu.RUnlock()
 
+	// SIGKILL backstop for E10.4 atomic-move promote: a promote that
+	// was killed between writing the `.thrum/skills/<name>.tmp/` staging
+	// dir and the os.Rename into `.thrum/skills/<name>/` leaves the
+	// staging dir on disk. Defer-rollback inside HandlePromote handles
+	// the common-case failures during a live promote; this catches the
+	// "process vanished" case at the next daemon boot's Reconcile pass.
+	//
+	// Symmetric cleanup for `.old/` backup-aside dirs created by the
+	// edit-promote rollback path — same SIGKILL window, same fix.
+	w.cleanupStalePromoteLeftovers()
+
 	var wg sync.WaitGroup
 	for _, ch := range channels {
 		wg.Add(1)
@@ -621,6 +632,55 @@ func (w *Worker) copyFile(src, dst string) error {
 		return fmt.Errorf("%w: write %s: %w", ErrMirrorWrite, dst, err)
 	}
 	return nil
+}
+
+// cleanupStalePromoteLeftovers removes any `.tmp/` and `.old/`
+// directories directly under the source root. These are atomic-move
+// artifacts from the E10.4 skill.promote handler that survived a
+// SIGKILL between the temp-dir write and the final os.Rename — under
+// a live promote, defer-rollback removes both. Both patterns are
+// unconditionally removed because:
+//
+//   - `.tmp/` is the in-progress staging dir; if the rename had
+//     succeeded it would have become `<name>/` (no .tmp suffix).
+//   - `.old/` is the renamed-aside previous version during an edit-
+//     promote; success removes it, failure rolls back over it.
+//
+// Errors during cleanup are logged at warn and swallowed — the next
+// Reconcile pass will retry, and a lingering leftover is at worst
+// disk waste (the mirror destination layer never reads from
+// `<SourceRoot>/*.tmp/`).
+func (w *Worker) cleanupStalePromoteLeftovers() {
+	matches, err := filepath.Glob(filepath.Join(w.opts.SourceRoot, "*.tmp"))
+	if err == nil {
+		for _, m := range matches {
+			// Log BEFORE the remove so operators reading the daemon
+			// log see the announcement of the intended action. A
+			// post-remove log line reads as past-tense narration of
+			// completed work, but the cleanup might fail — only the
+			// pre-log accurately reflects "about to do X" even when
+			// the followup errors out.
+			w.opts.Logger.Warn("skills promote: removing stale tmp dir from prior crash", "path", m)
+			if rmErr := os.RemoveAll(m); rmErr != nil {
+				w.opts.Logger.Warn("skills promote: failed to clean stale tmp dir", "path", m, "err", rmErr)
+				continue
+			}
+		}
+	} else {
+		w.opts.Logger.Warn("skills promote: glob *.tmp failed", "root", w.opts.SourceRoot, "err", err)
+	}
+	matches, err = filepath.Glob(filepath.Join(w.opts.SourceRoot, "*.old"))
+	if err == nil {
+		for _, m := range matches {
+			w.opts.Logger.Warn("skills promote: removing stale backup dir from prior crash", "path", m)
+			if rmErr := os.RemoveAll(m); rmErr != nil {
+				w.opts.Logger.Warn("skills promote: failed to clean stale backup dir", "path", m, "err", rmErr)
+				continue
+			}
+		}
+	} else {
+		w.opts.Logger.Warn("skills promote: glob *.old failed", "root", w.opts.SourceRoot, "err", err)
+	}
 }
 
 // Compile-time interface guards make the public surface explicit so

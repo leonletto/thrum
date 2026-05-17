@@ -463,22 +463,121 @@ proposed-skills/<name>/SKILL.md) into the canonical
 Runs secret-scan against the proposal body. If any pattern fires,
 the promote is blocked. Use --allow-secret <regex> (repeatable) to
 record an audit-trail override for a specific pattern — typically
-the literal fake-secret string in a test fixture.
+the literal fake-secret string in a test fixture. Pair each --allow-secret
+with a matching --allow-secret-reason that explains why the pattern is
+safe in this proposal.
 
 In the C-B2 stub window, pass --force to bypass the check-the-skill
 admission gate. Secret-scan still runs even with --force.
 
 Stamps the daemon-side provenance fields (thrum.review.*) atomically
-with the promote; emits an inbox notification to coordinator-role
-agents in the repo; cancels the proposal's staleness reminder.`,
+with the promote; emits an inbox notification to every non-supervisor
+agent in the repo; cancels the proposal's staleness reminder.`,
 		Args: cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return fmt.Errorf("skill.promote RPC body lands at E10.4 (thrum-6qmf.2.16)")
+		RunE: func(cmd *cobra.Command, args []string) error {
+			force, _ := cmd.Flags().GetBool("force")
+			forceReason, _ := cmd.Flags().GetString("force-reason")
+			patterns, _ := cmd.Flags().GetStringSlice("allow-secret")
+			reasons, _ := cmd.Flags().GetStringSlice("allow-secret-reason")
+			msgThreadID, _ := cmd.Flags().GetString("msg-thread-id")
+			return runSkillPromote(cmd.OutOrStdout(), args[0], force, forceReason, patterns, reasons, msgThreadID)
 		},
 	}
 	cmd.Flags().Bool("force", false, "Bypass the check-the-skill admission gate (secret-scan still runs)")
-	cmd.Flags().StringSlice("allow-secret", nil, "Audit-trail override for a secret-scan pattern (repeatable; use --allow-secret <regex>)")
+	cmd.Flags().String("force-reason", "", "Operator-supplied reason for --force; recorded in review.force_override (audit trail)")
+	cmd.Flags().StringSlice("allow-secret", nil, "Audit-trail override for a secret-scan pattern (repeatable; pair with --allow-secret-reason)")
+	cmd.Flags().StringSlice("allow-secret-reason", nil, "Reason for the corresponding --allow-secret entry (repeatable; position-paired with --allow-secret)")
+	cmd.Flags().String("msg-thread-id", "", "Inbound revision message thread ID — recorded under review.revisions on edit-promote")
 	return cmd
+}
+
+// runSkillPromote dispatches the skill.promote RPC and renders the
+// response. Pairing of --allow-secret patterns with --allow-secret-reason
+// is positional: the i-th pattern maps to the i-th reason. A pattern
+// without a paired reason gets a default reason string with the
+// caller's identity so the audit trail is never empty.
+func runSkillPromote(out io.Writer, path string, force bool, forceReason string, patterns, reasons []string, msgThreadID string) error {
+	agentID, err := resolveLocalAgentID()
+	if err != nil {
+		return fmt.Errorf("failed to resolve agent identity: %w", err)
+	}
+	client, err := getClient()
+	if err != nil {
+		return fmt.Errorf("failed to connect to daemon: %w", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	overrides := make([]map[string]string, 0, len(patterns))
+	for i, p := range patterns {
+		reason := ""
+		if i < len(reasons) {
+			reason = reasons[i]
+		}
+		if reason == "" {
+			reason = fmt.Sprintf("operator override by %s at promote time", agentID)
+		}
+		overrides = append(overrides, map[string]string{
+			"pattern": p,
+			"reason":  reason,
+		})
+	}
+
+	req := map[string]any{
+		"caller_agent_id":       agentID,
+		"path":                  path,
+		"force":                 force,
+		"allow_secret_patterns": overrides,
+	}
+	if forceReason != "" {
+		req["force_reason"] = forceReason
+	}
+	if msgThreadID != "" {
+		req["msg_thread_id"] = msgThreadID
+	}
+	var resp rpc.SkillPromoteResponse
+	if err := client.Call("skill.promote", req, &resp); err != nil {
+		return fmt.Errorf("skill.promote RPC failed: %w", err)
+	}
+	if flagJSON {
+		return cli.EmitJSON(resp)
+	}
+	return renderSkillPromote(out, resp)
+}
+
+// renderSkillPromote writes a human-readable summary of the promote
+// response. On the success path emits {promoted_path, mode, reviewed_at}
+// plus override summary; on the error path emits the error code and the
+// per-finding detail.
+func renderSkillPromote(out io.Writer, resp rpc.SkillPromoteResponse) error {
+	w := skillWriter{w: out}
+	if resp.Error != "" {
+		w.Fprintf("PROMOTE BLOCKED: %s\n", resp.Error)
+		for _, f := range resp.FrontmatterFindings {
+			detail := f.Detail
+			if detail == "" {
+				detail = "(no detail)"
+			}
+			w.Fprintf("  frontmatter: %s @ %s — %s\n", f.Kind, f.Path, detail)
+		}
+		for _, f := range resp.SecretFindings {
+			w.Fprintf("  secret-scan: %s @ %s:%d\n", f.PatternCategory, f.Path, f.Line)
+		}
+		if err := w.err; err != nil {
+			return err
+		}
+		return errors.New(resp.Error)
+	}
+	w.Fprintf("PROMOTED: %s\n", resp.PromotedPath)
+	w.Fprintf("  mode:        %s\n", resp.Mode)
+	w.Fprintf("  promoted_at: %s\n", resp.PromotedAt.Format("2006-01-02T15:04:05Z07:00"))
+	if resp.Review != nil {
+		w.Fprintf("  reviewed_by: %s\n", resp.Review.ReviewedBy)
+		w.Fprintf("  revisions:   %d\n", len(resp.Review.Revisions))
+		if n := len(resp.Review.SecretScanOverrides); n > 0 {
+			w.Fprintf("  overrides:   %d\n", n)
+		}
+	}
+	return w.err
 }
 
 // skillDeleteCmd implements `thrum skill delete <name> [--force]` per

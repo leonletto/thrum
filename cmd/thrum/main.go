@@ -6275,17 +6275,21 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	server.RegisterHandler("message.deleteByAgent", messageHandler.HandleDeleteByAgent)
 	server.RegisterHandler("message.archive", messageHandler.HandleArchive)
 
-	// Skill registration substrate (C-B1, v0.11) — read-only verbs land
-	// at E10.2 (list/show/check_status). Mutating verbs (promote, revise,
-	// delete, sync, validate) and the staleness-reminder integration land
-	// at E10.3–E10.9; lifecycle wiring of perm/staleness/worker into the
-	// constructor happens with E10.9 (thrum-8rgu plan-errata).
+	// Skill registration substrate (C-B1, v0.11) — read-only verbs and
+	// the v0.11 stubs landed at E10.2 (list/show/check_status) and E10.3
+	// (check). E10.4 wires promote (with validator + permPkg messenger
+	// for the inbox-fanout). The staleness reminder substrate
+	// (CancelProposalReminder) lands at E10.9 alongside the A-B4
+	// reminders.Store integration; until then h.staleness=nil makes the
+	// cancel-on-promote a no-op (logged), which is harmless — the
+	// reminder fires once and the operator dismisses it.
 	skillLibrary := skills.NewLibrary(st.RepoPath())
-	skillHandler := rpc.NewSkillHandler(skillLibrary, nil, nil, nil, nil, st.RawDB())
+	skillHandler := rpc.NewSkillHandler(skillLibrary, skills.NewValidator(), permPkg, nil, nil, st.RawDB())
 	server.RegisterHandler("skill.list", skillHandler.HandleList)
 	server.RegisterHandler("skill.show", skillHandler.HandleShow)
 	server.RegisterHandler("skill.check", skillHandler.HandleCheck)
 	server.RegisterHandler("skill.check_status", skillHandler.HandleCheckStatus)
+	server.RegisterHandler("skill.promote", skillHandler.HandlePromote)
 
 	// Monitor jobs — SECURITY: these handlers spawn child processes with the
 	// daemon's privileges, so they are registered on the unix-socket `server`
