@@ -196,17 +196,14 @@ func TestValidator_TriggerReasonRequired(t *testing.T) {
 	}
 }
 
-// Bridge to the dispatcher API: Validator.Validate dispatches to either
-// ValidatePromoted or ValidateProposed by surface type. Pins the
-// dispatcher contract so E10.8 (post-merge defense) can rely on it.
-func TestValidator_DispatchByType(t *testing.T) {
+// Validate is the plan-AC entrypoint that runs the strict promote-time
+// pass. Pins the signature so downstream consumers (E10.8 post-merge
+// defense) can rely on the plan-named API.
+func TestValidator_PlanAPI(t *testing.T) {
 	t.Parallel()
 
 	v := NewValidator()
 	if findings := v.Validate(promotedFixture()); len(findings) != 0 {
 		t.Errorf("Validate(*Skill) clean fixture findings: %+v", findings)
-	}
-	if findings := v.Validate(proposedFixture()); len(findings) != 0 {
-		t.Errorf("Validate(*ProposedSkill) clean fixture findings: %+v", findings)
 	}
 }

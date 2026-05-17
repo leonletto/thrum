@@ -107,6 +107,8 @@ func applySkillsGitignore(opts InitOptions) error {
 		}
 	}
 
+	hasSectionHeader := containsTrimmed(lines, skillsGitignoreSection)
+
 	var b strings.Builder
 	b.WriteString(existing)
 	if existing != "" && !strings.HasSuffix(existing, "\n") {
@@ -115,7 +117,13 @@ func applySkillsGitignore(opts InitOptions) error {
 	if existing != "" {
 		b.WriteString("\n")
 	}
-	b.WriteString(skillsGitignoreSection + "\n")
+	// Skip the section header on partial-state idempotent re-runs so
+	// the comment isn't duplicated when only one of the two lines is
+	// missing (e.g. user manually added the proposed-skills marker
+	// before re-running init).
+	if !hasSectionHeader {
+		b.WriteString(skillsGitignoreSection + "\n")
+	}
 	if !hasNegation {
 		b.WriteString(skillsNegationLine + "\n")
 	}

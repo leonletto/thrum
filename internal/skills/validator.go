@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"sort"
 
 	"gopkg.in/yaml.v3"
 )
@@ -45,19 +46,14 @@ type Validator struct{}
 // signatures.
 func NewValidator() *Validator { return &Validator{} }
 
-// Validate dispatches to ValidatePromoted or ValidateProposed by
-// the surface type so callers that hold a generic `any` (e.g. the
-// E10.8 post-merge defense) can avoid the type-assert dance at every
-// call site. Unknown types return an empty slice — callers that need
-// hard rejection use the typed methods directly.
-func (v *Validator) Validate(target any) []Finding {
-	switch t := target.(type) {
-	case *Skill:
-		return v.ValidatePromoted(t)
-	case *ProposedSkill:
-		return v.ValidateProposed(t)
-	}
-	return nil
+// Validate is the plan-AC entrypoint (plan §E8.4): runs the strict
+// promote-time pass over a *Skill. Empty slice means valid.
+//
+// Callers that hold a *ProposedSkill use ValidateProposed; callers
+// that have only raw frontmatter bytes (the merge-conflict defense
+// for E10.8) use ValidateRawFrontmatter.
+func (v *Validator) Validate(s *Skill) []Finding {
+	return v.ValidatePromoted(s)
 }
 
 // ValidatePromoted enforces the strict frontmatter contract used at
@@ -73,11 +69,14 @@ func (v *Validator) ValidatePromoted(s *Skill) []Finding {
 
 	// Required at promote-time. Order chosen so the most-actionable
 	// fields surface first; downstream code that short-circuits on the
-	// first finding still gets a useful error.
+	// first finding still gets a useful error. The top-level `name`
+	// field is required (checkName skips its regex check when name is
+	// empty so callers don't double-report).
 	required := []struct {
 		path string
 		val  string
 	}{
+		{"name", s.Frontmatter.Name},
 		{"thrum.proposed_by", s.Frontmatter.Thrum.ProposedBy},
 		{"thrum.promoted_by", s.Frontmatter.Thrum.PromotedBy},
 		{"thrum.trigger_reason", s.Frontmatter.Thrum.TriggerReason},
@@ -132,11 +131,14 @@ func (v *Validator) ValidateProposed(p *ProposedSkill) []Finding {
 
 // checkName enforces the name regex + dir-name match. Both rules
 // apply at propose-time and promote-time, so they live in a shared
-// helper.
+// helper. The empty-name case is intentionally left to the caller's
+// missing_required check — otherwise a missing name would surface as
+// two findings (regex_violation + missing_required), and callers
+// that switch on Kind would see redundant entries.
 func (v *Validator) checkName(s *Skill) []Finding {
 	var findings []Finding
 
-	if !skillNameRegex.MatchString(s.Frontmatter.Name) {
+	if s.Frontmatter.Name != "" && !skillNameRegex.MatchString(s.Frontmatter.Name) {
 		findings = append(findings, Finding{
 			Kind:   "regex_violation",
 			Path:   "name",
@@ -187,15 +189,24 @@ func (v *Validator) ValidateRawFrontmatter(raw []byte) []Finding {
 		}
 		seen[key.Value]++
 	}
-	var findings []Finding
+	// Sort keys so the findings slice is deterministic across runs.
+	// Map iteration in Go is intentionally randomized; without this
+	// sort the order would vary, breaking any caller that asserts a
+	// specific finding position (e.g. table-driven tests).
+	dupKeys := make([]string, 0, len(seen))
 	for key, count := range seen {
 		if count > 1 {
-			findings = append(findings, Finding{
-				Kind:   "duplicate_field",
-				Path:   key,
-				Detail: fmt.Sprintf("appears %d times in frontmatter", count),
-			})
+			dupKeys = append(dupKeys, key)
 		}
+	}
+	sort.Strings(dupKeys)
+	findings := make([]Finding, 0, len(dupKeys))
+	for _, key := range dupKeys {
+		findings = append(findings, Finding{
+			Kind:   "duplicate_field",
+			Path:   key,
+			Detail: fmt.Sprintf("appears %d times in frontmatter", seen[key]),
+		})
 	}
 	return findings
 }

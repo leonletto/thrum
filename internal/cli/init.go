@@ -455,6 +455,13 @@ func reinitIdentityOnly(opts InitOptions) error {
 	if _, err := identity.Bootstrap(thrumDir, opts.RepoPath); err != nil {
 		return fmt.Errorf("bootstrap identity: %w", err)
 	}
+	// Skills bootstrap also runs on the row-1 short-circuit so a
+	// v0.10.x → v0.11 upgrade via `thrum init --force` on a sync-
+	// configured install picks up the .gitignore negation +
+	// skills.pending_reminder_after default. Idempotent on repeat.
+	if err := applySkillsBootstrap(opts); err != nil {
+		return fmt.Errorf("bootstrap skills substrate: %w", err)
+	}
 	return nil
 }
 

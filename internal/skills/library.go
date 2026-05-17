@@ -183,18 +183,36 @@ func (l *Library) ListPending(ctx context.Context, filter PendingFilter) ([]Prop
 // path can be absolute or relative to the process CWD; the author is
 // derived from the path (the parent of "proposed-skills/" is the agent
 // directory).
+//
+// Containment: the cleaned path must resolve inside the Library's
+// repo root. A caller-supplied path that escapes the repo (relative
+// `..` segments, an absolute path to /etc/, etc.) is rejected with
+// ErrSkillNotFound so the function can never read outside the trust
+// boundary the Library was constructed with.
 func (l *Library) GetProposed(ctx context.Context, path string) (*ProposedSkill, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if _, err := os.Stat(path); err != nil {
+	absRoot, err := filepath.Abs(l.repoRoot)
+	if err != nil {
+		return nil, fmt.Errorf("skills: resolve repo root: %w", err)
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("skills: resolve %s: %w", path, err)
+	}
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil, fmt.Errorf("%w: %s escapes %s", ErrSkillNotFound, path, l.repoRoot)
+	}
+	if _, err := os.Stat(absPath); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, fmt.Errorf("%w: %s", ErrSkillNotFound, path)
 		}
 		return nil, fmt.Errorf("skills: stat %s: %w", path, err)
 	}
-	author, name := proposedAuthorAndName(path)
-	proposed := loadProposed(path, name, author)
+	author, name := proposedAuthorAndName(absPath)
+	proposed := loadProposed(absPath, name, author)
 	return &proposed, nil
 }
 
