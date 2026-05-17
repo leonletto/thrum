@@ -2709,3 +2709,115 @@ func TestHandleRegister_PreservesCoLocatedAgents(t *testing.T) {
 		}
 	}
 }
+
+// TestAgentRegister_ModeIdentityValidator pins the B-B1 Task 5 contract:
+// agent.register rejects the (persistent, ephemeral) reserved grid cell
+// and the (ephemeral, auto_respawn=true) cross-axis violation, while
+// accepting every other canonical combination per substrate-canonical-
+// reference.md §3.3 + spec §4.3.
+func TestAgentRegister_ModeIdentityValidator(t *testing.T) {
+	cases := []struct {
+		name        string
+		mode        string
+		identity    string
+		autoRespawn bool
+		wantErr     bool
+		wantSubstr  string
+	}{
+		// Three permitted combinations from canonical §3.3 grid.
+		{name: "persistent_long_lived_personal_agent", mode: "persistent", identity: "long_lived", wantErr: false},
+		{name: "ephemeral_long_lived_scheduled_agent", mode: "ephemeral", identity: "long_lived", wantErr: false},
+		{name: "ephemeral_ephemeral_implementer_class", mode: "ephemeral", identity: "ephemeral", wantErr: false},
+
+		// (mode, identity) grid rejection.
+		{
+			name: "rejects_persistent_ephemeral_reserved", mode: "persistent", identity: "ephemeral",
+			wantErr: true, wantSubstr: "(persistent, ephemeral) is reserved",
+		},
+		// Cross-axis rejection.
+		{
+			name: "rejects_ephemeral_with_auto_respawn", mode: "ephemeral", identity: "long_lived", autoRespawn: true,
+			wantErr: true, wantSubstr: "auto_respawn = true is only meaningful when mode = persistent",
+		},
+		// Invalid mode / identity strings.
+		{
+			name: "rejects_invalid_mode", mode: "weird", identity: "long_lived",
+			wantErr: true, wantSubstr: "mode must be",
+		},
+		{
+			name: "rejects_invalid_identity", mode: "persistent", identity: "weird",
+			wantErr: true, wantSubstr: "identity must be",
+		},
+		// Empty fields default to (persistent, long_lived) — the v0.10.x
+		// back-compat case where old clients don't send the new fields.
+		{name: "empty_defaults_to_persistent_long_lived", mode: "", identity: "", wantErr: false},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			thrumDir := filepath.Join(tmpDir, ".thrum")
+			s, err := state.NewState(thrumDir, thrumDir, "test_repo_modeident", "")
+			if err != nil {
+				t.Fatalf("create state: %v", err)
+			}
+			defer func() { _ = s.Close() }()
+
+			handler := NewAgentHandler(s)
+			req := RegisterRequest{
+				Name:        tt.name,
+				Role:        "implementer",
+				Module:      "mode_ident_test",
+				Mode:        tt.mode,
+				Identity:    tt.identity,
+				AutoRespawn: tt.autoRespawn,
+			}
+			reqJSON, _ := json.Marshal(req)
+			_, err = handler.HandleRegister(context.Background(), reqJSON)
+
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("HandleRegister err=%v; wantErr=%v", err, tt.wantErr)
+			}
+			if tt.wantErr && tt.wantSubstr != "" {
+				if !strings.Contains(err.Error(), tt.wantSubstr) {
+					t.Errorf("err = %v; want substring %q", err, tt.wantSubstr)
+				}
+			}
+		})
+	}
+}
+
+// TestAgentRegister_ModeIdentityValidator_WholeValidation pins the
+// whole-validation contract: a request with BOTH invalid mode AND
+// invalid identity surfaces BOTH error messages, not just the first.
+// First-fail validators force callers to round-trip on each problem;
+// whole-validation lets operators fix all problems in one pass.
+func TestAgentRegister_ModeIdentityValidator_WholeValidation(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_whole", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	handler := NewAgentHandler(s)
+	req := RegisterRequest{
+		Name:     "whole_test",
+		Role:     "implementer",
+		Module:   "whole_validation",
+		Mode:     "nonsense_mode",
+		Identity: "nonsense_identity",
+	}
+	reqJSON, _ := json.Marshal(req)
+	_, err = handler.HandleRegister(context.Background(), reqJSON)
+	if err == nil {
+		t.Fatal("expected error from invalid mode+identity, got nil")
+	}
+	if !strings.Contains(err.Error(), "mode must be") {
+		t.Errorf("err missing mode-validation substring: %v", err)
+	}
+	if !strings.Contains(err.Error(), "identity must be") {
+		t.Errorf("err missing identity-validation substring: %v", err)
+	}
+}

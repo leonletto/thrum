@@ -37,6 +37,69 @@ type RegisterRequest struct {
 	Force      bool   `json:"force,omitempty"`       // CLI --force: re-register existing agent, overriding stored fields (thrum-ufv5.2)
 	ReRegister bool   `json:"re_register,omitempty"` // Same agent returning
 	AgentPID   int    `json:"agent_pid,omitempty"`   // Claude process PID for identity resolution
+
+	// Mode + Identity + AutoRespawn are the v0.11+ canonical-§3.3
+	// agent classification axes. Empty Mode/Identity default to
+	// ("persistent", "long_lived") so pre-v0.11 clients that don't
+	// send these fields continue to work. Combinations are validated
+	// against spec §4.3's grid: only (persistent, long_lived),
+	// (ephemeral, long_lived), and (ephemeral, ephemeral) are
+	// permitted; (persistent, ephemeral) is reserved. AutoRespawn=
+	// true is rejected when Mode=ephemeral (cross-axis).
+	Mode        string `json:"mode,omitempty"`
+	Identity    string `json:"identity,omitempty"`
+	AutoRespawn bool   `json:"auto_respawn,omitempty"`
+}
+
+// Canonical mode/identity vocabularies from substrate-canonical-
+// reference.md §3.3. The validator at agent.register enforces these
+// values; backfill defaults in Migration 26 use the same constants.
+const (
+	agentModePersistent = "persistent"
+	agentModeEphemeral  = "ephemeral"
+
+	agentIdentityLongLived = "long_lived"
+	agentIdentityEphemeral = "ephemeral"
+)
+
+// validateModeIdentity enforces the canonical §3.3 grid + spec §4.3
+// cross-axis rule. Whole-validation: collects all applicable errors
+// so operators see every problem in one pass rather than one round-
+// trip per fix. Returns nil when the combination is permitted.
+func validateModeIdentity(mode, identity string, autoRespawn bool) error {
+	var msgs []string
+
+	validMode := mode == agentModePersistent || mode == agentModeEphemeral
+	validIdentity := identity == agentIdentityLongLived || identity == agentIdentityEphemeral
+
+	if !validMode {
+		msgs = append(msgs, fmt.Sprintf(
+			"mode must be %q or %q; got %q",
+			agentModePersistent, agentModeEphemeral, mode))
+	}
+	if !validIdentity {
+		msgs = append(msgs, fmt.Sprintf(
+			"identity must be %q or %q; got %q",
+			agentIdentityLongLived, agentIdentityEphemeral, identity))
+	}
+
+	// Grid intersection: only meaningful when both axes parse.
+	if validMode && validIdentity {
+		if mode == agentModePersistent && identity == agentIdentityEphemeral {
+			msgs = append(msgs,
+				"(mode, identity) = (persistent, ephemeral) is reserved; not yet defined in v0.11")
+		}
+	}
+	// Cross-axis: only meaningful when mode parses.
+	if validMode && autoRespawn && mode == agentModeEphemeral {
+		msgs = append(msgs,
+			"auto_respawn = true is only meaningful when mode = persistent; ephemeral agents have no stable identity to respawn into")
+	}
+
+	if len(msgs) > 0 {
+		return errors.New(strings.Join(msgs, "; "))
+	}
+	return nil
 }
 
 // RegisterResponse represents the response from agent.register RPC.
@@ -197,6 +260,20 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		if err := identity.ValidateAgentName(req.Name); err != nil {
 			return nil, fmt.Errorf("invalid agent name: %w", err)
 		}
+	}
+
+	// Apply v0.11 mode/identity defaults so pre-v0.11 clients (which
+	// omit these fields) land in the canonical (persistent, long_lived)
+	// cell — same as the Migration 26 backfill defaults for v0.10.x
+	// rows. Then validate against canonical §3.3 + spec §4.3.
+	if req.Mode == "" {
+		req.Mode = agentModePersistent
+	}
+	if req.Identity == "" {
+		req.Identity = agentIdentityLongLived
+	}
+	if err := validateModeIdentity(req.Mode, req.Identity, req.AutoRespawn); err != nil {
+		return nil, fmt.Errorf("invalid registration: %w", err)
 	}
 
 	// Generate agent ID
