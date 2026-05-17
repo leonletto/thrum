@@ -90,9 +90,13 @@ type Worker struct {
 // mirrorTask is the per-event payload that travels on the
 // destination channel. Wrapped (rather than sending the raw
 // MirrorEvent) so future fields (telemetry, batched-enqueue
-// support) don't break callers.
+// support) don't break callers. A non-nil reconcileWG marks a
+// boot-time reconcile tick: the destination goroutine runs a full
+// canonical-vs-destination diff + apply and signals completion via
+// wg.Done.
 type mirrorTask struct {
-	event skills.MirrorEvent
+	event       skills.MirrorEvent
+	reconcileWG *sync.WaitGroup
 }
 
 // New constructs a Worker, applies defaults, and validates required
@@ -318,6 +322,16 @@ func (w *Worker) runDestination(
 				flush()
 				return
 			}
+			if task.reconcileWG != nil {
+				// Reconcile tick: flush any pending debounced work
+				// first, then run a full canonical-vs-destination
+				// diff under the destination mutex. Signal
+				// completion to Worker.Reconcile via wg.Done.
+				flush()
+				w.reconcileDestination(dest, entry)
+				task.reconcileWG.Done()
+				continue
+			}
 			pending[task.event.SkillName] = task.event
 			if timer != nil {
 				timer.Stop()
@@ -329,6 +343,112 @@ func (w *Worker) runDestination(
 		case <-ctx.Done():
 			flush()
 			return
+		}
+	}
+}
+
+// Reconcile walks the source library and re-applies every skill to
+// every destination, then removes any destination-side skill that's
+// no longer canonical. Blocks until every destination signals
+// completion. Used at daemon boot (per E9.4 lifecycle wiring) to
+// repair drift accumulated while the daemon was down.
+//
+// Reconcile is idempotent: a second call against converged state
+// performs zero filesystem writes (copyFile skips identical content).
+// Null-adapter destinations were never registered, so there's nothing
+// to reconcile for them.
+//
+// Pre-flagged-MINOR-#7 guard: Worker.Start's ready-barrier ensures
+// every destination goroutine is in its select loop before Start
+// returns. Reconcile cannot deadlock on a non-existent receiver.
+func (w *Worker) Reconcile(ctx context.Context) error {
+	if !w.started.Load() {
+		return ErrWorkerNotStarted
+	}
+	var wg sync.WaitGroup
+	for _, ch := range w.channels {
+		wg.Add(1)
+		select {
+		case ch <- mirrorTask{
+			event:       skills.MirrorEvent{Trigger: skills.TriggerRestartReconcile},
+			reconcileWG: &wg,
+		}:
+		case <-ctx.Done():
+			wg.Done() // balance the Add so wg.Wait can exit
+			return ctx.Err()
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// reconcileDestination performs a full canonical-vs-destination diff
+// + apply under the destination mutex. Holds the lock for the
+// entire pass so EnsureMirrored (E9.5) can't see a half-reconciled
+// state.
+func (w *Worker) reconcileDestination(dest Destination, entry *AdapterEntry) {
+	mu := w.destMutex(dest)
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Enumerate canonical skills (skills with a SKILL.md in
+	// <SourceRoot>/<name>/).
+	canonical := map[string]struct{}{}
+	if entries, err := os.ReadDir(w.opts.SourceRoot); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			if _, err := os.Stat(filepath.Join(w.opts.SourceRoot, e.Name(), "SKILL.md")); err == nil {
+				canonical[e.Name()] = struct{}{}
+			}
+		}
+	}
+
+	destDir := filepath.Join(dest.WorktreePath, entry.MirrorPath)
+
+	// Copy / refresh every canonical skill.
+	for name := range canonical {
+		srcDir := filepath.Join(w.opts.SourceRoot, name)
+		dstDir := filepath.Join(destDir, name)
+		if err := w.copyDir(srcDir, dstDir); err != nil {
+			w.opts.Logger.Warn(
+				"skills mirror reconcile apply failed",
+				"worktree", dest.WorktreePath,
+				"runtime", dest.Runtime,
+				"skill", name,
+				"err", err,
+			)
+		}
+	}
+
+	// Remove destination-side skills that aren't in canonical.
+	if entries, err := os.ReadDir(destDir); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			if _, ok := canonical[e.Name()]; ok {
+				continue
+			}
+			stale := filepath.Join(destDir, e.Name())
+			if rmErr := os.RemoveAll(stale); rmErr != nil {
+				w.opts.Logger.Warn(
+					"skills mirror reconcile remove failed",
+					"path", stale,
+					"err", rmErr,
+				)
+			}
 		}
 	}
 }

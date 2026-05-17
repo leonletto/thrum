@@ -434,6 +434,134 @@ func TestWorker_NullAdapterRuntime(t *testing.T) {
 	}
 }
 
+func TestWorker_ReconcileCopiesMissing(t *testing.T) {
+	t.Parallel()
+
+	wtree := t.TempDir()
+	w, srcRoot, teardown := fixtureWorker(t, []Destination{claudeDest(wtree)})
+	defer teardown()
+
+	// Pre-populate canonical with two skills BEFORE reconcile.
+	writeSkill(t, srcRoot, "alpha", "body alpha", nil)
+	writeSkill(t, srcRoot, "beta", "body beta", nil)
+
+	// Destination dir empty. Reconcile should populate it.
+	if err := w.Reconcile(context.Background()); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	for _, name := range []string{"alpha", "beta"} {
+		path := filepath.Join(wtree, ".claude", "skills", name, "SKILL.md")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Errorf("reconcile did not copy %s: %v", name, err)
+			continue
+		}
+		if !bytes.Equal(data, []byte("body "+name)) {
+			t.Errorf("reconcile body drift for %s: %q", name, data)
+		}
+	}
+}
+
+func TestWorker_ReconcileRemovesStale(t *testing.T) {
+	t.Parallel()
+
+	wtree := t.TempDir()
+	w, srcRoot, teardown := fixtureWorker(t, []Destination{claudeDest(wtree)})
+	defer teardown()
+
+	// Pre-seed the destination with a skill that's NOT in canonical.
+	staleDir := filepath.Join(wtree, ".claude", "skills", "stale-skill")
+	if err := os.MkdirAll(staleDir, 0o750); err != nil {
+		t.Fatalf("mkdir stale: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(staleDir, "SKILL.md"), []byte("old"), 0o600); err != nil {
+		t.Fatalf("write stale: %v", err)
+	}
+
+	// Canonical has a different skill.
+	writeSkill(t, srcRoot, "current", "body current", nil)
+
+	if err := w.Reconcile(context.Background()); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	if _, err := os.Stat(staleDir); !os.IsNotExist(err) {
+		t.Errorf("reconcile did not remove stale skill: stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(wtree, ".claude", "skills", "current", "SKILL.md")); err != nil {
+		t.Errorf("reconcile did not copy current: %v", err)
+	}
+}
+
+func TestWorker_ReconcileIdempotent(t *testing.T) {
+	t.Parallel()
+
+	wtree := t.TempDir()
+	w, srcRoot, teardown := fixtureWorker(t, []Destination{claudeDest(wtree)})
+	defer teardown()
+
+	writeSkill(t, srcRoot, "demo", "body", nil)
+
+	if err := w.Reconcile(context.Background()); err != nil {
+		t.Fatalf("first Reconcile: %v", err)
+	}
+	dst := filepath.Join(wtree, ".claude", "skills", "demo", "SKILL.md")
+	info1, err := os.Stat(dst)
+	if err != nil {
+		t.Fatalf("stat after first: %v", err)
+	}
+	mtime1 := info1.ModTime()
+
+	// Sleep so a re-write would produce a distinguishable mtime.
+	time.Sleep(50 * time.Millisecond)
+
+	if err := w.Reconcile(context.Background()); err != nil {
+		t.Fatalf("second Reconcile: %v", err)
+	}
+	info2, err := os.Stat(dst)
+	if err != nil {
+		t.Fatalf("stat after second: %v", err)
+	}
+	if !info2.ModTime().Equal(mtime1) {
+		t.Errorf("idempotent reconcile re-wrote file: mtime1=%v mtime2=%v", mtime1, info2.ModTime())
+	}
+}
+
+func TestWorker_ReconcileSkipsNullAdapter(t *testing.T) {
+	t.Parallel()
+
+	wtree := t.TempDir()
+	w := New(WorkerOpts{
+		SourceRoot:   filepath.Join(t.TempDir(), ".thrum", "skills"),
+		Destinations: []Destination{{WorktreePath: wtree, Runtime: "codex"}},
+		Logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	if err := w.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer w.Stop()
+
+	// Reconcile must NOT panic / deadlock on a null-adapter
+	// destination (no channel registered for it).
+	if err := w.Reconcile(context.Background()); err != nil {
+		t.Errorf("Reconcile with null adapter: %v", err)
+	}
+}
+
+func TestWorker_ReconcileBeforeStartReturnsErr(t *testing.T) {
+	t.Parallel()
+
+	w := New(WorkerOpts{
+		SourceRoot:   filepath.Join(t.TempDir(), ".thrum", "skills"),
+		Destinations: []Destination{claudeDest(t.TempDir())},
+		Logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	if err := w.Reconcile(context.Background()); !errors.Is(err, ErrWorkerNotStarted) {
+		t.Fatalf("Reconcile before Start: expected ErrWorkerNotStarted, got %v", err)
+	}
+}
+
 // TestWorker_UnknownRuntimeRefusesStart confirms misconfiguration
 // (typo at the CLI / config layer) surfaces as ErrUnknownRuntime on
 // Start rather than a silent no-op.
