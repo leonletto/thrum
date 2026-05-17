@@ -20,7 +20,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 25
+const CurrentVersion = 26
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -143,17 +143,26 @@ func createTables(tx *sql.Tx) error {
 		// agents with overlapping (role, module) aren't treated as local
 		// conflicts (thrum-mm3l). See migration 21→22 for the backfill path
 		// on pre-existing databases.
+		// Per canonical §3.11 Guard 1: columns + types + NULLability + defaults
+		// MUST match the migration-25→26 ALTER path exactly. Drift between
+		// these two paths is the canonical Guard 1 failure mode.
 		`CREATE TABLE IF NOT EXISTS agents (
-			agent_id       TEXT PRIMARY KEY,
-			kind           TEXT NOT NULL,
-			role           TEXT NOT NULL,
-			module         TEXT NOT NULL,
-			display        TEXT NOT NULL DEFAULT '',
-			hostname       TEXT NOT NULL DEFAULT '',
-			agent_pid      INTEGER NOT NULL DEFAULT 0,
-			registered_at  TEXT NOT NULL,
-			last_seen_at   TEXT NOT NULL DEFAULT '',
-			origin_daemon  TEXT NOT NULL DEFAULT ''
+			agent_id                 TEXT PRIMARY KEY,
+			kind                     TEXT NOT NULL,
+			role                     TEXT NOT NULL,
+			module                   TEXT NOT NULL,
+			display                  TEXT NOT NULL DEFAULT '',
+			hostname                 TEXT NOT NULL DEFAULT '',
+			agent_pid                INTEGER NOT NULL DEFAULT 0,
+			registered_at            TEXT NOT NULL,
+			last_seen_at             TEXT NOT NULL DEFAULT '',
+			origin_daemon            TEXT NOT NULL DEFAULT '',
+			mode                     TEXT NOT NULL DEFAULT 'persistent',
+			identity                 TEXT NOT NULL DEFAULT 'long_lived',
+			auto_respawn_enabled     INTEGER NOT NULL DEFAULT 0,
+			auto_respawn_disabled_at INTEGER,
+			state_md_parse_failed_at INTEGER,
+			last_pane_alive_at       INTEGER
 		)`,
 
 		// Sessions table
@@ -1185,6 +1194,53 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_scheduler_events_run ON scheduler_job_events(run_id)`)
 		if err != nil {
 			return fmt.Errorf("migration 24→25: idx_scheduler_events_run: %w", err)
+		}
+	}
+
+	// Migration from version 25 to 26: B-B1 personal-agent + scheduled-agent
+	// lifecycle. Adds mode + identity + 4 runtime columns to the existing
+	// agents table per substrate-canonical-reference.md §3.3. The agents
+	// table already mixes identity + runtime-updated columns (last_seen_at,
+	// agent_pid, hostname) — this fold continues the established precedent
+	// rather than splitting runtime state into a separate table.
+	//
+	// Backfill defaults: pre-v0.11 rows get (persistent, long_lived) since
+	// the ephemeral-implementer + scheduled-agent classes don't exist
+	// pre-v0.11. Runtime columns default to NULL / 0 = healthy.
+	//
+	// Idempotency: tableExists + columnSet checks mirror the migration
+	// 21→22 origin_daemon pattern so the migration is safe to run against
+	// a fresh createTables() schema (which already has the columns) and
+	// against minimal test schemas that don't seed the agents table.
+	if startVersion < 26 && endVersion >= 26 {
+		hasAgents, err := tableExists(tx, "agents")
+		if err != nil {
+			return fmt.Errorf("migration 25→26: check agents table: %w", err)
+		}
+		if hasAgents {
+			agentCols, err := columnSet(tx, "agents")
+			if err != nil {
+				return fmt.Errorf("migration 25→26: inspect agents: %w", err)
+			}
+			type colDef struct {
+				name string
+				ddl  string
+			}
+			for _, c := range []colDef{
+				{"mode", `mode                     TEXT    NOT NULL DEFAULT 'persistent'`},
+				{"identity", `identity                 TEXT    NOT NULL DEFAULT 'long_lived'`},
+				{"auto_respawn_enabled", `auto_respawn_enabled     INTEGER NOT NULL DEFAULT 0`},
+				{"auto_respawn_disabled_at", `auto_respawn_disabled_at INTEGER`},
+				{"state_md_parse_failed_at", `state_md_parse_failed_at INTEGER`},
+				{"last_pane_alive_at", `last_pane_alive_at       INTEGER`},
+			} {
+				if agentCols[c.name] {
+					continue
+				}
+				if _, err := tx.Exec(`ALTER TABLE agents ADD COLUMN ` + c.ddl); err != nil {
+					return fmt.Errorf("migration 25→26: add agents.%s: %w", c.name, err)
+				}
+			}
 		}
 	}
 
