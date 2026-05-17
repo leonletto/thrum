@@ -98,7 +98,10 @@ func (s *SupervisorRouter) MaybeRoute(ctx context.Context, r *Reminder) (bool, e
 		// tmux is unhappy. Conservative default: don't claim
 		// supervisor ownership; the caller's normal delivery path
 		// might still succeed (e.g. inbox is a DB write, not a
-		// tmux operation).
+		// tmux operation). Deliberately swallow err — surfacing it
+		// would cancel the entire delivery on a transient tmux
+		// hiccup.
+		//nolint:nilerr // intentional: conservative fall-through on tmux failure
 		return false, nil
 	}
 

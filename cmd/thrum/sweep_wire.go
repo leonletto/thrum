@@ -120,6 +120,8 @@ func (r *identityFileAgentRegistry) LiveAgents(_ context.Context) ([]sweep.Agent
 			continue
 		}
 		path := filepath.Join(r.identitiesDir, e.Name())
+		// #nosec G304 -- path is constrained to entries returned by os.ReadDir(r.identitiesDir);
+		// identitiesDir comes from internal config, not user input.
 		data, err := os.ReadFile(path)
 		if err != nil {
 			log.Printf("[sweep] read identity %s: %v (skipping)", path, err)
