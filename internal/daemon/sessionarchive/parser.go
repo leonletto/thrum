@@ -1,6 +1,7 @@
 package sessionarchive
 
 import (
+	"regexp"
 	"strings"
 	"time"
 )
@@ -45,4 +46,73 @@ func ParseSavedAtFrontmatter(content string, fallback time.Time) time.Time {
 		return parsed
 	}
 	return fallback
+}
+
+// ParseBigPicture extracts the §1 "Big picture — what shipped this
+// session" body from a snapshot per spec §6A.4.
+//
+// raw=false (default for CLI list / discovery hint / JSON output)
+// collapses internal whitespace runs (newlines, tabs, multi-spaces)
+// to a single space. raw=true (CLI --verbose) preserves original
+// line breaks + leading whitespace.
+//
+// Returns empty string when the §1 section is missing, malformed,
+// or has an empty body.
+//
+// The heading admits two variants — em-dash "—" (3 bytes UTF-8)
+// and ASCII "--" (2 bytes) — so agent-authored snapshots typed
+// without IME help still parse. The matchedLen-tracking branch is
+// the F1 regression fix from spec v3: hard-coding len(headingEM)
+// for both branches overshoots the ASCII path by 1 byte when the
+// heading-as-EOF fallback fires (no newline after the heading).
+func ParseBigPicture(content []byte, raw bool) string {
+	return extractBigPicture(string(content), raw)
+}
+
+func extractBigPicture(content string, raw bool) string {
+	const headingEM = "## 1. Big picture — what shipped this session"
+	const headingASCII = "## 1. Big picture -- what shipped this session"
+
+	var idx int
+	var matchedLen int
+	if i := strings.Index(content, headingEM); i != -1 {
+		idx = i
+		matchedLen = len(headingEM)
+	} else if i := strings.Index(content, headingASCII); i != -1 {
+		idx = i
+		matchedLen = len(headingASCII)
+	} else {
+		return ""
+	}
+
+	// Move past the heading line. If there's a newline after the
+	// heading, use it; otherwise (heading at EOF) fall back to
+	// matchedLen — body will be empty in that case.
+	start := idx + matchedLen
+	if newline := strings.IndexByte(content[idx:], '\n'); newline != -1 {
+		start = idx + newline + 1
+	}
+
+	end := len(content)
+	rest := content[start:]
+	if nextH := strings.Index(rest, "\n## "); nextH != -1 {
+		end = start + nextH
+	}
+	if nextHR := strings.Index(rest, "\n---\n"); nextHR != -1 && start+nextHR < end {
+		end = start + nextHR
+	}
+
+	body := strings.TrimSpace(content[start:end])
+	if raw {
+		return body
+	}
+	return collapseWhitespace(body)
+}
+
+// whitespaceRun compiles once at package init (not per call) so the
+// hot CLI list / discovery-hint paths don't pay the regex-compile cost.
+var whitespaceRun = regexp.MustCompile(`\s+`)
+
+func collapseWhitespace(s string) string {
+	return whitespaceRun.ReplaceAllString(s, " ")
 }
