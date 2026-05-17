@@ -1,0 +1,194 @@
+package agentdispatch
+
+import (
+	"context"
+	"time"
+
+	"github.com/leonletto/thrum/internal/agent"
+	"github.com/leonletto/thrum/internal/daemon/scheduler"
+)
+
+// TmuxRPC is the minimal tmux-side surface ScheduledAgentHandler needs
+// from the daemon's RPC layer. Declared here (rather than imported from
+// internal/daemon/rpc) so agentdispatch stays free of import cycles —
+// the adapter at cmd/thrum/main.go wires rpc.TmuxHandler to this
+// interface at daemon boot. Tests mock TmuxRPC directly.
+type TmuxRPC interface {
+	// CheckPane reports whether `target` already owns a live tmux pane.
+	// Used by stage 0 to refuse a wake that would clobber an existing
+	// agent. Returns (false, nil) for "no live session" — distinct
+	// from (false, err) for "could not determine".
+	CheckPane(ctx context.Context, target string) (bool, error)
+
+	// TmuxCreate provisions a detached tmux session named `opts.SessionName`
+	// rooted at `opts.Cwd`. Stage 4.
+	TmuxCreate(ctx context.Context, target string, opts TmuxCreateOpts) error
+
+	// TmuxLaunch invokes the runtime command (claude, codex, ...) inside
+	// the session. Stage 5.
+	TmuxLaunch(ctx context.Context, target string) error
+
+	// WaitForPaneReady blocks until the runtime's pane is responsive
+	// (prompt rendered, stdin accepting input). Stage 6.
+	WaitForPaneReady(ctx context.Context, target string) error
+
+	// TmuxKillSession terminates the session. Used by rollback paths
+	// (stages 5/6 failures) and by graceful teardown in stage 8.
+	TmuxKillSession(ctx context.Context, target string) error
+
+	// PaneSendCtrlCExit sends the SIGTERM-equivalent keystroke sequence
+	// (Ctrl-C followed by `exit\n`) to give the runtime a graceful exit
+	// chance during stage 8 teardown. Followed by a configurable grace
+	// window before TmuxKillSession fires.
+	PaneSendCtrlCExit(ctx context.Context, target string) error
+}
+
+// TmuxCreateOpts carries the per-session knobs TmuxCreate needs.
+type TmuxCreateOpts struct {
+	// Cwd is the working directory the session opens in — typically
+	// the freshly-created worktree path from stage 3a.
+	Cwd string
+
+	// SessionName is the tmux session identifier; canonical convention
+	// is the agent's target name (e.g. "docs_bot").
+	SessionName string
+}
+
+// MessageRPC is the minimal message-send surface stage 2 needs. Stays
+// here rather than importing internal/daemon/rpc to keep agentdispatch
+// cycle-free; cmd/thrum/main.go's adapter wires rpc.MessageHandler.
+type MessageRPC interface {
+	// MessageSend enqueues an inbox message for `target` with the given
+	// subject + body, returning the persisted message id. The id is
+	// the wake_message_id that stage 2 journals atomically.
+	MessageSend(ctx context.Context, target, subject, body string) (string, error)
+}
+
+// MirrorWorker is the minimal skill-mirror surface stage 3b consumes.
+// Currently a single method per C-B1 E9.5; new methods land here only
+// when a B-B1 stage needs them. mirror.ErrNullAdapter is the canonical
+// success-as-error sentinel (some runtimes have no mirror path).
+type MirrorWorker interface {
+	EnsureMirrored(ctx context.Context, worktreePath string) error
+}
+
+// EscalationRouter is the minimal escalation surface stages 4-7 reach
+// for when they need to page an operator. Task 20 ships the real
+// implementation in internal/daemon/escalation; this interface keeps
+// scheduled_agent.go decoupled from the routing details.
+type EscalationRouter interface {
+	Route(ctx context.Context, alert EscalationAlert, subject, body string) error
+}
+
+// EscalationAlert tags the source of an escalation so the router can
+// pick the right delivery channel.
+type EscalationAlert struct {
+	Source    string // canonical sources: "b-b1.idle_nudge", "b-b1.stage_failure", "b-b1.auto_respawn_loop_guard"
+	AgentName string
+	JobID     string
+	RunID     string
+}
+
+// Deps carries every external dependency ScheduledAgentHandler needs
+// from cmd/thrum/main.go's wiring layer. Every field is an interface
+// so tests can swap real implementations for mocks without touching
+// the handler code.
+//
+// Per IMPORTANT #7 from plan v1 dual-review: ScheduledAgentHandler is
+// shared across concurrent dispatches (AC 9.2.10 race-detector clean
+// for 5 simultaneous dispatches). All per-run state lives in
+// stack/parameter scope, never on the handler struct.
+type Deps struct {
+	// RepoPath is the absolute path to the daemon-managed repository.
+	// Used by worktree.Create and worktree.Destroy callers.
+	RepoPath string
+
+	// Tmux + Message wrap the daemon's existing RPC machinery; the
+	// adapter in cmd/thrum/main.go wires rpc.TmuxHandler / rpc.MessageHandler.
+	Tmux    TmuxRPC
+	Message MessageRPC
+
+	// Registry is the agents-table read/write surface (E6.0 Task 4.5).
+	// Stage 7 idle-nudge fire path + stage 8 teardown read agent state
+	// through it; loop-guard + state-md ack flows mutate via setters.
+	Registry agent.AgentRegistry
+
+	// Mirror is C-B1 E9.5's EnsureMirrored worker. Stage 3b calls
+	// EnsureMirrored against the worktree path returned by stage 3a.
+	// ErrNullAdapter is treated as success per C-B1 §12.3.1.
+	Mirror MirrorWorker
+
+	// Escalation routes alerts to operator via the right channel
+	// (email when configured, supervisor agent otherwise). Task 20
+	// supplies the real implementation.
+	Escalation EscalationRouter
+}
+
+// ScheduledAgentHandler implements scheduler.Handler for the
+// "scheduled_agent" job type per spec §7.1. The 9-stage protocol
+// (stages 0-8 + dynamic idle_nudge_NofM during stage 7) is driven
+// by Dispatch; Reconcile (stub here, owned by E6.9) handles boot-
+// time recovery for non-terminal runs.
+//
+// All per-run state (jobspec, runID, reporter, worktree path,
+// completion signal channel) flows through method parameters or
+// closure capture in stage-helper methods. No mutable run state
+// lives on the handler struct so concurrent Dispatch invocations
+// don't share writeable fields.
+type ScheduledAgentHandler struct {
+	deps Deps
+}
+
+// NewScheduledAgentHandler returns a handler ready to register with
+// the A-B1 scheduler via scheduler.RegisterTypeHandler("scheduled_agent", h).
+// Caller owns the Deps lifecycle — the handler stores them as-is.
+func NewScheduledAgentHandler(deps Deps) *ScheduledAgentHandler {
+	return &ScheduledAgentHandler{deps: deps}
+}
+
+// Stages declares the canonical nine-stage dwell budget per spec §7.1.
+// Per-stage durations are upper bounds the A-B4 stalled-sweep consults
+// to decide when an in-stage agent is wedged.
+//
+// StageRunningWork is intentionally generous (24h) — the multi-fire
+// idle-nudge loop bounds the in-stage dwell, not this Stages() entry.
+// Without the wide ceiling, AC-9.2.10 long-running tests would trip
+// the sweep prematurely.
+func (h *ScheduledAgentHandler) Stages() map[string]time.Duration {
+	return map[string]time.Duration{
+		StageNameCollisionCheck:  5 * time.Second,
+		StageBudgetCheck:         5 * time.Second,
+		StageEnqueueWakeMessage:  10 * time.Second,
+		StageCreatingWorktree:    60 * time.Second, // includes EnsureMirrored sub-action
+		StageCreatingTmuxSession: 30 * time.Second,
+		StageLaunchingRuntime:    30 * time.Second,
+		StageWaitingForPaneReady: 60 * time.Second,
+		StageRunningWork:         24 * time.Hour,
+		StageTearingDown:         30 * time.Second,
+	}
+}
+
+// Dispatch implements scheduler.Handler.Dispatch for scheduled_agent
+// jobs. Per IMPORTANT #7 dual-review: all per-run state (jobspec,
+// runID, reporter, signals) lives in parameter/stack scope — no
+// mutable fields on the receiver.
+//
+// E6.1 Task 9 ships this as a placeholder; subsequent tasks implement
+// the 9 stages in order (Task 10 stage 0, Task 12 stage 2, etc.).
+func (h *ScheduledAgentHandler) Dispatch(ctx context.Context, job scheduler.JobSpec, runID string, reporter scheduler.StateReporter, signals <-chan *scheduler.Completion) error {
+	// TODO(thrum-6qmf.4.38..thrum-6qmf.4.61): implement stages 0-8.
+	return nil
+}
+
+// Reconcile implements scheduler.Handler.Reconcile for boot-time
+// recovery. Per spec §7.7 the real body lives in E6.9; E6.1 ships
+// this stub so the Handler interface is satisfied.
+//
+// The semantics E6.9 will fill in: enumerate non-terminal runs at
+// boot, classify each (resumable worktree intact, terminal-failed,
+// lost-track), and return the resolved state so the substrate can
+// advance scheduler_job_state.
+func (h *ScheduledAgentHandler) Reconcile(ctx context.Context, job scheduler.JobSpec, runID string, lastState scheduler.State) (scheduler.State, error) {
+	// TODO(thrum-6qmf.4.63): delegate to E6.9 ReconcileRun.
+	return lastState, nil
+}
