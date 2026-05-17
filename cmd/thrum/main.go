@@ -243,6 +243,7 @@ Environment variables:
 	rootCmd.AddCommand(rolesCmd())
 	rootCmd.AddCommand(purgeCmd())
 	rootCmd.AddCommand(telegramCmd())
+	rootCmd.AddCommand(emailCmd())
 	rootCmd.AddCommand(tmuxCmd())
 	rootCmd.AddCommand(restartCmd())
 	rootCmd.AddCommand(worktreeCmd())
