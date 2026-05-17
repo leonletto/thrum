@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -102,10 +103,14 @@ func buildSkillSubstrate(ctx context.Context, opts skillSubstrateOpts) (*skillSu
 	// incorrectly claimed Worker.Start triggered Reconcile internally;
 	// it does not.
 	if err := worker.Reconcile(ctx); err != nil {
-		// Surfaced via slog so operators can see boot-time reconcile
-		// failures, but doesn't unwind the substrate — live events
-		// still flow.
-		_ = err
+		// Log but do NOT unwind the substrate: the watcher's live
+		// event path still works, only the boot-time drift catch-up
+		// (mid-restart promotes + stale .tmp/.old cleanup) is missed.
+		// Ops visibility matters here — silent swallow would hide a
+		// systemic mirror failure behind a "live events still flow"
+		// veneer. Coordinator-approved pattern.
+		slog.Warn("skills: boot reconcile failed; daemon continues, live events flow via watcher",
+			"err", err)
 	}
 
 	sidecarPath := filepath.Join(opts.ThrumDir, "state", "skill-proposal-reminders.jsonl")
