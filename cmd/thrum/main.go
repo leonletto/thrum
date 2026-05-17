@@ -2730,22 +2730,167 @@ Examples:
 	return cmd
 }
 
-// reminderCmd returns the `thrum agent reminder` subcommand tree. Hosts
-// `set` for now; `list`, `<id>` lookup, and --defer/--clear/--cancel
-// flags land in subsequent A-B4 tasks.
+// reminderCmd returns the `thrum agent reminder` subcommand tree.
+// Hosts `set` and `list` subcommands; positional `<id>` invokes the
+// lookup view via the parent RunE. The positional form takes
+// precedence as the canonical lookup UX (Q3.1 "forcing-function
+// anchor") — cobra dispatches to a matching subcommand first, then
+// falls through to the parent RunE for non-subcommand args.
 func reminderCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "reminder",
+		Use:   "reminder [id]",
 		Short: "Manage reminders for an agent",
-		Long: `Reminders are persistent records with a fire-or-defer lifecycle.
-
-Set one with 'thrum agent reminder set --in 1h --body "finish release notes"'.
-Defer the alert with '--defer 30m', mark as resolved with '--clear', or
-withdraw it with '--cancel'.`,
+		Long: "Reminders are persistent records with a fire-or-defer lifecycle.\n\n" +
+			"Set one with 'thrum agent reminder set --in 1h --body \"finish release notes\"'.\n" +
+			"Look one up with 'thrum agent reminder <id>' — that's the forcing-function\n" +
+			"anchor: the fire message tells you \"run `thrum agent reminder <id>`\" and\n" +
+			"that lookup is where the full body + activity-since-raised banner lives.",
+		Args: cobra.MaximumNArgs(1),
+		RunE: runReminderLookup,
 	}
 	cmd.AddCommand(reminderSetCmd())
 	cmd.AddCommand(reminderListCmd())
 	return cmd
+}
+
+// runReminderLookup handles `thrum agent reminder <id>` when the arg
+// doesn't match a known subcommand (set / list). With zero args it
+// prints help. Action flags (--defer / --clear / --cancel) land in
+// thrum-6qmf.3.20 — this commit ships the bare lookup view.
+func runReminderLookup(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return cmd.Help()
+	}
+	id := args[0]
+
+	client, err := getClient()
+	if err != nil {
+		return fmt.Errorf("connect to daemon: %w", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	r, err := cli.ReminderGet(client, id)
+	if err != nil {
+		return err
+	}
+	fmt.Println(formatReminderLookup(*r, time.Now().UTC()))
+	return nil
+}
+
+// formatReminderLookup is the lookup-view renderer. Pure function so
+// it's unit-testable without a daemon. Renders per plan §Task 14:
+// ID + source + trigger_kind, trigger info, target, full body,
+// pane_snapshot preview (for condition rows), defer history, and the
+// Q3.4 "agent has been active for X since raised" banner for
+// condition rows.
+//
+// `now` is the clock seam (deterministic test output for the
+// activity-since-raised duration).
+func formatReminderLookup(r cli.ReminderRow, now time.Time) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Reminder %s\n", r.ID)
+	fmt.Fprintf(&b, "  source:       %s\n", r.Source)
+	fmt.Fprintf(&b, "  trigger_kind: %s\n", r.TriggerKind)
+	fmt.Fprintf(&b, "  state:        %s\n", r.State)
+
+	// Trigger info varies by kind.
+	switch r.TriggerKind {
+	case "time":
+		if r.NextReminderAt != nil {
+			fmt.Fprintf(&b, "  fires at:     %s\n", r.NextReminderAt.Format(time.RFC3339))
+		} else if r.LastFiredAt != nil {
+			fmt.Fprintf(&b, "  fired at:     %s\n", r.LastFiredAt.Format(time.RFC3339))
+		}
+	case "condition_pane_quiet":
+		fmt.Fprintf(&b, "  condition:    pane_quiet\n")
+		if r.LastFiredAt != nil {
+			fmt.Fprintf(&b, "  last fired:   %s\n", r.LastFiredAt.Format(time.RFC3339))
+		}
+		if r.NextReminderAt != nil {
+			fmt.Fprintf(&b, "  next rearm:   %s\n", r.NextReminderAt.Format(time.RFC3339))
+		}
+	}
+
+	// Target: single agent or chain.
+	if r.TargetAgent != "" {
+		fmt.Fprintf(&b, "  target:       @%s\n", r.TargetAgent)
+	}
+	if len(r.TargetChain) > 0 {
+		fmt.Fprintf(&b, "  chain:        %s\n", strings.Join(r.TargetChain, ", "))
+	}
+
+	// Raised-at + activity banner for condition rows.
+	if !r.RaisedAt.IsZero() {
+		fmt.Fprintf(&b, "  raised:       %s\n", r.RaisedAt.Format(time.RFC3339))
+		if r.TriggerKind == "condition_pane_quiet" && r.RaisedAt.Before(now) {
+			fmt.Fprintf(&b, "\n  Note: agent has been active for %s since this alert was raised.\n",
+				formatLookupElapsed(now.Sub(r.RaisedAt)))
+		}
+	}
+
+	if r.Body != "" {
+		fmt.Fprintf(&b, "\n  body:\n    %s\n", strings.ReplaceAll(r.Body, "\n", "\n    "))
+	}
+
+	// Pane snapshot preview (condition rows).
+	if r.TriggerKind == "condition_pane_quiet" && r.PaneSnapshot != "" {
+		fmt.Fprintf(&b, "\n  pane snapshot (%d bytes):\n", len(r.PaneSnapshot))
+		for _, line := range lastNLines(r.PaneSnapshot, 20) {
+			fmt.Fprintf(&b, "    %s\n", line)
+		}
+	}
+
+	// Terminal-state timestamps.
+	if r.ClearedAt != nil {
+		fmt.Fprintf(&b, "\n  cleared at:   %s\n", r.ClearedAt.Format(time.RFC3339))
+	}
+	if r.CancelledAt != nil {
+		fmt.Fprintf(&b, "\n  cancelled at: %s\n", r.CancelledAt.Format(time.RFC3339))
+	}
+
+	return b.String()
+}
+
+// formatLookupElapsed mirrors internal/cli/inbox.go's "Xm/Xh/Xd ago"
+// idiom; reused for the Q3.4 activity-since-raised banner. No "ago"
+// suffix since the caller phrases it as "active for X since ...".
+func formatLookupElapsed(d time.Duration) string {
+	if d < 0 {
+		d = -d
+	}
+	switch {
+	case d < time.Minute:
+		return "less than a minute"
+	case d < time.Hour:
+		mins := int(d.Minutes())
+		if mins == 1 {
+			return "1 minute"
+		}
+		return fmt.Sprintf("%d minutes", mins)
+	case d < 24*time.Hour:
+		hours := int(d.Hours())
+		if hours == 1 {
+			return "1 hour"
+		}
+		return fmt.Sprintf("%d hours", hours)
+	default:
+		days := int(d.Hours() / 24)
+		if days == 1 {
+			return "1 day"
+		}
+		return fmt.Sprintf("%d days", days)
+	}
+}
+
+// lastNLines returns the trailing n lines of s (or all lines if fewer
+// than n exist). Preserves the original line ordering. Used for
+// pane-snapshot preview rendering.
+func lastNLines(s string, n int) []string {
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	if len(lines) <= n {
+		return lines
+	}
+	return lines[len(lines)-n:]
 }
 
 // reminderListCmd implements `thrum agent reminder list`. Default

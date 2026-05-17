@@ -268,3 +268,141 @@ func TestFormatReminderListRow_LongBodyTruncated(t *testing.T) {
 		t.Errorf("body > 60 chars should be truncated with ...; got %s", got)
 	}
 }
+
+// --- lookup view tests ---
+
+func TestFormatReminderLookup_AgentTime(t *testing.T) {
+	fire := time.Date(2026, 5, 20, 9, 0, 0, 0, time.UTC)
+	raised := time.Date(2026, 5, 20, 8, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 5, 20, 8, 30, 0, 0, time.UTC)
+	r := cli.ReminderRow{
+		ID:             "reminder-docs_bot-100-0001",
+		Source:         "agent",
+		SourceAgent:    "docs_bot",
+		TriggerKind:    "time",
+		TargetAgent:    "docs_bot",
+		Body:           "finish release notes",
+		RaisedAt:       raised,
+		NextReminderAt: &fire,
+		State:          "open",
+	}
+	got := formatReminderLookup(r, now)
+	for _, want := range []string{
+		"reminder-docs_bot-100-0001",
+		"source:       agent",
+		"trigger_kind: time",
+		"state:        open",
+		"fires at:     2026-05-20T09:00:00Z",
+		"target:       @docs_bot",
+		"raised:       2026-05-20T08:00:00Z",
+		"finish release notes",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("output missing %q:\n%s", want, got)
+		}
+	}
+	// time-triggered rows should NOT carry the activity banner.
+	if strings.Contains(got, "active for") {
+		t.Errorf("time-triggered row should not have activity-since-raised banner:\n%s", got)
+	}
+}
+
+func TestFormatReminderLookup_ConditionWithActivityBanner(t *testing.T) {
+	raised := time.Date(2026, 5, 20, 6, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 5, 20, 8, 0, 0, 0, time.UTC) // 2h later
+	next := time.Date(2026, 5, 20, 8, 15, 0, 0, time.UTC)
+	r := cli.ReminderRow{
+		ID:             "reminder-docs_bot-200-1111",
+		Source:         "daemon",
+		TriggerKind:    "condition_pane_quiet",
+		TargetAgent:    "docs_bot",
+		TargetChain:    []string{"@coordinator_main", "leon@example.com"},
+		PaneSnapshot:   "line1\nline2\nline3\nline4\nline5",
+		RaisedAt:       raised,
+		NextReminderAt: &next,
+		State:          "open",
+	}
+	got := formatReminderLookup(r, now)
+
+	for _, want := range []string{
+		"condition:    pane_quiet",
+		"chain:        @coordinator_main, leon@example.com",
+		"agent has been active for 2 hours since this alert was raised",
+		"pane snapshot (",
+		"line1",
+		"line5",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestFormatReminderLookup_TerminalStatesIncludeTimestamps(t *testing.T) {
+	clearedAt := time.Date(2026, 5, 20, 10, 0, 0, 0, time.UTC)
+	r := cli.ReminderRow{
+		ID:        "reminder-x-1-2",
+		State:     "cleared",
+		ClearedAt: &clearedAt,
+	}
+	got := formatReminderLookup(r, time.Now().UTC())
+	if !strings.Contains(got, "cleared at:   2026-05-20T10:00:00Z") {
+		t.Errorf("missing cleared_at: %s", got)
+	}
+}
+
+func TestFormatLookupElapsed_Boundaries(t *testing.T) {
+	cases := []struct {
+		d    time.Duration
+		want string
+	}{
+		{30 * time.Second, "less than a minute"},
+		{time.Minute, "1 minute"},
+		{2 * time.Minute, "2 minutes"},
+		{time.Hour, "1 hour"},
+		{2 * time.Hour, "2 hours"},
+		{24 * time.Hour, "1 day"},
+		{72 * time.Hour, "3 days"},
+	}
+	for _, c := range cases {
+		got := formatLookupElapsed(c.d)
+		if got != c.want {
+			t.Errorf("formatLookupElapsed(%v) = %q, want %q", c.d, got, c.want)
+		}
+	}
+}
+
+func TestLastNLines_FewerThanN(t *testing.T) {
+	got := lastNLines("a\nb\nc", 10)
+	if len(got) != 3 || got[0] != "a" || got[2] != "c" {
+		t.Errorf("got %q, want [a b c]", got)
+	}
+}
+
+func TestLastNLines_TruncatesToLastN(t *testing.T) {
+	in := "a\nb\nc\nd\ne"
+	got := lastNLines(in, 3)
+	if len(got) != 3 || got[0] != "c" || got[2] != "e" {
+		t.Errorf("got %q, want [c d e]", got)
+	}
+}
+
+func TestLastNLines_TrimsTrailingNewline(t *testing.T) {
+	got := lastNLines("a\nb\n", 10)
+	if len(got) != 2 || got[1] != "b" {
+		t.Errorf("got %q, want [a b]", got)
+	}
+}
+
+func TestReminderCmd_NoArgsPrintsHelp(t *testing.T) {
+	cmd := reminderCmd()
+	cmd.SetArgs([]string{})
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	// Help output goes to stdout by default. The test only verifies
+	// that no error is returned and the help path was taken — actual
+	// help-text golden tests live in thrum-6qmf.3.22.
+	if err := cmd.Execute(); err != nil {
+		t.Errorf("no-args should print help and return nil; got %v", err)
+	}
+}
