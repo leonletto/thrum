@@ -6293,6 +6293,7 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	server.RegisterHandler("skill.revise", skillHandler.HandleRevise)
 	server.RegisterHandler("skill.delete", skillHandler.HandleDelete)
 	server.RegisterHandler("skill.sync", skillHandler.HandleSync)
+	server.RegisterHandler("skill.validate", skillHandler.HandleValidate)
 
 	// Monitor jobs — SECURITY: these handlers spawn child processes with the
 	// daemon's privileges, so they are registered on the unix-socket `server`

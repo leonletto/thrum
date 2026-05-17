@@ -819,22 +819,101 @@ func runSkillSync(out io.Writer, names []string) error {
 
 // skillValidateCmd implements `thrum skill validate [<name>]` per
 // spec §7.9. Optional positional <name> restricts to one skill;
-// without arg, validates every promoted + proposed skill.
+// without arg, validates every promoted skill.
 func skillValidateCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "validate [<name>]",
 		Short: "Schema-conformance check for skill frontmatter",
 		Long: `Run the E8.4 validator against a single named skill or
-(without args) every promoted + proposed skill. Surfaces:
+(without args) every promoted skill in .thrum/skills/. Surfaces:
 frontmatter_invalid / duplicate_field / missing_required /
 name_mismatch / regex_violation findings.
 
 Used post-merge as a defense against malformed frontmatter that
 escaped propose-time validation (e.g. a git merge conflict that
-duplicated the thrum: block).`,
+duplicated the thrum: block).
+
+Exit code is 0 when every skill validates cleanly; 1 when any skill
+surfaces a finding. Suitable as a pre-commit hook or CI gate.`,
 		Args: cobra.MaximumNArgs(1),
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return fmt.Errorf("skill.validate RPC body lands at E10.8 (thrum-6qmf.2.21)")
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := ""
+			if len(args) > 0 {
+				name = args[0]
+			}
+			err := runSkillValidate(cmd.OutOrStdout(), name)
+			if err == errSkillValidateFail {
+				osExit(1)
+			}
+			return err
 		},
 	}
+	return cmd
+}
+
+// errSkillValidateFail is the sentinel returned by runSkillValidate
+// when one or more skills surfaced findings. The cobra RunE turns it
+// into an osExit(1); cobra would do that anyway, but the explicit
+// sentinel keeps the "failure = exit 1" wire visible to readers.
+var errSkillValidateFail = errors.New("skill validation: one or more skills failed")
+
+// runSkillValidate dispatches the skill.validate RPC and renders a
+// human-readable table to stdout. JSON mode emits the raw response.
+// Returns errSkillValidateFail when any result has status != "ok"
+// so the caller can choose the exit code via osExit; the renderer
+// itself is side-effect-free.
+func runSkillValidate(out io.Writer, name string) error {
+	agentID, err := resolveLocalAgentID()
+	if err != nil {
+		return fmt.Errorf("failed to resolve agent identity: %w", err)
+	}
+	client, err := getClient()
+	if err != nil {
+		return fmt.Errorf("failed to connect to daemon: %w", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	req := map[string]any{"caller_agent_id": agentID}
+	if name != "" {
+		req["name"] = name
+	}
+	var resp rpc.SkillValidateResponse
+	if err := client.Call("skill.validate", req, &resp); err != nil {
+		return fmt.Errorf("skill.validate RPC failed: %w", err)
+	}
+	if flagJSON {
+		if err := cli.EmitJSON(resp); err != nil {
+			return err
+		}
+		if rpc.ClassifyValidationResults(resp.Results) != 0 {
+			return errSkillValidateFail
+		}
+		return nil
+	}
+	w := skillWriter{w: out}
+	if resp.Error != "" {
+		w.Fprintf("VALIDATE ERROR: %s\n", resp.Error)
+		if w.err != nil {
+			return w.err
+		}
+		return errors.New(resp.Error)
+	}
+	if len(resp.Results) == 0 {
+		w.Fprintln("(no skills to validate)")
+		return w.err
+	}
+	w.Fprintln("NAME\tSTATUS\tFINDINGS")
+	for _, r := range resp.Results {
+		w.Fprintf("%s\t%s\t%d\n", r.Name, r.Status, len(r.Findings))
+		for _, f := range r.Findings {
+			w.Fprintf("    - %s @ %s — %s\n", f.Kind, f.Path, f.Detail)
+		}
+	}
+	if w.err != nil {
+		return w.err
+	}
+	if rpc.ClassifyValidationResults(resp.Results) != 0 {
+		return errSkillValidateFail
+	}
+	return nil
 }

@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -840,6 +841,199 @@ func (h *SkillHandler) ensurePromoteDefaults() {
 	if h.reconciler == nil && h.worker != nil {
 		h.reconciler = h.worker
 	}
+}
+
+// --- HandleValidate ---
+
+// SkillValidateRequest is the params shape for skill.validate
+// (design-spec §7.9). Empty Name validates every skill in the library.
+type SkillValidateRequest struct {
+	CallerAgentID string `json:"caller_agent_id"`
+	Name          string `json:"name,omitempty"`
+}
+
+// ValidationFinding is one validator finding, mirroring skills.Finding
+// with explicit JSON tags for stable wire shape.
+type ValidationFinding struct {
+	Kind   string `json:"kind"`
+	Path   string `json:"path,omitempty"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// ValidationResult is one per-skill validation outcome. Status is
+// "ok" / "invalid" / "duplicate_provenance" per spec §15. The
+// CLI's exit-code classifier (ClassifyValidationResults) consumes
+// this slice; the JSON wire shape is consumed by the CLI's
+// --format=json path.
+type ValidationResult struct {
+	Name     string              `json:"name"`
+	Status   string              `json:"status"`
+	Findings []ValidationFinding `json:"findings,omitempty"`
+}
+
+// SkillValidateResponse is the JSON shape for skill.validate. Results
+// is one entry per validated skill. Error populates only for system-
+// level failures (Library read errors); per-skill validation findings
+// surface via the status + findings fields on each entry.
+type SkillValidateResponse struct {
+	Results []ValidationResult `json:"results"`
+	Error   string             `json:"error,omitempty"`
+}
+
+// ClassifyValidationResults returns the CLI exit code for a validate
+// result slice. 0 when every result is "ok" (or no results); 1 when
+// any result is non-"ok". Pure function so the cobra exit-code path
+// is testable without subprocess spawning.
+func ClassifyValidationResults(results []ValidationResult) int {
+	for _, r := range results {
+		if r.Status != "ok" {
+			return 1
+		}
+	}
+	return 0
+}
+
+// HandleValidate serves skill.validate (design-spec §7.9 + §15).
+// Any-agent auth per §7.10. For each skill (or just the named one):
+//
+//  1. Read the raw SKILL.md bytes
+//  2. Run ValidateRawFrontmatter on the raw bytes — catches duplicate
+//     top-level keys (the post-merge defense per §15)
+//  3. Run ValidatePromoted on the parsed frontmatter — catches every
+//     missing_required / regex_violation / name_mismatch finding
+//  4. Combine: duplicate findings → status="duplicate_provenance";
+//     other findings → status="invalid"; clean → status="ok"
+//
+// Missing .thrum/skills/ is NOT an error: a fresh repo returns an
+// empty results slice (consistent with Library.ListPending's
+// fresh-repo handling).
+func (h *SkillHandler) HandleValidate(ctx context.Context, params json.RawMessage) (any, error) {
+	var req SkillValidateRequest
+	if len(params) > 0 {
+		if err := json.Unmarshal(params, &req); err != nil {
+			return nil, fmt.Errorf("invalid request: %w", err)
+		}
+	}
+	if req.CallerAgentID == "" {
+		return nil, errors.New("unauthorized: caller_agent_id is required")
+	}
+
+	h.ensurePromoteDefaults()
+
+	if h.validator == nil {
+		return SkillValidateResponse{Error: "validator_not_wired"}, nil
+	}
+
+	var toValidate []skills.Skill
+	if req.Name != "" {
+		s, err := h.library.Get(ctx, req.Name)
+		if err != nil {
+			if errors.Is(err, skills.ErrSkillNotFound) {
+				return SkillValidateResponse{Error: ErrSkillNotFoundCode}, nil
+			}
+			return nil, fmt.Errorf("lookup skill: %w", err)
+		}
+		toValidate = []skills.Skill{*s}
+	} else {
+		list, err := h.library.List(ctx)
+		if err != nil {
+			// Empty library (fresh repo) is not an error: callers
+			// expect to wire `thrum skill validate` into pre-commit
+			// hooks before any skill exists.
+			if errors.Is(err, skills.ErrLibraryNotInitialized) {
+				return SkillValidateResponse{Results: nil}, nil
+			}
+			return nil, fmt.Errorf("list skills: %w", err)
+		}
+		toValidate = list
+	}
+
+	results := make([]ValidationResult, 0, len(toValidate))
+	for _, s := range toValidate {
+		results = append(results, h.validateOne(s))
+	}
+	return SkillValidateResponse{Results: results}, nil
+}
+
+// validateOne runs both the raw-frontmatter merge-conflict check AND
+// the parsed-form ValidatePromoted check on a single skill, then
+// combines findings into a ValidationResult with the appropriate
+// status discriminator.
+func (h *SkillHandler) validateOne(s skills.Skill) ValidationResult {
+	out := ValidationResult{Name: s.Name, Status: "ok"}
+
+	// Re-read the raw bytes — Library.List already populated s.Frontmatter +
+	// s.Body but discarded the raw frontmatter region; we need the raw
+	// bytes for the ValidateRawFrontmatter duplicate-key walker.
+	raw, readErr := os.ReadFile(s.Path) //nolint:gosec // s.Path comes from Library.List (containment guaranteed)
+	if readErr != nil {
+		out.Status = "invalid"
+		out.Findings = append(out.Findings, ValidationFinding{
+			Kind:   "read_error",
+			Detail: readErr.Error(),
+		})
+		return out
+	}
+	// Strip body — ValidateRawFrontmatter wants only the YAML region.
+	// Library uses splitFrontmatter to do this; for the validator we
+	// pass the entire file's leading "---" block. The walker is
+	// tolerant of body presence: it looks at the first DocumentNode's
+	// MappingNode only.
+	fmBytes := extractFrontmatterRegion(raw)
+
+	dupFindings := h.validator.ValidateRawFrontmatter(fmBytes)
+	for _, f := range dupFindings {
+		out.Findings = append(out.Findings, ValidationFinding{Kind: f.Kind, Path: f.Path, Detail: f.Detail})
+	}
+
+	parsedFindings := h.validator.ValidatePromoted(&s)
+	for _, f := range parsedFindings {
+		out.Findings = append(out.Findings, ValidationFinding{Kind: f.Kind, Path: f.Path, Detail: f.Detail})
+	}
+
+	// Status discriminator: a duplicate_field finding outranks
+	// missing_required + regex_violation in surface treatment because
+	// it usually indicates a merge-conflict aftermath and the operator
+	// fix is different (resolve the merge, not edit a field).
+	switch {
+	case findingsContain(out.Findings, "duplicate_field"):
+		out.Status = "duplicate_provenance"
+	case len(out.Findings) > 0:
+		out.Status = "invalid"
+	default:
+		out.Status = "ok"
+	}
+	return out
+}
+
+// findingsContain reports whether any finding's Kind matches the
+// supplied kind. Tiny helper — keeps the status switch above readable.
+func findingsContain(findings []ValidationFinding, kind string) bool {
+	for _, f := range findings {
+		if f.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
+// extractFrontmatterRegion returns the YAML bytes between the leading
+// "---\n" and the next "\n---" line. Returns the full input when
+// either delimiter is absent (ValidateRawFrontmatter is tolerant of
+// non-YAML input — it surfaces an ErrFrontmatterInvalid finding
+// rather than panicking).
+func extractFrontmatterRegion(raw []byte) []byte {
+	if !bytes.HasPrefix(raw, []byte("---")) {
+		return raw
+	}
+	rest := raw[3:]
+	if i := bytes.IndexByte(rest, '\n'); i >= 0 {
+		rest = rest[i+1:]
+	}
+	if front, _, ok := bytes.Cut(rest, []byte("\n---")); ok {
+		return front
+	}
+	return rest
 }
 
 // --- HandleSync ---
