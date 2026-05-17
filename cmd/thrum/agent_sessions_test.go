@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -256,6 +257,121 @@ func TestRenderDefault_NoBigPicturePlaceholder(t *testing.T) {
 	})
 	if !strings.Contains(out, "(no big-picture summary)") {
 		t.Errorf("missing placeholder: %q", out)
+	}
+}
+
+// === renderVerbose tests (Task 11) ===
+
+func TestRenderVerbose_PreservesLineBreaks(t *testing.T) {
+	sessions := []SessionEntry{
+		{
+			Timestamp:     mustParseTime(t, "2026-05-17T15:32:18Z"),
+			Size:          1024,
+			Reason:        "external",
+			BigPictureRaw: "Line1.\nLine2.\nLine3.",
+		},
+	}
+
+	out := renderToString(t, func(cmd *cobra.Command) error {
+		return renderVerbose(cmd, "alpha", sessions)
+	})
+	for _, line := range []string{"Line1.", "Line2.", "Line3."} {
+		if !strings.Contains(out, line) {
+			t.Errorf("missing line %q: %q", line, out)
+		}
+	}
+	// Each line indented under "Big picture:" header.
+	if !strings.Contains(out, "      Line1.") {
+		t.Errorf("body lines should be indented under Big picture header: %q", out)
+	}
+}
+
+func TestRenderVerbose_MissingBigPicture_FallbackString(t *testing.T) {
+	sessions := []SessionEntry{
+		{
+			Timestamp:     mustParseTime(t, "2026-05-17T15:32:18Z"),
+			Size:          512,
+			Reason:        "external",
+			BigPictureRaw: "",
+		},
+	}
+	out := renderToString(t, func(cmd *cobra.Command) error {
+		return renderVerbose(cmd, "alpha", sessions)
+	})
+	if !strings.Contains(out, "(no §1 section in this session)") {
+		t.Errorf("missing fallback for empty BigPictureRaw: %q", out)
+	}
+}
+
+// === renderJSON tests (Task 11) ===
+
+func TestRenderJSON_NewlineDelimited_AllEightFields(t *testing.T) {
+	sessions := []SessionEntry{
+		{
+			Timestamp:            mustParseTime(t, "2026-05-17T15:32:18Z"),
+			Size:                 1024,
+			Reason:               "external",
+			Path:                 "/abs/path/snapshot.md",
+			AgentID:              "alpha",
+			SessionID:            "ses_test",
+			MachineID:            "leon-m1pro.local",
+			BigPictureNormalized: "Locked the spec.",
+		},
+	}
+
+	out := renderToString(t, func(cmd *cobra.Command) error {
+		return renderJSON(cmd, sessions)
+	})
+
+	// Single line of JSON ending in newline.
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 JSON line, got %d: %q", len(lines), out)
+	}
+
+	var rec map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &rec); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %q", err, lines[0])
+	}
+
+	wantFields := []string{"timestamp", "size", "reason", "path", "agent_id", "session_id", "machine_id", "big_picture"}
+	for _, f := range wantFields {
+		if _, ok := rec[f]; !ok {
+			t.Errorf("JSON record missing field %q: %v", f, rec)
+		}
+	}
+
+	if rec["agent_id"] != "alpha" {
+		t.Errorf("agent_id: got %v, want 'alpha'", rec["agent_id"])
+	}
+	if rec["big_picture"] != "Locked the spec." {
+		t.Errorf("big_picture: got %v, want 'Locked the spec.'", rec["big_picture"])
+	}
+	if rec["size"] != float64(1024) { // JSON unmarshal int → float64
+		t.Errorf("size: got %v, want 1024", rec["size"])
+	}
+}
+
+func TestRenderJSON_MultipleRecords_EachOnOwnLine(t *testing.T) {
+	sessions := []SessionEntry{
+		{Timestamp: mustParseTime(t, "2026-05-17T15:00:00Z"), AgentID: "alpha", BigPictureNormalized: "first"},
+		{Timestamp: mustParseTime(t, "2026-05-17T14:00:00Z"), AgentID: "alpha", BigPictureNormalized: "second"},
+		{Timestamp: mustParseTime(t, "2026-05-17T13:00:00Z"), AgentID: "alpha", BigPictureNormalized: "third"},
+	}
+	out := renderToString(t, func(cmd *cobra.Command) error {
+		return renderJSON(cmd, sessions)
+	})
+
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 JSON lines, got %d", len(lines))
+	}
+	// Each line must independently parse as a valid JSON object.
+	for i, line := range lines {
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			t.Errorf("line %d invalid JSON: %v\nline: %q", i, err, line)
+		}
 	}
 }
 

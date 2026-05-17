@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -216,18 +217,65 @@ func renderDefault(cmd *cobra.Command, agentID string, sessions []SessionEntry) 
 	return nil
 }
 
-// renderVerbose is the Task 11 surface — stubbed here so Task 10
-// can compile + flag-validate cleanly. Implementation lands when
-// Task 11 (thrum-6qmf.15.3) wires the multi-line §1 body output.
+// renderVerbose emits one session per stanza with the full raw §1
+// body indented under each. Spec §6.3: header followed by numbered
+// entries; each entry's "Big picture" body preserves the original
+// agent-authored line breaks (raw=true on ParseBigPicture). Sessions
+// missing §1 (auto-extracted snapshots, agents that pre-date the
+// Task 14 skill template) render a "(no §1 section)" placeholder.
 func renderVerbose(cmd *cobra.Command, agentID string, sessions []SessionEntry) error {
-	return fmt.Errorf("--verbose not yet implemented (Task 11)")
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "Sessions for %s (%d total, most recent %s):\n\n",
+		agentID, len(sessions), sessions[0].Timestamp.Format("2006-01-02"))
+	for i, s := range sessions {
+		fmt.Fprintf(out, "[%d] %s · %s · %s\n",
+			i+1, s.Timestamp.Format(time.RFC3339), s.Reason, humanSize(s.Size))
+		if s.BigPictureRaw == "" {
+			fmt.Fprintln(out, "    (no §1 section in this session)")
+		} else {
+			fmt.Fprintln(out, "    Big picture:")
+			for line := range strings.SplitSeq(s.BigPictureRaw, "\n") {
+				fmt.Fprintf(out, "      %s\n", line)
+			}
+		}
+		fmt.Fprintln(out)
+	}
+	return nil
 }
 
-// renderJSON is the Task 11 surface — same stub pattern as
-// renderVerbose. Task 11 wires the spec §6.4 newline-delimited
-// JSON output.
+// renderJSON emits newline-delimited JSON records per spec §6.4. One
+// record per session, descending by timestamp. The 8-field schema is
+// frozen by the spec; downstream consumers (other CLI tools, scripts)
+// parse it field-by-field. Uses a typed struct (not map[string]any)
+// to lock the field order in JSON output for diff-friendly review.
 func renderJSON(cmd *cobra.Command, sessions []SessionEntry) error {
-	return fmt.Errorf("--json not yet implemented (Task 11)")
+	type jsonRecord struct {
+		Timestamp  string `json:"timestamp"`
+		Size       int64  `json:"size"`
+		Reason     string `json:"reason"`
+		Path       string `json:"path"`
+		AgentID    string `json:"agent_id"`
+		SessionID  string `json:"session_id"`
+		MachineID  string `json:"machine_id"`
+		BigPicture string `json:"big_picture"`
+	}
+	enc := json.NewEncoder(cmd.OutOrStdout())
+	for _, s := range sessions {
+		rec := jsonRecord{
+			Timestamp:  s.Timestamp.Format(time.RFC3339),
+			Size:       s.Size,
+			Reason:     s.Reason,
+			Path:       s.Path,
+			AgentID:    s.AgentID,
+			SessionID:  s.SessionID,
+			MachineID:  s.MachineID,
+			BigPicture: s.BigPictureNormalized,
+		}
+		if err := enc.Encode(rec); err != nil {
+			return fmt.Errorf("encode record: %w", err)
+		}
+	}
+	return nil
 }
 
 // listAllAgents is the Task 12 surface — same stub pattern as the
@@ -298,12 +346,14 @@ func loadSessionsFromThrumRoot(thrumRoot, agentID string) ([]SessionEntry, error
 		if err != nil {
 			continue
 		}
-		// Parse frontmatter for saved_at (mtime fallback) + §1 body.
+		// Parse frontmatter for saved_at (mtime fallback) + §1 body
+		// (both normalized + raw for the renderers that need each).
 		ts := sessionarchive.ParseSavedAtFrontmatter(string(content), info.ModTime())
-		bp := sessionarchive.ParseBigPicture(content, false)
-		// Reason / session_id / machine_id are populated by Task 11 (verbose + json modes need them).
-		// Task 10 default render only needs Timestamp / Size / Reason / BigPictureNormalized.
+		bpNormalized := sessionarchive.ParseBigPicture(content, false)
+		bpRaw := sessionarchive.ParseBigPicture(content, true)
 		reason := extractFrontmatterField(content, "reason")
+		sessionID := extractFrontmatterField(content, "session_id")
+		machineID := extractFrontmatterField(content, "machine_id")
 
 		sessions = append(sessions, SessionEntry{
 			Timestamp:            ts,
@@ -311,7 +361,10 @@ func loadSessionsFromThrumRoot(thrumRoot, agentID string) ([]SessionEntry, error
 			Reason:               reason,
 			Path:                 path,
 			AgentID:              agentID,
-			BigPictureNormalized: bp,
+			SessionID:            sessionID,
+			MachineID:            machineID,
+			BigPictureNormalized: bpNormalized,
+			BigPictureRaw:        bpRaw,
 		})
 	}
 
