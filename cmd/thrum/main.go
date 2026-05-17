@@ -7549,6 +7549,16 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// keys); zero values fall back to documented defaults.
 	wireSweep(sched, remindersStore, st.DB(), thrumDir, &thrumCfg.Daemon)
 
+	// A-B4 reminder dispatcher: register internal.reminder_dispatch with
+	// the real DeliverySink (swaps the NoopFireSink placeholder from
+	// thrum-6qmf.3.27). MessageHandler is already constructed above and
+	// is the canonical delivery path — reminders deliver via inbox just
+	// like any agent-to-agent message. Email + supervisor branches are
+	// nil for now: D-B1 substrate not yet wired (DeliverySink log-and-
+	// skips), B-B1 supervisor pane registry pending (DeliverySink falls
+	// through to normal inbox send).
+	wireReminders(sched, remindersStore, messageHandler, supervisorID, &thrumCfg.Daemon)
+
 	if err := sched.Start(ctx); err != nil {
 		return fmt.Errorf("start scheduler: %w", err)
 	}
