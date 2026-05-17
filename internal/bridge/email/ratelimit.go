@@ -74,21 +74,26 @@ func NewLimiter(db *sql.DB, cfg LimiterConfig, notifier CoordinatorNotifier) *Li
 //   - When the global ceiling is hit, paused=false and per-peer state is
 //     untouched.
 func (l *Limiter) IncrementInbound(ctx context.Context, peerKey string) (allowed bool, paused bool, err error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	// The notifier call (WebSocket RPC) is high-latency network I/O;
+	// firing it inside the mutex serializes all concurrent Increments
+	// behind a stalled WSClient. Record the transition under the lock,
+	// fire the alert after release.
+	var fireAlert bool
 
-	// Global ceiling check — minute-scoped, does not affect per-peer state.
+	l.mu.Lock()
 	if exceeded := l.bumpGlobalInbound(); exceeded {
+		l.mu.Unlock()
 		return false, false, nil
 	}
 
 	entry := l.ensureEntry(peerKey)
 	if err := l.maybeRollover(ctx, peerKey, entry); err != nil {
+		l.mu.Unlock()
 		return false, false, err
 	}
 
-	// If already paused, return immediately — don't bump the counter further.
 	if !entry.pausedAt.IsZero() {
+		l.mu.Unlock()
 		return false, true, nil
 	}
 
@@ -98,15 +103,18 @@ func (l *Limiter) IncrementInbound(ctx context.Context, peerKey string) (allowed
 		wasUnpaused := entry.pausedAt.IsZero()
 		entry.pausedAt = time.Now().UTC()
 		if err := l.persistPause(ctx, peerKey, entry); err != nil {
+			l.mu.Unlock()
 			return false, true, err
 		}
-		// Alert only fires on the transition from unpaused → paused.
-		if wasUnpaused {
+		fireAlert = wasUnpaused
+		l.mu.Unlock()
+		if fireAlert {
 			l.sendAlert(ctx, peerKey, "inbound")
 		}
 		return false, true, nil
 	}
 
+	l.mu.Unlock()
 	return true, false, nil
 }
 
@@ -114,15 +122,18 @@ func (l *Limiter) IncrementInbound(ctx context.Context, peerKey string) (allowed
 // Semantics mirror IncrementInbound: the global ceiling does NOT apply to
 // outbound; only the per-peer outbound threshold governs.
 func (l *Limiter) IncrementOutbound(ctx context.Context, peerKey string) (allowed bool, paused bool, err error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	// Same lock-release-before-notify discipline as IncrementInbound.
+	var fireAlert bool
 
+	l.mu.Lock()
 	entry := l.ensureEntry(peerKey)
 	if err := l.maybeRollover(ctx, peerKey, entry); err != nil {
+		l.mu.Unlock()
 		return false, false, err
 	}
 
 	if !entry.pausedAt.IsZero() {
+		l.mu.Unlock()
 		return false, true, nil
 	}
 
@@ -132,14 +143,18 @@ func (l *Limiter) IncrementOutbound(ctx context.Context, peerKey string) (allowe
 		wasUnpaused := entry.pausedAt.IsZero()
 		entry.pausedAt = time.Now().UTC()
 		if err := l.persistPause(ctx, peerKey, entry); err != nil {
+			l.mu.Unlock()
 			return false, true, err
 		}
-		if wasUnpaused {
+		fireAlert = wasUnpaused
+		l.mu.Unlock()
+		if fireAlert {
 			l.sendAlert(ctx, peerKey, "outbound")
 		}
 		return false, true, nil
 	}
 
+	l.mu.Unlock()
 	return true, false, nil
 }
 

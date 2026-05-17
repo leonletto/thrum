@@ -130,9 +130,9 @@ func (o *Outbound) handle(ctx context.Context, notif MessageNotification) {
 	// MsgMap is keyed Message-Id → ThrumMsgID (inbound direction); a full reverse
 	// map would require a separate data structure. For now we reconstruct using
 	// our own daemon-short, which is correct for supervisor-relay replies (the
-	// common case — the parent outbound was also ours).
-	// TODO(D-B1.x): full reverse lookup once cross-daemon reply-threading is
-	// exercised by integration tests.
+	// common case — the parent outbound was also ours). Cross-daemon reverse
+	// lookup is a v0.11.x extension once integration tests exercise it
+	// (tracked under follow-up; see thrum-6qmf.8 sibling discussion).
 	var inReplyTo string
 	var references []string
 	if notif.ReplyTo != "" {
