@@ -155,7 +155,20 @@ func Archive(
 		return nil, fmt.Errorf("read snapshot: %w", err)
 	}
 
-	savedAt := ParseSavedAtFrontmatter(string(content), info.ModTime())
+	// Three-step savedAt fallback chain per spec §3.2 step 6:
+	//   (1) parse saved_at from YAML frontmatter (~99% case)
+	//   (2) fall back to source file mtime (parse failed; rare)
+	//   (3) fall back to nowFn() (parse failed AND mtime is zero;
+	//       only possible if some upstream wrote a snapshot with no
+	//       saved_at AND set the file mtime to time.Time{} —
+	//       defensive, not a user-reachable path in normal operation)
+	//
+	// Using the OK-returning parse form so each layer's contribution
+	// is observable — tests verify (1), (2), and (3) independently.
+	savedAt, parseOK := parseSavedAtFrontmatterOK(string(content))
+	if !parseOK {
+		savedAt = info.ModTime()
+	}
 	if savedAt.IsZero() {
 		savedAt = nowFn()
 	}

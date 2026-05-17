@@ -17,21 +17,41 @@ import (
 //  3. locate "saved_at" (case-sensitive), trim surrounding whitespace
 //  4. parse as RFC 3339 nano; malformed → fallback
 //
-// Single-pass scanner; no YAML library dependency. The downstream
-// caller (HandleSessionArchive) chains: parseSavedAt(content, mtime),
-// then mtime→time.Now() if mtime itself can't be read.
+// Single-pass scanner; no YAML library dependency.
 //
-// parseBigPicture lives alongside this function (added by Task 4
-// thrum-6qmf.15.9); both consumers operate on the same frontmatter
-// block but parseBigPicture descends into the body section instead.
+// Implementation note: this thin wrapper exists for callers that already
+// have a sensible fallback value (mtime, current time) and want a single
+// time.Time back. Callers that need to KNOW whether the parse succeeded
+// — to chain a multi-step fallback (parse → mtime → now) and observe
+// where each layer landed — should use parseSavedAtFrontmatterOK
+// directly. Archive() uses the OK form so its three-layer fallback
+// chain is explicit and testable per spec §3.2 step 6.
 func ParseSavedAtFrontmatter(content string, fallback time.Time) time.Time {
+	if ts, ok := parseSavedAtFrontmatterOK(content); ok {
+		return ts
+	}
+	return fallback
+}
+
+// parseSavedAtFrontmatterOK is the inner OK-returning form of
+// ParseSavedAtFrontmatter. Returns (parsedTime, true) when the
+// frontmatter block parses cleanly AND contains a valid RFC 3339
+// saved_at value. Returns (time.Time{}, false) on any failure mode:
+// missing opening "---\n", missing closing "---\n", missing key,
+// malformed value.
+//
+// Package-private because external callers should keep using the
+// fallback-wrapping form. Internal callers (notably archive.go's
+// Archive function) use this directly so the multi-step fallback
+// chain is observable.
+func parseSavedAtFrontmatterOK(content string) (time.Time, bool) {
 	rest, ok := strings.CutPrefix(content, "---\n")
 	if !ok {
-		return fallback
+		return time.Time{}, false
 	}
 	block, _, ok := strings.Cut(rest, "\n---\n")
 	if !ok {
-		return fallback
+		return time.Time{}, false
 	}
 	for line := range strings.SplitSeq(block, "\n") {
 		value, ok := strings.CutPrefix(line, "saved_at:")
@@ -41,11 +61,11 @@ func ParseSavedAtFrontmatter(content string, fallback time.Time) time.Time {
 		value = strings.TrimSpace(value)
 		parsed, err := time.Parse(time.RFC3339Nano, value)
 		if err != nil {
-			return fallback
+			return time.Time{}, false
 		}
-		return parsed
+		return parsed, true
 	}
-	return fallback
+	return time.Time{}, false
 }
 
 // ParseBigPicture extracts the §1 "Big picture — what shipped this

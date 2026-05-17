@@ -86,11 +86,18 @@ every agent's archive in one pass.`,
 
 	archiveCmd := &cobra.Command{
 		Use:   "archive <agent-id>",
-		Short: "Invoke session.archive RPC for an agent (debug)",
+		Short: "Invoke session.archive RPC for an agent (DEBUG ONLY)",
 		Long: `Debug-only invocation of the session.archive RPC for the named
-agent. Manually triggers the same archive flow the daemon runs
-during prime-context build. Useful for dogfooding and manual
-testing; not part of any production workflow.
+agent. Manually triggers the same archive flow that 'thrum prime'
+runs at session start.
+
+**Not for production use.** Running this concurrently with
+'thrum prime' for the same agent creates a race: whichever
+invocation reaches HandleSessionArchive first claims the
+snapshot file, and the loser sees an empty (no-snapshot)
+response. Scripts and automation should rely on 'thrum prime'
+to drive archives; this subcommand exists only for manual
+dogfooding and operator-side reproduction of archive bugs.
 
 Per Q-Spec-6 (spec §3.1).`,
 		Args: cobra.ExactArgs(1),
