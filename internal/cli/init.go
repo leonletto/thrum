@@ -27,6 +27,18 @@ type InitOptions struct {
 	RepoPath string
 	Force    bool
 	Stealth  bool // Use .git/info/exclude instead of .gitignore
+
+	// Yes skips interactive confirmation prompts (e.g. the v0.10.x →
+	// v0.11 upgrade prompt that asks whether to add !.thrum/skills/ to
+	// an existing .gitignore). Equivalent to --yes / --no-interactive.
+	Yes bool
+
+	// Prompter, when non-nil, drives interactive confirmations during
+	// init steps that materialize changes to tracked files (notably the
+	// skills-substrate .gitignore upgrade per spec §10.2). When nil and
+	// Yes is false, those steps default to auto-apply — matching the
+	// AC's non-interactive default behavior.
+	Prompter Prompter
 }
 
 // SyncReconciliation describes how Init should set up the sync branch and
@@ -245,6 +257,15 @@ func Init(opts InitOptions) error {
 		return retErr
 	}
 
+	// 8. Skills substrate bootstrap (C-B1 E8.3): .thrum/skills/.gitkeep,
+	// .gitignore negation, skills.pending_reminder_after default. Runs
+	// after config.json materializes (step 6) so applySkillsConfigDefaults
+	// has something to load + merge.
+	if err := applySkillsBootstrap(opts); err != nil {
+		retErr = fmt.Errorf("failed to bootstrap skills substrate: %w", err)
+		return retErr
+	}
+
 	// Note: Daemon start will be implemented when daemon is ready (Epic 2)
 
 	return nil
@@ -433,6 +454,13 @@ func reinitIdentityOnly(opts InitOptions) error {
 	}
 	if _, err := identity.Bootstrap(thrumDir, opts.RepoPath); err != nil {
 		return fmt.Errorf("bootstrap identity: %w", err)
+	}
+	// Skills bootstrap also runs on the row-1 short-circuit so a
+	// v0.10.x → v0.11 upgrade via `thrum init --force` on a sync-
+	// configured install picks up the .gitignore negation +
+	// skills.pending_reminder_after default. Idempotent on repeat.
+	if err := applySkillsBootstrap(opts); err != nil {
+		return fmt.Errorf("bootstrap skills substrate: %w", err)
 	}
 	return nil
 }

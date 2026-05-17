@@ -50,7 +50,31 @@ type ThrumConfig struct {
 	// scheduler package — the scheduler's ReloadConfig decodes each entry
 	// into its JobSpec at boot/reload. See A-B1 plan §5947-5950.
 	Jobs map[string]json.RawMessage `json:"jobs,omitempty"`
+
+	// Skills holds C-B1 skill-substrate settings (canonical §4.4).
+	// Currently a single tunable: how long a proposed skill may sit in
+	// .thrum/agents/<agent>/proposed-skills/ before the daemon mints a
+	// staleness reminder via the A-B4 reminders.Store.
+	Skills SkillsConfig `json:"skills,omitzero"`
 }
+
+// SkillsConfig holds skill-substrate tunables. Currently one knob;
+// shaped as a block so future fields (per-runtime mirror reload-cmd
+// overrides, secret-scan whitelists, etc.) extend without breaking
+// existing config files.
+type SkillsConfig struct {
+	// PendingReminderAfter is the duration a proposed skill may sit
+	// un-promoted before the daemon mints a staleness reminder. Parsed
+	// by time.ParseDuration; default "48h" applied at consumption time
+	// (NOT at load) so a zero-value config can be distinguished from an
+	// explicit "0s" override.
+	PendingReminderAfter string `json:"pending_reminder_after,omitempty"`
+}
+
+// DefaultSkillsPendingReminderAfter is the default staleness window
+// applied when SkillsConfig.PendingReminderAfter is empty (canonical
+// spec §10.1).
+const DefaultSkillsPendingReminderAfter = "48h"
 
 // IdentityConfig holds the daemon's per-repo identity.
 // Daemon_id is generated once at thrum init (or first daemon start of an
@@ -618,6 +642,17 @@ func SaveThrumConfig(thrumDir string, cfg *ThrumConfig) error {
 	// Marshal and merge the orchestration section (only if merge_target is set)
 	if cfg.Orchestration.MergeTarget != "" {
 		existing["orchestration"] = cfg.Orchestration
+	}
+
+	// Marshal and merge the skills section (C-B1; only if any field is set).
+	if cfg.Skills.PendingReminderAfter != "" {
+		skillsBytes, err := json.Marshal(cfg.Skills)
+		if err != nil {
+			return err
+		}
+		var skillsMap any
+		_ = json.Unmarshal(skillsBytes, &skillsMap)
+		existing["skills"] = skillsMap
 	}
 
 	data, err := json.MarshalIndent(existing, "", "  ")
