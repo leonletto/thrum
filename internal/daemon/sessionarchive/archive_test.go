@@ -606,6 +606,18 @@ func TestArchive_RenameFailure_FriendlyError(t *testing.T) {
 	// blocked) or "atomic rename" (if UniqueDestPath returned a
 	// free slot but rename then failed). Both are sentinel error
 	// shapes a regression would lose.
+	//
+	// LATENT-BRANCH NOTE (brainstormer-third Medium #1): "atomic
+	// rename" in the assertion is dead-on-this-test — the
+	// pre-created directories guarantee the collision-cap path
+	// always fires first, so os.Rename is never reached. The
+	// "atomic rename" branch survives in the assertion only as a
+	// forward-guard: if UniqueDestPath's cap is ever raised, the
+	// test would then exercise the rename path and the assertion
+	// remains correct. Not worth a separate test today since the
+	// errata path is the copy-fallback (deferred), but documented
+	// here so a future reader doesn't trust the rename branch as
+	// "tested".
 	msg := err.Error()
 	if !strings.Contains(msg, "collision cap") && !strings.Contains(msg, "atomic rename") && !strings.Contains(msg, "session-archive") {
 		t.Errorf("error message should contain a session-archive context marker (collision cap / atomic rename / session-archive): %v", err)

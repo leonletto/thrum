@@ -148,7 +148,6 @@ func TestWireSessionArchiveResponse_E2E_RealDaemon(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new state: %v", err)
 	}
-	t.Cleanup(func() { _ = st.Close() })
 
 	// Start an in-process daemon on a short Unix socket path
 	// (avoiding the 104-char macOS limit by using /tmp).
@@ -173,7 +172,21 @@ func TestWireSessionArchiveResponse_E2E_RealDaemon(t *testing.T) {
 	if err := server.Start(context.Background()); err != nil {
 		t.Fatalf("server start: %v", err)
 	}
-	t.Cleanup(func() { server.Stop() })
+
+	// Cleanup ordering matters (t.Cleanup runs LIFO): server.Stop
+	// must run BEFORE st.Close so any in-flight handler can finish
+	// touching state. If we register st.Close first, the LIFO order
+	// would invert. Register server.Stop FIRST so it runs LAST is
+	// wrong too — we want server.Stop first (runs last) then
+	// st.Close (registered after, runs first under LIFO). Inverted:
+	// we want server.Stop to run before st.Close in cleanup order.
+	// Since LIFO means last-registered-first-fired, register st.Close
+	// FIRST then server.Stop SECOND so server.Stop fires FIRST and
+	// st.Close fires SECOND. Brainstormer-third Low #1 catch — the
+	// prior ordering was inverted and would race if Stop ever
+	// became async.
+	t.Cleanup(func() { _ = st.Close() }) // runs second (after server)
+	t.Cleanup(func() { server.Stop() })  // runs first (LIFO last-registered)
 
 	// Wait for the socket to accept connections.
 	waitForSocket(t, socketPath, 2*time.Second)
