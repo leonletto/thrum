@@ -30,8 +30,8 @@ var reconnectBackoff = []time.Duration{
 
 const maxReconnectAttempts = 10
 
-// Config holds all parameters for an IMAP Client.
-type Config struct {
+// IMAPConfig holds all parameters for an IMAPClient.
+type IMAPConfig struct {
 	Host         string
 	Port         int
 	UseStartTLS  bool
@@ -51,10 +51,10 @@ type RawMessage struct {
 	InternalDate time.Time
 }
 
-// Client wraps go-imap/v2 with IDLE keepalive, poll fallback, and
+// IMAPClient wraps go-imap/v2 with IDLE keepalive, poll fallback, and
 // reconnect-with-backoff.
-type Client struct {
-	cfg    Config
+type IMAPClient struct {
+	cfg    IMAPConfig
 	logger *log.Logger
 
 	mu         sync.Mutex
@@ -75,13 +75,13 @@ type Client struct {
 	closeCh   chan struct{}
 }
 
-// NewClient returns an unconfigured Client. Call Connect before any other
-// method.
-func NewClient(cfg Config) *Client {
+// NewIMAPClient returns an unconnected IMAPClient. Call Connect before
+// any other method.
+func NewIMAPClient(cfg IMAPConfig) *IMAPClient {
 	if cfg.PollInterval <= 0 {
 		cfg.PollInterval = 60 * time.Second
 	}
-	return &Client{
+	return &IMAPClient{
 		cfg:     cfg,
 		logger:  log.New(os.Stderr, "imap: ", log.LstdFlags),
 		closeCh: make(chan struct{}),
@@ -90,11 +90,11 @@ func NewClient(cfg Config) *Client {
 
 // Connect dials the server and authenticates. It must be called before any
 // other operation.
-func (c *Client) Connect(ctx context.Context) error {
+func (c *IMAPClient) Connect(ctx context.Context) error {
 	return c.connect(ctx)
 }
 
-func (c *Client) connect(ctx context.Context) error {
+func (c *IMAPClient) connect(ctx context.Context) error {
 	addr := fmt.Sprintf("%s:%d", c.cfg.Host, c.cfg.Port)
 
 	tlsCfg := c.cfg.TLSConfig
@@ -160,7 +160,7 @@ func (c *Client) connect(ctx context.Context) error {
 //
 // Re-IDLE is handled internally by go-imap/v2's IdleCommand (every 28 min by
 // default). We enter IDLE and wait on ctx.Done; tearing down IDLE on cancel.
-func (c *Client) IDLEloop(ctx context.Context) error {
+func (c *IMAPClient) IDLEloop(ctx context.Context) error {
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -194,7 +194,7 @@ func (c *Client) IDLEloop(ctx context.Context) error {
 }
 
 // runIDLE enters IDLE, blocks on ctx, then tears it down.
-func (c *Client) runIDLE(ctx context.Context) error {
+func (c *IMAPClient) runIDLE(ctx context.Context) error {
 	c.mu.Lock()
 	cl := c.imapClient
 	c.mu.Unlock()
@@ -218,7 +218,7 @@ func (c *Client) runIDLE(ctx context.Context) error {
 }
 
 // pollLoop repeatedly calls PollOnce at cfg.PollInterval until ctx is canceled.
-func (c *Client) pollLoop(ctx context.Context) error {
+func (c *IMAPClient) pollLoop(ctx context.Context) error {
 	ticker := time.NewTicker(c.cfg.PollInterval)
 	defer ticker.Stop()
 	for {
@@ -239,7 +239,7 @@ func (c *Client) pollLoop(ctx context.Context) error {
 // design-spec §13.
 //
 // Returns ctx.Err() promptly on cancellation.
-func (c *Client) PollOnce(ctx context.Context) error {
+func (c *IMAPClient) PollOnce(ctx context.Context) error {
 	since := time.Now().Add(-24 * time.Hour)
 	msgs, err := c.Fetch(ctx, since)
 	if err != nil {
@@ -267,7 +267,7 @@ func (c *Client) PollOnce(ctx context.Context) error {
 
 // Fetch searches for messages since `since` and returns their raw bytes.
 // It uses UID SEARCH + UID FETCH BODY.PEEK[] to avoid marking messages seen.
-func (c *Client) Fetch(ctx context.Context, since time.Time) ([]RawMessage, error) {
+func (c *IMAPClient) Fetch(ctx context.Context, since time.Time) ([]RawMessage, error) {
 	c.mu.Lock()
 	cl := c.imapClient
 	c.mu.Unlock()
@@ -322,7 +322,7 @@ func (c *Client) Fetch(ctx context.Context, since time.Time) ([]RawMessage, erro
 }
 
 // MarkSeen adds the \Seen flag to the message identified by uid.
-func (c *Client) MarkSeen(ctx context.Context, uid imap.UID) error {
+func (c *IMAPClient) MarkSeen(ctx context.Context, uid imap.UID) error {
 	c.mu.Lock()
 	cl := c.imapClient
 	c.mu.Unlock()
@@ -340,7 +340,7 @@ func (c *Client) MarkSeen(ctx context.Context, uid imap.UID) error {
 }
 
 // Close tears down the IMAP connection. Safe to call multiple times.
-func (c *Client) Close() error {
+func (c *IMAPClient) Close() error {
 	var retErr error
 	c.closeOnce.Do(func() {
 		c.closed.Store(true)
@@ -365,7 +365,7 @@ func (c *Client) Close() error {
 // reconnectWithBackoff attempts to reconnect up to maxReconnectAttempts with
 // the configured backoff schedule. Returns an error when all attempts are
 // exhausted or ctx is canceled.
-func (c *Client) reconnectWithBackoff(ctx context.Context) error {
+func (c *IMAPClient) reconnectWithBackoff(ctx context.Context) error {
 	c.mu.Lock()
 	attempt := c.reconnectAttempts
 	c.mu.Unlock()

@@ -152,10 +152,10 @@ func (ts *testServer) addr() (string, int) {
 	return a.IP.String(), a.Port
 }
 
-// cfg returns a Config pre-wired to the test server using STARTTLS.
-func (ts *testServer) cfg() Config {
+// cfg returns an IMAPConfig pre-wired to the test server using STARTTLS.
+func (ts *testServer) cfg() IMAPConfig {
 	host, port := ts.addr()
-	return Config{
+	return IMAPConfig{
 		Host:         host,
 		Port:         port,
 		UseStartTLS:  true,
@@ -207,7 +207,7 @@ func TestImap_ConnectAuthenticated(t *testing.T) {
 	ts := newTestServer(t)
 	defer ts.close()
 
-	c := NewClient(ts.cfg())
+	c := NewIMAPClient(ts.cfg())
 	ctx := context.Background()
 	if err := c.Connect(ctx); err != nil {
 		t.Fatalf("Connect: %v", err)
@@ -225,7 +225,7 @@ func TestImap_FetchSinceTimestamp(t *testing.T) {
 
 	ts.appendMessage(t, simpleTestMessage)
 
-	c := NewClient(ts.cfg())
+	c := NewIMAPClient(ts.cfg())
 	ctx := context.Background()
 	if err := c.Connect(ctx); err != nil {
 		t.Fatalf("Connect: %v", err)
@@ -256,7 +256,7 @@ func TestImap_IDLEKeepaliveResubmits(t *testing.T) {
 	ts := newTestServer(t)
 	defer ts.close()
 
-	c := NewClient(ts.cfg())
+	c := NewIMAPClient(ts.cfg())
 	ctx, cancel := context.WithCancel(context.Background())
 
 	if err := c.Connect(ctx); err != nil {
@@ -298,7 +298,7 @@ func TestImap_IDLEFailsDowngradesToPoll(t *testing.T) {
 	cfg := ts.cfg()
 	cfg.PollInterval = 50 * time.Millisecond // fast poll so test doesn't hang
 
-	c := NewClient(cfg)
+	c := NewIMAPClient(cfg)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	if err := c.Connect(ctx); err != nil {
@@ -346,7 +346,7 @@ func TestImap_ReconnectOnBrokenPipe(t *testing.T) {
 
 	ts.appendMessage(t, simpleTestMessage)
 
-	c := NewClient(ts.cfg())
+	c := NewIMAPClient(ts.cfg())
 	ctx := context.Background()
 	if err := c.Connect(ctx); err != nil {
 		t.Fatalf("Connect: %v", err)
@@ -383,7 +383,7 @@ func TestImap_PollOnceReturnsCleanlyOnCancel(t *testing.T) {
 	ts := newTestServer(t)
 	defer ts.close()
 
-	c := NewClient(ts.cfg())
+	c := NewIMAPClient(ts.cfg())
 	ctx, cancel := context.WithCancel(context.Background())
 
 	if err := c.Connect(ctx); err != nil {
@@ -415,7 +415,7 @@ func TestImap_NoGoroutineLeakOnClose(t *testing.T) {
 	ts := newTestServer(t)
 	defer ts.close()
 
-	c := NewClient(ts.cfg())
+	c := NewIMAPClient(ts.cfg())
 	ctx, cancel := context.WithCancel(context.Background())
 
 	if err := c.Connect(ctx); err != nil {
