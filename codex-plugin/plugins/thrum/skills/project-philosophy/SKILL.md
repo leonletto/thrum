@@ -1,14 +1,10 @@
 ---
 name: project-philosophy
-description:
-  "Use when a project needs its implementation philosophy established or updated
-  — the canonical doc at .thrum/philosophy.md defining anti-patterns, red flags,
-  and project-specific rules that implementation agents read at task-start time.
-  First invocation generates from project inspection; subsequent invocations
-  reconcile against current project state and propose diffs."
+description: "Use when a project needs its implementation philosophy established or updated — the canonical doc at .thrum/philosophy.md defining anti-patterns, red flags, and project-specific rules that implementation agents read at task-start time. First invocation generates from project inspection; subsequent invocations reconcile against current project state and propose diffs."
 # source: claude-plugin/skills/project-philosophy/SKILL.md
 # generated-by: scripts/sync-skills.sh
 ---
+
 
 ## Project Philosophy
 
