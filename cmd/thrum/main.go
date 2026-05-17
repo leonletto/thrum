@@ -2744,7 +2744,169 @@ Defer the alert with '--defer 30m', mark as resolved with '--clear', or
 withdraw it with '--cancel'.`,
 	}
 	cmd.AddCommand(reminderSetCmd())
+	cmd.AddCommand(reminderListCmd())
 	return cmd
+}
+
+// reminderListCmd implements `thrum agent reminder list`. Default
+// behavior with no filter flags: target=<self> AND state=open. Filter
+// flags override the defaults — e.g. `--state cleared` widens to all
+// targets but only cleared rows.
+func reminderListCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List reminders",
+		Long: `List reminders matching the given filters.
+
+With no flags: show open reminders targeted at self.
+
+Examples:
+  thrum agent reminder list                       # open reminders for self
+  thrum agent reminder list --state cleared       # all cleared rows
+  thrum agent reminder list --source daemon       # daemon-minted (idle sweep) rows
+  thrum agent reminder list --target @other_agent # rows targeted at another agent
+  thrum agent reminder list --limit 20            # cap output`,
+		RunE: runReminderList,
+	}
+	cmd.Flags().String("source", "", "filter by source (agent/user/daemon)")
+	cmd.Flags().String("state", "", "filter by state (open/fired/cleared/cancelled)")
+	cmd.Flags().String("target", "", "filter by target agent (@name)")
+	cmd.Flags().String("source-agent", "", "filter by source agent (@name)")
+	cmd.Flags().Int("limit", 0, "maximum rows to return (0 = unlimited)")
+	return cmd
+}
+
+// reminderListFlags captures the parsed flag values. Extracted so
+// buildReminderListOpts can be unit-tested without spinning up cobra.
+type reminderListFlags struct {
+	source      string
+	state       string
+	target      string
+	sourceAgent string
+	limit       int
+}
+
+// buildReminderListOpts translates parsed flags + the resolved self
+// agent into ReminderListOpts. Default behavior: when no scoping
+// flag is set, default to target=<self> AND state=open. Any explicit
+// filter flag suppresses both defaults — operators asking for
+// `--state cleared` want all cleared rows across targets, not "cleared
+// rows targeted at me".
+func buildReminderListOpts(f reminderListFlags, self string) cli.ReminderListOpts {
+	opts := cli.ReminderListOpts{
+		Source:      f.source,
+		State:       f.state,
+		TargetAgent: strings.TrimPrefix(f.target, "@"),
+		SourceAgent: strings.TrimPrefix(f.sourceAgent, "@"),
+		Limit:       f.limit,
+	}
+	noFilters := f.source == "" && f.state == "" && f.target == "" && f.sourceAgent == ""
+	if noFilters {
+		opts.TargetAgent = self
+		opts.State = "open"
+	}
+	return opts
+}
+
+func runReminderList(cmd *cobra.Command, _ []string) error {
+	source, _ := cmd.Flags().GetString("source")
+	state, _ := cmd.Flags().GetString("state")
+	target, _ := cmd.Flags().GetString("target")
+	sourceAgent, _ := cmd.Flags().GetString("source-agent")
+	limit, _ := cmd.Flags().GetInt("limit")
+
+	if limit < 0 {
+		return fmt.Errorf("--limit must be >= 0; got %d", limit)
+	}
+
+	self, err := resolveLocalAgentID()
+	if err != nil {
+		// Self-resolution failure isn't fatal for filtered queries — the
+		// caller might be running --target=<other> from a non-agent
+		// shell. Only fail if we need self for the default scope.
+		if source == "" && state == "" && target == "" && sourceAgent == "" {
+			return fmt.Errorf("resolve self for default scope: %w", err)
+		}
+		self = ""
+	}
+
+	opts := buildReminderListOpts(reminderListFlags{
+		source:      source,
+		state:       state,
+		target:      target,
+		sourceAgent: sourceAgent,
+		limit:       limit,
+	}, self)
+
+	client, err := getClient()
+	if err != nil {
+		return fmt.Errorf("connect to daemon: %w", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	rows, err := cli.ReminderList(client, opts)
+	if err != nil {
+		return err
+	}
+	for _, r := range rows {
+		fmt.Println(formatReminderListRow(r))
+	}
+	return nil
+}
+
+// formatReminderListRow renders one line per reminder. Body is
+// truncated to 60 chars (full body lives in lookup). Layout per the
+// plan §Output format example.
+func formatReminderListRow(r cli.ReminderRow) string {
+	fireAt := "unscheduled"
+	if r.NextReminderAt != nil {
+		fireAt = r.NextReminderAt.Format(time.RFC3339)
+	}
+	body := truncateBody(r.Body, 60)
+	target := r.TargetAgent
+	if target == "" {
+		target = "<chain>"
+	}
+	return fmt.Sprintf("%s   %s %s   target=%s   state=%s   %q",
+		r.ID, fireStateLabel(r), fireAt, target, r.State, body)
+}
+
+// fireStateLabel collapses the (state, next_reminder_at) pair into a
+// short prefix that reads naturally before the timestamp:
+//   - state=open with a fire time → "fires"
+//   - state=open without a fire time → "open"   (rare: stalled-sweep row pre-rearm)
+//   - state=fired                   → "fired"
+//   - state=cleared                 → "cleared"
+//   - state=cancelled               → "cancelled"
+func fireStateLabel(r cli.ReminderRow) string {
+	switch r.State {
+	case "open":
+		if r.NextReminderAt != nil {
+			return "fires"
+		}
+		return "open"
+	case "fired":
+		return "fired"
+	case "cleared":
+		return "cleared"
+	case "cancelled":
+		return "cancelled"
+	default:
+		return r.State
+	}
+}
+
+// truncateBody returns s unchanged if len(s) <= max; otherwise the
+// first max-3 runes plus "..." (so the total length stays at max).
+// Operates on bytes; reminder bodies are short and ASCII-dominant.
+func truncateBody(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	if max <= 3 {
+		return s[:max]
+	}
+	return s[:max-3] + "..."
 }
 
 // reminderSetCmd implements `thrum agent reminder set`. Flag set per
