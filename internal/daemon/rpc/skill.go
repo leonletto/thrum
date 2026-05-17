@@ -37,6 +37,15 @@ type SkillMirrorEnqueuer interface {
 	EnqueueAll(event skills.MirrorEvent) (int, error)
 }
 
+// SkillMirrorReconciler is the subset of internal/skills/mirror.Worker
+// consumed by HandleSync. Reconcile triggers a full canonical-vs-
+// destination pass across every worktree; ReconcileNames runs the
+// same pass scoped to the supplied skill names.
+type SkillMirrorReconciler interface {
+	Reconcile(ctx context.Context) error
+	ReconcileNames(ctx context.Context, names []string) error
+}
+
 // SkillHandler wires the skill.* JSON-RPC surface (design-spec §7) to
 // the internal/skills helpers. Constructed once at daemon boot via
 // NewSkillHandler and registered against the JSON-RPC server in
@@ -53,7 +62,8 @@ type SkillHandler struct {
 	perm       SkillSupervisorMessenger
 	staleness  skills.ProposalReminderer
 	worker     *mirror.Worker
-	enqueuer   SkillMirrorEnqueuer // defaults to worker via ensurePromoteDefaults
+	enqueuer   SkillMirrorEnqueuer   // defaults to worker via ensurePromoteDefaults
+	reconciler SkillMirrorReconciler // defaults to worker via ensurePromoteDefaults
 	db         *sql.DB
 	stamper    *skills.Stamper
 	scanner    *skills.Scanner
@@ -827,6 +837,75 @@ func (h *SkillHandler) ensurePromoteDefaults() {
 	if h.enqueuer == nil && h.worker != nil {
 		h.enqueuer = h.worker
 	}
+	if h.reconciler == nil && h.worker != nil {
+		h.reconciler = h.worker
+	}
+}
+
+// --- HandleSync ---
+
+// SkillSyncRequest is the params shape for skill.sync (design-spec §7.8).
+// Names is optional — when empty/nil, a full reconcile runs; when set,
+// only the listed skill names are scoped.
+type SkillSyncRequest struct {
+	CallerAgentID string   `json:"caller_agent_id"`
+	Names         []string `json:"names,omitempty"`
+}
+
+// SkillSyncResponse returns a count + any errors encountered. The count
+// is len(names) for a scoped pass and 0 for a full pass — Worker
+// doesn't surface a per-skill applied-count, and we don't synthesize
+// one. Errors carries the stringified Reconcile errors so the CLI can
+// surface them to the operator.
+type SkillSyncResponse struct {
+	ReconciledCount int      `json:"reconciled_count"`
+	Errors          []string `json:"errors,omitempty"`
+	Error           string   `json:"error,omitempty"`
+}
+
+// HandleSync serves skill.sync (design-spec §7.8). Any-agent auth per
+// §7.10. Synchronous from the caller's perspective — returns only after
+// Reconcile / ReconcileNames completes against every destination.
+//
+// When reconciler is nil (no worker wired yet at the lifecycle layer),
+// returns Error="reconciler_not_wired" so the operator gets a clear
+// signal rather than a silent no-op.
+func (h *SkillHandler) HandleSync(ctx context.Context, params json.RawMessage) (any, error) {
+	var req SkillSyncRequest
+	if len(params) > 0 {
+		if err := json.Unmarshal(params, &req); err != nil {
+			return nil, fmt.Errorf("invalid request: %w", err)
+		}
+	}
+	if req.CallerAgentID == "" {
+		return nil, errors.New("unauthorized: caller_agent_id is required")
+	}
+
+	h.ensurePromoteDefaults()
+
+	if h.reconciler == nil {
+		return SkillSyncResponse{Error: "reconciler_not_wired"}, nil
+	}
+
+	var reconcileErr error
+	if len(req.Names) == 0 {
+		reconcileErr = h.reconciler.Reconcile(ctx)
+	} else {
+		reconcileErr = h.reconciler.ReconcileNames(ctx, req.Names)
+	}
+
+	resp := SkillSyncResponse{
+		ReconciledCount: len(req.Names),
+	}
+	if reconcileErr != nil {
+		resp.Errors = []string{reconcileErr.Error()}
+	}
+	h.logger.Info("skill sync",
+		"caller", req.CallerAgentID,
+		"names_count", len(req.Names),
+		"errors", len(resp.Errors),
+	)
+	return resp, nil
 }
 
 // --- HandleDelete ---

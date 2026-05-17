@@ -88,7 +88,7 @@ func (w *Worker) EnsureMirrored(ctx context.Context, worktreePath string) error 
 		// code path as Worker.Reconcile). Surfaces the first
 		// filesystem error so B-B1's wake handler can roll back
 		// (errors.Is(err, ErrMirrorWrite) is the discriminator).
-		if err := w.reconcileDestination(dest, entry); err != nil {
+		if err := w.reconcileDestination(dest, entry, nil); err != nil {
 			return fmt.Errorf("ensure mirrored %s (runtime=%s): %w", worktreePath, dest.Runtime, err)
 		}
 	}

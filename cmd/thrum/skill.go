@@ -747,24 +747,74 @@ func runSkillRevise(out io.Writer, path, findings string) error {
 	return w.err
 }
 
-// skillSyncCmd implements `thrum skill sync [<name>]` per spec §7.8.
-// Optional positional <name> restricts the resync to one skill;
-// without arg, runs full Worker.Reconcile.
+// skillSyncCmd implements `thrum skill sync [<name>...]` per spec §7.8.
+// Optional positional <name> args restrict the resync to the listed
+// skills; without args, runs full Worker.Reconcile.
 func skillSyncCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "sync [<name>]",
+		Use:   "sync [<name>...]",
 		Short: "Manually re-trigger mirror reconcile",
 		Long: `Force a manual mirror re-trigger. Useful when a runtime path
 was edited externally and needs reset.
 
 Without arguments, runs the full Worker.Reconcile pass against
-every registered worktree × runtime. With <name>, restricts the
-resync to a single skill.`,
-		Args: cobra.MaximumNArgs(1),
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return fmt.Errorf("skill.sync RPC body lands at E10.7 (thrum-6qmf.2.20)")
+every registered worktree × runtime. With one or more <name>
+args, restricts the resync to the listed skills — destination
+skills outside the name list are left untouched.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runSkillSync(cmd.OutOrStdout(), args)
 		},
 	}
+}
+
+// runSkillSync dispatches the skill.sync RPC. names may be empty
+// (full pass) or hold one or more skill names (scoped pass — only
+// listed skills are reconciled, others at the destination are
+// left untouched).
+func runSkillSync(out io.Writer, names []string) error {
+	agentID, err := resolveLocalAgentID()
+	if err != nil {
+		return fmt.Errorf("failed to resolve agent identity: %w", err)
+	}
+	client, err := getClient()
+	if err != nil {
+		return fmt.Errorf("failed to connect to daemon: %w", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	req := map[string]any{
+		"caller_agent_id": agentID,
+	}
+	if len(names) > 0 {
+		req["names"] = names
+	}
+	var resp rpc.SkillSyncResponse
+	if err := client.Call("skill.sync", req, &resp); err != nil {
+		return fmt.Errorf("skill.sync RPC failed: %w", err)
+	}
+	if flagJSON {
+		return cli.EmitJSON(resp)
+	}
+	w := skillWriter{w: out}
+	if resp.Error != "" {
+		w.Fprintf("SYNC BLOCKED: %s\n", resp.Error)
+		if w.err != nil {
+			return w.err
+		}
+		return errors.New(resp.Error)
+	}
+	scope := "full"
+	if len(names) > 0 {
+		scope = strings.Join(names, ", ")
+	}
+	w.Fprintf("SYNC OK: %s (reconciled_count=%d)\n", scope, resp.ReconciledCount)
+	if len(resp.Errors) > 0 {
+		w.Fprintf("  errors: %d\n", len(resp.Errors))
+		for _, e := range resp.Errors {
+			w.Fprintf("    - %s\n", e)
+		}
+	}
+	return w.err
 }
 
 // skillValidateCmd implements `thrum skill validate [<name>]` per

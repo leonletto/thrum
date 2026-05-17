@@ -117,9 +117,16 @@ type Worker struct {
 // boot-time reconcile tick: the destination goroutine runs a full
 // canonical-vs-destination diff + apply and signals completion via
 // wg.Done.
+//
+// nameFilter is the optional scoping set for E10.7's skill.sync
+// names argument. When non-nil, reconcileDestination only considers
+// canonical entries whose name is in the set AND only removes
+// destination entries whose name is in the set (so unscoped skills
+// at the destination remain untouched).
 type mirrorTask struct {
 	event       skills.MirrorEvent
 	reconcileWG *sync.WaitGroup
+	nameFilter  map[string]struct{}
 }
 
 // New constructs a Worker, applies defaults, and validates required
@@ -413,7 +420,7 @@ func (w *Worker) runDestination(
 				// logged inside reconcileDestination; Reconcile's
 				// caller is best-effort.
 				flush()
-				_ = w.reconcileDestination(dest, entry)
+				_ = w.reconcileDestination(dest, entry, task.nameFilter)
 				task.reconcileWG.Done()
 				continue
 			}
@@ -501,6 +508,67 @@ func (w *Worker) Reconcile(ctx context.Context) error {
 	}
 }
 
+// ReconcileNames is the scoped variant of Reconcile: only the listed
+// skill names are considered at each destination. Both the copy pass
+// AND the stale-removal pass honor the filter — so unrelated skills
+// at the destination remain untouched by a scoped sync. An empty or
+// nil names slice falls through to a full Reconcile (the caller's
+// "no filter" intent is preserved).
+//
+// Intended for the skill.sync RPC at E10.7 when the operator passes
+// `names=[a, b]`. The synchronous-from-caller's-perspective contract
+// is preserved (blocks until every destination's reconcile pass
+// completes, same as Reconcile).
+func (w *Worker) ReconcileNames(ctx context.Context, names []string) error {
+	if len(names) == 0 {
+		return w.Reconcile(ctx)
+	}
+	filter := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		filter[n] = struct{}{}
+	}
+
+	w.stateMu.RLock()
+	if !w.started.Load() {
+		w.stateMu.RUnlock()
+		return ErrWorkerNotStarted
+	}
+	channels := make([]chan mirrorTask, 0, len(w.channels))
+	for _, ch := range w.channels {
+		channels = append(channels, ch)
+	}
+	w.stateMu.RUnlock()
+
+	w.cleanupStalePromoteLeftovers()
+
+	var wg sync.WaitGroup
+	for _, ch := range channels {
+		wg.Add(1)
+		select {
+		case ch <- mirrorTask{
+			event:       skills.MirrorEvent{Trigger: skills.TriggerManualSync},
+			reconcileWG: &wg,
+			nameFilter:  filter,
+		}:
+		case <-ctx.Done():
+			wg.Done()
+			return ctx.Err()
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // reconcileDestination performs a full canonical-vs-destination diff
 // + apply under the destination mutex. Holds the lock for the
 // entire pass so EnsureMirrored (E9.5) can't see a half-reconciled
@@ -511,7 +579,7 @@ func (w *Worker) Reconcile(ctx context.Context) error {
 // correction); the synchronous EnsureMirrored caller surfaces it so
 // B-B1's stage-3 wake handler can roll back. Wrapped errors satisfy
 // errors.Is(_, ErrMirrorWrite).
-func (w *Worker) reconcileDestination(dest Destination, entry *AdapterEntry) error {
+func (w *Worker) reconcileDestination(dest Destination, entry *AdapterEntry, nameFilter map[string]struct{}) error {
 	mu := w.destMutex(dest)
 	mu.Lock()
 	defer mu.Unlock()
@@ -543,6 +611,11 @@ func (w *Worker) reconcileDestination(dest Destination, entry *AdapterEntry) err
 		if !e.IsDir() {
 			continue
 		}
+		if nameFilter != nil {
+			if _, ok := nameFilter[e.Name()]; !ok {
+				continue
+			}
+		}
 		if _, err := os.Stat(filepath.Join(w.opts.SourceRoot, e.Name(), "SKILL.md")); err == nil {
 			canonical[e.Name()] = struct{}{}
 		}
@@ -569,7 +642,9 @@ func (w *Worker) reconcileDestination(dest Destination, entry *AdapterEntry) err
 		}
 	}
 
-	// Remove destination-side skills that aren't in canonical.
+	// Remove destination-side skills that aren't in canonical. When
+	// nameFilter is set, removal is also scoped — unrelated destination
+	// skills are not touched by a scoped reconcile.
 	if entries, err := os.ReadDir(destDir); err == nil {
 		for _, e := range entries {
 			if !e.IsDir() {
@@ -577,6 +652,11 @@ func (w *Worker) reconcileDestination(dest Destination, entry *AdapterEntry) err
 			}
 			if _, ok := canonical[e.Name()]; ok {
 				continue
+			}
+			if nameFilter != nil {
+				if _, ok := nameFilter[e.Name()]; !ok {
+					continue
+				}
 			}
 			stale := filepath.Join(destDir, e.Name())
 			if rmErr := os.RemoveAll(stale); rmErr != nil {
