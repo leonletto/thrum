@@ -7534,6 +7534,18 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		}
 	}
 
+	// A-B1 scheduler primitive: construct + register 10 JSON-RPC methods
+	// on both transports + the canonical internal.scheduler_event_cleanup
+	// housekeeping job. wireScheduler keeps the surface small so downstream
+	// epics (A-B4, D-B1, C-B1, MB-1.S6, A-B2) all RegisterInternal against
+	// one canonical *Scheduler. EventRetentionDays==0 is the documented
+	// "use default" sentinel (NewCleanupHandler clamps to 7 days).
+	sched := wireScheduler(server, wsRegistry, st.DB(), st.Identity().DaemonID,
+		thrumCfg.Daemon.Scheduler.EventRetentionDays)
+	if err := sched.Start(ctx); err != nil {
+		return fmt.Errorf("start scheduler: %w", err)
+	}
+
 	// Monitor jobs supervisor — launches runner goroutines for every monitor
 	// in the DB with status=running and blocks on ctx.Done(). Must start
 	// AFTER the backup scheduler and BEFORE lifecycle.Run(ctx).
