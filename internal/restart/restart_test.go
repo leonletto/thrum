@@ -129,10 +129,55 @@ func TestExtractConversation_Truncation(t *testing.T) {
 
 func TestFormatRestartSnapshot(t *testing.T) {
 	snapshot := FormatRestartSnapshot("test-agent", "ses_123", "manual", "conversation text")
+
+	// YAML frontmatter per spec §4.3
+	require.True(t, strings.HasPrefix(snapshot, "---\n"),
+		"snapshot must open with YAML frontmatter delimiter; got prefix %q", snapshot[:min(8, len(snapshot))])
+	assert.Contains(t, snapshot, "agent: test-agent")
+	assert.Contains(t, snapshot, "session_id: ses_123")
+	assert.Contains(t, snapshot, "reason: manual")
+	assert.Contains(t, snapshot, "saved_at: ")
+	assert.Contains(t, snapshot, "machine_id: ")
+
+	// saved_at must be RFC3339Nano UTC (parser §4.4 expects RFC 3339)
+	savedAt := extractFrontmatterValue(t, snapshot, "saved_at")
+	parsed, err := time.Parse(time.RFC3339Nano, savedAt)
+	require.NoError(t, err, "saved_at must parse as RFC 3339")
+	assert.Equal(t, time.UTC, parsed.Location(), "saved_at must be in UTC")
+
+	// Body still includes the agent title and the conversation
 	assert.Contains(t, snapshot, "# Restart Snapshot — test-agent")
-	assert.Contains(t, snapshot, "**Session:** ses_123")
-	assert.Contains(t, snapshot, "**Reason:** manual")
 	assert.Contains(t, snapshot, "conversation text")
+}
+
+func TestRestartSnapshot_IncludesMachineID(t *testing.T) {
+	snapshot := FormatRestartSnapshot("test-agent", "ses_123", "manual", "body")
+
+	h, err := os.Hostname()
+	require.NoError(t, err, "os.Hostname must succeed in the test environment")
+	require.NotEmpty(t, h, "os.Hostname returned empty string")
+
+	expected := fmt.Sprintf("machine_id: %s", h)
+	assert.Contains(t, snapshot, expected,
+		"snapshot must contain machine_id line matching os.Hostname()")
+}
+
+// extractFrontmatterValue returns the value for a YAML-frontmatter key
+// (`<key>: <value>`) from a snapshot string. Test-only helper; fails the
+// test if the key isn't found in the first `---`-delimited block.
+func extractFrontmatterValue(t *testing.T, snapshot, key string) string {
+	t.Helper()
+	prefix := key + ": "
+	for line := range strings.SplitSeq(snapshot, "\n") {
+		if line == "---" {
+			continue
+		}
+		if v, ok := strings.CutPrefix(line, prefix); ok {
+			return v
+		}
+	}
+	t.Fatalf("frontmatter key %q not found in snapshot:\n%s", key, snapshot)
+	return ""
 }
 
 func TestExtractConversation_EmptyFile(t *testing.T) {

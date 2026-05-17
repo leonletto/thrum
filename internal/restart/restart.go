@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -234,13 +235,42 @@ func FindLatestJSONLForCwd(claudeDir, cwd string) (string, error) {
 	return bestPath, nil
 }
 
-// FormatRestartSnapshot builds the complete snapshot file content.
+// FormatRestartSnapshot builds the complete snapshot file content, emitting a
+// YAML frontmatter block per spec §4.3 followed by the human-readable body.
+//
+// Frontmatter fields (agent, session_id, saved_at, reason, machine_id) are
+// machine-parseable by downstream tooling: session-archive's parseSavedAt
+// reads `saved_at`, the discovery hint reads §1 from the body, and v0.12
+// cross-machine roaming will key off `machine_id`.
+//
+// `machine_id` is auto-populated from os.Hostname(). Hostname-resolution
+// failure does NOT block writing — the field renders empty and a slog.Warn
+// is emitted instead (surfaced as a `hints` entry in --json output via the
+// cli slog bridge). v0.12 may upgrade the source to a stable UUID; the field
+// name stays `machine_id` per spec §4.2 forward-compat.
 func FormatRestartSnapshot(agentName, sessionID, reason, conversation string) string {
+	machineID, err := os.Hostname()
+	if err != nil {
+		slog.Warn("FormatRestartSnapshot os.Hostname failed; machine_id will be empty",
+			"agent", agentName, "err", err)
+		machineID = ""
+	}
+
 	var out strings.Builder
+	// YAML frontmatter (spec §4.3). Single source of truth for snapshot metadata.
+	out.WriteString("---\n")
+	fmt.Fprintf(&out, "agent: %s\n", agentName)
+	fmt.Fprintf(&out, "session_id: %s\n", sessionID)
+	fmt.Fprintf(&out, "saved_at: %s\n", time.Now().UTC().Format(time.RFC3339Nano))
+	fmt.Fprintf(&out, "reason: %s\n", reason)
+	fmt.Fprintf(&out, "machine_id: %s\n", machineID)
+	out.WriteString("---\n\n")
+
+	// Markdown body. Agent-authored snapshots from the /thrum:restart skill
+	// open with `## 1. Big picture — what shipped this session`; auto-extract
+	// snapshots (this path) substitute the agent-name title since no §1
+	// narrative exists for raw JSONL extracts.
 	fmt.Fprintf(&out, "# Restart Snapshot — %s\n\n", agentName)
-	fmt.Fprintf(&out, "**Session:** %s\n", sessionID)
-	fmt.Fprintf(&out, "**Saved:** %s\n", time.Now().Format(time.RFC3339))
-	fmt.Fprintf(&out, "**Reason:** %s\n\n", reason)
 	out.WriteString(conversation)
 	out.WriteString("\n\n---\n\n")
 	out.WriteString("**For additional context on recent work, run:**\n\n")
