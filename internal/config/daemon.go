@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,6 +17,8 @@ type ThrumConfig struct {
 	Daemon        DaemonConfig        `json:"daemon"`
 	Backup        BackupConfig        `json:"backup"`
 	Telegram      TelegramConfig      `json:"telegram"`
+	Email         EmailConfig          `json:"email,omitzero"` // omitzero: Go 1.24+; entire block dropped when at zero value
+	Users         map[string]UserPrefs `json:"users,omitempty"`
 	Peers         PeersConfig         `json:"peers"`
 	Restart       RestartConfig       `json:"restart"`
 	Worktrees     WorktreesConfig     `json:"worktrees,omitempty"`
@@ -185,6 +188,89 @@ type DaemonConfig struct {
 	// AgentLifecycle holds B-B1 agent-lifecycle housekeeping settings
 	// consumed by the internal.agent_lifecycle_cleanup daily handler.
 	AgentLifecycle DaemonAgentLifecycleConfig `json:"agent_lifecycle"`
+
+	// A-B4 substrate config blocks (v0.11; canonical §4.4).
+
+	// StalledSweep tunes internal.stalled_agent_sweep cadence
+	// (stability knob). Separate from Reminders.DispatchIntervalSeconds
+	// (UX-precision knob) per @architect_substrate decision 2026-05-15;
+	// coupling them would defeat Leon-brainstorm-Q3.3's minute-
+	// resolution Xm/Xh/Xd reminder contract.
+	StalledSweep StalledSweepConfig `json:"stalled_sweep,omitempty"`
+
+	// Reminders tunes internal.reminder_dispatch cadence
+	// (UX-precision knob). Must stay finer-grained than
+	// StalledSweep.IntervalMinutes to honor user-set minute-
+	// resolution reminders.
+	Reminders RemindersConfig `json:"reminders,omitempty"`
+
+	// Sweep configures the daemon-source target_chain for stalled-
+	// agent reminders. Empty AlertChain → fall back to
+	// [@Escalation.SupervisorAgentName] (canonical §4.4 single-
+	// supervisor; the brainstorm cycle-2 #3 two-element fallback
+	// was reduced to single-supervisor in the §4.4 amendment).
+	Sweep SweepChainConfig `json:"sweep,omitempty"`
+
+	// Escalation names the supervisor agent reminders escalate to
+	// when SweepChainConfig.AlertChain is unset (canonical §4.4).
+	Escalation EscalationConfig `json:"escalation,omitempty"`
+}
+
+// StalledSweepConfig tunes the stalled-agent sweep cadence
+// (canonical §4.4; A-B4 Q3.7).
+type StalledSweepConfig struct {
+	// IntervalMinutes is how often the sweep runs. Zero is the
+	// "use default" sentinel (15 minutes via
+	// DaemonConfig.StalledSweepIntervalMinutes).
+	IntervalMinutes int `json:"interval_minutes,omitempty"`
+}
+
+// RemindersConfig tunes the reminder-dispatcher cadence
+// (canonical §4.4; A-B4 plan E4.1 Task 10).
+type RemindersConfig struct {
+	// DispatchIntervalSeconds is how often the dispatcher scans
+	// for due reminders. Zero is the "use default" sentinel
+	// (30 seconds via DaemonConfig.RemindersDispatchIntervalSeconds).
+	DispatchIntervalSeconds int `json:"dispatch_interval_seconds,omitempty"`
+}
+
+// SweepChainConfig overrides the default target_chain for
+// daemon-source reminders (canonical §4.4; A-B4 cycle-2 #3).
+type SweepChainConfig struct {
+	// AlertChain is the explicit delivery chain
+	// (e.g. ["@coordinator_main", "leon@example.com"]). When empty,
+	// sweep falls back to [@Escalation.SupervisorAgentName].
+	AlertChain []string `json:"alert_chain,omitempty"`
+}
+
+// EscalationConfig names the supervisor agent that sweep-emitted
+// reminders escalate to when SweepChainConfig.AlertChain is unset
+// (canonical §4.4).
+type EscalationConfig struct {
+	// SupervisorAgentName is the agent name (with or without leading
+	// @ — the resolver normalizes). Empty → "coordinator" (canonical
+	// default).
+	SupervisorAgentName string `json:"supervisor_agent_name,omitempty"`
+}
+
+// StalledSweepIntervalMinutes returns the effective sweep cadence,
+// clamping zero/negative values to the canonical 15-minute default
+// per canonical §4.4.
+func (c DaemonConfig) StalledSweepIntervalMinutes() int {
+	if c.StalledSweep.IntervalMinutes > 0 {
+		return c.StalledSweep.IntervalMinutes
+	}
+	return 15
+}
+
+// RemindersDispatchIntervalSeconds returns the effective dispatcher
+// cadence, clamping zero/negative to the canonical 30-second default
+// per canonical §4.4.
+func (c DaemonConfig) RemindersDispatchIntervalSeconds() int {
+	if c.Reminders.DispatchIntervalSeconds > 0 {
+		return c.Reminders.DispatchIntervalSeconds
+	}
+	return 30
 }
 
 // DaemonSchedulerConfig holds A-B1 scheduler tuning consumed by daemon-boot
@@ -335,6 +421,13 @@ func LoadThrumConfig(thrumDir string) (*ThrumConfig, error) {
 			applyDefaults(cfg)
 			return cfg, nil
 		}
+		return nil, err
+	}
+
+	// D-B1.2: fail fast if config.json contains a known-secret field name
+	// (imap_password / smtp_password / oauth.refresh_token). Credentials
+	// belong in .thrum/secrets/email.json.
+	if err := CheckForSecretNames(data); err != nil {
 		return nil, err
 	}
 
@@ -495,6 +588,28 @@ func SaveThrumConfig(thrumDir string, cfg *ThrumConfig) error {
 		existing["telegram"] = telegramMap
 	}
 
+	// Marshal and merge the email section (omit when at zero value).
+	if !isZeroEmail(cfg.Email) {
+		emailBytes, err := json.Marshal(cfg.Email)
+		if err != nil {
+			return err
+		}
+		var emailMap any
+		_ = json.Unmarshal(emailBytes, &emailMap)
+		existing["email"] = emailMap
+	}
+
+	// Marshal and merge the users section (only if any entry).
+	if len(cfg.Users) > 0 {
+		usersBytes, err := json.Marshal(cfg.Users)
+		if err != nil {
+			return err
+		}
+		var usersMap any
+		_ = json.Unmarshal(usersBytes, &usersMap)
+		existing["users"] = usersMap
+	}
+
 	// Marshal and merge the worktrees section (only if base_path is set)
 	if cfg.Worktrees.BasePath != "" {
 		existing["worktrees"] = cfg.Worktrees
@@ -511,7 +626,35 @@ func SaveThrumConfig(thrumDir string, cfg *ThrumConfig) error {
 	}
 	data = append(data, '\n')
 
-	return os.WriteFile(configPath, data, 0600)
+	// Atomic write via temp file + rename. canonical-ref §3.10 Property 1
+	// mandates this for the daemon-driven mesh-mutation path; the operator
+	// write path uses the same primitive so a crash mid-write cannot
+	// produce a half-written config.json that would lose the whole
+	// email.peers[] roster on next daemon boot.
+	dir := filepath.Dir(configPath)
+	tmp, err := os.CreateTemp(dir, "config.json.tmp-*")
+	if err != nil {
+		return fmt.Errorf("temp config: %w", err)
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("write config: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("close config: %w", err)
+	}
+	if err := os.Chmod(tmpPath, 0o600); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("chmod config: %w", err)
+	}
+	if err := os.Rename(tmpPath, configPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("rename config: %w", err)
+	}
+	return nil
 }
 
 // AddPlugin adds a plugin to the config, replacing any existing plugin with the same name.

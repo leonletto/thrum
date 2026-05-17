@@ -28,6 +28,7 @@
     'messaging',
     'coordination',
     'integrations',
+    'email',
     'infrastructure',
     'reference',
     'api'
@@ -43,6 +44,7 @@
     messaging: 'Messaging',
     coordination: 'Coordination',
     integrations: 'Integrations',
+    email: 'Email Bridge',
     infrastructure: 'Infrastructure',
     reference: 'Reference',
     'agent-protocols': 'Agent Protocols',

@@ -448,7 +448,7 @@ func (s *State) GetEventsSince(ctx context.Context, afterSeq int64, limit int) (
 // handling daemon's ID). Consumers that need to know where the event
 // ORIGINATED should read event.origin_daemon from the JSON payload, not
 // the hook's daemonID argument — the latter is always "this process"
-// regardless of origin. thrum-xfsb uses the payload field to suppress
+// regardless of origin. Thrum-xfsb uses the payload field to suppress
 // peer-replicated broadcasts that would otherwise fan out to this
 // daemon's local Telegram bridge.
 func (s *State) IngestSyncedEvent(ctx context.Context, event []byte) error {

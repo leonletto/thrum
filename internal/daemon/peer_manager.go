@@ -77,7 +77,7 @@ type runningBridge struct {
 // A nil logger is replaced with log.Default() so the xir.29 OnDialError
 // hook can safely emit diagnostics without risking a nil-pointer panic.
 //
-// localWSPort MAY be "" at construction when the daemon hasn't bound its ws
+// LocalWSPort MAY be "" at construction when the daemon hasn't bound its ws
 // listener yet (thrum-1f4y: early construction lets handlers capture the
 // manager before wsPort resolves). Use SetLocalWSPort once the port binds;
 // bridges can only start after it is populated.
@@ -104,7 +104,7 @@ func (pm *PeerManager) SetLocalWSPort(port string) {
 }
 
 // BuildConfigs generates BridgeConfig for each dialer-role peer.
-// xir.29: when a ReconcileHook is installed via SetReconcileManager,
+// Xir.29: when a ReconcileHook is installed via SetReconcileManager,
 // each config's OnDialError is populated with the auto-reconcile entry
 // point. Attempt counters live on PeerManager.attemptStates (not the
 // closure) so they survive BuildConfigs being called multiple times
@@ -131,7 +131,7 @@ func (pm *PeerManager) BuildConfigs() []peer.BridgeConfig {
 
 // buildConfigForPeer produces the BridgeConfig for a single peer. Shared
 // by BuildConfigs, ConnectPeer, and AcceptPeer so the address/repo-path
-// selection stays in one place. xir.29's OnDialError hook is attached
+// selection stays in one place. Xir.29's OnDialError hook is attached
 // by BuildConfigs (dialer-only) and is intentionally NOT set here;
 // AcceptPeer and the ConnectPeer path into peer.join do not need the
 // reconcile callback (listener-side reverse bridges and newly-paired

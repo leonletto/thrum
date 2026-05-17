@@ -1049,9 +1049,9 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	}
 }
 
-func TestSchema_V27_CurrentVersion(t *testing.T) {
-	if schema.CurrentVersion != 27 {
-		t.Errorf("CurrentVersion = %d, want 27", schema.CurrentVersion)
+func TestSchema_V32_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 32 {
+		t.Errorf("CurrentVersion = %d, want 32 (A-B1 v25 + B-B1 v26/v27 + A-B4 v28 + D-B1 v30/31/32; v29 reserved for MB-1.S6 per canonical-ref §3.1)", schema.CurrentVersion)
 	}
 }
 
@@ -1543,6 +1543,100 @@ func TestMigrate_V20_AgentWithoutRegisterEvent_KeepsEmptyOriginDaemon(t *testing
 	}
 }
 
+// TestMigration_RemindersTable verifies the v28 reminders substrate creates
+// the locked column set per substrate-canonical-reference.md §3.5. Plan
+// thrum-6qmf.3.13 Step 1.
+func TestMigration_RemindersTable(t *testing.T) {
+	db := setupTestDB(t)
+
+	var version int
+	if err := db.QueryRow("SELECT version FROM schema_version").Scan(&version); err != nil {
+		t.Fatalf("read schema_version: %v", err)
+	}
+	if version != schema.CurrentVersion {
+		t.Fatalf("schema_version = %d, want CurrentVersion = %d", version, schema.CurrentVersion)
+	}
+
+	got := pragmaTableInfo(t, db, "reminders")
+
+	expected := []string{
+		"id", "source", "source_agent", "trigger_kind", "trigger_at",
+		"trigger_meta", "target_agent", "target_chain", "body",
+		"raised_at", "next_reminder_at", "last_fired_at", "state",
+		"pane_snapshot", "defer_history", "cleared_at", "cancelled_at",
+		"created_at", "updated_at",
+	}
+	for _, col := range expected {
+		if _, ok := got[col]; !ok {
+			t.Errorf("missing reminders column: %s", col)
+		}
+	}
+	if len(got) != len(expected) {
+		t.Errorf("reminders column count = %d, want %d (got=%v)", len(got), len(expected), got)
+	}
+
+	// Verify all four indexes exist (matches canonical §3.5 index set).
+	for _, idx := range []string{
+		"idx_reminders_next",
+		"idx_reminders_state",
+		"idx_reminders_target",
+		"idx_reminders_source_kind",
+	} {
+		var name string
+		err := db.QueryRow(
+			"SELECT name FROM sqlite_master WHERE type='index' AND name=?", idx,
+		).Scan(&name)
+		if err == sql.ErrNoRows {
+			t.Errorf("missing reminders index: %s", idx)
+		} else if err != nil {
+			t.Fatalf("query index %s: %v", idx, err)
+		}
+	}
+}
+
+// TestMigration_RemindersFreshInstallEquivalentToUpgrade enforces canonical
+// §3.11 Guard 1: fresh-install (InitDB → createTables) and incremental
+// upgrade (Migrate from a pre-v28 version) produce identical reminders
+// schema. Uses the shared assertSameTable helper plus an explicit index
+// SQL comparison since partial-index WHERE clauses must be byte-identical
+// (the planner picks different access paths otherwise).
+func TestMigration_RemindersFreshInstallEquivalentToUpgrade(t *testing.T) {
+	fresh := freshInstallDB(t)
+	upgraded := upgradedFromDB(t, 24)
+	assertSameTable(t, fresh, upgraded, "reminders")
+
+	for _, idx := range []string{
+		"idx_reminders_next",
+		"idx_reminders_state",
+		"idx_reminders_target",
+		"idx_reminders_source_kind",
+	} {
+		freshSQL := indexSQL(t, fresh, idx)
+		upSQL := indexSQL(t, upgraded, idx)
+		if freshSQL != upSQL {
+			t.Errorf("index %s SQL diverges:\n fresh:    %s\n upgraded: %s", idx, freshSQL, upSQL)
+		}
+	}
+}
+
+// indexSQL returns the CREATE INDEX SQL string for the given index name,
+// or "" if absent. Reminders has partial indexes (WHERE state='open') so
+// byte-level SQL comparison is the only way to catch WHERE-clause drift.
+func indexSQL(t *testing.T, db *sql.DB, name string) string {
+	t.Helper()
+	var sqlText sql.NullString
+	err := db.QueryRow(
+		"SELECT sql FROM sqlite_master WHERE type='index' AND name=?", name,
+	).Scan(&sqlText)
+	if err != nil {
+		t.Fatalf("indexSQL %s: %v", name, err)
+	}
+	if !sqlText.Valid {
+		return ""
+	}
+	return sqlText.String
+}
+
 // colInfo mirrors one row of PRAGMA table_info for comparison across paths.
 type colInfo struct {
 	cid     int
@@ -1747,11 +1841,14 @@ func TestMigration_SchedulerJobState_NextScheduledAtNullable(t *testing.T) {
 // createTables MUST produce the same scheduler_job_state and
 // scheduler_job_events schemas as upgrade-from-v24 via runMigrations.
 //
-// Source version is pinned to 24 (not CurrentVersion-1) because the v24→v25
-// migration is the one that creates these tables — bootstrapping at a later
-// version skips the CREATE TABLE step and the comparison becomes trivially
-// empty. Future migrations bumping CurrentVersion must not invalidate this
-// equivalence proof.
+// Baseline is pinned to v24 (the version BEFORE the scheduler migration
+// landed) rather than CurrentVersion-1 — once D-B1 bumped CurrentVersion
+// to 32, CurrentVersion-1 = v31 no longer exercises the scheduler
+// migration block. v24 is the canonical pre-scheduler version per §3.1.
+// With the v25-v32 substrate-gap protocol, CurrentVersion-1 may not
+// trigger any migration that creates the scheduler tables — A-B4's
+// v28 + D-B1's v30/31/32 don't, and B-B1's v26/v27 don't either.
+// v24 stays the canonical pre-scheduler version per §3.1.
 func TestMigration_SchedulerJobState_FreshInstallEquivalentToUpgrade(t *testing.T) {
 	fresh := freshInstallDB(t)
 	upgraded := upgradedFromDB(t, 24)
@@ -1998,6 +2095,95 @@ func TestMigration_AgentLifecycle_DetectionMethodCheckConstraint(t *testing.T) {
 	}
 }
 
+// --- D-B1.1: email substrate migrations 30/31/32 ---
+
+// TestMigration30_FreshApply verifies a fresh-install DB has email_msg_seen
+// with the canonical-ref §3.7 column set + idx_email_msg_seen_proc index.
+func TestMigration30_FreshApply(t *testing.T) {
+	db := setupTestDB(t)
+
+	got := pragmaTableInfo(t, db, "email_msg_seen")
+	for _, col := range []string{"message_id", "from_daemon_id", "nonce", "processed_at"} {
+		if _, ok := got[col]; !ok {
+			t.Errorf("email_msg_seen missing column %s", col)
+		}
+	}
+	// from_daemon_id + nonce stay NULLable per §3.7 (replay-nonce defense
+	// reserved for v0.11.x; v0.11 ships supervisor + unsigned mesh traffic).
+	for _, col := range []string{"from_daemon_id", "nonce"} {
+		if c := got[col]; c.notnull != 0 {
+			t.Errorf("email_msg_seen.%s notnull=%d; canonical-ref §3.7 requires NULLable (0)", col, c.notnull)
+		}
+	}
+	if got["processed_at"].notnull != 1 {
+		t.Errorf("email_msg_seen.processed_at notnull=%d; must be NOT NULL", got["processed_at"].notnull)
+	}
+	if got["message_id"].pk != 1 {
+		t.Errorf("email_msg_seen.message_id pk=%d; must be PK (1)", got["message_id"].pk)
+	}
+	assertIndexExists(t, db, "idx_email_msg_seen_proc")
+}
+
+// TestMigration30_NULLableColumns verifies INSERT with both replay-defense
+// columns NULL succeeds — the v0.11 unsigned-mesh + supervisor traffic case.
+func TestMigration30_NULLableColumns(t *testing.T) {
+	db := setupTestDB(t)
+	_, err := db.Exec(`INSERT INTO email_msg_seen (message_id, from_daemon_id, nonce, processed_at) VALUES (?, NULL, NULL, ?)`,
+		"<msg-1@host>", 1700000000)
+	if err != nil {
+		t.Fatalf("insert with NULL from_daemon_id + nonce: %v", err)
+	}
+}
+
+// TestMigration31_HeadersJsonName verifies the column is headers_json (NOT
+// headers_jsonl) per canonical-ref §3.11 Guard 4 — the §3.8 DDL example
+// drifted to headers_jsonl but Guard 4 mandates the rename at migration
+// time to avoid deserialization bugs (default '{}' is a JSON object, not
+// newline-delimited JSON).
+func TestMigration31_HeadersJsonName(t *testing.T) {
+	db := setupTestDB(t)
+	got := pragmaTableInfo(t, db, "email_outbound_queue")
+
+	if _, ok := got["headers_json"]; !ok {
+		t.Errorf("email_outbound_queue missing column headers_json (Guard 4)")
+	}
+	if _, ok := got["headers_jsonl"]; ok {
+		t.Errorf("email_outbound_queue has obsolete headers_jsonl column; Guard 4 mandates rename to headers_json")
+	}
+}
+
+// TestMigration31_SubjectIsNullable verifies subject accepts NULL — the
+// design-spec §5 NOT NULL constraint was superseded per the plan
+// (supervisor relay can elide subject).
+func TestMigration31_SubjectIsNullable(t *testing.T) {
+	db := setupTestDB(t)
+	_, err := db.Exec(`INSERT INTO email_outbound_queue
+		(from_agent, to_address, subject, body, status, next_retry_at, enqueued_at, updated_at)
+		VALUES (?, ?, NULL, ?, ?, ?, ?, ?)`,
+		"agent_a", "b@x", "body", "queued", 0, 0, 0)
+	if err != nil {
+		t.Fatalf("insert with NULL subject: %v", err)
+	}
+}
+
+// TestMigration31_StatusEnumValues verifies the four canonical status
+// strings (queued / sending / sent / failed) insert cleanly. No CHECK
+// constraint is enforced at DDL level — the typed-Go-constant guard
+// from D-B1.10 is the load-bearing protection — but accepting the
+// canonical set here pins the contract for the queue worker.
+func TestMigration31_StatusEnumValues(t *testing.T) {
+	db := setupTestDB(t)
+	for _, status := range []string{"queued", "sending", "sent", "failed"} {
+		_, err := db.Exec(`INSERT INTO email_outbound_queue
+			(from_agent, to_address, body, status, next_retry_at, enqueued_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			"agent_a", "b@x", "body", status, 0, 0, 0)
+		if err != nil {
+			t.Errorf("status=%q failed to insert: %v", status, err)
+		}
+	}
+}
+
 // TestMigration_AgentLifecycle_FreshInstallEquivalentToUpgrade enforces
 // canonical-ref §3.11 Guard 1 for migration 27: fresh-install via
 // createTables and upgrade via runMigrations produce identical column
@@ -2010,4 +2196,115 @@ func TestMigration_AgentLifecycle_FreshInstallEquivalentToUpgrade(t *testing.T) 
 	fresh := freshInstallDB(t)
 	upgraded := upgradedFromDB(t, 26)
 	assertSameTable(t, fresh, upgraded, "agent_lifecycle_events")
+}
+
+// TestMigration31_AttemptCountColumn verifies the column is attempt_count
+// (NOT attempts) per canonical-ref §3.8 + plan acceptance criteria.
+func TestMigration31_AttemptCountColumn(t *testing.T) {
+	db := setupTestDB(t)
+	got := pragmaTableInfo(t, db, "email_outbound_queue")
+	if _, ok := got["attempt_count"]; !ok {
+		t.Errorf("email_outbound_queue missing column attempt_count")
+	}
+	if _, ok := got["attempts"]; ok {
+		t.Errorf("email_outbound_queue has unexpected 'attempts' column; canonical name is attempt_count")
+	}
+}
+
+// TestMigration32_PeerKeyIsPK verifies peer_key is the single-column PK
+// (NOT a composite (peer_id, direction, window_start) as the design-spec
+// §5 example suggested).
+func TestMigration32_PeerKeyIsPK(t *testing.T) {
+	db := setupTestDB(t)
+	got := pragmaTableInfo(t, db, "email_peer_rate_state")
+	if got["peer_key"].pk != 1 {
+		t.Errorf("email_peer_rate_state.peer_key pk=%d; must be PK (1)", got["peer_key"].pk)
+	}
+	for _, col := range []string{"window_start_at", "inbound_count", "outbound_count", "paused_at"} {
+		if c := got[col]; c.pk != 0 {
+			t.Errorf("email_peer_rate_state.%s pk=%d; expected 0 (PK is single-column peer_key)", col, c.pk)
+		}
+	}
+}
+
+// TestMigration32_DualCountColumns verifies inbound_count + outbound_count
+// are separate columns (not a single (count, direction) pair as the
+// design-spec example showed). Also pins paused_at (NOT paused_until)
+// per canonical-ref §3.9.
+func TestMigration32_DualCountColumns(t *testing.T) {
+	db := setupTestDB(t)
+	got := pragmaTableInfo(t, db, "email_peer_rate_state")
+	for _, col := range []string{"inbound_count", "outbound_count"} {
+		if _, ok := got[col]; !ok {
+			t.Errorf("email_peer_rate_state missing column %s", col)
+		}
+	}
+	if _, ok := got["direction"]; ok {
+		t.Errorf("email_peer_rate_state has unexpected 'direction' column; canonical shape is dual-count")
+	}
+	if _, ok := got["paused_at"]; !ok {
+		t.Errorf("email_peer_rate_state missing column paused_at")
+	}
+	if _, ok := got["paused_until"]; ok {
+		t.Errorf("email_peer_rate_state has unexpected 'paused_until' column; canonical name is paused_at")
+	}
+}
+
+// TestMigration32_PausedAtPartialIndex verifies idx_peer_rate_paused exists
+// as a partial index with WHERE paused_at IS NOT NULL per canonical-ref
+// §3.11 Guard 6 — narrows the "find paused peers" query (run by
+// 'thrum email unblock' + rate-enforcement) to non-NULL rows.
+func TestMigration32_PausedAtPartialIndex(t *testing.T) {
+	db := setupTestDB(t)
+	var sqlText string
+	err := db.QueryRow(
+		`SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_peer_rate_paused'`,
+	).Scan(&sqlText)
+	if err != nil {
+		t.Fatalf("idx_peer_rate_paused not found: %v", err)
+	}
+	if !strings.Contains(strings.ToUpper(sqlText), "WHERE PAUSED_AT IS NOT NULL") {
+		t.Errorf("idx_peer_rate_paused is not a partial index; got: %s", sqlText)
+	}
+}
+
+// TestMigration_EmailTables_FreshInstallEquivalentToUpgrade enforces the
+// Guard 1 parity discipline for the email substrate: fresh-install via
+// createTables MUST produce the same column shapes as upgrade-from-v29
+// via runMigrations. Catches column-name + NULLability + default drift
+// between the two paths.
+func TestMigration_EmailTables_FreshInstallEquivalentToUpgrade(t *testing.T) {
+	fresh := freshInstallDB(t)
+	upgraded := upgradedFromDB(t, 29)
+	for _, table := range []string{"email_msg_seen", "email_outbound_queue", "email_peer_rate_state"} {
+		assertSameTable(t, fresh, upgraded, table)
+	}
+}
+
+// TestMigration_EmailMigrations_Idempotent verifies running Migrate twice
+// on a DB already at CurrentVersion is a no-op (no errors, no duplicate
+// table creation). Exercises Migrate's early-return when
+// currentVersion == CurrentVersion.
+func TestMigration_EmailMigrations_Idempotent(t *testing.T) {
+	db := setupTestDB(t)
+	if err := schema.Migrate(db); err != nil {
+		t.Errorf("second Migrate call should be no-op, got: %v", err)
+	}
+	if err := schema.Migrate(db); err != nil {
+		t.Errorf("third Migrate call should be no-op, got: %v", err)
+	}
+}
+
+// assertIndexExists checks that an index of the given name appears in
+// sqlite_master. Tiny helper for the email-migration tests.
+func assertIndexExists(t *testing.T, db *sql.DB, name string) {
+	t.Helper()
+	var got string
+	err := db.QueryRow(
+		`SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?`,
+		name,
+	).Scan(&got)
+	if err != nil {
+		t.Errorf("expected index %s to exist: %v", name, err)
+	}
 }

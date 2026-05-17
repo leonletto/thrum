@@ -108,7 +108,7 @@ func TestPeerManager_BuildConfigs_LocalPeer(t *testing.T) {
 // TestPeerManager_BuildConfigs_SanitizesBridgeUserID covers thrum-bew3:
 // peer names derived from hostnames routinely contain dots, but the
 // daemon's user.register validator rejects any character outside
-// [a-zA-Z0-9_-]. buildConfigForPeer must therefore sanitize the peer
+// [a-zA-Z0-9_-]. BuildConfigForPeer must therefore sanitize the peer
 // name before folding it into BridgeUserID, otherwise the bridge
 // handshake fails in a tight reconnect loop.
 func TestPeerManager_BuildConfigs_SanitizesBridgeUserID(t *testing.T) {
@@ -458,7 +458,7 @@ func TestOnDialError_CtxCancelInterruptsBackoff(t *testing.T) {
 	elapsed := time.Since(start)
 
 	if got {
-		t.Errorf("cancelled ctx wrongly signaled immediate retry")
+		t.Errorf("canceled ctx wrongly signaled immediate retry")
 	}
 	if called != 0 {
 		t.Errorf("hook wrongly invoked after ctx cancel")

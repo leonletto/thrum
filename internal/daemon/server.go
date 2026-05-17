@@ -107,6 +107,7 @@ var anonymousAllowedMethods = map[string]bool{
 	"peer.list":        true,
 	"peer.status":      true,
 	"telegram.status":  true,
+	"email.status":     true,
 	// Read-only agent/team/session queries
 	"agent.list":        true,
 	"agent.whoami":      true,

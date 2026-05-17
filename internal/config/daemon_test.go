@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -879,4 +880,238 @@ func keysOf(m map[string]json.RawMessage) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// --- D-B1.2: EmailConfig round-trip + absent-block tolerance + users default ---
+
+// fullEmailConfig returns a fully-populated EmailConfig + UsersConfig that
+// exercises every field from design-spec §4. Used by the round-trip test.
+func fullEmailConfig() (config.EmailConfig, map[string]config.UserPrefs) {
+	email := config.EmailConfig{
+		Enabled: true,
+		IMAP: config.EmailIMAP{
+			Host:        "imap.gmail.com",
+			Port:        993,
+			UseStartTLS: false,
+			UseIDLE:     true,
+		},
+		SMTP: config.EmailSMTP{
+			Host:        "smtp.gmail.com",
+			Port:        587,
+			UseStartTLS: true,
+		},
+		AuthMethod:            "password",
+		Username:              "thrum-mesh@gmail.com",
+		FromAddress:           "thrum-mesh@gmail.com",
+		FromDisplayNameFormat: "{agent} @ {handle}",
+		DaemonHandle:          "laptop-falcon",
+		TargetUser:            "leon-letto",
+		TargetEmail:           "leon@example.com",
+		DefaultMention:        "@coordinator_main",
+		AllowFrom:             []string{"leon@example.com", "thrum-mesh@gmail.com"},
+		PollIntervalSeconds:   60,
+		EmbedShortID:          true,
+		UnknownRecipient:      "drop",
+		MaxOutboundBytes:      102400,
+		RateLimits: config.EmailRateLimits{
+			OutboundPerPeerPerHour: 30,
+			InboundPerPeerPerHour:  60,
+			GlobalInboundPerMinute: 120,
+		},
+		Mesh: config.EmailMesh{
+			VouchAcceptance:         "auto_with_notify",
+			VouchTTLHours:           0,
+			AllowTransitiveVouching: true,
+			RevocationPropagation:   "gossip",
+			HopCountCeiling:         5,
+		},
+		Queue: config.EmailQueue{
+			MaxAttempts:           10,
+			BackoffInitialSeconds: 5,
+			BackoffCapSeconds:     300,
+		},
+		Peers: []config.EmailPeer{
+			{
+				Handle:       "laptop-thrum",
+				DaemonID:     "ab12cd34-...",
+				ContactEmail: "thrum-mesh@gmail.com",
+				VouchedBy:    "self",
+				AddedAt:      "2026-05-13T17:42:00Z",
+				Trust:        "full",
+			},
+		},
+	}
+	users := map[string]config.UserPrefs{
+		"leon-letto": {PreferredChannel: "both"},
+	}
+	return email, users
+}
+
+func TestEmailConfig_LoadRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	email, users := fullEmailConfig()
+	cfg := &config.ThrumConfig{
+		Daemon: config.DaemonConfig{LocalOnly: true},
+		Email:  email,
+		Users:  users,
+	}
+	if err := config.SaveThrumConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	loaded, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if !reflect.DeepEqual(loaded.Email, email) {
+		t.Errorf("Email round-trip mismatch:\nwant: %#v\ngot:  %#v", email, loaded.Email)
+	}
+	if !reflect.DeepEqual(loaded.Users, users) {
+		t.Errorf("Users round-trip mismatch:\nwant: %#v\ngot:  %#v", users, loaded.Users)
+	}
+}
+
+func TestEmailConfig_AbsentEmailBlock(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"daemon":{"local_only":true}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Email.Enabled {
+		t.Error("expected Email.Enabled=false when email block absent")
+	}
+	if cfg.Email.IMAP.Host != "" || cfg.Email.SMTP.Host != "" {
+		t.Errorf("expected zero-value Email when block absent; got IMAP.Host=%q SMTP.Host=%q",
+			cfg.Email.IMAP.Host, cfg.Email.SMTP.Host)
+	}
+	if cfg.Users != nil {
+		t.Errorf("expected nil Users map when users block absent; got %v", cfg.Users)
+	}
+}
+
+func TestEmailConfig_PreferredChannelDefault(t *testing.T) {
+	// users.<name> present but preferred_channel absent → PreferredChannel == "".
+	// Q11 outbound relay treats "" as "both"; the struct preserves operator
+	// intent rather than backfilling at load.
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	data := `{
+		"daemon": {"local_only": true},
+		"users": {
+			"leon-letto": {}
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	u, ok := cfg.Users["leon-letto"]
+	if !ok {
+		t.Fatalf("expected user leon-letto in Users map; got %v", cfg.Users)
+	}
+	if u.PreferredChannel != "" {
+		t.Errorf("expected PreferredChannel='' (operator omitted); got %q", u.PreferredChannel)
+	}
+}
+
+// --- A-B4 substrate config (thrum-6qmf.3.16) ---
+
+func TestDaemonConfig_StalledSweepIntervalMinutes_DefaultsTo15(t *testing.T) {
+	cfg := config.DaemonConfig{} // unset
+	if got := cfg.StalledSweepIntervalMinutes(); got != 15 {
+		t.Errorf("got %d, want 15 (canonical §4.4 default)", got)
+	}
+}
+
+func TestDaemonConfig_StalledSweepIntervalMinutes_HonorsExplicitValue(t *testing.T) {
+	cfg := config.DaemonConfig{StalledSweep: config.StalledSweepConfig{IntervalMinutes: 30}}
+	if got := cfg.StalledSweepIntervalMinutes(); got != 30 {
+		t.Errorf("got %d, want 30 (operator override)", got)
+	}
+}
+
+func TestDaemonConfig_StalledSweepIntervalMinutes_NegativeFallsBack(t *testing.T) {
+	cfg := config.DaemonConfig{StalledSweep: config.StalledSweepConfig{IntervalMinutes: -5}}
+	if got := cfg.StalledSweepIntervalMinutes(); got != 15 {
+		t.Errorf("negative value should clamp to default 15; got %d", got)
+	}
+}
+
+func TestDaemonConfig_RemindersDispatchIntervalSeconds_DefaultsTo30(t *testing.T) {
+	cfg := config.DaemonConfig{}
+	if got := cfg.RemindersDispatchIntervalSeconds(); got != 30 {
+		t.Errorf("got %d, want 30 (canonical §4.4 default)", got)
+	}
+}
+
+func TestDaemonConfig_RemindersDispatchIntervalSeconds_HonorsExplicitValue(t *testing.T) {
+	cfg := config.DaemonConfig{Reminders: config.RemindersConfig{DispatchIntervalSeconds: 5}}
+	if got := cfg.RemindersDispatchIntervalSeconds(); got != 5 {
+		t.Errorf("got %d, want 5 (operator override)", got)
+	}
+}
+
+func TestDaemonConfig_SubstrateBlocks_RoundTripJSON(t *testing.T) {
+	original := config.DaemonConfig{
+		StalledSweep: config.StalledSweepConfig{IntervalMinutes: 20},
+		Reminders:    config.RemindersConfig{DispatchIntervalSeconds: 45},
+		Sweep:        config.SweepChainConfig{AlertChain: []string{"@coord", "leon@example.com"}},
+		Escalation:   config.EscalationConfig{SupervisorAgentName: "coordinator_main"},
+	}
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var got config.DaemonConfig
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if got.StalledSweep.IntervalMinutes != 20 {
+		t.Errorf("StalledSweep.IntervalMinutes = %d", got.StalledSweep.IntervalMinutes)
+	}
+	if got.Reminders.DispatchIntervalSeconds != 45 {
+		t.Errorf("Reminders.DispatchIntervalSeconds = %d", got.Reminders.DispatchIntervalSeconds)
+	}
+	if len(got.Sweep.AlertChain) != 2 || got.Sweep.AlertChain[0] != "@coord" {
+		t.Errorf("Sweep.AlertChain = %v", got.Sweep.AlertChain)
+	}
+	if got.Escalation.SupervisorAgentName != "coordinator_main" {
+		t.Errorf("Escalation.SupervisorAgentName = %q", got.Escalation.SupervisorAgentName)
+	}
+}
+
+func TestDaemonConfig_SubstrateBlocks_RoundTripEmpty(t *testing.T) {
+	// Go's omitempty has no effect on nested struct fields (linter
+	// flags this as `omitzero` hint). Zero-value A-B4 blocks render
+	// as empty objects in JSON; the round-trip must still parse back
+	// cleanly — operators copy-pasting partial configs need to land
+	// at the canonical defaults via the *IntervalMinutes() /
+	// *IntervalSeconds() accessors, not via JSON-shape.
+	cfg := config.DaemonConfig{}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var got config.DaemonConfig
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if got.StalledSweepIntervalMinutes() != 15 {
+		t.Errorf("round-trip with zero StalledSweep should still resolve to default 15; got %d",
+			got.StalledSweepIntervalMinutes())
+	}
+	if got.RemindersDispatchIntervalSeconds() != 30 {
+		t.Errorf("round-trip with zero Reminders should still resolve to default 30; got %d",
+			got.RemindersDispatchIntervalSeconds())
+	}
 }

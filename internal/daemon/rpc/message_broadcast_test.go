@@ -398,7 +398,7 @@ func TestMessageHandler_TwoDaemons_OnlyOriginBroadcasts(t *testing.T) {
 	// Read the enriched event back from A's event log. WriteEvent stamps
 	// origin_daemon=stA.DaemonID() into the stored JSON, so this is the
 	// exact byte payload daemon B would receive over sync_apply. Doing a
-	// real round-trip (rather than synthesising the enriched struct in
+	// real round-trip (rather than synthesizing the enriched struct in
 	// memory) pins the contract: if WriteEvent ever stops stamping
 	// origin_daemon, this test flips — which is what we want, because
 	// the whole xfsb filter depends on that stamp being present.

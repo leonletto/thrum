@@ -157,7 +157,7 @@ type MessageDeleteResponse struct {
 	DeletedAt string `json:"deleted_at"`
 }
 
-// MessageDelete deletes a message. callerAgentID is the caller's
+// MessageDelete deletes a message. CallerAgentID is the caller's
 // claimed identity (from THRUM_NAME / loaded identity file); the
 // daemon verifies it against peercred + the shared-worktree
 // disambiguation (thrum-0pos) before accepting. Empty string

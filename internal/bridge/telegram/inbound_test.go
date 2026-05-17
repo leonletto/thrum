@@ -763,7 +763,7 @@ func TestInboundRelay_FreshDMLookupErrorFallsThrough(t *testing.T) {
 // scenario coordinator flagged: if a DIFFERENT human DMs the bot with
 // 'y' while Leon has a pending nudge, the lookup is keyed on the OTHER
 // human's r.userID — which returns empty — so Leon's nudge is not
-// inadvertently resolved. r.userID naturally enforces this, but the
+// inadvertently resolved. R.userID naturally enforces this, but the
 // test locks the behavior in.
 func TestInboundRelay_FreshDMSupervisorMismatch(t *testing.T) {
 	var sendReq map[string]any

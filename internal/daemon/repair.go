@@ -40,7 +40,7 @@ type PeerRepairManager struct {
 }
 
 // NewPeerRepairManager creates a manager bound to the given peer registry
-// and local identity. localName is the display name returned to the dialer
+// and local identity. LocalName is the display name returned to the dialer
 // (typically the hostname, matching PairingManager's convention).
 func NewPeerRepairManager(peers *PeerRegistry, localIdent identity.Identity, localName string) *PeerRepairManager {
 	return &PeerRepairManager{

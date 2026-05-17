@@ -163,7 +163,7 @@ func TestListActiveAgentsByRole_ExcludesEndedSessions(t *testing.T) {
 
 // insertSessionRef directly inserts a session_ref row for an existing
 // session. Used by the thrum-0pos worktree-lookup tests; the regular
-// event-projection path does not materialise session_refs for the
+// event-projection path does not materialize session_refs for the
 // state_query test harness, so we insert by SQL to exercise the query.
 func insertSessionRef(t *testing.T, st *State, sessionID, refType, refValue string) {
 	t.Helper()

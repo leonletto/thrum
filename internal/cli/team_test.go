@@ -452,3 +452,98 @@ func TestTeamMember_JSONRoundtripPreservesOriginDaemon(t *testing.T) {
 		}
 	}
 }
+
+// --- reminders block (thrum-6qmf.3.4) ---
+
+func TestFormatTeamReminders_EmptyHidesBlock(t *testing.T) {
+	if got := formatTeamReminders(nil); got != "" {
+		t.Errorf("nil ids should render empty; got %q", got)
+	}
+	if got := formatTeamReminders([]string{}); got != "" {
+		t.Errorf("empty ids should render empty; got %q", got)
+	}
+}
+
+func TestFormatTeamReminders_RendersMultiLine(t *testing.T) {
+	ids := []string{
+		"reminder-docs_bot-100-0001",
+		"reminder-docs_bot-200-1111",
+	}
+	got := formatTeamReminders(ids)
+	if !strings.HasPrefix(got, "Reminders:\n") {
+		t.Errorf("missing header; got %q", got)
+	}
+	for _, id := range ids {
+		if !strings.Contains(got, "  "+id+"\n") {
+			t.Errorf("id %q missing or wrong indent: %s", id, got)
+		}
+	}
+}
+
+func TestFormatTeamReminders_PreservesOrder(t *testing.T) {
+	ids := []string{"reminder-x-3-3", "reminder-x-1-1", "reminder-x-2-2"}
+	got := formatTeamReminders(ids)
+	// Order from the daemon must be preserved end-to-end (the daemon
+	// orders by next_reminder_at; resorting in the CLI would break that).
+	expectOrder := []int{
+		strings.Index(got, "reminder-x-3-3"),
+		strings.Index(got, "reminder-x-1-1"),
+		strings.Index(got, "reminder-x-2-2"),
+	}
+	for i := 1; i < len(expectOrder); i++ {
+		if expectOrder[i-1] >= expectOrder[i] {
+			t.Errorf("order broken between index %d and %d: %v", i-1, i, expectOrder)
+		}
+	}
+}
+
+func TestFormatTeamReminders_PassesThroughMoreMarker(t *testing.T) {
+	ids := []string{"reminder-x-1-1", "reminder-x-2-2", "... +5 more"}
+	got := formatTeamReminders(ids)
+	if !strings.Contains(got, "... +5 more") {
+		t.Errorf("synthetic '... +N more' marker should pass through: %s", got)
+	}
+}
+
+func TestFormatTeam_AgentWithReminders(t *testing.T) {
+	now := time.Now().UTC()
+	resp := &TeamListResponse{
+		Members: []TeamMember{{
+			AgentID:      "docs_bot",
+			Role:         "implementer",
+			Module:       "docs",
+			Status:       "active",
+			SessionID:    "ses_x",
+			SessionStart: now.Format(time.RFC3339),
+			Reminders: []string{
+				"reminder-docs_bot-100-0001",
+				"reminder-docs_bot-200-1111",
+			},
+		}},
+	}
+	out := FormatTeam(resp)
+	if !strings.Contains(out, "Reminders:") {
+		t.Errorf("expected Reminders block in output:\n%s", out)
+	}
+	if !strings.Contains(out, "reminder-docs_bot-100-0001") {
+		t.Errorf("expected reminder id in output:\n%s", out)
+	}
+}
+
+func TestFormatTeam_AgentWithoutReminders_NoBlock(t *testing.T) {
+	now := time.Now().UTC()
+	resp := &TeamListResponse{
+		Members: []TeamMember{{
+			AgentID:      "docs_bot",
+			Role:         "implementer",
+			Module:       "docs",
+			Status:       "active",
+			SessionID:    "ses_x",
+			SessionStart: now.Format(time.RFC3339),
+		}},
+	}
+	out := FormatTeam(resp)
+	if strings.Contains(out, "Reminders:") {
+		t.Errorf("agent without reminders should not render the Reminders block; got:\n%s", out)
+	}
+}
