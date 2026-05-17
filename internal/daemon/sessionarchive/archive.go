@@ -71,6 +71,13 @@ func mutexFor(agentID string) *sync.Mutex {
 // agent's sessions/ folder, returning the destination path and the
 // parsed §1 "Big picture" body.
 //
+// Return contract: never returns (nil, nil). The first return value
+// is always a non-nil *ArchiveResult whose pointer-fields convey
+// the present-or-absent state (nil ArchivedPath = no archive
+// happened, vs valid path + Content for a successful archive).
+// Errors always surface as the second return value with a nil first
+// return value.
+//
 // The caller passes both thrum-root candidates (mainRepoThrumDir +
 // worktreeThrumDir). SessionsDir picks per agent.Mode internally.
 // At RPC call sites the daemon already carries both as a pair

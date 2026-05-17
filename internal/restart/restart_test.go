@@ -162,6 +162,38 @@ func TestRestartSnapshot_IncludesMachineID(t *testing.T) {
 		"snapshot must contain machine_id line matching os.Hostname()")
 }
 
+// TestFormatRestartSnapshot_ReasonNewlinesStripped covers the
+// frontmatter-injection defense: a `reason` value containing a
+// newline (from a hostile --reason flag) must not be able to spoof
+// other YAML keys like `saved_at:`. The sanitizer in
+// FormatRestartSnapshot replaces \n and \r with spaces.
+func TestFormatRestartSnapshot_ReasonNewlinesStripped(t *testing.T) {
+	hostile := "self-initiated\nsaved_at: 2099-01-01T00:00:00Z"
+	snapshot := FormatRestartSnapshot("test-agent", "ses_123", hostile, "body")
+
+	// The legitimate saved_at line (current UTC, format starts with "20")
+	// must still parse out as expected — no spoofed line bypassing it.
+	frontmatterSavedAtValue := extractFrontmatterValue(t, snapshot, "saved_at")
+	if !strings.HasPrefix(frontmatterSavedAtValue, "20") {
+		t.Errorf("saved_at appears spoofed: %q", frontmatterSavedAtValue)
+	}
+	if strings.Contains(frontmatterSavedAtValue, "2099") {
+		t.Errorf("saved_at carries spoofed year: %q", frontmatterSavedAtValue)
+	}
+
+	// The reason line should contain the sanitized version (space
+	// instead of newline), keeping both halves on one line.
+	reasonValue := extractFrontmatterValue(t, snapshot, "reason")
+	if strings.Contains(reasonValue, "\n") {
+		t.Errorf("reason still contains newline: %q", reasonValue)
+	}
+	if !strings.Contains(reasonValue, "self-initiated") || !strings.Contains(reasonValue, "saved_at:") {
+		// We don't drop content, we just replace \n with space — both
+		// halves survive joined on one line.
+		t.Errorf("reason should contain both halves joined by space; got %q", reasonValue)
+	}
+}
+
 // extractFrontmatterValue returns the value for a YAML-frontmatter key
 // (`<key>: <value>`) from a snapshot string. Test-only helper; fails the
 // test if the key isn't found in the first `---`-delimited block.

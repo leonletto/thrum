@@ -259,3 +259,28 @@ func TestHandleSessionArchive_InvalidJSON_ReturnsError(t *testing.T) {
 		t.Errorf("expected 'invalid request' in error, got: %v", err)
 	}
 }
+
+// TestHandleSessionArchive_NoIdentityFile_ReturnsError covers the
+// resolveWorktreeThrumDir failure mode: agent row exists in the DB
+// (registered via HandleRegister), but the identity file is missing
+// from .thrum/identities/<agentID>.json. In production this is a
+// daemon-runtime invariant violation; the handler must surface a
+// clear error rather than silently archive into the wrong tree.
+func TestHandleSessionArchive_NoIdentityFile_ReturnsError(t *testing.T) {
+	h, agentID, _ := newArchiveTestHandler(t, "persistent")
+
+	// Remove the identity file the test helper just wrote.
+	idPath := filepath.Join(h.thrumDir, "identities", agentID+".json")
+	if err := os.Remove(idPath); err != nil {
+		t.Fatalf("remove identity file: %v", err)
+	}
+
+	params, _ := json.Marshal(SessionArchiveRequest{AgentID: agentID})
+	_, err := h.HandleArchive(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for missing identity file, got nil")
+	}
+	if !strings.Contains(err.Error(), "no identity file found") {
+		t.Errorf("expected 'no identity file found' in error, got: %v", err)
+	}
+}

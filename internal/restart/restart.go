@@ -256,6 +256,18 @@ func FormatRestartSnapshot(agentName, sessionID, reason, conversation string) st
 		machineID = ""
 	}
 
+	// Sanitize the only operator-supplied frontmatter value. `reason`
+	// comes from the --reason CLI flag (cmd/thrum/main.go's snapshot
+	// save command); a value containing a newline would inject fake
+	// YAML keys that ParseSavedAtFrontmatter's single-pass scanner
+	// would pick up — e.g. "self-initiated\nsaved_at: 2099-..."
+	// spoofs the archive timestamp. The other fields (agentName,
+	// sessionID) are validated at registration / session-creation
+	// time and don't need this treatment; machineID is from
+	// os.Hostname(), trusted.
+	reason = strings.ReplaceAll(reason, "\n", " ")
+	reason = strings.ReplaceAll(reason, "\r", " ")
+
 	var out strings.Builder
 	// YAML frontmatter (spec §4.3). Single source of truth for snapshot metadata.
 	out.WriteString("---\n")
@@ -335,6 +347,13 @@ func Restore(thrumDir, agentName string) (string, error) {
 
 // ConsumeInPrime reads a restart snapshot for prime inclusion.
 // Uses rename-then-delete for crash safety.
+//
+// Deprecated: prime now reads + archives the snapshot via the
+// session.archive RPC (thrum-6qmf.15 E2.2). New production paths
+// should use that RPC instead — the daemon centralizes archive
+// timing and preserves the snapshot under .thrum/agents/<id>/sessions/
+// rather than deleting it. Existing test fixtures keep this
+// function callable for the legacy roundtrip flow.
 func ConsumeInPrime(thrumDir, agentName string) (string, error) {
 	path := restartSnapshotPath(thrumDir, agentName)
 	data, err := os.ReadFile(path) // #nosec G304 -- internal path
@@ -346,6 +365,11 @@ func ConsumeInPrime(thrumDir, agentName string) (string, error) {
 }
 
 // CleanupConsumed deletes the .consumed file after prime output succeeds.
+//
+// Deprecated: paired with ConsumeInPrime above. The session.archive
+// RPC has supplanted both as the production prime-flow archive
+// mechanism (thrum-6qmf.15 E2.2). Kept exported only for legacy
+// test fixtures.
 func CleanupConsumed(thrumDir, agentName string) {
 	_ = os.Remove(restartSnapshotPath(thrumDir, agentName) + ".consumed")
 }

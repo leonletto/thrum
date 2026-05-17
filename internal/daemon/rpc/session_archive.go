@@ -117,15 +117,17 @@ func (h *SessionArchiveHandler) HandleArchive(ctx context.Context, params json.R
 	if err != nil {
 		return nil, fmt.Errorf("session archive: %w", err)
 	}
-	if result == nil {
-		return &SessionArchiveResponse{}, nil
-	}
-
-	// Discovery-hint rendering happens here (not inside Archive) so the
-	// session-archive primitive stays focused on move semantics; the
-	// RPC layer composes Archive + RenderDiscoveryHint. Hint reads
-	// SessionsDir(agent, ...) which is the same destination Archive
-	// just wrote into — fresh archives are included in the count.
+	// sessionarchive.Archive's return contract guarantees a non-nil
+	// result on err == nil — see Archive's doc comment. No nil-guard
+	// here; if that contract changes a test failure will surface
+	// before this dereferences a nil.
+	//
+	// Discovery-hint rendering happens at the RPC layer (not inside
+	// Archive) so the session-archive primitive stays focused on move
+	// semantics; HandleArchive composes Archive + RenderDiscoveryHint.
+	// Hint reads SessionsDir(agent, ...) — the same destination
+	// Archive just wrote into — so fresh archives are included in
+	// the count.
 	resp := &SessionArchiveResponse{
 		ArchivedPath: result.ArchivedPath,
 		BigPicture:   result.BigPicture,
