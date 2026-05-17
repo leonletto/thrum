@@ -37,18 +37,31 @@ import (
 // (copyFile content-equality short-circuit; same code path the
 // reconcile pass uses).
 func (w *Worker) EnsureMirrored(ctx context.Context, worktreePath string) error {
-	if !w.started.Load() {
-		return ErrWorkerNotStarted
-	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	if _, ok := w.registered[worktreePath]; !ok {
+	// Snapshot the registration + destinations under the read lock
+	// so a concurrent Stop (which closes channels and reassigns the
+	// maps) cannot race the destination iteration below. Release the
+	// lock before slow filesystem work — reconcileDestination takes
+	// the per-destination mutex internally, which is independent of
+	// stateMu.
+	w.stateMu.RLock()
+	if !w.started.Load() {
+		w.stateMu.RUnlock()
+		return ErrWorkerNotStarted
+	}
+	_, registered := w.registered[worktreePath]
+	if !registered {
+		w.stateMu.RUnlock()
 		return fmt.Errorf("%w: %s", ErrUnknownWorktree, worktreePath)
 	}
+	rawDests := w.worktree[worktreePath]
+	dests := make([]Destination, len(rawDests))
+	copy(dests, rawDests)
+	w.stateMu.RUnlock()
 
-	dests := w.worktree[worktreePath]
 	if len(dests) == 0 {
 		// Registered but every destination resolved to a null
 		// adapter — treat as success-skip per spec §12.3.1.

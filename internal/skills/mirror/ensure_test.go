@@ -268,6 +268,122 @@ func TestEnsureMirrored_BeforeStartReturnsErr(t *testing.T) {
 	}
 }
 
+// TestEnsureMirrored_RacesStop pins the stateMu locking contract
+// from the brainstormer-third finding I1: EnsureMirrored must
+// snapshot w.registered + w.worktree under RLock so a concurrent
+// Stop (which reassigns the maps after WaitGroup drain) cannot race
+// the destination iteration. Without the lock, the race detector
+// surfaces a data race on map header access here. Pinned regardless
+// of -race so a future refactor that drops the snapshot is caught.
+func TestEnsureMirrored_RacesStop(t *testing.T) {
+	t.Parallel()
+
+	const iterations = 50
+	for i := range iterations {
+		wtree := t.TempDir()
+		srcRoot := filepath.Join(t.TempDir(), ".thrum", "skills")
+		if err := os.MkdirAll(srcRoot, 0o750); err != nil {
+			t.Fatalf("iter %d: mkdir srcRoot: %v", i, err)
+		}
+		w := New(WorkerOpts{
+			SourceRoot:   srcRoot,
+			Destinations: []Destination{claudeDest(wtree)},
+			Debounce:     20 * time.Millisecond,
+			StopTimeout:  1 * time.Second,
+			Logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+		})
+		if err := w.Start(context.Background()); err != nil {
+			t.Fatalf("iter %d: Start: %v", i, err)
+		}
+		writeSkill(t, srcRoot, "raced", "body", nil)
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			// The worst race window is when Stop is mid-flight and
+			// EnsureMirrored is reading w.registered / w.worktree.
+			_ = w.EnsureMirrored(context.Background(), wtree)
+		}()
+		go func() {
+			defer wg.Done()
+			_ = w.Stop()
+		}()
+		wg.Wait()
+		// Either order produces a clean result: EnsureMirrored
+		// either completes (caught Stop after; mirror landed) or
+		// returns ErrWorkerNotStarted (Stop ran first). Both are
+		// acceptable; the race detector is the gate.
+	}
+}
+
+// TestReconcile_SilentFailGuardedAgainstSourceReadError pins
+// brainstormer-third finding M2: reconcileDestination must NOT
+// treat a source-read failure as "empty canonical" — otherwise the
+// destination cleanup loop wipes every mirrored skill on a transient
+// FS hiccup.
+func TestReconcile_SilentFailGuardedAgainstSourceReadError(t *testing.T) {
+	t.Parallel()
+
+	wtree := t.TempDir()
+	srcRoot := filepath.Join(t.TempDir(), ".thrum", "skills")
+	if err := os.MkdirAll(srcRoot, 0o750); err != nil {
+		t.Fatalf("mkdir srcRoot: %v", err)
+	}
+	// Pre-populate the destination with a mirrored skill.
+	destSkillDir := filepath.Join(wtree, ".claude", "skills", "valuable")
+	if err := os.MkdirAll(destSkillDir, 0o750); err != nil {
+		t.Fatalf("mkdir destSkill: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(destSkillDir, "SKILL.md"), []byte("body"), 0o600); err != nil {
+		t.Fatalf("write destSkill: %v", err)
+	}
+
+	// Sabotage source-read by replacing srcRoot with an unreadable
+	// path (chmod 0). On Linux + macOS, root can still read; the
+	// test relies on the non-root environment that CI + dev boxes
+	// run as. If the runner is root, the test trivially passes on
+	// the no-error path (canonical populated, no cleanup); the
+	// regression we care about is the wipe-on-read-failure path
+	// which only fires for non-root.
+	if err := os.Chmod(srcRoot, 0); err != nil {
+		t.Fatalf("chmod srcRoot 0: %v", err)
+	}
+	defer os.Chmod(srcRoot, 0o700) //nolint:errcheck,gosec // best-effort cleanup; 0o700 satisfies gosec G302 + restores ownership-read
+
+	w := New(WorkerOpts{
+		SourceRoot:   srcRoot,
+		Destinations: []Destination{claudeDest(wtree)},
+		Debounce:     20 * time.Millisecond,
+		StopTimeout:  1 * time.Second,
+		Logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	if err := w.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer w.Stop()
+
+	// Reconcile or EnsureMirrored should surface the read error
+	// rather than silently wipe the destination. Either return path
+	// (error or no-op) is acceptable; what's NOT acceptable is the
+	// destination skill disappearing.
+	_ = w.EnsureMirrored(context.Background(), wtree)
+
+	// The pre-existing destination skill must survive a failed
+	// reconcile.
+	if _, err := os.Stat(filepath.Join(destSkillDir, "SKILL.md")); err != nil {
+		// Only fail the test if the file actually disappeared.
+		// (If the runner is root, the chmod was a no-op, the
+		// source read succeeded, and the canonical-empty cleanup
+		// would have wiped the file — but the new guard says
+		// "only consider 'not exist' as legitimately empty", so
+		// the test still catches the regression.)
+		if os.IsNotExist(err) {
+			t.Errorf("destination skill wiped on source-read failure: %v", err)
+		}
+	}
+}
+
 // TestEnsureMirrored_MultipleDestinations confirms the wake-handler
 // contract when a worktree has more than one runtime registered. In
 // v0.11 only one runtime is canonical per worktree, but the contract

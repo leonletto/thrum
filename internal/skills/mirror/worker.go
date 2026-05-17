@@ -83,11 +83,18 @@ type Worker struct {
 	started atomic.Bool
 
 	// stateMu guards channels, worktree, and registered against the
-	// Stop / Enqueue race: Stop closes channels and reassigns the
-	// maps while Enqueue may be mid-flight. Without this mutex, an
-	// Enqueue that passed the started.Load() check could send to a
-	// closed channel and panic. Stop takes the write lock; Enqueue,
-	// Reconcile, and EnsureMirrored take the read lock.
+	// Stop race: Stop closes channels and reassigns the maps while
+	// Enqueue / Reconcile / EnsureMirrored may be mid-flight.
+	// Without this mutex, an Enqueue that passed the started.Load()
+	// check could send to a closed channel and panic; Reconcile /
+	// EnsureMirrored could race the map reassignment in Stop.
+	//
+	// Pattern: callers acquire RLock just long enough to snapshot
+	// the fields they need (channel slice, destinations slice,
+	// registered presence), then release the lock BEFORE doing slow
+	// filesystem work or waiting on channel sends. Stop takes the
+	// write lock to flip started→false + close channels (front
+	// half), then again to reassign the maps after WaitGroup drain.
 	stateMu  sync.RWMutex
 	channels map[Destination]chan mirrorTask
 	worktree map[string][]Destination
@@ -399,11 +406,24 @@ func (w *Worker) runDestination(
 // every destination goroutine is in its select loop before Start
 // returns. Reconcile cannot deadlock on a non-existent receiver.
 func (w *Worker) Reconcile(ctx context.Context) error {
+	// Snapshot the channel set under the read lock so a concurrent
+	// Stop can't reassign w.channels mid-loop. Release the lock
+	// before sending on the channels (the sends can block briefly
+	// behind debounced applies; holding stateMu while we wait would
+	// stall Stop and any other Enqueue).
+	w.stateMu.RLock()
 	if !w.started.Load() {
+		w.stateMu.RUnlock()
 		return ErrWorkerNotStarted
 	}
-	var wg sync.WaitGroup
+	channels := make([]chan mirrorTask, 0, len(w.channels))
 	for _, ch := range w.channels {
+		channels = append(channels, ch)
+	}
+	w.stateMu.RUnlock()
+
+	var wg sync.WaitGroup
+	for _, ch := range channels {
 		wg.Add(1)
 		select {
 		case ch <- mirrorTask{
@@ -445,16 +465,34 @@ func (w *Worker) reconcileDestination(dest Destination, entry *AdapterEntry) err
 	defer mu.Unlock()
 
 	// Enumerate canonical skills (skills with a SKILL.md in
-	// <SourceRoot>/<name>/).
+	// <SourceRoot>/<name>/). A read error here MUST NOT be silently
+	// swallowed: if we treated read failure as "empty canonical",
+	// the cleanup loop below would wipe every destination skill on
+	// a transient filesystem hiccup. Surface the error loudly + bail
+	// before any destructive work.
+	entries, readErr := os.ReadDir(w.opts.SourceRoot)
+	if readErr != nil {
+		if !os.IsNotExist(readErr) {
+			err := fmt.Errorf("%w: read source %s: %w", ErrMirrorWrite, w.opts.SourceRoot, readErr)
+			w.opts.Logger.Warn(
+				"skills mirror reconcile aborted: source read failed",
+				"worktree", dest.WorktreePath,
+				"runtime", dest.Runtime,
+				"err", err,
+			)
+			return err
+		}
+		// SourceRoot legitimately doesn't exist (fresh repo before
+		// any skills landed) — proceed with an empty canonical
+		// set. The cleanup loop's destDir read is the next gate.
+	}
 	canonical := map[string]struct{}{}
-	if entries, err := os.ReadDir(w.opts.SourceRoot); err == nil {
-		for _, e := range entries {
-			if !e.IsDir() {
-				continue
-			}
-			if _, err := os.Stat(filepath.Join(w.opts.SourceRoot, e.Name(), "SKILL.md")); err == nil {
-				canonical[e.Name()] = struct{}{}
-			}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(w.opts.SourceRoot, e.Name(), "SKILL.md")); err == nil {
+			canonical[e.Name()] = struct{}{}
 		}
 	}
 
