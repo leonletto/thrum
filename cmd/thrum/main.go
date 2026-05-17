@@ -6189,8 +6189,21 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	server.RegisterHandler("agent.cleanup", agentHandler.HandleCleanup)
 	server.RegisterHandler("agent.set-status", agentHandler.HandleSetAgentStatus)
 
+	// Reminder substrate (A-B4, v0.11) — constructed before the team
+	// handler because team.list decorates each member with open reminder
+	// IDs via remindersStore.OpenForAgent. Dispatcher wiring (via A-B1's
+	// scheduler.RegisterInternal) lands separately in thrum-6qmf.3.27.
+	remindersStore := reminders.NewSQLStore(safedb.New(st.RawDB()))
+	remindersHandler := reminders.NewHandler(remindersStore)
+	server.RegisterHandler("reminder.set", remindersHandler.HandleSet)
+	server.RegisterHandler("reminder.get", remindersHandler.HandleGet)
+	server.RegisterHandler("reminder.list", remindersHandler.HandleList)
+	server.RegisterHandler("reminder.defer", remindersHandler.HandleDefer)
+	server.RegisterHandler("reminder.clear", remindersHandler.HandleClear)
+	server.RegisterHandler("reminder.cancel", remindersHandler.HandleCancel)
+
 	// Team management
-	teamHandler := rpc.NewTeamHandler(st, thrumDir, supervisorIdentity)
+	teamHandler := rpc.NewTeamHandler(st, thrumDir, supervisorIdentity, remindersStore)
 	server.RegisterHandler("team.list", teamHandler.HandleList)
 
 	// Context management
@@ -6219,20 +6232,6 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	server.RegisterHandler("group.list", groupHandler.HandleList)
 	server.RegisterHandler("group.info", groupHandler.HandleInfo)
 	server.RegisterHandler("group.members", groupHandler.HandleMembers)
-
-	// Reminder substrate (A-B4, v0.11). Polymorphic reminders table backs
-	// agent/user time reminders, daemon staleness pings, and condition-
-	// triggered stalled-sweep entries. Dispatcher wiring (registration via
-	// A-B1's scheduler.RegisterInternal) lands in thrum-6qmf.3.27 — these
-	// RPC handlers only need the Store.
-	remindersStore := reminders.NewSQLStore(safedb.New(st.RawDB()))
-	remindersHandler := reminders.NewHandler(remindersStore)
-	server.RegisterHandler("reminder.set", remindersHandler.HandleSet)
-	server.RegisterHandler("reminder.get", remindersHandler.HandleGet)
-	server.RegisterHandler("reminder.list", remindersHandler.HandleList)
-	server.RegisterHandler("reminder.defer", remindersHandler.HandleDefer)
-	server.RegisterHandler("reminder.clear", remindersHandler.HandleClear)
-	server.RegisterHandler("reminder.cancel", remindersHandler.HandleCancel)
 
 	// Message management
 	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, thrumDir, supervisorID, legacySupervisorID)
