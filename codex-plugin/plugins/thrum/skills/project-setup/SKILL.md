@@ -1,10 +1,11 @@
 ---
 name: project-setup
-description: "Use when converting a plan file (from writing-plans skill) into beads epics, tasks, implementation prompts, and worktrees — before any coding begins"
+description:
+  "Use when converting a plan file (from writing-plans skill) into beads epics,
+  tasks, implementation prompts, and worktrees — before any coding begins"
 # source: claude-plugin/skills/project-setup/SKILL.md
 # generated-by: scripts/sync-skills.sh
 ---
-
 
 ## Project Setup
 
@@ -42,9 +43,9 @@ digraph when_to_use {
 **Don't use when:**
 
 - No design doc exists yet — use the `coordinator-running-brainstorm-cycles`
-  skill first (spawns a researcher in an isolated worktree, runs the
-  brainstorm interactively with the user, iterates dual-review cycles, then
-  hands off back to project-setup)
+  skill first (spawns a researcher in an isolated worktree, runs the brainstorm
+  interactively with the user, iterates dual-review cycles, then hands off back
+  to project-setup)
 - No plan file exists yet — use writing-plans skill first
 - Tasks already exist in beads — go straight to creating the implementation
   prompt closely following the template (implementation-agent.md)

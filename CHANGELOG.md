@@ -10,26 +10,26 @@ and this project adheres to
 
 ### Added
 
-- **`thrum inbox --from @agent` filter** — scope unread inbox to messages from
-  a single sender. Useful for catching up on a specific agent's traffic without
+- **`thrum inbox --from @agent` filter** — scope unread inbox to messages from a
+  single sender. Useful for catching up on a specific agent's traffic without
   reading the rest of the queue.
-- **`thrum worktree teardown --delete-branch` flag** — tear down a worktree
-  and delete its branch in one step. Previously the branch was kept and required
-  a separate `git branch -D` after teardown.
+- **`thrum worktree teardown --delete-branch` flag** — tear down a worktree and
+  delete its branch in one step. Previously the branch was kept and required a
+  separate `git branch -D` after teardown.
 - **Daemon-side backstop nudger** — the daemon now polls for stale-unread
   messages and re-emits delivery nudges, replacing the user-side
   `thrum-inbox-poll.sh` cron pattern. More reliable (survives runtime restarts)
   and lower-overhead than a per-agent cron schedule.
 - **Headless `worktree.Create` / `worktree.Destroy` Go API** — the worktree
-  lifecycle moves to a single shared package (`internal/worktree`), used by
-  both the cobra commands and future programmatic callers (notably the v0.11
+  lifecycle moves to a single shared package (`internal/worktree`), used by both
+  the cobra commands and future programmatic callers (notably the v0.11
   substrate epics). Behavior-equivalent to the previous cobra-only path; opens
   the door to ephemeral-worktree flows.
-- **`thrum prime` first-turn ack instruction** — the prime briefing now asks
-  the runtime to emit a short scrollback line on receipt, giving the agent
-  visible signal that context loaded. Previously some runtimes (notably Claude
-  Code's SessionStart hook) silently absorbed the prime briefing with no
-  observable first-turn anchor.
+- **`thrum prime` first-turn ack instruction** — the prime briefing now asks the
+  runtime to emit a short scrollback line on receipt, giving the agent visible
+  signal that context loaded. Previously some runtimes (notably Claude Code's
+  SessionStart hook) silently absorbed the prime briefing with no observable
+  first-turn anchor.
 
 ### Changed
 
@@ -37,21 +37,21 @@ and this project adheres to
   cleanup). README, website content, docs, and SEO references updated. Old
   GitHub Pages URLs still resolve via redirect; canonical now points at
   `thrum.team`.
-- **`thrum-inbox-poll.sh` cron deprecated** in favor of the daemon-side
-  backstop nudger. Existing installations continue to function but the cron is
-  no longer recommended; the daemon backstop is enabled by default. Removal
-  of the user-side cron is queued for a future release.
+- **`thrum-inbox-poll.sh` cron deprecated** in favor of the daemon-side backstop
+  nudger. Existing installations continue to function but the cron is no longer
+  recommended; the daemon backstop is enabled by default. Removal of the
+  user-side cron is queued for a future release.
 - **`project-setup` skill follows `.thrum/redirect` when checking
-  `philosophy.md`.** Previously failed in redirected worktrees because it
-  looked at the worktree-local path directly. Now resolves the redirect before
-  the philosophy-presence check.
+  `philosophy.md`.** Previously failed in redirected worktrees because it looked
+  at the worktree-local path directly. Now resolves the redirect before the
+  philosophy-presence check.
 - **`thrum worktree create` / `thrum worktree teardown` rewired through
   `internal/worktree`** — cobra commands now delegate to the shared package
   rather than inlining worktree-lifecycle logic. No user-visible behavior
   change, but makes worktree-related bug fixes land in one place.
-- **README dropped removed-feature references** (groups + subscriptions) —
-  these features were removed in earlier releases; the README is now
-  consistent with the current CLI surface.
+- **README dropped removed-feature references** (groups + subscriptions) — these
+  features were removed in earlier releases; the README is now consistent with
+  the current CLI surface.
 
 ### Fixed
 
@@ -68,8 +68,8 @@ and this project adheres to
   via explicit backtick strip in the interpolation path.
 - **Inbox backstop spool envelopes preserved from janitor reaping** — the
   janitor was prematurely deleting backstop-pending envelopes, causing
-  stale-unread messages to disappear from inbox before the backstop nudger
-  could re-deliver them.
+  stale-unread messages to disappear from inbox before the backstop nudger could
+  re-deliver them.
 - **Self-delivery: `read_at` stamped at insert; author preserved in
   recipientSet** — E1 self-mention semantic fix. Messages with explicit
   self-mention now route correctly to the author's own inbox without being
@@ -116,8 +116,8 @@ and this project adheres to
     preserve the single-document JSON contract; equivalent context routes
     through the slog bridge's hints array.
   - The `cross_worktree` guard's remediation message reads
-    `cd to the correct worktree or run 'thrum prime' to re-claim`. Agents
-    that hit the abort should fix their cwd; there is no user-facing bypass.
+    `cd to the correct worktree or run 'thrum prime' to re-claim`. Agents that
+    hit the abort should fix their cwd; there is no user-facing bypass.
   - `TestEveryLeafHasCrossWorktreeResponse` CI gate fails the build if any new
     cobra leaf lacks a class annotation — prevents silent taxonomy drift.
 

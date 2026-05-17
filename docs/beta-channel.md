@@ -1,4 +1,3 @@
-
 ## Thrum Beta Channel
 
 Every Thrum release goes through a soak window as `-rc.N` (release candidate)

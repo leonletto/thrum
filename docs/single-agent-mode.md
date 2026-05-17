@@ -1,4 +1,3 @@
-
 ## What Changed
 
 Thrum started as a messaging system. You run multiple agents, they need to talk

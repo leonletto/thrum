@@ -100,12 +100,12 @@ discipline.
 
 ### Run thrum commands from your worktree, never from the main repo or another worktree
 
-Your worktree (`{{.RepoRoot}}` here) is your home — the `.thrum/` identity
-file lives here. Running thrum CLI from the main repo would pick up the
-coordinator's identity and route messages under the wrong sender. Same
-hazard if you `cd` into another agent's worktree. Always run from
-`{{.RepoRoot}}`, or anchor explicitly with `--repo {{.RepoRoot}}`. If a Bash
-command `cd`s outside your worktree, return to it before any thrum CLI call.
+Your worktree (`{{.RepoRoot}}` here) is your home — the `.thrum/` identity file
+lives here. Running thrum CLI from the main repo would pick up the coordinator's
+identity and route messages under the wrong sender. Same hazard if you `cd` into
+another agent's worktree. Always run from `{{.RepoRoot}}`, or anchor explicitly
+with `--repo {{.RepoRoot}}`. If a Bash command `cd`s outside your worktree,
+return to it before any thrum CLI call.
 
 ### Send to specific agent names, never to role names
 
