@@ -73,6 +73,13 @@ type TeamMember struct {
 	// team.list handler; consumers should gate heartbeat-staleness checks on
 	// this field because heartbeats don't propagate across peer daemons.
 	IsLocal bool `json:"is_local,omitempty"`
+
+	// Reminders are the open reminder IDs targeted at this agent
+	// (state == 'open'). Populated by the daemon's team.list handler when
+	// the A-B4 substrate is wired. Capped at the daemon's
+	// teamReminderCompactCap with a "... +N more" marker for the tail —
+	// full list via 'thrum agent reminder list --target @<name>'.
+	Reminders []string `json:"reminders,omitempty"`
 }
 
 // FileChange represents a changed file for team display.
@@ -82,6 +89,32 @@ type FileChange struct {
 	Additions    int    `json:"additions"`
 	Deletions    int    `json:"deletions"`
 	Status       string `json:"status"`
+}
+
+// formatTeamReminders renders the per-agent reminders block for FormatTeam.
+// Returns "" when the slice is empty so the caller can splat it
+// unconditionally — empty reminders hide the row entirely (most agents
+// have none and rendering "(none)" everywhere would dilute the signal).
+//
+// Multi-line layout matches the Files: block convention (header line +
+// indented entries). IDs come from the daemon already ordered (by
+// next_reminder_at ASC NULLS LAST per Store.OpenForAgent), so this
+// renderer just preserves the order.
+//
+// The synthetic "... +N more" marker from the daemon's
+// teamReminderCompactCap passes through unchanged; consumers reading
+// past the cap should run 'thrum agent reminder list --target @<name>'
+// for the full set.
+func formatTeamReminders(ids []string) string {
+	if len(ids) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("Reminders:\n")
+	for _, id := range ids {
+		fmt.Fprintf(&b, "  %s\n", id)
+	}
+	return b.String()
 }
 
 // FormatTeam formats the team list for display.
@@ -173,6 +206,11 @@ func FormatTeam(resp *TeamListResponse) string {
 
 		// Inbox
 		fmt.Fprintf(&out, "Inbox:    %d unread / %d total\n", m.InboxUnread, m.InboxTotal)
+
+		// Reminders (A-B4). Hidden entirely when the agent has none —
+		// most agents have no open reminders, so rendering "Reminders:
+		// (none)" everywhere would dilute the signal.
+		out.WriteString(formatTeamReminders(m.Reminders))
 
 		// Branch
 		if m.Branch != "" {
