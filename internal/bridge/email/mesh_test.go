@@ -320,6 +320,50 @@ func TestMesh_PeerAnnounceCeilingDrops(t *testing.T) {
 	}
 }
 
+// --- Commit 4: peer.rebind ---
+
+func TestMesh_PeerRebindNewDaemonIdUnderSameHandle(t *testing.T) {
+	configDir, configPath := setupMeshConfigWithPeers(t, []config.EmailPeer{
+		{Handle: "ivan", DaemonID: "daemon-ivan-old1", ContactEmail: "ivan@example.com", Trust: "full", VouchedBy: "self"},
+	})
+	h, notifier, _ := newTestMeshHandler(t, configDir, configPath)
+	ctx := context.Background()
+
+	env := PeerProtocolPayload{
+		Handle:      "ivan",
+		DaemonID:    "daemon-ivan-old1",
+		NewDaemonID: "daemon-ivan-new2",
+	}
+	if err := h.HandlePeerRebind(ctx, env); err != nil {
+		t.Fatalf("HandlePeerRebind: %v", err)
+	}
+
+	// Notifier should have fired with old+new short IDs.
+	if len(notifier.messages) == 0 {
+		t.Error("expected notifier to be called for rebind")
+	}
+
+	// Before confirm: daemon_id unchanged.
+	if peers := loadPeers(t, configDir); peers[0].DaemonID != "daemon-ivan-old1" {
+		t.Errorf("daemon_id should not change before confirm: %v", peers[0].DaemonID)
+	}
+
+	// Confirm: daemon_id updated, handle preserved.
+	if err := h.ConfirmRebind(ctx, "ivan", "daemon-ivan-new2"); err != nil {
+		t.Fatalf("ConfirmRebind: %v", err)
+	}
+	peers := loadPeers(t, configDir)
+	if len(peers) != 1 {
+		t.Fatalf("expected 1 peer, got %d", len(peers))
+	}
+	if peers[0].Handle != "ivan" {
+		t.Errorf("handle changed: %q", peers[0].Handle)
+	}
+	if peers[0].DaemonID != "daemon-ivan-new2" {
+		t.Errorf("daemon_id not updated: %q", peers[0].DaemonID)
+	}
+}
+
 func TestMesh_PeerPairOperatorTimeoutDrops(t *testing.T) {
 	configDir, configPath := setupMeshConfig(t)
 
