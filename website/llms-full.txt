@@ -1,4 +1,4 @@
-# Thrum v0.10.4 -- Complete Agent Reference
+# Thrum v0.10.5 -- Complete Agent Reference
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -87,6 +87,68 @@ New in v0.8.2:
   `thrum worktree create` workflow; TMUX_SESSIONS.md warns that `tmux launch`
   hard-errors on `--no-agent` sessions; CLI_REFERENCE.md corrected to drop
   the old broken temp-session description.
+
+New in v0.10.5:
+- Daemon-side backstop nudger for stale-unread messages — the daemon polls
+  for unread messages older than the nudge threshold and re-emits delivery
+  notifications itself, replacing the user-side `thrum-inbox-poll.sh` cron
+  pattern. More reliable (no missed cron windows when an agent is
+  mid-restart) and lower-overhead than a per-agent schedule. Existing cron
+  installs continue to function alongside the daemon backstop as no-ops;
+  cron removal queued for a future release.
+- `thrum inbox --from @agent` filter — scope unread inbox to messages from
+  a single sender. Useful for catching up on one agent's traffic without
+  paging through the rest of the queue. Composes with the existing
+  `--unread`, `--scope`, `--mentions`, `--all` filters.
+- `thrum worktree teardown --delete-branch` flag — tear down a worktree
+  and delete its branch in one step. Previously the branch was kept and
+  required a separate `git branch -D` after teardown.
+- `thrum prime` first-turn ack instruction — the prime briefing now asks
+  the runtime to emit a short acknowledgment line on receipt, giving the
+  agent visible scrollback signal that context loaded. Previously some
+  runtimes (notably Claude Code's SessionStart hook) silently absorbed the
+  prime briefing with no observable first-turn anchor, making it hard to
+  diagnose "didn't get prime" without reading transcripts. Backticks in
+  identity fields are explicitly stripped from the interpolation path
+  (thrum-x7rb) so they don't leak literal markdown/shell interpretation
+  into the rendered ack.
+- Headless `worktree.Create` / `worktree.Destroy` Go API
+  (`internal/worktree`) — worktree lifecycle moves into a single shared
+  package used by both the cobra commands and future programmatic callers
+  (the v0.11 substrate epics in particular). Behavior-equivalent to the
+  previous cobra-only path; opens the door to ephemeral-worktree flows.
+  Cobra `thrum worktree create` / `teardown` are now thin shims over the
+  shared package.
+- `runtime-init` overwrites stale daemon-managed scripts (thrum-akqv P1) —
+  the runtime-init template logic now distinguishes daemon-managed scripts
+  (`scripts/thrum-startup.sh`, `scripts/thrum-check-inbox.sh`,
+  `scripts/thrum-polling.sh`, `.codex/hooks/session-start`) from
+  user-customized configs (`.claude/settings.json`, `AGENTS.md`,
+  `.gemini/instructions.md`, `.cursorrules`, `opencode.json`,
+  `.augment/settings.json`, `.augment/rules/thrum.md`). Daemon-managed
+  scripts overwrite on init so long-running agent worktrees stop drifting
+  from the embedded template; user configs preserve on init as before.
+  Pass `--force` to overwrite user configs too if needed. Fixes the silent
+  drift class where substrate-side template changes (e.g., backstop
+  polling moving from a per-agent cron to the daemon-side ticker) never
+  propagated into already-registered worktrees.
+- `project-setup` skill follows `.thrum/redirect` when checking
+  `philosophy.md` — previously failed in redirected worktrees because the
+  skill resolved the worktree-local `philosophy.md` path directly without
+  honoring the redirect. The check now resolves the redirect first.
+- Inbox backstop spool envelope durability — the janitor was prematurely
+  deleting backstop-pending envelopes, causing stale-unread messages to
+  disappear from inbox before the daemon backstop nudger could re-deliver
+  them. Janitor now preserves envelopes flagged backstop-pending.
+- Self-mention semantic fix — messages with an explicit self-mention now
+  route correctly to the author's own inbox without being filtered out by
+  the recipient-set construction. `read_at` is stamped at insert for the
+  self-delivery row, so the message doesn't appear as unread to its own
+  author the first time the inbox listing loads.
+- URLs migrated from `leonletto.github.io/thrum` to `thrum.team`
+  (Phase 6.3) across README, website content, docs, plugin manifests,
+  agent definitions, and SEO references. Old GitHub Pages URLs continue
+  to resolve via redirect; canonical now points at `thrum.team`.
 
 New in v0.9.1:
 - Peercred resolver error taxonomy (thrum-ndtw) — introspection failures no
@@ -416,6 +478,7 @@ All commands accept:
             --mentions           Only messages mentioning current agent
             --unread             Only unread messages
             --all, -a            Show all messages (disable auto-filtering)
+            --from @agent_name   (v0.10.5) Filter to messages from a single sender
             --page-size N        Results per page (default: 10)
             --limit N            Alias for --page-size
             --page N             Page number (default: 1)
@@ -688,10 +751,13 @@ All commands accept:
   thrum worktree setup <name> [-b BRANCH] [--detach] [...]
     Alias for `thrum worktree create` (v0.9.0).
 
-  thrum worktree teardown <name>
+  thrum worktree teardown <name> [--delete-branch]
     Remove a worktree and clean up thrum identity files.
     Deletes .thrum/identities/*.json from the worktree, then runs
     `git worktree remove --force <path>`.
+    --delete-branch (v0.10.5): also delete the worktree's branch in the
+    same step (previously required a separate `git branch -D` after
+    teardown).
 
   thrum worktree list
     List git worktrees with thrum agent info (reads identity files from each

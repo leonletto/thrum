@@ -1,4 +1,4 @@
-# Thrum v0.10.4
+# Thrum v0.10.5
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -142,6 +142,49 @@ New in v0.9.1:
   duplicates content. The CLAUDE.md block is the alternative for other
   runtimes (codex, cursor, opencode, kiro, auggie) and for Claude Code
   without the plugin.
+
+New in v0.10.5:
+- Daemon-side backstop nudger — daemon polls for stale-unread messages and
+  re-emits delivery nudges, replacing the user-side `thrum-inbox-poll.sh`
+  cron pattern. More reliable (survives runtime restarts) and lower-overhead
+  than a per-agent cron schedule. Existing cron installs continue as no-ops
+  alongside it; cron removal queued for a future release.
+- `thrum inbox --from @agent` filter — scope unread inbox to messages from a
+  single sender. Useful for catching up on one agent's traffic without paging
+  through the rest of the queue.
+- `thrum worktree teardown --delete-branch` flag — tear down a worktree and
+  delete its branch in one step. Previously required a separate `git branch -D`.
+- `thrum prime` first-turn ack instruction — the prime briefing now asks the
+  runtime to emit a short acknowledgment line on receipt, giving the agent a
+  visible scrollback anchor confirming context loaded.
+- Headless `worktree.Create` / `worktree.Destroy` Go API — worktree lifecycle
+  moves to a shared `internal/worktree` package used by both the cobra commands
+  and substrate-track programmatic callers. Behavior-equivalent to the previous
+  cobra-only path; opens the door to ephemeral-worktree flows. No user-visible
+  CLI change.
+- `runtime-init` overwrites stale daemon-managed scripts (thrum-akqv P1) —
+  `scripts/thrum-startup.sh` and `scripts/thrum-check-inbox.sh` are now
+  overwrite-on-init while user-customized configs (`.claude/settings.json`,
+  `AGENTS.md`, `.gemini/instructions.md`, `opencode.json`, etc.) remain
+  preserve-on-init. Fixes silent template drift in long-running worktrees as
+  substrate-side script changes evolved across releases.
+- `thrum prime` ack interpolation strips backticks from identity fields
+  (thrum-x7rb) — prevents literal markdown/shell interpretation leaking into
+  the rendered ack template when an agent name or display field contained `\``.
+- `project-setup` skill follows `.thrum/redirect` when checking
+  `philosophy.md` — previously failed in redirected worktrees because it
+  resolved the worktree-local path directly.
+- Inbox backstop spool envelopes preserved from janitor reaping — the janitor
+  was prematurely deleting backstop-pending envelopes, causing stale-unread
+  messages to disappear from inbox before the backstop nudger could re-deliver.
+- Self-mention semantic fix — messages with an explicit self-mention now route
+  correctly to the author's own inbox; `read_at` is stamped at insert for the
+  self-delivery row so it doesn't show as unread to its own author.
+- URLs migrated from `leonletto.github.io/thrum` to `thrum.team` across
+  README, website content, docs, and SEO references (Phase 6.3). Old URLs
+  still resolve via redirect.
+- `thrum worktree create` / `teardown` rewired through `internal/worktree`.
+  No user-visible behavior change.
 
 New in v0.10.1:
 - Hotfix for v0.10.0 quickstart-redirect regression. `thrum quickstart`
@@ -313,7 +356,7 @@ All commands accept these flags:
   thrum reply MSG_ID TEXT [--format markdown|plain|json]
     Reply to a message, copying the parent's audience (mentions/scopes). Includes reply_to reference.
 
-  thrum inbox [--scope type:value] [--mentions] [--unread] [--all|-a] [--page-size N] [--limit N] [--page N]
+  thrum inbox [--scope type:value] [--mentions] [--unread] [--all|-a] [--from @agent_name] [--page-size N] [--limit N] [--page N]
     List messages in your inbox. Auto-filters to messages addressed to you + broadcasts.
     Use --all to disable auto-filtering and show everything.
 
@@ -570,9 +613,11 @@ All commands accept these flags:
   thrum worktree setup <name> [-b BRANCH] [--detach] [...]
     Alias for `thrum worktree create`.
 
-  thrum worktree teardown <name>
+  thrum worktree teardown <name> [--delete-branch]
     Remove a worktree and clean up Thrum identity files.
     Runs `git worktree remove --force <path>` after cleanup.
+    --delete-branch (v0.10.5): also delete the worktree's branch in the same
+    step (previously required a separate `git branch -D`).
 
   thrum worktree list
     List git worktrees with Thrum agent info (reads identity files to show
