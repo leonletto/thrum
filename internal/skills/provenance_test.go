@@ -176,6 +176,28 @@ func TestStamper_MultipleOverridesAccumulate(t *testing.T) {
 	}
 }
 
+// TestStamper_StampCreatePreservesProposedBy pins the design intent
+// per spec §9.2: thrum.proposed_by is filled by the proposer (the
+// researcher who drafts the SKILL.md), NOT by the coordinator at
+// stamp time. The stamper must not overwrite an existing
+// proposed_by — doing so would lose attribution.
+func TestStamper_StampCreatePreservesProposedBy(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 5, 15, 17, 0, 0, 0, time.UTC)
+	s := NewStamper(fixedClock(now))
+	skill := freshSkill()
+	skill.Frontmatter.Thrum.ProposedBy = "@researcher_x"
+
+	if err := s.StampCreate(skill, "@coordinator_main", "1.0.0"); err != nil {
+		t.Fatalf("StampCreate: %v", err)
+	}
+	if skill.Frontmatter.Thrum.ProposedBy != "@researcher_x" {
+		t.Errorf("ProposedBy overwritten by stamper: got %q, want %q (preserved from proposer)",
+			skill.Frontmatter.Thrum.ProposedBy, "@researcher_x")
+	}
+}
+
 // Stamper{nil,...} guards. New() defaults to time.Now so nil-clock
 // is not an issue at construction; missing required args at the
 // method layer should produce a clear error.

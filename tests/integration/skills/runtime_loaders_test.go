@@ -20,6 +20,24 @@
 // mirrored under that runtime's path, restart, and confirm the
 // loader picks it up. See dev-docs/operator/skill-runtime-audit.md
 // for the operational playbook (lands at E10.10).
+//
+// Per-runtime verdict (operator-side audit pending):
+//
+//   - claude-plugin:    Untested in-process. Source inspection of
+//                       claude-plugin/skills/*/SKILL.md shows every
+//                       shipped skill uses the nested form;
+//                       compatibility with the nested form is
+//                       therefore assumed.
+//   - opencode-plugin:  Untested. Operational audit deferred to
+//                       E10.10 deliverable.
+//   - codex-plugin:     Untested. Operational audit deferred to
+//                       E10.10 deliverable.
+//
+// If any runtime loader audit comes back as nested-rejected, the
+// mirror sub-package's EncodeFlatFrontmatter (E11.1) is the
+// conversion path — the adapter table entry for that runtime adds
+// a flat-only flag and worker.applyOne uses the flat encoder
+// instead of the nested one. No parser changes required.
 package skills
 
 import (
