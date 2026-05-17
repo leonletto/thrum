@@ -86,6 +86,7 @@ func defaultOutboundCfg() email.OutboundConfig {
 	return email.OutboundConfig{
 		MyDaemonID:            "daemon-aabbccdd",
 		MyDaemonShort:         "aabbccdd",
+		MyBridgeUserAgentID:   "thrum-mesh",
 		Host:                  "example.com",
 		FromAddress:           "thrum@example.com",
 		FromDisplayNameFormat: "{agent} @ {handle}",
@@ -161,7 +162,11 @@ func TestOutbound_SelfEchoSkipped(t *testing.T) {
 	cfg := defaultOutboundCfg()
 
 	o := email.NewOutbound(cfg, sub, newTestMsgMap(t), newTestLimiterForOutbound(t), email.NewQueue(db))
-	notif := notification("@coordinator_main", cfg.MyDaemonID, "hello")
+	// Echo path: a real bridge sees its OWN outbound bounce back through the
+	// WS bus with Author.AgentID equal to the bridge's speaking identity
+	// (cfg.MyBridgeUserAgentID). Compare against that — comparing against
+	// MyDaemonID was a structural bug (agent name vs daemon UUID).
+	notif := notification("@coordinator_main", cfg.MyBridgeUserAgentID, "hello")
 	runRelayOnce(t, o, notif, sub)
 
 	if n := queueRowCount(t, db); n != 0 {

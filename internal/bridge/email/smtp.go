@@ -1,7 +1,6 @@
 package email
 
 import (
-	"bufio"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -37,17 +36,19 @@ var (
 // certificate without disabling verification globally; production paths
 // pass nil and the standard system pool is used.
 //
-// InsecureSkipVerify is the same field as EmailSMTP.InsecureSkipVerify
-// (carrying json:"-") — it is set programmatically by tests only and
-// must never be deserialized from .thrum/config.json.
+// InsecureSkipVerify carries json:"-" so the bool can never serialize
+// into a log line, status dump, or operator-visible artifact even if a
+// SMTPConfig is accidentally Marshaled — defense in depth alongside the
+// upstream EmailSMTP.InsecureSkipVerify json:"-" tag (D-B1.2). The field
+// is set programmatically by tests only.
 type SMTPConfig struct {
 	Host               string
 	Port               int
 	UseStartTLS        bool // true: STARTTLS on 587; false: implicit TLS on 465
 	Username           string
 	Password           string
-	InsecureSkipVerify bool
-	TLSRootCAs         *x509.CertPool // optional; nil → system pool
+	InsecureSkipVerify bool           `json:"-"`
+	TLSRootCAs         *x509.CertPool `json:"-"` // x509.CertPool not safely marshalable anyway
 }
 
 // Envelope is the input to SMTPClient.Submit: a prepared MIME message
@@ -259,7 +260,3 @@ func extractSMTPCode(s string) int {
 	code, _ := strconv.Atoi(s[:3])
 	return code
 }
-
-// Ensure unused-import elision. bufio is used in test helpers only; we
-// don't reference it from production code but keep the import group tidy.
-var _ = bufio.NewReader

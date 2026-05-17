@@ -25,6 +25,7 @@ type EmailBridgeInterface interface {
 	Queue() *email.Queue
 	Mesh() *email.MeshHandlerImpl
 	Limiter() *email.Limiter
+	Inbound() *email.Inbound
 	Config() config.EmailConfig
 }
 
@@ -330,15 +331,18 @@ func (h *EmailHandler) HandlePeerPair(ctx context.Context, params json.RawMessag
 	return &EmailPeerPairResponse{Pending: true, ExpiresAt: 0}, nil
 }
 
-// HandlePeerList handles the email.peer.list RPC.
-// Reads the current peer roster from the bridge config snapshot.
+// HandlePeerList handles the email.peer.list RPC (coordinator-only).
+// Reads the current peer roster from the bridge config snapshot. The
+// roster includes contact emails and daemon IDs — operator-grade
+// inventory — so the same coordinator-or-user gate that protects
+// pair/revoke/rebind applies here too (design-spec §6).
 func (h *EmailHandler) HandlePeerList(ctx context.Context, params json.RawMessage) (any, error) {
 	var req EmailPeerListRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	if err := h.requireAgentRegistered(ctx, req.CallerAgentID); err != nil {
+	if err := h.requireCoordinatorOrUser(ctx, req.CallerAgentID); err != nil {
 		return nil, err
 	}
 
@@ -442,6 +446,14 @@ func (h *EmailHandler) HandleStatus(ctx context.Context, params json.RawMessage)
 	resp.InboundCount = st.InboundProcessed
 	if !st.StartedAt.IsZero() {
 		resp.ConnectedAt = st.StartedAt.UnixMilli()
+	}
+
+	// Operator visibility into mis-routed inbound traffic — the count
+	// is the cumulative number of step-10 unknown_recipient drops since
+	// bridge start. Inbound() returns nil between run cycles; treat that
+	// as zero rather than skipping the field.
+	if inbound := h.bridge.Inbound(); inbound != nil {
+		resp.UnknownRecipientCount = inbound.UnknownRecipientCount()
 	}
 
 	// Outbound queue depth: rows in queued or sending state.

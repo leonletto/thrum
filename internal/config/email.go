@@ -64,6 +64,7 @@ type EmailMesh struct {
 	AllowTransitiveVouching bool   `json:"allow_transitive_vouching,omitempty"` // accept B-via-A pairings
 	RevocationPropagation   string `json:"revocation_propagation,omitempty"`    // "gossip" | "manual"
 	HopCountCeiling         int    `json:"hop_count_ceiling,omitempty"`         // mesh-wide loop ceiling for relayed messages
+	PairPendingTTLHours     int    `json:"pair_pending_ttl_hours,omitempty"`    // pending stranger-pair expiry; 0 → 24h default in bridge
 }
 
 // EmailRateLimits holds the per-peer + global inbound/outbound caps.

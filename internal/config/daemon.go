@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -506,7 +507,35 @@ func SaveThrumConfig(thrumDir string, cfg *ThrumConfig) error {
 	}
 	data = append(data, '\n')
 
-	return os.WriteFile(configPath, data, 0600)
+	// Atomic write via temp file + rename. canonical-ref §3.10 Property 1
+	// mandates this for the daemon-driven mesh-mutation path; the operator
+	// write path uses the same primitive so a crash mid-write cannot
+	// produce a half-written config.json that would lose the whole
+	// email.peers[] roster on next daemon boot.
+	dir := filepath.Dir(configPath)
+	tmp, err := os.CreateTemp(dir, "config.json.tmp-*")
+	if err != nil {
+		return fmt.Errorf("temp config: %w", err)
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("write config: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("close config: %w", err)
+	}
+	if err := os.Chmod(tmpPath, 0o600); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("chmod config: %w", err)
+	}
+	if err := os.Rename(tmpPath, configPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("rename config: %w", err)
+	}
+	return nil
 }
 
 // AddPlugin adds a plugin to the config, replacing any existing plugin with the same name.

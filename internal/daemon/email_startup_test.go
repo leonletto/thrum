@@ -153,12 +153,14 @@ type stubEmailBridge struct {
 	queue   *emailbridge.Queue
 	mesh    *emailbridge.MeshHandlerImpl
 	limiter *emailbridge.Limiter
+	inbound *emailbridge.Inbound
 }
 
-func (s *stubEmailBridge) Status() emailbridge.BridgeStatus  { return s.status }
+func (s *stubEmailBridge) Status() emailbridge.BridgeStatus   { return s.status }
 func (s *stubEmailBridge) Queue() *emailbridge.Queue          { return s.queue }
 func (s *stubEmailBridge) Mesh() *emailbridge.MeshHandlerImpl { return s.mesh }
 func (s *stubEmailBridge) Limiter() *emailbridge.Limiter      { return s.limiter }
+func (s *stubEmailBridge) Inbound() *emailbridge.Inbound      { return s.inbound }
 func (s *stubEmailBridge) Config() config.EmailConfig         { return s.cfg }
 
 // --- tests ---

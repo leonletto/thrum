@@ -445,8 +445,10 @@ func (l *Limiter) bumpGlobalInbound() bool {
 }
 
 // sendAlert fires a coordinator notification on the first pause transition.
-// Caller must hold l.mu. If notifier is nil the alert is silently skipped
-// (test scenarios that don't care about alerts).
+// Caller MUST NOT hold l.mu — the notifier invokes a WebSocket RPC which
+// is high-latency network I/O; firing it under the lock would serialize
+// all concurrent Increments behind a stalled WSClient. If notifier is
+// nil the alert is silently skipped (test scenarios that don't care).
 func (l *Limiter) sendAlert(ctx context.Context, peerKey, direction string) {
 	if l.notifier == nil {
 		return

@@ -81,6 +81,7 @@ type Bridge struct {
 	queue   atomic.Pointer[Queue]
 	mesh    atomic.Pointer[MeshHandlerImpl]
 	limiter atomic.Pointer[Limiter]
+	inbound atomic.Pointer[Inbound]
 }
 
 // New constructs a Bridge. secrets may be nil when cfg.Enabled is false.
@@ -138,6 +139,11 @@ func (b *Bridge) Mesh() *MeshHandlerImpl { return b.mesh.Load() }
 // Limiter returns the rate-limiter active during the current run cycle, or nil
 // when the bridge is not running. Safe to call concurrently.
 func (b *Bridge) Limiter() *Limiter { return b.limiter.Load() }
+
+// Inbound returns the inbound router active during the current run cycle,
+// or nil when the bridge is not running. Surfaces UnknownRecipientCount
+// for the email.status RPC.
+func (b *Bridge) Inbound() *Inbound { return b.inbound.Load() }
 
 // Config returns a snapshot of the current EmailConfig under the bridge mutex.
 // Callers should treat the returned value as read-only.
@@ -331,6 +337,12 @@ func (b *Bridge) run(ctx context.Context) error {
 		RevocationPropagation:   cfg.Mesh.RevocationPropagation,
 		ConfigPath:              configPath,
 	}
+	// Pending-pair TTL: config knob in hours per design-spec §4 + D-B1.13
+	// nudgeOperator timeout; falls back to 24h default inside NewMeshHandler
+	// when zero.
+	if cfg.Mesh.PairPendingTTLHours > 0 {
+		meshCfg.PairPendingTTL = time.Duration(cfg.Mesh.PairPendingTTLHours) * time.Hour
+	}
 	meshHandler := NewMeshHandler(meshCfg, wal, notifier, nil)
 
 	// --- 4. WAL replay — before goroutines start, idempotent re-apply. ---
@@ -360,6 +372,7 @@ func (b *Bridge) run(ctx context.Context) error {
 	outboundCfg := OutboundConfig{
 		MyDaemonID:            cfg.DaemonHandle,
 		MyDaemonShort:         shortID(cfg.DaemonHandle),
+		MyBridgeUserAgentID:   cfg.Username, // bridge sends AS this user; matches notif.Author.AgentID for echoes
 		Host:                  cfg.SMTP.Host,
 		FromAddress:           cfg.FromAddress,
 		FromDisplayNameFormat: cfg.FromDisplayNameFormat,
@@ -403,6 +416,7 @@ func (b *Bridge) run(ctx context.Context) error {
 	b.queue.Store(queue)
 	b.mesh.Store(meshHandler)
 	b.limiter.Store(limiter)
+	b.inbound.Store(inbound)
 	b.startedAt.Store(time.Now())
 	b.lastError.Store("")
 	defer func() {
@@ -410,6 +424,7 @@ func (b *Bridge) run(ctx context.Context) error {
 		b.queue.Store(nil)
 		b.mesh.Store(nil)
 		b.limiter.Store(nil)
+		b.inbound.Store(nil)
 	}()
 
 	b.logger.Printf("running (handle=%s, imap=%s, smtp=%s)", cfg.DaemonHandle, cfg.IMAP.Host, cfg.SMTP.Host)
@@ -593,10 +608,13 @@ func (b *Bridge) pollInbound(ctx context.Context, imap *IMAPClient, inbound *Inb
 	}
 }
 
-// replayWAL replays any pending (uncommitted) WAL entries through the mesh
-// handler's idempotent HandleProtocol path. Called once at run-start, before
-// goroutines spawn, so no concurrent access to the mesh state.
-func (b *Bridge) replayWAL(ctx context.Context, wal *state.PendingMeshUpdatesLog, mesh *MeshHandlerImpl) {
+// replayWAL acknowledges any pending (uncommitted) WAL entries left over
+// from a crash mid-mutation. Called once at run-start, before goroutines
+// spawn. See the comment inside the loop for why this is acknowledge-only,
+// not re-execute — atomic-rename in SaveThrumConfig means the underlying
+// config mutation is binary, so re-executing would risk double-applies
+// (mesh.go review IMPORTANT-7 + IMPORTANT-8).
+func (b *Bridge) replayWAL(ctx context.Context, wal *state.PendingMeshUpdatesLog, _ *MeshHandlerImpl) {
 	pending, err := wal.Pending()
 	if err != nil {
 		b.logger.Printf("WAL replay: read pending error: %v (skipping replay)", err)
@@ -606,11 +624,18 @@ func (b *Bridge) replayWAL(ctx context.Context, wal *state.PendingMeshUpdatesLog
 		if ctx.Err() != nil {
 			return
 		}
-		if err := mesh.HandleProtocol(ctx, p.Verb, nil, p.Payload); err != nil {
-			b.logger.Printf("WAL replay: HandleProtocol verb=%s update=%s error: %v", p.Verb, p.UpdateID, err)
-			continue
-		}
-		// Emit the committed marker so the entry won't replay again.
+		// Replay is "acknowledge + audit" not "re-execute". Rationale:
+		// SaveThrumConfig (post review-fix) is atomic via tmp-file + rename
+		// so the underlying config mutation is binary — either fully landed
+		// or never started. The pending-intent-without-committed state means
+		// the daemon crashed in the window AFTER atomic-rename but BEFORE
+		// AppendCommitted; the config is already correct on disk. Re-running
+		// the verb handler would (1) double-apply (peer appears twice) and
+		// (2) fail for peer.pair (the in-memory pending-pair state was lost
+		// across the crash). The right action is to close the WAL loop by
+		// emitting the committed marker + audit log so the next boot doesn't
+		// see the orphan intent.
+		b.logger.Printf("WAL replay: acknowledged intent verb=%s update=%s (atomic-rename guarantees binary outcome)", p.Verb, p.UpdateID)
 		if err := wal.AppendCommitted(p.UpdateID); err != nil {
 			b.logger.Printf("WAL replay: AppendCommitted update=%s error: %v", p.UpdateID, err)
 		}
@@ -747,7 +772,7 @@ func buildLimiterConfig(cfg config.EmailConfig) LimiterConfig {
 		lc.OutboundPerPeerPerHour = 200
 	}
 	if lc.GlobalInboundPerMinute == 0 {
-		lc.GlobalInboundPerMinute = 60
+		lc.GlobalInboundPerMinute = 120 // design-spec §11 default
 	}
 	return lc
 }

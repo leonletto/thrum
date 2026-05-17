@@ -32,19 +32,28 @@ type WSSubscriber interface {
 
 // OutboundConfig holds the static configuration for the outbound relay.
 type OutboundConfig struct {
-	MyDaemonID            string
-	MyDaemonShort         string // 8-hex-char short for plus-addressing and Message-Id generation
-	Host                  string // mail-domain for Message-Ids
+	MyDaemonID    string
+	MyDaemonShort string // 8-hex-char short for plus-addressing and Message-Id generation
+
+	// MyBridgeUserAgentID is the agent_id this bridge sends AS — when a
+	// notification.message arrives with Author.AgentID == this value, it's
+	// our own outbound being echoed back through the WS bus; suppress to
+	// avoid an echo loop. Notif.Author.AgentID carries an AGENT NAME
+	// (e.g. "coordinator_main"), NOT the daemon UUID — comparing against
+	// MyDaemonID would never match (D-B1 brainstormer review BLOCKING-1).
+	MyBridgeUserAgentID string
+
+	Host                  string                      // mail-domain for Message-Ids
 	FromAddress           string
-	FromDisplayNameFormat string // "{agent} @ {handle}" template
-	DaemonHandle          string // for {handle} substitution
-	TargetUser            string // local user this mailbox bridges to (Q11 check)
-	TargetEmail           string // recipient email for supervisor relay
-	DefaultMention        string // fallback @mention when notification has none
-	EmbedShortID          bool   // include short-id in subject line
+	FromDisplayNameFormat string                      // "{agent} @ {handle}" template
+	DaemonHandle          string                      // for {handle} substitution
+	TargetUser            string                      // local user this mailbox bridges to (Q11 check)
+	TargetEmail           string                      // recipient email for supervisor relay
+	DefaultMention        string                      // fallback @mention when notification has none
+	EmbedShortID          bool                        // include short-id in subject line
 	KnownPeers            map[string]config.EmailPeer // prefix → peer
 	UserPrefs             map[string]config.UserPrefs // username → prefs (Q11 preferred_channel lookup)
-	Repo                  string // for X-Thrum-Repo header
+	Repo                  string                      // for X-Thrum-Repo header
 }
 
 // Outbound subscribes to notification.message events and enqueues outbound
@@ -90,9 +99,12 @@ func (o *Outbound) Run(ctx context.Context) error {
 
 // handle processes one notification. Errors are logged; the relay never panics.
 func (o *Outbound) handle(ctx context.Context, notif MessageNotification) {
-	// Self-echo skip: messages FROM the bridge identity are our own outgoing
-	// messages — forwarding them would create an echo loop.
-	if notif.Author.AgentID == o.cfg.MyDaemonID {
+	// Self-echo skip: notif.Author.AgentID is an agent NAME (e.g.
+	// "coordinator_main"); MyBridgeUserAgentID is the same shape — the
+	// agent_id this bridge speaks as. When they match, the notification
+	// is our own outbound being echoed back through the WS bus and we'd
+	// loop forever forwarding it.
+	if o.cfg.MyBridgeUserAgentID != "" && notif.Author.AgentID == o.cfg.MyBridgeUserAgentID {
 		slog.Debug("email outbound: self-echo skipped", "author", notif.Author.AgentID)
 		return
 	}

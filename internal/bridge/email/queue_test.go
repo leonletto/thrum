@@ -96,8 +96,11 @@ func enqueueOne(t *testing.T, q *email.Queue) int64 {
 // regardless of when the row was last retried.
 func setNextRetryAt(t *testing.T, db *sql.DB, ms int64) {
 	t.Helper()
+	// Use the typed Status constant rather than a raw literal so the
+	// enum-guard-completeness claim (D-B1.10 acceptance) holds across
+	// both production code AND test helpers.
 	_, err := db.ExecContext(context.Background(),
-		`UPDATE email_outbound_queue SET next_retry_at = ? WHERE status = 'queued'`, ms)
+		`UPDATE email_outbound_queue SET next_retry_at = ? WHERE status = ?`, ms, string(email.StatusQueued))
 	if err != nil {
 		t.Fatalf("setNextRetryAt: %v", err)
 	}

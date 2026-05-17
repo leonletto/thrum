@@ -85,13 +85,15 @@ type stubBridge struct {
 	queue   *email.Queue
 	mesh    *email.MeshHandlerImpl
 	limiter *email.Limiter
+	inbound *email.Inbound
 }
 
-func (s *stubBridge) Status() email.BridgeStatus     { return s.status }
-func (s *stubBridge) Queue() *email.Queue             { return s.queue }
-func (s *stubBridge) Mesh() *email.MeshHandlerImpl    { return s.mesh }
-func (s *stubBridge) Limiter() *email.Limiter         { return s.limiter }
-func (s *stubBridge) Config() config.EmailConfig      { return s.cfg }
+func (s *stubBridge) Status() email.BridgeStatus   { return s.status }
+func (s *stubBridge) Queue() *email.Queue          { return s.queue }
+func (s *stubBridge) Mesh() *email.MeshHandlerImpl { return s.mesh }
+func (s *stubBridge) Limiter() *email.Limiter      { return s.limiter }
+func (s *stubBridge) Inbound() *email.Inbound      { return s.inbound }
+func (s *stubBridge) Config() config.EmailConfig   { return s.cfg }
 
 // --- tests ---
 

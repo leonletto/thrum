@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/emersion/go-imap/v2"
@@ -66,6 +67,18 @@ type Inbound struct {
 	msgmap     *MsgMap
 	dispatcher MessageDispatcher
 	mesh       MeshHandler
+
+	// unknownRecipientCount surfaces via email.status RPC so operators
+	// can spot mis-routed mailbox traffic without scraping logs. Bumped
+	// each time step-10 drops a message because to_agent is unmapped.
+	unknownRecipientCount atomic.Int64
+}
+
+// UnknownRecipientCount returns the running count of inbound messages
+// dropped because the X-Thrum-To-Agent header named an unknown local
+// agent. Exposed for email.status RPC reporting.
+func (in *Inbound) UnknownRecipientCount() int64 {
+	return in.unknownRecipientCount.Load()
 }
 
 // NewInbound constructs a ready-to-use Inbound router.
@@ -292,6 +305,7 @@ func (in *Inbound) routeMessage(ctx context.Context, msg *ParsedMessage) (Proces
 		if pol != "" && pol != "drop" {
 			log.Printf("[email/inbound] warning: unknown_recipient policy %q not implemented in D-B1; dropping", pol)
 		}
+		in.unknownRecipientCount.Add(1)
 		log.Printf("[email/inbound] drop: unknown_recipient to_agent=%q", toAgent)
 		return drop("unknown_recipient"), nil
 	}

@@ -200,6 +200,16 @@ func (m *MeshHandlerImpl) ConfirmStrangerPair(ctx context.Context, handle string
 
 	updateID := fmt.Sprintf("peer.pair-%d", m.nowFn().UnixNano())
 	return m.mutateConfigUnderMutex(updateID, "peer.pair", func(cfg *config.ThrumConfig) error {
+		// Duplicate-handle guard: re-confirming the same pair (or any path
+		// that reaches this mutation twice) is a no-op rather than a
+		// duplicate append. Match on handle — daemon-id mismatch under
+		// same handle is the rebind case, not a re-pair.
+		for i := range cfg.Email.Peers {
+			if cfg.Email.Peers[i].Handle == pp.handle {
+				log.Printf("[email/mesh] peer.pair from %s: handle %s already in config (no-op)", pp.daemonID, pp.handle)
+				return nil
+			}
+		}
 		cfg.Email.Peers = append(cfg.Email.Peers, config.EmailPeer{
 			Handle:       pp.handle,
 			DaemonID:     pp.daemonID,
@@ -455,10 +465,19 @@ func (m *MeshHandlerImpl) mutateConfigUnderMutex(updateID, verb string, mutate f
 }
 
 // addAnnouncedPeer adds a gossip-announced peer to config. notify=true
-// emits an auto-accept notification to the operator.
+// emits an auto-accept notification to the operator. Idempotent on the
+// (handle, daemon_id) tuple — re-announce of an existing peer is a no-op
+// (defense-in-depth against gossip-storm or WAL-replay double-apply).
 func (m *MeshHandlerImpl) addAnnouncedPeer(ctx context.Context, env PeerProtocolPayload, srcPeerID string, notify bool) error {
 	updateID := fmt.Sprintf("peer.announce-%d", m.nowFn().UnixNano())
 	return m.mutateConfigUnderMutex(updateID, "peer.announce", func(cfg *config.ThrumConfig) error {
+		for i := range cfg.Email.Peers {
+			if cfg.Email.Peers[i].Handle == env.Handle && cfg.Email.Peers[i].DaemonID == env.DaemonID {
+				log.Printf("[email/mesh] peer.announce from %s: %s (id %s) already present (no-op)",
+					srcPeerID, env.Handle, shortID(env.DaemonID))
+				return nil
+			}
+		}
 		cfg.Email.Peers = append(cfg.Email.Peers, config.EmailPeer{
 			Handle:       env.Handle,
 			DaemonID:     env.DaemonID,

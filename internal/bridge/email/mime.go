@@ -143,13 +143,17 @@ func ComposeProtocolMessage(env ProtocolEnvelope) ([]byte, error) {
 // headers plus a text/plain body. HTML-only bodies are stripped via
 // bluemonday.StrictPolicy + entity decoded + whitespace normalized.
 // Malformed input returns ErrMimeMalformed (wrapped); never panics.
-func ParseInbound(raw []byte) (*ParsedMessage, error) {
+func ParseInbound(raw []byte) (msg *ParsedMessage, err error) {
 	defer func() {
 		// Last-resort recover: the go-message library is well-tested
 		// but the daemon's inbound path MUST NOT crash on hostile or
-		// truncated input — protocol-level dedup runs after parse, so
-		// a panic here would hang the bridge.
-		_ = recover()
+		// truncated input. Surface the panic as ErrMimeMalformed so
+		// callers get a typed error instead of a silent (nil, nil)
+		// that would short-circuit downstream "if err != nil" checks.
+		if r := recover(); r != nil {
+			msg = nil
+			err = fmt.Errorf("%w: panic during parse: %v", ErrMimeMalformed, r)
+		}
 	}()
 
 	if len(bytes.TrimSpace(raw)) == 0 {
