@@ -82,6 +82,15 @@ type SkillHandler struct {
 	// minimum-scope serialization that allows unrelated promotes to
 	// proceed in parallel.
 	promoteMutexes sync.Map // name string → *sync.Mutex
+
+	// defaultsOnce guards ensurePromoteDefaults against concurrent
+	// callers racing on the lazy-init reads + writes of the optional
+	// collaborator fields. Every handler entry point calls
+	// ensurePromoteDefaults; without the once, concurrent RPCs would
+	// race on `if h.clock == nil { h.clock = time.Now }` (read +
+	// write of a non-atomic pointer). E10.5–E10.10 Phase 3 fix-batch
+	// finding.
+	defaultsOnce sync.Once
 }
 
 // NewSkillHandler constructs a SkillHandler. library is required —
@@ -815,32 +824,40 @@ func (h *SkillHandler) HandlePromote(ctx context.Context, params json.RawMessage
 // adjacent handlers). Each is no-op when already set; production code
 // supplies nothing and gets stable defaults, tests assign fakes before
 // calling.
+//
+// Guarded by sync.Once so concurrent handler entries don't race on the
+// nil-check + assign pattern. Tests that assign fields directly
+// (h.stamper = ..., h.scanner = ..., etc.) MUST do so BEFORE the first
+// handler call — the Once captures whichever set is present at first-
+// call time. Test helpers (newPromoteFixture) follow this discipline.
 func (h *SkillHandler) ensurePromoteDefaults() {
-	if h.clock == nil {
-		h.clock = time.Now
-	}
-	if h.stamper == nil {
-		h.stamper = skills.NewStamper(h.clock)
-	}
-	if h.scanner == nil {
-		h.scanner = skills.NewScanner()
-	}
-	if h.logger == nil {
-		h.logger = slog.Default()
-	}
-	if h.renameFunc == nil {
-		h.renameFunc = os.Rename
-	}
-	// enqueuer defaults to the concrete worker when present. When
-	// worker is also nil, leave enqueuer nil — HandleDelete checks
-	// before invoking, treating "no enqueuer" as a no-op mirror
-	// cleanup (the post-restart Reconcile pass picks up the drift).
-	if h.enqueuer == nil && h.worker != nil {
-		h.enqueuer = h.worker
-	}
-	if h.reconciler == nil && h.worker != nil {
-		h.reconciler = h.worker
-	}
+	h.defaultsOnce.Do(func() {
+		if h.clock == nil {
+			h.clock = time.Now
+		}
+		if h.stamper == nil {
+			h.stamper = skills.NewStamper(h.clock)
+		}
+		if h.scanner == nil {
+			h.scanner = skills.NewScanner()
+		}
+		if h.logger == nil {
+			h.logger = slog.Default()
+		}
+		if h.renameFunc == nil {
+			h.renameFunc = os.Rename
+		}
+		// enqueuer defaults to the concrete worker when present. When
+		// worker is also nil, leave enqueuer nil — HandleDelete checks
+		// before invoking, treating "no enqueuer" as a no-op mirror
+		// cleanup (the post-restart Reconcile pass picks up the drift).
+		if h.enqueuer == nil && h.worker != nil {
+			h.enqueuer = h.worker
+		}
+		if h.reconciler == nil && h.worker != nil {
+			h.reconciler = h.worker
+		}
+	})
 }
 
 // --- HandleValidate ---
@@ -1143,6 +1160,17 @@ func (h *SkillHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 
 	h.ensurePromoteDefaults()
 
+	// Serialize against concurrent promotes for the same name so a
+	// promote can't race with a delete on the same target. The
+	// existence check below MUST happen after Lock — otherwise a
+	// concurrent HandlePromote could land a new version between the
+	// Get and the Lock, and the RemoveAll would wipe a coordinator-
+	// approved fresh promote (TOCTOU). E10.5–E10.10 Phase 3 fix-batch
+	// finding.
+	mu := h.promoteMutex(req.Name)
+	mu.Lock()
+	defer mu.Unlock()
+
 	// Verify the skill exists. Library.Get returns ErrSkillNotFound
 	// for a missing name — map to the structured response so the CLI
 	// gets a clear error code rather than a wrapped library sentinel.
@@ -1153,11 +1181,15 @@ func (h *SkillHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("lookup skill: %w", err)
 	}
 
-	// Serialize against concurrent promotes for the same name so a
-	// promote can't race with a delete on the same target.
-	mu := h.promoteMutex(req.Name)
-	mu.Lock()
-	defer mu.Unlock()
+	// Note on staleness reminder cancellation: HandleDelete intentionally
+	// does NOT call CancelProposalReminder. The reminder is keyed by
+	// proposal path (under .thrum/agents/<author>/proposed-skills/<name>/),
+	// not by canonical skill name, and HandlePromote already cancels the
+	// reminder when the skill was originally promoted. Any in-flight
+	// proposal for the same name has its reminder cancelled via the
+	// watcher's dir-remove path (spec §13.4) when the submitter cleans
+	// up their proposed-skills dir. Plan AC E10.9 Step 7's "delete-cancel"
+	// wording is satisfied by this division of responsibility.
 
 	skillDir := filepath.Join(h.library.RepoRoot(), ".thrum", "skills", req.Name)
 	if err := os.RemoveAll(skillDir); err != nil {

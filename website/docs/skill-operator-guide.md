@@ -192,8 +192,10 @@ want a full reconcile to wipe your scratch work.
 `.thrum/skills/` is **committed** to the repo. Promoted skills travel
 with the codebase: a new clone on another machine sees the same
 skill library after `git pull`. Pending proposals under
-`.thrum/agents/<author>/proposed-skills/` are also committed (so a
-submitter's draft survives a `thrum daemon restart`).
+`.thrum/agents/<author>/proposed-skills/` are **gitignored** (LOCAL-only
+per spec §9.1) — they survive a `thrum daemon restart` because the
+watcher rescans the directory at boot and re-mints any staleness
+reminders for existing proposals, not because they ship with git.
 
 What stays out of git:
 
@@ -254,10 +256,12 @@ either (a) the cancel best-effort path failed at promote time (check
 the daemon log for `skill staleness reminder cancelled`), or (b) the
 proposal path on disk doesn't match the path stored in the sidecar.
 
-Manual recovery: locate the reminder ID via `thrum reminder list`
-(when that command exists) or inspect
-`.thrum/state/skill-proposal-reminders.jsonl` directly; then
-`thrum reminder clear <id>` to dismiss.
+Manual recovery: locate the reminder ID via `thrum agent reminder list`
+(coordinator-role can pass `--agent <author>` to scope to the proposing
+agent) or inspect `.thrum/state/skill-proposal-reminders.jsonl`
+directly; then `thrum agent reminder <id> --clear` to dismiss (or
+`--cancel` if the reminder was wrong to start with — see `thrum agent
+reminder --help` for the semantic distinction).
 
 ### `duplicate_provenance` from validate
 

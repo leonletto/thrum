@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -616,12 +617,16 @@ func runSkillDelete(in io.Reader, out io.Writer, name string, force bool, reason
 		if _, err := fmt.Fprintf(out, "Delete promoted skill %q? [y/N]: ", name); err != nil {
 			return fmt.Errorf("write prompt: %w", err)
 		}
-		var answer string
-		// Single line read; any non-y/yes answer aborts. EOF aborts too.
-		if _, err := fmt.Fscanln(in, &answer); err != nil {
-			return fmt.Errorf("delete aborted: %w", err)
+		// Use bufio.Scanner rather than fmt.Fscanln so an empty Enter
+		// (operator's "N" intent) falls through to the abort path
+		// cleanly. Fscanln returns "unexpected newline" on empty
+		// input, which would surface as a confusing error message.
+		// E10.5–E10.10 Phase 3 fix-batch finding.
+		scanner := bufio.NewScanner(in)
+		answer := ""
+		if scanner.Scan() {
+			answer = strings.ToLower(strings.TrimSpace(scanner.Text()))
 		}
-		answer = strings.ToLower(strings.TrimSpace(answer))
 		if answer != "y" && answer != "yes" {
 			return errors.New("delete aborted by operator")
 		}
@@ -834,13 +839,24 @@ escaped propose-time validation (e.g. a git merge conflict that
 duplicated the thrum: block).
 
 Exit code is 0 when every skill validates cleanly; 1 when any skill
-surfaces a finding. Suitable as a pre-commit hook or CI gate.`,
+surfaces a finding. Suitable as a pre-commit hook or CI gate.
+
+--all is accepted as a no-op alias for "no name argument" so the form
+documented in spec §15 ("thrum skill validate --all") works identically
+to the bare invocation.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := ""
 			if len(args) > 0 {
 				name = args[0]
 			}
+			// --all is accepted alongside or instead of the positional
+			// name arg. When both are passed (`validate --all foo`),
+			// the positional name wins (more specific intent); --all
+			// without a name is identical to the bare form. This pins
+			// spec §15's "thrum skill validate --all" form as a real
+			// CLI surface. E10.5–E10.10 Phase 3 fix-batch finding.
+			_, _ = cmd.Flags().GetBool("all")
 			err := runSkillValidate(cmd.OutOrStdout(), name)
 			if err == errSkillValidateFail {
 				osExit(1)
@@ -848,6 +864,7 @@ surfaces a finding. Suitable as a pre-commit hook or CI gate.`,
 			return err
 		},
 	}
+	cmd.Flags().Bool("all", false, "Validate every promoted skill (equivalent to omitting the name argument)")
 	return cmd
 }
 
@@ -902,15 +919,20 @@ func runSkillValidate(out io.Writer, name string) error {
 		w.Fprintln("(no skills to validate)")
 		return w.err
 	}
-	w.Fprintln("NAME\tSTATUS\tFINDINGS")
+	// Wrap in tabwriter so the NAME / STATUS / FINDINGS columns align
+	// (the list renderer at runSkillList uses the same pattern).
+	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	defer func() { _ = tw.Flush() }()
+	tww := skillWriter{w: tw}
+	tww.Fprintln("NAME\tSTATUS\tFINDINGS")
 	for _, r := range resp.Results {
-		w.Fprintf("%s\t%s\t%d\n", r.Name, r.Status, len(r.Findings))
+		tww.Fprintf("%s\t%s\t%d\n", r.Name, r.Status, len(r.Findings))
 		for _, f := range r.Findings {
-			w.Fprintf("    - %s @ %s — %s\n", f.Kind, f.Path, f.Detail)
+			tww.Fprintf("    - %s @ %s — %s\n", f.Kind, f.Path, f.Detail)
 		}
 	}
-	if w.err != nil {
-		return w.err
+	if tww.err != nil {
+		return tww.err
 	}
 	if rpc.ClassifyValidationResults(resp.Results) != 0 {
 		return errSkillValidateFail

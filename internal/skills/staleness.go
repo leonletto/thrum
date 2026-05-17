@@ -35,7 +35,17 @@ type Staleness struct {
 	logger       *slog.Logger
 
 	mu       sync.Mutex
-	pathToID map[string]string // proposalPath → reminderID (live entries only)
+	pathToID map[string]reminderEntry // proposalPath → (reminderID, mintedAt) live entries
+}
+
+// reminderEntry is the per-proposal-path in-memory cache. mintedAt is
+// retained alongside the reminderID so compactSidecar can preserve
+// the original mint timestamp rather than rewriting it as "now" on
+// each compact pass (which would lose the proposal-arrival time —
+// useful for operator triage via direct sidecar inspection).
+type reminderEntry struct {
+	reminderID string
+	mintedAt   time.Time
 }
 
 // sidecarRecord is one line in the .jsonl sidecar. Append-on-mint
@@ -62,7 +72,7 @@ func NewStaleness(store reminders.Store, resolver ChainResolver, mapPath string,
 		mapPath:      mapPath,
 		pendingAfter: pendingAfter,
 		logger:       slog.Default(),
-		pathToID:     map[string]string{},
+		pathToID:     map[string]reminderEntry{},
 	}
 	s.loadSidecar()
 	return s
@@ -85,12 +95,21 @@ func (s *Staleness) SetLogger(l *slog.Logger) {
 // means no useful reminder, and surfacing an error would block the
 // propose path on an empty-team repo. A resolver error propagates.
 func (s *Staleness) MintProposalReminder(ctx context.Context, proposalPath string) (string, error) {
+	// Hold the lock across the entire mint operation including the
+	// Store I/O. Without this, two goroutines racing on the same path
+	// (e.g. boot-time ReconcileProposals overlapping with a watcher-
+	// triggered mint) both pass the empty-map check and both call
+	// store.Mint — leaving one reminder orphaned in the store with no
+	// CancelProposalReminder path to retract it. The serialization
+	// cost is acceptable: mint frequency is low (per-proposal-creation,
+	// not per-event) and the I/O dominates the lock-hold window.
+	// E10.5–E10.10 Phase 3 fix-batch finding.
 	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if existing, ok := s.pathToID[proposalPath]; ok {
-		s.mu.Unlock()
-		return existing, nil
+		return existing.reminderID, nil
 	}
-	s.mu.Unlock()
 
 	agents, err := s.resolver(ctx)
 	if err != nil {
@@ -125,9 +144,7 @@ func (s *Staleness) MintProposalReminder(ctx context.Context, proposalPath strin
 		return "", fmt.Errorf("mint reminder: %w", mintErr)
 	}
 
-	s.mu.Lock()
-	s.pathToID[proposalPath] = reminderID
-	s.mu.Unlock()
+	s.pathToID[proposalPath] = reminderEntry{reminderID: reminderID, mintedAt: now}
 
 	if appendErr := s.appendSidecar(sidecarRecord{
 		Path: proposalPath, ReminderID: reminderID, MintedAt: now,
@@ -144,28 +161,30 @@ func (s *Staleness) MintProposalReminder(ctx context.Context, proposalPath strin
 // must not fail). On success, appends a tombstone record to the
 // sidecar so a startup compact-pass can drop the live entry.
 func (s *Staleness) CancelProposalReminder(ctx context.Context, proposalPath string) error {
+	// Hold the lock across the entire cancel operation (same rationale
+	// as MintProposalReminder above): without it, two callers racing on
+	// the same path could both call store.Cancel for the same ID.
 	s.mu.Lock()
-	reminderID, ok := s.pathToID[proposalPath]
-	s.mu.Unlock()
+	defer s.mu.Unlock()
+
+	entry, ok := s.pathToID[proposalPath]
 	if !ok {
 		s.logger.Warn("skills staleness: cancel without mint", "path", proposalPath)
 		return nil
 	}
 
-	if err := s.store.Cancel(ctx, reminderID, "skill-promote-or-delete"); err != nil {
-		return fmt.Errorf("cancel reminder %s: %w", reminderID, err)
+	if err := s.store.Cancel(ctx, entry.reminderID, "skill-promote-or-delete"); err != nil {
+		return fmt.Errorf("cancel reminder %s: %w", entry.reminderID, err)
 	}
 
-	s.mu.Lock()
 	delete(s.pathToID, proposalPath)
-	s.mu.Unlock()
 
 	if appendErr := s.appendSidecar(sidecarRecord{
-		Path: proposalPath, ReminderID: reminderID, TombstonedAt: time.Now().UTC(),
+		Path: proposalPath, ReminderID: entry.reminderID, TombstonedAt: time.Now().UTC(),
 	}); appendErr != nil {
 		s.logger.Warn("skills staleness: sidecar tombstone append failed", "path", proposalPath, "err", appendErr)
 	}
-	s.logger.Info("skill staleness reminder cancelled", "path", proposalPath, "reminder_id", reminderID)
+	s.logger.Info("skill staleness reminder cancelled", "path", proposalPath, "reminder_id", entry.reminderID)
 	return nil
 }
 
@@ -240,7 +259,10 @@ func (s *Staleness) loadSidecar() {
 			continue
 		}
 		if rec.ReminderID != "" {
-			s.pathToID[rec.Path] = rec.ReminderID
+			s.pathToID[rec.Path] = reminderEntry{
+				reminderID: rec.ReminderID,
+				mintedAt:   rec.MintedAt,
+			}
 		}
 	}
 }
@@ -279,8 +301,16 @@ func (s *Staleness) compactSidecar() error {
 	}
 	s.mu.Lock()
 	snapshot := make([]sidecarRecord, 0, len(s.pathToID))
-	for p, id := range s.pathToID {
-		snapshot = append(snapshot, sidecarRecord{Path: p, ReminderID: id, MintedAt: time.Now().UTC()})
+	for p, entry := range s.pathToID {
+		// Preserve the original mint timestamp rather than rewriting
+		// to "now" — operators inspecting the sidecar JSONL to triage
+		// pending-proposal age see the actual proposal-arrival time.
+		// E10.5–E10.10 Phase 3 fix-batch finding.
+		snapshot = append(snapshot, sidecarRecord{
+			Path:       p,
+			ReminderID: entry.reminderID,
+			MintedAt:   entry.mintedAt,
+		})
 	}
 	s.mu.Unlock()
 

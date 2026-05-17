@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -333,6 +334,84 @@ func TestStaleness_StoreSurfaceTight(t *testing.T) {
 	// fakeStore.t.Fatalf has already failed the test.
 	if id == "" {
 		t.Error("Mint returned empty ID")
+	}
+}
+
+// TestStaleness_ReconcileCompactsTombstones explicitly pins the
+// compactSidecar behavior: pre-existing tombstones get dropped on the
+// next Reconcile pass, and the resulting on-disk file contains exactly
+// one line per live entry. The SidecarPersistAcrossRestart test
+// exercises loadSidecar's tombstone-skip on the read path; this test
+// exercises compactSidecar's tombstone-drop on the write path.
+// E10.5–E10.10 Phase 3 fix-batch addition.
+func TestStaleness_ReconcileCompactsTombstones(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore(t)
+	mapPath := filepath.Join(t.TempDir(), "sidecar.jsonl")
+	silentLogger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	s := NewStaleness(store, chainResolverFn([]string{"@c"}, nil), mapPath, 48*time.Hour)
+	s.SetLogger(silentLogger)
+
+	// Mint 5 reminders, then cancel them all → 10 sidecar lines
+	// (5 mint records + 5 tombstone records).
+	for i := 1; i <= 5; i++ {
+		_, err := s.MintProposalReminder(context.Background(), fmt.Sprintf("/p%d", i))
+		if err != nil {
+			t.Fatalf("mint /p%d: %v", i, err)
+		}
+	}
+	for i := 1; i <= 5; i++ {
+		if err := s.CancelProposalReminder(context.Background(), fmt.Sprintf("/p%d", i)); err != nil {
+			t.Fatalf("cancel /p%d: %v", i, err)
+		}
+	}
+	// Mint 3 fresh ones → 13 sidecar lines.
+	for i := 6; i <= 8; i++ {
+		_, err := s.MintProposalReminder(context.Background(), fmt.Sprintf("/p%d", i))
+		if err != nil {
+			t.Fatalf("mint /p%d: %v", i, err)
+		}
+	}
+
+	// Sanity: file has 13 lines BEFORE compaction.
+	raw, err := os.ReadFile(mapPath)
+	if err != nil {
+		t.Fatalf("read pre-compact: %v", err)
+	}
+	preLines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	if len(preLines) != 13 {
+		t.Fatalf("pre-compact line count = %d, want 13 (5 mint + 5 tombstone + 3 mint)", len(preLines))
+	}
+
+	// Reconcile (with no on-disk proposals) → compactSidecar rewrites
+	// the file from the live pathToID map → 3 live entries left.
+	if err := s.ReconcileProposals(context.Background(), t.TempDir()); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	postRaw, err := os.ReadFile(mapPath)
+	if err != nil {
+		t.Fatalf("read post-compact: %v", err)
+	}
+	postLines := strings.Split(strings.TrimSpace(string(postRaw)), "\n")
+	if len(postLines) != 3 {
+		t.Fatalf("post-compact line count = %d, want 3 (live entries only); contents:\n%s",
+			len(postLines), postRaw)
+	}
+	// Each remaining line must reference one of /p6, /p7, /p8.
+	want := map[string]bool{"/p6": true, "/p7": true, "/p8": true}
+	for _, line := range postLines {
+		var rec sidecarRecord
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			t.Fatalf("parse compact line: %v", err)
+		}
+		if !want[rec.Path] {
+			t.Errorf("unexpected path in compact output: %s", rec.Path)
+		}
+		if !rec.TombstonedAt.IsZero() {
+			t.Errorf("compact output contains tombstone record: %+v", rec)
+		}
 	}
 }
 
