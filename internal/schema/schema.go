@@ -20,7 +20,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 25
+const CurrentVersion = 32
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -410,6 +410,59 @@ func createTables(tx *sql.Tx) error {
 			reason      TEXT,
 			details     TEXT
 		)`,
+
+		// Email dedup (v30, D-B1). Idempotent re-fetch + retry protection
+		// on the inbound IMAP path. from_daemon_id + nonce stay NULLable
+		// per canonical-ref §3.7 — replay-nonce defense is reserved for
+		// v0.11.x when signed envelopes return; v0.11 ships supervisor
+		// traffic and unsigned mesh chatter with both columns NULL. TTL
+		// pass (DELETE WHERE processed_at < now - 30d) runs via the
+		// internal.email_dedup_cleanup scheduler entry from D-B1.8.
+		`CREATE TABLE IF NOT EXISTS email_msg_seen (
+			message_id      TEXT    PRIMARY KEY,
+			from_daemon_id  TEXT,
+			nonce           TEXT,
+			processed_at    INTEGER NOT NULL
+		)`,
+
+		// Email outbound queue (v31, D-B1). Persistent FIFO for outbound
+		// sends with exp-backoff retry tracking. headers_json (per
+		// canonical-ref §3.11 Guard 4 — NOT headers_jsonl despite the
+		// drifted DDL example in §3.8) holds the X-Thrum-* envelope as
+		// a JSON object; default '{}' matches that shape. status enum is
+		// exactly {queued, sending, sent, failed} (canonical-ref §3.8 +
+		// plan §D-B1.10 — no 'pending', no 'dropped'). subject NULLable
+		// because supervisor relay can elide it.
+		`CREATE TABLE IF NOT EXISTS email_outbound_queue (
+			id              INTEGER PRIMARY KEY AUTOINCREMENT,
+			from_agent      TEXT    NOT NULL,
+			to_address      TEXT    NOT NULL,
+			subject         TEXT,
+			body            TEXT    NOT NULL,
+			headers_json    TEXT    NOT NULL DEFAULT '{}',
+			attempt_count   INTEGER NOT NULL DEFAULT 0,
+			next_retry_at   INTEGER NOT NULL,
+			last_error      TEXT,
+			status          TEXT    NOT NULL,
+			enqueued_at     INTEGER NOT NULL,
+			updated_at      INTEGER NOT NULL
+		)`,
+
+		// Email peer rate state (v32, D-B1). Durable backing for the
+		// hourly inbound/outbound counters that gate L3 rate-limit drops.
+		// peer_key is a single-column PK (canonical-ref §3.9; NOT the
+		// composite the design-spec §5 example showed). inbound_count +
+		// outbound_count stay as separate columns rather than a single
+		// (count, direction) pair so the UPSERT on rollover stays atomic.
+		// paused_at non-NULL = rate-limit fired; reset by
+		// 'thrum email unblock'.
+		`CREATE TABLE IF NOT EXISTS email_peer_rate_state (
+			peer_key            TEXT    PRIMARY KEY,
+			window_start_at     INTEGER NOT NULL,
+			inbound_count       INTEGER NOT NULL DEFAULT 0,
+			outbound_count      INTEGER NOT NULL DEFAULT 0,
+			paused_at           INTEGER
+		)`,
 	}
 
 	for _, sql := range tables {
@@ -486,6 +539,19 @@ func createIndexes(tx *sql.Tx) error {
 		"CREATE INDEX IF NOT EXISTS idx_scheduler_state_next ON scheduler_job_state(next_scheduled_at)",
 		"CREATE INDEX IF NOT EXISTS idx_scheduler_events_job_time ON scheduler_job_events(job_id, event_time)",
 		"CREATE INDEX IF NOT EXISTS idx_scheduler_events_run ON scheduler_job_events(run_id)",
+
+		// Email indexes (v30-v32, D-B1).
+		// idx_email_msg_seen_proc drives the 30d TTL sweeper (D-B1.8).
+		// idx_email_queue_next drives queue worker's next-fire scan
+		// (D-B1.10).
+		// idx_peer_rate_paused is a partial index per canonical-ref §3.11
+		// Guard 6 — narrows the "find paused peers" query (run by
+		// 'thrum email unblock' + the rate-enforcement path) to only the
+		// non-NULL rows, avoiding a full-table scan when the steady state
+		// has few paused peers.
+		"CREATE INDEX IF NOT EXISTS idx_email_msg_seen_proc ON email_msg_seen(processed_at)",
+		"CREATE INDEX IF NOT EXISTS idx_email_queue_next ON email_outbound_queue(next_retry_at, status)",
+		"CREATE INDEX IF NOT EXISTS idx_peer_rate_paused ON email_peer_rate_state(paused_at) WHERE paused_at IS NOT NULL",
 	}
 
 	for _, sql := range indexes {
@@ -1185,6 +1251,81 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_scheduler_events_run ON scheduler_job_events(run_id)`)
 		if err != nil {
 			return fmt.Errorf("migration 24→25: idx_scheduler_events_run: %w", err)
+		}
+	}
+
+	// Migrations 26-29 are reserved for A-B1 follow-on work + A-B4 +
+	// MB-1.S6 telemetry per canonical-ref §3.1. They are intentionally
+	// absent from this file — A-B1 shipped only v25 in its initial
+	// landing, and the v26-v29 versions are kept reserved so D-B1's
+	// v30/31/32 numbering matches the canonical-ref + plan.
+
+	// Migration from version 29 to 30: email_msg_seen (D-B1). The
+	// startVersion < 30 guard covers any jump from v25 to v32 in one
+	// shot (gap 26-29 is benign — no migration blocks exist for those).
+	if startVersion < 30 && endVersion >= 30 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS email_msg_seen (
+				message_id      TEXT    PRIMARY KEY,
+				from_daemon_id  TEXT,
+				nonce           TEXT,
+				processed_at    INTEGER NOT NULL
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 29→30: create email_msg_seen: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_email_msg_seen_proc ON email_msg_seen(processed_at)`)
+		if err != nil {
+			return fmt.Errorf("migration 29→30: idx_email_msg_seen_proc: %w", err)
+		}
+	}
+
+	// Migration from version 30 to 31: email_outbound_queue (D-B1).
+	if startVersion < 31 && endVersion >= 31 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS email_outbound_queue (
+				id              INTEGER PRIMARY KEY AUTOINCREMENT,
+				from_agent      TEXT    NOT NULL,
+				to_address      TEXT    NOT NULL,
+				subject         TEXT,
+				body            TEXT    NOT NULL,
+				headers_json    TEXT    NOT NULL DEFAULT '{}',
+				attempt_count   INTEGER NOT NULL DEFAULT 0,
+				next_retry_at   INTEGER NOT NULL,
+				last_error      TEXT,
+				status          TEXT    NOT NULL,
+				enqueued_at     INTEGER NOT NULL,
+				updated_at      INTEGER NOT NULL
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 30→31: create email_outbound_queue: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_email_queue_next ON email_outbound_queue(next_retry_at, status)`)
+		if err != nil {
+			return fmt.Errorf("migration 30→31: idx_email_queue_next: %w", err)
+		}
+	}
+
+	// Migration from version 31 to 32: email_peer_rate_state (D-B1).
+	// Partial index per canonical-ref §3.11 Guard 6.
+	if startVersion < 32 && endVersion >= 32 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS email_peer_rate_state (
+				peer_key            TEXT    PRIMARY KEY,
+				window_start_at     INTEGER NOT NULL,
+				inbound_count       INTEGER NOT NULL DEFAULT 0,
+				outbound_count      INTEGER NOT NULL DEFAULT 0,
+				paused_at           INTEGER
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 31→32: create email_peer_rate_state: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_peer_rate_paused ON email_peer_rate_state(paused_at) WHERE paused_at IS NOT NULL`)
+		if err != nil {
+			return fmt.Errorf("migration 31→32: idx_peer_rate_paused: %w", err)
 		}
 	}
 

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Email Bridge: Troubleshooting — Thrum</title>
+<meta name="description" content="Decision-tree for common email bridge failures — bridge won't start, IDLE dropping, outbound queue stuck, missing peers, and size-limit errors">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#email-troubleshooting.html">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Email Bridge: Troubleshooting","description":"Decision-tree for common email bridge failures — bridge won't start, IDLE dropping, outbound queue stuck, missing peers, and size-limit errors","url":"https://leonletto.github.io/thrum/docs.html#email-troubleshooting.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://leonletto.github.io/thrum/docs.html"}}</script>
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+<script>
+window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+plausible.init()
+</script>
+</head>
+<body>
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; email &rsaquo; Email Bridge: Troubleshooting
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="whats-new.html">What's New</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+<strong>Guides</strong>: <a href="beta-channel.html">Beta Channel</a><br>
+<strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
+<strong>email</strong>: <a href="email-overview.html">Email Bridge</a> | <a href="email-setup-gmail.html">Email Bridge: Gmail Setup</a> | <a href="email-setup-fastmail.html">Email Bridge: Fastmail Setup</a> | <a href="email-setup-icloud.html">Email Bridge: iCloud Mail Setup</a> | <a href="email-setup-postfix.html">Email Bridge: Self-Hosted Postfix Setup</a> | <a href="email-mesh-pairing.html">Email Mesh Pairing</a> | <a href="email-trust-model.html">Email Bridge: Trust Model</a> | <strong>Email Bridge: Troubleshooting</strong><br>
+<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
+</nav>
+<main>
+<h2>Email Bridge: Troubleshooting</h2>
+<p>A symptom-first decision tree for diagnosing email bridge failures. Start with
+the symptom that matches, follow the steps in order, and stop when the problem
+is resolved.</p>
+<hr>
+<h2>Bridge Won&#39;t Start</h2>
+<p><strong>Symptom:</strong> <code>thrum email status</code> shows <code>bridge: stopped</code> or the daemon log
+contains <code>email bridge failed to start</code>.</p>
+<h3>Check 1 — Secrets file exists</h3>
+<pre><code>ls -la .thrum/secrets/email.json</code></pre>
+<p>If the file is missing, run <code>thrum email init</code> to create it.</p>
+<h3>Check 2 — Secrets file permissions</h3>
+<p>The file must be mode <code>0600</code>. If it isn&#39;t, the bridge refuses to load it:</p>
+<pre><code>chmod 0600 .thrum/secrets/email.json
+thrum daemon restart</code></pre>
+<p>Daemon log signature for this error: <code>ErrEmailSecretsMode</code>.</p>
+<h3>Check 3 — Secrets file is valid JSON</h3>
+<pre><code>cat .thrum/secrets/email.json | python3 -m json.tool</code></pre>
+<p>A parse error means the file was written incorrectly (e.g. truncated during
+<code>thrum email init</code>). Re-run init:</p>
+<pre><code>thrum email init --address your-address@example.com --update-credentials</code></pre>
+<h3>Check 4 — IMAP host reachable</h3>
+<pre><code>openssl s_client -connect imap.gmail.com:993 -quiet 2&gt;&amp;1 | head -5</code></pre>
+<p>If the connection times out or TLS handshake fails, the network path to the IMAP
+host is blocked. Check firewall rules and DNS resolution.</p>
+<hr>
+<h2>IDLE Silently Dropping (Mail Not Arriving)</h2>
+<p><strong>Symptom:</strong> Messages sent from daemon-B never arrive on daemon-A, even though
+<code>thrum email status</code> shows <code>running</code> and no <code>last_error</code>.</p>
+<h3>Check 1 — IDLE re-issuance in daemon logs</h3>
+<p>The bridge re-issues an IMAP IDLE command every 25 minutes to prevent server-
+side timeout. Look for this log line:</p>
+<pre><code>thrum daemon logs | grep &quot;imap: idle re-armed&quot;</code></pre>
+<p>If the line never appears, the IDLE loop may have exited without restarting.
+Restart the daemon to reset the IDLE goroutine:</p>
+<pre><code>thrum daemon restart</code></pre>
+<h3>Check 2 — Last poll timestamp</h3>
+<pre><code>thrum email status</code></pre>
+<p>Check <code>last_poll</code>. If it is more than a few minutes old and the daemon is
+running, the IMAP connection may have stalled. A daemon restart clears it.</p>
+<h3>Check 3 — Network connectivity to IMAP host</h3>
+<p>Intermittent connectivity drops can cause the IDLE connection to go silent
+without an explicit error. Check system network logs and verify the IMAP host
+is reachable from the daemon&#39;s machine.</p>
+<h3>Check 4 — Mailbox is the correct folder</h3>
+<p>By default the bridge watches the <code>INBOX</code>. If mail is being delivered to a
+different folder (e.g. by a server-side filter), messages are missed. Verify
+no server-side filters redirect Thrum messages out of <code>INBOX</code>.</p>
+<hr>
+<h2>Outbound Stuck in Queue</h2>
+<p><strong>Symptom:</strong> <code>thrum send</code> appears to succeed, but the recipient daemon never
+receives the message. <code>thrum email status</code> shows a non-empty queue.</p>
+<h3>Check 1 — Inspect paused peers</h3>
+<pre><code>thrum email status</code></pre>
+<p>Look for a <code>paused_peers</code> list. A peer is paused after repeated SMTP delivery
+failures to its address.</p>
+<p>To unblock a paused peer:</p>
+<pre><code>thrum email unblock &lt;peer_handle&gt;</code></pre>
+<h3>Check 2 — Queue worker logs for SMTP errors</h3>
+<pre><code>thrum daemon logs | grep &quot;smtp:&quot;</code></pre>
+<p>Common SMTP errors and their causes:</p>
+<table>
+<thead>
+<tr>
+<th>Error</th>
+<th>Cause</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>530 5.7.0 Authentication required</code></td>
+<td>SMTP auth not configured or wrong credentials</td>
+</tr>
+<tr>
+<td><code>550 5.1.1 User unknown</code></td>
+<td>Recipient address does not exist</td>
+</tr>
+<tr>
+<td><code>421 Too many connections</code></td>
+<td>Rate-limited by the SMTP relay</td>
+</tr>
+<tr>
+<td><code>Connection refused</code></td>
+<td>SMTP host or port unreachable</td>
+</tr>
+</tbody></table>
+<h3>Check 3 — Message size limit</h3>
+<p>If the queued message exceeds <code>email.max_outbound_bytes</code>, it is held in the
+queue but never sent. See the <a href="#send-returns-over_size_limit">Send Returns over_size_limit</a>
+section below.</p>
+<hr>
+<h2>Peer Not in <code>thrum email list</code></h2>
+<p><strong>Symptom:</strong> After running <code>thrum email pair</code>, the peer does not appear in
+<code>thrum email list</code> on either side.</p>
+<h3>Check 1 — Pairing request delivered?</h3>
+<p>The pairing invitation is sent by email. Verify it arrived in the target
+daemon&#39;s mailbox. If not, the SMTP delivery failed — check <code>thrum daemon logs</code>
+for SMTP errors at the time of the <code>pair</code> command.</p>
+<h3>Check 2 — Confirmation received?</h3>
+<p>Both sides must run <code>thrum email pair --to &lt;address&gt;</code> for the pair to complete.
+If only one side has confirmed, the entry stays in <code>--pending</code> state:</p>
+<pre><code>thrum email list --pending</code></pre>
+<p>The other operator must run their <code>thrum email pair</code> command.</p>
+<h3>Check 3 — Pending pair expired</h3>
+<p>Pairing requests expire after <code>pair_pending_ttl_hours</code> (default: 24 hours). If
+the confirmation was not received in time, both sides must re-run <code>thrum email pair</code>.</p>
+<h3>Check 4 — Audit log for pair events</h3>
+<pre><code>thrum daemon logs | grep &quot;peer.pair&quot;</code></pre>
+<p>The <code>peer.pair</code> audit line is written when a pair exchange completes. If it&#39;s
+absent on one side, that daemon&#39;s IMAP bridge hasn&#39;t processed the confirmation
+message yet. Wait one poll cycle (up to 60 seconds) or restart the daemon.</p>
+<hr>
+<h2>Send Returns <code>over_size_limit</code></h2>
+<p><strong>Symptom:</strong> <code>thrum send</code> fails with <code>error: over_size_limit</code>.</p>
+<p>The message body exceeds the configured <code>email.max_outbound_bytes</code> limit
+(default: <code>102400</code> = 100 KB).</p>
+<h3>Check current limit</h3>
+<pre><code>thrum config show | grep max_outbound</code></pre>
+<h3>Raise the limit</h3>
+<p>Edit <code>.thrum/config.json</code>:</p>
+<pre><code>{
+  &quot;email&quot;: {
+    &quot;max_outbound_bytes&quot;: 524288
+  }
+}</code></pre>
+<p>Then restart the daemon:</p>
+<pre><code>thrum daemon restart</code></pre>
+<blockquote>
+<p>Keep the limit below your SMTP relay&#39;s maximum message size. Gmail&#39;s limit is
+25 MB; Fastmail&#39;s is 50 MB. Most Thrum coordination messages are well under 1 MB.</p>
+</blockquote>
+<hr>
+<h2>Still Stuck?</h2>
+<ol>
+<li>Collect a full log snapshot: <code>thrum daemon logs &gt; /tmp/thrum-email-debug.txt</code></li>
+<li>Run <code>thrum email status --json</code> for machine-readable bridge state</li>
+<li>Check the daemon version: <code>thrum version</code></li>
+</ol>
+<p>File an issue at <a href="https://github.com/leonletto/thrum/issues">github.com/leonletto/thrum</a>
+with the log snapshot and <code>thrum email status --json</code> output.</p>
+
+</main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#email-troubleshooting.html')}</script>
+</body>
+</html>

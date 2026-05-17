@@ -113,7 +113,7 @@ type PeerJoinParams struct {
 }
 
 // IsTsnetActive reports whether the daemon's Tailscale tsnet listener is
-// already initialized. tsnet only registers a TailscaleSyncInfo provider
+// already initialized. Tsnet only registers a TailscaleSyncInfo provider
 // after a successful startTsnet, so a populated, Enabled provider response
 // means the daemon already holds a working tsnet node and a fresh auth key
 // is not required for further peer pairing on this side.

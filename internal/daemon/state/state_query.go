@@ -126,7 +126,7 @@ func (s *State) ListAgentsInWorktree(ctx context.Context, worktree string) []str
 // next session start) is still a legitimate owner of that worktree,
 // and DaemonResolve needs to trust its CLI claim during that window.
 //
-// thrum-0pos shared-worktree disambiguation: peercred resolves a
+// Thrum-0pos shared-worktree disambiguation: peercred resolves a
 // connecting process to one agent via CWD → git-root → registered
 // worktree, but when multiple agents share a worktree the pick is
 // arbitrary. DaemonResolve uses this predicate to validate that a CLI-

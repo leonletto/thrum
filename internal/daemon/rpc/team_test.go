@@ -747,7 +747,7 @@ func TestHandleList_WorktreeFallbackFromSessionRefs(t *testing.T) {
 
 // TestHandleList_WorktreeAgentWorkContextsWins verifies that when both
 // agent_work_contexts.worktree_path AND session_refs carry a worktree
-// value, the agent_work_contexts row wins. agent_work_contexts is the
+// value, the agent_work_contexts row wins. Agent_work_contexts is the
 // authoritative source — session_refs is only a fallback.
 func TestHandleList_WorktreeAgentWorkContextsWins(t *testing.T) {
 	tmpDir := t.TempDir()

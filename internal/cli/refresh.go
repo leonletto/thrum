@@ -181,7 +181,7 @@ func RefreshLocalIdentity(client *Client, repoPath string) (*RefreshResult, erro
 	// The correct enforcement points are the registration paths
 	// (quickstart, tmux.create, agent.register via peercred-resolved
 	// worktree). Those are narrowly scoped to the worktree being
-	// registered INTO and are authorised to scrub siblings. Refresh is
+	// registered INTO and are authorized to scrub siblings. Refresh is
 	// read-mostly; when it writes, it writes only to its own identity
 	// file. Any stale-sibling cleanup should happen at the next
 	// registration, not at every refresh.
