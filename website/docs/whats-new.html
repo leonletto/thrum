@@ -51,13 +51,106 @@ plausible.init()
 breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG.md</a>.</p>
-<h2>v0.10.4 — rc.2 in soak (Quick Footgun Release)</h2>
-<p><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.4-rc.2"><code>v0.10.4-rc.2</code></a>
-tagged 2026-05-16 and sitting in a compressed 4-hour soak window.</p>
+<h2>v0.10.5 — rc.1 in soak</h2>
+<p><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.1"><code>v0.10.5-rc.1</code></a>
+tagged 2026-05-17, in the standard 48h soak through 2026-05-19.</p>
+<p>A small follow-on patch carrying what v0.10.4 didn&#39;t catch plus the SAFE fixes
+that surfaced during the v0.10.4 soak. Three operational hardening items, a
+couple of UX papercuts, and one new inbox filter — day-to-day flow is unchanged,
+but long-running agent worktrees pick up cleaner script management, agents
+running <code>thrum prime</code> get a visible scrollback anchor confirming context loaded,
+and the per-agent inbox-poll cron is no longer required.</p>
+<h3>Added</h3>
+<ul>
+<li><strong>Daemon-side backstop nudger for stale-unread messages.</strong> The daemon now
+polls for unread messages older than the nudge threshold and re-emits delivery
+notifications itself, replacing the user-side <code>thrum-inbox-poll.sh</code> cron.
+More reliable (survives runtime restarts, no missed-cron windows) and lower
+overhead than a per-agent cron schedule. Existing installs continue to work
+with the legacy cron in place; the cron is now a no-op alongside the daemon
+backstop.</li>
+<li><strong><code>thrum inbox --from @agent</code> filter.</strong> Scope unread inbox to messages from a
+specific sender. Useful for catching up on one agent&#39;s traffic without
+paging through the rest of the queue.</li>
+<li><strong><code>thrum worktree teardown --delete-branch</code> flag.</strong> Tear down a worktree and
+delete its branch in one step. Previously the branch was kept and required a
+separate <code>git branch -D</code> after teardown.</li>
+<li><strong><code>thrum prime</code> first-turn ack instruction.</strong> The prime briefing now asks
+the runtime to emit a short acknowledgment line on receipt, giving the agent
+visible scrollback signal that context loaded. Previously some runtimes
+(notably Claude Code&#39;s SessionStart hook) silently absorbed the briefing
+with no observable anchor; debugging an agent that &quot;didn&#39;t get its prime&quot;
+required reading transcripts.</li>
+<li><strong>Headless <code>worktree.Create</code> / <code>worktree.Destroy</code> Go API.</strong> The worktree
+lifecycle moves to a single shared package (<code>internal/worktree</code>), used by
+both the cobra commands and future programmatic callers (substrate-track
+agent epics in particular). Behavior-equivalent to the previous cobra-only
+path; opens the door to ephemeral-worktree flows.</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+<li><strong><code>thrum-inbox-poll.sh</code> cron deprecated</strong> in favor of the daemon-side
+backstop nudger. Existing installations continue to function but the cron
+is no longer recommended; the daemon backstop is enabled by default and
+uses the same nudge cadence. Removal of the user-side cron is queued for a
+future release.</li>
+<li><strong>URLs migrated from <code>leonletto.github.io/thrum</code> to <code>thrum.team</code></strong> across
+README, website content, docs, and SEO references (Phase 6.3 cleanup).
+Old GitHub Pages URLs still resolve via redirect; canonical now points at
+<code>thrum.team</code>.</li>
+<li><strong><code>project-setup</code> skill follows <code>.thrum/redirect</code> when checking
+<code>philosophy.md</code>.</strong> Previously failed in redirected worktrees because it
+looked at the worktree-local path directly. Now resolves the redirect
+before the philosophy-presence check.</li>
+<li><strong><code>thrum worktree create</code> / <code>teardown</code> rewired through <code>internal/worktree</code>.</strong>
+Cobra commands now delegate to the shared package rather than inlining
+worktree-lifecycle logic. No user-visible behavior change, but bug fixes
+to worktree handling now land in one place.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li><strong><code>runtime-init</code> no longer leaves stale daemon-managed scripts in worktrees</strong>
+(thrum-akqv, P1). Daemon-managed templates (<code>scripts/thrum-startup.sh</code>,
+<code>scripts/thrum-check-inbox.sh</code>) were skipped on <code>runtime-init</code> when the
+files already existed, causing silent drift in long-running worktrees as
+the template content evolved across releases. The init logic now
+distinguishes daemon-managed scripts (overwrite on init) from
+user-customized configs (<code>.claude/settings.json</code>, <code>AGENTS.md</code>, etc., which
+remain preserve-on-init).</li>
+<li><strong><code>thrum prime</code> ack interpolation strips backticks from identity fields</strong>
+(thrum-x7rb). Identity fields containing backticks were leaking literal
+markdown/shell interpretation into the rendered ack template. Now
+sanitized via explicit backtick strip in the interpolation path.</li>
+<li><strong>Inbox backstop spool envelopes preserved from janitor reaping.</strong> The
+janitor was prematurely deleting backstop-pending envelopes, causing
+stale-unread messages to disappear from inbox before the backstop nudger
+could re-deliver them.</li>
+<li><strong>Self-mention semantic fix.</strong> Messages with an explicit self-mention now
+route correctly to the author&#39;s own inbox without being filtered out by
+the recipient-set construction. <code>read_at</code> is stamped at insert for the
+self-delivery row so the message doesn&#39;t show as unread to its author.</li>
+</ul>
+<h3>Upgrade Notes</h3>
+<ul>
+<li><strong>No config changes required.</strong> The daemon backstop nudger is on by default
+with the same cadence the cron used; no opt-in needed.</li>
+<li><strong>You can safely remove <code>thrum-inbox-poll.sh</code> from your cron</strong> if you
+installed it manually. The daemon handles backstop polling itself; the
+legacy cron is now a no-op alongside it.</li>
+<li><strong>One new flag on <code>thrum inbox</code></strong> (<code>--from @agent</code>) and <strong>one new flag on
+<code>thrum worktree teardown</code></strong> (<code>--delete-branch</code>). No removed flags, no
+changed defaults.</li>
+</ul>
+<p>See the <a href="beta-channel.html">Beta Channel</a> page for install commands.</p>
+<h2>v0.10.4 — 2026-05-17 (Quick Footgun Release)</h2>
+<p><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.4"><code>v0.10.4</code></a> shipped
+2026-05-17 after a compressed 4-hour soak. rc.1 was unsalvageable — its
+remediation text advertised an internal <code>--repo</code> escape hatch to agent-facing
+output, undoing the guard&#39;s intent. rc.2 corrected the text and promoted clean.</p>
 <p><strong>Standard thrum functionality is unchanged.</strong> v0.10.4 only fixes confusing
 messages agents get when they cd into the wrong worktree by accident. Normal
-same-worktree day-to-day use is unaffected. This is UX and safety hardening, not
-a regression fix. Full backstory:
+same-worktree day-to-day use is unaffected. This is UX and safety hardening,
+not a regression fix. Full backstory:
 <a href="https://thrum.team/blog/shooting-yourself-in-both-feet.html">Shooting Yourself in Both Feet</a>.</p>
 <p>The bug was a known footgun in the original identity-guard work (thrum-7b84.6):
 when an agent&#39;s CLI command ran from a worktree that didn&#39;t match its pane-bound
@@ -77,11 +170,10 @@ helpers):</strong> same banner as Class B, no other change.</li>
 </ul>
 <p>The remediation: cd back to the agent&#39;s own worktree, or run <code>thrum prime</code> to
 re-claim the identity if the pane binding has drifted.</p>
-<p>Why a shortened soak window? The fix is small (4 files, ~270 LOC), the
-regression-test fingerprint is mechanical, and the bug is a known footgun missed
-in the original identity-guard work, not a discovered new regression. v0.10.4
-follows the standard pre-release process but with a 4-hour soak floor instead of
-the usual 48h.</p>
+<p>The shortened 4-hour soak (instead of the usual 48h) was justified by the fix&#39;s
+narrow scope (4 files, ~270 LOC), the mechanical regression-test fingerprint,
+and the bug being a known footgun missed in the original identity-guard work
+rather than a discovered new regression.</p>
 <p>See the <a href="beta-channel.html">Beta Channel</a> page for install commands.</p>
 <h2>v0.10.3</h2>
 <p><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.3"><code>v0.10.3</code></a> shipped

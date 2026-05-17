@@ -5,10 +5,105 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 [CHANGELOG.md](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-## v0.10.4 — rc.2 in soak (Quick Footgun Release)
+## v0.10.5 — rc.1 in soak
 
-[`v0.10.4-rc.2`](https://github.com/leonletto/thrum/releases/tag/v0.10.4-rc.2)
-tagged 2026-05-16 and sitting in a compressed 4-hour soak window.
+[`v0.10.5-rc.1`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.1)
+tagged 2026-05-17, in the standard 48h soak through 2026-05-19.
+
+A small follow-on patch carrying what v0.10.4 didn't catch plus the SAFE fixes
+that surfaced during the v0.10.4 soak. Three operational hardening items, a
+couple of UX papercuts, and one new inbox filter — day-to-day flow is unchanged,
+but long-running agent worktrees pick up cleaner script management, agents
+running `thrum prime` get a visible scrollback anchor confirming context loaded,
+and the per-agent inbox-poll cron is no longer required.
+
+### Added
+
+- **Daemon-side backstop nudger for stale-unread messages.** The daemon now
+  polls for unread messages older than the nudge threshold and re-emits delivery
+  notifications itself, replacing the user-side `thrum-inbox-poll.sh` cron. More
+  reliable (survives runtime restarts, no missed-cron windows) and lower
+  overhead than a per-agent cron schedule. Existing installs continue to work
+  with the legacy cron in place; the cron is now a no-op alongside the daemon
+  backstop.
+- **`thrum inbox --from @agent` filter.** Scope unread inbox to messages from a
+  specific sender. Useful for catching up on one agent's traffic without paging
+  through the rest of the queue.
+- **`thrum worktree teardown --delete-branch` flag.** Tear down a worktree and
+  delete its branch in one step. Previously the branch was kept and required a
+  separate `git branch -D` after teardown.
+- **`thrum prime` first-turn ack instruction.** The prime briefing now asks the
+  runtime to emit a short acknowledgment line on receipt, giving the agent
+  visible scrollback signal that context loaded. Previously some runtimes
+  (notably Claude Code's SessionStart hook) silently absorbed the briefing with
+  no observable anchor; debugging an agent that "didn't get its prime" required
+  reading transcripts.
+- **Headless `worktree.Create` / `worktree.Destroy` Go API.** The worktree
+  lifecycle moves to a single shared package (`internal/worktree`), used by both
+  the cobra commands and future programmatic callers (substrate-track agent
+  epics in particular). Behavior-equivalent to the previous cobra-only path;
+  opens the door to ephemeral-worktree flows.
+
+### Changed
+
+- **`thrum-inbox-poll.sh` cron deprecated** in favor of the daemon-side backstop
+  nudger. Existing installations continue to function but the cron is no longer
+  recommended; the daemon backstop is enabled by default and uses the same nudge
+  cadence. Removal of the user-side cron is queued for a future release.
+- **URLs migrated from `leonletto.github.io/thrum` to `thrum.team`** across
+  README, website content, docs, and SEO references (Phase 6.3 cleanup). Old
+  GitHub Pages URLs still resolve via redirect; canonical now points at
+  `thrum.team`.
+- **`project-setup` skill follows `.thrum/redirect` when checking
+  `philosophy.md`.** Previously failed in redirected worktrees because it looked
+  at the worktree-local path directly. Now resolves the redirect before the
+  philosophy-presence check.
+- **`thrum worktree create` / `teardown` rewired through `internal/worktree`.**
+  Cobra commands now delegate to the shared package rather than inlining
+  worktree-lifecycle logic. No user-visible behavior change, but bug fixes to
+  worktree handling now land in one place.
+
+### Fixed
+
+- **`runtime-init` no longer leaves stale daemon-managed scripts in worktrees**
+  (thrum-akqv, P1). Daemon-managed templates (`scripts/thrum-startup.sh`,
+  `scripts/thrum-check-inbox.sh`) were skipped on `runtime-init` when the files
+  already existed, causing silent drift in long-running worktrees as the
+  template content evolved across releases. The init logic now distinguishes
+  daemon-managed scripts (overwrite on init) from user-customized configs
+  (`.claude/settings.json`, `AGENTS.md`, etc., which remain preserve-on-init).
+- **`thrum prime` ack interpolation strips backticks from identity fields**
+  (thrum-x7rb). Identity fields containing backticks were leaking literal
+  markdown/shell interpretation into the rendered ack template. Now sanitized
+  via explicit backtick strip in the interpolation path.
+- **Inbox backstop spool envelopes preserved from janitor reaping.** The janitor
+  was prematurely deleting backstop-pending envelopes, causing stale-unread
+  messages to disappear from inbox before the backstop nudger could re-deliver
+  them.
+- **Self-mention semantic fix.** Messages with an explicit self-mention now
+  route correctly to the author's own inbox without being filtered out by the
+  recipient-set construction. `read_at` is stamped at insert for the
+  self-delivery row so the message doesn't show as unread to its author.
+
+### Upgrade Notes
+
+- **No config changes required.** The daemon backstop nudger is on by default
+  with the same cadence the cron used; no opt-in needed.
+- **You can safely remove `thrum-inbox-poll.sh` from your cron** if you
+  installed it manually. The daemon handles backstop polling itself; the legacy
+  cron is now a no-op alongside it.
+- **One new flag on `thrum inbox`** (`--from @agent`) and **one new flag on
+  `thrum worktree teardown`** (`--delete-branch`). No removed flags, no changed
+  defaults.
+
+See the [Beta Channel](beta-channel.md) page for install commands.
+
+## v0.10.4 — 2026-05-17 (Quick Footgun Release)
+
+[`v0.10.4`](https://github.com/leonletto/thrum/releases/tag/v0.10.4) shipped
+2026-05-17 after a compressed 4-hour soak. rc.1 was unsalvageable — its
+remediation text advertised an internal `--repo` escape hatch to agent-facing
+output, undoing the guard's intent. rc.2 corrected the text and promoted clean.
 
 **Standard thrum functionality is unchanged.** v0.10.4 only fixes confusing
 messages agents get when they cd into the wrong worktree by accident. Normal
@@ -35,11 +130,10 @@ v0.10.4 splits CLI commands into three behaviour classes:
 The remediation: cd back to the agent's own worktree, or run `thrum prime` to
 re-claim the identity if the pane binding has drifted.
 
-Why a shortened soak window? The fix is small (4 files, ~270 LOC), the
-regression-test fingerprint is mechanical, and the bug is a known footgun missed
-in the original identity-guard work, not a discovered new regression. v0.10.4
-follows the standard pre-release process but with a 4-hour soak floor instead of
-the usual 48h.
+The shortened 4-hour soak (instead of the usual 48h) was justified by the fix's
+narrow scope (4 files, ~270 LOC), the mechanical regression-test fingerprint,
+and the bug being a known footgun missed in the original identity-guard work
+rather than a discovered new regression.
 
 See the [Beta Channel](beta-channel.md) page for install commands.
 
