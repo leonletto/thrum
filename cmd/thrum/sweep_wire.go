@@ -143,3 +143,8 @@ func (r *identityFileAgentRegistry) LiveAgents(_ context.Context) ([]sweep.Agent
 	}
 	return out, nil
 }
+
+// Compile-time check mirrors the pattern in reminders_wire.go for
+// messageHandlerSender — catches sweep.AgentRegistry signature drift
+// at production build time rather than at test-suite time.
+var _ sweep.AgentRegistry = (*identityFileAgentRegistry)(nil)

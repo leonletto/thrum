@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -97,25 +95,13 @@ func TestWireReminders_DefaultCadenceWhenUnset(t *testing.T) {
 }
 
 // --- messageHandlerSender adapter tests ---
-
-// stubHandler captures the params handed to HandleSend so we can
-// assert on the wire shape. Wraps a real rpc.MessageHandler that's
-// constructed against an in-memory state.State so HandleSend's
-// upstream calls don't NPE.
-type capturingHandler struct {
-	wrapped     *rpc.MessageHandler
-	gotParams   json.RawMessage
-	forceError  error
-}
-
-// The adapter under test takes *rpc.MessageHandler concretely (not an
-// interface) since it's the only message-pipeline entry point in
-// production. To capture the wire shape we wrap the real handler in
-// our own type and proxy HandleSend through a test-only field. For
-// simplicity here we just test SendReminder's *failure* paths (empty
-// toAgent, nil handler) directly — the success path is exercised by
-// the wireReminders integration test above + the reminders package's
-// own dispatcher_test.go.
+//
+// The adapter takes *rpc.MessageHandler concretely (not an interface)
+// since that's the only message-pipeline entry point in production.
+// Success-path coverage lives in the wireReminders integration test
+// above + the reminders package's own dispatcher_test.go; tests here
+// focus on the failure paths the adapter adds (empty toAgent, nil
+// handler, daemon-source remap, no-fallback rejection).
 
 func TestMessageHandlerSender_EmptyToAgent_Rejects(t *testing.T) {
 	s := &messageHandlerSender{handler: &rpc.MessageHandler{}}
@@ -184,20 +170,7 @@ func TestMessageHandlerSender_NoFallbackConfigured_Rejects(t *testing.T) {
 	}
 }
 
-// errReporter is a tiny shim mirroring scheduler.StateReporter that
-// returns an error from Transition — used to confirm Dispatch
-// returns reporter errors verbatim (per scheduler.Handler contract).
-type errReporter struct{}
-
-func (errReporter) Transition(scheduler.State, string, map[string]any) error {
-	return errors.New("reporter unhappy")
-}
-func (errReporter) Stage(string) error { return nil }
-
 func TestMessageHandlerSender_SatisfiesInterface(t *testing.T) {
 	// Compile-time assertion mirroring the var _ in production.
 	var _ reminders.MessageSender = (*messageHandlerSender)(nil)
-	// Silence unused-type complaints from the helpers.
-	_ = capturingHandler{}
-	_ = errReporter{}
 }
