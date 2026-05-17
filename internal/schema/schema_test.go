@@ -1557,10 +1557,7 @@ func TestMigration_RemindersTable(t *testing.T) {
 		t.Fatalf("schema_version = %d, want CurrentVersion = %d", version, schema.CurrentVersion)
 	}
 
-	got, err := columnInfo(db, "reminders")
-	if err != nil {
-		t.Fatalf("PRAGMA reminders: %v", err)
-	}
+	got := pragmaTableInfo(t, db, "reminders")
 
 	expected := []string{
 		"id", "source", "source_agent", "trigger_kind", "trigger_at",
@@ -1600,141 +1597,257 @@ func TestMigration_RemindersTable(t *testing.T) {
 // TestMigration_RemindersFreshInstallEquivalentToUpgrade enforces canonical
 // §3.11 Guard 1: fresh-install (InitDB → createTables) and incremental
 // upgrade (Migrate from a pre-v28 version) produce identical reminders
-// schema. Plan thrum-6qmf.3.13 Step 1, second test.
+// schema. Uses the shared assertSameTable helper plus an explicit index
+// SQL comparison since partial-index WHERE clauses must be byte-identical
+// (the planner picks different access paths otherwise).
 func TestMigration_RemindersFreshInstallEquivalentToUpgrade(t *testing.T) {
-	fresh := setupTestDB(t)
-	upgraded := upgradedRemindersDB(t)
+	fresh := freshInstallDB(t)
+	upgraded := upgradedFromDB(t, 24)
+	assertSameTable(t, fresh, upgraded, "reminders")
 
-	freshCols, err := columnInfo(fresh, "reminders")
-	if err != nil {
-		t.Fatalf("fresh PRAGMA: %v", err)
-	}
-	upgradedCols, err := columnInfo(upgraded, "reminders")
-	if err != nil {
-		t.Fatalf("upgraded PRAGMA: %v", err)
-	}
-
-	if len(freshCols) != len(upgradedCols) {
-		t.Fatalf("column count mismatch: fresh=%d upgraded=%d", len(freshCols), len(upgradedCols))
-	}
-	for name, freshInfo := range freshCols {
-		upInfo, ok := upgradedCols[name]
-		if !ok {
-			t.Errorf("column %s present in fresh but missing in upgraded", name)
-			continue
-		}
-		if freshInfo != upInfo {
-			t.Errorf("column %s shape diverges: fresh=%q upgraded=%q", name, freshInfo, upInfo)
-		}
-	}
-
-	// Indexes must also match across paths — partial-index WHERE clauses
-	// must be byte-identical or the planner picks different access paths.
 	for _, idx := range []string{
 		"idx_reminders_next",
 		"idx_reminders_state",
 		"idx_reminders_target",
 		"idx_reminders_source_kind",
 	} {
-		freshSQL, err := indexSQL(fresh, idx)
-		if err != nil {
-			t.Fatalf("fresh index %s: %v", idx, err)
-		}
-		upSQL, err := indexSQL(upgraded, idx)
-		if err != nil {
-			t.Fatalf("upgraded index %s: %v", idx, err)
-		}
+		freshSQL := indexSQL(t, fresh, idx)
+		upSQL := indexSQL(t, upgraded, idx)
 		if freshSQL != upSQL {
 			t.Errorf("index %s SQL diverges:\n fresh:    %s\n upgraded: %s", idx, freshSQL, upSQL)
 		}
 	}
 }
 
-// columnInfo returns {column_name: "type|notnull|default|pk"} for a table —
-// captures the full column shape so equivalence tests catch NULLability +
-// default drift, not just column presence.
-func columnInfo(db *sql.DB, table string) (map[string]string, error) {
-	//nolint:gosec // trusted table name from test code
-	rows, err := db.Query("PRAGMA table_info(" + table + ")")
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	out := map[string]string{}
-	for rows.Next() {
-		var (
-			cid     int
-			name    string
-			ctype   string
-			notnull int
-			dflt    sql.NullString
-			pk      int
-		)
-		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
-			return nil, err
-		}
-		dfltStr := ""
-		if dflt.Valid {
-			dfltStr = dflt.String
-		}
-		out[name] = ctype + "|" + boolString(notnull == 1) + "|" + dfltStr + "|" + boolString(pk > 0)
-	}
-	return out, rows.Err()
-}
-
-func indexSQL(db *sql.DB, name string) (string, error) {
+// indexSQL returns the CREATE INDEX SQL string for the given index name,
+// or "" if absent. Reminders has partial indexes (WHERE state='open') so
+// byte-level SQL comparison is the only way to catch WHERE-clause drift.
+func indexSQL(t *testing.T, db *sql.DB, name string) string {
+	t.Helper()
 	var sqlText sql.NullString
 	err := db.QueryRow(
 		"SELECT sql FROM sqlite_master WHERE type='index' AND name=?", name,
 	).Scan(&sqlText)
 	if err != nil {
-		return "", err
+		t.Fatalf("indexSQL %s: %v", name, err)
 	}
 	if !sqlText.Valid {
-		return "", nil
+		return ""
 	}
-	return sqlText.String, nil
+	return sqlText.String
 }
 
-func boolString(b bool) string {
-	if b {
-		return "1"
-	}
-	return "0"
+// colInfo mirrors one row of PRAGMA table_info for comparison across paths.
+type colInfo struct {
+	cid     int
+	ctype   string
+	notnull int
+	dflt    sql.NullString
+	pk      int
 }
 
-// upgradedRemindersDB bootstraps a database at v24 with the v24 schema
-// shape, then runs Migrate to bring it to CurrentVersion. Tests that the
-// migration path lands at the same reminders shape as fresh-install,
-// including across the intentional v25-v27 gap (A-B1/B-B1 migrations land
-// later via cascade).
-func upgradedRemindersDB(t *testing.T) *sql.DB {
+// pragmaTableInfo reads PRAGMA table_info(table) into a name→colInfo map.
+// Used to compare fresh-install and upgrade schemas column-by-column (notably
+// for NULLability parity per substrate-canonical-reference.md §3.11 Guard 1).
+func pragmaTableInfo(t *testing.T, db *sql.DB, table string) map[string]colInfo {
 	t.Helper()
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "upgrade.db")
+	// PRAGMA does not support bind parameters; table name is hardcoded by callers.
+	rows, err := db.Query("PRAGMA table_info(" + table + ")") //nolint:gosec // trusted table name in tests
+	if err != nil {
+		t.Fatalf("PRAGMA table_info(%s): %v", table, err)
+	}
+	defer func() { _ = rows.Close() }()
 
+	cols := map[string]colInfo{}
+	for rows.Next() {
+		var (
+			info colInfo
+			name string
+		)
+		if err := rows.Scan(&info.cid, &name, &info.ctype, &info.notnull, &info.dflt, &info.pk); err != nil {
+			t.Fatalf("scan row for %s: %v", table, err)
+		}
+		cols[name] = info
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate PRAGMA table_info(%s): %v", table, err)
+	}
+	return cols
+}
+
+// freshInstallDB opens a new DB and runs InitDB (CurrentVersion via
+// createTables + createIndexes).
+func freshInstallDB(t *testing.T) *sql.DB {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "fresh.db")
 	db, err := schema.OpenDB(dbPath)
 	if err != nil {
 		t.Fatalf("OpenDB: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+	return db
+}
 
-	// Seed the schema_version table at v24 — we only need the version
-	// marker so Migrate runs the v28 reminders branch (v25/v26/v27 branches
-	// will land in later A-B1/B-B1 merges and are absent here).
+// upgradedFromDB opens a new DB, hand-bootstraps schema_version at `from`,
+// then runs Migrate to advance to CurrentVersion. Mirrors the bootstrap
+// pattern used by earlier migration tests (e.g. v17→v18, v20→v21).
+func upgradedFromDB(t *testing.T, from int) *sql.DB {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "upgrade.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
 	if _, err := db.Exec(`CREATE TABLE schema_version (
 		version INTEGER NOT NULL,
 		applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 	)`); err != nil {
 		t.Fatalf("create schema_version: %v", err)
 	}
-	if _, err := db.Exec("INSERT INTO schema_version (version) VALUES (24)"); err != nil {
-		t.Fatalf("seed v24: %v", err)
+	if _, err := db.Exec(`INSERT INTO schema_version (version) VALUES (?)`, from); err != nil {
+		t.Fatalf("seed version %d: %v", from, err)
 	}
-
 	if err := schema.Migrate(db); err != nil {
-		t.Fatalf("Migrate v24→%d: %v", schema.CurrentVersion, err)
+		t.Fatalf("Migrate from v%d: %v", from, err)
 	}
 	return db
+}
+
+// assertSameTable compares table_info between two DBs and fails on any
+// per-column divergence (type, notnull, default, pk) or column-set mismatch.
+func assertSameTable(t *testing.T, a, b *sql.DB, table string) {
+	t.Helper()
+	got := pragmaTableInfo(t, a, table)
+	want := pragmaTableInfo(t, b, table)
+	if len(got) != len(want) {
+		t.Errorf("%s: column count diverges fresh=%d upgrade=%d", table, len(got), len(want))
+	}
+	for name, w := range want {
+		g, ok := got[name]
+		if !ok {
+			t.Errorf("%s: column %s missing in fresh install", table, name)
+			continue
+		}
+		if g.ctype != w.ctype {
+			t.Errorf("%s.%s: type fresh=%q upgrade=%q", table, name, g.ctype, w.ctype)
+		}
+		if g.notnull != w.notnull {
+			t.Errorf("%s.%s: NOT NULL fresh=%d upgrade=%d (NULLability parity violation per §3.11 Guard 1)", table, name, g.notnull, w.notnull)
+		}
+		if g.dflt.String != w.dflt.String || g.dflt.Valid != w.dflt.Valid {
+			t.Errorf("%s.%s: default fresh=%v upgrade=%v", table, name, g.dflt, w.dflt)
+		}
+		if g.pk != w.pk {
+			t.Errorf("%s.%s: pk fresh=%d upgrade=%d", table, name, g.pk, w.pk)
+		}
+	}
+	for name := range got {
+		if _, ok := want[name]; !ok {
+			t.Errorf("%s: column %s present in fresh install but missing in upgrade", table, name)
+		}
+	}
+}
+
+// TestMigration_SchedulerTables verifies migration 25 creates both
+// scheduler_job_state and scheduler_job_events with the locked column set per
+// substrate-canonical-reference.md §3.2.
+func TestMigration_SchedulerTables(t *testing.T) {
+	db := setupTestDB(t)
+
+	var version int
+	if err := db.QueryRow("SELECT version FROM schema_version").Scan(&version); err != nil {
+		t.Fatalf("read version: %v", err)
+	}
+	if version != schema.CurrentVersion {
+		t.Fatalf("expected version %d, got %d", schema.CurrentVersion, version)
+	}
+
+	stateGot := pragmaTableInfo(t, db, "scheduler_job_state")
+	stateExpected := []string{
+		"job_id", "job_generation", "current_state", "current_stage",
+		"stage_entered_at", "last_run_id", "last_fired_at",
+		"last_completed_at", "last_completion_state", "last_error",
+		"next_scheduled_at", "consecutive_failures", "escalation_sent",
+		"total_runs", "created_at", "updated_at",
+	}
+	for _, col := range stateExpected {
+		if _, ok := stateGot[col]; !ok {
+			t.Errorf("scheduler_job_state missing column %s", col)
+		}
+	}
+
+	eventsGot := pragmaTableInfo(t, db, "scheduler_job_events")
+	eventsExpected := []string{
+		"id", "job_id", "run_id", "event_time", "from_state",
+		"to_state", "reason", "details",
+	}
+	for _, col := range eventsExpected {
+		if _, ok := eventsGot[col]; !ok {
+			t.Errorf("scheduler_job_events missing column %s", col)
+		}
+	}
+
+	for _, idx := range []string{
+		"idx_scheduler_state_next",
+		"idx_scheduler_events_job_time",
+		"idx_scheduler_events_run",
+	} {
+		var n int
+		err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?`, idx).Scan(&n)
+		if err != nil {
+			t.Fatalf("query index %s: %v", idx, err)
+		}
+		if n != 1 {
+			t.Errorf("index %s should exist on fresh install (got count=%d)", idx, n)
+		}
+	}
+}
+
+// TestMigration_SchedulerJobState_NextScheduledAtNullable pins canonical-ref
+// §3.11 Guard 1: next_scheduled_at MUST be NULLable. A row with
+// next_scheduled_at=NULL represents a one-shot terminal job or a recurring
+// job without a derivable next-tick — both legitimate states.
+func TestMigration_SchedulerJobState_NextScheduledAtNullable(t *testing.T) {
+	db := setupTestDB(t)
+	_, err := db.Exec(`
+		INSERT INTO scheduler_job_state
+			(job_id, job_generation, current_state, next_scheduled_at,
+			 consecutive_failures, escalation_sent, total_runs,
+			 created_at, updated_at)
+		VALUES ('test-once', 1, 'completed', NULL, 0, 0, 1, 1, 1)
+	`)
+	if err != nil {
+		t.Fatalf("INSERT with NULL next_scheduled_at: %v", err)
+	}
+
+	var notnull int
+	err = db.QueryRow(
+		`SELECT "notnull" FROM pragma_table_info('scheduler_job_state') WHERE name='next_scheduled_at'`,
+	).Scan(&notnull)
+	if err != nil {
+		t.Fatalf("pragma_table_info next_scheduled_at: %v", err)
+	}
+	if notnull != 0 {
+		t.Errorf("next_scheduled_at notnull=%d on fresh install; canonical-ref §3.11 Guard 1 requires NULLable (0)", notnull)
+	}
+}
+
+// TestMigration_SchedulerJobState_FreshInstallEquivalentToUpgrade enforces
+// canonical-ref §3.11 Guard 1 across both schema paths: fresh-install via
+// createTables MUST produce the same scheduler_job_state and
+// scheduler_job_events schemas as upgrade-from-v24 via runMigrations.
+func TestMigration_SchedulerJobState_FreshInstallEquivalentToUpgrade(t *testing.T) {
+	fresh := freshInstallDB(t)
+	// Start at v24 (not CurrentVersion-1) so the migration path traverses
+	// the v25 scheduler branch. With the v25-v27 substrate-gap protocol,
+	// CurrentVersion-1 may not trigger any migration that creates the
+	// scheduler tables — A-B4's v28 doesn't, and B-B1's v26/v27 may not
+	// either depending on what's merged.
+	upgraded := upgradedFromDB(t, 24)
+	assertSameTable(t, fresh, upgraded, "scheduler_job_state")
+	assertSameTable(t, fresh, upgraded, "scheduler_job_events")
 }
