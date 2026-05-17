@@ -10,12 +10,22 @@ machine-readable history lives in
 [`v0.10.5-rc.1`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.1)
 tagged 2026-05-17, in the standard 48h soak through 2026-05-19.
 
-A small follow-on patch carrying what v0.10.4 didn't catch plus the SAFE fixes
-that surfaced during the v0.10.4 soak. Three operational hardening items, a
-couple of UX papercuts, and one new inbox filter — day-to-day flow is unchanged,
-but long-running agent worktrees pick up cleaner script management, agents
-running `thrum prime` get a visible scrollback anchor confirming context loaded,
-and the per-agent inbox-poll cron is no longer required.
+Backstop and hygiene. The headline change is operational: a daemon-side backstop
+nudger re-emits delivery notifications for stale-unread messages on its own
+schedule, replacing the per-agent `thrum-inbox-poll.sh` cron that previously had
+to be installed and maintained per worktree. Around that: long-running agent
+worktrees stop drifting from the embedded daemon-managed script templates
+(`runtime-init` now overwrites them while preserving user-customized configs),
+`thrum prime` leaves a visible scrollback anchor so you can confirm at a glance
+that context loaded, the `project-setup` skill works in redirected worktrees
+again, and a handful of inbox-race fixes land alongside two small new CLI flags
+(`thrum inbox --from @agent`, `thrum worktree teardown --delete-branch`).
+
+Plus a headless `worktree.Create` / `worktree.Destroy` Go API moving into
+`internal/worktree` — no user-visible CLI change, but it's the substrate the
+v0.11 agent epics build on for ephemeral-worktree flows. The URL migration to
+`thrum.team` from `leonletto.github.io/thrum` also wraps up in this release
+(Phase 6.3 — old URLs redirect cleanly).
 
 ### Added
 
@@ -129,11 +139,6 @@ v0.10.4 splits CLI commands into three behaviour classes:
 
 The remediation: cd back to the agent's own worktree, or run `thrum prime` to
 re-claim the identity if the pane binding has drifted.
-
-The shortened 4-hour soak (instead of the usual 48h) was justified by the fix's
-narrow scope (4 files, ~270 LOC), the mechanical regression-test fingerprint,
-and the bug being a known footgun missed in the original identity-guard work
-rather than a discovered new regression.
 
 See the [Beta Channel](beta-channel.md) page for install commands.
 

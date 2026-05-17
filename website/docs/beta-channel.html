@@ -76,8 +76,8 @@ fixes the v0.10.4 soak surfaced. Day-to-day flow is unchanged for most users.</p
 <ul>
 <li><strong>Daemon-side backstop nudger for stale-unread messages</strong> replaces the
 per-agent <code>thrum-inbox-poll.sh</code> cron. More reliable (survives runtime
-restarts) and lower overhead than a per-agent cron schedule. Existing
-cron installs continue to work as no-ops alongside it.</li>
+restarts) and lower overhead than a per-agent cron schedule. Existing cron
+installs continue to work as no-ops alongside it.</li>
 <li><strong><code>runtime-init</code> refreshes stale daemon-managed scripts</strong> so long-running
 worktrees stop drifting from the embedded template
 (<code>scripts/thrum-startup.sh</code>, <code>scripts/thrum-check-inbox.sh</code>). User-edited
@@ -85,11 +85,10 @@ configs like <code>.claude/settings.json</code> and <code>AGENTS.md</code> stay 
 <li><strong><code>thrum prime</code> first-turn ack</strong> — the briefing now leaves a visible
 scrollback line so you can confirm at a glance that context loaded.</li>
 <li><strong><code>thrum inbox --from @agent</code></strong> filters unread by sender.</li>
-<li><strong><code>thrum worktree teardown --delete-branch</code></strong> drops the branch in the
-same command.</li>
+<li><strong><code>thrum worktree teardown --delete-branch</code></strong> drops the branch in the same
+command.</li>
 </ul>
-<p>No config changes required. Full release notes:
-<a href="whats-new.html">What&#39;s New</a>.</p>
+<p>No config changes required. Full release notes: <a href="whats-new.html">What&#39;s New</a>.</p>
 <p>Previous stable:
 <a href="https://github.com/leonletto/thrum/releases/tag/v0.10.4"><code>v0.10.4</code></a> — see
 <a href="whats-new.html">What&#39;s New</a> for v0.10.4 + v0.10.5 highlights.</p>
