@@ -253,6 +253,7 @@ Environment variables:
 	rootCmd.AddCommand(tmuxCmd())
 	rootCmd.AddCommand(restartCmd())
 	rootCmd.AddCommand(worktreeCmd())
+	rootCmd.AddCommand(skillCmd())
 
 	// Apply guard-category annotations to every leaf command under
 	// rootCmd. See command_categories.go for the per-path mapping +
