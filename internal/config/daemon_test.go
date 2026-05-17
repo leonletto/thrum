@@ -880,3 +880,95 @@ func keysOf(m map[string]json.RawMessage) []string {
 	}
 	return out
 }
+
+// --- A-B4 substrate config (thrum-6qmf.3.16) ---
+
+func TestDaemonConfig_StalledSweepIntervalMinutes_DefaultsTo15(t *testing.T) {
+	cfg := config.DaemonConfig{} // unset
+	if got := cfg.StalledSweepIntervalMinutes(); got != 15 {
+		t.Errorf("got %d, want 15 (canonical §4.4 default)", got)
+	}
+}
+
+func TestDaemonConfig_StalledSweepIntervalMinutes_HonorsExplicitValue(t *testing.T) {
+	cfg := config.DaemonConfig{StalledSweep: config.StalledSweepConfig{IntervalMinutes: 30}}
+	if got := cfg.StalledSweepIntervalMinutes(); got != 30 {
+		t.Errorf("got %d, want 30 (operator override)", got)
+	}
+}
+
+func TestDaemonConfig_StalledSweepIntervalMinutes_NegativeFallsBack(t *testing.T) {
+	cfg := config.DaemonConfig{StalledSweep: config.StalledSweepConfig{IntervalMinutes: -5}}
+	if got := cfg.StalledSweepIntervalMinutes(); got != 15 {
+		t.Errorf("negative value should clamp to default 15; got %d", got)
+	}
+}
+
+func TestDaemonConfig_RemindersDispatchIntervalSeconds_DefaultsTo30(t *testing.T) {
+	cfg := config.DaemonConfig{}
+	if got := cfg.RemindersDispatchIntervalSeconds(); got != 30 {
+		t.Errorf("got %d, want 30 (canonical §4.4 default)", got)
+	}
+}
+
+func TestDaemonConfig_RemindersDispatchIntervalSeconds_HonorsExplicitValue(t *testing.T) {
+	cfg := config.DaemonConfig{Reminders: config.RemindersConfig{DispatchIntervalSeconds: 5}}
+	if got := cfg.RemindersDispatchIntervalSeconds(); got != 5 {
+		t.Errorf("got %d, want 5 (operator override)", got)
+	}
+}
+
+func TestDaemonConfig_SubstrateBlocks_RoundTripJSON(t *testing.T) {
+	original := config.DaemonConfig{
+		StalledSweep: config.StalledSweepConfig{IntervalMinutes: 20},
+		Reminders:    config.RemindersConfig{DispatchIntervalSeconds: 45},
+		Sweep:        config.SweepChainConfig{AlertChain: []string{"@coord", "leon@example.com"}},
+		Escalation:   config.EscalationConfig{SupervisorAgentName: "coordinator_main"},
+	}
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var got config.DaemonConfig
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if got.StalledSweep.IntervalMinutes != 20 {
+		t.Errorf("StalledSweep.IntervalMinutes = %d", got.StalledSweep.IntervalMinutes)
+	}
+	if got.Reminders.DispatchIntervalSeconds != 45 {
+		t.Errorf("Reminders.DispatchIntervalSeconds = %d", got.Reminders.DispatchIntervalSeconds)
+	}
+	if len(got.Sweep.AlertChain) != 2 || got.Sweep.AlertChain[0] != "@coord" {
+		t.Errorf("Sweep.AlertChain = %v", got.Sweep.AlertChain)
+	}
+	if got.Escalation.SupervisorAgentName != "coordinator_main" {
+		t.Errorf("Escalation.SupervisorAgentName = %q", got.Escalation.SupervisorAgentName)
+	}
+}
+
+func TestDaemonConfig_SubstrateBlocks_RoundTripEmpty(t *testing.T) {
+	// Go's omitempty has no effect on nested struct fields (linter
+	// flags this as `omitzero` hint). Zero-value A-B4 blocks render
+	// as empty objects in JSON; the round-trip must still parse back
+	// cleanly — operators copy-pasting partial configs need to land
+	// at the canonical defaults via the *IntervalMinutes() /
+	// *IntervalSeconds() accessors, not via JSON-shape.
+	cfg := config.DaemonConfig{}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var got config.DaemonConfig
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if got.StalledSweepIntervalMinutes() != 15 {
+		t.Errorf("round-trip with zero StalledSweep should still resolve to default 15; got %d",
+			got.StalledSweepIntervalMinutes())
+	}
+	if got.RemindersDispatchIntervalSeconds() != 30 {
+		t.Errorf("round-trip with zero Reminders should still resolve to default 30; got %d",
+			got.RemindersDispatchIntervalSeconds())
+	}
+}

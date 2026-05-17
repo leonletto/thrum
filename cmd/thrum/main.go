@@ -7542,6 +7542,13 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// "use default" sentinel (NewCleanupHandler clamps to 7 days).
 	sched := wireScheduler(server, wsRegistry, st.DB(), st.Identity().DaemonID,
 		thrumCfg.Daemon.Scheduler.EventRetentionDays)
+
+	// A-B4 stalled-agent sweep: register internal.stalled_agent_sweep
+	// before sched.Start so the scheduler picks it up on its first tick.
+	// Cadence + chain config come from thrumCfg.Daemon (canonical §4.4
+	// keys); zero values fall back to documented defaults.
+	wireSweep(sched, remindersStore, st.DB(), thrumDir, &thrumCfg.Daemon)
+
 	if err := sched.Start(ctx); err != nil {
 		return fmt.Errorf("start scheduler: %w", err)
 	}
