@@ -31,6 +31,10 @@ type PrimeContext struct {
 	TmuxMode            bool             `json:"tmux_mode,omitempty"`
 	RestartSnapshot     string           `json:"restart_snapshot,omitempty"`
 	SavedSessionContext string           `json:"saved_session_context,omitempty"`
+	// SessionDiscoveryHint is the 1-or-2-line "Past sessions" reminder
+	// the daemon's session.archive RPC returns. Empty when the agent
+	// has no past sessions or §1 big picture (spec §7.2).
+	SessionDiscoveryHint string `json:"session_discovery_hint,omitempty"`
 }
 
 // PrimeSyncInfo contains sync health for prime output.
@@ -440,6 +444,16 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 		out.WriteString("3. Only after the plan is complete, return to the rest of this briefing or any pending user prompt.\n\n")
 		out.WriteString("---\n\n")
 		out.WriteString(ctx.RestartSnapshot)
+		out.WriteString("\n")
+	}
+
+	// Section 4.6: Past-sessions discovery hint (session-archive E2.3).
+	// Rendered by the daemon's session.archive RPC; the CLI just emits
+	// it verbatim. 1- or 2-line summary pointing at the persistent
+	// sessions/ folder + the most-recent §1 big picture (spec §7.2).
+	if ctx.SessionDiscoveryHint != "" {
+		out.WriteString("\n# Past Sessions\n\n")
+		out.WriteString(ctx.SessionDiscoveryHint)
 		out.WriteString("\n")
 	}
 

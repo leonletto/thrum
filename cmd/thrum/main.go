@@ -2743,6 +2743,7 @@ Examples:
 	cmd.AddCommand(agentSetTaskCmd)
 	cmd.AddCommand(agentSetStatusCmd())
 	cmd.AddCommand(reminderCmd())
+	cmd.AddCommand(agentSessionsCmd())
 
 	return cmd
 }
@@ -4904,12 +4905,12 @@ Examples:
 					}
 				}
 
-				// Wire RestartSnapshot (consumed on read)
-				if result.Identity != nil {
-					if snapshot, err := restart.ConsumeInPrime(thrumDir, result.Identity.AgentID); err == nil {
-						result.RestartSnapshot = snapshot
-					}
-				}
+				// Wire RestartSnapshot + SessionDiscoveryHint via
+				// session.archive RPC (Q-Spec-1 adaptation per Task 7).
+				// Extracted into wireSessionArchiveResponse so the
+				// load-bearing CLI wire is testable in isolation; see
+				// prime_session_archive.go + prime_session_archive_test.go.
+				wireSessionArchiveResponse(client, result)
 
 				// Identity refresh and TmuxMode detection are now handled
 				// inside getClient() → RefreshLocalIdentity and ContextPrime
@@ -4922,11 +4923,6 @@ Examples:
 				}
 			} else {
 				fmt.Print(cli.FormatPrimeContext(result))
-			}
-
-			// Clean up consumed restart snapshot
-			if result.RestartSnapshot != "" && result.Identity != nil && result.RepoPath != "" {
-				restart.CleanupConsumed(filepath.Join(result.RepoPath, ".thrum"), result.Identity.AgentID)
 			}
 
 			return nil
@@ -6252,6 +6248,12 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	server.RegisterHandler("session.setIntent", sessionHandler.HandleSetIntent)
 	server.RegisterHandler("session.setTask", sessionHandler.HandleSetTask)
 
+	// Session archive (thrum-6qmf.15 / v0.11): persist /thrum:restart
+	// snapshots into .thrum/agents/<id>/sessions/ instead of deleting
+	// them at prime time.
+	sessionArchiveHandler := rpc.NewSessionArchiveHandler(st, thrumDir)
+	server.RegisterHandler("session.archive", sessionArchiveHandler.HandleArchive)
+
 	// Group management
 	groupHandler := rpc.NewGroupHandler(st)
 	server.RegisterHandler("group.create", groupHandler.HandleCreate)
@@ -7278,6 +7280,7 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	wsRegistry.Register("session.heartbeat", websocket.Handler(sessionHandler.HandleHeartbeat))
 	wsRegistry.Register("session.setIntent", websocket.Handler(sessionHandler.HandleSetIntent))
 	wsRegistry.Register("session.setTask", websocket.Handler(sessionHandler.HandleSetTask))
+	wsRegistry.Register("session.archive", websocket.Handler(sessionArchiveHandler.HandleArchive))
 	wsRegistry.Register("group.create", websocket.Handler(groupHandler.HandleCreate))
 	wsRegistry.Register("group.delete", websocket.Handler(groupHandler.HandleDelete))
 	wsRegistry.Register("group.member.add", websocket.Handler(groupHandler.HandleMemberAdd))
