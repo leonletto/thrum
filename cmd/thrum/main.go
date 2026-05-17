@@ -2725,8 +2725,141 @@ Examples:
 	}
 	cmd.AddCommand(agentSetTaskCmd)
 	cmd.AddCommand(agentSetStatusCmd())
+	cmd.AddCommand(reminderCmd())
 
 	return cmd
+}
+
+// reminderCmd returns the `thrum agent reminder` subcommand tree. Hosts
+// `set` for now; `list`, `<id>` lookup, and --defer/--clear/--cancel
+// flags land in subsequent A-B4 tasks.
+func reminderCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "reminder",
+		Short: "Manage reminders for an agent",
+		Long: `Reminders are persistent records with a fire-or-defer lifecycle.
+
+Set one with 'thrum agent reminder set --in 1h --body "finish release notes"'.
+Defer the alert with '--defer 30m', mark as resolved with '--clear', or
+withdraw it with '--cancel'.`,
+	}
+	cmd.AddCommand(reminderSetCmd())
+	return cmd
+}
+
+// reminderSetCmd implements `thrum agent reminder set`. Flag set per
+// brainstorm Q3.6: --at (RFC3339, XOR with --in) | --in (duration,
+// XOR with --at) | --body (required) | --target (defaults to self).
+func reminderSetCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "set",
+		Short: "Set a reminder",
+		Long: `Set a time-triggered reminder. Fires once at the target time;
+the fire message is terse — the body lives in 'thrum agent reminder <id>' lookup.
+
+Examples:
+  thrum agent reminder set --in 1h --body "finish release notes"
+  thrum agent reminder set --at 2026-05-20T09:00:00Z --target @impl_billing --body "review billing PR"`,
+		RunE: runReminderSet,
+	}
+	cmd.Flags().String("at", "", "absolute trigger time (RFC3339, e.g. 2026-05-20T09:00:00Z)")
+	cmd.Flags().String("in", "", "relative duration from now (e.g. 1h, 30m, 2d)")
+	cmd.Flags().String("body", "", "reminder body (shown in lookup; not in fire message)")
+	cmd.Flags().String("target", "", "recipient agent (@name); defaults to self")
+	_ = cmd.MarkFlagRequired("body")
+	return cmd
+}
+
+func runReminderSet(cmd *cobra.Command, _ []string) error {
+	at, _ := cmd.Flags().GetString("at")
+	in, _ := cmd.Flags().GetString("in")
+	body, _ := cmd.Flags().GetString("body")
+	target, _ := cmd.Flags().GetString("target")
+
+	// XOR: exactly one of --at or --in must be set.
+	if (at == "" && in == "") || (at != "" && in != "") {
+		return fmt.Errorf("exactly one of --at or --in is required")
+	}
+
+	var trigger time.Time
+	if at != "" {
+		t, err := time.Parse(time.RFC3339, at)
+		if err != nil {
+			return fmt.Errorf("--at must be RFC3339 (e.g. 2026-05-20T09:00:00Z): %w", err)
+		}
+		trigger = t.UTC()
+	} else {
+		d, err := parseFutureDuration(in)
+		if err != nil {
+			return fmt.Errorf("--in invalid: %w", err)
+		}
+		trigger = time.Now().UTC().Add(d)
+	}
+	if trigger.Before(time.Now()) {
+		return fmt.Errorf("trigger time %s is in the past", trigger.Format(time.RFC3339))
+	}
+
+	self, err := resolveLocalAgentID()
+	if err != nil {
+		return fmt.Errorf("resolve self: %w", err)
+	}
+	if target == "" {
+		target = self
+	}
+	target = strings.TrimPrefix(target, "@")
+
+	client, err := getClient()
+	if err != nil {
+		return fmt.Errorf("connect to daemon: %w", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	res, err := cli.ReminderSet(client, cli.ReminderSetOpts{
+		Source:      "agent",
+		SourceAgent: self,
+		TriggerAt:   trigger,
+		TargetAgent: target,
+		Body:        body,
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Set reminder %s — fires at %s\n", res.ID, trigger.Format(time.RFC3339))
+	return nil
+}
+
+// parseFutureDuration accepts "<N>d" (days), Go duration strings (e.g.
+// "1h", "30m", "2h15m"), and returns a positive duration suitable for
+// time.Now().Add(d). Rejects empty input, leading-dash duration, and
+// zero / non-positive durations.
+//
+// Lives here rather than in internal/timeparse because that package's
+// existing ParseBefore is past-pointing (now.Add(-d)). If a second
+// callsite emerges for future-pointing parsing, lift this to
+// internal/timeparse as ParseAfter (dual-review BLOCKING #1 in the
+// plan).
+func parseFutureDuration(s string) (time.Duration, error) {
+	if s == "" {
+		return 0, fmt.Errorf("empty duration")
+	}
+	if strings.HasPrefix(s, "-") {
+		return 0, fmt.Errorf("duration must be positive")
+	}
+	if strings.HasSuffix(s, "d") {
+		n, err := strconv.Atoi(s[:len(s)-1])
+		if err != nil || n <= 0 {
+			return 0, fmt.Errorf("invalid day count %q", s)
+		}
+		return time.Duration(n) * 24 * time.Hour, nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, fmt.Errorf("invalid duration %q: %w", s, err)
+	}
+	if d <= 0 {
+		return 0, fmt.Errorf("duration must be positive, got %v", d)
+	}
+	return d, nil
 }
 
 func worktreeCmd() *cobra.Command {
