@@ -32,6 +32,7 @@ import (
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/context/roleconfig"
 	"github.com/leonletto/thrum/internal/daemon"
+	"github.com/leonletto/thrum/internal/daemon/backstop"
 	"github.com/leonletto/thrum/internal/daemon/bootstrap"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
@@ -76,6 +77,13 @@ var (
 	flagJSON    bool
 	flagQuiet   bool
 	flagVerbose bool
+
+	// currentCobraCmd is set by rootCmd.PersistentPreRunE before every
+	// leaf RunE so getClient() can consult the leaf's
+	// cross_worktree_response annotation. cobra invokes one leaf per
+	// execve so a package-level handle is safe across the request
+	// lifecycle (thrum-7b84.6).
+	currentCobraCmd *cobra.Command
 )
 
 func main() {
@@ -108,7 +116,17 @@ Environment variables:
 	// Global flags available to all commands
 	rootCmd.PersistentFlags().StringVar(&flagRole, "role", "", "Agent role (or THRUM_ROLE env var)")
 	rootCmd.PersistentFlags().StringVar(&flagModule, "module", "", "Agent module (or THRUM_MODULE env var)")
+	// --repo: intentionally hidden from --help. The flag is for testing
+	// helpers (tests/resilience, tests/e2e) and ad-hoc scripting only. It
+	// is NOT a user-facing operator override and MUST NOT appear in
+	// user-facing documentation (CLI reference, llms.txt, website docs)
+	// — advertising it would recruit agents to bypass the cross_worktree
+	// guard from a wrong cwd, which is the exact anti-pattern the guard
+	// exists to prevent. Source-divers can discover + use it for tests
+	// and scripts; that's fine. See thrum-7b84.6 cycle 2026-05-16 for
+	// the full context.
 	rootCmd.PersistentFlags().StringVar(&flagRepo, "repo", ".", "Repository path")
+	_ = rootCmd.PersistentFlags().MarkHidden("repo")
 	rootCmd.PersistentFlags().BoolVar(&flagJSON, "json", false, "JSON output for scripting")
 	rootCmd.PersistentFlags().BoolVar(&flagQuiet, "quiet", false, "Suppress non-essential output")
 	rootCmd.PersistentFlags().BoolVar(&flagVerbose, "verbose", false, "Debug output")
@@ -117,11 +135,18 @@ Environment variables:
 	rootCmd.Version = Version
 	rootCmd.SetVersionTemplate("thrum v{{.Version}} (build: " + Build + ", " + goruntime.Version() + ")\n" +
 		"\x1b]8;;https://github.com/leonletto/thrum\x07https://github.com/leonletto/thrum\x1b]8;;\x07\n" +
-		"\x1b]8;;https://leonletto.github.io/thrum\x07https://leonletto.github.io/thrum\x1b]8;;\x07\n")
+		"\x1b]8;;https://thrum.team\x07https://thrum.team\x1b]8;;\x07\n")
 
 	// Resolve flagRepo to the nearest parent containing .thrum/ (git-style traversal).
 	// Skip for "init" which creates .thrum/ and doesn't need it to exist.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		// thrum-7b84.6: stash the current command so getClient() can
+		// inspect its cross_worktree_response annotation. cobra's
+		// flow is single-command-per-invocation so a package-level
+		// var is safe; PersistentPreRunE on rootCmd fires before
+		// every leaf RunE.
+		currentCobraCmd = cmd
+
 		// Install slog bridge FIRST so any code running during repo
 		// resolution (worktree lookups, identity refresh) already has the
 		// correct stderr/JSON routing — in --json mode slog.Warn records
@@ -178,7 +203,11 @@ Environment variables:
 	rootCmd.AddCommand(whoamiCmd())
 	rootCmd.AddCommand(versionCmd())
 	rootCmd.AddCommand(waitCmd())
-	rootCmd.AddCommand(cronCmd())
+	// thrum-7b84.3.5: `thrum cron install-inbox-poll` deprecated — the
+	// daemon-side backstop ticker (internal/daemon/backstop) now handles
+	// the 15-minute stale-unread reminder for all alive agents. No
+	// per-agent CronCreate required; removing the registration retires
+	// the durable:false cron on each runtime's next session boot.
 
 	// Composite commands
 	rootCmd.AddCommand(primeCmd())
@@ -475,7 +504,7 @@ Examples:
 				// LoadThrumConfig; zero-value (false) applies for fresh installs.
 				if cfg.Worktrees.BasePath == "" {
 					cfg.Worktrees = config.WorktreesConfig{
-						BasePath:     inferWorktreeBasePath(flagRepo),
+						BasePath:     worktree.InferBasePath(flagRepo),
 						BeadsEnabled: true,
 						ThrumEnabled: true,
 					}
@@ -1152,10 +1181,16 @@ The daemon must be running and you must have an active session.`,
 			showAll, _ := cmd.Flags().GetBool("all")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 			page, _ := cmd.Flags().GetInt("page")
+			fromAgent, _ := cmd.Flags().GetString("from")
 
 			// --limit is an alias for --page-size
 			if cmd.Flags().Changed("limit") {
 				pageSize, _ = cmd.Flags().GetInt("limit")
+			}
+
+			// Strip optional leading @ on --from value.
+			if len(fromAgent) > 0 && fromAgent[0] == '@' {
+				fromAgent = fromAgent[1:]
 			}
 
 			agentID, err := resolveLocalAgentID()
@@ -1175,6 +1210,7 @@ The daemon must be running and you must have an active session.`,
 				Page:              page,
 				CallerAgentID:     agentID,
 				CallerMentionRole: agentRole,
+				AuthorID:          fromAgent,
 			}
 
 			// Auto-filter: when identity is resolved and --all is not set,
@@ -1189,6 +1225,26 @@ The daemon must be running and you must have an active session.`,
 				return fmt.Errorf("failed to connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
+
+			// Validate --from agent exists. Mirrors --to behavior: fast-fail
+			// with a clear error rather than silently returning an empty
+			// inbox on a typo.
+			if fromAgent != "" {
+				agentsResp, listErr := cli.AgentList(client, cli.AgentListOptions{})
+				if listErr != nil {
+					return fmt.Errorf("validate --from @%s: %w", fromAgent, listErr)
+				}
+				known := false
+				for _, a := range agentsResp.Agents {
+					if a.AgentID == fromAgent {
+						known = true
+						break
+					}
+				}
+				if !known {
+					return fmt.Errorf("unknown agent: @%s (use 'thrum team --all' to see registered agents)", fromAgent)
+				}
+			}
 
 			result, err := cli.Inbox(client, opts)
 			if err != nil {
@@ -1243,6 +1299,7 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().Int("page-size", 10, "Results per page")
 	cmd.Flags().Int("limit", 0, "Alias for --page-size")
 	cmd.Flags().Int("page", 1, "Page number")
+	cmd.Flags().String("from", "", "Filter inbox to messages from a specific agent (use @agent_name or agent_name)")
 
 	return cmd
 }
@@ -1259,68 +1316,19 @@ func versionCmd() *cobra.Command {
 					"build":       Build,
 					"go_version":  goruntime.Version(),
 					"repo_url":    "https://github.com/leonletto/thrum",
-					"website_url": "https://leonletto.github.io/thrum",
+					"website_url": "https://thrum.team",
 				})
 			}
 			// Human-readable output with OSC 8 hyperlinks
 			// Format: ESC ] 8 ; ; URL ESC \ TEXT ESC ] 8 ; ; ESC \
 			fmt.Printf("thrum v%s (build: %s, %s)\n", Version, Build, goruntime.Version())
 			fmt.Printf("\x1b]8;;https://github.com/leonletto/thrum\x07https://github.com/leonletto/thrum\x1b]8;;\x07\n")
-			fmt.Printf("\x1b]8;;https://leonletto.github.io/thrum\x07https://leonletto.github.io/thrum\x1b]8;;\x07\n")
+			fmt.Printf("\x1b]8;;https://thrum.team\x07https://thrum.team\x1b]8;;\x07\n")
 			return nil
 		},
 	}
 	return cmd
 }
-
-// cronCmd is the root of the `thrum cron` subtree. Currently houses
-// only install-inbox-poll. Subcommands here emit runtime-specific
-// scheduling instructions for the calling agent to execute — they do
-// not schedule anything directly; the daemon has no cron primitive.
-func cronCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "cron",
-		Short: "Manage cron-style scheduled tasks (runtime-specific emitters)",
-	}
-	cmd.AddCommand(cronInstallInboxPollCmd())
-	return cmd
-}
-
-// cronInstallInboxPollCmd emits an instruction block that the
-// SessionStart hook forwards to Claude Code, which reads it and calls
-// CronCreate to schedule the 15-minute inbox-check poll. The command
-// itself prints to stdout and exits — it does NOT call the daemon,
-// touch identity, or invoke any runtime API directly. That's why it's
-// classified as bypass.
-func cronInstallInboxPollCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "install-inbox-poll",
-		Short: "Emit a CronCreate instruction to schedule the 15-minute inbox-check poll",
-		Long: `Prints an instruction block for the running runtime agent to schedule
-the 15-minute inbox-check cron. Emitted to stdout; the SessionStart hook
-forwards it into the agent's context, where the runtime acts on it.
-
-This command is print-only. It does NOT call the daemon, touch identity
-state, or invoke any runtime scheduling API directly.`,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			_, err := fmt.Fprintln(cmd.OutOrStdout(), inboxPollCronInstruction)
-			return err
-		},
-	}
-}
-
-// inboxPollCronInstruction is the instruction block consumed by
-// Claude Code's SessionStart hook → context-injection pipeline.
-// The format intentionally mirrors other hook-output instructions:
-// a delimited banner, explicit kv lines, and a closing banner so
-// the runtime can parse it unambiguously.
-const inboxPollCronInstruction = `===== SCHEDULE CRON (hook-inbox-delivery) =====
-Please call CronCreate with the following parameters:
-  cron: "7,22,37,52 * * * *"
-  prompt: "Background inbox check. Run ` + "`thrum inbox --unread`" + ` once. If messages are present, process them; if not, return to idle without further action."
-  recurring: true
-  durable: false
-===============================================`
 
 // printAgentSummaryField emits the bare value of a single field from
 // AgentSummary, newline-terminated. Unknown fields return an error so
@@ -2719,17 +2727,6 @@ Examples:
 	return cmd
 }
 
-// inferWorktreeBasePath returns the conventional worktree base path for a repo.
-// Returns ~/.thrum/worktrees/<project>; returns it whether or not it exists yet.
-func inferWorktreeBasePath(repoPath string) string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	projectName := filepath.Base(repoPath)
-	return filepath.Join(home, ".thrum", "worktrees", projectName)
-}
-
 func worktreeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "worktree",
@@ -2775,7 +2772,7 @@ func worktreeCreateCmd() *cobra.Command {
 
 			basePath := cfg.Worktrees.BasePath
 			if basePath == "" {
-				basePath = inferWorktreeBasePath(repoPath)
+				basePath = worktree.InferBasePath(repoPath)
 			}
 			// Ensure base_path includes the repo name to prevent worktrees
 			// from different repos colliding in a flat directory. Stale configs
@@ -2798,27 +2795,46 @@ func worktreeCreateCmd() *cobra.Command {
 				return fmt.Errorf("worktrees.base_path %q resolves to the repo root — worktrees must be created outside the repo", basePath)
 			}
 
-			// 1. Create git worktree
-			gitArgs := []string{"worktree", "add"}
+			// Phase B: call headless primitive (spec §4.1 3-case mapping).
 			if detach {
-				gitArgs = append(gitArgs, "--detach")
+				// Cobra-only detach path: skip worktree.Create, run git
+				// worktree add --detach inline + EnsureRedirects. The
+				// headless API has no detach mode (B-B1 never needs it).
+				if out, err := safecmd.Git(cmd.Context(), repoPath,
+					"worktree", "add", "--detach", worktreePath); err != nil {
+					return fmt.Errorf("git worktree add --detach: %s\n%s", err, out)
+				}
+				fmt.Printf("✓ Worktree created at %s (detached)\n", worktreePath)
+				if err := cli.EnsureWorktreeRedirects(worktreePath, repoPath); err != nil {
+					return fmt.Errorf("redirect setup: %w", err)
+				}
 			} else {
+				// Branch-mode: delegate to worktree.Create with BranchOverride.
+				// The cobra layer populates BasePath explicitly from config
+				// (already computed above) — redundant with Create's
+				// three-tier fallback but makes intent self-evident at the
+				// call site. The daemon scheduler may pass BasePath:"" and
+				// rely on Create's tier-2/tier-3 fallback.
 				if branch == "" {
 					branch = "feature/" + name
 				}
-				gitArgs = append(gitArgs, "-b", branch)
-			}
-			gitArgs = append(gitArgs, worktreePath)
-
-			out, err := safecmd.Git(cmd.Context(), repoPath, gitArgs...)
-			if err != nil {
-				return fmt.Errorf("git worktree add: %s\n%s", err, out)
-			}
-			fmt.Printf("✓ Worktree created at %s\n", worktreePath)
-
-			// 2. Set up redirects (.thrum/ and optionally .beads/)
-			if err := cli.EnsureWorktreeRedirects(worktreePath, repoPath); err != nil {
-				return fmt.Errorf("redirect setup: %w", err)
+				result, err := worktree.Create(cmd.Context(), worktree.CreateOpts{
+					RepoPath:       repoPath,
+					BasePath:       basePath, // explicit; cobra always knows
+					AgentName:      name,
+					Persistent:     true,
+					BranchOverride: branch,
+				})
+				if err != nil {
+					return fmt.Errorf("create worktree: %w", err)
+				}
+				worktreePath = result.Path
+				branch = result.Branch
+				if result.Reused {
+					fmt.Printf("✓ Worktree reused at %s (branch %s)\n", worktreePath, branch)
+				} else {
+					fmt.Printf("✓ Worktree created at %s\n", worktreePath)
+				}
 			}
 			cli.PrintRedirectConfirmations(os.Stdout, worktreePath)
 
@@ -2903,7 +2919,7 @@ func worktreeCreateCmd() *cobra.Command {
 }
 
 func worktreeTeardownCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "teardown <name>",
 		Short: "Remove a worktree and clean up thrum/beads artifacts",
 		Args:  cobra.ExactArgs(1),
@@ -2912,6 +2928,8 @@ func worktreeTeardownCmd() *cobra.Command {
 			if strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
 				return fmt.Errorf("invalid worktree name %q: must not contain /, \\, or parent references", name)
 			}
+			deleteBranchFlag, _ := cmd.Flags().GetBool("delete-branch")
+
 			repoPath := paths.EffectiveRepoPath(flagRepo)
 			thrumDir := filepath.Join(repoPath, ".thrum")
 			cfg, err := config.LoadThrumConfig(thrumDir)
@@ -2921,7 +2939,7 @@ func worktreeTeardownCmd() *cobra.Command {
 
 			basePath := cfg.Worktrees.BasePath
 			if basePath == "" {
-				basePath = inferWorktreeBasePath(repoPath)
+				basePath = worktree.InferBasePath(repoPath)
 			}
 			repoName := filepath.Base(repoPath)
 			if filepath.Base(basePath) != repoName {
@@ -2956,16 +2974,50 @@ func worktreeTeardownCmd() *cobra.Command {
 				_ = cli.TmuxKill(client, name)
 			}
 
-			// Remove git worktree
-			out, err := safecmd.Git(cmd.Context(), repoPath, "worktree", "remove", "--force", worktreePath)
+			// Phase C: call headless primitive (spec §4.2 mapping table).
+			// Resolve the worktree's HEAD branch when --delete-branch
+			// is set so the operator doesn't have to type the branch
+			// name. Per Leon Q2 lock (2026-05-15): default flag-absent
+			// path passes Branch:"" so the branch stays after removal
+			// (pre-refactor parity); flag-on path passes the resolved
+			// HEAD short-name so worktree.Destroy deletes it.
+			var branchToDelete string
+			if deleteBranchFlag {
+				out, err := safecmd.Git(cmd.Context(), worktreePath,
+					"rev-parse", "--abbrev-ref", "HEAD")
+				if err != nil {
+					fmt.Fprintf(os.Stderr,
+						"  Warning: --delete-branch given but HEAD resolution failed: %v (branch left in place)\n", err)
+				} else {
+					branchToDelete = strings.TrimSpace(string(out))
+				}
+			}
+			res, err := worktree.Destroy(cmd.Context(), worktree.DestroyOpts{
+				RepoPath:     repoPath,
+				WorktreePath: worktreePath,
+				Branch:       branchToDelete, // "" when flag absent
+				Force:        true,
+			})
 			if err != nil {
-				return fmt.Errorf("git worktree remove: %s\n%s", err, out)
+				return fmt.Errorf("destroy worktree: %w", err)
 			}
 
 			fmt.Printf("✓ Worktree %s removed\n", name)
+			if branchToDelete != "" {
+				if res.BranchDeleted {
+					fmt.Printf("✓ Branch deleted: %s\n", branchToDelete)
+				} else {
+					fmt.Fprintf(os.Stderr,
+						"  Warning: branch %s not deleted (best-effort delete failed; see daemon logs)\n",
+						branchToDelete)
+				}
+			}
 			return nil
 		},
 	}
+	cmd.Flags().Bool("delete-branch", false,
+		"Delete the worktree's branch after removing the worktree (default: false; branch stays)")
+	return cmd
 }
 
 func worktreeListCmd() *cobra.Command {
@@ -5150,8 +5202,28 @@ func sessionHeartbeatRunE(cmd *cobra.Command, args []string) error {
 // every command except daemon lifecycle, init, and quickstart — those
 // should call getClientNoRefresh().
 //
-// Refresh failures are non-fatal: they log to stderr and the underlying
-// command proceeds normally. See RefreshLocalIdentity doc for details.
+// Refresh failures are non-fatal by default: they log to stderr and the
+// underlying command proceeds normally. See RefreshLocalIdentity doc for
+// details.
+//
+// thrum-7b84.6 (Enhanced Policy 2): strict-mode cross_worktree guard
+// fires get per-class treatment based on the calling leaf's
+// crossWorktreeResponseKey annotation:
+//   - abort (default): close the client and propagate refreshErr; the
+//     command exits non-zero with the 4-line guard error on stderr and
+//     an empty stdout. Wrong-identity writes are permanent and
+//     ~undetectable.
+//   - diagnostic_banner: emit a one-line stderr banner BEFORE any
+//     stdout write, then let the command proceed. For team / daemon * /
+//     agent list / version where output is useful from the wrong cwd.
+//   - whoami: emit the banner on BOTH stderr and stdout (prepended to
+//     the identity block in non-JSON mode). Whoami's stdout asserts
+//     identity, so the cross-worktree context belongs inline. In --json
+//     mode the stdout banner is suppressed (would corrupt the JSON
+//     contract); the slog bridge surfaces the warn via the hints array.
+//
+// Other guard reasons (dead_pid_auto_reclaim etc.) keep the original
+// log-and-proceed contract regardless of class.
 func getClient() (*cli.Client, error) {
 	client, err := getClientNoRefresh()
 	if err != nil {
@@ -5163,10 +5235,127 @@ func getClient() (*cli.Client, error) {
 		repoPath = "."
 	}
 	if _, refreshErr := cli.RefreshLocalIdentity(client, repoPath); refreshErr != nil {
-		fmt.Fprintf(os.Stderr, "thrum: identity refresh failed: %v\n", refreshErr)
+		fatalErr, absorbed := classifyRefreshError(currentCobraCmd, refreshErr)
+		if fatalErr != nil {
+			// Abort path: print the raw refresh error so the user
+			// sees the structured 4-line guard error block on stderr
+			// before the command exits. The banner branches below
+			// produce their own user-friendly stderr write and don't
+			// need the raw dump preceding them.
+			fmt.Fprintf(os.Stderr, "thrum: identity refresh failed: %v\n", refreshErr)
+			_ = client.Close()
+			return nil, fatalErr
+		}
+		if !absorbed {
+			// Not a cross_worktree fire — keep the original
+			// log-and-proceed contract: log to stderr and continue.
+			fmt.Fprintf(os.Stderr, "thrum: identity refresh failed: %v\n", refreshErr)
+		}
 	}
 
 	return client, nil
+}
+
+// classifyRefreshError decides what to do when RefreshLocalIdentity
+// returned an error. Returns:
+//   - fatalErr non-nil: getClient must close the client and propagate
+//     (Class A abort path).
+//   - absorbed=true: a Class B / Class C banner was emitted, or the
+//     user explicitly passed --repo as an operator override; the
+//     caller should NOT print the raw refresh error.
+//   - fatalErr=nil + absorbed=false: not a cross_worktree fire; caller
+//     keeps the legacy log-and-proceed contract for other guard
+//     reasons (dead_pid_auto_reclaim etc.).
+//
+// --repo escape hatch: when the user explicitly passes --repo on the
+// command line, they are asserting "I'm intentionally operating on
+// this other repo" — the same operator-override intent the
+// cross_worktree remediation message advertises. Suppress the guard
+// fire in that case regardless of response class. Other guard
+// reasons (dead_pid_auto_reclaim) still pass through to legacy
+// log-and-proceed since they're unrelated to the cross-worktree
+// scenario --repo overrides.
+//
+// Factored out of getClient for unit testability — the policy
+// decision is exercised independently of the daemon connection.
+func classifyRefreshError(cmd *cobra.Command, refreshErr error) (fatalErr error, absorbed bool) {
+	var ge *guard.Error
+	if !errors.As(refreshErr, &ge) || ge.Guard != "cross_worktree" {
+		return nil, false
+	}
+	if explicitRepoFlag(cmd) {
+		// Operator override: --repo is the documented escape
+		// hatch for cross-worktree calls. Absorb the guard fire
+		// silently and let the command proceed against the
+		// user-specified repo.
+		return nil, true
+	}
+	switch crossWorktreeResponseFor(cmd) {
+	case CrossWorktreeResponseDiagnosticBanner:
+		emitCrossWorktreeBanner(ge, false)
+		return nil, true
+	case CrossWorktreeResponseWhoami:
+		emitCrossWorktreeBanner(ge, true)
+		return nil, true
+	default: // CrossWorktreeResponseAbort (and any unknown value)
+		return refreshErr, false
+	}
+}
+
+// explicitRepoFlag reports whether the caller explicitly passed
+// --repo on the command line (vs. the default "."). Inherits the
+// persistent flag from root; safe on nil cmd.
+func explicitRepoFlag(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	f := cmd.Flags().Lookup("repo")
+	if f == nil {
+		return false
+	}
+	return f.Changed
+}
+
+// crossWorktreeResponseFor returns the leaf's annotated response class
+// or CrossWorktreeResponseAbort as the safe default when the cmd is
+// nil (e.g., called outside the normal cobra flow) or the annotation
+// is missing.
+func crossWorktreeResponseFor(cmd *cobra.Command) string {
+	if cmd == nil {
+		return CrossWorktreeResponseAbort
+	}
+	if resp, ok := cmd.Annotations[crossWorktreeResponseKey]; ok && resp != "" {
+		return resp
+	}
+	return CrossWorktreeResponseAbort
+}
+
+// emitCrossWorktreeBanner writes the Enhanced Policy 2 cross-worktree
+// banner. Stderr is always written (and flushed first per the
+// pipe/tee ordering contract). When stdoutToo is true (Class C —
+// whoami) AND the caller is not in --json mode, the same banner is
+// also written to stdout above the upcoming identity block. --json
+// mode suppresses the stdout write to preserve the single-document
+// JSON contract; the slog bridge surfaces equivalent context via the
+// hints array.
+func emitCrossWorktreeBanner(ge *guard.Error, stdoutToo bool) {
+	expected := ge.ExpectedAgent
+	if expected == "" {
+		expected = "another agent"
+	}
+	banner := fmt.Sprintf(
+		"⚠ Cross-worktree: you are running this from %s's worktree. "+
+			"cd to your own worktree or run 'thrum prime' to re-claim before further commands.",
+		expected,
+	)
+	// Stderr write first, with an explicit Sync so the banner reaches
+	// the terminal before any subsequent stdout from the RunE body.
+	_, _ = fmt.Fprintln(os.Stderr, banner)
+	_ = os.Stderr.Sync()
+	if stdoutToo && !flagJSON {
+		_, _ = fmt.Fprintln(os.Stdout, banner)
+		_ = os.Stdout.Sync()
+	}
 }
 
 // getClientNoRefresh opens a daemon connection without running the identity
@@ -6851,6 +7040,24 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		},
 	)
 	go spoolJanitor.Start(ctx)
+
+	// thrum-7b84.3 E3: backstop ticker. Every 15 minutes, scan
+	// message_deliveries for unread rows older than the AgeCutoff for
+	// alive agents, and re-fire the existing tmux nudge. Catches the
+	// push-delivery cases that tmux/spool missed (wedged pane, hook
+	// didn't fire, agent in a long bash invocation that didn't yield).
+	// Pattern mirrors PeriodicSyncScheduler + BackupScheduler — own
+	// goroutine, own ticker. The Dispatcher is a thin shim around
+	// nudge.DispatchTmux + inbox.WriteSpool that explicitly bypasses
+	// OutboundRelay/Telegram (this is a forgotten-mail reminder, not a
+	// paging signal).
+	bs := &backstop.Backstop{
+		DB:        st.DB(),
+		Dispatch:  newBackstopDispatcher(thrumDir),
+		AgeCutoff: 15 * time.Minute,
+		Interval:  15 * time.Minute,
+	}
+	go bs.Run(ctx)
 
 	// Telegram bridge RPC handlers + goroutine
 	telegramHandler := rpc.NewTelegramHandler(absPath)

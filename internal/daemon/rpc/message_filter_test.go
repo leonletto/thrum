@@ -280,12 +280,36 @@ func TestMessageListCombinedFilters(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Send messages: 2 addressed to @reviewer (auto-created role group), 1 to @ops
+	// Register a second reviewer to author the @reviewer mentions, so the
+	// test agent receives them as a non-author recipient. Required after
+	// E1 (thrum-7b84.3.1/.2) pre-stamps read_at on self-delivery rows:
+	// if the test agent authored these messages, both would be pre-read
+	// for them and the unread count would be 0.
+	st := handler.state
+	authorID := "reviewer_alt"
+	authorRegParams, _ := json.Marshal(RegisterRequest{
+		Name:    authorID,
+		Role:    "reviewer",
+		Module:  "core",
+		Display: "Author Reviewer",
+	})
+	if _, err := NewAgentHandler(st).HandleRegister(ctx, authorRegParams); err != nil {
+		t.Fatalf("register author reviewer: %v", err)
+	}
+	authorSessionParams, _ := json.Marshal(SessionStartRequest{AgentID: authorID})
+	if _, err := NewSessionHandler(st).HandleStart(ctx, authorSessionParams); err != nil {
+		t.Fatalf("start author session: %v", err)
+	}
+
+	// Send messages: 2 addressed to @reviewer (authored by the second
+	// reviewer so they reach the test agent as a fresh recipient), 1 to
+	// @ops.
 	var reviewerMsgIDs []string
 	for i := 0; i < 2; i++ {
 		req := SendRequest{
-			Content:  "Reviewer message",
-			Mentions: []string{"@reviewer"},
+			Content:       "Reviewer message",
+			Mentions:      []string{"@reviewer"},
+			CallerAgentID: authorID,
 		}
 		params, _ := json.Marshal(req)
 		resp, err := handler.HandleSend(ctx, params)
@@ -299,23 +323,24 @@ func TestMessageListCombinedFilters(t *testing.T) {
 		reviewerMsgIDs = append(reviewerMsgIDs, sendResp.MessageID)
 	}
 
-	opsReq := SendRequest{Content: "Ops message", Mentions: []string{"@ops"}}
+	opsReq := SendRequest{Content: "Ops message", Mentions: []string{"@ops"}, CallerAgentID: authorID}
 	opsParams, _ := json.Marshal(opsReq)
 	if _, err := handler.HandleSend(ctx, opsParams); err != nil {
 		t.Fatalf("send ops: %v", err)
 	}
 
-	// Mark first reviewer message as read
-	markReq := MarkReadRequest{MessageIDs: []string{reviewerMsgIDs[0]}}
+	// Mark first reviewer message as read (by the test reviewer agent).
+	markReq := MarkReadRequest{MessageIDs: []string{reviewerMsgIDs[0]}, CallerAgentID: agentID}
 	markParams, _ := json.Marshal(markReq)
 	if _, err := handler.HandleMarkRead(ctx, markParams); err != nil {
 		t.Fatalf("mark read: %v", err)
 	}
 
-	t.Run("unread inbox for reviewer via group membership", func(t *testing.T) {
-		// With auto role groups, @reviewer messages are group-scoped.
-		// Reviewer sees messages via ForAgent/ForAgentRole inbox using group membership.
-		// Combined with unread filter, we get 1 unread reviewer message.
+	t.Run("unread inbox for reviewer via role mention", func(t *testing.T) {
+		// @reviewer messages resolve to a `mention` ref with value "reviewer".
+		// The test reviewer agent sees them via ForAgent/ForAgentRole.
+		// Combined with the unread filter, after marking one as read, we
+		// expect 1 unread reviewer message remaining.
 		req := ListMessagesRequest{
 			ForAgent:       agentID,
 			ForAgentRole:   "reviewer",

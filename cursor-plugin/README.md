@@ -4,7 +4,7 @@ Thrum multi-agent coordination plugin for Cursor Agent.
 
 ## Prerequisites
 
-- [Thrum CLI](https://leonletto.github.io/thrum) installed and on PATH
+- [Thrum CLI](https://thrum.team) installed and on PATH
 - Cursor Agent with hooks support
 
 ## Install

@@ -101,9 +101,7 @@ if [ "${THRUM_ANNOUNCE:-false}" = "true" ]; then
   thrum --repo "$THRUM_HOME" send "Agent $AGENT_NAME online" --to @everyone --json
 fi
 
-# 6. Emit CronCreate instruction. The runtime (Claude Code) consumes the
-# instruction block from our stdout via the SessionStart hook's context-
-# injection path and schedules the 15-minute inbox-check cron. For
-# runtimes without that capability (e.g. cli-only), this is a no-op at
-# the agent's end — the command still prints, but nothing reads it.
-thrum --repo "$THRUM_HOME" cron install-inbox-poll 2>/dev/null || true
+# 6. Backstop polling moved to daemon-side ticker (see internal/daemon/backstop,
+# thrum-7b84.3 E3). No per-agent cron required; the daemon nudges alive agents
+# with stale unread every 15 min and writes a spool envelope so dead-pane
+# agents pick up the reminder on next SessionStart.
