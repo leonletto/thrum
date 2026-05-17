@@ -24,56 +24,50 @@ they're parameterized over `VERSION` and the release branch.
 
 ## Stable-track current pre-release
 
-> **Quick Footgun Release:
-> [`v0.10.4-rc.2`](https://github.com/leonletto/thrum/releases/tag/v0.10.4-rc.2)**
-> (2026-05-16, in 4h soak).
+> **[`v0.10.5-rc.1`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.1)**
+> (2026-05-17, in 48h soak through 2026-05-19).
 >
-> Standard thrum functionality is unchanged. v0.10.4 only fixes confusing
-> messages agents get when they cd into the wrong worktree by accident. Normal
-> same-worktree day-to-day use is unaffected.
+> A small follow-on patch to v0.10.4 — what v0.10.4 didn't catch plus the SAFE
+> fixes the v0.10.4 soak surfaced. Day-to-day flow is unchanged for most users.
 >
-> What's fixed: when an agent's CLI command runs from a worktree that doesn't
-> match its pane-bound identity, mutating commands (send, reply, inbox, etc.)
-> now fail loudly with a clear error message instead of silently sending under
-> the wrong identity. Diagnostic commands (team, status, daemon, whoami) keep
-> working but show a "you're in another worktree" banner so cross-repo
-> housekeeping scripts (e.g., updating thrum + restarting daemons across N
-> repos) still succeed cleanly.
+> What's new:
 >
-> The remediation is straightforward: cd back to the agent's own worktree, or
-> run `thrum prime` to re-claim the identity if the pane binding has drifted.
+> - **Daemon-side backstop nudger for stale-unread messages** replaces the
+>   per-agent `thrum-inbox-poll.sh` cron. More reliable (survives runtime
+>   restarts) and lower overhead than a per-agent cron schedule. Existing cron
+>   installs continue to work as no-ops alongside it.
+> - **`runtime-init` refreshes stale daemon-managed scripts** so long-running
+>   worktrees stop drifting from the embedded template
+>   (`scripts/thrum-startup.sh`, `scripts/thrum-check-inbox.sh`). User-edited
+>   configs like `.claude/settings.json` and `AGENTS.md` stay preserved.
+> - **`thrum prime` first-turn ack** — the briefing now leaves a visible
+>   scrollback line so you can confirm at a glance that context loaded.
+> - **`thrum inbox --from @agent`** filters unread by sender.
+> - **`thrum worktree teardown --delete-branch`** drops the branch in the same
+>   command.
 >
-> The full backstory — including the meta-lesson about how rc.1 shipped with the
-> wrong remediation text, the chain that caught it, and the design call between
-> the three response classes — is in
-> [Shooting Yourself in Both Feet](https://thrum.team/blog/shooting-yourself-in-both-feet.html).
->
-> Why a shortened soak window? The fix is small (4 files, ~270 LOC), the
-> regression-test fingerprint is mechanical, and the bug is a known footgun
-> missed in the original identity-guard work — not a discovered new regression.
-> v0.10.4 follows the standard pre-release process but with a compressed 4-hour
-> soak window instead of the usual 48h floor.
+> No config changes required. Full release notes: [What's New](whats-new.md).
 >
 > Previous stable:
-> [`v0.10.3`](https://github.com/leonletto/thrum/releases/tag/v0.10.3) — see
-> [What's New](whats-new.md) for the v0.10.3 highlights.
+> [`v0.10.4`](https://github.com/leonletto/thrum/releases/tag/v0.10.4) — see
+> [What's New](whats-new.md) for v0.10.4 + v0.10.5 highlights.
 
-### Quick install for `v0.10.4-rc.2`
+### Quick install for `v0.10.5-rc.1`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.4-rc.2 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.1 sh
 
-# Codex plugin (matches release/v0.10.4)
-THRUM_INSTALL_REF=release/v0.10.4 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.4/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+# Codex plugin (matches release/v0.10.5)
+THRUM_INSTALL_REF=release/v0.10.5 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.5/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
 ```
 
 Claude Code plugin (run inside Claude):
 
 ```text
-/plugin marketplace add leonletto/thrum#release/v0.10.4
+/plugin marketplace add leonletto/thrum#release/v0.10.5
 /plugin install thrum@thrum
 /reload-plugins
 ```

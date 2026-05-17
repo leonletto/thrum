@@ -68,43 +68,41 @@ mechanics (binary + plugins + rollback) are shared further down the page —
 they&#39;re parameterized over <code>VERSION</code> and the release branch.</p>
 <h2>Stable-track current pre-release</h2>
 <blockquote>
-<p><strong>Quick Footgun Release:
-<a href="https://github.com/leonletto/thrum/releases/tag/v0.10.4-rc.2"><code>v0.10.4-rc.2</code></a></strong>
-(2026-05-16, in 4h soak).</p>
-<p>Standard thrum functionality is unchanged. v0.10.4 only fixes confusing
-messages agents get when they cd into the wrong worktree by accident. Normal
-same-worktree day-to-day use is unaffected.</p>
-<p>What&#39;s fixed: when an agent&#39;s CLI command runs from a worktree that doesn&#39;t
-match its pane-bound identity, mutating commands (send, reply, inbox, etc.)
-now fail loudly with a clear error message instead of silently sending under
-the wrong identity. Diagnostic commands (team, status, daemon, whoami) keep
-working but show a &quot;you&#39;re in another worktree&quot; banner so cross-repo
-housekeeping scripts (e.g., updating thrum + restarting daemons across N
-repos) still succeed cleanly.</p>
-<p>The remediation is straightforward: cd back to the agent&#39;s own worktree, or
-run <code>thrum prime</code> to re-claim the identity if the pane binding has drifted.</p>
-<p>The full backstory — including the meta-lesson about how rc.1 shipped with the
-wrong remediation text, the chain that caught it, and the design call between
-the three response classes — is in
-<a href="https://thrum.team/blog/shooting-yourself-in-both-feet.html">Shooting Yourself in Both Feet</a>.</p>
-<p>Why a shortened soak window? The fix is small (4 files, ~270 LOC), the
-regression-test fingerprint is mechanical, and the bug is a known footgun
-missed in the original identity-guard work — not a discovered new regression.
-v0.10.4 follows the standard pre-release process but with a compressed 4-hour
-soak window instead of the usual 48h floor.</p>
+<p><strong><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.1"><code>v0.10.5-rc.1</code></a></strong>
+(2026-05-17, in 48h soak through 2026-05-19).</p>
+<p>A small follow-on patch to v0.10.4 — what v0.10.4 didn&#39;t catch plus the SAFE
+fixes the v0.10.4 soak surfaced. Day-to-day flow is unchanged for most users.</p>
+<p>What&#39;s new:</p>
+<ul>
+<li><strong>Daemon-side backstop nudger for stale-unread messages</strong> replaces the
+per-agent <code>thrum-inbox-poll.sh</code> cron. More reliable (survives runtime
+restarts) and lower overhead than a per-agent cron schedule. Existing
+cron installs continue to work as no-ops alongside it.</li>
+<li><strong><code>runtime-init</code> refreshes stale daemon-managed scripts</strong> so long-running
+worktrees stop drifting from the embedded template
+(<code>scripts/thrum-startup.sh</code>, <code>scripts/thrum-check-inbox.sh</code>). User-edited
+configs like <code>.claude/settings.json</code> and <code>AGENTS.md</code> stay preserved.</li>
+<li><strong><code>thrum prime</code> first-turn ack</strong> — the briefing now leaves a visible
+scrollback line so you can confirm at a glance that context loaded.</li>
+<li><strong><code>thrum inbox --from @agent</code></strong> filters unread by sender.</li>
+<li><strong><code>thrum worktree teardown --delete-branch</code></strong> drops the branch in the
+same command.</li>
+</ul>
+<p>No config changes required. Full release notes:
+<a href="whats-new.html">What&#39;s New</a>.</p>
 <p>Previous stable:
-<a href="https://github.com/leonletto/thrum/releases/tag/v0.10.3"><code>v0.10.3</code></a> — see
-<a href="whats-new.html">What&#39;s New</a> for the v0.10.3 highlights.</p>
+<a href="https://github.com/leonletto/thrum/releases/tag/v0.10.4"><code>v0.10.4</code></a> — see
+<a href="whats-new.html">What&#39;s New</a> for v0.10.4 + v0.10.5 highlights.</p>
 </blockquote>
-<h3>Quick install for <code>v0.10.4-rc.2</code></h3>
+<h3>Quick install for <code>v0.10.5-rc.1</code></h3>
 <p>Binary and Codex plugin (run in your shell):</p>
 <pre><code># Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.4-rc.2 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.1 sh
 
-# Codex plugin (matches release/v0.10.4)
-THRUM_INSTALL_REF=release/v0.10.4 bash &lt;(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.4/codex-plugin/plugins/thrum/scripts/install-plugin.sh)</code></pre>
+# Codex plugin (matches release/v0.10.5)
+THRUM_INSTALL_REF=release/v0.10.5 bash &lt;(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.5/codex-plugin/plugins/thrum/scripts/install-plugin.sh)</code></pre>
 <p>Claude Code plugin (run inside Claude):</p>
-<pre><code>/plugin marketplace add leonletto/thrum#release/v0.10.4
+<pre><code>/plugin marketplace add leonletto/thrum#release/v0.10.5
 /plugin install thrum@thrum
 /reload-plugins</code></pre>
 <h2>Substrate-track current pre-release</h2>
