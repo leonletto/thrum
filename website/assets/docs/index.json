@@ -147,6 +147,140 @@
     "lastUpdated": "2026-03-13"
   },
   {
+    "path": "email-overview.html",
+    "title": "Email Bridge",
+    "description": "Route Thrum messages across machines and repositories over IMAP/SMTP — no dedicated server required, works with Gmail, Fastmail, iCloud, or self-hosted Postfix",
+    "category": "email",
+    "order": 0,
+    "tags": [
+      "email",
+      "bridge",
+      "mesh",
+      "imap",
+      "smtp",
+      "v0.11",
+      "overview"
+    ],
+    "lastUpdated": "2026-05-16"
+  },
+  {
+    "path": "email-setup-gmail.html",
+    "title": "Email Bridge: Gmail Setup",
+    "description": "Configure the Thrum email bridge with a Gmail account — app password, IMAP/SMTP settings, init invocation, and auth troubleshooting",
+    "category": "email",
+    "order": 1,
+    "tags": [
+      "email",
+      "gmail",
+      "bridge",
+      "imap",
+      "smtp",
+      "setup"
+    ],
+    "lastUpdated": "2026-05-16"
+  },
+  {
+    "path": "email-setup-fastmail.html",
+    "title": "Email Bridge: Fastmail Setup",
+    "description": "Configure the Thrum email bridge with a Fastmail account — app password, IMAP/SMTP settings, init invocation, and auth troubleshooting",
+    "category": "email",
+    "order": 2,
+    "tags": [
+      "email",
+      "fastmail",
+      "bridge",
+      "imap",
+      "smtp",
+      "setup"
+    ],
+    "lastUpdated": "2026-05-16"
+  },
+  {
+    "path": "email-setup-icloud.html",
+    "title": "Email Bridge: iCloud Mail Setup",
+    "description": "Configure the Thrum email bridge with an iCloud Mail account — app-specific password, IMAP/SMTP settings, init invocation, and auth troubleshooting",
+    "category": "email",
+    "order": 3,
+    "tags": [
+      "email",
+      "icloud",
+      "apple",
+      "bridge",
+      "imap",
+      "smtp",
+      "setup"
+    ],
+    "lastUpdated": "2026-05-16"
+  },
+  {
+    "path": "email-setup-postfix.html",
+    "title": "Email Bridge: Self-Hosted Postfix Setup",
+    "description": "Configure the Thrum email bridge against a self-hosted Postfix MTA — STARTTLS auth, daemon-handle naming, and common Postfix pitfalls",
+    "category": "email",
+    "order": 4,
+    "tags": [
+      "email",
+      "postfix",
+      "self-hosted",
+      "bridge",
+      "smtp",
+      "imap",
+      "setup"
+    ],
+    "lastUpdated": "2026-05-16"
+  },
+  {
+    "path": "email-mesh-pairing.html",
+    "title": "Email Mesh Pairing",
+    "description": "Pair two Thrum daemons over the email bridge, verify trust, and understand gossip propagation and revocation semantics",
+    "category": "email",
+    "order": 5,
+    "tags": [
+      "email",
+      "mesh",
+      "pairing",
+      "peers",
+      "gossip",
+      "trust",
+      "revocation"
+    ],
+    "lastUpdated": "2026-05-16"
+  },
+  {
+    "path": "email-trust-model.html",
+    "title": "Email Bridge: Trust Model",
+    "description": "How v0.11 scopes trust to mailbox access, what is and isn't signed, what's deferred to v0.11.x, and the rotation procedure for suspected compromise",
+    "category": "email",
+    "order": 6,
+    "tags": [
+      "email",
+      "trust",
+      "security",
+      "mesh",
+      "signing",
+      "v0.11",
+      "credentials"
+    ],
+    "lastUpdated": "2026-05-16"
+  },
+  {
+    "path": "email-troubleshooting.html",
+    "title": "Email Bridge: Troubleshooting",
+    "description": "Decision-tree for common email bridge failures — bridge won't start, IDLE dropping, outbound queue stuck, missing peers, and size-limit errors",
+    "category": "email",
+    "order": 7,
+    "tags": [
+      "email",
+      "troubleshooting",
+      "bridge",
+      "imap",
+      "smtp",
+      "queue",
+      "debug"
+    ],
+    "lastUpdated": "2026-05-16"
+  },
+  {
     "path": "beta-channel.html",
     "title": "Beta Channel",
     "description": "How to opt into Thrum pre-release builds, install RCs and their matching plugins, report bugs against them, and roll back to stable",

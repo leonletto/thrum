@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Email Bridge: Self-Hosted Postfix Setup — Thrum</title>
+<meta name="description" content="Configure the Thrum email bridge against a self-hosted Postfix MTA — STARTTLS auth, daemon-handle naming, and common Postfix pitfalls">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#email-setup-postfix.html">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Email Bridge: Self-Hosted Postfix Setup","description":"Configure the Thrum email bridge against a self-hosted Postfix MTA — STARTTLS auth, daemon-handle naming, and common Postfix pitfalls","url":"https://leonletto.github.io/thrum/docs.html#email-setup-postfix.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://leonletto.github.io/thrum/docs.html"}}</script>
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+<script>
+window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+plausible.init()
+</script>
+</head>
+<body>
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; email &rsaquo; Email Bridge: Self-Hosted Postfix Setup
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="whats-new.html">What's New</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+<strong>Guides</strong>: <a href="beta-channel.html">Beta Channel</a><br>
+<strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
+<strong>email</strong>: <a href="email-overview.html">Email Bridge</a> | <a href="email-setup-gmail.html">Email Bridge: Gmail Setup</a> | <a href="email-setup-fastmail.html">Email Bridge: Fastmail Setup</a> | <a href="email-setup-icloud.html">Email Bridge: iCloud Mail Setup</a> | <strong>Email Bridge: Self-Hosted Postfix Setup</strong> | <a href="email-mesh-pairing.html">Email Mesh Pairing</a> | <a href="email-trust-model.html">Email Bridge: Trust Model</a> | <a href="email-troubleshooting.html">Email Bridge: Troubleshooting</a><br>
+<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
+</nav>
+<main>
+<h2>Email Bridge: Self-Hosted Postfix Setup</h2>
+<p>Run the Thrum email bridge against a Postfix MTA you control. This is the right
+path when you need a private mesh with no dependency on a cloud mail provider.</p>
+<h3>Prerequisites</h3>
+<ul>
+<li>A Postfix MTA reachable from all daemons in your mesh (port 587 STARTTLS or
+465 implicit TLS)</li>
+<li>Dovecot (or another IMAP server) fronting the same mailbox that Postfix
+delivers into</li>
+<li>A dedicated mailbox for Thrum traffic (e.g. <code>thrum@mail.example.com</code>)</li>
+<li>SASL authentication configured in Postfix (<code>smtpd_sasl_auth_enable = yes</code>)</li>
+<li>Thrum installed and the daemon running (<code>thrum daemon status</code>)</li>
+</ul>
+<hr>
+<h2>Postfix Submission Configuration (Reference)</h2>
+<p>A minimal <code>master.cf</code> submission stanza that enables STARTTLS and SASL:</p>
+<pre><code>submission inet n - y - - smtpd
+  -o syslog_name=postfix/submission
+  -o smtpd_tls_security_level=encrypt
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_sasl_type=dovecot
+  -o smtpd_sasl_path=private/auth
+  -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
+  -o milter_macro_daemon_name=ORIGINATING</code></pre>
+<p>Key <code>main.cf</code> settings:</p>
+<pre><code>smtpd_tls_cert_file = /etc/letsencrypt/live/mail.example.com/fullchain.pem
+smtpd_tls_key_file  = /etc/letsencrypt/live/mail.example.com/privkey.pem
+smtpd_use_tls       = yes
+smtpd_tls_security_level = may</code></pre>
+<blockquote>
+<p>Only STARTTLS on port 587 or implicit TLS on port 465 should be used.
+Unauthenticated port-25 relay is not supported by the email bridge.</p>
+</blockquote>
+<hr>
+<h2>Daemon-Handle Naming Convention</h2>
+<p>Each Thrum daemon has a short handle used as a routing identifier inside the
+mesh. For self-hosted deployments, use a name that reflects the machine or repo:</p>
+<pre><code>daemon-a          ← daemon on machine &quot;a&quot;, repo &quot;main&quot;
+daemon-b-infra    ← daemon on machine &quot;b&quot;, repo &quot;infra&quot;</code></pre>
+<p>The handle is set with <code>--display-name</code> during <code>thrum email init</code>. It becomes
+the <code>X-Thrum-From-Daemon</code> header value on outbound messages — keep it stable
+after pairing, because the mesh uses it as a routing key.</p>
+<hr>
+<h2>IMAP / SMTP Host Configuration</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>IMAP host</td>
+<td>Your Dovecot host (e.g. <code>mail.example.com</code>)</td>
+</tr>
+<tr>
+<td>IMAP port</td>
+<td><code>993</code> (TLS) or <code>143</code> (STARTTLS)</td>
+</tr>
+<tr>
+<td>SMTP host</td>
+<td>Your Postfix host</td>
+</tr>
+<tr>
+<td>SMTP port</td>
+<td><code>587</code> (STARTTLS) or <code>465</code> (TLS)</td>
+</tr>
+<tr>
+<td>Auth method</td>
+<td><code>PLAIN</code> over STARTTLS</td>
+</tr>
+<tr>
+<td>Username</td>
+<td>Full mailbox address</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>Run <code>thrum email init</code></h2>
+<pre><code>thrum email init \
+  --provider smtp \
+  --address thrum@mail.example.com \
+  --imap-host mail.example.com \
+  --imap-port 993 \
+  --smtp-host mail.example.com \
+  --smtp-port 587 \
+  --display-name &quot;daemon-a&quot;</code></pre>
+<p>The command prompts for the mailbox password and writes
+<code>.thrum/secrets/email.json</code> (mode <code>0600</code>). The daemon restarts the bridge
+automatically.</p>
+<hr>
+<h2>Verify with <code>thrum email status</code></h2>
+<pre><code>thrum email status</code></pre>
+<p>Expected output:</p>
+<pre><code>email bridge: running
+  address:      thrum@mail.example.com
+  provider:     smtp
+  imap:         mail.example.com:993  connected
+  smtp:         mail.example.com:587  ok
+  last_poll:    2026-05-16T14:03:11Z
+  last_error:   —
+  peers:        0 active</code></pre>
+<hr>
+<h2>Troubleshoot Auth</h2>
+<p><strong><code>535 5.7.8 Authentication credentials invalid</code></strong>
+Verify the SASL password is correct. Check that <code>smtpd_sasl_auth_enable = yes</code>
+is set in <code>main.cf</code> for the submission daemon, not just the main smtpd.</p>
+<p><strong><code>454 4.7.0 TLS not available</code></strong>
+Postfix TLS certificates are missing or expired. Check <code>/var/log/mail.log</code> for
+OpenSSL errors and renew the certificate.</p>
+<p><strong>IMAP connects but SMTP rejects</strong>
+Postfix <code>smtpd_recipient_restrictions</code> may not include
+<code>permit_sasl_authenticated</code>. Verify <code>master.cf</code> has the restriction set on the
+submission service specifically.</p>
+<p><strong><code>Connection refused</code> on port 587</strong>
+The submission service may not be enabled. Check <code>master.cf</code> for the
+<code>submission</code> line and restart Postfix after changes:</p>
+<pre><code>postfix reload</code></pre>
+<hr>
+<h2>Deliverability</h2>
+<p>For outbound mail from your own domain to reach external providers, configure:</p>
+<ul>
+<li><strong>SPF:</strong> add a <code>TXT</code> record to your DNS pointing to your MTA&#39;s IP</li>
+<li><strong>DKIM:</strong> configure <code>opendkim</code> on your Postfix server and add the public key
+to DNS</li>
+<li><strong>DMARC:</strong> optional but recommended for <code>p=quarantine</code> policy</li>
+</ul>
+<p>For a closed private mesh (all daemons on the same domain or LAN), SPF/DKIM
+are not required — authenticated submission over STARTTLS is sufficient.</p>
+
+</main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#email-setup-postfix.html')}</script>
+</body>
+</html>

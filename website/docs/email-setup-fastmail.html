@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Email Bridge: Fastmail Setup — Thrum</title>
+<meta name="description" content="Configure the Thrum email bridge with a Fastmail account — app password, IMAP/SMTP settings, init invocation, and auth troubleshooting">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#email-setup-fastmail.html">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Email Bridge: Fastmail Setup","description":"Configure the Thrum email bridge with a Fastmail account — app password, IMAP/SMTP settings, init invocation, and auth troubleshooting","url":"https://leonletto.github.io/thrum/docs.html#email-setup-fastmail.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://leonletto.github.io/thrum/docs.html"}}</script>
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+<script>
+window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+plausible.init()
+</script>
+</head>
+<body>
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; email &rsaquo; Email Bridge: Fastmail Setup
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="whats-new.html">What's New</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+<strong>Guides</strong>: <a href="beta-channel.html">Beta Channel</a><br>
+<strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
+<strong>email</strong>: <a href="email-overview.html">Email Bridge</a> | <a href="email-setup-gmail.html">Email Bridge: Gmail Setup</a> | <strong>Email Bridge: Fastmail Setup</strong> | <a href="email-setup-icloud.html">Email Bridge: iCloud Mail Setup</a> | <a href="email-setup-postfix.html">Email Bridge: Self-Hosted Postfix Setup</a> | <a href="email-mesh-pairing.html">Email Mesh Pairing</a> | <a href="email-trust-model.html">Email Bridge: Trust Model</a> | <a href="email-troubleshooting.html">Email Bridge: Troubleshooting</a><br>
+<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
+</nav>
+<main>
+<h2>Email Bridge: Fastmail Setup</h2>
+<p>Connect Thrum&#39;s email bridge to a Fastmail account so daemons can exchange
+messages over IMAP/SMTP.</p>
+<h3>Prerequisites</h3>
+<ul>
+<li>A Fastmail account (individual or team)</li>
+<li>Thrum installed and the daemon running (<code>thrum daemon status</code>)</li>
+<li>A dedicated Fastmail address or masked email for Thrum traffic</li>
+</ul>
+<hr>
+<h2>Step 1 — Generate an App Password</h2>
+<p>Fastmail uses per-app passwords for third-party IMAP/SMTP access. Your main
+account password does not work for IMAP.</p>
+<ol>
+<li>Log in at <a href="https://app.fastmail.com">app.fastmail.com</a></li>
+<li>Go to <strong>Settings → Privacy &amp; Security → Passwords &amp; Security → App Passwords</strong></li>
+<li>Click <strong>New App Password</strong>, name it <code>thrum-daemon</code>, and select the
+<strong>Mail (IMAP/POP/SMTP)</strong> access level</li>
+<li>Copy the generated password — it is shown only once</li>
+</ol>
+<blockquote>
+<p>Fastmail docs: <a href="https://www.fastmail.help/hc/en-us/articles/360058752854">App Passwords</a></p>
+</blockquote>
+<hr>
+<h2>Step 2 — IMAP / SMTP Host Configuration</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>IMAP host</td>
+<td><code>imap.fastmail.com</code></td>
+</tr>
+<tr>
+<td>IMAP port</td>
+<td><code>993</code> (TLS)</td>
+</tr>
+<tr>
+<td>SMTP host</td>
+<td><code>smtp.fastmail.com</code></td>
+</tr>
+<tr>
+<td>SMTP port</td>
+<td><code>587</code> (STARTTLS)</td>
+</tr>
+<tr>
+<td>Auth method</td>
+<td><code>PLAIN</code> over STARTTLS</td>
+</tr>
+<tr>
+<td>Username</td>
+<td>Full Fastmail address (e.g. <code>thrum-mesh@fastmail.com</code>)</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>Step 3 — Run <code>thrum email init</code></h2>
+<pre><code>thrum email init \
+  --provider fastmail \
+  --address thrum-mesh@fastmail.com \
+  --imap-host imap.fastmail.com \
+  --imap-port 993 \
+  --smtp-host smtp.fastmail.com \
+  --smtp-port 587 \
+  --display-name &quot;Thrum Daemon A&quot;</code></pre>
+<p>The command prompts for the app password and writes
+<code>.thrum/secrets/email.json</code> (mode <code>0600</code>). The daemon restarts the bridge
+automatically.</p>
+<hr>
+<h2>Step 4 — Verify with <code>thrum email status</code></h2>
+<pre><code>thrum email status</code></pre>
+<p>Expected output when the bridge is healthy:</p>
+<pre><code>email bridge: running
+  address:      thrum-mesh@fastmail.com
+  provider:     fastmail
+  imap:         imap.fastmail.com:993  connected
+  smtp:         smtp.fastmail.com:587  ok
+  last_poll:    2026-05-16T14:03:11Z
+  last_error:   —
+  peers:        0 active</code></pre>
+<p>If <code>last_error</code> shows anything, see <a href="#troubleshoot-auth">Troubleshoot Auth</a> below.</p>
+<hr>
+<h2>Troubleshoot Auth</h2>
+<p><strong><code>535 Authentication credentials invalid</code></strong>
+The app password was pasted incorrectly or the slot was deleted. Go to
+<strong>Settings → App Passwords</strong>, delete the <code>thrum-daemon</code> entry, create a new
+one, and re-run <code>thrum email init --update-credentials</code>.</p>
+<p><strong><code>IMAP LOGIN failed</code></strong>
+Fastmail requires the username to be the <strong>full email address</strong>, not just the
+local part. Verify <code>--address</code> is set to <code>user@fastmail.com</code>, not <code>user</code>.</p>
+<p><strong>App password stops working</strong>
+Fastmail invalidates app passwords when you change your main account password.
+Generate a fresh app password and update:</p>
+<pre><code>thrum email init --address thrum-mesh@fastmail.com --update-credentials
+thrum daemon restart</code></pre>
+<hr>
+<h2>Deliverability</h2>
+<p>Fastmail&#39;s SMTP servers handle SPF and DKIM automatically for addresses on your
+domain. For <code>@fastmail.com</code> addresses, authentication records are pre-configured
+— no additional DNS steps are required.</p>
+<p>To verify the display name appears correctly:</p>
+<pre><code>thrum email test-send --to your-personal@email.com --subject &quot;Thrum display name check&quot;</code></pre>
+<p>Open the received message and confirm the <strong>From</strong> header shows your configured
+<code>--display-name</code>.</p>
+
+</main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#email-setup-fastmail.html')}</script>
+</body>
+</html>
