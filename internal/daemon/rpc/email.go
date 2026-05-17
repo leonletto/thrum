@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	email "github.com/leonletto/thrum/internal/bridge/email"
@@ -283,6 +284,18 @@ func (h *EmailHandler) HandleSend(ctx context.Context, params json.RawMessage) (
 	if err != nil {
 		return nil, fmt.Errorf("email.send: enqueue: %w", err)
 	}
+
+	// Telemetry: attribute the enqueue event to the calling agent so
+	// operators can audit which agents generated outbound email traffic.
+	// from_agent is already persisted in email_outbound_queue.from_agent;
+	// the slog record makes it queryable from the daemon log without a
+	// DB query.
+	slog.Info("[email] outbound queued",
+		"queue_id", queueID,
+		"message_id", messageID,
+		"from_agent", req.CallerAgentID,
+		"to_address", req.ToAddress,
+	)
 
 	return &EmailSendResponse{
 		Status:    "queued",

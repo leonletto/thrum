@@ -26,6 +26,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/backup"
 	bridgepeer "github.com/leonletto/thrum/internal/bridge/peer"
+	email "github.com/leonletto/thrum/internal/bridge/email"
 	telegram "github.com/leonletto/thrum/internal/bridge/telegram"
 	"github.com/leonletto/thrum/internal/cli"
 	"github.com/leonletto/thrum/internal/config"
@@ -7105,6 +7106,35 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		telegramHandler.SetBridge(tgBridge)
 		go tgBridge.Run(ctx)
 		fmt.Fprintf(os.Stderr, "  Telegram:    bridge enabled (target: %s)\n", thrumCfg.Telegram.Target)
+	}
+
+	// Email bridge RPC handlers + goroutine (D-B1.17)
+	//
+	// Secrets are loaded before the handler is constructed so the daemon can
+	// gate on missing/mis-permissioned secrets and fail fast rather than
+	// silently degrading after startup.
+	emailSecretsPath := filepath.Join(thrumDir, "secrets", "email.json")
+	emailSecrets, emailSecretsErr := config.LoadEmailSecrets(emailSecretsPath, thrumCfg.Email.Enabled)
+	if emailSecretsErr != nil {
+		// A secrets-mode error (0644 file) is always fatal — it is a security
+		// incident regardless of bridge state. A missing-file error when
+		// Email.Enabled=true is also fatal: the operator explicitly asked for
+		// the bridge but didn't provision credentials.
+		return fmt.Errorf("email bridge startup: %w", emailSecretsErr)
+	}
+	emailBridge := email.New(thrumCfg.Email, emailSecrets, wsPort)
+	emailBridge.SetDB(st.RawDB())
+	emailHandler := rpc.NewEmailHandler(emailBridge, st.RawDB())
+	server.RegisterHandler("email.send", emailHandler.HandleSend)
+	server.RegisterHandler("email.peer.pair", emailHandler.HandlePeerPair)
+	server.RegisterHandler("email.peer.list", emailHandler.HandlePeerList)
+	server.RegisterHandler("email.peer.revoke", emailHandler.HandlePeerRevoke)
+	server.RegisterHandler("email.peer.rebind", emailHandler.HandlePeerRebind)
+	server.RegisterHandler("email.status", emailHandler.HandleStatus)
+	server.RegisterHandler("email.unblock", emailHandler.HandleUnblock)
+	if thrumCfg.Email.Enabled {
+		go emailBridge.Run(ctx)
+		fmt.Fprintf(os.Stderr, "  Email:       bridge enabled (handle: %s)\n", thrumCfg.Email.DaemonHandle)
 	}
 
 	// Tmux session management handlers
