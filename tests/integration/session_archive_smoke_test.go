@@ -1,8 +1,8 @@
 //go:build integration
 
-// Package integration session_archive_smoke validates the
-// session-archive inject-pipeline shape across all runtime plugin
-// mirrors. Per the A2 amend in plan v2 (thrum-6qmf.15 Task 15):
+// Session-archive smoke validates the inject-pipeline shape across
+// all runtime plugin mirrors. Per the A2 amend in plan v2
+// (thrum-6qmf.15 Task 15):
 //
 //   - Claude smoke is REQUIRED — the source-of-truth restart skill
 //     template must carry the §1 Big-picture mandate that downstream
@@ -135,6 +135,12 @@ func TestSessionArchiveSmoke_RuntimeMirrors_CarryBigPictureMandate(t *testing.T)
 // expected §1 body via the parser. This is the OTHER side of the
 // drift guard — covers cases where the heading text alone matches
 // but the surrounding structure breaks parsing.
+//
+// Single-line body: raw and normalized parses are identical here.
+// Multi-paragraph raw=true line-break preservation is covered
+// separately by TestParseBigPicture_RawTrue_PreservesLineBreaks in
+// internal/daemon/sessionarchive/parser_test.go — no duplication
+// needed at the smoke layer.
 func TestSessionArchiveSmoke_TemplateOutput_ParsesViaParseBigPicture(t *testing.T) {
 	// Construct a synthetic snapshot matching the structure the
 	// template instructs agents to write. Frontmatter + the §1
@@ -158,10 +164,28 @@ func TestSessionArchiveSmoke_TemplateOutput_ParsesViaParseBigPicture(t *testing.
 		t.Errorf("normalized §1 parse mismatch:\n got:  %q\n want: %q", got, bodyText)
 	}
 
-	// Raw parse (CLI --verbose mode).
+	// Raw parse (CLI --verbose mode). For a single-line body, this
+	// returns the same string as the normalized parse above.
 	gotRaw := sessionarchive.ParseBigPicture([]byte(snapshot), true)
 	if gotRaw != bodyText {
 		t.Errorf("raw §1 parse mismatch:\n got:  %q\n want: %q", gotRaw, bodyText)
+	}
+}
+
+// TestSessionArchiveSmoke_ASCIIDashVariant_AlsoParses covers the
+// reviewer-flagged coverage gap (Low #2): the parser accepts both
+// the em-dash "—" and the ASCII "--" heading variants. The skill
+// template shows only the em-dash in its example, but an agent
+// running under a runtime that drops the em-dash to "--" should
+// still produce a parseable snapshot.
+func TestSessionArchiveSmoke_ASCIIDashVariant_AlsoParses(t *testing.T) {
+	const asciiHeading = "## 1. Big picture -- what shipped this session"
+	bodyText := "Closed E5 with the ASCII-variant smoke test."
+	snapshot := "---\nagent: t\n---\n" + asciiHeading + "\n\n" + bodyText + "\n"
+
+	got := sessionarchive.ParseBigPicture([]byte(snapshot), false)
+	if got != bodyText {
+		t.Errorf("ASCII-variant §1 parse mismatch:\n got:  %q\n want: %q", got, bodyText)
 	}
 }
 
