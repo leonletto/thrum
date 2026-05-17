@@ -20,11 +20,20 @@ type SessionArchiveRequest struct {
 	AgentID string `json:"agent_id"`
 }
 
-// SessionArchiveResponse is the spec §3.1 return shape. Both fields
-// are pointer-strings so they can serialize as JSON null when absent.
+// SessionArchiveResponse is the spec §3.1 return shape extended with
+// `content` for the Task 7 CLI-side prime adaptation (spec §3.6 was
+// written assuming a daemon-orchestrated prime builder; the actual
+// code is CLI-orchestrated). The CLI calls session.archive and uses
+// `content` as the snapshot body it inserts into prime output,
+// replacing the prior restart.ConsumeInPrime+CleanupConsumed two-step.
+//
+// All fields are pointer-strings so they serialize as JSON null when
+// absent. content is null iff archived_path is null (missing or
+// empty source).
 type SessionArchiveResponse struct {
 	ArchivedPath *string `json:"archived_path"`
 	BigPicture   *string `json:"big_picture"`
+	Content      *string `json:"content"`
 }
 
 // SessionArchiveHandler wraps sessionarchive.Archive for the daemon's
@@ -106,6 +115,7 @@ func (h *SessionArchiveHandler) HandleArchive(ctx context.Context, params json.R
 	return &SessionArchiveResponse{
 		ArchivedPath: result.ArchivedPath,
 		BigPicture:   result.BigPicture,
+		Content:      result.Content,
 	}, nil
 }
 

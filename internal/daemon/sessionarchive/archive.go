@@ -28,15 +28,28 @@ type Opts struct {
 	Now    func() time.Time
 }
 
-// ArchiveResult is the spec §3.1 return shape:
+// ArchiveResult is the spec §3.1 return shape, extended with Content
+// for CLI-side prime-context inclusion per the Task 7 adaptation:
 //
-//	{ archived_path: string | null, big_picture: string | null }
+//	{ archived_path: string | null,
+//	  big_picture:   string | null,
+//	  content:       string | null }   ← Task 7 addition
 //
-// Pointer-string fields are nil iff the corresponding field was
-// absent (snapshot not found, empty body, §1 missing).
+// Spec §3.6 (Q-Spec-1) was written assuming a daemon-orchestrated
+// prime builder; the actual code orchestrates prime CLI-side. To
+// preserve the spec's intent (single source of truth on archive
+// timing; runtime inject scripts unchanged), the CLI calls the
+// session.archive RPC and uses Content as the snapshot body it
+// inserts into the prime output — eliminating the prior
+// ConsumeInPrime/CleanupConsumed two-step.
+//
+// Content is nil when ArchivedPath is nil (missing source, 0-byte
+// source). Non-nil Content always points at the full pre-archive
+// file bytes as UTF-8 string.
 type ArchiveResult struct {
 	ArchivedPath *string
 	BigPicture   *string
+	Content      *string
 }
 
 // agentMutexes provides per-agent serialization. sync.Map is the
@@ -155,7 +168,11 @@ func Archive(
 			"agent", agent.AgentID, "path", dst, "err", err)
 	}
 
-	result := &ArchiveResult{ArchivedPath: &dst}
+	contentStr := string(content)
+	result := &ArchiveResult{
+		ArchivedPath: &dst,
+		Content:      &contentStr,
+	}
 	if bigPicture != "" {
 		result.BigPicture = &bigPicture
 	}

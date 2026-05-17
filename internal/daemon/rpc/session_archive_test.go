@@ -155,9 +155,39 @@ func TestHandleSessionArchive_PersistentAgent_ValidSnapshot_Archives(t *testing.
 	if r.BigPicture == nil || *r.BigPicture != "Locked the spec." {
 		t.Errorf("BigPicture: got %v, want 'Locked the spec.'", r.BigPicture)
 	}
+	// Content (Task 7 addition) carries the pre-archive file bytes
+	// so the CLI prime flow can emit them in place of the prior
+	// restart.ConsumeInPrime read.
+	if r.Content == nil {
+		t.Fatal("expected Content for valid snapshot, got nil")
+	}
+	if !strings.Contains(*r.Content, "Locked the spec.") {
+		t.Errorf("Content missing body: %q", *r.Content)
+	}
+	if !strings.Contains(*r.Content, "saved_at: 2026-05-17T15:32:18.421Z") {
+		t.Errorf("Content missing frontmatter: %q", *r.Content)
+	}
 	// Source removed
 	if _, err := os.Stat(srcPath); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("source not removed: %v", err)
+	}
+}
+
+// TestHandleSessionArchive_NoSnapshot_NullContent confirms the Content
+// field is JSON null when no snapshot existed at call time —
+// idempotency contract preserves the "{archived_path:null, ...}"
+// response shape for missing-source.
+func TestHandleSessionArchive_NoSnapshot_NullContent(t *testing.T) {
+	h, agentID, _ := newArchiveTestHandler(t, "persistent")
+
+	params, _ := json.Marshal(SessionArchiveRequest{AgentID: agentID})
+	resp, err := h.HandleArchive(context.Background(), params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	r := resp.(*SessionArchiveResponse)
+	if r.Content != nil {
+		t.Errorf("expected nil Content for missing snapshot, got %v", *r.Content)
 	}
 }
 

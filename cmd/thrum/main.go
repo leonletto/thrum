@@ -4902,11 +4902,30 @@ Examples:
 					}
 				}
 
-				// Wire RestartSnapshot (consumed on read)
+				// Wire RestartSnapshot via session.archive RPC (Q-Spec-1
+				// adaptation per Task 7 — daemon-side archive supplants
+				// CLI-side ConsumeInPrime+CleanupConsumed; single source
+				// of truth on archive timing). The daemon reads the
+				// snapshot, parses §1 big picture, moves the file to
+				// .thrum/agents/<id>/sessions/, and returns the content
+				// for CLI inclusion in prime output. Failures here are
+				// non-fatal — prime continues without snapshot context
+				// and the daemon logs the underlying error.
 				if result.Identity != nil {
-					if snapshot, err := restart.ConsumeInPrime(thrumDir, result.Identity.AgentID); err == nil {
-						result.RestartSnapshot = snapshot
+					var archiveResp struct {
+						ArchivedPath *string `json:"archived_path"`
+						BigPicture   *string `json:"big_picture"`
+						Content      *string `json:"content"`
 					}
+					archiveReq := map[string]string{"agent_id": result.Identity.AgentID}
+					if err := client.Call("session.archive", archiveReq, &archiveResp); err == nil {
+						if archiveResp.Content != nil {
+							result.RestartSnapshot = *archiveResp.Content
+						}
+					}
+					// big_picture: Task 8 (E2.3) renders the discovery
+					// hint that consumes it. Captured here once Task 8
+					// lands the rendering surface.
 				}
 
 				// Identity refresh and TmuxMode detection are now handled
@@ -4920,11 +4939,6 @@ Examples:
 				}
 			} else {
 				fmt.Print(cli.FormatPrimeContext(result))
-			}
-
-			// Clean up consumed restart snapshot
-			if result.RestartSnapshot != "" && result.Identity != nil && result.RepoPath != "" {
-				restart.CleanupConsumed(filepath.Join(result.RepoPath, ".thrum"), result.Identity.AgentID)
 			}
 
 			return nil

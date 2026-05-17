@@ -68,6 +68,33 @@ func TestArchive_NoSnapshot_ReturnsNullNull(t *testing.T) {
 	if res.BigPicture != nil {
 		t.Errorf("expected nil BigPicture, got %v", *res.BigPicture)
 	}
+	if res.Content != nil {
+		t.Errorf("expected nil Content, got %v", *res.Content)
+	}
+}
+
+func TestArchive_ValidSnapshot_PopulatesContent(t *testing.T) {
+	mainRepo := filepath.Join(t.TempDir(), ".thrum")
+	src := writeSnapshot(t, mainRepo, "alpha.md", "2026-05-17T15:32:18.421Z", "body text")
+
+	agent := makeArchiveAgent("alpha", agentpkg.ModePersistent)
+	res, err := sessionarchive.Archive(
+		context.Background(),
+		agent, src, mainRepo, "",
+		sessionarchive.Opts{Logger: silentLogger()},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.Content == nil {
+		t.Fatal("expected Content for valid snapshot, got nil")
+	}
+	if !strings.Contains(*res.Content, "body text") {
+		t.Errorf("Content missing body: %q", *res.Content)
+	}
+	if !strings.Contains(*res.Content, "saved_at: 2026-05-17T15:32:18.421Z") {
+		t.Errorf("Content missing frontmatter: %q", *res.Content)
+	}
 }
 
 func TestArchive_EmptySnapshot_RemovesAndReturnsNull(t *testing.T) {
