@@ -20,7 +20,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 26
+const CurrentVersion = 27
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -419,6 +419,25 @@ func createTables(tx *sql.Tx) error {
 			reason      TEXT,
 			details     TEXT
 		)`,
+
+		// Agent lifecycle events (v27, B-B1). Append-only journal of per-
+		// agent lifecycle events (respawn fires, crash detections, state.md
+		// parse failures). Mirrors scheduler_job_events shape applied to
+		// agents. CHECK constraint pins the detection_method vocabulary per
+		// canonical-ref §3.4 + plan-v1 BLOCKING #2 fix. Guard 1 (§3.11)
+		// requires this block to match the migration 26→27 path exactly.
+		`CREATE TABLE IF NOT EXISTS agent_lifecycle_events (
+			id                INTEGER PRIMARY KEY AUTOINCREMENT,
+			agent_name        TEXT    NOT NULL,
+			event_kind        TEXT    NOT NULL,
+			event_time        INTEGER NOT NULL,
+			detection_method  TEXT CHECK (
+				detection_method IS NULL OR detection_method IN
+					('health_check_tick', 'restart_reconciliation', 'rpc_observation')
+			),
+			reason            TEXT,
+			details           TEXT
+		)`,
 	}
 
 	for _, sql := range tables {
@@ -495,6 +514,13 @@ func createIndexes(tx *sql.Tx) error {
 		"CREATE INDEX IF NOT EXISTS idx_scheduler_state_next ON scheduler_job_state(next_scheduled_at)",
 		"CREATE INDEX IF NOT EXISTS idx_scheduler_events_job_time ON scheduler_job_events(job_id, event_time)",
 		"CREATE INDEX IF NOT EXISTS idx_scheduler_events_run ON scheduler_job_events(run_id)",
+
+		// Agent lifecycle indexes (v27, B-B1). Per-(agent,time) drives the
+		// loop-guard query "3 respawn_fired events within window?";
+		// per-(kind,time) supports observability filters like "all crashes
+		// in the last hour". See substrate-canonical-reference.md §3.4.
+		"CREATE INDEX IF NOT EXISTS idx_agent_lifecycle_agent_time ON agent_lifecycle_events(agent_name, event_time)",
+		"CREATE INDEX IF NOT EXISTS idx_agent_lifecycle_kind ON agent_lifecycle_events(event_kind, event_time)",
 	}
 
 	for _, sql := range indexes {
@@ -1241,6 +1267,41 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 					return fmt.Errorf("migration 25→26: add agents.%s: %w", c.name, err)
 				}
 			}
+		}
+	}
+
+	// Migration from version 26 to 27: B-B1 agent_lifecycle_events append-
+	// only journal per substrate-canonical-reference.md §3.4. Mirrors the
+	// scheduler_job_events shape (§3.2) applied to agents: respawn fires,
+	// crash detections, state.md parse failures. The detection_method CHECK
+	// constraint is SQL-level defense-in-depth — the Go validator enforces
+	// the same vocabulary at the RPC boundary, but the DB layer catches
+	// anything that slips past.
+	if startVersion < 27 && endVersion >= 27 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS agent_lifecycle_events (
+				id                INTEGER PRIMARY KEY AUTOINCREMENT,
+				agent_name        TEXT    NOT NULL,
+				event_kind        TEXT    NOT NULL,
+				event_time        INTEGER NOT NULL,
+				detection_method  TEXT CHECK (
+					detection_method IS NULL OR detection_method IN
+						('health_check_tick', 'restart_reconciliation', 'rpc_observation')
+				),
+				reason            TEXT,
+				details           TEXT
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 26→27: create agent_lifecycle_events: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_agent_lifecycle_agent_time ON agent_lifecycle_events(agent_name, event_time)`)
+		if err != nil {
+			return fmt.Errorf("migration 26→27: idx_agent_lifecycle_agent_time: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_agent_lifecycle_kind ON agent_lifecycle_events(event_kind, event_time)`)
+		if err != nil {
+			return fmt.Errorf("migration 26→27: idx_agent_lifecycle_kind: %w", err)
 		}
 	}
 

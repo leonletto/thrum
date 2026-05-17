@@ -1049,9 +1049,9 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	}
 }
 
-func TestSchema_V26_CurrentVersion(t *testing.T) {
-	if schema.CurrentVersion != 26 {
-		t.Errorf("CurrentVersion = %d, want 26", schema.CurrentVersion)
+func TestSchema_V27_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 27 {
+		t.Errorf("CurrentVersion = %d, want 27", schema.CurrentVersion)
 	}
 }
 
@@ -1933,4 +1933,81 @@ func upgradedWithV25AgentsTable(t *testing.T) *sql.DB {
 		t.Fatalf("Migrate: %v", err)
 	}
 	return db
+}
+
+// TestMigration_AgentLifecycleEventsTable verifies migration 27 creates the
+// agent_lifecycle_events append-only journal per canonical-ref §3.4.
+func TestMigration_AgentLifecycleEventsTable(t *testing.T) {
+	db := setupTestDB(t)
+	got := pragmaTableInfo(t, db, "agent_lifecycle_events")
+
+	for _, col := range []string{
+		"id", "agent_name", "event_kind", "event_time",
+		"detection_method", "reason", "details",
+	} {
+		if _, ok := got[col]; !ok {
+			t.Errorf("agent_lifecycle_events missing column %s", col)
+		}
+	}
+
+	// Both per-(name,time) and per-(kind,time) indexes are load-bearing for
+	// loop-guard queries + observability filters.
+	for _, idx := range []string{
+		"idx_agent_lifecycle_agent_time",
+		"idx_agent_lifecycle_kind",
+	} {
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?`, idx).Scan(&n); err != nil {
+			t.Fatalf("query index %s: %v", idx, err)
+		}
+		if n != 1 {
+			t.Errorf("index %s: count=%d, want 1", idx, n)
+		}
+	}
+}
+
+// TestMigration_AgentLifecycle_DetectionMethodCheckConstraint pins the
+// SQL-level CHECK guard (canonical §3.4 + BLOCKING #2 from plan v1
+// dual-review). Go-level validator also enforces; this verifies the DB
+// layer catches anything that slips past Go.
+func TestMigration_AgentLifecycle_DetectionMethodCheckConstraint(t *testing.T) {
+	db := setupTestDB(t)
+	_, err := db.Exec(`INSERT INTO agent_lifecycle_events
+		(agent_name, event_kind, event_time, detection_method)
+		VALUES ('x', 'crash_detected', 1, 'totally_made_up')`)
+	if err == nil {
+		t.Fatal("expected CHECK constraint failure on invalid detection_method")
+	}
+
+	// NULL must be permitted (some event_kinds carry no detection_method).
+	_, err = db.Exec(`INSERT INTO agent_lifecycle_events
+		(agent_name, event_kind, event_time, detection_method)
+		VALUES ('x', 'crash_detected', 1, NULL)`)
+	if err != nil {
+		t.Errorf("NULL detection_method should be permitted: %v", err)
+	}
+
+	// Each canonical value must be accepted verbatim.
+	for _, v := range []string{"health_check_tick", "restart_reconciliation", "rpc_observation"} {
+		_, err = db.Exec(`INSERT INTO agent_lifecycle_events
+			(agent_name, event_kind, event_time, detection_method)
+			VALUES ('x', 'crash_detected', 1, ?)`, v)
+		if err != nil {
+			t.Errorf("canonical value %q should be permitted: %v", v, err)
+		}
+	}
+}
+
+// TestMigration_AgentLifecycle_FreshInstallEquivalentToUpgrade enforces
+// canonical-ref §3.11 Guard 1 for migration 27: fresh-install via
+// createTables and upgrade via runMigrations produce identical column
+// sets, types, NULLability, and defaults for agent_lifecycle_events.
+//
+// Source version pinned to 26 (not CurrentVersion-1) so future migrations
+// bumping CurrentVersion don't invalidate this equivalence proof — the
+// v26→v27 migration is the one that creates this table.
+func TestMigration_AgentLifecycle_FreshInstallEquivalentToUpgrade(t *testing.T) {
+	fresh := freshInstallDB(t)
+	upgraded := upgradedFromDB(t, 26)
+	assertSameTable(t, fresh, upgraded, "agent_lifecycle_events")
 }
