@@ -1,4 +1,4 @@
-# Thrum v0.10.3 -- Complete Agent Reference
+# Thrum v0.10.4 -- Complete Agent Reference
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -311,7 +311,6 @@ All commands accept:
 
   --role VALUE        Agent role (or THRUM_ROLE env var)
   --module VALUE      Agent module (or THRUM_MODULE env var)
-  --repo PATH         Repository path (default: ".")
   --json              JSON output for scripting
   --quiet             Suppress non-essential output
   --verbose           Debug output
@@ -729,7 +728,7 @@ All commands accept:
                  internal/cli/templates/claude-md/thrum-block.md. Intentionally
                  minimal (~30-40 lines): what Thrum is, the 5 essential
                  commands (whoami, team, inbox, send, reply), pointer to full
-                 docs at https://thrum.team.
+                 docs at https://leonletto.github.io/thrum.
 
   When to use:   Claude Code WITHOUT the Thrum plugin, or other runtimes
                  (codex, cursor, opencode, kiro, auggie) that don't have a

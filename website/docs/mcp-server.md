@@ -64,7 +64,7 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command
 
 ### Startup Sequence
 
-1. Resolve repo path (respects `--repo` flag, defaults to `.`)
+1. Resolve repo path (defaults to `.`)
 2. If `--agent-id` is provided, set `THRUM_NAME` env var before config load
 3. Verify daemon is running (connect to Unix socket, call `health` RPC)
 4. Load agent identity from `.thrum/identities/{name}.json` via
@@ -126,7 +126,6 @@ thrum mcp serve [--agent-id NAME]
 | Flag         | Default              | Description                                                  |
 | ------------ | -------------------- | ------------------------------------------------------------ |
 | `--agent-id` | (from identity file) | Override agent name; selects `.thrum/identities/{name}.json` |
-| `--repo`     | `.`                  | Repository path                                              |
 
 ### Claude Code Configuration
 
