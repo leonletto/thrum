@@ -79,8 +79,18 @@ type ReminderRow struct {
 	LastFiredAt    *time.Time
 	State          string
 	PaneSnapshot   string
+	DeferHistory   []DeferEntry
 	ClearedAt      *time.Time
 	CancelledAt    *time.Time
+}
+
+// DeferEntry mirrors reminders.DeferEntry at the wire layer. Surfaced
+// in the lookup view per plan §Task 14 AC ("defer_history (each
+// (deferred_by, defer_to, when) triple)").
+type DeferEntry struct {
+	DeferredBy string    `json:"deferred_by"`
+	DeferTo    time.Time `json:"defer_to"`
+	When       time.Time `json:"when"`
 }
 
 // reminderWire is the JSON shape produced by the daemon's reminder.get /
@@ -88,21 +98,22 @@ type ReminderRow struct {
 // reminders.Reminder struct). RFC3339 times for non-NULL columns; null
 // for NULL columns.
 type reminderWire struct {
-	ID             string     `json:"ID"`
-	Source         string     `json:"Source"`
-	SourceAgent    string     `json:"SourceAgent"`
-	TriggerKind    string     `json:"TriggerKind"`
-	TriggerAt      *time.Time `json:"TriggerAt"`
-	TargetAgent    string     `json:"TargetAgent"`
-	TargetChain    []string   `json:"TargetChain"`
-	Body           string     `json:"Body"`
-	RaisedAt       time.Time  `json:"RaisedAt"`
-	NextReminderAt *time.Time `json:"NextReminderAt"`
-	LastFiredAt    *time.Time `json:"LastFiredAt"`
-	State          string     `json:"State"`
-	PaneSnapshot   string     `json:"PaneSnapshot"`
-	ClearedAt      *time.Time `json:"ClearedAt"`
-	CancelledAt    *time.Time `json:"CancelledAt"`
+	ID             string       `json:"ID"`
+	Source         string       `json:"Source"`
+	SourceAgent    string       `json:"SourceAgent"`
+	TriggerKind    string       `json:"TriggerKind"`
+	TriggerAt      *time.Time   `json:"TriggerAt"`
+	TargetAgent    string       `json:"TargetAgent"`
+	TargetChain    []string     `json:"TargetChain"`
+	Body           string       `json:"Body"`
+	RaisedAt       time.Time    `json:"RaisedAt"`
+	NextReminderAt *time.Time   `json:"NextReminderAt"`
+	LastFiredAt    *time.Time   `json:"LastFiredAt"`
+	State          string       `json:"State"`
+	PaneSnapshot   string       `json:"PaneSnapshot"`
+	DeferHistory   []DeferEntry `json:"DeferHistory"`
+	ClearedAt      *time.Time   `json:"ClearedAt"`
+	CancelledAt    *time.Time   `json:"CancelledAt"`
 }
 
 func wireToRow(w reminderWire) ReminderRow {
@@ -120,6 +131,7 @@ func wireToRow(w reminderWire) ReminderRow {
 		LastFiredAt:    w.LastFiredAt,
 		State:          w.State,
 		PaneSnapshot:   w.PaneSnapshot,
+		DeferHistory:   w.DeferHistory,
 		ClearedAt:      w.ClearedAt,
 		CancelledAt:    w.CancelledAt,
 	}

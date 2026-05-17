@@ -92,6 +92,70 @@ func TestChain_NeverEmpty(t *testing.T) {
 	}
 }
 
+// --- ValidateChainConfig (brainstormer review fix: prevent dispatcher
+// infinite-loop on email-only chains while EmailQueue is unwired) ---
+
+func TestValidateChainConfig_PassesWhenEmailDeliveryWired(t *testing.T) {
+	cfg := ChainConfig{AlertChain: []string{"leon@example.com", "ops@example.com"}}
+	if err := ValidateChainConfig(cfg, true); err != nil {
+		t.Errorf("post-D-B1 with email delivery wired: should pass; got %v", err)
+	}
+}
+
+func TestValidateChainConfig_PassesOnEmptyChain(t *testing.T) {
+	// Empty AlertChain → resolver falls back to single supervisor;
+	// never email-only.
+	if err := ValidateChainConfig(ChainConfig{}, false); err != nil {
+		t.Errorf("empty AlertChain should pass (fallback to supervisor); got %v", err)
+	}
+}
+
+func TestValidateChainConfig_PassesOnMixedChain(t *testing.T) {
+	cfg := ChainConfig{AlertChain: []string{"@coordinator_main", "leon@example.com"}}
+	if err := ValidateChainConfig(cfg, false); err != nil {
+		t.Errorf("mixed chain (at least one @agent) should pass even without email; got %v", err)
+	}
+}
+
+func TestValidateChainConfig_PassesOnAgentOnlyChain(t *testing.T) {
+	cfg := ChainConfig{AlertChain: []string{"@coord1", "@coord2"}}
+	if err := ValidateChainConfig(cfg, false); err != nil {
+		t.Errorf("agent-only chain should pass; got %v", err)
+	}
+}
+
+func TestValidateChainConfig_RejectsEmailOnlyWithoutDelivery(t *testing.T) {
+	cfg := ChainConfig{AlertChain: []string{"leon@example.com"}}
+	err := ValidateChainConfig(cfg, false)
+	if err == nil {
+		t.Fatal("email-only chain without delivery should reject (prevents dispatcher infinite-loop)")
+	}
+	// Error message should help operators understand the fix.
+	for _, want := range []string{"only email", "supervisor_agent_name", "alert_chain"} {
+		if !contains(err.Error(), want) {
+			t.Errorf("error message missing %q (operator fix hint): %v", want, err)
+		}
+	}
+}
+
+func TestValidateChainConfig_RejectsMultipleEmailsWithoutDelivery(t *testing.T) {
+	cfg := ChainConfig{AlertChain: []string{"leon@example.com", "ops@example.com"}}
+	if err := ValidateChainConfig(cfg, false); err == nil {
+		t.Error("multi-email-only chain should reject (still loops without delivery)")
+	}
+}
+
+// contains is a tiny helper to avoid pulling strings into this small
+// test file when sweep/chain_test.go doesn't already import it.
+func contains(haystack, needle string) bool {
+	for i := 0; i+len(needle) <= len(haystack); i++ {
+		if haystack[i:i+len(needle)] == needle {
+			return true
+		}
+	}
+	return false
+}
+
 func TestChain_ConfigSliceIsolation(t *testing.T) {
 	// Mutating the returned slice MUST NOT mutate the config's
 	// underlying AlertChain. Operators may re-resolve repeatedly via

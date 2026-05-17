@@ -340,6 +340,57 @@ func TestFormatReminderLookup_ConditionWithActivityBanner(t *testing.T) {
 	}
 }
 
+// TestFormatReminderLookup_RendersDeferHistory verifies plan §Task 14
+// AC ("defer_history (each (deferred_by, defer_to, when) triple)") —
+// brainstormer review found this dropped between daemon and CLI.
+// Now wired end-to-end: ReminderRow.DeferHistory populated from
+// daemon's JSON response via wireToRow + this render block.
+func TestFormatReminderLookup_RendersDeferHistory(t *testing.T) {
+	now := time.Date(2026, 5, 20, 12, 0, 0, 0, time.UTC)
+	r := cli.ReminderRow{
+		ID:    "reminder-docs_bot-100-0001",
+		State: "open",
+		DeferHistory: []cli.DeferEntry{
+			{
+				DeferredBy: "leon",
+				DeferTo:    time.Date(2026, 5, 20, 14, 0, 0, 0, time.UTC),
+				When:       time.Date(2026, 5, 20, 11, 0, 0, 0, time.UTC),
+			},
+			{
+				DeferredBy: "coordinator_main",
+				DeferTo:    time.Date(2026, 5, 20, 16, 0, 0, 0, time.UTC),
+				When:       time.Date(2026, 5, 20, 13, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+	got := formatReminderLookup(r, now)
+	for _, want := range []string{
+		"defer history (2 entries)",
+		"by:        leon",
+		"by:        coordinator_main",
+		"until:     2026-05-20T14:00:00Z",
+		"until:     2026-05-20T16:00:00Z",
+		"deferred:  2026-05-20T11:00:00Z",
+		"deferred:  2026-05-20T13:00:00Z",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("defer-history render missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestFormatReminderLookup_HidesDeferHistoryWhenEmpty(t *testing.T) {
+	r := cli.ReminderRow{
+		ID:           "reminder-x-1-1",
+		State:        "open",
+		DeferHistory: nil,
+	}
+	got := formatReminderLookup(r, time.Now().UTC())
+	if strings.Contains(got, "defer history") {
+		t.Errorf("empty defer_history should hide the block; got:\n%s", got)
+	}
+}
+
 func TestFormatReminderLookup_TerminalStatesIncludeTimestamps(t *testing.T) {
 	clearedAt := time.Date(2026, 5, 20, 10, 0, 0, 0, time.UTC)
 	r := cli.ReminderRow{

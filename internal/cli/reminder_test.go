@@ -166,6 +166,8 @@ func TestReminderCancel_ShapesRPCParams(t *testing.T) {
 
 func TestReminderGet_DecodesWireShape(t *testing.T) {
 	triggerAt := time.Unix(1700000000, 0).UTC()
+	deferWhen := time.Unix(1700001000, 0).UTC()
+	deferTo := time.Unix(1700002000, 0).UTC()
 	fake := newFakeRPC(t)
 	fake.expect("reminder.get")
 	fake.respond = func(string, any) any {
@@ -179,6 +181,9 @@ func TestReminderGet_DecodesWireShape(t *testing.T) {
 			Body:        "do thing",
 			RaisedAt:    time.Unix(1699999900, 0).UTC(),
 			State:       "open",
+			DeferHistory: []DeferEntry{
+				{DeferredBy: "leon", DeferTo: deferTo, When: deferWhen},
+			},
 		}
 	}
 	got, err := ReminderGet(fake, "reminder-docs_bot-100-0001")
@@ -193,6 +198,18 @@ func TestReminderGet_DecodesWireShape(t *testing.T) {
 	}
 	if got.State != "open" {
 		t.Errorf("State = %q", got.State)
+	}
+	// DeferHistory round-trip (brainstormer-review IMPORTANT #2):
+	// daemon's defer_history must surface through the CLI wire layer
+	// so the lookup view can render it per plan §Task 14 AC.
+	if len(got.DeferHistory) != 1 {
+		t.Fatalf("DeferHistory len = %d, want 1", len(got.DeferHistory))
+	}
+	if got.DeferHistory[0].DeferredBy != "leon" {
+		t.Errorf("DeferHistory[0].DeferredBy = %q, want leon", got.DeferHistory[0].DeferredBy)
+	}
+	if !got.DeferHistory[0].DeferTo.Equal(deferTo) {
+		t.Errorf("DeferHistory[0].DeferTo = %v, want %v", got.DeferHistory[0].DeferTo, deferTo)
 	}
 }
 

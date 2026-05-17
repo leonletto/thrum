@@ -46,6 +46,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/daemon/state"
+	"github.com/leonletto/thrum/internal/daemon/sweep"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/netdetect"
@@ -2890,6 +2891,18 @@ func formatReminderLookup(r cli.ReminderRow, now time.Time) string {
 		fmt.Fprintf(&b, "\n  pane snapshot (%d bytes):\n", len(r.PaneSnapshot))
 		for _, line := range lastNLines(r.PaneSnapshot, 20) {
 			fmt.Fprintf(&b, "    %s\n", line)
+		}
+	}
+
+	// Defer history (plan §Task 14 AC: render each (deferred_by,
+	// defer_to, when) triple). Oldest-first matches the slice's
+	// insertion order from Store.Defer.
+	if len(r.DeferHistory) > 0 {
+		fmt.Fprintf(&b, "\n  defer history (%d entries):\n", len(r.DeferHistory))
+		for _, d := range r.DeferHistory {
+			fmt.Fprintf(&b, "    - by:        %s\n", d.DeferredBy)
+			fmt.Fprintf(&b, "      deferred:  %s\n", d.When.Format(time.RFC3339))
+			fmt.Fprintf(&b, "      until:     %s\n", d.DeferTo.Format(time.RFC3339))
 		}
 	}
 
@@ -7542,6 +7555,21 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// "use default" sentinel (NewCleanupHandler clamps to 7 days).
 	sched := wireScheduler(server, wsRegistry, st.DB(), st.Identity().DaemonID,
 		thrumCfg.Daemon.Scheduler.EventRetentionDays)
+
+	// A-B4 sweep config sanity check before any wiring: an AlertChain
+	// containing only email entries would cause the dispatcher to
+	// infinite-loop on every fire tick while EmailQueue is unwired
+	// (D-B1 epic ships EmailQueue; until then, hasEmailDelivery=false).
+	// Fail-loud at boot so operators fix config rather than ship a
+	// daemon that retries every 30 seconds forever. Guard relaxes
+	// automatically once hasEmailDelivery flips to true.
+	const hasEmailDelivery = false // flip when D-B1 EmailQueue wires in
+	if err := sweep.ValidateChainConfig(sweep.ChainConfig{
+		AlertChain:          thrumCfg.Daemon.Sweep.AlertChain,
+		SupervisorAgentName: thrumCfg.Daemon.Escalation.SupervisorAgentName,
+	}, hasEmailDelivery); err != nil {
+		return fmt.Errorf("invalid A-B4 sweep config: %w", err)
+	}
 
 	// A-B4 stalled-agent sweep: register internal.stalled_agent_sweep
 	// before sched.Start so the scheduler picks it up on its first tick.

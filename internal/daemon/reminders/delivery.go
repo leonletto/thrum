@@ -203,9 +203,18 @@ func (d *DeliverySink) deliverToTarget(ctx context.Context, r *Reminder) error {
 		}
 	}
 
-	// Source label is "daemon" for daemon-authored time rows (handled
-	// in fanToChain above so we won't reach here for those), the
-	// originating agent for agent-source, and empty for user-source.
+	// Source label semantics + downstream contract:
+	//   - SourceDaemon: daemon-authored time rows. Already routed via
+	//     fanToChain above on the Source==SourceDaemon branch, so we
+	//     don't reach this code path for daemon-source.
+	//   - SourceAgent: from = SourceAgent (the originating agent's id;
+	//     it has an active session, MessageSender resolves it directly).
+	//   - SourceUser: from = "" (no session-bearing agent — user is
+	//     the operator, not an agent). The production messageHandlerSender
+	//     adapter (cmd/thrum/reminders_wire.go) remaps empty fromAgent
+	//     to the synthetic supervisorID so HandleSend resolves a
+	//     caller session. Tests that pass nil MessageSender adapters
+	//     should mirror this remap or pass a different fromAgent.
 	from := ""
 	if r.Source == SourceAgent {
 		from = r.SourceAgent

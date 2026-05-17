@@ -2,6 +2,7 @@ package sweep
 
 import (
 	"context"
+	"fmt"
 	"strings"
 )
 
@@ -78,3 +79,64 @@ func (r *ChainResolverImpl) Resolve(_ context.Context) ([]string, error) {
 
 // Compile-time satisfaction check.
 var _ ChainResolver = (*ChainResolverImpl)(nil)
+
+// ValidateChainConfig is a daemon-boot guard against a misconfiguration
+// that would cause the dispatcher to infinite-loop on every fire tick.
+//
+// Setup that triggers the loop:
+//   1. AlertChain configured with ONLY email entries (no @agent refs).
+//   2. EmailQueue NOT yet wired (D-B1 epic is the EmailQueue producer;
+//      A-B4 ships with hasEmailDelivery=false until then).
+//
+// Symptom without this guard:
+//   - DeliverySink.fanToChain processes the chain
+//   - Every email entry is skipped (EmailQueue is nil)
+//   - delivered=0, no errors → returns "no recipients reached (all
+//     skipped)" error
+//   - Dispatcher leaves the row state=open (per at-least-once
+//     semantics)
+//   - Next tick (30s later): same chain, same skip, same error,
+//     same retry — for the lifetime of the daemon.
+//
+// Resolution: validate at daemon boot. If AlertChain is non-empty and
+// contains only email entries while email delivery isn't wired,
+// return a clear error so the operator fixes config rather than ships
+// a daemon that infinite-loops.
+//
+// Three pass-through paths (no error returned):
+//   - hasEmailDelivery=true (D-B1 wired; emails actually deliver).
+//   - AlertChain has at least one @agent entry (mixed chain — agent
+//     entries deliver, email entries log+skip, fire succeeds).
+//   - AlertChain is empty (resolver falls back to single supervisor,
+//     never email-only).
+//
+// Post-D-B1: callers pass hasEmailDelivery=true and this guard
+// natural-defaults to no-op. The guard can be removed entirely once
+// D-B1 is permanent.
+func ValidateChainConfig(cfg ChainConfig, hasEmailDelivery bool) error {
+	if hasEmailDelivery {
+		return nil
+	}
+	if len(cfg.AlertChain) == 0 {
+		// Fallback path uses single supervisor — never email-only.
+		return nil
+	}
+	for _, entry := range cfg.AlertChain {
+		if isAgentRef(entry) {
+			// At least one @agent entry — mixed chain delivers via
+			// MessageSender even if email entries skip.
+			return nil
+		}
+	}
+	return fmt.Errorf("daemon.sweep.alert_chain contains only email entries (%v) "+
+		"but email delivery is not wired; either configure at least one @agent entry "+
+		"or unset daemon.sweep.alert_chain to fall back to "+
+		"escalation.supervisor_agent_name", cfg.AlertChain)
+}
+
+// isAgentRef recognizes "@agent_name" entries in target_chain.
+// Mirrors DeliverySink.isAgentRef (internal/daemon/reminders/delivery.go)
+// — sweep + reminders agree on chain-entry shape detection.
+func isAgentRef(entry string) bool {
+	return strings.HasPrefix(entry, "@") && len(entry) > 1
+}
