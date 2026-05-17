@@ -57,6 +57,7 @@ import (
 	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/restart"
 	"github.com/leonletto/thrum/internal/runtime"
+	"github.com/leonletto/thrum/internal/skills"
 	"github.com/leonletto/thrum/internal/subscriptions"
 	thrumSync "github.com/leonletto/thrum/internal/sync"
 	"github.com/leonletto/thrum/internal/timeparse"
@@ -253,6 +254,7 @@ Environment variables:
 	rootCmd.AddCommand(tmuxCmd())
 	rootCmd.AddCommand(restartCmd())
 	rootCmd.AddCommand(worktreeCmd())
+	rootCmd.AddCommand(skillCmd())
 
 	// Apply guard-category annotations to every leaf command under
 	// rootCmd. See command_categories.go for the per-path mapping +
@@ -6272,6 +6274,81 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	server.RegisterHandler("message.deleteByScope", messageHandler.HandleDeleteByScope)
 	server.RegisterHandler("message.deleteByAgent", messageHandler.HandleDeleteByAgent)
 	server.RegisterHandler("message.archive", messageHandler.HandleArchive)
+
+	// Skill registration substrate (C-B1, v0.11). Constructs the full
+	// substrate (Worker, Staleness, Watcher) and re-passes the live
+	// instances to the SkillHandler so the C-B1 surface is INERT NO
+	// MORE — promote events fan to worktree mirrors, proposed-skills
+	// changes trigger staleness reminders + coordinator notifications,
+	// cancel-on-promote retracts the reminder. Worker + Watcher run
+	// for the daemon lifetime; their Stop calls are deferred so SIGTERM
+	// triggers clean shutdown.
+	//
+	// reminders.Store integration (the prerequisite that was missing at
+	// E10.9-commit time) landed at A-B4; this is the wiring that flips
+	// the substrate from "constructed but dead-code" to live.
+	skillLibrary := skills.NewLibrary(st.RepoPath())
+	// Resolve the staleness-reminder window from operator config with
+	// a 48h fallback per canonical default. Phase 3 dual-reviewer
+	// finding — the config field existed but wasn't being read.
+	skillPendingAfter := 48 * time.Hour
+	pendingStr := thrumCfg.Skills.PendingReminderAfter
+	if pendingStr == "" {
+		pendingStr = config.DefaultSkillsPendingReminderAfter
+	}
+	if d, parseErr := time.ParseDuration(pendingStr); parseErr == nil {
+		skillPendingAfter = d
+	} else {
+		slog.Warn("skill substrate: invalid skills.pending_reminder_after; falling back to 48h",
+			"value", pendingStr, "err", parseErr)
+	}
+	skillSubstrate, err := buildSkillSubstrate(ctx, skillSubstrateOpts{
+		RepoPath:       st.RepoPath(),
+		ThrumDir:       thrumDir,
+		Library:        skillLibrary,
+		Permission:     permPkg,
+		RemindersStore: remindersStore,
+		DB:             st.DB(),
+		PendingAfter:   skillPendingAfter,
+	})
+	if err != nil {
+		return fmt.Errorf("build skill substrate: %w", err)
+	}
+	defer func() {
+		// Shut down in reverse order: Watcher first (stops emitting new
+		// events into the Worker), then Worker (drains in-flight applies
+		// up to StopTimeout). Stop errors are surfaced via slog so
+		// operators can diagnose fsnotify-close failures rather than
+		// having the shutdown silently swallow them. Phase 3 finding.
+		if skillSubstrate.Watcher != nil {
+			if stopErr := skillSubstrate.Watcher.Stop(); stopErr != nil {
+				slog.Warn("skill watcher shutdown", "err", stopErr)
+			}
+		}
+		if skillSubstrate.Worker != nil {
+			if stopErr := skillSubstrate.Worker.Stop(); stopErr != nil {
+				slog.Warn("skill mirror worker shutdown", "err", stopErr)
+			}
+		}
+	}()
+
+	skillHandler := rpc.NewSkillHandler(
+		skillLibrary,
+		skills.NewValidator(),
+		permPkg,
+		skillSubstrate.Staleness,
+		skillSubstrate.Worker,
+		st.RawDB(),
+	)
+	server.RegisterHandler("skill.list", skillHandler.HandleList)
+	server.RegisterHandler("skill.show", skillHandler.HandleShow)
+	server.RegisterHandler("skill.check", skillHandler.HandleCheck)
+	server.RegisterHandler("skill.check_status", skillHandler.HandleCheckStatus)
+	server.RegisterHandler("skill.promote", skillHandler.HandlePromote)
+	server.RegisterHandler("skill.revise", skillHandler.HandleRevise)
+	server.RegisterHandler("skill.delete", skillHandler.HandleDelete)
+	server.RegisterHandler("skill.sync", skillHandler.HandleSync)
+	server.RegisterHandler("skill.validate", skillHandler.HandleValidate)
 
 	// Monitor jobs — SECURITY: these handlers spawn child processes with the
 	// daemon's privileges, so they are registered on the unix-socket `server`

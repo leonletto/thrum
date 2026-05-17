@@ -44,6 +44,13 @@ func NewLibrary(repoRoot string) *Library {
 	return &Library{repoRoot: repoRoot}
 }
 
+// RepoRoot returns the directory the Library was constructed against —
+// the parent of `.thrum/`. Exposed so callers that need to build sibling
+// paths under `.thrum/skills/` (e.g. the promote handler at E10.4
+// assembling the canonical write target) don't have to thread the root
+// through a separate channel.
+func (l *Library) RepoRoot() string { return l.repoRoot }
+
 // PendingFilter scopes a ListPending call. Zero-value filter returns all
 // pending proposals across every agent's proposed-skills/ directory.
 type PendingFilter struct {

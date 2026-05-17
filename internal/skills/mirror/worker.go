@@ -117,9 +117,16 @@ type Worker struct {
 // boot-time reconcile tick: the destination goroutine runs a full
 // canonical-vs-destination diff + apply and signals completion via
 // wg.Done.
+//
+// nameFilter is the optional scoping set for E10.7's skill.sync
+// names argument. When non-nil, reconcileDestination only considers
+// canonical entries whose name is in the set AND only removes
+// destination entries whose name is in the set (so unscoped skills
+// at the destination remain untouched).
 type mirrorTask struct {
 	event       skills.MirrorEvent
 	reconcileWG *sync.WaitGroup
+	nameFilter  map[string]struct{}
 }
 
 // New constructs a Worker, applies defaults, and validates required
@@ -282,6 +289,47 @@ func (w *Worker) Enqueue(event skills.MirrorEvent, worktreePath string) error {
 	return nil
 }
 
+// EnqueueAll dispatches an event to every registered worktree that
+// has at least one destination (null-adapter worktrees are silently
+// skipped). Returns the count of successfully-enqueued worktrees and
+// the first error encountered (callers log + continue on subsequent
+// failures — the next Reconcile pass repairs drift).
+//
+// Intended for the skill.delete handler at E10.6: a coordinator-issued
+// delete must propagate Kind=delete to every destination, but the
+// handler doesn't know the worktree list. This method encapsulates
+// both the worktree enumeration and the per-worktree enqueue under a
+// single lock-acquisition boundary.
+func (w *Worker) EnqueueAll(event skills.MirrorEvent) (int, error) {
+	w.stateMu.RLock()
+	if !w.started.Load() {
+		w.stateMu.RUnlock()
+		return 0, ErrWorkerNotStarted
+	}
+	wtrees := make([]string, 0, len(w.worktree))
+	for wtree := range w.worktree {
+		wtrees = append(wtrees, wtree)
+	}
+	w.stateMu.RUnlock()
+
+	var count int
+	var firstErr error
+	for _, wtree := range wtrees {
+		if err := w.Enqueue(event, wtree); err != nil {
+			// ErrUnknownWorktree shouldn't surface here (we just
+			// snapshotted from w.worktree), but a concurrent Stop +
+			// Start could race. Treat as silent skip + record as the
+			// firstErr for caller diagnostics.
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		count++
+	}
+	return count, firstErr
+}
+
 // MutexRegistry exposes the per-destination mutex map so E9.5's
 // synchronous EnsureMirrored can serialize against the async worker.
 // Keys are destinationKey(Destination) strings; values are
@@ -372,7 +420,7 @@ func (w *Worker) runDestination(
 				// logged inside reconcileDestination; Reconcile's
 				// caller is best-effort.
 				flush()
-				_ = w.reconcileDestination(dest, entry)
+				_ = w.reconcileDestination(dest, entry, task.nameFilter)
 				task.reconcileWG.Done()
 				continue
 			}
@@ -422,6 +470,17 @@ func (w *Worker) Reconcile(ctx context.Context) error {
 	}
 	w.stateMu.RUnlock()
 
+	// SIGKILL backstop for E10.4 atomic-move promote: a promote that
+	// was killed between writing the `.thrum/skills/<name>.tmp/` staging
+	// dir and the os.Rename into `.thrum/skills/<name>/` leaves the
+	// staging dir on disk. Defer-rollback inside HandlePromote handles
+	// the common-case failures during a live promote; this catches the
+	// "process vanished" case at the next daemon boot's Reconcile pass.
+	//
+	// Symmetric cleanup for `.old/` backup-aside dirs created by the
+	// edit-promote rollback path — same SIGKILL window, same fix.
+	w.cleanupStalePromoteLeftovers()
+
 	var wg sync.WaitGroup
 	for _, ch := range channels {
 		wg.Add(1)
@@ -449,6 +508,67 @@ func (w *Worker) Reconcile(ctx context.Context) error {
 	}
 }
 
+// ReconcileNames is the scoped variant of Reconcile: only the listed
+// skill names are considered at each destination. Both the copy pass
+// AND the stale-removal pass honor the filter — so unrelated skills
+// at the destination remain untouched by a scoped sync. An empty or
+// nil names slice falls through to a full Reconcile (the caller's
+// "no filter" intent is preserved).
+//
+// Intended for the skill.sync RPC at E10.7 when the operator passes
+// `names=[a, b]`. The synchronous-from-caller's-perspective contract
+// is preserved (blocks until every destination's reconcile pass
+// completes, same as Reconcile).
+func (w *Worker) ReconcileNames(ctx context.Context, names []string) error {
+	if len(names) == 0 {
+		return w.Reconcile(ctx)
+	}
+	filter := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		filter[n] = struct{}{}
+	}
+
+	w.stateMu.RLock()
+	if !w.started.Load() {
+		w.stateMu.RUnlock()
+		return ErrWorkerNotStarted
+	}
+	channels := make([]chan mirrorTask, 0, len(w.channels))
+	for _, ch := range w.channels {
+		channels = append(channels, ch)
+	}
+	w.stateMu.RUnlock()
+
+	w.cleanupStalePromoteLeftovers()
+
+	var wg sync.WaitGroup
+	for _, ch := range channels {
+		wg.Add(1)
+		select {
+		case ch <- mirrorTask{
+			event:       skills.MirrorEvent{Trigger: skills.TriggerManualSync},
+			reconcileWG: &wg,
+			nameFilter:  filter,
+		}:
+		case <-ctx.Done():
+			wg.Done()
+			return ctx.Err()
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // reconcileDestination performs a full canonical-vs-destination diff
 // + apply under the destination mutex. Holds the lock for the
 // entire pass so EnsureMirrored (E9.5) can't see a half-reconciled
@@ -459,7 +579,7 @@ func (w *Worker) Reconcile(ctx context.Context) error {
 // correction); the synchronous EnsureMirrored caller surfaces it so
 // B-B1's stage-3 wake handler can roll back. Wrapped errors satisfy
 // errors.Is(_, ErrMirrorWrite).
-func (w *Worker) reconcileDestination(dest Destination, entry *AdapterEntry) error {
+func (w *Worker) reconcileDestination(dest Destination, entry *AdapterEntry, nameFilter map[string]struct{}) error {
 	mu := w.destMutex(dest)
 	mu.Lock()
 	defer mu.Unlock()
@@ -491,6 +611,11 @@ func (w *Worker) reconcileDestination(dest Destination, entry *AdapterEntry) err
 		if !e.IsDir() {
 			continue
 		}
+		if nameFilter != nil {
+			if _, ok := nameFilter[e.Name()]; !ok {
+				continue
+			}
+		}
 		if _, err := os.Stat(filepath.Join(w.opts.SourceRoot, e.Name(), "SKILL.md")); err == nil {
 			canonical[e.Name()] = struct{}{}
 		}
@@ -517,7 +642,9 @@ func (w *Worker) reconcileDestination(dest Destination, entry *AdapterEntry) err
 		}
 	}
 
-	// Remove destination-side skills that aren't in canonical.
+	// Remove destination-side skills that aren't in canonical. When
+	// nameFilter is set, removal is also scoped — unrelated destination
+	// skills are not touched by a scoped reconcile.
 	if entries, err := os.ReadDir(destDir); err == nil {
 		for _, e := range entries {
 			if !e.IsDir() {
@@ -525,6 +652,11 @@ func (w *Worker) reconcileDestination(dest Destination, entry *AdapterEntry) err
 			}
 			if _, ok := canonical[e.Name()]; ok {
 				continue
+			}
+			if nameFilter != nil {
+				if _, ok := nameFilter[e.Name()]; !ok {
+					continue
+				}
 			}
 			stale := filepath.Join(destDir, e.Name())
 			if rmErr := os.RemoveAll(stale); rmErr != nil {
@@ -621,6 +753,55 @@ func (w *Worker) copyFile(src, dst string) error {
 		return fmt.Errorf("%w: write %s: %w", ErrMirrorWrite, dst, err)
 	}
 	return nil
+}
+
+// cleanupStalePromoteLeftovers removes any `.tmp/` and `.old/`
+// directories directly under the source root. These are atomic-move
+// artifacts from the E10.4 skill.promote handler that survived a
+// SIGKILL between the temp-dir write and the final os.Rename — under
+// a live promote, defer-rollback removes both. Both patterns are
+// unconditionally removed because:
+//
+//   - `.tmp/` is the in-progress staging dir; if the rename had
+//     succeeded it would have become `<name>/` (no .tmp suffix).
+//   - `.old/` is the renamed-aside previous version during an edit-
+//     promote; success removes it, failure rolls back over it.
+//
+// Errors during cleanup are logged at warn and swallowed — the next
+// Reconcile pass will retry, and a lingering leftover is at worst
+// disk waste (the mirror destination layer never reads from
+// `<SourceRoot>/*.tmp/`).
+func (w *Worker) cleanupStalePromoteLeftovers() {
+	matches, err := filepath.Glob(filepath.Join(w.opts.SourceRoot, "*.tmp"))
+	if err == nil {
+		for _, m := range matches {
+			// Log BEFORE the remove so operators reading the daemon
+			// log see the announcement of the intended action. A
+			// post-remove log line reads as past-tense narration of
+			// completed work, but the cleanup might fail — only the
+			// pre-log accurately reflects "about to do X" even when
+			// the followup errors out.
+			w.opts.Logger.Warn("skills promote: removing stale tmp dir from prior crash", "path", m)
+			if rmErr := os.RemoveAll(m); rmErr != nil {
+				w.opts.Logger.Warn("skills promote: failed to clean stale tmp dir", "path", m, "err", rmErr)
+				continue
+			}
+		}
+	} else {
+		w.opts.Logger.Warn("skills promote: glob *.tmp failed", "root", w.opts.SourceRoot, "err", err)
+	}
+	matches, err = filepath.Glob(filepath.Join(w.opts.SourceRoot, "*.old"))
+	if err == nil {
+		for _, m := range matches {
+			w.opts.Logger.Warn("skills promote: removing stale backup dir from prior crash", "path", m)
+			if rmErr := os.RemoveAll(m); rmErr != nil {
+				w.opts.Logger.Warn("skills promote: failed to clean stale backup dir", "path", m, "err", rmErr)
+				continue
+			}
+		}
+	} else {
+		w.opts.Logger.Warn("skills promote: glob *.old failed", "root", w.opts.SourceRoot, "err", err)
+	}
 }
 
 // Compile-time interface guards make the public surface explicit so
