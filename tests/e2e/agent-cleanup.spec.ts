@@ -15,7 +15,10 @@ function thrumRaw(
   env?: NodeJS.ProcessEnv,
 ): { stdout: string; stderr: string; exitCode: number } {
   try {
-    const stdout = execFileSync(BIN, args, {
+    // Prepend --repo to anchor identity resolution to the test's worktree,
+    // bypassing the strict cross_worktree guard (v0.10.4+) when the test
+    // process's pane has a different agent identity than the test root.
+    const stdout = execFileSync(BIN, ['--repo', getTestRoot(), ...args], {
       cwd: getTestRoot(),
       encoding: 'utf-8',
       timeout: 10_000,
@@ -27,6 +30,8 @@ function thrumRaw(
     }).trim();
     return { stdout, stderr: '', exitCode: 0 };
   } catch (err: any) {
+    // Stderr includes the captured error output even when our --repo prepend
+    // changes the resolved repo path; tests verify exitCode + stderr content.
     return {
       stdout: err.stdout?.toString().trim() || '',
       stderr: err.stderr?.toString().trim() || '',
