@@ -185,6 +185,47 @@ func (l *Limiter) Unblock(ctx context.Context, peerKey string) error {
 	return nil
 }
 
+// PausedPeers returns the peer_key values currently flagged as paused. It
+// combines the in-memory map (authoritative for this window) with SQLite for
+// any peer not yet loaded into memory (e.g. after a daemon restart where Init
+// was not called). Results are deduplicated; ordering is unspecified.
+// Uses the idx_peer_rate_paused partial index per Guard 6.
+func (l *Limiter) PausedPeers(ctx context.Context) ([]string, error) {
+	l.mu.Lock()
+	inMem := make(map[string]bool, len(l.peers))
+	for k, e := range l.peers {
+		if !e.pausedAt.IsZero() {
+			inMem[k] = true
+		}
+	}
+	l.mu.Unlock()
+
+	dbRows, err := l.db.QueryContext(ctx,
+		`SELECT peer_key FROM email_peer_rate_state WHERE paused_at IS NOT NULL`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("rate-limit paused-peers: %w", err)
+	}
+	defer func() { _ = dbRows.Close() }()
+
+	for dbRows.Next() {
+		var pk string
+		if err := dbRows.Scan(&pk); err != nil {
+			return nil, fmt.Errorf("rate-limit paused-peers scan: %w", err)
+		}
+		inMem[pk] = true
+	}
+	if err := dbRows.Err(); err != nil {
+		return nil, fmt.Errorf("rate-limit paused-peers rows: %w", err)
+	}
+
+	out := make([]string, 0, len(inMem))
+	for k := range inMem {
+		out = append(out, k)
+	}
+	return out, nil
+}
+
 // WindowRoller is a long-running goroutine that flushes and zeroes any
 // in-memory windows that have aged past the hour boundary. It also catches
 // windows that were never triggered by Increment (e.g. a peer that was

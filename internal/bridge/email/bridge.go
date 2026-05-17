@@ -73,6 +73,14 @@ type Bridge struct {
 	// don't share the global os.TempDir() namespace.
 	stateDirFn  func(cfg config.EmailConfig) string
 	configDirFn func(cfg config.EmailConfig) string
+
+	// Sub-component references — set at the start of each inner run() and
+	// cleared to nil on exit. Exposed via Queue/Mesh/Limiter getters for the
+	// RPC handler layer (D-B1.15). Callers must tolerate nil returns when the
+	// bridge is not yet running or between restart cycles.
+	queue   atomic.Pointer[Queue]
+	mesh    atomic.Pointer[MeshHandlerImpl]
+	limiter atomic.Pointer[Limiter]
 }
 
 // New constructs a Bridge. secrets may be nil when cfg.Enabled is false.
@@ -117,6 +125,26 @@ func (b *Bridge) Status() BridgeStatus {
 // Running reports whether the bridge is currently executing its inner run loop.
 func (b *Bridge) Running() bool {
 	return b.running.Load()
+}
+
+// Queue returns the outbound queue component active during the current run
+// cycle, or nil when the bridge is not running. Safe to call concurrently.
+func (b *Bridge) Queue() *Queue { return b.queue.Load() }
+
+// Mesh returns the mesh handler active during the current run cycle, or nil
+// when the bridge is not running. Safe to call concurrently.
+func (b *Bridge) Mesh() *MeshHandlerImpl { return b.mesh.Load() }
+
+// Limiter returns the rate-limiter active during the current run cycle, or nil
+// when the bridge is not running. Safe to call concurrently.
+func (b *Bridge) Limiter() *Limiter { return b.limiter.Load() }
+
+// Config returns a snapshot of the current EmailConfig under the bridge mutex.
+// Callers should treat the returned value as read-only.
+func (b *Bridge) Config() config.EmailConfig {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.cfg
 }
 
 // Restart cancels the current inner run cycle and adopts the new config.
@@ -368,11 +396,21 @@ func (b *Bridge) run(ctx context.Context) error {
 	dispatcher := &wsMessageDispatcher{ws: ws, imap: imapClient}
 	inbound := NewInbound(inboundCfg, dedup, limiter, msgmap, dispatcher, meshHandler)
 
-	// --- 5. Mark running. ---
+	// --- 5. Mark running. Expose sub-components via atomic pointers so the
+	// RPC handler layer (D-B1.15) can read them without entering the run loop.
+	// Cleared on exit so callers see nil when the bridge is stopped. ---
 	b.running.Store(true)
+	b.queue.Store(queue)
+	b.mesh.Store(meshHandler)
+	b.limiter.Store(limiter)
 	b.startedAt.Store(time.Now())
 	b.lastError.Store("")
-	defer b.running.Store(false)
+	defer func() {
+		b.running.Store(false)
+		b.queue.Store(nil)
+		b.mesh.Store(nil)
+		b.limiter.Store(nil)
+	}()
 
 	b.logger.Printf("running (handle=%s, imap=%s, smtp=%s)", cfg.DaemonHandle, cfg.IMAP.Host, cfg.SMTP.Host)
 
