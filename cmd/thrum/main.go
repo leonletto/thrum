@@ -57,6 +57,7 @@ import (
 	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/restart"
 	"github.com/leonletto/thrum/internal/runtime"
+	"github.com/leonletto/thrum/internal/skills"
 	"github.com/leonletto/thrum/internal/subscriptions"
 	thrumSync "github.com/leonletto/thrum/internal/sync"
 	"github.com/leonletto/thrum/internal/timeparse"
@@ -6273,6 +6274,17 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	server.RegisterHandler("message.deleteByScope", messageHandler.HandleDeleteByScope)
 	server.RegisterHandler("message.deleteByAgent", messageHandler.HandleDeleteByAgent)
 	server.RegisterHandler("message.archive", messageHandler.HandleArchive)
+
+	// Skill registration substrate (C-B1, v0.11) — read-only verbs land
+	// at E10.2 (list/show/check_status). Mutating verbs (promote, revise,
+	// delete, sync, validate) and the staleness-reminder integration land
+	// at E10.3–E10.9; lifecycle wiring of perm/staleness/worker into the
+	// constructor happens with E10.9 (thrum-8rgu plan-errata).
+	skillLibrary := skills.NewLibrary(st.RepoPath())
+	skillHandler := rpc.NewSkillHandler(skillLibrary, nil, nil, nil, nil, st.RawDB())
+	server.RegisterHandler("skill.list", skillHandler.HandleList)
+	server.RegisterHandler("skill.show", skillHandler.HandleShow)
+	server.RegisterHandler("skill.check_status", skillHandler.HandleCheckStatus)
 
 	// Monitor jobs — SECURITY: these handlers spawn child processes with the
 	// daemon's privileges, so they are registered on the unix-socket `server`
