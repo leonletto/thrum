@@ -40,7 +40,7 @@ func newSchedulerForSweepTest(t *testing.T) (*scheduler.Scheduler, *safedb.DB, r
 func TestWireSweep_RegistersInternalJob(t *testing.T) {
 	sched, db, store := newSchedulerForSweepTest(t)
 	thrumDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
 		t.Fatal(err)
 	}
 	cfg := &config.DaemonConfig{
@@ -99,7 +99,7 @@ func TestWireSweep_DoesNotPanicOnFreshBootMissingIdentitiesDir(t *testing.T) {
 // writeIdentity writes a minimal identity file fixture for sweep tests.
 func writeIdentity(t *testing.T, dir, name string, idFile config.IdentityFile) {
 	t.Helper()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 	data, err := json.Marshal(idFile)
@@ -156,7 +156,7 @@ func TestIdentityFileAgentRegistry_ReadsAgents(t *testing.T) {
 
 func TestIdentityFileAgentRegistry_SkipsCorruptFile(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "identities")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 	// Good file.
@@ -181,7 +181,7 @@ func TestIdentityFileAgentRegistry_SkipsCorruptFile(t *testing.T) {
 
 func TestIdentityFileAgentRegistry_SkipsNonJSONAndDirs(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "identities")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 	writeIdentity(t, dir, "real", config.IdentityFile{
@@ -192,7 +192,7 @@ func TestIdentityFileAgentRegistry_SkipsNonJSONAndDirs(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Subdirectory — should be skipped.
-	if err := os.MkdirAll(filepath.Join(dir, "backup"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "backup"), 0o750); err != nil {
 		t.Fatal(err)
 	}
 

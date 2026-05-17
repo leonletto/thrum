@@ -117,24 +117,7 @@ type reminderWire struct {
 }
 
 func wireToRow(w reminderWire) ReminderRow {
-	return ReminderRow{
-		ID:             w.ID,
-		Source:         w.Source,
-		SourceAgent:    w.SourceAgent,
-		TriggerKind:    w.TriggerKind,
-		TriggerAt:      w.TriggerAt,
-		TargetAgent:    w.TargetAgent,
-		TargetChain:    w.TargetChain,
-		Body:           w.Body,
-		RaisedAt:       w.RaisedAt,
-		NextReminderAt: w.NextReminderAt,
-		LastFiredAt:    w.LastFiredAt,
-		State:          w.State,
-		PaneSnapshot:   w.PaneSnapshot,
-		DeferHistory:   w.DeferHistory,
-		ClearedAt:      w.ClearedAt,
-		CancelledAt:    w.CancelledAt,
-	}
+	return ReminderRow(w)
 }
 
 // ReminderGet calls reminder.get on the daemon and decodes the full row.

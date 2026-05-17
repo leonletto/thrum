@@ -143,7 +143,7 @@ func bytesOrNil(b []byte) any {
 	if len(b) == 0 {
 		return nil
 	}
-	return []byte(b)
+	return b
 }
 
 // scanReminder scans one row from a SELECT against the reminders table

@@ -3109,17 +3109,17 @@ func fireStateLabel(r cli.ReminderRow) string {
 	}
 }
 
-// truncateBody returns s unchanged if len(s) <= max; otherwise the
-// first max-3 runes plus "..." (so the total length stays at max).
+// truncateBody returns s unchanged if len(s) <= limit; otherwise the
+// first limit-3 runes plus "..." (so the total length stays at limit).
 // Operates on bytes; reminder bodies are short and ASCII-dominant.
-func truncateBody(s string, max int) string {
-	if len(s) <= max {
+func truncateBody(s string, limit int) string {
+	if len(s) <= limit {
 		return s
 	}
-	if max <= 3 {
-		return s[:max]
+	if limit <= 3 {
+		return s[:limit]
 	}
-	return s[:max-3] + "..."
+	return s[:limit-3] + "..."
 }
 
 // reminderSetCmd implements `thrum agent reminder set`. Flag set per
