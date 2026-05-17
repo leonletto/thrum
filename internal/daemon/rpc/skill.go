@@ -204,6 +204,11 @@ const (
 	// other coordinator-facing logical failure) so the CLI can distinguish
 	// a typo in --allow-secret from a real scanner I/O failure.
 	ErrInvalidPatternCode = "invalid_pattern"
+	// ErrProposalNotFoundCode signals that skill.revise was given a
+	// path that doesn't resolve to a proposed-skill SKILL.md. Surfaced
+	// via the structured response so the CLI distinguishes
+	// "you typed a bad path" from a wire / DB failure.
+	ErrProposalNotFoundCode = "proposal_not_found"
 )
 
 // AllowedPatternWire is the JSON shape for one entry in
@@ -800,6 +805,108 @@ func (h *SkillHandler) ensurePromoteDefaults() {
 	if h.renameFunc == nil {
 		h.renameFunc = os.Rename
 	}
+}
+
+// --- HandleRevise ---
+
+// SkillReviseRequest is the params shape for skill.revise (design-spec §7.7).
+type SkillReviseRequest struct {
+	CallerAgentID string `json:"caller_agent_id"`
+	Path          string `json:"path"`
+	Findings      string `json:"findings"`
+	// CheckFindings is the structured output of a prior `check-the-skill`
+	// run. Nil/empty in the v0.11 stub window (no live check), packaged
+	// into the inbox body as "stub: not run".
+	CheckFindings string `json:"check_findings,omitempty"`
+}
+
+// SkillReviseResponse returns the IDs of the inbox message that
+// HandleRevise dispatched on the coordinator's behalf. Empty MessageID
+// + non-empty Error signals a logical failure (e.g. proposal_not_found);
+// auth-style failures still travel via the Go error path per the
+// established HandleCheck pattern.
+type SkillReviseResponse struct {
+	MessageID string `json:"message_id,omitempty"`
+	ThreadID  string `json:"thread_id,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+// HandleRevise serves skill.revise (design-spec §7.7 / §13.2 step 2).
+// Coordinator-only. Packages coordinator findings + optional check
+// output into a structured inbox message addressed to the proposing
+// agent. MUST NOT write to the submitter's `.thrum/agents/<author>/`
+// directory — MB-1.S2 Q2 ownership boundary enforced by the
+// TestRevise_NeverWritesSubmitterFolder integration test.
+//
+// The submitter is resolved from the path's `<author>` segment
+// (canonical per spec §17.2); a frontmatter mismatch logs a warning
+// but does not block — the path location is the load-bearing
+// identity, not the operator-mutable frontmatter field.
+func (h *SkillHandler) HandleRevise(ctx context.Context, params json.RawMessage) (any, error) {
+	var req SkillReviseRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+	if err := h.requireCoordinator(ctx, req.CallerAgentID); err != nil {
+		return nil, err
+	}
+	if req.Path == "" {
+		return nil, errors.New("invalid request: path is required")
+	}
+
+	h.ensurePromoteDefaults() // logger; revise reuses the same defaulter
+
+	proposed, err := h.library.GetProposed(ctx, req.Path)
+	if err != nil {
+		// Library.GetProposed wraps the various not-found / escape
+		// cases with ErrSkillNotFound; map those to the structured
+		// proposal_not_found response so the CLI can distinguish bad
+		// path from system error.
+		if errors.Is(err, skills.ErrSkillNotFound) {
+			return SkillReviseResponse{Error: ErrProposalNotFoundCode}, nil
+		}
+		return nil, fmt.Errorf("load proposal: %w", err)
+	}
+
+	// Cross-check: frontmatter's proposed_by SHOULD match the path's
+	// author segment. Mismatch is informational (path wins), but log
+	// at warn so operators can investigate stale or mis-authored
+	// proposals on triage.
+	if proposed.Frontmatter.Thrum.ProposedBy != "" && proposed.Frontmatter.Thrum.ProposedBy != proposed.Author {
+		h.logger.Warn("skill.revise: submitter mismatch",
+			"path_author", proposed.Author,
+			"frontmatter_proposed_by", proposed.Frontmatter.Thrum.ProposedBy,
+			"path", proposed.Path,
+		)
+	}
+
+	if h.perm == nil {
+		return nil, errors.New("skill.revise: messenger not configured")
+	}
+
+	checkText := req.CheckFindings
+	if checkText == "" {
+		checkText = "stub: not run"
+	}
+	body := fmt.Sprintf(
+		"# Skill revision feedback\n\n**Skill:** %s\n**Path:** %s\n\n## Coordinator findings\n%s\n\n## Check-the-skill output\n%s\n",
+		proposed.Name, proposed.Path, req.Findings, checkText,
+	)
+
+	msgID, sendErr := h.perm.SendSupervisorMessage(ctx, proposed.Author, body, "")
+	if sendErr != nil {
+		return nil, fmt.Errorf("send revision message: %w", sendErr)
+	}
+	h.logger.Info("skill revised",
+		"name", proposed.Name,
+		"submitter", proposed.Author,
+		"caller", req.CallerAgentID,
+		"msg_id", msgID,
+	)
+	return SkillReviseResponse{
+		MessageID: msgID,
+		ThreadID:  msgID, // new thread; the first message's ID is the thread root.
+	}, nil
 }
 
 // compileAllowedPatterns pre-compiles every override regex and returns

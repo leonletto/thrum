@@ -608,19 +608,62 @@ prompt + emits an audit log line.`,
 // sends a structured revision message to the proposing agent.
 func skillReviseCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "revise <path> <body>",
+		Use:   "revise <path> <findings>",
 		Short: "Send a structured revision message to the proposing agent",
 		Long: `Send a structured revision message about a proposed SKILL.md back
 to its author. The CLI does NOT write into the submitter's
 proposed-skills/ — the message thread is the revision channel
 (MB-1.S2 Q2 owner-write-only).
 
-<path> is the proposal path; <body> is the revision request text.`,
+<path> is the proposal path; <findings> is the revision request text.
+The composed message body is rendered with section headings and the
+path's <author> segment is used as the routing recipient (canonical
+per spec §17.2 — frontmatter mismatch logs a warning but proceeds).`,
 		Args: cobra.ExactArgs(2),
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return fmt.Errorf("skill.revise RPC body lands at E10.5 (thrum-6qmf.2.17)")
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runSkillRevise(cmd.OutOrStdout(), args[0], args[1])
 		},
 	}
+}
+
+// runSkillRevise dispatches the skill.revise RPC and renders the
+// response. On the logical-error path (proposal_not_found) it surfaces
+// the error and returns non-nil so the cobra exit is non-zero.
+func runSkillRevise(out io.Writer, path, findings string) error {
+	agentID, err := resolveLocalAgentID()
+	if err != nil {
+		return fmt.Errorf("failed to resolve agent identity: %w", err)
+	}
+	client, err := getClient()
+	if err != nil {
+		return fmt.Errorf("failed to connect to daemon: %w", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	req := map[string]any{
+		"caller_agent_id": agentID,
+		"path":            path,
+		"findings":        findings,
+	}
+	var resp rpc.SkillReviseResponse
+	if err := client.Call("skill.revise", req, &resp); err != nil {
+		return fmt.Errorf("skill.revise RPC failed: %w", err)
+	}
+	if flagJSON {
+		return cli.EmitJSON(resp)
+	}
+	w := skillWriter{w: out}
+	if resp.Error != "" {
+		w.Fprintf("REVISE BLOCKED: %s\n", resp.Error)
+		if w.err != nil {
+			return w.err
+		}
+		return errors.New(resp.Error)
+	}
+	w.Fprintf("REVISION SENT: %s\n", path)
+	w.Fprintf("  message_id: %s\n", resp.MessageID)
+	w.Fprintf("  thread_id:  %s\n", resp.ThreadID)
+	return w.err
 }
 
 // skillSyncCmd implements `thrum skill sync [<name>]` per spec §7.8.
