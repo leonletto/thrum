@@ -95,7 +95,7 @@ func TestScheduler_RegisterInternal_PanicsOnBadSuffix(t *testing.T) {
 // register without panicking.
 func TestScheduler_RegisterInternal_AcceptsSnakeAndKebab(t *testing.T) {
 	cases := []string{
-		"internal.scheduler_event_cleanup",  // canonical snake — Task 35
+		"internal.scheduler_event_cleanup",   // canonical snake — Task 35
 		"internal.email_poll",                // D-B1 RegisterInternal target
 		"internal.stalled_agent_sweep",       // A-B4 RegisterInternal target
 		"internal.skill_staleness_check",     // C-B1 RegisterInternal target

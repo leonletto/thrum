@@ -1051,7 +1051,7 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 
 func TestSchema_V32_CurrentVersion(t *testing.T) {
 	if schema.CurrentVersion != 32 {
-		t.Errorf("CurrentVersion = %d, want 32 (A-B1 v25 + A-B4 v28 + D-B1 v30/31/32; v26/v27/v29 reserved for B-B1/MB-1.S6 per canonical-ref §3.1)", schema.CurrentVersion)
+		t.Errorf("CurrentVersion = %d, want 32 (A-B1 v25 + B-B1 v26/v27 + A-B4 v28 + D-B1 v30/31/32; v29 reserved for MB-1.S6 per canonical-ref §3.1)", schema.CurrentVersion)
 	}
 }
 
@@ -1845,17 +1845,254 @@ func TestMigration_SchedulerJobState_NextScheduledAtNullable(t *testing.T) {
 // landed) rather than CurrentVersion-1 — once D-B1 bumped CurrentVersion
 // to 32, CurrentVersion-1 = v31 no longer exercises the scheduler
 // migration block. v24 is the canonical pre-scheduler version per §3.1.
+// With the v25-v32 substrate-gap protocol, CurrentVersion-1 may not
+// trigger any migration that creates the scheduler tables — A-B4's
+// v28 + D-B1's v30/31/32 don't, and B-B1's v26/v27 don't either.
+// v24 stays the canonical pre-scheduler version per §3.1.
 func TestMigration_SchedulerJobState_FreshInstallEquivalentToUpgrade(t *testing.T) {
 	fresh := freshInstallDB(t)
-	// Start at v24 (not CurrentVersion-1) so the migration path traverses
-	// the v25 scheduler branch. With the v25-v32 substrate-gap protocol,
-	// CurrentVersion-1 may not trigger any migration that creates the
-	// scheduler tables — A-B4's v28 + D-B1's v30/31/32 don't, and B-B1's
-	// v26/v27 won't either when they merge. v24 is the canonical
-	// pre-scheduler version per §3.1.
 	upgraded := upgradedFromDB(t, 24)
 	assertSameTable(t, fresh, upgraded, "scheduler_job_state")
 	assertSameTable(t, fresh, upgraded, "scheduler_job_events")
+}
+
+// TestMigration_AgentsModeIdentity_Columns verifies migration 26 adds the
+// six mode/identity/runtime columns to the agents table per canonical-ref
+// §3.3. DDL is locked: mode + identity TEXT NOT NULL with backfill defaults,
+// auto_respawn_enabled INTEGER NOT NULL DEFAULT 0, the three "*_at" cols
+// nullable INTEGER (NULL = healthy / armed).
+func TestMigration_AgentsModeIdentity_Columns(t *testing.T) {
+	db := setupTestDB(t)
+	got := pragmaTableInfo(t, db, "agents")
+
+	for _, col := range []string{
+		"mode", "identity",
+		"auto_respawn_enabled",
+		"auto_respawn_disabled_at",
+		"state_md_parse_failed_at",
+		"last_pane_alive_at",
+	} {
+		if _, ok := got[col]; !ok {
+			t.Errorf("agents.%s missing after migration 26", col)
+		}
+	}
+
+	// Type + nullability checks pin canonical §3.3 exactly.
+	cases := []struct {
+		name      string
+		ctype     string
+		notnull   int
+		dfltValid bool
+	}{
+		{"mode", "TEXT", 1, true},
+		{"identity", "TEXT", 1, true},
+		{"auto_respawn_enabled", "INTEGER", 1, true},
+		{"auto_respawn_disabled_at", "INTEGER", 0, false},
+		{"state_md_parse_failed_at", "INTEGER", 0, false},
+		{"last_pane_alive_at", "INTEGER", 0, false},
+	}
+	for _, c := range cases {
+		col, ok := got[c.name]
+		if !ok {
+			continue // already errored above
+		}
+		if col.ctype != c.ctype {
+			t.Errorf("agents.%s: type=%q want %q", c.name, col.ctype, c.ctype)
+		}
+		if col.notnull != c.notnull {
+			t.Errorf("agents.%s: NOT NULL=%d want %d", c.name, col.notnull, c.notnull)
+		}
+		if col.dflt.Valid != c.dfltValid {
+			t.Errorf("agents.%s: default-present=%v want %v (got %v)", c.name, col.dflt.Valid, c.dfltValid, col.dflt)
+		}
+	}
+}
+
+// TestMigration_AgentsModeIdentity_BackfillsExistingRows pins the
+// canonical-ref §3.3 backfill contract: pre-v0.11 agent rows get
+// (persistent, long_lived) — those classes pre-date the ephemeral-
+// implementer + scheduled-agent grid entries, so the defaults are safe.
+func TestMigration_AgentsModeIdentity_BackfillsExistingRows(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "backfill.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	// Bootstrap at v25 (the pre-B-B1 state).
+	if _, err := db.Exec(`CREATE TABLE schema_version (
+		version INTEGER NOT NULL,
+		applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("create schema_version: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO schema_version (version) VALUES (25)`); err != nil {
+		t.Fatalf("seed v25: %v", err)
+	}
+	// v25-shape agents table — pre-migration-26 (no mode/identity/runtime cols).
+	if _, err := db.Exec(`CREATE TABLE agents (
+		agent_id       TEXT PRIMARY KEY,
+		kind           TEXT NOT NULL,
+		role           TEXT NOT NULL,
+		module         TEXT NOT NULL,
+		display        TEXT NOT NULL DEFAULT '',
+		hostname       TEXT NOT NULL DEFAULT '',
+		agent_pid      INTEGER NOT NULL DEFAULT 0,
+		registered_at  TEXT NOT NULL,
+		last_seen_at   TEXT NOT NULL DEFAULT '',
+		origin_daemon  TEXT NOT NULL DEFAULT ''
+	)`); err != nil {
+		t.Fatalf("create v25 agents: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO agents
+		(agent_id, kind, role, module, registered_at, last_seen_at)
+		VALUES ('legacy-agent', 'agent', 'implementer', 'foo', '2026-01-01', '2026-01-01')`); err != nil {
+		t.Fatalf("seed legacy agent: %v", err)
+	}
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	var mode, identity string
+	var autoEnabled int
+	err = db.QueryRow(`SELECT mode, identity, auto_respawn_enabled FROM agents WHERE agent_id='legacy-agent'`).
+		Scan(&mode, &identity, &autoEnabled)
+	if err != nil {
+		t.Fatalf("read backfilled row: %v", err)
+	}
+	if mode != "persistent" {
+		t.Errorf("mode = %q, want %q", mode, "persistent")
+	}
+	if identity != "long_lived" {
+		t.Errorf("identity = %q, want %q", identity, "long_lived")
+	}
+	if autoEnabled != 0 {
+		t.Errorf("auto_respawn_enabled = %d, want 0", autoEnabled)
+	}
+}
+
+// TestMigration_AgentsModeIdentity_FreshInstallEquivalentToUpgrade enforces
+// canonical-ref §3.11 Guard 1 for migration 26: fresh-install via createTables
+// and upgrade-from-v25 via runMigrations MUST produce the same agents
+// table column set, types, NULLability, and defaults.
+//
+// `agents` is an ALTER migration (mutates pre-existing v25 schema) so the
+// upgrade fixture must pre-seed the v25 agents table before invoking Migrate.
+// The shared upgradedFromDB helper only stamps schema_version, which works
+// for the CREATE-only v25 scheduler tables but not for our ALTER path.
+func TestMigration_AgentsModeIdentity_FreshInstallEquivalentToUpgrade(t *testing.T) {
+	fresh := freshInstallDB(t)
+	upgraded := upgradedWithV25AgentsTable(t)
+	assertSameTable(t, fresh, upgraded, "agents")
+}
+
+// upgradedWithV25AgentsTable returns a DB bootstrapped at v25 with the
+// canonical v25-shape agents table (10 columns, matching createTables prior
+// to migration 26), then advanced to CurrentVersion via schema.Migrate.
+// Used by the migration-26 Guard 1 fresh-vs-upgrade parity check.
+func upgradedWithV25AgentsTable(t *testing.T) *sql.DB {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "upgrade-with-agents.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if _, err := db.Exec(`CREATE TABLE schema_version (
+		version INTEGER NOT NULL,
+		applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("create schema_version: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO schema_version (version) VALUES (25)`); err != nil {
+		t.Fatalf("seed v25: %v", err)
+	}
+	// v25 agents shape — must match createTables agents block as of v25
+	// exactly. Drift here will cause Guard 1 false-positives.
+	if _, err := db.Exec(`CREATE TABLE agents (
+		agent_id       TEXT PRIMARY KEY,
+		kind           TEXT NOT NULL,
+		role           TEXT NOT NULL,
+		module         TEXT NOT NULL,
+		display        TEXT NOT NULL DEFAULT '',
+		hostname       TEXT NOT NULL DEFAULT '',
+		agent_pid      INTEGER NOT NULL DEFAULT 0,
+		registered_at  TEXT NOT NULL,
+		last_seen_at   TEXT NOT NULL DEFAULT '',
+		origin_daemon  TEXT NOT NULL DEFAULT ''
+	)`); err != nil {
+		t.Fatalf("create v25 agents: %v", err)
+	}
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	return db
+}
+
+// TestMigration_AgentLifecycleEventsTable verifies migration 27 creates the
+// agent_lifecycle_events append-only journal per canonical-ref §3.4.
+func TestMigration_AgentLifecycleEventsTable(t *testing.T) {
+	db := setupTestDB(t)
+	got := pragmaTableInfo(t, db, "agent_lifecycle_events")
+
+	for _, col := range []string{
+		"id", "agent_name", "event_kind", "event_time",
+		"detection_method", "reason", "details",
+	} {
+		if _, ok := got[col]; !ok {
+			t.Errorf("agent_lifecycle_events missing column %s", col)
+		}
+	}
+
+	// Both per-(name,time) and per-(kind,time) indexes are load-bearing for
+	// loop-guard queries + observability filters.
+	for _, idx := range []string{
+		"idx_agent_lifecycle_agent_time",
+		"idx_agent_lifecycle_kind",
+	} {
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?`, idx).Scan(&n); err != nil {
+			t.Fatalf("query index %s: %v", idx, err)
+		}
+		if n != 1 {
+			t.Errorf("index %s: count=%d, want 1", idx, n)
+		}
+	}
+}
+
+// TestMigration_AgentLifecycle_DetectionMethodCheckConstraint pins the
+// SQL-level CHECK guard (canonical §3.4 + BLOCKING #2 from plan v1
+// dual-review). Go-level validator also enforces; this verifies the DB
+// layer catches anything that slips past Go.
+func TestMigration_AgentLifecycle_DetectionMethodCheckConstraint(t *testing.T) {
+	db := setupTestDB(t)
+	_, err := db.Exec(`INSERT INTO agent_lifecycle_events
+		(agent_name, event_kind, event_time, detection_method)
+		VALUES ('x', 'crash_detected', 1, 'totally_made_up')`)
+	if err == nil {
+		t.Fatal("expected CHECK constraint failure on invalid detection_method")
+	}
+
+	// NULL must be permitted (some event_kinds carry no detection_method).
+	_, err = db.Exec(`INSERT INTO agent_lifecycle_events
+		(agent_name, event_kind, event_time, detection_method)
+		VALUES ('x', 'crash_detected', 1, NULL)`)
+	if err != nil {
+		t.Errorf("NULL detection_method should be permitted: %v", err)
+	}
+
+	// Each canonical value must be accepted verbatim.
+	for _, v := range []string{"health_check_tick", "restart_reconciliation", "rpc_observation"} {
+		_, err = db.Exec(`INSERT INTO agent_lifecycle_events
+			(agent_name, event_kind, event_time, detection_method)
+			VALUES ('x', 'crash_detected', 1, ?)`, v)
+		if err != nil {
+			t.Errorf("canonical value %q should be permitted: %v", v, err)
+		}
+	}
 }
 
 // --- D-B1.1: email substrate migrations 30/31/32 ---
@@ -1945,6 +2182,20 @@ func TestMigration31_StatusEnumValues(t *testing.T) {
 			t.Errorf("status=%q failed to insert: %v", status, err)
 		}
 	}
+}
+
+// TestMigration_AgentLifecycle_FreshInstallEquivalentToUpgrade enforces
+// canonical-ref §3.11 Guard 1 for migration 27: fresh-install via
+// createTables and upgrade via runMigrations produce identical column
+// sets, types, NULLability, and defaults for agent_lifecycle_events.
+//
+// Source version pinned to 26 (not CurrentVersion-1) so future migrations
+// bumping CurrentVersion don't invalidate this equivalence proof — the
+// v26→v27 migration is the one that creates this table.
+func TestMigration_AgentLifecycle_FreshInstallEquivalentToUpgrade(t *testing.T) {
+	fresh := freshInstallDB(t)
+	upgraded := upgradedFromDB(t, 26)
+	assertSameTable(t, fresh, upgraded, "agent_lifecycle_events")
 }
 
 // TestMigration31_AttemptCountColumn verifies the column is attempt_count

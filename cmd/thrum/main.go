@@ -33,6 +33,7 @@ import (
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/context/roleconfig"
 	"github.com/leonletto/thrum/internal/daemon"
+	"github.com/leonletto/thrum/internal/daemon/agentdispatch"
 	"github.com/leonletto/thrum/internal/daemon/backstop"
 	"github.com/leonletto/thrum/internal/daemon/bootstrap"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
@@ -46,6 +47,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/safedb"
+	"github.com/leonletto/thrum/internal/daemon/scheduler"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/daemon/sweep"
 	"github.com/leonletto/thrum/internal/identity"
@@ -7567,6 +7569,19 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// "use default" sentinel (NewCleanupHandler clamps to 7 days).
 	sched := wireScheduler(server, wsRegistry, st.DB(), st.Identity().DaemonID,
 		thrumCfg.Daemon.Scheduler.EventRetentionDays)
+
+	// B-B1 agent-lifecycle housekeeper: prunes agent_lifecycle_events
+	// rows older than retention once per day. First B-B1 consumer of
+	// scheduler.RegisterInternal; downstream B-B1 tasks (auto-respawn
+	// guard, crash detection) write events that this handler bounds.
+	// NewCleanupHandler clamps zero/negative retention to 7 days per
+	// canonical §6.3.
+	lifecycleStore := state.NewAgentLifecycleStore(st.DB())
+	sched.RegisterInternal(
+		"internal.agent_lifecycle_cleanup", "@daily",
+		scheduler.InternalOpts{RunAtStart: false, CatchUp: "skip"},
+		agentdispatch.NewCleanupHandler(lifecycleStore, thrumCfg.Daemon.AgentLifecycle.EventRetentionDays),
+	)
 
 	// A-B4 sweep config sanity check before any wiring: an AlertChain
 	// containing only email entries would cause the dispatcher to

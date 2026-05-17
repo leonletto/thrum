@@ -21,16 +21,18 @@ import (
 
 // CurrentVersion is the current schema version.
 //
-// Gap 26-27 + 29 is intentional: the v0.11 substrate brainstorm LOCKED the
-// numbering across parallel epics so the migrations don't reshuffle on each
-// merge. As-of 2026-05-17 thrum-agents carries:
-//   - v25 (A-B1 scheduler_job_state + scheduler_job_events) — landed
-//   - v28 (A-B4 reminders unified substrate) — landed
-//   - v30/v31/v32 (D-B1 email_msg_seen + email_outbound_queue + email_peer_rate_state) — landed
-// Reserved slots awaiting downstream cascade:
-//   - v26/v27 (B-B1 agents-ALTER + agent_lifecycle_events — reserved for E6.0)
+// Gap 29 remains intentional per the v0.11 substrate brainstorm: the
+// migration numbering is LOCKED across parallel epics so the slots
+// don't reshuffle on each merge. As-of 2026-05-17 thrum-dev / thrum-
+// agents carries:
+//   - v25 (A-B1 scheduler_job_state + scheduler_job_events)
+//   - v26 (B-B1 agents-ALTER: mode + identity + 4 runtime cols) — this branch
+//   - v27 (B-B1 agent_lifecycle_events table)                    — this branch
+//   - v28 (A-B4 reminders unified substrate)
+//   - v30/v31/v32 (D-B1 email_msg_seen + email_outbound_queue + email_peer_rate_state)
+// Reserved slot awaiting downstream cascade:
 //   - v29 (MB-1.S6 scheduler_telemetry — reserved)
-// runMigrations switch handles the gaps cleanly (no-op cases jump version forward).
+// runMigrations switch handles the gap cleanly (no-op case jumps version forward).
 const CurrentVersion = 32
 
 // InitDB initializes a new database with the current schema.
@@ -154,17 +156,26 @@ func createTables(tx *sql.Tx) error {
 		// agents with overlapping (role, module) aren't treated as local
 		// conflicts (thrum-mm3l). See migration 21→22 for the backfill path
 		// on pre-existing databases.
+		// Per canonical §3.11 Guard 1: columns + types + NULLability + defaults
+		// MUST match the migration-25→26 ALTER path exactly. Drift between
+		// these two paths is the canonical Guard 1 failure mode.
 		`CREATE TABLE IF NOT EXISTS agents (
-			agent_id       TEXT PRIMARY KEY,
-			kind           TEXT NOT NULL,
-			role           TEXT NOT NULL,
-			module         TEXT NOT NULL,
-			display        TEXT NOT NULL DEFAULT '',
-			hostname       TEXT NOT NULL DEFAULT '',
-			agent_pid      INTEGER NOT NULL DEFAULT 0,
-			registered_at  TEXT NOT NULL,
-			last_seen_at   TEXT NOT NULL DEFAULT '',
-			origin_daemon  TEXT NOT NULL DEFAULT ''
+			agent_id                 TEXT PRIMARY KEY,
+			kind                     TEXT NOT NULL,
+			role                     TEXT NOT NULL,
+			module                   TEXT NOT NULL,
+			display                  TEXT NOT NULL DEFAULT '',
+			hostname                 TEXT NOT NULL DEFAULT '',
+			agent_pid                INTEGER NOT NULL DEFAULT 0,
+			registered_at            TEXT NOT NULL,
+			last_seen_at             TEXT NOT NULL DEFAULT '',
+			origin_daemon            TEXT NOT NULL DEFAULT '',
+			mode                     TEXT NOT NULL DEFAULT 'persistent',
+			identity                 TEXT NOT NULL DEFAULT 'long_lived',
+			auto_respawn_enabled     INTEGER NOT NULL DEFAULT 0,
+			auto_respawn_disabled_at INTEGER,
+			state_md_parse_failed_at INTEGER,
+			last_pane_alive_at       INTEGER
 		)`,
 
 		// Sessions table
@@ -422,6 +433,25 @@ func createTables(tx *sql.Tx) error {
 			details     TEXT
 		)`,
 
+		// Agent lifecycle events (v27, B-B1). Append-only journal of per-
+		// agent lifecycle events (respawn fires, crash detections, state.md
+		// parse failures). Mirrors scheduler_job_events shape applied to
+		// agents. CHECK constraint pins the detection_method vocabulary per
+		// canonical-ref §3.4 + plan-v1 BLOCKING #2 fix. Guard 1 (§3.11)
+		// requires this block to match the migration 26→27 path exactly.
+		`CREATE TABLE IF NOT EXISTS agent_lifecycle_events (
+			id                INTEGER PRIMARY KEY AUTOINCREMENT,
+			agent_name        TEXT    NOT NULL,
+			event_kind        TEXT    NOT NULL,
+			event_time        INTEGER NOT NULL,
+			detection_method  TEXT CHECK (
+				detection_method IS NULL OR detection_method IN
+					('health_check_tick', 'restart_reconciliation', 'rpc_observation')
+			),
+			reason            TEXT,
+			details           TEXT
+		)`,
+
 		// Email dedup (v30, D-B1). Idempotent re-fetch + retry protection
 		// on the inbound IMAP path. from_daemon_id + nonce stay NULLable
 		// per canonical-ref §3.7 — replay-nonce defense is reserved for
@@ -578,6 +608,13 @@ func createIndexes(tx *sql.Tx) error {
 		"CREATE INDEX IF NOT EXISTS idx_scheduler_state_next ON scheduler_job_state(next_scheduled_at)",
 		"CREATE INDEX IF NOT EXISTS idx_scheduler_events_job_time ON scheduler_job_events(job_id, event_time)",
 		"CREATE INDEX IF NOT EXISTS idx_scheduler_events_run ON scheduler_job_events(run_id)",
+
+		// Agent lifecycle indexes (v27, B-B1). Per-(agent,time) drives the
+		// loop-guard query "3 respawn_fired events within window?";
+		// per-(kind,time) supports observability filters like "all crashes
+		// in the last hour". See substrate-canonical-reference.md §3.4.
+		"CREATE INDEX IF NOT EXISTS idx_agent_lifecycle_agent_time ON agent_lifecycle_events(agent_name, event_time)",
+		"CREATE INDEX IF NOT EXISTS idx_agent_lifecycle_kind ON agent_lifecycle_events(event_kind, event_time)",
 
 		// Email indexes (v30-v32, D-B1).
 		// idx_email_msg_seen_proc drives the 30d TTL sweeper (D-B1.8).
@@ -1302,6 +1339,88 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		}
 	}
 
+	// Migration from version 25 to 26: B-B1 personal-agent + scheduled-agent
+	// lifecycle. Adds mode + identity + 4 runtime columns to the existing
+	// agents table per substrate-canonical-reference.md §3.3. The agents
+	// table already mixes identity + runtime-updated columns (last_seen_at,
+	// agent_pid, hostname) — this fold continues the established precedent
+	// rather than splitting runtime state into a separate table.
+	//
+	// Backfill defaults: pre-v0.11 rows get (persistent, long_lived) since
+	// the ephemeral-implementer + scheduled-agent classes don't exist
+	// pre-v0.11. Runtime columns default to NULL / 0 = healthy.
+	//
+	// Idempotency: tableExists + columnSet checks mirror the migration
+	// 21→22 origin_daemon pattern so the migration is safe to run against
+	// a fresh createTables() schema (which already has the columns) and
+	// against minimal test schemas that don't seed the agents table.
+	if startVersion < 26 && endVersion >= 26 {
+		hasAgents, err := tableExists(tx, "agents")
+		if err != nil {
+			return fmt.Errorf("migration 25→26: check agents table: %w", err)
+		}
+		if hasAgents {
+			agentCols, err := columnSet(tx, "agents")
+			if err != nil {
+				return fmt.Errorf("migration 25→26: inspect agents: %w", err)
+			}
+			type colDef struct {
+				name string
+				ddl  string
+			}
+			for _, c := range []colDef{
+				{"mode", `mode                     TEXT    NOT NULL DEFAULT 'persistent'`},
+				{"identity", `identity                 TEXT    NOT NULL DEFAULT 'long_lived'`},
+				{"auto_respawn_enabled", `auto_respawn_enabled     INTEGER NOT NULL DEFAULT 0`},
+				{"auto_respawn_disabled_at", `auto_respawn_disabled_at INTEGER`},
+				{"state_md_parse_failed_at", `state_md_parse_failed_at INTEGER`},
+				{"last_pane_alive_at", `last_pane_alive_at       INTEGER`},
+			} {
+				if agentCols[c.name] {
+					continue
+				}
+				if _, err := tx.Exec(`ALTER TABLE agents ADD COLUMN ` + c.ddl); err != nil {
+					return fmt.Errorf("migration 25→26: add agents.%s: %w", c.name, err)
+				}
+			}
+		}
+	}
+
+	// Migration from version 26 to 27: B-B1 agent_lifecycle_events append-
+	// only journal per substrate-canonical-reference.md §3.4. Mirrors the
+	// scheduler_job_events shape (§3.2) applied to agents: respawn fires,
+	// crash detections, state.md parse failures. The detection_method CHECK
+	// constraint is SQL-level defense-in-depth — the Go validator enforces
+	// the same vocabulary at the RPC boundary, but the DB layer catches
+	// anything that slips past.
+	if startVersion < 27 && endVersion >= 27 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS agent_lifecycle_events (
+				id                INTEGER PRIMARY KEY AUTOINCREMENT,
+				agent_name        TEXT    NOT NULL,
+				event_kind        TEXT    NOT NULL,
+				event_time        INTEGER NOT NULL,
+				detection_method  TEXT CHECK (
+					detection_method IS NULL OR detection_method IN
+						('health_check_tick', 'restart_reconciliation', 'rpc_observation')
+				),
+				reason            TEXT,
+				details           TEXT
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 26→27: create agent_lifecycle_events: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_agent_lifecycle_agent_time ON agent_lifecycle_events(agent_name, event_time)`)
+		if err != nil {
+			return fmt.Errorf("migration 26→27: idx_agent_lifecycle_agent_time: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_agent_lifecycle_kind ON agent_lifecycle_events(event_kind, event_time)`)
+		if err != nil {
+			return fmt.Errorf("migration 26→27: idx_agent_lifecycle_kind: %w", err)
+		}
+	}
+
 	// Migration from version 24 to 28: A-B4 unified reminder substrate.
 	// Authoritative DDL: dev-docs/thrum-agents/substrate-canonical-reference.md §3.5.
 	// Single polymorphic table carries both time-triggered reminders (agent/user
@@ -1311,9 +1430,10 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 	// internal/daemon/reminders/validator.go.
 	//
 	// Version numbering is LOCKED per the v0.11 substrate plan: A-B1 owns
-	// 25 (landed); B-B1 owns 26/27 (reserved E6.0); A-B4 owns 28 (landed);
-	// MB-1.S6 owns 29 (reserved); D-B1 owns 30/31/32 (landed). runMigrations
-	// handles gapped sequences naturally — missing v26/v27/v29 branches no-op.
+	// 25 (landed); B-B1 owns 26/27 (landed via this branch); A-B4 owns 28
+	// (landed); MB-1.S6 owns 29 (reserved); D-B1 owns 30/31/32 (landed).
+	// runMigrations handles gapped sequences naturally — missing v29
+	// branch no-ops.
 	if startVersion < 28 && endVersion >= 28 {
 		_, err = tx.Exec(`
 			CREATE TABLE IF NOT EXISTS reminders (
@@ -1361,7 +1481,7 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 
 	// Migration from version 29 to 30: email_msg_seen (D-B1). The
 	// startVersion < 30 guard covers any jump from v25 to v32 in one
-	// shot (gap 26-29 is benign — no migration blocks exist for those).
+	// shot (gap 29 is benign — no migration block exists for it).
 	if startVersion < 30 && endVersion >= 30 {
 		_, err = tx.Exec(`
 			CREATE TABLE IF NOT EXISTS email_msg_seen (
