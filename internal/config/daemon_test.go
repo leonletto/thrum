@@ -815,3 +815,68 @@ func TestValidatePermissionSupervisors(t *testing.T) {
 		})
 	}
 }
+
+// Pins the canonical-ref §4.4 contract for daemon.scheduler.event_retention_days:
+// zero is the on-disk default (consumer treats it as 7 per A-B1 plan §5966-5969).
+// Keeping the struct zero-valued lets omitempty + back-compat both work.
+func TestLoadThrumConfig_SchedulerEventRetentionDaysDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := cfg.Daemon.Scheduler.EventRetentionDays; got != 0 {
+		t.Errorf("expected zero default for EventRetentionDays (consumer resolves to 7); got %d", got)
+	}
+}
+
+// Pins the canonical-ref §4.1 contract: operator-authored periodic job specs
+// live under top-level `jobs:` as raw JSON so internal/config stays independent
+// of the scheduler package (the scheduler's ReloadConfig decodes into JobSpec).
+func TestLoadThrumConfig_JobsBlock_StoresAsRawJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	data := `{
+		"jobs": {
+			"docs-bot": {"id": "docs-bot", "type": "command",
+			             "schedule": "@every 5m", "enabled": true}
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	raw, ok := cfg.Jobs["docs-bot"]
+	if !ok {
+		t.Fatalf("docs-bot not in cfg.Jobs: keys=%v", keysOf(cfg.Jobs))
+	}
+	// Sanity-check that the raw bytes parse back to a map with the expected
+	// shape — keeps the test honest if a future refactor swaps the type.
+	var parsed map[string]any
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		t.Fatalf("docs-bot raw is not valid JSON: %v", err)
+	}
+	if parsed["id"] != "docs-bot" {
+		t.Errorf("expected docs-bot id, got %v", parsed["id"])
+	}
+	if parsed["schedule"] != "@every 5m" {
+		t.Errorf("expected schedule=@every 5m, got %v", parsed["schedule"])
+	}
+}
+
+func keysOf(m map[string]json.RawMessage) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
