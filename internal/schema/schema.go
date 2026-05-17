@@ -20,7 +20,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 24
+const CurrentVersion = 25
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -369,6 +369,47 @@ func createTables(tx *sql.Tx) error {
 			thrum_msg_id TEXT NOT NULL,
 			created_at   INTEGER NOT NULL
 		)`,
+
+		// Scheduler job state (v25, A-B1). Latest-state row per scheduled job.
+		// Authoritative DDL: dev-docs/thrum-agents/substrate-canonical-reference.md §3.2.
+		// next_scheduled_at is NULLable per §3.11 Guard 1: NULL means "no future
+		// fire scheduled" (one-shot already fired, or recurring job temporarily
+		// without a derivable next-tick). This createTables path AND the
+		// runMigrations 24→25 branch below MUST agree on NULLability —
+		// disagreement causes silent constraint violations on one-shot
+		// completion writes.
+		`CREATE TABLE IF NOT EXISTS scheduler_job_state (
+			job_id                TEXT PRIMARY KEY,
+			job_generation        INTEGER NOT NULL DEFAULT 1,
+			current_state         TEXT    NOT NULL,
+			current_stage         TEXT,
+			stage_entered_at      INTEGER,
+			last_run_id           TEXT,
+			last_fired_at         INTEGER,
+			last_completed_at     INTEGER,
+			last_completion_state TEXT,
+			last_error            TEXT,
+			next_scheduled_at     INTEGER,
+			consecutive_failures  INTEGER NOT NULL DEFAULT 0,
+			escalation_sent       INTEGER NOT NULL DEFAULT 0,
+			total_runs            INTEGER NOT NULL DEFAULT 0,
+			created_at            INTEGER NOT NULL,
+			updated_at            INTEGER NOT NULL
+		)`,
+
+		// Scheduler job events (v25, A-B1). Append-only journal of every job
+		// state transition. Paired with scheduler_job_state via job_id;
+		// transitions cite the run_id that produced them.
+		`CREATE TABLE IF NOT EXISTS scheduler_job_events (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			job_id      TEXT    NOT NULL,
+			run_id      TEXT    NOT NULL,
+			event_time  INTEGER NOT NULL,
+			from_state  TEXT,
+			to_state    TEXT    NOT NULL,
+			reason      TEXT,
+			details     TEXT
+		)`,
 	}
 
 	for _, sql := range tables {
@@ -439,6 +480,12 @@ func createIndexes(tx *sql.Tx) error {
 
 		// Telegram msg map reverse-lookup index (v24, thrum-48kt.2)
 		"CREATE INDEX IF NOT EXISTS idx_telegram_msg_map_thrum ON telegram_msg_map(thrum_msg_id)",
+
+		// Scheduler indexes (v25, A-B1). next-fire scan + per-job event lookup
+		// + per-run event lookup. See substrate-canonical-reference.md §3.2.
+		"CREATE INDEX IF NOT EXISTS idx_scheduler_state_next ON scheduler_job_state(next_scheduled_at)",
+		"CREATE INDEX IF NOT EXISTS idx_scheduler_events_job_time ON scheduler_job_events(job_id, event_time)",
+		"CREATE INDEX IF NOT EXISTS idx_scheduler_events_run ON scheduler_job_events(run_id)",
 	}
 
 	for _, sql := range indexes {
@@ -1075,6 +1122,69 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_telegram_msg_map_thrum ON telegram_msg_map(thrum_msg_id)`)
 		if err != nil {
 			return fmt.Errorf("migration 23→24: create idx_telegram_msg_map_thrum: %w", err)
+		}
+	}
+
+	// Migration from version 24 to 25: A-B1 scheduler substrate. Adds
+	// scheduler_job_state (latest-state per job) + scheduler_job_events
+	// (append-only journal). First migration of the v0.11 substrate stack;
+	// see substrate-canonical-reference.md §3.1 for the v25→v32 sequence.
+	//
+	// Guard 1 (canonical-ref §3.11): next_scheduled_at MUST be NULLable on
+	// both this migration path AND the createTables path. NULL means "no
+	// future fire scheduled" — required for one-shot @at / @once
+	// terminal-state rows. Disagreement between paths causes silent
+	// constraint violations on one-shot completion writes.
+	if startVersion < 25 && endVersion >= 25 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS scheduler_job_state (
+				job_id                TEXT PRIMARY KEY,
+				job_generation        INTEGER NOT NULL DEFAULT 1,
+				current_state         TEXT    NOT NULL,
+				current_stage         TEXT,
+				stage_entered_at      INTEGER,
+				last_run_id           TEXT,
+				last_fired_at         INTEGER,
+				last_completed_at     INTEGER,
+				last_completion_state TEXT,
+				last_error            TEXT,
+				next_scheduled_at     INTEGER,
+				consecutive_failures  INTEGER NOT NULL DEFAULT 0,
+				escalation_sent       INTEGER NOT NULL DEFAULT 0,
+				total_runs            INTEGER NOT NULL DEFAULT 0,
+				created_at            INTEGER NOT NULL,
+				updated_at            INTEGER NOT NULL
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 24→25: create scheduler_job_state: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_scheduler_state_next ON scheduler_job_state(next_scheduled_at)`)
+		if err != nil {
+			return fmt.Errorf("migration 24→25: idx_scheduler_state_next: %w", err)
+		}
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS scheduler_job_events (
+				id          INTEGER PRIMARY KEY AUTOINCREMENT,
+				job_id      TEXT    NOT NULL,
+				run_id      TEXT    NOT NULL,
+				event_time  INTEGER NOT NULL,
+				from_state  TEXT,
+				to_state    TEXT    NOT NULL,
+				reason      TEXT,
+				details     TEXT
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 24→25: create scheduler_job_events: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_scheduler_events_job_time ON scheduler_job_events(job_id, event_time)`)
+		if err != nil {
+			return fmt.Errorf("migration 24→25: idx_scheduler_events_job_time: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_scheduler_events_run ON scheduler_job_events(run_id)`)
+		if err != nil {
+			return fmt.Errorf("migration 24→25: idx_scheduler_events_run: %w", err)
 		}
 	}
 
