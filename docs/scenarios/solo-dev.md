@@ -1,3 +1,4 @@
+
 ## Solo Dev with One Agent
 
 This is where most people should start. One machine, one agent, you in control.

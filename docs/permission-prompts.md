@@ -1,3 +1,4 @@
+
 ## What This Does
 
 Your agent hits a permission prompt in the middle of a long run. You're not

@@ -1,3 +1,4 @@
+
 ## Thrum CLI Reference
 
 > **TL;DR:** You only need 8 commands for daily use — they're in the
@@ -118,7 +119,6 @@ Available on all commands:
 | ----------- | ---------------------------------------- | ------- |
 | `--role`    | Agent role (or `THRUM_ROLE` env var)     |         |
 | `--module`  | Agent module (or `THRUM_MODULE` env var) |         |
-| `--repo`    | Repository path                          | `.`     |
 | `--json`    | JSON output for scripting                | `false` |
 | `--quiet`   | Suppress non-essential output            | `false` |
 | `--verbose` | Debug output                             | `false` |
