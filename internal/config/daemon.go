@@ -184,6 +184,89 @@ type DaemonConfig struct {
 	// Scheduler holds A-B1 scheduler-primitive settings consumed by the
 	// daemon-side wiring (canonical §4.4).
 	Scheduler DaemonSchedulerConfig `json:"scheduler"`
+
+	// A-B4 substrate config blocks (v0.11; canonical §4.4).
+
+	// StalledSweep tunes internal.stalled_agent_sweep cadence
+	// (stability knob). Separate from Reminders.DispatchIntervalSeconds
+	// (UX-precision knob) per @architect_substrate decision 2026-05-15;
+	// coupling them would defeat Leon-brainstorm-Q3.3's minute-
+	// resolution Xm/Xh/Xd reminder contract.
+	StalledSweep StalledSweepConfig `json:"stalled_sweep,omitempty"`
+
+	// Reminders tunes internal.reminder_dispatch cadence
+	// (UX-precision knob). Must stay finer-grained than
+	// StalledSweep.IntervalMinutes to honor user-set minute-
+	// resolution reminders.
+	Reminders RemindersConfig `json:"reminders,omitempty"`
+
+	// Sweep configures the daemon-source target_chain for stalled-
+	// agent reminders. Empty AlertChain → fall back to
+	// [@Escalation.SupervisorAgentName] (canonical §4.4 single-
+	// supervisor; the brainstorm cycle-2 #3 two-element fallback
+	// was reduced to single-supervisor in the §4.4 amendment).
+	Sweep SweepChainConfig `json:"sweep,omitempty"`
+
+	// Escalation names the supervisor agent reminders escalate to
+	// when SweepChainConfig.AlertChain is unset (canonical §4.4).
+	Escalation EscalationConfig `json:"escalation,omitempty"`
+}
+
+// StalledSweepConfig tunes the stalled-agent sweep cadence
+// (canonical §4.4; A-B4 Q3.7).
+type StalledSweepConfig struct {
+	// IntervalMinutes is how often the sweep runs. Zero is the
+	// "use default" sentinel (15 minutes via
+	// DaemonConfig.StalledSweepIntervalMinutes).
+	IntervalMinutes int `json:"interval_minutes,omitempty"`
+}
+
+// RemindersConfig tunes the reminder-dispatcher cadence
+// (canonical §4.4; A-B4 plan E4.1 Task 10).
+type RemindersConfig struct {
+	// DispatchIntervalSeconds is how often the dispatcher scans
+	// for due reminders. Zero is the "use default" sentinel
+	// (30 seconds via DaemonConfig.RemindersDispatchIntervalSeconds).
+	DispatchIntervalSeconds int `json:"dispatch_interval_seconds,omitempty"`
+}
+
+// SweepChainConfig overrides the default target_chain for
+// daemon-source reminders (canonical §4.4; A-B4 cycle-2 #3).
+type SweepChainConfig struct {
+	// AlertChain is the explicit delivery chain
+	// (e.g. ["@coordinator_main", "leon@example.com"]). When empty,
+	// sweep falls back to [@Escalation.SupervisorAgentName].
+	AlertChain []string `json:"alert_chain,omitempty"`
+}
+
+// EscalationConfig names the supervisor agent that sweep-emitted
+// reminders escalate to when SweepChainConfig.AlertChain is unset
+// (canonical §4.4).
+type EscalationConfig struct {
+	// SupervisorAgentName is the agent name (with or without leading
+	// @ — the resolver normalizes). Empty → "coordinator" (canonical
+	// default).
+	SupervisorAgentName string `json:"supervisor_agent_name,omitempty"`
+}
+
+// StalledSweepIntervalMinutes returns the effective sweep cadence,
+// clamping zero/negative values to the canonical 15-minute default
+// per canonical §4.4.
+func (c DaemonConfig) StalledSweepIntervalMinutes() int {
+	if c.StalledSweep.IntervalMinutes > 0 {
+		return c.StalledSweep.IntervalMinutes
+	}
+	return 15
+}
+
+// RemindersDispatchIntervalSeconds returns the effective dispatcher
+// cadence, clamping zero/negative to the canonical 30-second default
+// per canonical §4.4.
+func (c DaemonConfig) RemindersDispatchIntervalSeconds() int {
+	if c.Reminders.DispatchIntervalSeconds > 0 {
+		return c.Reminders.DispatchIntervalSeconds
+	}
+	return 30
 }
 
 // DaemonSchedulerConfig holds A-B1 scheduler tuning consumed by daemon-boot

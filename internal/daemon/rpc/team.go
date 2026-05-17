@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/reminders"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/process"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
@@ -81,24 +82,45 @@ type TeamMember struct {
 	// staleness checks on this field because heartbeats are DB-only and do
 	// NOT propagate across peer daemons (thrum-iyrt).
 	IsLocal bool `json:"is_local,omitempty"`
+
+	// Reminders are the open reminder IDs for this agent (target_agent ==
+	// agent_id, state == 'open'). Populated by HandleList when the team
+	// handler has a remindersStore wired; nil/empty otherwise. Capped at
+	// teamReminderCompactCap with a "... +N more" marker — full list
+	// available via 'thrum agent reminder list --target @<name>'.
+	Reminders []string `json:"reminders,omitempty"`
 }
+
+// teamReminderCompactCap is the maximum number of reminder IDs included
+// per agent in a team.list response. Above this the slice's tail becomes
+// a synthetic "... +N more" marker so the response stays bounded under
+// many-reminders fixtures (which would otherwise balloon team.list to
+// arbitrary size).
+const teamReminderCompactCap = 10
 
 // TeamHandler handles team-related RPC methods.
 type TeamHandler struct {
 	state              *state.State
 	thrumDir           string
 	supervisorIdentity *config.IdentityFile // synthesized virtual-supervisor identity; nil in tests
+	remindersStore     reminders.Store      // optional; nil → skip reminder enrichment
 }
 
 // NewTeamHandler creates a new team handler.
 // SupervisorIdentity is the virtual-supervisor identity synthesized at
 // daemon boot; it is wired in here now and consumed by ListAgents in a
 // later task. Passing nil is safe — the injection path short-circuits.
-func NewTeamHandler(state *state.State, thrumDir string, supervisorIdentity *config.IdentityFile) *TeamHandler {
+//
+// remindersStore is the A-B4 substrate Store used to decorate each
+// agent with open-reminder IDs. Pass nil to disable enrichment (used
+// by tests that don't care about reminders + by daemons running pre-
+// A-B4 binaries).
+func NewTeamHandler(state *state.State, thrumDir string, supervisorIdentity *config.IdentityFile, remindersStore reminders.Store) *TeamHandler {
 	return &TeamHandler{
 		state:              state,
 		thrumDir:           thrumDir,
 		supervisorIdentity: supervisorIdentity,
+		remindersStore:     remindersStore,
 	}
 }
 
@@ -220,7 +242,67 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 	if shared != nil && (shared.BroadcastTotal > 0 || len(shared.Groups) > 0) {
 		sharedPtr = shared
 	}
+
+	// Decorate with open-reminder IDs. Runs outside the state lock since
+	// the reminders Store is independent of state.State; nil-safe when
+	// the handler was constructed without a reminders store.
+	members = h.decorateWithReminders(ctx, members)
+
 	return &TeamListResponse{Members: members, SharedMessages: sharedPtr}, nil
+}
+
+// decorateWithReminders attaches the open-reminder IDs to each member.
+// Runs once per HandleList call. Failures on individual agents are
+// logged but don't abort the response — a transient SQL error in the
+// reminders Store shouldn't blank out the entire team listing.
+//
+// Cap at teamReminderCompactCap; over the cap, the slice tail becomes
+// a synthetic "... +N more" marker so response size stays bounded.
+func (h *TeamHandler) decorateWithReminders(ctx context.Context, members []TeamMember) []TeamMember {
+	if h.remindersStore == nil {
+		return members
+	}
+	for i := range members {
+		// Use AgentID as the target_agent key. This matches the
+		// reminders schema: target_agent is the recipient's agent_name
+		// (== AgentID for named agents per identity.GenerateAgentID).
+		rows, err := h.remindersStore.OpenForAgent(ctx, members[i].AgentID)
+		if err != nil {
+			log.Printf("team.list: reminders.OpenForAgent(%s): %v", members[i].AgentID, err)
+			continue
+		}
+		if len(rows) == 0 {
+			continue
+		}
+		ids := make([]string, 0, len(rows))
+		for _, r := range rows {
+			ids = append(ids, r.ID)
+		}
+		members[i].Reminders = capReminderIDs(ids, teamReminderCompactCap)
+	}
+	return members
+}
+
+// capReminderIDs returns ids unchanged when len(ids) <= limit. Above
+// the limit it returns the first (limit-1) IDs plus a synthetic
+// "... +N more" marker so the slice length stays at limit exactly.
+// The marker is a human-facing convenience; consumers parsing this
+// slice should still fall back to a full lookup via
+// `thrum agent reminder list` when they need the complete set.
+//
+// Parameter intentionally named `limit` rather than `cap` so it
+// doesn't shadow the built-in `cap()` function — even though `cap`
+// isn't used inside this body today, the shadow would surprise a
+// future maintainer extending the function.
+func capReminderIDs(ids []string, limit int) []string {
+	if len(ids) <= limit {
+		return ids
+	}
+	out := make([]string, 0, limit)
+	out = append(out, ids[:limit-1]...)
+	more := len(ids) - (limit - 1)
+	out = append(out, fmt.Sprintf("... +%d more", more))
+	return out
 }
 
 // buildTeamListLocked runs the three SQL queries and identity-file enrichment

@@ -20,6 +20,17 @@ import (
 )
 
 // CurrentVersion is the current schema version.
+//
+// Gap 26-27 + 29 is intentional: the v0.11 substrate brainstorm LOCKED the
+// numbering across parallel epics so the migrations don't reshuffle on each
+// merge. As-of 2026-05-17 thrum-agents carries:
+//   - v25 (A-B1 scheduler_job_state + scheduler_job_events) — landed
+//   - v28 (A-B4 reminders unified substrate) — landed
+//   - v30/v31/v32 (D-B1 email_msg_seen + email_outbound_queue + email_peer_rate_state) — landed
+// Reserved slots awaiting downstream cascade:
+//   - v26/v27 (B-B1 agents-ALTER + agent_lifecycle_events — reserved for E6.0)
+//   - v29 (MB-1.S6 scheduler_telemetry — reserved)
+// runMigrations switch handles the gaps cleanly (no-op cases jump version forward).
 const CurrentVersion = 32
 
 // InitDB initializes a new database with the current schema.
@@ -463,6 +474,34 @@ func createTables(tx *sql.Tx) error {
 			outbound_count      INTEGER NOT NULL DEFAULT 0,
 			paused_at           INTEGER
 		)`,
+
+		// Reminders table (v28, A-B4 unified reminder substrate). Single
+		// polymorphic table for time-triggered reminders (agent/user self-set,
+		// daemon-authored staleness pings) and condition-triggered stalled-agent
+		// sweep entries. Polymorphism discriminated by (source, trigger_kind);
+		// validation enforced at mint time in internal/daemon/reminders/.
+		// Authoritative DDL: dev-docs/thrum-agents/substrate-canonical-reference.md §3.5.
+		`CREATE TABLE IF NOT EXISTS reminders (
+			id                  TEXT    PRIMARY KEY,
+			source              TEXT    NOT NULL,
+			source_agent        TEXT,
+			trigger_kind        TEXT    NOT NULL,
+			trigger_at          INTEGER,
+			trigger_meta        TEXT,
+			target_agent        TEXT,
+			target_chain        TEXT,
+			body                TEXT,
+			raised_at           INTEGER NOT NULL,
+			next_reminder_at    INTEGER,
+			last_fired_at       INTEGER,
+			state               TEXT    NOT NULL,
+			pane_snapshot       TEXT,
+			defer_history       TEXT    NOT NULL DEFAULT '[]',
+			cleared_at          INTEGER,
+			cancelled_at        INTEGER,
+			created_at          INTEGER NOT NULL,
+			updated_at          INTEGER NOT NULL
+		)`,
 	}
 
 	for _, sql := range tables {
@@ -552,6 +591,15 @@ func createIndexes(tx *sql.Tx) error {
 		"CREATE INDEX IF NOT EXISTS idx_email_msg_seen_proc ON email_msg_seen(processed_at)",
 		"CREATE INDEX IF NOT EXISTS idx_email_queue_next ON email_outbound_queue(next_retry_at, status)",
 		"CREATE INDEX IF NOT EXISTS idx_peer_rate_paused ON email_peer_rate_state(paused_at) WHERE paused_at IS NOT NULL",
+
+		// Reminders indexes (v28, A-B4). Mirrors canonical §3.5. Partial indexes
+		// (WHERE state='open') keep dispatch + per-target lookups O(open-set)
+		// rather than O(total-reminders); the (source, trigger_kind) index
+		// accelerates sweep observability queries.
+		"CREATE INDEX IF NOT EXISTS idx_reminders_next ON reminders(next_reminder_at) WHERE state = 'open'",
+		"CREATE INDEX IF NOT EXISTS idx_reminders_state ON reminders(state)",
+		"CREATE INDEX IF NOT EXISTS idx_reminders_target ON reminders(target_agent) WHERE state = 'open'",
+		"CREATE INDEX IF NOT EXISTS idx_reminders_source_kind ON reminders(source, trigger_kind)",
 	}
 
 	for _, sql := range indexes {
@@ -1254,11 +1302,62 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		}
 	}
 
-	// Migrations 26-29 are reserved for A-B1 follow-on work + A-B4 +
-	// MB-1.S6 telemetry per canonical-ref §3.1. They are intentionally
-	// absent from this file — A-B1 shipped only v25 in its initial
-	// landing, and the v26-v29 versions are kept reserved so D-B1's
-	// v30/31/32 numbering matches the canonical-ref + plan.
+	// Migration from version 24 to 28: A-B4 unified reminder substrate.
+	// Authoritative DDL: dev-docs/thrum-agents/substrate-canonical-reference.md §3.5.
+	// Single polymorphic table carries both time-triggered reminders (agent/user
+	// self-set, daemon-authored staleness pings) and condition-triggered
+	// stalled-agent sweep entries. Polymorphism discriminated by (source,
+	// trigger_kind); validation enforced at mint time in
+	// internal/daemon/reminders/validator.go.
+	//
+	// Version numbering is LOCKED per the v0.11 substrate plan: A-B1 owns
+	// 25 (landed); B-B1 owns 26/27 (reserved E6.0); A-B4 owns 28 (landed);
+	// MB-1.S6 owns 29 (reserved); D-B1 owns 30/31/32 (landed). runMigrations
+	// handles gapped sequences naturally — missing v26/v27/v29 branches no-op.
+	if startVersion < 28 && endVersion >= 28 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS reminders (
+				id                  TEXT    PRIMARY KEY,
+				source              TEXT    NOT NULL,
+				source_agent        TEXT,
+				trigger_kind        TEXT    NOT NULL,
+				trigger_at          INTEGER,
+				trigger_meta        TEXT,
+				target_agent        TEXT,
+				target_chain        TEXT,
+				body                TEXT,
+				raised_at           INTEGER NOT NULL,
+				next_reminder_at    INTEGER,
+				last_fired_at       INTEGER,
+				state               TEXT    NOT NULL,
+				pane_snapshot       TEXT,
+				defer_history       TEXT    NOT NULL DEFAULT '[]',
+				cleared_at          INTEGER,
+				cancelled_at        INTEGER,
+				created_at          INTEGER NOT NULL,
+				updated_at          INTEGER NOT NULL
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 24→28: create reminders table: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_reminders_next ON reminders(next_reminder_at) WHERE state = 'open'`)
+		if err != nil {
+			return fmt.Errorf("migration 24→28: create idx_reminders_next: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_reminders_state ON reminders(state)`)
+		if err != nil {
+			return fmt.Errorf("migration 24→28: create idx_reminders_state: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_reminders_target ON reminders(target_agent) WHERE state = 'open'`)
+		if err != nil {
+			return fmt.Errorf("migration 24→28: create idx_reminders_target: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_reminders_source_kind ON reminders(source, trigger_kind)`)
+		if err != nil {
+			return fmt.Errorf("migration 24→28: create idx_reminders_source_kind: %w", err)
+		}
+	}
 
 	// Migration from version 29 to 30: email_msg_seen (D-B1). The
 	// startVersion < 30 guard covers any jump from v25 to v32 in one

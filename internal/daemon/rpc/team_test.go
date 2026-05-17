@@ -30,7 +30,7 @@ func TestTeamHandleList(t *testing.T) {
 	ctx := context.Background()
 	agentHandler := NewAgentHandler(s)
 	sessionHandler := NewSessionHandler(s)
-	teamHandler := NewTeamHandler(s, "", nil)
+	teamHandler := NewTeamHandler(s, "", nil, nil)
 
 	// Register two agents
 	reg1 := RegisterRequest{Role: "implementer", Module: "auth"}
@@ -214,7 +214,7 @@ func TestTeamHandleList_EmptyDB(t *testing.T) {
 	}
 	defer func() { _ = s.Close() }()
 
-	teamHandler := NewTeamHandler(s, "", nil)
+	teamHandler := NewTeamHandler(s, "", nil, nil)
 	req := TeamListRequest{}
 	reqJSON, _ := json.Marshal(req)
 	resp, err := teamHandler.HandleList(context.Background(), reqJSON)
@@ -263,7 +263,7 @@ func TestTeamList_SelfHealSkipsLiveFilePID(t *testing.T) {
 	ctx := context.Background()
 	agentHandler := NewAgentHandler(s)
 	sessionHandler := NewSessionHandler(s)
-	teamHandler := NewTeamHandler(s, thrumDir, nil)
+	teamHandler := NewTeamHandler(s, thrumDir, nil, nil)
 
 	// Register an agent with a DEAD PID (simulating legacy/stale DB state).
 	// PID 999999 is nearly guaranteed to not be running on a developer box.
@@ -389,7 +389,7 @@ func TestTeamList_HidesReservedByDefault(t *testing.T) {
 		t.Fatalf("save normal identity: %v", err)
 	}
 
-	handler := NewTeamHandler(s, thrumDir, nil)
+	handler := NewTeamHandler(s, thrumDir, nil, nil)
 	ctx := context.Background()
 
 	reqJSON, _ := json.Marshal(TeamListRequest{IncludeOffline: true})
@@ -435,7 +435,7 @@ func TestTeamList_SystemFlagShowsReserved(t *testing.T) {
 		t.Fatalf("save reserved identity: %v", err)
 	}
 
-	handler := NewTeamHandler(s, thrumDir, nil)
+	handler := NewTeamHandler(s, thrumDir, nil, nil)
 	ctx := context.Background()
 
 	reqJSON, _ := json.Marshal(TeamListRequest{
@@ -519,7 +519,7 @@ func TestTeamList_SystemFlagMarksExistingReserved(t *testing.T) {
 		t.Fatalf("save identity: %v", err)
 	}
 
-	handler := NewTeamHandler(s, thrumDir, nil)
+	handler := NewTeamHandler(s, thrumDir, nil, nil)
 
 	// Default: should NOT include the reserved agent even though
 	// it has a live agents-table row.
@@ -575,7 +575,7 @@ func TestHandleList_InjectsSupervisorWhenIncludeSystemTrue(t *testing.T) {
 		},
 		Reserved: true,
 	}
-	h := NewTeamHandler(s, "", supervisorIdentity)
+	h := NewTeamHandler(s, "", supervisorIdentity, nil)
 
 	reqJSON, _ := json.Marshal(TeamListRequest{IncludeSystem: true})
 	rawResp, err := h.HandleList(context.Background(), reqJSON)
@@ -632,7 +632,7 @@ func TestHandleList_HidesSupervisorWhenIncludeSystemFalse(t *testing.T) {
 		},
 		Reserved: true,
 	}
-	h := NewTeamHandler(s, "", supervisorIdentity)
+	h := NewTeamHandler(s, "", supervisorIdentity, nil)
 
 	reqJSON, _ := json.Marshal(TeamListRequest{IncludeSystem: false})
 	rawResp, err := h.HandleList(context.Background(), reqJSON)
@@ -676,7 +676,7 @@ func TestHandleList_WorktreeFallbackFromSessionRefs(t *testing.T) {
 	ctx := context.Background()
 	agentHandler := NewAgentHandler(s)
 	sessionHandler := NewSessionHandler(s)
-	teamHandler := NewTeamHandler(s, "", nil)
+	teamHandler := NewTeamHandler(s, "", nil, nil)
 
 	const wantWorktree = "/tmp/test-worktree-fallback"
 
@@ -766,7 +766,7 @@ func TestHandleList_WorktreeAgentWorkContextsWins(t *testing.T) {
 	ctx := context.Background()
 	agentHandler := NewAgentHandler(s)
 	sessionHandler := NewSessionHandler(s)
-	teamHandler := NewTeamHandler(s, "", nil)
+	teamHandler := NewTeamHandler(s, "", nil, nil)
 
 	const refWorktree = "/tmp/from-session-ref"
 	const authoritative = "/tmp/from-work-context"
@@ -861,7 +861,7 @@ func TestTeamList_IsLocalPopulated(t *testing.T) {
 		t.Fatalf("insert agents: %v", err)
 	}
 
-	handler := NewTeamHandler(s, "", nil)
+	handler := NewTeamHandler(s, "", nil, nil)
 	reqJSON, _ := json.Marshal(TeamListRequest{IncludeOffline: true})
 	raw, err := handler.HandleList(ctx, reqJSON)
 	if err != nil {

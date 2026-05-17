@@ -1051,7 +1051,7 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 
 func TestSchema_V32_CurrentVersion(t *testing.T) {
 	if schema.CurrentVersion != 32 {
-		t.Errorf("CurrentVersion = %d, want 32 (bumped from 25 by D-B1.1 email migrations 30/31/32; migrations 26-29 reserved for A-B1/A-B4/MB-1.S6 follow-ups per canonical-ref §3.1)", schema.CurrentVersion)
+		t.Errorf("CurrentVersion = %d, want 32 (A-B1 v25 + A-B4 v28 + D-B1 v30/31/32; v26/v27/v29 reserved for B-B1/MB-1.S6 per canonical-ref §3.1)", schema.CurrentVersion)
 	}
 }
 
@@ -1543,6 +1543,100 @@ func TestMigrate_V20_AgentWithoutRegisterEvent_KeepsEmptyOriginDaemon(t *testing
 	}
 }
 
+// TestMigration_RemindersTable verifies the v28 reminders substrate creates
+// the locked column set per substrate-canonical-reference.md §3.5. Plan
+// thrum-6qmf.3.13 Step 1.
+func TestMigration_RemindersTable(t *testing.T) {
+	db := setupTestDB(t)
+
+	var version int
+	if err := db.QueryRow("SELECT version FROM schema_version").Scan(&version); err != nil {
+		t.Fatalf("read schema_version: %v", err)
+	}
+	if version != schema.CurrentVersion {
+		t.Fatalf("schema_version = %d, want CurrentVersion = %d", version, schema.CurrentVersion)
+	}
+
+	got := pragmaTableInfo(t, db, "reminders")
+
+	expected := []string{
+		"id", "source", "source_agent", "trigger_kind", "trigger_at",
+		"trigger_meta", "target_agent", "target_chain", "body",
+		"raised_at", "next_reminder_at", "last_fired_at", "state",
+		"pane_snapshot", "defer_history", "cleared_at", "cancelled_at",
+		"created_at", "updated_at",
+	}
+	for _, col := range expected {
+		if _, ok := got[col]; !ok {
+			t.Errorf("missing reminders column: %s", col)
+		}
+	}
+	if len(got) != len(expected) {
+		t.Errorf("reminders column count = %d, want %d (got=%v)", len(got), len(expected), got)
+	}
+
+	// Verify all four indexes exist (matches canonical §3.5 index set).
+	for _, idx := range []string{
+		"idx_reminders_next",
+		"idx_reminders_state",
+		"idx_reminders_target",
+		"idx_reminders_source_kind",
+	} {
+		var name string
+		err := db.QueryRow(
+			"SELECT name FROM sqlite_master WHERE type='index' AND name=?", idx,
+		).Scan(&name)
+		if err == sql.ErrNoRows {
+			t.Errorf("missing reminders index: %s", idx)
+		} else if err != nil {
+			t.Fatalf("query index %s: %v", idx, err)
+		}
+	}
+}
+
+// TestMigration_RemindersFreshInstallEquivalentToUpgrade enforces canonical
+// §3.11 Guard 1: fresh-install (InitDB → createTables) and incremental
+// upgrade (Migrate from a pre-v28 version) produce identical reminders
+// schema. Uses the shared assertSameTable helper plus an explicit index
+// SQL comparison since partial-index WHERE clauses must be byte-identical
+// (the planner picks different access paths otherwise).
+func TestMigration_RemindersFreshInstallEquivalentToUpgrade(t *testing.T) {
+	fresh := freshInstallDB(t)
+	upgraded := upgradedFromDB(t, 24)
+	assertSameTable(t, fresh, upgraded, "reminders")
+
+	for _, idx := range []string{
+		"idx_reminders_next",
+		"idx_reminders_state",
+		"idx_reminders_target",
+		"idx_reminders_source_kind",
+	} {
+		freshSQL := indexSQL(t, fresh, idx)
+		upSQL := indexSQL(t, upgraded, idx)
+		if freshSQL != upSQL {
+			t.Errorf("index %s SQL diverges:\n fresh:    %s\n upgraded: %s", idx, freshSQL, upSQL)
+		}
+	}
+}
+
+// indexSQL returns the CREATE INDEX SQL string for the given index name,
+// or "" if absent. Reminders has partial indexes (WHERE state='open') so
+// byte-level SQL comparison is the only way to catch WHERE-clause drift.
+func indexSQL(t *testing.T, db *sql.DB, name string) string {
+	t.Helper()
+	var sqlText sql.NullString
+	err := db.QueryRow(
+		"SELECT sql FROM sqlite_master WHERE type='index' AND name=?", name,
+	).Scan(&sqlText)
+	if err != nil {
+		t.Fatalf("indexSQL %s: %v", name, err)
+	}
+	if !sqlText.Valid {
+		return ""
+	}
+	return sqlText.String
+}
+
 // colInfo mirrors one row of PRAGMA table_info for comparison across paths.
 type colInfo struct {
 	cid     int
@@ -1753,6 +1847,12 @@ func TestMigration_SchedulerJobState_NextScheduledAtNullable(t *testing.T) {
 // migration block. v24 is the canonical pre-scheduler version per §3.1.
 func TestMigration_SchedulerJobState_FreshInstallEquivalentToUpgrade(t *testing.T) {
 	fresh := freshInstallDB(t)
+	// Start at v24 (not CurrentVersion-1) so the migration path traverses
+	// the v25 scheduler branch. With the v25-v32 substrate-gap protocol,
+	// CurrentVersion-1 may not trigger any migration that creates the
+	// scheduler tables — A-B4's v28 + D-B1's v30/31/32 don't, and B-B1's
+	// v26/v27 won't either when they merge. v24 is the canonical
+	// pre-scheduler version per §3.1.
 	upgraded := upgradedFromDB(t, 24)
 	assertSameTable(t, fresh, upgraded, "scheduler_job_state")
 	assertSameTable(t, fresh, upgraded, "scheduler_job_events")

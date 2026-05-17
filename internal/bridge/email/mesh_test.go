@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -741,7 +742,10 @@ func TestMesh_ForwardBindingRuleOnlyEmailPeersMutated(t *testing.T) {
 	}
 
 	// All other top-level fields must be unchanged.
-	if after.Daemon != before.Daemon {
+	// Use reflect.DeepEqual since DaemonConfig contains slices (e.g.
+	// SweepChainConfig.AlertChain added by A-B4) and is no longer
+	// directly comparable with !=.
+	if !reflect.DeepEqual(after.Daemon, before.Daemon) {
 		t.Errorf("Daemon changed: %+v → %+v", before.Daemon, after.Daemon)
 	}
 	if after.Email.Enabled != before.Email.Enabled {
