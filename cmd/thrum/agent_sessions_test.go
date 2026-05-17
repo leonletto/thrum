@@ -409,6 +409,139 @@ func TestAgentSessionsList_AllAndExplicitAgent_Rejected(t *testing.T) {
 	}
 }
 
+// === listAllAgents tests (Task 12) ===
+
+// setupTwoAgents writes identity files and one session apiece for
+// two agents under thrumRoot. Returns the thrumRoot for caller use.
+func setupTwoAgents(t *testing.T) string {
+	t.Helper()
+	thrumRoot := filepath.Join(t.TempDir(), ".thrum")
+	if err := os.MkdirAll(thrumRoot, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	writeTestIdentity(t, thrumRoot, "agent-a")
+	writeTestIdentity(t, thrumRoot, "agent-b")
+	// agent-a's session is OLDER, agent-b's session is NEWER —
+	// for the JSON global-sort assertion.
+	writeTestSnapshot(t,
+		filepath.Join(thrumRoot, "agents", "agent-a", "sessions", "older-restart.md"),
+		"2026-05-16T10:00:00.000Z", "external", "A1 body.")
+	writeTestSnapshot(t,
+		filepath.Join(thrumRoot, "agents", "agent-b", "sessions", "newer-restart.md"),
+		"2026-05-17T10:00:00.000Z", "external", "B1 body.")
+	return thrumRoot
+}
+
+func TestListAllAgentsFromThrumRoot_NoIdentities_PrintsEmpty(t *testing.T) {
+	thrumRoot := filepath.Join(t.TempDir(), ".thrum")
+	if err := os.MkdirAll(thrumRoot, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	out := renderToString(t, func(cmd *cobra.Command) error {
+		return listAllAgentsFromThrumRoot(cmd, thrumRoot, false, false)
+	})
+	if !strings.Contains(out, "No agents registered.") {
+		t.Errorf("expected empty-state message, got %q", out)
+	}
+}
+
+func TestListAllAgentsFromThrumRoot_IdentitiesButNoSessions_PrintsEmpty(t *testing.T) {
+	thrumRoot := filepath.Join(t.TempDir(), ".thrum")
+	if err := os.MkdirAll(thrumRoot, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	writeTestIdentity(t, thrumRoot, "alpha")
+	writeTestIdentity(t, thrumRoot, "beta")
+
+	out := renderToString(t, func(cmd *cobra.Command) error {
+		return listAllAgentsFromThrumRoot(cmd, thrumRoot, false, false)
+	})
+	if !strings.Contains(out, "No agents with archived sessions.") {
+		t.Errorf("expected 'no archived sessions' message, got %q", out)
+	}
+}
+
+func TestListAllAgentsFromThrumRoot_Default_GroupsByAgent(t *testing.T) {
+	thrumRoot := setupTwoAgents(t)
+
+	out := renderToString(t, func(cmd *cobra.Command) error {
+		return listAllAgentsFromThrumRoot(cmd, thrumRoot, false, false)
+	})
+
+	// Both agents' header lines should be present.
+	if !strings.Contains(out, "Sessions for agent-a (1 total") {
+		t.Errorf("missing agent-a header: %q", out)
+	}
+	if !strings.Contains(out, "Sessions for agent-b (1 total") {
+		t.Errorf("missing agent-b header: %q", out)
+	}
+	// Both summaries should be present.
+	if !strings.Contains(out, "A1 body.") {
+		t.Errorf("missing A1 body: %q", out)
+	}
+	if !strings.Contains(out, "B1 body.") {
+		t.Errorf("missing B1 body: %q", out)
+	}
+	// Stable ordering: agent-a renders before agent-b lexically.
+	aIdx := strings.Index(out, "Sessions for agent-a")
+	bIdx := strings.Index(out, "Sessions for agent-b")
+	if aIdx == -1 || bIdx == -1 || aIdx > bIdx {
+		t.Errorf("ordering broken: agent-a at %d, agent-b at %d (want a < b)", aIdx, bIdx)
+	}
+}
+
+func TestListAllAgentsFromThrumRoot_Verbose_PerAgentVerboseLayout(t *testing.T) {
+	thrumRoot := setupTwoAgents(t)
+
+	out := renderToString(t, func(cmd *cobra.Command) error {
+		return listAllAgentsFromThrumRoot(cmd, thrumRoot, true, false)
+	})
+	// Verbose's [1] numbered-stanza format should appear under each
+	// agent block.
+	if strings.Count(out, "[1]") != 2 {
+		t.Errorf("expected 2 [1] stanzas (one per agent), got %d: %q", strings.Count(out, "[1]"), out)
+	}
+	// Verbose's "Big picture:" header appears under each.
+	if strings.Count(out, "Big picture:") != 2 {
+		t.Errorf("expected 2 'Big picture:' headers, got %d: %q", strings.Count(out, "Big picture:"), out)
+	}
+}
+
+// TestListAllAgentsFromThrumRoot_JSON_GlobalSort verifies the JSON
+// flow ignores per-agent grouping and emits a single stream
+// descending by timestamp. agent-b's 2026-05-17 record should
+// come BEFORE agent-a's 2026-05-16 record despite agent-a being
+// lexically first.
+func TestListAllAgentsFromThrumRoot_JSON_GlobalSort(t *testing.T) {
+	thrumRoot := setupTwoAgents(t)
+
+	out := renderToString(t, func(cmd *cobra.Command) error {
+		return listAllAgentsFromThrumRoot(cmd, thrumRoot, false, true)
+	})
+
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 JSON records, got %d: %q", len(lines), out)
+	}
+
+	var first, second map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &first); err != nil {
+		t.Fatalf("first line not JSON: %v", err)
+	}
+	if err := json.Unmarshal([]byte(lines[1]), &second); err != nil {
+		t.Fatalf("second line not JSON: %v", err)
+	}
+
+	// First record must be the NEWER one (agent-b's 2026-05-17).
+	if first["agent_id"] != "agent-b" {
+		t.Errorf("--all --json not globally sorted: first agent_id = %v (want agent-b)", first["agent_id"])
+	}
+	if second["agent_id"] != "agent-a" {
+		t.Errorf("second record agent_id = %v (want agent-a)", second["agent_id"])
+	}
+}
+
 // === humanSize tests ===
 
 func TestHumanSize_Thresholds(t *testing.T) {

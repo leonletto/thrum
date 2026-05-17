@@ -278,12 +278,103 @@ func renderJSON(cmd *cobra.Command, sessions []SessionEntry) error {
 	return nil
 }
 
-// listAllAgents is the Task 12 surface — same stub pattern as the
-// renderers above. Task 12 walks every identity file in the
-// thrum-root, loads each agent's sessions, and renders a
-// global-sort timeline.
+// listAllAgents walks every identity file in the cwd-anchored
+// thrum-root and aggregates each agent's archived sessions. JSON
+// mode emits a single global newline-delimited stream sorted
+// descending by timestamp (so cross-agent timeline analysis is
+// trivial). Default + --verbose modes group by agent with a
+// blank-line separator between blocks.
+//
+// --verbose --json is rejected at the runAgentSessionsList layer
+// before this is invoked. --all + explicit agent-id is also
+// rejected at runAgentSessionsList.
 func listAllAgents(cmd *cobra.Command, verbose, asJSON bool) error {
-	return fmt.Errorf("--all not yet implemented (Task 12)")
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("getwd: %w", err)
+	}
+	thrumRoot, err := paths.FindThrumRoot(cwd)
+	if err != nil {
+		return fmt.Errorf("find thrum-root: %w", err)
+	}
+	return listAllAgentsFromThrumRoot(cmd, thrumRoot, verbose, asJSON)
+}
+
+// listAllAgentsFromThrumRoot is the testable core of listAllAgents
+// — takes the thrum-root explicitly instead of resolving from cwd.
+// Test fixtures call this directly.
+func listAllAgentsFromThrumRoot(cmd *cobra.Command, thrumRoot string, verbose, asJSON bool) error {
+	idDir := filepath.Join(thrumRoot, "identities")
+	entries, err := os.ReadDir(idDir)
+	if errors.Is(err, os.ErrNotExist) {
+		fmt.Fprintln(cmd.OutOrStdout(), "No agents registered.")
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read identities: %w", err)
+	}
+
+	type agentBlock struct {
+		AgentID  string
+		Sessions []SessionEntry
+	}
+	var blocks []agentBlock
+	var allSessions []SessionEntry // for global JSON sort
+
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		agentID := strings.TrimSuffix(e.Name(), ".json")
+		sessions, err := loadSessionsFromThrumRoot(thrumRoot, agentID)
+		if err != nil {
+			// Skip agents we can't read — corrupt identity files,
+			// transient FS errors. Filing under best-effort: a
+			// single bad agent shouldn't blank out the whole
+			// `--all` list.
+			continue
+		}
+		if len(sessions) == 0 {
+			continue
+		}
+		blocks = append(blocks, agentBlock{AgentID: agentID, Sessions: sessions})
+		allSessions = append(allSessions, sessions...)
+	}
+
+	if asJSON {
+		sort.Slice(allSessions, func(i, j int) bool {
+			return allSessions[i].Timestamp.After(allSessions[j].Timestamp)
+		})
+		return renderJSON(cmd, allSessions)
+	}
+
+	if len(blocks) == 0 {
+		fmt.Fprintln(cmd.OutOrStdout(), "No agents with archived sessions.")
+		return nil
+	}
+
+	// Stable ordering of blocks by agent ID — keeps test snapshots
+	// reproducible and the diff-noise across runs minimal.
+	sort.Slice(blocks, func(i, j int) bool {
+		return blocks[i].AgentID < blocks[j].AgentID
+	})
+
+	out := cmd.OutOrStdout()
+	for i, block := range blocks {
+		if i > 0 {
+			fmt.Fprintln(out)
+		}
+		if verbose {
+			if err := renderVerbose(cmd, block.AgentID, block.Sessions); err != nil {
+				return err
+			}
+		} else {
+			if err := renderDefault(cmd, block.AgentID, block.Sessions); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // loadSessionsForAgent walks the cwd-anchored thrum-root, locates
