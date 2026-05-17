@@ -1,11 +1,10 @@
 ---
 name: project-setup
-description:
-  "Use when converting a plan file (from writing-plans skill) into beads epics,
-  tasks, implementation prompts, and worktrees — before any coding begins"
+description: "Use when converting a plan file (from writing-plans skill) into beads epics, tasks, implementation prompts, and worktrees — before any coding begins"
 # source: claude-plugin/skills/project-setup/SKILL.md
 # generated-by: scripts/sync-skills.sh
 ---
+
 
 ## Project Setup
 
@@ -82,10 +81,14 @@ TodoWrite.
 
 #### Implementation Philosophy Doc
 
-Verify the project has an implementation philosophy doc at the canonical path:
+Verify the project has an implementation philosophy doc at the canonical path.
+In worktrees, `.thrum/` is a redirect file pointing at the project root's real
+`.thrum/` directory — the check must resolve through it:
 
 ```bash
-test -f .thrum/philosophy.md
+PHILOSOPHY_DIR=.thrum
+[ -f .thrum/redirect ] && PHILOSOPHY_DIR="$(cat .thrum/redirect)"
+test -f "$PHILOSOPHY_DIR/philosophy.md"
 ```
 
 If the file does not exist, stop and tell the user:

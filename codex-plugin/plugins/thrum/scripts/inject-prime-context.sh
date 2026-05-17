@@ -11,9 +11,15 @@
 #   1. Identity banner — agent / role / worktree / branch / module
 #   2. Directive — single "auto-loaded, do not re-prime" message.
 #      Always second so it lands inside the preview.
-#   3. Restart-snapshot preamble (existing). Hoisted only when the
+#   3. First-turn ack instruction (thrum-zqw7) — tells the agent to
+#      emit a one-line ack as the first action of its turn. Produces
+#      visible scrollback so humans can distinguish a healthy launch
+#      from a stuck or failed one without probing. Pre-fills agent /
+#      role / module from the captured whoami so only <intent> is
+#      left to the agent.
+#   4. Restart-snapshot preamble (existing). Hoisted only when the
 #      briefing carries a `# Previous Session Context` block.
-#   4. Briefing envelope + full prime output.
+#   5. Briefing envelope + full prime output.
 
 # -e intentionally omitted: external commands use || true guards.
 set -uo pipefail
@@ -115,9 +121,29 @@ append_to DIRECTIVE '> **Do NOT run `$thrum-prime` or `thrum prime` — the full
 append_to DIRECTIVE '> Only invoke them manually if this hook fell through to a degraded "auto-injection failed" notice.'$'\n'
 append_to DIRECTIVE $'\n'
 
-# Emit in canonical order: banner → directive → restart preamble →
-# briefing. Banner + directive always land inside the preview.
+# First-turn ack (thrum-zqw7). Tells the agent to emit one visible
+# plain-text line before any tool calls so tmux pane scrollback shows
+# a clear launch signal. Identity fields are pre-filled from whoami;
+# the agent only fills <intent> from inbox or restart snapshot.
+ACK_INSTRUCTION=""
+if [ -n "$AGENT_MODULE" ] && [ "$AGENT_MODULE" != "$AGENT_ROLE" ]; then
+  _ACK_LINE="@${AGENT_ID} primed (${AGENT_ROLE:-unknown}/${AGENT_MODULE}). <intent>. Standing by."
+else
+  _ACK_LINE="@${AGENT_ID} primed (${AGENT_ROLE:-unknown}). <intent>. Standing by."
+fi
+append_to ACK_INSTRUCTION '> 📣 **First turn: print a one-line ack to the user.**'$'\n'
+append_to ACK_INSTRUCTION '>'$'\n'
+append_to ACK_INSTRUCTION '> Before reading the briefing or running any tools, print this single plain-text line — substitute `<intent>` with a brief sentence drawn from your inbox or restart snapshot:'$'\n'
+append_to ACK_INSTRUCTION '>'$'\n'
+append_to ACK_INSTRUCTION "> \`${_ACK_LINE}\`"$'\n'
+append_to ACK_INSTRUCTION '>'$'\n'
+append_to ACK_INSTRUCTION '> This produces visible scrollback so humans can distinguish a healthy launch from a stuck or failed one without probing.'$'\n'
+append_to ACK_INSTRUCTION $'\n'
+
+# Emit in canonical order: banner → directive → ack → restart preamble →
+# briefing. Banner + directive + ack always land inside the preview.
 printf '%s' "$BANNER"
 printf '%s' "$DIRECTIVE"
+printf '%s' "$ACK_INSTRUCTION"
 printf '%s' "$RESTART_PREAMBLE"
 printf '%s' "$BRIEFING"
