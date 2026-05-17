@@ -231,6 +231,95 @@ func TestMesh_PeerWelcomeUpdatesTrustToFull(t *testing.T) {
 	}
 }
 
+// --- Commit 3: peer.announce ---
+
+func TestMesh_PeerAnnounceVouchAcceptanceAutoNotify(t *testing.T) {
+	configDir, configPath := setupMeshConfig(t)
+	// Default config already uses "auto_with_notify".
+	h, notifier, _ := newTestMeshHandler(t, configDir, configPath)
+	ctx := context.Background()
+	getLogs := captureLogs(t)
+
+	env := PeerProtocolPayload{Handle: "eve", DaemonID: "daemon-eve-bbbb", VouchedBy: "alice"}
+	if err := h.HandlePeerAnnounce(ctx, env, 1); err != nil {
+		t.Fatalf("HandlePeerAnnounce: %v", err)
+	}
+
+	peers := loadPeers(t, configDir)
+	if len(peers) != 1 || peers[0].Handle != "eve" {
+		t.Fatalf("expected peer eve, got: %+v", peers)
+	}
+	if !strings.Contains(getLogs(), "added") {
+		t.Errorf("expected audit log, got: %s", getLogs())
+	}
+	if len(notifier.messages) == 0 {
+		t.Error("expected notify call for auto_with_notify")
+	}
+}
+
+func TestMesh_PeerAnnounceTransitiveAllowed(t *testing.T) {
+	configDir, configPath := setupMeshConfig(t)
+	h, _, _ := newTestMeshHandler(t, configDir, configPath, func(c *MeshConfig) {
+		c.AllowTransitiveVouching = true
+		c.VouchAcceptance = "auto"
+	})
+	ctx := context.Background()
+
+	env := PeerProtocolPayload{Handle: "frank", DaemonID: "daemon-frank-cccc", VouchedBy: "bob"}
+	if err := h.HandlePeerAnnounce(ctx, env, 2); err != nil {
+		t.Fatalf("HandlePeerAnnounce hop=2 transitive=true: %v", err)
+	}
+	if peers := loadPeers(t, configDir); len(peers) != 1 {
+		t.Errorf("expected peer added, got %d peers", len(peers))
+	}
+}
+
+func TestMesh_PeerAnnounceTransitiveDisallowed(t *testing.T) {
+	configDir, configPath := setupMeshConfig(t)
+	h, _, _ := newTestMeshHandler(t, configDir, configPath, func(c *MeshConfig) {
+		c.AllowTransitiveVouching = false
+		c.VouchAcceptance = "auto"
+	})
+	ctx := context.Background()
+	getLogs := captureLogs(t)
+
+	env := PeerProtocolPayload{Handle: "grace", DaemonID: "daemon-grace-dddd", VouchedBy: "carol"}
+	if err := h.HandlePeerAnnounce(ctx, env, 2); err != nil {
+		t.Fatalf("HandlePeerAnnounce hop=2 transitive=false: %v", err)
+	}
+
+	// No peer added.
+	if peers := loadPeers(t, configDir); len(peers) != 0 {
+		t.Errorf("expected drop, got %d peers", len(peers))
+	}
+	if !strings.Contains(getLogs(), "transitive_vouching=false") {
+		t.Errorf("expected transitive drop log, got: %s", getLogs())
+	}
+}
+
+func TestMesh_PeerAnnounceCeilingDrops(t *testing.T) {
+	configDir, configPath := setupMeshConfig(t)
+	h, _, _ := newTestMeshHandler(t, configDir, configPath, func(c *MeshConfig) {
+		c.HopCountCeiling = 3
+		c.VouchAcceptance = "auto"
+	})
+	ctx := context.Background()
+	getLogs := captureLogs(t)
+
+	env := PeerProtocolPayload{Handle: "hank", DaemonID: "daemon-hank-eeee", VouchedBy: "dave"}
+	if err := h.HandlePeerAnnounce(ctx, env, 10); err != nil {
+		t.Fatalf("HandlePeerAnnounce hop=10: %v", err)
+	}
+
+	// No peer added.
+	if peers := loadPeers(t, configDir); len(peers) != 0 {
+		t.Errorf("expected ceiling drop, got %d peers", len(peers))
+	}
+	if !strings.Contains(getLogs(), "ceiling") {
+		t.Errorf("expected ceiling drop log, got: %s", getLogs())
+	}
+}
+
 func TestMesh_PeerPairOperatorTimeoutDrops(t *testing.T) {
 	configDir, configPath := setupMeshConfig(t)
 
