@@ -181,6 +181,10 @@ type DaemonConfig struct {
 	// Scheduler holds A-B1 scheduler-primitive settings consumed by the
 	// daemon-side wiring (canonical §4.4).
 	Scheduler DaemonSchedulerConfig `json:"scheduler"`
+
+	// AgentLifecycle holds B-B1 agent-lifecycle housekeeping settings
+	// consumed by the internal.agent_lifecycle_cleanup daily handler.
+	AgentLifecycle DaemonAgentLifecycleConfig `json:"agent_lifecycle"`
 }
 
 // DaemonSchedulerConfig holds A-B1 scheduler tuning consumed by daemon-boot
@@ -191,6 +195,17 @@ type DaemonSchedulerConfig struct {
 	// EventRetentionDays controls scheduler_job_events pruning cadence
 	// for the internal.scheduler_event_cleanup canonical cleanup job.
 	// Zero (the default) means "use the consumer's default" (7 days).
+	EventRetentionDays int `json:"event_retention_days,omitempty"`
+}
+
+// DaemonAgentLifecycleConfig holds B-B1 agent-lifecycle housekeeping
+// tuning consumed by daemon-boot wiring. Zero-valued by default; the
+// consumer (internal.agent_lifecycle_cleanup handler) clamps zero to 7
+// days per canonical §6.3 + Q-Spec-3.
+type DaemonAgentLifecycleConfig struct {
+	// EventRetentionDays controls agent_lifecycle_events pruning
+	// cadence. Zero (the default) means "use the consumer's default"
+	// (7 days).
 	EventRetentionDays int `json:"event_retention_days,omitempty"`
 }
 
