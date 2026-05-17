@@ -6275,16 +6275,51 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	server.RegisterHandler("message.deleteByAgent", messageHandler.HandleDeleteByAgent)
 	server.RegisterHandler("message.archive", messageHandler.HandleArchive)
 
-	// Skill registration substrate (C-B1, v0.11) — read-only verbs and
-	// the v0.11 stubs landed at E10.2 (list/show/check_status) and E10.3
-	// (check). E10.4 wires promote (with validator + permPkg messenger
-	// for the inbox-fanout). The staleness reminder substrate
-	// (CancelProposalReminder) lands at E10.9 alongside the A-B4
-	// reminders.Store integration; until then h.staleness=nil makes the
-	// cancel-on-promote a no-op (logged), which is harmless — the
-	// reminder fires once and the operator dismisses it.
+	// Skill registration substrate (C-B1, v0.11). Constructs the full
+	// substrate (Worker, Staleness, Watcher) and re-passes the live
+	// instances to the SkillHandler so the C-B1 surface is INERT NO
+	// MORE — promote events fan to worktree mirrors, proposed-skills
+	// changes trigger staleness reminders + coordinator notifications,
+	// cancel-on-promote retracts the reminder. Worker + Watcher run
+	// for the daemon lifetime; their Stop calls are deferred so SIGTERM
+	// triggers clean shutdown.
+	//
+	// reminders.Store integration (the prerequisite that was missing at
+	// E10.9-commit time) landed at A-B4; this is the wiring that flips
+	// the substrate from "constructed but dead-code" to live.
 	skillLibrary := skills.NewLibrary(st.RepoPath())
-	skillHandler := rpc.NewSkillHandler(skillLibrary, skills.NewValidator(), permPkg, nil, nil, st.RawDB())
+	skillSubstrate, err := buildSkillSubstrate(ctx, skillSubstrateOpts{
+		RepoPath:       st.RepoPath(),
+		ThrumDir:       thrumDir,
+		Library:        skillLibrary,
+		Permission:     permPkg,
+		RemindersStore: remindersStore,
+		DB:             st.RawDB(),
+		PendingAfter:   48 * time.Hour,
+	})
+	if err != nil {
+		return fmt.Errorf("build skill substrate: %w", err)
+	}
+	defer func() {
+		// Shut down in reverse order: Watcher first (stops emitting new
+		// events into the Worker), then Worker (drains in-flight applies
+		// up to StopTimeout).
+		if skillSubstrate.Watcher != nil {
+			_ = skillSubstrate.Watcher.Stop()
+		}
+		if skillSubstrate.Worker != nil {
+			_ = skillSubstrate.Worker.Stop()
+		}
+	}()
+
+	skillHandler := rpc.NewSkillHandler(
+		skillLibrary,
+		skills.NewValidator(),
+		permPkg,
+		skillSubstrate.Staleness,
+		skillSubstrate.Worker,
+		st.RawDB(),
+	)
 	server.RegisterHandler("skill.list", skillHandler.HandleList)
 	server.RegisterHandler("skill.show", skillHandler.HandleShow)
 	server.RegisterHandler("skill.check", skillHandler.HandleCheck)
