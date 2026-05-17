@@ -293,11 +293,13 @@ func listAllAgents(cmd *cobra.Command, verbose, asJSON bool) error {
 	if err != nil {
 		return fmt.Errorf("getwd: %w", err)
 	}
-	thrumRoot, err := paths.FindThrumRoot(cwd)
+	repoRoot, err := paths.FindThrumRoot(cwd)
 	if err != nil {
 		return fmt.Errorf("find thrum-root: %w", err)
 	}
-	return listAllAgentsFromThrumRoot(cmd, thrumRoot, verbose, asJSON)
+	// Append .thrum/ — see loadSessionsForAgent doc for the
+	// FindThrumRoot return-value convention.
+	return listAllAgentsFromThrumRoot(cmd, filepath.Join(repoRoot, ".thrum"), verbose, asJSON)
 }
 
 // listAllAgentsFromThrumRoot is the testable core of listAllAgents
@@ -394,11 +396,15 @@ func loadSessionsForAgent(agentID string) ([]SessionEntry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("getwd: %w", err)
 	}
-	thrumRoot, err := paths.FindThrumRoot(cwd)
+	// paths.FindThrumRoot returns the REPO root (parent of .thrum/),
+	// not .thrum/ itself. loadSessionsFromThrumRoot's parameter is
+	// the .thrum/ directory — append the suffix here so the testable
+	// core stays parameterized on .thrum/ paths.
+	repoRoot, err := paths.FindThrumRoot(cwd)
 	if err != nil {
 		return nil, fmt.Errorf("find thrum-root: %w", err)
 	}
-	return loadSessionsFromThrumRoot(thrumRoot, agentID)
+	return loadSessionsFromThrumRoot(filepath.Join(repoRoot, ".thrum"), agentID)
 }
 
 // loadSessionsFromThrumRoot is the testable core of
@@ -420,7 +426,7 @@ func loadSessionsFromThrumRoot(thrumRoot, agentID string) ([]SessionEntry, error
 		return nil, nil // folder hasn't been created yet → "none yet"
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read sessions dir: %w", err)
+		return nil, fmt.Errorf("cannot read sessions folder: %w", err)
 	}
 
 	var sessions []SessionEntry

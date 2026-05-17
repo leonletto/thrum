@@ -542,6 +542,115 @@ func TestListAllAgentsFromThrumRoot_JSON_GlobalSort(t *testing.T) {
 	}
 }
 
+// === §6.7 error-case sweep (Task 13) ===
+
+// TestRunAgentSessionsList_NoneYet_MessageAndZeroExit covers spec
+// §6.7 case 1: an agent with no sessions/ folder yet should print
+// "Sessions for X: none yet." to stdout and exit 0 (no error).
+//
+// The runAgentSessionsList path normally calls loadSessionsForAgent
+// which uses cwd-based thrum-root resolution. For unit testing we
+// chdir into a fixture thrumRoot's parent so cwd-walking lands on
+// our test data, then run the command tree end-to-end.
+func TestRunAgentSessionsList_NoneYet_MessageAndZeroExit(t *testing.T) {
+	thrumRoot := filepath.Join(t.TempDir(), ".thrum")
+	if err := os.MkdirAll(thrumRoot, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	writeTestIdentity(t, thrumRoot, "alpha")
+
+	// chdir into the thrumRoot's parent for the duration of the test
+	// — paths.FindThrumRoot(cwd) walks upward looking for .thrum/.
+	cwdParent := filepath.Dir(thrumRoot)
+	origWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origWd) })
+	if err := os.Chdir(cwdParent); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	cmd := agentSessionsCmd()
+	cmd.SetArgs([]string{"list", "alpha"})
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stdout)
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected zero exit, got error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Sessions for alpha: none yet.") {
+		t.Errorf("missing 'none yet' message; got %q", stdout.String())
+	}
+}
+
+// TestRunAgentSessionsList_UnregisteredAgent_StderrExitOne covers
+// spec §6.7 case 2: an unknown agent ID should produce a clear
+// "agent ... not registered" error returned from the command (cobra
+// surfaces this as exit 1 with the message on stderr).
+func TestRunAgentSessionsList_UnregisteredAgent_StderrExitOne(t *testing.T) {
+	thrumRoot := filepath.Join(t.TempDir(), ".thrum")
+	if err := os.MkdirAll(thrumRoot, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// No identity file written — ghost-agent is unregistered.
+
+	cwdParent := filepath.Dir(thrumRoot)
+	origWd, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(origWd) })
+	if err := os.Chdir(cwdParent); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	cmd := agentSessionsCmd()
+	cmd.SetArgs([]string{"list", "ghost-agent"})
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected non-nil error for unregistered agent")
+	}
+	if !strings.Contains(err.Error(), "not registered") {
+		t.Errorf("error message missing 'not registered': %v", err)
+	}
+}
+
+// TestLoadSessionsFromThrumRoot_UnreadableFolder_FriendlyError covers
+// spec §6.7 case 3: a sessions/ folder with no read permission must
+// surface "cannot read sessions folder: ..." rather than a bare
+// errno or stack trace. Skipped if running as root (chmod 0000
+// can't block root access).
+func TestLoadSessionsFromThrumRoot_UnreadableFolder_FriendlyError(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can read 0000-mode folders; skip permission test under root")
+	}
+	thrumRoot := filepath.Join(t.TempDir(), ".thrum")
+	if err := os.MkdirAll(thrumRoot, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	writeTestIdentity(t, thrumRoot, "alpha")
+
+	sessionsDir := filepath.Join(thrumRoot, "agents", "alpha", "sessions")
+	if err := os.MkdirAll(sessionsDir, 0o700); err != nil {
+		t.Fatalf("mkdir sessions: %v", err)
+	}
+	if err := os.Chmod(sessionsDir, 0o000); err != nil {
+		t.Fatalf("chmod 0000: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(sessionsDir, 0o700) }) // restore so t.TempDir cleanup works
+
+	_, err := loadSessionsFromThrumRoot(thrumRoot, "alpha")
+	if err == nil {
+		t.Fatal("expected error for unreadable sessions folder, got nil")
+	}
+	if !strings.Contains(err.Error(), "cannot read sessions folder") {
+		t.Errorf("error message should be operator-friendly: %v", err)
+	}
+}
+
 // === humanSize tests ===
 
 func TestHumanSize_Thresholds(t *testing.T) {
