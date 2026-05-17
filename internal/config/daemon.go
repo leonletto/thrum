@@ -41,6 +41,12 @@ type ThrumConfig struct {
 	// the supervisor sender identity (@supervisor_<ProjectName>). Falls
 	// back to filepath.Base(repo_root) at daemon boot if empty.
 	ProjectName string `json:"project_name,omitempty"`
+
+	// Jobs holds operator-authored periodic job specs per canonical §4.1.
+	// Stored as raw JSON so internal/config stays independent of the
+	// scheduler package — the scheduler's ReloadConfig decodes each entry
+	// into its JobSpec at boot/reload. See A-B1 plan §5947-5950.
+	Jobs map[string]json.RawMessage `json:"jobs,omitempty"`
 }
 
 // IdentityConfig holds the daemon's per-repo identity.
@@ -171,6 +177,21 @@ type DaemonConfig struct {
 	PeerPort        string `json:"peer_port,omitempty"`     // "auto" or specific port number for peer connections
 	SingleAgentMode bool   `json:"single_agent_mode,omitempty"`
 	LogLevel        string `json:"log_level,omitempty"` // "debug", "info", "warn", "error"; default "info"
+
+	// Scheduler holds A-B1 scheduler-primitive settings consumed by the
+	// daemon-side wiring (canonical §4.4).
+	Scheduler DaemonSchedulerConfig `json:"scheduler"`
+}
+
+// DaemonSchedulerConfig holds A-B1 scheduler tuning consumed by daemon-boot
+// wiring. Kept zero-valued by default so omitempty + back-compat both work;
+// the consumer (internal.scheduler_event_cleanup handler) resolves zero to
+// 7 days per A-B1 plan §5966-5969.
+type DaemonSchedulerConfig struct {
+	// EventRetentionDays controls scheduler_job_events pruning cadence
+	// for the internal.scheduler_event_cleanup canonical cleanup job.
+	// Zero (the default) means "use the consumer's default" (7 days).
+	EventRetentionDays int `json:"event_retention_days,omitempty"`
 }
 
 // BackupConfig holds backup-related settings.
