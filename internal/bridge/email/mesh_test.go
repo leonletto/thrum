@@ -198,6 +198,39 @@ func TestMesh_PeerPairOperatorDenyDrops(t *testing.T) {
 	}
 }
 
+// --- Commit 2: peer.welcome ---
+
+func TestMesh_PeerWelcomeUpdatesTrustToFull(t *testing.T) {
+	configDir, configPath := setupMeshConfigWithPeers(t, []config.EmailPeer{
+		{Handle: "dave", DaemonID: "daemon-dave-aaaa", ContactEmail: "dave@example.com", Trust: "limited", VouchedBy: "self"},
+	})
+	h, _, _ := newTestMeshHandler(t, configDir, configPath)
+	ctx := context.Background()
+	getLogs := captureLogs(t)
+
+	env := PeerProtocolPayload{Handle: "dave", DaemonID: "daemon-dave-aaaa"}
+	if err := h.HandlePeerWelcome(ctx, env); err != nil {
+		t.Fatalf("HandlePeerWelcome: %v", err)
+	}
+
+	peers := loadPeers(t, configDir)
+	if len(peers) != 1 || peers[0].Trust != "full" {
+		t.Errorf("expected trust=full, got: %+v", peers)
+	}
+	if !strings.Contains(getLogs(), "trust=full") {
+		t.Errorf("expected audit log with trust=full, got: %s", getLogs())
+	}
+
+	// Idempotent: second call must not fail or duplicate.
+	if err := h.HandlePeerWelcome(ctx, env); err != nil {
+		t.Fatalf("second HandlePeerWelcome: %v", err)
+	}
+	peers = loadPeers(t, configDir)
+	if len(peers) != 1 {
+		t.Errorf("expected still 1 peer after idempotent call, got %d", len(peers))
+	}
+}
+
 func TestMesh_PeerPairOperatorTimeoutDrops(t *testing.T) {
 	configDir, configPath := setupMeshConfig(t)
 
