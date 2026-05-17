@@ -24,10 +24,10 @@ import (
 // address-eligibility check showed up in review as wasted work; hoisting to
 // package-level init ensures the parse happens once.
 var (
-	// cgnatCIDR is the Tailscale CGNAT range (100.64.0.0/10). Addresses in
+	// CgnatCIDR is the Tailscale CGNAT range (100.64.0.0/10). Addresses in
 	// this range belong to the tailscale transport, not "network".
 	cgnatCIDR *net.IPNet
-	// ulaCIDR is the IPv6 unique-local range (fc00::/7). Not a normal LAN
+	// UlaCIDR is the IPv6 unique-local range (fc00::/7). Not a normal LAN
 	// class for direct peer pairing.
 	ulaCIDR *net.IPNet
 )

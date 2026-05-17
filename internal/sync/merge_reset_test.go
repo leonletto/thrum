@@ -72,7 +72,7 @@ func pushFromSecondClone(t *testing.T, bareDir, extraEvent string) {
 
 // pushFromSecondCloneWithMessage is the extended variant that also writes a
 // messages/<msgFile> file with msgContent, exercising the messages/ merge
-// path (merge.go:131-183) through to the reset-at-end step. messageFile
+// path (merge.go:131-183) through to the reset-at-end step. MessageFile
 // and messageContent may be empty to skip the messages write.
 func pushFromSecondCloneWithMessage(t *testing.T, bareDir, extraEvent, messageFile, messageContent string) {
 	t.Helper()

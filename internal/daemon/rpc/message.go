@@ -283,7 +283,7 @@ type WSBroadcaster interface {
 // wsBroadcaster while main.go's startup goroutine writes it. A plain
 // field would be a data race per Go's memory model even though the
 // write-before-read ordering is guaranteed in practice by daemon
-// startup sequencing. atomic.Value is the minimal-overhead fix for
+// startup sequencing. Atomic.Value is the minimal-overhead fix for
 // this set-once-read-many pattern.
 type MessageHandler struct {
 	state            *state.State
@@ -1957,7 +1957,7 @@ func buildDeliveredRecipients(agentIDs []string, deliveredAt string) []MessageRe
 // agents table, which the caller supplies via knownAgents. A ref.value that
 // matches an agent_id produces Type="agent"; otherwise it stays "mention".
 //
-// thrum-qb62 Bug 1: passing a nil knownAgents preserves the pre-fix behavior
+// Thrum-qb62 Bug 1: passing a nil knownAgents preserves the pre-fix behavior
 // (all mentions reported as Type="mention"). Callers that can cheaply reach
 // the agents table should populate the map so the CLI/UI display matches the
 // send-time audience type.

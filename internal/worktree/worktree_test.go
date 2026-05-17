@@ -612,7 +612,7 @@ func TestEnforceOneIdentityWith_AllowCrossWorktreeBypassesCheck(t *testing.T) {
 
 // TestEnforceOneIdentityWith_EmptyCallerCwdSkipsGate — legacy-friendly
 // behavior: callers that never populate CallerCwd (the old
-// EnforceOneIdentity(path, keep...) wrapper passes zero-value opts)
+// EnforceOneIdentity(path, keep...) Wrapper passes zero-value opts)
 // are NOT subjected to the CWD-match gate. This preserves the
 // existing API for tests and any future non-daemon callers.
 func TestEnforceOneIdentityWith_EmptyCallerCwdSkipsGate(t *testing.T) {

@@ -604,7 +604,7 @@ func TestRefreshLocalIdentity_NoSessionResumedWhenAlreadyActive(t *testing.T) {
 //
 // Prior to thrum-ajmd, refresh.go called
 // worktree.EnforceOneIdentity(paths.EffectiveRepoPath(repoPath), ...)
-// which deletes every sibling .json. Because repoPath in refresh is
+// Which deletes every sibling .json. Because repoPath in refresh is
 // the caller's cwd (or THRUM_HOME), a non-coordinator agent running
 // refresh with cwd resolving to the main repo path would silently
 // delete coordinator_main.json — a P0 that broke supervisor routing

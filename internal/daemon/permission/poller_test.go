@@ -470,7 +470,7 @@ func TestStripVolatileLines_UnknownRuntime(t *testing.T) {
 }
 
 // TestPoller_Run_RespectsContextCancellation verifies Run exits
-// promptly when its context is cancelled — required for graceful
+// promptly when its context is canceled — required for graceful
 // daemon shutdown. Without this, a select-ordering bug could deadlock
 // the daemon's shutdown sequence.
 func TestPoller_Run_RespectsContextCancellation(t *testing.T) {

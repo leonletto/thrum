@@ -57,7 +57,7 @@ func NewPeerAddressChangedHandler(fn AddressChangedFunc) *PeerAddressChangedHand
 // error rejects the request with an error that names
 // `thrum peer join --type repair` as the next step for the user.
 //
-// lookupPeer may be nil; in that case the guard receives empty
+// LookupPeer may be nil; in that case the guard receives empty
 // oldAddr/transport (see Handle godoc for the accept-by-default
 // semantics).
 func NewPeerAddressChangedHandlerWithGuard(

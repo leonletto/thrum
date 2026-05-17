@@ -191,16 +191,16 @@ func (m *MessageMap) Len() int { return m.inner.Len() }
 // nudge resolves concurrently mid-sweep and we delete its mapping —
 // is harmless because post-resolve the mapping is no longer needed.
 //
-// permission_nudges.message_id is declared TEXT PRIMARY KEY (see
+// Permission_nudges.message_id is declared TEXT PRIMARY KEY (see
 // internal/schema/schema.go), which in SQLite is implicitly NOT NULL.
 // The NOT EXISTS subquery therefore does not exhibit three-valued-
 // logic NULL-matching surprises. If that schema changes, revisit.
 //
 // # TTL edge cases
 //
-// Callers should pass a positive ttl. ttl == 0 makes cutoff == now,
+// Callers should pass a positive ttl. Ttl == 0 makes cutoff == now,
 // which means any row whose created_at is earlier than "right now"
-// is eligible — effectively delete-all-except-pinned. ttl < 0 makes
+// is eligible — effectively delete-all-except-pinned. Ttl < 0 makes
 // cutoff a future timestamp, so every row with a past created_at is
 // eligible — same practical effect. Neither is a crash, but neither
 // is the intended use; DefaultMapTTL is positive and callers should
@@ -208,7 +208,7 @@ func (m *MessageMap) Len() int { return m.inner.Len() }
 //
 // # Concurrency
 //
-// Callers do not need to serialise this against bridge traffic.
+// Callers do not need to serialize this against bridge traffic.
 // Concurrent Store writes race with the DELETE at the SQL layer; the
 // INSERT OR REPLACE in Store timestamps created_at to the current
 // clock, which by construction is newer than (now - ttl), so a

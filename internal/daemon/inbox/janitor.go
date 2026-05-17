@@ -45,8 +45,8 @@ type SpoolJanitor struct {
 }
 
 // NewSpoolJanitor constructs a janitor with the default hourly cadence.
-// localAgents enumerates agent IDs owned by this daemon's host.
-// readState queries the daemon's message store.
+// LocalAgents enumerates agent IDs owned by this daemon's host.
+// ReadState queries the daemon's message store.
 func NewSpoolJanitor(thrumDir string, localAgents LocalAgentsFunc, readState MessageReadStateFunc) *SpoolJanitor {
 	return &SpoolJanitor{
 		thrumDir:    thrumDir,
