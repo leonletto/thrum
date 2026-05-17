@@ -18,6 +18,11 @@ const (
 	PromptWorktreesRoot
 	PromptRoleTemplates
 	PromptOverwriteRoleTemplate
+	// PromptSkillsGitignoreApply asks the user whether to add
+	// !.thrum/skills/ to an existing .gitignore that already has the
+	// .thrum/ blanket ignore. Fires only on the v0.10.x → v0.11
+	// upgrade path; fresh init writes both lines together.
+	PromptSkillsGitignoreApply
 )
 
 // Prompter abstracts user prompts so wizard tests can inject canned

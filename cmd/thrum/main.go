@@ -421,10 +421,19 @@ Examples:
 					})
 				}
 
+				yesFlag, _ := cmd.Flags().GetBool("yes")
 				opts := cli.InitOptions{
 					RepoPath: flagRepo,
 					Force:    force,
 					Stealth:  stealth,
+					Yes:      yesFlag || nonInteractive,
+				}
+				// Skills bootstrap (E8.3) prompts only on the v0.10.x →
+				// v0.11 upgrade path. Wire a Prompter when stdin is a TTY
+				// and the user hasn't asked for silent mode; otherwise
+				// Yes (or its absence with no Prompter) drives auto-apply.
+				if !opts.Yes && isInteractive() && cli.SkillsBootstrapNeeded(flagRepo) {
+					opts.Prompter = cli.NewScannerPrompter(os.Stdin, os.Stderr)
 				}
 
 				if err := cli.Init(opts); err != nil {
@@ -657,6 +666,7 @@ Examples:
 	// flags below pre-fill answers so the wizard can be partially or fully
 	// scripted. Spec: dev-docs/specs/2026-05-02-thrum-init-wizard-design.md.
 	cmd.Flags().Bool("non-interactive", false, "Force silent (legacy) mode even on a TTY")
+	cmd.Flags().Bool("yes", false, "Auto-confirm any safety prompts (e.g. the v0.10.x → v0.11 .gitignore upgrade)")
 	cmd.Flags().String("name", "", "Pre-fill identity name (skips wizard prompt)")
 	cmd.Flags().String("role", "", "Pre-fill role")
 	cmd.Flags().String("module", "", "Pre-fill module")
