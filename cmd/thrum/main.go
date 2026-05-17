@@ -2748,7 +2748,17 @@ func reminderCmd() *cobra.Command {
 			"From the lookup, take action with one of:\n" +
 			"  --defer <duration>  snooze the next fire (e.g. --defer 30m)\n" +
 			"  --clear             situation resolved; you're done with it\n" +
-			"  --cancel            reminder set in error / no longer wanted",
+			"  --cancel            reminder set in error / no longer wanted\n\n" +
+			"--clear vs --cancel:\n" +
+			"  --clear: situation resolved, recipient saw it and is done with it.\n" +
+			"           Example: stalled-agent alert fired, you investigated,\n" +
+			"           agent is fine — clear it.\n" +
+			"  --cancel: reminder set in error or no longer wanted; abort/withdraw.\n" +
+			"            Example: you set 'thrum agent reminder set --in 1h --body \"ship the website\"'\n" +
+			"            and then shipped early — cancel it.\n\n" +
+			"The schema records the difference (cleared_at vs cancelled_at) so a\n" +
+			"'thrum agent reminder list --state cleared' or '--state cancelled'\n" +
+			"query later shows which is which.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: runReminderLookup,
 	}
@@ -3109,7 +3119,15 @@ the fire message is terse — the body lives in 'thrum agent reminder <id>' look
 
 Examples:
   thrum agent reminder set --in 1h --body "finish release notes"
-  thrum agent reminder set --at 2026-05-20T09:00:00Z --target @impl_billing --body "review billing PR"`,
+  thrum agent reminder set --at 2026-05-20T09:00:00Z --target @impl_billing --body "review billing PR"
+
+After the reminder fires, dismiss it with one of:
+  thrum agent reminder <id> --clear   (resolved; you saw it and acted on it)
+  thrum agent reminder <id> --cancel  (set in error / no longer wanted)
+
+The schema records the difference (cleared_at vs cancelled_at) so a
+'thrum agent reminder list --state cleared' or '--state cancelled' query
+later shows which is which.`,
 		RunE: runReminderSet,
 	}
 	cmd.Flags().String("at", "", "absolute trigger time (RFC3339, e.g. 2026-05-20T09:00:00Z)")

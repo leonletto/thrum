@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/leonletto/thrum/internal/cli"
 )
 
@@ -428,6 +430,34 @@ func TestReminderCmd_MutuallyExclusiveActionFlags(t *testing.T) {
 			err := cmd.Execute()
 			if err == nil {
 				t.Errorf("expected mutual-exclusivity error for %v", combo)
+			}
+		})
+	}
+}
+
+// TestReminderHelp_Distinguishes_ClearVsCancel asserts that both the
+// reminder parent help and `reminder set --help` carry the
+// --clear/--cancel distinction per brainstorm cycle-2 finding #13.
+// Golden assertion: presence-of-snippet rather than byte-equality so
+// minor wording tweaks don't break the test.
+func TestReminderHelp_Distinguishes_ClearVsCancel(t *testing.T) {
+	cases := map[string]*cobra.Command{
+		"reminder parent": reminderCmd(),
+		"reminder set":    reminderSetCmd(),
+	}
+	for name, cmd := range cases {
+		t.Run(name, func(t *testing.T) {
+			help := cmd.Long
+			for _, want := range []string{"--clear", "--cancel"} {
+				if !strings.Contains(help, want) {
+					t.Errorf("%s help missing %q:\n%s", name, want, help)
+				}
+			}
+			// Both Long strings must mention the storage-level
+			// distinction so users learn that --list --state filters
+			// will distinguish them later.
+			if !strings.Contains(help, "cleared_at") || !strings.Contains(help, "cancelled_at") {
+				t.Errorf("%s help should mention cleared_at + cancelled_at distinction:\n%s", name, help)
 			}
 		})
 	}
