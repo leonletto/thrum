@@ -41,8 +41,10 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/nudge"
 	"github.com/leonletto/thrum/internal/daemon/permission"
 	"github.com/leonletto/thrum/internal/daemon/reconcile"
+	"github.com/leonletto/thrum/internal/daemon/reminders"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/identity/guard"
@@ -5716,6 +5718,20 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	server.RegisterHandler("group.list", groupHandler.HandleList)
 	server.RegisterHandler("group.info", groupHandler.HandleInfo)
 	server.RegisterHandler("group.members", groupHandler.HandleMembers)
+
+	// Reminder substrate (A-B4, v0.11). Polymorphic reminders table backs
+	// agent/user time reminders, daemon staleness pings, and condition-
+	// triggered stalled-sweep entries. Dispatcher wiring (registration via
+	// A-B1's scheduler.RegisterInternal) lands in thrum-6qmf.3.27 — these
+	// RPC handlers only need the Store.
+	remindersStore := reminders.NewSQLStore(safedb.New(st.RawDB()))
+	remindersHandler := reminders.NewHandler(remindersStore)
+	server.RegisterHandler("reminder.set", remindersHandler.HandleSet)
+	server.RegisterHandler("reminder.get", remindersHandler.HandleGet)
+	server.RegisterHandler("reminder.list", remindersHandler.HandleList)
+	server.RegisterHandler("reminder.defer", remindersHandler.HandleDefer)
+	server.RegisterHandler("reminder.clear", remindersHandler.HandleClear)
+	server.RegisterHandler("reminder.cancel", remindersHandler.HandleCancel)
 
 	// Message management
 	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, thrumDir, supervisorID, legacySupervisorID)
