@@ -364,6 +364,35 @@ func TestMesh_PeerRebindNewDaemonIdUnderSameHandle(t *testing.T) {
 	}
 }
 
+// --- Commit 5: peer.revoke ---
+
+func TestMesh_PeerRevokeRemovesPeer(t *testing.T) {
+	configDir, configPath := setupMeshConfigWithPeers(t, []config.EmailPeer{
+		{Handle: "judy", DaemonID: "daemon-judy-1111", ContactEmail: "judy@example.com", Trust: "full", VouchedBy: "self"},
+		{Handle: "ken", DaemonID: "daemon-ken-2222", ContactEmail: "ken@example.com", Trust: "full", VouchedBy: "self"},
+	})
+	h, _, _ := newTestMeshHandler(t, configDir, configPath)
+	ctx := context.Background()
+	getLogs := captureLogs(t)
+
+	env := PeerProtocolPayload{Handle: "judy", DaemonID: "daemon-judy-1111"}
+	if err := h.HandlePeerRevoke(ctx, env); err != nil {
+		t.Fatalf("HandlePeerRevoke: %v", err)
+	}
+
+	peers := loadPeers(t, configDir)
+	if len(peers) != 1 || peers[0].Handle != "ken" {
+		t.Errorf("expected only ken to remain, got: %+v", peers)
+	}
+	if !strings.Contains(getLogs(), "removed peer judy") {
+		t.Errorf("expected audit log, got: %s", getLogs())
+	}
+	// Gossip stub log emitted.
+	if !strings.Contains(getLogs(), "would gossip peer.revoke") {
+		t.Errorf("expected gossip stub log, got: %s", getLogs())
+	}
+}
+
 func TestMesh_PeerPairOperatorTimeoutDrops(t *testing.T) {
 	configDir, configPath := setupMeshConfig(t)
 
