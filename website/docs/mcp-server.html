@@ -91,7 +91,7 @@ instantly when a message arrives.</p>
 cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <h3>Startup Sequence</h3>
 <ol>
-<li>Resolve repo path (respects <code>--repo</code> flag, defaults to <code>.</code>)</li>
+<li>Resolve repo path (defaults to <code>.</code>)</li>
 <li>If <code>--agent-id</code> is provided, set <code>THRUM_NAME</code> env var before config load</li>
 <li>Verify daemon is running (connect to Unix socket, call <code>health</code> RPC)</li>
 <li>Load agent identity from <code>.thrum/identities/{name}.json</code> via
@@ -155,11 +155,6 @@ CLI already exercises.</li>
 <td><code>--agent-id</code></td>
 <td>(from identity file)</td>
 <td>Override agent name; selects <code>.thrum/identities/{name}.json</code></td>
-</tr>
-<tr>
-<td><code>--repo</code></td>
-<td><code>.</code></td>
-<td>Repository path</td>
 </tr>
 </tbody></table>
 <h3>Claude Code Configuration</h3>
