@@ -99,15 +99,33 @@ for line in "${agent_lines[@]}"; do
         last_seen_display="$last_seen"
     fi
 
+    # Capture pane FIRST so we can extract Ctx Used% for the header.
+    # Capture-pane: -p print to stdout, -t target, -S -<N> start N lines from end.
+    pane_capture_ok=1
+    if ! pane=$(tmux capture-pane -p -t "$tmux_session" -S -"$LINES" 2>&1); then
+        pane_capture_ok=0
+    fi
+
+    # Extract Claude Code footer's "Ctx Used: X.X%" if present in the captured
+    # pane. Pattern matches the canonical footer format. Falls back to "(n/a)"
+    # for runtimes that don't display this (Codex, Cursor, etc.) or panes that
+    # have scrolled past the footer.
+    if [[ "$pane_capture_ok" -eq 1 ]]; then
+        ctx_used=$(printf '%s\n' "$pane" | grep -oE 'Ctx Used: [0-9]+\.[0-9]+%' | tail -1 | sed 's/Ctx Used: //')
+        [[ -z "$ctx_used" ]] && ctx_used="(n/a)"
+    else
+        ctx_used="(capture failed)"
+    fi
+
     echo "===== @$agent_id · $role${module:+/$module} ====="
     echo "tmux:      $tmux_session"
     echo "worktree:  $worktree"
     echo "last_seen: $last_seen_display"
     echo "status:    $status"
+    echo "ctx_used:  $ctx_used"
     echo "--- pane (bottom $LINES lines) ---"
 
-    # tmux capture-pane: -p (print to stdout), -t target, -S -<N> start at -N from end
-    if pane=$(tmux capture-pane -p -t "$tmux_session" -S -"$LINES" 2>&1); then
+    if [[ "$pane_capture_ok" -eq 1 ]]; then
         # Strip trailing blank lines for tighter output
         printf '%s\n' "$pane" | sed -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}'
     else
