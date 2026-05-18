@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/leonletto/thrum/internal/agent"
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
+	"github.com/leonletto/thrum/internal/skills/mirror"
 	"github.com/leonletto/thrum/internal/worktree"
 )
 
@@ -310,12 +312,90 @@ func (h *ScheduledAgentHandler) Dispatch(ctx context.Context, job scheduler.JobS
 		return h.classifyWorktreeError(err, reporter)
 	}
 
-	// TODO(thrum-6qmf.4.51): stage 3b (skillmirror.EnsureMirrored) +
-	// atomic journal-write of worktree_path/branch_name/reused at end
-	// of stage 3 per spec §7.1. Stage 3a result captured in scope for
-	// the upcoming Task 14 commit.
-	_ = createResult
+	// Stage 3b: skillmirror.EnsureMirrored. Has its own rollback
+	// semantics because stage 3a already returned successfully — a
+	// non-cancel mirror failure leaves a fully-created worktree
+	// behind, so the handler must inline-destroy it (with the
+	// destroyed-paths recorded in the failure event details for the
+	// audit trail).
+	//
+	// IMPORTANT #8 fix from plan v1 dual-review: the three-arm switch
+	// (success/null-adapter, context-cancel, hard-fail-with-rollback)
+	// lives in handleStage3bMirror as a helper returning
+	// (treatAsSuccess bool, err error) instead of inline goto/label.
+	// The straight-line caller cannot accidentally pick up a future
+	// compile-trap if a `var` declaration ever lands between the goto
+	// site and the label.
+	if _, mirrorErr := h.handleStage3bMirror(ctx, createResult, reporter); mirrorErr != nil {
+		return mirrorErr
+	}
+
+	// Atomic journal-write closing stage 3 (after BOTH sub-actions
+	// succeed OR EnsureMirrored returned ErrNullAdapter, which
+	// canonical §3.5 + C-B1 §12.3.1 treat as success).
+	if err := reporter.Transition(scheduler.StateRunning, "stage 3 complete", map[string]any{
+		"worktree_path": createResult.Path,
+		"branch_name":   createResult.Branch,
+		"reused":        createResult.Reused,
+	}); err != nil {
+		return err
+	}
+
+	// TODO(thrum-6qmf.4.54..thrum-6qmf.4.61): implement stages 4-8.
 	return nil
+}
+
+// handleStage3bMirror runs the skill-mirror sub-action and classifies
+// the result per spec §7.1 stage 3b + C-B1 §12.3.1. Returns:
+//
+//   - (true, nil) on EnsureMirrored success OR ErrNullAdapter (the
+//     latter is success-skip — some runtimes have no mirror surface
+//     in v0.11; the agent reads skills directly from the worktree).
+//   - (false, err) on context.Canceled / context.DeadlineExceeded
+//     with a StateCancelled transition recorded and NO inline
+//     worktree.Destroy (per thrum-non7 §3.7 the E6.9 sweep reclaims
+//     the orphan; inline rollback would race the sweep).
+//   - (false, err) on any other error with an inline worktree.Destroy
+//     (best-effort, using context.Background() so the cleanup runs
+//     even when the parent context is cancelled), the destroyed paths
+//     recorded in the failure event details, and a StateFailed
+//     transition.
+//
+// The (bool, error) shape encodes IMPORTANT #8 from plan v1 dual-
+// review: keeping the success/null-adapter distinction available to
+// future telemetry without forcing a goto in the caller.
+func (h *ScheduledAgentHandler) handleStage3bMirror(ctx context.Context, result *worktree.CreateResult, reporter scheduler.StateReporter) (bool, error) {
+	err := h.deps.Mirror.EnsureMirrored(ctx, result.Path)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, mirror.ErrNullAdapter) {
+		slog.Debug("stage 3b: ErrNullAdapter — runtime has no mirror path",
+			"worktree_path", result.Path)
+		return true, nil
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		_ = reporter.Transition(scheduler.StateCancelled,
+			"stage 3b cancelled mid-mirror", nil)
+		return false, err
+	}
+	// Non-cancel hard failure: inline rollback. context.Background()
+	// so the cleanup completes even if the parent context is already
+	// cancelled (cleanup must not be skipped just because the daemon
+	// is shutting down on a different code path).
+	_, _ = h.deps.Worktree.Destroy(context.Background(), worktree.DestroyOpts{
+		RepoPath:     h.deps.RepoPath,
+		WorktreePath: result.Path,
+		Branch:       result.Branch,
+		Force:        true,
+	})
+	_ = reporter.Transition(scheduler.StateFailed,
+		fmt.Sprintf("stage 3b: skill mirror failed: %v", err),
+		map[string]any{
+			"worktree_path_destroyed": result.Path,
+			"branch_name_destroyed":   result.Branch,
+		})
+	return false, fmt.Errorf("stage 3b: skill mirror failed: %w", err)
 }
 
 // classifyWorktreeError maps stage 3a errors to the canonical

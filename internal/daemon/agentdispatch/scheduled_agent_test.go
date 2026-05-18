@@ -10,6 +10,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/daemon/agentdispatch"
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
+	"github.com/leonletto/thrum/internal/skills/mirror"
 	"github.com/leonletto/thrum/internal/worktree"
 )
 
@@ -89,6 +90,24 @@ func okWorktree() *stubWorktreeMgr {
 		},
 	}
 }
+
+// stubMirror records EnsureMirrored calls + returns canned errors.
+// Stage-3b happy-path tests leave returnErr nil; rollback tests set
+// it to a real error; null-adapter tests set it to mirror.ErrNullAdapter
+// (treated as success per C-B1 §12.3.1).
+type stubMirror struct {
+	returnErr error
+	calls     []string
+}
+
+func (m *stubMirror) EnsureMirrored(_ context.Context, worktreePath string) error {
+	m.calls = append(m.calls, worktreePath)
+	return m.returnErr
+}
+
+// okMirror returns a mirror stub wired for the happy path. Stage-4+
+// downstream tests use this when they need stage 3b to succeed.
+func okMirror() *stubMirror { return &stubMirror{} }
 
 // recReporter pins the scheduler.StateReporter interface for the
 // scheduled-agent stage tests — records every Transition + Stage call
@@ -243,7 +262,7 @@ func TestStage0_FailsOnCheckPaneError(t *testing.T) {
 func TestStage1_BudgetCheckMarkerEmittedEvenThoughCheckIsUpstream(t *testing.T) {
 	rpc := &stubTmuxRPC{checkPaneResult: false}
 	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage1"}
-	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC, Worktree: okWorktree()})
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC, Worktree: okWorktree(), Mirror: okMirror()})
 	rep := &recReporter{}
 
 	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, nil)
@@ -271,7 +290,7 @@ func TestStage1_BudgetCheckMarkerEmittedEvenThoughCheckIsUpstream(t *testing.T) 
 func TestStage0_HappyPath(t *testing.T) {
 	rpc := &stubTmuxRPC{checkPaneResult: false}
 	msgRPC := &stubMessageRPC{returnMessageID: "msg-happy"}
-	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC, Worktree: okWorktree()})
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC, Worktree: okWorktree(), Mirror: okMirror()})
 	rep := &recReporter{}
 
 	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, nil)
@@ -297,7 +316,7 @@ func TestStage0_HappyPath(t *testing.T) {
 func TestStage2_EnqueuesWakeMessageAndJournalsMessageID(t *testing.T) {
 	rpc := &stubTmuxRPC{checkPaneResult: false}
 	msgRPC := &stubMessageRPC{returnMessageID: "msg-123"}
-	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC, Worktree: okWorktree()})
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC, Worktree: okWorktree(), Mirror: okMirror()})
 	rep := &recReporter{}
 
 	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, nil)
@@ -372,7 +391,7 @@ func TestStage2_FailsOnMessageSendError(t *testing.T) {
 func TestStage2_BuildWakeMessage_ShapeMatchesSpec7_4(t *testing.T) {
 	rpc := &stubTmuxRPC{checkPaneResult: false}
 	msgRPC := &stubMessageRPC{returnMessageID: "msg-shape"}
-	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC, Worktree: okWorktree()})
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC, Worktree: okWorktree(), Mirror: okMirror()})
 	rep := &recReporter{}
 
 	if err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-shape", rep, nil); err != nil {
@@ -445,6 +464,7 @@ func TestStage3a_CallsWorktreeCreate_WithCorrectOpts(t *testing.T) {
 		Tmux:     rpc,
 		Message:  msgRPC,
 		Worktree: wt,
+		Mirror:   okMirror(),
 	})
 	rep := &recReporter{}
 
@@ -501,6 +521,7 @@ func TestStage3a_HonorsBaseBranchAndPersistentFromJobSpec(t *testing.T) {
 		Tmux:     rpc,
 		Message:  msgRPC,
 		Worktree: wt,
+		Mirror:   okMirror(),
 	})
 	rep := &recReporter{}
 
@@ -680,6 +701,218 @@ func TestStage3a_DefaultErrorMapsToFailedWithRawErrorString(t *testing.T) {
 	}
 	if !strings.Contains(rep.lastTransition().reason, "disk full") {
 		t.Errorf("reason = %q; want raw error substring 'disk full'", rep.lastTransition().reason)
+	}
+}
+
+// TestStage3b_HappyPath_JournalsAfterMirrorSuccess pins the canonical
+// stage-3 closing: when BOTH worktree.Create and EnsureMirrored
+// succeed, Dispatch emits a StateRunning transition with
+// worktree_path + branch_name + reused under the details map. Stage 4+
+// pivots off this atomic record (transcript_dir join + tmux create
+// would otherwise lose ground-truth on a crash between sub-actions).
+func TestStage3b_HappyPath_JournalsAfterMirrorSuccess(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-3b"}
+	wt := okWorktree()
+	mir := okMirror()
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+		Mirror:   mir,
+	})
+	rep := &recReporter{}
+
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-3b", rep, nil)
+	if err != nil {
+		t.Fatalf("expected stages 0-3 to pass; got: %v", err)
+	}
+
+	if len(mir.calls) != 1 || mir.calls[0] != wt.createResult.Path {
+		t.Errorf("EnsureMirrored calls = %v; want [%q]", mir.calls, wt.createResult.Path)
+	}
+
+	// Stage 3 atomic journal-write must be the LAST transition with
+	// worktree_path/branch_name/reused all populated.
+	tr := rep.lastTransition()
+	if tr.state != scheduler.StateRunning {
+		t.Errorf("last state = %v; want StateRunning", tr.state)
+	}
+	if !strings.Contains(tr.reason, "stage 3 complete") {
+		t.Errorf("last reason = %q; want substring 'stage 3 complete'", tr.reason)
+	}
+	if tr.details["worktree_path"] != wt.createResult.Path {
+		t.Errorf("details[worktree_path] = %v; want %q", tr.details["worktree_path"], wt.createResult.Path)
+	}
+	if tr.details["branch_name"] != wt.createResult.Branch {
+		t.Errorf("details[branch_name] = %v; want %q", tr.details["branch_name"], wt.createResult.Branch)
+	}
+	if tr.details["reused"] != false {
+		t.Errorf("details[reused] = %v; want false", tr.details["reused"])
+	}
+}
+
+// TestStage3b_ErrNullAdapter_TreatedAsSuccess pins the C-B1 §12.3.1
+// null-adapter contract: some runtimes (codex, opencode, kiro, cursor
+// as of plan v2) have no mirror surface in v0.11; EnsureMirrored
+// returning ErrNullAdapter is success-skip, NOT a rollback trigger.
+// Stage 3 must still close with the worktree_path journal entry — the
+// agent still reads skills directly from the worktree even without a
+// per-runtime mirror copy.
+func TestStage3b_ErrNullAdapter_TreatedAsSuccess(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-3b-null"}
+	wt := okWorktree()
+	mir := &stubMirror{returnErr: mirror.ErrNullAdapter}
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+		Mirror:   mir,
+	})
+	rep := &recReporter{}
+
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-null", rep, nil)
+	if err != nil {
+		t.Fatalf("ErrNullAdapter should NOT propagate; got err: %v", err)
+	}
+
+	tr := rep.lastTransition()
+	if tr.state != scheduler.StateRunning {
+		t.Errorf("last state = %v; want StateRunning", tr.state)
+	}
+	if tr.details["worktree_path"] != wt.createResult.Path {
+		t.Errorf("ErrNullAdapter blocked stage-3 close; details = %+v", tr.details)
+	}
+	// And critically: NO inline Destroy was triggered.
+	if len(wt.destroyCalls) != 0 {
+		t.Errorf("ErrNullAdapter triggered inline Destroy: %d call(s); want 0", len(wt.destroyCalls))
+	}
+}
+
+// TestStage3b_NonCancelError_DestroysWorktreeAndTransitionsFailed pins
+// the inline-rollback contract per spec §7.1 stage 3b + thrum-non7
+// §3.5: a non-cancel hard failure from EnsureMirrored leaves a
+// fully-created worktree behind that must be inline-destroyed (with
+// the destroyed paths recorded in the failure event details so an
+// audit trail back to the lost worktree is preserved).
+func TestStage3b_NonCancelError_DestroysWorktreeAndTransitionsFailed(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-3b-fail"}
+	wt := okWorktree()
+	mirrorErr := errors.New("mirror disk full")
+	mir := &stubMirror{returnErr: mirrorErr}
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+		Mirror:   mir,
+	})
+	rep := &recReporter{}
+
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-3b-fail", rep, nil)
+	if !errors.Is(err, mirrorErr) {
+		t.Errorf("err = %v; want wraps mirrorErr", err)
+	}
+
+	// Inline rollback fires with the right opts.
+	if len(wt.destroyCalls) != 1 {
+		t.Fatalf("worktree.Destroy calls = %d; want 1", len(wt.destroyCalls))
+	}
+	d := wt.destroyCalls[0]
+	if d.WorktreePath != wt.createResult.Path {
+		t.Errorf("Destroy.WorktreePath = %q; want %q", d.WorktreePath, wt.createResult.Path)
+	}
+	if d.Branch != wt.createResult.Branch {
+		t.Errorf("Destroy.Branch = %q; want %q", d.Branch, wt.createResult.Branch)
+	}
+	if !d.Force {
+		t.Error("Destroy.Force = false; want true (ephemeral teardown requires --force)")
+	}
+	if d.RepoPath != "/repo" {
+		t.Errorf("Destroy.RepoPath = %q; want /repo", d.RepoPath)
+	}
+
+	tr := rep.lastTransition()
+	if tr.state != scheduler.StateFailed {
+		t.Errorf("last state = %v; want StateFailed", tr.state)
+	}
+	if !strings.Contains(tr.reason, "stage 3b: skill mirror failed") {
+		t.Errorf("reason = %q; want substring 'stage 3b: skill mirror failed'", tr.reason)
+	}
+	if tr.details["worktree_path_destroyed"] != wt.createResult.Path {
+		t.Errorf("details[worktree_path_destroyed] = %v; want %q (audit trail)",
+			tr.details["worktree_path_destroyed"], wt.createResult.Path)
+	}
+	if tr.details["branch_name_destroyed"] != wt.createResult.Branch {
+		t.Errorf("details[branch_name_destroyed] = %v; want %q",
+			tr.details["branch_name_destroyed"], wt.createResult.Branch)
+	}
+}
+
+// TestStage3b_ContextCanceled_DefersToSweep pins the asymmetric
+// rollback table (coordinator trap #3 in the resume plan): a
+// context.Canceled error from EnsureMirrored must NOT trigger inline
+// worktree.Destroy. The E6.9 sweep reclaims the orphan; inline rollback
+// would race the sweep AND extend daemon-shutdown latency unnecessarily.
+func TestStage3b_ContextCanceled_DefersToSweep(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-3b-cancel"}
+	wt := okWorktree()
+	mir := &stubMirror{returnErr: context.Canceled}
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+		Mirror:   mir,
+	})
+	rep := &recReporter{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_ = h.Dispatch(ctx, testJob("docs_bot"), "run-3b-cancel", rep, nil)
+
+	if len(wt.destroyCalls) != 0 {
+		t.Errorf("context-cancel triggered inline Destroy: %d call(s); want 0 (defer to sweep)",
+			len(wt.destroyCalls))
+	}
+	if rep.lastTransition().state != scheduler.StateCancelled {
+		t.Errorf("last state = %v; want StateCancelled", rep.lastTransition().state)
+	}
+	if !strings.Contains(rep.lastTransition().reason, "cancelled mid-mirror") {
+		t.Errorf("reason = %q; want substring 'cancelled mid-mirror'", rep.lastTransition().reason)
+	}
+}
+
+// TestStage3b_DeadlineExceeded_DefersToSweep is the deadline-exceeded
+// twin of the cancel test: both share thrum-non7 §3.7 deferral
+// semantics so the sweep can reclaim either orphan class uniformly.
+func TestStage3b_DeadlineExceeded_DefersToSweep(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-3b-deadline"}
+	wt := okWorktree()
+	mir := &stubMirror{returnErr: context.DeadlineExceeded}
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+		Mirror:   mir,
+	})
+	rep := &recReporter{}
+
+	_ = h.Dispatch(context.Background(), testJob("docs_bot"), "run-3b-deadline", rep, nil)
+
+	if len(wt.destroyCalls) != 0 {
+		t.Errorf("deadline-exceeded triggered inline Destroy: %d call(s); want 0",
+			len(wt.destroyCalls))
+	}
+	if rep.lastTransition().state != scheduler.StateCancelled {
+		t.Errorf("last state = %v; want StateCancelled", rep.lastTransition().state)
 	}
 }
 
