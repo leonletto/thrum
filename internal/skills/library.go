@@ -1,7 +1,6 @@
 package skills
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -10,8 +9,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 // Sentinel errors. Callers compare with errors.Is to distinguish library
@@ -46,6 +43,13 @@ type Library struct {
 func NewLibrary(repoRoot string) *Library {
 	return &Library{repoRoot: repoRoot}
 }
+
+// RepoRoot returns the directory the Library was constructed against —
+// the parent of `.thrum/`. Exposed so callers that need to build sibling
+// paths under `.thrum/skills/` (e.g. the promote handler at E10.4
+// assembling the canonical write target) don't have to thread the root
+// through a separate channel.
+func (l *Library) RepoRoot() string { return l.repoRoot }
 
 // PendingFilter scopes a ListPending call. Zero-value filter returns all
 // pending proposals across every agent's proposed-skills/ directory.
@@ -258,41 +262,24 @@ func loadProposed(path, name, author string) ProposedSkill {
 }
 
 // splitFrontmatter parses a SKILL.md file into (frontmatter, body, err).
-// Files without a leading "---" YAML preamble return body=full and
-// frontmatter at zero. YAML decode errors are returned so callers can
-// flag FrontmatterValid=false; body still surfaces in that case so a
-// reviewer can read the prose.
-//
-// The E11.1 task will replace this with the nested+flat compat parser;
-// for E8.2 the inline implementation is sufficient.
+// Delegates to ParseFrontmatter (E11.1, nested+flat compat). Files
+// without a leading "---" YAML preamble return body=full and
+// frontmatter at zero with err=nil — the library walker treats
+// no-frontmatter as a legal partial file, not an error. Malformed
+// YAML inside a real frontmatter region surfaces as err so callers
+// can flag FrontmatterValid=false on proposed skills.
 func splitFrontmatter(data []byte) (Frontmatter, []byte, error) {
-	var fm Frontmatter
-	if !bytes.HasPrefix(data, []byte("---")) {
-		return fm, data, nil
+	fm, body, err := ParseFrontmatter(data)
+	if errors.Is(err, ErrNoFrontmatter) {
+		return Frontmatter{}, body, nil
 	}
-	// Strip the leading delimiter line.
-	rest := data[3:]
-	if i := bytes.IndexByte(rest, '\n'); i >= 0 {
-		rest = rest[i+1:]
+	if err != nil {
+		return Frontmatter{}, body, err
 	}
-	// Find the closing delimiter at the start of a line.
-	yamlBytes, body, found := bytes.Cut(rest, []byte("\n---"))
-	if !found {
-		// no closing delimiter — treat as malformed; surface entire
-		// remainder as body so the file isn't lost.
-		return fm, data, fmt.Errorf("skills: frontmatter has no closing delimiter")
+	if fm == nil {
+		return Frontmatter{}, body, nil
 	}
-	// Skip the rest of the closing-delimiter line.
-	if i := bytes.IndexByte(body, '\n'); i >= 0 {
-		body = body[i+1:]
-	}
-	// Trim any leading blank line so callers don't see a phantom \n.
-	body = bytes.TrimLeft(body, "\n")
-
-	if err := yaml.Unmarshal(yamlBytes, &fm); err != nil {
-		return Frontmatter{}, body, fmt.Errorf("skills: yaml: %w", err)
-	}
-	return fm, body, nil
+	return *fm, body, nil
 }
 
 // proposedAuthorAndName derives (author, skillName) from a proposed-skill

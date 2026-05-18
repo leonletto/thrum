@@ -79,12 +79,20 @@ type SourcePattern struct {
 // skill: who reviewed it, against which version of the check-the-skill
 // meta-skill, plus per-revision msg-thread links and any secret-scan
 // pattern overrides recorded at promote time.
+//
+// ForceOverride is the operator-supplied reason text when --force was
+// passed at promote (per plan AC E10.4 line 1172 / line 1632-1634):
+// the field is empty for a normal promote and a non-empty audit string
+// when a coordinator bypassed the check-the-skill gate. The field name
+// `force_override` is the plan AC's "or equivalent provenance field"
+// — pinned here at impl time.
 type ReviewBlock struct {
 	ReviewedBy          string               `json:"reviewed_by,omitempty" yaml:"reviewed_by,omitempty"`
 	ReviewedAt          time.Time            `json:"reviewed_at,omitzero" yaml:"reviewed_at,omitempty"`
 	CheckSkillVersion   string               `json:"check_skill_version,omitempty" yaml:"check_skill_version,omitempty"`
 	Revisions           []RevisionEntry      `json:"revisions,omitempty" yaml:"revisions,omitempty"`
 	SecretScanOverrides []SecretScanOverride `json:"secret_scan_overrides,omitempty" yaml:"secret_scan_overrides,omitempty"`
+	ForceOverride       string               `json:"force_override,omitempty" yaml:"force_override,omitempty"`
 }
 
 // RevisionEntry is one entry in the review.revisions array. The shape is
