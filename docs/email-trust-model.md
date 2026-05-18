@@ -1,14 +1,3 @@
----
-title: "Email Bridge: Trust Model"
-description:
-  "How v0.11 scopes trust to mailbox access, what is and isn't signed, what's
-  deferred to v0.11.x, and the rotation procedure for suspected compromise"
-category: "email"
-order: 6
-tags: ["email", "trust", "security", "mesh", "signing", "v0.11", "credentials"]
-last_updated: "2026-05-16"
----
-
 ## Email Bridge: Trust Model
 
 Understanding what v0.11 guarantees — and what it doesn't — before deploying the

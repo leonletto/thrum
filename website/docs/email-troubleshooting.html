@@ -43,6 +43,7 @@ plausible.init()
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
 <strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>skills</strong>: <a href="skill-operator-guide.html">Skill Operator Guide</a><br>
 <strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
@@ -65,8 +66,13 @@ thrum daemon restart</code></pre>
 <h3>Check 3 — Secrets file is valid JSON</h3>
 <pre><code>cat .thrum/secrets/email.json | python3 -m json.tool</code></pre>
 <p>A parse error means the file was written incorrectly (e.g. truncated during
-<code>thrum email init</code>). Re-run init:</p>
-<pre><code>thrum email init --address your-address@example.com --update-credentials</code></pre>
+<code>thrum email init</code>). Re-run init to overwrite the file (or edit it directly,
+mode must stay <code>0600</code>):</p>
+<pre><code>thrum email init --provider &lt;gmail|fastmail|icloud|custom&gt; --non-interactive \
+  --password &quot;&lt;app password&gt;&quot; \
+  --daemon-handle &lt;your handle&gt; \
+  --target-user &lt;your username&gt; \
+  --target-email &lt;your contact email&gt;</code></pre>
 <h3>Check 4 — IMAP host reachable</h3>
 <pre><code>openssl s_client -connect imap.gmail.com:993 -quiet 2&gt;&amp;1 | head -5</code></pre>
 <p>If the connection times out or TLS handshake fails, the network path to the IMAP
@@ -144,10 +150,14 @@ section below.</p>
 daemon&#39;s mailbox. If not, the SMTP delivery failed — check <code>thrum daemon logs</code>
 for SMTP errors at the time of the <code>pair</code> command.</p>
 <h3>Check 2 — Confirmation received?</h3>
-<p>Both sides must run <code>thrum email pair --to &lt;address&gt;</code> for the pair to complete.
-If only one side has confirmed, the entry stays in <code>--pending</code> state:</p>
-<pre><code>thrum email list --pending</code></pre>
-<p>The other operator must run their <code>thrum email pair</code> command.</p>
+<p>Both sides must run <code>thrum email pair --to &lt;handle&gt;</code> for the pair to
+complete (<code>&lt;handle&gt;</code> is the other daemon&#39;s <code>--daemon-handle</code> value). If
+only one side has confirmed, the entry remains pending on the
+unconfirmed side. <code>thrum email status</code> reports the pending stranger-pair
+count:</p>
+<pre><code>thrum email status</code></pre>
+<p>The other operator must run their <code>thrum email pair --to &lt;handle&gt;</code>
+command to confirm.</p>
 <h3>Check 3 — Pending pair expired</h3>
 <p>Pairing requests expire after <code>pair_pending_ttl_hours</code> (default: 24 hours). If
 the confirmation was not received in time, both sides must re-run <code>thrum email pair</code>.</p>

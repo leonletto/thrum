@@ -1,14 +1,3 @@
----
-title: "Email Bridge: Self-Hosted Postfix Setup"
-description:
-  "Configure the Thrum email bridge against a self-hosted Postfix MTA — STARTTLS
-  auth, daemon-handle naming, and common Postfix pitfalls"
-category: "email"
-order: 4
-tags: ["email", "postfix", "self-hosted", "bridge", "smtp", "imap", "setup"]
-last_updated: "2026-05-16"
----
-
 ## Email Bridge: Self-Hosted Postfix Setup
 
 Run the Thrum email bridge against a Postfix MTA you control. This is the right

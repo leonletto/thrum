@@ -43,6 +43,7 @@ plausible.init()
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
 <strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>skills</strong>: <a href="skill-operator-guide.html">Skill Operator Guide</a><br>
 <strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
@@ -105,17 +106,22 @@ and type <code>thrum-daemon</code></li>
 </tbody></table>
 <hr>
 <h2>Step 3 — Run <code>thrum email init</code></h2>
+<p>The interactive wizard prompts for the app password and writes
+<code>.thrum/secrets/email.json</code> (mode <code>0600</code>):</p>
+<pre><code>thrum email init --provider gmail</code></pre>
+<p>For scripted / non-interactive setup:</p>
 <pre><code>thrum email init \
   --provider gmail \
-  --address thrum-mesh@gmail.com \
-  --imap-host imap.gmail.com \
-  --imap-port 993 \
-  --smtp-host smtp.gmail.com \
-  --smtp-port 587 \
-  --display-name &quot;Thrum Daemon A&quot;</code></pre>
-<p>The command prompts for the app password and writes
-<code>.thrum/secrets/email.json</code> (mode <code>0600</code>). The daemon restarts the bridge
-automatically.</p>
+  --non-interactive \
+  --password &quot;&lt;16-char app password&gt;&quot; \
+  --daemon-handle thrum-daemon-a \
+  --target-user leon \
+  --target-email leon@personal-email.com</code></pre>
+<p><code>--daemon-handle</code> is the mesh-visible identity peers use to address you;
+<code>--target-user</code> is the Thrum username this mailbox bridges to;
+<code>--target-email</code> is the operator contact address that doubles as the
+RFC 5322 <code>From:</code> header (override separately with <code>--from-address</code>).</p>
+<p>After init, run <code>thrum daemon restart</code> to load the new bridge config.</p>
 <hr>
 <h2>Step 4 — Verify with <code>thrum email status</code></h2>
 <pre><code>thrum email status</code></pre>
@@ -141,8 +147,19 @@ and re-run <code>thrum email init</code>.</p>
 generate the app password.</p>
 <p><strong>App password stops working after a period</strong>
 Google can expire app passwords when account security settings change (e.g.
-after a password reset). Generate a fresh app password and update secrets:</p>
-<pre><code>thrum email init --address thrum-mesh@gmail.com --update-credentials
+after a password reset). Generate a fresh app password and either re-run
+<code>thrum email init</code> (the wizard overwrites <code>.thrum/secrets/email.json</code>) or
+edit the secrets file directly:</p>
+<pre><code># Option A: re-run the wizard with the new password
+thrum email init --provider gmail --non-interactive \
+  --password &quot;&lt;new app password&gt;&quot; \
+  --daemon-handle thrum-daemon-a \
+  --target-user leon \
+  --target-email leon@personal-email.com
+thrum daemon restart
+
+# Option B: edit .thrum/secrets/email.json in place (mode must stay 0600)
+$EDITOR .thrum/secrets/email.json
 thrum daemon restart</code></pre>
 <hr>
 <h2>Deliverability</h2>
@@ -151,9 +168,13 @@ SPF and DKIM are handled by Google — no additional DNS records are needed for
 a <code>gmail.com</code> sender.</p>
 <p>To verify the display name appears correctly, send a test message to your
 personal address:</p>
-<pre><code>thrum email test-send --to your-personal@gmail.com --subject &quot;Thrum display name check&quot;</code></pre>
-<p>Open the received message and confirm the <strong>From</strong> header shows your configured
-<code>--display-name</code> value, not just the raw address.</p>
+<pre><code>thrum email send \
+  --to your-personal@gmail.com \
+  --subject &quot;Thrum display name check&quot; \
+  --body &quot;test&quot;</code></pre>
+<p>Open the received message and confirm the <strong>From</strong> header shows the daemon
+handle from your configured <code>from_display_name_format</code> (default
+<code>{agent} @ {handle}</code>), not just the raw address.</p>
 
 </main>
 <footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">

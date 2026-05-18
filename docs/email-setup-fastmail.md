@@ -1,14 +1,3 @@
----
-title: "Email Bridge: Fastmail Setup"
-description:
-  "Configure the Thrum email bridge with a Fastmail account — app password,
-  IMAP/SMTP settings, init invocation, and auth troubleshooting"
-category: "email"
-order: 2
-tags: ["email", "fastmail", "bridge", "imap", "smtp", "setup"]
-last_updated: "2026-05-16"
----
-
 ## Email Bridge: Fastmail Setup
 
 Connect Thrum's email bridge to a Fastmail account so daemons can exchange

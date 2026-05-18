@@ -1,15 +1,3 @@
----
-title: "Email Bridge"
-description:
-  "Route Thrum messages across machines and repositories over IMAP/SMTP — no
-  dedicated server required, works with Gmail, Fastmail, iCloud, or self-hosted
-  Postfix"
-category: "email"
-order: 0
-tags: ["email", "bridge", "mesh", "imap", "smtp", "v0.11", "overview"]
-last_updated: "2026-05-16"
----
-
 ## Email Bridge
 
 **Route Thrum messages across machines over standard IMAP/SMTP — no dedicated

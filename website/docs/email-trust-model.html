@@ -43,6 +43,7 @@ plausible.init()
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
 <strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>skills</strong>: <a href="skill-operator-guide.html">Skill Operator Guide</a><br>
 <strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
@@ -108,9 +109,16 @@ security settings, delete every app password associated with the account
 </li>
 <li><p><strong>Generate a new app password</strong> and note it.</p>
 </li>
-<li><p><strong>Update each daemon&#39;s credentials:</strong></p>
-<pre><code>thrum email init --address thrum-mesh@example.com --update-credentials</code></pre>
-<p>Run this on every daemon that uses the compromised mailbox credentials.</p>
+<li><p><strong>Update each daemon&#39;s credentials.</strong> Two equivalent paths:</p>
+<p><em>Option A — re-run the wizard (overwrites <code>.thrum/secrets/email.json</code>):</em></p>
+<pre><code>thrum email init --provider &lt;gmail|fastmail|icloud|custom&gt; --non-interactive \
+  --password &quot;&lt;new app password&gt;&quot; \
+  --daemon-handle &lt;existing handle&gt; \
+  --target-user &lt;existing user&gt; \
+  --target-email &lt;existing contact email&gt;</code></pre>
+<p><em>Option B — edit the secrets file in place (mode must stay 0600):</em></p>
+<pre><code>$EDITOR .thrum/secrets/email.json   # replace imap_password / smtp_password</code></pre>
+<p>Run on every daemon that uses the compromised mailbox credentials.</p>
 </li>
 <li><p><strong>Restart each daemon:</strong></p>
 <pre><code>thrum daemon restart</code></pre>
