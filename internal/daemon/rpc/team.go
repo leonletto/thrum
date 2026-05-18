@@ -117,6 +117,13 @@ type TeamMember struct {
 	// strings (UTC); empty for personal agents with no scheduled job.
 	// LastRunState is the canonical scheduler state vocabulary
 	// (completed | failed | cancelled).
+	//
+	// NOT YET POPULATED: the scheduler_job_state join lands at the
+	// E6.8 batch-2-follow-on dispatch that wires Scheduler.JobSpec +
+	// StateStore into TeamHandler. Until then these fields are
+	// `omitempty` so callers see them absent rather than zero-string;
+	// the field surface is locked in as part of Task 56 so the wire
+	// shape is stable for downstream consumers.
 	NextRun      string `json:"next_run,omitempty"`
 	LastRun      string `json:"last_run,omitempty"`
 	LastRunState string `json:"last_run_state,omitempty"`
@@ -137,14 +144,24 @@ type TeamMember struct {
 
 	// AutoRespawnDisabledAt is the unix-millisecond timestamp when
 	// the auto-respawn loop guard tripped for this agent (zero
-	// when not tripped). Surfaced via the §6.2 crashed-state banner
-	// in Task 60.
+	// when not tripped). Surfaces via the Banner field below per
+	// spec §6.2 crashed-state mapping.
 	AutoRespawnDisabledAt int64 `json:"auto_respawn_disabled_at,omitempty"`
 
 	// StateMdParseFailedAt is the unix-millisecond timestamp when
-	// state.md last failed to parse (zero when clean). Surfaced via
-	// the §6.2 state.md-corruption banner in Task 60.
+	// state.md last failed to parse (zero when clean). Surfaces via
+	// the Banner field below per spec §6.2 crashed-state mapping.
 	StateMdParseFailedAt int64 `json:"state_md_parse_failed_at,omitempty"`
+
+	// Banner is the operator-facing crashed-state explanation when
+	// the agent has tripped one of the auto-recovery guards. Empty
+	// for healthy agents. Populated server-side from the
+	// auto_respawn_disabled_at + state_md_parse_failed_at flags
+	// per spec §7.6 banner strings; rendered verbatim by the CLI
+	// in both compact + expanded views. When both guards are
+	// tripped simultaneously, loop-guard banner takes precedence
+	// (matches deriveAgentState's evaluation order).
+	Banner string `json:"banner,omitempty"`
 }
 
 // TeamUsageSummary is today's per-agent telemetry summary from the
@@ -445,25 +462,42 @@ func (h *TeamHandler) decorateWithLifecycle(ctx context.Context, members []TeamM
 		log.Printf("team.list: lifecycle agents-table query: %v (skipping enrichment)", err)
 		return members
 	}
-	for rows.Next() {
-		var (
-			id     string
-			m      agentMeta
-		)
-		if err := rows.Scan(&id, &m.mode, &m.identity, &m.autoRespawnAt, &m.stateMdFailAt); err != nil {
-			log.Printf("team.list: lifecycle scan: %v", err)
-			continue
+	func() {
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var (
+				id string
+				m  agentMeta
+			)
+			if err := rows.Scan(&id, &m.mode, &m.identity, &m.autoRespawnAt, &m.stateMdFailAt); err != nil {
+				log.Printf("team.list: lifecycle scan: %v", err)
+				continue
+			}
+			metaByID[id] = m
 		}
-		metaByID[id] = m
+		if err := rows.Err(); err != nil {
+			log.Printf("team.list: lifecycle rows.Err: %v", err)
+		}
+	}()
+
+	// Bulk-fetch the last teamRecentTransitionsCap events per agent
+	// in ONE round-trip when the lifecycle store is wired. Previous
+	// per-agent ListByAgent calls inside the loop were O(N) queries;
+	// ListByAgents windows them into a single SQL hit (brainstormer-
+	// third I1 fold-in).
+	var eventsByAgent map[string][]state.AgentLifecycleEvent
+	if h.lifecycleStore != nil {
+		ev, err := h.lifecycleStore.ListByAgents(ctx, agentIDs, teamRecentTransitionsCap)
+		if err != nil {
+			log.Printf("team.list: lifecycle.ListByAgents: %v (skipping recent_transitions)", err)
+		} else {
+			eventsByAgent = ev
+		}
 	}
-	if err := rows.Err(); err != nil {
-		log.Printf("team.list: lifecycle rows.Err: %v", err)
-	}
-	_ = rows.Close()
 
 	// Per-agent enrichment: copy meta fields onto each TeamMember,
-	// derive State, and (when lifecycle store is wired) pull recent
-	// transitions.
+	// derive State, and (when lifecycle store is wired) format
+	// recent_transitions from the bulk-fetched map.
 	for i := range members {
 		m := &members[i]
 		if meta, ok := metaByID[m.AgentID]; ok {
@@ -473,12 +507,9 @@ func (h *TeamHandler) decorateWithLifecycle(ctx context.Context, members []TeamM
 			m.StateMdParseFailedAt = meta.stateMdFailAt
 		}
 		m.State = deriveAgentState(m)
-		if h.lifecycleStore != nil {
-			events, err := h.lifecycleStore.ListByAgent(ctx, m.AgentID, teamRecentTransitionsCap)
-			if err != nil {
-				log.Printf("team.list: lifecycle.ListByAgent(%s): %v", m.AgentID, err)
-				continue
-			}
+		m.Banner = deriveCrashedBanner(m)
+		if eventsByAgent != nil {
+			events := eventsByAgent[m.AgentID]
 			if len(events) == 0 {
 				continue
 			}
@@ -491,6 +522,24 @@ func (h *TeamHandler) decorateWithLifecycle(ctx context.Context, members []TeamM
 		}
 	}
 	return members
+}
+
+// deriveCrashedBanner builds the operator-facing banner string for
+// a crashed agent per spec §7.6. Returns empty when neither guard
+// is tripped. Loop-guard takes precedence when both flags are set
+// (same order deriveAgentState uses).
+//
+// The banner strings here are the EXACT verbatim per-spec phrasing;
+// downstream CLI consumers render them as-is so operator-facing
+// language stays consistent across Compact + Expanded views.
+func deriveCrashedBanner(m *TeamMember) string {
+	if m.AutoRespawnDisabledAt > 0 {
+		return "⚠ AUTO-RESPAWN DISABLED — 3 respawns in window tripped the loop guard. Run `thrum agent ack-respawn-alert " + m.AgentID + "` to re-arm."
+	}
+	if m.StateMdParseFailedAt > 0 {
+		return "⚠ state.md UNPARSEABLE — auto-respawn blocked. Bad content at `.thrum/agents/" + m.AgentID + "/state.md.broken`. Run `thrum agent ack-state-corruption " + m.AgentID + "` to clear after operator review."
+	}
+	return ""
 }
 
 // deriveAgentState implements the §6.2 state-vocabulary precedence

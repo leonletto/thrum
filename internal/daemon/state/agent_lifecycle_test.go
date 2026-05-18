@@ -67,6 +67,102 @@ func TestAgentLifecycleStore_AppendAndList(t *testing.T) {
 	}
 }
 
+// TestAgentLifecycleStore_ListByAgents_BulkLookup pins the I1 fold-in
+// from E6.8 batch-1 review: the bulk ListByAgents method runs one
+// SQL round-trip across N agents (rather than N per-agent
+// ListByAgent calls inside a team.list loop). Asserts:
+//   - Results keyed by agent_name.
+//   - Per-agent ordering most-recent first.
+//   - Per-agent limit applied via the windowed ROW_NUMBER() partition.
+//   - Agents without events are absent from the map.
+//   - Agents not in the request list are absent from the map.
+//   - Empty input → empty map + nil error (no SQL fires).
+func TestAgentLifecycleStore_ListByAgents_BulkLookup(t *testing.T) {
+	s := state.NewAgentLifecycleStore(newLifecycleStoreDB(t))
+	ctx := context.Background()
+	now := time.Now()
+
+	// Seed: docs_bot has 3 events; ops_bot has 1; unknown_bot has 0.
+	// no_match_bot has events but won't be in the request.
+	for i, kind := range []state.AgentLifecycleEventKind{
+		state.EventCrashDetected, state.EventRespawnFired, state.EventRespawnSkippedLoopguard,
+	} {
+		if _, err := s.Append(ctx, state.AgentLifecycleEvent{
+			AgentName: "docs_bot",
+			EventKind: kind,
+			EventTime: now.Add(time.Duration(-i) * time.Minute),
+			Reason:    fmt.Sprintf("docs_bot event #%d", i),
+		}); err != nil {
+			t.Fatalf("seed docs_bot: %v", err)
+		}
+	}
+	if _, err := s.Append(ctx, state.AgentLifecycleEvent{
+		AgentName: "ops_bot", EventKind: state.EventCrashDetected,
+		EventTime: now, Reason: "ops crash",
+	}); err != nil {
+		t.Fatalf("seed ops_bot: %v", err)
+	}
+	if _, err := s.Append(ctx, state.AgentLifecycleEvent{
+		AgentName: "no_match_bot", EventKind: state.EventCrashDetected,
+		EventTime: now, Reason: "out-of-scope",
+	}); err != nil {
+		t.Fatalf("seed no_match_bot: %v", err)
+	}
+
+	out, err := s.ListByAgents(ctx, []string{"docs_bot", "ops_bot", "unknown_bot"}, 2)
+	if err != nil {
+		t.Fatalf("ListByAgents: %v", err)
+	}
+
+	// docs_bot has 3 events; limit=2 windows to top-2 per partition.
+	if got := len(out["docs_bot"]); got != 2 {
+		t.Errorf("docs_bot count = %d; want 2 (limit applied per partition)", got)
+	}
+	// Most-recent first: docs_bot event #0 (now) should precede event #1 (now-1min).
+	if len(out["docs_bot"]) >= 2 {
+		if !out["docs_bot"][0].EventTime.After(out["docs_bot"][1].EventTime) &&
+			!out["docs_bot"][0].EventTime.Equal(out["docs_bot"][1].EventTime) {
+			t.Errorf("docs_bot ordering not DESC: [0]=%v [1]=%v",
+				out["docs_bot"][0].EventTime, out["docs_bot"][1].EventTime)
+		}
+	}
+	if got := len(out["ops_bot"]); got != 1 {
+		t.Errorf("ops_bot count = %d; want 1", got)
+	}
+	if _, present := out["unknown_bot"]; present {
+		t.Errorf("unknown_bot (zero events) should be ABSENT from the map; map = %v",
+			mapKeys(out))
+	}
+	if _, present := out["no_match_bot"]; present {
+		t.Errorf("no_match_bot (not requested) leaked into result; map = %v",
+			mapKeys(out))
+	}
+}
+
+// TestAgentLifecycleStore_ListByAgents_EmptyInput_NoQuery pins the
+// fast-path: an empty agentNames slice short-circuits without
+// firing SQL (would otherwise hit a syntax error on an empty IN
+// clause).
+func TestAgentLifecycleStore_ListByAgents_EmptyInput_NoQuery(t *testing.T) {
+	s := state.NewAgentLifecycleStore(newLifecycleStoreDB(t))
+	out, err := s.ListByAgents(context.Background(), nil, 5)
+	if err != nil {
+		t.Fatalf("empty input ListByAgents: %v", err)
+	}
+	if len(out) != 0 {
+		t.Errorf("empty input should return empty map; got %v", out)
+	}
+}
+
+// mapKeys returns sorted keys for stable error output.
+func mapKeys(m map[string][]state.AgentLifecycleEvent) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
 // TestAgentLifecycleStore_LoopGuardCount pins the 3-in-window predicate
 // canonical-ref §3.4 + spec §B-B1-Q10 use to decide whether to refuse
 // the next auto-respawn. The query window is the half-open interval

@@ -77,6 +77,11 @@ func TestDeriveAgentState(t *testing.T) {
 			},
 			want: "offline",
 		},
+		{
+			name: "zero-value Status (uninitialized fixture) → offline (default)",
+			m:    TeamMember{}, // Status == ""
+			want: "offline",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -87,3 +92,91 @@ func TestDeriveAgentState(t *testing.T) {
 		})
 	}
 }
+
+// TestDeriveCrashedBanner pins B-B1 E6.8 Task 60: the operator-
+// facing banner strings rendered when an agent has tripped one of
+// the auto-recovery guards (loop-guard or state.md corruption).
+//
+// Per spec §7.6, banners surface in both compact + expanded
+// `thrum team` views. The exact phrasing is part of the spec —
+// changes here would diverge from operator-runbook expectations,
+// so the test pins the SUBSTRINGS that operators rely on
+// (banner header, agent name, ack-CLI invocation) rather than the
+// full string (which is more forgiving against future copy-edits
+// to surrounding punctuation/wording).
+func TestDeriveCrashedBanner(t *testing.T) {
+	cases := []struct {
+		name      string
+		m         TeamMember
+		wantEmpty bool
+		wantSubs  []string
+	}{
+		{
+			name: "loop-guard tripped → loop-guard banner",
+			m: TeamMember{
+				AgentID:               "docs_bot",
+				AutoRespawnDisabledAt: 1747500000000,
+			},
+			wantSubs: []string{
+				"AUTO-RESPAWN DISABLED",
+				"docs_bot",
+				"ack-respawn-alert",
+			},
+		},
+		{
+			name: "state.md unparseable → state.md banner",
+			m: TeamMember{
+				AgentID:              "writer_bot",
+				StateMdParseFailedAt: 1747500000000,
+			},
+			wantSubs: []string{
+				"state.md UNPARSEABLE",
+				"writer_bot",
+				"ack-state-corruption",
+				"state.md.broken",
+			},
+		},
+		{
+			name: "both tripped → loop-guard takes precedence (matches deriveAgentState order)",
+			m: TeamMember{
+				AgentID:               "docs_bot",
+				AutoRespawnDisabledAt: 1747500000000,
+				StateMdParseFailedAt:  1747500000000,
+			},
+			wantSubs: []string{
+				"AUTO-RESPAWN DISABLED",
+				"ack-respawn-alert",
+			},
+		},
+		{
+			name:      "no flags tripped → empty banner",
+			m:         TeamMember{AgentID: "docs_bot", Status: "active", Identity: "long_lived"},
+			wantEmpty: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := deriveCrashedBanner(&tc.m)
+			if tc.wantEmpty {
+				if got != "" {
+					t.Errorf("expected empty banner; got %q", got)
+				}
+				return
+			}
+			for _, sub := range tc.wantSubs {
+				if !contains(got, sub) {
+					t.Errorf("banner missing %q; got %q", sub, got)
+				}
+			}
+			// Cross-check: when state.md banner is expected but
+			// loop-guard is also set, we don't want both banners
+			// concatenated.
+			if tc.name == "both tripped → loop-guard takes precedence (matches deriveAgentState order)" {
+				if contains(got, "state.md UNPARSEABLE") {
+					t.Errorf("loop-guard precedence violated: state.md banner leaked into output: %q", got)
+				}
+			}
+		})
+	}
+}
+
