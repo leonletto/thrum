@@ -17,7 +17,7 @@ tags:
     "plugin",
     "substrate",
   ]
-last_updated: "2026-05-17"
+last_updated: "2026-05-18"
 ---
 
 ## Thrum Beta Channel
@@ -46,16 +46,21 @@ they're parameterized over `VERSION` and the release branch.
 
 ## Stable-track current pre-release
 
-> **[`v0.10.5-rc.2`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.2)**
-> (2026-05-17, in 24h CLI/docs soak through 2026-05-18).
+> **[`v0.10.5-rc.3`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.3)**
+> (2026-05-18, in 48h FULL soak through 2026-05-20).
 >
-> Same release surface as rc.1 (backstop nudger, runtime-init managed-template
-> fix, first-turn ack, two new CLI flags). rc.2 is a docs-only patch on top: the
-> `/thrum:restart` skill is restructured into an 11-section numbered format
-> (adding sections for "Honest unknowns" and "End-of-continuation note", with
-> "human input" reworded to "repo owner input"), plus a small `bd comments add`
-> syntax correction in role templates and docs. No Go behavior change since
-> rc.1.
+> Same release surface as rc.1/rc.2 (backstop nudger, runtime-init
+> managed-template fix, first-turn ack, two new CLI flags), now with a self-echo
+> regression fix (thrum-1zfk). rc.1's self-mention semantic change was correct
+> in the spool dispatch path (Layer 2) but missed the tmux nudge dispatch path
+> (Layer 4) — agents could still get a phantom `New message from @<self>`
+> reminder in their own pane on outbound sends. rc.3 adds the symmetric Layer 4
+> self-skip so both dispatch paths behave consistently. Also folds in a doc-port
+> of the `/thrum:restart` skill's §1 "Big picture" mandate across the plugin
+> variants.
+>
+> The promotion back to 48h FULL soak (from rc.2's 24h CLI/docs class) is
+> because the fix touches daemon dispatch code, not just docs.
 >
 > What's new in v0.10.5 overall:
 >
@@ -79,13 +84,13 @@ they're parameterized over `VERSION` and the release branch.
 > [`v0.10.4`](https://github.com/leonletto/thrum/releases/tag/v0.10.4) — see
 > [What's New](whats-new.md) for v0.10.4 + v0.10.5 highlights.
 
-### Quick install for `v0.10.5-rc.2`
+### Quick install for `v0.10.5-rc.3`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.2 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.3 sh
 
 # Codex plugin (matches release/v0.10.5)
 THRUM_INSTALL_REF=release/v0.10.5 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.5/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
