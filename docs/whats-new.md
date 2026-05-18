@@ -5,16 +5,19 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 [CHANGELOG.md](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-## v0.10.5 — rc.2 in soak
+## v0.10.5 — rc.3 in soak
 
-[`v0.10.5-rc.2`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.2)
-tagged 2026-05-17, in 24h CLI/docs soak through 2026-05-18. rc.2 is a docs-only
-patch on rc.1 — the `/thrum:restart` skill is restructured into an 11-section
-numbered format (adding "Honest unknowns" and "End-of-continuation note"
-sections, with "human input" reworded to "repo owner input"), plus a small
-`bd comments add` syntax correction in role templates and docs. No Go behavior
-change since rc.1. The Added/Changed/Fixed and Upgrade Notes sections below are
-the v0.10.5 release surface as a whole.
+[`v0.10.5-rc.3`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.3)
+tagged 2026-05-18, in 48h FULL soak through 2026-05-20. rc.3 carries a self-echo
+regression fix (thrum-1zfk): rc.1's self-mention semantic change was correct in
+the spool dispatch path but missed the tmux nudge dispatch path, so agents could
+still get a phantom `New message from @<self>` reminder on outbound sends. rc.3
+adds the symmetric tmux-path self-skip so both dispatch paths behave
+consistently. rc.2 was a docs-only patch (`/thrum:restart` skill restructured
+into an 11-section numbered format adding "Honest unknowns" and
+"End-of-continuation note" sections; `bd comments add` syntax correction in role
+templates and docs). The Added/Changed/Fixed and Upgrade Notes sections below
+describe the v0.10.5 release surface as a whole.
 
 Backstop and hygiene. The headline change is operational: a daemon-side backstop
 nudger re-emits delivery notifications for stale-unread messages on its own
@@ -100,6 +103,11 @@ v0.11 agent epics build on for ephemeral-worktree flows. The URL migration to
   route correctly to the author's own inbox without being filtered out by the
   recipient-set construction. `read_at` is stamped at insert for the
   self-delivery row so the message doesn't show as unread to its author.
+- **Self-echo nudge guard for tmux dispatch** (thrum-1zfk, rc.3). The tmux nudge
+  dispatch path (Layer 4) didn't honor the same self-skip the spool dispatcher
+  (Layer 2) does, so an outbound `thrum send` could still produce a phantom
+  `New message from @<self>` reminder in the sender's own pane. Layer 4 now
+  mirrors Layer 2; both dispatch paths skip self-delivery symmetrically.
 
 ### Upgrade Notes
 
