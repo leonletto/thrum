@@ -469,8 +469,11 @@ func (h *ScheduledAgentHandler) Dispatch(ctx context.Context, job scheduler.JobS
 	//   - ctx.Done(): operator cancel → teardown + StateCancelled.
 	//   - signals: job.done RPC delivered a Completion → teardown +
 	//     StateCompleted with the summary recorded in journal details.
-	//   - timer.C: idle window expired → fireIdleNudge (E6.4 stub
-	//     re-arms; the real multi-fire + escalation body ships there).
+	//   - timer.C: idle window expired → loop.onTimerFire runs one
+	//     tick of the multi-fire protocol (E6.4 in idle_nudge.go) —
+	//     PaneActivity probe, settle/re-arm if active, idle_nudge_NofM
+	//     stage marker + nudge inject if silent, Layer-D escalation
+	//     when nudgesFired hits maxNudges.
 	//
 	// Per IMPORTANT #7 dual-review: idleNudgeLoop is per-call (stack
 	// scope), never a handler field. AC 9.2.10 (5 simultaneous

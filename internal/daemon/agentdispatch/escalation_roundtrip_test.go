@@ -61,6 +61,14 @@ func (r *stateStoreRoundtripReporter) Transition(to scheduler.State, reason stri
 	// Mirror of scheduler.stateReporter.Transition from
 	// internal/daemon/scheduler/handler.go. The marker translation
 	// is the load-bearing line for Layer-D suppression.
+	//
+	// NOTE: Only the StateFailed branch is mirrored faithfully —
+	// the real reporter also resets ConsecutiveFailures + EscalationSent
+	// + LastError on StateCompleted, but this test never drives a
+	// Completed transition through the mirror so the reset code
+	// would be dead. A future test that exercises Completed must
+	// either add the reset logic here or use the real reporter
+	// (which requires scheduler-package-internal test placement).
 	switch to {
 	case scheduler.StateCompleted, scheduler.StateFailed, scheduler.StateCancelled, scheduler.StateOverBudget:
 		newRow.LastCompletedAt = &now

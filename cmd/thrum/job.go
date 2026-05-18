@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -71,19 +72,26 @@ func runJobDone(cmd *cobra.Command, _ []string) error {
 
 	if jobID == "" || runID == "" {
 		ctx, err := loadAgentRunContext(flagRepo)
-		if err == nil {
+		switch {
+		case err == nil:
 			if jobID == "" {
 				jobID = ctx.JobID
 			}
 			if runID == "" {
 				runID = ctx.RunID
 			}
-		} else if runID == "" {
-			// Only error when run_id is still missing — the daemon
-			// doesn't need job_id, so a partial context-load
-			// (e.g. file present but RunID empty) is fatal for
-			// run_id but not job_id.
+		case runID == "":
+			// run_id is still missing AND the context file is
+			// unavailable — the daemon needs run_id, so this is fatal.
 			return fmt.Errorf("--run-id required and run context unavailable: %w", err)
+		default:
+			// run_id was supplied via flag, so the context-file
+			// failure is benign — but log it so the operator can
+			// debug the missing run_context.json when they later
+			// wonder why the job_id-bearing confirmation line is
+			// absent.
+			slog.Debug("run context unavailable; job-id omitted from confirmation",
+				"err", err)
 		}
 	}
 
@@ -97,7 +105,16 @@ func runJobDone(cmd *cobra.Command, _ []string) error {
 	}
 	defer func() { _ = client.Close() }()
 
-	agentID, _ := resolveLocalAgentID()
+	// CallerAgentID is best-effort — the daemon's RPC_JobDone
+	// ignores it (only run_id matters), so a resolveLocalAgentID
+	// failure here is non-fatal. Log at debug so the operator can
+	// trace a degraded environment (no identity file, no
+	// THRUM_AGENT_ID env) without blocking the call.
+	agentID, agentIDErr := resolveLocalAgentID()
+	if agentIDErr != nil {
+		slog.Debug("resolveLocalAgentID failed; sending empty CallerAgentID (daemon ignores it)",
+			"err", agentIDErr)
+	}
 
 	req := scheduler.JobDoneRequest{
 		CallerAgentID: agentID,
