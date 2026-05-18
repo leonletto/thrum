@@ -10,6 +10,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/daemon/agentdispatch"
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
+	"github.com/leonletto/thrum/internal/worktree"
 )
 
 // stubTmuxRPC records calls + returns canned values. Used by stage-0
@@ -51,6 +52,42 @@ type messageSendCall struct {
 func (m *stubMessageRPC) MessageSend(_ context.Context, target, subject, body string) (string, error) {
 	m.calls = append(m.calls, messageSendCall{target: target, subject: subject, body: body})
 	return m.returnMessageID, m.returnErr
+}
+
+// stubWorktreeMgr records Create + Destroy calls + returns canned
+// values. Used by stage-3a tests; stage-4-6 rollback + stage-8
+// teardown tests extend usage (destroyResult / destroyErr).
+type stubWorktreeMgr struct {
+	createResult  *worktree.CreateResult
+	createErr     error
+	destroyResult *worktree.DestroyResult
+	destroyErr    error
+
+	createCalls  []worktree.CreateOpts
+	destroyCalls []worktree.DestroyOpts
+}
+
+func (s *stubWorktreeMgr) Create(_ context.Context, opts worktree.CreateOpts) (*worktree.CreateResult, error) {
+	s.createCalls = append(s.createCalls, opts)
+	return s.createResult, s.createErr
+}
+
+func (s *stubWorktreeMgr) Destroy(_ context.Context, opts worktree.DestroyOpts) (*worktree.DestroyResult, error) {
+	s.destroyCalls = append(s.destroyCalls, opts)
+	return s.destroyResult, s.destroyErr
+}
+
+// okWorktree returns a stub wired for the happy path: Create returns
+// a populated CreateResult with no error. Stage-3a/3b downstream tests
+// use this when they need stage 3a to succeed.
+func okWorktree() *stubWorktreeMgr {
+	return &stubWorktreeMgr{
+		createResult: &worktree.CreateResult{
+			Path:   "/tmp/wt/docs_bot-docs_bot_job-1",
+			Branch: "agent/docs_bot/job-docs_bot_job-1",
+			Reused: false,
+		},
+	}
 }
 
 // recReporter pins the scheduler.StateReporter interface for the
@@ -206,7 +243,7 @@ func TestStage0_FailsOnCheckPaneError(t *testing.T) {
 func TestStage1_BudgetCheckMarkerEmittedEvenThoughCheckIsUpstream(t *testing.T) {
 	rpc := &stubTmuxRPC{checkPaneResult: false}
 	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage1"}
-	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC})
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC, Worktree: okWorktree()})
 	rep := &recReporter{}
 
 	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, nil)
@@ -234,7 +271,7 @@ func TestStage1_BudgetCheckMarkerEmittedEvenThoughCheckIsUpstream(t *testing.T) 
 func TestStage0_HappyPath(t *testing.T) {
 	rpc := &stubTmuxRPC{checkPaneResult: false}
 	msgRPC := &stubMessageRPC{returnMessageID: "msg-happy"}
-	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC})
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC, Worktree: okWorktree()})
 	rep := &recReporter{}
 
 	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, nil)
@@ -260,7 +297,7 @@ func TestStage0_HappyPath(t *testing.T) {
 func TestStage2_EnqueuesWakeMessageAndJournalsMessageID(t *testing.T) {
 	rpc := &stubTmuxRPC{checkPaneResult: false}
 	msgRPC := &stubMessageRPC{returnMessageID: "msg-123"}
-	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC})
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC, Worktree: okWorktree()})
 	rep := &recReporter{}
 
 	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, nil)
@@ -335,7 +372,7 @@ func TestStage2_FailsOnMessageSendError(t *testing.T) {
 func TestStage2_BuildWakeMessage_ShapeMatchesSpec7_4(t *testing.T) {
 	rpc := &stubTmuxRPC{checkPaneResult: false}
 	msgRPC := &stubMessageRPC{returnMessageID: "msg-shape"}
-	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC})
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC, Worktree: okWorktree()})
 	rep := &recReporter{}
 
 	if err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-shape", rep, nil); err != nil {
@@ -389,6 +426,260 @@ func TestStage2_BuildWakeMessage_ShapeMatchesSpec7_4(t *testing.T) {
 	}
 	if _, err := time.Parse(time.RFC3339, ts); err != nil {
 		t.Errorf("scheduled_at = %q; not RFC3339 (%v)", ts, err)
+	}
+}
+
+// TestStage3a_CallsWorktreeCreate_WithCorrectOpts pins the canonical
+// stage-3a invocation per spec §7.1: Dispatch builds CreateOpts with
+// RepoPath/AgentName/JobID/WakeTimestamp/BaseBranch/Persistent derived
+// from the JobSpec + handler RepoPath, then calls
+// WorktreeManager.Create. JobID must be ULID-clean (worktree validator
+// rejects hyphens), so the handler sanitizes JobSpec.ID by replacing
+// hyphens with underscores.
+func TestStage3a_CallsWorktreeCreate_WithCorrectOpts(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-3a"}
+	wt := okWorktree()
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+	})
+	rep := &recReporter{}
+
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, nil)
+	if err != nil {
+		t.Fatalf("expected stages 0-3a to pass; got: %v", err)
+	}
+
+	if len(wt.createCalls) != 1 {
+		t.Fatalf("worktree.Create calls = %d; want 1", len(wt.createCalls))
+	}
+	opts := wt.createCalls[0]
+	if opts.AgentName != "docs_bot" {
+		t.Errorf("AgentName = %q; want docs_bot", opts.AgentName)
+	}
+	if opts.RepoPath != "/repo" {
+		t.Errorf("RepoPath = %q; want /repo", opts.RepoPath)
+	}
+	if opts.JobID == "" {
+		t.Error("JobID must be set for ephemeral mode")
+	}
+	if strings.Contains(opts.JobID, "-") {
+		t.Errorf("JobID = %q; must be ULID-clean (no hyphens)", opts.JobID)
+	}
+	if opts.WakeTimestamp <= 0 {
+		t.Errorf("WakeTimestamp = %d; want > 0", opts.WakeTimestamp)
+	}
+	if opts.BaseBranch != "main" {
+		t.Errorf("BaseBranch = %q; want main (default)", opts.BaseBranch)
+	}
+	if opts.Persistent != false {
+		t.Errorf("Persistent = %v; want false (default)", opts.Persistent)
+	}
+
+	// Stage marker must fire as the third stage in the canonical walk.
+	if len(rep.stages) < 4 {
+		t.Fatalf("expected at least 4 stage markers; got: %v", rep.stages)
+	}
+	if rep.stages[3] != agentdispatch.StageCreatingWorktree {
+		t.Errorf("stages[3] = %q; want %q", rep.stages[3], agentdispatch.StageCreatingWorktree)
+	}
+}
+
+// TestStage3a_HonorsBaseBranchAndPersistentFromJobSpec pins the
+// canonical sub-tree wiring: BaseBranch + WorktreePersistent flow from
+// JobSpec.ScheduledAgent into worktree.CreateOpts so operator
+// configuration reaches the actual create call.
+func TestStage3a_HonorsBaseBranchAndPersistentFromJobSpec(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-baseb"}
+	wt := okWorktree()
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+	})
+	rep := &recReporter{}
+
+	job := testJob("docs_bot")
+	job.ScheduledAgent.BaseBranch = "develop"
+	job.ScheduledAgent.WorktreePersistent = true
+
+	if err := h.Dispatch(context.Background(), job, "run-pb", rep, nil); err != nil {
+		t.Fatalf("Dispatch err: %v", err)
+	}
+	if len(wt.createCalls) != 1 {
+		t.Fatalf("worktree.Create calls = %d; want 1", len(wt.createCalls))
+	}
+	opts := wt.createCalls[0]
+	if opts.BaseBranch != "develop" {
+		t.Errorf("BaseBranch = %q; want develop", opts.BaseBranch)
+	}
+	if !opts.Persistent {
+		t.Error("Persistent = false; want true")
+	}
+	// Persistent mode skips JobID/WakeTimestamp validation; the handler
+	// must NOT populate JobID since the worktree leaf is the agent name.
+	if opts.JobID != "" {
+		t.Errorf("JobID = %q; want empty when Persistent=true", opts.JobID)
+	}
+}
+
+// TestStage3a_MapsErrPathExistsToFailedWithSweepDeferralReason pins
+// the canonical error mapping per spec §7.1 stage 3 + thrum-non7 §3.5:
+// stale ephemeral worktree → StateFailed with the "queued for next-
+// boot sweep" reason, error returned wraps ErrPathExists so callers
+// can errors.Is against it.
+func TestStage3a_MapsErrPathExistsToFailedWithSweepDeferralReason(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-pex"}
+	wt := &stubWorktreeMgr{createErr: worktree.ErrPathExists}
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+	})
+	rep := &recReporter{}
+
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-px", rep, nil)
+	if !errors.Is(err, worktree.ErrPathExists) {
+		t.Errorf("err = %v; want wraps worktree.ErrPathExists", err)
+	}
+	if rep.lastTransition().state != scheduler.StateFailed {
+		t.Errorf("lastState = %v; want StateFailed", rep.lastTransition().state)
+	}
+	if !strings.Contains(rep.lastTransition().reason, "queued for next-boot sweep") {
+		t.Errorf("reason = %q; want canonical sweep-deferral substring", rep.lastTransition().reason)
+	}
+}
+
+// TestStage3a_MapsErrPersistentBranchMismatchToManualReconciliation
+// pins the second canonical error mapping: an operator-owned branch
+// squatting the agent path → StateFailed with the "manual
+// reconciliation required" reason. Sweep cannot fix this — needs an
+// operator.
+func TestStage3a_MapsErrPersistentBranchMismatchToManualReconciliation(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-mismatch"}
+	wt := &stubWorktreeMgr{createErr: worktree.ErrPersistentBranchMismatch}
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+	})
+	rep := &recReporter{}
+
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-pm", rep, nil)
+	if !errors.Is(err, worktree.ErrPersistentBranchMismatch) {
+		t.Errorf("err = %v; want wraps worktree.ErrPersistentBranchMismatch", err)
+	}
+	if rep.lastTransition().state != scheduler.StateFailed {
+		t.Errorf("lastState = %v; want StateFailed", rep.lastTransition().state)
+	}
+	if !strings.Contains(rep.lastTransition().reason, "manual reconciliation required") {
+		t.Errorf("reason = %q; want canonical manual-reconciliation substring", rep.lastTransition().reason)
+	}
+}
+
+// TestStage3a_MapsContextCanceledToCancelledWithoutJournalWrite pins
+// the cancellation-discipline contract per IMPORTANT #7 + thrum-non7
+// §3.7: a context.Canceled error from worktree.Create on the cancel
+// path must NOT journal the worktree_path; E6.9 sweep owns the
+// orphan reclamation. Inline rollback would race the sweep and
+// double-delete; the asymmetric stage-failure rollback table is the
+// point.
+func TestStage3a_MapsContextCanceledToCancelledWithoutJournalWrite(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-cancel"}
+	wt := &stubWorktreeMgr{createErr: context.Canceled}
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+	})
+	rep := &recReporter{}
+
+	_ = h.Dispatch(ctx, testJob("docs_bot"), "run-cancel", rep, nil)
+
+	if rep.lastTransition().state != scheduler.StateCancelled {
+		t.Errorf("lastState = %v; want StateCancelled", rep.lastTransition().state)
+	}
+	if !strings.Contains(rep.lastTransition().reason, "cancelled mid-create") {
+		t.Errorf("reason = %q; want canonical cancellation substring", rep.lastTransition().reason)
+	}
+	// CRITICAL: no worktree_path in ANY journal entry on the cancel path.
+	for i, tr := range rep.transitions {
+		if _, has := tr.details["worktree_path"]; has {
+			t.Errorf("transitions[%d].details has worktree_path on cancel path; want absent (defer to sweep): %+v",
+				i, tr.details)
+		}
+	}
+}
+
+// TestStage3a_MapsContextDeadlineExceededToCancelledWithoutJournalWrite
+// is the deadline-exceeded twin of the cancel test: both share the
+// thrum-non7 §3.7 deferral semantics so the sweep can reclaim either
+// orphan class uniformly.
+func TestStage3a_MapsContextDeadlineExceededToCancelledWithoutJournalWrite(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-deadline"}
+	wt := &stubWorktreeMgr{createErr: context.DeadlineExceeded}
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+	})
+	rep := &recReporter{}
+
+	_ = h.Dispatch(context.Background(), testJob("docs_bot"), "run-deadline", rep, nil)
+
+	if rep.lastTransition().state != scheduler.StateCancelled {
+		t.Errorf("lastState = %v; want StateCancelled", rep.lastTransition().state)
+	}
+	for i, tr := range rep.transitions {
+		if _, has := tr.details["worktree_path"]; has {
+			t.Errorf("transitions[%d].details has worktree_path on deadline path; want absent: %+v",
+				i, tr.details)
+		}
+	}
+}
+
+// TestStage3a_DefaultErrorMapsToFailedWithRawErrorString pins the
+// fallback classification: an unclassified worktree.Create error
+// (e.g. ErrInvalidOpts in a misconfigured path, or some future
+// sentinel) surfaces as StateFailed with the raw error string in the
+// transition reason so operator diagnostics include the root cause.
+func TestStage3a_DefaultErrorMapsToFailedWithRawErrorString(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-default"}
+	rawErr := errors.New("disk full")
+	wt := &stubWorktreeMgr{createErr: rawErr}
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+	})
+	rep := &recReporter{}
+
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-def", rep, nil)
+	if !errors.Is(err, rawErr) {
+		t.Errorf("err = %v; want wraps raw err", err)
+	}
+	if rep.lastTransition().state != scheduler.StateFailed {
+		t.Errorf("lastState = %v; want StateFailed", rep.lastTransition().state)
+	}
+	if !strings.Contains(rep.lastTransition().reason, "disk full") {
+		t.Errorf("reason = %q; want raw error substring 'disk full'", rep.lastTransition().reason)
 	}
 }
 

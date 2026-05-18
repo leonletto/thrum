@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/leonletto/thrum/internal/agent"
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
+	"github.com/leonletto/thrum/internal/worktree"
 )
 
 // ErrTargetSessionAlive is returned by stage 0 when CheckPane reports
@@ -74,6 +76,20 @@ type MessageRPC interface {
 	MessageSend(ctx context.Context, target, subject, body string) (string, error)
 }
 
+// WorktreeManager is the minimal worktree-side surface stages 3a, 4-6
+// rollback, and stage 8 teardown reach for. The package-level
+// internal/worktree functions get adapted to this interface in
+// cmd/thrum/main.go so tests can swap fakes without touching real git
+// state. Stage 3a calls Create; rollback + stage 8 call Destroy.
+//
+// The error sentinels (ErrPathExists, ErrPersistentBranchMismatch,
+// context.Canceled, context.DeadlineExceeded) flow through unchanged —
+// classifyWorktreeError keys off them via errors.Is.
+type WorktreeManager interface {
+	Create(ctx context.Context, opts worktree.CreateOpts) (*worktree.CreateResult, error)
+	Destroy(ctx context.Context, opts worktree.DestroyOpts) (*worktree.DestroyResult, error)
+}
+
 // MirrorWorker is the minimal skill-mirror surface stage 3b consumes.
 // Currently a single method per C-B1 E9.5; new methods land here only
 // when a B-B1 stage needs them. mirror.ErrNullAdapter is the canonical
@@ -117,6 +133,13 @@ type Deps struct {
 	// adapter in cmd/thrum/main.go wires rpc.TmuxHandler / rpc.MessageHandler.
 	Tmux    TmuxRPC
 	Message MessageRPC
+
+	// Worktree wraps internal/worktree.Create + Destroy. Stage 3a
+	// consumes Create; stage 4-6 rollback + stage 8 teardown consume
+	// Destroy. The cmd/thrum/main.go adapter forwards directly to the
+	// package functions; tests swap a fake to exercise error paths
+	// (ErrPathExists / ErrPersistentBranchMismatch / context.Canceled).
+	Worktree WorktreeManager
 
 	// Registry is the agents-table read/write surface (E6.0 Task 4.5).
 	// Stage 7 idle-nudge fire path + stage 8 teardown read agent state
@@ -246,8 +269,91 @@ func (h *ScheduledAgentHandler) Dispatch(ctx context.Context, job scheduler.JobS
 		return err
 	}
 
-	// TODO(thrum-6qmf.4.46..thrum-6qmf.4.61): implement stages 3-8.
+	// Stage 3a: worktree.Create. Failure-contract per thrum-non7 §3.5
+	// is "zero residue on non-cancel errors" — no inline rollback is
+	// needed for ErrPathExists or ErrPersistentBranchMismatch. The
+	// context-cancellation case (cancel arriving AFTER git worktree add
+	// succeeds) is the one residue-class the thrum-non7 contract
+	// explicitly defers to E6.9 sweep (spec §7.1 stage 3 + thrum-non7
+	// §3.7) — so the cancel path emits NO worktree_path journal entry.
+	if err := reporter.Stage(StageCreatingWorktree); err != nil {
+		return err
+	}
+	persistent := false
+	baseBranch := ""
+	if job.ScheduledAgent != nil {
+		persistent = job.ScheduledAgent.WorktreePersistent
+		baseBranch = job.ScheduledAgent.BaseBranch
+	}
+	if baseBranch == "" {
+		baseBranch = "main"
+	}
+	createOpts := worktree.CreateOpts{
+		RepoPath:      h.deps.RepoPath,
+		BasePath:      "", // fall through to worktree.InferBasePath
+		AgentName:     target,
+		BaseBranch:    baseBranch,
+		Persistent:    persistent,
+		WakeTimestamp: time.Now().Unix(),
+	}
+	// JobID is ULID-clean only (alphanumeric + underscore per
+	// worktree.validateOpts); JobSpec.IDs use hyphenated kebab-case.
+	// Sanitize by replacing hyphens with underscores so the leaf path
+	// remains scoped to the originating job spec without leaking out
+	// of the worktree validator's alphabet. Persistent mode skips
+	// JobID/WakeTimestamp validation altogether.
+	if !persistent {
+		createOpts.JobID = strings.ReplaceAll(job.ID, "-", "_")
+	}
+	createResult, err := h.deps.Worktree.Create(ctx, createOpts)
+	if err != nil {
+		return h.classifyWorktreeError(err, reporter)
+	}
+
+	// TODO(thrum-6qmf.4.51): stage 3b (skillmirror.EnsureMirrored) +
+	// atomic journal-write of worktree_path/branch_name/reused at end
+	// of stage 3 per spec §7.1. Stage 3a result captured in scope for
+	// the upcoming Task 14 commit.
+	_ = createResult
 	return nil
+}
+
+// classifyWorktreeError maps stage 3a errors to the canonical
+// StateFailed reasons + Cancelled state per spec §7.1 stage 3 and
+// thrum-non7 §3.5/§3.7. Four cases:
+//
+//   - context.Canceled / DeadlineExceeded → StateCancelled with NO
+//     worktree_path journal-write; the E6.9 sweep is responsible for
+//     reclaiming the in-flight residue.
+//   - ErrPathExists → StateFailed "queued for next-boot sweep" (stale
+//     worktree at expected path; sweep reaps).
+//   - ErrPersistentBranchMismatch → StateFailed "manual reconciliation
+//     required" (operator-owned branch squatted the agent path).
+//   - default → StateFailed with the raw error string.
+//
+// The error is returned wrapped (via fmt.Errorf %w on non-sentinel
+// paths) so callers can still errors.Is(...) against the underlying
+// sentinels — important for AC 9.2 acceptance pinning.
+func (h *ScheduledAgentHandler) classifyWorktreeError(err error, reporter scheduler.StateReporter) error {
+	switch {
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		_ = reporter.Transition(scheduler.StateCancelled, "stage 3a cancelled mid-create", nil)
+		return err
+	case errors.Is(err, worktree.ErrPathExists):
+		_ = reporter.Transition(scheduler.StateFailed,
+			"stage 3a: stale worktree at expected path; queued for next-boot sweep",
+			map[string]any{"original_err": err.Error()})
+		return err
+	case errors.Is(err, worktree.ErrPersistentBranchMismatch):
+		_ = reporter.Transition(scheduler.StateFailed,
+			"stage 3a: persistent worktree squatted by operator-owned branch; manual reconciliation required",
+			map[string]any{"original_err": err.Error()})
+		return err
+	default:
+		_ = reporter.Transition(scheduler.StateFailed,
+			fmt.Sprintf("stage 3a: worktree.Create: %v", err), nil)
+		return fmt.Errorf("stage 3a: worktree.Create: %w", err)
+	}
 }
 
 // buildWakeMessage composes the agent.wake message body per spec §7.4:
