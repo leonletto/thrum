@@ -55,8 +55,16 @@ fi
 # the next wake's diff surfaces only what's truly NEW since this
 # boot, not since end-of-session (which might be drift-free if no
 # new skills shipped during the session).
+#
+# Atomic write via temp-file + mv to match the project's
+# shared-state-file convention (portfile.go, peer_registry.go,
+# scheduler/reload.go). A crash mid-cp would leave a partial
+# last_seen_skills.txt; the next wake's diff would then emit
+# "all skills new" (false-positive drift). Temp+mv eliminates the
+# partial-write window.
 mkdir -p ".thrum/agents/${AGENT_NAME}"
-cp /tmp/current_skills.txt "${LAST_SEEN}"
+cp /tmp/current_skills.txt "${LAST_SEEN}.tmp" && \
+  mv "${LAST_SEEN}.tmp" "${LAST_SEEN}"
 ```
 
 The skill registry mirrors C-B1's auto-discovery (canonical §8.5): when a

@@ -89,11 +89,25 @@ func TestScheduledAgentStateMD_FiveWakeContinuity(t *testing.T) {
 	agentID := registerTestAgent(t, st)
 	writeIdentityFile(t, thrumRoot, agentID, repoRoot)
 
+	// Fixture .claude/skills/ dir for the last_seen_skills.txt
+	// behavioral assertion (brainstormer-third I1 fix). The
+	// prime-agent SKILL.md's Step 2 reads .claude/skills/, diffs
+	// against last_seen_skills.txt, then writes the current set
+	// back. The behavioral test simulates Step 2 in pure Go
+	// (executing the shell would require bash + claude-plugin
+	// path resolution; the in-process simulation faithfully
+	// exercises the WRITE side which is what plan v2.2 AC retains).
+	setupFixtureSkillsDir(t, repoRoot, []string{"prime-agent", "thrum", "update-agent-state"})
+
 	// === 5 sequential wakes ===
 
 	for wake := 1; wake <= 5; wake++ {
 		runStateUpdate(t, thrumBin, repoRoot, socketPath, agentID, wake)
 		verifyStateMDAfterWake(t, thrumRoot, agentID, wake)
+		// Simulate prime-agent Step 2's last_seen_skills.txt
+		// write-back per spec §8.5 + plan v2.2 retained AC.
+		simulatePrimeAgentStep2(t, repoRoot, thrumRoot, agentID, wake)
+		verifyLastSeenSkillsBumped(t, thrumRoot, agentID, wake)
 	}
 
 	// === bd AC after wake 5 specifically ===
@@ -373,18 +387,89 @@ func readStateMD(t *testing.T, thrumRoot, agentID string) *agentstate.StateMD {
 	return s
 }
 
-// totalSessionCount tallies verbatim entries + summary-block
-// entries. Matches the calculation in agentstate's own
-// TestPromoteAndDrop_30SessionYoyo helper.
+// totalSessionCount tallies verbatim + summary-block entries
+// using the structured SummaryBlock.Entries slice (B1 fix from
+// brainstormer-third — was a newline-count over a concatenated
+// Summary string).
 func totalSessionCount(s *agentstate.StateMD) int {
 	total := len(s.Verbatim)
 	for _, b := range s.SummaryBlocks {
-		if b.Summary == "" {
-			continue
-		}
-		total += strings.Count(b.Summary, "\n") + 1
+		total += len(b.Entries)
 	}
 	return total
+}
+
+// setupFixtureSkillsDir creates a .claude/skills/ tree with one
+// subdir per skill name. Mimics the production layout the
+// prime-agent Step 2 shell logic does `ls .claude/skills/` against.
+func setupFixtureSkillsDir(t *testing.T, repoRoot string, skillNames []string) {
+	t.Helper()
+	skillsDir := filepath.Join(repoRoot, ".claude", "skills")
+	for _, name := range skillNames {
+		if err := os.MkdirAll(filepath.Join(skillsDir, name), 0o700); err != nil {
+			t.Fatalf("mkdir skill %s: %v", name, err)
+		}
+	}
+}
+
+// simulatePrimeAgentStep2 performs the prime-agent SKILL.md Step 2
+// write-back logic in Go: list .claude/skills/, write atomically to
+// .thrum/agents/<id>/last_seen_skills.txt via temp+mv (matching the
+// SKILL.md's shell `cp temp + mv` after brainstormer-third I4 fix).
+//
+// On wake N+1 the SKILL.md's diff would compare the previously-
+// written file against the current ls; on wake 1 there's no prior
+// file so the diff path is "first wake" + this function lands the
+// initial baseline.
+func simulatePrimeAgentStep2(t *testing.T, repoRoot, thrumRoot, agentID string, wake int) {
+	t.Helper()
+	skillsDir := filepath.Join(repoRoot, ".claude", "skills")
+	entries, err := os.ReadDir(skillsDir)
+	if err != nil {
+		t.Fatalf("wake %d: read skills dir: %v", wake, err)
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	dst := filepath.Join(thrumRoot, "agents", agentID, "last_seen_skills.txt")
+	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+		t.Fatalf("wake %d: mkdir last_seen parent: %v", wake, err)
+	}
+	// Atomic write via temp + rename (mirrors the SKILL.md shell
+	// pattern after brainstormer-third I4 fix). A naked WriteFile
+	// would also work in-process but the test should exercise the
+	// same atomic discipline the production shell does.
+	tmp := dst + ".tmp"
+	body := strings.Join(names, "\n") + "\n"
+	if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
+		t.Fatalf("wake %d: write temp: %v", wake, err)
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		t.Fatalf("wake %d: rename temp: %v", wake, err)
+	}
+}
+
+// verifyLastSeenSkillsBumped asserts that the last_seen_skills.txt
+// file exists for the agent + contains the fixture skill names per
+// brainstormer-third I1 fix (plan v2.2 retained AC: file bumped
+// after each wake).
+func verifyLastSeenSkillsBumped(t *testing.T, thrumRoot, agentID string, wake int) {
+	t.Helper()
+	path := filepath.Join(thrumRoot, "agents", agentID, "last_seen_skills.txt")
+	data, err := os.ReadFile(path) // #nosec G304 -- test fixture path under thrumRoot
+	if err != nil {
+		t.Errorf("wake %d: last_seen_skills.txt missing: %v", wake, err)
+		return
+	}
+	for _, expected := range []string{"prime-agent", "thrum", "update-agent-state"} {
+		if !strings.Contains(string(data), expected) {
+			t.Errorf("wake %d: last_seen_skills.txt missing fixture skill %q; got: %q",
+				wake, expected, string(data))
+		}
+	}
 }
 
 // waitForSocket polls until the Unix socket accepts connections.

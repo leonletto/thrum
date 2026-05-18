@@ -65,12 +65,32 @@ type VerbatimEntry struct {
 //
 // Source line shape:
 //
-//	**Block A** (sessions <start>–<end>): <one-or-multi-line summary>
+//	**Block A** (sessions <start>–<end>): <first-entry-line>
+//	<second-entry-line>
+//	...
+//	<fifth-entry-line>
+//
+// Each entry-line follows the same shape as a VerbatimEntry source
+// line: `<session-id> · <date> — <summary>` (em-dash OR ASCII `--`).
+// Entries are stored as a structured slice rather than concatenated
+// text so the MaxEntriesPerBlock invariant is exactly enforceable
+// at parse time (Phase 3 brainstormer-third B1 fix).
 type SummaryBlock struct {
 	Label        string // "A" / "B" / "C" — assigned by the writer; parser preserves
 	StartSession string
 	EndSession   string
-	Summary      string
+	Entries      []SummaryEntry // hard cap: ≤5 per spec §7.5
+}
+
+// SummaryEntry is one graduated session inside a SummaryBlock.
+// Shape matches VerbatimEntry intentionally — graduated entries
+// preserve the same `<session-id> · <date> — <summary>` shape so
+// the writer's render is consistent across verbatim + summary
+// sections.
+type SummaryEntry struct {
+	SessionID string
+	Date      string
+	Summary   string
 }
 
 // ReferenceEntry is one row of the reference table at the foot of
@@ -129,6 +149,11 @@ var (
 	// Summary block header: `**Block A** (sessions <start>–<end>): <first-line>`.
 	// En-dash (U+2013) is the canonical separator inside the parens; ASCII `-` accepted.
 	summaryHeaderRE = regexp.MustCompile(`^\*\*Block ([A-Z])\*\*\s*\(sessions\s+(\S+?)(?:–|-)(\S+)\):\s*(.*)$`)
+
+	// Summary entry line: `<session-id> · <date> — <summary>` (same
+	// shape as verbatim, minus the leading "N. " number prefix).
+	// Em-dash AND ASCII `--` both accepted.
+	summaryEntryRE = regexp.MustCompile(`^(\S+)\s+·\s+([^—]*?)\s*(?:—|--)\s*(.+)$`)
 
 	// Reference row: `- `<path>`: <purpose>`.
 	referenceRE = regexp.MustCompile("^- `([^`]+)`:\\s*(.+)$")
@@ -213,28 +238,62 @@ func Parse(content string) (*StateMD, error) {
 			continue
 
 		case trimmed == "## Session history":
+			if err := requireSectionOrder(section, sectionPreamble, "## Session history"); err != nil {
+				return nil, err
+			}
 			section = sectionVerbatim
 			continue
 
 		case trimmed == "### Verbatim (most recent first)":
+			// Sub-section of ## Session history; accept while
+			// section is sectionVerbatim (which the ## heading
+			// already set), or accept once if section was
+			// sectionPreamble (defensive: some files might skip
+			// the parent heading).
+			if section != sectionVerbatim && section != sectionPreamble {
+				return nil, fmt.Errorf("%w: '### Verbatim' appeared after %s (must follow '## Session history')",
+					ErrMalformedFormat, sectionName(section))
+			}
 			section = sectionVerbatim
 			continue
 
 		case trimmed == "### Summary blocks (most recent first)":
+			// Must follow Verbatim within Session history.
+			if section != sectionVerbatim {
+				return nil, fmt.Errorf("%w: '### Summary blocks' appeared after %s (must follow '### Verbatim')",
+					ErrMalformedFormat, sectionName(section))
+			}
 			section = sectionSummaryBlocks
 			continue
 
 		case trimmed == "## Last worked on":
+			// Must follow Verbatim or Summary blocks (the two
+			// sub-sections of Session history). Out-of-order
+			// (e.g., after "## Planning next") rejected.
+			if section != sectionVerbatim && section != sectionSummaryBlocks {
+				return nil, fmt.Errorf("%w: '## Last worked on' appeared after %s (must follow Session history)",
+					ErrMalformedFormat, sectionName(section))
+			}
 			flushCurrentBlock()
 			section = sectionLastWorkedOn
 			continue
 
 		case trimmed == "## Planning next":
+			// Must follow Last worked on.
+			if section != sectionLastWorkedOn {
+				return nil, fmt.Errorf("%w: '## Planning next' appeared after %s (must follow '## Last worked on')",
+					ErrMalformedFormat, sectionName(section))
+			}
 			flushCurrentBlock()
 			section = sectionPlanningNext
 			continue
 
 		case trimmed == "## Reference table":
+			// Must follow Planning next.
+			if section != sectionPlanningNext {
+				return nil, fmt.Errorf("%w: '## Reference table' appeared after %s (must follow '## Planning next')",
+					ErrMalformedFormat, sectionName(section))
+			}
 			flushCurrentBlock()
 			section = sectionReferenceTable
 			continue
@@ -280,16 +339,36 @@ func Parse(content string) (*StateMD, error) {
 					Label:        m[1],
 					StartSession: m[2],
 					EndSession:   m[3],
-					Summary:      strings.TrimSpace(m[4]),
+				}
+				// The header's trailing text (capture group 4) is
+				// the FIRST entry's inline summary. If it matches
+				// the entry shape, parse it; otherwise treat the
+				// whole thing as one entry's summary with empty
+				// session-id/date (defensive — well-formed
+				// blocks from PromoteAndDrop always have the
+				// `<id> · <date> — <summary>` shape on the
+				// header line).
+				firstLine := strings.TrimSpace(m[4])
+				if firstLine != "" {
+					if entry, ok := parseSummaryEntryLine(firstLine); ok {
+						currentBlock.Entries = append(currentBlock.Entries, entry)
+					}
 				}
 				continue
 			}
-			// Continuation line of the current block's multi-line summary.
+			// Body line: either a new entry (matches entry shape)
+			// or a continuation of the previous entry's summary.
 			if currentBlock != nil {
-				if currentBlock.Summary != "" {
-					currentBlock.Summary += "\n"
+				if entry, ok := parseSummaryEntryLine(trimmed); ok {
+					currentBlock.Entries = append(currentBlock.Entries, entry)
+				} else if n := len(currentBlock.Entries); n > 0 {
+					// Continuation of last entry's multi-line summary.
+					currentBlock.Entries[n-1].Summary += "\n" + trimmed
 				}
-				currentBlock.Summary += trimmed
+				// If no entries yet and the line doesn't match
+				// entry shape, it's stray prose — silently
+				// dropped (rare; would indicate hand-edit drift
+				// that doesn't fit the format).
 			}
 
 		case sectionLastWorkedOn:
@@ -318,19 +397,19 @@ func Parse(content string) (*StateMD, error) {
 	// happen for well-formed input).
 	flushCurrentBlock()
 
-	// Validate block-entry-count cap (Phase 3 Medium #2 fix).
-	// Each summary block carries up to MaxEntriesPerBlock graduated
-	// entries, one per newline. A block whose Summary exceeds that
-	// indicates either a writer-side bug (PromoteAndDrop should
-	// never produce more than 5) or external tampering — either
-	// way, structural corruption per spec §6.5. Surface as
-	// ErrSummaryBlockTooLarge so the caller routes through
-	// /thrum:recover-agent-state.
+	// Validate block-entry-count cap (Phase 3 brainstormer-third B1
+	// fix). Each block holds up to MaxEntriesPerBlock entries; the
+	// structured SummaryBlock.Entries slice makes this exactly
+	// enforceable at parse time. Previously the parser counted
+	// newlines in a concatenated Summary string — that approach
+	// was ambiguous on hand-edited multi-line entries (a single
+	// graduated entry with embedded newlines would inflate the
+	// count). The structured slice eliminates that ambiguity.
 	for i, b := range s.SummaryBlocks {
-		if summaryEntryCount(b.Summary) > MaxEntriesPerBlock {
+		if len(b.Entries) > MaxEntriesPerBlock {
 			return nil, fmt.Errorf("%w: block %d (label %q) has %d entries (cap %d)",
 				ErrSummaryBlockTooLarge, i, b.Label,
-				summaryEntryCount(b.Summary), MaxEntriesPerBlock)
+				len(b.Entries), MaxEntriesPerBlock)
 		}
 	}
 
@@ -369,8 +448,23 @@ func (s *StateMD) Write(w io.Writer) error {
 
 	buf.WriteString("### Summary blocks (most recent first)\n\n")
 	for _, b := range s.SummaryBlocks {
-		fmt.Fprintf(&buf, "**Block %s** (sessions %s–%s): %s\n\n",
-			b.Label, b.StartSession, b.EndSession, b.Summary)
+		// First entry rides on the block-header line; remaining
+		// entries land on their own lines below. Empty Entries
+		// renders just the header (defensive — shouldn't happen
+		// for blocks generated by PromoteAndDrop).
+		if len(b.Entries) == 0 {
+			fmt.Fprintf(&buf, "**Block %s** (sessions %s–%s):\n\n",
+				b.Label, b.StartSession, b.EndSession)
+			continue
+		}
+		first := b.Entries[0]
+		fmt.Fprintf(&buf, "**Block %s** (sessions %s–%s): %s · %s — %s\n",
+			b.Label, b.StartSession, b.EndSession,
+			first.SessionID, first.Date, first.Summary)
+		for _, e := range b.Entries[1:] {
+			fmt.Fprintf(&buf, "%s · %s — %s\n", e.SessionID, e.Date, e.Summary)
+		}
+		buf.WriteString("\n")
 	}
 
 	// Last worked on
@@ -418,10 +512,9 @@ func (s *StateMD) Write(w io.Writer) error {
 // drop while opening a fresh block) and 19 (peak just before a
 // drop).
 //
-// "Graduating entry" is represented in a summary block by appending
-// the entry's SessionID + summary into the block's Summary field as
-// a new line. Block entry count is derived from `strings.Count(b.Summary, "\n") + 1`
-// when the field is non-empty.
+// Graduating entries are stored as structured SummaryEntry values
+// in the block's Entries slice. Block entry count is exactly
+// `len(block.Entries)`.
 func PromoteAndDrop(s *StateMD, newEntry VerbatimEntry) {
 	// Step 1+2: insert newEntry at slot #1; shift others.
 	s.Verbatim = append([]VerbatimEntry{newEntry}, s.Verbatim...)
@@ -438,18 +531,17 @@ func PromoteAndDrop(s *StateMD, newEntry VerbatimEntry) {
 	}
 
 	// Step 3+4: route graduating entry into a summary block.
-	gradLine := fmt.Sprintf("%s · %s — %s",
-		graduating.SessionID, graduating.Date, graduating.Summary)
+	gradEntry := SummaryEntry{
+		SessionID: graduating.SessionID,
+		Date:      graduating.Date,
+		Summary:   graduating.Summary,
+	}
 
 	if len(s.SummaryBlocks) > 0 {
 		head := &s.SummaryBlocks[0]
-		headEntries := summaryEntryCount(head.Summary)
-		if headEntries < MaxEntriesPerBlock {
+		if len(head.Entries) < MaxEntriesPerBlock {
 			// Append to the most-recent block.
-			if head.Summary != "" {
-				head.Summary += "\n"
-			}
-			head.Summary += gradLine
+			head.Entries = append(head.Entries, gradEntry)
 			// Update end-session bound — most-recent block now
 			// covers up through the graduating entry.
 			head.EndSession = graduating.SessionID
@@ -465,18 +557,75 @@ func PromoteAndDrop(s *StateMD, newEntry VerbatimEntry) {
 		Label:        nextBlockLabel(s.SummaryBlocks),
 		StartSession: graduating.SessionID,
 		EndSession:   graduating.SessionID,
-		Summary:      gradLine,
+		Entries:      []SummaryEntry{gradEntry},
 	}
 	s.SummaryBlocks = append([]SummaryBlock{newBlock}, s.SummaryBlocks...)
 }
 
-// summaryEntryCount returns the number of newline-delimited entries
-// in a SummaryBlock's Summary field. Empty Summary = 0 entries.
-func summaryEntryCount(summary string) int {
-	if summary == "" {
-		return 0
+// parseSummaryEntryLine attempts to match a line in the
+// summary-blocks section as a `<session-id> · <date> — <summary>`
+// entry shape. Returns (entry, true) on match; (zero, false)
+// otherwise (the line is a continuation of the previous entry's
+// multi-line summary, or stray prose).
+func parseSummaryEntryLine(line string) (SummaryEntry, bool) {
+	m := summaryEntryRE.FindStringSubmatch(line)
+	if m == nil {
+		return SummaryEntry{}, false
 	}
-	return strings.Count(summary, "\n") + 1
+	return SummaryEntry{
+		SessionID: m[1],
+		Date:      strings.TrimSpace(m[2]),
+		Summary:   strings.TrimSpace(m[3]),
+	}, true
+}
+
+// requireSectionOrder enforces the spec §7.5 heading sequence per
+// brainstormer-third B2 fix. Returns ErrMalformedFormat (wrapped
+// with a descriptive message) if the parser is about to enter a
+// section but the prior section isn't a valid predecessor.
+//
+// The canonical sequence:
+//
+//	preamble  → sectionVerbatim       (## Session history)
+//	verbatim  → sectionSummaryBlocks  (### Summary blocks)
+//	verbatim
+//	  OR summary blocks
+//	          → sectionLastWorkedOn   (## Last worked on)
+//	last worked on
+//	          → sectionPlanningNext   (## Planning next)
+//	planning next
+//	          → sectionReferenceTable (## Reference table)
+//
+// A state.md with sections in any other order indicates either
+// tampering or a writer bug; rejected via ErrMalformedFormat so
+// the recovery skill routes through spec §6.5.
+func requireSectionOrder(current, want int, heading string) error {
+	if current != want {
+		return fmt.Errorf("%w: %q appeared after %s (expected after %s)",
+			ErrMalformedFormat, heading, sectionName(current), sectionName(want))
+	}
+	return nil
+}
+
+// sectionName renders a section sentinel as a human-friendly string
+// for error messages. Internal-only.
+func sectionName(s int) string {
+	switch s {
+	case 0: // sectionPreamble
+		return "preamble (before '## Session history')"
+	case 1: // sectionVerbatim
+		return "'### Verbatim' section"
+	case 2: // sectionSummaryBlocks
+		return "'### Summary blocks' section"
+	case 3: // sectionLastWorkedOn
+		return "'## Last worked on' section"
+	case 4: // sectionPlanningNext
+		return "'## Planning next' section"
+	case 5: // sectionReferenceTable
+		return "'## Reference table' section"
+	default:
+		return fmt.Sprintf("unknown section %d", s)
+	}
 }
 
 // nextBlockLabel returns the label for a newly-opened most-recent

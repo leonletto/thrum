@@ -30,7 +30,7 @@ func fixtureBasic() string {
 		"\n" +
 		"### Summary blocks (most recent first)\n" +
 		"\n" +
-		"**Block A** (sessions ses_000a–ses_000e): Earlier work on B-B1 E6.1.\n" +
+		"**Block A** (sessions ses_000a–ses_000e): ses_000a · 2026-05-13 — Earlier work on B-B1 E6.1.\n" +
 		"\n" +
 		"## Last worked on\n" +
 		"\n" +
@@ -217,27 +217,89 @@ func TestParse_MalformedVerbatimEntry_ReturnsError(t *testing.T) {
 	}
 }
 
-// TestParse_SummaryBlockTooLarge_ReturnsError covers Phase 3 Medium
-// #2 fix: a summary block whose body exceeds 5 newline-delimited
-// entries must surface as ErrSummaryBlockTooLarge. The exported
-// sentinel was previously never returned by Parse — now enforced.
+// TestParse_SummaryBlockTooLarge_ReturnsError covers Phase 3
+// brainstormer-third B1 fix: a summary block with more than
+// MaxEntriesPerBlock STRUCTURED entries must surface as
+// ErrSummaryBlockTooLarge. Each entry has the canonical
+// `<session-id> · <date> — <summary>` shape; the parser counts
+// matching entries via len(SummaryBlock.Entries) — not newlines
+// in a concatenated string (the original Medium #2 approach,
+// which was ambiguous on multi-line entries).
 func TestParse_SummaryBlockTooLarge_ReturnsError(t *testing.T) {
 	// Block A with 6 graduated entries (one over cap). Each entry
-	// is a separate line after the heading.
+	// has the proper SummaryEntry shape; only the count violates
+	// MaxEntriesPerBlock.
 	content := "# Agent State — alpha\n\n" +
 		"> **Last updated:** 2026-05-18T15:32:18Z **Last run:** x · y\n\n" +
 		"## Session history\n\n" +
 		"### Verbatim (most recent first)\n\n" +
 		"### Summary blocks (most recent first)\n\n" +
-		"**Block A** (sessions ses_001–ses_006): entry-1.\n" +
-		"entry-2.\n" +
-		"entry-3.\n" +
-		"entry-4.\n" +
-		"entry-5.\n" +
-		"entry-6.\n"
+		"**Block A** (sessions ses_001–ses_006): ses_001 · 2026-05-13 — entry-1.\n" +
+		"ses_002 · 2026-05-14 — entry-2.\n" +
+		"ses_003 · 2026-05-15 — entry-3.\n" +
+		"ses_004 · 2026-05-16 — entry-4.\n" +
+		"ses_005 · 2026-05-17 — entry-5.\n" +
+		"ses_006 · 2026-05-18 — entry-6.\n"
 	_, err := agentstate.Parse(content)
 	if !errors.Is(err, agentstate.ErrSummaryBlockTooLarge) {
 		t.Errorf("expected ErrSummaryBlockTooLarge for 6-entry block, got %v", err)
+	}
+}
+
+// TestParse_TransposedSections_ReturnsError covers Phase 3
+// brainstormer-third B2 fix: spec §9.3.6 requires the parser to
+// reject malformed structural shapes. Section order matters —
+// `## Planning next` appearing BEFORE `## Last worked on` (or any
+// out-of-order transposition) must surface as ErrMalformedFormat
+// so the recovery skill routes through spec §6.5 rather than
+// silently storing content in the wrong field.
+func TestParse_TransposedSections_ReturnsError(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+	}{
+		{
+			name: "PlanningNext_before_LastWorkedOn",
+			content: "# Agent State — alpha\n\n" +
+				"> **Last updated:** 2026-05-18T15:32:18Z **Last run:** x · y\n\n" +
+				"## Session history\n\n" +
+				"### Verbatim (most recent first)\n\n" +
+				"### Summary blocks (most recent first)\n\n" +
+				"## Planning next\n\n" + // SHOULD come AFTER Last worked on
+				"next text\n\n" +
+				"## Last worked on\n\n" +
+				"last text\n",
+		},
+		{
+			name: "SummaryBlocks_before_Verbatim",
+			content: "# Agent State — alpha\n\n" +
+				"> **Last updated:** 2026-05-18T15:32:18Z **Last run:** x · y\n\n" +
+				"## Session history\n\n" +
+				"### Summary blocks (most recent first)\n\n" + // SHOULD come AFTER Verbatim
+				"### Verbatim (most recent first)\n\n" +
+				"1. ses_001 · 2026-05-18 — first.\n",
+		},
+		{
+			name: "ReferenceTable_before_PlanningNext",
+			content: "# Agent State — alpha\n\n" +
+				"> **Last updated:** 2026-05-18T15:32:18Z **Last run:** x · y\n\n" +
+				"## Session history\n\n" +
+				"### Verbatim (most recent first)\n\n" +
+				"### Summary blocks (most recent first)\n\n" +
+				"## Last worked on\n\n" +
+				"text\n\n" +
+				"## Reference table\n\n" + // SHOULD come AFTER Planning next
+				"- `foo`: bar\n",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := agentstate.Parse(tc.content)
+			if !errors.Is(err, agentstate.ErrMalformedFormat) {
+				t.Errorf("expected ErrMalformedFormat for transposed sections, got %v", err)
+			}
+		})
 	}
 }
 
@@ -365,16 +427,12 @@ func mkEntry(sessionID string) agentstate.VerbatimEntry {
 }
 
 // totalSessionCount tallies verbatim + summary-block entries for the
-// yo-yo invariant check. Block-entry count is derived from the
-// block's Summary newline count (each graduated entry adds one
-// newline).
+// yo-yo invariant check. Block-entry count is now exactly
+// len(block.Entries) (B1 fix from brainstormer-third).
 func totalSessionCount(s *agentstate.StateMD) int {
 	total := len(s.Verbatim)
 	for _, b := range s.SummaryBlocks {
-		if b.Summary == "" {
-			continue
-		}
-		total += strings.Count(b.Summary, "\n") + 1
+		total += len(b.Entries)
 	}
 	return total
 }
