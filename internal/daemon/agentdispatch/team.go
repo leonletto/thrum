@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"github.com/leonletto/thrum/internal/daemon/state"
 )
 
 // AgentRenderState carries the per-agent context the body-fallback
@@ -136,3 +139,59 @@ func RenderBodyFallbackChain(
 	return fmt.Sprintf("Last run: %s at %s. No summary.",
 		state.LastRunState, state.LastCompletedAt.UTC().Format(time.RFC3339))
 }
+
+// journalDefaultLimit is the cap on agent_lifecycle_events surfaced
+// by `thrum team @<name> --journal`. Matches spec §7.6 "Most recent
+// first; capped at 50 entries (older history greppable in daemon
+// logs)".
+const journalDefaultLimit = 50
+
+// RenderJournal builds the multi-line journal output for
+// `thrum team @<name> --journal` (E6.8 Task 59). Reads the last
+// journalDefaultLimit agent_lifecycle_events for agentName via
+// AgentLifecycleStore.ListByAgent and formats each entry as
+// "<RFC3339> · <event_kind> · <reason>", most-recent first
+// (matches the store's ListByAgent ORDER BY event_time DESC).
+//
+// On store error the function returns a single-line error
+// description so the CLI can render it inline (operator sees
+// "error reading journal: <detail>" rather than a silent empty
+// pane). On empty journal the function returns "No journal
+// entries for <agentName>." — non-empty so the CLI doesn't show
+// a confusing blank.
+func RenderJournal(ctx context.Context, agentName string, store state.AgentLifecycleStore) string {
+	if store == nil {
+		return "Journal unavailable: lifecycle store not wired."
+	}
+	events, err := store.ListByAgent(ctx, agentName, journalDefaultLimit)
+	if err != nil {
+		return "error reading journal: " + err.Error()
+	}
+	if len(events) == 0 {
+		return "No journal entries for " + agentName + "."
+	}
+	var b strings.Builder
+	for _, e := range events {
+		reason := e.Reason
+		if reason == "" {
+			reason = "—"
+		}
+		fmt.Fprintf(&b, "%s · %s · %s\n",
+			e.EventTime.UTC().Format(time.RFC3339),
+			e.EventKind,
+			reason)
+	}
+	return b.String()
+}
+
+// FilesRPCUnavailableMessage is the operator-facing string the
+// `--files` flag renders when the cross-epic MB-1.S2 Q10 RPC
+// (agent.listFiles) isn't registered on the daemon. Per spec
+// §9.7.4 / §9.9.5 the feature-detect path prints this and exits 0.
+//
+// Exported so the CLI (cmd/thrum/team.go in the follow-on dispatch
+// that wires the --files flag) renders the exact string operators
+// expect in their runbooks; centralising it here means a single
+// edit propagates to every consumer.
+const FilesRPCUnavailableMessage = "files RPC unavailable in this daemon"
+

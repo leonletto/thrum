@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/safedb"
@@ -72,6 +73,18 @@ type AgentLifecycleStore interface {
 	// ListByAgent returns the most-recent `limit` events for agentName
 	// ordered by event_time DESC. limit <= 0 means "no cap".
 	ListByAgent(ctx context.Context, agentName string, limit int) ([]AgentLifecycleEvent, error)
+
+	// ListByAgents returns the most-recent `limit` events for each
+	// agent in agentNames, keyed by agent_name in the returned map.
+	// Agents with zero events are absent from the map (callers
+	// distinguish "no events" from "lookup failed" via the error).
+	//
+	// Implementations execute one bulk query (single round-trip)
+	// rather than N per-agent queries — protects team.list-style
+	// callers from N+1 SQL hits when rendering many members.
+	// limit <= 0 means "no cap"; bounded operationally by the
+	// agent_lifecycle_events retention window.
+	ListByAgents(ctx context.Context, agentNames []string, limit int) (map[string][]AgentLifecycleEvent, error)
 
 	// LoopGuardCount returns the number of events with (agent_name,
 	// event_kind) matching, with event_time in the half-open interval
@@ -189,6 +202,85 @@ func (s *agentLifecycleStore) ListByAgent(ctx context.Context, agentName string,
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate agent_lifecycle_events: %w", err)
+	}
+	return out, nil
+}
+
+// ListByAgents implements the bulk lookup. Uses a windowed
+// per-agent ROW_NUMBER() partition so a single round-trip returns
+// the most-recent `limit` events for every agent in agentNames —
+// no N+1 round-trips. Empty agentNames returns an empty map +
+// nil error (no SQL fires).
+func (s *agentLifecycleStore) ListByAgents(ctx context.Context, agentNames []string, limit int) (map[string][]AgentLifecycleEvent, error) {
+	if len(agentNames) == 0 {
+		return map[string][]AgentLifecycleEvent{}, nil
+	}
+
+	placeholders := make([]string, len(agentNames))
+	args := make([]any, 0, len(agentNames)+1)
+	for i, name := range agentNames {
+		placeholders[i] = "?"
+		args = append(args, name)
+	}
+
+	// Window-function partition: for each agent_name, number the
+	// events by event_time DESC, then keep only the first N per
+	// partition. ROW_NUMBER() is supported by SQLite 3.25+ which
+	// pre-dates the project's required version.
+	query := `
+		WITH ranked AS (
+			SELECT id, agent_name, event_kind, event_time,
+			       detection_method, reason, details,
+			       ROW_NUMBER() OVER (
+			         PARTITION BY agent_name
+			         ORDER BY event_time DESC, id DESC
+			       ) AS rn
+			  FROM agent_lifecycle_events
+			 WHERE agent_name IN (` + strings.Join(placeholders, ",") + `)
+		)
+		SELECT id, agent_name, event_kind, event_time,
+		       detection_method, reason, details
+		  FROM ranked`
+	if limit > 0 {
+		query += " WHERE rn <= ?"
+		args = append(args, limit)
+	}
+	query += " ORDER BY agent_name, event_time DESC, id DESC"
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("bulk list agent_lifecycle_events: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make(map[string][]AgentLifecycleEvent, len(agentNames))
+	for rows.Next() {
+		var (
+			ev       AgentLifecycleEvent
+			ts       int64
+			kind     string
+			detMthd  sql.NullString
+			reason   sql.NullString
+			detsText sql.NullString
+		)
+		if err := rows.Scan(&ev.ID, &ev.AgentName, &kind, &ts, &detMthd, &reason, &detsText); err != nil {
+			return nil, fmt.Errorf("scan bulk agent_lifecycle_event: %w", err)
+		}
+		ev.EventKind = AgentLifecycleEventKind(kind)
+		ev.EventTime = time.Unix(ts, 0).UTC()
+		if detMthd.Valid {
+			ev.DetectionMethod = DetectionMethod(detMthd.String)
+		}
+		if reason.Valid {
+			ev.Reason = reason.String
+		}
+		if detsText.Valid && detsText.String != "" && detsText.String != "null" {
+			ev.Details = json.RawMessage(detsText.String)
+		}
+		out[ev.AgentName] = append(out[ev.AgentName], ev)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate bulk agent_lifecycle_events: %w", err)
 	}
 	return out, nil
 }

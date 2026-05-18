@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/leonletto/thrum/internal/daemon/state"
 )
 
 // --- Branch 1: live pane ---
@@ -70,6 +72,35 @@ func TestFallbackChain_LivePane_CaptureError_FallsThrough(t *testing.T) {
 
 	if !strings.Contains(got, "Last said: msg-3") {
 		t.Errorf("branch 1 capture-error should fall through to branch 3; got %q", got)
+	}
+}
+
+// TestFallbackChain_LivePane_CaptureEmptyString_FallsThrough pins
+// the non-error empty-content path: capture returns ("", nil) — no
+// underlying error but the pane has nothing to render. Branch 1
+// must fall through to subsequent branches rather than rendering an
+// empty pane block. Without this, the expanded view would show
+// "<blank>\n\n[active job: ..., elapsed: ...]" — misleading
+// "agent is running but produced no output" framing when the
+// capture itself returned cleanly.
+func TestFallbackChain_LivePane_CaptureEmptyString_FallsThrough(t *testing.T) {
+	capture := func(_ context.Context, _ string, _ int) (string, error) {
+		return "", nil // clean call, but pane is genuinely empty
+	}
+	outbound := func(_ context.Context, _ string) (*OutboundMessage, error) {
+		return &OutboundMessage{MessageID: "msg-empty", Subject: "fallback-on-empty"}, nil
+	}
+	state := AgentRenderState{
+		JobCurrentState: "running",
+		ActiveJobID:     "docs_bot_wake",
+	}
+	got := RenderBodyFallbackChain(context.Background(), "docs_bot", "", state, capture, outbound)
+
+	if strings.Contains(got, "[active job:") {
+		t.Errorf("empty-pane should NOT render the active-job suffix (misleading framing); got %q", got)
+	}
+	if !strings.Contains(got, "Last said: msg-empty") {
+		t.Errorf("empty-pane should fall through to branch 3; got %q", got)
 	}
 }
 
@@ -246,6 +277,137 @@ func TestFallbackChain_NoData_WithLastRunState(t *testing.T) {
 }
 
 // --- Cross-branch precedence ---
+
+// --- Task 59: RenderJournal ---
+
+// fakeLifecycleStore minimally satisfies state.AgentLifecycleStore
+// for the RenderJournal happy-path / error / empty cases. Only
+// ListByAgent gets non-trivial fixtures; the other methods are
+// satisfied by no-ops so the type compiles.
+type fakeLifecycleStore struct {
+	events    []lcEvent
+	err       error
+	calls     int
+	lastLimit int
+}
+
+type lcEvent struct {
+	When   time.Time
+	Kind   string
+	Reason string
+}
+
+func (f *fakeLifecycleStore) ListByAgent(_ context.Context, _ string, limit int) ([]state.AgentLifecycleEvent, error) {
+	f.calls++
+	f.lastLimit = limit
+	if f.err != nil {
+		return nil, f.err
+	}
+	out := make([]state.AgentLifecycleEvent, 0, len(f.events))
+	for _, e := range f.events {
+		out = append(out, state.AgentLifecycleEvent{
+			AgentName: "docs_bot",
+			EventTime: e.When,
+			EventKind: state.AgentLifecycleEventKind(e.Kind),
+			Reason:    e.Reason,
+		})
+	}
+	return out, nil
+}
+func (f *fakeLifecycleStore) ListByAgents(_ context.Context, _ []string, _ int) (map[string][]state.AgentLifecycleEvent, error) {
+	return map[string][]state.AgentLifecycleEvent{}, nil
+}
+func (f *fakeLifecycleStore) Append(_ context.Context, _ state.AgentLifecycleEvent) (int64, error) {
+	return 0, nil
+}
+func (f *fakeLifecycleStore) LoopGuardCount(_ context.Context, _ string, _ state.AgentLifecycleEventKind, _ int) (int, error) {
+	return 0, nil
+}
+func (f *fakeLifecycleStore) PruneOlderThan(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
+
+func TestRenderJournal_HappyPath(t *testing.T) {
+	store := &fakeLifecycleStore{
+		events: []lcEvent{
+			{When: time.Date(2026, 5, 18, 12, 0, 0, 0, time.UTC), Kind: "respawn_fired", Reason: "pane gone"},
+			{When: time.Date(2026, 5, 18, 11, 30, 0, 0, time.UTC), Kind: "crash_detected", Reason: "health-check"},
+		},
+	}
+	out := RenderJournal(context.Background(), "docs_bot", store)
+
+	if !strings.Contains(out, "respawn_fired") {
+		t.Errorf("journal missing respawn_fired event; got %q", out)
+	}
+	if !strings.Contains(out, "crash_detected") {
+		t.Errorf("journal missing crash_detected event; got %q", out)
+	}
+	if !strings.Contains(out, "2026-05-18T12:00:00Z") {
+		t.Errorf("journal missing RFC3339 timestamp; got %q", out)
+	}
+	if !strings.Contains(out, "pane gone") {
+		t.Errorf("journal missing reason; got %q", out)
+	}
+	if store.lastLimit != journalDefaultLimit {
+		t.Errorf("ListByAgent limit = %d; want %d", store.lastLimit, journalDefaultLimit)
+	}
+}
+
+func TestRenderJournal_EmptyEvents_StaticMessage(t *testing.T) {
+	store := &fakeLifecycleStore{events: nil}
+	out := RenderJournal(context.Background(), "docs_bot", store)
+	if !strings.Contains(out, "No journal entries") {
+		t.Errorf("expected static no-entries message; got %q", out)
+	}
+}
+
+func TestRenderJournal_StoreError_InlineError(t *testing.T) {
+	store := &fakeLifecycleStore{err: errors.New("db locked")}
+	out := RenderJournal(context.Background(), "docs_bot", store)
+	if !strings.Contains(out, "error reading journal") {
+		t.Errorf("expected inline error prefix; got %q", out)
+	}
+	if !strings.Contains(out, "db locked") {
+		t.Errorf("expected underlying error detail; got %q", out)
+	}
+}
+
+func TestRenderJournal_NilStore_StaticMessage(t *testing.T) {
+	out := RenderJournal(context.Background(), "docs_bot", nil)
+	if !strings.Contains(out, "Journal unavailable") {
+		t.Errorf("expected nil-store fallback message; got %q", out)
+	}
+}
+
+func TestRenderJournal_EventWithoutReason_RendersDashPlaceholder(t *testing.T) {
+	store := &fakeLifecycleStore{
+		events: []lcEvent{
+			{When: time.Date(2026, 5, 18, 12, 0, 0, 0, time.UTC), Kind: "respawn_fired", Reason: ""},
+		},
+	}
+	out := RenderJournal(context.Background(), "docs_bot", store)
+	if !strings.Contains(out, "—") {
+		t.Errorf("missing dash placeholder for empty reason; got %q", out)
+	}
+}
+
+// --- Task 58: FilesRPCUnavailableMessage ---
+
+// TestFilesRPCUnavailableMessage_NonEmpty pins that the constant
+// carries a non-empty operator-facing string. Trivial but catches
+// an accidental empty-string regression that would silently leave
+// the --files feature-detect path printing nothing.
+func TestFilesRPCUnavailableMessage_NonEmpty(t *testing.T) {
+	if FilesRPCUnavailableMessage == "" {
+		t.Error("FilesRPCUnavailableMessage must be non-empty for the --files feature-detect path")
+	}
+	if !strings.Contains(FilesRPCUnavailableMessage, "files") {
+		t.Errorf("message should mention 'files'; got %q", FilesRPCUnavailableMessage)
+	}
+	if !strings.Contains(FilesRPCUnavailableMessage, "unavailable") {
+		t.Errorf("message should signal unavailability; got %q", FilesRPCUnavailableMessage)
+	}
+}
 
 // TestFallbackChain_AllBranchesAvailable_LivePaneWins pins the
 // recency-ranked precedence: when every fallback source has data,

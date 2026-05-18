@@ -80,6 +80,9 @@ func (s *stubLifecycleStore) Append(_ context.Context, e state.AgentLifecycleEve
 func (s *stubLifecycleStore) ListByAgent(_ context.Context, _ string, _ int) ([]state.AgentLifecycleEvent, error) {
 	return nil, nil
 }
+func (s *stubLifecycleStore) ListByAgents(_ context.Context, _ []string, _ int) (map[string][]state.AgentLifecycleEvent, error) {
+	return map[string][]state.AgentLifecycleEvent{}, nil
+}
 func (s *stubLifecycleStore) LoopGuardCount(_ context.Context, agentName string, kind state.AgentLifecycleEventKind, windowSeconds int) (int, error) {
 	s.loopGuardAgent = agentName
 	s.loopGuardKind = kind
