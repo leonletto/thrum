@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -64,8 +63,123 @@ Required flags: --session-id, --summary. Optional: --agent-id
 	updateCmd.Flags().String("run-id", "", "Run ID for the metadata header")
 	updateCmd.Flags().String("run-state", "", "Run completion state (success/partial/failed)")
 
+	recoverCmd := &cobra.Command{
+		Use:   "recover",
+		Short: "Recover a corrupt state.md (skill-driven; spec §6.5)",
+		Long: `Validate the agent's state.md and route the spec §6.5 corruption
+flow when it fails to parse.
+
+If the file is parseable: prints a status line and exits 0.
+If the file is malformed:
+  (1) moves the bad file to <state.md>.broken (preserves content
+      for operator review)
+  (2) calls agent.mark_state_corruption RPC which sets the
+      auto-respawn gate flag, appends a state_md_parse_failed
+      event to agent_lifecycle_events, and routes a Q3-D
+      escalation to the operator per spec §8
+
+Invoked by /thrum:recover-agent-state at scheduled-agent
+wake when the agent suspects the prior session crashed mid-write.
+Operators rarely call this directly — use 'thrum agent
+ack-state-corruption' to clear the flag once the file is repaired.`,
+		RunE: runAgentStateRecover,
+	}
+	recoverCmd.Flags().String("agent-id", "", "Agent ID (default: current identity)")
+
 	parent.AddCommand(updateCmd)
+	parent.AddCommand(recoverCmd)
 	return parent
+}
+
+// runAgentStateRecover implements the spec §6.5 recovery flow.
+// Returns nil + a "state.md OK" status line when the file parses
+// cleanly; returns a non-nil error and performs the .broken move +
+// RPC dispatch when the file is malformed.
+//
+// The function is the CLI counterpart to the
+// /thrum:recover-agent-state skill — the skill's body is just a
+// one-liner that invokes this command and reads the exit code.
+func runAgentStateRecover(cmd *cobra.Command, _ []string) error {
+	agentID, _ := cmd.Flags().GetString("agent-id")
+	if agentID == "" {
+		resolved, err := currentAgentID()
+		if err != nil {
+			return fmt.Errorf("resolve current agent: %w", err)
+		}
+		if resolved == "" {
+			return fmt.Errorf("agent-id required (no current identity to default to; pass --agent-id)")
+		}
+		agentID = resolved
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("getwd: %w", err)
+	}
+	repoRoot, err := paths.FindThrumRoot(cwd)
+	if err != nil {
+		return fmt.Errorf("find thrum-root: %w", err)
+	}
+	thrumRoot := filepath.Join(repoRoot, ".thrum")
+	stateMDPath := filepath.Join(thrumRoot, "agents", agentID, "state.md")
+
+	// Missing file is "nothing to recover" — exit 0 with a clear
+	// message. First-wake scheduled agents legitimately have no
+	// state.md yet; the recovery skill is invoked defensively.
+	data, err := os.ReadFile(stateMDPath) // #nosec G304 -- path under cwd-anchored thrum-root
+	if errors.Is(err, os.ErrNotExist) {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+			"state.md does not exist for %s; nothing to recover.\n", agentID)
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read state.md: %w", err)
+	}
+
+	// Validate via the strict parser.
+	if _, parseErr := agentstate.Parse(string(data)); parseErr == nil {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+			"state.md OK for %s — no recovery needed.\n", agentID)
+		return nil
+	}
+
+	// Recovery path. Move to .broken FIRST so the corrupt content
+	// is preserved even if the RPC call fails partway.
+	brokenPath := stateMDPath + ".broken"
+	if err := os.Rename(stateMDPath, brokenPath); err != nil {
+		return fmt.Errorf("preserve corrupt state.md to .broken: %w", err)
+	}
+
+	// Call the daemon RPC to set the corruption flag + emit the
+	// escalation. The skill itself does NOT call RouteEscalation —
+	// the daemon owns routing per spec §8.
+	client, err := getClient()
+	if err != nil {
+		return fmt.Errorf("connect daemon (state.md preserved at %s): %w", brokenPath, err)
+	}
+	defer func() { _ = client.Close() }()
+
+	req := map[string]string{
+		"agent_name":  agentID,
+		"broken_path": brokenPath,
+	}
+	var resp struct {
+		AgentName string `json:"agent_name"`
+		FailedAt  string `json:"failed_at"`
+		Escalated bool   `json:"escalated"`
+	}
+	if err := client.Call("agent.mark_state_corruption", req, &resp); err != nil {
+		return fmt.Errorf("agent.mark_state_corruption (state.md preserved at %s): %w",
+			brokenPath, err)
+	}
+
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+		"state.md for %s was unparseable. Corrupt content preserved at:\n  %s\n"+
+			"Corruption flag set at %s. Escalation routed: %v.\n"+
+			"Auto-respawn is BLOCKED until the operator clears via:\n"+
+			"  thrum agent ack-state-corruption %s\n",
+		agentID, brokenPath, resp.FailedAt, resp.Escalated, agentID)
+	return nil
 }
 
 func runAgentStateUpdate(cmd *cobra.Command, _ []string) error {
@@ -213,12 +327,3 @@ func writeStateMD(path string, s *agentstate.StateMD) error {
 	return nil
 }
 
-// trimEmpty is unused in the current revision but kept for the
-// recover-agent-state CLI surface Task 26 will add (the recovery
-// command needs to trim leading/trailing whitespace from
-// reconstructed paragraphs).
-//
-// nolint:unused // reserved for Task 26
-func trimEmpty(s string) string {
-	return strings.TrimSpace(s)
-}
