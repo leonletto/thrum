@@ -1134,7 +1134,7 @@ func (h *AgentHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 
 	// Lock for DB query to get agent
 	h.state.Lock()
-	agent, err := h.getAgentByID(ctx, req.Name)
+	existingAgent, err := h.getAgentByID(ctx, req.Name)
 	if err != nil {
 		h.state.Unlock()
 		if err == sql.ErrNoRows {
@@ -1143,6 +1143,23 @@ func (h *AgentHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("check agent existence: %w", err)
 	}
 	h.state.Unlock()
+
+	// F3: resolve agent identity from the canonical AgentRegistry
+	// (NOT job spec or other source) so folder-cleanup keys on the
+	// post-E6.0 (mode, identity) grid. Lookup against the same DB
+	// the agents table lives on. Lookup failure (ErrAgentNotFound
+	// for pre-v0.11 rows whose registry-side view is missing) is
+	// non-fatal — we fall through to the "long_lived" default,
+	// which preserves the folder. Matches the E6.0 backfill
+	// contract: pre-v0.11 rows without explicit identity migrate
+	// to long_lived, so preserving their folders honors the
+	// canonical default.
+	reg := agent.NewSQLiteRegistry(h.state.DB())
+	registryAgent, regErr := reg.Lookup(ctx, req.Name)
+	agentIdentity := agent.IdentityLongLived
+	if regErr == nil && registryAgent.Identity != "" {
+		agentIdentity = registryAgent.Identity
+	}
 
 	// File I/O without lock
 	thrumDir := filepath.Join(h.state.RepoPath(), ".thrum")
@@ -1169,6 +1186,30 @@ func (h *AgentHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 	// Delete preamble file (if exists)
 	if err := os.Remove(preamblePath); err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("delete preamble file: %w", err)
+	}
+
+	// F3: folder cleanup at decommission keys on Agent.Identity per
+	// spec §6.1 + canonical §2.1. Ephemeral identity = delete the
+	// per-agent .thrum/agents/<name>/ tree (the agent's working
+	// state was per-run and has no operator value post-deletion).
+	// Long-lived identity = preserve the folder (operator may want
+	// the agent's accumulated state/memories/notes even after the
+	// registry row is gone). Cleanup errors are logged but not
+	// fatal — the registry row is already deleted, and a stale
+	// folder is recoverable; failing the RPC on filesystem
+	// flakiness would make decommission worse.
+	if agentIdentity == agent.IdentityEphemeral {
+		agentFolder := filepath.Join(thrumDir, "agents", req.Name)
+		if err := os.RemoveAll(agentFolder); err != nil {
+			log.Printf("warning: folder cleanup .thrum/agents/%s/ failed (ephemeral identity): %v",
+				req.Name, err)
+		} else {
+			slog.Debug("agent folder removed at decommission",
+				"agent", req.Name, "path", agentFolder, "identity", "ephemeral")
+		}
+	} else {
+		slog.Debug("agent folder preserved at decommission (long-lived identity)",
+			"agent", req.Name, "identity", agentIdentity)
 	}
 
 	// Remove agent lifecycle events from events.jsonl
@@ -1270,7 +1311,7 @@ func (h *AgentHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 	h.state.Unlock()
 
 	return &DeleteAgentResponse{
-		AgentID: agent.AgentID,
+		AgentID: existingAgent.AgentID,
 		Deleted: true,
 		Message: fmt.Sprintf("Agent %s deleted successfully", req.Name),
 	}, nil

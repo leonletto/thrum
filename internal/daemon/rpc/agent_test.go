@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/leonletto/thrum/internal/agent"
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
 	"github.com/leonletto/thrum/internal/daemon/state"
@@ -2819,5 +2820,122 @@ func TestAgentRegister_ModeIdentityValidator_WholeValidation(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "identity must be") {
 		t.Errorf("err missing identity-validation substring: %v", err)
+	}
+}
+
+// agentDeleteIdentityFixture builds a minimal AgentHandler + state
+// + registers an agent + sets agents.identity directly via SQL,
+// populating its .thrum/agents/<name>/ folder with a marker file.
+//
+// Why raw UPDATE for identity: the canonical
+// internal/projection/projector.go applyAgentRegister doesn't
+// carry identity/mode from the AgentRegisterEvent into the
+// agents-table projection yet (that wire-up is a separate
+// projection-schema concern outside E6.7's scope). The registry's
+// Lookup reads identity off the agents-table column directly, so
+// driving identity via UPDATE lets HandleDelete's F3 cleanup
+// logic be exercised end-to-end without coupling to the
+// projection extension.
+func agentDeleteIdentityFixture(t *testing.T, agentName, mode, identity string) (handler *AgentHandler, thrumDir, agentFolder string) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	thrumDir = filepath.Join(tmpDir, ".thrum")
+	syncDir := filepath.Join(thrumDir, "sync")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
+		t.Fatalf("mkdir identities: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(syncDir, "messages"), 0o750); err != nil {
+		t.Fatalf("mkdir messages: %v", err)
+	}
+	st, err := state.NewState(thrumDir, syncDir, "test-repo", "")
+	if err != nil {
+		t.Fatalf("new state: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	handler = NewAgentHandler(st)
+	req := RegisterRequest{
+		Name:     agentName,
+		Role:     "implementer",
+		Module:   "folder_cleanup",
+		Mode:     mode,
+		Identity: identity,
+	}
+	reqJSON, _ := json.Marshal(req)
+	if _, err := handler.HandleRegister(context.Background(), reqJSON); err != nil {
+		t.Fatalf("register agent: %v", err)
+	}
+
+	// Set agents.identity directly — the projection doesn't carry
+	// it through agent.register events yet (see fixture comment).
+	if _, err := st.RawDB().ExecContext(context.Background(),
+		"UPDATE agents SET identity = ?, mode = ? WHERE agent_id = ?",
+		identity, mode, agentName); err != nil {
+		t.Fatalf("set identity via UPDATE: %v", err)
+	}
+
+	// Populate .thrum/agents/<name>/ with a marker file so the test
+	// can verify either deletion or preservation post-decommission.
+	agentFolder = filepath.Join(thrumDir, "agents", agentName)
+	if err := os.MkdirAll(agentFolder, 0o750); err != nil {
+		t.Fatalf("mkdir agent folder: %v", err)
+	}
+	markerPath := filepath.Join(agentFolder, "marker.txt")
+	if err := os.WriteFile(markerPath, []byte("present"), 0o600); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+	return handler, thrumDir, agentFolder
+}
+
+// TestAgentDelete_FolderCleanup_EphemeralIdentity_DeletesFolder
+// pins F3 forward-flag + AC 9.8.6 for the ephemeral path: when an
+// agent registered with identity="ephemeral" is decommissioned via
+// agent.delete, the .thrum/agents/<name>/ tree is removed
+// (working state was per-run; no operator value post-deletion).
+func TestAgentDelete_FolderCleanup_EphemeralIdentity_DeletesFolder(t *testing.T) {
+	handler, _, agentFolder := agentDeleteIdentityFixture(t,
+		"ephemeral_agent", agent.ModeEphemeral, agent.IdentityEphemeral)
+
+	deleteReq := DeleteAgentRequest{Name: "ephemeral_agent"}
+	deleteJSON, _ := json.Marshal(deleteReq)
+	if _, err := handler.HandleDelete(context.Background(), deleteJSON); err != nil {
+		t.Fatalf("HandleDelete: %v", err)
+	}
+
+	// Folder must be gone.
+	if _, err := os.Stat(agentFolder); !os.IsNotExist(err) {
+		t.Errorf(".thrum/agents/ephemeral_agent/ still exists after delete; "+
+			"want removed (ephemeral identity). stat err = %v", err)
+	}
+}
+
+// TestAgentDelete_FolderCleanup_LongLivedIdentity_PreservesFolder
+// pins F3 + AC 9.8.6 for the long-lived path: when an agent
+// registered with identity="long_lived" is decommissioned, the
+// .thrum/agents/<name>/ tree is preserved (operator may want the
+// accumulated state/memories/notes even after the registry row
+// is gone).
+func TestAgentDelete_FolderCleanup_LongLivedIdentity_PreservesFolder(t *testing.T) {
+	handler, _, agentFolder := agentDeleteIdentityFixture(t,
+		"longlived_agent", agent.ModePersistent, agent.IdentityLongLived)
+
+	deleteReq := DeleteAgentRequest{Name: "longlived_agent"}
+	deleteJSON, _ := json.Marshal(deleteReq)
+	if _, err := handler.HandleDelete(context.Background(), deleteJSON); err != nil {
+		t.Fatalf("HandleDelete: %v", err)
+	}
+
+	// Folder must still exist with the marker file intact.
+	if _, err := os.Stat(agentFolder); err != nil {
+		t.Fatalf(".thrum/agents/longlived_agent/ missing after delete; "+
+			"want preserved (long-lived identity). stat err = %v", err)
+	}
+	markerPath := filepath.Join(agentFolder, "marker.txt")
+	data, err := os.ReadFile(markerPath) //nolint:gosec // test path
+	if err != nil {
+		t.Errorf("marker file missing: %v", err)
+	}
+	if string(data) != "present" {
+		t.Errorf("marker contents = %q; want 'present'", string(data))
 	}
 }
