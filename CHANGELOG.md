@@ -75,14 +75,13 @@ and this project adheres to
   self-mention now route correctly to the author's own inbox without being
   filtered out by the recipient-set construction.
 - **Self-echo nudge guard for tmux dispatch** (thrum-1zfk; regression of
-  thrum-kfn3 introduced by the self-delivery fix above). The DispatchTmux
-  tmux nudge path was missing the self-skip guard symmetric to the spool
-  path. With the author now preserved in `recipientSet` for `read_at`
-  stamping, every send touching role-group expansion or self-@mention
-  reached the unguarded tmux nudge path, firing phantom "new message"
-  notifications back to the sender. Layer 4 (DispatchTmux) now self-skips
-  with `[nudge] tmux.skip self` for grep parity with the existing
-  `[nudge] spool.skip self` log.
+  thrum-kfn3 introduced by the self-delivery fix above). The DispatchTmux tmux
+  nudge path was missing the self-skip guard symmetric to the spool path. With
+  the author now preserved in `recipientSet` for `read_at` stamping, every send
+  touching role-group expansion or self-@mention reached the unguarded tmux
+  nudge path, firing phantom "new message" notifications back to the sender.
+  Layer 4 (DispatchTmux) now self-skips with `[nudge] tmux.skip self` for grep
+  parity with the existing `[nudge] spool.skip self` log.
 - **SEO: BlogPosting JSON-LD non-critical warnings cleaned up** — Schema.org
   warnings on generated blog pages.
 

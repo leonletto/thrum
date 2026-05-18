@@ -26,37 +26,36 @@ Your context is high and we want to restart without losing the decisions we've
 made. Write a rich continuation that future-you will read as the first action
 after restart.
 
-**§1 Big picture — REQUIRED FIRST SECTION (write this BEFORE anything else)**
+### §1 Big picture — REQUIRED FIRST SECTION (write this BEFORE anything else)
 
 Every restart snapshot MUST begin with a section using this exact heading:
 
-```
+```markdown
 ## 1. Big picture — what shipped this session
 ```
 
-Followed by 1-3 sentences (a single paragraph or up to 3 short ones)
-summarizing what the session accomplished. Be specific: name the artifacts,
-the decisions, the cycles closed. Examples:
+Followed by 1-3 sentences (a single paragraph or up to 3 short ones) summarizing
+what the session accomplished. Be specific: name the artifacts, the decisions,
+the cycles closed. Examples:
 
 > Locked the session-archive spec v2 with §1 Big picture requirement, five
 > Q-Spec approvals, and Q-Spec-5 deferred to impl-time. Hand-off pending
 > coordinator final review.
-
+>
 > Investigated rc.9 inbox-race against impl_inbox_race's hypothesis: confirmed
 > the lock-substrate fence is the right fix. Filed thrum-XXX with 4 BLOCKING
 > evidence points.
+>
+> Closed B-B1 E6.0 brainstormer-third pass. 2 BLOCKING + 5 IMPORTANT + 10 MINOR.
+> All three load-bearing traps PASSed. Standing by for E6.1 next batch.
 
-> Closed B-B1 E6.0 brainstormer-third pass. 2 BLOCKING + 5 IMPORTANT + 10
-> MINOR. All three load-bearing traps PASSed. Standing by for E6.1 next batch.
-
-This section becomes YOUR OWN log entry, visible in
-`thrum agent sessions list` alongside the archives of every other session
-you've ever restarted from. Future-you (and other agents inspecting your
-history) skim §1 to decide which sessions are worth re-reading. Write it
-first — before the Resume Plan, before file paths, before patterns —
-because composing the §1 summary forces you to identify what was actually
-load-bearing about this session, and that priority shapes everything else
-you write below it.
+This section becomes YOUR OWN log entry, visible in `thrum agent sessions list`
+alongside the archives of every other session you've ever restarted from.
+Future-you (and other agents inspecting your history) skim §1 to decide which
+sessions are worth re-reading. Write it first — before the Resume Plan, before
+file paths, before patterns — because composing the §1 summary forces you to
+identify what was actually load-bearing about this session, and that priority
+shapes everything else you write below it.
 
 After the §1 block:
 
@@ -79,8 +78,8 @@ Write for a competent stranger in your role — someone who has the runtime
 briefing (`thrum prime`, role preamble, project state) but none of this
 session's conversation context. Refer to the previous session in third person.
 
-Use these numbered sections (write each as prose or table — your call — but
-the numbered structure itself should be present):
+Use these numbered sections (write each as prose or table — your call — but the
+numbered structure itself should be present):
 
 1. **Big picture** — what shipped this session (REQUIRED FIRST, written above
    per the §1 mandate).
@@ -93,29 +92,27 @@ the numbered structure itself should be present):
    cases.
 5. **Questions awaiting repo owner input** — anything queued for the project
    owner's call before work can proceed. Name the question concretely.
-6. **Outstanding work you owe** — commitments still open on your side
-   (pushes, merges, dispatches, doc-patches).
-7. **Patterns that worked / burned us** — short reflective section: what to
-   keep doing, what to stop. Two sub-sections is enough.
-8. **File paths future-you will reopen** — concrete paths the next session
-   will need. Group by purpose (in-flight / queued / reference).
+6. **Outstanding work you owe** — commitments still open on your side (pushes,
+   merges, dispatches, doc-patches).
+7. **Patterns that worked / burned us** — short reflective section: what to keep
+   doing, what to stop. Two sub-sections is enough.
+8. **File paths future-you will reopen** — concrete paths the next session will
+   need. Group by purpose (in-flight / queued / reference).
 9. **Numbered resume plan** — concrete first-N-steps the next session should
    take, in order. Step 1 must be actionable from a cold start.
-10. **Honest unknowns — verify post-restart, do NOT fabricate** — list facts
-    you suspect changed during the session OR were never confirmed in the
-    first place. Future-you must NOT carry these forward as truth until
-    they're verified (e.g., "whether @impl_X has progressed past Task N",
-    "exact branch tip — listed as ~SHA but multiple FF merges may have
-    happened during the snapshot write", "whether the keepalive cron survived
-    restart").
-11. **End-of-continuation note** — one short paragraph reflecting on the
-    session itself. What was the dominant pattern this session, what pattern
-    proved load-bearing, what's a known fragility going into the next one.
+10. **Honest unknowns — verify post-restart, do NOT fabricate** — list facts you
+    suspect changed during the session OR were never confirmed in the first
+    place. Future-you must NOT carry these forward as truth until they're
+    verified (e.g., "whether @impl_X has progressed past Task N", "exact branch
+    tip — listed as ~SHA but multiple FF merges may have happened during the
+    snapshot write", "whether the keepalive cron survived restart").
+11. **End-of-continuation note** — one short paragraph reflecting on the session
+    itself. What was the dominant pattern this session, what pattern proved
+    load-bearing, what's a known fragility going into the next one.
 
 Skip a section only when it genuinely doesn't apply — an honest "N/A: no
-decisions this session" beats fabrication. The numbered structure itself
-should always be present so future-you can scan for what's covered and what
-isn't.
+decisions this session" beats fabrication. The numbered structure itself should
+always be present so future-you can scan for what's covered and what isn't.
 
 ### 3. Write the continuation directly to your restart file
 
