@@ -1347,6 +1347,24 @@ func waitForPaneReady(target, runtime string, stableFor int, ceilingSeconds int)
 	}
 }
 
+// PaneInjectPrompt is the exported entry point that B-B1's
+// agentdispatch.TmuxRPC adapter calls to inject a prompt into a runtime
+// pane. Wraps the package-private sendKeysAndSubmit so the canonical
+// 200ms text→Enter gap (paneInputSubmitGap) stays the single source of
+// truth — adapters MUST NOT copy-paste the gap logic; that would split
+// the invariant across packages and the next thrum-84xc-class
+// regression would only land in one place.
+//
+// ctx is part of the agentdispatch.TmuxRPC interface contract but
+// intentionally unused: sendKeysAndSubmit's send/sleep/Enter sequence
+// is short (~200ms total) and cancelling mid-submit would leave the
+// runtime in a half-typed state. Honoring ctx would require a
+// rollback mechanism for the partial input, which is worse than just
+// letting the 200ms complete.
+func (h *TmuxHandler) PaneInjectPrompt(_ context.Context, target, text string) error {
+	return sendKeysAndSubmit(target, text)
+}
+
 // sendKeysAndSubmit sends `text` to a tmux pane via send-keys, pauses
 // briefly (paneInputSubmitGap), then sends Enter. The pause exists because
 // modern TUI runtimes like Claude Code interpret a long string immediately
