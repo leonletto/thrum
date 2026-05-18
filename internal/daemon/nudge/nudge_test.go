@@ -1,16 +1,40 @@
 package nudge_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/nudge"
 	"github.com/stretchr/testify/require"
 )
+
+// syncBuf is a thread-safe wrapper around bytes.Buffer so the slog
+// handler (writing from background goroutines) and the test goroutine
+// (polling via String()) don't race on the same buffer.
+type syncBuf struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *syncBuf) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *syncBuf) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
+}
 
 // TestResolveTarget_FindsTmuxSession exercises the happy path: an agent
 // with TmuxSession populated in its identity file is resolvable.
@@ -107,6 +131,57 @@ func TestDispatchTmux_SkipsUnresolvableRecipients(t *testing.T) {
 	// but the test passes if no panic / no goroutine leak.
 	nudge.DispatchTmux(thrumDir, []string{"ghost1", "ghost2"}, "alice")
 	// No assertion needed — completing without panic is the test.
+}
+
+// TestDispatchTmux_SkipsSelfEcho is the thrum-1zfk regression guard.
+// HandleSend now intentionally keeps the author in the recipients list
+// (so the projector can stamp read_at on the self-delivery row), which
+// reached the tmux-nudge path and surfaced as 'New message from @<self>'
+// in the sender's own pane. DispatchTmux must filter sender out before
+// firing, matching the spool-dispatcher guard in cmd/thrum/main.go.
+//
+// Capture slog to confirm: alice (the sender) is skipped synchronously
+// with the 'tmux.skip self' log; bob (a non-self recipient without a
+// real tmux session) reaches the resolution path. The test verifies the
+// guard fires before any I/O attempt for the self recipient.
+func TestDispatchTmux_SkipsSelfEcho(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	require.NoError(t, os.MkdirAll(identitiesDir, 0750))
+
+	// Give alice a registered tmux session — without the guard,
+	// DispatchTmux would resolve her identity and attempt to nudge,
+	// producing 'nudge.DispatchTmux fire' for sender=alice recipient=alice.
+	id := config.IdentityFile{TmuxSession: "alice-session:0.0"}
+	idJSON, err := json.Marshal(id)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(identitiesDir, "alice.json"), idJSON, 0600))
+
+	// Install a slog handler that writes to a thread-safe buffer so the
+	// guard-path log (synchronous) and the bob goroutine's log don't
+	// race on the same writer. Restore the previous default at end.
+	var logBuf syncBuf
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	nudge.DispatchTmux(thrumDir, []string{"alice", "bob"}, "alice")
+
+	// Drain background goroutines spawned for non-self recipients.
+	// The bob goroutine will fall through to ResolveTarget (returns "")
+	// and log 'no-target' — that's our proof bob's path was entered
+	// while alice's was short-circuited.
+	require.Eventually(t, func() bool {
+		return strings.Contains(logBuf.String(), "no-target")
+	}, 2*1e9, 50*1e6, "bob's no-target log never appeared; background goroutine may not have run")
+
+	out := logBuf.String()
+	require.Contains(t, out, "tmux.skip self",
+		"expected '[nudge] tmux.skip self' for sender=alice recipient=alice; full log:\n%s", out)
+	require.NotContains(t, out, `"recipient":"alice"`+`,"target"`,
+		"alice's path should be short-circuited BEFORE any target resolution; full log:\n%s", out)
 }
 
 func TestHasLocalIdentity(t *testing.T) {
