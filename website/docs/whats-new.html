@@ -51,20 +51,25 @@ plausible.init()
 breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG.md</a>.</p>
-<h2>v0.10.5 — rc.1 in soak</h2>
-<p><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.1"><code>v0.10.5-rc.1</code></a>
-tagged 2026-05-17, in the standard 48h soak through 2026-05-19.</p>
-<p>Backstop and hygiene. The headline change is operational: a daemon-side
-backstop nudger re-emits delivery notifications for stale-unread messages on
-its own schedule, replacing the per-agent <code>thrum-inbox-poll.sh</code> cron that
-previously had to be installed and maintained per worktree. Around that:
-long-running agent worktrees stop drifting from the embedded daemon-managed
-script templates (<code>runtime-init</code> now overwrites them while preserving
-user-customized configs), <code>thrum prime</code> leaves a visible scrollback anchor so
-you can confirm at a glance that context loaded, the <code>project-setup</code> skill
-works in redirected worktrees again, and a handful of inbox-race fixes land
-alongside two small new CLI flags (<code>thrum inbox --from @agent</code>,
-<code>thrum worktree teardown --delete-branch</code>).</p>
+<h2>v0.10.5 — rc.2 in soak</h2>
+<p><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.2"><code>v0.10.5-rc.2</code></a>
+tagged 2026-05-17, in 24h CLI/docs soak through 2026-05-18. rc.2 is a docs-only
+patch on rc.1 — the <code>/thrum:restart</code> skill is restructured into an 11-section
+numbered format (adding &quot;Honest unknowns&quot; and &quot;End-of-continuation note&quot;
+sections, with &quot;human input&quot; reworded to &quot;repo owner input&quot;), plus a small
+<code>bd comments add</code> syntax correction in role templates and docs. No Go behavior
+change since rc.1. The Added/Changed/Fixed and Upgrade Notes sections below are
+the v0.10.5 release surface as a whole.</p>
+<p>Backstop and hygiene. The headline change is operational: a daemon-side backstop
+nudger re-emits delivery notifications for stale-unread messages on its own
+schedule, replacing the per-agent <code>thrum-inbox-poll.sh</code> cron that previously had
+to be installed and maintained per worktree. Around that: long-running agent
+worktrees stop drifting from the embedded daemon-managed script templates
+(<code>runtime-init</code> now overwrites them while preserving user-customized configs),
+<code>thrum prime</code> leaves a visible scrollback anchor so you can confirm at a glance
+that context loaded, the <code>project-setup</code> skill works in redirected worktrees
+again, and a handful of inbox-race fixes land alongside two small new CLI flags
+(<code>thrum inbox --from @agent</code>, <code>thrum worktree teardown --delete-branch</code>).</p>
 <p>Plus a headless <code>worktree.Create</code> / <code>worktree.Destroy</code> Go API moving into
 <code>internal/worktree</code> — no user-visible CLI change, but it&#39;s the substrate the
 v0.11 agent epics build on for ephemeral-worktree flows. The URL migration to

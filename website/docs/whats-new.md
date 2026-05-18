@@ -16,10 +16,16 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 [CHANGELOG.md](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-## v0.10.5 — rc.1 in soak
+## v0.10.5 — rc.2 in soak
 
-[`v0.10.5-rc.1`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.1)
-tagged 2026-05-17, in the standard 48h soak through 2026-05-19.
+[`v0.10.5-rc.2`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.2)
+tagged 2026-05-17, in 24h CLI/docs soak through 2026-05-18. rc.2 is a docs-only
+patch on rc.1 — the `/thrum:restart` skill is restructured into an 11-section
+numbered format (adding "Honest unknowns" and "End-of-continuation note"
+sections, with "human input" reworded to "repo owner input"), plus a small
+`bd comments add` syntax correction in role templates and docs. No Go behavior
+change since rc.1. The Added/Changed/Fixed and Upgrade Notes sections below are
+the v0.10.5 release surface as a whole.
 
 Backstop and hygiene. The headline change is operational: a daemon-side backstop
 nudger re-emits delivery notifications for stale-unread messages on its own
