@@ -14,25 +14,59 @@ import (
 	"github.com/leonletto/thrum/internal/worktree"
 )
 
-// stubTmuxRPC records calls + returns canned values. Used by stage-0
-// (CheckPane) tests; later stage tests extend the fields as needed.
+// stubTmuxRPC records calls + returns canned values. Stage tests
+// progressively extend the fields they exercise; defaults are nil
+// error returns + empty call slices so unused-stage tests stay terse.
 type stubTmuxRPC struct {
 	checkPaneResult bool
 	checkPaneErr    error
 	checkPaneCalls  []string // recorded targets
+
+	tmuxCreateErr   error
+	tmuxCreateCalls []tmuxCreateCall
+
+	tmuxLaunchErr   error
+	tmuxLaunchCalls []string
+
+	waitPaneReadyErr   error
+	waitPaneReadyCalls []string
+
+	tmuxKillErr   error
+	tmuxKillCalls []string
+
+	paneCtrlCErr   error
+	paneCtrlCCalls []string
+}
+
+type tmuxCreateCall struct {
+	target string
+	opts   agentdispatch.TmuxCreateOpts
 }
 
 func (s *stubTmuxRPC) CheckPane(_ context.Context, target string) (bool, error) {
 	s.checkPaneCalls = append(s.checkPaneCalls, target)
 	return s.checkPaneResult, s.checkPaneErr
 }
-func (s *stubTmuxRPC) TmuxCreate(_ context.Context, _ string, _ agentdispatch.TmuxCreateOpts) error {
-	return nil
+func (s *stubTmuxRPC) TmuxCreate(_ context.Context, target string, opts agentdispatch.TmuxCreateOpts) error {
+	s.tmuxCreateCalls = append(s.tmuxCreateCalls, tmuxCreateCall{target: target, opts: opts})
+	return s.tmuxCreateErr
 }
-func (s *stubTmuxRPC) TmuxLaunch(_ context.Context, _ string) error        { return nil }
-func (s *stubTmuxRPC) WaitForPaneReady(_ context.Context, _ string) error  { return nil }
-func (s *stubTmuxRPC) TmuxKillSession(_ context.Context, _ string) error   { return nil }
-func (s *stubTmuxRPC) PaneSendCtrlCExit(_ context.Context, _ string) error { return nil }
+func (s *stubTmuxRPC) TmuxLaunch(_ context.Context, target string) error {
+	s.tmuxLaunchCalls = append(s.tmuxLaunchCalls, target)
+	return s.tmuxLaunchErr
+}
+func (s *stubTmuxRPC) WaitForPaneReady(_ context.Context, target string) error {
+	s.waitPaneReadyCalls = append(s.waitPaneReadyCalls, target)
+	return s.waitPaneReadyErr
+}
+func (s *stubTmuxRPC) TmuxKillSession(_ context.Context, target string) error {
+	s.tmuxKillCalls = append(s.tmuxKillCalls, target)
+	return s.tmuxKillErr
+}
+func (s *stubTmuxRPC) PaneSendCtrlCExit(_ context.Context, target string) error {
+	s.paneCtrlCCalls = append(s.paneCtrlCCalls, target)
+	return s.paneCtrlCErr
+}
 
 // stubMessageRPC records MessageSend calls + returns canned values.
 // Used by stage-2 tests; the recorded call shape lets pinning tests
@@ -140,6 +174,20 @@ func (r *recReporter) lastTransition() recCall {
 		return recCall{}
 	}
 	return r.transitions[len(r.transitions)-1]
+}
+
+// findTransitionByReasonSubstring returns the first recCall whose
+// reason contains needle (case-sensitive substring). Returns zero
+// value when no match — callers must guard against an empty recCall.
+// Used by stage-mid tests that need to assert on a specific stage's
+// transition shape even when later stages have overwritten lastTransition.
+func (r *recReporter) findTransitionByReasonSubstring(needle string) recCall {
+	for _, t := range r.transitions {
+		if strings.Contains(t.reason, needle) {
+			return t
+		}
+	}
+	return recCall{}
 }
 
 // testJob builds a minimal JobSpec with a scheduled_agent target.
@@ -733,14 +781,11 @@ func TestStage3b_HappyPath_JournalsAfterMirrorSuccess(t *testing.T) {
 		t.Errorf("EnsureMirrored calls = %v; want [%q]", mir.calls, wt.createResult.Path)
 	}
 
-	// Stage 3 atomic journal-write must be the LAST transition with
-	// worktree_path/branch_name/reused all populated.
-	tr := rep.lastTransition()
+	// Stage 3 atomic journal-write — find by reason since later stages
+	// (4+) overwrite lastTransition once they run in the chain.
+	tr := rep.findTransitionByReasonSubstring("stage 3 complete")
 	if tr.state != scheduler.StateRunning {
-		t.Errorf("last state = %v; want StateRunning", tr.state)
-	}
-	if !strings.Contains(tr.reason, "stage 3 complete") {
-		t.Errorf("last reason = %q; want substring 'stage 3 complete'", tr.reason)
+		t.Errorf("stage-3 state = %v; want StateRunning", tr.state)
 	}
 	if tr.details["worktree_path"] != wt.createResult.Path {
 		t.Errorf("details[worktree_path] = %v; want %q", tr.details["worktree_path"], wt.createResult.Path)
@@ -779,9 +824,11 @@ func TestStage3b_ErrNullAdapter_TreatedAsSuccess(t *testing.T) {
 		t.Fatalf("ErrNullAdapter should NOT propagate; got err: %v", err)
 	}
 
-	tr := rep.lastTransition()
+	// Stage 3 closing transition is mid-chain now (Stage 4 runs after);
+	// find by reason rather than relying on lastTransition.
+	tr := rep.findTransitionByReasonSubstring("stage 3 complete")
 	if tr.state != scheduler.StateRunning {
-		t.Errorf("last state = %v; want StateRunning", tr.state)
+		t.Errorf("stage-3 state = %v; want StateRunning", tr.state)
 	}
 	if tr.details["worktree_path"] != wt.createResult.Path {
 		t.Errorf("ErrNullAdapter blocked stage-3 close; details = %+v", tr.details)
@@ -913,6 +960,121 @@ func TestStage3b_DeadlineExceeded_DefersToSweep(t *testing.T) {
 	}
 	if rep.lastTransition().state != scheduler.StateCancelled {
 		t.Errorf("last state = %v; want StateCancelled", rep.lastTransition().state)
+	}
+}
+
+// TestStage4_JournalsTmuxSessionAndTranscriptDir pins the canonical
+// stage-4 atomic close per spec §7.1 stage 4 + canonical §8.2: a
+// successful TmuxCreate records both the tmux session name and the
+// per-wake transcript directory under the StateRunning transition's
+// details. The transcript_dir field is consumed by E6.6's job.done
+// drain path + MB-1.S6's telemetry parser.
+func TestStage4_JournalsTmuxSessionAndTranscriptDir(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage4"}
+	wt := okWorktree()
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+		Mirror:   okMirror(),
+	})
+	rep := &recReporter{}
+
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-stage4", rep, nil)
+	if err != nil {
+		t.Fatalf("expected stages 0-4 to pass; got: %v", err)
+	}
+
+	// TmuxCreate must have fired with worktree path as cwd and target as session.
+	if len(rpc.tmuxCreateCalls) != 1 {
+		t.Fatalf("TmuxCreate calls = %d; want 1", len(rpc.tmuxCreateCalls))
+	}
+	call := rpc.tmuxCreateCalls[0]
+	if call.target != "docs_bot" {
+		t.Errorf("TmuxCreate target = %q; want docs_bot", call.target)
+	}
+	if call.opts.Cwd != wt.createResult.Path {
+		t.Errorf("TmuxCreate Cwd = %q; want %q", call.opts.Cwd, wt.createResult.Path)
+	}
+	if call.opts.SessionName != "docs_bot" {
+		t.Errorf("TmuxCreate SessionName = %q; want docs_bot", call.opts.SessionName)
+	}
+
+	// Stage 4 atomic journal-write must be the last transition.
+	tr := rep.lastTransition()
+	if tr.state != scheduler.StateRunning {
+		t.Errorf("last state = %v; want StateRunning", tr.state)
+	}
+	if !strings.Contains(tr.reason, "stage 4 complete") {
+		t.Errorf("last reason = %q; want 'stage 4 complete'", tr.reason)
+	}
+	if tr.details["tmux_session_name"] != "docs_bot" {
+		t.Errorf("details[tmux_session_name] = %v; want docs_bot", tr.details["tmux_session_name"])
+	}
+	transcriptDir, ok := tr.details["transcript_dir"].(string)
+	if !ok || transcriptDir == "" {
+		t.Errorf("details[transcript_dir] = %v; want non-empty string per canonical §8.2", tr.details["transcript_dir"])
+	}
+	// Stage marker fires as the canonical fifth stage in the nine-stage walk.
+	if len(rep.stages) < 5 {
+		t.Fatalf("expected at least 5 stage markers; got: %v", rep.stages)
+	}
+	if rep.stages[4] != agentdispatch.StageCreatingTmuxSession {
+		t.Errorf("stages[4] = %q; want %q", rep.stages[4], agentdispatch.StageCreatingTmuxSession)
+	}
+}
+
+// TestStage4_TmuxCreateFailure_DestroysWorktreeAndTransitionsFailed
+// pins the canonical stage-4 rollback row per spec §7.1: stage 3 left
+// a fully-created worktree behind, so a stage-4 failure must inline-
+// destroy it (worktree + branch) before transitioning to StateFailed
+// with the destroyed-paths recorded in the failure event details for
+// the audit trail.
+func TestStage4_TmuxCreateFailure_DestroysWorktreeAndTransitionsFailed(t *testing.T) {
+	tmuxErr := errors.New("tmux socket gone")
+	rpc := &stubTmuxRPC{checkPaneResult: false, tmuxCreateErr: tmuxErr}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage4-fail"}
+	wt := okWorktree()
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+		Mirror:   okMirror(),
+	})
+	rep := &recReporter{}
+
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-stage4-fail", rep, nil)
+	if !errors.Is(err, tmuxErr) {
+		t.Errorf("err = %v; want wraps %v", err, tmuxErr)
+	}
+
+	if len(wt.destroyCalls) != 1 {
+		t.Fatalf("worktree.Destroy calls = %d; want 1", len(wt.destroyCalls))
+	}
+	d := wt.destroyCalls[0]
+	if d.WorktreePath != wt.createResult.Path {
+		t.Errorf("Destroy.WorktreePath = %q; want %q", d.WorktreePath, wt.createResult.Path)
+	}
+	if d.Branch != wt.createResult.Branch {
+		t.Errorf("Destroy.Branch = %q; want %q", d.Branch, wt.createResult.Branch)
+	}
+	if !d.Force {
+		t.Error("Destroy.Force = false; want true")
+	}
+
+	tr := rep.lastTransition()
+	if tr.state != scheduler.StateFailed {
+		t.Errorf("last state = %v; want StateFailed", tr.state)
+	}
+	if !strings.Contains(tr.reason, "stage 4: tmux create") {
+		t.Errorf("reason = %q; want substring 'stage 4: tmux create'", tr.reason)
+	}
+	if tr.details["worktree_path_destroyed"] != wt.createResult.Path {
+		t.Errorf("details[worktree_path_destroyed] = %v; want %q",
+			tr.details["worktree_path_destroyed"], wt.createResult.Path)
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/agent"
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
+	"github.com/leonletto/thrum/internal/runtime/claude"
 	"github.com/leonletto/thrum/internal/skills/mirror"
 	"github.com/leonletto/thrum/internal/worktree"
 )
@@ -290,13 +291,14 @@ func (h *ScheduledAgentHandler) Dispatch(ctx context.Context, job scheduler.JobS
 	if baseBranch == "" {
 		baseBranch = "main"
 	}
+	wakeTimestamp := time.Now().Unix()
 	createOpts := worktree.CreateOpts{
 		RepoPath:      h.deps.RepoPath,
 		BasePath:      "", // fall through to worktree.InferBasePath
 		AgentName:     target,
 		BaseBranch:    baseBranch,
 		Persistent:    persistent,
-		WakeTimestamp: time.Now().Unix(),
+		WakeTimestamp: wakeTimestamp,
 	}
 	// JobID is ULID-clean only (alphanumeric + underscore per
 	// worktree.validateOpts); JobSpec.IDs use hyphenated kebab-case.
@@ -341,8 +343,61 @@ func (h *ScheduledAgentHandler) Dispatch(ctx context.Context, job scheduler.JobS
 		return err
 	}
 
-	// TODO(thrum-6qmf.4.54..thrum-6qmf.4.61): implement stages 4-8.
+	// Stage 4: tmux create. Failures here trigger
+	// rollbackStage4Failure (worktree.Destroy), since stage 3 left a
+	// fully-created worktree behind that won't be reaped by the
+	// stage-3a zero-residue contract.
+	if err := reporter.Stage(StageCreatingTmuxSession); err != nil {
+		return err
+	}
+	if err := h.deps.Tmux.TmuxCreate(ctx, target, TmuxCreateOpts{
+		Cwd:         createResult.Path,
+		SessionName: target,
+	}); err != nil {
+		h.rollbackStage4Failure(createResult)
+		_ = reporter.Transition(scheduler.StateFailed,
+			fmt.Sprintf("stage 4: tmux create: %v", err),
+			map[string]any{
+				"worktree_path_destroyed": createResult.Path,
+				"branch_name_destroyed":   createResult.Branch,
+			})
+		return fmt.Errorf("stage 4: tmux create: %w", err)
+	}
+
+	// Atomic journal-write recording the tmux session + the per-wake
+	// transcript directory (canonical §8.2). The transcript_dir is
+	// path-derived from the worktree + wake timestamp; the agentName
+	// argument is reserved for a future Claude Code hash change and
+	// has no effect today.
+	transcriptDir := claude.TranscriptDir(createResult.Path, target, wakeTimestamp)
+	if err := reporter.Transition(scheduler.StateRunning, "stage 4 complete", map[string]any{
+		"tmux_session_name": target,
+		"transcript_dir":    transcriptDir,
+	}); err != nil {
+		return err
+	}
+
+	// TODO(thrum-6qmf.4.56..thrum-6qmf.4.61): implement stages 5-8.
 	return nil
+}
+
+// rollbackStage4Failure tears down the stage-3 worktree (path + branch)
+// after a stage-4 tmux-create failure. context.Background() so the
+// cleanup completes even when the parent context is already cancelled
+// — daemon shutdown shouldn't strand a worktree just because the
+// failing stage's context happened to be the one that got cancelled.
+//
+// Task 17 extracts this (and rollbackStage5Failure for stages 5/6)
+// into rollback.go so the rollback-table is documented + tested in
+// isolation. The forward declaration here lets Task 15's commit be
+// self-contained.
+func (h *ScheduledAgentHandler) rollbackStage4Failure(result *worktree.CreateResult) {
+	_, _ = h.deps.Worktree.Destroy(context.Background(), worktree.DestroyOpts{
+		RepoPath:     h.deps.RepoPath,
+		WorktreePath: result.Path,
+		Branch:       result.Branch,
+		Force:        true,
+	})
 }
 
 // handleStage3bMirror runs the skill-mirror sub-action and classifies
