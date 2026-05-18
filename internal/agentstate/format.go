@@ -248,10 +248,14 @@ func Parse(content string) (*StateMD, error) {
 			}
 			m := verbatimRE.FindStringSubmatch(trimmed)
 			if m == nil {
-				// Permissive: non-matching lines (stray blank-ish
-				// punctuation, future schema additions) skip rather
-				// than fail. Only structural counts get strict-checked.
-				continue
+				// Strict: non-blank verbatim-section lines that
+				// don't match the regex indicate corruption (e.g.,
+				// a mid-write crash that left a partial line).
+				// Per spec §6.5 + Phase 3 Medium #1 fix: surface
+				// as ErrMalformedFormat so the caller routes
+				// through /thrum:recover-agent-state rather than
+				// silently dropping the entry.
+				return nil, fmt.Errorf("%w: malformed verbatim entry %q", ErrMalformedFormat, trimmed)
 			}
 			if len(s.Verbatim) >= MaxVerbatim {
 				return nil, ErrTooManyVerbatim
@@ -314,16 +318,21 @@ func Parse(content string) (*StateMD, error) {
 	// happen for well-formed input).
 	flushCurrentBlock()
 
-	// Validate block-entry-count cap. The parser collects multi-line
-	// summary text per block (continuation lines append), but each
-	// block represents UP TO 5 logical entries. Spec §7.5 doesn't
-	// require enumerating entries inside a block — the cap is
-	// enforced at the writer side (PromoteAndDrop creates blocks
-	// with ≤5 entries). For the parser, the structural check is
-	// "no block has more than MaxEntriesPerBlock entries", which
-	// can't be verified without re-parsing the block summary text.
-	// The cap is therefore semantic on the writer side; the parser
-	// trusts the writer.
+	// Validate block-entry-count cap (Phase 3 Medium #2 fix).
+	// Each summary block carries up to MaxEntriesPerBlock graduated
+	// entries, one per newline. A block whose Summary exceeds that
+	// indicates either a writer-side bug (PromoteAndDrop should
+	// never produce more than 5) or external tampering — either
+	// way, structural corruption per spec §6.5. Surface as
+	// ErrSummaryBlockTooLarge so the caller routes through
+	// /thrum:recover-agent-state.
+	for i, b := range s.SummaryBlocks {
+		if summaryEntryCount(b.Summary) > MaxEntriesPerBlock {
+			return nil, fmt.Errorf("%w: block %d (label %q) has %d entries (cap %d)",
+				ErrSummaryBlockTooLarge, i, b.Label,
+				summaryEntryCount(b.Summary), MaxEntriesPerBlock)
+		}
+	}
 
 	s.LastWorkedOn = strings.TrimSpace(strings.Join(lastWorkedOnLines, "\n"))
 	s.PlanningNext = strings.TrimSpace(strings.Join(planningNextLines, "\n"))

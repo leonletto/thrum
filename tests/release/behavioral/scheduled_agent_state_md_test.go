@@ -313,8 +313,15 @@ func runStateUpdate(t *testing.T, thrumBin, repoRoot, socketPath, agentID string
 		"--summary", summary,
 	)
 	cmd.Dir = repoRoot
+	// THRUM_SOCKET (NOT _PATH) is the env var the CLI's getClient()
+	// reads at cmd/thrum/main.go:5896 — caught by code-reviewer
+	// Important #1 on the original Task 27.5 commit. With the wrong
+	// name the CLI silently falls back to the default socket path
+	// and connects to whatever real daemon happens to be running
+	// (or fails with "daemon not running"), invalidating the
+	// behavioral-test intent.
 	cmd.Env = append(os.Environ(),
-		"THRUM_SOCKET_PATH="+socketPath, // forces CLI to use our test daemon
+		"THRUM_SOCKET="+socketPath, // forces CLI to use our test daemon
 	)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

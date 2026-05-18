@@ -198,6 +198,49 @@ func TestParse_TooManySummaryBlocks_ReturnsError(t *testing.T) {
 	}
 }
 
+// TestParse_MalformedVerbatimEntry_ReturnsError covers Phase 3
+// Medium #1 fix: a non-blank verbatim-section line that doesn't
+// match the regex must surface as ErrMalformedFormat (per spec
+// §6.5 recovery routing), not silently skip.
+func TestParse_MalformedVerbatimEntry_ReturnsError(t *testing.T) {
+	// "ses 004" with embedded space breaks the \S+ session-id
+	// match. Simulates a mid-write crash that left a partial
+	// session ID.
+	content := "# Agent State — alpha\n\n" +
+		"> **Last updated:** 2026-05-18T15:32:18Z **Last run:** x · y\n\n" +
+		"## Session history\n\n" +
+		"### Verbatim (most recent first)\n\n" +
+		"1. ses 004 · 2026-05-18 — corrupted session-id with space.\n"
+	_, err := agentstate.Parse(content)
+	if !errors.Is(err, agentstate.ErrMalformedFormat) {
+		t.Errorf("expected ErrMalformedFormat for corrupt verbatim line, got %v", err)
+	}
+}
+
+// TestParse_SummaryBlockTooLarge_ReturnsError covers Phase 3 Medium
+// #2 fix: a summary block whose body exceeds 5 newline-delimited
+// entries must surface as ErrSummaryBlockTooLarge. The exported
+// sentinel was previously never returned by Parse — now enforced.
+func TestParse_SummaryBlockTooLarge_ReturnsError(t *testing.T) {
+	// Block A with 6 graduated entries (one over cap). Each entry
+	// is a separate line after the heading.
+	content := "# Agent State — alpha\n\n" +
+		"> **Last updated:** 2026-05-18T15:32:18Z **Last run:** x · y\n\n" +
+		"## Session history\n\n" +
+		"### Verbatim (most recent first)\n\n" +
+		"### Summary blocks (most recent first)\n\n" +
+		"**Block A** (sessions ses_001–ses_006): entry-1.\n" +
+		"entry-2.\n" +
+		"entry-3.\n" +
+		"entry-4.\n" +
+		"entry-5.\n" +
+		"entry-6.\n"
+	_, err := agentstate.Parse(content)
+	if !errors.Is(err, agentstate.ErrSummaryBlockTooLarge) {
+		t.Errorf("expected ErrSummaryBlockTooLarge for 6-entry block, got %v", err)
+	}
+}
+
 // TestParse_ASCIIDashTolerance covers the F1-style robustness gap:
 // the parser must accept both em-dash "—" and ASCII "--" in the
 // header AND verbatim-entry lines, mirroring the

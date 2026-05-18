@@ -99,43 +99,16 @@ func (h *AgentStateCorruptionHandler) HandleMarkStateCorruption(ctx context.Cont
 
 	now := time.Now().UTC()
 
-	h.state.Lock()
-	defer h.state.Unlock()
-
-	// Verify the agent exists. Per the existing handler convention
-	// (session.go line 542-554) this is a separate query rather
-	// than relying on the UPDATE row-count, because the update
-	// silently succeeds when no row matches.
-	var exists bool
-	if err := h.state.DB().QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM agents WHERE agent_id = ?)`,
-		req.AgentName,
-	).Scan(&exists); err != nil {
-		return nil, fmt.Errorf("check agent existence: %w", err)
-	}
-	if !exists {
-		return nil, fmt.Errorf("agent %s not registered", req.AgentName)
-	}
-
-	// (1) Set the gate flag.
-	if _, err := h.state.DB().ExecContext(ctx,
-		`UPDATE agents SET state_md_parse_failed_at = ? WHERE agent_id = ?`,
-		now.Unix(), req.AgentName,
-	); err != nil {
-		return nil, fmt.Errorf("update state_md_parse_failed_at: %w", err)
-	}
-
-	// (2) Append the lifecycle event. details JSON carries the
-	// broken-path location for operator review per spec §6.5.
-	detailsJSON, err := json.Marshal(map[string]string{"broken_path": req.BrokenPath})
-	if err != nil {
-		return nil, fmt.Errorf("marshal event details: %w", err)
-	}
-	if _, err := h.state.DB().ExecContext(ctx,
-		`INSERT INTO agent_lifecycle_events (agent_name, event_kind, event_time, details) VALUES (?, ?, ?, ?)`,
-		req.AgentName, "state_md_parse_failed", now.Unix(), string(detailsJSON),
-	); err != nil {
-		return nil, fmt.Errorf("insert lifecycle event: %w", err)
+	// Two-phase: DB writes under the state lock, router I/O
+	// outside the lock. Split into separate methods so the lock
+	// scope is unambiguous — earlier revision used a manual
+	// Unlock + defer Lock inside the same function and that
+	// double-defer pattern was flagged as fragile (Phase 3
+	// review Important #2). The split also keeps a future
+	// developer from accidentally adding an early-return path
+	// inside the locked section that would skip the router call.
+	if err := h.persistCorruption(ctx, req.AgentName, req.BrokenPath, now); err != nil {
+		return nil, err
 	}
 
 	resp := &MarkStateCorruptionResponse{
@@ -144,13 +117,9 @@ func (h *AgentStateCorruptionHandler) HandleMarkStateCorruption(ctx context.Cont
 		Escalated: false,
 	}
 
-	// (3) Route the escalation OUTSIDE the state lock. Router I/O
-	// (email send, message dispatch) shouldn't block the SQL
-	// connection. The router may be nil when escalation isn't
-	// wired yet — degraded but functional.
-	h.state.Unlock()
-	defer h.state.Lock()
-
+	// Router I/O happens UNLOCKED. The router may be nil when
+	// escalation isn't wired yet (degraded but functional) — we
+	// still return success with Escalated=false.
 	if h.router != nil {
 		alert := escalation.Alert{
 			Source:    "b-b1.state_md_parse_failed",
@@ -181,4 +150,58 @@ Per B-B1 spec §6.5.
 	}
 
 	return resp, nil
+}
+
+// persistCorruption performs the spec §6.5 DB-side side effects
+// atomically under the state lock: (1) sets state_md_parse_failed_at
+// on the agent row; (2) appends a state_md_parse_failed row to
+// agent_lifecycle_events with the broken-path location.
+//
+// Extracted from HandleMarkStateCorruption so the lock scope is
+// localized to ONE function (single defer Unlock; no manual
+// re-locking). Router I/O is the caller's responsibility, outside
+// any state lock.
+func (h *AgentStateCorruptionHandler) persistCorruption(
+	ctx context.Context, agentName, brokenPath string, now time.Time,
+) error {
+	h.state.Lock()
+	defer h.state.Unlock()
+
+	// Verify the agent exists. Per the existing handler convention
+	// (session.go line 542-554) this is a separate query rather
+	// than relying on the UPDATE row-count, because the update
+	// silently succeeds when no row matches.
+	var exists bool
+	if err := h.state.DB().QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM agents WHERE agent_id = ?)`,
+		agentName,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("check agent existence: %w", err)
+	}
+	if !exists {
+		return fmt.Errorf("agent %s not registered", agentName)
+	}
+
+	// (1) Set the gate flag.
+	if _, err := h.state.DB().ExecContext(ctx,
+		`UPDATE agents SET state_md_parse_failed_at = ? WHERE agent_id = ?`,
+		now.Unix(), agentName,
+	); err != nil {
+		return fmt.Errorf("update state_md_parse_failed_at: %w", err)
+	}
+
+	// (2) Append the lifecycle event. details JSON carries the
+	// broken-path location for operator review per spec §6.5.
+	detailsJSON, err := json.Marshal(map[string]string{"broken_path": brokenPath})
+	if err != nil {
+		return fmt.Errorf("marshal event details: %w", err)
+	}
+	if _, err := h.state.DB().ExecContext(ctx,
+		`INSERT INTO agent_lifecycle_events (agent_name, event_kind, event_time, details) VALUES (?, ?, ?, ?)`,
+		agentName, "state_md_parse_failed", now.Unix(), string(detailsJSON),
+	); err != nil {
+		return fmt.Errorf("insert lifecycle event: %w", err)
+	}
+
+	return nil
 }

@@ -305,11 +305,9 @@ func writeStateMD(path string, s *agentstate.StateMD) error {
 	}
 	tmpPath := tmpFile.Name()
 	// Clean up the temp file if anything fails before the rename.
-	defer func() {
-		if _, statErr := os.Stat(tmpPath); statErr == nil {
-			_ = os.Remove(tmpPath)
-		}
-	}()
+	// os.Remove on a non-existent file returns fs.ErrNotExist and
+	// is safe to ignore — no Stat guard needed (Phase 3 Low #1).
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	if err := s.Write(tmpFile); err != nil {
 		_ = tmpFile.Close()
