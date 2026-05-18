@@ -172,6 +172,36 @@ func TestStage0_FailsOnCheckPaneError(t *testing.T) {
 	}
 }
 
+// TestStage1_BudgetCheckMarkerEmittedEvenThoughCheckIsUpstream pins
+// the canonical Q-Spec-3 resolution + MINOR #6 reframing from plan
+// v1 dual-review: A-B1's reactor performs the actual budget check
+// BEFORE invoking Dispatch (over-budget jobs never reach this
+// handler — A-B1 emits dispatched → over_budget upstream). B-B1's
+// stage-1 contribution is the observability marker so downstream
+// tools (`thrum cron history`, A-B4 stalled-sweep skip-set logic)
+// see the full nine-stage walk in scheduler_job_events.
+func TestStage1_BudgetCheckMarkerEmittedEvenThoughCheckIsUpstream(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc})
+	rep := &recReporter{}
+
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, nil)
+	if err != nil {
+		t.Fatalf("expected stages 0-1 to pass; got: %v", err)
+	}
+	// Both stages 0 + 1 must fire as the dispatch advances. Order
+	// matters: name_collision_check then budget_check.
+	if len(rep.stages) < 2 {
+		t.Fatalf("expected at least 2 stage markers; got: %v", rep.stages)
+	}
+	if rep.stages[0] != agentdispatch.StageNameCollisionCheck {
+		t.Errorf("stages[0] = %q; want %q", rep.stages[0], agentdispatch.StageNameCollisionCheck)
+	}
+	if rep.stages[1] != agentdispatch.StageBudgetCheck {
+		t.Errorf("stages[1] = %q; want %q", rep.stages[1], agentdispatch.StageBudgetCheck)
+	}
+}
+
 // TestStage0_HappyPath pins the no-collision path: when CheckPane
 // returns (false, nil), stage 0 emits its marker and Dispatch falls
 // through to stage 1+ (which are still placeholders in Task 10 — the

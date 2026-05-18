@@ -211,7 +211,19 @@ func (h *ScheduledAgentHandler) Dispatch(ctx context.Context, job scheduler.JobS
 		return ErrTargetSessionAlive
 	}
 
-	// TODO(thrum-6qmf.4.41..thrum-6qmf.4.61): implement stages 1-8.
+	// Stage 1: budget_check — observability marker only. A-B1's reactor
+	// performs the actual budget check BEFORE invoking Dispatch (per
+	// spec §7.1 + canonical Q-Spec-3 resolution / Leon's 2026-05-15
+	// answer); over-budget jobs never reach this handler. Emitting the
+	// marker keeps the nine-stage walk visible in scheduler_job_events
+	// so `thrum cron history` + A-B4 stalled-sweep see the full
+	// dispatched → ... → completed sequence (MINOR #6 from plan v1
+	// dual-review prompted this reframing).
+	if err := reporter.Stage(StageBudgetCheck); err != nil {
+		return err
+	}
+
+	// TODO(thrum-6qmf.4.43..thrum-6qmf.4.61): implement stages 2-8.
 	return nil
 }
 
