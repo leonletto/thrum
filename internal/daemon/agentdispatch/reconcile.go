@@ -327,12 +327,15 @@ func (r *BootReconciler) ReconcileRun(
 // clear dangling .git/worktrees/<name>/ metadata from SIGKILL-
 // during-stage-3 cases. Per spec §7.7.
 //
-// Ordering invariant: callers must invoke SweepOrphans AFTER
-// scheduler.ReconcileBoot has finished. The per-row walker may
-// transition rows from running/dispatched into scheduled/failed,
-// which changes which worktrees the journal claims as in-flight;
-// running concurrently would race the NonTerminalWorktrees view.
-// B3 wires this in main.go's boot sequence post-ReconcileBoot.
+// Ordering invariant: callers must invoke SweepOrphans AFTER the
+// per-row scheduler reconciliation (e.g. scheduler.RegisterTypeHandler's
+// walk for matching rows, or scheduler.ReconcileBoot for a full
+// sweep) completes. That walk may transition rows from
+// running/dispatched into scheduled/failed, which changes which
+// worktrees the journal claims as in-flight; running concurrently
+// would race the NonTerminalWorktrees view. main.go enforces this
+// ordering structurally — wireScheduledAgentHandlers' synchronous
+// RegisterTypeHandler call returns before SweepOrphans fires.
 //
 // SIGKILL-residue note: a daemon killed between worktree.Create
 // succeeding and the journal-write for stage 3 leaves behind a
@@ -443,15 +446,16 @@ func (r *BootReconciler) runPrune(ctx context.Context) error {
 
 // Compile-time check that *BootReconciler satisfies the consumer-side
 // Reconciler interface declared in scheduled_agent.go.
-// wireScheduledAgentHandlers (E6.9 B3) will swap NewReconcilerStub() →
-// NewBootReconciler(...).
+// wireScheduledAgentHandlers wires NewBootReconciler in place of
+// NewReconcilerStub at daemon boot.
 var _ Reconciler = (*BootReconciler)(nil)
 
 // Compile-time check that *scheduler.StateStore directly satisfies
 // JournalReader — its EventsForRun + NonTerminalWorktrees methods
-// match the interface signatures exactly, so B3 can pass the
-// daemon-boot StateStore through without a wrapping adapter. If a
-// future StateStore signature drift breaks this, the build fails
-// here rather than at the wireScheduledAgentHandlers call site
-// where the chain of indirection makes the diagnostic less obvious.
+// match the interface signatures exactly, so daemon-boot wiring
+// passes the StateStore through without an intermediate adapter.
+// If a future StateStore signature drift breaks this, the build
+// fails here rather than at the wireScheduledAgentHandlers call
+// site where the chain of indirection makes the diagnostic less
+// obvious.
 var _ JournalReader = (*scheduler.StateStore)(nil)

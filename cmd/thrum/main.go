@@ -35,6 +35,7 @@ import (
 	"github.com/leonletto/thrum/internal/context/roleconfig"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/agentdispatch"
+	"github.com/leonletto/thrum/internal/daemon/agenthealth"
 	"github.com/leonletto/thrum/internal/daemon/backstop"
 	"github.com/leonletto/thrum/internal/daemon/bootstrap"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
@@ -8131,7 +8132,7 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// constructing the same adapter twice with slightly different
 	// types).
 	escalationMessage := agentdispatch.NewMessageRPCAdapter(messageHandler, supervisorID)
-	if err := wireScheduledAgentHandlers(sched, scheduledAgentDeps{
+	bootReconciler, err := wireScheduledAgentHandlers(sched, scheduledAgentDeps{
 		RepoPath:       absPath,
 		TmuxHandler:    tmuxHandler,
 		MessageHandler: messageHandler,
@@ -8145,8 +8146,10 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 				SupervisorAgentName: thrumCfg.Daemon.Escalation.SupervisorAgentName,
 			},
 		},
-		Drainer: agentDispatchDrainer,
-	}); err != nil {
+		Drainer:     agentDispatchDrainer,
+		DaemonState: st,
+	})
+	if err != nil {
 		return fmt.Errorf("wire scheduled-agent handlers: %w", err)
 	}
 	// agentInflightTracker stays parked: MB-1.S2 will wire the
@@ -8168,6 +8171,26 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// Closes spec §9.8.4 PARTIAL → FULL PASS.
 	if err := wirePaneHealthCheck(sched, agentRegistry, st, tmuxHandler); err != nil {
 		return fmt.Errorf("wire pane-health check: %w", err)
+	}
+
+	// B-B1 E6.9 / thrum-6qmf.4.15-.19: orphan-worktree filesystem
+	// sweep + boot-time pane-health pass. Per spec §7.7 + plan
+	// §3408-3429 Option B sequencing — runs synchronously AFTER
+	// wireScheduledAgentHandlers' per-handler reconcile walk
+	// completes (which transitioned non-terminal scheduler rows
+	// through BootReconciler.ReconcileRun), so the
+	// NonTerminalWorktrees set the sweep cross-references reflects
+	// the post-reconcile state. Both calls are best-effort; errors
+	// are logged at Warn level and do not fail boot.
+	if err := bootReconciler.SweepOrphans(ctx); err != nil {
+		slog.Warn("E6.9 orphan sweep returned error at boot; continuing",
+			"err", err)
+	}
+	bootRespawner := buildPaneHealthRespawner(agentRegistry, st, tmuxHandler)
+	if err := agenthealth.BootPass(ctx, agentRegistry, tmuxPaneProber{},
+		agenthealth.WrapAgentdispatchRespawner(bootRespawner), nil); err != nil {
+		slog.Warn("E6.9 boot pane-health pass returned error; continuing",
+			"err", err)
 	}
 
 	// Auto-connect to dialer-role peers after the WS server is ready.

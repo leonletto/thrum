@@ -166,41 +166,53 @@ type scheduledAgentDeps struct {
 	// real drain path is wired (replaces the parked _ = drainer
 	// from 42a).
 	Drainer agentdispatch.RPCDrainer
+
+	// DaemonState owns the safedb handle threaded through both the
+	// BootReconciler's JournalReader (a *scheduler.StateStore over
+	// the same DB) and its AgentLifecycleStore. E6.9 B3: required
+	// to construct the production BootReconciler that replaces the
+	// NewReconcilerStub from E6.5 42b.
+	DaemonState *state.State
 }
 
-// wireScheduledAgentHandlers performs E6.5 Task 42b: replace the
-// placeholder registrations with real ScheduledAgentHandler +
-// NudgeHandler instances, each constructed with concrete Deps
-// adapters bridging agentdispatch's narrow interfaces to the
-// rpc-package handlers + ttmux + worktree primitives.
+// wireScheduledAgentHandlers performs E6.5 Task 42b + E6.9 Task 68:
+// replace placeholder registrations with real ScheduledAgentHandler
+// + NudgeHandler instances, each constructed with concrete Deps
+// adapters. E6.9 Task 68 swaps the NewReconcilerStub Reconciler slot
+// for a real *agentdispatch.BootReconciler so the per-handler
+// reconcile walk inside RegisterTypeHandler routes rows through
+// spec §7.7's classification.
 //
-// Closes AC §9.6.4 (real dispatch path) in tandem with Task 44's
-// end-to-end smoke. §9.6.1 was closed by 42a; the integration test
-// here verifies the type-handler registry still reports both types
-// (now backed by real handlers, not placeholders).
+// Returns the constructed BootReconciler so main.go can invoke
+// SweepOrphans + BootPass against it after RegisterTypeHandler
+// completes the per-handler reconcile walk (Option B sequencing
+// per plan §3408-3429 — synchronous main.go ordering replaces
+// the unimplemented Scheduler.ReconciliationComplete channel).
+//
+// Closes AC §9.6.4 (real dispatch) + AC §9.10.1-§9.10.3 (Reconcile
+// row-class coverage now backed by real recovery logic) +
+// §9.10.4-§9.10.6 (when callers invoke SweepOrphans post-wire).
 //
 // Ordering invariant: MUST be called AFTER sched.Start so the
-// per-handler reconcile loop (scheduler.go RegisterTypeHandler)
-// walks any non-terminal rows under these types and routes them
-// through the real Reconcile path (E6.9-pending stub returns
-// StateFailed; the placeholder path did the same).
+// per-handler reconcile loop walks any non-terminal rows under
+// these types and routes them through the real Reconcile path.
 //
 // PANICS only via the underlying scheduler error wrap when
 // RegisterTypeHandler rejects a duplicate — would indicate
 // registerPlaceholderHandlers was called first (a wiring bug since
 // they're mutually exclusive production paths).
-func wireScheduledAgentHandlers(sched *scheduler.Scheduler, deps scheduledAgentDeps) error {
+func wireScheduledAgentHandlers(sched *scheduler.Scheduler, deps scheduledAgentDeps) (*agentdispatch.BootReconciler, error) {
 	if sched == nil {
-		return fmt.Errorf("wireScheduledAgentHandlers: nil scheduler")
+		return nil, fmt.Errorf("wireScheduledAgentHandlers: nil scheduler")
 	}
 	if deps.TmuxHandler == nil {
-		return fmt.Errorf("wireScheduledAgentHandlers: nil TmuxHandler")
+		return nil, fmt.Errorf("wireScheduledAgentHandlers: nil TmuxHandler")
 	}
 	if deps.MessageHandler == nil {
-		return fmt.Errorf("wireScheduledAgentHandlers: nil MessageHandler")
+		return nil, fmt.Errorf("wireScheduledAgentHandlers: nil MessageHandler")
 	}
 	if deps.CallerAgentID == "" {
-		return fmt.Errorf("wireScheduledAgentHandlers: empty CallerAgentID (need supervisor identity for daemon-source sends)")
+		return nil, fmt.Errorf("wireScheduledAgentHandlers: empty CallerAgentID (need supervisor identity for daemon-source sends)")
 	}
 	if deps.MirrorWorker == nil {
 		// Mirror is consumed by Stage 3b (EnsureMirrored). A nil
@@ -210,14 +222,31 @@ func wireScheduledAgentHandlers(sched *scheduler.Scheduler, deps scheduledAgentD
 		// with TmuxHandler/MessageHandler nil guards becomes a trap
 		// for fixtures + future callers; surface here as a boot-time
 		// wiring error instead.
-		return fmt.Errorf("wireScheduledAgentHandlers: nil MirrorWorker (Stage 3b would nil-deref)")
+		return nil, fmt.Errorf("wireScheduledAgentHandlers: nil MirrorWorker (Stage 3b would nil-deref)")
+	}
+	if deps.DaemonState == nil {
+		return nil, fmt.Errorf("wireScheduledAgentHandlers: nil DaemonState (BootReconciler needs DB handle)")
 	}
 
 	tmuxAdapter := agentdispatch.NewTmuxRPCAdapter(deps.TmuxHandler)
 	messageAdapter := agentdispatch.NewMessageRPCAdapter(deps.MessageHandler, deps.CallerAgentID)
 	worktreeAdapter := agentdispatch.NewWorktreeMgrAdapter()
 	escalationAdapter := agentdispatch.NewEscalationRouterAdapter(deps.EscalationDeps)
-	reconciler := agentdispatch.NewReconcilerStub()
+
+	// E6.9 B3: real BootReconciler replaces NewReconcilerStub. The
+	// JournalReader interface is satisfied directly by
+	// *scheduler.StateStore (compile-time-checked in reconcile.go);
+	// constructing a fresh StateStore over the same safedb handle
+	// hits the same SQLite tables the scheduler itself writes to.
+	journalStore := scheduler.NewStateStore(deps.DaemonState.DB())
+	lifecycleStore := state.NewAgentLifecycleStore(deps.DaemonState.DB())
+	bootReconciler := agentdispatch.NewBootReconciler(
+		deps.RepoPath,
+		tmuxAdapter,
+		worktreeAdapter,
+		journalStore,
+		lifecycleStore,
+	)
 
 	scheduledHandler := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
 		RepoPath:   deps.RepoPath,
@@ -227,7 +256,7 @@ func wireScheduledAgentHandlers(sched *scheduler.Scheduler, deps scheduledAgentD
 		Registry:   deps.AgentRegistry,
 		Mirror:     deps.MirrorWorker,
 		Escalation: escalationAdapter,
-		Reconciler: reconciler,
+		Reconciler: bootReconciler,
 		Drainer:    deps.Drainer,
 	})
 	nudgeHandler := agentdispatch.NewNudgeHandler(agentdispatch.NudgeDeps{
@@ -237,12 +266,12 @@ func wireScheduledAgentHandlers(sched *scheduler.Scheduler, deps scheduledAgentD
 	})
 
 	if err := sched.RegisterTypeHandler("scheduled_agent", scheduledHandler); err != nil {
-		return fmt.Errorf("register scheduled_agent type handler: %w", err)
+		return nil, fmt.Errorf("register scheduled_agent type handler: %w", err)
 	}
 	if err := sched.RegisterTypeHandler("nudge", nudgeHandler); err != nil {
-		return fmt.Errorf("register nudge type handler: %w", err)
+		return nil, fmt.Errorf("register nudge type handler: %w", err)
 	}
-	return nil
+	return bootReconciler, nil
 }
 
 // tmuxPaneProber satisfies agenthealth.PaneProber by wrapping the
@@ -272,7 +301,7 @@ func (tmuxPaneProber) CheckPane(_ context.Context, target string) (bool, error) 
 //     wrapping rpc.TmuxHandler.RestartSession. Closes spec §9.8.4
 //     PARTIAL → FULL PASS: when OnPaneGone fires + gate predicate
 //     passes, the system now actually re-creates the tmux session
-//     + relaunches the runtime instead of returning
+//   - relaunches the runtime instead of returning
 //     ErrHandlerWiringPending.
 //   - Escalation: nil for now; the loop-guard trip path's F2
 //     nil-guard handles this. When the daemon-side escalation
