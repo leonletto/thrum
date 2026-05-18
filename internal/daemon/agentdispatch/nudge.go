@@ -10,6 +10,16 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
 )
 
+// TypeNudge is the canonical scheduler job-type identifier for the
+// nudge handler per spec §7.2. E6.5 wires the handler with
+// scheduler.RegisterTypeHandler(TypeNudge, nudgeHandler) at daemon
+// boot. Exporting the constant here means E6.5's daemon-startup
+// code can reference it by symbol rather than by string literal —
+// drift between the registration call and the validator's switch-
+// case (internal/daemon/scheduler/validator.go) surfaces as a
+// compile error rather than a silent runtime mismatch.
+const TypeNudge = "nudge"
+
 // Sentinel errors for the nudge dispatch path. Callers errors.Is
 // against these to distinguish the two canonical operator-facing
 // failure classes ("the agent isn't running" vs "the agent isn't

@@ -50,6 +50,19 @@ func testNudgeJob(target string) scheduler.JobSpec {
 	}
 }
 
+// TestTypeNudge_MatchesSchedulerValidator pins the canonical type
+// ID per spec §7.2: the exported TypeNudge constant MUST equal the
+// "nudge" string literal that internal/daemon/scheduler/validator.go
+// keys off. Drift between the constant and the validator would mean
+// E6.5's registration call succeeds but the validator rejects every
+// user-supplied nudge job — silent in-production breakage.
+func TestTypeNudge_MatchesSchedulerValidator(t *testing.T) {
+	if agentdispatch.TypeNudge != "nudge" {
+		t.Errorf("TypeNudge = %q; want %q (validator keys off this string)",
+			agentdispatch.TypeNudge, "nudge")
+	}
+}
+
 // TestNudgeDispatch_ErrTargetOffline pins the canonical pre-enqueue
 // liveness gate per spec §7.2 + AC 9.4.2: if CheckPane reports the
 // target's pane is not alive, Dispatch refuses with ErrTargetOffline
