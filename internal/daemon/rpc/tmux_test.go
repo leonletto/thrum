@@ -773,3 +773,37 @@ func TestHandleCheckPane_IdentityMissingTmuxSession_SilentlyIdles(t *testing.T) 
 		t.Error("no nudge row should be created when identity lookup fails")
 	}
 }
+
+// TestRestartSession_MissingSession_SurfacesEnsureSessionError
+// pins the canonical RestartSession behavior when the named tmux
+// session doesn't exist: ensureSession's error propagates through
+// the helper unchanged, so callers (HandleRestart RPC + B-B1
+// agentdispatch.RestarterAdapter) see the same error class for
+// the same failure regardless of entry point. Closes the
+// helper-level unit-test gap from thrum-6qmf.4.88 — the adapter
+// tests in agentdispatch/adapters_test.go cover the forwarding
+// shape; this test covers RestartSession directly.
+func TestRestartSession_MissingSession_SurfacesEnsureSessionError(t *testing.T) {
+	h := NewTmuxHandler(t.TempDir(), nil)
+	// Empty session name fails earliest in ensureSession; any name
+	// without a real tmux session would also fail. We want the
+	// error path that doesn't require any tmux subprocess.
+	_, err := h.RestartSession(context.Background(),
+		"docs_bot_missing_session_42", RestartSessionOpts{})
+	if err == nil {
+		t.Fatal("expected error for missing session; got nil")
+	}
+}
+
+// TestRestartSession_EmptySessionName_FailsCleanly pins the
+// defensive empty-name path: an empty sessionName is a wiring
+// bug (the adapter forwards agentName, which is validated
+// upstream), but RestartSession should surface a clean error
+// rather than nil-deref on the empty string downstream.
+func TestRestartSession_EmptySessionName_FailsCleanly(t *testing.T) {
+	h := NewTmuxHandler(t.TempDir(), nil)
+	_, err := h.RestartSession(context.Background(), "", RestartSessionOpts{})
+	if err == nil {
+		t.Error("expected error for empty session name; got nil")
+	}
+}

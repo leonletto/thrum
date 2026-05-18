@@ -2,6 +2,7 @@ package agentdispatch
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/daemon/escalation"
@@ -18,6 +19,50 @@ func TestAdapters_SatisfyInterfaces(t *testing.T) {
 	var _ WorktreeManager = (*worktreeMgrAdapter)(nil)
 	var _ EscalationRouter = (*escalationRouterAdapter)(nil)
 	var _ Reconciler = (*reconcilerStub)(nil)
+	var _ Restarter = (*restarterAdapter)(nil)
+}
+
+// TestRestarterAdapter_NilHandler_ReturnsErrorNotPanic pins the
+// defensive nil-handler guard per thrum-6qmf.4.88 wiring contract:
+// a misconfigured adapter (nil TmuxHandler dep) surfaces as a
+// wrapped error rather than a nil-deref panic at first Restart
+// fire. Catches the case where daemon-boot wiring forgets to
+// thread the real *rpc.TmuxHandler through buildPaneHealthRespawner.
+func TestRestarterAdapter_NilHandler_ReturnsErrorNotPanic(t *testing.T) {
+	a := NewRestarterAdapter(nil)
+	err := a.Restart(context.Background(), "docs_bot")
+	if err == nil {
+		t.Fatal("expected error for nil TmuxHandler; got nil")
+	}
+}
+
+// TestRestarterAdapter_Restart_ForwardsAgentNameAsSession pins
+// the canonical mapping per thrum-6qmf.4.88 + adapter docstring:
+// the agentName parameter from Respawner.OnPaneGone maps 1:1 to
+// the tmux session name passed to RestartSession. Construct an
+// rpc.TmuxHandler so the call reaches its body, then assert the
+// error chain identifies our agentName — the underlying
+// RestartSession will fail because no real session exists, but
+// the failure carries the agent name through so the adapter's
+// forwarding shape is verified end-to-end.
+func TestRestarterAdapter_Restart_ForwardsAgentNameAsSession(t *testing.T) {
+	// Build a TmuxHandler against a temp dir. The session
+	// "docs_bot_missing" doesn't exist in tmux, so RestartSession
+	// will fail at ensureSession; the error message includes the
+	// session name we passed → proves the adapter forwarded
+	// agentName as the session name.
+	h := rpc.NewTmuxHandler(t.TempDir(), nil)
+	a := NewRestarterAdapter(h)
+	err := a.Restart(context.Background(), "docs_bot_missing")
+	if err == nil {
+		t.Fatal("expected error from missing session; got nil")
+	}
+	// The error chain should reference the session we asked to
+	// restart. ensureSession's wrapped error includes the session
+	// name verbatim.
+	if !strings.Contains(err.Error(), "docs_bot_missing") {
+		t.Errorf("err = %v; want substring 'docs_bot_missing' (proves agentName→session mapping)", err)
+	}
 }
 
 // --- worktreeMgrAdapter ---

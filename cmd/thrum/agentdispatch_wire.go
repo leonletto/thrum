@@ -263,45 +263,29 @@ func (tmuxPaneProber) CheckPane(_ context.Context, target string) (bool, error) 
 	return tmux.HasSession(target), nil
 }
 
-// placeholderRestarter satisfies agentdispatch.Restarter with a
-// stub that returns ErrHandlerWiringPending. Production restart
-// requires extracting a Go-level helper from rpc/tmux.go's
-// HandleRestart (per IMPORTANT #10 audit verdict); that adapter
-// is post-42b work tracked under thrum-fvhs's design notes.
-//
-// Until the real adapter lands, Respawner.OnPaneGone's F1
-// defensive handling catches the wrapped sentinel and logs +
-// continues without marking the agent as crash-looped. The audit
-// trail (crash_detected event) is preserved, so the system
-// observes the crash even without acting on it.
-type placeholderRestarter struct{}
-
-func (placeholderRestarter) Restart(_ context.Context, agentName string) error {
-	return fmt.Errorf("restart %q: %w", agentName, agentdispatch.ErrHandlerWiringPending)
-}
-
 // buildPaneHealthRespawner constructs an *agentdispatch.Respawner
 // with the canonical production deps for E6.7 pane-health respawn:
 //   - Registry: the supplied agent.AgentRegistry (caller-built
 //     via agent.NewSQLiteRegistry(state.DB)).
 //   - LifecycleStore: state.NewAgentLifecycleStore over the same DB.
-//   - Restarter: placeholderRestarter until the post-42b real
-//     adapter (Go-level Restart helper extracted from
-//     rpc/tmux.go's HandleRestart) lands. F1 forward-flag catches
-//     the wrapped ErrHandlerWiringPending in OnPaneGone — log +
-//     skip without state corruption.
+//   - Restarter: the real RestarterAdapter (thrum-6qmf.4.88)
+//     wrapping rpc.TmuxHandler.RestartSession. Closes spec §9.8.4
+//     PARTIAL → FULL PASS: when OnPaneGone fires + gate predicate
+//     passes, the system now actually re-creates the tmux session
+//     + relaunches the runtime instead of returning
+//     ErrHandlerWiringPending.
 //   - Escalation: nil for now; the loop-guard trip path's F2
 //     nil-guard handles this. When the daemon-side escalation
 //     router is wired, pass through here.
 //
 // Lives next to wirePaneHealthCheck so main.go's composition
-// root threads the same DB to both the registry slot and the
-// lifecycle store — single source of truth.
-func buildPaneHealthRespawner(registry agent.AgentRegistry, db *state.State) *agentdispatch.Respawner {
+// root threads the same DB + TmuxHandler to all consumers —
+// single source of truth.
+func buildPaneHealthRespawner(registry agent.AgentRegistry, db *state.State, tmuxHandler *rpc.TmuxHandler) *agentdispatch.Respawner {
 	return &agentdispatch.Respawner{
 		Registry:       registry,
 		LifecycleStore: state.NewAgentLifecycleStore(db.DB()),
-		Restarter:      placeholderRestarter{},
+		Restarter:      agentdispatch.NewRestarterAdapter(tmuxHandler),
 		// Escalation: nil — wire when daemon-side escalation router lands.
 	}
 }
@@ -325,6 +309,7 @@ func wirePaneHealthCheck(
 	sched *scheduler.Scheduler,
 	registry agent.AgentRegistry,
 	daemonState *state.State,
+	tmuxHandler *rpc.TmuxHandler,
 ) error {
 	if sched == nil {
 		return fmt.Errorf("wirePaneHealthCheck: nil scheduler")
@@ -335,7 +320,10 @@ func wirePaneHealthCheck(
 	if daemonState == nil {
 		return fmt.Errorf("wirePaneHealthCheck: nil state")
 	}
-	respawner := buildPaneHealthRespawner(registry, daemonState)
+	if tmuxHandler == nil {
+		return fmt.Errorf("wirePaneHealthCheck: nil tmux handler")
+	}
+	respawner := buildPaneHealthRespawner(registry, daemonState, tmuxHandler)
 	handler := agenthealth.New(
 		registry,
 		tmuxPaneProber{},
