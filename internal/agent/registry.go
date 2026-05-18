@@ -98,6 +98,19 @@ type AgentRegistry interface {
 	// check via errors.Is.
 	Lookup(ctx context.Context, name string) (Agent, error)
 
+	// ListAutoRespawnEnabled returns all Agent rows that are eligible
+	// for auto-respawn at this instant: auto_respawn_enabled = 1 AND
+	// auto_respawn_disabled_at IS NULL (loop guard not tripped) AND
+	// state_md_parse_failed_at IS NULL (no parse-failure banner).
+	//
+	// The pane-health monitor (internal/daemon/agenthealth) iterates
+	// the returned set to scan for crashed agents. Filtering at the
+	// list site is an optimization — per-agent OnPaneGone still
+	// re-checks gate-predicate state to avoid TOCTOU races between
+	// list time and probe time. Result ordering is implementation-
+	// defined; callers MUST NOT depend on it.
+	ListAutoRespawnEnabled(ctx context.Context) ([]Agent, error)
+
 	// SetAutoRespawnDisabledAt arms the loop-guard trip marker.
 	// Subsequent Lookups observe the timestamp; downstream respawn
 	// logic refuses respawns until ClearAutoRespawnDisabledAt fires.

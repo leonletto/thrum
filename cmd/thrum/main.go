@@ -7757,6 +7757,26 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// reconcile-loop ordering invariant), which it does — the call
 	// site is ~250 lines down in this same daemon-boot function.
 
+	// B-B1 E6.7 / thrum-fvhs: register the periodic pane-health
+	// monitor. Iterates every auto-respawn-eligible agent each tick
+	// (30s cadence per dispatch), probes its tmux pane, and routes
+	// pane-gone events through agentdispatch.Respawner.OnPaneGone
+	// — the canonical 5-step flow that appends crash_detected,
+	// runs the gate predicate + loop guard, and fires respawn or
+	// escalation.
+	//
+	// The Restarter is currently a placeholder (returns
+	// ErrHandlerWiringPending) until post-42b real-adapter glue
+	// lands. F1 forward-flag in Respawner catches the wrapped
+	// sentinel and logs + continues without state corruption —
+	// the audit trail (crash_detected event) is preserved so the
+	// system observes the crash even before the production restart
+	// can execute.
+	registry := agent.NewSQLiteRegistry(st.DB())
+	if err := wirePaneHealthCheck(sched, registry, st); err != nil {
+		return fmt.Errorf("wire pane-health check: %w", err)
+	}
+
 	// Monitor jobs supervisor — launches runner goroutines for every monitor
 	// in the DB with status=running and blocks on ctx.Done(). Must start
 	// AFTER the backup scheduler and BEFORE lifecycle.Run(ctx).

@@ -228,3 +228,125 @@ func TestSQLiteRegistry_ConcurrentWrites(t *testing.T) {
 		t.Errorf("AgentID lost after concurrent writes: %q", got.AgentID)
 	}
 }
+
+// TestSQLiteRegistry_ListAutoRespawnEnabled_EmptyDB pins the
+// empty-result path: a registry with no agents returns an empty
+// slice + nil error (NOT a nil slice + nil error from a query
+// abort). Distinguishes "no agents are auto-respawnable" from
+// "the query failed".
+func TestSQLiteRegistry_ListAutoRespawnEnabled_EmptyDB(t *testing.T) {
+	reg := agent.NewSQLiteRegistry(newRegistryDB(t))
+	got, err := reg.ListAutoRespawnEnabled(context.Background())
+	if err != nil {
+		t.Fatalf("ListAutoRespawnEnabled: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("got %d agents from empty DB; want 0", len(got))
+	}
+}
+
+// TestSQLiteRegistry_ListAutoRespawnEnabled_FiltersByPredicate
+// pins the canonical gate predicate at the SQL layer per spec §3.4:
+// only rows with auto_respawn_enabled=1 AND no loop-guard trip
+// AND no parse-failure banner surface to the pane-health monitor.
+// Catches drift in the filter clause that would either include
+// disabled agents (false respawn attempts) or exclude eligible
+// agents (silent crash-loop failures).
+func TestSQLiteRegistry_ListAutoRespawnEnabled_FiltersByPredicate(t *testing.T) {
+	db := newRegistryDB(t)
+	ctx := context.Background()
+
+	// 5 agents covering every gate-predicate combination:
+	// - eligible_1, eligible_2 → return
+	// - disabled → not in result (auto_respawn_enabled=0)
+	// - guard_tripped → not in result (auto_respawn_disabled_at NOT NULL)
+	// - parse_failed → not in result (state_md_parse_failed_at NOT NULL)
+	seedAgent(t, db, "eligible_1", agent.ModePersistent, agent.IdentityLongLived)
+	seedAgent(t, db, "eligible_2", agent.ModePersistent, agent.IdentityLongLived)
+	seedAgent(t, db, "disabled", agent.ModePersistent, agent.IdentityLongLived)
+	seedAgent(t, db, "guard_tripped", agent.ModePersistent, agent.IdentityLongLived)
+	seedAgent(t, db, "parse_failed", agent.ModePersistent, agent.IdentityLongLived)
+
+	// Set auto_respawn_enabled = 1 for everyone except "disabled".
+	if _, err := db.ExecContext(ctx,
+		`UPDATE agents SET auto_respawn_enabled = 1 WHERE agent_id != ?`,
+		"disabled"); err != nil {
+		t.Fatalf("enable auto_respawn: %v", err)
+	}
+	// Trip the loop guard for guard_tripped.
+	if _, err := db.ExecContext(ctx,
+		`UPDATE agents SET auto_respawn_disabled_at = ? WHERE agent_id = ?`,
+		time.Now().Unix(), "guard_tripped"); err != nil {
+		t.Fatalf("trip guard: %v", err)
+	}
+	// Set parse-failure banner for parse_failed.
+	if _, err := db.ExecContext(ctx,
+		`UPDATE agents SET state_md_parse_failed_at = ? WHERE agent_id = ?`,
+		time.Now().Unix(), "parse_failed"); err != nil {
+		t.Fatalf("set parse_failed: %v", err)
+	}
+
+	reg := agent.NewSQLiteRegistry(db)
+	got, err := reg.ListAutoRespawnEnabled(ctx)
+	if err != nil {
+		t.Fatalf("ListAutoRespawnEnabled: %v", err)
+	}
+
+	// Collect names for set comparison (result ordering is
+	// implementation-defined per docstring).
+	gotNames := map[string]bool{}
+	for _, a := range got {
+		gotNames[a.AgentID] = true
+	}
+	if len(gotNames) != 2 {
+		t.Errorf("got %d agents; want 2 (eligible_1 + eligible_2). Names: %v",
+			len(gotNames), gotNames)
+	}
+	for _, want := range []string{"eligible_1", "eligible_2"} {
+		if !gotNames[want] {
+			t.Errorf("expected agent %q in result; missing. Got: %v", want, gotNames)
+		}
+	}
+	for _, excluded := range []string{"disabled", "guard_tripped", "parse_failed"} {
+		if gotNames[excluded] {
+			t.Errorf("agent %q must NOT appear (predicate excludes); got: %v",
+				excluded, gotNames)
+		}
+	}
+}
+
+// TestSQLiteRegistry_ListAutoRespawnEnabled_FieldsPopulated pins
+// per-field Scan correctness: the returned Agent rows carry the
+// same shape Lookup produces (AgentID, Mode, Identity,
+// AutoRespawnEnabled bool, etc.). Drift in the SQL column order vs
+// the Scan target list surfaces here.
+func TestSQLiteRegistry_ListAutoRespawnEnabled_FieldsPopulated(t *testing.T) {
+	db := newRegistryDB(t)
+	seedAgent(t, db, "docs_bot", agent.ModePersistent, agent.IdentityLongLived)
+	if _, err := db.ExecContext(context.Background(),
+		`UPDATE agents SET auto_respawn_enabled = 1 WHERE agent_id = ?`, "docs_bot"); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+
+	reg := agent.NewSQLiteRegistry(db)
+	got, err := reg.ListAutoRespawnEnabled(context.Background())
+	if err != nil {
+		t.Fatalf("ListAutoRespawnEnabled: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d agents; want 1", len(got))
+	}
+	a := got[0]
+	if a.AgentID != "docs_bot" {
+		t.Errorf("AgentID = %q; want docs_bot", a.AgentID)
+	}
+	if a.Mode != agent.ModePersistent {
+		t.Errorf("Mode = %q; want %q", a.Mode, agent.ModePersistent)
+	}
+	if a.Identity != agent.IdentityLongLived {
+		t.Errorf("Identity = %q; want %q", a.Identity, agent.IdentityLongLived)
+	}
+	if !a.AutoRespawnEnabled {
+		t.Error("AutoRespawnEnabled = false; want true")
+	}
+}

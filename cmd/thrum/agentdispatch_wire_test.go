@@ -4,16 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/leonletto/thrum/internal/agent"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/agentdispatch"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
+	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/schema"
 	"github.com/leonletto/thrum/internal/skills/mirror"
 )
@@ -302,4 +305,85 @@ func TestWireScheduledAgentHandlers_RejectsDuplicateOnPlaceholderConflict(t *tes
 	if err == nil {
 		t.Error("expected duplicate-registration error when placeholder + real handlers both registered")
 	}
+}
+
+// --- wirePaneHealthCheck (thrum-fvhs / E6.7 9.8.4) ---
+
+// TestWirePaneHealthCheck_RegistersInternalJob pins the
+// thrum-fvhs / E6.7 9.8.4 wiring contract: wirePaneHealthCheck
+// registers the canonical "internal.pane_health_check" job with
+// the @every 30s cadence. Operators see it in `thrum cron list`
+// + `thrum cron history` output keyed off this id; drift would
+// break those audit-trail queries.
+func TestWirePaneHealthCheck_RegistersInternalJob(t *testing.T) {
+	s := newSchedulerForRegistrationTest(t)
+
+	// Build minimal real deps. The registry + state are shared with
+	// the production wiring path — same DB the scheduler sees.
+	st := newStateForWireTest(t)
+	registry := agent.NewSQLiteRegistry(st.DB())
+
+	if err := wirePaneHealthCheck(s, registry, st); err != nil {
+		t.Fatalf("wirePaneHealthCheck: %v", err)
+	}
+
+	spec, ok := s.JobSpec(paneHealthCheckJobID)
+	if !ok {
+		t.Fatalf("job %q not registered", paneHealthCheckJobID)
+	}
+	if spec.Schedule != paneHealthCheckSchedule {
+		t.Errorf("schedule = %q; want %q", spec.Schedule, paneHealthCheckSchedule)
+	}
+	if spec.Type != "internal" {
+		t.Errorf("type = %q; want internal", spec.Type)
+	}
+}
+
+// TestWirePaneHealthCheck_RejectsNilDeps pins the defensive nil
+// guards in wirePaneHealthCheck. Operator-facing diagnostics
+// matter here — a misconfigured daemon boot should fail loud
+// rather than nil-deref during the first tick.
+func TestWirePaneHealthCheck_RejectsNilDeps(t *testing.T) {
+	s := newSchedulerForRegistrationTest(t)
+	st := newStateForWireTest(t)
+	registry := agent.NewSQLiteRegistry(st.DB())
+
+	cases := []struct {
+		name string
+		sch  *scheduler.Scheduler
+		reg  agent.AgentRegistry
+		st   *state.State
+	}{
+		{"nil scheduler", nil, registry, st},
+		{"nil registry", s, nil, st},
+		{"nil state", s, registry, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if err := wirePaneHealthCheck(c.sch, c.reg, c.st); err == nil {
+				t.Error("expected error; got nil")
+			}
+		})
+	}
+}
+
+// newStateForWireTest builds a minimal *state.State backed by a
+// fresh in-memory SQLite for wire-helper testing. The state's DB
+// must already have run migrations to head so the agents +
+// agent_lifecycle_events tables exist (the registry + lifecycle
+// store both read against them).
+func newStateForWireTest(t *testing.T) *state.State {
+	t.Helper()
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	syncDir := filepath.Join(thrumDir, "sync")
+	if err := os.MkdirAll(syncDir, 0o750); err != nil {
+		t.Fatalf("mkdir syncDir: %v", err)
+	}
+	st, err := state.NewState(thrumDir, syncDir, "test-repo", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	return st
 }

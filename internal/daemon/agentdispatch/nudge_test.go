@@ -26,6 +26,9 @@ func (s *stubAgentRegistry) Lookup(_ context.Context, name string) (agent.Agent,
 	s.lookupCalls = append(s.lookupCalls, name)
 	return s.lookupAgent, s.lookupErr
 }
+func (s *stubAgentRegistry) ListAutoRespawnEnabled(_ context.Context) ([]agent.Agent, error) {
+	return nil, nil
+}
 func (s *stubAgentRegistry) SetAutoRespawnDisabledAt(_ context.Context, _ string, _ time.Time) error {
 	return nil
 }
