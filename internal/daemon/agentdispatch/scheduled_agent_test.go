@@ -143,6 +143,17 @@ func (m *stubMirror) EnsureMirrored(_ context.Context, worktreePath string) erro
 // downstream tests use this when they need stage 3b to succeed.
 func okMirror() *stubMirror { return &stubMirror{} }
 
+// completedSignals returns a pre-buffered signal channel carrying a
+// Completion so the stage-7 select loop fires the completion arm
+// immediately on stage-7 entry. Used by tests that exercise stages
+// 0-6 in isolation and need stage 7 to short-circuit without waiting
+// out the operator-configurable idle window (default 90s).
+func completedSignals() chan *scheduler.Completion {
+	sigs := make(chan *scheduler.Completion, 1)
+	sigs <- &scheduler.Completion{Reason: "test-driven-completion", Summary: ""}
+	return sigs
+}
+
 // recReporter pins the scheduler.StateReporter interface for the
 // scheduled-agent stage tests — records every Transition + Stage call
 // plus the details map (richer than cleanup_internal_test.go's
@@ -313,7 +324,7 @@ func TestStage1_BudgetCheckMarkerEmittedEvenThoughCheckIsUpstream(t *testing.T) 
 	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC, Worktree: okWorktree(), Mirror: okMirror()})
 	rep := &recReporter{}
 
-	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, nil)
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, completedSignals())
 	if err != nil {
 		t.Fatalf("expected stages 0-1 to pass; got: %v", err)
 	}
@@ -341,7 +352,7 @@ func TestStage0_HappyPath(t *testing.T) {
 	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC, Worktree: okWorktree(), Mirror: okMirror()})
 	rep := &recReporter{}
 
-	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, nil)
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, completedSignals())
 	if err != nil {
 		t.Fatalf("expected stage-0 to pass, got: %v", err)
 	}
@@ -367,7 +378,7 @@ func TestStage2_EnqueuesWakeMessageAndJournalsMessageID(t *testing.T) {
 	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC, Worktree: okWorktree(), Mirror: okMirror()})
 	rep := &recReporter{}
 
-	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, nil)
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, completedSignals())
 	if err != nil {
 		t.Fatalf("expected stages 0-2 to pass; got: %v", err)
 	}
@@ -442,7 +453,7 @@ func TestStage2_BuildWakeMessage_ShapeMatchesSpec7_4(t *testing.T) {
 	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC, Worktree: okWorktree(), Mirror: okMirror()})
 	rep := &recReporter{}
 
-	if err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-shape", rep, nil); err != nil {
+	if err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-shape", rep, completedSignals()); err != nil {
 		t.Fatalf("Dispatch returned %v", err)
 	}
 	if len(msgRPC.calls) != 1 {
@@ -516,7 +527,7 @@ func TestStage3a_CallsWorktreeCreate_WithCorrectOpts(t *testing.T) {
 	})
 	rep := &recReporter{}
 
-	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, nil)
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, completedSignals())
 	if err != nil {
 		t.Fatalf("expected stages 0-3a to pass; got: %v", err)
 	}
@@ -577,7 +588,7 @@ func TestStage3a_HonorsBaseBranchAndPersistentFromJobSpec(t *testing.T) {
 	job.ScheduledAgent.BaseBranch = "develop"
 	job.ScheduledAgent.WorktreePersistent = true
 
-	if err := h.Dispatch(context.Background(), job, "run-pb", rep, nil); err != nil {
+	if err := h.Dispatch(context.Background(), job, "run-pb", rep, completedSignals()); err != nil {
 		t.Fatalf("Dispatch err: %v", err)
 	}
 	if len(wt.createCalls) != 1 {
@@ -772,7 +783,7 @@ func TestStage3b_HappyPath_JournalsAfterMirrorSuccess(t *testing.T) {
 	})
 	rep := &recReporter{}
 
-	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-3b", rep, nil)
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-3b", rep, completedSignals())
 	if err != nil {
 		t.Fatalf("expected stages 0-3 to pass; got: %v", err)
 	}
@@ -819,7 +830,7 @@ func TestStage3b_ErrNullAdapter_TreatedAsSuccess(t *testing.T) {
 	})
 	rep := &recReporter{}
 
-	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-null", rep, nil)
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-null", rep, completedSignals())
 	if err != nil {
 		t.Fatalf("ErrNullAdapter should NOT propagate; got err: %v", err)
 	}
@@ -833,9 +844,15 @@ func TestStage3b_ErrNullAdapter_TreatedAsSuccess(t *testing.T) {
 	if tr.details["worktree_path"] != wt.createResult.Path {
 		t.Errorf("ErrNullAdapter blocked stage-3 close; details = %+v", tr.details)
 	}
-	// And critically: NO inline Destroy was triggered.
-	if len(wt.destroyCalls) != 0 {
-		t.Errorf("ErrNullAdapter triggered inline Destroy: %d call(s); want 0", len(wt.destroyCalls))
+	// And critically: NO inline rollback Destroy was triggered. The
+	// dispatch runs through to stage-8 teardown (which DOES call
+	// Destroy once), so the test asserts exactly 1 destroy + a stage
+	// 3 close that happened before any destroy was recorded. Without
+	// this ordering check, a regression that re-introduced an inline
+	// rollback could surface as 2 destroys but still satisfy the
+	// happy-path completion contract.
+	if len(wt.destroyCalls) != 1 {
+		t.Errorf("Destroy calls = %d; want exactly 1 (stage-8 teardown only)", len(wt.destroyCalls))
 	}
 }
 
@@ -982,9 +999,9 @@ func TestStage4_JournalsTmuxSessionAndTranscriptDir(t *testing.T) {
 	})
 	rep := &recReporter{}
 
-	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-stage4", rep, nil)
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-stage4", rep, completedSignals())
 	if err != nil {
-		t.Fatalf("expected stages 0-4 to pass; got: %v", err)
+		t.Fatalf("expected stages 0-7 to pass; got: %v", err)
 	}
 
 	// TmuxCreate must have fired with worktree path as cwd and target as session.
@@ -1002,13 +1019,11 @@ func TestStage4_JournalsTmuxSessionAndTranscriptDir(t *testing.T) {
 		t.Errorf("TmuxCreate SessionName = %q; want docs_bot", call.opts.SessionName)
 	}
 
-	// Stage 4 atomic journal-write must be the last transition.
-	tr := rep.lastTransition()
+	// Stage 4 atomic journal-write — find by reason since stages 5+ /
+	// stage 7 completion overwrite lastTransition.
+	tr := rep.findTransitionByReasonSubstring("stage 4 complete")
 	if tr.state != scheduler.StateRunning {
-		t.Errorf("last state = %v; want StateRunning", tr.state)
-	}
-	if !strings.Contains(tr.reason, "stage 4 complete") {
-		t.Errorf("last reason = %q; want 'stage 4 complete'", tr.reason)
+		t.Errorf("stage-4 state = %v; want StateRunning", tr.state)
 	}
 	if tr.details["tmux_session_name"] != "docs_bot" {
 		t.Errorf("details[tmux_session_name] = %v; want docs_bot", tr.details["tmux_session_name"])
@@ -1094,7 +1109,7 @@ func TestStage5_LaunchesRuntimeAndAdvances(t *testing.T) {
 	})
 	rep := &recReporter{}
 
-	if err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-stage5", rep, nil); err != nil {
+	if err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-stage5", rep, completedSignals()); err != nil {
 		t.Fatalf("expected stages 0-6 to pass; got: %v", err)
 	}
 	if len(rpc.tmuxLaunchCalls) != 1 || rpc.tmuxLaunchCalls[0] != "docs_bot" {
@@ -1169,7 +1184,7 @@ func TestStage6_WaitForPaneReady_Succeeds(t *testing.T) {
 	})
 	rep := &recReporter{}
 
-	if err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-stage6", rep, nil); err != nil {
+	if err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-stage6", rep, completedSignals()); err != nil {
 		t.Fatalf("expected stages 0-6 to pass; got: %v", err)
 	}
 	if len(rpc.waitPaneReadyCalls) != 1 || rpc.waitPaneReadyCalls[0] != "docs_bot" {
@@ -1220,6 +1235,150 @@ func TestStage6_PaneReadyTimeout_KillsSessionAndDestroysWorktree(t *testing.T) {
 	}
 	if !strings.Contains(tr.reason, "stage 6: pane-ready timeout") {
 		t.Errorf("reason = %q; want substring 'stage 6: pane-ready timeout'", tr.reason)
+	}
+}
+
+// TestStage7_SignalChannelTriggersCompletion pins the canonical
+// stage-7 completion path per spec §7.1 stage 7: when a
+// scheduler.Completion arrives on the signals channel, the loop
+// runs teardownGracefully + transitions to StateCompleted with the
+// Completion.Summary recorded under details["summary"] for `thrum
+// cron history` consumption.
+func TestStage7_SignalChannelTriggersCompletion(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage7-done"}
+	wt := okWorktree()
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+		Mirror:   okMirror(),
+	})
+	rep := &recReporter{}
+
+	// Pre-buffered signal so the select-loop sees it immediately on
+	// stage-7 entry; no real sleep required.
+	signals := make(chan *scheduler.Completion, 1)
+	signals <- &scheduler.Completion{Reason: "agent reported done", Summary: "wrote 3 files"}
+
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-stage7-done", rep, signals)
+	if err != nil {
+		t.Fatalf("expected nil on signal completion; got: %v", err)
+	}
+
+	tr := rep.lastTransition()
+	if tr.state != scheduler.StateCompleted {
+		t.Errorf("last state = %v; want StateCompleted", tr.state)
+	}
+	if !strings.Contains(tr.reason, "agent reported done") {
+		t.Errorf("reason = %q; want 'agent reported done'", tr.reason)
+	}
+	if tr.details["summary"] != "wrote 3 files" {
+		t.Errorf("details[summary] = %v; want 'wrote 3 files'", tr.details["summary"])
+	}
+
+	// Teardown must have fired (tmux kill + worktree destroy).
+	if len(rpc.tmuxKillCalls) != 1 || rpc.tmuxKillCalls[0] != "docs_bot" {
+		t.Errorf("TmuxKillSession calls = %v; want [docs_bot]", rpc.tmuxKillCalls)
+	}
+	if len(wt.destroyCalls) != 1 {
+		t.Fatalf("worktree.Destroy calls = %d; want 1", len(wt.destroyCalls))
+	}
+
+	// StageRunningWork + StageTearingDown must both fire.
+	var sawRunning, sawTeardown bool
+	for _, s := range rep.stages {
+		if s == agentdispatch.StageRunningWork {
+			sawRunning = true
+		}
+		if s == agentdispatch.StageTearingDown {
+			sawTeardown = true
+		}
+	}
+	if !sawRunning {
+		t.Errorf("StageRunningWork not emitted; stages: %v", rep.stages)
+	}
+	if !sawTeardown {
+		t.Errorf("StageTearingDown not emitted; stages: %v", rep.stages)
+	}
+}
+
+// TestStage7_CtxDoneTriggersCancellation pins the canonical stage-7
+// cancel path per spec §7.1: operator cancel fires teardownGracefully
+// + StateCancelled. Distinct from the cancel-during-3a/3b paths
+// (which defer to E6.9 sweep) because stage 7 ALWAYS owns the live
+// runtime + worktree, so inline teardown is the correct cleanup.
+func TestStage7_CtxDoneTriggersCancellation(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage7-cancel"}
+	wt := okWorktree()
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+		Mirror:   okMirror(),
+	})
+	rep := &recReporter{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // pre-cancel so select fires ctx.Done immediately
+	signals := make(chan *scheduler.Completion)
+
+	err := h.Dispatch(ctx, testJob("docs_bot"), "run-stage7-cancel", rep, signals)
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v; want wraps context.Canceled", err)
+	}
+
+	if rep.lastTransition().state != scheduler.StateCancelled {
+		t.Errorf("last state = %v; want StateCancelled", rep.lastTransition().state)
+	}
+	if !strings.Contains(rep.lastTransition().reason, "operator cancelled") {
+		t.Errorf("reason = %q; want 'operator cancelled'", rep.lastTransition().reason)
+	}
+	// Stage-7 teardown ALWAYS destroys: live runtime + worktree.
+	if len(rpc.tmuxKillCalls) != 1 {
+		t.Errorf("TmuxKillSession calls = %d; want 1", len(rpc.tmuxKillCalls))
+	}
+	if len(wt.destroyCalls) != 1 {
+		t.Errorf("worktree.Destroy calls = %d; want 1", len(wt.destroyCalls))
+	}
+}
+
+// TestStage7_PersistentWorktree_BranchPreserved pins the canonical
+// persistent-mode contract per spec §7.1 stage 8: teardown destroys
+// the worktree path but does NOT delete the branch, so the next
+// scheduled wake can reuse it. Ephemeral mode (default) deletes both.
+func TestStage7_PersistentWorktree_BranchPreserved(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage7-persistent"}
+	wt := okWorktree()
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+		Mirror:   okMirror(),
+	})
+	rep := &recReporter{}
+
+	job := testJob("docs_bot")
+	job.ScheduledAgent.WorktreePersistent = true
+
+	signals := make(chan *scheduler.Completion, 1)
+	signals <- &scheduler.Completion{Reason: "done", Summary: ""}
+	_ = h.Dispatch(context.Background(), job, "run-stage7-persistent", rep, signals)
+
+	if len(wt.destroyCalls) != 1 {
+		t.Fatalf("Destroy calls = %d; want 1", len(wt.destroyCalls))
+	}
+	if wt.destroyCalls[0].Branch != "" {
+		t.Errorf("Destroy.Branch = %q; want empty (persistent mode preserves branch)",
+			wt.destroyCalls[0].Branch)
+	}
+	if !wt.destroyCalls[0].Force {
+		t.Error("Destroy.Force = false; want true (still required for worktree removal)")
 	}
 }
 

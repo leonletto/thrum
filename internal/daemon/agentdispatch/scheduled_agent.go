@@ -416,8 +416,153 @@ func (h *ScheduledAgentHandler) Dispatch(ctx context.Context, job scheduler.JobS
 		return fmt.Errorf("stage 6: pane-ready timeout: %w", err)
 	}
 
-	// TODO(thrum-6qmf.4.60..thrum-6qmf.4.61): implement stages 7-8.
+	// Stage 7: running_work + idle-nudge select loop. The loop arms
+	// a timer on the operator-configured idle window and waits for
+	// one of three things to happen:
+	//   - ctx.Done(): operator cancel → teardown + StateCancelled.
+	//   - signals: job.done RPC delivered a Completion → teardown +
+	//     StateCompleted with the summary recorded in journal details.
+	//   - timer.C: idle window expired → fireIdleNudge (E6.4 stub
+	//     re-arms; the real multi-fire + escalation body ships there).
+	//
+	// Per IMPORTANT #7 dual-review: idleNudgeLoop is per-call (stack
+	// scope), never a handler field. AC 9.2.10 (5 simultaneous
+	// dispatches, race-detector clean) depends on this.
+	if err := reporter.Stage(StageRunningWork); err != nil {
+		return err
+	}
+	idleSeconds := defaultIfZero(0, 90)
+	maxNudges := defaultIfZero(0, 5)
+	graceSeconds := defaultIfZero(0, 10)
+	if job.ScheduledAgent != nil {
+		idleSeconds = defaultIfZero(job.ScheduledAgent.IdleNudgeSeconds, 90)
+		maxNudges = defaultIfZero(job.ScheduledAgent.MaxIdleNudges, 5)
+		graceSeconds = defaultIfZero(job.ScheduledAgent.TeardownGraceSeconds, 10)
+	}
+	loop := &idleNudgeLoop{
+		target:      target,
+		runID:       runID,
+		idleSeconds: idleSeconds,
+		maxNudges:   maxNudges,
+		timer:       time.NewTimer(time.Duration(idleSeconds) * time.Second),
+	}
+	defer loop.timer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			h.teardownGracefully(ctx, target, createResult, graceSeconds, job, reporter)
+			_ = reporter.Transition(scheduler.StateCancelled, "operator cancelled", nil)
+			return ctx.Err()
+		case completion := <-signals:
+			h.teardownGracefully(ctx, target, createResult, graceSeconds, job, reporter)
+			details := map[string]any{}
+			if completion != nil {
+				details["summary"] = completion.Summary
+			}
+			_ = reporter.Transition(scheduler.StateCompleted, "agent reported done", details)
+			return nil
+		case <-loop.timer.C:
+			// E6.4 ships the real multi-fire body (canonical §2.2
+			// idle_nudge_NofM emit + Layer-D escalation). For E6.1
+			// the stub just re-arms so the dispatcher remains
+			// correct under signals/ctx-cancel arrival mid-window.
+			if err := h.fireIdleNudge(ctx, loop, reporter); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// defaultIfZero returns fallback when v is zero, else v. Used to
+// merge JobSpec.ScheduledAgent.* operator-configurable knobs with
+// canonical defaults per spec §7.1 (idleSeconds=90, maxNudges=5,
+// graceSeconds=10).
+func defaultIfZero(v, fallback int) int {
+	if v == 0 {
+		return fallback
+	}
+	return v
+}
+
+// idleNudgeLoop carries the per-dispatch state the stage-7 select
+// loop needs to coordinate the multi-fire idle-nudge protocol per
+// spec §7.1 + canonical §2.2. Lives in stack/parameter scope per
+// IMPORTANT #7 dual-review: ScheduledAgentHandler is shared across
+// concurrent dispatches (AC 9.2.10 race-detector clean for 5
+// simultaneous), so the per-run state must NOT live on the
+// receiver.
+//
+// E6.4's Task 36 fills in the real fireIdleNudge body — multi-fire
+// counter increment, idle_nudge_NofM stage marker emit via
+// IdleNudgeStageFmt, and Layer-D escalation routing when nudgeCount
+// reaches maxNudges. E6.1 ships a placeholder that just re-arms the
+// timer so the dispatcher stays correct under signals/ctx-cancel
+// arrival mid-window.
+type idleNudgeLoop struct {
+	target      string
+	runID       string
+	idleSeconds int
+	maxNudges   int
+
+	// timer is the per-window scheduler. defer loop.timer.Stop() in
+	// Dispatch ensures the timer is GC'd even on early return paths
+	// (signals / ctx-cancel before the timer fires for the first time).
+	timer *time.Timer
+
+	// nudgeCount tracks how many idle-nudge fires have happened in
+	// this stage 7 entry. E6.4's Task 36 increments + compares
+	// against maxNudges; E6.1 keeps the field for forward-compat.
+	nudgeCount int
+}
+
+// fireIdleNudge is the stage-7 timer-arm placeholder per resume plan
+// §"Patterns that worked". E6.4's Task 36 replaces this body with
+// the multi-fire idle_nudge_NofM emit + Layer-D escalation when
+// nudgeCount reaches maxNudges; E6.1 just re-arms the timer so the
+// loop continues to react to signals + ctx.Done.
+//
+// Keeping the seam clean: the method signature is the contract
+// E6.4 drops into. No callers in E6.1 inspect the return value
+// beyond non-nil-as-fatal.
+//
+//nolint:unparam // E6.4 returns a real error from escalation routing
+func (h *ScheduledAgentHandler) fireIdleNudge(_ context.Context, loop *idleNudgeLoop, _ scheduler.StateReporter) error {
+	// E6.1 stub: increment counter (for forward-compat introspection)
+	// and re-arm. E6.4 fills in the IdleNudgeStageFmt emit + escalation.
+	loop.nudgeCount++
+	loop.timer.Reset(time.Duration(loop.idleSeconds) * time.Second)
 	return nil
+}
+
+// teardownGracefully runs the stage-8 teardown sequence per spec
+// §7.1 stage 8. E6.1 Task 18 ships the minimal viable version:
+// tmux kill-session + worktree.Destroy with Persistent-mode branch
+// preservation. Task 19 expands it with the SIGTERM-equivalent
+// (Ctrl-C + exit) + grace-window wait + E6.6 listFiles drain.
+//
+// Per IMPORTANT #7 dual-review: `job` and `reporter` are passed AS
+// PARAMETERS (not handler fields) so concurrent Dispatches don't
+// race on per-run state.
+func (h *ScheduledAgentHandler) teardownGracefully(_ context.Context, target string, result *worktree.CreateResult, graceSeconds int, job scheduler.JobSpec, reporter scheduler.StateReporter) {
+	_ = graceSeconds // Task 19 wires the grace-window wait
+	_ = reporter.Stage(StageTearingDown)
+
+	_ = h.deps.Tmux.TmuxKillSession(context.Background(), target)
+
+	// Persistent mode: skip branch deletion (spec §7.1 + Q-Spec
+	// preservation contract). Ephemeral mode: delete branch alongside
+	// the worktree path so a re-run isn't blocked by stale state.
+	branch := result.Branch
+	if job.ScheduledAgent != nil && job.ScheduledAgent.WorktreePersistent {
+		branch = ""
+	}
+	_, _ = h.deps.Worktree.Destroy(context.Background(), worktree.DestroyOpts{
+		RepoPath:     h.deps.RepoPath,
+		WorktreePath: result.Path,
+		Branch:       branch,
+		Force:        true,
+	})
 }
 
 
