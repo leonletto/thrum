@@ -133,17 +133,30 @@ func (f *stalenessFixture) writeProposalFile(author, name string) string {
 	return abs
 }
 
-func TestStalenessIntegration_MintTickFiresThroughFakeSink(t *testing.T) {
+func TestStalenessIntegration_StoreMintTickFiresThroughFakeSink(t *testing.T) {
 	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener"))
 	f := newStalenessFixture(t)
 
-	path := f.writeProposalFile("@alice", "widget")
-	reminderID, err := f.staleness.MintProposalReminder(context.Background(), path)
-	if err != nil {
-		t.Fatalf("MintProposalReminder: %v", err)
+	// Plan E10.9 step 8 prescribes the tight A-B4 substrate seam: mint
+	// DIRECTLY via reminders.Store.Mint (NOT via Staleness.MintProposalReminder)
+	// so this test isolates the Dispatcher.Tick → FireSink path without
+	// coupling through Staleness's sidecar/resolver logic. The
+	// Staleness-Mint variant is exercised by the Cancel and Reconcile
+	// tests below, which inherently require the Staleness layer.
+	triggerAt := f.clock.Add(48 * time.Hour)
+	reminderID := reminders.MintID("skill-widget")
+	rem := &reminders.Reminder{
+		ID:          reminderID,
+		Source:      reminders.SourceDaemon,
+		TriggerKind: reminders.TriggerTime,
+		TriggerAt:   &triggerAt,
+		TargetChain: []string{"@coordinator_main"},
+		Body:        "Skill proposal pending review: @alice/widget",
+		RaisedAt:    f.clock,
+		State:       reminders.StateOpen,
 	}
-	if reminderID == "" {
-		t.Fatal("Mint returned empty reminder ID")
+	if err := f.store.Mint(context.Background(), rem); err != nil {
+		t.Fatalf("Store.Mint: %v", err)
 	}
 
 	// Pre-tick: the reminder is open, not yet fired.

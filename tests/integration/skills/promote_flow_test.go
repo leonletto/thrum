@@ -294,15 +294,25 @@ func TestPromoteFlow_ForcePromoteCancelsRealReminder(t *testing.T) {
 		t.Errorf("sidecar missing tombstone for %s", path)
 	}
 
-	// Inbox fanout fired at least once. The exact recipient set depends
-	// on the agents projection (only @coordinator_main is inserted here,
-	// and the handler filters out the caller) — so the assertion is on
-	// the fanout having run, not its cardinality.
+	// Inbox fanout: only @coordinator_main is registered. The handler
+	// fanouts to every agent in the projection — empirically observed
+	// that it does NOT filter the caller (the caller still receives the
+	// audit notification). With force=true, the body must carry the
+	// FORCE OVERRIDE marker per plan AC line 1632-1634. Multi-recipient
+	// cardinality is covered by the unit test TestPromote_InboxNotificationFanout
+	// in internal/daemon/rpc/skill_promote_test.go; this test pins the
+	// real-DB single-agent-projection path including the FORCE OVERRIDE
+	// audit-marker prefix.
 	calls := f.messenger.snapshot()
-	// In a 1-coordinator repo, fanout has zero non-caller recipients
-	// (the caller is filtered out). The handler must not block on the
-	// empty case — assert no error path, not non-empty.
-	_ = calls
+	if len(calls) != 1 {
+		t.Fatalf("fanout calls = %d, want 1; got %+v", len(calls), calls)
+	}
+	if calls[0].To != "@coordinator_main" {
+		t.Errorf("fanout recipient = %q, want @coordinator_main", calls[0].To)
+	}
+	if !strings.Contains(calls[0].Body, "FORCE OVERRIDE") {
+		t.Errorf("fanout body missing FORCE OVERRIDE marker: %q", calls[0].Body)
+	}
 }
 
 // --- helpers ---

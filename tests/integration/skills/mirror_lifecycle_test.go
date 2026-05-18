@@ -160,9 +160,11 @@ func (f *mirrorFixture) mirrorPath(name string) string {
 }
 
 func TestMirrorLifecycle_CanonicalWriteAppearsInMirror(t *testing.T) {
-	// goleak registered via t.Cleanup so it runs AFTER the fixture's
-	// Worker.Stop / Watcher.Stop cleanups (defer runs before t.Cleanup;
-	// LIFO within t.Cleanup means goleak — registered first — runs last).
+	// goleak registered via t.Cleanup BEFORE the fixture is constructed.
+	// Ordering: defer runs first at function exit, then t.Cleanup runs
+	// in LIFO order. The fixture's Worker.Stop / Watcher.Stop are
+	// registered via t.Cleanup INSIDE newMirrorFixture (i.e. AFTER this
+	// goleak registration), so by LIFO they run BEFORE goleak's check.
 	t.Cleanup(func() {
 		goleak.VerifyNone(t,
 			goleak.IgnoreTopFunction("github.com/fsnotify/fsnotify.(*Watcher).readEvents"),
@@ -188,6 +190,7 @@ func TestMirrorLifecycle_CanonicalWriteAppearsInMirror(t *testing.T) {
 }
 
 func TestMirrorLifecycle_CanonicalUpdatePropagates(t *testing.T) {
+	// goleak ordering: see TestMirrorLifecycle_CanonicalWriteAppearsInMirror.
 	t.Cleanup(func() {
 		goleak.VerifyNone(t,
 			goleak.IgnoreTopFunction("github.com/fsnotify/fsnotify.(*Watcher).readEvents"),
@@ -286,14 +289,17 @@ func TestMirrorLifecycle_RestartReconcileConverges(t *testing.T) {
 	}, "beta mirror did not converge after Reconcile")
 
 	// alpha must have been refreshed from canonical (the stale
-	// "ALPHA-STALE" body must be gone).
+	// "ALPHA-STALE" body must be gone). Asserting on "ALPHA\n" (the
+	// canonical body terminator) + absence of "STALE" gives two
+	// independently meaningful checks: the first proves the canonical
+	// body landed, the second proves the stale body was overwritten.
 	alphaMirror := filepath.Join(mirrorDir, "alpha", "SKILL.md")
 	eventually(t, 2*time.Second, 50*time.Millisecond, func() bool {
 		data, err := os.ReadFile(alphaMirror)
 		if err != nil {
 			return false
 		}
-		return strings.Contains(string(data), "ALPHA") && !strings.Contains(string(data), "ALPHA-STALE")
+		return strings.Contains(string(data), "ALPHA\n") && !strings.Contains(string(data), "STALE")
 	}, "alpha mirror did not refresh from canonical after Reconcile")
 }
 
