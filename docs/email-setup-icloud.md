@@ -1,14 +1,3 @@
----
-title: "Email Bridge: iCloud Mail Setup"
-description:
-  "Configure the Thrum email bridge with an iCloud Mail account — app-specific
-  password, IMAP/SMTP settings, init invocation, and auth troubleshooting"
-category: "email"
-order: 3
-tags: ["email", "icloud", "apple", "bridge", "imap", "smtp", "setup"]
-last_updated: "2026-05-16"
----
-
 ## Email Bridge: iCloud Mail Setup
 
 Connect Thrum's email bridge to an iCloud Mail account so daemons can exchange

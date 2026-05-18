@@ -43,6 +43,7 @@ plausible.init()
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
 <strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>skills</strong>: <a href="skill-operator-guide.html">Skill Operator Guide</a><br>
 <strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
@@ -55,26 +56,33 @@ they can exchange Thrum messages across machines or repositories.</p>
 <ul>
 <li>Both daemons must have a running email bridge (<code>thrum email status</code> shows
 <code>running</code> on each side)</li>
-<li>Each daemon must have a distinct handle set via <code>--display-name</code> during
-<code>thrum email init</code></li>
+<li>Each daemon must have a distinct handle set via <code>--daemon-handle</code> during
+<code>thrum email init</code> (and matching peer entries on both sides)</li>
 <li>The two daemons must be able to reach each other&#39;s mailbox (i.e. they are
 using the same shared mailbox or can deliver mail to each other&#39;s address)</li>
 </ul>
 <hr>
 <h2>Initial Pair</h2>
-<p>The pairing handshake is two-sided — each operator initiates from their own
-daemon.</p>
-<p><strong>On daemon-A</strong> (operator A runs):</p>
-<pre><code>thrum email pair --to daemon-b@mail.example.com</code></pre>
-<p>This sends a pairing invitation to daemon-B&#39;s mailbox. The output is:</p>
-<pre><code>pairing request sent to daemon-b@mail.example.com
-waiting for confirmation... (expires in 24h)</code></pre>
-<p><strong>On daemon-B</strong> (operator B receives a nudge from their coordinator agent,
-then confirms):</p>
-<pre><code>thrum email pair --to daemon-a@mail.example.com</code></pre>
-<p>Once daemon-B&#39;s confirmation arrives in daemon-A&#39;s mailbox, both sides record
-the peer. The pairing exchange completes within one IMAP poll cycle (typically
-under 60 seconds).</p>
+<p>The pairing handshake is two-sided. Each daemon receives an inbound
+pair-request envelope from the other peer&#39;s first contact, which lands
+in the bridge&#39;s pending-stranger-pair list keyed by the sender&#39;s
+<code>daemon_handle</code>. The operator then confirms the pending entry with
+<code>thrum email pair --to &lt;handle&gt;</code>.</p>
+<p><strong>On daemon-A</strong> (operator A confirms daemon-B&#39;s pending request):</p>
+<pre><code>thrum email pair --to daemon-b</code></pre>
+<p>The handle (<code>daemon-b</code>) is the <code>--daemon-handle</code> value daemon-B was
+configured with at <code>thrum email init</code>. Output:</p>
+<pre><code>Paired with daemon-b</code></pre>
+<p><strong>On daemon-B</strong> (operator B confirms daemon-A&#39;s pending request):</p>
+<pre><code>thrum email pair --to daemon-a</code></pre>
+<p>Once both sides have confirmed, both daemons record the peer with
+<code>trust=full</code>. The exchange completes within one IMAP poll cycle
+(typically under 60 seconds).</p>
+<blockquote>
+<p>Pre-pairing exchange of handles is out-of-band (Signal, in person,
+shared config). The <code>pair</code> command only confirms a pending stranger
+request — it does not initiate one.</p>
+</blockquote>
 <hr>
 <h2>Verify with <code>thrum email list</code></h2>
 <p>Run on either daemon:</p>
@@ -131,8 +139,10 @@ The TTL is configurable:</p>
 }</code></pre>
 <p>After expiry, the invitation is discarded. Both operators must re-run
 <code>thrum email pair</code> to retry.</p>
-<p>To check for pending (unconfirmed) pairs:</p>
-<pre><code>thrum email list --pending</code></pre>
+<p>To check for pending (unconfirmed) pairs, run <code>thrum email status</code> — the
+output includes a count of pending stranger-pair entries waiting for
+operator confirmation:</p>
+<pre><code>thrum email status</code></pre>
 
 </main>
 <footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">

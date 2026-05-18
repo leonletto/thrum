@@ -1,14 +1,3 @@
----
-title: "Email Mesh Pairing"
-description:
-  "Pair two Thrum daemons over the email bridge, verify trust, and understand
-  gossip propagation and revocation semantics"
-category: "email"
-order: 5
-tags: ["email", "mesh", "pairing", "peers", "gossip", "trust", "revocation"]
-last_updated: "2026-05-16"
----
-
 ## Email Mesh Pairing
 
 After each daemon has its email bridge configured and running, pair them so they

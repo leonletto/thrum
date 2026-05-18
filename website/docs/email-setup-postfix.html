@@ -43,6 +43,7 @@ plausible.init()
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
 <strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+<strong>skills</strong>: <a href="skill-operator-guide.html">Skill Operator Guide</a><br>
 <strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
 </nav>
 <main>
@@ -85,9 +86,9 @@ Unauthenticated port-25 relay is not supported by the email bridge.</p>
 mesh. For self-hosted deployments, use a name that reflects the machine or repo:</p>
 <pre><code>daemon-a          ← daemon on machine &quot;a&quot;, repo &quot;main&quot;
 daemon-b-infra    ← daemon on machine &quot;b&quot;, repo &quot;infra&quot;</code></pre>
-<p>The handle is set with <code>--display-name</code> during <code>thrum email init</code>. It becomes
-the <code>X-Thrum-From-Daemon</code> header value on outbound messages — keep it stable
-after pairing, because the mesh uses it as a routing key.</p>
+<p>The handle is set with <code>--daemon-handle</code> during <code>thrum email init</code>. It
+becomes the <code>X-Thrum-From-Daemon</code> header value on outbound messages — keep
+it stable after pairing, because the mesh uses it as a routing key.</p>
 <hr>
 <h2>IMAP / SMTP Host Configuration</h2>
 <table>
@@ -124,17 +125,21 @@ after pairing, because the mesh uses it as a routing key.</p>
 </tbody></table>
 <hr>
 <h2>Run <code>thrum email init</code></h2>
+<p>Self-hosted MTAs use the <code>custom</code> provider with explicit IMAP/SMTP hosts:</p>
+<pre><code>thrum email init --provider custom</code></pre>
+<p>The interactive wizard prompts for IMAP/SMTP hosts + ports, then the
+mailbox password, and writes <code>.thrum/secrets/email.json</code> (mode <code>0600</code>).</p>
+<p>For scripted / non-interactive setup:</p>
 <pre><code>thrum email init \
-  --provider smtp \
-  --address thrum@mail.example.com \
-  --imap-host mail.example.com \
-  --imap-port 993 \
-  --smtp-host mail.example.com \
-  --smtp-port 587 \
-  --display-name &quot;daemon-a&quot;</code></pre>
-<p>The command prompts for the mailbox password and writes
-<code>.thrum/secrets/email.json</code> (mode <code>0600</code>). The daemon restarts the bridge
-automatically.</p>
+  --provider custom \
+  --non-interactive \
+  --imap-host mail.example.com --imap-port 993 \
+  --smtp-host mail.example.com --smtp-port 587 \
+  --password &quot;&lt;mailbox password&gt;&quot; \
+  --daemon-handle daemon-a \
+  --target-user leon \
+  --target-email leon@personal-email.com</code></pre>
+<p>After init, run <code>thrum daemon restart</code> to load the new bridge config.</p>
 <hr>
 <h2>Verify with <code>thrum email status</code></h2>
 <pre><code>thrum email status</code></pre>

@@ -1,14 +1,3 @@
----
-title: "Email Bridge: Gmail Setup"
-description:
-  "Configure the Thrum email bridge with a Gmail account — app password,
-  IMAP/SMTP settings, init invocation, and auth troubleshooting"
-category: "email"
-order: 1
-tags: ["email", "gmail", "bridge", "imap", "smtp", "setup"]
-last_updated: "2026-05-16"
----
-
 ## Email Bridge: Gmail Setup
 
 Connect Thrum's email bridge to a Gmail (or Google Workspace) account so daemons

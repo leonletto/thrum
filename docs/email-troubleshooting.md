@@ -1,14 +1,3 @@
----
-title: "Email Bridge: Troubleshooting"
-description:
-  "Decision-tree for common email bridge failures — bridge won't start, IDLE
-  dropping, outbound queue stuck, missing peers, and size-limit errors"
-category: "email"
-order: 7
-tags: ["email", "troubleshooting", "bridge", "imap", "smtp", "queue", "debug"]
-last_updated: "2026-05-16"
----
-
 ## Email Bridge: Troubleshooting
 
 A symptom-first decision tree for diagnosing email bridge failures. Start with

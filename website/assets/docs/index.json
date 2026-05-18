@@ -940,6 +940,22 @@
     "lastUpdated": "2026-04-20"
   },
   {
+    "path": "skill-operator-guide.html",
+    "title": "Skill Operator Guide",
+    "description": "End-to-end operator guide for the v0.11 per-project skill lifecycle: drafting, reviewing, promoting, and troubleshooting skills under .thrum/skills/.",
+    "category": "skills",
+    "order": 1,
+    "tags": [
+      "skills",
+      "operator",
+      "v0.11",
+      "promote",
+      "secret-scan",
+      "staleness"
+    ],
+    "lastUpdated": "2026-05-17"
+  },
+  {
     "path": "guides/recommended-tools.html",
     "title": "Recommended Tools",
     "description": "Tools, extensions, and integrations that work well with Thrum for AI agent coordination workflows",
