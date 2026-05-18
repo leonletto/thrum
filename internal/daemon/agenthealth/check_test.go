@@ -268,29 +268,68 @@ func TestCheckHandler_RespawnError_ContinuesLoop(t *testing.T) {
 	}
 }
 
+// cancellingProber cancels the supplied ctx the first time it sees a
+// probe call, simulating the realistic mid-loop cancel scenario:
+// the registry list completes successfully, the first probe runs,
+// then ctx is cancelled (daemon shutdown / scheduler stop). The
+// loop's ctx.Err() check on subsequent iterations must short-
+// circuit gracefully — NOT mark the whole tick failed and NOT
+// keep probing.
+type cancellingProber struct {
+	cancel    context.CancelFunc
+	cancelled bool
+	calls     []string
+}
+
+func (c *cancellingProber) CheckPane(_ context.Context, target string) (bool, error) {
+	c.calls = append(c.calls, target)
+	if !c.cancelled {
+		c.cancelled = true
+		c.cancel() // fire the cancel AFTER recording this probe
+	}
+	return true, nil // first agent appears alive; we don't care
+}
+
 // TestCheckHandler_CtxCancelMidScan_GracefulExit pins the
-// cancellation-discipline contract: if ctx is cancelled mid-batch
-// (daemon shutdown, scheduler stop), the loop exits gracefully
-// rather than marking the whole tick failed. Next tick re-scans
-// from scratch (idempotent). Partial progress is preserved in
-// the StateCompleted transition's details.
+// cancellation-discipline contract for the REAL mid-loop case: the
+// registry list succeeds, the first probe runs, then ctx is
+// cancelled (daemon shutdown / scheduler stop). The loop's
+// ctx.Err() check on the SECOND iteration must short-circuit
+// gracefully — completing the tick rather than failing it, and
+// NOT probing agents 2 and 3. Next tick re-scans from scratch
+// (idempotent).
+//
+// This is structured to exercise the real ctx.Err() check —
+// pre-cancelling before Dispatch would only verify the loop's
+// stub-receptive behavior since stubs ignore ctx; cancelling
+// AFTER the first probe exercises the production path that
+// actually consults ctx mid-loop.
 func TestCheckHandler_CtxCancelMidScan_GracefulExit(t *testing.T) {
 	reg := &stubRegistry{agents: []agent.Agent{
 		mkAgent("agent_1"), mkAgent("agent_2"), mkAgent("agent_3"),
 	}}
-	prober := &stubProber{}
+	ctx, cancel := context.WithCancel(context.Background())
+	prober := &cancellingProber{cancel: cancel}
 	resp := &stubRespawner{}
 	h := agenthealth.New(reg, prober, resp, nil)
 	rep := &stubReporter{}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // pre-cancel — loop exits on first iter check
 	if err := h.Dispatch(ctx, scheduler.JobSpec{}, "run-1", rep, nil); err != nil {
 		t.Errorf("Dispatch err = %v; want nil (cancel mid-scan is graceful)", err)
 	}
 	if rep.lastTransition().state != scheduler.StateCompleted {
 		t.Errorf("last state = %v; want StateCompleted (graceful exit)",
 			rep.lastTransition().state)
+	}
+	// The mid-loop short-circuit: only ONE agent should have been
+	// probed before the ctx.Err() check kicked in on the next
+	// iteration. Agents 2 + 3 must be untouched.
+	if len(prober.calls) != 1 {
+		t.Errorf("probe calls = %v; want exactly 1 (mid-loop short-circuit on agent 2)",
+			prober.calls)
+	}
+	if prober.calls[0] != "agent_1" {
+		t.Errorf("first probe = %q; want agent_1", prober.calls[0])
 	}
 }
 

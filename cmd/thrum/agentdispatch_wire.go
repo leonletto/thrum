@@ -11,7 +11,6 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/agenthealth"
 	"github.com/leonletto/thrum/internal/daemon/escalation"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
-	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/skills/mirror"
@@ -261,7 +260,6 @@ func (tmuxPaneProber) CheckPane(_ context.Context, target string) (bool, error) 
 	// against a live tmux server). When tmux itself is down the
 	// call returns false, which is the right answer for the
 	// pane-health check anyway.
-	_ = safecmd.Tmux // keep safecmd import grounded for future probe extensions
 	return tmux.HasSession(target), nil
 }
 
