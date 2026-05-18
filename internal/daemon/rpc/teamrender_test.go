@@ -1,4 +1,4 @@
-package agentdispatch
+package rpc
 
 import (
 	"context"
