@@ -1,4 +1,4 @@
-package agentdispatch
+package rpc
 
 import (
 	"context"
@@ -194,4 +194,3 @@ func RenderJournal(ctx context.Context, agentName string, store state.AgentLifec
 // expect in their runbooks; centralising it here means a single
 // edit propagates to every consumer.
 const FilesRPCUnavailableMessage = "files RPC unavailable in this daemon"
-

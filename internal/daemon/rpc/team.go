@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -25,6 +26,15 @@ type TeamListRequest struct {
 	// Reserved=true (e.g. @supervisor_<project>) that are hidden
 	// from the default listing. Set via `thrum team --system`.
 	IncludeSystem bool `json:"include_system,omitempty"`
+
+	// AgentFilter, when non-empty, restricts the response to a
+	// single agent whose AgentID matches the value. The daemon
+	// additionally populates that member's Body field via the
+	// spec §7.6 fallback chain (live pane → summary.md → outbound
+	// message → "no summary"). Backs `thrum team @<name>` —
+	// keeping the body computation server-side keeps tmux/filesystem
+	// access inside the daemon process boundary.
+	AgentFilter string `json:"agent_filter,omitempty"`
 }
 
 // TeamListResponse represents the response from team.list RPC.
@@ -140,6 +150,14 @@ type TeamMember struct {
 	// from MB-1.S6's daily_usage_summary table. Empty/nil when
 	// MB-1.S6 substrate hasn't shipped (feature-detect probe) or
 	// when the agent has no telemetry rows for today.
+	//
+	// NOT YET POPULATED in v0.11 substrate: the daemon's HandleList
+	// path leaves this nil until the MB-1.S6 telemetry slice lands.
+	// The field surface is locked in (spec §7.6) so consumers and
+	// wire shape stay stable across the substrate gap. Wiring is
+	// owned by the MB-1.S6 epic (parallel track); no separate
+	// follow-up bead — the field starts populating when MB-1.S6's
+	// HandleList enrichment patch lands.
 	Usage *TeamUsageSummary `json:"usage,omitempty"`
 
 	// AutoRespawnDisabledAt is the unix-millisecond timestamp when
@@ -162,6 +180,15 @@ type TeamMember struct {
 	// tripped simultaneously, loop-guard banner takes precedence
 	// (matches deriveAgentState's evaluation order).
 	Banner string `json:"banner,omitempty"`
+
+	// Body is the per spec §7.6 "what's happening" line for the
+	// expanded single-agent view. Populated server-side via
+	// RenderBodyFallbackChain (in teamrender.go) only when the
+	// request's AgentFilter matches this member (the chain is
+	// expensive — pane capture, summary.md stat, outbound lookup —
+	// so we don't run it for the full team listing). Empty for the
+	// compact view.
+	Body string `json:"body,omitempty"`
 }
 
 // TeamUsageSummary is today's per-agent telemetry summary from the
@@ -185,6 +212,19 @@ type TeamUsageSummary struct {
 // `thrum team @<name> --journal` (Task 59).
 const teamRecentTransitionsCap = 5
 
+// loopGuardDefaultWindowSecs is the canonical respawn-window default
+// rendered in the loop-guard banner per spec §7.6 ("3 respawns in N
+// seconds tripped the loop guard"). Duplicated from
+// agentdispatch.defaultRespawnWindowSeconds — kept as a local
+// constant rather than imported so the rpc package doesn't depend on
+// agentdispatch (which already imports rpc via adapters.go and would
+// reverse the dependency). Per-agent overrides live on
+// AutoRespawnConfig in config (not the agents table), so the banner
+// renders the canonical default — the operator value downstream of
+// `thrum agent ack-respawn-alert` matches this number for every agent
+// that hasn't been re-armed with a custom window.
+const loopGuardDefaultWindowSecs = 600
+
 // teamReminderCompactCap is the maximum number of reminder IDs included
 // per agent in a team.list response. Above this the slice's tail becomes
 // a synthetic "... +N more" marker so the response stays bounded under
@@ -196,9 +236,15 @@ const teamReminderCompactCap = 10
 type TeamHandler struct {
 	state              *state.State
 	thrumDir           string
-	supervisorIdentity *config.IdentityFile // synthesized virtual-supervisor identity; nil in tests
-	remindersStore     reminders.Store      // optional; nil → skip reminder enrichment
+	supervisorIdentity *config.IdentityFile      // synthesized virtual-supervisor identity; nil in tests
+	remindersStore     reminders.Store           // optional; nil → skip reminder enrichment
 	lifecycleStore     state.AgentLifecycleStore // optional; nil → skip lifecycle enrichment (E6.8 Task 56)
+
+	// E6.8 .89 single-agent expanded view: body fallback chain deps.
+	// Both are nil-safe — RenderBodyFallbackChain skips any branch
+	// whose dep is unwired and falls through to the next.
+	paneCapture    PaneCaptureFunc
+	outboundLookup OutboundLookupFunc
 }
 
 // NewTeamHandler creates a new team handler.
@@ -217,6 +263,71 @@ func NewTeamHandler(state *state.State, thrumDir string, supervisorIdentity *con
 		supervisorIdentity: supervisorIdentity,
 		remindersStore:     remindersStore,
 	}
+}
+
+// JournalRequest is the wire shape for the team.journal RPC.
+// One agent at a time — the RPC backs `thrum team @<name> --journal`
+// (single-agent scope per spec §7.6).
+type JournalRequest struct {
+	AgentName string `json:"agent_name"`
+}
+
+// JournalResponse carries the rendered journal output (multi-line
+// string). The CLI prints it verbatim. Pre-formatted on the daemon
+// side via RenderJournal so the operator-facing shape is consistent
+// across consumers + the formatting code lives in one place.
+type JournalResponse struct {
+	AgentName string `json:"agent_name"`
+	Journal   string `json:"journal"`
+}
+
+// HandleJournal handles the team.journal RPC method per spec §7.6:
+// `thrum team @<name> --journal` renders the last 50
+// agent_lifecycle_events for one agent, most recent first. When the
+// lifecycle store isn't wired (tests / pre-B-B1 daemons) the response
+// surfaces a single-line "Journal unavailable" string so the CLI can
+// render it inline rather than failing the RPC.
+func (h *TeamHandler) HandleJournal(ctx context.Context, params json.RawMessage) (any, error) {
+	var req JournalRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+	if req.AgentName == "" {
+		return nil, fmt.Errorf("agent_name is required")
+	}
+	return JournalResponse{
+		AgentName: req.AgentName,
+		Journal:   RenderJournal(ctx, req.AgentName, h.lifecycleStore),
+	}, nil
+}
+
+// SetPaneCapture wires the live-pane-snippet branch (1) of the body
+// fallback chain. Production passes a wrapper around ttmux.CapturePane;
+// tests inject fakes. nil-safe — passing nil leaves branch 1 disabled
+// and the chain falls through to branch 2.
+//
+// CONCURRENCY: must be called BEFORE the server begins dispatching
+// RPC calls (i.e. before server.RegisterHandler / server.Serve in
+// cmd/thrum/main.go's boot sequence). The field is read concurrently
+// by HandleList goroutines but written only by this setter — no
+// mutex protects it because the daemon's boot-then-serve order
+// satisfies the Go memory model's happens-before guarantee. Tests
+// call this on the same goroutine they later invoke HandleList from,
+// which also satisfies happens-before.
+func (h *TeamHandler) SetPaneCapture(fn PaneCaptureFunc) {
+	h.paneCapture = fn
+}
+
+// SetOutboundLookup wires the "last said" branch (3) of the body
+// fallback chain. Production passes a SQL-backed helper that looks up
+// the agent's most-recent message; tests inject fakes. nil-safe —
+// passing nil leaves branch 3 disabled and the chain falls through to
+// branch 4 (no summary).
+//
+// CONCURRENCY: same boot-time-write invariant as SetPaneCapture
+// above — call before server.Serve.
+func (h *TeamHandler) SetOutboundLookup(fn OutboundLookupFunc) {
+	h.outboundLookup = fn
 }
 
 // SetLifecycleStore wires the B-B1 Migration 27 agent_lifecycle_events
@@ -366,7 +477,68 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 	// see the new fields stay at zero values.
 	members = h.decorateWithLifecycle(ctx, members)
 
+	// E6.8 .89 single-agent filter: when the request scopes to one
+	// agent (`thrum team @<name>`), keep that member only and
+	// populate Body via the §7.6 fallback chain. Filtering happens
+	// AFTER lifecycle enrichment so the kept member has all the
+	// surface fields populated; running enrichment on the full set
+	// keeps the bulk lifecycle query fast (no per-call branch).
+	if req.AgentFilter != "" {
+		members = filterMembersByAgent(members, req.AgentFilter)
+		if len(members) == 1 {
+			h.decorateWithBody(ctx, &members[0])
+		}
+		sharedPtr = nil // single-agent view hides the team-wide shared footer
+	}
+
 	return &TeamListResponse{Members: members, SharedMessages: sharedPtr}, nil
+}
+
+// filterMembersByAgent returns a one-element slice containing the
+// member whose AgentID matches `name`, or an empty slice when no
+// match exists. Used by the AgentFilter path on team.list.
+func filterMembersByAgent(members []TeamMember, name string) []TeamMember {
+	for i := range members {
+		if members[i].AgentID == name {
+			return []TeamMember{members[i]}
+		}
+	}
+	return []TeamMember{}
+}
+
+// decorateWithBody computes the spec §7.6 "what's happening" line for
+// the expanded single-agent view and writes it onto the member. The
+// per-agent fallback chain is delegated to RenderBodyFallbackChain;
+// this function only assembles the AgentRenderState (scheduler hooks
+// remain stubbed pending the MB-1.S6 scheduler injection — current
+// snapshot leaves JobCurrentState/ActiveJobID/Elapsed/LastCompletedAt
+// at their zero values, which makes branch 1 quietly skip until that
+// substrate lands).
+//
+// agentsDir is `<thrumDir>/agents` per the canonical per-agent state
+// folder layout. When thrumDir is empty (fixture daemons) the chain
+// falls through to branches 3 + 4 cleanly.
+func (h *TeamHandler) decorateWithBody(ctx context.Context, m *TeamMember) {
+	var agentsDir string
+	if h.thrumDir != "" {
+		agentsDir = filepath.Join(h.thrumDir, "agents")
+	}
+
+	renderState := AgentRenderState{
+		// Scheduler-injection fields (NextRun/LastRun/LastRunState)
+		// land with thrum-6qmf.4.90; until then leave the render
+		// state's scheduler fields zero so branch 1 stays inactive.
+		LastRunState: m.LastRunState,
+	}
+
+	m.Body = RenderBodyFallbackChain(
+		ctx,
+		m.AgentID,
+		agentsDir,
+		renderState,
+		h.paneCapture,
+		h.outboundLookup,
+	)
 }
 
 // decorateWithReminders attaches the open-reminder IDs to each member.
@@ -436,10 +608,10 @@ func (h *TeamHandler) decorateWithLifecycle(ctx context.Context, members []TeamM
 		agentIDs = append(agentIDs, members[i].AgentID)
 	}
 	type agentMeta struct {
-		mode           string
-		identity       string
-		autoRespawnAt  int64
-		stateMdFailAt  int64
+		mode          string
+		identity      string
+		autoRespawnAt int64
+		stateMdFailAt int64
 	}
 	metaByID := make(map[string]agentMeta, len(members))
 
@@ -534,7 +706,8 @@ func (h *TeamHandler) decorateWithLifecycle(ctx context.Context, members []TeamM
 // language stays consistent across Compact + Expanded views.
 func deriveCrashedBanner(m *TeamMember) string {
 	if m.AutoRespawnDisabledAt > 0 {
-		return "⚠ AUTO-RESPAWN DISABLED — 3 respawns in window tripped the loop guard. Run `thrum agent ack-respawn-alert " + m.AgentID + "` to re-arm."
+		return fmt.Sprintf("⚠ AUTO-RESPAWN DISABLED — 3 respawns in %d seconds tripped the loop guard. Run `thrum agent ack-respawn-alert %s` to re-arm.",
+			loopGuardDefaultWindowSecs, m.AgentID)
 	}
 	if m.StateMdParseFailedAt > 0 {
 		return "⚠ state.md UNPARSEABLE — auto-respawn blocked. Bad content at `.thrum/agents/" + m.AgentID + "/state.md.broken`. Run `thrum agent ack-state-corruption " + m.AgentID + "` to clear after operator review."
