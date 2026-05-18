@@ -144,6 +144,46 @@ func TestScheduler_RegisterTypeHandler_Duplicate(t *testing.T) {
 	}
 }
 
+// TestScheduler_RegisteredTypeHandlers pins the inspection-helper
+// contract used by B-B1 E6.5 Task 42a's integration test: the
+// returned slice contains every registered user-job-type, in
+// sorted order, with no internals leaked.
+func TestScheduler_RegisteredTypeHandlers(t *testing.T) {
+	s := New(Config{DB: setupStateTestDB(t), DaemonID: "test-daemon"})
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	// Empty starts clean.
+	if got := s.RegisteredTypeHandlers(); len(got) != 0 {
+		t.Errorf("fresh scheduler types = %v; want empty", got)
+	}
+
+	// Register two and confirm both surface, sorted.
+	if err := s.RegisterTypeHandler("scheduled_agent", &noopHandler{}); err != nil {
+		t.Fatalf("register scheduled_agent: %v", err)
+	}
+	if err := s.RegisterTypeHandler("nudge", &noopHandler{}); err != nil {
+		t.Fatalf("register nudge: %v", err)
+	}
+
+	got := s.RegisteredTypeHandlers()
+	want := []string{"nudge", "scheduled_agent"} // sorted
+	if len(got) != len(want) {
+		t.Fatalf("RegisteredTypeHandlers = %v; want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("RegisteredTypeHandlers[%d] = %q; want %q (sorted order)", i, got[i], want[i])
+		}
+	}
+
+	// Returned slice is a copy — mutating it doesn't affect later
+	// reads.
+	got[0] = "tampered"
+	if redo := s.RegisteredTypeHandlers(); redo[0] != "nudge" {
+		t.Errorf("returned slice is not a copy: %v", redo)
+	}
+}
+
 func TestScheduler_JobSpec_NotFound(t *testing.T) {
 	s := New(Config{DB: setupStateTestDB(t), DaemonID: "test-daemon"})
 	defer func() { _ = s.Stop(context.Background()) }()

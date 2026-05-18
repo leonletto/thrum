@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/agentdispatch"
+	"github.com/leonletto/thrum/internal/daemon/scheduler"
 )
 
 // listFilesProbeMethod is the RPC method daemon-boot probes to decide
@@ -58,4 +60,36 @@ func wireAgentDispatch(server *daemon.Server) (*agentdispatch.Drainer, agentdisp
 	}
 	drainer := agentdispatch.NewDrainer(tracker)
 	return drainer, tracker
+}
+
+// userJobTypes lists the user-facing scheduler job types B-B1 E6.5
+// owns. Kept here (not in agentdispatch) because cmd/thrum is the
+// composition root that decides which types are "real for v0.11";
+// agentdispatch can add new handler types over time without
+// implicitly registering them.
+var userJobTypes = []string{"scheduled_agent", "nudge"}
+
+// registerPlaceholderHandlers performs E6.5 Task 42a: register a
+// PlaceholderHandler for each user-facing job type so A-B1's
+// validator + reactor recognize the type name even before E6.5
+// Task 42b ships the real adapter glue. Returns an error if any
+// registration fails (e.g. duplicate type — would be a wiring
+// bug since this is called once at daemon boot).
+//
+// Idempotency note: scheduler.RegisterTypeHandler rejects
+// duplicates, so calling registerPlaceholderHandlers a second
+// time will fail on the first type. 42b will need to either swap
+// the registration mechanism or land alongside a daemon-restart
+// boundary; documented in main.go's call site.
+func registerPlaceholderHandlers(sched *scheduler.Scheduler) error {
+	if sched == nil {
+		return fmt.Errorf("registerPlaceholderHandlers: nil scheduler")
+	}
+	for _, jobType := range userJobTypes {
+		if err := sched.RegisterTypeHandler(jobType,
+			agentdispatch.NewPlaceholderHandler(jobType)); err != nil {
+			return fmt.Errorf("register %s type handler: %w", jobType, err)
+		}
+	}
+	return nil
 }

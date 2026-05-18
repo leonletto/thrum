@@ -7717,22 +7717,47 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// tracker into skip-drain mode so teardownGracefully's drain step
 	// short-circuits (returns immediately, no 50ms polling against a
 	// tracker that would never see Begin). Drainer + tracker are
-	// returned for ScheduledAgentHandler.Deps wiring landing in a
-	// follow-on B-B1 dispatch task.
+	// returned for ScheduledAgentHandler.Deps wiring landing in
+	// E6.5 Task 42b (the real-handler adapter glue dispatch).
 	//
-	// TODO(B-B1 ScheduledAgentHandler wiring task): inject
-	// agentDispatchDrainer into ScheduledAgentHandler.Deps.Drainer
-	// and pass agentInflightTracker to MB-1.S2's agent.listFiles /
-	// agent.getFile RPC adapter so Begin/End get called. Until that
-	// lands, deps.Drainer is nil at runtime and stage-8 drain
-	// no-ops via the scheduled_agent.go:680 guard; in RPC-present
-	// mode the tracker is operational but unobserved.
+	// TODO(B-B1 E6.5 Task 42b): inject agentDispatchDrainer into
+	// ScheduledAgentHandler.Deps.Drainer and pass agentInflightTracker
+	// to MB-1.S2's agent.listFiles / agent.getFile RPC adapter so
+	// Begin/End get called. Until 42b lands, deps.Drainer is nil at
+	// runtime (registered as PlaceholderHandler below — Dispatch
+	// returns ErrHandlerWiringPending cleanly rather than nil-deref).
 	agentDispatchDrainer, agentInflightTracker := wireAgentDispatch(server)
 	_ = agentDispatchDrainer
 	_ = agentInflightTracker
 
 	if err := sched.Start(ctx); err != nil {
 		return fmt.Errorf("start scheduler: %w", err)
+	}
+
+	// B-B1 E6.5 Task 42a: register placeholder handlers for the
+	// user-facing job types so A-B1's validator + reactor recognize
+	// "scheduled_agent" + "nudge" specs even before E6.5 Task 42b
+	// (the real adapter glue) ships. PlaceholderHandler.Dispatch
+	// returns ErrHandlerWiringPending — a fire on either type
+	// records a clean StateFailed transition in scheduler_job_state
+	// (visible in `thrum cron history`) rather than nil-deref'ing
+	// on the unfilled Deps.
+	//
+	// Registration MUST happen after sched.Start so the per-handler
+	// reconcile loop (scheduler.go:200+) walks non-terminal rows
+	// matching these types and routes them through Reconcile —
+	// which for the placeholder marks them failed (no real handler
+	// to resume).
+	//
+	// 42b replaces these registrations with the real
+	// NewScheduledAgentHandler + NewNudgeHandler once the
+	// TmuxRPC/MessageRPC/WorktreeManager/etc. adapters are built.
+	// Re-registering the same type currently returns an error
+	// (RegisterTypeHandler rejects duplicates), so 42b will need
+	// to swap the registration mechanism or land alongside a
+	// daemon-restart boundary. Documented for the 42b implementer.
+	if err := registerPlaceholderHandlers(sched); err != nil {
+		return fmt.Errorf("register placeholder handlers: %w", err)
 	}
 
 	// Monitor jobs supervisor — launches runner goroutines for every monitor
