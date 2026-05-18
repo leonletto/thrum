@@ -5,15 +5,26 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/agentdispatch"
+	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
 	"github.com/leonletto/thrum/internal/schema"
+	"github.com/leonletto/thrum/internal/skills/mirror"
 )
+
+// testMirrorWorker returns a non-nil *mirror.Worker for tests that
+// need to satisfy wireScheduledAgentHandlers' nil-guard. SourceRoot
+// is required by mirror.New; t.TempDir keeps the worker isolated.
+func testMirrorWorker(t *testing.T) *mirror.Worker {
+	t.Helper()
+	return mirror.New(mirror.WorkerOpts{SourceRoot: t.TempDir()})
+}
 
 // newProbeServer returns a daemon.Server with no handlers registered.
 // Use registerProbeMethod below to add agent.listFiles before
@@ -187,5 +198,108 @@ func TestRegisterPlaceholderHandlers_RejectsDuplicateRegistration(t *testing.T) 
 	}
 	if err := registerPlaceholderHandlers(s); err == nil {
 		t.Error("expected error on duplicate registration")
+	}
+}
+
+// --- wireScheduledAgentHandlers (E6.5 Task 42b) ---
+
+// TestWireScheduledAgentHandlers_RejectsNilScheduler pins the
+// defensive guard on the helper itself — a nil scheduler is a
+// programming error.
+func TestWireScheduledAgentHandlers_RejectsNilScheduler(t *testing.T) {
+	if err := wireScheduledAgentHandlers(nil, scheduledAgentDeps{}); err == nil {
+		t.Error("expected error on nil scheduler")
+	}
+}
+
+// TestWireScheduledAgentHandlers_RejectsNilHandlers pins the
+// guards that catch wiring bugs at boot: nil TmuxHandler / nil
+// MessageHandler / empty CallerAgentID / nil MirrorWorker all
+// return a clear error rather than silently constructing a handler
+// that would nil-deref at first dispatch.
+func TestWireScheduledAgentHandlers_RejectsNilHandlers(t *testing.T) {
+	s := newSchedulerForRegistrationTest(t)
+	cases := []struct {
+		name string
+		deps scheduledAgentDeps
+		want string
+	}{
+		{"nil-tmux", scheduledAgentDeps{}, "nil TmuxHandler"},
+		{"nil-message", scheduledAgentDeps{TmuxHandler: &rpc.TmuxHandler{}}, "nil MessageHandler"},
+		{"empty-caller", scheduledAgentDeps{TmuxHandler: &rpc.TmuxHandler{}, MessageHandler: &rpc.MessageHandler{}}, "empty CallerAgentID"},
+		{"nil-mirror", scheduledAgentDeps{
+			TmuxHandler:    &rpc.TmuxHandler{},
+			MessageHandler: &rpc.MessageHandler{},
+			CallerAgentID:  "supervisor_test",
+		}, "nil MirrorWorker"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := wireScheduledAgentHandlers(s, tc.deps)
+			if err == nil {
+				t.Fatalf("expected error mentioning %q; got nil", tc.want)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %v; want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestWireScheduledAgentHandlers_RegistersBothTypes verifies that
+// when the deps are wired correctly, both "scheduled_agent" and
+// "nudge" types are registered with real (non-placeholder)
+// handlers. Closes §9.6.1 against the real-handler path (it was
+// already closed for the placeholder path by 42a's
+// TestRegisterPlaceholderHandlers_BothTypesAppear).
+//
+// The test uses zero-valued nested deps (e.g., TmuxHandler with
+// no thrumDir / state) — sufficient for registration; dispatch
+// itself isn't exercised here. The 9-stage flow's correctness is
+// covered by scheduled_agent_test.go's existing fixtures.
+func TestWireScheduledAgentHandlers_RegistersBothTypes(t *testing.T) {
+	s := newSchedulerForRegistrationTest(t)
+	if err := wireScheduledAgentHandlers(s, scheduledAgentDeps{
+		RepoPath:       "/tmp/repo",
+		TmuxHandler:    &rpc.TmuxHandler{},
+		MessageHandler: &rpc.MessageHandler{},
+		CallerAgentID:  "supervisor_test",
+		MirrorWorker:   testMirrorWorker(t),
+	}); err != nil {
+		t.Fatalf("wireScheduledAgentHandlers: %v", err)
+	}
+	registered := s.RegisteredTypeHandlers()
+	have := make(map[string]bool, len(registered))
+	for _, jt := range registered {
+		have[jt] = true
+	}
+	for _, want := range []string{"scheduled_agent", "nudge"} {
+		if !have[want] {
+			t.Errorf("type %q missing from RegisteredTypeHandlers after 42b wire; got %v", want, registered)
+		}
+	}
+}
+
+// TestWireScheduledAgentHandlers_RejectsDuplicateOnPlaceholderConflict
+// pins the mutually-exclusive contract: 42b wiring cannot land on
+// top of 42a registration (registerPlaceholderHandlers must not
+// be called in the same daemon-boot path that calls
+// wireScheduledAgentHandlers).
+func TestWireScheduledAgentHandlers_RejectsDuplicateOnPlaceholderConflict(t *testing.T) {
+	s := newSchedulerForRegistrationTest(t)
+	if err := registerPlaceholderHandlers(s); err != nil {
+		t.Fatalf("placeholder register: %v", err)
+	}
+	// Now try 42b on top — must fail because RegisterTypeHandler
+	// rejects duplicates.
+	err := wireScheduledAgentHandlers(s, scheduledAgentDeps{
+		RepoPath:       "/tmp/repo",
+		TmuxHandler:    &rpc.TmuxHandler{},
+		MessageHandler: &rpc.MessageHandler{},
+		CallerAgentID:  "supervisor_test",
+		MirrorWorker:   testMirrorWorker(t),
+	})
+	if err == nil {
+		t.Error("expected duplicate-registration error when placeholder + real handlers both registered")
 	}
 }

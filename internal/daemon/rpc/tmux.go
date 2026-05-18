@@ -1365,6 +1365,38 @@ func (h *TmuxHandler) PaneInjectPrompt(_ context.Context, target, text string) e
 	return sendKeysAndSubmit(target, text)
 }
 
+// WaitForPaneReady is the exported entry point that B-B1's
+// agentdispatch.TmuxRPC adapter calls between Stage 5 (TmuxLaunch)
+// and Stage 7 (running_work). Resolves the runtime from the agent
+// identity file (so the adapter doesn't need to plumb it through),
+// then delegates to the package-private waitForPaneReady helper
+// with canonical Stage 6 defaults: stableFor=0 (silence-driven
+// readiness, no minimum-stable window), ceilingSeconds=60 (matches
+// agentdispatch.Stages()'s StageWaitingForPaneReady budget).
+//
+// Returns nil when the pane settles within the ceiling; returns an
+// error when waitForPaneReady gives up (the agentdispatch caller
+// rolls back per spec §7.1 Stage 6's failure contract).
+//
+// Empty-runtime fallback: if the identity file lookup yields no
+// runtime, the silence-driven path still works (just without
+// runtime-specific permission-prompt detection — fine for
+// agentdispatch's needs).
+func (h *TmuxHandler) WaitForPaneReady(ctx context.Context, target string) error {
+	runtime := ""
+	if _, idFile, _ := h.findIdentityForSession(ctx, target); idFile != nil {
+		runtime = idFile.Runtime
+	}
+	const (
+		paneReadyStableFor      = 0
+		paneReadyCeilingSeconds = 60
+	)
+	if ok := waitForPaneReady(target, runtime, paneReadyStableFor, paneReadyCeilingSeconds); !ok {
+		return fmt.Errorf("WaitForPaneReady(%q): pane did not settle within %ds", target, paneReadyCeilingSeconds)
+	}
+	return nil
+}
+
 // sendKeysAndSubmit sends `text` to a tmux pane via send-keys, pauses
 // briefly (paneInputSubmitGap), then sends Enter. The pause exists because
 // modern TUI runtimes like Claude Code interpret a long string immediately
