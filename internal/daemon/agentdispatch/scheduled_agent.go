@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/agent"
+	"github.com/leonletto/thrum/internal/daemon/escalation"
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
 	"github.com/leonletto/thrum/internal/runtime/claude"
 	"github.com/leonletto/thrum/internal/skills/mirror"
@@ -105,8 +106,23 @@ type MirrorWorker interface {
 // for when they need to page an operator. Task 20 ships the real
 // implementation in internal/daemon/escalation; this interface keeps
 // scheduled_agent.go decoupled from the routing details.
+//
+// The Alert parameter is the canonical escalation.Alert struct from
+// internal/daemon/escalation — sharing it avoids a silent-divergence
+// risk between two structurally-identical Alert definitions.
 type EscalationRouter interface {
-	Route(ctx context.Context, alert EscalationAlert, subject, body string) error
+	Route(ctx context.Context, alert escalation.Alert, subject, body string) error
+}
+
+// RPCDrainer drains in-flight agent-side RPCs (agent.listFiles +
+// agent.getFile per spec §7.1 stage 8 + E6.6 contract) during
+// teardown so cleanup doesn't race a writing runtime. E6.6's
+// implementer ships the real RPC tracker; E6.1 ships the interface
+// + a nil-safe call site so the canonical teardown ordering
+// (PaneSendCtrlCExit → waitForPaneExit → Drain → TmuxKillSession →
+// worktree.Destroy) is established before E6.6 lands.
+type RPCDrainer interface {
+	DrainListFiles(ctx context.Context, target string, grace time.Duration) error
 }
 
 // Reconciler is the boot-time recovery surface ScheduledAgentHandler
@@ -123,14 +139,9 @@ type Reconciler interface {
 	ReconcileRun(ctx context.Context, job scheduler.JobSpec, runID string, lastState scheduler.State) (scheduler.State, error)
 }
 
-// EscalationAlert tags the source of an escalation so the router can
-// pick the right delivery channel.
-type EscalationAlert struct {
-	Source    string // canonical sources: "b-b1.idle_nudge", "b-b1.stage_failure", "b-b1.auto_respawn_loop_guard"
-	AgentName string
-	JobID     string
-	RunID     string
-}
+// (EscalationAlert was previously a local struct here; it has been
+// consolidated into escalation.Alert so the router contract is
+// expressed by exactly one type. See EscalationRouter above.)
 
 // Deps carries every external dependency ScheduledAgentHandler needs
 // from cmd/thrum/main.go's wiring layer. Every field is an interface
@@ -179,6 +190,13 @@ type Deps struct {
 	// without wiring it. Reconcile() guards against nil at the call
 	// site rather than panicking on uninjected Deps.
 	Reconciler Reconciler
+
+	// Drainer waits for in-flight agent-side RPCs to settle during
+	// stage-8 teardown (per spec §7.1 + AC 9.2.9). E6.6 ships the
+	// real implementation; E6.1 allows nil so the teardown skips
+	// the drain step when the dep isn't wired (preserves the
+	// canonical ordering when partial deps are injected).
+	Drainer RPCDrainer
 }
 
 // ScheduledAgentHandler implements scheduler.Handler for the
@@ -452,9 +470,9 @@ func (h *ScheduledAgentHandler) Dispatch(ctx context.Context, job scheduler.JobS
 	if err := reporter.Stage(StageRunningWork); err != nil {
 		return err
 	}
-	idleSeconds := defaultIfZero(0, 90)
-	maxNudges := defaultIfZero(0, 5)
-	graceSeconds := defaultIfZero(0, 10)
+	// Canonical defaults per spec §7.1: idle=90s, maxNudges=5,
+	// grace=10s. Overridden per-job when ScheduledAgent is populated.
+	idleSeconds, maxNudges, graceSeconds := 90, 5, 10
 	if job.ScheduledAgent != nil {
 		idleSeconds = defaultIfZero(job.ScheduledAgent.IdleNudgeSeconds, 90)
 		maxNudges = defaultIfZero(job.ScheduledAgent.MaxIdleNudges, 5)
@@ -472,11 +490,11 @@ func (h *ScheduledAgentHandler) Dispatch(ctx context.Context, job scheduler.JobS
 	for {
 		select {
 		case <-ctx.Done():
-			h.teardownGracefully(ctx, target, createResult, graceSeconds, job, reporter)
+			h.teardownGracefully(target, createResult, graceSeconds, job, reporter)
 			_ = reporter.Transition(scheduler.StateCancelled, "operator cancelled", nil)
 			return ctx.Err()
 		case completion := <-signals:
-			h.teardownGracefully(ctx, target, createResult, graceSeconds, job, reporter)
+			h.teardownGracefully(target, createResult, graceSeconds, job, reporter)
 			details := map[string]any{}
 			if completion != nil {
 				details["summary"] = completion.Summary
@@ -577,7 +595,14 @@ func (h *ScheduledAgentHandler) fireIdleNudge(_ context.Context, loop *idleNudge
 // not handler fields, so concurrent Dispatches don't race on
 // per-run state. AC 9.2.10 (5 simultaneous dispatches, race clean)
 // pins this.
-func (h *ScheduledAgentHandler) teardownGracefully(_ context.Context, target string, result *worktree.CreateResult, graceSeconds int, job scheduler.JobSpec, reporter scheduler.StateReporter) {
+// (signature note) ctx is intentionally NOT a parameter: every
+// child call inside teardownGracefully uses context.Background() so
+// cleanup completes even when the parent context is already
+// cancelled. Threading a context through would invite a future
+// implementer to propagate it — which would defeat the cancel-path
+// cleanup invariant. Per-call context is constructed internally
+// (waitForPaneExit, drainListFilesRPCs both use their own).
+func (h *ScheduledAgentHandler) teardownGracefully(target string, result *worktree.CreateResult, graceSeconds int, job scheduler.JobSpec, reporter scheduler.StateReporter) {
 	_ = reporter.Stage(StageTearingDown)
 
 	grace := time.Duration(graceSeconds) * time.Second
@@ -643,15 +668,20 @@ func (h *ScheduledAgentHandler) waitForPaneExit(target string, grace time.Durati
 	}
 }
 
-// drainListFilesRPCs is E6.6's helper — wait for in-flight
-// agent.listFiles + agent.getFile RPCs to settle before kill-session.
-// E6.1 ships a no-op stub so the canonical ordering is fixed at the
-// call site; E6.6's implementer drops in the real wait without
-// re-touching teardownGracefully.
-func (h *ScheduledAgentHandler) drainListFilesRPCs(_ string, _ time.Duration) {
-	// E6.6 (file-streaming sub-epic) ships the real wait.
+// drainListFilesRPCs delegates to the injected RPCDrainer per spec
+// §7.1 stage 8 + AC 9.2.9. When Drainer is nil (E6.6 not wired,
+// fixture-only handler), the drain is a no-op so the canonical
+// teardown ordering is preserved — operator visibility into the
+// missing drain comes from the daemon-boot config check, not from a
+// runtime nil-deref at teardown time. Drainer errors are absorbed
+// (best-effort cleanup); the kill-session path that follows assumes
+// the drain may have timed out.
+func (h *ScheduledAgentHandler) drainListFilesRPCs(target string, grace time.Duration) {
+	if h.deps.Drainer == nil {
+		return
+	}
+	_ = h.deps.Drainer.DrainListFiles(context.Background(), target, grace)
 }
-
 
 // handleStage3bMirror runs the skill-mirror sub-action and classifies
 // the result per spec §7.1 stage 3b + C-B1 §12.3.1. Returns:
@@ -726,17 +756,17 @@ func (h *ScheduledAgentHandler) classifyWorktreeError(err error, reporter schedu
 	switch {
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		_ = reporter.Transition(scheduler.StateCancelled, "stage 3a cancelled mid-create", nil)
-		return err
+		return fmt.Errorf("stage 3a: %w", err)
 	case errors.Is(err, worktree.ErrPathExists):
 		_ = reporter.Transition(scheduler.StateFailed,
 			"stage 3a: stale worktree at expected path; queued for next-boot sweep",
 			map[string]any{"original_err": err.Error()})
-		return err
+		return fmt.Errorf("stage 3a: %w", err)
 	case errors.Is(err, worktree.ErrPersistentBranchMismatch):
 		_ = reporter.Transition(scheduler.StateFailed,
 			"stage 3a: persistent worktree squatted by operator-owned branch; manual reconciliation required",
 			map[string]any{"original_err": err.Error()})
-		return err
+		return fmt.Errorf("stage 3a: %w", err)
 	default:
 		_ = reporter.Transition(scheduler.StateFailed,
 			fmt.Sprintf("stage 3a: worktree.Create: %v", err), nil)

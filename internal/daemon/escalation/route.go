@@ -112,6 +112,12 @@ func RouteEscalation(ctx context.Context, alert Alert, subject, body string, dep
 	if deps.Message == nil {
 		return fmt.Errorf("escalation: no Email + no Message dep wired (alert source=%q)", alert.Source)
 	}
+	// Subject is embedded in the body too so an inbox-reading
+	// operator sees the headline + detail in one place even when
+	// the inbox UI hides the subject header (some terminal clients
+	// collapse it). The subject also goes to MessageSend's `subject`
+	// argument so MessageMap routing keys + threading work as
+	// usual. Pinned by the route_test.go body assertion.
 	composed := subject + "\n\n" + body
 	_, err := deps.Message.MessageSend(ctx, supervisor, subject, composed)
 	return err

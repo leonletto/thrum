@@ -143,6 +143,36 @@ func (m *stubMirror) EnsureMirrored(_ context.Context, worktreePath string) erro
 // downstream tests use this when they need stage 3b to succeed.
 func okMirror() *stubMirror { return &stubMirror{} }
 
+// stubDrainer records DrainListFiles invocations + when they fired
+// relative to other tmux RPC calls. AC 9.2.9 requires the drain to
+// be exercised by a mock fixture; this is the fixture.
+type stubDrainer struct {
+	returnErr error
+	calls     []drainerCall
+
+	// firedBeforeKill is set to true when DrainListFiles runs while
+	// tmuxKill has zero calls — the canonical ordering invariant
+	// (drain BEFORE kill).
+	firedBeforeKill bool
+	// stub is a back-pointer so the drainer can inspect the tmux
+	// stub's call count at drain-time. Set in tests that need the
+	// ordering assertion.
+	tmuxBackRef *stubTmuxRPC
+}
+
+type drainerCall struct {
+	target string
+	grace  time.Duration
+}
+
+func (d *stubDrainer) DrainListFiles(_ context.Context, target string, grace time.Duration) error {
+	d.calls = append(d.calls, drainerCall{target: target, grace: grace})
+	if d.tmuxBackRef != nil && len(d.tmuxBackRef.tmuxKillCalls) == 0 {
+		d.firedBeforeKill = true
+	}
+	return d.returnErr
+}
+
 // completedSignals returns a pre-buffered signal channel carrying a
 // Completion so the stage-7 select loop fires the completion arm
 // immediately on stage-7 entry. Used by tests that exercise stages
@@ -1430,6 +1460,134 @@ func TestStage8_TeardownOrdering_CtrlCExitBeforeKillSession(t *testing.T) {
 	}
 	if !wt.destroyCalls[0].Force {
 		t.Error("Destroy.Force = false; want true")
+	}
+}
+
+// TestStage8_DrainListFilesRPCs_FiredBetweenCtrlCAndKill pins AC
+// 9.2.9: the listFiles RPC drain hook runs AFTER the
+// SIGTERM-equivalent (Ctrl-C/exit) + grace window AND BEFORE
+// tmux kill-session. This sequencing guarantees the runtime's
+// in-flight agent.listFiles / agent.getFile RPCs have a chance to
+// settle (via the grace window) and that any straggling RPCs are
+// drained before the session is torn down underneath them. E6.6
+// ships the real RPCDrainer; this test pins the seam with a mock
+// fixture per AC 9.2.9 ("verifies via mock RPC fixture").
+func TestStage8_DrainListFilesRPCs_FiredBetweenCtrlCAndKill(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	drainer := &stubDrainer{tmuxBackRef: rpc}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage8-drain"}
+	wt := okWorktree()
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+		Mirror:   okMirror(),
+		Drainer:  drainer,
+	})
+	rep := &recReporter{}
+
+	job := testJob("docs_bot")
+	job.ScheduledAgent.TeardownGraceSeconds = 1
+	signals := make(chan *scheduler.Completion, 1)
+	signals <- &scheduler.Completion{Reason: "done", Summary: ""}
+	_ = h.Dispatch(context.Background(), job, "run-stage8-drain", rep, signals)
+
+	if len(drainer.calls) != 1 {
+		t.Fatalf("DrainListFiles calls = %d; want 1", len(drainer.calls))
+	}
+	call := drainer.calls[0]
+	if call.target != "docs_bot" {
+		t.Errorf("Drain target = %q; want docs_bot", call.target)
+	}
+	if call.grace != time.Second {
+		t.Errorf("Drain grace = %v; want 1s (matches TeardownGraceSeconds)", call.grace)
+	}
+	if !drainer.firedBeforeKill {
+		t.Error("DrainListFiles fired AFTER TmuxKillSession; want BEFORE (per spec §7.1 stage 8)")
+	}
+	// The full canonical sequence must still complete: Ctrl-C → drain
+	// → kill → destroy.
+	if len(rpc.paneCtrlCCalls) != 1 {
+		t.Errorf("PaneSendCtrlCExit calls = %d; want 1", len(rpc.paneCtrlCCalls))
+	}
+	if len(rpc.tmuxKillCalls) != 1 {
+		t.Errorf("TmuxKillSession calls = %d; want 1", len(rpc.tmuxKillCalls))
+	}
+	if len(wt.destroyCalls) != 1 {
+		t.Errorf("worktree.Destroy calls = %d; want 1", len(wt.destroyCalls))
+	}
+}
+
+// TestStage8_DrainListFilesRPCs_NilDrainerSkipsCleanly pins the
+// defensive partial-config path per AC 9.2.9: when Drainer isn't
+// wired (E6.6 not yet shipped, fixture-only handler), the drain
+// step is a no-op rather than a nil-deref. Operator visibility into
+// the missing drain comes from daemon-boot config validation, not
+// runtime crashes.
+func TestStage8_DrainListFilesRPCs_NilDrainerSkipsCleanly(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage8-nodrain"}
+	wt := okWorktree()
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+		Mirror:   okMirror(),
+		// Drainer: nil — defensively unwired
+	})
+	rep := &recReporter{}
+
+	job := testJob("docs_bot")
+	job.ScheduledAgent.TeardownGraceSeconds = 1
+	signals := make(chan *scheduler.Completion, 1)
+	signals <- &scheduler.Completion{Reason: "done", Summary: ""}
+	err := h.Dispatch(context.Background(), job, "run-stage8-nodrain", rep, signals)
+	if err != nil {
+		t.Errorf("Dispatch err = %v; want nil (nil Drainer must be a no-op)", err)
+	}
+	// Teardown still completes end-to-end.
+	if len(rpc.tmuxKillCalls) != 1 || len(wt.destroyCalls) != 1 {
+		t.Errorf("teardown incomplete with nil Drainer: kill=%d destroy=%d",
+			len(rpc.tmuxKillCalls), len(wt.destroyCalls))
+	}
+}
+
+// TestStage8_DrainListFilesRPCs_AbsorbsTransientError pins the
+// best-effort cleanup contract: a Drainer error must NOT short-
+// circuit the rest of teardown. The kill-session + destroy steps
+// run regardless because the alternative — leaving a live tmux
+// session + worktree behind because the drain timed out — is worse
+// than a single missed RPC.
+func TestStage8_DrainListFilesRPCs_AbsorbsTransientError(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	drainer := &stubDrainer{returnErr: errors.New("rpc tracker offline")}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage8-drainerr"}
+	wt := okWorktree()
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+		Mirror:   okMirror(),
+		Drainer:  drainer,
+	})
+	rep := &recReporter{}
+
+	job := testJob("docs_bot")
+	job.ScheduledAgent.TeardownGraceSeconds = 1
+	signals := make(chan *scheduler.Completion, 1)
+	signals <- &scheduler.Completion{Reason: "done", Summary: ""}
+	_ = h.Dispatch(context.Background(), job, "run-stage8-drainerr", rep, signals)
+
+	if len(rpc.tmuxKillCalls) != 1 {
+		t.Errorf("TmuxKillSession calls = %d; want 1 (drain error must not short-circuit)",
+			len(rpc.tmuxKillCalls))
+	}
+	if len(wt.destroyCalls) != 1 {
+		t.Errorf("Destroy calls = %d; want 1 (drain error must not short-circuit)",
+			len(wt.destroyCalls))
 	}
 }
 
