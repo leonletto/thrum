@@ -26,8 +26,8 @@ import (
 
 	"github.com/leonletto/thrum/internal/agent"
 	"github.com/leonletto/thrum/internal/backup"
-	bridgepeer "github.com/leonletto/thrum/internal/bridge/peer"
 	email "github.com/leonletto/thrum/internal/bridge/email"
+	bridgepeer "github.com/leonletto/thrum/internal/bridge/peer"
 	telegram "github.com/leonletto/thrum/internal/bridge/telegram"
 	"github.com/leonletto/thrum/internal/cli"
 	"github.com/leonletto/thrum/internal/config"
@@ -35,10 +35,10 @@ import (
 	"github.com/leonletto/thrum/internal/context/roleconfig"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/agentdispatch"
-	"github.com/leonletto/thrum/internal/daemon/escalation"
 	"github.com/leonletto/thrum/internal/daemon/backstop"
 	"github.com/leonletto/thrum/internal/daemon/bootstrap"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
+	"github.com/leonletto/thrum/internal/daemon/escalation"
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
 	"github.com/leonletto/thrum/internal/daemon/inbox"
 	"github.com/leonletto/thrum/internal/daemon/monitor"
@@ -5514,18 +5514,25 @@ Examples:
 
 func teamCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "team",
+		Use:   "team [@AGENT]",
 		Short: "Show status of all active agents",
 		Long: `Show a rich, multi-line status report for every active agent.
 
 Displays session info, work context, inbox counts, branch status,
 and per-file change details for all agents with active sessions.
 
+With a positional @AGENT argument the output switches to the expanded
+single-agent view (per spec §7.6) showing the body fallback chain.
+
 Examples:
   thrum team
   thrum team --all
   thrum team --system
-  thrum team --json`,
+  thrum team --json
+  thrum team @docs_bot
+  thrum team @docs_bot --journal
+  thrum team @docs_bot --files`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := getClient()
 			if err != nil {
@@ -5535,9 +5542,29 @@ Examples:
 
 			includeAll, _ := cmd.Flags().GetBool("all")
 			includeSystem, _ := cmd.Flags().GetBool("system")
+			showJournal, _ := cmd.Flags().GetBool("journal")
+			showFiles, _ := cmd.Flags().GetBool("files")
+
+			// Extract the @<name> positional. Leading "@" is optional
+			// for symmetry with `thrum send --to @name` (which accepts
+			// either form); the daemon AgentFilter matches the AgentID
+			// without the prefix.
+			var agentFilter string
+			if len(args) == 1 {
+				agentFilter = strings.TrimPrefix(args[0], "@")
+				if agentFilter == "" {
+					return fmt.Errorf("agent name cannot be empty (got %q)", args[0])
+				}
+			}
+
+			if agentFilter == "" && (showJournal || showFiles) {
+				return fmt.Errorf("--journal and --files require a single-agent argument (e.g. 'thrum team @docs_bot --journal')")
+			}
+
 			req := cli.TeamListRequest{
 				IncludeOffline: includeAll,
 				IncludeSystem:  includeSystem,
+				AgentFilter:    agentFilter,
 			}
 
 			var result cli.TeamListResponse
@@ -5545,9 +5572,66 @@ Examples:
 				return fmt.Errorf("team.list RPC failed: %w", err)
 			}
 
-			if flagJSON {
-				return cli.EmitJSON(result)
+			if agentFilter != "" && len(result.Members) == 0 {
+				return fmt.Errorf("agent %q not found (use 'thrum team' to list active agents)", agentFilter)
 			}
+
+			// Optional sections — fetched only for the single-agent
+			// expanded view. Errors collected and surfaced inline so
+			// the operator sees a partial view rather than nothing.
+			var journalResp *cli.JournalResponse
+			var filesPaths []string
+			var filesAvailable bool
+
+			if agentFilter != "" && showJournal {
+				var j cli.JournalResponse
+				if err := client.Call("team.journal", cli.JournalRequest{AgentName: agentFilter}, &j); err != nil {
+					return fmt.Errorf("team.journal RPC failed: %w", err)
+				}
+				journalResp = &j
+			}
+
+			if agentFilter != "" && showFiles {
+				paths, available, err := probeAgentListFiles(client, agentFilter)
+				if err != nil {
+					return fmt.Errorf("agent.listFiles probe failed: %w", err)
+				}
+				filesPaths = paths
+				filesAvailable = available
+			}
+
+			if flagJSON {
+				out := map[string]any{
+					"team": result,
+				}
+				if journalResp != nil {
+					out["journal"] = journalResp
+				}
+				// Guard on both flag AND agentFilter — symmetric with
+				// the probe gate above. The early input-validation
+				// rejects `--files` without `@AGENT`, but duplicating
+				// the guard here keeps the JSON shape honest if that
+				// early-rejection ever changes.
+				if showFiles && agentFilter != "" {
+					out["files"] = map[string]any{
+						"available": filesAvailable,
+						"paths":     filesPaths,
+					}
+				}
+				return cli.EmitJSON(out)
+			}
+
+			if agentFilter != "" {
+				fmt.Print(cli.FormatTeamExpanded(&result.Members[0]))
+				if showFiles {
+					fmt.Print(cli.FormatFilesSection(filesPaths, filesAvailable))
+				}
+				if journalResp != nil {
+					fmt.Print(cli.FormatJournalSection(journalResp))
+				}
+				return nil
+			}
+
 			fmt.Print(cli.FormatTeam(&result))
 			return nil
 		},
@@ -5555,8 +5639,41 @@ Examples:
 
 	cmd.Flags().Bool("all", false, "Include offline agents")
 	cmd.Flags().Bool("system", false, "Include reserved pseudo-agents (@supervisor_*, etc.)")
+	cmd.Flags().Bool("journal", false, "Append the agent's lifecycle journal (requires @AGENT)")
+	cmd.Flags().Bool("files", false, "List files in the agent's state folder (requires @AGENT)")
 
 	return cmd
+}
+
+// probeAgentListFiles calls agent.listFiles for the target agent and
+// returns its file paths. When the daemon doesn't register that RPC
+// (cross-epic MB-1.S2 Q10 not yet shipped), the JSON-RPC server
+// returns a "method not found" error; we catch that as
+// available=false so the CLI renders FilesRPCUnavailable instead of
+// failing. Any other error propagates.
+func probeAgentListFiles(client *cli.Client, agentName string) ([]string, bool, error) {
+	// Cross-epic dep: response shape is provisional pending MB-1.S2
+	// Q10. The probe accepts whatever the daemon returns under the
+	// "paths" / "files" keys and ignores the rest. Until the daemon
+	// registers agent.listFiles, the catch-all returns "available=false"
+	// based on the method-not-found error string.
+	var raw map[string]any
+	if err := client.Call("agent.listFiles", map[string]string{"agent_name": agentName}, &raw); err != nil {
+		msg := err.Error()
+		if strings.Contains(msg, "Method not found") || strings.Contains(msg, "method not found") || strings.Contains(msg, "-32601") {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	var paths []string
+	if pv, ok := raw["paths"].([]any); ok {
+		for _, p := range pv {
+			if s, ok := p.(string); ok {
+				paths = append(paths, s)
+			}
+		}
+	}
+	return paths, true, nil
 }
 
 func whoHasCmd() *cobra.Command {
@@ -6251,7 +6368,15 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// boot supplies the lifecycle store unconditionally since the
 	// Migration 27 table is always present post-B-B1.
 	teamHandler.SetLifecycleStore(state.NewAgentLifecycleStore(st.DB()))
+	// E6.8 .89 body fallback chain (per spec §7.6): wire the live-pane
+	// capture and outbound-message lookup so the expanded single-agent
+	// view (`thrum team @<name>`) can resolve branches 1 + 3. nil-safe
+	// — RenderBodyFallbackChain falls through to branch 2 (summary.md)
+	// or branch 4 (no summary) if either dep yields no result.
+	teamHandler.SetPaneCapture(rpc.NewTmuxPaneCapture())
+	teamHandler.SetOutboundLookup(rpc.NewMessagesOutboundLookup(st))
 	server.RegisterHandler("team.list", teamHandler.HandleList)
+	server.RegisterHandler("team.journal", teamHandler.HandleJournal)
 
 	// Context management
 	contextHandler := rpc.NewContextHandler(st)

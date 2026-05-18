@@ -124,6 +124,7 @@ var anonymousAllowedMethods = map[string]bool{
 	"agent.whoami":      true,
 	"agent.listContext": true,
 	"team.list":         true,
+	"team.journal":      true,
 	"session.list":      true,
 	// Read-only context queries
 	"context.show":          true,

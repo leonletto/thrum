@@ -289,6 +289,15 @@ type fakeLifecycleStore struct {
 	err       error
 	calls     int
 	lastLimit int
+
+	// bulkCalls counts ListByAgents invocations. Surfaced separately
+	// from `calls` (which tracks legacy per-agent ListByAgent) so
+	// handler-level assertions can confirm the bulk path fires once
+	// per HandleList rather than N times — the I2 fold-in from the
+	// E6.8 batch-2 third-pass review.
+	bulkCalls      int
+	bulkLastAgents []string
+	bulkLastLimit  int
 }
 
 type lcEvent struct {
@@ -314,8 +323,22 @@ func (f *fakeLifecycleStore) ListByAgent(_ context.Context, _ string, limit int)
 	}
 	return out, nil
 }
-func (f *fakeLifecycleStore) ListByAgents(_ context.Context, _ []string, _ int) (map[string][]state.AgentLifecycleEvent, error) {
-	return map[string][]state.AgentLifecycleEvent{}, nil
+func (f *fakeLifecycleStore) ListByAgents(_ context.Context, agentNames []string, limit int) (map[string][]state.AgentLifecycleEvent, error) {
+	f.bulkCalls++
+	f.bulkLastAgents = append([]string(nil), agentNames...)
+	f.bulkLastLimit = limit
+	out := make(map[string][]state.AgentLifecycleEvent, len(agentNames))
+	for _, name := range agentNames {
+		for _, e := range f.events {
+			out[name] = append(out[name], state.AgentLifecycleEvent{
+				AgentName: name,
+				EventTime: e.When,
+				EventKind: state.AgentLifecycleEventKind(e.Kind),
+				Reason:    e.Reason,
+			})
+		}
+	}
+	return out, nil
 }
 func (f *fakeLifecycleStore) Append(_ context.Context, _ state.AgentLifecycleEvent) (int64, error) {
 	return 0, nil
