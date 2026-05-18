@@ -420,37 +420,6 @@ func (h *ScheduledAgentHandler) Dispatch(ctx context.Context, job scheduler.JobS
 	return nil
 }
 
-// rollbackStage4Failure tears down the stage-3 worktree (path + branch)
-// after a stage-4 tmux-create failure. context.Background() so the
-// cleanup completes even when the parent context is already cancelled
-// — daemon shutdown shouldn't strand a worktree just because the
-// failing stage's context happened to be the one that got cancelled.
-//
-// Task 17 extracts this (and rollbackStage5Failure for stages 5/6)
-// into rollback.go so the rollback-table is documented + tested in
-// isolation. The forward declaration here lets Task 15's commit be
-// self-contained.
-func (h *ScheduledAgentHandler) rollbackStage4Failure(result *worktree.CreateResult) {
-	_, _ = h.deps.Worktree.Destroy(context.Background(), worktree.DestroyOpts{
-		RepoPath:     h.deps.RepoPath,
-		WorktreePath: result.Path,
-		Branch:       result.Branch,
-		Force:        true,
-	})
-}
-
-// rollbackStage5Failure tears down both the live tmux session AND the
-// stage-3 worktree after a stage-5 or stage-6 failure. context.Background()
-// throughout so cleanup runs even when the parent context is already
-// cancelled. Kill order: tmux first (so the runtime can't continue
-// writing into the doomed worktree mid-destroy), then worktree.
-//
-// Task 17 extracts this (and rollbackStage4Failure) into rollback.go
-// alongside the canonical rollback-table comment.
-func (h *ScheduledAgentHandler) rollbackStage5Failure(target string, result *worktree.CreateResult) {
-	_ = h.deps.Tmux.TmuxKillSession(context.Background(), target)
-	h.rollbackStage4Failure(result)
-}
 
 // handleStage3bMirror runs the skill-mirror sub-action and classifies
 // the result per spec §7.1 stage 3b + C-B1 §12.3.1. Returns:
