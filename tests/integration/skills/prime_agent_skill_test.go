@@ -174,6 +174,68 @@ func TestPrimeAgentSkill_Step2_IsSkillLibraryCheck(t *testing.T) {
 	}
 }
 
+// TestPrimeAgentSkill_Step2_WritesLastSeenBaseline asserts the
+// Task 27 addition: Step 2 must NOT just diff against
+// last_seen_skills.txt — it must also WRITE the current skill
+// set back to that file so the NEXT wake's diff has a fresh
+// baseline.
+//
+// Per canonical §8.5 + Task 27: writing the baseline at wake-time
+// (rather than end-of-session) means each wake updates its own
+// "what existed when I last booted" record. The next wake's diff
+// surfaces only what's NEW between wake N's boot and wake N+1's
+// boot — clean signal.
+//
+// Implementation check: the second ```bash block must contain
+// BOTH the diff (asserted separately by Step2_IsSkillLibraryCheck)
+// AND a write-back invocation. The write surface is intentionally
+// flexible (cp / mv from tmp / direct ls > redirect) — we look
+// for the destination path as the structural anchor.
+func TestPrimeAgentSkill_Step2_WritesLastSeenBaseline(t *testing.T) {
+	body := stripFrontmatter(readSkill(t))
+
+	// Skip first ```bash block (Step 1: inbox).
+	_, afterFirst, ok := strings.Cut(body, "```bash\n")
+	if !ok {
+		t.Fatal("no ```bash blocks")
+	}
+	_, afterFirstClose, ok := strings.Cut(afterFirst, "\n```")
+	if !ok {
+		t.Fatal("first block not closed")
+	}
+
+	// Second ```bash block — Step 2.
+	_, afterSecond, ok := strings.Cut(afterFirstClose, "```bash\n")
+	if !ok {
+		t.Fatal("body has only ONE ```bash block — Step 2 missing")
+	}
+	secondBlock, _, ok := strings.Cut(afterSecond, "\n```")
+	if !ok {
+		t.Fatal("second ```bash block not closed")
+	}
+
+	// Look for any write-back to LAST_SEEN. The skill's prose uses
+	// the LAST_SEEN bash variable rather than a hard-coded path so
+	// the AGENT_NAME interpolation is the variable-substituted
+	// hook for tests + readers. Acceptable shapes:
+	//   cp /tmp/current_skills.txt "${LAST_SEEN}"
+	//   mv "${LAST_SEEN}.new" "${LAST_SEEN}"
+	//   ls .claude/skills/ > "${LAST_SEEN}"
+	// All three contain '${LAST_SEEN}"' on the destination side OR
+	// reference the file by its absolute pattern. Check for the
+	// envvar pattern as the canonical signal.
+	if !strings.Contains(secondBlock, "${LAST_SEEN}") {
+		t.Errorf("Step 2 must reference ${LAST_SEEN} for the write-back baseline update")
+	}
+	// Must have at least TWO references to ${LAST_SEEN}: one for
+	// the diff input (read side) and one for the write destination
+	// (write side). A single reference means the write was missed.
+	count := strings.Count(secondBlock, "${LAST_SEEN}")
+	if count < 2 {
+		t.Errorf("Step 2 should reference ${LAST_SEEN} at least twice (read + write); found %d", count)
+	}
+}
+
 // TestPrimeAgentSkill_NoEarlyExit asserts there's no early-exit
 // affordance between Step 1 and Step 2. An agent reading the
 // skill must not encounter language like "you may stop after

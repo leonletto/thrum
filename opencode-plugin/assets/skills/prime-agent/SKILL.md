@@ -36,7 +36,8 @@ the missing wake message in the status report at end of session.
 
 ## Step 2: Skill-library check
 
-**Run this exact diff against the last-seen skill set.**
+**Run this exact diff against the last-seen skill set, then write
+the current set back so the NEXT wake compares against THIS wake.**
 
 ```bash
 ls .claude/skills/ > /tmp/current_skills.txt
@@ -48,13 +49,21 @@ else
   echo "First wake for this agent — full skill library:"
   cat /tmp/current_skills.txt
 fi
+
+# Update last_seen_skills.txt — this wake's skill set becomes the
+# next wake's baseline. Do this AT BOOT (not at end-of-session) so
+# the next wake's diff surfaces only what's truly NEW since this
+# boot, not since end-of-session (which might be drift-free if no
+# new skills shipped during the session).
+mkdir -p ".thrum/agents/${AGENT_NAME}"
+cp /tmp/current_skills.txt "${LAST_SEEN}"
 ```
 
 The skill registry mirrors C-B1's auto-discovery (canonical §8.5): when a
 new skill ships to `.claude/skills/`, the next wake's lean-prime surfaces
-it. The agent's `last_seen_skills.txt` is updated at end of session (by
-`/thrum:update-agent-state`) so the next wake sees the diff against TODAY's
-skill set, not the first-ever one.
+it. Writing `last_seen_skills.txt` at the END of Step 2 (after the diff)
+means each wake updates its own baseline — the diff at wake N+1 reflects
+what's NEW since wake N's boot, regardless of mid-session skill drift.
 
 Do not skip this step even if Step 1's inbox was empty. Skill drift between
 wakes is a real failure mode — agents can miss a critical new skill if
@@ -76,9 +85,13 @@ with other agents, defer to `thrum prime`.
 
 Once both steps complete, proceed with the work the wake-primer asked for.
 At end of session, before exiting, run `/thrum:update-agent-state` to
-record what happened in `.thrum/agents/<agent_id>/state.md` and bump
-`last_seen_skills.txt` so the NEXT wake's Step 2 shows the right diff.
+record what happened in `.thrum/agents/<agent_id>/state.md`. The
+`last_seen_skills.txt` baseline is already bumped by Step 2 above —
+`/thrum:update-agent-state` owns the state.md half of the wake-loop
+bookkeeping, not the skill-library half.
 
 If the prior session crashed (no clean state.md write), run
-`/thrum:recover-agent-state` instead — it reconstructs from the previous
-transcript and validates parseability before writing.
+`/thrum:recover-agent-state` instead — it validates the existing
+state.md structurally and routes the spec §6.5 corruption flow if the
+parse fails (moves to `state.md.broken`, sets the auto-respawn gate
+flag, pages the operator).
