@@ -26,6 +26,40 @@ Your context is high and we want to restart without losing the decisions we've
 made. Write a rich continuation that future-you will read as the first action
 after restart.
 
+**§1 Big picture — REQUIRED FIRST SECTION (write this BEFORE anything else)**
+
+Every restart snapshot MUST begin with a section using this exact heading:
+
+```
+## 1. Big picture — what shipped this session
+```
+
+Followed by 1-3 sentences (a single paragraph or up to 3 short ones)
+summarizing what the session accomplished. Be specific: name the artifacts,
+the decisions, the cycles closed. Examples:
+
+> Locked the session-archive spec v2 with §1 Big picture requirement, five
+> Q-Spec approvals, and Q-Spec-5 deferred to impl-time. Hand-off pending
+> coordinator final review.
+
+> Investigated rc.9 inbox-race against impl_inbox_race's hypothesis: confirmed
+> the lock-substrate fence is the right fix. Filed thrum-XXX with 4 BLOCKING
+> evidence points.
+
+> Closed B-B1 E6.0 brainstormer-third pass. 2 BLOCKING + 5 IMPORTANT + 10
+> MINOR. All three load-bearing traps PASSed. Standing by for E6.1 next batch.
+
+This section becomes YOUR OWN log entry, visible in
+`thrum agent sessions list` alongside the archives of every other session
+you've ever restarted from. Future-you (and other agents inspecting your
+history) skim §1 to decide which sessions are worth re-reading. Write it
+first — before the Resume Plan, before file paths, before patterns —
+because composing the §1 summary forces you to identify what was actually
+load-bearing about this session, and that priority shapes everything else
+you write below it.
+
+After the §1 block:
+
 CRITICAL DISCIPLINE — compose from your own working context only. To preserve
 the remaining runway:
 
