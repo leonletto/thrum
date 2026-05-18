@@ -2,15 +2,44 @@ package agentdispatch
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
 	"time"
 
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/worktree"
 )
+
+// orphanSweepGracePeriod is the minimum age an ephemeral worktree
+// must reach before the sweep considers it for destruction. Set per
+// spec §10.2: 60s covers the worst-case stage-3-to-stage-5 dwell on
+// a high-load wake, so a sweep that runs concurrently with a fresh
+// dispatch never destroys a worktree that the journal hasn't yet
+// recorded (the dispatch's journal-write lands within the 60s
+// window). Operator-tunability deferred to v0.11.x per spec §10.2.
+const orphanSweepGracePeriod = 60 * time.Second
+
+// ephemeralWorktreePattern matches the directory naming convention
+// from thrum-non7 §3.4: <AgentName>-<JobID>-<WakeTimestamp>. The
+// trailing `\d+` anchors on the unix-second timestamp; greedy
+// `.+` for agent + job means names containing literal `-`
+// segments parse with the dash absorbed into whichever side
+// backtracking favors. v0.11 worktrees use kebab/snake-case names
+// so the canonical case is unambiguous; pathological names with
+// embedded dashes still parse but may yield surprising agent/job
+// extracts. Branch reconstruction uses the parsed agent/job so
+// pathological cases get a misformed branch reference — the
+// subsequent `git worktree prune` step cleans up dangling metadata
+// either way.
+var ephemeralWorktreePattern = regexp.MustCompile(`^(?P<agent>.+)-(?P<job>.+)-(?P<ts>\d+)$`)
 
 // JournalReader is the read-only surface E6.9's boot reconciler needs
 // over scheduler_job_events + scheduler_job_state. The production
@@ -62,9 +91,20 @@ type BootReconciler struct {
 	// touching the filesystem.
 	pathExists func(string) bool
 
-	// nowFn supplies AgentLifecycleEvent.EventTime; tests pin a
-	// deterministic value via NewBootReconciler... overrides.
+	// nowFn supplies AgentLifecycleEvent.EventTime + the orphan-
+	// sweep grace-period clock; tests pin a deterministic value.
 	nowFn func() time.Time
+
+	// readDir lists the orphan-sweep basepath; defaults to
+	// os.ReadDir. Tests substitute an in-memory directory so the
+	// sweep exercises its branching without writing real worktrees.
+	readDir func(dir string) ([]os.DirEntry, error)
+
+	// gitWorktreePrune runs the trailing `git worktree prune` step
+	// per spec §7.7 (handles SIGKILL-residue dangling metadata).
+	// Production wraps safecmd.Git; tests record invocation +
+	// return canned errors.
+	gitWorktreePrune func(ctx context.Context, repoPath string) error
 }
 
 // NewBootReconciler constructs the production BootReconciler. pathExists
@@ -79,14 +119,26 @@ func NewBootReconciler(
 	lifecycleStore state.AgentLifecycleStore,
 ) *BootReconciler {
 	return &BootReconciler{
-		repoPath:       repoPath,
-		tmux:           tmux,
-		worktree:       wt,
-		journal:        journal,
-		lifecycleStore: lifecycleStore,
-		pathExists:     defaultPathExists,
-		nowFn:          time.Now,
+		repoPath:         repoPath,
+		tmux:             tmux,
+		worktree:         wt,
+		journal:          journal,
+		lifecycleStore:   lifecycleStore,
+		pathExists:       defaultPathExists,
+		nowFn:            time.Now,
+		readDir:          os.ReadDir,
+		gitWorktreePrune: defaultGitWorktreePrune,
 	}
+}
+
+// defaultGitWorktreePrune invokes `git worktree prune` against
+// repoPath via safecmd.Git per project rule feedback_safecmd_safedb
+// — bare exec.Command bypasses the guardrails and drops context
+// propagation. Output is discarded; prune is non-interactive +
+// best-effort metadata cleanup.
+func defaultGitWorktreePrune(ctx context.Context, repoPath string) error {
+	_, err := safecmd.Git(ctx, repoPath, "worktree", "prune")
+	return err
 }
 
 // defaultPathExists returns true iff os.Stat succeeds. Symlinks
@@ -178,17 +230,24 @@ func (r *BootReconciler) ReconcileRun(
 
 	// Row 3: worktree exists but no tmux_session_name was journaled
 	// (daemon died between stage 3 and stage 4). Destroy the orphan
-	// + branch, then roll back. Destroy errors are intentionally
-	// swallowed at this layer — boot reconciliation is best-effort
-	// and the next sweep cycle (B2's SweepOrphans) catches anything
-	// still on disk via the basepath scan.
+	// + branch, then roll back. The state-transition path proceeds
+	// even if Destroy fails — SweepOrphans catches stuck residue on
+	// the next boot. Destroy errors log via slog so operators can
+	// investigate (file permissions, stale .git locks).
 	if jstate.TmuxSessionName == "" {
-		_, _ = r.worktree.Destroy(ctx, worktree.DestroyOpts{
+		if _, destroyErr := r.worktree.Destroy(ctx, worktree.DestroyOpts{
 			RepoPath:     r.repoPath,
 			WorktreePath: jstate.WorktreePath,
 			Branch:       jstate.BranchName,
 			Force:        true,
-		})
+		}); destroyErr != nil {
+			slog.Warn("reconcile: destroy orphan failed (row 3)",
+				"path", jstate.WorktreePath,
+				"branch", jstate.BranchName,
+				"run_id", runID,
+				"err", destroyErr,
+			)
+		}
 		return scheduler.StateScheduled, nil
 	}
 
@@ -223,12 +282,19 @@ func (r *BootReconciler) ReconcileRun(
 	// terminated…")) — see ReconcileRun doc-comment above; nil is
 	// the only path that fires the StateFailed transition through
 	// scheduler/reconcile.go.
-	_, _ = r.worktree.Destroy(ctx, worktree.DestroyOpts{
+	if _, destroyErr := r.worktree.Destroy(ctx, worktree.DestroyOpts{
 		RepoPath:     r.repoPath,
 		WorktreePath: jstate.WorktreePath,
 		Branch:       jstate.BranchName,
 		Force:        true,
-	})
+	}); destroyErr != nil {
+		slog.Warn("reconcile: destroy orphan failed (row 5)",
+			"path", jstate.WorktreePath,
+			"branch", jstate.BranchName,
+			"run_id", runID,
+			"err", destroyErr,
+		)
+	}
 	if job.ScheduledAgent != nil {
 		if _, appendErr := r.lifecycleStore.Append(ctx, state.AgentLifecycleEvent{
 			AgentName:       job.ScheduledAgent.Target,
@@ -252,6 +318,127 @@ func (r *BootReconciler) ReconcileRun(
 		}
 	}
 	return scheduler.StateFailed, nil
+}
+
+// SweepOrphans walks the daemon's worktree basepath for ephemeral
+// directories (per thrum-non7 §3.4 naming) that no non-terminal
+// scheduler_job_state row claims, destroys each that's older than
+// the orphanSweepGracePeriod, and runs `git worktree prune` to
+// clear dangling .git/worktrees/<name>/ metadata from SIGKILL-
+// during-stage-3 cases. Per spec §7.7.
+//
+// Ordering invariant: callers must invoke SweepOrphans AFTER
+// scheduler.ReconcileBoot has finished. The per-row walker may
+// transition rows from running/dispatched into scheduled/failed,
+// which changes which worktrees the journal claims as in-flight;
+// running concurrently would race the NonTerminalWorktrees view.
+// B3 wires this in main.go's boot sequence post-ReconcileBoot.
+//
+// SIGKILL-residue note: a daemon killed between worktree.Create
+// succeeding and the journal-write for stage 3 leaves behind a
+// directory the journal never names. The grace period ensures
+// SweepOrphans doesn't destroy directories belonging to a fresh
+// concurrent dispatch (whose journal-write hasn't landed yet);
+// the trailing `git worktree prune` cleans up the dangling
+// .git/worktrees/<name>/ metadata left by every destroyed orphan.
+//
+// Non-fatal prune failure: per BLOCKING #5 fix in plan v1 dual-
+// review, prune errors log via slog.Warn but don't fail SweepOrphans
+// — the per-orphan destroys already cleaned the visible filesystem;
+// prune is best-effort cleanup of `.git/worktrees/<name>/` residue.
+func (r *BootReconciler) SweepOrphans(ctx context.Context) error {
+	basePath := worktree.InferBasePath(r.repoPath)
+	if basePath == "" {
+		return fmt.Errorf("sweep: worktree.InferBasePath returned empty (HOME unresolved)")
+	}
+
+	entries, err := r.readDir(basePath)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			// Basepath absent is the steady state on a fresh daemon
+			// with no dispatches yet: nothing to sweep, but the
+			// `git worktree prune` step is still worth running so
+			// pre-existing dangling metadata in `.git/worktrees/`
+			// doesn't pile up forever.
+			return r.runPrune(ctx)
+		}
+		return fmt.Errorf("sweep: read basepath %q: %w", basePath, err)
+	}
+
+	referenced, err := r.journal.NonTerminalWorktrees(ctx)
+	if err != nil {
+		return fmt.Errorf("sweep: read referenced worktrees: %w", err)
+	}
+
+	nowUnix := r.nowFn().Unix()
+	// Integer-second division avoids the float64 round-trip
+	// orphanSweepGracePeriod.Seconds() would introduce; the constant
+	// is whole-second by construction (per spec §10.2).
+	graceSec := int64(orphanSweepGracePeriod / time.Second)
+	subexpAgent := ephemeralWorktreePattern.SubexpIndex("agent")
+	subexpJob := ephemeralWorktreePattern.SubexpIndex("job")
+	subexpTs := ephemeralWorktreePattern.SubexpIndex("ts")
+
+	for _, entry := range entries {
+		name := entry.Name()
+		matches := ephemeralWorktreePattern.FindStringSubmatch(name)
+		if matches == nil {
+			continue
+		}
+		ts, err := strconv.ParseInt(matches[subexpTs], 10, 64)
+		if err != nil {
+			// Trailing-digit group matched per regex, but ParseInt
+			// can still fail on overflow. Skip pathological names
+			// rather than fail the whole sweep.
+			continue
+		}
+		if nowUnix-ts < graceSec {
+			// Younger than grace window; might belong to a
+			// dispatch whose journal-write hasn't landed yet.
+			continue
+		}
+		worktreePath := filepath.Join(basePath, name)
+		if referenced[worktreePath] {
+			continue
+		}
+		agentName := matches[subexpAgent]
+		jobID := matches[subexpJob]
+		// Branch naming pinned by spec §7.7 sweep example:
+		// agent/<AgentName>/job-<JobID>-<WakeTs>. The same scheme
+		// scheduled_agent.go's stage 3 derives via worktree.Create.
+		branch := fmt.Sprintf("agent/%s/job-%s-%s", agentName, jobID, matches[subexpTs])
+		if _, destroyErr := r.worktree.Destroy(ctx, worktree.DestroyOpts{
+			RepoPath:     r.repoPath,
+			WorktreePath: worktreePath,
+			Branch:       branch,
+			Force:        true,
+		}); destroyErr != nil {
+			// Per project convention, surface destroy failures via
+			// slog so operators can investigate stuck orphans
+			// (e.g. file permissions, stale .git locks). Continue
+			// the sweep — one stuck orphan shouldn't block others.
+			slog.Warn("sweep: destroy orphan failed",
+				"path", worktreePath,
+				"branch", branch,
+				"err", destroyErr,
+			)
+		}
+	}
+
+	return r.runPrune(ctx)
+}
+
+// runPrune wraps gitWorktreePrune so the basepath-missing branch in
+// SweepOrphans shares the slog.Warn-on-failure semantics with the
+// normal path.
+func (r *BootReconciler) runPrune(ctx context.Context) error {
+	if err := r.gitWorktreePrune(ctx, r.repoPath); err != nil {
+		slog.Warn("sweep: git worktree prune failed",
+			"repo", r.repoPath,
+			"err", err,
+		)
+	}
+	return nil
 }
 
 // Compile-time check that *BootReconciler satisfies the consumer-side
