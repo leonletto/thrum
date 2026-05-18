@@ -3,10 +3,29 @@ package agentdispatch
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/leonletto/thrum/internal/agent"
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
+)
+
+// Sentinel errors for the nudge dispatch path. Callers errors.Is
+// against these to distinguish the two canonical operator-facing
+// failure classes ("the agent isn't running" vs "the agent isn't
+// even registered") from generic infrastructure errors.
+var (
+	// ErrTargetOffline fires when the pre-enqueue liveness check
+	// (TmuxRPC.CheckPane) reports the target's pane is not alive.
+	// Refusing the wake protects the inbox from filling with stale
+	// prods aimed at a dead agent.
+	ErrTargetOffline = errors.New("nudge target offline at fire time")
+
+	// ErrTargetNotRegistered fires when the registry has no row for
+	// the nudge target. Distinct from ErrTargetOffline so operators
+	// can tell from `thrum cron history` whether the agent is
+	// missing entirely or just down.
+	ErrTargetNotRegistered = errors.New("nudge target not in agent registry")
 )
 
 // NudgeHandler implements scheduler.Handler for the "nudge" job type
@@ -77,10 +96,78 @@ func (h *NudgeHandler) Reconcile(_ context.Context, _ scheduler.JobSpec, _ strin
 	return scheduler.StateFailed, errors.New("nudge reconciliation: lost across daemon restart")
 }
 
-// Dispatch is not yet implemented — Task 30 ships pre-enqueue
-// liveness check + send. Returning an error here pins the test
-// surface so Task 29's compile-time assertion passes without an
-// accidental dispatch path slipping through.
-func (h *NudgeHandler) Dispatch(_ context.Context, _ scheduler.JobSpec, _ string, _ scheduler.StateReporter, _ <-chan *scheduler.Completion) error {
-	return errors.New("nudge.Dispatch: not yet implemented (E6.3 Task 30)")
+// Dispatch implements scheduler.Handler.Dispatch for nudge jobs per
+// spec §7.2. Four-step sequence: stage marker → liveness check →
+// registry presence → message enqueue → completion. Two gates fire
+// before message enqueue (CheckPane + Registry.Lookup) so a nudge
+// against an offline-or-missing target never reaches the message
+// bus — wasted I/O at the inbox is worse than the cost of the two
+// guard calls.
+//
+// State machine per AC 9.4.4: nudges skip StateRunning. The dispatch
+// IS the work; there's no long-running stage. Successful flow:
+// dispatched (substrate-emitted) → delivering (stage marker) →
+// completed.
+func (h *NudgeHandler) Dispatch(ctx context.Context, job scheduler.JobSpec, _ string, reporter scheduler.StateReporter, _ <-chan *scheduler.Completion) error {
+	target := ""
+	message := ""
+	if job.Nudge != nil {
+		target = job.Nudge.Target
+		message = job.Nudge.Message
+	}
+
+	if err := reporter.Stage("delivering"); err != nil {
+		return err
+	}
+
+	// Pre-enqueue liveness check. CheckPane error and pane-not-alive
+	// are distinct failure classes (operator-facing diagnostics
+	// matter): error = "could not determine"; not-alive = "definitely
+	// offline".
+	paneAlive, err := h.deps.Tmux.CheckPane(ctx, target)
+	if err != nil {
+		_ = reporter.Transition(scheduler.StateFailed,
+			fmt.Sprintf("nudge target liveness check failed: %v", err),
+			map[string]any{"target": target})
+		return fmt.Errorf("nudge liveness check: %w", err)
+	}
+	if !paneAlive {
+		_ = reporter.Transition(scheduler.StateFailed,
+			"nudge target offline at fire time",
+			map[string]any{"target": target})
+		return ErrTargetOffline
+	}
+
+	// Registry presence check per BLOCKING #6 dual-review fix:
+	// AgentRegistry.Lookup returns (Agent, error) with
+	// ErrAgentNotFound for the missing case. errors.Is (NOT a
+	// boolean-ok pattern) is mandated so wrapped sentinels still
+	// match — defensive against future registry implementations
+	// that wrap the canonical sentinel with context.
+	if _, err := h.deps.Registry.Lookup(ctx, target); err != nil {
+		if errors.Is(err, agent.ErrAgentNotFound) {
+			_ = reporter.Transition(scheduler.StateFailed,
+				"nudge target not in agent registry",
+				map[string]any{"target": target})
+			return ErrTargetNotRegistered
+		}
+		_ = reporter.Transition(scheduler.StateFailed,
+			fmt.Sprintf("nudge target registry lookup failed: %v", err),
+			map[string]any{"target": target})
+		return fmt.Errorf("nudge registry lookup: %w", err)
+	}
+
+	// Enqueue. The subject prefix "Nudge: <job_id>" disambiguates
+	// nudge messages from agent.wake messages in the operator
+	// inbox view; `thrum inbox` filters key off the prefix.
+	if _, err := h.deps.Message.MessageSend(ctx, target, "Nudge: "+job.ID, message); err != nil {
+		_ = reporter.Transition(scheduler.StateFailed,
+			fmt.Sprintf("nudge enqueue failed: %v", err), nil)
+		return fmt.Errorf("nudge enqueue: %w", err)
+	}
+
+	if err := reporter.Transition(scheduler.StateCompleted, "nudge delivered", nil); err != nil {
+		return err
+	}
+	return nil
 }
