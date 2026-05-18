@@ -7811,6 +7811,10 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	server.RegisterHandler("email.status", emailHandler.HandleStatus)
 	server.RegisterHandler("email.unblock", emailHandler.HandleUnblock)
 	if thrumCfg.Email.Enabled {
+		// thrum-6qmf.8: substrate-adopt the email-bridge tickers. Internal
+		// jobs are only registered when the bridge is enabled so a
+		// disabled-email daemon doesn't fire no-op ticks every 5s.
+		wireEmailInternal(sched, emailBridge, thrumCfg.Email)
 		go emailBridge.Run(ctx)
 		fmt.Fprintf(os.Stderr, "  Email:       bridge enabled (handle: %s)\n", thrumCfg.Email.DaemonHandle)
 	}

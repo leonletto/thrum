@@ -76,12 +76,16 @@ type Bridge struct {
 
 	// Sub-component references — set at the start of each inner run() and
 	// cleared to nil on exit. Exposed via Queue/Mesh/Limiter getters for the
-	// RPC handler layer (D-B1.15). Callers must tolerate nil returns when the
+	// RPC handler layer (D-B1.15) and the substrate poll/dedup/queue
+	// handlers (thrum-6qmf.8). Callers must tolerate nil returns when the
 	// bridge is not yet running or between restart cycles.
 	queue   atomic.Pointer[Queue]
 	mesh    atomic.Pointer[MeshHandlerImpl]
 	limiter atomic.Pointer[Limiter]
 	inbound atomic.Pointer[Inbound]
+	dedup   atomic.Pointer[Dedup]
+	imap    atomic.Pointer[IMAPClient]
+	worker  atomic.Pointer[Worker]
 }
 
 // New constructs a Bridge. secrets may be nil when cfg.Enabled is false.
@@ -145,6 +149,21 @@ func (b *Bridge) Limiter() *Limiter { return b.limiter.Load() }
 // for the email.status RPC.
 func (b *Bridge) Inbound() *Inbound { return b.inbound.Load() }
 
+// Dedup returns the dedup table active during the current run cycle, or
+// nil when the bridge is not running. Consumed by the
+// `internal.email_dedup_cleanup` substrate handler.
+func (b *Bridge) Dedup() *Dedup { return b.dedup.Load() }
+
+// IMAPClient returns the long-lived IMAP client active during the current
+// run cycle, or nil when the bridge is not running or IMAP credentials
+// are absent. Consumed by the `internal.email_poll` substrate handler.
+func (b *Bridge) IMAPClient() *IMAPClient { return b.imap.Load() }
+
+// Worker returns the outbound queue worker active during the current run
+// cycle, or nil when the bridge is not running. Consumed by the
+// `internal.email_queue_drain` substrate handler.
+func (b *Bridge) Worker() *Worker { return b.worker.Load() }
+
 // Config returns a snapshot of the current EmailConfig under the bridge mutex.
 // Callers should treat the returned value as read-only.
 func (b *Bridge) Config() config.EmailConfig {
@@ -199,36 +218,6 @@ func (b *Bridge) Run(ctx context.Context) {
 		case <-time.After(b.RetryBackoff):
 		}
 	}
-}
-
-// PollOnce performs a single IMAP fetch + process cycle without starting the
-// full goroutine inventory. Satisfies the A-B1 RegisterInternal handler-shape
-// contract from design-spec §13.
-//
-// Safe to call without Run() running. Returns promptly on ctx.Done.
-func (b *Bridge) PollOnce(ctx context.Context) error {
-	db := b.db.Load()
-	if db == nil {
-		return fmt.Errorf("email PollOnce: db not wired")
-	}
-
-	b.mu.Lock()
-	cfg := b.cfg
-	secrets := b.secrets
-	b.mu.Unlock()
-
-	if secrets == nil {
-		return fmt.Errorf("email PollOnce: secrets not available")
-	}
-
-	imapCfg := buildIMAPConfig(cfg, secrets)
-	imap := NewIMAPClient(imapCfg)
-	if err := imap.Connect(ctx); err != nil {
-		return fmt.Errorf("email PollOnce: imap connect: %w", err)
-	}
-	defer func() { _ = imap.Close() }()
-
-	return imap.PollOnce(ctx)
 }
 
 // runWithRecover wraps run() so panics become errors that the outer retry
@@ -410,13 +399,19 @@ func (b *Bridge) run(ctx context.Context) error {
 	inbound := NewInbound(inboundCfg, dedup, limiter, msgmap, dispatcher, meshHandler)
 
 	// --- 5. Mark running. Expose sub-components via atomic pointers so the
-	// RPC handler layer (D-B1.15) can read them without entering the run loop.
+	// RPC handler layer (D-B1.15) and the substrate poll/dedup/queue
+	// handlers (thrum-6qmf.8) can read them without entering the run loop.
 	// Cleared on exit so callers see nil when the bridge is stopped. ---
 	b.running.Store(true)
 	b.queue.Store(queue)
 	b.mesh.Store(meshHandler)
 	b.limiter.Store(limiter)
 	b.inbound.Store(inbound)
+	b.dedup.Store(dedup)
+	b.worker.Store(worker)
+	if imapClient != nil {
+		b.imap.Store(imapClient)
+	}
 	b.startedAt.Store(time.Now())
 	b.lastError.Store("")
 	defer func() {
@@ -425,7 +420,18 @@ func (b *Bridge) run(ctx context.Context) error {
 		b.mesh.Store(nil)
 		b.limiter.Store(nil)
 		b.inbound.Store(nil)
+		b.dedup.Store(nil)
+		b.imap.Store(nil)
+		b.worker.Store(nil)
 	}()
+
+	// One-shot orphan recovery: drains rows left in 'sending' by a crashed
+	// worker. Pre thrum-6qmf.8 this ran inside Worker.Run before its
+	// ticker loop; now the substrate schedules drains, so the recovery
+	// pass moves to startup so the first substrate-tick sees a clean queue.
+	if err := worker.RecoverOrphans(ctx); err != nil && ctx.Err() == nil {
+		b.logger.Printf("queue orphan recovery: %v", err)
+	}
 
 	b.logger.Printf("running (handle=%s, imap=%s, smtp=%s)", cfg.DaemonHandle, cfg.IMAP.Host, cfg.SMTP.Host)
 
@@ -454,23 +460,12 @@ func (b *Bridge) run(ctx context.Context) error {
 		})
 	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		b.safeGo("queue.Worker.Run", func() {
-			if err := worker.Run(ctx); err != nil && ctx.Err() == nil {
-				b.logger.Printf("queue worker exited: %v", err)
-			}
-		})
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		b.safeGo("dedup.Sweeper", func() {
-			b.dedupSweeper(ctx, dedup)
-		})
-	}()
+	// thrum-6qmf.8: queue-drain, dedup-sweep, and inbound-poll are now
+	// driven by the A-B1 substrate via internal.email_queue_drain,
+	// internal.email_dedup_cleanup, and internal.email_poll respectively
+	// (see poll.go and cmd/thrum/email_wire.go). Worker/Dedup/Inbound +
+	// IMAP are exposed via b.Worker()/b.Dedup()/b.Inbound()/b.IMAPClient()
+	// for the substrate handlers; no in-bridge ticker remains.
 
 	wg.Add(1)
 	go func() {
@@ -489,18 +484,6 @@ func (b *Bridge) run(ctx context.Context) error {
 			b.heartbeatLoop(ctx, ws, sess.SessionID)
 		})
 	}()
-
-	// Inbound pump: IMAP poll triggers ProcessMessage on each raw message.
-	// When no IMAP client is available (disabled / no secrets) this is a no-op.
-	if imapClient != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			b.safeGo("inbound.poll", func() {
-				b.inboundPumpLoop(ctx, imapClient, inbound)
-			})
-		}()
-	}
 
 	<-ctx.Done()
 	wg.Wait()
@@ -531,79 +514,6 @@ func (b *Bridge) heartbeatLoop(ctx context.Context, ws WSConn, sessionID string)
 				"session_id": sessionID,
 			})
 			b.heartbeatCount.Add(1)
-		}
-	}
-}
-
-// dedupSweeper runs dedup.Sweep once every 24h, dropping rows older than 30d.
-// A-B1 RegisterInternal adoption is a follow-up; D-B1 ships a bare ticker.
-func (b *Bridge) dedupSweeper(ctx context.Context, d *Dedup) {
-	ticker := time.NewTicker(DefaultDedupSweepInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			cutoff := time.Now().Add(-DefaultDedupTTL)
-			if n, err := d.Sweep(ctx, cutoff); err != nil && ctx.Err() == nil {
-				b.logger.Printf("dedup sweep error: %v", err)
-			} else if n > 0 {
-				b.logger.Printf("dedup sweep: deleted %d stale rows", n)
-			}
-		}
-	}
-}
-
-// inboundPumpLoop re-fetches from IMAP at cfg.PollInterval cadence so that
-// the goroutine acts as an additional feed alongside IDLEloop. This is
-// intentionally kept simple: fetch → ProcessMessage per uid.
-//
-// The 24-hour lookback window in PollOnce/Fetch means freshly IDLE-pushed
-// messages are also caught on the next poll if IDLEloop delivered them
-// already — the dedup table makes the second arrival a no-op.
-func (b *Bridge) inboundPumpLoop(ctx context.Context, imap *IMAPClient, inbound *Inbound) {
-	b.mu.Lock()
-	interval := time.Duration(b.cfg.PollIntervalSeconds) * time.Second
-	b.mu.Unlock()
-	if interval <= 0 {
-		interval = 60 * time.Second
-	}
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			b.pollInbound(ctx, imap, inbound)
-		}
-	}
-}
-
-// pollInbound fetches messages from the IMAP server and runs them through
-// the inbound pipeline. Errors on individual messages are logged and skipped.
-func (b *Bridge) pollInbound(ctx context.Context, imap *IMAPClient, inbound *Inbound) {
-	msgs, err := imap.Fetch(ctx, time.Now().Add(-24*time.Hour))
-	if err != nil {
-		if ctx.Err() == nil {
-			b.logger.Printf("inbound poll fetch: %v", err)
-		}
-		return
-	}
-	for _, msg := range msgs {
-		if ctx.Err() != nil {
-			return
-		}
-		action, err := inbound.ProcessMessage(ctx, msg.Bytes, msg.UID)
-		if err != nil && ctx.Err() == nil {
-			b.logger.Printf("inbound process uid=%d: %v", msg.UID, err)
-			continue
-		}
-		if action.Kind == ActionRouted {
-			b.inboundProcessed.Add(1)
 		}
 	}
 }

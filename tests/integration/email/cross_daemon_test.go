@@ -161,7 +161,6 @@ func TestEmail_AC1_TwoDaemonPair_Exchange(t *testing.T) {
 		MaxAttempts:    3,
 		BackoffInitial: 5 * time.Millisecond,
 		BackoffCap:     50 * time.Millisecond,
-		PollInterval:   10 * time.Millisecond,
 	}
 	workerA := email.NewWorker(queueA, adapter, nil, workerCfg)
 
@@ -305,7 +304,6 @@ func TestEmail_AC4_ScheduledAgentSend_Threading(t *testing.T) {
 		MaxAttempts:    3,
 		BackoffInitial: 5 * time.Millisecond,
 		BackoffCap:     50 * time.Millisecond,
-		PollInterval:   10 * time.Millisecond,
 	}
 	w := email.NewWorker(q, adapter, nil, cfg)
 	sent, _, _, err := w.Drain(context.Background())

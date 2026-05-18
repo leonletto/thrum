@@ -39,12 +39,14 @@ type SMTPSubmitter interface {
 	Submit(ctx context.Context, env Envelope) error
 }
 
-// QueueConfig controls retry behaviour and polling cadence.
+// QueueConfig controls retry behaviour. Pre thrum-6qmf.8 this struct
+// also carried a PollInterval knob consumed by the now-removed
+// Worker.Run ticker; drain cadence now lives at the substrate layer via
+// EmailQueue.PollIntervalSeconds in internal/config/email.go.
 type QueueConfig struct {
 	MaxAttempts    int           // row moves to 'failed' after this many total attempts (default 10)
 	BackoffInitial time.Duration // delay after the first failed attempt (default 5s)
 	BackoffCap     time.Duration // upper bound on backoff growth (default 5min)
-	PollInterval   time.Duration // how often the worker ticks (default 5s)
 }
 
 func (c *QueueConfig) applyDefaults() {
@@ -56,9 +58,6 @@ func (c *QueueConfig) applyDefaults() {
 	}
 	if c.BackoffCap == 0 {
 		c.BackoffCap = 5 * time.Minute
-	}
-	if c.PollInterval == 0 {
-		c.PollInterval = 5 * time.Second
 	}
 }
 
@@ -108,7 +107,10 @@ func (q *Queue) Enqueue(ctx context.Context, env QueueEnvelope) (int64, error) {
 	return res.LastInsertId()
 }
 
-// Worker polls the queue and submits due rows via the configured SMTPSubmitter.
+// Worker drains the outbound queue. Pre thrum-6qmf.8, Run() ticked
+// internally; the substrate now drives drains via the
+// `internal.email_queue_drain` job (see poll.go QueueDrainHandler). The
+// startup orphan-recovery sweep is invoked separately by bridge.run().
 type Worker struct {
 	q         *Queue
 	submitter SMTPSubmitter
@@ -123,30 +125,17 @@ func NewWorker(q *Queue, submitter SMTPSubmitter, notifier CoordinatorNotifier, 
 	return &Worker{q: q, submitter: submitter, notifier: notifier, cfg: cfg}
 }
 
-// Run is a long-running ticker loop. On startup it runs the orphan-row
-// recovery sweep once, then drains on each tick. Returns when ctx is done.
-func (w *Worker) Run(ctx context.Context) error {
-	// Recovery sweep: rows left in 'sending' by a crashed worker are
-	// invisible to Drain's WHERE status='queued' predicate. Any row that
-	// has been 'sending' for more than 5 minutes must have survived a crash
-	// — flip it back to 'queued' so it gets retried.
-	_ = w.recoverOrphans(ctx)
-
-	ticker := time.NewTicker(w.cfg.PollInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			if _, _, _, err := w.Drain(ctx); err != nil && !errors.Is(err, context.Canceled) {
-				// Transient DB errors on a single tick are non-fatal; log
-				// and keep looping rather than killing the worker.
-				_ = err
-			}
-		}
-	}
+// RecoverOrphans is the startup recovery pass. Rows left in 'sending' by
+// a crashed worker are invisible to Drain's WHERE status='queued'
+// predicate; any row that has been 'sending' for more than 5 minutes
+// must have survived a crash — flip it back to 'queued' so it gets
+// retried on the next drain.
+//
+// Bridge.run() invokes this once per run cycle before registering the
+// drain handler. Errors are returned for caller logging; they are
+// non-fatal — the queue still drains live rows.
+func (w *Worker) RecoverOrphans(ctx context.Context) error {
+	return w.recoverOrphans(ctx)
 }
 
 // Drain performs one full iteration: claims all due queued rows and

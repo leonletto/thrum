@@ -74,7 +74,6 @@ func fastCfg() email.QueueConfig {
 		MaxAttempts:    3,
 		BackoffInitial: 10 * time.Millisecond,
 		BackoffCap:     100 * time.Millisecond,
-		PollInterval:   10 * time.Millisecond,
 	}
 }
 
@@ -250,7 +249,6 @@ func TestQueue_DrainBackoffCappedAtMax(t *testing.T) {
 		MaxAttempts:    100,
 		BackoffInitial: 10 * time.Millisecond,
 		BackoffCap:     50 * time.Millisecond,
-		PollInterval:   10 * time.Millisecond,
 	}
 	stub := &fakeSubmitter{submitErr: fmt.Errorf("%w", email.ErrSmtpTransient)}
 	w := email.NewWorker(q, stub, nil, cfg)
@@ -289,7 +287,6 @@ func TestQueue_MaxAttemptsMarksFailed(t *testing.T) {
 		MaxAttempts:    1, // fail on the first attempt (newAttemptCount=1 >= MaxAttempts=1)
 		BackoffInitial: 10 * time.Millisecond,
 		BackoffCap:     100 * time.Millisecond,
-		PollInterval:   10 * time.Millisecond,
 	}
 	stub := &fakeSubmitter{submitErr: fmt.Errorf("%w", email.ErrSmtpTransient)}
 	w := email.NewWorker(q, stub, notifier, cfg)
@@ -351,8 +348,10 @@ func TestQueue_PermanentErrorFailsImmediately(t *testing.T) {
 }
 
 // TestQueue_SendingStateRollsBackOnError verifies that the orphan-recovery
-// sweep (run at Worker startup) rescues rows stranded in 'sending' by a
-// previously crashed worker. We plant such a row directly in the DB.
+// pass rescues rows stranded in 'sending' by a previously crashed worker.
+// Post thrum-6qmf.8 the substrate drives drains, so this test invokes
+// RecoverOrphans + Drain explicitly rather than the removed Worker.Run
+// ticker.
 func TestQueue_SendingStateRollsBackOnError(t *testing.T) {
 	t.Parallel()
 	db := testDB(t)
@@ -375,15 +374,19 @@ func TestQueue_SendingStateRollsBackOnError(t *testing.T) {
 
 	stub := &fakeSubmitter{} // success
 	cfg := fastCfg()
-	cfg.PollInterval = 20 * time.Millisecond
 	w := email.NewWorker(q, stub, nil, cfg)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	_ = w.Run(ctx)
+	if err := w.RecoverOrphans(ctx); err != nil {
+		t.Fatalf("RecoverOrphans: %v", err)
+	}
+	if _, _, _, err := w.Drain(ctx); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
 
 	// The recovery sweep should have flipped the orphan to 'queued',
-	// and the first tick should have submitted and sent it.
+	// and the Drain call should have submitted and sent it.
 	if stub.count() == 0 {
 		t.Fatal("orphan row was not recovered and sent")
 	}
@@ -407,32 +410,32 @@ func TestQueue_StatusEnumGuardRejectsInvalid(t *testing.T) {
 	var _ = email.StatusFailed
 }
 
-// TestQueue_WorkerExitsOnContextCancel verifies that Worker.Run returns
-// within 2 seconds of context cancellation.
-func TestQueue_WorkerExitsOnContextCancel(t *testing.T) {
+// TestQueue_DrainHonorsContextCancel verifies Worker.Drain exits promptly
+// when its context is cancelled mid-iteration. Pre thrum-6qmf.8 the
+// per-Worker ticker loop guarded the cancel contract; the substrate now
+// owns scheduling, so the per-drain contract is what matters.
+func TestQueue_DrainHonorsContextCancel(t *testing.T) {
 	t.Parallel()
 	db := testDB(t)
 	q := email.NewQueue(db)
 
 	stub := &fakeSubmitter{}
-	cfg := fastCfg()
-	cfg.PollInterval = 50 * time.Millisecond
-	w := email.NewWorker(q, stub, nil, cfg)
+	w := email.NewWorker(q, stub, nil, fastCfg())
 
 	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 
 	done := make(chan struct{})
 	go func() {
-		_ = w.Run(ctx)
+		_, _, _, _ = w.Drain(ctx)
 		close(done)
 	}()
 
-	cancel()
 	select {
 	case <-done:
 		// success
 	case <-time.After(2 * time.Second):
-		t.Fatal("Worker.Run did not exit within 2s after context cancel")
+		t.Fatal("Worker.Drain did not exit within 2s after context cancel")
 	}
 }
 

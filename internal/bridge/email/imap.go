@@ -233,10 +233,11 @@ func (c *IMAPClient) pollLoop(ctx context.Context) error {
 	}
 }
 
-// PollOnce is the A-B1 RegisterInternal entry point: a single fetch iteration
-// that retrieves all unseen messages since the last 24 hours and processes
-// them. Callers at the bridge layer wrap this in the handler shape from
-// design-spec §13.
+// PollOnce performs a single IMAP fetch + mark-seen pass. Used by the
+// IDLE-fallback pollLoop above; the substrate poll job
+// (`internal.email_poll`, see poll.go PollHandler) does not call this —
+// it calls Fetch + MarkSeen directly so it can feed messages through
+// the inbound pipeline before marking them.
 //
 // Returns ctx.Err() promptly on cancellation.
 func (c *IMAPClient) PollOnce(ctx context.Context) error {
