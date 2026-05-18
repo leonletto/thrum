@@ -107,11 +107,12 @@ for line in "${agent_lines[@]}"; do
     fi
 
     # Extract Claude Code footer's "Ctx Used: X.X%" if present in the captured
-    # pane. Pattern matches the canonical footer format. Falls back to "(n/a)"
-    # for runtimes that don't display this (Codex, Cursor, etc.) or panes that
-    # have scrolled past the footer.
+    # pane. Claude Code's status line separates words with non-breaking spaces
+    # (UTF-8 \xc2\xa0), not ASCII spaces — normalize before matching. The
+    # trailing `|| true` keeps set -e from killing the loop on runtimes whose
+    # panes have no footer to match (Codex, Cursor) or have scrolled past it.
     if [[ "$pane_capture_ok" -eq 1 ]]; then
-        ctx_used=$(printf '%s\n' "$pane" | grep -oE 'Ctx Used: [0-9]+\.[0-9]+%' | tail -1 | sed 's/Ctx Used: //')
+        ctx_used=$(printf '%s\n' "$pane" | sed $'s/\xc2\xa0/ /g' | grep -oE 'Ctx Used: [0-9]+\.[0-9]+%' | tail -1 | sed 's/Ctx Used: //' || true)
         [[ -z "$ctx_used" ]] && ctx_used="(n/a)"
     else
         ctx_used="(capture failed)"
