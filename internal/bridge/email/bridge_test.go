@@ -357,23 +357,6 @@ func TestBridge_HeartbeatTicker(t *testing.T) {
 	}
 }
 
-// TestBridge_PollOnceCallable verifies PollOnce returns an error about missing
-// secrets or db without panicking, and leaves no goroutine leak.
-func TestBridge_PollOnceCallable(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
-	b := New(config.EmailConfig{
-		DaemonHandle: "pollonce-test",
-	}, nil /* no secrets */, "8080")
-	// No DB wired — expect error.
-
-	ctx := context.Background()
-	err := b.PollOnce(ctx)
-	if err == nil {
-		t.Error("PollOnce without db should return error, got nil")
-	}
-}
-
 // TestBridge_GoroutineLeakClean runs the bridge through a full start+shutdown
 // cycle and asserts no goroutines leak using goleak.
 //

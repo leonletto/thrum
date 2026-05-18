@@ -76,11 +76,14 @@ type EmailRateLimits struct {
 }
 
 // EmailQueue holds outbound-queue retry tuning. Workers exponentially
-// back off failed sends up to MaxAttempts.
+// back off failed sends up to MaxAttempts. PollIntervalSeconds tunes the
+// cadence of the `internal.email_queue_drain` substrate job; zero falls
+// back to the 5-second default.
 type EmailQueue struct {
 	MaxAttempts           int `json:"max_attempts,omitempty"`
 	BackoffInitialSeconds int `json:"backoff_initial_seconds,omitempty"`
 	BackoffCapSeconds     int `json:"backoff_cap_seconds,omitempty"`
+	PollIntervalSeconds   int `json:"poll_interval_seconds,omitempty"`
 }
 
 // EmailPeer is an operator-curated mesh peer entry. DaemonID is a public

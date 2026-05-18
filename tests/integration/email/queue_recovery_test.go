@@ -94,21 +94,7 @@ func fastWorkerConfig() email.QueueConfig {
 		MaxAttempts:    3,
 		BackoffInitial: 5 * time.Millisecond,
 		BackoffCap:     50 * time.Millisecond,
-		PollInterval:   10 * time.Millisecond,
 	}
-}
-
-// waitForSubmitCount polls until the submitter count reaches n or timeout.
-func waitForSubmitCount(t *testing.T, sub *recordingSubmitter, n int64, timeout time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if sub.Count() >= n {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatalf("timed out waiting for %d submissions (got %d)", n, sub.Count())
 }
 
 // --- tests -------------------------------------------------------------------
@@ -116,6 +102,10 @@ func waitForSubmitCount(t *testing.T, sub *recordingSubmitter, n int64, timeout 
 // TestEmail_QueuePersistenceAcrossRestart verifies that a new Worker
 // constructed against the same SQLite DB picks up rows that were enqueued
 // before a prior worker exited (simulating daemon restart).
+//
+// Post thrum-6qmf.8 the substrate drives drains via
+// `internal.email_queue_drain`; this test exercises the per-tick
+// contract (Drain) directly without the substrate involved.
 func TestEmail_QueuePersistenceAcrossRestart(t *testing.T) {
 	defer goleak.VerifyNone(t,
 		goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener"),
@@ -128,40 +118,36 @@ func TestEmail_QueuePersistenceAcrossRestart(t *testing.T) {
 	const rowCount = 5
 	_ = enqueueN(t, q, rowCount)
 
-	// "First worker" — starts and we cancel it before it can drain.
-	// Use a context that's already cancelled so the first worker never ticks.
-	cancelledCtx, cancel := context.WithCancel(context.Background())
-	cancel() // immediately cancelled
-
+	// "First worker" — constructed but never gets a chance to Drain.
 	sub1 := &recordingSubmitter{}
 	w1 := email.NewWorker(q, sub1, nil, fastWorkerConfig())
-	// Run returns when ctx is done; the orphan-recovery sweep runs but the ticker
-	// fires 0 times because context is already cancelled. Rows stay queued.
-	_ = w1.Run(cancelledCtx)
+	_ = w1
+	if sub1.Count() != 0 {
+		t.Fatalf("first worker submitted %d rows without Drain being called", sub1.Count())
+	}
 
-	// First worker did not drain anything (or at most did the recovery sweep).
-	// The rows should still be in 'queued' state.
+	// Rows should still be in 'queued' state.
 	var remaining int
 	_ = db.QueryRowContext(context.Background(),
 		`SELECT COUNT(*) FROM email_outbound_queue WHERE status = 'queued'`).Scan(&remaining)
-	if remaining == 0 {
-		t.Skip("worker drained rows before we could test restart — increase row count or remove this skip")
+	if remaining != rowCount {
+		t.Fatalf("expected %d queued rows pre-restart, got %d", rowCount, remaining)
 	}
 
 	// "Second worker" — fresh Worker, same DB. Should pick up all remaining rows.
 	sub2 := &recordingSubmitter{}
 	w2 := email.NewWorker(q, sub2, nil, fastWorkerConfig())
 
-	ctx2, cancel2 := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		_ = w2.Run(ctx2)
-	}()
-	t.Cleanup(func() { cancel2(); <-done })
+	if err := w2.RecoverOrphans(context.Background()); err != nil {
+		t.Fatalf("RecoverOrphans: %v", err)
+	}
+	if _, _, _, err := w2.Drain(context.Background()); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
 
-	// Wait for the second worker to drain remaining rows.
-	waitForSubmitCount(t, sub2, int64(remaining), 2*time.Second)
+	if sub2.Count() != int64(remaining) {
+		t.Errorf("second worker submitted %d rows; want %d", sub2.Count(), remaining)
+	}
 
 	// All rows must now be 'sent'.
 	var queued int
@@ -170,16 +156,13 @@ func TestEmail_QueuePersistenceAcrossRestart(t *testing.T) {
 	if queued != 0 {
 		t.Errorf("expected 0 queued rows after second worker, got %d", queued)
 	}
-
-	cancel2()
-	<-done
 }
 
 // TestEmail_NoDoubleSendOnRestart verifies that across a simulated restart
 // boundary each queued row is submitted exactly once.
 //
-// Mechanism: first worker drains N rows then is stopped; second worker starts
-// and finds 0 remaining. Total submit count == rowCount.
+// Mechanism: first worker drains N rows; second worker starts and finds
+// 0 remaining. Total submit count == rowCount.
 func TestEmail_NoDoubleSendOnRestart(t *testing.T) {
 	defer goleak.VerifyNone(t,
 		goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener"),
@@ -191,38 +174,25 @@ func TestEmail_NoDoubleSendOnRestart(t *testing.T) {
 	const rowCount = 8
 	_ = enqueueN(t, q, rowCount)
 
-	// First worker: run until it drains all rows.
+	// First worker: drain all rows.
 	sub1 := &recordingSubmitter{}
 	w1 := email.NewWorker(q, sub1, nil, fastWorkerConfig())
-
-	ctx1, cancel1 := context.WithCancel(context.Background())
-	done1 := make(chan struct{})
-	go func() {
-		defer close(done1)
-		_ = w1.Run(ctx1)
-	}()
-
-	// Wait for first worker to drain all rows.
-	waitForSubmitCount(t, sub1, rowCount, 3*time.Second)
-	cancel1()
-	<-done1
+	if err := w1.RecoverOrphans(context.Background()); err != nil {
+		t.Fatalf("first RecoverOrphans: %v", err)
+	}
+	if _, _, _, err := w1.Drain(context.Background()); err != nil {
+		t.Fatalf("first Drain: %v", err)
+	}
 
 	// Second worker: same DB, fresh Worker instance. Nothing should be left.
 	sub2 := &recordingSubmitter{}
 	w2 := email.NewWorker(q, sub2, nil, fastWorkerConfig())
-
-	ctx2, cancel2 := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer cancel2()
-	done2 := make(chan struct{})
-	go func() {
-		defer close(done2)
-		_ = w2.Run(ctx2)
-	}()
-
-	// Let the second worker run briefly (one poll cycle).
-	time.Sleep(50 * time.Millisecond)
-	cancel2()
-	<-done2
+	if err := w2.RecoverOrphans(context.Background()); err != nil {
+		t.Fatalf("second RecoverOrphans: %v", err)
+	}
+	if _, _, _, err := w2.Drain(context.Background()); err != nil {
+		t.Fatalf("second Drain: %v", err)
+	}
 
 	// Total submissions across both workers must equal rowCount (no double-send).
 	total := sub1.Count() + sub2.Count()
@@ -261,16 +231,18 @@ func TestEmail_WorkerOrphanRecovery(t *testing.T) {
 	sub := &recordingSubmitter{}
 	w := email.NewWorker(q, sub, nil, fastWorkerConfig())
 
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		_ = w.Run(ctx)
-	}()
-	t.Cleanup(func() { cancel(); <-done })
+	// Post thrum-6qmf.8 the substrate drives drains; this test exercises
+	// the explicit RecoverOrphans + Drain contract directly.
+	if err := w.RecoverOrphans(context.Background()); err != nil {
+		t.Fatalf("RecoverOrphans: %v", err)
+	}
+	if _, _, _, err := w.Drain(context.Background()); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
 
-	// The recovery sweep runs at Run() startup; the first tick should deliver.
-	waitForSubmitCount(t, sub, 1, 2*time.Second)
+	if sub.Count() != 1 {
+		t.Errorf("expected 1 submission after recovery; got %d", sub.Count())
+	}
 
 	// Verify the row is now 'sent'.
 	var status string
@@ -279,9 +251,6 @@ func TestEmail_WorkerOrphanRecovery(t *testing.T) {
 	if status != string(email.StatusSent) {
 		t.Errorf("orphan row status after recovery: got %q, want %q", status, email.StatusSent)
 	}
-
-	cancel()
-	<-done
 }
 
 // TestEmail_ConcurrentWorkersNoDoubleSend verifies that two Worker instances
