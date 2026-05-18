@@ -377,7 +377,46 @@ func (h *ScheduledAgentHandler) Dispatch(ctx context.Context, job scheduler.JobS
 		return err
 	}
 
-	// TODO(thrum-6qmf.4.56..thrum-6qmf.4.61): implement stages 5-8.
+	// Stage 5: tmux launch. Spawns the runtime command (claude / codex
+	// / etc.) inside the tmux session created in stage 4. Failures
+	// here trigger rollbackStage5Failure — kill-session + destroy
+	// worktree — since both artifacts are live.
+	if err := reporter.Stage(StageLaunchingRuntime); err != nil {
+		return err
+	}
+	if err := h.deps.Tmux.TmuxLaunch(ctx, target); err != nil {
+		h.rollbackStage5Failure(target, createResult)
+		_ = reporter.Transition(scheduler.StateFailed,
+			fmt.Sprintf("stage 5: tmux launch: %v", err),
+			map[string]any{
+				"worktree_path_destroyed":  createResult.Path,
+				"branch_name_destroyed":    createResult.Branch,
+				"tmux_session_killed":      target,
+			})
+		return fmt.Errorf("stage 5: tmux launch: %w", err)
+	}
+
+	// Stage 6: wait for the runtime's pane to render its prompt and
+	// accept input. Same rollback row as stage 5 — kill-session +
+	// destroy worktree. Failure reason carries "pane-ready timeout"
+	// (the canonical operator-facing string), since timeouts dominate
+	// this failure class.
+	if err := reporter.Stage(StageWaitingForPaneReady); err != nil {
+		return err
+	}
+	if err := h.deps.Tmux.WaitForPaneReady(ctx, target); err != nil {
+		h.rollbackStage5Failure(target, createResult)
+		_ = reporter.Transition(scheduler.StateFailed,
+			fmt.Sprintf("stage 6: pane-ready timeout: %v", err),
+			map[string]any{
+				"worktree_path_destroyed":  createResult.Path,
+				"branch_name_destroyed":    createResult.Branch,
+				"tmux_session_killed":      target,
+			})
+		return fmt.Errorf("stage 6: pane-ready timeout: %w", err)
+	}
+
+	// TODO(thrum-6qmf.4.60..thrum-6qmf.4.61): implement stages 7-8.
 	return nil
 }
 
@@ -398,6 +437,19 @@ func (h *ScheduledAgentHandler) rollbackStage4Failure(result *worktree.CreateRes
 		Branch:       result.Branch,
 		Force:        true,
 	})
+}
+
+// rollbackStage5Failure tears down both the live tmux session AND the
+// stage-3 worktree after a stage-5 or stage-6 failure. context.Background()
+// throughout so cleanup runs even when the parent context is already
+// cancelled. Kill order: tmux first (so the runtime can't continue
+// writing into the doomed worktree mid-destroy), then worktree.
+//
+// Task 17 extracts this (and rollbackStage4Failure) into rollback.go
+// alongside the canonical rollback-table comment.
+func (h *ScheduledAgentHandler) rollbackStage5Failure(target string, result *worktree.CreateResult) {
+	_ = h.deps.Tmux.TmuxKillSession(context.Background(), target)
+	h.rollbackStage4Failure(result)
 }
 
 // handleStage3bMirror runs the skill-mirror sub-action and classifies

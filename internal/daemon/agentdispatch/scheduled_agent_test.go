@@ -1078,6 +1078,151 @@ func TestStage4_TmuxCreateFailure_DestroysWorktreeAndTransitionsFailed(t *testin
 	}
 }
 
+// TestStage5_LaunchesRuntimeAndAdvances pins the canonical stage-5
+// happy path per spec §7.1 stage 5: rpc.TmuxLaunch fires with the
+// agent target name, the StageLaunchingRuntime marker emits, and
+// Dispatch falls through to stage 6.
+func TestStage5_LaunchesRuntimeAndAdvances(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage5"}
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: okWorktree(),
+		Mirror:   okMirror(),
+	})
+	rep := &recReporter{}
+
+	if err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-stage5", rep, nil); err != nil {
+		t.Fatalf("expected stages 0-6 to pass; got: %v", err)
+	}
+	if len(rpc.tmuxLaunchCalls) != 1 || rpc.tmuxLaunchCalls[0] != "docs_bot" {
+		t.Errorf("TmuxLaunch calls = %v; want [docs_bot]", rpc.tmuxLaunchCalls)
+	}
+	if len(rep.stages) < 6 {
+		t.Fatalf("expected at least 6 stage markers; got: %v", rep.stages)
+	}
+	if rep.stages[5] != agentdispatch.StageLaunchingRuntime {
+		t.Errorf("stages[5] = %q; want %q", rep.stages[5], agentdispatch.StageLaunchingRuntime)
+	}
+}
+
+// TestStage5_TmuxLaunchFailure_KillsSessionAndDestroysWorktree pins
+// the canonical stage-5 rollback row per spec §7.1: rollbackStage5
+// runs tmux kill-session FIRST (so the runtime can't continue writing
+// into the doomed worktree mid-destroy) THEN worktree.Destroy.
+func TestStage5_TmuxLaunchFailure_KillsSessionAndDestroysWorktree(t *testing.T) {
+	launchErr := errors.New("runtime binary not found")
+	rpc := &stubTmuxRPC{checkPaneResult: false, tmuxLaunchErr: launchErr}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage5-fail"}
+	wt := okWorktree()
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+		Mirror:   okMirror(),
+	})
+	rep := &recReporter{}
+
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-stage5-fail", rep, nil)
+	if !errors.Is(err, launchErr) {
+		t.Errorf("err = %v; want wraps %v", err, launchErr)
+	}
+
+	if len(rpc.tmuxKillCalls) != 1 || rpc.tmuxKillCalls[0] != "docs_bot" {
+		t.Errorf("TmuxKillSession calls = %v; want [docs_bot]", rpc.tmuxKillCalls)
+	}
+	if len(wt.destroyCalls) != 1 {
+		t.Fatalf("worktree.Destroy calls = %d; want 1", len(wt.destroyCalls))
+	}
+	tr := rep.lastTransition()
+	if tr.state != scheduler.StateFailed {
+		t.Errorf("last state = %v; want StateFailed", tr.state)
+	}
+	if !strings.Contains(tr.reason, "stage 5: tmux launch") {
+		t.Errorf("reason = %q; want substring 'stage 5: tmux launch'", tr.reason)
+	}
+	if tr.details["worktree_path_destroyed"] != wt.createResult.Path {
+		t.Errorf("details[worktree_path_destroyed] = %v; want %q",
+			tr.details["worktree_path_destroyed"], wt.createResult.Path)
+	}
+	if tr.details["tmux_session_killed"] != "docs_bot" {
+		t.Errorf("details[tmux_session_killed] = %v; want docs_bot", tr.details["tmux_session_killed"])
+	}
+}
+
+// TestStage6_WaitForPaneReady_Succeeds pins the canonical stage-6
+// happy path: rpc.WaitForPaneReady fires with the target name and
+// Dispatch advances past stage 6. The StageWaitingForPaneReady
+// marker is the sixth (zero-indexed: 6) in the canonical walk.
+func TestStage6_WaitForPaneReady_Succeeds(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage6"}
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: okWorktree(),
+		Mirror:   okMirror(),
+	})
+	rep := &recReporter{}
+
+	if err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-stage6", rep, nil); err != nil {
+		t.Fatalf("expected stages 0-6 to pass; got: %v", err)
+	}
+	if len(rpc.waitPaneReadyCalls) != 1 || rpc.waitPaneReadyCalls[0] != "docs_bot" {
+		t.Errorf("WaitForPaneReady calls = %v; want [docs_bot]", rpc.waitPaneReadyCalls)
+	}
+	if len(rep.stages) < 7 {
+		t.Fatalf("expected at least 7 stage markers; got: %v", rep.stages)
+	}
+	if rep.stages[6] != agentdispatch.StageWaitingForPaneReady {
+		t.Errorf("stages[6] = %q; want %q", rep.stages[6], agentdispatch.StageWaitingForPaneReady)
+	}
+}
+
+// TestStage6_PaneReadyTimeout_KillsSessionAndDestroysWorktree pins
+// the canonical stage-6 rollback row: same rollback shape as stage 5
+// (tmux kill + worktree destroy), distinct reason string ("pane-ready
+// timeout") so operator diagnostics distinguish the two failure
+// classes. The canonical phrasing matters — `thrum cron history`
+// surfaces it.
+func TestStage6_PaneReadyTimeout_KillsSessionAndDestroysWorktree(t *testing.T) {
+	waitErr := errors.New("deadline exceeded waiting for prompt")
+	rpc := &stubTmuxRPC{checkPaneResult: false, waitPaneReadyErr: waitErr}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage6-fail"}
+	wt := okWorktree()
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+		Mirror:   okMirror(),
+	})
+	rep := &recReporter{}
+
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-stage6-fail", rep, nil)
+	if !errors.Is(err, waitErr) {
+		t.Errorf("err = %v; want wraps %v", err, waitErr)
+	}
+
+	if len(rpc.tmuxKillCalls) != 1 || rpc.tmuxKillCalls[0] != "docs_bot" {
+		t.Errorf("TmuxKillSession calls = %v; want [docs_bot]", rpc.tmuxKillCalls)
+	}
+	if len(wt.destroyCalls) != 1 {
+		t.Fatalf("worktree.Destroy calls = %d; want 1", len(wt.destroyCalls))
+	}
+	tr := rep.lastTransition()
+	if tr.state != scheduler.StateFailed {
+		t.Errorf("last state = %v; want StateFailed", tr.state)
+	}
+	if !strings.Contains(tr.reason, "stage 6: pane-ready timeout") {
+		t.Errorf("reason = %q; want substring 'stage 6: pane-ready timeout'", tr.reason)
+	}
+}
+
 // TestIdleNudgeStageFmt pins the canonical §2.2 dynamic stage marker
 // format used during stage 7's multi-fire loop (E6.4 Task 36 will
 // emit these). `thrum cron history` and the A-B4 sweep observability
