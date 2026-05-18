@@ -2,11 +2,20 @@ package agentdispatch
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/leonletto/thrum/internal/agent"
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
 )
+
+// ErrTargetSessionAlive is returned by stage 0 when CheckPane reports
+// a live tmux session for the target agent. Refusing the wake here
+// protects an in-flight agent from being clobbered by a clashing
+// scheduled-agent dispatch. Callers MUST check via errors.Is rather
+// than string-matching — wrapped variants surface from helper layers.
+var ErrTargetSessionAlive = errors.New("agentdispatch: target tmux session already alive")
 
 // TmuxRPC is the minimal tmux-side surface ScheduledAgentHandler needs
 // from the daemon's RPC layer. Declared here (rather than imported from
@@ -173,10 +182,36 @@ func (h *ScheduledAgentHandler) Stages() map[string]time.Duration {
 // runID, reporter, signals) lives in parameter/stack scope — no
 // mutable fields on the receiver.
 //
-// E6.1 Task 9 ships this as a placeholder; subsequent tasks implement
-// the 9 stages in order (Task 10 stage 0, Task 12 stage 2, etc.).
+// E6.1 Task 10 implements stage 0 (name-collision check); subsequent
+// tasks fill in stages 1-8.
 func (h *ScheduledAgentHandler) Dispatch(ctx context.Context, job scheduler.JobSpec, runID string, reporter scheduler.StateReporter, signals <-chan *scheduler.Completion) error {
-	// TODO(thrum-6qmf.4.38..thrum-6qmf.4.61): implement stages 0-8.
+	target := ""
+	if job.ScheduledAgent != nil {
+		target = job.ScheduledAgent.Target
+	}
+
+	// Stage 0: name-collision check. Refuses the wake if a tmux pane
+	// already exists for `target` so we never clobber a live agent.
+	// The CheckPane-error path is distinct from the alive-true path:
+	// the former is "could not determine", the latter is the
+	// canonical "another session is up" rejection.
+	if err := reporter.Stage(StageNameCollisionCheck); err != nil {
+		return err
+	}
+	paneAlive, err := h.deps.Tmux.CheckPane(ctx, target)
+	if err != nil {
+		_ = reporter.Transition(scheduler.StateFailed,
+			fmt.Sprintf("stage 0: CheckPane error: %v", err), nil)
+		return fmt.Errorf("stage 0: CheckPane(%q): %w", target, err)
+	}
+	if paneAlive {
+		_ = reporter.Transition(scheduler.StateFailed,
+			fmt.Sprintf("stage 0: target agent %s already has a live tmux session", target),
+			map[string]any{"target": target})
+		return ErrTargetSessionAlive
+	}
+
+	// TODO(thrum-6qmf.4.41..thrum-6qmf.4.61): implement stages 1-8.
 	return nil
 }
 
