@@ -2745,6 +2745,7 @@ Examples:
 	cmd.AddCommand(agentSetStatusCmd())
 	cmd.AddCommand(reminderCmd())
 	cmd.AddCommand(agentSessionsCmd())
+	cmd.AddCommand(agentStateCmd())
 
 	return cmd
 }
@@ -6215,6 +6216,18 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	server.RegisterHandler("agent.cleanup", agentHandler.HandleCleanup)
 	server.RegisterHandler("agent.set-status", agentHandler.HandleSetAgentStatus)
 
+	// B-B1 E6.2 Task 26: agent.mark_state_corruption RPC for the
+	// /thrum:recover-agent-state skill flow per spec §6.5. Router is
+	// nil at v0.11 boot since escalation.RouteEscalation isn't yet
+	// production-wired (first-call-site epic; see
+	// internal/daemon/escalation/route.go). The handler falls back
+	// to DB-writes-only when router is nil (per its docstring), so
+	// the corruption-flag + lifecycle-event side is functional even
+	// without operator paging. Escalation wiring lands when D-B1
+	// + supervisor config promote past v0.11.
+	stateCorruptionHandler := rpc.NewAgentStateCorruptionHandler(st, nil)
+	server.RegisterHandler("agent.mark_state_corruption", stateCorruptionHandler.HandleMarkStateCorruption)
+
 	// Reminder substrate (A-B4, v0.11) — constructed before the team
 	// handler because team.list decorates each member with open reminder
 	// IDs via remindersStore.OpenForAgent. Dispatcher wiring (via A-B1's
@@ -7275,6 +7288,7 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	wsRegistry.Register("agent.listContext", websocket.Handler(agentHandler.HandleListContext))
 	wsRegistry.Register("agent.delete", websocket.Handler(agentHandler.HandleDelete))
 	wsRegistry.Register("agent.cleanup", websocket.Handler(agentHandler.HandleCleanup))
+	wsRegistry.Register("agent.mark_state_corruption", websocket.Handler(stateCorruptionHandler.HandleMarkStateCorruption))
 	wsRegistry.Register("session.start", websocket.Handler(sessionHandler.HandleStart))
 	wsRegistry.Register("session.end", websocket.Handler(sessionHandler.HandleEnd))
 	wsRegistry.Register("session.list", websocket.Handler(sessionHandler.HandleList))
