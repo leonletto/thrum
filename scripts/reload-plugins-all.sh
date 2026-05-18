@@ -14,9 +14,11 @@
 #   - Clean pane → raw `tmux send-keys -t <sess>:0.0 '/reload-plugins' Enter`
 #     (atomic text + Enter in one call). Keystrokes queue if the agent is
 #     busy and fire when the REPL returns to idle (verified empirically
-#     2026-05-18). Note: `thrum tmux send` was tested first and found to
-#     silently drop keystrokes for some idle sessions — raw tmux send-keys
-#     is the reliable primitive here.
+#     2026-05-18). `thrum tmux send` also works but goes through the daemon
+#     RPC path, adding multi-second delivery latency — fine functionally,
+#     but harder to verify in a script that wants to spot-check soon after
+#     dispatch. Raw tmux send-keys is local-only, near-instantaneous, and
+#     gives us atomic text+Enter in one call.
 #   - Overlay/permission pane → SKIP and surface loudly at the end
 #
 # Exit code:
