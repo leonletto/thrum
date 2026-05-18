@@ -62,6 +62,17 @@ func (s *Server) RegisterLongPollHandler(method string, h Handler) {
 	s.longPoll[method] = true
 }
 
+// HasHandler reports whether a handler is registered for the given JSON-RPC
+// method. Used by daemon-boot feature-detect plumbing (B-B1 E6.6 Task 63:
+// when agent.listFiles isn't wired, the stage-8 drain short-circuits).
+// Concurrent-safe.
+func (s *Server) HasHandler(method string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, ok := s.handlers[method]
+	return ok
+}
+
 // SetIdentityResolver wires a peer-credential resolver into the server so that
 // every RPC request gets its kernel-verified identity injected into the
 // per-request context. Passing nil disables peercred-based identity injection
