@@ -164,15 +164,24 @@ func (r *Respawner) OnPaneGone(ctx context.Context, agentName string, detection 
 		// F2 nil-guard: bookkeeping above is unconditional, but the
 		// operator-facing alert is conditional on Escalation being
 		// wired. Same pattern as idleNudgeLoop's Layer-D path.
+		// Route errors are logged at WARN — bookkeeping is already
+		// persisted (loop guard tripped, audit row appended), so
+		// the run-state is consistent; only the operator
+		// notification was lost. An operator in a degraded
+		// environment can still observe the guard trip via
+		// `thrum agent show` / agent_lifecycle_events.
 		if r.Escalation != nil {
-			_ = r.Escalation.Route(ctx,
+			if err := r.Escalation.Route(ctx,
 				escalation.Alert{
 					Source:    "b-b1.auto_respawn_loop_guard",
 					AgentName: agentName,
 				},
 				"Auto-respawn disabled for "+agentName,
 				fmt.Sprintf(loopGuardBody, agentName, count, windowSecs, agentName, agentName, agentName),
-			)
+			); err != nil {
+				slog.Warn("loop guard trip escalation routing failed",
+					"agent", agentName, "err", err)
+			}
 		}
 		return nil
 	}

@@ -2,7 +2,6 @@ package agentdispatch
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -447,34 +446,30 @@ func TestRespawn_RegistryLookupError_BubblesUp(t *testing.T) {
 	}
 }
 
-// TestRespawn_DetectsViaSafedb pins F4 forward-flag (safedb
-// usage): the lifecycle store interface mandates safedb at the
-// concrete-impl level; the test verifies that interface contract
-// flows correctly through Append. The actual safedb wrapping is
-// pinned by state/agent_lifecycle_test.go; this test confirms
-// Respawner respects the interface boundary (no raw db.Exec
-// leakage).
-func TestRespawn_DetectsViaSafedb(t *testing.T) {
-	// Structural check: state.AgentLifecycleStore is the interface
-	// the respawner depends on; the concrete agentLifecycleStore
-	// wraps *safedb.DB internally. Test verifies the type
-	// boundary by introspection (the dep field is the interface,
-	// not the concrete type).
-	r := &Respawner{}
-	switch any(r.LifecycleStore).(type) {
-	case state.AgentLifecycleStore, nil:
-		// Either the interface (production) or nil (uninjected
-		// test fixture) is fine — the type-check enforces that
-		// no concrete db handle leaks into the dep slot.
-	default:
-		t.Errorf("LifecycleStore is %T; want state.AgentLifecycleStore interface", r.LifecycleStore)
+// TestRespawn_CrashDetectedAppendError_BubblesUp pins the
+// early-failure path in step 1 of OnPaneGone: when LifecycleStore.
+// Append fails on the crash_detected write (e.g., DB locked,
+// disk full), OnPaneGone returns the wrapped error WITHOUT
+// proceeding to the registry lookup or downstream steps. This is
+// the only error path where the canonical "crash_detected
+// always" invariant is broken — by design, because nothing else
+// can run if the audit-trail write itself failed.
+func TestRespawn_CrashDetectedAppendError_BubblesUp(t *testing.T) {
+	r, reg, store, restarter, _ := newTestRespawner()
+	appendErr := errors.New("disk full")
+	store.appendErr = appendErr
+
+	err := r.OnPaneGone(context.Background(), "docs_bot", state.DetectionHealthCheckTick)
+	if !errors.Is(err, appendErr) {
+		t.Errorf("err = %v; want wraps %v", err, appendErr)
 	}
-	// Smoke-test that appended events round-trip through JSON
-	// (the canonical state.AgentLifecycleEvent.Details is
-	// json.RawMessage — drift would surface here as a type
-	// mismatch in test fixtures).
-	raw, _ := json.Marshal(map[string]any{"check": "f4"})
-	if _, err := json.Marshal(state.AgentLifecycleEvent{Details: raw}); err != nil {
-		t.Errorf("AgentLifecycleEvent round-trip: %v", err)
+	// Registry lookup must NOT fire — early return is the canonical
+	// fail-fast on audit-trail write failure.
+	if len(reg.lookupCalls) != 0 {
+		t.Errorf("Registry.Lookup calls = %d; want 0 (early-return on append fail)", len(reg.lookupCalls))
+	}
+	// Restart must NOT fire either.
+	if len(restarter.calls) != 0 {
+		t.Errorf("Restart calls = %d; want 0", len(restarter.calls))
 	}
 }

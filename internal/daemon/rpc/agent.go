@@ -1201,8 +1201,8 @@ func (h *AgentHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 	if agentIdentity == agent.IdentityEphemeral {
 		agentFolder := filepath.Join(thrumDir, "agents", req.Name)
 		if err := os.RemoveAll(agentFolder); err != nil {
-			log.Printf("warning: folder cleanup .thrum/agents/%s/ failed (ephemeral identity): %v",
-				req.Name, err)
+			slog.Warn("agent folder cleanup failed at decommission",
+				"agent", req.Name, "path", agentFolder, "err", err)
 		} else {
 			slog.Debug("agent folder removed at decommission",
 				"agent", req.Name, "path", agentFolder, "identity", "ephemeral")
