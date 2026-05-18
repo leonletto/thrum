@@ -289,3 +289,47 @@ func (r *reconcilerStub) ReconcileRun(_ context.Context, _ scheduler.JobSpec, ru
 
 // Compile-time satisfaction check.
 var _ Reconciler = (*reconcilerStub)(nil)
+
+// --- Restarter adapter (thrum-6qmf.4.88) ---
+
+// restarterAdapter wraps the daemon's *rpc.TmuxHandler so B-B1
+// agentdispatch.Respawner can call RestartSession via the Restarter
+// interface. Closes spec §9.8.4 PARTIAL → FULL PASS by replacing
+// thrum-fvhs's placeholderRestarter (which returned wrapped
+// ErrHandlerWiringPending) with the real restart path.
+//
+// agentName is mapped 1:1 to the tmux session name — the canonical
+// thrum convention (`thrum tmux create <agentName>` creates session
+// <agentName>). When a future agent uses a non-default session
+// naming scheme, the resolution moves here (registry.Lookup →
+// session name), keeping rpc.TmuxHandler.RestartSession's interface
+// stable.
+//
+// Forward-flag F1 sentinel-handling preserved: real Tmux restart
+// errors (kill failure, create failure, send-keys failure) are
+// distinct from agentdispatch.ErrHandlerWiringPending — Respawner's
+// errors.Is(err, ErrHandlerWiringPending) check no longer matches
+// the production path, so OnPaneGone treats real errors as actual
+// restart failures (audit trail captures, loop guard accumulates).
+type restarterAdapter struct {
+	handler *rpc.TmuxHandler
+}
+
+// NewRestarterAdapter wraps an *rpc.TmuxHandler as a Restarter.
+// Production callers thread the daemon's wired TmuxHandler instance
+// through; tests inject fakes via Respawner.Restarter directly
+// without going through this adapter.
+func NewRestarterAdapter(h *rpc.TmuxHandler) Restarter {
+	return &restarterAdapter{handler: h}
+}
+
+func (a *restarterAdapter) Restart(ctx context.Context, agentName string) error {
+	if a.handler == nil {
+		return fmt.Errorf("restart %q: nil TmuxHandler (wiring bug)", agentName)
+	}
+	_, err := a.handler.RestartSession(ctx, agentName, rpc.RestartSessionOpts{})
+	return err
+}
+
+// Compile-time satisfaction check.
+var _ Restarter = (*restarterAdapter)(nil)

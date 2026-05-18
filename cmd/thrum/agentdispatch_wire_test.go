@@ -320,10 +320,14 @@ func TestWirePaneHealthCheck_RegistersInternalJob(t *testing.T) {
 
 	// Build minimal real deps. The registry + state are shared with
 	// the production wiring path — same DB the scheduler sees.
+	// TmuxHandler is zero-valued for registration-shape testing;
+	// dispatch itself isn't exercised here (the agenthealth-side
+	// tests cover the loop behavior; the rpc-side RestartSession
+	// tests cover the production path).
 	st := newStateForWireTest(t)
 	registry := agent.NewSQLiteRegistry(st.DB())
 
-	if err := wirePaneHealthCheck(s, registry, st); err != nil {
+	if err := wirePaneHealthCheck(s, registry, st, &rpc.TmuxHandler{}); err != nil {
 		t.Fatalf("wirePaneHealthCheck: %v", err)
 	}
 
@@ -347,20 +351,23 @@ func TestWirePaneHealthCheck_RejectsNilDeps(t *testing.T) {
 	s := newSchedulerForRegistrationTest(t)
 	st := newStateForWireTest(t)
 	registry := agent.NewSQLiteRegistry(st.DB())
+	tmx := &rpc.TmuxHandler{}
 
 	cases := []struct {
 		name string
 		sch  *scheduler.Scheduler
 		reg  agent.AgentRegistry
 		st   *state.State
+		tmx  *rpc.TmuxHandler
 	}{
-		{"nil scheduler", nil, registry, st},
-		{"nil registry", s, nil, st},
-		{"nil state", s, registry, nil},
+		{"nil scheduler", nil, registry, st, tmx},
+		{"nil registry", s, nil, st, tmx},
+		{"nil state", s, registry, nil, tmx},
+		{"nil tmux", s, registry, st, nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if err := wirePaneHealthCheck(c.sch, c.reg, c.st); err == nil {
+			if err := wirePaneHealthCheck(c.sch, c.reg, c.st, c.tmx); err == nil {
 				t.Error("expected error; got nil")
 			}
 		})

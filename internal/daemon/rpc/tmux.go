@@ -1083,14 +1083,49 @@ type TmuxRestartResponse struct {
 	SnapshotLines int    `json:"snapshot_lines"`
 }
 
-// HandleRestart orchestrates the full restart cycle: snapshot → kill → relaunch.
-func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage) (any, error) {
-	var req TmuxRestartRequest
-	if err := json.Unmarshal(params, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
-	}
+// RestartSessionOpts carries the optional knobs that the JSON-RPC
+// TmuxRestartRequest exposes to operators. Used by RestartSession,
+// the Go-level entry point that B-B1 agentdispatch.Respawner
+// consumes via a thin Restarter adapter (see
+// internal/daemon/agentdispatch/adapters.go).
+//
+// Force defaults to false (graceful snapshot flow — send a message
+// asking the agent to /thrum:restart, then wait up to the
+// configured grace window). Runtime defaults to "" (inherit from
+// the identity file's recorded runtime, falling through to
+// "claude" when both are empty).
+type RestartSessionOpts struct {
+	Force   bool
+	Runtime string
+}
 
-	name, _, err := h.ensureSession(req.Name)
+// RestartSessionResult mirrors the relevant TmuxRestartResponse
+// fields so callers don't need to depend on the RPC response type.
+type RestartSessionResult struct {
+	SessionName   string
+	SnapshotLines int
+}
+
+// RestartSession is the Go-level entry point for the full restart
+// cycle (snapshot → kill → relaunch). HandleRestart wraps this for
+// the JSON-RPC surface; B-B1 agentdispatch.Respawner consumes it
+// via the RestarterAdapter so pane-health auto-respawn can actually
+// fire a restart (closes spec §9.8.4 from PARTIAL → FULL PASS).
+//
+// sessionName is the tmux session identifier — by canonical thrum
+// convention this equals the agent name for most agents (the
+// session is created via `thrum tmux create <agentName>`). The
+// adapter resolves agentName as the session name without further
+// lookup; if a future agent uses a different session naming
+// scheme, the resolution moves to the adapter, not here.
+//
+// Forward-compat for thrum-6qmf.4.85 (operator-driven E2E): both
+// pieces — the helper here and the agenthealth callsite from
+// thrum-fvhs — are now in place; the 9-stage integration smoke
+// at 4.85 verifies the end-to-end pane-gone → respawn → new
+// pane appears flow against real tmux.
+func (h *TmuxHandler) RestartSession(ctx context.Context, sessionName string, opts RestartSessionOpts) (*RestartSessionResult, error) {
+	name, _, err := h.ensureSession(sessionName)
 	if err != nil {
 		return nil, err
 	}
@@ -1101,7 +1136,7 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("no identity file found for session %s", name)
 	}
 
-	runtime := req.Runtime
+	runtime := opts.Runtime
 	if runtime == "" {
 		runtime = idFile.Runtime
 	}
@@ -1134,7 +1169,7 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 
 	// Graceful flow: ask agent to save its own snapshot before killing.
 	// Force flow: extract snapshot directly from JSONL conversation logs.
-	if !req.Force && !restart.SnapshotExists(wtThrumDir, agentName) {
+	if !opts.Force && !restart.SnapshotExists(wtThrumDir, agentName) {
 		// Delete any stale snapshot/consumed so we can detect a fresh one.
 		restart.DeleteSnapshot(wtThrumDir, agentName)
 
@@ -1202,7 +1237,7 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 
 	target := name + ":0.0"
 
-	// thrum-8dl3: shell-readiness probe. HandleRestart's CreateSession
+	// thrum-8dl3: shell-readiness probe. RestartSession's CreateSession
 	// returns BEFORE the new pane's shell finishes init (zsh/oh-my-zsh
 	// sources dotfiles, wires prompt). Any SendKeys arriving during init
 	// is silently swallowed. HandleCreate masks this via
@@ -1252,9 +1287,34 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 		h.poller.Enroll(name, runtime, target)
 	}
 
-	return &TmuxRestartResponse{
-		Session:       name,
+	return &RestartSessionResult{
+		SessionName:   name,
 		SnapshotLines: snapshotLines,
+	}, nil
+}
+
+// HandleRestart is the JSON-RPC wrapper around RestartSession.
+// Maps TmuxRestartRequest fields → RestartSessionOpts and
+// RestartSessionResult → TmuxRestartResponse. The behavioral
+// body lives in RestartSession so the Go-level callers (B-B1
+// agentdispatch.Respawner via RestarterAdapter) share parity
+// with the JSON-RPC surface — same snapshot/kill/relaunch flow,
+// same error surface.
+func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage) (any, error) {
+	var req TmuxRestartRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+	result, err := h.RestartSession(ctx, req.Name, RestartSessionOpts{
+		Force:   req.Force,
+		Runtime: req.Runtime,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &TmuxRestartResponse{
+		Session:       result.SessionName,
+		SnapshotLines: result.SnapshotLines,
 	}, nil
 }
 

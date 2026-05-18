@@ -7757,25 +7757,12 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// reconcile-loop ordering invariant), which it does — the call
 	// site is ~250 lines down in this same daemon-boot function.
 
-	// B-B1 E6.7 / thrum-fvhs: register the periodic pane-health
-	// monitor. Iterates every auto-respawn-eligible agent each tick
-	// (30s cadence per dispatch), probes its tmux pane, and routes
-	// pane-gone events through agentdispatch.Respawner.OnPaneGone
-	// — the canonical 5-step flow that appends crash_detected,
-	// runs the gate predicate + loop guard, and fires respawn or
-	// escalation.
-	//
-	// The Restarter is currently a placeholder (returns
-	// ErrHandlerWiringPending) until post-42b real-adapter glue
-	// lands. F1 forward-flag in Respawner catches the wrapped
-	// sentinel and logs + continues without state corruption —
-	// the audit trail (crash_detected event) is preserved so the
-	// system observes the crash even before the production restart
-	// can execute.
-	registry := agent.NewSQLiteRegistry(st.DB())
-	if err := wirePaneHealthCheck(sched, registry, st); err != nil {
-		return fmt.Errorf("wire pane-health check: %w", err)
-	}
+	// thrum-fvhs registration moves below — needs tmuxHandler
+	// (constructed later in this function around line ~7902) for the
+	// real RestarterAdapter that closes spec §9.8.4 PARTIAL → FULL
+	// PASS per thrum-6qmf.4.88. The call site is right after
+	// wireScheduledAgentHandlers (~line 8042) so both the registry
+	// and the tmux handler are in scope.
 
 	// Monitor jobs supervisor — launches runner goroutines for every monitor
 	// in the DB with status=running and blocks on ctx.Done(). Must start
@@ -8044,6 +8031,22 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// agent.listFiles RPC's Begin/End calls into it once that
 	// substrate ships.
 	_ = agentInflightTracker
+
+	// B-B1 E6.7 / thrum-fvhs / thrum-6qmf.4.88: register the periodic
+	// pane-health monitor. Iterates every auto-respawn-eligible agent
+	// each tick (30s cadence per dispatch), probes its tmux pane, and
+	// routes pane-gone events through agentdispatch.Respawner.OnPaneGone
+	// — the canonical 5-step flow that appends crash_detected, runs
+	// the gate predicate + loop guard, and fires respawn via the real
+	// RestarterAdapter wrapping tmuxHandler.RestartSession.
+	//
+	// thrum-fvhs shipped DETECTION (placeholderRestarter returning
+	// ErrHandlerWiringPending); thrum-6qmf.4.88 closes the RESTART
+	// half by wiring the real adapter via agentdispatch.NewRestarterAdapter.
+	// Closes spec §9.8.4 PARTIAL → FULL PASS.
+	if err := wirePaneHealthCheck(sched, agentRegistry, st, tmuxHandler); err != nil {
+		return fmt.Errorf("wire pane-health check: %w", err)
+	}
 
 	// Auto-connect to dialer-role peers after the WS server is ready.
 	// xir.29: build a single reconcile.Manager shared by the boot-time
