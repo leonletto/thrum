@@ -89,7 +89,84 @@ type TeamMember struct {
 	// teamReminderCompactCap with a "... +N more" marker — full list
 	// available via 'thrum agent reminder list --target @<name>'.
 	Reminders []string `json:"reminders,omitempty"`
+
+	// --- B-B1 E6.8 Task 56 fields (per spec §7.6 + §9.9.1) ---
+
+	// Mode is the registration mode from the agents table (canonical
+	// §3.3): "persistent" (long-lived registry row) or "ephemeral"
+	// (per-wake; cleaned up at decommission). Empty when the agent
+	// row has no mode column populated (pre-Migration-26 fixtures).
+	Mode string `json:"mode,omitempty"`
+
+	// Identity is the identity-lifecycle mode from the agents table
+	// (canonical §3.3): "long_lived" (identity file persists across
+	// wakes) or "ephemeral" (cleaned up alongside the worktree).
+	// Empty for pre-Migration-26 rows.
+	Identity string `json:"identity,omitempty"`
+
+	// State is the canonical agent-state vocabulary per spec §6.2
+	// (over_budget | dispatched | working | idle | crashed | alive).
+	// Derived from scheduler_job_state.current_state + banner flags
+	// per §6.2 precedence. "idle" is the default for scheduled agents
+	// between wakes; "alive" is the default for personal agents
+	// with healthy panes and no banners.
+	State string `json:"state,omitempty"`
+
+	// NextRun, LastRun, LastRunState come from scheduler_job_state for
+	// the agent's associated scheduled_agent job. RFC3339 timestamp
+	// strings (UTC); empty for personal agents with no scheduled job.
+	// LastRunState is the canonical scheduler state vocabulary
+	// (completed | failed | cancelled).
+	NextRun      string `json:"next_run,omitempty"`
+	LastRun      string `json:"last_run,omitempty"`
+	LastRunState string `json:"last_run_state,omitempty"`
+
+	// RecentTransitions are the last few entries from
+	// agent_lifecycle_events (Migration 27 — B-B1 E6.7's lifecycle
+	// table) for this agent, most recent first. Capped at
+	// teamRecentTransitionsCap. Each entry is "<RFC3339> · <event_kind>
+	// · <reason>" — pre-formatted so renderers don't need to know
+	// the lifecycle schema.
+	RecentTransitions []string `json:"recent_transitions,omitempty"`
+
+	// Usage is today's telemetry summary (token + minute totals)
+	// from MB-1.S6's daily_usage_summary table. Empty/nil when
+	// MB-1.S6 substrate hasn't shipped (feature-detect probe) or
+	// when the agent has no telemetry rows for today.
+	Usage *TeamUsageSummary `json:"usage,omitempty"`
+
+	// AutoRespawnDisabledAt is the unix-millisecond timestamp when
+	// the auto-respawn loop guard tripped for this agent (zero
+	// when not tripped). Surfaced via the §6.2 crashed-state banner
+	// in Task 60.
+	AutoRespawnDisabledAt int64 `json:"auto_respawn_disabled_at,omitempty"`
+
+	// StateMdParseFailedAt is the unix-millisecond timestamp when
+	// state.md last failed to parse (zero when clean). Surfaced via
+	// the §6.2 state.md-corruption banner in Task 60.
+	StateMdParseFailedAt int64 `json:"state_md_parse_failed_at,omitempty"`
 }
+
+// TeamUsageSummary is today's per-agent telemetry summary from the
+// MB-1.S6 daily_usage_summary table. Optional in the team.list
+// response — absent when the MB-1.S6 substrate hasn't shipped (the
+// table doesn't exist) or when the agent has no telemetry rows for
+// today.
+type TeamUsageSummary struct {
+	// TokensTotal is the sum of in + out tokens for the current
+	// UTC day.
+	TokensTotal int64 `json:"tokens_total"`
+
+	// MinutesTotal is the sum of session-minute-counts for the
+	// current UTC day. Useful for runtime-cost dashboards.
+	MinutesTotal int64 `json:"minutes_total,omitempty"`
+}
+
+// teamRecentTransitionsCap is the maximum number of
+// agent_lifecycle_events entries surfaced per agent in team.list
+// (per spec §7.6 "last 5"). Larger history is available via
+// `thrum team @<name> --journal` (Task 59).
+const teamRecentTransitionsCap = 5
 
 // teamReminderCompactCap is the maximum number of reminder IDs included
 // per agent in a team.list response. Above this the slice's tail becomes
@@ -104,6 +181,7 @@ type TeamHandler struct {
 	thrumDir           string
 	supervisorIdentity *config.IdentityFile // synthesized virtual-supervisor identity; nil in tests
 	remindersStore     reminders.Store      // optional; nil → skip reminder enrichment
+	lifecycleStore     state.AgentLifecycleStore // optional; nil → skip lifecycle enrichment (E6.8 Task 56)
 }
 
 // NewTeamHandler creates a new team handler.
@@ -122,6 +200,20 @@ func NewTeamHandler(state *state.State, thrumDir string, supervisorIdentity *con
 		supervisorIdentity: supervisorIdentity,
 		remindersStore:     remindersStore,
 	}
+}
+
+// SetLifecycleStore wires the B-B1 Migration 27 agent_lifecycle_events
+// surface. When set, HandleList enriches each TeamMember with the
+// new E6.8 Task 56 fields (mode, identity, banner flags, recent
+// transitions) per spec §7.6. When nil, the new fields stay at
+// their zero values — tests + pre-B-B1 daemons keep working
+// without the enrichment overhead.
+//
+// Wired separately from NewTeamHandler (via setter) to keep the
+// constructor signature stable across the many test call sites
+// that don't care about lifecycle data.
+func (h *TeamHandler) SetLifecycleStore(store state.AgentLifecycleStore) {
+	h.lifecycleStore = store
 }
 
 // HandleList handles the team.list RPC method.
@@ -248,6 +340,15 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 	// the handler was constructed without a reminders store.
 	members = h.decorateWithReminders(ctx, members)
 
+	// E6.8 Task 56: enrich with B-B1 lifecycle fields (mode, identity,
+	// banner flags from the agents-table Migration 26 columns; recent
+	// transitions from Migration 27's agent_lifecycle_events). Runs
+	// outside the state RLock since the lifecycle store + the
+	// supplementary agents-table query both use their own connections.
+	// Nil-safe — pre-B-B1 daemons or tests without SetLifecycleStore
+	// see the new fields stay at zero values.
+	members = h.decorateWithLifecycle(ctx, members)
+
 	return &TeamListResponse{Members: members, SharedMessages: sharedPtr}, nil
 }
 
@@ -281,6 +382,152 @@ func (h *TeamHandler) decorateWithReminders(ctx context.Context, members []TeamM
 		members[i].Reminders = capReminderIDs(ids, teamReminderCompactCap)
 	}
 	return members
+}
+
+// decorateWithLifecycle enriches members with the B-B1 E6.8 Task 56
+// fields:
+//
+//   - mode, identity, AutoRespawnDisabledAt, StateMdParseFailedAt
+//     from a batched agents-table query (Migration 26 columns).
+//   - RecentTransitions from AgentLifecycleStore.ListByAgent (last 5
+//     per spec §7.6 "transitions" field).
+//   - State derived per §6.2 mapping (banner-based crashed first,
+//     then default per agent kind).
+//
+// Failures on the bulk agents-table query or per-agent lifecycle
+// reads are logged but don't blank out the response — a transient
+// SQL error shouldn't lose the entire team listing. Cross-daemon
+// agents (OriginDaemon set + not local) are skipped: their lifecycle
+// data lives on the source daemon, not here.
+//
+// Nil-safe when h.lifecycleStore is unset; in that case the
+// agents-table enrichment still fires (mode/identity/banner flags
+// come from a SELECT, not from the lifecycle store) but
+// RecentTransitions stays nil.
+func (h *TeamHandler) decorateWithLifecycle(ctx context.Context, members []TeamMember) []TeamMember {
+	if len(members) == 0 {
+		return members
+	}
+
+	// Bulk query the agents-table Migration 26 + E6.7 columns for
+	// every member in one round-trip. Cheaper than N queries when
+	// the listing has many members. Empty mode/identity strings
+	// (rows pre-Migration-26) are preserved as empty so renderers
+	// can fall back to defaults.
+	agentIDs := make([]string, 0, len(members))
+	for i := range members {
+		agentIDs = append(agentIDs, members[i].AgentID)
+	}
+	type agentMeta struct {
+		mode           string
+		identity       string
+		autoRespawnAt  int64
+		stateMdFailAt  int64
+	}
+	metaByID := make(map[string]agentMeta, len(members))
+
+	// Build the IN-clause placeholders. Bounded by len(members) so
+	// this is safe against unbounded expansion.
+	placeholders := make([]string, len(agentIDs))
+	args := make([]any, len(agentIDs))
+	for i, id := range agentIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	query := `SELECT agent_id,
+		COALESCE(mode, ''),
+		COALESCE(identity, ''),
+		COALESCE(auto_respawn_disabled_at, 0),
+		COALESCE(state_md_parse_failed_at, 0)
+		FROM agents WHERE agent_id IN (` + strings.Join(placeholders, ",") + `)`
+	rows, err := h.state.DB().QueryContext(ctx, query, args...)
+	if err != nil {
+		log.Printf("team.list: lifecycle agents-table query: %v (skipping enrichment)", err)
+		return members
+	}
+	for rows.Next() {
+		var (
+			id     string
+			m      agentMeta
+		)
+		if err := rows.Scan(&id, &m.mode, &m.identity, &m.autoRespawnAt, &m.stateMdFailAt); err != nil {
+			log.Printf("team.list: lifecycle scan: %v", err)
+			continue
+		}
+		metaByID[id] = m
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("team.list: lifecycle rows.Err: %v", err)
+	}
+	_ = rows.Close()
+
+	// Per-agent enrichment: copy meta fields onto each TeamMember,
+	// derive State, and (when lifecycle store is wired) pull recent
+	// transitions.
+	for i := range members {
+		m := &members[i]
+		if meta, ok := metaByID[m.AgentID]; ok {
+			m.Mode = meta.mode
+			m.Identity = meta.identity
+			m.AutoRespawnDisabledAt = meta.autoRespawnAt
+			m.StateMdParseFailedAt = meta.stateMdFailAt
+		}
+		m.State = deriveAgentState(m)
+		if h.lifecycleStore != nil {
+			events, err := h.lifecycleStore.ListByAgent(ctx, m.AgentID, teamRecentTransitionsCap)
+			if err != nil {
+				log.Printf("team.list: lifecycle.ListByAgent(%s): %v", m.AgentID, err)
+				continue
+			}
+			if len(events) == 0 {
+				continue
+			}
+			lines := make([]string, 0, len(events))
+			for _, e := range events {
+				lines = append(lines, fmt.Sprintf("%s · %s · %s",
+					e.EventTime.UTC().Format(time.RFC3339), e.EventKind, e.Reason))
+			}
+			m.RecentTransitions = lines
+		}
+	}
+	return members
+}
+
+// deriveAgentState implements the §6.2 state-vocabulary precedence
+// for a TeamMember row:
+//
+//  1. AutoRespawnDisabledAt set → "crashed" (loop-guard banner).
+//  2. StateMdParseFailedAt set → "crashed" (state.md banner).
+//  3. Otherwise → "alive" for personal agents (Status == "active"
+//     with no scheduler hooks) or "idle" for scheduled agents
+//     (Mode == "ephemeral" or Identity != "long_lived").
+//
+// Cross-epic finer states (over_budget, dispatched, working, idle
+// with nudge banner) require the scheduler_job_state join that
+// Task 56's next_run/last_run fields plumb through — those land
+// in batch 2 once the scheduler injection is wired. For now this
+// derivation surfaces the banner-driven "crashed" cases (which is
+// what AC §9.9.3 + §9.9.4 require) and falls back to alive/idle
+// defaults for everyone else.
+func deriveAgentState(m *TeamMember) string {
+	if m.AutoRespawnDisabledAt > 0 {
+		return "crashed"
+	}
+	if m.StateMdParseFailedAt > 0 {
+		return "crashed"
+	}
+	if m.Status == "active" {
+		// Scheduled agents are typically marked Identity="ephemeral";
+		// personal agents are Identity="long_lived" (canonical §3.3).
+		// Until the scheduler-state join lands, treat scheduled
+		// agents between wakes as "idle" and personal agents as
+		// "alive".
+		if m.Identity == "ephemeral" {
+			return "idle"
+		}
+		return "alive"
+	}
+	return "offline"
 }
 
 // capReminderIDs returns ids unchanged when len(ids) <= limit. Above

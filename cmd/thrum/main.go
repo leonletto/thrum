@@ -6245,6 +6245,12 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 
 	// Team management
 	teamHandler := rpc.NewTeamHandler(st, thrumDir, supervisorIdentity, remindersStore)
+	// B-B1 E6.8 Task 56: wire the agent_lifecycle_events store so
+	// team.list renders the §7.6 transitions field. Setter pattern
+	// keeps NewTeamHandler's signature stable for tests; production
+	// boot supplies the lifecycle store unconditionally since the
+	// Migration 27 table is always present post-B-B1.
+	teamHandler.SetLifecycleStore(state.NewAgentLifecycleStore(st.DB()))
 	server.RegisterHandler("team.list", teamHandler.HandleList)
 
 	// Context management
