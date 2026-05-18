@@ -159,12 +159,17 @@ func TestRegisterPlaceholderHandlers_BothTypesAppear(t *testing.T) {
 }
 
 // TestRegisterPlaceholderHandlers_DispatchReturnsWiringPending pins
-// the operator-facing failure mode: when a placeholder receives a
-// dispatch (e.g. an operator-configured scheduled_agent job ticks
-// before E6.5 Task 42b lands), the error chain is
-// ErrHandlerWiringPending rather than a nil-deref panic. Cleanly
-// failed dispatches surface in `thrum cron history` with a
-// meaningful reason.
+// the operator-facing failure mode of the scheduled_agent / nudge
+// PLACEHOLDER dispatcher (the type-handler registered by
+// registerPlaceholderHandlers — distinct from the Restarter slot
+// which thrum-6qmf.4.88 already wired to the real adapter).
+//
+// The placeholder type-dispatcher is retained for fixture/test
+// utility (see registerPlaceholderHandlers docstring); if a
+// scheduled_agent job ticks through it before the real adapter is
+// wired in production, the error chain is ErrHandlerWiringPending
+// rather than a nil-deref panic. Cleanly failed dispatches
+// surface in `thrum cron history` with a meaningful reason.
 func TestRegisterPlaceholderHandlers_DispatchReturnsWiringPending(t *testing.T) {
 	// Construct a placeholder directly and exercise Dispatch — the
 	// scheduler-side end-to-end fire would require A-B1's reactor +

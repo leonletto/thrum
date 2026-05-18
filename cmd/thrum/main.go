@@ -7757,12 +7757,9 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// reconcile-loop ordering invariant), which it does — the call
 	// site is ~250 lines down in this same daemon-boot function.
 
-	// thrum-fvhs registration moves below — needs tmuxHandler
-	// (constructed later in this function around line ~7902) for the
-	// real RestarterAdapter that closes spec §9.8.4 PARTIAL → FULL
-	// PASS per thrum-6qmf.4.88. The call site is right after
-	// wireScheduledAgentHandlers (~line 8042) so both the registry
-	// and the tmux handler are in scope.
+	// wirePaneHealthCheck (B-B1 thrum-fvhs / thrum-6qmf.4.88) is
+	// wired after wireScheduledAgentHandlers — see below — so
+	// the real RestarterAdapter has tmuxHandler in scope.
 
 	// Monitor jobs supervisor — launches runner goroutines for every monitor
 	// in the DB with status=running and blocks on ctx.Done(). Must start

@@ -327,6 +327,11 @@ func (a *restarterAdapter) Restart(ctx context.Context, agentName string) error 
 	if a.handler == nil {
 		return fmt.Errorf("restart %q: nil TmuxHandler (wiring bug)", agentName)
 	}
+	// Zero-valued RestartSessionOpts: Force=false → graceful flow
+	// (send /thrum:restart message, poll for snapshot); Runtime="" →
+	// inherit from identity file. These defaults match the
+	// canonical thrum tmux restart behavior — auto-respawn fires
+	// the same restart flow the operator would invoke manually.
 	_, err := a.handler.RestartSession(ctx, agentName, rpc.RestartSessionOpts{})
 	return err
 }
