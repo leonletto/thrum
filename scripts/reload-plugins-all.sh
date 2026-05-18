@@ -11,14 +11,16 @@
 #     roles, not just implementer)
 #   - For each pane: capture the bottom 15 lines and check for overlay states
 #     (agent-list nav, y/n permission prompts, file-picker, etc.)
-#   - Clean pane → raw `tmux send-keys -t <sess>:0.0 '/reload-plugins' Enter`
-#     (atomic text + Enter in one call). Keystrokes queue if the agent is
-#     busy and fire when the REPL returns to idle (verified empirically
-#     2026-05-18). `thrum tmux send` also works but goes through the daemon
-#     RPC path, adding multi-second delivery latency — fine functionally,
-#     but harder to verify in a script that wants to spot-check soon after
-#     dispatch. Raw tmux send-keys is local-only, near-instantaneous, and
-#     gives us atomic text+Enter in one call.
+#   - Clean pane → `thrum tmux send <sess> '/reload-plugins'` + Enter via
+#     `tmux send-keys -t <sess>:0.0 Enter`. The thrum-wrapped primitive
+#     goes through the daemon RPC path which adds audit + identity +
+#     session-validity safeguards — slower (several seconds latency) but
+#     correct. We use the wrapped primitive deliberately even though raw
+#     `tmux send-keys` would work; bypassing thrum's safeguards for speed
+#     is the wrong trade-off. Enter is sent via raw tmux because thrum
+#     tmux send doesn't append a newline.
+#     Keystrokes queue if the agent is busy and fire when the REPL returns
+#     to idle (verified empirically 2026-05-18).
 #   - Overlay/permission pane → SKIP and surface loudly at the end
 #
 # Exit code:
@@ -72,10 +74,16 @@ for sess in "${SESSIONS[@]}"; do
     continue
   fi
 
-  # Send: raw tmux send-keys with text + Enter atomically. Keystrokes queue
-  # cleanly while the REPL is busy and fire when it returns to idle.
-  if ! tmux send-keys -t "${sess}:0.0" '/reload-plugins' Enter 2>/dev/null; then
-    skipped+=("$sess  [tmux send-keys failed — pane vanished or session mismatch]")
+  # Send: thrum tmux send delivers the text (via daemon RPC with audit +
+  # identity safeguards), then raw tmux send-keys fires Enter to submit.
+  # Two-step because thrum tmux send doesn't append a newline. Keystrokes
+  # queue cleanly while the REPL is busy and fire when it returns to idle.
+  if ! thrum tmux send "$sess" '/reload-plugins' >/dev/null 2>&1; then
+    skipped+=("$sess  [thrum tmux send failed — daemon issue or session mismatch]")
+    continue
+  fi
+  if ! tmux send-keys -t "${sess}:0.0" Enter 2>/dev/null; then
+    skipped+=("$sess  [tmux send-keys Enter failed — pane vanished mid-send]")
     continue
   fi
 
@@ -95,7 +103,8 @@ fi
 if (( ${#skipped[@]} == 0 )); then
   echo ""
   echo "  All clear — fires queue automatically; busy panes will reload on"
-  echo "  their next REPL idle. Spot-check with:"
+  echo "  their next REPL idle. Delivery goes through the thrum daemon RPC,"
+  echo "  so allow ~15-30s before spot-checking with:"
   echo "    tmux capture-pane -t <session>:0.0 -p | grep -A1 '/reload-plugins'"
   exit 0
 fi
