@@ -247,6 +247,7 @@ Environment variables:
 
 	rootCmd.AddCommand(setupCmd())
 	rootCmd.AddCommand(mcpCmd())
+	rootCmd.AddCommand(jobCmd())
 	rootCmd.AddCommand(rolesCmd())
 	rootCmd.AddCommand(purgeCmd())
 	rootCmd.AddCommand(telegramCmd())
