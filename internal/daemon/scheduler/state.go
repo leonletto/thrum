@@ -387,6 +387,102 @@ func (s *StateStore) RecentEvents(ctx context.Context, jobID string, limit int) 
 	return events, nil
 }
 
+// EventsForRun returns every scheduler_job_events row for the given run_id,
+// ordered ASC by event_time then id (oldest first). E6.9's boot reconciler
+// walks the journal in order, overwriting jstate.WorktreePath /
+// .BranchName / .TmuxSessionName as later stage-complete transitions
+// record them — ASC order means the final non-rollback values win without
+// the caller having to re-sort. Empty result on unknown run_id (not an
+// error; terminal cleanup may have already pruned the events per
+// canonical §6.3 retention).
+func (s *StateStore) EventsForRun(ctx context.Context, runID string) ([]Event, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, job_id, run_id, event_time, from_state, to_state, reason, details
+		  FROM scheduler_job_events
+		 WHERE run_id = ?
+		 ORDER BY event_time ASC, id ASC
+	`, runID)
+	if err != nil {
+		return nil, fmt.Errorf("events for run %q: %w", runID, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var events []Event
+	for rows.Next() {
+		var (
+			e                          Event
+			eventTime                  int64
+			toState                    string
+			fromState, reason, details sql.NullString
+		)
+		if err := rows.Scan(&e.ID, &e.JobID, &e.RunID, &eventTime,
+			&fromState, &toState, &reason, &details); err != nil {
+			return nil, fmt.Errorf("scan event: %w", err)
+		}
+		e.EventTime = time.Unix(eventTime, 0)
+		e.FromState = State(fromState.String)
+		e.ToState = State(toState)
+		e.Reason = reason.String
+		if details.Valid && details.String != "" {
+			if err := json.Unmarshal([]byte(details.String), &e.Details); err != nil {
+				return nil, fmt.Errorf("unmarshal details for event %d: %w", e.ID, err)
+			}
+		}
+		events = append(events, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate events: %w", err)
+	}
+	return events, nil
+}
+
+// NonTerminalWorktrees returns the set of worktree paths journaled under
+// non-terminal scheduler_job_state rows (current_state IN scheduled /
+// dispatched / running). Used by E6.9's orphan sweep (spec §7.7) to skip
+// filesystem entries still owned by live or recovering runs.
+//
+// The cross-reference uses each non-terminal row's last_run_id; only
+// worktree_path values journaled under that run_id count. Earlier-run
+// worktrees of the same job (already destroyed by their teardown) do not
+// leak because their run_id no longer matches. Empty last_run_id (truly
+// never-fired StateScheduled rows) naturally fails the JOIN, so they
+// contribute nothing.
+//
+// Conservatively reads worktree_path from ALL events of the run, not just
+// the last one. The cost is over-protecting an orphan whose teardown
+// journaled worktree_path_destroyed but whose row is somehow still in a
+// non-terminal state (a transient inconsistency); the next boot's sweep
+// will pick it up once the row becomes terminal. Under-protection (a live
+// worktree's path missing from the set) is worse — it would let the
+// sweep destroy an in-use directory.
+func (s *StateStore) NonTerminalWorktrees(ctx context.Context) (map[string]bool, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT json_extract(e.details, '$.worktree_path') AS wt
+		  FROM scheduler_job_state s
+		  JOIN scheduler_job_events e
+		    ON s.last_run_id = e.run_id
+		 WHERE s.current_state IN ('scheduled', 'dispatched', 'running')
+		   AND json_extract(e.details, '$.worktree_path') IS NOT NULL
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("non-terminal worktrees: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := map[string]bool{}
+	for rows.Next() {
+		var wt string
+		if err := rows.Scan(&wt); err != nil {
+			return nil, fmt.Errorf("scan worktree: %w", err)
+		}
+		out[wt] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate worktrees: %w", err)
+	}
+	return out, nil
+}
+
 // nullJSON returns nil for empty byte slices so SQLite stores NULL rather
 // than an empty string. Mirrors nullStr / nullTime for the JSON-encoded
 // details column.

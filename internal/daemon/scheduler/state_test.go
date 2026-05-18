@@ -411,3 +411,142 @@ func TestStateStore_ConcurrentUpdates_RaceClean(t *testing.T) {
 		t.Errorf("final state = %q, want %q", got.CurrentState, StateRunning)
 	}
 }
+
+// TestEventsForRun_AscByEventTime verifies events for one run are returned
+// oldest-first, scoped strictly to the requested run_id. E6.9's boot
+// reconciler depends on ASC order to extract the final non-rollback
+// worktree_path / branch_name / tmux_session_name from the journal.
+func TestEventsForRun_AscByEventTime(t *testing.T) {
+	store := NewStateStore(setupStateTestDB(t))
+	ctx := context.Background()
+
+	t0 := time.Unix(1747353600, 0)
+	mustAppend := func(e *Event) {
+		t.Helper()
+		if err := store.AppendEvent(ctx, e); err != nil {
+			t.Fatalf("append %s: %v", e.Reason, err)
+		}
+	}
+	mustAppend(&Event{JobID: "j1", RunID: "r1", EventTime: t0, ToState: StateRunning, Reason: "stage 1 dispatch"})
+	mustAppend(&Event{JobID: "j1", RunID: "r1", EventTime: t0.Add(time.Second), FromState: StateRunning, ToState: StateRunning, Reason: "stage 3 complete",
+		Details: map[string]any{"worktree_path": "/wt1", "branch_name": "agent/x/job-r1"}})
+	mustAppend(&Event{JobID: "j1", RunID: "r1", EventTime: t0.Add(2 * time.Second), FromState: StateRunning, ToState: StateRunning, Reason: "stage 4 complete",
+		Details: map[string]any{"tmux_session_name": "sess1"}})
+	// Different run for the same job — must be excluded.
+	mustAppend(&Event{JobID: "j1", RunID: "r2", EventTime: t0.Add(3 * time.Second), ToState: StateRunning, Reason: "other run"})
+
+	got, err := store.EventsForRun(ctx, "r1")
+	if err != nil {
+		t.Fatalf("EventsForRun: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d events, want 3 (r2 must be excluded)", len(got))
+	}
+	if got[0].Reason != "stage 1 dispatch" {
+		t.Errorf("got[0].Reason = %q, want stage 1 dispatch (oldest first)", got[0].Reason)
+	}
+	if got[2].Reason != "stage 4 complete" {
+		t.Errorf("got[2].Reason = %q, want stage 4 complete (newest last)", got[2].Reason)
+	}
+	if wp, ok := got[1].Details["worktree_path"].(string); !ok || wp != "/wt1" {
+		t.Errorf("got[1].Details[worktree_path] = %v, want /wt1", got[1].Details["worktree_path"])
+	}
+	if bn, ok := got[1].Details["branch_name"].(string); !ok || bn != "agent/x/job-r1" {
+		t.Errorf("got[1].Details[branch_name] = %v, want agent/x/job-r1", got[1].Details["branch_name"])
+	}
+	if ts, ok := got[2].Details["tmux_session_name"].(string); !ok || ts != "sess1" {
+		t.Errorf("got[2].Details[tmux_session_name] = %v, want sess1", got[2].Details["tmux_session_name"])
+	}
+}
+
+// TestEventsForRun_UnknownRun returns empty slice + nil error.
+func TestEventsForRun_UnknownRun(t *testing.T) {
+	store := NewStateStore(setupStateTestDB(t))
+	got, err := store.EventsForRun(context.Background(), "nonexistent")
+	if err != nil {
+		t.Fatalf("EventsForRun: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("got %d events, want 0 for unknown run", len(got))
+	}
+}
+
+// TestNonTerminalWorktrees_OnlyLiveRuns verifies the orphan-sweep
+// cross-reference set: includes worktree_path values journaled under
+// non-terminal rows' last_run_id; excludes terminal rows + rows with no
+// worktree journaled + rows whose worktree_path was recorded under an
+// earlier run_id.
+func TestNonTerminalWorktrees_OnlyLiveRuns(t *testing.T) {
+	store := NewStateStore(setupStateTestDB(t))
+	ctx := context.Background()
+
+	t0 := time.Unix(1747353600, 0)
+	mustUpsert := func(r *StateRow) {
+		t.Helper()
+		if err := store.UpsertState(ctx, r); err != nil {
+			t.Fatalf("upsert %s: %v", r.JobID, err)
+		}
+	}
+	mustAppend := func(e *Event) {
+		t.Helper()
+		if err := store.AppendEvent(ctx, e); err != nil {
+			t.Fatalf("append %s/%s: %v", e.JobID, e.RunID, err)
+		}
+	}
+
+	// j1: running, worktree journaled — INCLUDED.
+	mustUpsert(&StateRow{JobID: "j1", Generation: 1, CurrentState: StateRunning, LastRunID: "r1", CreatedAt: t0, UpdatedAt: t0})
+	mustAppend(&Event{JobID: "j1", RunID: "r1", EventTime: t0, ToState: StateRunning, Reason: "stage 3",
+		Details: map[string]any{"worktree_path": "/wt1"}})
+
+	// j2: dispatched, worktree journaled — INCLUDED.
+	mustUpsert(&StateRow{JobID: "j2", Generation: 1, CurrentState: StateDispatched, LastRunID: "r2", CreatedAt: t0, UpdatedAt: t0})
+	mustAppend(&Event{JobID: "j2", RunID: "r2", EventTime: t0, ToState: StateRunning, Reason: "stage 3",
+		Details: map[string]any{"worktree_path": "/wt2"}})
+
+	// j3: scheduled, never ran — EXCLUDED (no events match last_run_id="").
+	mustUpsert(&StateRow{JobID: "j3", Generation: 1, CurrentState: StateScheduled, LastRunID: "", CreatedAt: t0, UpdatedAt: t0})
+
+	// j4: completed (terminal), has a worktree event — EXCLUDED.
+	mustUpsert(&StateRow{JobID: "j4", Generation: 1, CurrentState: StateCompleted, LastRunID: "r4", CreatedAt: t0, UpdatedAt: t0})
+	mustAppend(&Event{JobID: "j4", RunID: "r4", EventTime: t0, ToState: StateRunning, Reason: "stage 3",
+		Details: map[string]any{"worktree_path": "/wt4"}})
+
+	// j5: running, an earlier run had a worktree but last_run_id points at r5b
+	// (r5b has no worktree journaled yet) — EXCLUDED for /wt5a, but /wt5b absent.
+	mustUpsert(&StateRow{JobID: "j5", Generation: 2, CurrentState: StateRunning, LastRunID: "r5b", CreatedAt: t0, UpdatedAt: t0})
+	mustAppend(&Event{JobID: "j5", RunID: "r5a", EventTime: t0.Add(-time.Hour), ToState: StateRunning, Reason: "old stage 3",
+		Details: map[string]any{"worktree_path": "/wt5a"}})
+
+	got, err := store.NonTerminalWorktrees(ctx)
+	if err != nil {
+		t.Fatalf("NonTerminalWorktrees: %v", err)
+	}
+	want := map[string]bool{"/wt1": true, "/wt2": true}
+	if len(got) != len(want) {
+		t.Errorf("got %d paths, want %d (%v vs %v)", len(got), len(want), got, want)
+	}
+	for k := range want {
+		if !got[k] {
+			t.Errorf("missing expected path %q", k)
+		}
+	}
+	if got["/wt4"] {
+		t.Errorf("/wt4 leaked despite j4 being terminal")
+	}
+	if got["/wt5a"] {
+		t.Errorf("/wt5a leaked despite belonging to earlier run r5a")
+	}
+}
+
+// TestNonTerminalWorktrees_Empty returns empty map + nil error.
+func TestNonTerminalWorktrees_Empty(t *testing.T) {
+	store := NewStateStore(setupStateTestDB(t))
+	got, err := store.NonTerminalWorktrees(context.Background())
+	if err != nil {
+		t.Fatalf("NonTerminalWorktrees: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("got %d paths, want 0 (empty DB)", len(got))
+	}
+}
