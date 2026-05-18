@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/nudge"
@@ -175,13 +176,70 @@ func TestDispatchTmux_SkipsSelfEcho(t *testing.T) {
 	// while alice's was short-circuited.
 	require.Eventually(t, func() bool {
 		return strings.Contains(logBuf.String(), "no-target")
-	}, 2*1e9, 50*1e6, "bob's no-target log never appeared; background goroutine may not have run")
+	}, 2*time.Second, 50*time.Millisecond, "bob's no-target log never appeared; background goroutine may not have run")
 
 	out := logBuf.String()
 	require.Contains(t, out, "tmux.skip self",
 		"expected '[nudge] tmux.skip self' for sender=alice recipient=alice; full log:\n%s", out)
 	require.NotContains(t, out, `"recipient":"alice"`+`,"target"`,
 		"alice's path should be short-circuited BEFORE any target resolution; full log:\n%s", out)
+}
+
+// TestDispatchTmux_SkipsSelfEcho_AllSelfRecipients pins the edge case
+// where every recipient is the sender. The guard fires for each entry,
+// the loop ends with zero goroutines launched, and DispatchTmux exits
+// cleanly. Together with TestDispatchTmux_SkipsSelfEcho this proves the
+// guard is per-entry rather than depending on a non-self recipient
+// being present in the slice.
+func TestDispatchTmux_SkipsSelfEcho_AllSelfRecipients(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	require.NoError(t, os.MkdirAll(filepath.Join(thrumDir, "identities"), 0750))
+
+	var logBuf syncBuf
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	// All three recipients equal the sender — every iteration must take
+	// the guard branch.
+	nudge.DispatchTmux(thrumDir, []string{"alice", "alice", "alice"}, "alice")
+
+	out := logBuf.String()
+	require.Equal(t, 3, strings.Count(out, "tmux.skip self"),
+		"expected exactly 3 'tmux.skip self' lines (one per recipient); full log:\n%s", out)
+	require.NotContains(t, out, "nudge.DispatchTmux fire",
+		"no fire log should appear when every recipient is the sender; full log:\n%s", out)
+	require.NotContains(t, out, "no-target",
+		"no goroutine should reach ResolveTarget when every recipient is skipped; full log:\n%s", out)
+}
+
+// TestDispatchTmux_EmptySenderName_TriggersGuard pins the defensive
+// behavior when senderName is the empty string. evt.AgentID is supposed
+// to be non-empty in production (HandleSend always populates it from
+// the resolved callerID), but the guard at the top of the loop will
+// silently skip any "" recipient if senderName is also "". This is
+// preferable to firing an unsigned nudge — it just means an upstream
+// invariant is broken. The pin ensures future refactors don't change
+// that behavior without an explicit decision.
+func TestDispatchTmux_EmptySenderName_TriggersGuard(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	require.NoError(t, os.MkdirAll(filepath.Join(thrumDir, "identities"), 0750))
+
+	var logBuf syncBuf
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	// senderName="" and one recipient also "". Equality holds, guard fires.
+	nudge.DispatchTmux(thrumDir, []string{""}, "")
+
+	out := logBuf.String()
+	require.Contains(t, out, "tmux.skip self",
+		"empty-string recipient with empty-string sender should hit the guard; full log:\n%s", out)
+	require.NotContains(t, out, "nudge.DispatchTmux fire",
+		"no fire log expected; full log:\n%s", out)
 }
 
 func TestHasLocalIdentity(t *testing.T) {
