@@ -1463,6 +1463,62 @@ func TestStage8_DestroyEvenIfKillFails(t *testing.T) {
 	}
 }
 
+// stubReconciler records ReconcileRun calls + returns canned values.
+type stubReconciler struct {
+	returnState scheduler.State
+	returnErr   error
+	calls       int
+	gotLast     scheduler.State
+}
+
+func (s *stubReconciler) ReconcileRun(_ context.Context, _ scheduler.JobSpec, _ string, lastState scheduler.State) (scheduler.State, error) {
+	s.calls++
+	s.gotLast = lastState
+	return s.returnState, s.returnErr
+}
+
+// TestReconcile_DelegatesToInjectedReconciler pins the canonical
+// boot-time recovery delegation per spec §7.7: when Deps.Reconciler
+// is wired, Handler.Reconcile passes the call through and returns
+// whatever the reconciler decides. E6.9's classification logic
+// (resumable / terminal-failed / lost-track) flows through this seam.
+func TestReconcile_DelegatesToInjectedReconciler(t *testing.T) {
+	rec := &stubReconciler{returnState: scheduler.StateCompleted}
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Reconciler: rec})
+
+	state, err := h.Reconcile(context.Background(), testJob("docs_bot"), "run-rec", scheduler.StateRunning)
+	if err != nil {
+		t.Fatalf("Reconcile err = %v; want nil", err)
+	}
+	if state != scheduler.StateCompleted {
+		t.Errorf("state = %v; want StateCompleted (from reconciler)", state)
+	}
+	if rec.calls != 1 {
+		t.Errorf("ReconcileRun calls = %d; want 1", rec.calls)
+	}
+	if rec.gotLast != scheduler.StateRunning {
+		t.Errorf("ReconcileRun received lastState = %v; want StateRunning", rec.gotLast)
+	}
+}
+
+// TestReconcile_NilReconciler_ReturnsLastStateUnchanged pins the
+// defensive partial-config path: when no Reconciler is wired (E6.9
+// not yet shipped or a fixture-only test handler), Reconcile returns
+// the substrate's last-known state rather than panicking on nil
+// interface. Returning ErrLostTrack here would punish runs against
+// a partial-config daemon — wrong default.
+func TestReconcile_NilReconciler_ReturnsLastStateUnchanged(t *testing.T) {
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{})
+
+	state, err := h.Reconcile(context.Background(), testJob("docs_bot"), "run-noop", scheduler.StateRunning)
+	if err != nil {
+		t.Errorf("Reconcile err = %v; want nil (no-op with nil Reconciler)", err)
+	}
+	if state != scheduler.StateRunning {
+		t.Errorf("state = %v; want StateRunning passed through unchanged", state)
+	}
+}
+
 // TestIdleNudgeStageFmt pins the canonical §2.2 dynamic stage marker
 // format used during stage 7's multi-fire loop (E6.4 Task 36 will
 // emit these). `thrum cron history` and the A-B4 sweep observability

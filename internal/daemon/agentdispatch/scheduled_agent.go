@@ -109,6 +109,20 @@ type EscalationRouter interface {
 	Route(ctx context.Context, alert EscalationAlert, subject, body string) error
 }
 
+// Reconciler is the boot-time recovery surface ScheduledAgentHandler
+// delegates to per spec §7.7. The real implementation ships in E6.9
+// (sub-epic thrum-6qmf.4.65): enumerate non-terminal runs at boot,
+// classify each (resumable worktree intact, terminal-failed, lost-
+// track), and return the resolved state so scheduler advances
+// scheduler_job_state correctly.
+//
+// E6.1 ships the interface declaration so the Handler.Reconcile
+// satisfaction compiles cleanly across the integration boundary;
+// E6.9 supplies a real implementation that gets injected via Deps.
+type Reconciler interface {
+	ReconcileRun(ctx context.Context, job scheduler.JobSpec, runID string, lastState scheduler.State) (scheduler.State, error)
+}
+
 // EscalationAlert tags the source of an escalation so the router can
 // pick the right delivery channel.
 type EscalationAlert struct {
@@ -158,6 +172,13 @@ type Deps struct {
 	// (email when configured, supervisor agent otherwise). Task 20
 	// supplies the real implementation.
 	Escalation EscalationRouter
+
+	// Reconciler ships the boot-time recovery logic per spec §7.7.
+	// E6.9 (thrum-6qmf.4.65) provides the real implementation; E6.1
+	// allows nil so Dispatch-only fixtures can construct a handler
+	// without wiring it. Reconcile() guards against nil at the call
+	// site rather than panicking on uninjected Deps.
+	Reconciler Reconciler
 }
 
 // ScheduledAgentHandler implements scheduler.Handler for the
@@ -757,14 +778,15 @@ func buildWakeMessage(job scheduler.JobSpec, runID string) string {
 }
 
 // Reconcile implements scheduler.Handler.Reconcile for boot-time
-// recovery. Per spec §7.7 the real body lives in E6.9; E6.1 ships
-// this stub so the Handler interface is satisfied.
-//
-// The semantics E6.9 will fill in: enumerate non-terminal runs at
-// boot, classify each (resumable worktree intact, terminal-failed,
-// lost-track), and return the resolved state so the substrate can
-// advance scheduler_job_state.
+// recovery per spec §7.7. Delegates to the injected Reconciler;
+// when no Reconciler is wired (E6.9 hasn't landed yet, or a fixture-
+// only test handler), returns lastState unchanged so the substrate
+// continues to treat the run as it was. Returning ErrLostTrack here
+// would punish runs against a partial-config daemon, which is the
+// wrong default — let E6.9's real body make the classification.
 func (h *ScheduledAgentHandler) Reconcile(ctx context.Context, job scheduler.JobSpec, runID string, lastState scheduler.State) (scheduler.State, error) {
-	// TODO(thrum-6qmf.4.63): delegate to E6.9 ReconcileRun.
-	return lastState, nil
+	if h.deps.Reconciler == nil {
+		return lastState, nil
+	}
+	return h.deps.Reconciler.ReconcileRun(ctx, job, runID, lastState)
 }
