@@ -116,7 +116,10 @@ var (
 
 	// Metadata blockquote: `> **Last updated:** <ts> **Last run:** <id> · <state>`.
 	// Two capture groups (ts, run_id_and_state); the dot/middle-dot split is parsed downstream.
-	metadataRE = regexp.MustCompile(`^>\s*\*\*Last updated:\*\*\s*(\S+)\s+\*\*Last run:\*\*\s*(.+)$`)
+	// Trailing value accepts empty string (`(.*)$`) for the first-session
+	// case where no --run-id has been recorded yet — the writer emits
+	// "**Last run:** " (no trailing value) and the round-trip must succeed.
+	metadataRE = regexp.MustCompile(`^>\s*\*\*Last updated:\*\*\s*(\S+)\s+\*\*Last run:\*\*\s*(.*)$`)
 
 	// Verbatim entry: `1. <session-id> · <date> — <summary>` (em-dash OR ASCII).
 	// Numbered prefix is 1-based and assigned by ordering; parser ignores the number

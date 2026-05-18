@@ -2744,6 +2744,7 @@ Examples:
 	cmd.AddCommand(agentSetStatusCmd())
 	cmd.AddCommand(reminderCmd())
 	cmd.AddCommand(agentSessionsCmd())
+	cmd.AddCommand(agentStateCmd())
 
 	return cmd
 }
