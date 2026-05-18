@@ -4,9 +4,13 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/leonletto/thrum/internal/agent"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/agentdispatch"
+	"github.com/leonletto/thrum/internal/daemon/escalation"
+	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
+	"github.com/leonletto/thrum/internal/skills/mirror"
 )
 
 // listFilesProbeMethod is the RPC method daemon-boot probes to decide
@@ -69,18 +73,26 @@ func wireAgentDispatch(server *daemon.Server) (*agentdispatch.Drainer, agentdisp
 // implicitly registering them.
 var userJobTypes = []string{"scheduled_agent", "nudge"}
 
-// registerPlaceholderHandlers performs E6.5 Task 42a: register a
-// PlaceholderHandler for each user-facing job type so A-B1's
-// validator + reactor recognize the type name even before E6.5
-// Task 42b ships the real adapter glue. Returns an error if any
-// registration fails (e.g. duplicate type — would be a wiring
-// bug since this is called once at daemon boot).
+// Compile-time check that *mirror.Worker satisfies
+// agentdispatch.MirrorWorker. The mirror package can't declare
+// this directly (it doesn't import agentdispatch), and agentdispatch
+// can't declare it (it doesn't import mirror — that would risk an
+// import cycle through cmd/thrum). The composition root is the
+// natural home for the check; catches signature drift at build time
+// rather than at wireScheduledAgentHandlers' first dispatch.
+var _ agentdispatch.MirrorWorker = (*mirror.Worker)(nil)
+
+// registerPlaceholderHandlers registers a PlaceholderHandler for
+// each user-facing job type. Originally shipped at E6.5 Task 42a
+// as the production registration path; 42b superseded it with
+// wireScheduledAgentHandlers (real handler instances + Deps
+// adapters). The helper is retained as a fixture/test utility so
+// scheduler-level tests can exercise the type-taxonomy registry
+// without needing the full adapter chain.
 //
 // Idempotency note: scheduler.RegisterTypeHandler rejects
 // duplicates, so calling registerPlaceholderHandlers a second
-// time will fail on the first type. 42b will need to either swap
-// the registration mechanism or land alongside a daemon-restart
-// boundary; documented in main.go's call site.
+// time will fail on the first type.
 func registerPlaceholderHandlers(sched *scheduler.Scheduler) error {
 	if sched == nil {
 		return fmt.Errorf("registerPlaceholderHandlers: nil scheduler")
@@ -90,6 +102,127 @@ func registerPlaceholderHandlers(sched *scheduler.Scheduler) error {
 			agentdispatch.NewPlaceholderHandler(jobType)); err != nil {
 			return fmt.Errorf("register %s type handler: %w", jobType, err)
 		}
+	}
+	return nil
+}
+
+// scheduledAgentDeps groups the wiring inputs wireScheduledAgentHandlers
+// needs from daemon-boot context. Each field maps to one Deps slot on
+// ScheduledAgentHandler / NudgeHandler; keeping the grouping struct
+// here (rather than inline params) makes the call site at main.go
+// readable and centralizes the "what 42b consumes" inventory.
+type scheduledAgentDeps struct {
+	// RepoPath is the absolute path to the daemon-managed repository
+	// passed through to worktree.Create as the parent path.
+	RepoPath string
+
+	// TmuxHandler is the daemon's existing rpc.TmuxHandler. The
+	// adapter wraps it for the TmuxRPC interface.
+	TmuxHandler *rpc.TmuxHandler
+
+	// MessageHandler is the daemon's existing rpc.MessageHandler.
+	// The adapter wraps it for the MessageRPC interface; CallerAgentID
+	// is the supervisor identity used for daemon-source enqueues.
+	MessageHandler *rpc.MessageHandler
+
+	// CallerAgentID is the synthetic supervisor agent id (same value
+	// reminders_wire.go uses for daemon-source sends).
+	CallerAgentID string
+
+	// AgentRegistry satisfies agent.AgentRegistry directly — passed
+	// through to both ScheduledAgentHandler.Deps.Registry and
+	// NudgeHandler.NudgeDeps.Registry without an adapter layer.
+	AgentRegistry agent.AgentRegistry
+
+	// MirrorWorker satisfies agentdispatch.MirrorWorker directly via
+	// its EnsureMirrored method.
+	MirrorWorker *mirror.Worker
+
+	// EscalationDeps is the escalation package's Deps struct (Email,
+	// Message, Config). The router adapter wraps it.
+	EscalationDeps escalation.Deps
+
+	// Drainer is the agentdispatch.Drainer constructed by
+	// wireAgentDispatch. Plumbs through to
+	// ScheduledAgentHandler.Deps.Drainer so stage-8 teardown's
+	// real drain path is wired (replaces the parked _ = drainer
+	// from 42a).
+	Drainer agentdispatch.RPCDrainer
+}
+
+// wireScheduledAgentHandlers performs E6.5 Task 42b: replace the
+// placeholder registrations with real ScheduledAgentHandler +
+// NudgeHandler instances, each constructed with concrete Deps
+// adapters bridging agentdispatch's narrow interfaces to the
+// rpc-package handlers + ttmux + worktree primitives.
+//
+// Closes AC §9.6.4 (real dispatch path) in tandem with Task 44's
+// end-to-end smoke. §9.6.1 was closed by 42a; the integration test
+// here verifies the type-handler registry still reports both types
+// (now backed by real handlers, not placeholders).
+//
+// Ordering invariant: MUST be called AFTER sched.Start so the
+// per-handler reconcile loop (scheduler.go RegisterTypeHandler)
+// walks any non-terminal rows under these types and routes them
+// through the real Reconcile path (E6.9-pending stub returns
+// StateFailed; the placeholder path did the same).
+//
+// PANICS only via the underlying scheduler error wrap when
+// RegisterTypeHandler rejects a duplicate — would indicate
+// registerPlaceholderHandlers was called first (a wiring bug since
+// they're mutually exclusive production paths).
+func wireScheduledAgentHandlers(sched *scheduler.Scheduler, deps scheduledAgentDeps) error {
+	if sched == nil {
+		return fmt.Errorf("wireScheduledAgentHandlers: nil scheduler")
+	}
+	if deps.TmuxHandler == nil {
+		return fmt.Errorf("wireScheduledAgentHandlers: nil TmuxHandler")
+	}
+	if deps.MessageHandler == nil {
+		return fmt.Errorf("wireScheduledAgentHandlers: nil MessageHandler")
+	}
+	if deps.CallerAgentID == "" {
+		return fmt.Errorf("wireScheduledAgentHandlers: empty CallerAgentID (need supervisor identity for daemon-source sends)")
+	}
+	if deps.MirrorWorker == nil {
+		// Mirror is consumed by Stage 3b (EnsureMirrored). A nil
+		// *mirror.Worker satisfies the MirrorWorker interface as a
+		// non-nil interface holding a nil pointer — calls would
+		// nil-deref deep in Stage 3b at first dispatch. Asymmetry
+		// with TmuxHandler/MessageHandler nil guards becomes a trap
+		// for fixtures + future callers; surface here as a boot-time
+		// wiring error instead.
+		return fmt.Errorf("wireScheduledAgentHandlers: nil MirrorWorker (Stage 3b would nil-deref)")
+	}
+
+	tmuxAdapter := agentdispatch.NewTmuxRPCAdapter(deps.TmuxHandler)
+	messageAdapter := agentdispatch.NewMessageRPCAdapter(deps.MessageHandler, deps.CallerAgentID)
+	worktreeAdapter := agentdispatch.NewWorktreeMgrAdapter()
+	escalationAdapter := agentdispatch.NewEscalationRouterAdapter(deps.EscalationDeps)
+	reconciler := agentdispatch.NewReconcilerStub()
+
+	scheduledHandler := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath:   deps.RepoPath,
+		Tmux:       tmuxAdapter,
+		Message:    messageAdapter,
+		Worktree:   worktreeAdapter,
+		Registry:   deps.AgentRegistry,
+		Mirror:     deps.MirrorWorker,
+		Escalation: escalationAdapter,
+		Reconciler: reconciler,
+		Drainer:    deps.Drainer,
+	})
+	nudgeHandler := agentdispatch.NewNudgeHandler(agentdispatch.NudgeDeps{
+		Tmux:     tmuxAdapter,
+		Message:  messageAdapter,
+		Registry: deps.AgentRegistry,
+	})
+
+	if err := sched.RegisterTypeHandler("scheduled_agent", scheduledHandler); err != nil {
+		return fmt.Errorf("register scheduled_agent type handler: %w", err)
+	}
+	if err := sched.RegisterTypeHandler("nudge", nudgeHandler); err != nil {
+		return fmt.Errorf("register nudge type handler: %w", err)
 	}
 	return nil
 }

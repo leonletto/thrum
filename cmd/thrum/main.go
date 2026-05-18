@@ -24,6 +24,7 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/leonletto/thrum/internal/agent"
 	"github.com/leonletto/thrum/internal/backup"
 	bridgepeer "github.com/leonletto/thrum/internal/bridge/peer"
 	email "github.com/leonletto/thrum/internal/bridge/email"
@@ -34,6 +35,7 @@ import (
 	"github.com/leonletto/thrum/internal/context/roleconfig"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/agentdispatch"
+	"github.com/leonletto/thrum/internal/daemon/escalation"
 	"github.com/leonletto/thrum/internal/daemon/backstop"
 	"github.com/leonletto/thrum/internal/daemon/bootstrap"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
@@ -7730,49 +7732,24 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// MB-1.S2 file-streaming substrate hasn't shipped, flips the
 	// tracker into skip-drain mode so teardownGracefully's drain step
 	// short-circuits (returns immediately, no 50ms polling against a
-	// tracker that would never see Begin). Drainer + tracker are
-	// returned for ScheduledAgentHandler.Deps wiring landing in
-	// E6.5 Task 42b (the real-handler adapter glue dispatch).
-	//
-	// TODO(B-B1 E6.5 Task 42b): inject agentDispatchDrainer into
-	// ScheduledAgentHandler.Deps.Drainer and pass agentInflightTracker
-	// to MB-1.S2's agent.listFiles / agent.getFile RPC adapter so
-	// Begin/End get called. Until 42b lands, deps.Drainer is nil at
-	// runtime (registered as PlaceholderHandler below — Dispatch
-	// returns ErrHandlerWiringPending cleanly rather than nil-deref).
+	// tracker that would never see Begin). agentDispatchDrainer flows
+	// into wireScheduledAgentHandlers (line ~7990 below) which injects
+	// it into ScheduledAgentHandler.Deps.Drainer — the real drain
+	// path is now wired end-to-end. agentInflightTracker stays parked
+	// until MB-1.S2 ships the agent.listFiles RPC adapter that wires
+	// Begin/End around the in-flight RPC handler.
 	agentDispatchDrainer, agentInflightTracker := wireAgentDispatch(server)
-	_ = agentDispatchDrainer
-	_ = agentInflightTracker
 
 	if err := sched.Start(ctx); err != nil {
 		return fmt.Errorf("start scheduler: %w", err)
 	}
 
-	// B-B1 E6.5 Task 42a: register placeholder handlers for the
-	// user-facing job types so A-B1's validator + reactor recognize
-	// "scheduled_agent" + "nudge" specs even before E6.5 Task 42b
-	// (the real adapter glue) ships. PlaceholderHandler.Dispatch
-	// returns ErrHandlerWiringPending — a fire on either type
-	// records a clean StateFailed transition in scheduler_job_state
-	// (visible in `thrum cron history`) rather than nil-deref'ing
-	// on the unfilled Deps.
-	//
-	// Registration MUST happen after sched.Start so the per-handler
-	// reconcile loop (scheduler.go:200+) walks non-terminal rows
-	// matching these types and routes them through Reconcile —
-	// which for the placeholder marks them failed (no real handler
-	// to resume).
-	//
-	// 42b replaces these registrations with the real
-	// NewScheduledAgentHandler + NewNudgeHandler once the
-	// TmuxRPC/MessageRPC/WorktreeManager/etc. adapters are built.
-	// Re-registering the same type currently returns an error
-	// (RegisterTypeHandler rejects duplicates), so 42b will need
-	// to swap the registration mechanism or land alongside a
-	// daemon-restart boundary. Documented for the 42b implementer.
-	if err := registerPlaceholderHandlers(sched); err != nil {
-		return fmt.Errorf("register placeholder handlers: %w", err)
-	}
+	// B-B1 E6.5 Task 42b registration is deferred until after the
+	// tmux + permission + email + agent-registry pieces are
+	// constructed below — wireScheduledAgentHandlers needs them all
+	// as Deps. Registration MUST happen after sched.Start (per the
+	// reconcile-loop ordering invariant), which it does — the call
+	// site is ~250 lines down in this same daemon-boot function.
 
 	// Monitor jobs supervisor — launches runner goroutines for every monitor
 	// in the DB with status=running and blocks on ctx.Done(). Must start
@@ -7991,6 +7968,56 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	if err := tmuxHandler.RecoverQueueState(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "[queue] recovery failed: %v\n", err)
 	}
+
+	// B-B1 E6.5 Task 42b: register the REAL ScheduledAgentHandler +
+	// NudgeHandler with their full Deps adapter chain. Replaces the
+	// 42a placeholder pattern — every fire now hits real business
+	// logic (worktree.Create at Stage 3, tmux session create at Stage
+	// 4, etc.). Consumes the E6.6 parked-vars (agentDispatchDrainer
+	// for stage-8 RPC drain; agentInflightTracker stays in the
+	// closure scope for future MB-1.S2 wiring once agent.listFiles
+	// ships).
+	//
+	// Registration ordering is honored: this fires AFTER sched.Start
+	// (line above) so the per-handler-registration reconcile loop
+	// in scheduler.go walks any non-terminal rows under these types
+	// and routes them through the real Reconcile (stubbed to
+	// StateFailed via reconcilerStub until E6.9 ships the real
+	// recovery logic).
+	//
+	// Email is left nil in escalation.Deps — the bridge exists but
+	// agentdispatch escalations fall back to the supervisor agent
+	// for v0.11; D-B1's email-route lands at a follow-on dispatch
+	// once the operator-address config plumbing is finalized.
+	agentRegistry := agent.NewSQLiteRegistry(safedb.New(st.DB().Raw()))
+	// Single MessageRPCAdapter instance — agentdispatch.MessageRPC
+	// and escalation.MessageRPC have the identical signature, so one
+	// concrete adapter satisfies both interface boundaries (avoids
+	// constructing the same adapter twice with slightly different
+	// types).
+	escalationMessage := agentdispatch.NewMessageRPCAdapter(messageHandler, supervisorID)
+	if err := wireScheduledAgentHandlers(sched, scheduledAgentDeps{
+		RepoPath:       absPath,
+		TmuxHandler:    tmuxHandler,
+		MessageHandler: messageHandler,
+		CallerAgentID:  supervisorID,
+		AgentRegistry:  agentRegistry,
+		MirrorWorker:   skillSubstrate.Worker,
+		EscalationDeps: escalation.Deps{
+			Message: escalationMessage,
+			Config: escalation.Config{
+				EmailEnabled:        false,
+				SupervisorAgentName: thrumCfg.Daemon.Escalation.SupervisorAgentName,
+			},
+		},
+		Drainer: agentDispatchDrainer,
+	}); err != nil {
+		return fmt.Errorf("wire scheduled-agent handlers: %w", err)
+	}
+	// agentInflightTracker stays parked: MB-1.S2 will wire the
+	// agent.listFiles RPC's Begin/End calls into it once that
+	// substrate ships.
+	_ = agentInflightTracker
 
 	// Auto-connect to dialer-role peers after the WS server is ready.
 	// xir.29: build a single reconcile.Manager shared by the boot-time
