@@ -683,6 +683,32 @@ func (h *ScheduledAgentHandler) drainListFilesRPCs(target string, grace time.Dur
 	_ = h.deps.Drainer.DrainListFiles(context.Background(), target, grace)
 }
 
+// routeEscalation is the canonical call site for all five spec §8
+// escalation sources: idle-nudge exhaustion (E6.4), stage-failure
+// 3-consecutive (E6.1), auto-respawn loop guard (E6.7), state.md
+// parse failure (E6.2), nudge target offline (E6.3). Future
+// implementers add Route() invocations against this helper rather
+// than reaching for h.deps.Escalation directly so the nil guard
+// applies uniformly across the substrate — a partial-config
+// deployment (Escalation interface unwired) returns nil rather
+// than nil-deref'ing on the first escalation event.
+//
+// Errors from the underlying router are returned as-is so callers
+// can decide whether to log + continue (most cases) or surface
+// (e.g., the auto-respawn loop guard might choose to fail the
+// dispatch if the operator can't be reached).
+//
+// E6.1 ships this helper + the nil guard pattern; no call sites
+// fire yet (the consecutive-failure counter is A-B1's responsibility
+// and the read+route plumbing lands with the next E6.x sub-epic
+// per the spec §8 attribution table).
+func (h *ScheduledAgentHandler) routeEscalation(ctx context.Context, alert escalation.Alert, subject, body string) error {
+	if h.deps.Escalation == nil {
+		return nil
+	}
+	return h.deps.Escalation.Route(ctx, alert, subject, body)
+}
+
 // handleStage3bMirror runs the skill-mirror sub-action and classifies
 // the result per spec §7.1 stage 3b + C-B1 §12.3.1. Returns:
 //

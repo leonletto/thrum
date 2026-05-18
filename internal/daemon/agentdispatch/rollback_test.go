@@ -2,9 +2,11 @@ package agentdispatch
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/leonletto/thrum/internal/daemon/escalation"
 	"github.com/leonletto/thrum/internal/worktree"
 )
 
@@ -173,6 +175,80 @@ func TestWaitForPaneExit_ReturnsImmediatelyOnNotAlive(t *testing.T) {
 
 	if elapsed > 500*time.Millisecond {
 		t.Errorf("waitForPaneExit took %v with not-alive pane; want < 500ms", elapsed)
+	}
+}
+
+// stubEscalationRouter records Route invocations + returns canned errors.
+type stubEscalationRouter struct {
+	returnErr error
+	calls     []escalationCall
+}
+
+type escalationCall struct {
+	alert   escalation.Alert
+	subject string
+	body    string
+}
+
+func (s *stubEscalationRouter) Route(_ context.Context, alert escalation.Alert, subject, body string) error {
+	s.calls = append(s.calls, escalationCall{alert: alert, subject: subject, body: body})
+	return s.returnErr
+}
+
+// TestRouteEscalation_NilEscalation_ReturnsNil pins the defensive
+// nil-guard pattern per brainstormer-third I3 (fix-batch
+// 0aa97b1...): the routeEscalation helper returns nil when the
+// Escalation dep isn't wired, so partial-config deployments don't
+// nil-deref on the first real Route() call site E6.4/E6.7 land.
+// Establishes the pattern future implementers inherit.
+func TestRouteEscalation_NilEscalation_ReturnsNil(t *testing.T) {
+	h := &ScheduledAgentHandler{deps: Deps{}}
+	alert := escalation.Alert{Source: "b-b1.stage_failure", AgentName: "docs_bot"}
+
+	err := h.routeEscalation(context.Background(), alert, "Subj", "Body")
+	if err != nil {
+		t.Errorf("err = %v; want nil (nil Escalation must be a no-op)", err)
+	}
+}
+
+// TestRouteEscalation_DelegatesToInjectedRouter pins the happy-path
+// delegation: when Escalation is wired, routeEscalation passes the
+// call through and returns whatever the router decides. Plays the
+// role of the wiring-pattern proof for E6.4/E6.7 implementers.
+func TestRouteEscalation_DelegatesToInjectedRouter(t *testing.T) {
+	router := &stubEscalationRouter{}
+	h := &ScheduledAgentHandler{deps: Deps{Escalation: router}}
+	alert := escalation.Alert{Source: "b-b1.idle_nudge", AgentName: "docs_bot", JobID: "job", RunID: "run"}
+
+	if err := h.routeEscalation(context.Background(), alert, "Subj", "Body"); err != nil {
+		t.Fatalf("err = %v; want nil", err)
+	}
+	if len(router.calls) != 1 {
+		t.Fatalf("Route calls = %d; want 1", len(router.calls))
+	}
+	call := router.calls[0]
+	if call.alert.Source != "b-b1.idle_nudge" {
+		t.Errorf("alert.Source = %q; want b-b1.idle_nudge", call.alert.Source)
+	}
+	if call.subject != "Subj" || call.body != "Body" {
+		t.Errorf("subject/body = %q/%q; want Subj/Body", call.subject, call.body)
+	}
+}
+
+// TestRouteEscalation_PropagatesRouterError pins the error-propagation
+// contract: when the wired router returns an error, routeEscalation
+// surfaces it unchanged so callers can decide (log + continue for
+// most cases; surface for auto-respawn loop guard). The helper does
+// NOT absorb errors — that's the underlying escalation.Route's
+// responsibility (email queue retry for transient bridge failures).
+func TestRouteEscalation_PropagatesRouterError(t *testing.T) {
+	wantErr := errors.New("inbox shard offline")
+	router := &stubEscalationRouter{returnErr: wantErr}
+	h := &ScheduledAgentHandler{deps: Deps{Escalation: router}}
+
+	err := h.routeEscalation(context.Background(), escalation.Alert{Source: "b-b1.stage_failure"}, "Subj", "Body")
+	if !errors.Is(err, wantErr) {
+		t.Errorf("err = %v; want wraps %v", err, wantErr)
 	}
 }
 

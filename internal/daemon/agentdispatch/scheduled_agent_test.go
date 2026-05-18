@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,12 @@ import (
 // stubTmuxRPC records calls + returns canned values. Stage tests
 // progressively extend the fields they exercise; defaults are nil
 // error returns + empty call slices so unused-stage tests stay terse.
+//
+// callOrder is a shared chronological log across ALL RPC methods on
+// the stub. Per-method slices are convenient for "called once with X"
+// assertions; callOrder is for sequence assertions ("ctrlc fired
+// before kill"). Without callOrder, presence-only tests would miss
+// a future refactor that reverses the order of two calls.
 type stubTmuxRPC struct {
 	checkPaneResult bool
 	checkPaneErr    error
@@ -36,6 +43,8 @@ type stubTmuxRPC struct {
 
 	paneCtrlCErr   error
 	paneCtrlCCalls []string
+
+	callOrder []string // chronological: "ctrlc", "kill", "create", ...
 }
 
 type tmuxCreateCall struct {
@@ -45,26 +54,32 @@ type tmuxCreateCall struct {
 
 func (s *stubTmuxRPC) CheckPane(_ context.Context, target string) (bool, error) {
 	s.checkPaneCalls = append(s.checkPaneCalls, target)
+	s.callOrder = append(s.callOrder, "checkpane")
 	return s.checkPaneResult, s.checkPaneErr
 }
 func (s *stubTmuxRPC) TmuxCreate(_ context.Context, target string, opts agentdispatch.TmuxCreateOpts) error {
 	s.tmuxCreateCalls = append(s.tmuxCreateCalls, tmuxCreateCall{target: target, opts: opts})
+	s.callOrder = append(s.callOrder, "create")
 	return s.tmuxCreateErr
 }
 func (s *stubTmuxRPC) TmuxLaunch(_ context.Context, target string) error {
 	s.tmuxLaunchCalls = append(s.tmuxLaunchCalls, target)
+	s.callOrder = append(s.callOrder, "launch")
 	return s.tmuxLaunchErr
 }
 func (s *stubTmuxRPC) WaitForPaneReady(_ context.Context, target string) error {
 	s.waitPaneReadyCalls = append(s.waitPaneReadyCalls, target)
+	s.callOrder = append(s.callOrder, "wait")
 	return s.waitPaneReadyErr
 }
 func (s *stubTmuxRPC) TmuxKillSession(_ context.Context, target string) error {
 	s.tmuxKillCalls = append(s.tmuxKillCalls, target)
+	s.callOrder = append(s.callOrder, "kill")
 	return s.tmuxKillErr
 }
 func (s *stubTmuxRPC) PaneSendCtrlCExit(_ context.Context, target string) error {
 	s.paneCtrlCCalls = append(s.paneCtrlCCalls, target)
+	s.callOrder = append(s.callOrder, "ctrlc")
 	return s.paneCtrlCErr
 }
 
@@ -1461,6 +1476,33 @@ func TestStage8_TeardownOrdering_CtrlCExitBeforeKillSession(t *testing.T) {
 	if !wt.destroyCalls[0].Force {
 		t.Error("Destroy.Force = false; want true")
 	}
+
+	// Sequence assertion (brainstormer-third I5): ctrlc must fire
+	// BEFORE kill within the teardown sequence. Presence-only
+	// assertions would miss a future refactor that reverses the
+	// order. We assert on the relative position of "ctrlc" vs "kill"
+	// in callOrder rather than absolute indices, since other RPC
+	// methods (checkpane during stage 0 + waitForPaneExit) also
+	// contribute entries.
+	ctrlcIdx, killIdx := -1, -1
+	for i, c := range rpc.callOrder {
+		if c == "ctrlc" && ctrlcIdx == -1 {
+			ctrlcIdx = i
+		}
+		if c == "kill" && killIdx == -1 {
+			killIdx = i
+		}
+	}
+	if ctrlcIdx == -1 {
+		t.Error("ctrlc never fired; teardown sequence broken")
+	}
+	if killIdx == -1 {
+		t.Error("kill never fired; teardown sequence broken")
+	}
+	if ctrlcIdx >= killIdx {
+		t.Errorf("ctrlc at index %d but kill at index %d; want ctrlc BEFORE kill (callOrder: %v)",
+			ctrlcIdx, killIdx, rpc.callOrder)
+	}
 }
 
 // TestStage8_DrainListFilesRPCs_FiredBetweenCtrlCAndKill pins AC
@@ -1719,7 +1761,10 @@ func TestConcurrentDispatches_RaceClean(t *testing.T) {
 			rep := &recReporter{}
 			signals := make(chan *scheduler.Completion, 1)
 			signals <- &scheduler.Completion{Reason: "done", Summary: ""}
-			job := testJob("docs_bot")
+			// Distinct agent names per AC 9.2.10 wording ("5 distinct
+			// agents") — fidelity matters when a future maintainer
+			// reads the spec alongside the test.
+			job := testJob("docs_bot_" + strconv.Itoa(i))
 			job.ScheduledAgent.TeardownGraceSeconds = 1
 			runID := "concurrent-run-" + string(rune('a'+i))
 			errs <- h.Dispatch(context.Background(), job, runID, rep, signals)
@@ -1770,7 +1815,9 @@ func TestConcurrentDispatches_SharedHandler_NoRace(t *testing.T) {
 			rep := &recReporter{}
 			signals := make(chan *scheduler.Completion, 1)
 			signals <- &scheduler.Completion{Reason: "done", Summary: ""}
-			job := testJob("docs_bot")
+			// Distinct agent names per AC 9.2.10 wording — proves
+			// the shared handler doesn't collapse runs by target.
+			job := testJob("docs_bot_" + strconv.Itoa(i))
 			job.ScheduledAgent.TeardownGraceSeconds = 1
 			runID := "shared-handler-run-" + string(rune('a'+i))
 			errs <- h.Dispatch(context.Background(), job, runID, rep, signals)
