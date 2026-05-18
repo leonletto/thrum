@@ -2,9 +2,11 @@ package agentdispatch_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/agentdispatch"
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
@@ -25,10 +27,31 @@ func (s *stubTmuxRPC) CheckPane(_ context.Context, target string) (bool, error) 
 func (s *stubTmuxRPC) TmuxCreate(_ context.Context, _ string, _ agentdispatch.TmuxCreateOpts) error {
 	return nil
 }
-func (s *stubTmuxRPC) TmuxLaunch(_ context.Context, _ string) error            { return nil }
-func (s *stubTmuxRPC) WaitForPaneReady(_ context.Context, _ string) error      { return nil }
-func (s *stubTmuxRPC) TmuxKillSession(_ context.Context, _ string) error       { return nil }
-func (s *stubTmuxRPC) PaneSendCtrlCExit(_ context.Context, _ string) error     { return nil }
+func (s *stubTmuxRPC) TmuxLaunch(_ context.Context, _ string) error        { return nil }
+func (s *stubTmuxRPC) WaitForPaneReady(_ context.Context, _ string) error  { return nil }
+func (s *stubTmuxRPC) TmuxKillSession(_ context.Context, _ string) error   { return nil }
+func (s *stubTmuxRPC) PaneSendCtrlCExit(_ context.Context, _ string) error { return nil }
+
+// stubMessageRPC records MessageSend calls + returns canned values.
+// Used by stage-2 tests; the recorded call shape lets pinning tests
+// assert subject/body/target without spying on RPC internals.
+type stubMessageRPC struct {
+	returnMessageID string
+	returnErr       error
+
+	calls []messageSendCall
+}
+
+type messageSendCall struct {
+	target  string
+	subject string
+	body    string
+}
+
+func (m *stubMessageRPC) MessageSend(_ context.Context, target, subject, body string) (string, error) {
+	m.calls = append(m.calls, messageSendCall{target: target, subject: subject, body: body})
+	return m.returnMessageID, m.returnErr
+}
 
 // recReporter pins the scheduler.StateReporter interface for the
 // scheduled-agent stage tests — records every Transition + Stage call
@@ -182,7 +205,8 @@ func TestStage0_FailsOnCheckPaneError(t *testing.T) {
 // see the full nine-stage walk in scheduler_job_events.
 func TestStage1_BudgetCheckMarkerEmittedEvenThoughCheckIsUpstream(t *testing.T) {
 	rpc := &stubTmuxRPC{checkPaneResult: false}
-	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc})
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage1"}
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC})
 	rep := &recReporter{}
 
 	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, nil)
@@ -209,7 +233,8 @@ func TestStage1_BudgetCheckMarkerEmittedEvenThoughCheckIsUpstream(t *testing.T) 
 // since Tasks 11-19 fill in the remaining stages).
 func TestStage0_HappyPath(t *testing.T) {
 	rpc := &stubTmuxRPC{checkPaneResult: false}
-	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc})
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-happy"}
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC})
 	rep := &recReporter{}
 
 	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, nil)
@@ -222,6 +247,148 @@ func TestStage0_HappyPath(t *testing.T) {
 	// CheckPane should have been called exactly once with our target.
 	if len(rpc.checkPaneCalls) != 1 || rpc.checkPaneCalls[0] != "docs_bot" {
 		t.Errorf("CheckPane calls = %v; want [docs_bot]", rpc.checkPaneCalls)
+	}
+}
+
+// TestStage2_EnqueuesWakeMessageAndJournalsMessageID pins the canonical
+// stage-2 happy path per spec §7.1: Dispatch composes the agent.wake
+// body, sends it via MessageRPC.MessageSend, and atomically journals
+// the returned message ID under the "wake_message_id" details key on
+// the running-state transition. Without atomic journal-write, an A-B4
+// stalled-sweep + recovery on this run would have no audit pointer
+// back to the inbox row.
+func TestStage2_EnqueuesWakeMessageAndJournalsMessageID(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-123"}
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC})
+	rep := &recReporter{}
+
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, nil)
+	if err != nil {
+		t.Fatalf("expected stages 0-2 to pass; got: %v", err)
+	}
+
+	if len(rep.stages) < 3 {
+		t.Fatalf("expected stage marker for stage 2; got: %v", rep.stages)
+	}
+	if rep.stages[2] != agentdispatch.StageEnqueueWakeMessage {
+		t.Errorf("stages[2] = %q; want %q", rep.stages[2], agentdispatch.StageEnqueueWakeMessage)
+	}
+
+	if len(rep.transitions) == 0 {
+		t.Fatalf("expected at least one Transition; got none")
+	}
+	tr := rep.transitions[0]
+	if tr.state != scheduler.StateRunning {
+		t.Errorf("transitions[0].state = %v; want StateRunning", tr.state)
+	}
+	if !strings.Contains(tr.reason, "stage 2 complete") {
+		t.Errorf("transitions[0].reason = %q; want substring 'stage 2 complete'", tr.reason)
+	}
+	if got := tr.details["wake_message_id"]; got != "msg-123" {
+		t.Errorf("transitions[0].details[wake_message_id] = %v; want msg-123", got)
+	}
+
+	// MessageSend must have been called exactly once with target + subject + body.
+	if len(msgRPC.calls) != 1 {
+		t.Fatalf("MessageSend calls = %d; want 1", len(msgRPC.calls))
+	}
+	call := msgRPC.calls[0]
+	if call.target != "docs_bot" {
+		t.Errorf("MessageSend target = %q; want docs_bot", call.target)
+	}
+	if !strings.HasPrefix(call.subject, "Wake: docs-bot-job @ ") {
+		t.Errorf("MessageSend subject = %q; want prefix 'Wake: docs-bot-job @ '", call.subject)
+	}
+}
+
+// TestStage2_FailsOnMessageSendError pins the error-propagation path:
+// MessageSend returning a real error surfaces as StateFailed with the
+// canonical reason prefix and the wrapped error returned from Dispatch.
+// Stage-2 emit-failure rolls back via spec §8 escalation in later
+// tasks; here we just guard the Transition + return-err contract.
+func TestStage2_FailsOnMessageSendError(t *testing.T) {
+	wantErr := errors.New("inbox shard offline")
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnErr: wantErr}
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC})
+	rep := &recReporter{}
+
+	err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-1", rep, nil)
+	if !errors.Is(err, wantErr) {
+		t.Errorf("err = %v; want wraps %v", err, wantErr)
+	}
+	if rep.lastTransition().state != scheduler.StateFailed {
+		t.Errorf("lastState = %v; want StateFailed", rep.lastTransition().state)
+	}
+	if !strings.Contains(rep.lastTransition().reason, "stage 2: agent.wake enqueue failed") {
+		t.Errorf("reason = %q; want substring 'stage 2: agent.wake enqueue failed'", rep.lastTransition().reason)
+	}
+}
+
+// TestStage2_BuildWakeMessage_ShapeMatchesSpec7_4 pins the canonical
+// agent.wake wire format per spec §7.4: JSON inside a markdown fenced
+// block with kind, job_id, run_id, scheduled_at (RFC3339), wake_reason
+// ("scheduled"), primer, prior_run_summary (nullable; nil for first
+// wake). Drift here breaks the lean-prime skill parser on the agent
+// side (E6.2).
+func TestStage2_BuildWakeMessage_ShapeMatchesSpec7_4(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-shape"}
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{Tmux: rpc, Message: msgRPC})
+	rep := &recReporter{}
+
+	if err := h.Dispatch(context.Background(), testJob("docs_bot"), "run-shape", rep, nil); err != nil {
+		t.Fatalf("Dispatch returned %v", err)
+	}
+	if len(msgRPC.calls) != 1 {
+		t.Fatalf("MessageSend calls = %d; want 1", len(msgRPC.calls))
+	}
+
+	body := msgRPC.calls[0].body
+	if !strings.HasPrefix(body, "```json\n") || !strings.HasSuffix(body, "\n```\n") {
+		t.Errorf("body not wrapped in json fenced block; got: %q", body)
+	}
+
+	// Strip the fence to validate the inner JSON shape.
+	inner := strings.TrimPrefix(body, "```json\n")
+	inner = strings.TrimSuffix(inner, "\n```\n")
+
+	var got map[string]any
+	if err := json.Unmarshal([]byte(inner), &got); err != nil {
+		t.Fatalf("inner body is not valid JSON: %v\nbody:\n%s", err, inner)
+	}
+
+	for _, key := range []string{"kind", "job_id", "run_id", "scheduled_at", "wake_reason", "primer", "prior_run_summary"} {
+		if _, ok := got[key]; !ok {
+			t.Errorf("body missing required key %q", key)
+		}
+	}
+	if got["kind"] != "agent.wake" {
+		t.Errorf("kind = %v; want 'agent.wake'", got["kind"])
+	}
+	if got["job_id"] != "docs-bot-job" {
+		t.Errorf("job_id = %v; want docs-bot-job", got["job_id"])
+	}
+	if got["run_id"] != "run-shape" {
+		t.Errorf("run_id = %v; want run-shape", got["run_id"])
+	}
+	if got["wake_reason"] != "scheduled" {
+		t.Errorf("wake_reason = %v; want scheduled", got["wake_reason"])
+	}
+	if got["primer"] != "wake up" {
+		t.Errorf("primer = %v; want 'wake up'", got["primer"])
+	}
+	if got["prior_run_summary"] != nil {
+		t.Errorf("prior_run_summary = %v; want nil for first wake", got["prior_run_summary"])
+	}
+	// scheduled_at must parse as RFC3339.
+	ts, ok := got["scheduled_at"].(string)
+	if !ok {
+		t.Fatalf("scheduled_at = %v; want string", got["scheduled_at"])
+	}
+	if _, err := time.Parse(time.RFC3339, ts); err != nil {
+		t.Errorf("scheduled_at = %q; not RFC3339 (%v)", ts, err)
 	}
 }
 

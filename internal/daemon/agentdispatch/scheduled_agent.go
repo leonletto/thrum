@@ -2,6 +2,7 @@ package agentdispatch
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -223,8 +224,63 @@ func (h *ScheduledAgentHandler) Dispatch(ctx context.Context, job scheduler.JobS
 		return err
 	}
 
-	// TODO(thrum-6qmf.4.43..thrum-6qmf.4.61): implement stages 2-8.
+	// Stage 2: enqueue agent.wake message. The wire format (JSON-in-
+	// fenced-block per spec §7.4) is composed by buildWakeMessage; the
+	// returned message ID is journaled atomically on the StateRunning
+	// transition so A-B4's stalled-sweep + post-crash recovery have an
+	// audit pointer back to the inbox row that primed this wake.
+	if err := reporter.Stage(StageEnqueueWakeMessage); err != nil {
+		return err
+	}
+	wakeBody := buildWakeMessage(job, runID)
+	subject := fmt.Sprintf("Wake: %s @ %s", job.ID, time.Now().Format(time.RFC3339))
+	messageID, err := h.deps.Message.MessageSend(ctx, target, subject, wakeBody)
+	if err != nil {
+		_ = reporter.Transition(scheduler.StateFailed,
+			fmt.Sprintf("stage 2: agent.wake enqueue failed: %v", err), nil)
+		return fmt.Errorf("stage 2: agent.wake enqueue failed: %w", err)
+	}
+	if err := reporter.Transition(scheduler.StateRunning, "stage 2 complete", map[string]any{
+		"wake_message_id": messageID,
+	}); err != nil {
+		return err
+	}
+
+	// TODO(thrum-6qmf.4.46..thrum-6qmf.4.61): implement stages 3-8.
 	return nil
+}
+
+// buildWakeMessage composes the agent.wake message body per spec §7.4:
+// JSON inside a markdown fenced block so the message is both human-
+// readable in the inbox and machine-parseable by the agent-side lean-
+// prime skill (E6.2).
+//
+// prior_run_summary is nullable; first-wake produces null. Sourcing the
+// non-nil case from scheduler_job_state.last_completion_summary is
+// deferred — the state-store field doesn't exist yet, and the spec
+// §7.4 wire format already permits the null encoding for the unavailable
+// case. When the state-store column lands, plumb it here without
+// changing the wire shape.
+func buildWakeMessage(job scheduler.JobSpec, runID string) string {
+	var primer string
+	if job.ScheduledAgent != nil {
+		primer = job.ScheduledAgent.Primer
+	}
+	body := map[string]any{
+		"kind":              "agent.wake",
+		"job_id":            job.ID,
+		"run_id":            runID,
+		"scheduled_at":      time.Now().Format(time.RFC3339),
+		"wake_reason":       "scheduled",
+		"primer":            primer,
+		"prior_run_summary": nil,
+	}
+	// json.MarshalIndent on a map[string]any with only JSON-safe values
+	// cannot fail; error path is unreachable in practice. Ignore err
+	// rather than panic so a hypothetical regression in upstream Go
+	// (or a future field-type change) doesn't crash the dispatcher.
+	jsonBlob, _ := json.MarshalIndent(body, "", "  ")
+	return fmt.Sprintf("```json\n%s\n```\n", string(jsonBlob))
 }
 
 // Reconcile implements scheduler.Handler.Reconcile for boot-time
