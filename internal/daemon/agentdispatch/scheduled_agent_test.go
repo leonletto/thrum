@@ -113,6 +113,11 @@ func (m *stubMessageRPC) MessageSend(_ context.Context, target, subject, body st
 // stubWorktreeMgr records Create + Destroy calls + returns canned
 // values. Used by stage-3a tests; stage-4-6 rollback + stage-8
 // teardown tests extend usage (destroyResult / destroyErr).
+//
+// tmuxBackRef is an optional back-pointer to a stubTmuxRPC. When
+// set, Destroy appends "destroy" to the tmux stub's callOrder slice
+// so sequence tests can pin kill-before-destroy alongside the
+// ctrlc-before-kill assertion that lives on the tmux stub.
 type stubWorktreeMgr struct {
 	createResult  *worktree.CreateResult
 	createErr     error
@@ -121,6 +126,8 @@ type stubWorktreeMgr struct {
 
 	createCalls  []worktree.CreateOpts
 	destroyCalls []worktree.DestroyOpts
+
+	tmuxBackRef *stubTmuxRPC
 }
 
 func (s *stubWorktreeMgr) Create(_ context.Context, opts worktree.CreateOpts) (*worktree.CreateResult, error) {
@@ -130,6 +137,9 @@ func (s *stubWorktreeMgr) Create(_ context.Context, opts worktree.CreateOpts) (*
 
 func (s *stubWorktreeMgr) Destroy(_ context.Context, opts worktree.DestroyOpts) (*worktree.DestroyResult, error) {
 	s.destroyCalls = append(s.destroyCalls, opts)
+	if s.tmuxBackRef != nil {
+		s.tmuxBackRef.callOrder = append(s.tmuxBackRef.callOrder, "destroy")
+	}
 	return s.destroyResult, s.destroyErr
 }
 
@@ -1436,11 +1446,19 @@ func TestStage7_PersistentWorktree_BranchPreserved(t *testing.T) {
 }
 
 // TestStage8_TeardownOrdering_CtrlCExitBeforeKillSession pins the
-// canonical stage-8 sequence per spec §7.1 stage 8: PaneSendCtrlCExit
-// fires BEFORE TmuxKillSession so the runtime gets a SIGTERM-equivalent
-// grace window to flush state.md, in-flight messages, and other
-// session-end work. Reversing the order would mean every clean
-// shutdown looks like a hard-kill in the agent_lifecycle_events log.
+// ctrlc-before-kill leg of the stage-8 sequence per spec §7.1
+// stage 8: PaneSendCtrlCExit fires BEFORE TmuxKillSession so the
+// runtime gets a SIGTERM-equivalent grace window to flush state.md,
+// in-flight messages, and other session-end work. Reversing the
+// order would mean every clean shutdown looks like a hard-kill in
+// the agent_lifecycle_events log.
+//
+// This fixture wires no Drainer (Deps.Drainer is nil), so the
+// sequence exercised is CtrlC → Kill → Destroy. The
+// drain-before-kill leg is pinned by
+// TestStage8_DrainListFilesRPCs_FiredBetweenCtrlCAndKill (a separate
+// test below); the kill-before-destroy leg is pinned by
+// TestStage8_TeardownOrdering_KillBeforeDestroy.
 func TestStage8_TeardownOrdering_CtrlCExitBeforeKillSession(t *testing.T) {
 	rpc := &stubTmuxRPC{checkPaneResult: false} // CheckPane returns not-alive → waitForPaneExit unblocks immediately
 	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage8-order"}
@@ -1508,6 +1526,75 @@ func TestStage8_TeardownOrdering_CtrlCExitBeforeKillSession(t *testing.T) {
 	if ctrlcIdx >= killIdx {
 		t.Errorf("first ctrlc at index %d but first kill at index %d; want ctrlc BEFORE kill (callOrder: %v)",
 			ctrlcIdx, killIdx, rpc.callOrder)
+	}
+}
+
+// TestStage8_TeardownOrdering_KillBeforeDestroy pins the
+// kill-before-destroy leg of the stage-8 sequence per spec §7.1
+// stage 8: TmuxKillSession fires BEFORE worktree.Destroy so the
+// runtime's tmux session is gone before the filesystem path it
+// lives in disappears. Reversing the order would mean destroy
+// races a still-running runtime — flaky filesystem deletes, lost
+// final writes, and (worst case) git worktree state corruption if
+// the runtime is mid-commit when its directory is yanked.
+//
+// Without this pin, a future refactor (e.g. E6.9's ReconcileRun
+// reaching the same teardown path through a different entry point)
+// could silently reverse the order — current presence-only tests
+// would still pass. The drain + ctrlc ordering pins live in
+// neighboring tests; this completes the trio so the full
+// stage-8 chain (CtrlC → Drain → Kill → Destroy) is covered by
+// callOrder assertions.
+func TestStage8_TeardownOrdering_KillBeforeDestroy(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage8-killdestroy"}
+	wt := okWorktree()
+	wt.tmuxBackRef = rpc // wire destroy into the shared callOrder
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+		Mirror:   okMirror(),
+	})
+	rep := &recReporter{}
+
+	job := testJob("docs_bot")
+	job.ScheduledAgent.TeardownGraceSeconds = 1
+	signals := make(chan *scheduler.Completion, 1)
+	signals <- &scheduler.Completion{Reason: "done", Summary: "ok"}
+	_ = h.Dispatch(context.Background(), job, "run-stage8-killdestroy", rep, signals)
+
+	// Presence-of-both: kill + destroy both fired exactly once.
+	if len(rpc.tmuxKillCalls) != 1 {
+		t.Fatalf("TmuxKillSession calls = %d; want 1", len(rpc.tmuxKillCalls))
+	}
+	if len(wt.destroyCalls) != 1 {
+		t.Fatalf("worktree.Destroy calls = %d; want 1", len(wt.destroyCalls))
+	}
+
+	// Relative ordering via the shared callOrder: kill must precede
+	// destroy. Other RPC tokens (checkpane during stage 0,
+	// waitForPaneExit during stage 8) interleave, so we assert on
+	// relative position rather than absolute indices.
+	killIdx, destroyIdx := -1, -1
+	for i, c := range rpc.callOrder {
+		if c == "kill" && killIdx == -1 {
+			killIdx = i
+		}
+		if c == "destroy" && destroyIdx == -1 {
+			destroyIdx = i
+		}
+	}
+	if killIdx == -1 {
+		t.Fatal("kill never appeared in callOrder; teardown sequence broken")
+	}
+	if destroyIdx == -1 {
+		t.Fatal("destroy never appeared in callOrder; stubWorktreeMgr back-ref wiring broken")
+	}
+	if killIdx >= destroyIdx {
+		t.Errorf("first kill at index %d but first destroy at index %d; want kill BEFORE destroy (callOrder: %v)",
+			killIdx, destroyIdx, rpc.callOrder)
 	}
 }
 

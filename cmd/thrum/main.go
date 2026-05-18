@@ -7710,6 +7710,26 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	}
 	wireReminders(sched, remindersStore, messageHandler, remindersEmailQueue, supervisorID, &thrumCfg.Daemon)
 
+	// B-B1 E6.6 Task 63: feature-detect plumbing for stage-8 drain.
+	// Probes server.HasHandler("agent.listFiles") at boot — when the
+	// MB-1.S2 file-streaming substrate hasn't shipped, flips the
+	// tracker into skip-drain mode so teardownGracefully's drain step
+	// short-circuits (returns immediately, no 50ms polling against a
+	// tracker that would never see Begin). Drainer + tracker are
+	// returned for ScheduledAgentHandler.Deps wiring landing in a
+	// follow-on B-B1 dispatch task.
+	//
+	// TODO(B-B1 ScheduledAgentHandler wiring task): inject
+	// agentDispatchDrainer into ScheduledAgentHandler.Deps.Drainer
+	// and pass agentInflightTracker to MB-1.S2's agent.listFiles /
+	// agent.getFile RPC adapter so Begin/End get called. Until that
+	// lands, deps.Drainer is nil at runtime and stage-8 drain
+	// no-ops via the scheduled_agent.go:680 guard; in RPC-present
+	// mode the tracker is operational but unobserved.
+	agentDispatchDrainer, agentInflightTracker := wireAgentDispatch(server)
+	_ = agentDispatchDrainer
+	_ = agentInflightTracker
+
 	if err := sched.Start(ctx); err != nil {
 		return fmt.Errorf("start scheduler: %w", err)
 	}
