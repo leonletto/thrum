@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/leonletto/thrum/internal/daemon/escalation"
+	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
 	"github.com/leonletto/thrum/internal/worktree"
 )
@@ -153,19 +154,18 @@ func TestMessageRPCAdapter_NilHandlerRejects(t *testing.T) {
 
 // TestMessageRPCAdapter_EmptyCallerRejects pins the caller-resolution
 // guard: a daemon-source enqueue without a wired supervisor identity
-// is a wiring bug, not a runtime error.
+// is a wiring bug, not a runtime error. Supplies a non-nil handler
+// (&rpc.MessageHandler{}) so the nil-handler guard above doesn't
+// fire first — this test must exercise the callerAgentID branch
+// specifically.
 func TestMessageRPCAdapter_EmptyCallerRejects(t *testing.T) {
-	// Construct with empty callerAgentID; nil handler is fine
-	// because the caller-guard fires first.
-	a := &MessageRPCAdapter{handler: nil, callerAgentID: ""}
+	a := &MessageRPCAdapter{handler: &rpc.MessageHandler{}, callerAgentID: ""}
 	_, err := a.MessageSend(context.Background(), "docs_bot", "subj", "body")
 	if err == nil {
-		t.Error("expected error for empty callerAgentID")
+		t.Fatal("expected error for empty callerAgentID")
 	}
-	if !contains(err.Error(), "callerAgentID") && !contains(err.Error(), "handler") {
-		// Order-of-checks could surface either error; both are
-		// acceptable wiring-bug signals.
-		t.Errorf("error should mention wiring bug (callerAgentID or handler); got %v", err)
+	if !contains(err.Error(), "callerAgentID") {
+		t.Errorf("error should mention empty callerAgentID; got %v", err)
 	}
 }
 

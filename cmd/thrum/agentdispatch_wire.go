@@ -73,12 +73,22 @@ func wireAgentDispatch(server *daemon.Server) (*agentdispatch.Drainer, agentdisp
 // implicitly registering them.
 var userJobTypes = []string{"scheduled_agent", "nudge"}
 
-// registerPlaceholderHandlers performs E6.5 Task 42a: register a
-// PlaceholderHandler for each user-facing job type so A-B1's
-// validator + reactor recognize the type name even before E6.5
-// Task 42b ships the real adapter glue. Retained as a callable
-// helper for fixtures/tests; production wiring at daemon boot uses
-// wireScheduledAgentHandlers (42b) instead.
+// Compile-time check that *mirror.Worker satisfies
+// agentdispatch.MirrorWorker. The mirror package can't declare
+// this directly (it doesn't import agentdispatch), and agentdispatch
+// can't declare it (it doesn't import mirror — that would risk an
+// import cycle through cmd/thrum). The composition root is the
+// natural home for the check; catches signature drift at build time
+// rather than at wireScheduledAgentHandlers' first dispatch.
+var _ agentdispatch.MirrorWorker = (*mirror.Worker)(nil)
+
+// registerPlaceholderHandlers registers a PlaceholderHandler for
+// each user-facing job type. Originally shipped at E6.5 Task 42a
+// as the production registration path; 42b superseded it with
+// wireScheduledAgentHandlers (real handler instances + Deps
+// adapters). The helper is retained as a fixture/test utility so
+// scheduler-level tests can exercise the type-taxonomy registry
+// without needing the full adapter chain.
 //
 // Idempotency note: scheduler.RegisterTypeHandler rejects
 // duplicates, so calling registerPlaceholderHandlers a second

@@ -9,13 +9,19 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
 )
 
-// ErrHandlerWiringPending is returned by PlaceholderHandler.Dispatch when
-// the daemon attempts to fire a scheduled_agent or nudge job before
-// E6.5 Task 42b (real-handler adapter glue) has shipped. It surfaces
-// the wiring gap as a clean error rather than a nil-deref panic — the
+// ErrHandlerWiringPending is the canonical sentinel returned when an
+// agentdispatch handler is constructed without its full Deps surface
+// (or stub-registered as a PlaceholderHandler). Surfaces the wiring
+// gap as a clean error rather than a nil-deref panic — the
 // `thrum cron history` audit trail records a clear "wiring pending"
-// failure so operators can correlate against the v0.11 rollout state.
-var ErrHandlerWiringPending = errors.New("agentdispatch: handler not yet wired (E6.5 Task 42b pending)")
+// failure so operators can correlate against the substrate's rollout
+// state.
+//
+// Consumers (errors.Is callers): PlaceholderHandler.Dispatch (this
+// package); E6.7 respawn.go (benign-skip guard for placeholder
+// returns). Stable error identity — message text may evolve over
+// time but errors.Is comparisons remain stable.
+var ErrHandlerWiringPending = errors.New("agentdispatch: handler wiring deferred to lifecycle setup")
 
 // PlaceholderHandler satisfies scheduler.Handler with no-op
 // implementations that return ErrHandlerWiringPending from Dispatch

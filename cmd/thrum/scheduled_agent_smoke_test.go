@@ -11,10 +11,17 @@ import (
 )
 
 // TestScheduledAgentSmoke_ConfigReloadToRealHandler is B-B1 E6.5
-// Task 44's integration-style smoke test (scoped to what runs in
-// the Go test suite — full 9-stage protocol exercise needs real
-// tmux + git + a runtime and lives in tests/e2e/). It pins the
-// composition path that closes §9.6.4 as far as unit-testable:
+// Task 44's PARTIAL-AUTOMATED smoke test. It verifies the wiring
+// path (config → reload → validator → real handler registry)
+// but does NOT exercise the §9.6.4 "Tick fires; full 9-stage
+// protocol runs" requirement — that needs real tmux + git + a
+// runtime and is tracked as a P2 follow-up bd (9-stage integration
+// smoke via test-double tmux OR documented manual E2E
+// verification). The §9.6.4 status in Task 45's checklist is
+// PARTIAL-AUTOMATED / MANUAL-PENDING per the brainstormer-third
+// reclassification, not full PASS.
+//
+// What this test pins (verifies as automated):
 //
 //  1. A config.json file containing a `type: scheduled_agent` job
 //     is written to disk.
