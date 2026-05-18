@@ -89,13 +89,8 @@ type ContextProvider interface {
 	ContextUsageFor(agentName string) (ContextUsage, bool)
 }
 
-// Poller is the context-usage polling engine. It dispatches enrolled agents
-// to their matching Parser on a fixed interval, compares the result against
-// the configured warn and auto thresholds, and invokes registered callbacks
-// when thresholds are crossed.
-//
-// This declaration is a scaffold stub. Fields, supporting types
-// (PollerConfig, agentPollState, callback signatures), and methods (Run,
-// Enroll, Unenroll, PostRestart, ContextUsageFor) are added in
-// thrum-6qmf.1.11 (CR.2 Poller implementation) in sibling file poller.go.
-type Poller struct{}
+// The Poller type, its supporting types (PollerConfig, AgentEnrollment,
+// callback signatures), and its methods live in sibling file poller.go.
+// Keeping the interfaces above isolated in this file makes the dependency
+// surface easy to audit (no daemon/rpc imports, see acceptance criteria for
+// thrum-6qmf.1.1 / .1.19 import-cycle guard).
