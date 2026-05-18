@@ -50,12 +50,13 @@ import (
 func TestScheduledAgentSmoke_ConfigReloadToRealHandler(t *testing.T) {
 	// 1. Bring up a real scheduler with 42b-wired handlers.
 	s := newSchedulerForRegistrationTest(t)
-	if err := wireScheduledAgentHandlers(s, scheduledAgentDeps{
+	if _, err := wireScheduledAgentHandlers(s, scheduledAgentDeps{
 		RepoPath:       "/tmp/repo",
 		TmuxHandler:    &rpc.TmuxHandler{},
 		MessageHandler: &rpc.MessageHandler{},
 		CallerAgentID:  "supervisor_test",
 		MirrorWorker:   testMirrorWorker(t),
+		DaemonState:    newStateForWireTest(t),
 	}); err != nil {
 		t.Fatalf("wire 42b handlers: %v", err)
 	}
@@ -131,12 +132,13 @@ func TestScheduledAgentSmoke_ConfigReloadToRealHandler(t *testing.T) {
 // rejected field combo. Until then it's just the existence pin.
 func TestScheduledAgentSmoke_BaselineValidatorRejectsInvalidShape(t *testing.T) {
 	s := newSchedulerForRegistrationTest(t)
-	if err := wireScheduledAgentHandlers(s, scheduledAgentDeps{
+	if _, err := wireScheduledAgentHandlers(s, scheduledAgentDeps{
 		RepoPath:       "/tmp/repo",
 		TmuxHandler:    &rpc.TmuxHandler{},
 		MessageHandler: &rpc.MessageHandler{},
 		CallerAgentID:  "supervisor_test",
 		MirrorWorker:   testMirrorWorker(t),
+		DaemonState:    newStateForWireTest(t),
 	}); err != nil {
 		t.Fatalf("wire 42b handlers: %v", err)
 	}

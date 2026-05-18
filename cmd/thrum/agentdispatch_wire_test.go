@@ -215,7 +215,7 @@ func TestRegisterPlaceholderHandlers_RejectsDuplicateRegistration(t *testing.T) 
 // defensive guard on the helper itself — a nil scheduler is a
 // programming error.
 func TestWireScheduledAgentHandlers_RejectsNilScheduler(t *testing.T) {
-	if err := wireScheduledAgentHandlers(nil, scheduledAgentDeps{}); err == nil {
+	if _, err := wireScheduledAgentHandlers(nil, scheduledAgentDeps{}); err == nil {
 		t.Error("expected error on nil scheduler")
 	}
 }
@@ -243,7 +243,7 @@ func TestWireScheduledAgentHandlers_RejectsNilHandlers(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := wireScheduledAgentHandlers(s, tc.deps)
+			_, err := wireScheduledAgentHandlers(s, tc.deps)
 			if err == nil {
 				t.Fatalf("expected error mentioning %q; got nil", tc.want)
 			}
@@ -251,6 +251,27 @@ func TestWireScheduledAgentHandlers_RejectsNilHandlers(t *testing.T) {
 				t.Errorf("error = %v; want substring %q", err, tc.want)
 			}
 		})
+	}
+}
+
+// TestWireScheduledAgentHandlers_RejectsNilDaemonState pins the
+// E6.9 B3 deps guard: DaemonState is required to construct the
+// production BootReconciler (StateStore + LifecycleStore both
+// thread its safedb handle).
+func TestWireScheduledAgentHandlers_RejectsNilDaemonState(t *testing.T) {
+	s := newSchedulerForRegistrationTest(t)
+	_, err := wireScheduledAgentHandlers(s, scheduledAgentDeps{
+		TmuxHandler:    &rpc.TmuxHandler{},
+		MessageHandler: &rpc.MessageHandler{},
+		CallerAgentID:  "supervisor_test",
+		MirrorWorker:   testMirrorWorker(t),
+		// DaemonState intentionally omitted.
+	})
+	if err == nil {
+		t.Fatalf("expected nil-DaemonState error, got nil")
+	}
+	if !strings.Contains(err.Error(), "nil DaemonState") {
+		t.Errorf("error = %v; want substring %q", err, "nil DaemonState")
 	}
 }
 
@@ -267,12 +288,13 @@ func TestWireScheduledAgentHandlers_RejectsNilHandlers(t *testing.T) {
 // covered by scheduled_agent_test.go's existing fixtures.
 func TestWireScheduledAgentHandlers_RegistersBothTypes(t *testing.T) {
 	s := newSchedulerForRegistrationTest(t)
-	if err := wireScheduledAgentHandlers(s, scheduledAgentDeps{
+	if _, err := wireScheduledAgentHandlers(s, scheduledAgentDeps{
 		RepoPath:       "/tmp/repo",
 		TmuxHandler:    &rpc.TmuxHandler{},
 		MessageHandler: &rpc.MessageHandler{},
 		CallerAgentID:  "supervisor_test",
 		MirrorWorker:   testMirrorWorker(t),
+		DaemonState:    newStateForWireTest(t),
 	}); err != nil {
 		t.Fatalf("wireScheduledAgentHandlers: %v", err)
 	}
@@ -300,12 +322,13 @@ func TestWireScheduledAgentHandlers_RejectsDuplicateOnPlaceholderConflict(t *tes
 	}
 	// Now try 42b on top — must fail because RegisterTypeHandler
 	// rejects duplicates.
-	err := wireScheduledAgentHandlers(s, scheduledAgentDeps{
+	_, err := wireScheduledAgentHandlers(s, scheduledAgentDeps{
 		RepoPath:       "/tmp/repo",
 		TmuxHandler:    &rpc.TmuxHandler{},
 		MessageHandler: &rpc.MessageHandler{},
 		CallerAgentID:  "supervisor_test",
 		MirrorWorker:   testMirrorWorker(t),
+		DaemonState:    newStateForWireTest(t),
 	})
 	if err == nil {
 		t.Error("expected duplicate-registration error when placeholder + real handlers both registered")
