@@ -7665,12 +7665,14 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 
 	// A-B4 sweep config sanity check before any wiring: an AlertChain
 	// containing only email entries would cause the dispatcher to
-	// infinite-loop on every fire tick while EmailQueue is unwired
-	// (D-B1 epic ships EmailQueue; until then, hasEmailDelivery=false).
-	// Fail-loud at boot so operators fix config rather than ship a
-	// daemon that retries every 30 seconds forever. Guard relaxes
-	// automatically once hasEmailDelivery flips to true.
-	const hasEmailDelivery = false // flip when D-B1 EmailQueue wires in
+	// infinite-loop on every fire tick while EmailQueue is unwired.
+	// Email delivery is now wired when thrumCfg.Email.Enabled (D-B1
+	// bridge starts a queue worker that drains email_outbound_queue);
+	// when disabled, rows would enqueue but never send, so the guard
+	// still rejects email-only chains. Fail-loud at boot so operators
+	// fix config rather than ship a daemon that retries every 30
+	// seconds forever.
+	hasEmailDelivery := thrumCfg.Email.Enabled
 	if err := sweep.ValidateChainConfig(sweep.ChainConfig{
 		AlertChain:          thrumCfg.Daemon.Sweep.AlertChain,
 		SupervisorAgentName: thrumCfg.Daemon.Escalation.SupervisorAgentName,
@@ -7686,13 +7688,27 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 
 	// A-B4 reminder dispatcher: register internal.reminder_dispatch with
 	// the real DeliverySink (swaps the NoopFireSink placeholder from
-	// thrum-6qmf.3.27). MessageHandler is already constructed above and
-	// is the canonical delivery path — reminders deliver via inbox just
-	// like any agent-to-agent message. Email + supervisor branches are
-	// nil for now: D-B1 substrate not yet wired (DeliverySink log-and-
-	// skips), B-B1 supervisor pane registry pending (DeliverySink falls
-	// through to normal inbox send).
-	wireReminders(sched, remindersStore, messageHandler, supervisorID, &thrumCfg.Daemon)
+	// thrum-6qmf.3.27). MessageHandler is the canonical agent-delivery
+	// path — reminders deliver via inbox just like any agent-to-agent
+	// message. EmailQueue wraps D-B1's *email.Queue when the bridge is
+	// enabled; nil otherwise (DeliverySink log-and-skips email chain
+	// entries). SupervisorMaybeRouter remains nil — B-B1 pane registry
+	// pending; DeliverySink falls through to normal inbox send.
+	//
+	// Wired before LoadEmailSecrets (later in this function); the
+	// internal.reminder_dispatch job is registered with RunAtStart=false
+	// and a 30s minimum cadence (canonical §4.4), so the dispatcher
+	// can't fire before the secrets guard either succeeds or aborts
+	// the boot. Rows enqueued from the first fire wait briefly on the
+	// queue worker (started in the same Email.Enabled branch below).
+	var remindersEmailQueue reminders.EmailQueue
+	if hasEmailDelivery {
+		remindersEmailQueue = &reminderEmailQueue{
+			queue:     email.NewQueue(st.DB().Raw()),
+			fromAgent: supervisorID,
+		}
+	}
+	wireReminders(sched, remindersStore, messageHandler, remindersEmailQueue, supervisorID, &thrumCfg.Daemon)
 
 	if err := sched.Start(ctx); err != nil {
 		return fmt.Errorf("start scheduler: %w", err)

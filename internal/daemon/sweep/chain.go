@@ -85,8 +85,9 @@ var _ ChainResolver = (*ChainResolverImpl)(nil)
 //
 // Setup that triggers the loop:
 //   1. AlertChain configured with ONLY email entries (no @agent refs).
-//   2. EmailQueue NOT yet wired (D-B1 epic is the EmailQueue producer;
-//      A-B4 ships with hasEmailDelivery=false until then).
+//   2. EmailQueue NOT wired — either D-B1 substrate absent (pre-v0.11)
+//      or thrumCfg.Email.Enabled=false (bridge disabled at runtime;
+//      worker doesn't drain the queue table).
 //
 // Symptom without this guard:
 //   - DeliverySink.fanToChain processes the chain
@@ -104,15 +105,17 @@ var _ ChainResolver = (*ChainResolverImpl)(nil)
 // a daemon that infinite-loops.
 //
 // Three pass-through paths (no error returned):
-//   - hasEmailDelivery=true (D-B1 wired; emails actually deliver).
+//   - hasEmailDelivery=true (email bridge enabled; queue worker
+//     drains email_outbound_queue and emails actually deliver).
 //   - AlertChain has at least one @agent entry (mixed chain — agent
 //     entries deliver, email entries log+skip, fire succeeds).
 //   - AlertChain is empty (resolver falls back to single supervisor,
 //     never email-only).
 //
-// Post-D-B1: callers pass hasEmailDelivery=true and this guard
-// natural-defaults to no-op. The guard can be removed entirely once
-// D-B1 is permanent.
+// The guard remains permanent: hasEmailDelivery is tied to
+// thrumCfg.Email.Enabled at the composition root, so even with the
+// D-B1 substrate present a disabled bridge still triggers the
+// infinite-loop scenario and must be rejected at boot.
 func ValidateChainConfig(cfg ChainConfig, hasEmailDelivery bool) error {
 	if hasEmailDelivery {
 		return nil

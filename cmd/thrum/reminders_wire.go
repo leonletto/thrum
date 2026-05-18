@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/leonletto/thrum/internal/bridge/email"
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/reminders"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
@@ -22,10 +23,14 @@ import (
 //   - MessageSender: messageHandlerSender adapter wraps the existing
 //     *rpc.MessageHandler.HandleSend so reminders deliver via the
 //     canonical message-send pipeline (inbox + sync + events).
-//   - EmailQueue: nil for now. D-B1 (email substrate) lands later in
-//     v0.11; DeliverySink.fanToChain log-and-skips email chain entries
-//     when this is nil. Operators get a log line ("email entry in
-//     chain but no EmailQueue wired") rather than a silent drop.
+//   - EmailQueue: optional. Production wiring constructs a
+//     reminderEmailQueue adapter over D-B1's *email.Queue when
+//     thrumCfg.Email.Enabled; otherwise this is nil and
+//     DeliverySink.fanToChain log-and-skips email chain entries
+//     (operators get a log line "email entry in chain but no
+//     EmailQueue wired" rather than a silent drop). Daemon-boot
+//     sweep.ValidateChainConfig rejects email-only chains when
+//     emailQueue==nil to avoid dispatcher infinite-loop.
 //   - SupervisorMaybeRouter: nil for now. B-B1's supervisor pane
 //     registry + tmux pane-state resolver land in a follow-on epic.
 //     DeliverySink.deliverToTarget treats nil supervisor as "skip the
@@ -44,6 +49,7 @@ func wireReminders(
 	sched *scheduler.Scheduler,
 	store reminders.Store,
 	msgHandler *rpc.MessageHandler,
+	emailQueue reminders.EmailQueue,
 	supervisorID string,
 	cfg *config.DaemonConfig,
 ) {
@@ -52,10 +58,10 @@ func wireReminders(
 
 	sink := reminders.NewDeliverySink(
 		&messageHandlerSender{
-			handler:         msgHandler,
-			fallbackSender:  supervisorID,
+			handler:        msgHandler,
+			fallbackSender: supervisorID,
 		},
-		nil, // EmailQueue — D-B1 substrate not yet wired
+		emailQueue,
 		nil, // SupervisorMaybeRouter — B-B1 supervisor + AgentRuntimeResolver pending
 	)
 	dispatcher := reminders.NewDispatcher(
@@ -138,3 +144,50 @@ func (s *messageHandlerSender) SendReminder(ctx context.Context, fromAgent, toAg
 // reminders.MessageSender interface — catches signature drift on
 // either side.
 var _ reminders.MessageSender = (*messageHandlerSender)(nil)
+
+// reminderEmailQueue adapts D-B1's *email.Queue (Enqueue with a
+// QueueEnvelope) to A-B4's narrower reminders.EmailQueue interface
+// (QueueReminderEmail with positional to/subject/body). The adapter
+// is the composition root for the v0.11 substrate — A-B4 stays
+// agnostic of D-B1's envelope shape; D-B1 stays agnostic of A-B4's
+// reminder concept.
+//
+// fromAgent is the SMTP envelope's logical sender. Reminders don't
+// carry a session-bearing source agent (daemon-source rows are
+// system-generated), so this is set to the synthetic supervisor
+// identity at wire-up time — same fallback messageHandlerSender uses.
+type reminderEmailQueue struct {
+	queue     *email.Queue
+	fromAgent string
+}
+
+// QueueReminderEmail satisfies reminders.EmailQueue by writing a
+// queued row into email_outbound_queue. The D-B1 worker drains the
+// table on its own ticker; this method returns as soon as the row
+// is persisted (the queue is the async hand-off seam).
+//
+// Rejects empty `to` to avoid enqueuing rows that will fail their full
+// retry budget before the coordinator alert fires — mirrors the
+// messageHandlerSender.SendReminder empty-toAgent guard.
+func (a *reminderEmailQueue) QueueReminderEmail(ctx context.Context, to, subject, body string) error {
+	if a == nil || a.queue == nil {
+		return fmt.Errorf("reminderEmailQueue: nil queue (wiring bug)")
+	}
+	if to == "" {
+		return fmt.Errorf("reminderEmailQueue: empty to address")
+	}
+	if _, err := a.queue.Enqueue(ctx, email.QueueEnvelope{
+		FromAgent: a.fromAgent,
+		ToAddress: to,
+		Subject:   subject,
+		Body:      body,
+	}); err != nil {
+		return fmt.Errorf("reminderEmailQueue: enqueue to %s: %w", to, err)
+	}
+	return nil
+}
+
+// Compile-time check that reminderEmailQueue satisfies the
+// reminders.EmailQueue interface — catches signature drift on
+// either side.
+var _ reminders.EmailQueue = (*reminderEmailQueue)(nil)
