@@ -245,9 +245,8 @@ function renderPostPage(post) {
   <!-- JSON-LD structured data (BlogPosting) -->
   <script type="application/ld+json">${JSON.stringify(blogPostingJsonLd)}</script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/inter.woff2" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-mono-regular.woff2" crossorigin>
   <link rel="stylesheet" href="../css/theme.css">
   <link rel="stylesheet" href="../css/landing.css">
   <link rel="stylesheet" href="../css/blog.css">
@@ -419,9 +418,8 @@ function renderIndexPage(posts) {
   <!-- JSON-LD structured data (Blog) -->
   <script type="application/ld+json">${JSON.stringify(blogJsonLd)}</script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="preload" as="font" type="font/woff2" href="assets/fonts/inter.woff2" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="assets/fonts/ibm-plex-mono-regular.woff2" crossorigin>
   <link rel="stylesheet" href="css/theme.css">
   <link rel="stylesheet" href="css/landing.css">
   <link rel="stylesheet" href="css/blog.css">

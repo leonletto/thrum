@@ -43,35 +43,11 @@
   font-display: swap;
 }
 
-/* Inter - Body Text */
+/* Inter - Body Text (variable font: single file covers all weights) */
 @font-face {
   font-family: 'Inter';
-  src: url('../assets/fonts/inter-regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Inter';
-  src: url('../assets/fonts/inter-medium.woff2') format('woff2');
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Inter';
-  src: url('../assets/fonts/inter-semibold.woff2') format('woff2');
-  font-weight: 600;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Inter';
-  src: url('../assets/fonts/inter-bold.woff2') format('woff2');
-  font-weight: 700;
+  src: url('../assets/fonts/inter.woff2') format('woff2');
+  font-weight: 100 900;
   font-style: normal;
   font-display: swap;
 }

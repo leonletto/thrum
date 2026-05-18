@@ -53,16 +53,16 @@ machine-readable history lives in
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG.md</a>.</p>
 <h2>v0.10.5 — rc.3 in soak</h2>
 <p><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.3"><code>v0.10.5-rc.3</code></a>
-tagged 2026-05-18, in 48h FULL soak through 2026-05-20. rc.3 carries a
-self-echo regression fix (thrum-1zfk): rc.1&#39;s self-mention semantic change was
-correct in the spool dispatch path but missed the tmux nudge dispatch path, so
-agents could still get a phantom <code>New message from @&lt;self&gt;</code> reminder on
-outbound sends. rc.3 adds the symmetric tmux-path self-skip so both dispatch
-paths behave consistently. rc.2 was a docs-only patch (<code>/thrum:restart</code> skill
-restructured into an 11-section numbered format adding &quot;Honest unknowns&quot; and
-&quot;End-of-continuation note&quot; sections; <code>bd comments add</code> syntax correction in
-role templates and docs). The Added/Changed/Fixed and Upgrade Notes sections
-below describe the v0.10.5 release surface as a whole.</p>
+tagged 2026-05-18, in 48h FULL soak through 2026-05-20. rc.3 carries a self-echo
+regression fix (thrum-1zfk): rc.1&#39;s self-mention semantic change was correct in
+the spool dispatch path but missed the tmux nudge dispatch path, so agents could
+still get a phantom <code>New message from @&lt;self&gt;</code> reminder on outbound sends. rc.3
+adds the symmetric tmux-path self-skip so both dispatch paths behave
+consistently. rc.2 was a docs-only patch (<code>/thrum:restart</code> skill restructured
+into an 11-section numbered format adding &quot;Honest unknowns&quot; and
+&quot;End-of-continuation note&quot; sections; <code>bd comments add</code> syntax correction in role
+templates and docs). The Added/Changed/Fixed and Upgrade Notes sections below
+describe the v0.10.5 release surface as a whole.</p>
 <p>Backstop and hygiene. The headline change is operational: a daemon-side backstop
 nudger re-emits delivery notifications for stale-unread messages on its own
 schedule, replacing the per-agent <code>thrum-inbox-poll.sh</code> cron that previously had
@@ -145,11 +145,11 @@ them.</li>
 route correctly to the author&#39;s own inbox without being filtered out by the
 recipient-set construction. <code>read_at</code> is stamped at insert for the
 self-delivery row so the message doesn&#39;t show as unread to its author.</li>
-<li><strong>Self-echo nudge guard for tmux dispatch</strong> (thrum-1zfk, rc.3). The tmux
-nudge dispatch path (Layer 4) didn&#39;t honor the same self-skip the spool
-dispatcher (Layer 2) does, so an outbound <code>thrum send</code> could still produce a
-phantom <code>New message from @&lt;self&gt;</code> reminder in the sender&#39;s own pane. Layer
-4 now mirrors Layer 2; both dispatch paths skip self-delivery symmetrically.</li>
+<li><strong>Self-echo nudge guard for tmux dispatch</strong> (thrum-1zfk, rc.3). The tmux nudge
+dispatch path (Layer 4) didn&#39;t honor the same self-skip the spool dispatcher
+(Layer 2) does, so an outbound <code>thrum send</code> could still produce a phantom
+<code>New message from @&lt;self&gt;</code> reminder in the sender&#39;s own pane. Layer 4 now
+mirrors Layer 2; both dispatch paths skip self-delivery symmetrically.</li>
 </ul>
 <h3>Upgrade Notes</h3>
 <ul>

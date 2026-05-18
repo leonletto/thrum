@@ -71,14 +71,14 @@ they&#39;re parameterized over <code>VERSION</code> and the release branch.</p>
 <p><strong><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.3"><code>v0.10.5-rc.3</code></a></strong>
 (2026-05-18, in 48h FULL soak through 2026-05-20).</p>
 <p>Same release surface as rc.1/rc.2 (backstop nudger, runtime-init
-managed-template fix, first-turn ack, two new CLI flags), now with a
-self-echo regression fix (thrum-1zfk). rc.1&#39;s self-mention semantic change
-was correct in the spool dispatch path (Layer 2) but missed the tmux nudge
-dispatch path (Layer 4) — agents could still get a phantom
-<code>New message from @&lt;self&gt;</code> reminder in their own pane on outbound sends.
-rc.3 adds the symmetric Layer 4 self-skip so both dispatch paths behave
-consistently. Also folds in a doc-port of the <code>/thrum:restart</code> skill&#39;s §1
-&quot;Big picture&quot; mandate across the plugin variants.</p>
+managed-template fix, first-turn ack, two new CLI flags), now with a self-echo
+regression fix (thrum-1zfk). rc.1&#39;s self-mention semantic change was correct
+in the spool dispatch path (Layer 2) but missed the tmux nudge dispatch path
+(Layer 4) — agents could still get a phantom <code>New message from @&lt;self&gt;</code>
+reminder in their own pane on outbound sends. rc.3 adds the symmetric Layer 4
+self-skip so both dispatch paths behave consistently. Also folds in a doc-port
+of the <code>/thrum:restart</code> skill&#39;s §1 &quot;Big picture&quot; mandate across the plugin
+variants.</p>
 <p>The promotion back to 48h FULL soak (from rc.2&#39;s 24h CLI/docs class) is
 because the fix touches daemon dispatch code, not just docs.</p>
 <p>What&#39;s new in v0.10.5 overall:</p>
