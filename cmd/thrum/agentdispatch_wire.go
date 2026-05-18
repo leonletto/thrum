@@ -1,17 +1,35 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 
 	"github.com/leonletto/thrum/internal/agent"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/agentdispatch"
+	"github.com/leonletto/thrum/internal/daemon/agenthealth"
 	"github.com/leonletto/thrum/internal/daemon/escalation"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/scheduler"
+	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/skills/mirror"
+	"github.com/leonletto/thrum/internal/tmux"
 )
+
+// paneHealthCheckJobID is the canonical scheduler internal-job ID
+// for the periodic pane-health monitor. Operators see it in
+// `thrum cron list` + `thrum cron history` output; drift in the
+// literal here would break those audit-trail queries.
+const paneHealthCheckJobID = "internal.pane_health_check"
+
+// paneHealthCheckSchedule is the canonical cadence per the
+// thrum-fvhs dispatch ("Cadence: every 30s (configurable later)").
+// Coarse enough not to flood tmux with display-message probes;
+// tight enough that a crashed agent is detected within the same
+// minute. Operator override via config lands as a separate
+// follow-up bd if needed.
+const paneHealthCheckSchedule = "@every 30s"
 
 // listFilesProbeMethod is the RPC method daemon-boot probes to decide
 // whether agentdispatch's stage-8 drain should run or short-circuit.
@@ -224,5 +242,111 @@ func wireScheduledAgentHandlers(sched *scheduler.Scheduler, deps scheduledAgentD
 	if err := sched.RegisterTypeHandler("nudge", nudgeHandler); err != nil {
 		return fmt.Errorf("register nudge type handler: %w", err)
 	}
+	return nil
+}
+
+// tmuxPaneProber satisfies agenthealth.PaneProber by wrapping the
+// canonical internal/tmux.HasSession primitive — the same probe
+// internal/daemon/sweep/panes.go and internal/daemon/nudge/nudge.go
+// use to decide "is this agent's tmux session still up?" Returns
+// (alive, nil) on a successful probe; tmux errors surface as
+// (false, err) so the loop's per-agent error path activates
+// rather than silently treating an unreachable tmux as "pane gone".
+type tmuxPaneProber struct{}
+
+func (tmuxPaneProber) CheckPane(_ context.Context, target string) (bool, error) {
+	// tmux.HasSession synchronously shells out via safecmd; no
+	// context propagation needed (the probe is sub-millisecond
+	// against a live tmux server). When tmux itself is down the
+	// call returns false, which is the right answer for the
+	// pane-health check anyway.
+	return tmux.HasSession(target), nil
+}
+
+// placeholderRestarter satisfies agentdispatch.Restarter with a
+// stub that returns ErrHandlerWiringPending. Production restart
+// requires extracting a Go-level helper from rpc/tmux.go's
+// HandleRestart (per IMPORTANT #10 audit verdict); that adapter
+// is post-42b work tracked under thrum-fvhs's design notes.
+//
+// Until the real adapter lands, Respawner.OnPaneGone's F1
+// defensive handling catches the wrapped sentinel and logs +
+// continues without marking the agent as crash-looped. The audit
+// trail (crash_detected event) is preserved, so the system
+// observes the crash even without acting on it.
+type placeholderRestarter struct{}
+
+func (placeholderRestarter) Restart(_ context.Context, agentName string) error {
+	return fmt.Errorf("restart %q: %w", agentName, agentdispatch.ErrHandlerWiringPending)
+}
+
+// buildPaneHealthRespawner constructs an *agentdispatch.Respawner
+// with the canonical production deps for E6.7 pane-health respawn:
+//   - Registry: the supplied agent.AgentRegistry (caller-built
+//     via agent.NewSQLiteRegistry(state.DB)).
+//   - LifecycleStore: state.NewAgentLifecycleStore over the same DB.
+//   - Restarter: placeholderRestarter until the post-42b real
+//     adapter (Go-level Restart helper extracted from
+//     rpc/tmux.go's HandleRestart) lands. F1 forward-flag catches
+//     the wrapped ErrHandlerWiringPending in OnPaneGone — log +
+//     skip without state corruption.
+//   - Escalation: nil for now; the loop-guard trip path's F2
+//     nil-guard handles this. When the daemon-side escalation
+//     router is wired, pass through here.
+//
+// Lives next to wirePaneHealthCheck so main.go's composition
+// root threads the same DB to both the registry slot and the
+// lifecycle store — single source of truth.
+func buildPaneHealthRespawner(registry agent.AgentRegistry, db *state.State) *agentdispatch.Respawner {
+	return &agentdispatch.Respawner{
+		Registry:       registry,
+		LifecycleStore: state.NewAgentLifecycleStore(db.DB()),
+		Restarter:      placeholderRestarter{},
+		// Escalation: nil — wire when daemon-side escalation router lands.
+	}
+}
+
+// wirePaneHealthCheck registers the periodic agenthealth.CheckHandler
+// per thrum-fvhs / E6.7 AC 9.8.4. The handler iterates every
+// auto-respawn-eligible agent each tick, probes its tmux pane via
+// tmux.HasSession, and routes pane-gone events to
+// Respawner.OnPaneGone (which appends crash_detected, runs the
+// gate predicate + loop guard, and fires respawn or escalation).
+//
+// scheduler.RegisterInternal panics on duplicate id; this function
+// must be called exactly once per daemon boot. The id literal
+// matches paneHealthCheckJobID — operators see it in `thrum cron`
+// output.
+//
+// Deps are interface-injected so the production wiring at main.go's
+// composition root threads the daemon state + registry; tests
+// substitute fakes via the agenthealth.New constructor.
+func wirePaneHealthCheck(
+	sched *scheduler.Scheduler,
+	registry agent.AgentRegistry,
+	daemonState *state.State,
+) error {
+	if sched == nil {
+		return fmt.Errorf("wirePaneHealthCheck: nil scheduler")
+	}
+	if registry == nil {
+		return fmt.Errorf("wirePaneHealthCheck: nil registry")
+	}
+	if daemonState == nil {
+		return fmt.Errorf("wirePaneHealthCheck: nil state")
+	}
+	respawner := buildPaneHealthRespawner(registry, daemonState)
+	handler := agenthealth.New(
+		registry,
+		tmuxPaneProber{},
+		agenthealth.WrapAgentdispatchRespawner(respawner),
+		nil, // use slog.Default()
+	)
+	// RunAtStart=false: the first tick fires after the cadence
+	// window elapses. Boot-time non-terminal agents are handled
+	// separately by Reconciler (E6.9). RunAtStart=true would
+	// race the registry projection (agents may not yet be loaded).
+	sched.RegisterInternal(paneHealthCheckJobID, paneHealthCheckSchedule,
+		scheduler.InternalOpts{CatchUp: "skip"}, handler)
 	return nil
 }

@@ -85,6 +85,77 @@ func (r *sqliteRegistry) Lookup(ctx context.Context, name string) (Agent, error)
 	return a, nil
 }
 
+// listAutoRespawnEnabledQuery yields the same column set as
+// lookupQuery so the Scan logic mirrors. Filters apply the
+// canonical gate predicate from spec §3.4 + canonical-ref §6.3:
+// auto_respawn_enabled=1 AND no loop-guard trip AND no parse-
+// failure banner. Result ordering is implementation-defined
+// (callers must not depend on it).
+const listAutoRespawnEnabledQuery = `
+	SELECT
+		agent_id, kind, role, module, display, hostname,
+		agent_pid, registered_at, origin_daemon, last_seen_at,
+		mode, identity,
+		auto_respawn_enabled, auto_respawn_disabled_at,
+		state_md_parse_failed_at, last_pane_alive_at
+	  FROM agents
+	 WHERE auto_respawn_enabled = 1
+	   AND auto_respawn_disabled_at IS NULL
+	   AND state_md_parse_failed_at IS NULL`
+
+func (r *sqliteRegistry) ListAutoRespawnEnabled(ctx context.Context) ([]Agent, error) {
+	rows, err := r.db.QueryContext(ctx, listAutoRespawnEnabledQuery)
+	if err != nil {
+		return nil, fmt.Errorf("agent.ListAutoRespawnEnabled: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var agents []Agent
+	for rows.Next() {
+		var (
+			a                       Agent
+			lastSeenAt              sql.NullString
+			autoRespawnEnabled      int
+			autoRespawnDisabledUnix sql.NullInt64
+			stateMdFailedUnix       sql.NullInt64
+			lastPaneAliveUnix       sql.NullInt64
+		)
+		if err := rows.Scan(
+			&a.AgentID, &a.Kind, &a.Role, &a.Module, &a.Display, &a.Hostname,
+			&a.AgentPID, &a.RegisteredAt, &a.OriginDaemon, &lastSeenAt,
+			&a.Mode, &a.Identity,
+			&autoRespawnEnabled, &autoRespawnDisabledUnix,
+			&stateMdFailedUnix, &lastPaneAliveUnix,
+		); err != nil {
+			return nil, fmt.Errorf("agent.ListAutoRespawnEnabled scan: %w", err)
+		}
+		a.AutoRespawnEnabled = autoRespawnEnabled != 0
+		if lastSeenAt.Valid && lastSeenAt.String != "" {
+			if ts, parseErr := time.Parse(time.RFC3339, lastSeenAt.String); parseErr == nil {
+				ts = ts.UTC()
+				a.LastSeenAt = &ts
+			}
+		}
+		if autoRespawnDisabledUnix.Valid {
+			ts := time.Unix(autoRespawnDisabledUnix.Int64, 0).UTC()
+			a.AutoRespawnDisabledAt = &ts
+		}
+		if stateMdFailedUnix.Valid {
+			ts := time.Unix(stateMdFailedUnix.Int64, 0).UTC()
+			a.StateMdParseFailedAt = &ts
+		}
+		if lastPaneAliveUnix.Valid {
+			ts := time.Unix(lastPaneAliveUnix.Int64, 0).UTC()
+			a.LastPaneAliveAt = &ts
+		}
+		agents = append(agents, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("agent.ListAutoRespawnEnabled iter: %w", err)
+	}
+	return agents, nil
+}
+
 // nullableTimestampSetter is the shared shape for "UPDATE agents SET
 // <col> = ? WHERE agent_id = ?". Returning ErrAgentNotFound when no row
 // matches lets callers distinguish "you tried to set state on an agent
