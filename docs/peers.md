@@ -18,8 +18,6 @@ inbox. No relay, no manual handoff.
 Peers are bidirectional and persistent. Pair once; the connection re-establishes
 on daemon restarts automatically.
 
----
-
 ## The Two Transports
 
 Peers use two network transports. The peer model is the same for both — you pair
@@ -58,8 +56,6 @@ See [Tailscale Sync](tailscale-sync.md) for Tailscale setup and
 | Local     | `127.0.0.1`   | Both repos are on the same machine                   |
 | Tailscale | `100.x.x.x`   | Daemons are on separate Tailscale-connected machines |
 | Network   | Direct TCP/WS | Same LAN, no Tailscale (trusted networks only)       |
-
----
 
 ## The Pairing Flow
 
@@ -116,8 +112,6 @@ future connections.
 
 If the pairing code expires, run `thrum peer add` again to generate a new one.
 
----
-
 ## Listener vs Dialer
 
 The "adder" side (the one that ran `thrum peer add`) is always the **listener**.
@@ -140,8 +134,6 @@ The roles are fixed from the first pairing. They're stored in `peers.json` as
 
 Once connected, the WebSocket connection is bidirectional — both sides send RPC
 requests and receive notifications over the same connection.
-
----
 
 ## Address Change Handling
 
@@ -177,8 +169,6 @@ up.
 
 See [RPC API](rpc-api.md#peer.address_changed) for the `peer.address_changed`
 method signature.
-
----
 
 ## Messaging Across Peers
 
@@ -237,8 +227,6 @@ sender's perspective. Inbox, threading, and read state all work normally.
 resolves cross-repo agents.
 
 See [Messaging](messaging.md) for full send/receive/reply documentation.
-
----
 
 ## Configuration
 
@@ -306,8 +294,6 @@ same backup-once semantics as `config.json.pre-identity-bak` — the file is nev
 overwritten after creation. Rename it back if a schema migration goes wrong.
 
 See [Configuration](configuration.md) for the full config reference.
-
----
 
 ## Commands
 
@@ -417,8 +403,6 @@ thrum peer configure mock-salesforce add-agent coordinator_main
 thrum peer configure mock-salesforce remove-agent coordinator_main
 ```
 
----
-
 ## Automatic Drift Recovery
 
 When a peer's address changes (IP reassignment, port change, daemon restart on a
@@ -481,8 +465,6 @@ thrum peer add --type tailscale   # (or local/network)
 thrum peer join --type tailscale --peercode alice:...
 ```
 
----
-
 ## Troubleshooting
 
 ### Pairing fails or times out
@@ -520,8 +502,6 @@ alice            100.64.1.5:44123     true       2026-03-01T12:00:00Z    2m ago
 - `LAST_SYNC` stale by more than a few minutes — check daemon logs for
   connection errors.
 
----
-
 ## How It Differs from Sync
 
 Peers and sync are complementary. They serve different purposes.
@@ -551,8 +531,6 @@ agents on those machines.
 
 See [Sync Protocol](sync.md) for how Git-based sync works and
 [Tailscale Sync](tailscale-sync.md) for cross-machine sync via Tailscale.
-
----
 
 ## Next Steps
 

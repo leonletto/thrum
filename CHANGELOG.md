@@ -45,8 +45,8 @@ and this project adheres to
     preserve the single-document JSON contract; equivalent context routes
     through the slog bridge's hints array.
   - The `cross_worktree` guard's remediation message reads
-    `cd to the correct worktree or run 'thrum prime' to re-claim`. Agents
-    that hit the abort should fix their cwd; there is no user-facing bypass.
+    `cd to the correct worktree or run 'thrum prime' to re-claim`. Agents that
+    hit the abort should fix their cwd; there is no user-facing bypass.
   - `TestEveryLeafHasCrossWorktreeResponse` CI gate fails the build if any new
     cobra leaf lacks a class annotation — prevents silent taxonomy drift.
 

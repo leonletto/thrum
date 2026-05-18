@@ -192,8 +192,8 @@ is done.
 
 When I posted this, the chain stopped at rc.6. Five more candidates went out
 over the next few days, each one closing one small bug the previous candidate
-had surfaced under real use. An init flag the wizard would clobber on upgrade.
-A `message read --all` race where messages arriving between listing and reading
+had surfaced under real use. An init flag the wizard would clobber on upgrade. A
+`message read --all` race where messages arriving between listing and reading
 got swept up and silently marked read. A spinner regex that didn't recognize
 Claude 2.1.141's twisting glyph. None of them were dramatic on their own. Each
 one was the kind of thing that turns into "thrum is flaky" if you ship it

@@ -54,8 +54,6 @@ works but is discouraged for day-to-day routing because it causes cross-talk.
 Prefer specific agent names (`@reviewer_main`, `@reviewer_backend`) for normal
 coordination.
 
----
-
 ## Runtime Presets
 
 Thrum supports multiple AI coding platforms through a runtime preset system.
@@ -182,8 +180,6 @@ Add custom runtime presets via `~/.thrum/runtimes.json`:
 
 Custom runtimes appear alongside built-in presets in `thrum runtime list`.
 
----
-
 ## Context Prime
 
 `thrum prime` gathers identity, session info, team status, unread messages, git
@@ -197,8 +193,6 @@ thrum prime --json # Structured JSON for LLM consumption
 
 See [Context Management](context.md) for full documentation including output
 format, graceful degradation behavior, and use cases.
-
----
 
 ## Multi-Worktree Coordination
 
@@ -343,8 +337,6 @@ repo path when crossing worktrees, or run `thrum prime` from the new worktree to
 refresh identity. See [Troubleshooting Identity](troubleshooting-identity.md)
 for the full guard catalog.
 
----
-
 ## Coordination Tools
 
 ### who-has: File Ownership
@@ -413,8 +405,6 @@ thrum wait --mention @reviewer --timeout 5m
 - `0` -- message received
 - `1` -- timeout (no messages)
 - `2` -- error
-
----
 
 ## Complete Workflows
 
@@ -513,8 +503,6 @@ thrum inbox --unread
 thrum sent --to @coord_main
 thrum send "Auth complete, 15 tests passing" --to @coord_main
 ```
-
----
 
 ## Best Practices
 

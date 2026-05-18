@@ -21,8 +21,6 @@ Each is a first-class citizen. Thrum doesn't care which one you're running. The
 nudge mechanism, messaging, identity system, and session lifecycle work the same
 regardless.
 
----
-
 ## Why Multi-Runtime Matters
 
 Different runtimes are good at different things. Claude Opus is expensive but
@@ -49,8 +47,6 @@ thrum tmux launch debug-session --runtime shell
 The `runtime` field shows up in `thrum tmux status` and `thrum team` so you can
 see at a glance what each agent is running.
 
----
-
 ## Runtime Resolution Order
 
 Every tmux command that starts or restarts a runtime resolves which runtime to
@@ -72,8 +68,6 @@ If you set `preferred_runtime` in the identity file once, you never need to pass
 directly, bypassing the caller's `THRUM_HOME` / `THRUM_NAME` env vars. This
 fixes a class of bugs where launching from one worktree to another carried the
 wrong identity into the new session.
-
----
 
 ## Setting `preferred_runtime` at Init
 
@@ -115,8 +109,6 @@ You can set a different runtime per launch by passing `--runtime` explicitly.
 The `preferred_runtime` value doesn't change — it stays as the default for that
 worktree.
 
----
-
 ## Process Detection Across Runtimes
 
 When Thrum needs to find the agent process in a tmux pane, it walks the process
@@ -154,8 +146,6 @@ should run here_ field.
 
 The distinction matters when you manually launch a different runtime than the
 one in `preferred_runtime`. Thrum tracks what's actually there.
-
----
 
 ## tmux Launch and Restart Per Runtime
 
@@ -203,8 +193,6 @@ runtimes is deferred until there's a clear format to work with.
 
 See [Session Restart](session-restart.md) for the full Claude restart story.
 
----
-
 ## Identity File Fields (Version 5)
 
 The identity file format is version 5 as of this feature. Two changes from
@@ -240,8 +228,6 @@ The full v5 shape, with the relevant fields:
 
 See [Identity System](identity.md) for the complete field reference.
 
----
-
 ## Config: System-Wide Runtime Default
 
 If you want all new agents to default to a specific runtime without passing
@@ -264,8 +250,6 @@ different defaults, set it in each one's `.thrum/config.json`.
 
 See [Configuration](configuration.md) for the full config reference.
 
----
-
 ## Known Limitations
 
 **Restart snapshots are Claude-only.** When you restart a non-Claude session,
@@ -284,8 +268,6 @@ misattribute. This hasn't happened yet.
 **`.opencode` shim detection (v0.9.0).** The `.opencode` dot-prefix shim binary
 is now detected in the ancestor walk. Before v0.9.0 it was invisible to the
 process scan, and opencode panes were misattributed to the parent shell.
-
----
 
 ## Full Setup Example
 
@@ -331,8 +313,6 @@ SESSION        AGENT        STATE        RUNTIME    BRANCH
 impl-api       impl_api     alive        opencode   feature/api-refactor
 impl-tests     impl_tests   alive        codex      feature/api-refactor-tests
 ```
-
----
 
 ## Next Steps
 

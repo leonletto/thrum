@@ -1429,8 +1429,6 @@ spec to the `monitors` table so it survives daemon restarts.
 - `max monitors reached`: Already at the 100-monitor limit
 - `agent not found`: Recipient agent name is not registered
 
----
-
 ### monitor.list
 
 List monitor jobs.
@@ -1453,8 +1451,6 @@ List monitor jobs.
 | `monitors[].uptime` | string  | Human-readable uptime (empty if stopped) |
 | `monitors[].match`  | string  | Regex pattern                            |
 | `monitors[].to`     | string  | Recipient agent name                     |
-
----
 
 ### monitor.show
 
@@ -1485,8 +1481,6 @@ Full detail on a single monitor job.
 | `recent_matches` | array   | Last N matched lines (strings)                  |
 | `created_at`     | string  | ISO 8601 creation timestamp                     |
 
----
-
 ### monitor.stop
 
 Stop a running monitor. Sends SIGTERM, waits 5 seconds, sends SIGKILL if still
@@ -1510,8 +1504,6 @@ running. Removes the spec from persistence — the monitor won't respawn.
 - `monitor not found`: No monitor with given ID
 - `monitor already stopped`: Monitor is not running
 
----
-
 ### monitor.logs
 
 Return the last N bytes of captured stdout+stderr from the child process.
@@ -1533,8 +1525,6 @@ Return the last N bytes of captured stdout+stderr from the child process.
 **Errors:**
 
 - `monitor not found`: No monitor with given ID
-
----
 
 ### monitor.restart
 
@@ -1558,8 +1548,6 @@ spec.
 
 - `monitor not found`: No monitor with given ID
 - `monitor already running`: Monitor is currently active
-
----
 
 ## Using the API
 
