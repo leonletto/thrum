@@ -57,6 +57,14 @@ type TmuxRPC interface {
 	// chance during stage 8 teardown. Followed by a configurable grace
 	// window before TmuxKillSession fires.
 	PaneSendCtrlCExit(ctx context.Context, target string) error
+
+	// PaneInjectPrompt sends a text prompt to the runtime's pane via
+	// send-keys + 200ms gap + Enter (matching the canonical
+	// sendKeysAndSubmit helper in internal/daemon/rpc/tmux.go so we
+	// defeat paste-mode detection per feedback_byte_equality_pane_detection
+	// memory). Used by E6.4's multi-fire idle-nudge loop to inject
+	// the operator-visible nudge prompt each fire.
+	PaneInjectPrompt(ctx context.Context, target, text string) error
 }
 
 // TmuxCreateOpts carries the per-session knobs TmuxCreate needs.
@@ -479,11 +487,14 @@ func (h *ScheduledAgentHandler) Dispatch(ctx context.Context, job scheduler.JobS
 		graceSeconds = defaultIfZero(job.ScheduledAgent.TeardownGraceSeconds, 10)
 	}
 	loop := &idleNudgeLoop{
-		target:      target,
-		runID:       runID,
-		idleSeconds: idleSeconds,
-		maxNudges:   maxNudges,
-		timer:       time.NewTimer(time.Duration(idleSeconds) * time.Second),
+		target:           target,
+		runID:            runID,
+		idleSeconds:      idleSeconds,
+		maxNudges:        maxNudges,
+		lastPaneActivity: time.Now(),
+		timer:            time.NewTimer(time.Duration(idleSeconds) * time.Second),
+		tmux:             h.deps.Tmux,
+		escalation:       h.deps.Escalation,
 	}
 	defer loop.timer.Stop()
 
@@ -502,11 +513,13 @@ func (h *ScheduledAgentHandler) Dispatch(ctx context.Context, job scheduler.JobS
 			_ = reporter.Transition(scheduler.StateCompleted, "agent reported done", details)
 			return nil
 		case <-loop.timer.C:
-			// E6.4 ships the real multi-fire body (canonical §2.2
-			// idle_nudge_NofM emit + Layer-D escalation). For E6.1
-			// the stub just re-arms so the dispatcher remains
-			// correct under signals/ctx-cancel arrival mid-window.
-			if err := h.fireIdleNudge(ctx, loop, reporter); err != nil {
+			// E6.4 multi-fire body: PaneActivity probe → if active,
+			// reset with 2s settle; if silent, increment counter +
+			// emit idle_nudge_NofM stage marker; at maxNudges fire
+			// Layer-D escalation (StateFailed + escalation_emitted_by
+			// marker for A-B1's evaluator-side suppression) and
+			// return ErrIdleNudgeExhausted to close the dispatch.
+			if err := loop.onTimerFire(ctx, reporter); err != nil {
 				return err
 			}
 		}
@@ -524,55 +537,9 @@ func defaultIfZero(v, fallback int) int {
 	return v
 }
 
-// idleNudgeLoop carries the per-dispatch state the stage-7 select
-// loop needs to coordinate the multi-fire idle-nudge protocol per
-// spec §7.1 + canonical §2.2. Lives in stack/parameter scope per
-// IMPORTANT #7 dual-review: ScheduledAgentHandler is shared across
-// concurrent dispatches (AC 9.2.10 race-detector clean for 5
-// simultaneous), so the per-run state must NOT live on the
-// receiver.
-//
-// E6.4's Task 36 fills in the real fireIdleNudge body — multi-fire
-// counter increment, idle_nudge_NofM stage marker emit via
-// IdleNudgeStageFmt, and Layer-D escalation routing when nudgeCount
-// reaches maxNudges. E6.1 ships a placeholder that just re-arms the
-// timer so the dispatcher stays correct under signals/ctx-cancel
-// arrival mid-window.
-type idleNudgeLoop struct {
-	target      string
-	runID       string
-	idleSeconds int
-	maxNudges   int
-
-	// timer is the per-window scheduler. defer loop.timer.Stop() in
-	// Dispatch ensures the timer is GC'd even on early return paths
-	// (signals / ctx-cancel before the timer fires for the first time).
-	timer *time.Timer
-
-	// nudgeCount tracks how many idle-nudge fires have happened in
-	// this stage 7 entry. E6.4's Task 36 increments + compares
-	// against maxNudges; E6.1 keeps the field for forward-compat.
-	nudgeCount int
-}
-
-// fireIdleNudge is the stage-7 timer-arm placeholder per resume plan
-// §"Patterns that worked". E6.4's Task 36 replaces this body with
-// the multi-fire idle_nudge_NofM emit + Layer-D escalation when
-// nudgeCount reaches maxNudges; E6.1 just re-arms the timer so the
-// loop continues to react to signals + ctx.Done.
-//
-// Keeping the seam clean: the method signature is the contract
-// E6.4 drops into. No callers in E6.1 inspect the return value
-// beyond non-nil-as-fatal.
-//
-//nolint:unparam // E6.4 returns a real error from escalation routing
-func (h *ScheduledAgentHandler) fireIdleNudge(_ context.Context, loop *idleNudgeLoop, _ scheduler.StateReporter) error {
-	// E6.1 stub: increment counter (for forward-compat introspection)
-	// and re-arm. E6.4 fills in the IdleNudgeStageFmt emit + escalation.
-	loop.nudgeCount++
-	loop.timer.Reset(time.Duration(loop.idleSeconds) * time.Second)
-	return nil
-}
+// idleNudgeLoop + onTimerFire moved to idle_nudge.go in E6.4 Task 36.
+// The type declaration + canonical multi-fire body live there alongside
+// the supporting helpers (idleNudgePrompt, Layer-D body builder).
 
 // teardownGracefully runs the canonical stage-8 teardown sequence
 // per spec §7.1 stage 8 — five steps in fixed order:

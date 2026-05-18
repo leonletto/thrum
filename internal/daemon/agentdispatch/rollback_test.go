@@ -39,7 +39,8 @@ func (r *recordingTmux) TmuxKillSession(_ context.Context, target string) error 
 	r.killCalls = append(r.killCalls, target)
 	return r.killErr
 }
-func (r *recordingTmux) PaneSendCtrlCExit(_ context.Context, _ string) error { return nil }
+func (r *recordingTmux) PaneSendCtrlCExit(_ context.Context, _ string) error  { return nil }
+func (r *recordingTmux) PaneInjectPrompt(_ context.Context, _, _ string) error { return nil }
 
 type recordingWorktree struct {
 	destroyCalls []worktree.DestroyOpts
@@ -257,46 +258,6 @@ func TestRouteEscalation_PropagatesRouterError(t *testing.T) {
 	}
 }
 
-// TestFireIdleNudge_StubIncrementsCounterAndRearmsTimer pins the
-// stage-7 timer-arm placeholder per resume plan "Patterns that
-// worked": E6.1's fireIdleNudge stub must increment the nudge
-// counter (forward-compat introspection for E6.4) and re-arm the
-// timer so the select-loop continues to react to signals + ctx.Done
-// arrival mid-window. E6.4's drop-in body replaces the stub with
-// idle_nudge_NofM emit + escalation; the seam is what's pinned here.
-func TestFireIdleNudge_StubIncrementsCounterAndRearmsTimer(t *testing.T) {
-	h := &ScheduledAgentHandler{deps: Deps{}}
-	loop := &idleNudgeLoop{
-		target:      "docs_bot",
-		runID:       "run-nudge-1",
-		idleSeconds: 1,
-		maxNudges:   3,
-		timer:       time.NewTimer(time.Hour), // long enough that re-arm replaces, not fires
-	}
-	defer loop.timer.Stop()
-
-	if err := h.fireIdleNudge(context.Background(), loop, nil); err != nil {
-		t.Fatalf("fireIdleNudge err = %v; want nil for E6.1 stub", err)
-	}
-	if loop.nudgeCount != 1 {
-		t.Errorf("nudgeCount = %d; want 1 after one fire", loop.nudgeCount)
-	}
-
-	// Re-arm must have happened — the timer is still pending, not
-	// drained. Stop() returns true if the timer was active.
-	if !loop.timer.Stop() {
-		t.Error("timer.Stop returned false; expected the re-armed timer to still be active")
-	}
-
-	// Calling fireIdleNudge again increments the counter — E6.4 will
-	// compare against maxNudges before re-arming. The stub does NOT
-	// compare; the counter is purely a forward-compat handle.
-	loop.timer = time.NewTimer(time.Hour)
-	defer loop.timer.Stop()
-	if err := h.fireIdleNudge(context.Background(), loop, nil); err != nil {
-		t.Errorf("fireIdleNudge err = %v on second call; want nil", err)
-	}
-	if loop.nudgeCount != 2 {
-		t.Errorf("nudgeCount after two fires = %d; want 2", loop.nudgeCount)
-	}
-}
+// (The E6.1 stub test for fireIdleNudge is superseded by the full
+// E6.4 onTimerFire test suite in idle_nudge_test.go — the stub no
+// longer exists; the multi-fire body has its own coverage there.)

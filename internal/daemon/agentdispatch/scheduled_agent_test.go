@@ -44,13 +44,21 @@ type stubTmuxRPC struct {
 	paneCtrlCErr   error
 	paneCtrlCCalls []string
 
+	paneInjectErr   error
+	paneInjectCalls []paneInjectCall
+
 	// callOrder is a chronological log across all RPC methods on
 	// this stub. Tokens: "checkpane", "create", "launch", "wait",
-	// "kill", "ctrlc". Note: a stub instance shared across sub-tests
-	// must reset callOrder manually (no auto-reset between table
-	// entries) — otherwise the second sub-test sees the first's
-	// entries.
+	// "kill", "ctrlc", "inject". Note: a stub instance shared
+	// across sub-tests must reset callOrder manually (no auto-reset
+	// between table entries) — otherwise the second sub-test sees
+	// the first's entries.
 	callOrder []string
+}
+
+type paneInjectCall struct {
+	target string
+	text   string
 }
 
 type tmuxCreateCall struct {
@@ -87,6 +95,11 @@ func (s *stubTmuxRPC) PaneSendCtrlCExit(_ context.Context, target string) error 
 	s.paneCtrlCCalls = append(s.paneCtrlCCalls, target)
 	s.callOrder = append(s.callOrder, "ctrlc")
 	return s.paneCtrlCErr
+}
+func (s *stubTmuxRPC) PaneInjectPrompt(_ context.Context, target, text string) error {
+	s.paneInjectCalls = append(s.paneInjectCalls, paneInjectCall{target: target, text: text})
+	s.callOrder = append(s.callOrder, "inject")
+	return s.paneInjectErr
 }
 
 // stubMessageRPC records MessageSend calls + returns canned values.
@@ -1850,7 +1863,8 @@ func (raceCleanTmux) TmuxCreate(_ context.Context, _ string, _ agentdispatch.Tmu
 func (raceCleanTmux) TmuxLaunch(_ context.Context, _ string) error        { return nil }
 func (raceCleanTmux) WaitForPaneReady(_ context.Context, _ string) error  { return nil }
 func (raceCleanTmux) TmuxKillSession(_ context.Context, _ string) error   { return nil }
-func (raceCleanTmux) PaneSendCtrlCExit(_ context.Context, _ string) error { return nil }
+func (raceCleanTmux) PaneSendCtrlCExit(_ context.Context, _ string) error  { return nil }
+func (raceCleanTmux) PaneInjectPrompt(_ context.Context, _, _ string) error { return nil }
 
 type raceCleanMessage struct{}
 
