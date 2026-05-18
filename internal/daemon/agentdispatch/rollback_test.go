@@ -3,6 +3,7 @@ package agentdispatch
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/leonletto/thrum/internal/worktree"
 )
@@ -17,11 +18,16 @@ import (
 // re-declaring the test plumbing.
 
 type recordingTmux struct {
-	killCalls []string
-	killErr   error
+	killCalls       []string
+	killErr         error
+	checkPaneAlive  bool // controls waitForPaneExit polling
+	checkPaneCalls  int
 }
 
-func (r *recordingTmux) CheckPane(_ context.Context, _ string) (bool, error)         { return false, nil }
+func (r *recordingTmux) CheckPane(_ context.Context, _ string) (bool, error) {
+	r.checkPaneCalls++
+	return r.checkPaneAlive, nil
+}
 func (r *recordingTmux) TmuxCreate(_ context.Context, _ string, _ TmuxCreateOpts) error {
 	return nil
 }
@@ -121,5 +127,52 @@ func TestRollbackStage5Failure_DestroysEvenIfKillFails(t *testing.T) {
 
 	if len(wt.destroyCalls) != 1 {
 		t.Errorf("Destroy calls = %d; want 1 (kill error must not short-circuit destroy)", len(wt.destroyCalls))
+	}
+}
+
+// TestWaitForPaneExit_HonorsGraceWindow pins the canonical stage-8
+// grace-window timeout: if CheckPane keeps reporting alive (e.g. a
+// wedged runtime that ignored Ctrl-C), waitForPaneExit must return
+// after the grace window expires rather than block indefinitely.
+// Without this, a single stuck runtime would freeze the entire
+// scheduler dispatcher (AC 9.2.10 race-clean depends on it returning).
+func TestWaitForPaneExit_HonorsGraceWindow(t *testing.T) {
+	tmux := &recordingTmux{checkPaneAlive: true} // never reports exit
+	h := &ScheduledAgentHandler{deps: Deps{Tmux: tmux}}
+
+	start := time.Now()
+	h.waitForPaneExit("docs_bot", 250*time.Millisecond)
+	elapsed := time.Since(start)
+
+	// Grace window is 250ms; with the 100ms polling cadence and
+	// scheduler jitter, allow a generous upper bound but assert
+	// the call did NOT hang.
+	if elapsed > 2*time.Second {
+		t.Errorf("waitForPaneExit blocked %v; want ≤ 2s", elapsed)
+	}
+	if elapsed < 200*time.Millisecond {
+		t.Errorf("waitForPaneExit returned in %v; expected at least grace window (250ms)", elapsed)
+	}
+	if tmux.checkPaneCalls == 0 {
+		t.Error("CheckPane was never polled; the helper short-circuited unexpectedly")
+	}
+}
+
+// TestWaitForPaneExit_ReturnsImmediatelyOnNotAlive pins the fast-path
+// case: when CheckPane reports the pane is not alive on the first
+// poll, waitForPaneExit returns promptly (well under the grace
+// window). A regression that always burned the full grace would
+// add up to 10s per teardown — visible operator-facing slowness
+// across many wakes.
+func TestWaitForPaneExit_ReturnsImmediatelyOnNotAlive(t *testing.T) {
+	tmux := &recordingTmux{checkPaneAlive: false}
+	h := &ScheduledAgentHandler{deps: Deps{Tmux: tmux}}
+
+	start := time.Now()
+	h.waitForPaneExit("docs_bot", 5*time.Second)
+	elapsed := time.Since(start)
+
+	if elapsed > 500*time.Millisecond {
+		t.Errorf("waitForPaneExit took %v with not-alive pane; want < 500ms", elapsed)
 	}
 }

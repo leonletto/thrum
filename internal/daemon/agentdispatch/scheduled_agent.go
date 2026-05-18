@@ -535,19 +535,47 @@ func (h *ScheduledAgentHandler) fireIdleNudge(_ context.Context, loop *idleNudge
 	return nil
 }
 
-// teardownGracefully runs the stage-8 teardown sequence per spec
-// §7.1 stage 8. E6.1 Task 18 ships the minimal viable version:
-// tmux kill-session + worktree.Destroy with Persistent-mode branch
-// preservation. Task 19 expands it with the SIGTERM-equivalent
-// (Ctrl-C + exit) + grace-window wait + E6.6 listFiles drain.
+// teardownGracefully runs the canonical stage-8 teardown sequence
+// per spec §7.1 stage 8 — five steps in fixed order:
 //
-// Per IMPORTANT #7 dual-review: `job` and `reporter` are passed AS
-// PARAMETERS (not handler fields) so concurrent Dispatches don't
-// race on per-run state.
+//  1. PaneSendCtrlCExit (SIGTERM-equivalent: Ctrl-C + `exit\n`) so
+//     the runtime gets a graceful-exit window before kill-session.
+//  2. waitForPaneExit(graceSeconds) — block up to grace seconds for
+//     the runtime to actually exit. Spares cleanup from racing the
+//     runtime's own shutdown writes.
+//  3. drainListFilesRPCs(graceSeconds) — wait for in-flight
+//     agent.listFiles / agent.getFile RPCs to settle (E6.6 ships
+//     the real helper; E6.1 stubs as a no-op so the canonical
+//     ordering is documented at the call site).
+//  4. TmuxKillSession — hard-kill if step 2 timed out.
+//  5. worktree.Destroy — ephemeral mode deletes branch alongside
+//     the path; persistent mode passes Branch="" so the branch is
+//     preserved for the next scheduled wake to reuse.
+//
+// Per IMPORTANT #7 dual-review: `job` and `reporter` are PARAMETERS,
+// not handler fields, so concurrent Dispatches don't race on
+// per-run state. AC 9.2.10 (5 simultaneous dispatches, race clean)
+// pins this.
 func (h *ScheduledAgentHandler) teardownGracefully(_ context.Context, target string, result *worktree.CreateResult, graceSeconds int, job scheduler.JobSpec, reporter scheduler.StateReporter) {
-	_ = graceSeconds // Task 19 wires the grace-window wait
 	_ = reporter.Stage(StageTearingDown)
 
+	grace := time.Duration(graceSeconds) * time.Second
+
+	// SIGTERM-equivalent first — give the runtime its grace window
+	// to flush state.md, in-flight messages, etc.
+	_ = h.deps.Tmux.PaneSendCtrlCExit(context.Background(), target)
+
+	h.waitForPaneExit(target, grace)
+
+	// E6.6's listFiles drain is owned by the file-streaming epic;
+	// stub here so the canonical ordering is fixed before E6.6
+	// drops in the real wait.
+	h.drainListFilesRPCs(target, grace)
+
+	// Hard-kill if the runtime didn't exit on its own during the
+	// grace window. TmuxKillSession is idempotent (no-op on already-
+	// dead sessions) so calling it after a successful graceful exit
+	// is safe.
 	_ = h.deps.Tmux.TmuxKillSession(context.Background(), target)
 
 	// Persistent mode: skip branch deletion (spec §7.1 + Q-Spec
@@ -563,6 +591,44 @@ func (h *ScheduledAgentHandler) teardownGracefully(_ context.Context, target str
 		Branch:       branch,
 		Force:        true,
 	})
+}
+
+// waitForPaneExit polls TmuxRPC.CheckPane until the pane reports
+// not-alive OR the grace window expires. Polling cadence (100ms) is
+// fast enough that a runtime exiting in well under graceSeconds gets
+// detected almost immediately, but slow enough that the daemon
+// doesn't spam CheckPane during a stuck shutdown.
+//
+// Uses context.Background() with a timeout so the wait completes
+// even if the parent context is cancelled — see teardownGracefully's
+// invariant that cleanup runs on cancel paths too.
+func (h *ScheduledAgentHandler) waitForPaneExit(target string, grace time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), grace)
+	defer cancel()
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			alive, err := h.deps.Tmux.CheckPane(ctx, target)
+			if err != nil || !alive {
+				return
+			}
+		}
+	}
+}
+
+// drainListFilesRPCs is E6.6's helper — wait for in-flight
+// agent.listFiles + agent.getFile RPCs to settle before kill-session.
+// E6.1 ships a no-op stub so the canonical ordering is fixed at the
+// call site; E6.6's implementer drops in the real wait without
+// re-touching teardownGracefully.
+func (h *ScheduledAgentHandler) drainListFilesRPCs(_ string, _ time.Duration) {
+	// E6.6 (file-streaming sub-epic) ships the real wait.
 }
 
 

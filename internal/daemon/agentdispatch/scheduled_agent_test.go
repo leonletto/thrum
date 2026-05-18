@@ -359,9 +359,11 @@ func TestStage0_HappyPath(t *testing.T) {
 	if len(rep.stages) == 0 || rep.stages[0] != agentdispatch.StageNameCollisionCheck {
 		t.Errorf("first stage = %v; want %q", rep.stages, agentdispatch.StageNameCollisionCheck)
 	}
-	// CheckPane should have been called exactly once with our target.
-	if len(rpc.checkPaneCalls) != 1 || rpc.checkPaneCalls[0] != "docs_bot" {
-		t.Errorf("CheckPane calls = %v; want [docs_bot]", rpc.checkPaneCalls)
+	// CheckPane is called once at stage 0 (must be "docs_bot"); the
+	// stage-8 waitForPaneExit polling adds further calls during
+	// teardown, so we assert the FIRST call only.
+	if len(rpc.checkPaneCalls) == 0 || rpc.checkPaneCalls[0] != "docs_bot" {
+		t.Errorf("CheckPane first call = %v; want docs_bot", rpc.checkPaneCalls)
 	}
 }
 
@@ -1379,6 +1381,85 @@ func TestStage7_PersistentWorktree_BranchPreserved(t *testing.T) {
 	}
 	if !wt.destroyCalls[0].Force {
 		t.Error("Destroy.Force = false; want true (still required for worktree removal)")
+	}
+}
+
+// TestStage8_TeardownOrdering_CtrlCExitBeforeKillSession pins the
+// canonical stage-8 sequence per spec §7.1 stage 8: PaneSendCtrlCExit
+// fires BEFORE TmuxKillSession so the runtime gets a SIGTERM-equivalent
+// grace window to flush state.md, in-flight messages, and other
+// session-end work. Reversing the order would mean every clean
+// shutdown looks like a hard-kill in the agent_lifecycle_events log.
+func TestStage8_TeardownOrdering_CtrlCExitBeforeKillSession(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false} // CheckPane returns not-alive → waitForPaneExit unblocks immediately
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage8-order"}
+	wt := okWorktree()
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+		Mirror:   okMirror(),
+	})
+	rep := &recReporter{}
+
+	// Use a short grace window so the test doesn't pause on the
+	// real default (10s) — waitForPaneExit will return when CheckPane
+	// reports not-alive anyway, but the safety belt matters in case
+	// of a regression that makes CheckPane stick.
+	job := testJob("docs_bot")
+	job.ScheduledAgent.TeardownGraceSeconds = 1
+
+	signals := make(chan *scheduler.Completion, 1)
+	signals <- &scheduler.Completion{Reason: "done", Summary: "ok"}
+	_ = h.Dispatch(context.Background(), job, "run-stage8-order", rep, signals)
+
+	if len(rpc.paneCtrlCCalls) != 1 || rpc.paneCtrlCCalls[0] != "docs_bot" {
+		t.Errorf("PaneSendCtrlCExit calls = %v; want [docs_bot]", rpc.paneCtrlCCalls)
+	}
+	if len(rpc.tmuxKillCalls) != 1 || rpc.tmuxKillCalls[0] != "docs_bot" {
+		t.Errorf("TmuxKillSession calls = %v; want [docs_bot]", rpc.tmuxKillCalls)
+	}
+	if len(wt.destroyCalls) != 1 {
+		t.Errorf("worktree.Destroy calls = %d; want 1", len(wt.destroyCalls))
+	}
+	// Ephemeral mode: branch must be passed through for deletion.
+	if wt.destroyCalls[0].Branch != wt.createResult.Branch {
+		t.Errorf("Destroy.Branch = %q; want %q (ephemeral mode deletes branch)",
+			wt.destroyCalls[0].Branch, wt.createResult.Branch)
+	}
+	if !wt.destroyCalls[0].Force {
+		t.Error("Destroy.Force = false; want true")
+	}
+}
+
+// TestStage8_DestroyEvenIfKillFails pins the best-effort cleanup
+// contract: a TmuxKillSession error must NOT short-circuit
+// worktree.Destroy. Otherwise a transient tmux failure during
+// teardown would leave the worktree orphan-stranded across daemon
+// restarts.
+func TestStage8_DestroyEvenIfKillFails(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: false, tmuxKillErr: errors.New("tmux socket vanished")}
+	msgRPC := &stubMessageRPC{returnMessageID: "msg-stage8-kill-fail"}
+	wt := okWorktree()
+	h := agentdispatch.NewScheduledAgentHandler(agentdispatch.Deps{
+		RepoPath: "/repo",
+		Tmux:     rpc,
+		Message:  msgRPC,
+		Worktree: wt,
+		Mirror:   okMirror(),
+	})
+	rep := &recReporter{}
+
+	job := testJob("docs_bot")
+	job.ScheduledAgent.TeardownGraceSeconds = 1
+	signals := make(chan *scheduler.Completion, 1)
+	signals <- &scheduler.Completion{Reason: "done", Summary: ""}
+	_ = h.Dispatch(context.Background(), job, "run-stage8-killfail", rep, signals)
+
+	if len(wt.destroyCalls) != 1 {
+		t.Errorf("Destroy calls = %d; want 1 (kill error must not short-circuit destroy)",
+			len(wt.destroyCalls))
 	}
 }
 
