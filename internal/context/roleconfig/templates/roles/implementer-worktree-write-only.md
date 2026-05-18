@@ -80,7 +80,7 @@ across worktrees and projects when missing.
 `/thrum:update-project` and edits to `.thrum/context/project_state.md` are
 coordinator-only actions. If you need to preserve session context before a
 restart or compaction, send a status message to the coordinator and wait — they
-update state on your behalf. Use `bd comments <task-id> add "<note>"` for urgent
+update state on your behalf. Use `bd comments add <task-id> "<note>"` for urgent
 task-scoped notes.
 
 ### Always pass an explicit `model:` parameter on every sub-agent spawn
