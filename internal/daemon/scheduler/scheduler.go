@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -250,6 +251,29 @@ func (s *Scheduler) RegisterTypeHandler(jobType string, h Handler) error {
 		}
 	}
 	return nil
+}
+
+// RegisteredTypeHandlers returns the sorted list of job-type names
+// currently registered via RegisterTypeHandler. Substrate-owned
+// types ("command", "thrum_command") are included alongside
+// user-registered ones since the read surface is uniform — the
+// inspection helper exposes whatever the scheduler considers a
+// valid type at this moment.
+//
+// Used by B-B1 E6.5 Task 42a's integration test to assert both
+// "scheduled_agent" and "nudge" are registered at daemon boot, and
+// by future B-B2 `thrum cron show`-style introspection. Snapshot
+// semantics — the returned slice is a fresh copy and won't reflect
+// later registrations.
+func (s *Scheduler) RegisteredTypeHandlers() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]string, 0, len(s.typeHandlers))
+	for jobType := range s.typeHandlers {
+		out = append(out, jobType)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // JobSpec returns the in-memory job spec for the given id; (zero, false)
