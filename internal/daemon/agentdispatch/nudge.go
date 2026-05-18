@@ -119,12 +119,20 @@ func (h *NudgeHandler) Reconcile(_ context.Context, _ scheduler.JobSpec, _ strin
 // dispatched (substrate-emitted) → delivering (stage marker) →
 // completed.
 func (h *NudgeHandler) Dispatch(ctx context.Context, job scheduler.JobSpec, _ string, reporter scheduler.StateReporter, _ <-chan *scheduler.Completion) error {
-	target := ""
-	message := ""
-	if job.Nudge != nil {
-		target = job.Nudge.Target
-		message = job.Nudge.Message
+	// Defensive nil-guard at the API boundary. The scheduler's
+	// validator (internal/daemon/scheduler/validator.go) rejects
+	// nudge jobs with missing Nudge sub-trees before they're
+	// registered, but defense-in-depth here means a bug in the
+	// validator (or a direct test-only handler invocation that
+	// bypasses validation) surfaces as a clean StateFailed +
+	// returned error rather than a nil-deref panic.
+	if job.Nudge == nil {
+		_ = reporter.Transition(scheduler.StateFailed,
+			"nudge job spec missing Nudge field", nil)
+		return fmt.Errorf("nudge dispatch: job %q has nil Nudge spec", job.ID)
 	}
+	target := job.Nudge.Target
+	message := job.Nudge.Message
 
 	if err := reporter.Stage("delivering"); err != nil {
 		return err
@@ -176,8 +184,11 @@ func (h *NudgeHandler) Dispatch(ctx context.Context, job scheduler.JobSpec, _ st
 		return fmt.Errorf("nudge enqueue: %w", err)
 	}
 
-	if err := reporter.Transition(scheduler.StateCompleted, "nudge delivered", nil); err != nil {
-		return err
-	}
+	// Message was delivered successfully — that's what nudge dispatch
+	// promises. A reporter-infra failure on the final Transition is
+	// not a nudge failure; the canonical pattern (see
+	// scheduled_agent.go's intermediate transitions) is to discard
+	// the error so the caller sees the dispatch succeeded.
+	_ = reporter.Transition(scheduler.StateCompleted, "nudge delivered", nil)
 	return nil
 }

@@ -241,6 +241,43 @@ func TestNudgeDispatch_RegistryError_PropagatesAndFails(t *testing.T) {
 	}
 }
 
+// TestNudgeDispatch_NilNudgeSpec_FailsWithoutPanic pins the
+// defensive nil-guard at the API boundary: a JobSpec with a nil
+// Nudge sub-tree (validator bypass, direct test invocation) must
+// surface as a clean StateFailed + returned error, not a nil-
+// deref panic. The validator rejects nil Nudge before dispatch
+// in production, but defense-in-depth here is the locked
+// expectation.
+func TestNudgeDispatch_NilNudgeSpec_FailsWithoutPanic(t *testing.T) {
+	rpc := &stubTmuxRPC{checkPaneResult: true}
+	msgRPC := &stubMessageRPC{}
+	reg := &stubAgentRegistry{}
+	h := agentdispatch.NewNudgeHandler(agentdispatch.NudgeDeps{Tmux: rpc, Message: msgRPC, Registry: reg})
+	rep := &recReporter{}
+
+	job := scheduler.JobSpec{ID: "broken-job", Type: "nudge", Nudge: nil}
+	err := h.Dispatch(context.Background(), job, "run-nil", rep, nil)
+	if err == nil {
+		t.Fatal("expected error for nil Nudge spec; got nil")
+	}
+	if rep.lastTransition().state != scheduler.StateFailed {
+		t.Errorf("lastState = %v; want StateFailed", rep.lastTransition().state)
+	}
+	if !strings.Contains(rep.lastTransition().reason, "missing Nudge field") {
+		t.Errorf("reason = %q; want canonical 'missing Nudge field'", rep.lastTransition().reason)
+	}
+	// Gate calls must NOT fire — guard runs before Stage marker.
+	if len(rpc.checkPaneCalls) != 0 {
+		t.Errorf("CheckPane called %d times; want 0", len(rpc.checkPaneCalls))
+	}
+	if len(reg.lookupCalls) != 0 {
+		t.Errorf("Registry.Lookup called %d times; want 0", len(reg.lookupCalls))
+	}
+	if len(msgRPC.calls) != 0 {
+		t.Errorf("MessageSend called %d times; want 0", len(msgRPC.calls))
+	}
+}
+
 // TestNudgeDispatch_MessageSendError_FailsCleanly pins the enqueue
 // failure path: a MessageSend error → StateFailed with the wrapped
 // error. The fixed registry presence check already passed at this
@@ -292,7 +329,9 @@ func TestNudgeHandler_StagesReturnsDeliveringWith10s(t *testing.T) {
 	if !ok {
 		t.Fatalf("Stages missing 'delivering' key; got: %v", stages)
 	}
-	if dur <= 0 {
-		t.Errorf("Stages[delivering] = %v; want positive duration", dur)
+	// Pin the exact 10s budget — drift to e.g. 1s would break
+	// A-B4's stalled-sweep skip-set logic for nudge runs.
+	if dur != 10*time.Second {
+		t.Errorf("Stages[delivering] = %v; want 10s exactly", dur)
 	}
 }
