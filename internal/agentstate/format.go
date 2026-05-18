@@ -167,6 +167,21 @@ var (
 // The parser is strict on STRUCTURE (counts, section markers,
 // header presence) and lenient on TEXT (paragraph content is taken
 // as-written; no schema enforcement on summaries themselves).
+// Section sentinels for the parser state machine. Lifted to
+// package scope (from function scope) so sectionName can switch
+// on the named constants rather than raw integer literals —
+// otherwise inserting a new sentinel between existing ones would
+// silently misalign sectionName's labels (Phase 3 fix-batch
+// reviewer M1).
+const (
+	sectionPreamble       = iota // header + metadata, before "## Session history"
+	sectionVerbatim              // inside ### Verbatim
+	sectionSummaryBlocks         // inside ### Summary blocks
+	sectionLastWorkedOn          // inside ## Last worked on
+	sectionPlanningNext          // inside ## Planning next
+	sectionReferenceTable        // inside ## Reference table
+)
+
 func Parse(content string) (*StateMD, error) {
 	if !strings.HasPrefix(content, "# Agent State ") {
 		return nil, ErrMissingHeader
@@ -179,14 +194,6 @@ func Parse(content string) (*StateMD, error) {
 	// currently accumulating. The "above the # Session history"
 	// header block sets AgentName + metadata; subsequent sections
 	// flush into the appropriate field.
-	const (
-		sectionPreamble = iota // header + metadata, before "## Session history"
-		sectionVerbatim
-		sectionSummaryBlocks
-		sectionLastWorkedOn
-		sectionPlanningNext
-		sectionReferenceTable
-	)
 	section := sectionPreamble
 
 	var (
@@ -608,20 +615,22 @@ func requireSectionOrder(current, want int, heading string) error {
 }
 
 // sectionName renders a section sentinel as a human-friendly string
-// for error messages. Internal-only.
+// for error messages. Switches on the named constants so a future
+// iota reorder doesn't silently misalign labels (Phase 3 fix-batch
+// reviewer M1).
 func sectionName(s int) string {
 	switch s {
-	case 0: // sectionPreamble
+	case sectionPreamble:
 		return "preamble (before '## Session history')"
-	case 1: // sectionVerbatim
+	case sectionVerbatim:
 		return "'### Verbatim' section"
-	case 2: // sectionSummaryBlocks
+	case sectionSummaryBlocks:
 		return "'### Summary blocks' section"
-	case 3: // sectionLastWorkedOn
+	case sectionLastWorkedOn:
 		return "'## Last worked on' section"
-	case 4: // sectionPlanningNext
+	case sectionPlanningNext:
 		return "'## Planning next' section"
-	case 5: // sectionReferenceTable
+	case sectionReferenceTable:
 		return "'## Reference table' section"
 	default:
 		return fmt.Sprintf("unknown section %d", s)
