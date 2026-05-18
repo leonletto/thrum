@@ -44,7 +44,13 @@ type stubTmuxRPC struct {
 	paneCtrlCErr   error
 	paneCtrlCCalls []string
 
-	callOrder []string // chronological: "ctrlc", "kill", "create", ...
+	// callOrder is a chronological log across all RPC methods on
+	// this stub. Tokens: "checkpane", "create", "launch", "wait",
+	// "kill", "ctrlc". Note: a stub instance shared across sub-tests
+	// must reset callOrder manually (no auto-reset between table
+	// entries) — otherwise the second sub-test sees the first's
+	// entries.
+	callOrder []string
 }
 
 type tmuxCreateCall struct {
@@ -1500,7 +1506,7 @@ func TestStage8_TeardownOrdering_CtrlCExitBeforeKillSession(t *testing.T) {
 		t.Error("kill never fired; teardown sequence broken")
 	}
 	if ctrlcIdx >= killIdx {
-		t.Errorf("ctrlc at index %d but kill at index %d; want ctrlc BEFORE kill (callOrder: %v)",
+		t.Errorf("first ctrlc at index %d but first kill at index %d; want ctrlc BEFORE kill (callOrder: %v)",
 			ctrlcIdx, killIdx, rpc.callOrder)
 	}
 }

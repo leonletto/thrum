@@ -184,6 +184,11 @@ type stubEscalationRouter struct {
 	calls     []escalationCall
 }
 
+// Compile-time guard: a signature drift on EscalationRouter would
+// surface here as "does not implement" rather than a confusing
+// assignment failure in the tests below.
+var _ EscalationRouter = (*stubEscalationRouter)(nil)
+
 type escalationCall struct {
 	alert   escalation.Alert
 	subject string
