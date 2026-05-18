@@ -68,11 +68,16 @@ mechanics (binary + plugins + rollback) are shared further down the page —
 they&#39;re parameterized over <code>VERSION</code> and the release branch.</p>
 <h2>Stable-track current pre-release</h2>
 <blockquote>
-<p><strong><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.1"><code>v0.10.5-rc.1</code></a></strong>
-(2026-05-17, in 48h soak through 2026-05-19).</p>
-<p>A small follow-on patch to v0.10.4 — what v0.10.4 didn&#39;t catch plus the SAFE
-fixes the v0.10.4 soak surfaced. Day-to-day flow is unchanged for most users.</p>
-<p>What&#39;s new:</p>
+<p><strong><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.2"><code>v0.10.5-rc.2</code></a></strong>
+(2026-05-17, in 24h CLI/docs soak through 2026-05-18).</p>
+<p>Same release surface as rc.1 (backstop nudger, runtime-init managed-template
+fix, first-turn ack, two new CLI flags). rc.2 is a docs-only patch on top:
+the <code>/thrum:restart</code> skill is restructured into an 11-section numbered format
+(adding sections for &quot;Honest unknowns&quot; and &quot;End-of-continuation note&quot;, with
+&quot;human input&quot; reworded to &quot;repo owner input&quot;), plus a small <code>bd comments add</code>
+syntax correction in role templates and docs. No Go behavior change since
+rc.1.</p>
+<p>What&#39;s new in v0.10.5 overall:</p>
 <ul>
 <li><strong>Daemon-side backstop nudger for stale-unread messages</strong> replaces the
 per-agent <code>thrum-inbox-poll.sh</code> cron. More reliable (survives runtime
@@ -93,10 +98,10 @@ command.</li>
 <a href="https://github.com/leonletto/thrum/releases/tag/v0.10.4"><code>v0.10.4</code></a> — see
 <a href="whats-new.html">What&#39;s New</a> for v0.10.4 + v0.10.5 highlights.</p>
 </blockquote>
-<h3>Quick install for <code>v0.10.5-rc.1</code></h3>
+<h3>Quick install for <code>v0.10.5-rc.2</code></h3>
 <p>Binary and Codex plugin (run in your shell):</p>
 <pre><code># Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.1 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.2 sh
 
 # Codex plugin (matches release/v0.10.5)
 THRUM_INSTALL_REF=release/v0.10.5 bash &lt;(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.5/codex-plugin/plugins/thrum/scripts/install-plugin.sh)</code></pre>

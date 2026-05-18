@@ -46,13 +46,18 @@ they're parameterized over `VERSION` and the release branch.
 
 ## Stable-track current pre-release
 
-> **[`v0.10.5-rc.1`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.1)**
-> (2026-05-17, in 48h soak through 2026-05-19).
+> **[`v0.10.5-rc.2`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.2)**
+> (2026-05-17, in 24h CLI/docs soak through 2026-05-18).
 >
-> A small follow-on patch to v0.10.4 — what v0.10.4 didn't catch plus the SAFE
-> fixes the v0.10.4 soak surfaced. Day-to-day flow is unchanged for most users.
+> Same release surface as rc.1 (backstop nudger, runtime-init managed-template
+> fix, first-turn ack, two new CLI flags). rc.2 is a docs-only patch on top: the
+> `/thrum:restart` skill is restructured into an 11-section numbered format
+> (adding sections for "Honest unknowns" and "End-of-continuation note", with
+> "human input" reworded to "repo owner input"), plus a small `bd comments add`
+> syntax correction in role templates and docs. No Go behavior change since
+> rc.1.
 >
-> What's new:
+> What's new in v0.10.5 overall:
 >
 > - **Daemon-side backstop nudger for stale-unread messages** replaces the
 >   per-agent `thrum-inbox-poll.sh` cron. More reliable (survives runtime
@@ -74,13 +79,13 @@ they're parameterized over `VERSION` and the release branch.
 > [`v0.10.4`](https://github.com/leonletto/thrum/releases/tag/v0.10.4) — see
 > [What's New](whats-new.md) for v0.10.4 + v0.10.5 highlights.
 
-### Quick install for `v0.10.5-rc.1`
+### Quick install for `v0.10.5-rc.2`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.1 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.2 sh
 
 # Codex plugin (matches release/v0.10.5)
 THRUM_INSTALL_REF=release/v0.10.5 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.5/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
