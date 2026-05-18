@@ -1115,3 +1115,89 @@ func TestDaemonConfig_SubstrateBlocks_RoundTripEmpty(t *testing.T) {
 			got.RemindersDispatchIntervalSeconds())
 	}
 }
+
+// CR.5 (thrum-6qmf.1.5): RestartConfig WarnThreshold / AutoThresholdValue /
+// IsAutoDisabled coverage. The auto-restart Poller (CR.2) reads thresholds
+// exclusively through these accessors so the default policy stays centralized.
+
+func TestRestartConfig_WarnThresholdDefault(t *testing.T) {
+	r := config.RestartConfig{}
+	if got := r.WarnThresholdValue(); got != 70 {
+		t.Errorf("WarnThresholdValue on zero struct = %d, want 70", got)
+	}
+}
+
+func TestRestartConfig_WarnThresholdExplicit(t *testing.T) {
+	r := config.RestartConfig{WarnThreshold: 65}
+	if got := r.WarnThresholdValue(); got != 65 {
+		t.Errorf("WarnThresholdValue = %d, want 65", got)
+	}
+}
+
+func TestRestartConfig_AutoThresholdDefault(t *testing.T) {
+	r := config.RestartConfig{}
+	if got := r.AutoThresholdValue(); got != 80 {
+		t.Errorf("AutoThresholdValue on zero struct = %d, want 80", got)
+	}
+}
+
+func TestRestartConfig_AutoThresholdExplicit(t *testing.T) {
+	r := config.RestartConfig{AutoThreshold: 85}
+	if got := r.AutoThresholdValue(); got != 85 {
+		t.Errorf("AutoThresholdValue = %d, want 85", got)
+	}
+}
+
+func TestRestartConfig_BackwardCompat_AutoOnlyConfig(t *testing.T) {
+	// Pre-CR.5 configs only carry auto_threshold; the warn-tier accessor
+	// must still return its default, and the auto accessor returns the
+	// user-set value. Guard against future regressions that might couple
+	// the two fields.
+	var r config.RestartConfig
+	if err := json.Unmarshal([]byte(`{"auto_threshold": 85}`), &r); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got := r.WarnThresholdValue(); got != 70 {
+		t.Errorf("WarnThresholdValue on auto-only config = %d, want 70", got)
+	}
+	if got := r.AutoThresholdValue(); got != 85 {
+		t.Errorf("AutoThresholdValue on auto-only config = %d, want 85", got)
+	}
+}
+
+func TestRestartConfig_IsAutoDisabled_True(t *testing.T) {
+	r := config.RestartConfig{AutoDisabledAgents: []string{"impl_debug"}}
+	if !r.IsAutoDisabled("impl_debug") {
+		t.Error("IsAutoDisabled(impl_debug) = false, want true")
+	}
+}
+
+func TestRestartConfig_IsAutoDisabled_False(t *testing.T) {
+	r := config.RestartConfig{AutoDisabledAgents: []string{"impl_debug"}}
+	if r.IsAutoDisabled("coordinator") {
+		t.Error("IsAutoDisabled(coordinator) = true, want false")
+	}
+}
+
+func TestRestartConfig_IsAutoDisabled_EmptyList(t *testing.T) {
+	r := config.RestartConfig{}
+	if r.IsAutoDisabled("anybody") {
+		t.Error("IsAutoDisabled on empty list = true, want false")
+	}
+}
+
+func TestRestartConfig_AutoDisabledAgents_OmitEmpty(t *testing.T) {
+	// Marshal a zero-value RestartConfig and confirm the new key does not
+	// appear — keeps existing config.json on disk byte-identical for users
+	// who never set the field.
+	out, err := json.Marshal(config.RestartConfig{})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(out), "auto_disabled_agents") {
+		t.Errorf("zero-value marshal leaked auto_disabled_agents key: %s", out)
+	}
+	if strings.Contains(string(out), "warn_threshold") {
+		t.Errorf("zero-value marshal leaked warn_threshold key: %s", out)
+	}
+}
