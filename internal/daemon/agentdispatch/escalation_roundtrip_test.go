@@ -62,13 +62,24 @@ func (r *stateStoreRoundtripReporter) Transition(to scheduler.State, reason stri
 	// internal/daemon/scheduler/handler.go. The marker translation
 	// is the load-bearing line for Layer-D suppression.
 	//
-	// NOTE: Only the StateFailed branch is mirrored faithfully —
-	// the real reporter also resets ConsecutiveFailures + EscalationSent
-	// + LastError on StateCompleted, but this test never drives a
-	// Completed transition through the mirror so the reset code
-	// would be dead. A future test that exercises Completed must
-	// either add the reset logic here or use the real reporter
-	// (which requires scheduler-package-internal test placement).
+	// SCOPE NOTE: this mirror is StateFailed-ONLY. The real
+	// scheduler.stateReporter has additional bookkeeping on
+	// StateCompleted (resets ConsecutiveFailures, EscalationSent,
+	// LastError) — that branch is NOT replicated here because
+	// Layer-D escalation always ends in StateFailed, never
+	// Completed. A future test that walks a Completed path
+	// through this mirror would see incorrect retained
+	// ConsecutiveFailures + EscalationSent state. Two ways to
+	// extend safely:
+	//   (a) Replicate the StateCompleted reset block here from
+	//       handler.go before adding the new test, OR
+	//   (b) Move the new test into the scheduler package as a
+	//       *_test.go file so it can construct the real
+	//       stateReporter directly (which has package-private
+	//       fields + constructor).
+	// Either path keeps the round-trip honest; choose based on
+	// whether the new test crosses the agentdispatch boundary
+	// (use (a)) or stays scheduler-internal (use (b)).
 	switch to {
 	case scheduler.StateCompleted, scheduler.StateFailed, scheduler.StateCancelled, scheduler.StateOverBudget:
 		newRow.LastCompletedAt = &now

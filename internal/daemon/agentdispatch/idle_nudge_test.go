@@ -410,6 +410,46 @@ func TestIdleNudgeLoop_ProbeRecoveryResetsErrorCounter(t *testing.T) {
 	}
 }
 
+// TestIdleNudgeLoop_FreshDispatchFiresOnFirstSilentWindow pins
+// the production initialization path: scheduled_agent.go sets
+// lastPaneActivity to time.Now() at loop construction (line ~494),
+// so a probe returning activity <= time.Now() means the pane was
+// silent during the first idle window → nudge fires on the very
+// first timer pop.
+//
+// The default test fixture (newTestIdleNudgeLoop) backdates
+// lastPaneActivity by an hour so EVERY probe looks fresh; that
+// pattern is convenient for happy-path tests but doesn't exercise
+// the production "lastPaneActivity == start time" boundary. This
+// test pins that boundary directly.
+func TestIdleNudgeLoop_FreshDispatchFiresOnFirstSilentWindow(t *testing.T) {
+	now := time.Now()
+	silentProbe := func(_ context.Context, _ string) (time.Time, error) {
+		// Probe returns activity that's older than lastPaneActivity
+		// (the production init time) — equivalent to "no new tmux
+		// pane updates during the idle window."
+		return now.Add(-30 * time.Second), nil
+	}
+	loop, tmux, _ := newTestIdleNudgeLoop(silentProbe)
+	defer loop.timer.Stop()
+	// Reset lastPaneActivity to the production init pattern: same
+	// instant as construction (a "fresh" loop with no prior activity
+	// observation).
+	loop.lastPaneActivity = now
+	rep := &idleNudgeRecReporter{}
+
+	if err := loop.onTimerFire(context.Background(), rep); err != nil {
+		t.Fatalf("onTimerFire err = %v; want nil (first fire pre-exhaustion)", err)
+	}
+	if loop.nudgesFired != 1 {
+		t.Errorf("nudgesFired = %d; want 1 (fresh dispatch + silent probe → first fire)",
+			loop.nudgesFired)
+	}
+	if len(tmux.injectCalls) != 1 {
+		t.Errorf("PaneInjectPrompt calls = %d; want 1", len(tmux.injectCalls))
+	}
+}
+
 // TestIdleNudgePrompt_ContainsCanonicalMarkers pins AC 9.5.7
 // (distinguishable markers): the operator-visible prompt body
 // includes "thrum job done" + the N-of-M counter so the agent

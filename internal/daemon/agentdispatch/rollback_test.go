@@ -258,6 +258,3 @@ func TestRouteEscalation_PropagatesRouterError(t *testing.T) {
 	}
 }
 
-// (The E6.1 stub test for fireIdleNudge is superseded by the full
-// E6.4 onTimerFire test suite in idle_nudge_test.go — the stub no
-// longer exists; the multi-fire body has its own coverage there.)
