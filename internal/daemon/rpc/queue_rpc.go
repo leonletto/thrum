@@ -505,6 +505,22 @@ func (h *TmuxHandler) sendSystemMessage(ctx context.Context, recipient, body str
 	h.state.Unlock()
 }
 
+// SendSystemNudge writes a @system inbox message to recipient and fires an
+// InterruptNudge to wake the recipient's tmux pane if one is bound. The dual
+// signal — durable inbox row plus pane interrupt — is the same pattern used
+// by the existing restart-request flow (see tmux.go:1177-1184). Exported so
+// boot-time callback registrations in cmd/thrum/main.go (CR.2 T2.3
+// contextpoll.OnWarn / OnPreFire closures) can reuse it without
+// re-implementing the resolve + nudge sequence at every call site.
+//
+// No-op (logged at Warn by sendSystemMessage) if recipient is empty.
+func (h *TmuxHandler) SendSystemNudge(ctx context.Context, recipient, body string) {
+	h.sendSystemMessage(ctx, recipient, body)
+	if target := resolveNudgeTarget(h.thrumDir, recipient); target != "" {
+		_ = ttmux.InterruptNudge(target, "system")
+	}
+}
+
 // handleCommandTimeout is invoked by the per-command timer when the configured
 // timeout elapses. It races against completeCommand (silence detected shortly
 // after the timer fires) and HandleCancel, so all mutations run under cmd.mu.

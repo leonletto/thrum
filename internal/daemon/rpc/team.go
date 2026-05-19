@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/contextpoll"
 	"github.com/leonletto/thrum/internal/daemon/reminders"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/process"
@@ -245,6 +246,14 @@ type TeamHandler struct {
 	// whose dep is unwired and falls through to the next.
 	paneCapture    PaneCaptureFunc
 	outboundLookup OutboundLookupFunc
+
+	// contextProvider is the read-only surface from CR.2's context-usage
+	// Poller. Wired at daemon init via SetContextProvider; nil when the
+	// poller hasn't been started (tests + pre-v0.11 boots). CR.6 T6.1
+	// consumes the cached ContextUsageFor result to populate the
+	// ContextPct/ContextApprox/ContextKnown columns in team.list. T2.3
+	// only wires the setter; consumption lands in T6.1.
+	contextProvider contextpoll.ContextProvider
 }
 
 // NewTeamHandler creates a new team handler.
@@ -342,6 +351,19 @@ func (h *TeamHandler) SetOutboundLookup(fn OutboundLookupFunc) {
 // that don't care about lifecycle data.
 func (h *TeamHandler) SetLifecycleStore(store state.AgentLifecycleStore) {
 	h.lifecycleStore = store
+}
+
+// SetContextProvider wires the CR.2 context-usage Poller into team rendering.
+// When set, CR.6 T6.1 will use the cached ContextUsageFor result to populate
+// the ContextPct/ContextApprox/ContextKnown columns in team.list. T2.3 only
+// wires the setter; consumption lands in T6.1. When nil, the new fields stay
+// at their zero values — tests + pre-v0.11 daemons keep working without the
+// enrichment overhead.
+//
+// CONCURRENCY: same boot-time-write invariant as SetPaneCapture above — call
+// before server.Serve.
+func (h *TeamHandler) SetContextProvider(p contextpoll.ContextProvider) {
+	h.contextProvider = p
 }
 
 // HandleList handles the team.list RPC method.

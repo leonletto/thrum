@@ -39,6 +39,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/backstop"
 	"github.com/leonletto/thrum/internal/daemon/bootstrap"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
+	"github.com/leonletto/thrum/internal/daemon/contextpoll"
 	"github.com/leonletto/thrum/internal/daemon/escalation"
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
 	"github.com/leonletto/thrum/internal/daemon/inbox"
@@ -8104,6 +8105,125 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	if err := tmuxHandler.RecoverQueueState(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "[queue] recovery failed: %v\n", err)
 	}
+
+	// Context-usage poller (CR.2 / thrum-6qmf.1.13). Per-runtime context-window
+	// polling: warns agents at WarnThreshold (default 70%), pre-fires at
+	// AutoThreshold (default 80%) with a 3-minute countdown before the daemon
+	// would force-fire a restart. OnFire is wired as a slog.Info stub for T2.3;
+	// CR.4 T4.3 (thrum-6qmf.1.18) swaps in the real RestartTrigger adapter.
+	//
+	// tmuxHandler.SendSystemNudge is the exported dual-signal helper added in
+	// T2.3 — the plan example called the unexported tmuxHandler.sendSystemMessage
+	// directly from main.go, which doesn't compile across the package boundary.
+	// The wrapper at internal/daemon/rpc/queue_rpc.go bundles sendSystemMessage +
+	// resolveNudgeTarget + ttmux.InterruptNudge into one exported entry point so
+	// these callback closures stay readable. Surfaced for cr_spec as a plan v1.3
+	// erratum candidate.
+	warnCfg := thrumCfg.Restart
+	ctxPoller := contextpoll.NewPoller(contextpoll.PollerConfig{
+		PollInterval:    30 * time.Second,
+		PreFireWait:     3 * time.Minute,
+		InFlightMaxWait: 5 * time.Minute,
+		WarnThreshold:   warnCfg.WarnThresholdValue(),
+		AutoThreshold:   warnCfg.AutoThresholdValue(),
+	})
+	ctxPoller.OnWarn(func(ctx context.Context, agentName string, usage contextpoll.ContextUsage) {
+		// CR.3 T3.1 final body lands at thrum-6qmf.1.14; the text here is the
+		// plan §3.4.1 / brainstorm §Q2 body inlined so T2.3 boots a usable
+		// warn nudge today.
+		body := fmt.Sprintf(
+			"Context at %d%%. Wrap up your current sub-task and run `/thrum:restart`.\n\n"+
+				"Do NOT dispatch sub-agents (Agent, Explore, etc.).\n"+
+				"Do NOT re-read large files.\n"+
+				"Do NOT spawn web fetches.\n\n"+
+				"Write your continuation from working context directly. If you don't "+
+				"self-restart by %d%%, the daemon will force-restart you in three "+
+				"minutes and your new session will receive a 200-line transcript tail "+
+				"instead of your prose continuation.",
+			usage.UsedPercentage, warnCfg.AutoThresholdValue(),
+		)
+		// Disabled agents still receive the warn nudge — operator visibility
+		// preserved per spec §3.1.4. They are excluded from pre-fire + fire.
+		tmuxHandler.SendSystemNudge(ctx, agentName, body)
+	})
+	ctxPoller.OnPreFire(func(ctx context.Context, agentName string, usage contextpoll.ContextUsage) {
+		if warnCfg.IsAutoDisabled(agentName) {
+			return
+		}
+		body := "Restart imminent in three minutes. Last chance to self-restart.\n" +
+			"Run `/thrum:restart` now to preserve your prose continuation."
+		tmuxHandler.SendSystemNudge(ctx, agentName, body)
+	})
+	ctxPoller.OnFire(func(_ context.Context, agentName string, usage contextpoll.ContextUsage) {
+		if warnCfg.IsAutoDisabled(agentName) {
+			return
+		}
+		// CR.4 T4.3 (thrum-6qmf.1.18) wires the real RestartTrigger here. The
+		// stub keeps the threshold engine end-to-end exercised in production:
+		// the in-flight guard still sets, the InFlightMaxWait backstop still
+		// clears it after 5 min, and operators see breadcrumbs that the auto
+		// path would have fired.
+		slog.Info("[contextpoll] OnFire stub — CR.4 T4.3 wires the real RestartTrigger",
+			"agent", agentName, "usage_pct", usage.UsedPercentage)
+	})
+	// Register per-runtime parsers. CR.8 (.24) registers OpenCodeParserV1 here;
+	// CR.9 (.27) registers CodexParserV1. Order is first-Matches-wins.
+	ctxPoller.RegisterParser(contextpoll.ClaudeParserV2x{})
+
+	// Enroll pre-existing sessions at boot. Walks .thrum/identities/ rather
+	// than reusing the bootstrap.Reconcile pass above because the poller is
+	// authoritative for its own enrollment set — keeping the two walks
+	// independent means a future identity-format change touches one site, not
+	// both. TranscriptPath may be empty here if the agent's session hasn't
+	// produced a JSONL file yet; the Poller silently skips empty paths and the
+	// wiring re-Enrolls when identity refresh lands the resolved path.
+	{
+		homeDir, _ := os.UserHomeDir()
+		claudeDir := filepath.Join(homeDir, ".claude")
+		identitiesDir := filepath.Join(thrumDir, "identities")
+		if entries, err := os.ReadDir(identitiesDir); err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+					continue
+				}
+				idPath := filepath.Join(identitiesDir, entry.Name())
+				data, err := os.ReadFile(idPath) // #nosec G304 -- path is .thrum/identities/<name>.json
+				if err != nil {
+					continue
+				}
+				var idFile config.IdentityFile
+				if err := json.Unmarshal(data, &idFile); err != nil {
+					continue
+				}
+				if idFile.Reserved || idFile.Agent.Name == "" {
+					continue
+				}
+				var transcript string
+				if idFile.AgentPID > 0 {
+					transcript, _ = restart.FindSessionJSONL(claudeDir, idFile.AgentPID)
+				}
+				if transcript == "" && idFile.Worktree != "" {
+					transcript, _ = restart.FindLatestJSONLForCwd(claudeDir, idFile.Worktree)
+				}
+				ctxPoller.Enroll(idFile.Agent.Name, contextpoll.AgentEnrollment{
+					TranscriptPath: transcript,
+					AgentPID:       idFile.AgentPID,
+					AgentCwd:       idFile.Worktree,
+					Runtime:        idFile.Runtime,
+					SessionID:      idFile.SessionID,
+				})
+			}
+		}
+	}
+
+	// Wire ContextProvider into TeamHandler. CR.6 T6.1 (thrum-6qmf.1.20)
+	// consumes the cached usage to render the context-% column in
+	// `thrum team`; T2.3 only wires the setter.
+	teamHandler.SetContextProvider(ctxPoller)
+
+	// Start the poll loop. Stops when ctx is canceled by the daemon
+	// shutdown sequence. PollInterval is taken from PollerConfig (30s).
+	go ctxPoller.Run(ctx, 30*time.Second)
 
 	// B-B1 E6.5 Task 42b: register the REAL ScheduledAgentHandler +
 	// NudgeHandler with their full Deps adapter chain. Replaces the
