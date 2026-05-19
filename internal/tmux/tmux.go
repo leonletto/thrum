@@ -253,9 +253,20 @@ func SendSpecialKey(target, key string) error {
 
 // CapturePane captures the visible content of a tmux pane.
 // Lines is a positive number specifying how many lines to capture from the bottom.
+//
+// The `-J` flag joins any tmux-wrapped lines (and preserves trailing spaces).
+// Without `-J`, a long logical line (e.g. the full identity-banner printf
+// body, which exceeds typical terminal width) is returned as multiple physical
+// pane lines split mid-string — defeating downstream text-search consumers
+// like `paneAgentEngaged`'s `strings.Contains(line, sentinel)` check, which
+// can no longer find the sentinel on any single line and false-positives
+// the engagement check (thrum-ktp8). All current callers (watchdog,
+// HandleCapture RPC, queue captured-output, alert-silence run-shell, and
+// permission paneStillMatches) are text-search consumers that benefit from
+// joined output; none depend on wrap-preservation.
 func CapturePane(target string, lines int) (string, error) {
 	startLine := fmt.Sprintf("-%d", lines)
-	out, err := safecmd.Tmux(context.Background(), "capture-pane", "-p", "-t", target, "-S", startLine)
+	out, err := safecmd.Tmux(context.Background(), "capture-pane", "-p", "-J", "-t", target, "-S", startLine)
 	if err != nil {
 		return "", fmt.Errorf("tmux capture-pane failed: %w", err)
 	}

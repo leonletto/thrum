@@ -205,6 +205,22 @@ authors until they upgrade.
   all 5 runtime plugins emit (claude/cursor/opencode/codex/kiro), so unrelated
   prose like `@impl_v0105 primed the database` is not mis-classified and real
   agent output still suppresses the nudge correctly.
+- **`tmux capture-pane` joins wrapped lines (`-J` flag)** (thrum-ktp8). The
+  post-launch silence watchdog's `paneAgentEngaged` searches captured pane
+  content for the `PrimeTruncationSentinel` to bound the decision region.
+  Without tmux's `-J` flag, long identity-banner content (Agent + Role +
+  Worktree + Branch + sentinel, frequently > 100 chars on typical terminals)
+  wrapped mid-string, splitting the sentinel across two pane lines. The
+  per-line `strings.Contains(line, sentinel)` check then failed to match
+  on any single line → `topIdx = -1` → conservative `return true` → no
+  nudge fired. This silently masked the rc.5 thrum-qpw7 ack-exclusion fix
+  (which was correct but never reached because sentinel detection failed
+  first). `-J` joins wrapped lines (and preserves trailing spaces); all 5
+  non-watchdog `CapturePane` callers (HandleCapture RPC, queue captured-
+  output, alert-silence run-shell, permission paneStillMatches) are text-
+  search consumers that benefit from joined output, none depend on wrap-
+  preservation. Surfaced during Leon's @impl_writer_website_dev rc.5
+  spot-check.
 
 ## [0.10.4] - 2026-05-16
 
