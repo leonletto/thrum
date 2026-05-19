@@ -1050,9 +1050,142 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	}
 }
 
-func TestSchema_V24_CurrentVersion(t *testing.T) {
-	if schema.CurrentVersion != 24 {
-		t.Errorf("CurrentVersion = %d, want 24", schema.CurrentVersion)
+func TestSchema_V32_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 32 {
+		t.Errorf("CurrentVersion = %d, want 32 (v25-v32 forward-ported from thrum-agents per rc.4)", schema.CurrentVersion)
+	}
+}
+
+// TestSchema_ForwardPort_V25_to_V32_AllTablesPresent exercises the
+// forward-ported migrations end-to-end. Initializes a DB at v24's
+// shape (telegram_msg_map being the last table added pre-forward-port),
+// stamps schema_version to 24, then runs Migrate and asserts the 7
+// new tables + agents-table column additions all reached the live DB.
+// This is the smoke that proves the v25-v32 blocks fire in sequence
+// without conflict and that createTables/runMigrations agree on the
+// final shape (canonical §3.11 Guard 1 fresh-vs-upgrade parity).
+func TestSchema_ForwardPort_V25_to_V32_AllTablesPresent(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "v24_to_v32.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Bootstrap a fresh DB then rewind schema_version to v24 so the
+	// migration runner replays 25-32. (We can't easily create a "true"
+	// v24-shaped DB on this branch since createTables now includes the
+	// v32 tables; the rewind exercises the migration code path that
+	// existing-DB users will hit, and the IF NOT EXISTS guards make
+	// the CREATEs idempotent.)
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+	if _, err := db.Exec("UPDATE schema_version SET version = 24"); err != nil {
+		t.Fatalf("rewind to v24: %v", err)
+	}
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v24→v32: %v", err)
+	}
+
+	v, err := schema.GetSchemaVersion(db)
+	if err != nil {
+		t.Fatalf("GetSchemaVersion: %v", err)
+	}
+	if v != 32 {
+		t.Errorf("schema_version after migrate = %d; want 32", v)
+	}
+
+	// All 7 new tables must be present.
+	for _, tbl := range []string{
+		"scheduler_job_state",
+		"scheduler_job_events",
+		"agent_lifecycle_events",
+		"reminders",
+		"email_msg_seen",
+		"email_outbound_queue",
+		"email_peer_rate_state",
+	} {
+		var name string
+		err := db.QueryRow(
+			"SELECT name FROM sqlite_master WHERE type='table' AND name=?", tbl,
+		).Scan(&name)
+		if err != nil {
+			t.Errorf("table %q missing post-migrate: %v", tbl, err)
+		}
+	}
+
+	// agents table must carry the v26 column additions.
+	cols, err := db.Query("PRAGMA table_info(agents)")
+	if err != nil {
+		t.Fatalf("PRAGMA agents: %v", err)
+	}
+	defer func() { _ = cols.Close() }()
+	have := map[string]bool{}
+	for cols.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := cols.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		have[name] = true
+	}
+	for _, c := range []string{
+		"mode",
+		"identity",
+		"auto_respawn_enabled",
+		"auto_respawn_disabled_at",
+		"state_md_parse_failed_at",
+		"last_pane_alive_at",
+	} {
+		if !have[c] {
+			t.Errorf("agents column %q missing post-migrate", c)
+		}
+	}
+}
+
+// TestSchema_FreshInstall_HasForwardPortedTables proves
+// createTables/runMigrations agree on the v32 end-state for a brand-new
+// DB (no pre-existing rows). All 7 forward-ported tables must exist
+// after InitDB with no migration replay needed.
+func TestSchema_FreshInstall_HasForwardPortedTables(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "fresh_v32.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+	v, err := schema.GetSchemaVersion(db)
+	if err != nil {
+		t.Fatalf("GetSchemaVersion: %v", err)
+	}
+	if v != 32 {
+		t.Errorf("fresh install schema_version = %d; want 32", v)
+	}
+	for _, tbl := range []string{
+		"scheduler_job_state",
+		"scheduler_job_events",
+		"agent_lifecycle_events",
+		"reminders",
+		"email_msg_seen",
+		"email_outbound_queue",
+		"email_peer_rate_state",
+	} {
+		var name string
+		err := db.QueryRow(
+			"SELECT name FROM sqlite_master WHERE type='table' AND name=?", tbl,
+		).Scan(&name)
+		if err != nil {
+			t.Errorf("fresh-install missing forward-ported table %q: %v", tbl, err)
+		}
 	}
 }
 

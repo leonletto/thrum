@@ -20,7 +20,14 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 24
+// CurrentVersion is 32 on release/v0.10.5 to mirror the thrum-agents
+// (v0.11 substrate) DDL surface. The release line ships the migrations
+// only — none of the new tables (scheduler_*, reminders, agent_lifecycle_events,
+// email_*) have consumer code on v0.10.5. The goal is binary-supports-v32-
+// schema-on-disk so a v0.10.5-rc.4 install can open a DB that was previously
+// touched by a v0.11-substrate binary. v29 is a deliberate gap (reserved
+// for MB-1.S6 on the substrate plan); runMigrations handles it cleanly.
+const CurrentVersion = 32
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -144,16 +151,22 @@ func createTables(tx *sql.Tx) error {
 		// conflicts (thrum-mm3l). See migration 21→22 for the backfill path
 		// on pre-existing databases.
 		`CREATE TABLE IF NOT EXISTS agents (
-			agent_id       TEXT PRIMARY KEY,
-			kind           TEXT NOT NULL,
-			role           TEXT NOT NULL,
-			module         TEXT NOT NULL,
-			display        TEXT NOT NULL DEFAULT '',
-			hostname       TEXT NOT NULL DEFAULT '',
-			agent_pid      INTEGER NOT NULL DEFAULT 0,
-			registered_at  TEXT NOT NULL,
-			last_seen_at   TEXT NOT NULL DEFAULT '',
-			origin_daemon  TEXT NOT NULL DEFAULT ''
+			agent_id                 TEXT PRIMARY KEY,
+			kind                     TEXT NOT NULL,
+			role                     TEXT NOT NULL,
+			module                   TEXT NOT NULL,
+			display                  TEXT NOT NULL DEFAULT '',
+			hostname                 TEXT NOT NULL DEFAULT '',
+			agent_pid                INTEGER NOT NULL DEFAULT 0,
+			registered_at            TEXT NOT NULL,
+			last_seen_at             TEXT NOT NULL DEFAULT '',
+			origin_daemon            TEXT NOT NULL DEFAULT '',
+			mode                     TEXT NOT NULL DEFAULT 'persistent',
+			identity                 TEXT NOT NULL DEFAULT 'long_lived',
+			auto_respawn_enabled     INTEGER NOT NULL DEFAULT 0,
+			auto_respawn_disabled_at INTEGER,
+			state_md_parse_failed_at INTEGER,
+			last_pane_alive_at       INTEGER
 		)`,
 
 		// Sessions table
@@ -369,6 +382,107 @@ func createTables(tx *sql.Tx) error {
 			thrum_msg_id TEXT NOT NULL,
 			created_at   INTEGER NOT NULL
 		)`,
+
+		// Scheduler substrate (v25, forward-ported from thrum-agents A-B1).
+		// Dead-end on v0.10.5: no consumer code reads from these tables. Present
+		// only so the binary can open DBs that touched v0.11 substrate work.
+		`CREATE TABLE IF NOT EXISTS scheduler_job_state (
+			job_id                TEXT PRIMARY KEY,
+			job_generation        INTEGER NOT NULL DEFAULT 1,
+			current_state         TEXT    NOT NULL,
+			current_stage         TEXT,
+			stage_entered_at      INTEGER,
+			last_run_id           TEXT,
+			last_fired_at         INTEGER,
+			last_completed_at     INTEGER,
+			last_completion_state TEXT,
+			last_error            TEXT,
+			next_scheduled_at     INTEGER,
+			consecutive_failures  INTEGER NOT NULL DEFAULT 0,
+			escalation_sent       INTEGER NOT NULL DEFAULT 0,
+			total_runs            INTEGER NOT NULL DEFAULT 0,
+			created_at            INTEGER NOT NULL,
+			updated_at            INTEGER NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS scheduler_job_events (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			job_id      TEXT    NOT NULL,
+			run_id      TEXT    NOT NULL,
+			event_time  INTEGER NOT NULL,
+			from_state  TEXT,
+			to_state    TEXT    NOT NULL,
+			reason      TEXT,
+			details     TEXT
+		)`,
+
+		// Agent lifecycle journal (v27, forward-ported from thrum-agents B-B1).
+		// Dead-end on v0.10.5.
+		`CREATE TABLE IF NOT EXISTS agent_lifecycle_events (
+			id                INTEGER PRIMARY KEY AUTOINCREMENT,
+			agent_name        TEXT    NOT NULL,
+			event_kind        TEXT    NOT NULL,
+			event_time        INTEGER NOT NULL,
+			detection_method  TEXT CHECK (
+				detection_method IS NULL OR detection_method IN
+					('health_check_tick', 'restart_reconciliation', 'rpc_observation')
+			),
+			reason            TEXT,
+			details           TEXT
+		)`,
+
+		// Unified reminder substrate (v28, forward-ported from thrum-agents A-B4).
+		// Dead-end on v0.10.5.
+		`CREATE TABLE IF NOT EXISTS reminders (
+			id                  TEXT    PRIMARY KEY,
+			source              TEXT    NOT NULL,
+			source_agent        TEXT,
+			trigger_kind        TEXT    NOT NULL,
+			trigger_at          INTEGER,
+			trigger_meta        TEXT,
+			target_agent        TEXT,
+			target_chain        TEXT,
+			body                TEXT,
+			raised_at           INTEGER NOT NULL,
+			next_reminder_at    INTEGER,
+			last_fired_at       INTEGER,
+			state               TEXT    NOT NULL,
+			pane_snapshot       TEXT,
+			defer_history       TEXT    NOT NULL DEFAULT '[]',
+			cleared_at          INTEGER,
+			cancelled_at        INTEGER,
+			created_at          INTEGER NOT NULL,
+			updated_at          INTEGER NOT NULL
+		)`,
+
+		// Email substrate (v30/31/32, forward-ported from thrum-agents D-B1).
+		// Dead-end on v0.10.5.
+		`CREATE TABLE IF NOT EXISTS email_msg_seen (
+			message_id      TEXT    PRIMARY KEY,
+			from_daemon_id  TEXT,
+			nonce           TEXT,
+			processed_at    INTEGER NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS email_outbound_queue (
+			id              INTEGER PRIMARY KEY AUTOINCREMENT,
+			from_agent      TEXT    NOT NULL,
+			to_address      TEXT    NOT NULL,
+			subject         TEXT,
+			body            TEXT    NOT NULL,
+			headers_json    TEXT    NOT NULL DEFAULT '{}',
+			attempt_count   INTEGER NOT NULL DEFAULT 0,
+			next_retry_at   INTEGER NOT NULL,
+			last_error      TEXT,
+			status          TEXT    NOT NULL,
+			enqueued_at     INTEGER NOT NULL,
+			updated_at      INTEGER NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS email_peer_rate_state (
+			peer_key            TEXT    PRIMARY KEY,
+			window_start_at     INTEGER NOT NULL,
+			inbound_count       INTEGER NOT NULL DEFAULT 0,
+			outbound_count      INTEGER NOT NULL DEFAULT 0,
+			paused_at           INTEGER
+		)`,
 	}
 
 	for _, sql := range tables {
@@ -439,6 +553,26 @@ func createIndexes(tx *sql.Tx) error {
 
 		// Telegram msg map reverse-lookup index (v24, thrum-48kt.2)
 		"CREATE INDEX IF NOT EXISTS idx_telegram_msg_map_thrum ON telegram_msg_map(thrum_msg_id)",
+
+		// Scheduler indexes (v25, forward-ported from thrum-agents)
+		"CREATE INDEX IF NOT EXISTS idx_scheduler_state_next ON scheduler_job_state(next_scheduled_at)",
+		"CREATE INDEX IF NOT EXISTS idx_scheduler_events_job_time ON scheduler_job_events(job_id, event_time)",
+		"CREATE INDEX IF NOT EXISTS idx_scheduler_events_run ON scheduler_job_events(run_id)",
+
+		// Agent lifecycle indexes (v27)
+		"CREATE INDEX IF NOT EXISTS idx_agent_lifecycle_agent_time ON agent_lifecycle_events(agent_name, event_time)",
+		"CREATE INDEX IF NOT EXISTS idx_agent_lifecycle_kind ON agent_lifecycle_events(event_kind, event_time)",
+
+		// Reminders indexes (v28)
+		"CREATE INDEX IF NOT EXISTS idx_reminders_next ON reminders(next_reminder_at) WHERE state = 'open'",
+		"CREATE INDEX IF NOT EXISTS idx_reminders_state ON reminders(state)",
+		"CREATE INDEX IF NOT EXISTS idx_reminders_target ON reminders(target_agent) WHERE state = 'open'",
+		"CREATE INDEX IF NOT EXISTS idx_reminders_source_kind ON reminders(source, trigger_kind)",
+
+		// Email substrate indexes (v30/v31/v32)
+		"CREATE INDEX IF NOT EXISTS idx_email_msg_seen_proc ON email_msg_seen(processed_at)",
+		"CREATE INDEX IF NOT EXISTS idx_email_queue_next ON email_outbound_queue(next_retry_at, status)",
+		"CREATE INDEX IF NOT EXISTS idx_peer_rate_paused ON email_peer_rate_state(paused_at) WHERE paused_at IS NOT NULL",
 	}
 
 	for _, sql := range indexes {
@@ -1101,6 +1235,250 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_telegram_msg_map_thrum ON telegram_msg_map(thrum_msg_id)`)
 		if err != nil {
 			return fmt.Errorf("migration 23→24: create idx_telegram_msg_map_thrum: %w", err)
+		}
+	}
+
+	// Migrations 25-32 are forward-ported from thrum-agents (v0.11 substrate).
+	// All blocks add DDL only — no consumer code on release/v0.10.5. v29 is a
+	// deliberate gap (reserved for MB-1.S6 on the substrate plan); runMigrations
+	// handles gapped sequences naturally — the missing v29 branch no-ops.
+	// thrum-quth follow-up: lets v0.10.5-rc.4 binary open DBs touched by v0.11.
+
+	// Migration 24→25: scheduler substrate (A-B1).
+	if startVersion < 25 && endVersion >= 25 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS scheduler_job_state (
+				job_id                TEXT PRIMARY KEY,
+				job_generation        INTEGER NOT NULL DEFAULT 1,
+				current_state         TEXT    NOT NULL,
+				current_stage         TEXT,
+				stage_entered_at      INTEGER,
+				last_run_id           TEXT,
+				last_fired_at         INTEGER,
+				last_completed_at     INTEGER,
+				last_completion_state TEXT,
+				last_error            TEXT,
+				next_scheduled_at     INTEGER,
+				consecutive_failures  INTEGER NOT NULL DEFAULT 0,
+				escalation_sent       INTEGER NOT NULL DEFAULT 0,
+				total_runs            INTEGER NOT NULL DEFAULT 0,
+				created_at            INTEGER NOT NULL,
+				updated_at            INTEGER NOT NULL
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 24→25: create scheduler_job_state: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_scheduler_state_next ON scheduler_job_state(next_scheduled_at)`)
+		if err != nil {
+			return fmt.Errorf("migration 24→25: idx_scheduler_state_next: %w", err)
+		}
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS scheduler_job_events (
+				id          INTEGER PRIMARY KEY AUTOINCREMENT,
+				job_id      TEXT    NOT NULL,
+				run_id      TEXT    NOT NULL,
+				event_time  INTEGER NOT NULL,
+				from_state  TEXT,
+				to_state    TEXT    NOT NULL,
+				reason      TEXT,
+				details     TEXT
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 24→25: create scheduler_job_events: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_scheduler_events_job_time ON scheduler_job_events(job_id, event_time)`)
+		if err != nil {
+			return fmt.Errorf("migration 24→25: idx_scheduler_events_job_time: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_scheduler_events_run ON scheduler_job_events(run_id)`)
+		if err != nil {
+			return fmt.Errorf("migration 24→25: idx_scheduler_events_run: %w", err)
+		}
+	}
+
+	// Migration 25→26: B-B1 mode + identity + 4 runtime cols on agents table.
+	// Idempotent via columnSet check — safe against a fresh createTables()
+	// schema (cols already present) and against partial test schemas (skipped
+	// when agents table absent). Matches the established v21→v22 origin_daemon
+	// pattern.
+	if startVersion < 26 && endVersion >= 26 {
+		hasAgents, err := tableExists(tx, "agents")
+		if err != nil {
+			return fmt.Errorf("migration 25→26: check agents table: %w", err)
+		}
+		if hasAgents {
+			agentCols, err := columnSet(tx, "agents")
+			if err != nil {
+				return fmt.Errorf("migration 25→26: inspect agents: %w", err)
+			}
+			type colDef struct {
+				name string
+				ddl  string
+			}
+			for _, c := range []colDef{
+				{"mode", `mode                     TEXT    NOT NULL DEFAULT 'persistent'`},
+				{"identity", `identity                 TEXT    NOT NULL DEFAULT 'long_lived'`},
+				{"auto_respawn_enabled", `auto_respawn_enabled     INTEGER NOT NULL DEFAULT 0`},
+				{"auto_respawn_disabled_at", `auto_respawn_disabled_at INTEGER`},
+				{"state_md_parse_failed_at", `state_md_parse_failed_at INTEGER`},
+				{"last_pane_alive_at", `last_pane_alive_at       INTEGER`},
+			} {
+				if agentCols[c.name] {
+					continue
+				}
+				if _, err := tx.Exec(`ALTER TABLE agents ADD COLUMN ` + c.ddl); err != nil {
+					return fmt.Errorf("migration 25→26: add agents.%s: %w", c.name, err)
+				}
+			}
+		}
+	}
+
+	// Migration 26→27: B-B1 agent_lifecycle_events journal.
+	if startVersion < 27 && endVersion >= 27 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS agent_lifecycle_events (
+				id                INTEGER PRIMARY KEY AUTOINCREMENT,
+				agent_name        TEXT    NOT NULL,
+				event_kind        TEXT    NOT NULL,
+				event_time        INTEGER NOT NULL,
+				detection_method  TEXT CHECK (
+					detection_method IS NULL OR detection_method IN
+						('health_check_tick', 'restart_reconciliation', 'rpc_observation')
+				),
+				reason            TEXT,
+				details           TEXT
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 26→27: create agent_lifecycle_events: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_agent_lifecycle_agent_time ON agent_lifecycle_events(agent_name, event_time)`)
+		if err != nil {
+			return fmt.Errorf("migration 26→27: idx_agent_lifecycle_agent_time: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_agent_lifecycle_kind ON agent_lifecycle_events(event_kind, event_time)`)
+		if err != nil {
+			return fmt.Errorf("migration 26→27: idx_agent_lifecycle_kind: %w", err)
+		}
+	}
+
+	// Migration ?→28: A-B4 unified reminder substrate. Polymorphic single
+	// table covering both time-triggered and condition-triggered reminders.
+	// Originally landed as v25 on a side-branch, renumbered to v28 in the
+	// LOCKED substrate plan to claim its slot (A-B1=25, B-B1=26/27, A-B4=28,
+	// reserved=29, D-B1=30/31/32).
+	if startVersion < 28 && endVersion >= 28 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS reminders (
+				id                  TEXT    PRIMARY KEY,
+				source              TEXT    NOT NULL,
+				source_agent        TEXT,
+				trigger_kind        TEXT    NOT NULL,
+				trigger_at          INTEGER,
+				trigger_meta        TEXT,
+				target_agent        TEXT,
+				target_chain        TEXT,
+				body                TEXT,
+				raised_at           INTEGER NOT NULL,
+				next_reminder_at    INTEGER,
+				last_fired_at       INTEGER,
+				state               TEXT    NOT NULL,
+				pane_snapshot       TEXT,
+				defer_history       TEXT    NOT NULL DEFAULT '[]',
+				cleared_at          INTEGER,
+				cancelled_at        INTEGER,
+				created_at          INTEGER NOT NULL,
+				updated_at          INTEGER NOT NULL
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 27→28: create reminders table: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_reminders_next ON reminders(next_reminder_at) WHERE state = 'open'`)
+		if err != nil {
+			return fmt.Errorf("migration 27→28: idx_reminders_next: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_reminders_state ON reminders(state)`)
+		if err != nil {
+			return fmt.Errorf("migration 27→28: idx_reminders_state: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_reminders_target ON reminders(target_agent) WHERE state = 'open'`)
+		if err != nil {
+			return fmt.Errorf("migration 27→28: idx_reminders_target: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_reminders_source_kind ON reminders(source, trigger_kind)`)
+		if err != nil {
+			return fmt.Errorf("migration 27→28: idx_reminders_source_kind: %w", err)
+		}
+	}
+
+	// Migration 29→30: email_msg_seen (D-B1). v29 is a deliberate gap; the
+	// startVersion < 30 guard covers any jump from earlier versions.
+	if startVersion < 30 && endVersion >= 30 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS email_msg_seen (
+				message_id      TEXT    PRIMARY KEY,
+				from_daemon_id  TEXT,
+				nonce           TEXT,
+				processed_at    INTEGER NOT NULL
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 29→30: create email_msg_seen: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_email_msg_seen_proc ON email_msg_seen(processed_at)`)
+		if err != nil {
+			return fmt.Errorf("migration 29→30: idx_email_msg_seen_proc: %w", err)
+		}
+	}
+
+	// Migration 30→31: email_outbound_queue (D-B1).
+	if startVersion < 31 && endVersion >= 31 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS email_outbound_queue (
+				id              INTEGER PRIMARY KEY AUTOINCREMENT,
+				from_agent      TEXT    NOT NULL,
+				to_address      TEXT    NOT NULL,
+				subject         TEXT,
+				body            TEXT    NOT NULL,
+				headers_json    TEXT    NOT NULL DEFAULT '{}',
+				attempt_count   INTEGER NOT NULL DEFAULT 0,
+				next_retry_at   INTEGER NOT NULL,
+				last_error      TEXT,
+				status          TEXT    NOT NULL,
+				enqueued_at     INTEGER NOT NULL,
+				updated_at      INTEGER NOT NULL
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 30→31: create email_outbound_queue: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_email_queue_next ON email_outbound_queue(next_retry_at, status)`)
+		if err != nil {
+			return fmt.Errorf("migration 30→31: idx_email_queue_next: %w", err)
+		}
+	}
+
+	// Migration 31→32: email_peer_rate_state (D-B1). Partial index per
+	// canonical-ref §3.11 Guard 6.
+	if startVersion < 32 && endVersion >= 32 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS email_peer_rate_state (
+				peer_key            TEXT    PRIMARY KEY,
+				window_start_at     INTEGER NOT NULL,
+				inbound_count       INTEGER NOT NULL DEFAULT 0,
+				outbound_count      INTEGER NOT NULL DEFAULT 0,
+				paused_at           INTEGER
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 31→32: create email_peer_rate_state: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_peer_rate_paused ON email_peer_rate_state(paused_at) WHERE paused_at IS NOT NULL`)
+		if err != nil {
+			return fmt.Errorf("migration 31→32: idx_peer_rate_paused: %w", err)
 		}
 	}
 
