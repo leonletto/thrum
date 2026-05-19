@@ -164,19 +164,16 @@ type RuntimeConfig struct {
 }
 
 // DaemonConfig holds daemon-specific settings.
+// Note: sync_interval was removed in v0.10.6 (thrum-s6os); the field is
+// silently ignored when present in legacy config files (spec §7.2).
 type DaemonConfig struct {
-	LocalOnly bool `json:"local_only,omitempty"`
-	// SyncInterval is retained for forward-compatibility with pre-v0.10.6
-	// configs but is no longer consumed; sync is event-triggered as of
-	// v0.10.6 (thrum-s6os). Slated for full removal once the ticker
-	// initialization in cmd/thrum/main.go is excised in Task 12.
-	SyncInterval              int    `json:"sync_interval,omitempty"`
+	LocalOnly                 bool   `json:"local_only,omitempty"`
 	WSPort                    string `json:"ws_port,omitempty"`   // "auto" or specific port number
 	PeerPort                  string `json:"peer_port,omitempty"` // "auto" or specific port number for peer connections
 	SingleAgentMode           bool   `json:"single_agent_mode,omitempty"`
-	LogLevel                  string `json:"log_level,omitempty"`                     // "debug", "info", "warn", "error"; default "info"
-	EventsRetentionDays       int    `json:"events_retention_days,omitempty"`         // retention window for .thrum/events.jsonl + SQLite events table (default 2)
-	CompactionSizeThresholdMB int    `json:"compaction_size_threshold_mb,omitempty"`  // per-file size threshold above which compaction rewrites the file (default 10)
+	LogLevel                  string `json:"log_level,omitempty"`                    // "debug", "info", "warn", "error"; default "info"
+	EventsRetentionDays       int    `json:"events_retention_days,omitempty"`        // retention window for .thrum/events.jsonl + SQLite events table (default 2)
+	CompactionSizeThresholdMB int    `json:"compaction_size_threshold_mb,omitempty"` // per-file size threshold above which compaction rewrites the file (default 10)
 }
 
 // BackupConfig holds backup-related settings.
@@ -236,13 +233,6 @@ const (
 	DefaultRetentionWeekly  = 4
 	DefaultRetentionMonthly = -1
 )
-
-// DefaultSyncInterval is retained as a no-op anchor for legacy callers
-// that still read it (cmd/thrum/main.go, internal/cli/init.go,
-// internal/cli/config_show.go). As of v0.10.6 (thrum-s6os) sync is
-// event-triggered and no consumer of this constant influences runtime
-// behavior. Slated for full removal in Task 12.
-const DefaultSyncInterval = 60
 
 // DefaultEventsRetentionDays is the default retention window (in days)
 // for the local-only .thrum/events.jsonl journal and the SQLite events
@@ -348,11 +338,6 @@ func LoadThrumConfig(thrumDir string) (*ThrumConfig, error) {
 // Note: LocalOnly defaults to true (local-first). Users must explicitly
 // set local_only=false in config.json to enable remote git sync.
 func applyDefaults(cfg *ThrumConfig) {
-	// SyncInterval is no longer defaulted; sync is event-triggered as
-	// of v0.10.6 (thrum-s6os). The field is silently ignored if present
-	// in legacy user configs (spec §7.2). Slated for full removal in
-	// Task 12 once the ticker initialization in cmd/thrum/main.go is
-	// excised.
 	if cfg.Daemon.WSPort == "" {
 		cfg.Daemon.WSPort = DefaultWSPort
 	}

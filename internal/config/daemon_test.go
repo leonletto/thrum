@@ -19,10 +19,8 @@ func TestLoadThrumConfig_NoFile(t *testing.T) {
 	if cfg.Daemon.LocalOnly {
 		t.Error("expected LocalOnly=false when no config file exists")
 	}
-	// Defaults should be applied. SyncInterval is no longer defaulted
-	// as of v0.10.6 (thrum-s6os); event-triggered sync replaces the
-	// ticker. The new retention/compaction defaults are exercised below
-	// in T-config-2 / T-config-3.
+	// Defaults should be applied; retention/compaction defaults are
+	// exercised in T-config-2 / T-config-3.
 	if cfg.Daemon.WSPort != config.DefaultWSPort {
 		t.Errorf("expected WSPort=%q, got %q", config.DefaultWSPort, cfg.Daemon.WSPort)
 	}
@@ -77,8 +75,6 @@ func TestLoadThrumConfig_EmptyJSON(t *testing.T) {
 	if cfg.Daemon.LocalOnly {
 		t.Error("expected LocalOnly=false for empty config")
 	}
-	// SyncInterval is no longer defaulted as of v0.10.6 (thrum-s6os).
-	// Retention/compaction defaults are exercised in T-config-2 / T-config-3.
 	if cfg.Daemon.WSPort != config.DefaultWSPort {
 		t.Errorf("expected WSPort=%q, got %q", config.DefaultWSPort, cfg.Daemon.WSPort)
 	}
@@ -100,6 +96,8 @@ func TestLoadThrumConfig_InvalidJSON(t *testing.T) {
 func TestLoadThrumConfig_FullSchema(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
+	// sync_interval is silently ignored as of v0.10.6 (spec §7.2); verify
+	// the config still loads cleanly when legacy configs carry the key.
 	data := `{
 		"runtime": {"primary": "claude"},
 		"daemon": {
@@ -122,9 +120,6 @@ func TestLoadThrumConfig_FullSchema(t *testing.T) {
 	if !cfg.Daemon.LocalOnly {
 		t.Error("expected LocalOnly=true")
 	}
-	if cfg.Daemon.SyncInterval != 30 {
-		t.Errorf("expected SyncInterval=30, got %d", cfg.Daemon.SyncInterval)
-	}
 	if cfg.Daemon.WSPort != "9999" {
 		t.Errorf("expected WSPort=9999, got %q", cfg.Daemon.WSPort)
 	}
@@ -145,7 +140,6 @@ func TestLoadThrumConfig_BackwardsCompat(t *testing.T) {
 	if !cfg.Daemon.LocalOnly {
 		t.Error("expected LocalOnly=true")
 	}
-	// SyncInterval is no longer defaulted as of v0.10.6 (thrum-s6os).
 	if cfg.Daemon.WSPort != config.DefaultWSPort {
 		t.Errorf("expected default WSPort, got %q", cfg.Daemon.WSPort)
 	}
@@ -157,10 +151,9 @@ func TestLoadThrumConfig_BackwardsCompat(t *testing.T) {
 // TestLoadThrumConfig_LegacySyncIntervalSilentlyIgnored covers T-config-1
 // from the thrum-s6os plan §11 E9 acceptance block. Pre-v0.10.6 user
 // configs frequently carry `daemon.sync_interval`; in v0.10.6 the field
-// is retained on DaemonConfig for forward-compatibility but the load
-// path no longer defaults nor emits a deprecation warning. The value
-// must round-trip through unmarshal cleanly so legacy configs continue
-// to load without surprise.
+// is removed from DaemonConfig and the JSON key is silently dropped by
+// json.Unmarshal (unknown fields are ignored). Legacy configs must
+// continue to load without error (spec §7.2).
 func TestLoadThrumConfig_LegacySyncIntervalSilentlyIgnored(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
@@ -173,8 +166,9 @@ func TestLoadThrumConfig_LegacySyncIntervalSilentlyIgnored(t *testing.T) {
 	if err != nil {
 		t.Fatalf("legacy config with sync_interval should load without error, got: %v", err)
 	}
-	if cfg.Daemon.SyncInterval != 6000 {
-		t.Errorf("field should still unmarshal for forward-compat; got %d, want 6000", cfg.Daemon.SyncInterval)
+	// The key is silently ignored; other defaults still apply.
+	if cfg.Daemon.WSPort != config.DefaultWSPort {
+		t.Errorf("expected default WSPort after legacy config load, got %q", cfg.Daemon.WSPort)
 	}
 }
 
@@ -263,7 +257,7 @@ func TestSaveThrumConfig_WithRuntime(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := &config.ThrumConfig{
 		Runtime: config.RuntimeConfig{Primary: "claude"},
-		Daemon:  config.DaemonConfig{LocalOnly: true, SyncInterval: 30, WSPort: "9999"},
+		Daemon:  config.DaemonConfig{LocalOnly: true, WSPort: "9999"},
 	}
 
 	if err := config.SaveThrumConfig(tmpDir, cfg); err != nil {
@@ -276,9 +270,6 @@ func TestSaveThrumConfig_WithRuntime(t *testing.T) {
 	}
 	if loaded.Runtime.Primary != "claude" {
 		t.Errorf("expected Runtime.Primary=claude, got %q", loaded.Runtime.Primary)
-	}
-	if loaded.Daemon.SyncInterval != 30 {
-		t.Errorf("expected SyncInterval=30, got %d", loaded.Daemon.SyncInterval)
 	}
 	if loaded.Daemon.WSPort != "9999" {
 		t.Errorf("expected WSPort=9999, got %q", loaded.Daemon.WSPort)

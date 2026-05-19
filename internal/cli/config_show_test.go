@@ -22,9 +22,6 @@ func TestConfigShow_NoConfigFile(t *testing.T) {
 	}
 
 	// Should have defaults
-	if result.Daemon.SyncInterval.Source != "default" {
-		t.Errorf("expected SyncInterval source 'default', got %q", result.Daemon.SyncInterval.Source)
-	}
 	if result.Daemon.WSPort.Value != "auto" {
 		t.Errorf("expected WSPort 'auto', got %q", result.Daemon.WSPort.Value)
 	}
@@ -42,7 +39,7 @@ func TestConfigShow_WithConfig(t *testing.T) {
 
 	cfg := &config.ThrumConfig{
 		Runtime: config.RuntimeConfig{Primary: "claude"},
-		Daemon:  config.DaemonConfig{LocalOnly: true, SyncInterval: 30, WSPort: "9999"},
+		Daemon:  config.DaemonConfig{LocalOnly: true, WSPort: "9999"},
 	}
 	if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
 		t.Fatal(err)
@@ -65,12 +62,6 @@ func TestConfigShow_WithConfig(t *testing.T) {
 	if result.Daemon.LocalOnly.Source != "config.json" {
 		t.Errorf("expected LocalOnly source 'config.json', got %q", result.Daemon.LocalOnly.Source)
 	}
-	if result.Daemon.SyncInterval.Value != "30s" {
-		t.Errorf("expected SyncInterval=30s, got %q", result.Daemon.SyncInterval.Value)
-	}
-	if result.Daemon.SyncInterval.Source != "config.json" {
-		t.Errorf("expected SyncInterval source 'config.json', got %q", result.Daemon.SyncInterval.Source)
-	}
 	if result.Daemon.WSPort.Value != "9999" {
 		t.Errorf("expected WSPort=9999, got %q", result.Daemon.WSPort.Value)
 	}
@@ -84,7 +75,6 @@ func TestConfigShow_EnvOverrides(t *testing.T) {
 	}
 
 	t.Setenv("THRUM_LOCAL", "true")
-	t.Setenv("THRUM_SYNC_INTERVAL", "120")
 	t.Setenv("THRUM_WS_PORT", "8888")
 
 	result, err := ConfigShow(tmpDir)
@@ -95,16 +85,13 @@ func TestConfigShow_EnvOverrides(t *testing.T) {
 	if result.Daemon.LocalOnly.Source != "env" {
 		t.Errorf("expected LocalOnly source 'env', got %q", result.Daemon.LocalOnly.Source)
 	}
-	if result.Daemon.SyncInterval.Source != "env" {
-		t.Errorf("expected SyncInterval source 'env', got %q", result.Daemon.SyncInterval.Source)
-	}
 	if result.Daemon.WSPort.Source != "env" {
 		t.Errorf("expected WSPort source 'env', got %q", result.Daemon.WSPort.Source)
 	}
 
 	// Should list overrides
-	if len(result.Overrides) < 3 {
-		t.Errorf("expected at least 3 overrides, got %d", len(result.Overrides))
+	if len(result.Overrides) < 2 {
+		t.Errorf("expected at least 2 overrides, got %d", len(result.Overrides))
 	}
 }
 
@@ -117,10 +104,9 @@ func TestFormatConfigShow(t *testing.T) {
 			Detected: []string{"claude", "auggie"},
 		},
 		Daemon: ConfigDaemonInfo{
-			LocalOnly:    ConfigValue{Value: "true", Source: "config.json"},
-			SyncInterval: ConfigValue{Value: "60s", Source: "default"},
-			WSPort:       ConfigValue{Value: "auto", Source: "default"},
-			Status:       "not running",
+			LocalOnly: ConfigValue{Value: "true", Source: "config.json"},
+			WSPort:    ConfigValue{Value: "auto", Source: "default"},
+			Status:    "not running",
 		},
 		Identity: ConfigIdentityInfo{
 			Agent:  "test_agent",
@@ -138,7 +124,6 @@ func TestFormatConfigShow(t *testing.T) {
 		"claude, auggie",
 		"Daemon",
 		"Local-only:",
-		"Sync interval:",
 		"Identity",
 		"test_agent",
 	}
@@ -146,5 +131,10 @@ func TestFormatConfigShow(t *testing.T) {
 		if !strings.Contains(output, check) {
 			t.Errorf("output missing %q:\n%s", check, output)
 		}
+	}
+
+	// Sync interval line must be gone
+	if strings.Contains(output, "Sync interval:") {
+		t.Errorf("output should not contain 'Sync interval:' after v0.10.6 removal:\n%s", output)
 	}
 }
