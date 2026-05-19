@@ -155,6 +155,9 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 	type msgAction struct {
 		agentID string
 		msgID   string
+		// payload is the raw event map, used as a fallback author_id source
+		// when the messages table lookup (done after rows.Close()) finds no row.
+		payload map[string]any
 	}
 	type receiptAction struct {
 		issuerID  string
@@ -220,14 +223,12 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 			if msgID == "" {
 				continue
 			}
-			// Derive agent_id from the projection (latest source of truth).
-			agentID, err := w.lookupMessageAuthor(ctx, msgID, raw)
-			if err != nil {
-				return fmt.Errorf("snapshot: lookup author for %s: %w", msgID, err)
-			}
-			if agentID != "" {
-				msgActions = append(msgActions, msgAction{agentID: agentID, msgID: msgID})
-			}
+			// Defer the DB lookup until after rows is closed (see below).
+			// Doing lookupMessageAuthor here while rows is open causes a
+			// deadlock on MaxOpenConns=1: rows holds the single connection
+			// and lookupMessageAuthor tries to acquire a second one.
+			// Store (msgID, payload fallback) and resolve after rows.Close().
+			msgActions = append(msgActions, msgAction{agentID: "", msgID: msgID, payload: raw})
 
 		case "message.receipt":
 			issuerID, _ := raw["agent_id"].(string)
@@ -243,7 +244,31 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("snapshot: iterate events: %w", err)
 	}
-	_ = rows.Close()
+	_ = rows.Close() // release DB connection before doing per-message lookups
+
+	// Resolve message authors now that rows is closed and the DB connection
+	// is free.  lookupMessageAuthor queries the messages table; doing this
+	// inside the rows loop above deadlocks on MaxOpenConns=1 because rows
+	// holds the single connection while the sub-query tries to acquire a
+	// second one.
+	for i := range msgActions {
+		if msgActions[i].agentID != "" {
+			continue // already resolved (shouldn't happen, but guard for safety)
+		}
+		agentID, err := w.lookupMessageAuthor(ctx, msgActions[i].msgID, msgActions[i].payload)
+		if err != nil {
+			return fmt.Errorf("snapshot: lookup author for %s: %w", msgActions[i].msgID, err)
+		}
+		msgActions[i].agentID = agentID
+	}
+	// Filter out actions where author could not be resolved.
+	filtered := msgActions[:0]
+	for _, ma := range msgActions {
+		if ma.agentID != "" {
+			filtered = append(filtered, ma)
+		}
+	}
+	msgActions = filtered
 
 	// If nothing to do, advance lastWalkAt and return.
 	if len(agentActions) == 0 &&
