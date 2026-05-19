@@ -11,7 +11,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:1331-1355
 // Destination: version_cmd.go:17-41
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 8bca6129d7
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func versionCmd() *cobra.Command {

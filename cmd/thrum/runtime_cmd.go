@@ -12,7 +12,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:4939-5010
 // Destination: runtime_cmd.go:18-89
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: ccad4a6acc
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func runtimeGroupCmd() *cobra.Command {

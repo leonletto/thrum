@@ -770,7 +770,7 @@ func runSkillsInstall(repoPath, runtimeFlag string, force, dryRun bool) error {
 // MOVED[thrum-8kxh]: isInteractive → helpers.go:25-27
 // Original range: main.go:774-776
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: d558385f83
 // Phase: 1
 // Remove once refactor verified green.
 
@@ -1330,7 +1330,7 @@ The daemon must be running and you must have an active session.`,
 // MOVED[thrum-8kxh]: versionCmd → version_cmd.go:17-41
 // Original range: main.go:1331-1355
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 8bca6129d7
 // Phase: 1
 // Remove once refactor verified green.
 
@@ -1595,35 +1595,35 @@ Exit codes:
 // MOVED[thrum-8kxh]: daemonCmd → daemon_cmd.go:18-123
 // Original range: main.go:1615-1720
 // Tests: cmd/thrum/main_test.go (indirect via Execute()); cmd/thrum/daemon_bootstrap_test.go (sibling, unaffected)
-// Commit: <pending>
+// Commit: 69a0f569a9
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: daemonLogsCmd → daemon_cmd.go:131-167
 // Original range: main.go:1722-1758
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 69a0f569a9
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: daemonRunCmd → daemon_cmd.go:175-184
 // Original range: main.go:1760-1769
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 69a0f569a9
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: peerCmd → peer.go:24-374
 // Original range: main.go:1771-2121
 // Tests: cmd/thrum/peer_cli_test.go (references peerCmd by name; stays package main); cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 05e04ad25f
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: monitorCmd → monitor.go:19-225
 // Original range: main.go:2123-2329
 // Tests: cmd/thrum/main_test.go (indirect via Execute()); internal/daemon/rpc/monitor_trust_boundary_test.go (Phase 3 hazard — RPC handlers still in runDaemon, unaffected by this Phase 1 CLI-surface move)
-// Commit: <pending>
+// Commit: 4217e1fc89
 // Phase: 1
 // Remove once refactor verified green.
 
@@ -4238,7 +4238,7 @@ Examples:
 // MOVED[thrum-8kxh]: runtimeGroupCmd → runtime_cmd.go:18-89
 // Original range: main.go:4939-5010
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: ccad4a6acc
 // Phase: 1
 // Remove once refactor verified green.
 
@@ -4698,35 +4698,35 @@ Examples:
 // MOVED[thrum-8kxh]: overviewCmd → presence.go:17-67
 // Original range: main.go:5465-5515
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 8e856b779d
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: teamCmd → presence.go:75-206
 // Original range: main.go:5517-5648
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 8e856b779d
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: probeAgentListFiles → presence.go:220-243
 // Original range: main.go:5656-5679
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 8e856b779d
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: whoHasCmd → presence.go:251-288
 // Original range: main.go:5681-5718
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 8e856b779d
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: pingCmd → presence.go:296-345
 // Original range: main.go:5720-5769
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 8e856b779d
 // Phase: 1
 // Remove once refactor verified green.
 
@@ -4811,56 +4811,56 @@ func sessionHeartbeatRunE(cmd *cobra.Command, args []string) error {
 // MOVED[thrum-8kxh]: getClient → helpers.go:64-94
 // Original range: main.go:5878-5908
 // Tests: cmd/thrum/cross_worktree_response_test.go (indirect via classifyRefreshError); cmd/thrum/job_test.go; cmd/thrum/hints_integration_test.go
-// Commit: <pending>
+// Commit: d558385f83
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: classifyRefreshError → helpers.go:201-223
 // Original range: main.go:5932-5954
 // Tests: cmd/thrum/cross_worktree_response_test.go (TestClassifyRefreshError, TestRepoFlag_AbsorbsCrossWorktree)
-// Commit: <pending>
+// Commit: d558385f83
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: explicitRepoFlag → helpers.go:234-243
 // Original range: main.go:5959-5968
 // Tests: cmd/thrum/cross_worktree_response_test.go (TestExplicitRepoFlag)
-// Commit: <pending>
+// Commit: d558385f83
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: crossWorktreeResponseFor → helpers.go:255-263
 // Original range: main.go:5974-5982
 // Tests: cmd/thrum/cross_worktree_response_test.go (TestCrossWorktreeResponseFor)
-// Commit: <pending>
+// Commit: d558385f83
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: emitCrossWorktreeBanner → helpers.go:279-297
 // Original range: main.go:5992-6010
 // Tests: cmd/thrum/cross_worktree_response_test.go (TestEmitBanner_*)
-// Commit: <pending>
+// Commit: d558385f83
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: getClientNoRefresh → helpers.go:107-113
 // Original range: main.go:6017-6023
 // Tests: cmd/thrum/job_test.go (indirect via daemon RPC bind)
-// Commit: <pending>
+// Commit: d558385f83
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: resolveLocalAgentID → helpers.go:139-155
 // Original range: main.go:6043-6059
 // Tests: cmd/thrum/email_test.go; cmd/thrum/job_test.go; cmd/thrum/hints_integration_test.go
-// Commit: <pending>
+// Commit: d558385f83
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: resolveLocalMentionRole → helpers.go:165-171
 // Original range: main.go:6063-6069
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: d558385f83
 // Phase: 1
 // Remove once refactor verified green.
 
@@ -7370,147 +7370,147 @@ func queryMessageReadState(ctx context.Context, st *state.State, msgID, agentID 
 // MOVED[thrum-8kxh]: rolesCmd → roles.go:23-41
 // Original range: main.go:8574-8592
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: rolesSaveConfigCmd → roles.go:53-66
 // Original range: main.go:8598-8611
 // Tests: cmd/thrum/roles_save_config_test.go; cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: runRolesSaveConfig → roles.go:78-107
 // Original range: main.go:8617-8646
 // Tests: cmd/thrum/roles_save_config_test.go
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: rolesTemplatesCmd → roles.go:119-126
 // Original range: main.go:8652-8659
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: rolesTemplatesPrintCmd → roles.go:134-154
 // Original range: main.go:8661-8681
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: rolesRefreshCmd → roles.go:167-183
 // Original range: main.go:8688-8704
 // Tests: cmd/thrum/roles_refresh_test.go; cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: runRolesRefresh → roles.go:196-242
 // Original range: main.go:8711-8757
 // Tests: cmd/thrum/roles_refresh_test.go
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: rolesListCmd → roles.go:250-284
 // Original range: main.go:8759-8793
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: rolesDeployCmd → roles.go:292-349
 // Original range: main.go:8795-8852
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: applyRolePreamble → roles.go:359-402
 // Original range: main.go:8856-8899
 // Tests: cmd/thrum/main_test.go (indirect via Execute()); cross-phase caller from Phase 2's quickstartCmd (sync_cmd.go)
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: backupCmd → backup.go:24-75
 // Original range: main.go:8901-8952
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 56560885ec
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: scheduleCmd → backup.go:83-128
 // Original range: main.go:8954-8999
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 56560885ec
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: runBackupSchedule → backup.go:136-205
 // Original range: main.go:9001-9070
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 56560885ec
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: runBackupCreate → backup.go:213-277
 // Original range: main.go:9072-9136
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 56560885ec
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: runBackupStatus → backup.go:285-362
 // Original range: main.go:9138-9215
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 56560885ec
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: runBackupConfig → backup.go:370-408
 // Original range: main.go:9217-9255
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 56560885ec
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: runBackupRestore → backup.go:416-507
 // Original range: main.go:9257-9348
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 56560885ec
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: pluginCmd → plugin.go:19-65
 // Original range: main.go:9350-9396
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 184cf28e7f
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: runPluginAdd → plugin.go:73-110
 // Original range: main.go:9398-9435
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 184cf28e7f
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: runPluginList → plugin.go:118-147
 // Original range: main.go:9437-9466
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 184cf28e7f
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: runPluginRemove → plugin.go:155-176
 // Original range: main.go:9468-9489
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 184cf28e7f
 // Phase: 1
 // Remove once refactor verified green.
 
@@ -7519,84 +7519,84 @@ func queryMessageReadState(ctx context.Context, st *state.State, msgID, agentID 
 // MOVED[thrum-8kxh]: telegramCmd → telegram.go:23-32
 // Original range: main.go:9493-9502
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: telegramConfigureCmd → telegram.go:40-80
 // Original range: main.go:9504-9544
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: runTelegramConfigure → telegram.go:88-206
 // Original range: main.go:9546-9664
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: telegramStatusCmd → telegram.go:214-222
 // Original range: main.go:9666-9674
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: runTelegramStatus → telegram.go:230-300
 // Original range: main.go:9676-9746
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: telegramPairCmd → telegram.go:308-331
 // Original range: main.go:9748-9771
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: runTelegramPair → telegram.go:339-400
 // Original range: main.go:9773-9834
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: isValidBotToken → telegram.go:408-426
 // Original range: main.go:9836-9854
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: maskToken → telegram.go:434-439
 // Original range: main.go:9856-9861
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: detectGitUser → telegram.go:447-458
 // Original range: main.go:9863-9874
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: restartCmd → restart_cmd.go:21-29
 // Original range: main.go:9876-9884
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: f516ec027e
 // Phase: 1
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: restartSnapshotSubcmds → restart_cmd.go:39-213
 // Original range: main.go:9888-10062
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: f516ec027e
 // Phase: 1
 // Remove once refactor verified green.
 

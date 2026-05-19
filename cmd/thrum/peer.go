@@ -18,7 +18,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:1771-2121
 // Destination: peer.go:24-374
 // Tests: cmd/thrum/peer_cli_test.go (references peerCmd by name; stays package main); cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 05e04ad25f
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func peerCmd() *cobra.Command {

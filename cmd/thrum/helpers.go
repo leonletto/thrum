@@ -18,7 +18,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:774-776
 // Destination: helpers.go:25-27
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: d558385f83
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 // isInteractive returns true if stdin is a terminal (not piped/redirected).
@@ -29,7 +29,7 @@ func isInteractive() bool {
 // ORIGIN[thrum-8kxh]: moved from main.go:5878-5908
 // Destination: helpers.go:64-94
 // Tests: cmd/thrum/cross_worktree_response_test.go (indirect via classifyRefreshError); cmd/thrum/job_test.go; cmd/thrum/hints_integration_test.go
-// Commit: <pending>
+// Commit: d558385f83
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 // getClient returns a configured RPC client.
@@ -96,7 +96,7 @@ func getClient() (*cli.Client, error) {
 // ORIGIN[thrum-8kxh]: moved from main.go:6017-6023
 // Destination: helpers.go:107-113
 // Tests: cmd/thrum/job_test.go (indirect via daemon RPC bind)
-// Commit: <pending>
+// Commit: d558385f83
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 // getClientNoRefresh opens a daemon connection without running the identity
@@ -115,7 +115,7 @@ func getClientNoRefresh() (*cli.Client, error) {
 // ORIGIN[thrum-8kxh]: moved from main.go:6043-6059
 // Destination: helpers.go:139-155
 // Tests: cmd/thrum/email_test.go; cmd/thrum/job_test.go; cmd/thrum/hints_integration_test.go
-// Commit: <pending>
+// Commit: d558385f83
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 // resolveLocalAgentID resolves the agent ID from the local worktree's identity file.
@@ -157,7 +157,7 @@ func resolveLocalAgentID() (string, error) {
 // ORIGIN[thrum-8kxh]: moved from main.go:6063-6069
 // Destination: helpers.go:165-171
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: d558385f83
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 // resolveLocalMentionRole resolves the agent's role from the local worktree's identity file.
@@ -173,7 +173,7 @@ func resolveLocalMentionRole() (string, error) {
 // ORIGIN[thrum-8kxh]: moved from main.go:5932-5954
 // Destination: helpers.go:201-223
 // Tests: cmd/thrum/cross_worktree_response_test.go (TestClassifyRefreshError, TestRepoFlag_AbsorbsCrossWorktree)
-// Commit: <pending>
+// Commit: d558385f83
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 // classifyRefreshError decides what to do when RefreshLocalIdentity
@@ -225,7 +225,7 @@ func classifyRefreshError(cmd *cobra.Command, refreshErr error) (fatalErr error,
 // ORIGIN[thrum-8kxh]: moved from main.go:5959-5968
 // Destination: helpers.go:234-243
 // Tests: cmd/thrum/cross_worktree_response_test.go (TestExplicitRepoFlag)
-// Commit: <pending>
+// Commit: d558385f83
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 // explicitRepoFlag reports whether the caller explicitly passed
@@ -245,7 +245,7 @@ func explicitRepoFlag(cmd *cobra.Command) bool {
 // ORIGIN[thrum-8kxh]: moved from main.go:5974-5982
 // Destination: helpers.go:255-263
 // Tests: cmd/thrum/cross_worktree_response_test.go (TestCrossWorktreeResponseFor)
-// Commit: <pending>
+// Commit: d558385f83
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 // crossWorktreeResponseFor returns the leaf's annotated response class
@@ -265,7 +265,7 @@ func crossWorktreeResponseFor(cmd *cobra.Command) string {
 // ORIGIN[thrum-8kxh]: moved from main.go:5992-6010
 // Destination: helpers.go:279-297
 // Tests: cmd/thrum/cross_worktree_response_test.go (TestEmitBanner_*)
-// Commit: <pending>
+// Commit: d558385f83
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 // emitCrossWorktreeBanner writes the Enhanced Policy 2 cross-worktree

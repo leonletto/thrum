@@ -17,7 +17,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:8574-8592
 // Destination: roles.go:23-41
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func rolesCmd() *cobra.Command {
@@ -43,7 +43,7 @@ identity data (AgentName, Role, Module, WorktreePath, RepoRoot, CoordinatorName)
 // ORIGIN[thrum-8kxh]: moved from main.go:8598-8611
 // Destination: roles.go:53-66
 // Tests: cmd/thrum/roles_save_config_test.go; cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 // rolesSaveConfigCmd is the CLI shim used by /thrum:configure-roles to
@@ -68,7 +68,7 @@ rendered_hash from current shipped templates, and atomically writes to
 // ORIGIN[thrum-8kxh]: moved from main.go:8617-8646
 // Destination: roles.go:78-107
 // Tests: cmd/thrum/roles_save_config_test.go
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 // runRolesSaveConfig is the testable body of `thrum roles save-config`.
@@ -109,7 +109,7 @@ func runRolesSaveConfig(thrumDir string, in io.Reader) error {
 // ORIGIN[thrum-8kxh]: moved from main.go:8652-8659
 // Destination: roles.go:119-126
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 // rolesTemplatesCmd groups inspection subcommands for embedded shipped
@@ -128,7 +128,7 @@ func rolesTemplatesCmd() *cobra.Command {
 // ORIGIN[thrum-8kxh]: moved from main.go:8661-8681
 // Destination: roles.go:134-154
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func rolesTemplatesPrintCmd() *cobra.Command {
@@ -156,7 +156,7 @@ func rolesTemplatesPrintCmd() *cobra.Command {
 // ORIGIN[thrum-8kxh]: moved from main.go:8688-8704
 // Destination: roles.go:167-183
 // Tests: cmd/thrum/roles_refresh_test.go; cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 // rolesRefreshCmd regenerates rendered .thrum/role_templates/<role>.md files
@@ -185,7 +185,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:8711-8757
 // Destination: roles.go:196-242
 // Tests: cmd/thrum/roles_refresh_test.go
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 // runRolesRefresh is the testable body of `thrum roles refresh`. Fails loud
@@ -244,7 +244,7 @@ func runRolesRefresh(thrumDir string) error {
 // ORIGIN[thrum-8kxh]: moved from main.go:8759-8793
 // Destination: roles.go:250-284
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func rolesListCmd() *cobra.Command {
@@ -286,7 +286,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:8795-8852
 // Destination: roles.go:292-349
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func rolesDeployCmd() *cobra.Command {
@@ -351,7 +351,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:8856-8899
 // Destination: roles.go:359-402
 // Tests: cmd/thrum/main_test.go (indirect via Execute()); cross-phase caller from Phase 2's quickstartCmd (sync_cmd.go)
-// Commit: <pending>
+// Commit: 9946f64a8c
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 // applyRolePreamble applies the preamble for an agent using the priority:
