@@ -560,6 +560,14 @@ func TestBranchManager_CreateSyncWorktree_SparseCheckout(t *testing.T) {
 	if !strings.Contains(content, "messages") {
 		t.Errorf("sparse-checkout missing messages pattern, got:\n%s", content)
 	}
+	// thrum-s6os E10: the v0.10.6 wire-stream skeleton must be in the
+	// sparse pattern set, otherwise the new state-not-events flow won't
+	// see writes to state/, messages-v2/, or receipts/.
+	for _, pat := range []string{"state/", "messages-v2/", "receipts/"} {
+		if !strings.Contains(content, pat) {
+			t.Errorf("sparse-checkout missing v0.10.6 pattern %q, got:\n%s", pat, content)
+		}
+	}
 }
 
 func TestBranchManager_CreateSyncWorktree_NoSparseCheckoutLeak(t *testing.T) {
