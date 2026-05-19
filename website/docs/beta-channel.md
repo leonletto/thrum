@@ -17,7 +17,7 @@ tags:
     "plugin",
     "substrate",
   ]
-last_updated: "2026-05-18"
+last_updated: "2026-05-19"
 ---
 
 ## Thrum Beta Channel
@@ -46,21 +46,28 @@ they're parameterized over `VERSION` and the release branch.
 
 ## Stable-track current pre-release
 
-> **[`v0.10.5-rc.3`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.3)**
-> (2026-05-18, in 48h FULL soak through 2026-05-20).
+> **[`v0.10.5-rc.4`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.4)**
+> (2026-05-19, in 48h FULL soak through 2026-05-21).
 >
-> Same release surface as rc.1/rc.2 (backstop nudger, runtime-init
-> managed-template fix, first-turn ack, two new CLI flags), now with a self-echo
-> regression fix (thrum-1zfk). rc.1's self-mention semantic change was correct
-> in the spool dispatch path (Layer 2) but missed the tmux nudge dispatch path
-> (Layer 4) — agents could still get a phantom `New message from @<self>`
-> reminder in their own pane on outbound sends. rc.3 adds the symmetric Layer 4
-> self-skip so both dispatch paths behave consistently. Also folds in a doc-port
-> of the `/thrum:restart` skill's §1 "Big picture" mandate across the plugin
-> variants.
+> rc.4 resolves the multi-binary upgrade trap: agents and users running both
+> v0.11 substrate work (thrum-agents branch) and v0.10.5 binaries no longer hit
+> the "daemon won't start, schema is version N this binary supports up to M"
+> wall when switching between them. The rc.4 binary forward-ports schema
+> migrations v25-v32 from thrum-agents — they're dead-end on v0.10.5 (no
+> consumer code references them) but live when v0.11 ships, so a v32 DB created
+> by a thrum-agents binary opens cleanly under v0.10.5-rc.4.
 >
-> The promotion back to 48h FULL soak (from rc.2's 24h CLI/docs class) is
-> because the fix touches daemon dispatch code, not just docs.
+> When something does go wrong on the version axis, the downgrade-guard error
+> now names the binary's schema range, the DB's current version, and two
+> concrete recovery paths (re-install the matching binary, OR
+> `thrum daemon stop` + remove the DB file), plus a pointer to a new
+> "Multi-Binary Worktree Footgun" section in `CLAUDE.md` (thrum-quth).
+>
+> Polish on top: `/thrum:restart` skill §1 mandate + 11-section structure
+> forward-ported from later RCs (consistent restart UX across the v0.10.5 line),
+> `bd comments add` syntax correction in role-preamble templates, and a doc note
+> explaining the daemon backstop nudger (full doc rewrite deferred to v0.10.6
+> per thrum-peh0).
 >
 > What's new in v0.10.5 overall:
 >
@@ -84,13 +91,13 @@ they're parameterized over `VERSION` and the release branch.
 > [`v0.10.4`](https://github.com/leonletto/thrum/releases/tag/v0.10.4) — see
 > [What's New](whats-new.md) for v0.10.4 + v0.10.5 highlights.
 
-### Quick install for `v0.10.5-rc.3`
+### Quick install for `v0.10.5-rc.4`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.3 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.4 sh
 
 # Codex plugin (matches release/v0.10.5)
 THRUM_INSTALL_REF=release/v0.10.5 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.5/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
