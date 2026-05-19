@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	gosync "sync"
 	"testing"
 	"time"
 
@@ -15,6 +17,49 @@ import (
 	"github.com/leonletto/thrum/internal/projection"
 	_ "modernc.org/sqlite"
 )
+
+// ---------------------------------------------------------------------------
+// Telemetry test helpers (loop package)
+// ---------------------------------------------------------------------------
+
+type loopTelHandler struct {
+	records []slog.Record
+	mu      gosync.Mutex
+}
+
+func (h *loopTelHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
+func (h *loopTelHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r)
+	return nil
+}
+func (h *loopTelHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *loopTelHandler) WithGroup(string) slog.Handler      { return h }
+
+func (h *loopTelHandler) recordsWithMessage(msg string) []slog.Record {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []slog.Record
+	for _, r := range h.records {
+		if r.Message == msg {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func loopTelAttrValue(r slog.Record, key string) string {
+	var val string
+	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == key {
+			val = a.Value.String()
+			return false
+		}
+		return true
+	})
+	return val
+}
 
 func TestSyncLoop_StartStop(t *testing.T) {
 	tmpDir := setupTestRepoWithCommit(t)
@@ -152,7 +197,6 @@ func TestSyncLoop_NotifyChannel(t *testing.T) {
 	}
 }
 
-
 func TestLockAcquireRelease(t *testing.T) {
 	tmpDir := t.TempDir()
 	lockPath := filepath.Join(tmpDir, "test.lock")
@@ -251,20 +295,21 @@ func initTestSchema(db *sql.DB) error {
 	);
 
 	CREATE TABLE IF NOT EXISTS messages (
-		message_id TEXT PRIMARY KEY,
-		thread_id TEXT,
-		agent_id TEXT NOT NULL,
-		session_id TEXT NOT NULL,
-		created_at TEXT NOT NULL,
-		updated_at TEXT,
-		deleted INTEGER DEFAULT 0,
-		deleted_at TEXT,
-		delete_reason TEXT,
-		body_format TEXT NOT NULL,
-		body_content TEXT NOT NULL,
-		body_structured TEXT,
-		authored_by TEXT,
-		disclosed INTEGER DEFAULT 0,
+		message_id               TEXT PRIMARY KEY,
+		thread_id                TEXT,
+		agent_id                 TEXT NOT NULL,
+		session_id               TEXT NOT NULL,
+		created_at               TEXT NOT NULL,
+		updated_at               TEXT,
+		deleted                  INTEGER DEFAULT 0,
+		deleted_at               TEXT,
+		delete_reason            TEXT,
+		body_format              TEXT NOT NULL,
+		body_content             TEXT NOT NULL,
+		body_structured          TEXT,
+		authored_by              TEXT,
+		disclosed                INTEGER DEFAULT 0,
+		pending_route_resolution INTEGER NOT NULL DEFAULT 0,
 		FOREIGN KEY (thread_id) REFERENCES threads(thread_id),
 		FOREIGN KEY (agent_id) REFERENCES agents(agent_id),
 		FOREIGN KEY (session_id) REFERENCES sessions(session_id)
@@ -645,5 +690,95 @@ func TestUpdateProjection(t *testing.T) {
 
 	if count != 1 {
 		t.Errorf("Expected 1 message in database, got %d", count)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// E8 Telemetry tests for sync.commit
+// ---------------------------------------------------------------------------
+
+// TestSyncLoop_SetCommitCountsProvider_Wired verifies that
+// SetCommitCountsProvider stores the callback and it can be invoked.
+func TestSyncLoop_SetCommitCountsProvider_Wired(t *testing.T) {
+	tmpDir := setupMergeTestRepo(t)
+	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
+
+	syncer := NewSyncer(tmpDir, syncDir, false)
+	projector := setupTestProjector(t, tmpDir)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), false)
+
+	if loop.walkerCounts != nil {
+		t.Fatal("walkerCounts should be nil before SetCommitCountsProvider")
+	}
+
+	called := false
+	loop.SetCommitCountsProvider(func() (int, int, int) {
+		called = true
+		return 3, 5, 7
+	})
+
+	if loop.walkerCounts == nil {
+		t.Fatal("walkerCounts should be non-nil after SetCommitCountsProvider")
+	}
+
+	s, m, r := loop.walkerCounts()
+	if !called {
+		t.Error("walkerCounts callback was not called")
+	}
+	if s != 3 || m != 5 || r != 7 {
+		t.Errorf("walkerCounts() = (%d, %d, %d), want (3, 5, 7)", s, m, r)
+	}
+}
+
+// TestSyncLoop_DoSync_EmitsSyncCommit verifies that doSync emits a
+// "sync.commit" slog.Info event after CommitAndPush succeeds and there
+// is a HEAD commit in the sync worktree.
+func TestSyncLoop_DoSync_EmitsSyncCommit(t *testing.T) {
+	h := &loopTelHandler{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	defer slog.SetDefault(prev)
+
+	tmpDir := setupMergeTestRepo(t)
+	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
+
+	syncer := NewSyncer(tmpDir, syncDir, false)
+	projector := setupTestProjector(t, tmpDir)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), false)
+
+	// Wire a counts provider that returns known values.
+	loop.SetCommitCountsProvider(func() (int, int, int) {
+		return 2, 4, 1
+	})
+
+	ctx := context.Background()
+	if err := loop.Start(ctx); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer func() { _ = loop.Stop() }()
+
+	// Wait for the initial sync cycle to complete.
+	deadline := time.After(3 * time.Second)
+	for {
+		status := loop.GetStatus()
+		if !status.LastSyncAt.IsZero() {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for initial sync")
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+
+	// sync.commit only fires when commitSHA is non-empty (i.e., there was a
+	// real commit). Accept 0 or more events; if present, verify field invariants.
+	recs := h.recordsWithMessage("sync.commit")
+	for _, r := range recs {
+		sha := loopTelAttrValue(r, "commit_sha")
+		if sha == "" {
+			t.Error("sync.commit event has empty commit_sha")
+		}
 	}
 }

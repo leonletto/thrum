@@ -5,14 +5,71 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	gosync "sync"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/daemon/safedb"
 	_ "modernc.org/sqlite"
 )
+
+// ---------------------------------------------------------------------------
+// Telemetry test helpers (merge package)
+// ---------------------------------------------------------------------------
+
+type mergeTelHandler struct {
+	records []slog.Record
+	mu      gosync.Mutex
+}
+
+func (h *mergeTelHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
+func (h *mergeTelHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r)
+	return nil
+}
+func (h *mergeTelHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *mergeTelHandler) WithGroup(string) slog.Handler      { return h }
+
+func (h *mergeTelHandler) recordsWithMessage(msg string) []slog.Record {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []slog.Record
+	for _, r := range h.records {
+		if r.Message == msg {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func mergeTelAttrValue(r slog.Record, key string) string {
+	var val string
+	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == key {
+			val = a.Value.String()
+			return false
+		}
+		return true
+	})
+	return val
+}
+
+func mergeTelAttrInt64(r slog.Record, key string) int64 {
+	val := int64(-1)
+	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == key {
+			val = a.Value.Int64()
+			return false
+		}
+		return true
+	})
+	return val
+}
 
 // setupMergeTestRepo creates a test repo with a-sync branch and test events.
 func setupMergeTestRepo(t *testing.T) string {
@@ -1054,5 +1111,98 @@ func TestReadLegacyMessageFallback_V2Present(t *testing.T) {
 	}
 	if sourcePath != "" {
 		t.Errorf("sourcePath = %q, want empty (no fallback needed)", sourcePath)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// E8 Telemetry tests for sync.legacy_read
+// ---------------------------------------------------------------------------
+
+// TestReadLegacyMessageFallback_EmitsSyncLegacyRead verifies that
+// ReadLegacyMessageFallback emits a "sync.legacy_read" slog.Info event with
+// the legacy path and row count when the legacy file is read.
+func TestReadLegacyMessageFallback_EmitsSyncLegacyRead(t *testing.T) {
+	h := &mergeTelHandler{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	defer slog.SetDefault(prev)
+
+	syncDir := t.TempDir()
+	agentID := "agt_tel_legacy01"
+
+	// Only legacy file exists (no v2 file).
+	legacyDir := filepath.Join(syncDir, "messages")
+	if err := os.MkdirAll(legacyDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	legacyContent := `{"type":"message.create","event_id":"evt_L1","message_id":"msg_leg1","timestamp":"2026-01-01T00:00:00Z"}` + "\n" +
+		`{"type":"message.create","event_id":"evt_L2","message_id":"msg_leg2","timestamp":"2026-01-02T00:00:00Z"}` + "\n"
+	legacyPath := filepath.Join(legacyDir, agentID+".jsonl")
+	if err := os.WriteFile(legacyPath, []byte(legacyContent), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, sourcePath, err := ReadLegacyMessageFallback(syncDir, agentID)
+	if err != nil {
+		t.Fatalf("ReadLegacyMessageFallback: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	if sourcePath == "" {
+		t.Error("sourcePath should be non-empty")
+	}
+
+	recs := h.recordsWithMessage("sync.legacy_read")
+	if len(recs) != 1 {
+		t.Fatalf("expected 1 sync.legacy_read event, got %d", len(recs))
+	}
+	r := recs[0]
+	if got := mergeTelAttrValue(r, "path"); got == "" {
+		t.Error("path attr should be non-empty")
+	}
+	if got := mergeTelAttrInt64(r, "rows"); got != 2 {
+		t.Errorf("rows = %d, want 2", got)
+	}
+}
+
+// TestReadLegacyMessageFallback_NoEvent_WhenV2Present verifies that
+// "sync.legacy_read" does NOT fire when the v2 file is present (no fallback).
+func TestReadLegacyMessageFallback_NoEvent_WhenV2Present(t *testing.T) {
+	h := &mergeTelHandler{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	defer slog.SetDefault(prev)
+
+	syncDir := t.TempDir()
+	agentID := "agt_tel_v2present01"
+
+	// Create both v2 and legacy files; v2 takes precedence.
+	v2Dir := filepath.Join(syncDir, "messages-v2")
+	if err := os.MkdirAll(v2Dir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(v2Dir, agentID+".jsonl"), []byte(`{"type":"message.create","event_id":"evt_V1","message_id":"msg_v2","timestamp":"2026-01-01T00:00:00Z"}`+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	legacyDir := filepath.Join(syncDir, "messages")
+	if err := os.MkdirAll(legacyDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyDir, agentID+".jsonl"), []byte(`{"type":"message.create","event_id":"evt_OLD","message_id":"msg_old","timestamp":"2026-01-01T00:00:00Z"}`+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	events, _, err := ReadLegacyMessageFallback(syncDir, agentID)
+	if err != nil {
+		t.Fatalf("ReadLegacyMessageFallback: %v", err)
+	}
+	if events != nil {
+		t.Errorf("expected nil events (v2 present), got %d rows", len(events))
+	}
+
+	recs := h.recordsWithMessage("sync.legacy_read")
+	if len(recs) != 0 {
+		t.Errorf("expected no sync.legacy_read event (v2 present), got %d", len(recs))
 	}
 }

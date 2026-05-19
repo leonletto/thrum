@@ -6,8 +6,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	gosync "sync"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +19,25 @@ import (
 	"github.com/leonletto/thrum/internal/sync/state"
 	_ "modernc.org/sqlite"
 )
+
+// ---------------------------------------------------------------------------
+// Telemetry test helpers (snapshot package)
+// ---------------------------------------------------------------------------
+
+type snapTelHandler struct {
+	records []slog.Record
+	mu      gosync.Mutex
+}
+
+func (h *snapTelHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
+func (h *snapTelHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r)
+	return nil
+}
+func (h *snapTelHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *snapTelHandler) WithGroup(string) slog.Handler      { return h }
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -595,5 +616,83 @@ func TestWalker_LastWalkAt_DoesNotAdvanceOnError(t *testing.T) {
 	newLastWalkAt := walker.GetLastWalkAt()
 	if !newLastWalkAt.Equal(before) {
 		t.Errorf("lastWalkAt advanced on error: was %v, now %v", before, newLastWalkAt)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// E8 Telemetry tests for WalkCounts / LastCounts
+// ---------------------------------------------------------------------------
+
+// TestWalker_LastCounts_TracksWritesPerWalk verifies that WalkCounts returned
+// by LastCounts() accurately reflects the number of agent state files, message
+// rows, and receipt rows written in a single WalkAndWrite call.
+func TestWalker_LastCounts_TracksWritesPerWalk(t *testing.T) {
+	// Install a capturing slog handler (not strictly required for this test,
+	// but ensures the telemetry path is exercised without crashing).
+	h := &snapTelHandler{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	defer slog.SetDefault(prev)
+
+	dir := t.TempDir()
+	syncDir := filepath.Join(dir, "sync")
+	daemonID := "d_counts_test"
+
+	db := openTestDB(t)
+	ownedAgents := map[string]string{
+		"agt_counts01": daemonID,
+	}
+	sw := makeStateWriter(t, syncDir, daemonID, ownedAgents)
+	msgW := snapshot.NewMessageStateWriter(syncDir, daemonID)
+	recW := snapshot.NewReceiptStateWriter(syncDir, daemonID)
+	walker := snapshot.NewWalker(db, sw, msgW, recW, syncDir, daemonID)
+
+	// Counts should be zero before any walk.
+	initial := walker.LastCounts()
+	if initial.StateFiles != 0 || initial.MessageRows != 0 || initial.ReceiptRows != 0 {
+		t.Errorf("initial counts should be zero, got %+v", initial)
+	}
+
+	now := time.Now().UTC()
+	before := now.Add(-time.Second)
+	walker.SetLastWalkAt(before)
+
+	// Insert one agent.register event and one message.create event.
+	insertAgent(t, db, "agt_counts01", "agent", "coordinator", "thrum", "Counts Agent", "host1", daemonID)
+	ts1 := now.Add(100 * time.Millisecond)
+	insertEvent(t, db, 1, "agent.register", ts1.Format(time.RFC3339Nano), fmt.Sprintf(
+		`{"type":"agent.register","event_id":"evt_cnt01","agent_id":"agt_counts01","timestamp":%q,"origin_daemon":%q}`,
+		ts1.Format(time.RFC3339Nano), daemonID,
+	))
+
+	insertMessage(t, db, "msg_counts01", "agt_counts01", "hello", false)
+	ts2 := now.Add(200 * time.Millisecond)
+	insertEvent(t, db, 2, "message.create", ts2.Format(time.RFC3339Nano), fmt.Sprintf(
+		`{"type":"message.create","event_id":"evt_cnt02","message_id":"msg_counts01","agent_id":"agt_counts01","timestamp":%q,"origin_daemon":%q}`,
+		ts2.Format(time.RFC3339Nano), daemonID,
+	))
+
+	ctx := context.Background()
+	if err := walker.WalkAndWrite(ctx); err != nil {
+		t.Fatalf("WalkAndWrite: %v", err)
+	}
+
+	counts := walker.LastCounts()
+	// We should have at least 1 state file (agent.register) and 1 message row.
+	if counts.StateFiles < 1 {
+		t.Errorf("StateFiles = %d, want >= 1", counts.StateFiles)
+	}
+	if counts.MessageRows < 1 {
+		t.Errorf("MessageRows = %d, want >= 1", counts.MessageRows)
+	}
+
+	// Reset: second walk on the same window should produce zero counts
+	// (lastWalkAt has already advanced past these events).
+	if err := walker.WalkAndWrite(ctx); err != nil {
+		t.Fatalf("second WalkAndWrite: %v", err)
+	}
+	counts2 := walker.LastCounts()
+	if counts2.StateFiles != 0 || counts2.MessageRows != 0 || counts2.ReceiptRows != 0 {
+		t.Errorf("after second walk with no new events, expected zero counts, got %+v", counts2)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -886,8 +887,7 @@ func contains(events []*Event, id string) bool {
 func ReadLegacyMessageFallback(syncDir, agentID string) (events []json.RawMessage, sourcePath string, err error) {
 	v2Path := filepath.Join(syncDir, "messages-v2", agentID+".jsonl")
 	if _, statErr := os.Stat(v2Path); statErr == nil {
-		// v2 file is present; no fallback needed.
-		// TODO E8 telemetry: slog sync.legacy_read here when this path is taken
+		// v2 file is present; no legacy fallback needed — no sync.legacy_read event.
 		return nil, "", nil
 	}
 
@@ -907,7 +907,7 @@ func ReadLegacyMessageFallback(syncDir, agentID string) (events []json.RawMessag
 		return nil, legacyPath, fmt.Errorf("read legacy message file: %w", err)
 	}
 
-	// TODO E8 telemetry: slog sync.legacy_read here
+	slog.Info("sync.legacy_read", "path", legacyPath, "rows", len(rows))
 	return rows, legacyPath, nil
 }
 
@@ -1010,6 +1010,10 @@ func BootstrapIngestLegacyEvents(ctx context.Context, thrumDir, syncDir string, 
 	// Write sentinel after successful ingest. Includes timestamp for diagnostics.
 	if writeErr := writeSentinel(sentinelPath); writeErr != nil {
 		return ingested, fmt.Errorf("write legacy_ingested sentinel: %w", writeErr)
+	}
+
+	if ingested > 0 {
+		slog.Info("sync.legacy_read", "path", legacyEventsPath, "rows", ingested)
 	}
 
 	// DO NOT delete legacy events.jsonl — spec §4.6 keeps it as a historical

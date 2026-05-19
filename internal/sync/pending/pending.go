@@ -10,6 +10,7 @@ package pending
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -39,7 +40,7 @@ func (p *Pool) Add(msg OrphanedMessage) {
 		return
 	}
 	p.orphans[msg.MessageID] = msg
-	// TODO E8 telemetry: slog.Info("pending_pool.added", "message_id", msg.MessageID, "blocked_by", msg.BlockedBy)
+	slog.Info("pending_pool.added", "message_id", msg.MessageID, "blocked_by", msg.BlockedBy)
 }
 
 // ResolveOnStateLand is called by the projection after applying any new
@@ -87,7 +88,9 @@ func (p *Pool) ResolveOnStateLand(ctx context.Context, newKnownIDs []string, res
 			delete(p.orphans, orphan.MessageID)
 			p.mu.Unlock()
 			resolved++
-			// TODO E8 telemetry: slog.Info("pending_pool.resolved", "message_id", orphan.MessageID, "wait_ms", time.Since(orphan.LandedAt).Milliseconds())
+			slog.Info("pending_pool.resolved",
+				"message_id", orphan.MessageID,
+				"wait_ms", time.Since(orphan.LandedAt).Milliseconds())
 		}
 	}
 	return resolved
