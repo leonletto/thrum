@@ -1328,31 +1328,12 @@ The daemon must be running and you must have an active session.`,
 	return cmd
 }
 
-func versionCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "version",
-		Short: "Show thrum version",
-		Long:  `Display version information including version number, build hash, repository URL, and documentation URL.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if flagJSON {
-				return cli.EmitJSON(map[string]string{
-					"version":     Version,
-					"build":       Build,
-					"go_version":  goruntime.Version(),
-					"repo_url":    "https://github.com/leonletto/thrum",
-					"website_url": "https://thrum.team",
-				})
-			}
-			// Human-readable output with OSC 8 hyperlinks
-			// Format: ESC ] 8 ; ; URL ESC \ TEXT ESC ] 8 ; ; ESC \
-			fmt.Printf("thrum v%s (build: %s, %s)\n", Version, Build, goruntime.Version())
-			fmt.Printf("\x1b]8;;https://github.com/leonletto/thrum\x07https://github.com/leonletto/thrum\x1b]8;;\x07\n")
-			fmt.Printf("\x1b]8;;https://thrum.team\x07https://thrum.team\x1b]8;;\x07\n")
-			return nil
-		},
-	}
-	return cmd
-}
+// MOVED[thrum-8kxh]: versionCmd → version_cmd.go:17-41
+// Original range: main.go:1331-1355
+// Tests: cmd/thrum/main_test.go (indirect via Execute())
+// Commit: <pending>
+// Phase: 1
+// Remove once refactor verified green.
 
 // printAgentSummaryField emits the bare value of a single field from
 // AgentSummary, newline-terminated. Unknown fields return an error so
