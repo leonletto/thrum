@@ -62,8 +62,11 @@ var detectAncestor = process.FindClaudeAncestor
 // Returns a non-nil result on success; zero-valued result means the happy
 // path (nothing drifted).
 //
-// Callers MUST discriminate refresh errors via
-// `errors.As(err, &guard.Error{})`:
+// Callers MUST discriminate refresh errors via the canonical errors.As
+// idiom:
+//
+//	var ge *guard.Error
+//	if errors.As(err, &ge) { ... }
 //
 //   - A *guard.Error is a catastrophic ownership refusal (cross_worktree,
 //     unauthenticated_rpc, prime_ownership, …). Callers must propagate

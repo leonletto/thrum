@@ -5276,9 +5276,13 @@ func getClient() (*cli.Client, error) {
 //     legacy log-and-proceed contract (daemon-unreachable, config-load
 //     failures, and similar advisory failures per brainstorm §4.3).
 //
-// Policy (brainstorm §4.5): any error satisfying
-// `errors.As(err, &guard.Error{})` is a catastrophic ownership refusal
-// that must fail closed. cross_worktree is the only guard with per-leaf
+// Policy (brainstorm §4.5): any error matched by
+//
+//	var ge *guard.Error
+//	if errors.As(refreshErr, &ge) { ... }
+//
+// is a catastrophic ownership refusal that must fail closed.
+// cross_worktree is the only guard with per-leaf
 // response classes (diagnostic_banner / whoami) that absorb the fire so
 // commands like `thrum team` / `thrum whoami` can still surface useful
 // output from the wrong cwd; all other guards (unauthenticated_rpc,
