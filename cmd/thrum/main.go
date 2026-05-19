@@ -8127,45 +8127,10 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		WarnThreshold:   warnCfg.WarnThresholdValue(),
 		AutoThreshold:   warnCfg.AutoThresholdValue(),
 	})
-	ctxPoller.OnWarn(func(ctx context.Context, agentName string, usage contextpoll.ContextUsage) {
-		// CR.3 T3.1 final body lands at thrum-6qmf.1.14; the text here is the
-		// plan §3.4.1 / brainstorm §Q2 body inlined so T2.3 boots a usable
-		// warn nudge today.
-		body := fmt.Sprintf(
-			"Context at %d%%. Wrap up your current sub-task and run `/thrum:restart`.\n\n"+
-				"Do NOT dispatch sub-agents (Agent, Explore, etc.).\n"+
-				"Do NOT re-read large files.\n"+
-				"Do NOT spawn web fetches.\n\n"+
-				"Write your continuation from working context directly. If you don't "+
-				"self-restart by %d%%, the daemon will force-restart you in three "+
-				"minutes and your new session will receive a 200-line transcript tail "+
-				"instead of your prose continuation.",
-			usage.UsedPercentage, warnCfg.AutoThresholdValue(),
-		)
-		// Disabled agents still receive the warn nudge — operator visibility
-		// preserved per spec §3.1.4. They are excluded from pre-fire + fire.
-		tmuxHandler.SendSystemNudge(ctx, agentName, body)
-	})
-	ctxPoller.OnPreFire(func(ctx context.Context, agentName string, usage contextpoll.ContextUsage) {
-		if warnCfg.IsAutoDisabled(agentName) {
-			return
-		}
-		body := "Restart imminent in three minutes. Last chance to self-restart.\n" +
-			"Run `/thrum:restart` now to preserve your prose continuation."
-		tmuxHandler.SendSystemNudge(ctx, agentName, body)
-	})
-	ctxPoller.OnFire(func(_ context.Context, agentName string, usage contextpoll.ContextUsage) {
-		if warnCfg.IsAutoDisabled(agentName) {
-			return
-		}
-		// CR.4 T4.3 (thrum-6qmf.1.18) wires the real RestartTrigger here. The
-		// stub keeps the threshold engine end-to-end exercised in production:
-		// the in-flight guard still sets, the InFlightMaxWait backstop still
-		// clears it after 5 min, and operators see breadcrumbs that the auto
-		// path would have fired.
-		slog.Info("[contextpoll] OnFire stub — CR.4 T4.3 wires the real RestartTrigger",
-			"agent", agentName, "usage_pct", usage.UsedPercentage)
-	})
+	onWarn, onPreFire, onFire := buildContextPollCallbacks(warnCfg, tmuxHandler)
+	ctxPoller.OnWarn(onWarn)
+	ctxPoller.OnPreFire(onPreFire)
+	ctxPoller.OnFire(onFire)
 	// Register per-runtime parsers. CR.8 (.24) registers OpenCodeParserV1 here;
 	// CR.9 (.27) registers CodexParserV1. Order is first-Matches-wins.
 	ctxPoller.RegisterParser(contextpoll.ClaudeParserV2x{})
@@ -8392,6 +8357,78 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	}
 
 	return lifecycle.Run(ctx)
+}
+
+// contextpollNudger is the narrow surface buildContextPollCallbacks needs
+// from TmuxHandler. Extracting it as an interface lets the CR.3 T3.1 / T3.2
+// (thrum-6qmf.1.14 / .15) unit tests inject a fake nudger and inspect the
+// recorded message bodies + per-tier IsAutoDisabled gating without standing
+// up a daemon.
+type contextpollNudger interface {
+	SendSystemNudge(ctx context.Context, recipient, body string)
+}
+
+// buildContextPollCallbacks returns the three callback closures that the
+// contextpoll.Poller invokes at threshold crossings. Factored out of
+// daemonRun's body for CR.3 T3.1 / T3.2 testability:
+//
+//   - OnWarn (§3.4.1 + spec §3.1.4): fires for every agent that crosses the
+//     warn tier, INCLUDING agents listed in AutoDisabledAgents. Operator
+//     visibility is preserved — they still see the discipline reminder even
+//     though force-fire is suppressed for them.
+//   - OnPreFire (§3.4.2 + spec §3.1.4): suppressed for AutoDisabledAgents.
+//     The pre-fire nudge is the last warning before force-fire; if
+//     force-fire is disabled, the pre-fire message would be false-urgency.
+//   - OnFire (§3.1.4): suppressed for AutoDisabledAgents. The real
+//     RestartTrigger.Restart call lands at CR.4 T4.3 (thrum-6qmf.1.18);
+//     T2.3 carries the slog.Info breadcrumb so operators can see the auto
+//     path would have fired even while the substrate is incomplete.
+//
+// Body texts are the canonical plan §3.4.1 + brainstorm §Q2 / §Q4 prose,
+// inlined byte-for-byte. Future body refinements live here, not in the
+// daemon wiring.
+func buildContextPollCallbacks(warnCfg config.RestartConfig, sender contextpollNudger) (
+	contextpoll.WarnCallback,
+	contextpoll.PreFireCallback,
+	contextpoll.FireCallback,
+) {
+	onWarn := func(ctx context.Context, agentName string, usage contextpoll.ContextUsage) {
+		// Disabled agents still receive the warn nudge per spec §3.1.4.
+		body := fmt.Sprintf(
+			"Context at %d%%. Wrap up your current sub-task and run `/thrum:restart`.\n\n"+
+				"Do NOT dispatch sub-agents (Agent, Explore, etc.).\n"+
+				"Do NOT re-read large files.\n"+
+				"Do NOT spawn web fetches.\n\n"+
+				"Write your continuation from working context directly. If you don't "+
+				"self-restart by %d%%, the daemon will force-restart you in three "+
+				"minutes and your new session will receive a 200-line transcript tail "+
+				"instead of your prose continuation.",
+			usage.UsedPercentage, warnCfg.AutoThresholdValue(),
+		)
+		sender.SendSystemNudge(ctx, agentName, body)
+	}
+	onPreFire := func(ctx context.Context, agentName string, _ contextpoll.ContextUsage) {
+		if warnCfg.IsAutoDisabled(agentName) {
+			return
+		}
+		body := "Restart imminent in three minutes. Last chance to self-restart.\n" +
+			"Run `/thrum:restart` now to preserve your prose continuation."
+		sender.SendSystemNudge(ctx, agentName, body)
+	}
+	onFire := func(_ context.Context, agentName string, usage contextpoll.ContextUsage) {
+		if warnCfg.IsAutoDisabled(agentName) {
+			return
+		}
+		// CR.4 T4.3 (thrum-6qmf.1.18) swaps this slog.Info for a real
+		// RestartTrigger.Restart call. The stub keeps the threshold engine
+		// end-to-end exercised: the Poller's in-flight guard still sets after
+		// this fires, the InFlightMaxWait backstop still clears it after 5
+		// min, and operators see a breadcrumb in the daemon log every time
+		// the auto path would have triggered a restart.
+		slog.Info("[contextpoll] OnFire stub — CR.4 T4.3 wires the real RestartTrigger",
+			"agent", agentName, "usage_pct", usage.UsedPercentage)
+	}
+	return onWarn, onPreFire, onFire
 }
 
 // queryMessageReadState checks whether a message is read by a specific
