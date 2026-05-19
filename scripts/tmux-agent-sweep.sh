@@ -29,12 +29,16 @@ set -euo pipefail
 LINES=15
 ROLE_FILTER=""   # empty = no filter
 OUT=""           # empty = stdout
+SHOW_ALL=0       # 0 = only emit flagged agents (default); 1 = emit all
+CTX_THRESHOLD=50 # int %; agents at-or-above this are flagged
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --lines) LINES="$2"; shift 2 ;;
         --role)  ROLE_FILTER="$2"; shift 2 ;;
         --out)   OUT="$2"; shift 2 ;;
+        --all)   SHOW_ALL=1; shift ;;
+        --ctx-threshold) CTX_THRESHOLD="$2"; shift 2 ;;
         -h|--help)
             sed -n '2,/^$/p' "$0" | sed 's/^# \?//'
             exit 0
@@ -50,21 +54,63 @@ fi
 
 now_epoch=$(date -u +%s)
 
-# Pull team JSON; bail loud if daemon is unreachable
-team_json=$(thrum team --json 2>&1) || {
-    echo "ERROR: thrum team --json failed:" >&2
-    echo "$team_json" >&2
-    exit 1
-}
+# Build the agent list from identity files + tmux list-sessions directly,
+# bypassing `thrum team --json` to avoid CLI-startup identity-refresh overhead
+# under fleet load (filed as a perf-investigation bd; see thrum-xir.36).
+#
+# Sources:
+#   - Per-worktree identity files at <worktree>/.thrum/identities/*.json
+#   - Each identity carries: agent.Name, agent.Role, agent.Module, tmux_session,
+#     worktree, agent_status, updated_at
+# Liveness check:
+#   - tmux list-sessions for alive set; identity's tmux_session is "<name>:W.P"
+#     so we strip the suffix and check inclusion
 
-# jq filter: members with alive tmux, optionally filtered by role
-jq_filter='.members[]
-    | select(.tmux_state == "alive")
-    | select($role == "" or .role == $role)
-    | {agent_id, role, module, tmux_session, worktree, last_seen, status}'
+# Globs: main repo + ~/.thrum/worktrees/thrum/* (extend if your layout differs)
+shopt -s nullglob
+identity_files=(
+    /Users/leon/dev/opensource/thrum/.thrum/identities/*.json
+    /Users/leon/.thrum/worktrees/thrum/*/.thrum/identities/*.json
+)
+shopt -u nullglob
 
-# Emit a NUL-delimited stream of compact JSON objects so agent_ids with spaces survive
-mapfile -t agent_lines < <(printf '%s' "$team_json" | jq -c --arg role "$ROLE_FILTER" "$jq_filter")
+# Build alive-set string for fast membership check (|name1|name2|...|)
+mapfile -t alive_sessions < <(tmux list-sessions -F "#{session_name}" 2>/dev/null || true)
+alive_set=""
+for s in "${alive_sessions[@]}"; do alive_set+="|$s"; done
+alive_set+="|"
+
+# Emit one compact JSON per qualifying identity (alive tmux + role match).
+# Same shape as the old jq filter: {agent_id, role, module, tmux_session, worktree, last_seen, status}
+agent_lines=()
+for f in "${identity_files[@]}"; do
+    [[ -f "$f" ]] || continue
+    # Single jq invocation per file extracts everything
+    raw=$(jq -c '{
+        agent_id: (.agent.Name // .Name // ""),
+        role: (.agent.Role // .Role // ""),
+        module: (.agent.Module // .Module // ""),
+        tmux_session: (.tmux_session // ""),
+        worktree: (.worktree // ""),
+        last_seen: (.updated_at // ""),
+        status: (.agent_status // "")
+    }' "$f" 2>/dev/null) || continue
+    [[ -z "$raw" || "$raw" == "null" ]] && continue
+
+    # Extract session name (strip :W.P suffix) for alive check
+    tmux_full=$(jq -r '.tmux_session' <<<"$raw")
+    [[ -z "$tmux_full" ]] && continue
+    session_name="${tmux_full%%:*}"
+    [[ "$alive_set" != *"|$session_name|"* ]] && continue
+
+    # Role filter
+    if [[ -n "$ROLE_FILTER" ]]; then
+        role=$(jq -r '.role' <<<"$raw")
+        [[ "$role" != "$ROLE_FILTER" ]] && continue
+    fi
+
+    agent_lines+=("$raw")
+done
 
 if [[ ${#agent_lines[@]} -eq 0 ]]; then
     echo "# tmux-agent-sweep report (no alive tmux agents matched)"
@@ -73,13 +119,15 @@ if [[ ${#agent_lines[@]} -eq 0 ]]; then
     exit 0
 fi
 
-# Header
-echo "# tmux-agent-sweep report"
-echo "# generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-echo "# lines per pane: $LINES"
-[[ -n "$ROLE_FILTER" ]] && echo "# role filter: $ROLE_FILTER"
-echo "# agents captured: ${#agent_lines[@]}"
-echo
+# Output strategy: buffer each agent's section to a temp file. Only emit
+# (a) all agents if --all, or (b) only flagged agents (ctx >= threshold,
+# api_errors present, or capture failure). Keeps healthy-fleet output to
+# a 2-line "all clear" header. Default threshold is 50% — matches the
+# coordinator-context-monitoring SKILL's 50% directed-restart tier.
+ATTENTION_BUF=$(mktemp)
+ALL_BUF=$(mktemp)
+ATTENTION_COUNT=0
+trap 'rm -f "$ATTENTION_BUF" "$ALL_BUF"' EXIT
 
 for line in "${agent_lines[@]}"; do
     agent_id=$(jq -r '.agent_id' <<<"$line")
@@ -118,21 +166,83 @@ for line in "${agent_lines[@]}"; do
         ctx_used="(capture failed)"
     fi
 
-    echo "===== @$agent_id · $role${module:+/$module} ====="
-    echo "tmux:      $tmux_session"
-    echo "worktree:  $worktree"
-    echo "last_seen: $last_seen_display"
-    echo "status:    $status"
-    echo "ctx_used:  $ctx_used"
-    echo "--- pane (bottom $LINES lines) ---"
-
+    # Extract Anthropic API errors from the captured pane. These are
+    # transient (usually 529 Overloaded or rate limits) and the right
+    # remediation is `thrum tmux send <session> 'continue'` — see
+    # coordinator-context-monitoring SKILL §Step 6.
     if [[ "$pane_capture_ok" -eq 1 ]]; then
-        # Strip trailing blank lines for tighter output
-        printf '%s\n' "$pane" | sed -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}'
+        # Look for Claude Code's specific error-display phrases. Patterns are
+        # tightened against false-positive on agents whose panes happen to
+        # show source code containing regex-like fragments (coord viewing this
+        # very script triggered "API Error[^." matches). grep returns non-zero
+        # on no-match under pipefail; suppress with || true.
+        api_errors=$(printf '%s\n' "$pane" | { grep -oE 'API Error: [0-9]{3}[^\n]*|529 Overloaded|status\.claude\.com|This is a server-side issue|Try again in a moment' || true; } | sort -u | paste -sd '; ' -)
+        [[ -z "$api_errors" ]] && api_errors="(none)"
     else
-        echo "[capture failed: $pane]"
+        api_errors="(capture failed)"
     fi
 
-    echo "--- end pane ---"
-    echo
+    # Build this agent's full section into a temp variable
+    agent_section=""
+    agent_section+="===== @$agent_id · $role${module:+/$module} =====\n"
+    agent_section+="tmux:       $tmux_session\n"
+    agent_section+="worktree:   $worktree\n"
+    agent_section+="last_seen:  $last_seen_display\n"
+    agent_section+="status:     $status\n"
+    agent_section+="ctx_used:   $ctx_used\n"
+    agent_section+="api_errors: $api_errors\n"
+    agent_section+="--- pane (bottom $LINES lines) ---\n"
+    if [[ "$pane_capture_ok" -eq 1 ]]; then
+        pane_trimmed=$(printf '%s\n' "$pane" | sed -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}')
+        agent_section+="$pane_trimmed\n"
+    else
+        agent_section+="[capture failed: $pane]\n"
+    fi
+    agent_section+="--- end pane ---\n\n"
+
+    # Always append to the all-buffer
+    printf '%b' "$agent_section" >> "$ALL_BUF"
+
+    # Evaluate whether this agent needs attention
+    needs_attention=0
+
+    # ctx_used >= threshold?
+    if [[ "$ctx_used" =~ ^([0-9]+)\.([0-9]+)%$ ]]; then
+        ctx_int="${BASH_REMATCH[1]}"
+        if [[ "$ctx_int" -ge "$CTX_THRESHOLD" ]]; then
+            needs_attention=1
+        fi
+    elif [[ "$ctx_used" == "(capture failed)" ]]; then
+        # Capture failure is a real concern — flag it
+        needs_attention=1
+    fi
+    # ctx_used == "(n/a)" is NOT a flag — Codex/Cursor runtimes have no footer
+
+    # api_errors present?
+    if [[ "$api_errors" != "(none)" && "$api_errors" != "(capture failed)" ]]; then
+        needs_attention=1
+    fi
+
+    if [[ "$needs_attention" -eq 1 ]]; then
+        printf '%b' "$agent_section" >> "$ATTENTION_BUF"
+        ATTENTION_COUNT=$((ATTENTION_COUNT + 1))
+    fi
 done
+
+# Header
+echo "# tmux-agent-sweep report"
+echo "# generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "# lines per pane: $LINES"
+[[ -n "$ROLE_FILTER" ]] && echo "# role filter: $ROLE_FILTER"
+echo "# alive agents: ${#agent_lines[@]}; flagged: $ATTENTION_COUNT (ctx>=${CTX_THRESHOLD}% or api_errors or capture-fail)"
+
+# Emit body: --all forces full emit; otherwise only flagged agents
+if [[ "$SHOW_ALL" -eq 1 ]]; then
+    echo
+    cat "$ALL_BUF"
+elif [[ "$ATTENTION_COUNT" -eq 0 ]]; then
+    echo "# all clear — no agents need attention. Run with --all to see full fleet."
+else
+    echo
+    cat "$ATTENTION_BUF"
+fi

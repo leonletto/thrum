@@ -1,6 +1,6 @@
 ---
 name: coordinator-context-monitoring
-description: Use when managing live implementer/brainstormer agents during a long coordination session, at epic merge gates, after a busy dispatch hour, or whenever you suspect an agent is approaching context limits. Prevents 97%-context silent blow-ups by running a sweep + pre-emptive restart before the agent degrades. Apply at major checkpoints (epic merge, review-cycle gates, session-mid points) — NOT on a fixed-interval cron that force-restarts unconditionally (that violates feedback_restart_discipline; burn the runway, don't restart on schedule).
+description: Use when managing live implementer/brainstormer agents during a long coordination session, at epic merge gates, after a busy dispatch hour, or whenever you suspect an agent is approaching context limits. Prevents 97%-context silent blow-ups by running a sweep + pre-emptive restart before the agent degrades. Safe to wire into a recurring cron that INVOKES this skill — the skill applies tier-ladder judgment, only firing autonomous restarts at the >85% tier. What's forbidden is a cron/script that fires restarts unconditionally without going through this skill's tier ladder.
 ---
 
 # Coordinator: Context Monitoring and Pre-emptive Restart
@@ -16,9 +16,15 @@ Trigger this pattern at each of:
 - When you observe slow or degraded responses from an implementer
 - Manually whenever the session feels "intense" (lots of cycles in a short window)
 
-Do NOT put this on a fixed-interval cron that triggers restarts unconditionally
-— that violates `feedback_restart_discipline` (burn the runway before
-restarting, not by schedule). Use coordinator-judgment checkpoints only.
+A recurring cron MAY invoke this skill — the skill itself applies tier-ladder
+judgment, so the >85% autonomous-restart tier fires conditionally, not on every
+sweep. What's forbidden is a script or cron that bypasses this skill and fires
+`thrum tmux restart --force` unconditionally (that violates
+`feedback_restart_discipline` — burn the runway, don't restart on schedule).
+
+Per the cron-triggers-skills pattern, the cron prompt should be a one-line
+"Invoke the coordinator-context-monitoring skill" — never a re-implementation
+of the tier ladder below. That keeps the discipline single-sourced.
 
 ## Step 1 — Run the sweep
 
@@ -87,20 +93,55 @@ typed it. The agent writes their snapshot + restarts.
 If the tmux-send doesn't trigger a restart within ~5 minutes (agent may be too
 degraded to process input), escalate to Step 5 (force-restart).
 
-## Step 5 — Force restart for >85% agents
+## Step 5 — Force restart for >85% agents (autonomous)
 
 ```bash
 thrum tmux restart <agent_name> --force
 ```
+
+**Execute autonomously — do NOT surface to the operator first** (rule confirmed
+2026-05-18 Session 73 per [[feedback-autonomous-force-restart]]: the previous
+"surface first, restart on authorization" policy resulted in an agent stuck at
+97% ctx because the surface message scrolled past during a busy coordination
+window; the autonomous restart would have caught it sooner. Restart is
+non-destructive — snapshot is preserved + worktree state survives — so the
+cost of a false-positive restart is far lower than the cost of a missed catch).
 
 Do NOT wait for the agent to respond. The `--force` flag sends the restart
 signal even if the agent is mid-tool-call. After the new session starts, it
 auto-primes from the restart snapshot (if one was written) or from `bd prime`
 + `thrum prime`.
 
+Surface to the operator AFTER the restart in a brief status note ("Force-
+restarted @<agent_name> at <ctx>% — snapshot at .thrum/restart/<agent>.md
+preserved"). The notify is information, not authorization.
+
 After force-restart, re-send the agent's current dispatch as if it were a fresh
 dispatch — their previous in-flight work may need to resume from scratch (any
 WIP files in their worktree are theirs to audit salvage-vs-discard).
+
+## Step 6 — API-error nudge (orthogonal to ctx tier ladder)
+
+Separate from context % entirely: the sweep script's `api_errors:` line
+surfaces any Anthropic API errors detected in the captured pane (`529
+Overloaded`, `API Error`, `Rate limit`, `status.claude.com`, `Try again`).
+
+For any agent with `api_errors: (something other than (none))`:
+
+```bash
+thrum tmux send <tmux_session> 'continue'
+```
+
+That's it. No question, no inbox message — just types `continue` into their
+pane. The runtime retries the API call and they pick up where they left off.
+
+Anthropic 529s are transient (typically resolve in seconds-to-minutes); the
+agent's previous tool call is already queued in their session, so a single
+`continue` reactivates them without losing in-flight state.
+
+If the same agent shows api_errors on TWO consecutive sweeps despite the nudge,
+the issue isn't transient — surface to operator as SUSPECTED-STUCK and
+investigate manually (status.claude.com, network, account limits).
 
 ## Cron-fire safety checks
 
