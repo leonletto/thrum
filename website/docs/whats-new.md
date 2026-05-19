@@ -16,21 +16,24 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 [CHANGELOG.md](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-## v0.10.5 — rc.5 in soak
+## v0.10.5 — rc.6 in soak
 
-[`v0.10.5-rc.5`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.5)
-tagged 2026-05-19, in 24h soak through 2026-05-20. rc.5 fixes the
-post-tmux-launch silence-watchdog nudge (thrum-qpw7): a freshly-launched agent
-that acks the launch banner (the `@<name> primed (<role>). Standing by.` printf)
-without actually reading its prime briefing now correctly receives the
-corrective "finish reading the prime" nudge. Before rc.5, that ack line was
-registering as engagement, so the watchdog stayed silent and the agent could
-appear primed while operating on truncated context. Closes the last silent gap
-from the launch-nudge work in the v0.10.5 line. Earlier RCs in this line: rc.4
-shipped the multi-binary upgrade trap fix + downgrade-guard recovery UX
-(thrum-quth); rc.3 closed the tmux-path self-echo regression (thrum-1zfk); rc.2
-was a docs-only patch on rc.1's release surface. The Added/Changed/Fixed and
-Upgrade Notes sections below describe the v0.10.5 release surface as a whole.
+[`v0.10.5-rc.6`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.6)
+tagged 2026-05-19, in 24h soak through 2026-05-20. rc.6 ships a **BREAKING**
+change to `thrum send` (thrum-t698) and an upstream tmux fix that had been
+masking rc.5's thrum-qpw7 downstream (thrum-ktp8). `thrum send "msg"` now
+requires either `--to @<agent>` or `--broadcast` — the previous silent-broadcast
+default was a 94-agent accidental-fanout footgun. `--to @everyone` continues to
+work as the legacy keyword form. Separately, tmux `capture-pane` now uses the
+`-J` flag to join wrapped lines, so long identity banners no longer split the
+prime-truncation sentinel across pane lines (which had been defeating rc.5's
+ack-exclusion fix downstream). Earlier RCs in this line: rc.5 fixed the
+post-tmux-launch silence-watchdog nudge false-positive on the launch-ack line
+(thrum-qpw7); rc.4 shipped the multi-binary upgrade trap fix + downgrade-guard
+recovery UX (thrum-quth); rc.3 closed the tmux-path self-echo regression
+(thrum-1zfk); rc.2 was a docs-only patch on rc.1's release surface. The
+Added/Changed/Fixed and Upgrade Notes sections below describe the v0.10.5
+release surface as a whole.
 
 Backstop and hygiene. The headline change is operational: a daemon-side backstop
 nudger re-emits delivery notifications for stale-unread messages on its own
@@ -78,6 +81,13 @@ v0.11 agent epics build on for ephemeral-worktree flows. The URL migration to
 
 ### Changed
 
+- **`thrum send` no longer broadcasts by default — `--to @<agent>` or
+  `--broadcast` now required** (thrum-t698, rc.6, BREAKING). The bare form
+  `thrum send "msg"` previously fanned out to every agent in the team — a
+  94-agent accidental broadcast surfaced this as a footgun mid-cycle. The send
+  command now requires either an explicit `--to @<agent>` for a directed send or
+  `--broadcast` for the team fanout. `--to @everyone` continues to work as the
+  legacy keyword form for the broadcast case. See Upgrade Notes for migration.
 - **`thrum-inbox-poll.sh` cron deprecated** in favor of the daemon-side backstop
   nudger. Existing installations continue to function but the cron is no longer
   recommended; the daemon backstop is enabled by default and uses the same nudge
@@ -154,11 +164,25 @@ v0.11 agent epics build on for ephemeral-worktree flows. The URL migration to
   primed to the watchdog and never got the corrective nudge. The watchdog now
   correctly distinguishes the ack-line printf from real engagement, closing the
   last silent gap in the launch-nudge work.
+- **`tmux capture-pane` joins wrapped lines via the new `-J` flag** (thrum-ktp8,
+  rc.6). Long identity-banner content (worktree path + branch + truncation
+  sentinel) was previously splitting the prime-truncation sentinel across pane
+  lines, which defeated the rc.5 thrum-qpw7 ack-exclusion fix downstream —
+  `paneAgentEngaged` couldn't find the sentinel in any single captured line, so
+  the silence watchdog stayed conservative and the corrective nudge never fired
+  even on the new binary. `capture-pane` now passes `-J` so tmux joins wrapped
+  lines before returning the buffer, restoring the semantics every text-search
+  consumer in the codebase expects.
 
 ### Upgrade Notes
 
-- **No config changes required.** The daemon backstop nudger is on by default
-  with the same cadence the cron used; no opt-in needed.
+- **`thrum send` migration (BREAKING, rc.6).** Update scripts and aliases that
+  use the bare form `thrum send "msg"`. Add either `--to @<name>` for directed
+  sends (the canonical form) or `--broadcast` for explicit team fanout. The
+  silent-broadcast default has been removed (thrum-t698). `--to @everyone`
+  continues to work as the legacy keyword broadcast form.
+- **No other config changes required.** The daemon backstop nudger is on by
+  default with the same cadence the cron used; no opt-in needed.
 - **You can safely remove `thrum-inbox-poll.sh` from your cron** if you
   installed it manually. The daemon handles backstop polling itself; the legacy
   cron is now a no-op alongside it.
