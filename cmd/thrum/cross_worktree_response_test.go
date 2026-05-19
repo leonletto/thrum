@@ -200,7 +200,8 @@ func TestEmitCrossWorktreeBanner_NoExpectedAgent(t *testing.T) {
 // error, callers exit 1, no RPC ever fires.
 func TestClassifyRefreshError(t *testing.T) {
 	xworktreeErr := &guard.Error{Guard: "cross_worktree", Reason: "pid_mismatch", ExpectedAgent: "alice"}
-	otherGuardErr := &guard.Error{Guard: "dead_pid_auto_reclaim", Reason: "dead_owner_reclaimed"}
+	unauthRPCErr := &guard.Error{Guard: "unauthenticated_rpc", Reason: "no_caller_agent_id"}
+	primeOwnErr := &guard.Error{Guard: "prime_ownership", Reason: "non_owner"}
 
 	cases := []struct {
 		name         string
@@ -238,14 +239,31 @@ func TestClassifyRefreshError(t *testing.T) {
 			wantAbsorbed: true,
 		},
 		{
-			name:         "non-cross_worktree guard error passes through (legacy log-and-proceed)",
+			// Brainstorm §4.5: any *guard.Error other than cross_worktree
+			// is a catastrophic refusal regardless of the leaf's response
+			// class — there is no per-command escape hatch for them.
+			name:         "unauthenticated_rpc guard error fails closed",
 			cmdResp:      CrossWorktreeResponseAbort,
-			refreshErr:   otherGuardErr,
-			wantFatal:    false,
+			refreshErr:   unauthRPCErr,
+			wantFatal:    true,
 			wantAbsorbed: false,
 		},
 		{
-			name:         "plain non-guard error passes through",
+			name:         "unauthenticated_rpc fails closed even on diagnostic_banner-class command",
+			cmdResp:      CrossWorktreeResponseDiagnosticBanner,
+			refreshErr:   unauthRPCErr,
+			wantFatal:    true,
+			wantAbsorbed: false,
+		},
+		{
+			name:         "prime_ownership fails closed even on whoami-class command",
+			cmdResp:      CrossWorktreeResponseWhoami,
+			refreshErr:   primeOwnErr,
+			wantFatal:    true,
+			wantAbsorbed: false,
+		},
+		{
+			name:         "plain non-guard error passes through (preserves daemon-down warn-and-proceed per §4.3)",
 			cmdResp:      CrossWorktreeResponseAbort,
 			refreshErr:   io.EOF, // any non-*guard.Error
 			wantFatal:    false,
