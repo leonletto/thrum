@@ -39,6 +39,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/backstop"
 	"github.com/leonletto/thrum/internal/daemon/bootstrap"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
+	"github.com/leonletto/thrum/internal/daemon/contextpoll"
 	"github.com/leonletto/thrum/internal/daemon/escalation"
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
 	"github.com/leonletto/thrum/internal/daemon/inbox"
@@ -8105,6 +8106,164 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		fmt.Fprintf(os.Stderr, "[queue] recovery failed: %v\n", err)
 	}
 
+	// Context-usage poller (CR.2 / thrum-6qmf.1.13). Per-runtime context-window
+	// polling: warns agents at WarnThreshold (default 70%), pre-fires at
+	// AutoThreshold (default 80%) with a 3-minute countdown before the daemon
+	// would force-fire a restart. OnFire is wired as a slog.Info stub for T2.3;
+	// CR.4 T4.3 (thrum-6qmf.1.18) swaps in the real RestartTrigger adapter.
+	//
+	// tmuxHandler.SendSystemNudge is the exported dual-signal helper added in
+	// T2.3 — the plan example called the unexported tmuxHandler.sendSystemMessage
+	// directly from main.go, which doesn't compile across the package boundary.
+	// The wrapper at internal/daemon/rpc/queue_rpc.go bundles sendSystemMessage +
+	// resolveNudgeTarget + ttmux.InterruptNudge into one exported entry point so
+	// these callback closures stay readable. Surfaced for cr_spec as a plan v1.3
+	// erratum candidate.
+	warnCfg := thrumCfg.Restart
+	ctxPoller := contextpoll.NewPoller(contextpoll.PollerConfig{
+		PollInterval:    30 * time.Second,
+		PreFireWait:     3 * time.Minute,
+		InFlightMaxWait: 5 * time.Minute,
+		WarnThreshold:   warnCfg.WarnThresholdValue(),
+		AutoThreshold:   warnCfg.AutoThresholdValue(),
+	})
+	// RestartTrigger adapter (CR.4 T4.1 / thrum-6qmf.1.16). Wraps the
+	// snapshot-write + tmuxHandler.RestartSession + ctxPoller.PostRestart
+	// sequence so OnFire can invoke a single Restart(ctx, agentName, reason)
+	// call without the contextpoll package gaining a dependency on the rpc
+	// package (spec §5.2 import-cycle constraint).
+	//
+	// Snapshot semantics: writes the YAML-frontmatter snapshot to
+	// thrumDir/restart/<agent>.md BEFORE invoking RestartSession. Because
+	// RestartSession's force-flow fallback (rpc/tmux.go:1198) checks
+	// SnapshotExists and skips re-extraction if a snapshot is already
+	// present, our pre-write WINS — the agent's resume plan will record
+	// reason="automatic context-threshold restart at N%" rather than
+	// RestartSession's hardcoded "external". Snapshot write is best-effort:
+	// a failure to locate JSONL or extract content does not block the
+	// restart itself; the new session simply starts without a prose
+	// continuation.
+	restartTrigger := contextpoll.RestartTriggerFunc(func(ctx context.Context, agentName, reason string) error {
+		// Resolve identity from the shared identities dir. For worktrees
+		// that DON'T share thrumDir via redirect this lookup misses; the
+		// adapter then falls through to RestartSession with no snapshot
+		// pre-write, and RestartSession's own force-flow extraction takes
+		// over (with reason="external"). Most production agents share the
+		// redirect, so this is the hot path.
+		idPath := filepath.Join(thrumDir, "identities", agentName+".json")
+		if data, readErr := os.ReadFile(idPath); readErr == nil { // #nosec G304 -- identity path within thrumDir
+			var idFile config.IdentityFile
+			if jsonErr := json.Unmarshal(data, &idFile); jsonErr == nil {
+				homeDir, _ := os.UserHomeDir()
+				claudeDir := filepath.Join(homeDir, ".claude")
+				var jsonlPath string
+				if idFile.AgentPID > 0 {
+					jsonlPath, _ = restart.FindSessionJSONL(claudeDir, idFile.AgentPID)
+				}
+				if jsonlPath == "" && idFile.Worktree != "" {
+					jsonlPath, _ = restart.FindLatestJSONLForCwd(claudeDir, idFile.Worktree)
+				}
+				if jsonlPath != "" {
+					maxLines := warnCfg.RestartMaxLines()
+					if conversation, extractErr := restart.ExtractConversation(jsonlPath, maxLines); extractErr == nil {
+						snapshot := restart.FormatRestartSnapshot(agentName, idFile.SessionID, reason, conversation)
+						if saveErr := restart.SaveSnapshot(thrumDir, agentName, snapshot); saveErr != nil {
+							// Best-effort: log and proceed to RestartSession. The
+							// new session starts without a prose continuation
+							// — recoverable.
+							slog.Warn("[contextpoll] save snapshot failed; restart proceeds without prose continuation",
+								"agent", agentName, "reason", reason, "err", saveErr)
+						}
+					}
+				}
+			}
+		}
+		// Trigger the restart. RestartSession sees the snapshot we just wrote
+		// (if any) and skips its own extraction. Force=true bypasses the
+		// graceful-snapshot wait.
+		if _, err := tmuxHandler.RestartSession(ctx, agentName, rpc.RestartSessionOpts{Force: true}); err != nil {
+			return fmt.Errorf("restart %s (reason: %s): %w", agentName, reason, err)
+		}
+		// Clear poller state so the new session is re-evaluated from a fresh
+		// baseline. PostRestart drops the sticky parser choice + threshold
+		// debounce flags + restartInFlight guard; the next poll observes the
+		// new session's transcript path (via the wiring's re-Enroll path on
+		// identity refresh) and starts cycling from 0%.
+		ctxPoller.PostRestart(agentName)
+		return nil
+	})
+	onWarn, onPreFire, onFire := buildContextPollCallbacks(warnCfg, tmuxHandler, restartTrigger)
+	ctxPoller.OnWarn(onWarn)
+	ctxPoller.OnPreFire(onPreFire)
+	ctxPoller.OnFire(onFire)
+	// Register per-runtime parsers. Order is first-Matches-wins — parsers
+	// must have non-overlapping first-line anchors. OpenCodeParserV1 keys
+	// on the SQLite magic in the first 16 bytes, CodexParserV1 keys on
+	// type=="session_meta" + payload.originator=="codex_cli_rs", and
+	// ClaudeParserV2x keys on any non-empty top-level "type" field. The
+	// more-specific anchors are registered first so they win when both
+	// would match — Claude's bare "type" presence would also match a
+	// Codex session_meta line, so Codex must come before Claude. OpenCode
+	// is binary (SQLite) and disjoint from both JSONL anchors.
+	ctxPoller.RegisterParser(contextpoll.OpenCodeParserV1{})
+	ctxPoller.RegisterParser(contextpoll.CodexParserV1{})
+	ctxPoller.RegisterParser(contextpoll.ClaudeParserV2x{})
+
+	// Enroll pre-existing sessions at boot. Walks .thrum/identities/ rather
+	// than reusing the bootstrap.Reconcile pass above because the poller is
+	// authoritative for its own enrollment set — keeping the two walks
+	// independent means a future identity-format change touches one site, not
+	// both. TranscriptPath may be empty here if the agent's session hasn't
+	// produced a JSONL file yet; the Poller silently skips empty paths and the
+	// wiring re-Enrolls when identity refresh lands the resolved path.
+	{
+		homeDir, _ := os.UserHomeDir()
+		claudeDir := filepath.Join(homeDir, ".claude")
+		identitiesDir := filepath.Join(thrumDir, "identities")
+		if entries, err := os.ReadDir(identitiesDir); err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+					continue
+				}
+				idPath := filepath.Join(identitiesDir, entry.Name())
+				data, err := os.ReadFile(idPath) // #nosec G304 -- path is .thrum/identities/<name>.json
+				if err != nil {
+					continue
+				}
+				var idFile config.IdentityFile
+				if err := json.Unmarshal(data, &idFile); err != nil {
+					continue
+				}
+				if idFile.Reserved || idFile.Agent.Name == "" {
+					continue
+				}
+				var transcript string
+				if idFile.AgentPID > 0 {
+					transcript, _ = restart.FindSessionJSONL(claudeDir, idFile.AgentPID)
+				}
+				if transcript == "" && idFile.Worktree != "" {
+					transcript, _ = restart.FindLatestJSONLForCwd(claudeDir, idFile.Worktree)
+				}
+				ctxPoller.Enroll(idFile.Agent.Name, contextpoll.AgentEnrollment{
+					TranscriptPath: transcript,
+					AgentPID:       idFile.AgentPID,
+					AgentCwd:       idFile.Worktree,
+					Runtime:        idFile.Runtime,
+					SessionID:      idFile.SessionID,
+				})
+			}
+		}
+	}
+
+	// Wire ContextProvider into TeamHandler. CR.6 T6.1 (thrum-6qmf.1.20)
+	// consumes the cached usage to render the context-% column in
+	// `thrum team`; T2.3 only wires the setter.
+	teamHandler.SetContextProvider(ctxPoller)
+
+	// Start the poll loop. Stops when ctx is canceled by the daemon
+	// shutdown sequence. PollInterval is taken from PollerConfig (30s).
+	go ctxPoller.Run(ctx, 30*time.Second)
+
 	// B-B1 E6.5 Task 42b: register the REAL ScheduledAgentHandler +
 	// NudgeHandler with their full Deps adapter chain. Replaces the
 	// 42a placeholder pattern — every fire now hits real business
@@ -8272,6 +8431,98 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	}
 
 	return lifecycle.Run(ctx)
+}
+
+// contextpollNudger is the narrow surface buildContextPollCallbacks needs
+// from TmuxHandler. Extracting it as an interface lets the CR.3 T3.1 / T3.2
+// (thrum-6qmf.1.14 / .15) unit tests inject a fake nudger and inspect the
+// recorded message bodies + per-tier IsAutoDisabled gating without standing
+// up a daemon.
+type contextpollNudger interface {
+	SendSystemNudge(ctx context.Context, recipient, body string)
+}
+
+// buildContextPollCallbacks returns the three callback closures that the
+// contextpoll.Poller invokes at threshold crossings. Factored out of
+// daemonRun's body for CR.3 T3.1 / T3.2 + CR.4 T4.2 testability:
+//
+//   - OnWarn (§3.4.1 + spec §3.1.4): fires for every agent that crosses the
+//     warn tier, INCLUDING agents listed in AutoDisabledAgents. Operator
+//     visibility is preserved — they still see the discipline reminder even
+//     though force-fire is suppressed for them.
+//   - OnPreFire (§3.4.2 + spec §3.1.4): suppressed for AutoDisabledAgents.
+//     The pre-fire nudge is the last warning before force-fire; if
+//     force-fire is disabled, the pre-fire message would be false-urgency.
+//   - OnFire (§3.1.4 + spec §3.5): suppressed for AutoDisabledAgents. For
+//     enabled agents, delegates to the supplied RestartTrigger which performs
+//     the snapshot-write + RestartSession + PostRestart sequence. A failure
+//     is logged at Warn level so the in-flight guard still trips (preventing
+//     a tight retry loop) and the InFlightMaxWait backstop eventually clears
+//     it. A nil trigger short-circuits to the T2.3 slog.Info breadcrumb —
+//     useful for the small set of tests that don't care about the force-fire
+//     side of the contract.
+//
+// Body texts are the canonical plan §3.4.1 + brainstorm §Q2 / §Q4 prose,
+// inlined byte-for-byte. Future body refinements live here, not in the
+// daemon wiring.
+func buildContextPollCallbacks(
+	warnCfg config.RestartConfig,
+	sender contextpollNudger,
+	trigger contextpoll.RestartTrigger,
+) (
+	contextpoll.WarnCallback,
+	contextpoll.PreFireCallback,
+	contextpoll.FireCallback,
+) {
+	onWarn := func(ctx context.Context, agentName string, usage contextpoll.ContextUsage) {
+		// Disabled agents still receive the warn nudge per spec §3.1.4.
+		body := fmt.Sprintf(
+			"Context at %d%%. Wrap up your current sub-task and run `/thrum:restart`.\n\n"+
+				"Do NOT dispatch sub-agents (Agent, Explore, etc.).\n"+
+				"Do NOT re-read large files.\n"+
+				"Do NOT spawn web fetches.\n\n"+
+				"Write your continuation from working context directly. If you don't "+
+				"self-restart by %d%%, the daemon will force-restart you in three "+
+				"minutes and your new session will receive a 200-line transcript tail "+
+				"instead of your prose continuation.",
+			usage.UsedPercentage, warnCfg.AutoThresholdValue(),
+		)
+		sender.SendSystemNudge(ctx, agentName, body)
+	}
+	onPreFire := func(ctx context.Context, agentName string, _ contextpoll.ContextUsage) {
+		if warnCfg.IsAutoDisabled(agentName) {
+			return
+		}
+		body := "Restart imminent in three minutes. Last chance to self-restart.\n" +
+			"Run `/thrum:restart` now to preserve your prose continuation."
+		sender.SendSystemNudge(ctx, agentName, body)
+	}
+	onFire := func(ctx context.Context, agentName string, usage contextpoll.ContextUsage) {
+		if warnCfg.IsAutoDisabled(agentName) {
+			return
+		}
+		if trigger == nil {
+			// T2.3-shape stub: no trigger wired. Log the breadcrumb so an
+			// operator running an older daemon (pre-CR.4 land) still sees
+			// the auto path would have fired. Also covers tests that
+			// build the callbacks with a nil trigger to assert only the
+			// warn / pre-fire halves of the contract.
+			slog.Info("[contextpoll] OnFire stub — no RestartTrigger wired",
+				"agent", agentName, "usage_pct", usage.UsedPercentage)
+			return
+		}
+		reason := fmt.Sprintf("automatic context-threshold restart at %d%%", usage.UsedPercentage)
+		if err := trigger.Restart(ctx, agentName, reason); err != nil {
+			// Don't return the error — there's no caller to surface it to.
+			// The in-flight guard set by the Poller will prevent a tight
+			// retry loop; the InFlightMaxWait backstop (default 5min)
+			// re-arms the callback after the wall-clock window.
+			slog.Warn("[contextpoll] OnFire: RestartTrigger failed",
+				"agent", agentName, "usage_pct", usage.UsedPercentage,
+				"reason", reason, "err", err)
+		}
+	}
+	return onWarn, onPreFire, onFire
 }
 
 // queryMessageReadState checks whether a message is read by a specific

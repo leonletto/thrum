@@ -547,3 +547,71 @@ func TestFormatTeam_AgentWithoutReminders_NoBlock(t *testing.T) {
 		t.Errorf("agent without reminders should not render the Reminders block; got:\n%s", out)
 	}
 }
+
+// TestFormatContextColumn pins the rendering matrix for the
+// CR.6 / thrum-6qmf.1.21 context column. Layout per plan §3.4
+// (see the formatContextColumn docstring for the full table).
+func TestFormatContextColumn(t *testing.T) {
+	cases := []struct {
+		name   string
+		pct    int
+		approx bool
+		known  bool
+		want   string
+	}{
+		{"unknown_when_not_known", 0, false, false, "unknown"},
+		{"unknown_overrides_pct", 80, true, false, "unknown"},
+		{"direct_below_warn", 50, false, true, "50% ctx"},
+		{"direct_at_warn", 70, false, true, "70% ctx ⚠"},
+		{"direct_above_warn_below_auto", 75, false, true, "75% ctx ⚠"},
+		{"direct_at_auto", 80, false, true, "80% ctx 🔥"},
+		{"direct_above_auto", 95, false, true, "95% ctx 🔥"},
+		{"approx_below_warn", 50, true, true, "~50% ctx"},
+		{"approx_at_warn", 70, true, true, "~70% ctx ⚠"},
+		{"approx_at_auto", 85, true, true, "~85% ctx 🔥"},
+		{"zero_percent_is_known", 0, false, true, "0% ctx"},
+		{"zero_percent_approx_is_known", 0, true, true, "~0% ctx"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := formatContextColumn(tc.pct, tc.approx, tc.known)
+			if got != tc.want {
+				t.Errorf("formatContextColumn(%d, approx=%v, known=%v) = %q, want %q",
+					tc.pct, tc.approx, tc.known, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestFormatTeam_ContextLineAlwaysRenders confirms FormatTeam emits
+// the Context line for every agent in the listing, including agents
+// with ContextKnown=false (rendered "unknown"). Per plan §3.4 the
+// column is always-on so operators can spot agents whose runtime
+// has no parser registered.
+func TestFormatTeam_ContextLineAlwaysRenders(t *testing.T) {
+	resp := &TeamListResponse{
+		Members: []TeamMember{
+			{
+				AgentID:      "impl_known",
+				Module:       "test",
+				Status:       "active",
+				ContextPct:   55,
+				ContextKnown: true,
+			},
+			{
+				AgentID: "impl_unknown",
+				Module:  "test",
+				Status:  "active",
+				// ContextKnown left false — no parser for this agent.
+			},
+		},
+	}
+	out := FormatTeam(resp)
+
+	if want := "Context:  55% ctx"; !strings.Contains(out, want) {
+		t.Errorf("FormatTeam missing %q for known agent; got:\n%s", want, out)
+	}
+	if want := "Context:  unknown"; !strings.Contains(out, want) {
+		t.Errorf("FormatTeam missing %q for unknown agent; got:\n%s", want, out)
+	}
+}

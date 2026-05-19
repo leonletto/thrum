@@ -396,6 +396,19 @@ type RestartConfig struct {
 	// pane for activity and nudging it if still silent. 0 = use default
 	// (30s). Negative = disabled (no watchdog).
 	SilenceWatchdogSeconds int `json:"silence_watchdog_seconds,omitempty"`
+
+	// WarnThreshold is the context-usage percentage (0-100) at which the
+	// daemon emits a warn-tier nudge instructing the agent to wrap its
+	// current sub-task and self-restart. Default 70 (via WarnThresholdValue).
+	// CR.5 (v0.11 context-restart auto-restart).
+	WarnThreshold int `json:"warn_threshold,omitempty"`
+
+	// AutoDisabledAgents lists agent names for which the daemon will NOT
+	// force-fire a restart at the auto threshold. Warn-tier nudges still
+	// fire; the agent retains control over its own restart cadence. Use
+	// this to opt long-debugging sessions out of force-fire interruption.
+	// CR.5 (v0.11 context-restart auto-restart).
+	AutoDisabledAgents []string `json:"auto_disabled_agents,omitempty"`
 }
 
 // RestartMaxLines returns the configured max lines, defaulting to 200.
@@ -415,6 +428,36 @@ func (r RestartConfig) RestartGracefulTimeout() int {
 		return 30
 	}
 	return r.GracefulTimeout
+}
+
+// WarnThresholdValue returns the warn-tier context-% threshold, defaulting
+// to 70 when WarnThreshold is unset (zero or negative). The warn tier is
+// the soft signal: the daemon nudges the agent to wrap and self-restart,
+// but takes no force action — agent autonomy is preserved.
+func (r RestartConfig) WarnThresholdValue() int {
+	if r.WarnThreshold <= 0 {
+		return 70
+	}
+	return r.WarnThreshold
+}
+
+// AutoThresholdValue returns the auto-tier (force-fire) context-% threshold,
+// defaulting to 80 when AutoThreshold is unset. Mirrors RestartMaxLines /
+// RestartGracefulTimeout / WarnThresholdValue — callers should always read
+// the configured value through this accessor rather than the raw field, so
+// the default policy is centralized in one place.
+func (r RestartConfig) AutoThresholdValue() int {
+	if r.AutoThreshold <= 0 {
+		return 80
+	}
+	return r.AutoThreshold
+}
+
+// IsAutoDisabled reports whether agentName is on the auto-fire opt-out list.
+// Returns false for the empty list (the default) or unrecognized names.
+// Warn-tier nudges fire regardless of this setting.
+func (r RestartConfig) IsAutoDisabled(agentName string) bool {
+	return slices.Contains(r.AutoDisabledAgents, agentName)
 }
 
 // SilenceWatchdog returns (seconds, enabled). seconds == 0 + enabled ==

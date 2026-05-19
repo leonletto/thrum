@@ -127,6 +127,23 @@ Run `thrum inbox --unread` at session start, after each completed beads task,
 before each commit push, and at every natural breakpoint. Proactive polling
 catches anything that arrived during a tool call.
 
+### Context-restart discipline
+
+When the daemon nudges you at `warn_threshold` (default 70%): wrap your
+current sub-task, compose a continuation from your working context, save it,
+and run `/thrum:restart` yourself. The continuation should be a tight prose
+summary of what you know — drawn directly from your own context, not from
+fresh investigation.
+
+Specifically: **at warn-tier, do NOT dispatch sub-agents (Agent, Explore,
+etc.). Do NOT re-read large files. Do NOT spawn web fetches.** Write what you
+know directly. Each of those would cost context you don't have to spend.
+
+If you can't compose in your remaining runway, the daemon will force-restart
+you at 80% + 3 minutes. The new session will receive the last 200 lines of
+your transcript as its restart snapshot — your in-flight decisions and
+judgment calls will be lost, but the system makes progress.
+
 ---
 
 ## Anti-Patterns

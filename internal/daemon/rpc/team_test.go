@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/contextpoll"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/types"
 )
@@ -891,5 +892,111 @@ func TestTeamList_IsLocalPopulated(t *testing.T) {
 			t.Errorf("agent %q: IsLocal = %v, want %v (OriginDaemon=%q)",
 				tc.agentID, m.IsLocal, tc.want, m.OriginDaemon)
 		}
+	}
+}
+
+// fakeContextProvider is a minimal contextpoll.ContextProvider stub for
+// CR.6 T6.3 (thrum-6qmf.1.22) tests. The map is keyed on agent name —
+// same key the production Poller uses on ContextUsageFor.
+type fakeContextProvider struct {
+	usages map[string]contextpoll.ContextUsage
+}
+
+func (f *fakeContextProvider) ContextUsageFor(agentName string) (contextpoll.ContextUsage, bool) {
+	u, ok := f.usages[agentName]
+	return u, ok
+}
+
+// TestTeamHandler_ContextPct_Known pins the happy path: a provider
+// returns a direct (non-approximate) usage reading and the
+// decorateWithContext call populates all three CR.6 fields.
+func TestTeamHandler_ContextPct_Known(t *testing.T) {
+	h := &TeamHandler{}
+	h.SetContextProvider(&fakeContextProvider{
+		usages: map[string]contextpoll.ContextUsage{
+			"impl_a": {UsedPercentage: 68, Approximate: false, ParserVersion: "claude-v2x"},
+		},
+	})
+
+	members := []TeamMember{{AgentID: "impl_a"}}
+	out := h.decorateWithContext(members)
+
+	if got := out[0].ContextPct; got != 68 {
+		t.Errorf("ContextPct = %d, want 68", got)
+	}
+	if out[0].ContextApprox {
+		t.Error("ContextApprox = true, want false (direct reading)")
+	}
+	if !out[0].ContextKnown {
+		t.Error("ContextKnown = false, want true")
+	}
+}
+
+// TestTeamHandler_ContextPct_Approximate pins the approximate-reading
+// flag pass-through. Used by OpenCodeParserV1 (reconstruction-based)
+// to signal CLI rendering should prefix with `~`.
+func TestTeamHandler_ContextPct_Approximate(t *testing.T) {
+	h := &TeamHandler{}
+	h.SetContextProvider(&fakeContextProvider{
+		usages: map[string]contextpoll.ContextUsage{
+			"impl_a": {UsedPercentage: 55, Approximate: true, ParserVersion: "opencode-v1"},
+		},
+	})
+
+	members := []TeamMember{{AgentID: "impl_a"}}
+	out := h.decorateWithContext(members)
+
+	if !out[0].ContextApprox {
+		t.Error("ContextApprox = false, want true (reconstruction parser)")
+	}
+	if !out[0].ContextKnown {
+		t.Error("ContextKnown = false, want true")
+	}
+}
+
+// TestTeamHandler_ContextPct_NoProvider covers the nil-safe path:
+// SetContextProvider was never called (or was called with nil) — the
+// decoration must leave ContextKnown false on every member rather
+// than panicking on a nil interface call.
+func TestTeamHandler_ContextPct_NoProvider(t *testing.T) {
+	h := &TeamHandler{}
+	// contextProvider not set — h.contextProvider is the zero value (nil).
+
+	members := []TeamMember{{AgentID: "impl_a"}, {AgentID: "impl_b"}}
+	out := h.decorateWithContext(members)
+
+	for i := range out {
+		if out[i].ContextKnown {
+			t.Errorf("members[%d].ContextKnown = true with no provider; want false", i)
+		}
+	}
+}
+
+// TestTeamHandler_ContextPct_AgentNotEnrolled covers the provider-says-
+// false path: the provider is wired, but it returns ok=false for the
+// agent (parser didn't match the runtime, or the agent was never
+// Enrolled with the Poller). ContextKnown stays false; the CLI
+// renders "unknown" for that row.
+func TestTeamHandler_ContextPct_AgentNotEnrolled(t *testing.T) {
+	h := &TeamHandler{}
+	h.SetContextProvider(&fakeContextProvider{
+		usages: map[string]contextpoll.ContextUsage{
+			// impl_a present but impl_b is absent — provider returns
+			// (ContextUsage{}, false) for impl_b.
+			"impl_a": {UsedPercentage: 42, ParserVersion: "claude-v2x"},
+		},
+	})
+
+	members := []TeamMember{{AgentID: "impl_a"}, {AgentID: "impl_b"}}
+	out := h.decorateWithContext(members)
+
+	if !out[0].ContextKnown {
+		t.Error("impl_a (enrolled): ContextKnown = false, want true")
+	}
+	if out[1].ContextKnown {
+		t.Error("impl_b (not enrolled): ContextKnown = true, want false")
+	}
+	if out[1].ContextPct != 0 {
+		t.Errorf("impl_b: ContextPct = %d, want 0 (unset)", out[1].ContextPct)
 	}
 }
