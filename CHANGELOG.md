@@ -8,8 +8,49 @@ and this project adheres to
 
 ## [Unreleased]
 
+### ⚠ Mixed-Cluster Upgrade Warning (v0.10.6)
+
+**v0.10.6 changes the sync wire format.** The local projection journal
+(`.thrum/events.jsonl`, gitignored) is now split from the cross-machine wire
+stream, and the wire stream lives in new paths (`state/`, `messages-v2/`,
+`receipts/`) instead of the legacy `messages/` shards. The 60-second polling
+ticker is gone — sync is now purely event-triggered on the structural-event
+whitelist (`agent.register`, `group.*`, `message.create`).
+
+**v0.10.5 peers cannot read messages from upgraded v0.10.6 peers.** The new code
+writes ONLY to `messages-v2/<id>.jsonl`. Pre-v0.10.6 peers don't know about that
+path and will silently miss messages authored by upgraded peers until they
+upgrade themselves. This is the intentional D6 verdict (no double-write to
+legacy `messages/<id>.jsonl`).
+
+**Recommended upgrade flow:** upgrade all peers in the cluster in one window. The
+asymmetric-receive behavior is by design but surprising in mixed clusters:
+v0.10.6 peers continue to read messages FROM v0.10.5 peers via the legacy-read
+fallback (so upgraded peers stay fully functional), but v0.10.5 peers lose
+visibility into v0.10.6 authors until they upgrade.
+
 ### Added
 
+- **Sync re-architecture (thrum-s6os)** — the cross-machine wire stream now
+  derives from per-agent + per-bridge-group state files rather than from a synced
+  event journal. Daemon-local truth (heartbeats, session boundaries, work-context
+  updates, message edits/deletes, receipts) is no longer git-committed to peers.
+  Idle daemons produce zero commits on `a-sync`; busy multi-agent clusters stop
+  accumulating heartbeat noise (the falcon-backend 11K-commits-per-week stream is
+  now a trickle proportional to actual message volume).
+- **New daemon config keys** — `daemon.events_retention_days` (default 2)
+  controls the rolling window for the local-only events journal + SQLite events
+  table; `daemon.compaction_size_threshold_mb` (default 10) controls the per-file
+  size threshold above which `messages-v2/` and `receipts/` files are
+  dedup-compacted at sync-trigger time.
+- **New diagnostics RPC `sync.pending_pool.list`** — returns the current
+  orphaned-message pool for inspection. Auto-resolves when missing state files
+  land via fetch+merge; the inbox UI renders an inline `(pending — waiting for
+  route resolution from peer)` placeholder while the orphan is unresolved. The
+  `messages.pending_route_resolution` column (already present at schema v33 on
+  this release line via the dead-end DDL gap-fill) is now wired by the sync
+  re-architecture: it flags pending-pool messages and clears automatically when
+  the referenced state file lands.
 - **Schema v33–v36 dead-end forward-port** — `CurrentVersion` bumped from 32 to
   36 with four new migration blocks: `messages.pending_route_resolution` column
   (v33), `memories` + `memory_scopes` tables and their six indexes (v34), the
@@ -50,6 +91,19 @@ and this project adheres to
   plugin-install cache is keyed by the `version` field, the advancing suffix
   lets `/plugin update` upgrade the plugin in place through the rc pipeline — no
   uninstall/reinstall — mirroring the binary upgrade path.
+
+### Removed
+
+- `daemon.sync_interval` config key. The field is silently ignored if present in
+  pre-v0.10.6 configs (no deprecation warning emitted) — forward-compatible
+  silent drop per spec §7.2.
+- `config.DefaultSyncInterval = 60` constant.
+- The 60-second polling ticker in `internal/sync/loop.go`. There is no fallback
+  poll: sync is purely event-triggered. The single initial sync at daemon start
+  remains, for peer-events catch-up.
+- The per-agent `messages/<id>.jsonl` writer wiring from
+  `internal/daemon/state.NewState`. The legacy path remains readable
+  (read-fallback for mixed clusters) but is no longer written by v0.10.6 code.
 
 ## [0.10.5] - 2026-05-21
 
