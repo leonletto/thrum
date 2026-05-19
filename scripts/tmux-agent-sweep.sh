@@ -148,38 +148,60 @@ for line in "${agent_lines[@]}"; do
         last_seen_display="$last_seen"
     fi
 
-    # Capture pane FIRST so we can extract Ctx Used% for the header.
+    # Capture pane FIRST so we can extract api_errors and fallback ctx footer.
     # Capture-pane: -p print to stdout, -t target, -S -<N> start N lines from end.
     pane_capture_ok=1
     if ! pane=$(tmux capture-pane -p -t "$tmux_session" -S -"$LINES" 2>&1); then
         pane_capture_ok=0
     fi
 
-    # Extract Claude Code footer's "Ctx Used: X.X%" if present in the captured
-    # pane. Claude Code's status line separates words with non-breaking spaces
-    # (UTF-8 \xc2\xa0), not ASCII spaces — normalize before matching. The
-    # trailing `|| true` keeps set -e from killing the loop on runtimes whose
-    # panes have no footer to match (Codex, Cursor) or have scrolled past it.
-    if [[ "$pane_capture_ok" -eq 1 ]]; then
-        ctx_used=$(printf '%s\n' "$pane" | sed $'s/\xc2\xa0/ /g' | grep -oE 'Ctx Used: [0-9]+\.[0-9]+%' | tail -1 | sed 's/Ctx Used: //' || true)
-        [[ -z "$ctx_used" ]] && ctx_used="(n/a)"
-    else
-        ctx_used="(capture failed)"
+    # Resolve transcript path for Claude Code agents (encode worktree path by
+    # replacing / and . with -). Both ctx_used and api_errors derive from the
+    # transcript when available — same source ccstatusline uses for the in-TUI
+    # status footer, but reliable regardless of pane scroll state. Daemon-side
+    # implementation lives in thrum-j9zg.
+    transcript=""
+    if [[ -n "$worktree" ]]; then
+        transcript_dir="$HOME/.claude/projects/$(echo "$worktree" | sed 's|[./]|-|g')"
+        if [[ -d "$transcript_dir" ]]; then
+            transcript=$(ls -t "$transcript_dir"/*.jsonl 2>/dev/null | head -1 || true)
+        fi
     fi
 
-    # Extract Anthropic API errors from the captured pane. These are
-    # transient (usually 529 Overloaded or rate limits) and the right
-    # remediation is `thrum tmux send <session> 'continue'` — see
-    # coordinator-context-monitoring SKILL §Step 6.
-    if [[ "$pane_capture_ok" -eq 1 ]]; then
-        # Match Claude Code's "⎿  API Error: ..." tool-result error lines.
-        # Phrasing of the error suffix varies (3-digit codes, "Server is
-        # temporarily limiting requests", "Rate limited", etc.) so we don't
-        # constrain the tail — but we DO anchor to the ⎿ tool-result prefix
-        # so that source code containing "API Error" strings (this very script,
-        # commit messages, comments) and prior sweep output (which echoes
-        # captured error text back) don't trigger recursive false-positives.
-        # grep returns non-zero on no-match under pipefail; suppress with || true.
+    # ctx_used from JSONL latest usage block. Window defaults to 1M (Opus 4.7
+    # 1m-context, current fleet default); per-model window detection deferred
+    # to daemon-side impl. Falls through to "(n/a)" when no transcript (non-
+    # claude runtimes like Codex/Cursor).
+    ctx_used="(n/a)"
+    if [[ -n "$transcript" ]]; then
+        used_tokens=$(tail -200 "$transcript" 2>/dev/null | jq -rs '
+            map(select(.message.usage != null)) | last | .message.usage |
+            ((.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0))
+        ' 2>/dev/null || echo "")
+        if [[ -n "$used_tokens" && "$used_tokens" != "null" && "$used_tokens" != "0" ]]; then
+            ctx_used=$(awk -v u="$used_tokens" -v w=1000000 'BEGIN { printf "%.1f%%", (u/w)*100 }')
+        fi
+    fi
+
+    # Detect Anthropic API errors from JSONL transcript. The agent is currently
+    # stuck IFF the LATEST assistant message's content is an API Error text
+    # entry (stop_reason: "stop_sequence", content[0].text starts with "API
+    # Error:"). Historical errors from earlier in the same session that have
+    # since recovered are correctly NOT flagged — only the tail of the
+    # conversation matters. Falls back to pane regex for non-claude runtimes
+    # where no transcript is available.
+    api_errors="(none)"
+    if [[ -n "$transcript" ]]; then
+        latest_error=$(tail -200 "$transcript" 2>/dev/null | jq -rs '
+            map(select(.type == "assistant")) | last |
+            (.message.content // [])[0] |
+            select(.type == "text") |
+            .text | select(startswith("API Error"))
+        ' 2>/dev/null || echo "")
+        [[ -n "$latest_error" ]] && api_errors="$latest_error"
+    elif [[ "$pane_capture_ok" -eq 1 ]]; then
+        # Non-claude runtime: fall back to pane scan with the ⎿ anchor to
+        # avoid recursive false-positives from source/sweep-output echoes.
         api_errors=$(printf '%s\n' "$pane" | { grep -oE '⎿[[:space:]]+API Error[^\n]*' || true; } | sort -u | paste -sd '; ' -)
         [[ -z "$api_errors" ]] && api_errors="(none)"
     else
