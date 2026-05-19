@@ -37,8 +37,8 @@ test.describe.serial('Messaging Tests', () => {
   });
 
   test('E1: Send a broadcast and verify delivery to another agent', async () => {
-    // Act: coordinator sends broadcast
-    const sendResult = thrumIn(getTestRoot(), ['send', 'Hello everyone, coordinator is online', '--json'], 10_000, coordEnv());
+    // Act: coordinator sends broadcast (thrum-t698: explicit --broadcast)
+    const sendResult = thrumIn(getTestRoot(), ['send', 'Hello everyone, coordinator is online', '--broadcast', '--json'], 10_000, coordEnv());
     const parsed = JSON.parse(sendResult);
     expect(parsed.message_id).toMatch(/^msg_/);
 
@@ -73,8 +73,12 @@ test.describe.serial('Messaging Tests', () => {
   test('E3: Send a message with mention and verify delivery', async () => {
     thrumIn(getImplementerRoot(), ['message', 'read', '--all'], 10_000, implEnv());
 
-    // Act: coordinator sends message mentioning implementer
-    const sendResult = thrumIn(getTestRoot(), ['send', 'Need input on relay architecture', '--mention', '@e2e_implementer', '--json'], 10_000, coordEnv());
+    // Act: coordinator sends message mentioning implementer (thrum-t698:
+    // explicit --broadcast preserves the pre-t698 broadcast-with-mention
+    // semantic; using --to @e2e_implementer alongside --mention @e2e_implementer
+    // would duplicate the recipient ref and hit a message_refs UNIQUE
+    // constraint at the daemon's projector layer)
+    const sendResult = thrumIn(getTestRoot(), ['send', 'Need input on relay architecture', '--broadcast', '--mention', '@e2e_implementer', '--json'], 10_000, coordEnv());
     const parsed = JSON.parse(sendResult);
     expect(parsed.message_id).toMatch(/^msg_/);
 
@@ -88,8 +92,9 @@ test.describe.serial('Messaging Tests', () => {
   });
 
   test('E4: Send with scope and refs', async () => {
-    // Act: send message with scope and refs
-    const sendResult = thrumIn(getTestRoot(), ['send', 'Auth module updated', '--scope', 'module:auth', '--ref', 'commit:abc123', '--json'], 10_000, coordEnv());
+    // Act: send message with scope and refs (thrum-t698: explicit --to;
+    // this test exercises scope/ref metadata, not broadcast semantics)
+    const sendResult = thrumIn(getTestRoot(), ['send', 'Auth module updated', '--to', '@e2e_implementer', '--scope', 'module:auth', '--ref', 'commit:abc123', '--json'], 10_000, coordEnv());
     const parsed = JSON.parse(sendResult);
     expect(parsed.message_id).toMatch(/^msg_/);
 
@@ -100,8 +105,9 @@ test.describe.serial('Messaging Tests', () => {
   });
 
   test('E5: Get single message details', async () => {
-    // Arrange: send a message
-    const sendResult = thrumIn(getTestRoot(), ['send', 'Test message for details', '--json'], 10_000, coordEnv());
+    // Arrange: send a message (thrum-t698: explicit --to; this test exercises
+    // message.get, not delivery semantics)
+    const sendResult = thrumIn(getTestRoot(), ['send', 'Test message for details', '--to', '@e2e_implementer', '--json'], 10_000, coordEnv());
     const parsed = JSON.parse(sendResult);
     expect(parsed.message_id).toMatch(/^msg_/);
 
@@ -126,9 +132,10 @@ test.describe.serial('Messaging Tests', () => {
   });
 
   test('E7: Edit a message', async () => {
-    // Arrange: send a message
+    // Arrange: send a message (thrum-t698: explicit --to; this test exercises
+    // message.edit, not delivery semantics)
     const originalText = `Edit test original ${Date.now()}`;
-    const sendResult = thrumIn(getTestRoot(), ['send', originalText, '--json'], 10_000, coordEnv());
+    const sendResult = thrumIn(getTestRoot(), ['send', originalText, '--to', '@e2e_implementer', '--json'], 10_000, coordEnv());
     const parsed = JSON.parse(sendResult);
     const msgId = parsed.message_id;
 
@@ -145,9 +152,10 @@ test.describe.serial('Messaging Tests', () => {
   });
 
   test('E8: Delete a message', async () => {
-    // Arrange: send a message
+    // Arrange: send a message (thrum-t698: explicit --to; this test exercises
+    // message.delete, not delivery semantics)
     const deleteText = `Delete test ${Date.now()}`;
-    const sendResult = thrumIn(getTestRoot(), ['send', deleteText, '--json'], 10_000, coordEnv());
+    const sendResult = thrumIn(getTestRoot(), ['send', deleteText, '--to', '@e2e_implementer', '--json'], 10_000, coordEnv());
     const parsed = JSON.parse(sendResult);
     const msgId = parsed.message_id;
 
@@ -162,9 +170,10 @@ test.describe.serial('Messaging Tests', () => {
   });
 
   test('E9: Reply to a message (auto-thread creation)', async () => {
-    // Arrange: send a message
+    // Arrange: send a message (thrum-t698: explicit --to; this test exercises
+    // reply/auto-thread, not delivery semantics)
     const originalText = `Reply test original ${Date.now()}`;
-    const sendResult = thrumIn(getTestRoot(), ['send', originalText, '--json'], 10_000, coordEnv());
+    const sendResult = thrumIn(getTestRoot(), ['send', originalText, '--to', '@e2e_implementer', '--json'], 10_000, coordEnv());
     const parsed = JSON.parse(sendResult);
     const msgId = parsed.message_id;
 

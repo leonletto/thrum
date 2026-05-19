@@ -86,8 +86,9 @@ test.describe('Sync', () => {
   });
 
   test('SC-38: Manual sync', async () => {
-    // Arrange: send some messages (using the global daemon/repo)
-    thrum(['send', 'Sync test message SC-38']);
+    // Arrange: send some messages (using the global daemon/repo;
+    // thrum-t698: explicit --to)
+    thrum(['send', 'Sync test message SC-38', '--to', '@e2e_implementer']);
 
     // Act: run sync
     let syncOutput: string;
@@ -137,7 +138,9 @@ test.describe('Sync', () => {
         thrumIn(repo, ['quickstart', '--role', 'sender', '--module', 'test',
           '--name', 'sc40_sender', '--intent', 'SC-40 test']);
       } catch { /* may exist */ }
-      thrumIn(repo, ['send', 'Cross-worktree message SC-40']);
+      // thrum-t698: --broadcast — this is a fresh bare repo with only
+      // sc40_sender registered, so a directed --to has no valid recipient
+      thrumIn(repo, ['send', 'Cross-worktree message SC-40', '--broadcast']);
 
       // Act: sync force
       const syncOutput = thrumIn(repo, ['sync', 'force']);
