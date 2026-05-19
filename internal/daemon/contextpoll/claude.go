@@ -55,11 +55,11 @@ func (ClaudeParserV2x) Version() string { return "claude-v2x" }
 // Returns false for empty files, unreadable files, and files whose first line
 // is not valid JSON with a `type` field.
 func (ClaudeParserV2x) Matches(path string) bool {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- path is an absolute JSONL path resolved by restart.FindSessionJSONL / FindLatestJSONLForCwd
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	scanner := bufio.NewScanner(f)
 	// Claude JSONL lines can carry large thinking / tool-result payloads;
 	// raise the per-line cap well past bufio's 64KB default so we never
@@ -112,11 +112,11 @@ type claudeAssistantEvent struct {
 // and clamped to [0, 100]. Approximate is always false: Claude reports its
 // own running cumulative-token counts directly, no reconstruction needed.
 func (ClaudeParserV2x) Parse(path string) (ContextUsage, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- path is an absolute JSONL path resolved by restart.FindSessionJSONL / FindLatestJSONLForCwd
 	if err != nil {
 		return ContextUsage{}, fmt.Errorf("contextpoll: open claude transcript: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 1<<16), 16<<20)

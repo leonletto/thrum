@@ -291,13 +291,14 @@ func (p *Poller) pollAgent(
 	p.mu.Unlock()
 
 	// Backstop: clear stale in-flight guard so a hung restart doesn't
-	// silence the agent forever.
+	// silence the agent forever. The local restartInFlight copy is not
+	// re-read after this branch — downstream checks use state.restartInFlight
+	// under the lock — so we don't need to update the local mirror.
 	if restartInFlight && now.Sub(restartInFlightAt) >= cfg.InFlightMaxWait {
 		p.mu.Lock()
 		state.restartInFlight = false
 		state.restartInFlightAt = time.Time{}
 		p.mu.Unlock()
-		restartInFlight = false
 		slog.Warn("[contextpoll] in-flight guard cleared after timeout",
 			"agent", name, "after", now.Sub(restartInFlightAt).String())
 	}
