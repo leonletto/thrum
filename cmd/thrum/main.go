@@ -1003,7 +1003,17 @@ func sendCmd() *cobra.Command {
 		Long: `Send a message to the Thrum messaging system.
 
 Messages can include scopes (context), refs (references), and mentions.
-The daemon must be running and you must have an active session.`,
+The daemon must be running and you must have an active session.
+
+A recipient flag is required (thrum-t698 — BREAKING CHANGE in v0.10.5):
+  thrum send 'hello'  --to @coordinator_main    # directed send
+  thrum send 'hello'  --broadcast                # explicit team fanout
+
+Invoking 'thrum send' with no recipient flag is a hard error. The previous
+default — silent broadcast to every team agent — was a footgun (the wider
+the team, the easier to flood mid-cycle). Use --to @<agent_name> for the
+common case, or --broadcast when an explicit team-wide announcement is
+intended.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			scopes, _ := cmd.Flags().GetStringSlice("scope")
@@ -1012,6 +1022,29 @@ The daemon must be running and you must have an active session.`,
 			structured, _ := cmd.Flags().GetString("structured")
 			format, _ := cmd.Flags().GetString("format")
 			to, _ := cmd.Flags().GetString("to")
+			broadcast, _ := cmd.Flags().GetBool("broadcast")
+
+			// thrum-t698: require an explicit recipient flag. The
+			// previous default (silent broadcast when --to absent)
+			// was a real footgun — coord live-demonstrated it during
+			// Session 75 with an accidental 94-agent broadcast.
+			// Convention (CLAUDE.md "send to specific names, never
+			// role names") already says always --to; this aligns the
+			// CLI default with the convention.
+			if to == "" && !broadcast {
+				return fmt.Errorf("thrum send: missing recipient. Did you intend to:\n  - send to a specific agent? Use --to @agent_name\n  - broadcast to the entire team? Use --broadcast")
+			}
+			// --broadcast desugars to the existing @everyone audience
+			// the daemon already accepts. --to @everyone continues
+			// to work as the explicit-keyword form. Mutual exclusivity
+			// of --to + --broadcast is enforced by
+			// MarkFlagsMutuallyExclusive (registered at cmd-build
+			// time below the RunE closure; fires during arg parsing
+			// before RunE runs, so we never observe both flags set
+			// here).
+			if broadcast {
+				to = "@everyone"
+			}
 
 			opts := cli.SendOptions{
 				Content:       args[0],
@@ -1098,6 +1131,8 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().String("structured", "", "Structured payload (JSON)")
 	cmd.Flags().String("format", "markdown", "Message format (markdown, plain, json)")
 	cmd.Flags().String("to", "", "Recipient (@agent_name or @everyone)")
+	cmd.Flags().Bool("broadcast", false, "Fan out to the entire team (mutually exclusive with --to)")
+	cmd.MarkFlagsMutuallyExclusive("to", "broadcast")
 
 	return cmd
 }
