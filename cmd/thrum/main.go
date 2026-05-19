@@ -5698,6 +5698,18 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		triggers.SetWalker(walker)
 		st.SetSyncTrigger(triggers.SyncOnWrite)
 
+		// Bootstrap-ingest legacy events.jsonl from the sync worktree into
+		// the local journal + SQLite on first daemon run after upgrade to
+		// v0.10.6. Idempotent via sentinel file (.thrum/legacy_ingested).
+		// Runs BEFORE CompactAll so legacy events are present before the
+		// retention cutoff scan (spec §4.6, plan Task 14 anti-pattern §3).
+		if rows, err := thrumSync.BootstrapIngestLegacyEvents(ctx, thrumDir, syncDir, st.DB()); err != nil {
+			log.Printf("sync: legacy events bootstrap-ingest failed: %v", err)
+			slog.Warn("sync.legacy_ingest_failed", "err", err)
+		} else if rows > 0 {
+			log.Printf("sync: bootstrap-ingested %d legacy events from sync worktree", rows)
+		}
+
 		compactor := syncCompact.New(thrumDir, syncDir,
 			thrumCfg.Daemon.EventsRetentionDays,
 			thrumCfg.Daemon.CompactionSizeThresholdMB)

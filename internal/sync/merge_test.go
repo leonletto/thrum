@@ -2,11 +2,16 @@ package sync
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/leonletto/thrum/internal/daemon/safedb"
+	_ "modernc.org/sqlite"
 )
 
 // setupMergeTestRepo creates a test repo with a-sync branch and test events.
@@ -673,5 +678,381 @@ func TestMerger_MergeFile(t *testing.T) {
 	}
 	if result.NewEvents != 0 {
 		t.Errorf("NewEvents = %d, want 0", result.NewEvents)
+	}
+}
+
+// openIngestTestDB creates an in-memory SQLite database with the events table
+// schema needed for BootstrapIngestLegacyEvents tests.
+func openIngestTestDB(t *testing.T) *safedb.DB {
+	t.Helper()
+	raw, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(func() { _ = raw.Close() })
+	_, err = raw.Exec(`CREATE TABLE events (
+		id            INTEGER PRIMARY KEY AUTOINCREMENT,
+		event_id      TEXT NOT NULL UNIQUE,
+		sequence      INTEGER,
+		type          TEXT,
+		timestamp     TEXT,
+		origin_daemon TEXT,
+		event_json    TEXT
+	)`)
+	if err != nil {
+		t.Fatalf("create events table: %v", err)
+	}
+	return safedb.New(raw)
+}
+
+// countEventsDB returns the number of rows in the events table.
+func countEventsDB(t *testing.T, db *safedb.DB) int {
+	t.Helper()
+	var count int
+	err := db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM events`).Scan(&count)
+	if err != nil {
+		t.Fatalf("count events: %v", err)
+	}
+	return count
+}
+
+// seedLegacyEventsFile writes N events to a legacy events.jsonl path.
+func seedLegacyEventsFile(t *testing.T, path string, n int) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create legacy events.jsonl: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+	for i := range n {
+		line := fmt.Sprintf(`{"type":"agent.register","event_id":"evt_%04d","timestamp":"2026-01-01T00:00:%02dZ","origin_daemon":"peer1","sequence":%d}`, i, i%60, i)
+		if _, err := fmt.Fprintln(f, line); err != nil {
+			t.Fatalf("write line %d: %v", i, err)
+		}
+	}
+}
+
+// countJSONLLines returns the number of non-empty lines in a JSONL file.
+func countJSONLLines(t *testing.T, path string) int {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read file %s: %v", path, err)
+	}
+	lines := 0
+	for _, line := range splitLines(string(data)) {
+		if len(line) > 0 {
+			lines++
+		}
+	}
+	return lines
+}
+
+func splitLines(s string) []string {
+	var result []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			result = append(result, s[start:i])
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		result = append(result, s[start:])
+	}
+	return result
+}
+
+// TestMergeAll_IncludesNewPaths verifies that MergeAll processes the v0.10.6
+// paths (state/, messages-v2/, receipts/) alongside legacy paths without error.
+func TestMergeAll_IncludesNewPaths(t *testing.T) {
+	repoPath := setupMergeTestRepo(t)
+	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
+	m := NewMerger(repoPath, syncDir, false)
+
+	// Seed legacy paths.
+	legacyEventsPath := filepath.Join(syncDir, "events.jsonl")
+	if err := os.WriteFile(legacyEventsPath, []byte(`{"type":"agent.register","event_id":"evt_LEG1","timestamp":"2026-01-01T00:00:00Z"}`+"\n"), 0600); err != nil {
+		t.Fatalf("write legacy events.jsonl: %v", err)
+	}
+
+	// Seed v0.10.6 paths.
+	for _, dir := range []string{
+		filepath.Join(syncDir, "state", "agents"),
+		filepath.Join(syncDir, "state", "bridge-groups"),
+		filepath.Join(syncDir, "messages-v2"),
+		filepath.Join(syncDir, "receipts"),
+	} {
+		if err := os.MkdirAll(dir, 0750); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+	}
+
+	// Write a state file.
+	stateFile := filepath.Join(syncDir, "state", "agents", "agent_test_001.json")
+	if err := os.WriteFile(stateFile, []byte(`{"agent_id":"agent:test:001"}`), 0600); err != nil {
+		t.Fatalf("write state file: %v", err)
+	}
+
+	// Write a messages-v2 JSONL file.
+	v2File := filepath.Join(syncDir, "messages-v2", "agent:test:001.jsonl")
+	if err := os.WriteFile(v2File, []byte(`{"type":"message.create","event_id":"evt_V2_1","timestamp":"2026-01-01T00:00:00Z","message_id":"msg_001"}`+"\n"), 0600); err != nil {
+		t.Fatalf("write messages-v2 file: %v", err)
+	}
+
+	// Write a receipts JSONL file.
+	receiptFile := filepath.Join(syncDir, "receipts", "agent:test:001.jsonl")
+	if err := os.WriteFile(receiptFile, []byte(`{"type":"message.read","event_id":"evt_REC_1","timestamp":"2026-01-01T00:00:00Z","message_id":"msg_001","agent_id":"agent:test:001"}`+"\n"), 0600); err != nil {
+		t.Fatalf("write receipts file: %v", err)
+	}
+
+	// MergeAll must succeed without error.
+	result, err := m.MergeAll(context.Background())
+	if err != nil {
+		t.Fatalf("MergeAll failed: %v", err)
+	}
+
+	// No remote files means no new events; local files preserved.
+	if result == nil {
+		t.Fatal("MergeAll returned nil result")
+	}
+
+	// Verify files still exist after merge.
+	for _, path := range []string{legacyEventsPath, stateFile, v2File, receiptFile} {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("file missing after MergeAll: %s", path)
+		}
+	}
+}
+
+// TestBootstrapIngestLegacyEvents_FirstRun verifies that on first run the
+// legacy events are ingested into both the local journal and SQLite.
+func TestBootstrapIngestLegacyEvents_FirstRun(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	syncDir := filepath.Join(tmpDir, "sync")
+
+	if err := os.MkdirAll(thrumDir, 0750); err != nil {
+		t.Fatalf("mkdir thrumDir: %v", err)
+	}
+	if err := os.MkdirAll(syncDir, 0750); err != nil {
+		t.Fatalf("mkdir syncDir: %v", err)
+	}
+
+	const legacyRows = 5
+	seedLegacyEventsFile(t, filepath.Join(syncDir, "events.jsonl"), legacyRows)
+
+	db := openIngestTestDB(t)
+
+	rows, err := BootstrapIngestLegacyEvents(context.Background(), thrumDir, syncDir, db)
+	if err != nil {
+		t.Fatalf("BootstrapIngestLegacyEvents failed: %v", err)
+	}
+	if rows != legacyRows {
+		t.Errorf("ingested rows = %d, want %d", rows, legacyRows)
+	}
+
+	// Local journal should have legacyRows lines.
+	journalPath := filepath.Join(thrumDir, "events.jsonl")
+	if _, err := os.Stat(journalPath); err != nil {
+		t.Fatalf("local events.jsonl missing after ingest: %v", err)
+	}
+	gotLines := countJSONLLines(t, journalPath)
+	if gotLines != legacyRows {
+		t.Errorf("local events.jsonl lines = %d, want %d", gotLines, legacyRows)
+	}
+
+	// SQLite events table should have legacyRows rows.
+	gotDBRows := countEventsDB(t, db)
+	if gotDBRows != legacyRows {
+		t.Errorf("SQLite events rows = %d, want %d", gotDBRows, legacyRows)
+	}
+
+	// Sentinel file must exist.
+	sentinelPath := filepath.Join(thrumDir, "legacy_ingested")
+	if _, err := os.Stat(sentinelPath); err != nil {
+		t.Errorf("sentinel file missing after ingest: %v", err)
+	}
+
+	// Legacy events.jsonl must NOT be deleted (spec §4.6).
+	if _, err := os.Stat(filepath.Join(syncDir, "events.jsonl")); err != nil {
+		t.Errorf("legacy events.jsonl was deleted — violates spec §4.6")
+	}
+}
+
+// TestBootstrapIngestLegacyEvents_Idempotent verifies that a second call is
+// a no-op and does not duplicate rows.
+func TestBootstrapIngestLegacyEvents_Idempotent(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	syncDir := filepath.Join(tmpDir, "sync")
+
+	if err := os.MkdirAll(thrumDir, 0750); err != nil {
+		t.Fatalf("mkdir thrumDir: %v", err)
+	}
+	if err := os.MkdirAll(syncDir, 0750); err != nil {
+		t.Fatalf("mkdir syncDir: %v", err)
+	}
+
+	const legacyRows = 3
+	seedLegacyEventsFile(t, filepath.Join(syncDir, "events.jsonl"), legacyRows)
+
+	db := openIngestTestDB(t)
+
+	// First run.
+	rows1, err := BootstrapIngestLegacyEvents(context.Background(), thrumDir, syncDir, db)
+	if err != nil {
+		t.Fatalf("first call failed: %v", err)
+	}
+	if rows1 != legacyRows {
+		t.Errorf("first call rows = %d, want %d", rows1, legacyRows)
+	}
+
+	// Second run must be a no-op.
+	rows2, err := BootstrapIngestLegacyEvents(context.Background(), thrumDir, syncDir, db)
+	if err != nil {
+		t.Fatalf("second call failed: %v", err)
+	}
+	if rows2 != 0 {
+		t.Errorf("second call rows = %d, want 0 (no-op)", rows2)
+	}
+
+	// SQLite row count must still equal legacyRows (no duplicates).
+	gotDBRows := countEventsDB(t, db)
+	if gotDBRows != legacyRows {
+		t.Errorf("SQLite rows after second call = %d, want %d (no duplication)", gotDBRows, legacyRows)
+	}
+}
+
+// TestBootstrapIngestLegacyEvents_NoLegacyFile verifies that when the legacy
+// events.jsonl is absent, the function returns (0, nil) and still writes the
+// sentinel so subsequent boots don't keep checking.
+func TestBootstrapIngestLegacyEvents_NoLegacyFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	syncDir := filepath.Join(tmpDir, "sync")
+
+	if err := os.MkdirAll(thrumDir, 0750); err != nil {
+		t.Fatalf("mkdir thrumDir: %v", err)
+	}
+	if err := os.MkdirAll(syncDir, 0750); err != nil {
+		t.Fatalf("mkdir syncDir: %v", err)
+	}
+	// Do NOT create events.jsonl in syncDir.
+
+	db := openIngestTestDB(t)
+
+	rows, err := BootstrapIngestLegacyEvents(context.Background(), thrumDir, syncDir, db)
+	if err != nil {
+		t.Fatalf("BootstrapIngestLegacyEvents failed: %v", err)
+	}
+	if rows != 0 {
+		t.Errorf("rows = %d, want 0 (no legacy file)", rows)
+	}
+
+	// Sentinel must be written to prevent repeated no-op checks.
+	sentinelPath := filepath.Join(thrumDir, "legacy_ingested")
+	if _, err := os.Stat(sentinelPath); err != nil {
+		t.Errorf("sentinel file missing even when legacy file absent: %v", err)
+	}
+}
+
+// TestReadLegacyMessageFallback_LegacyPresent verifies that when
+// messages/<agent>.jsonl exists and messages-v2/<agent>.jsonl is absent,
+// ReadLegacyMessageFallback returns the rows and the legacy path.
+func TestReadLegacyMessageFallback_LegacyPresent(t *testing.T) {
+	syncDir := t.TempDir()
+
+	agentID := "agent:test:abc"
+
+	// Create legacy messages/ directory and file.
+	legacyDir := filepath.Join(syncDir, "messages")
+	if err := os.MkdirAll(legacyDir, 0750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	legacyPath := filepath.Join(legacyDir, agentID+".jsonl")
+	legacyData := `{"type":"message.create","event_id":"evt_L1","timestamp":"2026-01-01T00:00:00Z","message_id":"msg_001"}` + "\n" +
+		`{"type":"message.create","event_id":"evt_L2","timestamp":"2026-01-01T00:01:00Z","message_id":"msg_002"}` + "\n"
+	if err := os.WriteFile(legacyPath, []byte(legacyData), 0600); err != nil {
+		t.Fatalf("write legacy file: %v", err)
+	}
+	// Do NOT create messages-v2/ file.
+
+	events, sourcePath, err := ReadLegacyMessageFallback(syncDir, agentID)
+	if err != nil {
+		t.Fatalf("ReadLegacyMessageFallback failed: %v", err)
+	}
+	if len(events) != 2 {
+		t.Errorf("events count = %d, want 2", len(events))
+	}
+	if sourcePath != legacyPath {
+		t.Errorf("sourcePath = %q, want %q", sourcePath, legacyPath)
+	}
+
+	// Verify events are valid JSON.
+	for i, ev := range events {
+		var obj map[string]any
+		if err := json.Unmarshal(ev, &obj); err != nil {
+			t.Errorf("event[%d] is not valid JSON: %v", i, err)
+		}
+	}
+}
+
+// TestReadLegacyMessageFallback_LegacyAbsent verifies that when neither
+// messages/ nor messages-v2/ file exists, the function returns (nil, "", nil).
+func TestReadLegacyMessageFallback_LegacyAbsent(t *testing.T) {
+	syncDir := t.TempDir()
+	agentID := "agent:test:xyz"
+
+	events, sourcePath, err := ReadLegacyMessageFallback(syncDir, agentID)
+	if err != nil {
+		t.Fatalf("ReadLegacyMessageFallback failed: %v", err)
+	}
+	if events != nil {
+		t.Errorf("events = %v, want nil", events)
+	}
+	if sourcePath != "" {
+		t.Errorf("sourcePath = %q, want empty", sourcePath)
+	}
+}
+
+// TestReadLegacyMessageFallback_V2Present verifies that when messages-v2/
+// file exists, ReadLegacyMessageFallback returns (nil, "", nil) — v2
+// is preferred, so no fallback is needed.
+func TestReadLegacyMessageFallback_V2Present(t *testing.T) {
+	syncDir := t.TempDir()
+	agentID := "agent:test:v2"
+
+	// Create messages-v2/ file.
+	v2Dir := filepath.Join(syncDir, "messages-v2")
+	if err := os.MkdirAll(v2Dir, 0750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	v2Path := filepath.Join(v2Dir, agentID+".jsonl")
+	if err := os.WriteFile(v2Path, []byte(`{"type":"message.create","event_id":"evt_V1","message_id":"msg_v2","timestamp":"2026-01-01T00:00:00Z"}`+"\n"), 0600); err != nil {
+		t.Fatalf("write v2 file: %v", err)
+	}
+
+	// Also create legacy file to ensure v2 takes precedence.
+	legacyDir := filepath.Join(syncDir, "messages")
+	if err := os.MkdirAll(legacyDir, 0750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyDir, agentID+".jsonl"), []byte(`{"type":"message.create","event_id":"evt_OLD","message_id":"msg_old","timestamp":"2026-01-01T00:00:00Z"}`+"\n"), 0600); err != nil {
+		t.Fatalf("write legacy file: %v", err)
+	}
+
+	events, sourcePath, err := ReadLegacyMessageFallback(syncDir, agentID)
+	if err != nil {
+		t.Fatalf("ReadLegacyMessageFallback failed: %v", err)
+	}
+	if events != nil {
+		t.Errorf("events = %v, want nil (v2 present, no fallback needed)", events)
+	}
+	if sourcePath != "" {
+		t.Errorf("sourcePath = %q, want empty (no fallback needed)", sourcePath)
 	}
 }
