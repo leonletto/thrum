@@ -13,10 +13,15 @@ package context
 // Paths are relative to the repository root.
 var RoleAwarePreambleAllowedCallSites = []string{
 	// Two intentional fallback sites:
-	//   - runPreambleInit (around line 4014): --init handler. Tries
+	//   - runPreambleInit (cmd/thrum/main.go): --init handler. Tries
 	//     RenderRoleTemplate first; falls back here when no rendered
 	//     template exists for the role.
-	//   - applyRolePreamble (around line 7192): quickstart / agent
+	//   - applyRolePreamble (cmd/thrum/roles.go): quickstart / agent
 	//     register path. Same try-RenderRoleTemplate-first pattern.
+	//
+	// applyRolePreamble moved from main.go → roles.go in thrum-8kxh Phase 1
+	// (T1.11, commit 9946f64a8c). runPreambleInit remains in main.go pending
+	// Phase 2's context.go extraction.
 	"cmd/thrum/main.go",
+	"cmd/thrum/roles.go",
 }
