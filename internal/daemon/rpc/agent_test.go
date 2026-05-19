@@ -2939,3 +2939,174 @@ func TestAgentDelete_FolderCleanup_LongLivedIdentity_PreservesFolder(t *testing.
 		t.Errorf("marker contents = %q; want 'present'", string(data))
 	}
 }
+
+// ackRespawnAlertFixture sets up an AgentHandler wired with a lifecycle
+// store, registers the named agent, and arms the loop-guard trip marker
+// (AutoRespawnDisabledAt) to disabledAt. Returns the handler, the live
+// lifecycle store (so tests can ListByAgent-assert appended events), and
+// the registry (so idempotent / Clear-side-effect tests can inspect
+// post-call state without re-constructing).
+func ackRespawnAlertFixture(t *testing.T, name string, disabledAt time.Time) (*AgentHandler, state.AgentLifecycleStore, agent.AgentRegistry, *state.State) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	st, err := state.NewState(thrumDir, thrumDir, "test_repo_ack", "")
+	if err != nil {
+		t.Fatalf("state.NewState: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	lifecycleStore := state.NewAgentLifecycleStore(st.DB())
+	h := NewAgentHandler(st)
+	h.SetLifecycleStore(lifecycleStore)
+
+	reg := agent.NewSQLiteRegistry(st.DB())
+
+	if name != "" {
+		registerReq := RegisterRequest{Name: name, Role: "tester", Module: "ack"}
+		registerJSON, _ := json.Marshal(registerReq)
+		if _, err := h.HandleRegister(context.Background(), registerJSON); err != nil {
+			t.Fatalf("register %s: %v", name, err)
+		}
+		if !disabledAt.IsZero() {
+			if err := reg.SetAutoRespawnDisabledAt(context.Background(), name, disabledAt); err != nil {
+				t.Fatalf("set disabled-at %s: %v", name, err)
+			}
+		}
+	}
+
+	return h, lifecycleStore, reg, st
+}
+
+// TestHandleAckRespawnAlert_ClearsDisabled is the happy path: an agent
+// with AutoRespawnDisabledAt set returns {cleared: true, prior_disabled_at}
+// from agent.ack_respawn_alert, clears the field on the registry, and
+// appends a respawn_ack_cleared event to the lifecycle store. Pins spec
+// §9.12.1 + plan §3622-3635.
+func TestHandleAckRespawnAlert_ClearsDisabled(t *testing.T) {
+	trip := time.Now().Add(-5 * time.Minute).UTC().Truncate(time.Second)
+	h, lifecycleStore, reg, _ := ackRespawnAlertFixture(t, "flaky_agent", trip)
+
+	reqJSON, _ := json.Marshal(AckRespawnAlertRequest{AgentName: "flaky_agent"})
+	resp, err := h.HandleAckRespawnAlert(context.Background(), reqJSON)
+	if err != nil {
+		t.Fatalf("HandleAckRespawnAlert: %v", err)
+	}
+
+	ack, ok := resp.(*AckRespawnAlertResponse)
+	if !ok {
+		t.Fatalf("response type = %T; want *AckRespawnAlertResponse", resp)
+	}
+	if !ack.Cleared {
+		t.Errorf("Cleared = false; want true")
+	}
+	if ack.AgentName != "flaky_agent" {
+		t.Errorf("AgentName = %q; want %q", ack.AgentName, "flaky_agent")
+	}
+	if ack.PriorDisabledAt == nil {
+		t.Errorf("PriorDisabledAt = nil; want non-nil (was set at %v)", trip)
+	} else if !ack.PriorDisabledAt.Equal(trip) {
+		t.Errorf("PriorDisabledAt = %v; want %v", *ack.PriorDisabledAt, trip)
+	}
+
+	// Side-effect: registry row's AutoRespawnDisabledAt now nil.
+	got, err := reg.Lookup(context.Background(), "flaky_agent")
+	if err != nil {
+		t.Fatalf("Lookup post-clear: %v", err)
+	}
+	if got.AutoRespawnDisabledAt != nil {
+		t.Errorf("registry.AutoRespawnDisabledAt = %v; want nil after ack",
+			got.AutoRespawnDisabledAt)
+	}
+
+	// Side-effect: lifecycle store gained one respawn_ack_cleared event.
+	events, err := lifecycleStore.ListByAgent(context.Background(), "flaky_agent", 10)
+	if err != nil {
+		t.Fatalf("ListByAgent: %v", err)
+	}
+	var found bool
+	for _, e := range events {
+		if e.EventKind == state.EventRespawnAckCleared && e.AgentName == "flaky_agent" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("respawn_ack_cleared event not appended; events = %+v", events)
+	}
+}
+
+// TestHandleAckRespawnAlert_Idempotent pins spec §9.12.3: re-running on
+// an already-cleared (AutoRespawnDisabledAt == nil) agent returns
+// {cleared: false} without error and does NOT append a lifecycle event
+// (no-op semantics — re-acking should not pollute the journal).
+func TestHandleAckRespawnAlert_Idempotent(t *testing.T) {
+	// disabledAt zero → fixture skips the SetAutoRespawnDisabledAt arm.
+	h, lifecycleStore, _, _ := ackRespawnAlertFixture(t, "clean_agent", time.Time{})
+
+	reqJSON, _ := json.Marshal(AckRespawnAlertRequest{AgentName: "clean_agent"})
+	resp, err := h.HandleAckRespawnAlert(context.Background(), reqJSON)
+	if err != nil {
+		t.Fatalf("HandleAckRespawnAlert: %v", err)
+	}
+
+	ack, ok := resp.(*AckRespawnAlertResponse)
+	if !ok {
+		t.Fatalf("response type = %T; want *AckRespawnAlertResponse", resp)
+	}
+	if ack.Cleared {
+		t.Errorf("Cleared = true; want false on already-cleared agent")
+	}
+	if ack.AgentName != "clean_agent" {
+		t.Errorf("AgentName = %q; want %q", ack.AgentName, "clean_agent")
+	}
+	if ack.PriorDisabledAt != nil {
+		t.Errorf("PriorDisabledAt = %v; want nil on no-op", ack.PriorDisabledAt)
+	}
+
+	// No-op MUST NOT append a lifecycle event.
+	events, err := lifecycleStore.ListByAgent(context.Background(), "clean_agent", 10)
+	if err != nil {
+		t.Fatalf("ListByAgent: %v", err)
+	}
+	for _, e := range events {
+		if e.EventKind == state.EventRespawnAckCleared {
+			t.Errorf("idempotent re-ack appended respawn_ack_cleared event: %+v", e)
+		}
+	}
+}
+
+// TestHandleAckRespawnAlert_UnknownAgent pins the registry-miss path:
+// agent.ack_respawn_alert on a name with no row returns the registry's
+// ErrAgentNotFound (wrapped). Spec §9.12.1 "Refuses when unknown agent_name".
+func TestHandleAckRespawnAlert_UnknownAgent(t *testing.T) {
+	h, _, _, _ := ackRespawnAlertFixture(t, "", time.Time{})
+
+	reqJSON, _ := json.Marshal(AckRespawnAlertRequest{AgentName: "ghost"})
+	_, err := h.HandleAckRespawnAlert(context.Background(), reqJSON)
+	if err == nil {
+		t.Fatal("HandleAckRespawnAlert on unknown agent: nil error; want error")
+	}
+	if !errorContains(err, "ghost") {
+		t.Errorf("error = %v; want message naming the missing agent", err)
+	}
+}
+
+// TestHandleAckRespawnAlert_MissingName pins the input-validation path:
+// empty agent_name returns an error before any registry call.
+func TestHandleAckRespawnAlert_MissingName(t *testing.T) {
+	h, _, _, _ := ackRespawnAlertFixture(t, "", time.Time{})
+
+	reqJSON, _ := json.Marshal(AckRespawnAlertRequest{AgentName: ""})
+	_, err := h.HandleAckRespawnAlert(context.Background(), reqJSON)
+	if err == nil {
+		t.Fatal("HandleAckRespawnAlert with empty name: nil error; want error")
+	}
+}
+
+// errorContains is a tiny test-helper used by the ack-respawn-alert tests
+// to assert that the registry's ErrAgentNotFound surface carries the
+// failing agent name (avoiding errors.Is acrobatics for a one-line check).
+func errorContains(err error, substr string) bool {
+	return err != nil && strings.Contains(err.Error(), substr)
+}

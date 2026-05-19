@@ -49,23 +49,10 @@ type RuntimePreset struct {
 	SpinnerRegex *regexp.Regexp `json:"-"`
 }
 
-// claudeBottomAnchorRegex matches the horizontal rule (U+2500 × 20+) that
-// Claude Code renders between the conversation transcript and the input chrome.
-// Used by the silence watchdog (thrum-84xc) to bound the agent-output region.
-var claudeBottomAnchorRegex = regexp.MustCompile(`^─{20,}$`)
-
-// claudeSpinnerRegex matches Claude Code's animated thinking indicator.
-// Three observed forms:
-//   - Short form (<1m):  "✻ <verb> for <N>s"       — e.g. "✻ Churned for 17s"
-//   - Long form  (≥1m):  "✻ <verb> for <Nm Ns>"    — e.g. "✻ Baked for 1m 45s"
-//   - Dot form  (2.1.141+): "· <verb>…"             — e.g. "· Twisting…"
-//
-// ✻ = U+273B, · = U+00B7, … = U+2026. Present in the agent-output region
-// while a turn is in flight; the watchdog ignores these lines as chrome.
-// Uses \S+ instead of \w+ because some verbs contain non-ASCII characters
-// (e.g. "Sautéed"). The long-form branch is non-capturing so the regex stays
-// anchored at line end. thrum-8dl3, thrum-fyza.
-var claudeSpinnerRegex = regexp.MustCompile(`^(?:✻ \S+ for \d+(?:m \d+)?s|· \S+…)$`)
+// Claude per-runtime anchor regexes (claudeBottomAnchorRegex,
+// claudeSpinnerRegex) moved to runtime_anchors.go per spec §9.11.1 +
+// plan §Task 71 — single canonical location, consumed by the
+// BuiltinPresets["claude"] entry below via same-package reference.
 
 // BuiltinPresets contains the default presets for all known runtimes.
 var BuiltinPresets = map[string]RuntimePreset{
