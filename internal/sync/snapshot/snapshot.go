@@ -35,6 +35,14 @@ import (
 	"github.com/leonletto/thrum/internal/sync/state"
 )
 
+// WalkCounts holds the row/file counts from the most recent WalkAndWrite call.
+// Used by loop.go to populate the sync.commit telemetry event fields.
+type WalkCounts struct {
+	StateFiles  int // number of agent/bridge-group state files written
+	MessageRows int // number of messages-v2 rows appended
+	ReceiptRows int // number of receipts rows appended
+}
+
 // Walker reads local SQLite projection + events table since last walk and
 // writes the latest state to state files, messages-v2/, and receipts/.
 // Called before Triggers.SyncOnWrite fires commit-and-push.
@@ -47,6 +55,7 @@ type Walker struct {
 	daemonID      string
 	mu            gosync.Mutex
 	lastWalkAt    time.Time
+	lastCounts    WalkCounts // counts from the most recent walk; reset at each walk start
 }
 
 // NewWalker constructs a Walker.
@@ -87,6 +96,15 @@ func (w *Walker) GetLastWalkAt() time.Time {
 	return w.lastWalkAt
 }
 
+// LastCounts returns a snapshot copy of the counts from the most recent
+// WalkAndWrite call. Called by loop.doSync after CommitAndPush succeeds
+// to populate the sync.commit telemetry event fields.
+func (w *Walker) LastCounts() WalkCounts {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.lastCounts
+}
+
 // WalkAndWrite sweeps the events table for all events since lastWalkAt,
 // derives latest state per touched entity, and writes state files + message
 // rows + receipt rows before the caller fires commit-and-push.
@@ -106,6 +124,10 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 	// trigger channel, but the mutex is cheap defense-in-depth.
 	w.mu.Lock()
 	defer w.mu.Unlock()
+
+	// Reset per-walk counters so LastCounts() always reflects the most
+	// recent walk, not a cumulative total.
+	w.lastCounts = WalkCounts{}
 
 	// Query all events since lastWalkAt.
 	// Column names from schema: event_id, sequence, type, timestamp, origin_daemon, event_json
@@ -239,7 +261,6 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 	// ---------------------------------------------------------------------------
 
 	// 1. Agent state files.
-	// TODO E8 telemetry: slog.Info("sync.commit", ...) at the write/commit point.
 	for _, a := range agentActions {
 		snap, err := w.buildAgentSnapshot(ctx, a.agentID)
 		if err != nil {
@@ -257,6 +278,7 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 			}
 			return fmt.Errorf("snapshot: write agent state for %s: %w", a.agentID, writeErr)
 		}
+		w.lastCounts.StateFiles++
 	}
 
 	// 2. Bridge-group state files (write + delete).
@@ -269,6 +291,7 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 				}
 				return fmt.Errorf("snapshot: delete bridge group %s: %w", bg.groupID, err)
 			}
+			w.lastCounts.StateFiles++
 			continue
 		}
 		bgSnap, err := w.buildBridgeGroupSnapshot(ctx, bg.groupID, bg.payload)
@@ -281,6 +304,7 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 			}
 			return fmt.Errorf("snapshot: write bridge-group state for %s: %w", bg.groupID, writeErr)
 		}
+		w.lastCounts.StateFiles++
 	}
 
 	// 3. Message rows — append to messages-v2/<agentID>.jsonl.
@@ -305,6 +329,7 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 		if appendErr := w.msgWriter.AppendSnapshot(ctx, ma.agentID, *row); appendErr != nil {
 			return fmt.Errorf("snapshot: append message row for %s: %w", ma.msgID, appendErr)
 		}
+		w.lastCounts.MessageRows++
 	}
 
 	// 4. Receipt rows — append to receipts/<issuerID>.jsonl.
@@ -319,6 +344,7 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 		if appendErr := w.receiptWriter.AppendSnapshot(ctx, ra.issuerID, *row); appendErr != nil {
 			return fmt.Errorf("snapshot: append receipt row (%s, %s): %w", ra.issuerID, ra.messageID, appendErr)
 		}
+		w.lastCounts.ReceiptRows++
 	}
 
 	// All writes succeeded — advance lastWalkAt.

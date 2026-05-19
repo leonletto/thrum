@@ -3,12 +3,74 @@ package pending_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/leonletto/thrum/internal/sync/pending"
 )
+
+// ---------------------------------------------------------------------------
+// Telemetry test helpers
+// ---------------------------------------------------------------------------
+
+// capturingHandler records all slog.Record values emitted to it.
+type capturingHandler struct {
+	records []slog.Record
+	mu      sync.Mutex
+}
+
+func (h *capturingHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
+func (h *capturingHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r)
+	return nil
+}
+func (h *capturingHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *capturingHandler) WithGroup(string) slog.Handler      { return h }
+
+// recordsWithMessage returns all captured records whose Message equals msg.
+func (h *capturingHandler) recordsWithMessage(msg string) []slog.Record {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []slog.Record
+	for _, r := range h.records {
+		if r.Message == msg {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// attrValue returns the string value of a named attribute in a slog.Record,
+// or "" if not found.
+func attrValue(r slog.Record, key string) string {
+	var val string
+	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == key {
+			val = a.Value.String()
+			return false
+		}
+		return true
+	})
+	return val
+}
+
+// attrInt64 returns the int64 value of a named attribute in a slog.Record,
+// or -1 if not found.
+func attrInt64(r slog.Record, key string) int64 {
+	val := int64(-1)
+	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == key {
+			val = a.Value.Int64()
+			return false
+		}
+		return true
+	})
+	return val
+}
 
 // stubResolver is a test double for the Resolver interface.
 type stubResolver struct {
@@ -219,5 +281,107 @@ func TestPool_List_EmptyPool(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("expected empty list, got %d entries", len(got))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// E8 Telemetry tests
+// ---------------------------------------------------------------------------
+
+// TestPool_Add_Emits_PendingPoolAdded verifies that Pool.Add emits a
+// "pending_pool.added" slog.Info event with the correct message_id and
+// blocked_by fields. Also verifies no event fires when Add is idempotent.
+func TestPool_Add_Emits_PendingPoolAdded(t *testing.T) {
+	h := &capturingHandler{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	defer slog.SetDefault(prev)
+
+	p := pending.New()
+	o := makeOrphan("msg-tel-1", "tg:grp1", "agt:bar")
+	p.Add(o)
+
+	recs := h.recordsWithMessage("pending_pool.added")
+	if len(recs) != 1 {
+		t.Fatalf("expected 1 pending_pool.added record, got %d", len(recs))
+	}
+	r := recs[0]
+	if got := attrValue(r, "message_id"); got != "msg-tel-1" {
+		t.Errorf("message_id = %q, want %q", got, "msg-tel-1")
+	}
+	// blocked_by is a []string; slog renders it as a string attr value.
+	blocked := attrValue(r, "blocked_by")
+	if blocked == "" {
+		t.Error("blocked_by attr should be non-empty")
+	}
+
+	// Second Add of the same orphan must be a no-op (idempotent) — no new event.
+	p.Add(o)
+	recs2 := h.recordsWithMessage("pending_pool.added")
+	if len(recs2) != 1 {
+		t.Errorf("idempotent Add must not re-emit; got %d events total", len(recs2))
+	}
+}
+
+// TestPool_ResolveOnStateLand_Emits_PendingPoolResolved verifies that
+// "pending_pool.resolved" fires with the correct message_id and a non-negative
+// wait_ms when an orphan is successfully resolved.
+func TestPool_ResolveOnStateLand_Emits_PendingPoolResolved(t *testing.T) {
+	h := &capturingHandler{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	defer slog.SetDefault(prev)
+
+	p := pending.New()
+	o := pending.OrphanedMessage{
+		MessageID:  "msg-tel-2",
+		AuthorID:   "agt:author",
+		Recipients: []string{"agt:recipient"},
+		BlockedBy:  []string{"tg:foo"},
+		LandedAt:   time.Now(),
+	}
+	p.Add(o)
+
+	resolver := newStubResolver()
+	resolver.setResult("msg-tel-2", true, nil)
+
+	n := p.ResolveOnStateLand(context.Background(), []string{"tg:foo"}, resolver)
+	if n != 1 {
+		t.Fatalf("expected 1 resolved, got %d", n)
+	}
+
+	recs := h.recordsWithMessage("pending_pool.resolved")
+	if len(recs) != 1 {
+		t.Fatalf("expected 1 pending_pool.resolved record, got %d", len(recs))
+	}
+	r := recs[0]
+	if got := attrValue(r, "message_id"); got != "msg-tel-2" {
+		t.Errorf("message_id = %q, want %q", got, "msg-tel-2")
+	}
+	waitMS := attrInt64(r, "wait_ms")
+	if waitMS < 0 {
+		t.Errorf("wait_ms = %d, want >= 0", waitMS)
+	}
+}
+
+// TestPool_ResolveOnStateLand_NoEvent_WhenNotResolved verifies that
+// "pending_pool.resolved" does NOT fire when the resolver returns (false, nil).
+func TestPool_ResolveOnStateLand_NoEvent_WhenNotResolved(t *testing.T) {
+	h := &capturingHandler{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	defer slog.SetDefault(prev)
+
+	p := pending.New()
+	p.Add(makeOrphan("msg-tel-3", "tg:baz"))
+
+	resolver := newStubResolver()
+	resolver.setResult("msg-tel-3", false, nil)
+
+	p.ResolveOnStateLand(context.Background(), []string{"tg:baz"}, resolver)
+
+	recs := h.recordsWithMessage("pending_pool.resolved")
+	if len(recs) != 0 {
+		t.Errorf("expected 0 pending_pool.resolved events when resolver returns false, got %d", len(recs))
 	}
 }

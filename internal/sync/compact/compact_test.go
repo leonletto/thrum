@@ -6,9 +6,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +18,65 @@ import (
 	"github.com/leonletto/thrum/internal/sync/compact"
 	_ "modernc.org/sqlite"
 )
+
+// ---------------------------------------------------------------------------
+// Telemetry test helpers
+// ---------------------------------------------------------------------------
+
+// capturingHandler records all slog.Record values emitted to it.
+type capturingHandler struct {
+	records []slog.Record
+	mu      sync.Mutex
+}
+
+func (h *capturingHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
+func (h *capturingHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r)
+	return nil
+}
+func (h *capturingHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *capturingHandler) WithGroup(string) slog.Handler      { return h }
+
+// recordsWithMessage returns all captured records whose Message equals msg.
+func (h *capturingHandler) recordsWithMessage(msg string) []slog.Record {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []slog.Record
+	for _, r := range h.records {
+		if r.Message == msg {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// attrValue returns the string value of a named attribute in a slog.Record.
+func attrValue(r slog.Record, key string) string {
+	var val string
+	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == key {
+			val = a.Value.String()
+			return false
+		}
+		return true
+	})
+	return val
+}
+
+// attrInt64 returns the int64 value of a named attribute.
+func attrInt64(r slog.Record, key string) int64 {
+	val := int64(-1)
+	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == key {
+			val = a.Value.Int64()
+			return false
+		}
+		return true
+	})
+	return val
+}
 
 // openTestDB creates an in-memory SQLite database with an events table.
 func openTestDB(t *testing.T) *safedb.DB {
@@ -559,6 +620,211 @@ func TestCompactor_CompactMessageStateFile_BelowThresholdSkips(t *testing.T) {
 	postCount := countJSONLLines(t, filePath)
 	if postCount != 5 {
 		t.Errorf("row count changed: got %d, want 5", postCount)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// E8 Telemetry tests
+// ---------------------------------------------------------------------------
+
+// TestCompactor_EventsJournal_EmitsCompactionTrimmed verifies that
+// CompactEventsJournal emits a "compaction.trimmed" slog.Info event with
+// non-empty path and rows_removed > 0 when events are actually removed.
+func TestCompactor_EventsJournal_EmitsCompactionTrimmed(t *testing.T) {
+	h := &capturingHandler{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	defer slog.SetDefault(prev)
+
+	dir := t.TempDir()
+	thrumDir := filepath.Join(dir, ".thrum")
+	syncDir := filepath.Join(dir, "sync")
+	if err := os.MkdirAll(thrumDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().UTC()
+	// Write 10 events: 5 old (3 days ago, outside 2-day window), 5 recent.
+	var rows []map[string]string
+	var timestamps []time.Time
+	for i := 0; i < 5; i++ {
+		ts := now.Add(-3 * 24 * time.Hour).Add(time.Duration(i) * time.Second)
+		timestamps = append(timestamps, ts)
+		rows = append(rows, map[string]string{
+			"event_id":  fmt.Sprintf("old_%02d", i),
+			"timestamp": ts.Format(time.RFC3339Nano),
+		})
+	}
+	for i := 0; i < 5; i++ {
+		ts := now.Add(-1 * time.Hour).Add(time.Duration(i) * time.Second)
+		timestamps = append(timestamps, ts)
+		rows = append(rows, map[string]string{
+			"event_id":  fmt.Sprintf("new_%02d", i),
+			"timestamp": ts.Format(time.RFC3339Nano),
+		})
+	}
+	journalPath := filepath.Join(thrumDir, "events.jsonl")
+	writeJSONLFile(t, journalPath, rows)
+
+	db := openTestDB(t)
+	seedEventsTable(t, db, timestamps)
+
+	c := compact.New(thrumDir, syncDir, 2, 0)
+	ctx := context.Background()
+	removed, err := c.CompactEventsJournal(ctx, db)
+	if err != nil {
+		t.Fatalf("CompactEventsJournal: %v", err)
+	}
+	if removed <= 0 {
+		t.Fatalf("expected events to be removed, got %d", removed)
+	}
+
+	recs := h.recordsWithMessage("compaction.trimmed")
+	if len(recs) < 1 {
+		t.Fatalf("expected at least 1 compaction.trimmed event, got 0")
+	}
+	r := recs[0]
+	if got := attrValue(r, "path"); got == "" {
+		t.Error("path attr should be non-empty")
+	}
+	if got := attrInt64(r, "rows_removed"); got <= 0 {
+		t.Errorf("rows_removed = %d, want > 0", got)
+	}
+}
+
+// TestCompactor_EventsJournal_NoEvent_WhenNothingRemoved verifies that
+// "compaction.trimmed" is NOT emitted when zero rows are removed.
+func TestCompactor_EventsJournal_NoEvent_WhenNothingRemoved(t *testing.T) {
+	h := &capturingHandler{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	defer slog.SetDefault(prev)
+
+	dir := t.TempDir()
+	thrumDir := filepath.Join(dir, ".thrum")
+	syncDir := filepath.Join(dir, "sync")
+	if err := os.MkdirAll(thrumDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().UTC()
+	// All events are recent (within retention window).
+	var rows []map[string]string
+	var timestamps []time.Time
+	for i := 0; i < 5; i++ {
+		ts := now.Add(-1 * time.Hour).Add(time.Duration(i) * time.Second)
+		timestamps = append(timestamps, ts)
+		rows = append(rows, map[string]string{
+			"event_id":  fmt.Sprintf("new_%02d", i),
+			"timestamp": ts.Format(time.RFC3339Nano),
+		})
+	}
+	journalPath := filepath.Join(thrumDir, "events.jsonl")
+	writeJSONLFile(t, journalPath, rows)
+
+	db := openTestDB(t)
+	seedEventsTable(t, db, timestamps)
+
+	c := compact.New(thrumDir, syncDir, 2, 0)
+	ctx := context.Background()
+	removed, err := c.CompactEventsJournal(ctx, db)
+	if err != nil {
+		t.Fatalf("CompactEventsJournal: %v", err)
+	}
+	if removed != 0 {
+		t.Fatalf("expected 0 rows removed (all within window), got %d", removed)
+	}
+
+	recs := h.recordsWithMessage("compaction.trimmed")
+	if len(recs) != 0 {
+		t.Errorf("expected no compaction.trimmed event when nothing removed, got %d", len(recs))
+	}
+}
+
+// TestCompactor_MessageStateFile_EmitsCompactionTrimmed verifies that
+// CompactMessageStateFile emits "compaction.trimmed" with path, rows_removed > 0,
+// and bytes_saved >= 0 when dedup removes rows.
+func TestCompactor_MessageStateFile_EmitsCompactionTrimmed(t *testing.T) {
+	h := &capturingHandler{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	defer slog.SetDefault(prev)
+
+	dir := t.TempDir()
+	thrumDir := filepath.Join(dir, ".thrum")
+	syncDir := filepath.Join(dir, "sync")
+	agentID := "agt_tel_msg01"
+
+	// Write 10 rows with 5 duplicate message IDs (each appears twice).
+	var rows []map[string]string
+	for i := 0; i < 5; i++ {
+		msgID := fmt.Sprintf("msg_%02d", i)
+		rows = append(rows, map[string]string{"message_id": msgID, "body": "first"})
+		rows = append(rows, map[string]string{"message_id": msgID, "body": "latest"})
+	}
+	filePath := filepath.Join(syncDir, "messages-v2", agentID+".jsonl")
+	writeJSONLFile(t, filePath, rows)
+
+	c := compact.New(thrumDir, syncDir, 2, 0)
+	ctx := context.Background()
+	saved, err := c.CompactMessageStateFile(ctx, agentID)
+	if err != nil {
+		t.Fatalf("CompactMessageStateFile: %v", err)
+	}
+	if saved <= 0 {
+		t.Fatalf("expected positive bytes saved, got %d", saved)
+	}
+
+	recs := h.recordsWithMessage("compaction.trimmed")
+	if len(recs) < 1 {
+		t.Fatalf("expected at least 1 compaction.trimmed event, got 0")
+	}
+	r := recs[0]
+	if got := attrValue(r, "path"); got == "" {
+		t.Error("path attr should be non-empty")
+	}
+	if got := attrInt64(r, "rows_removed"); got <= 0 {
+		t.Errorf("rows_removed = %d, want > 0", got)
+	}
+	if got := attrInt64(r, "bytes_saved"); got < 0 {
+		t.Errorf("bytes_saved = %d, want >= 0", got)
+	}
+}
+
+// TestCompactor_MessageStateFile_NoEvent_BelowThreshold verifies that
+// "compaction.trimmed" is NOT emitted when the file is below the size threshold.
+func TestCompactor_MessageStateFile_NoEvent_BelowThreshold(t *testing.T) {
+	h := &capturingHandler{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	defer slog.SetDefault(prev)
+
+	dir := t.TempDir()
+	thrumDir := filepath.Join(dir, ".thrum")
+	syncDir := filepath.Join(dir, "sync")
+	agentID := "agt_tel_thresh01"
+
+	var rows []map[string]string
+	for i := 0; i < 5; i++ {
+		rows = append(rows, map[string]string{"message_id": fmt.Sprintf("msg_%02d", i), "body": "hello"})
+	}
+	filePath := filepath.Join(syncDir, "messages-v2", agentID+".jsonl")
+	writeJSONLFile(t, filePath, rows)
+
+	// Large threshold means the small file is always skipped.
+	c := compact.New(thrumDir, syncDir, 2, 1024)
+	ctx := context.Background()
+	saved, err := c.CompactMessageStateFile(ctx, agentID)
+	if err != nil {
+		t.Fatalf("CompactMessageStateFile: %v", err)
+	}
+	if saved != 0 {
+		t.Fatalf("expected 0 bytes saved (below threshold), got %d", saved)
+	}
+
+	recs := h.recordsWithMessage("compaction.trimmed")
+	if len(recs) != 0 {
+		t.Errorf("expected no compaction.trimmed event (below threshold), got %d", len(recs))
 	}
 }
 

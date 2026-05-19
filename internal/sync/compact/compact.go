@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -93,10 +94,12 @@ func (c *Compactor) CompactEventsJournal(ctx context.Context, db *safedb.DB) (in
 		return journalRemoved, fmt.Errorf("compact events table: %w", err)
 	}
 
-	// TODO E8 telemetry: slog.Info("compaction.trimmed",
-	//   "path", journalPath,
-	//   "rows_removed", journalRemoved,
-	//   "bytes_saved", 0)
+	if journalRemoved > 0 {
+		slog.Info("compaction.trimmed",
+			"path", journalPath,
+			"rows_removed", journalRemoved,
+			"bytes_saved", 0)
+	}
 
 	return journalRemoved, nil
 }
@@ -331,10 +334,13 @@ func (c *Compactor) compactJSONLByKey(
 		saved = 0 // should not happen; guard against edge cases
 	}
 
-	// TODO E8 telemetry: slog.Info("compaction.trimmed",
-	//   "path", path,
-	//   "rows_removed", len(lines)-len(keepSet),
-	//   "bytes_saved", saved)
+	rowsRemoved := len(lines) - len(keepSet)
+	if rowsRemoved > 0 {
+		slog.Info("compaction.trimmed",
+			"path", path,
+			"rows_removed", rowsRemoved,
+			"bytes_saved", saved)
+	}
 
 	return saved, nil
 }
