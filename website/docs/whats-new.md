@@ -16,14 +16,60 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 [CHANGELOG.md](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-## v0.10.3 — In Soak (RC)
+## v0.10.5 — In Soak (RC)
 
-v0.10.3 is currently a release candidate. The latest tag is `v0.10.3-rc.9`,
-which closes the cross-agent inbox read-race silent-loss class (watermark-gated
-`markRead` plus an honest "hidden by filter" count on inbox listings). See the
-[Beta Channel](beta-channel.md) guide for how to opt in. Stable promotion
-follows the standard 48-hour soak window once no P0/P1 bugs are open against the
-RC.
+v0.10.5 is currently a release candidate. The latest tag is `v0.10.5-rc.4`,
+which adds a `--from` filter to `thrum inbox`, a daemon-side backstop nudger
+that replaces the user-side cron pattern for stale-unread re-delivery, a
+`--delete-branch` flag for `thrum worktree teardown`, an expanded
+downgrade-guard error with actionable recovery hints + a new "Multi-Binary
+Worktree Footgun" section in CLAUDE.md, a self-echo regression fix for the tmux
+nudge dispatcher (`thrum-1zfk`), and a schema forward-port to v32 so the binary
+can open DBs previously touched by v0.11-substrate work (intentionally dead-end
+on v0.10.5 — no consumer code). The `/thrum:restart` skill now mandates a §1 Big
+picture section and follows an 11-section numbered structure so snapshots double
+as searchable session log entries.
+
+See the [Beta Channel](beta-channel.md) guide for how to opt in. Stable
+promotion follows the standard 48-hour soak window once no P0/P1 bugs are open
+against the RC.
+
+## v0.10.4 — 2026-05-16
+
+Fixes a P1 cross-worktree-identity-drift bug where mutating CLI commands
+(`thrum send`, `thrum reply`, `thrum inbox`, etc.) silently swallowed the guard
+error and proceeded — including silent wrong-author sends and destructive
+wrong-agent auto-marks-as-read. The bug surfaced in the wild on 2026-05-16 when
+an architect's review was attributed to the implementer it was reviewing.
+Standard same-cwd flow is unchanged.
+
+The cross-worktree guard response is now classified per verb on an orthogonal
+`cross_worktree_response` axis:
+
+- **Class A — Abortable**: mutating + identity-filtered commands (send, reply,
+  inbox, message edit/delete/mark-read/mark-unread, session start/end, agent
+  register, etc.) fail closed with exit 1 + a 4-line guard error.
+- **Class B — DiagnosticBanner**: identity-agnostic diagnostics (team, agent
+  list, version, daemon status, peer/sync/backup/telegram/tmux status) exit 0
+  with normal stdout and a one-line `⚠ Cross-worktree` banner on stderr —
+  supports cross-repo housekeeping flows.
+- **Class C — Whoami**: `thrum whoami` prepends the banner to BOTH stdout and
+  stderr so downstream tooling parsing stdout sees the warning inline. `--json`
+  mode correctly suppresses the stdout banner and routes equivalent context
+  through the slog bridge's hints array.
+
+A `TestEveryLeafHasCrossWorktreeResponse` CI gate fails the build if any new
+cobra leaf lacks a class annotation, preventing silent taxonomy drift.
+
+## v0.10.3 — 2026-05-16
+
+The v0.10.3 line shipped after RC soak. The headline change closes the
+cross-agent inbox read-race silent-loss class (watermark-gated `markRead` plus
+an honest "hidden by filter" count on inbox listings). The rc cycle also
+produced the v2 `/thrum:restart` skill with in-context-composed prose
+continuations writing directly to `.thrum/restart/<agent>.md`, a pre-launch
+readiness gate that polls pane stability instead of a hardcoded sleep, and a
+bundle of quieter fixes around env scoping, self-echo, and preamble framing.
 
 This release is largely about the runtime experience: codex gains the same
 first-class plugin treatment claude has had, fresh and restarted tmux panes no

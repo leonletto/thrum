@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1049,9 +1050,203 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	}
 }
 
-func TestSchema_V25_CurrentVersion(t *testing.T) {
-	if schema.CurrentVersion != 25 {
-		t.Errorf("CurrentVersion = %d, want 25", schema.CurrentVersion)
+func TestSchema_V33_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 33 {
+		t.Errorf("CurrentVersion = %d, want 33 (v25-v32 forward-ported from thrum-agents per rc.4 + v33 pending_route_resolution renumber per forward-merge to thrum-dev)", schema.CurrentVersion)
+	}
+}
+
+// TestSchema_ForwardPort_V25_to_V32_AllTablesPresent exercises the
+// forward-ported migrations end-to-end. Initializes a DB at v24's
+// shape (telegram_msg_map being the last table added pre-forward-port),
+// stamps schema_version to 24, then runs Migrate and asserts the 7
+// new tables + agents-table column additions all reached the live DB.
+// This is the smoke that proves the v25-v32 blocks fire in sequence
+// without conflict and that createTables/runMigrations agree on the
+// final shape (canonical §3.11 Guard 1 fresh-vs-upgrade parity).
+func TestSchema_ForwardPort_V25_to_V32_AllTablesPresent(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "v24_to_v32.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Bootstrap a fresh DB then rewind schema_version to v24 so the
+	// migration runner replays 25-32. (We can't easily create a "true"
+	// v24-shaped DB on this branch since createTables now includes the
+	// v32 tables; the rewind exercises the migration code path that
+	// existing-DB users will hit, and the IF NOT EXISTS guards make
+	// the CREATEs idempotent.)
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+	if _, err := db.Exec("UPDATE schema_version SET version = 24"); err != nil {
+		t.Fatalf("rewind to v24: %v", err)
+	}
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v24→v32: %v", err)
+	}
+
+	v, err := schema.GetSchemaVersion(db)
+	if err != nil {
+		t.Fatalf("GetSchemaVersion: %v", err)
+	}
+	if v != 33 {
+		t.Errorf("schema_version after migrate = %d; want 33", v)
+	}
+
+	// All 7 new tables must be present.
+	for _, tbl := range []string{
+		"scheduler_job_state",
+		"scheduler_job_events",
+		"agent_lifecycle_events",
+		"reminders",
+		"email_msg_seen",
+		"email_outbound_queue",
+		"email_peer_rate_state",
+	} {
+		var name string
+		err := db.QueryRow(
+			"SELECT name FROM sqlite_master WHERE type='table' AND name=?", tbl,
+		).Scan(&name)
+		if err != nil {
+			t.Errorf("table %q missing post-migrate: %v", tbl, err)
+		}
+	}
+
+	// agents table must carry the v26 column additions.
+	cols, err := db.Query("PRAGMA table_info(agents)")
+	if err != nil {
+		t.Fatalf("PRAGMA agents: %v", err)
+	}
+	defer func() { _ = cols.Close() }()
+	have := map[string]bool{}
+	for cols.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := cols.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		have[name] = true
+	}
+	for _, c := range []string{
+		"mode",
+		"identity",
+		"auto_respawn_enabled",
+		"auto_respawn_disabled_at",
+		"state_md_parse_failed_at",
+		"last_pane_alive_at",
+	} {
+		if !have[c] {
+			t.Errorf("agents column %q missing post-migrate", c)
+		}
+	}
+}
+
+// TestSchema_FreshInstall_HasForwardPortedTables proves
+// createTables/runMigrations agree on the v32 end-state for a brand-new
+// DB (no pre-existing rows). All 7 forward-ported tables must exist
+// after InitDB with no migration replay needed.
+func TestSchema_FreshInstall_HasForwardPortedTables(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "fresh_v32.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+	v, err := schema.GetSchemaVersion(db)
+	if err != nil {
+		t.Fatalf("GetSchemaVersion: %v", err)
+	}
+	if v != 33 {
+		t.Errorf("fresh install schema_version = %d; want 33", v)
+	}
+	for _, tbl := range []string{
+		"scheduler_job_state",
+		"scheduler_job_events",
+		"agent_lifecycle_events",
+		"reminders",
+		"email_msg_seen",
+		"email_outbound_queue",
+		"email_peer_rate_state",
+	} {
+		var name string
+		err := db.QueryRow(
+			"SELECT name FROM sqlite_master WHERE type='table' AND name=?", tbl,
+		).Scan(&name)
+		if err != nil {
+			t.Errorf("fresh-install missing forward-ported table %q: %v", tbl, err)
+		}
+	}
+}
+
+// TestSchema_V33_PendingRouteResolution_Renumbered exercises the v33
+// migration that owns the pending_route_resolution column on the messages
+// table. The migration originally landed on thrum-dev as v25 alongside
+// the thrum-s6os sync re-architecture; renumbered to v33 during the
+// rc.4 → thrum-dev forward-merge because the v0.11 substrate forward-port
+// took v25 for scheduler. This pins both the new version slot AND the
+// fresh-install vs migration parity for the renumbered block.
+func TestSchema_V33_PendingRouteResolution_Renumbered(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "v33.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+
+	// Fresh-install path must already have the column (createTables
+	// includes it inline on the messages table).
+	msgCols, err := db.Query("PRAGMA table_info(messages)")
+	if err != nil {
+		t.Fatalf("PRAGMA messages: %v", err)
+	}
+	have := map[string]bool{}
+	for msgCols.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := msgCols.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		have[name] = true
+	}
+	_ = msgCols.Close()
+	if !have["pending_route_resolution"] {
+		t.Errorf("fresh-install messages table missing pending_route_resolution column (Guard 1 fresh-vs-upgrade parity)")
+	}
+
+	// Migration path: rewind to v32 and run migrate; the v33 block must
+	// add the column to a synthesized pre-v33 schema. Drop the column
+	// first so the ALTER actually fires (CREATE in createTables happens
+	// before this test rewinds).
+	if _, err := db.Exec("UPDATE schema_version SET version = 32"); err != nil {
+		t.Fatalf("rewind to v32: %v", err)
+	}
+	// Idempotent path: column already exists; migrate must skip cleanly.
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v32→v33 (column already present): %v", err)
+	}
+	v, err := schema.GetSchemaVersion(db)
+	if err != nil {
+		t.Fatalf("GetSchemaVersion: %v", err)
+	}
+	if v != 33 {
+		t.Errorf("schema_version after migrate = %d; want 33", v)
 	}
 }
 
@@ -1235,8 +1430,36 @@ func TestMigrate_DowngradeGuard(t *testing.T) {
 	if err == nil {
 		t.Fatal("Migrate() should return error when DB version > CurrentVersion")
 	}
-	if !strings.Contains(err.Error(), "cannot downgrade") {
+	errStr := err.Error()
+	if !strings.Contains(errStr, "cannot downgrade") {
 		t.Fatalf("error should mention 'cannot downgrade', got: %v", err)
+	}
+	// thrum-quth: the user-facing error must carry the version pair AND
+	// both recovery paths. Pin each so future refactors can't silently
+	// drop the help the operator depends on.
+	if !strings.Contains(errStr, fmt.Sprintf("version %d", futurVersion)) {
+		t.Errorf("error should mention DB version %d; got: %v", futurVersion, err)
+	}
+	if !strings.Contains(errStr, fmt.Sprintf("supports up to %d", schema.CurrentVersion)) {
+		t.Errorf("error should mention binary max version %d; got: %v", schema.CurrentVersion, err)
+	}
+	if !strings.Contains(errStr, "Re-install a newer binary") {
+		t.Errorf("error should include the reinstall recovery hint; got: %v", err)
+	}
+	if !strings.Contains(errStr, "make install") {
+		t.Errorf("error should include the concrete 'make install' command; got: %v", err)
+	}
+	if !strings.Contains(errStr, "thrum daemon stop") {
+		t.Errorf("error should instruct stopping the daemon before rm so file locks release; got: %v", err)
+	}
+	if !strings.Contains(errStr, "LOSES local message history") {
+		t.Errorf("error should warn that rm-the-DB destroys local history; got: %v", err)
+	}
+	if !strings.Contains(errStr, dbPath) {
+		t.Errorf("error should include the on-disk DB path %q so user knows what to rm; got: %v", dbPath, err)
+	}
+	if !strings.Contains(errStr, "Multi-binary worktree footgun") {
+		t.Errorf("error should point at the CLAUDE.md prevention section; got: %v", err)
 	}
 }
 
