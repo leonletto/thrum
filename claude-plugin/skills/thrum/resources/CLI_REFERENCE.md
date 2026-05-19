@@ -62,6 +62,7 @@ thrum inbox                                    # Show inbox (auto-filtered to yo
 thrum inbox --unread                           # Only unread messages
 thrum inbox --all                              # All messages (no auto-filter)
 thrum inbox --mentions                         # Only messages mentioning you
+thrum inbox --from @agent                      # Filter to messages from a specific sender
 thrum inbox --scope type:value                 # Filter by scope
 thrum inbox --page 2 --page-size 20            # Pagination
 thrum inbox --limit N                          # Alias for --page-size
@@ -77,6 +78,7 @@ Flags:
 -a, --all           Show all messages (disable auto-filtering)
 --unread            Only unread messages (does not mark as read — safe to peek)
 --mentions          Only messages mentioning me
+--from string       Filter to messages from a specific sender (use @agent or agent)
 --scope string      Filter by scope (format: type:value)
 --page int          Page number (default 1)
 --page-size int     Results per page (default 10)
@@ -453,6 +455,7 @@ Flags:
 --module string         Pre-fill the wizard's module prompt
 --worktrees-root string Pre-fill the wizard's worktrees-root prompt (absolute path outside the repo)
 --roles string          Pre-fill the wizard's role-template choice: enhanced|default|skip
+--yes                   Auto-confirm any safety prompts (e.g. the v0.10.x → v0.11 .gitignore upgrade)
 ```
 
 The wizard's suggested default agent name is derived from the repo directory,
@@ -788,8 +791,9 @@ thrum worktree create <name> --detach          # Detached HEAD worktree
 thrum worktree create <name> \
   --name <agent> --role <role> --module <mod>  # Create worktree + register agent
 thrum worktree setup <name>                    # Alias for worktree create
-thrum worktree teardown <name>                 # Remove worktree and clean up artifacts
-thrum worktree list                            # List worktrees with agent info
+thrum worktree teardown <name>                       # Remove worktree, keep branch
+thrum worktree teardown <name> --delete-branch       # Also delete the worktree's branch
+thrum worktree list                                  # List worktrees with agent info
 ```
 
 `worktree create` / `worktree setup` flags:
@@ -802,7 +806,13 @@ thrum worktree list                            # List worktrees with agent info
 --module string       Agent module
 --intent string       Initial work intent description
 --runtime string      Runtime preset: claude, codex, cursor, gemini, opencode, auggie
---force               Overwrite existing runtime config files
+```
+
+`worktree teardown` flags:
+
+```text
+--delete-branch       Delete the worktree's branch after removing the worktree
+                      (branch stays by default)
 ```
 
 When `--name`, `--role`, and `--module` are all provided, a tmux session is

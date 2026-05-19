@@ -80,7 +80,7 @@ across worktrees and projects when missing.
 `/thrum:update-project` and edits to `.thrum/context/project_state.md` are
 coordinator-only actions. If you need to preserve session context before a
 restart or compaction, send a status message to the coordinator and wait — they
-update state on your behalf. Use `bd comments <task-id> add "<note>"` for urgent
+update state on your behalf. Use `bd comments add <task-id> "<note>"` for urgent
 task-scoped notes.
 
 ### Always pass an explicit `model:` parameter on every sub-agent spawn
@@ -100,12 +100,12 @@ discipline.
 
 ### Run thrum commands from your worktree, never from the main repo or another worktree
 
-Your worktree (`{{.RepoRoot}}` here) is your home — the `.thrum/` identity
-file lives here. Running thrum CLI from the main repo would pick up the
-coordinator's identity and route messages under the wrong sender. Same
-hazard if you `cd` into another agent's worktree. Always run from
-`{{.RepoRoot}}`, or anchor explicitly with `--repo {{.RepoRoot}}`. If a Bash
-command `cd`s outside your worktree, return to it before any thrum CLI call.
+Your worktree (`{{.RepoRoot}}` here) is your home — the `.thrum/` identity file
+lives here. Running thrum CLI from the main repo would pick up the coordinator's
+identity and route messages under the wrong sender. Same hazard if you `cd` into
+another agent's worktree. Always run from `{{.RepoRoot}}`, or anchor explicitly
+with `--repo {{.RepoRoot}}`. If a Bash command `cd`s outside your worktree,
+return to it before any thrum CLI call.
 
 ### Send to specific agent names, never to role names
 

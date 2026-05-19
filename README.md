@@ -112,8 +112,7 @@ You only need about 8 commands for daily use:
 
 Everything else — agent lifecycle, sessions, context management — is
 infrastructure that agents use programmatically. See the
-[CLI Reference](https://thrum.team/docs/cli.html) for the full
-list.
+[CLI Reference](https://thrum.team/docs/cli.html) for the full list.
 
 ## Agent Setup
 
@@ -138,10 +137,9 @@ claude plugin marketplace add https://github.com/leonletto/thrum
 claude plugin install thrum
 ```
 
-See
-[Claude Code Plugin](https://thrum.team/docs/claude-code-plugin.html).
-If the plugin is already installed, `thrum init --skills` will detect it and
-skip the install.
+See [Claude Code Plugin](https://thrum.team/docs/claude-code-plugin.html). If
+the plugin is already installed, `thrum init --skills` will detect it and skip
+the install.
 
 ### Any Agent via CLI
 
@@ -150,20 +148,19 @@ required — just call `thrum` from the command line.
 
 ## Documentation
 
-Full documentation:
-**[thrum.team](https://thrum.team)**
+Full documentation: **[thrum.team](https://thrum.team)**
 
 - [Overview](https://thrum.team/docs/overview.html) |
   [Quickstart](https://thrum.team/docs/quickstart.html) |
   [CLI Reference](https://thrum.team/docs/cli.html) |
   [Architecture](https://thrum.team/docs/architecture.html)
 - [Messaging](https://thrum.team/docs/messaging.html) |
-  [Agent Coordination](https://thrum.team/docs/agent-coordination.html)
-  | [Multi-Agent](https://thrum.team/docs/multi-agent.html) |
+  [Agent Coordination](https://thrum.team/docs/agent-coordination.html) |
+  [Multi-Agent](https://thrum.team/docs/multi-agent.html) |
   [Sync](https://thrum.team/docs/sync.html)
-- [Telegram Bridge](https://thrum.team/docs/telegram-bridge.html)
-  | [Tailscale Sync](https://thrum.team/docs/tailscale-sync.html)
-  | [Web UI](https://thrum.team/docs/web-ui.html)
+- [Telegram Bridge](https://thrum.team/docs/telegram-bridge.html) |
+  [Tailscale Sync](https://thrum.team/docs/tailscale-sync.html) |
+  [Web UI](https://thrum.team/docs/web-ui.html)
 
 ## License
 

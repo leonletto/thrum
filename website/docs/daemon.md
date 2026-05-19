@@ -415,6 +415,31 @@ Extracts git-derived work context from a worktree path:
 - `FilterStaleContexts(contexts, now)` - In-memory filter (same rules, for sync)
 - Runs at daemon startup and before sync
 
+### Backstop Nudger (v0.10.5+)
+
+The daemon runs a built-in backstop loop that re-emits delivery nudges for
+messages still unread after a delay. This replaces the user-side
+`scripts/thrum-inbox-poll.sh` cron pattern (deprecated in v0.10.5; the script
+has been removed from the runtime templates).
+
+- **Lives in:** `internal/daemon/backstop/`
+- **Behavior:** scans recipient spool dirs periodically; for stale unread
+  envelopes whose owning agent is still alive, re-fires the nudge through the
+  same dispatch path as a fresh `thrum send`. Spool envelopes survive the inbox
+  janitor so the backstop can find them.
+- **Why moved daemon-side:** the user-side cron was process-launched, race-
+  prone on shared tmux servers, and silently broken when an agent's env drifted.
+  The daemon-side version is single-source-of-truth and survives runtime
+  restarts.
+
+Existing installs with the old cron continue to function (the script is
+idempotent against the new path) but the cron is no longer recommended; the
+backstop is enabled by default in v0.10.5. Documentation that still references
+the cron watchdog pattern (notably
+[`agent-coordination.md`](agent-coordination.md) and
+[`agent-configs.md`](agent-configs.md)) will be rewritten to point at the daemon
+backstop in a follow-up doc pass.
+
 ## Observability
 
 ### `identity_guard_fire` Slog Event
