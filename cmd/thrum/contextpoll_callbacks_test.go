@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -36,6 +37,36 @@ func (f *fakeNudger) recordedCalls() []nudgeCall {
 	return out
 }
 
+// fakeRestartTrigger records every Restart call so tests can assert on the
+// recipient + reason text. ReturnErr lets tests cover the "trigger fails"
+// path (CR.4 T4.2 — OnFire must log + survive without panicking when the
+// underlying RestartSession returns an error).
+type fakeRestartTrigger struct {
+	mu        sync.Mutex
+	calls     []triggerCall
+	returnErr error
+}
+
+type triggerCall struct {
+	agentName string
+	reason    string
+}
+
+func (f *fakeRestartTrigger) Restart(_ context.Context, agentName, reason string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, triggerCall{agentName: agentName, reason: reason})
+	return f.returnErr
+}
+
+func (f *fakeRestartTrigger) recordedCalls() []triggerCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]triggerCall, len(f.calls))
+	copy(out, f.calls)
+	return out
+}
+
 // TestContextPollCallbacks_WarnBody covers thrum-6qmf.1.14 acceptance criteria
 // 1-3 (plan lines 549-551): the warn body contains the current percentage,
 // the "do NOT dispatch sub-agents" prohibition, and references the
@@ -43,7 +74,7 @@ func (f *fakeNudger) recordedCalls() []nudgeCall {
 func TestContextPollCallbacks_WarnBody(t *testing.T) {
 	cfg := config.RestartConfig{WarnThreshold: 70, AutoThreshold: 80}
 	nudger := &fakeNudger{}
-	onWarn, _, _ := buildContextPollCallbacks(cfg, nudger)
+	onWarn, _, _ := buildContextPollCallbacks(cfg, nudger, nil)
 
 	onWarn(context.Background(), "test_agent", contextpoll.ContextUsage{UsedPercentage: 72})
 
@@ -77,7 +108,7 @@ func TestContextPollCallbacks_WarnBody(t *testing.T) {
 func TestContextPollCallbacks_PreFireBody(t *testing.T) {
 	cfg := config.RestartConfig{}
 	nudger := &fakeNudger{}
-	_, onPreFire, _ := buildContextPollCallbacks(cfg, nudger)
+	_, onPreFire, _ := buildContextPollCallbacks(cfg, nudger, nil)
 
 	onPreFire(context.Background(), "test_agent", contextpoll.ContextUsage{UsedPercentage: 82})
 
@@ -102,7 +133,7 @@ func TestContextPollCallbacks_PreFireBody(t *testing.T) {
 func TestContextPollCallbacks_WarnFiresForDisabledAgent(t *testing.T) {
 	cfg := config.RestartConfig{AutoDisabledAgents: []string{"disabled_agent"}}
 	nudger := &fakeNudger{}
-	onWarn, _, _ := buildContextPollCallbacks(cfg, nudger)
+	onWarn, _, _ := buildContextPollCallbacks(cfg, nudger, nil)
 
 	onWarn(context.Background(), "disabled_agent", contextpoll.ContextUsage{UsedPercentage: 72})
 
@@ -119,7 +150,7 @@ func TestContextPollCallbacks_WarnFiresForDisabledAgent(t *testing.T) {
 func TestContextPollCallbacks_PreFireSkipsDisabledAgent(t *testing.T) {
 	cfg := config.RestartConfig{AutoDisabledAgents: []string{"disabled_agent"}}
 	nudger := &fakeNudger{}
-	_, onPreFire, _ := buildContextPollCallbacks(cfg, nudger)
+	_, onPreFire, _ := buildContextPollCallbacks(cfg, nudger, nil)
 
 	onPreFire(context.Background(), "disabled_agent", contextpoll.ContextUsage{UsedPercentage: 82})
 
@@ -135,7 +166,7 @@ func TestContextPollCallbacks_PreFireSkipsDisabledAgent(t *testing.T) {
 func TestContextPollCallbacks_PreFireFiresForEnabledAgent(t *testing.T) {
 	cfg := config.RestartConfig{AutoDisabledAgents: []string{"some_other_agent"}}
 	nudger := &fakeNudger{}
-	_, onPreFire, _ := buildContextPollCallbacks(cfg, nudger)
+	_, onPreFire, _ := buildContextPollCallbacks(cfg, nudger, nil)
 
 	onPreFire(context.Background(), "test_agent", contextpoll.ContextUsage{UsedPercentage: 82})
 
@@ -146,43 +177,84 @@ func TestContextPollCallbacks_PreFireFiresForEnabledAgent(t *testing.T) {
 
 // TestContextPollCallbacks_OnFireSkipsDisabledAgent covers thrum-6qmf.1.15
 // acceptance criterion 3 (plan line 569): force-fire does NOT fire for
-// disabled agents. The OnFire stub doesn't currently call sender — that
-// changes at CR.4 T4.3 (thrum-6qmf.1.18) when the real RestartTrigger lands
-// — so this test asserts the IsAutoDisabled short-circuit is in place by
-// the only available observable: the closure exits cleanly without panicking
-// AND a non-disabled call against the same factory closure does proceed to
-// the slog breadcrumb side of the branch. The companion test
-// TestContextPollCallbacks_OnFireDoesNotCallSender pins the stub semantics so
-// a future refactor that wires sender-from-OnFire (e.g. CR.4 T4.3) makes
-// this test fail visibly and the implementer has to update both the test
-// and the gate.
+// disabled agents. With CR.4 wired, this is now observable directly on
+// the RestartTrigger fake: no Restart calls recorded for disabled agents.
 func TestContextPollCallbacks_OnFireSkipsDisabledAgent(t *testing.T) {
 	cfg := config.RestartConfig{AutoDisabledAgents: []string{"disabled_agent"}}
 	nudger := &fakeNudger{}
-	_, _, onFire := buildContextPollCallbacks(cfg, nudger)
+	trigger := &fakeRestartTrigger{}
+	_, _, onFire := buildContextPollCallbacks(cfg, nudger, trigger)
 
-	// Should return without doing anything observable.
 	onFire(context.Background(), "disabled_agent", contextpoll.ContextUsage{UsedPercentage: 90})
 
 	if got := len(nudger.recordedCalls()); got != 0 {
 		t.Errorf("OnFire must NOT touch sender for disabled agent; got %d calls", got)
 	}
+	if got := len(trigger.recordedCalls()); got != 0 {
+		t.Errorf("OnFire must NOT call RestartTrigger for disabled agent; got %d calls", got)
+	}
 }
 
-// TestContextPollCallbacks_OnFireDoesNotCallSender pins the T2.3-shipped
-// OnFire stub semantics: it logs but does not invoke sender. When CR.4 T4.3
-// (thrum-6qmf.1.18) lands and OnFire calls the real RestartTrigger.Restart,
-// this test should be UPDATED to assert the trigger interaction rather than
-// the absence of sender activity — at that point the fake nudger is the
-// wrong harness and a RestartTrigger fake should be added instead.
-func TestContextPollCallbacks_OnFireDoesNotCallSender(t *testing.T) {
+// TestContextPollCallbacks_OnFireCallsRestartTrigger covers CR.4 T4.3
+// (thrum-6qmf.1.18) acceptance: OnFire invokes the configured
+// RestartTrigger.Restart on enabled agents with a reason that includes
+// the percentage at the time of fire.
+func TestContextPollCallbacks_OnFireCallsRestartTrigger(t *testing.T) {
 	cfg := config.RestartConfig{}
 	nudger := &fakeNudger{}
-	_, _, onFire := buildContextPollCallbacks(cfg, nudger)
+	trigger := &fakeRestartTrigger{}
+	_, _, onFire := buildContextPollCallbacks(cfg, nudger, trigger)
 
-	onFire(context.Background(), "test_agent", contextpoll.ContextUsage{UsedPercentage: 90})
+	onFire(context.Background(), "test_agent", contextpoll.ContextUsage{UsedPercentage: 88})
+
+	calls := trigger.recordedCalls()
+	if len(calls) != 1 {
+		t.Fatalf("OnFire should fire RestartTrigger once, got %d calls", len(calls))
+	}
+	if calls[0].agentName != "test_agent" {
+		t.Errorf("agentName = %q, want %q", calls[0].agentName, "test_agent")
+	}
+	if !strings.Contains(calls[0].reason, "88%") {
+		t.Errorf("reason missing percentage; got %q", calls[0].reason)
+	}
+	if !strings.Contains(calls[0].reason, "automatic context-threshold restart") {
+		t.Errorf("reason missing canonical phrase; got %q", calls[0].reason)
+	}
+}
+
+// TestContextPollCallbacks_OnFireSurvivesTriggerError pins the failure
+// path: if RestartTrigger.Restart returns an error, OnFire must NOT
+// panic, must NOT bubble the error up (there's no caller), and must NOT
+// re-fire on its own. The Poller's in-flight guard handles retry
+// suppression; the InFlightMaxWait backstop eventually re-arms the
+// callback.
+func TestContextPollCallbacks_OnFireSurvivesTriggerError(t *testing.T) {
+	cfg := config.RestartConfig{}
+	nudger := &fakeNudger{}
+	trigger := &fakeRestartTrigger{returnErr: errors.New("simulated restart failure")}
+	_, _, onFire := buildContextPollCallbacks(cfg, nudger, trigger)
+
+	// Should NOT panic.
+	onFire(context.Background(), "test_agent", contextpoll.ContextUsage{UsedPercentage: 88})
+
+	if got := len(trigger.recordedCalls()); got != 1 {
+		t.Errorf("OnFire must still call RestartTrigger even when it errors; got %d calls", got)
+	}
+}
+
+// TestContextPollCallbacks_OnFireNilTriggerStub pins the nil-trigger
+// fallback behavior: OnFire logs the stub breadcrumb and returns
+// cleanly. This branch exists for the tests above that build
+// callbacks with a nil trigger (warn/pre-fire only).
+func TestContextPollCallbacks_OnFireNilTriggerStub(t *testing.T) {
+	cfg := config.RestartConfig{}
+	nudger := &fakeNudger{}
+	_, _, onFire := buildContextPollCallbacks(cfg, nudger, nil)
+
+	// Should NOT panic; should NOT call sender.
+	onFire(context.Background(), "test_agent", contextpoll.ContextUsage{UsedPercentage: 88})
 
 	if got := len(nudger.recordedCalls()); got != 0 {
-		t.Errorf("T2.3 OnFire stub must not call sender (sender-call lands at CR.4 T4.3 via RestartTrigger); got %d calls", got)
+		t.Errorf("nil-trigger OnFire must not call sender; got %d calls", got)
 	}
 }

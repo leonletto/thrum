@@ -3,6 +3,8 @@ package contextpoll
 import (
 	"context"
 	"errors"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -234,6 +236,102 @@ func TestPoller_ParseError_NoCallback(t *testing.T) {
 
 	if warn.calls() != 0 {
 		t.Errorf("onWarn fired %d times on parser error, want 0", warn.calls())
+	}
+}
+
+// stubRestartTrigger records every Restart call. The integration test
+// at TestPoller_ForceFire_CallsRestartTrigger uses it to verify that
+// the OnFire closure (typically constructed in cmd/thrum's daemon-init
+// block) actually invokes the configured RestartTrigger on a
+// threshold crossing — verifying the Poller → OnFire →
+// RestartTrigger pipe end-to-end inside the contextpoll package's
+// test isolation.
+type stubRestartTrigger struct {
+	mu    sync.Mutex
+	calls []stubRestartTriggerCall
+}
+
+type stubRestartTriggerCall struct {
+	agentName string
+	reason    string
+}
+
+func (s *stubRestartTrigger) Restart(_ context.Context, agentName, reason string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls = append(s.calls, stubRestartTriggerCall{agentName: agentName, reason: reason})
+	return nil
+}
+
+func (s *stubRestartTrigger) callCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.calls)
+}
+
+// TestPoller_ForceFire_CallsRestartTrigger covers CR.4 T4.2
+// (thrum-6qmf.1.17) acceptance:
+//   - RestartTrigger.Restart called exactly once per fire event.
+//   - In-flight guard prevents re-fire while restart is in progress.
+//   - PostRestart correctly resets state for re-enrollment.
+//
+// The Poller does not own the RestartTrigger — cmd/thrum/main.go's
+// OnFire closure wires it. This test reproduces that wiring inline
+// (OnFire calls trigger.Restart with a synthesized reason) so the
+// full callback chain is exercised against a real Poller + stub
+// trigger combination, not relying on the daemon being up.
+func TestPoller_ForceFire_CallsRestartTrigger(t *testing.T) {
+	p := newTestPoller(t)
+	p.RegisterParser(usageAt(82))
+	trigger := &stubRestartTrigger{}
+	p.OnFire(func(ctx context.Context, name string, usage ContextUsage) {
+		_ = trigger.Restart(ctx, name, "automatic context-threshold restart at "+
+			strconv.Itoa(usage.UsedPercentage)+"%")
+	})
+	enrollOne(p, "agent-1")
+
+	// First poll arms the pre-fire timer.
+	p.pollOnce(context.Background())
+	if got := trigger.callCount(); got != 0 {
+		t.Fatalf("RestartTrigger fired prematurely after arming poll; got %d calls", got)
+	}
+
+	// PreFireWait elapses; the next poll fires OnFire which in turn
+	// invokes the trigger.
+	time.Sleep(60 * time.Millisecond)
+	p.pollOnce(context.Background())
+	if got := trigger.callCount(); got != 1 {
+		t.Fatalf("RestartTrigger fired %d times after PreFireWait, want 1", got)
+	}
+
+	// In-flight guard: subsequent polls at the same threshold must NOT
+	// fire RestartTrigger again. The Poller sets restartInFlight after
+	// the OnFire callback so the threshold engine ignores further
+	// crossings until PostRestart (or InFlightMaxWait) clears it.
+	p.pollOnce(context.Background())
+	p.pollOnce(context.Background())
+	if got := trigger.callCount(); got != 1 {
+		t.Errorf("RestartTrigger re-fired under in-flight guard; got %d calls, want 1", got)
+	}
+
+	// PostRestart resets state. Next-poll threshold crossing re-arms
+	// the pre-fire timer + re-fires after PreFireWait elapses.
+	p.PostRestart("agent-1")
+	p.pollOnce(context.Background()) // re-arm
+	time.Sleep(60 * time.Millisecond)
+	p.pollOnce(context.Background()) // re-fire
+	if got := trigger.callCount(); got != 2 {
+		t.Errorf("RestartTrigger should re-fire after PostRestart + threshold re-cross; got %d calls, want 2", got)
+	}
+
+	// Verify the reason payload carried the percentage and the
+	// canonical "automatic context-threshold restart" prefix.
+	last := trigger.calls[len(trigger.calls)-1]
+	if last.agentName != "agent-1" {
+		t.Errorf("agentName = %q, want %q", last.agentName, "agent-1")
+	}
+	if want := "82%"; !strings.Contains(last.reason, want) {
+		t.Errorf("reason missing percentage %q; got %q", want, last.reason)
 	}
 }
 
