@@ -148,6 +148,20 @@ type TeamMember struct {
 	// the request's AgentFilter matches this member; empty for the
 	// compact view.
 	Body string `json:"body,omitempty"`
+
+	// === CR.6 context-usage fields (thrum-6qmf.1.20) ===
+	//
+	// Populated by the daemon's TeamHandler.decorateWithContext from
+	// the contextpoll.Poller's cached usage. ContextKnown is the
+	// authoritative "do we have a reading?" flag — false means
+	// either no parser is registered for this runtime OR the agent
+	// hasn't been enrolled with the Poller (or hasn't produced a
+	// transcript yet). When false, FormatTeam renders "unknown" for
+	// the column; when true, FormatTeam renders "N% ctx" or "~N% ctx"
+	// per ContextApprox, with optional ⚠ / 🔥 tier suffixes.
+	ContextPct    int  `json:"context_pct,omitempty"`
+	ContextApprox bool `json:"context_approx,omitempty"`
+	ContextKnown  bool `json:"context_known,omitempty"`
 }
 
 // TeamUsageSummary is today's per-agent telemetry summary
@@ -164,6 +178,66 @@ type FileChange struct {
 	Additions    int    `json:"additions"`
 	Deletions    int    `json:"deletions"`
 	Status       string `json:"status"`
+}
+
+// Context-column display thresholds. Mirror the daemon defaults
+// (config.RestartConfig.{Warn,Auto}ThresholdValue) so the CLI's glyph
+// suffixes line up with the daemon's actual fire thresholds in the
+// common case. Operator-customized thresholds may make the glyph
+// boundaries drift by a few percent from the daemon's true fire
+// points; treat the glyph as informational, not authoritative.
+//
+// A v1.X amend candidate flagged for cr_spec: surface the daemon's
+// resolved thresholds in the team.list response so the CLI can pin
+// glyph rendering to whatever the operator configured. Outside the
+// CR.6 scope; tracked as cr_spec follow-up if it becomes load-bearing.
+const (
+	contextColumnWarnThreshold = 70
+	contextColumnAutoThreshold = 80
+)
+
+// contextColumnWarnGlyph is the suffix appended when ContextPct is at
+// or above the warn threshold. ⚠ matches plan §3.4 / brainstorm §Q8.
+const contextColumnWarnGlyph = "⚠"
+
+// contextColumnAutoGlyph is the suffix appended when ContextPct is at
+// or above the auto threshold. 🔥 was the implementer's pick at code
+// time per brainstorm §Q8 ("glyph TBD at implementation time"); it
+// visually escalates from the warn glyph and matches the plan §3.4
+// example. Code-time decision documented here so future implementers
+// don't relitigate.
+const contextColumnAutoGlyph = "🔥"
+
+// formatContextColumn renders the context-usage column for
+// FormatTeam. Layout per plan §3.4:
+//
+//	ContextKnown=false           → "unknown"
+//	approx=true,  pct<70          → "~N% ctx"
+//	approx=true,  70<=pct<80      → "~N% ctx ⚠"
+//	approx=true,  pct>=80         → "~N% ctx 🔥"
+//	approx=false, pct<70          → "N% ctx"
+//	approx=false, 70<=pct<80      → "N% ctx ⚠"
+//	approx=false, pct>=80         → "N% ctx 🔥"
+//
+// Exported via the CLI text renderer only; --json consumers read the
+// raw ContextPct/ContextApprox/ContextKnown fields directly.
+func formatContextColumn(pct int, approx, known bool) string {
+	if !known {
+		return "unknown"
+	}
+	prefix := ""
+	if approx {
+		prefix = "~"
+	}
+	base := fmt.Sprintf("%s%d%% ctx", prefix, pct)
+	switch {
+	case pct >= contextColumnAutoThreshold:
+		return base + " " + contextColumnAutoGlyph
+	case pct >= contextColumnWarnThreshold:
+		return base + " " + contextColumnWarnGlyph
+	default:
+		return base
+	}
 }
 
 // formatTeamReminders renders the per-agent reminders block for FormatTeam.
@@ -273,6 +347,10 @@ func FormatTeamExpanded(m *TeamMember) string {
 	if m.Runtime != "" {
 		fmt.Fprintf(&out, "Runtime:  %s\n", m.Runtime)
 	}
+	// Context: CR.6 / thrum-6qmf.1.21. Same renderer as the compact
+	// view — pinned shape so --json consumers parse a single format
+	// regardless of single-agent vs. team listing.
+	fmt.Fprintf(&out, "Context:  %s\n", formatContextColumn(m.ContextPct, m.ContextApprox, m.ContextKnown))
 	if m.WorktreePath != "" {
 		fmt.Fprintf(&out, "Worktree: %s\n", filepath.Base(m.WorktreePath))
 	}
@@ -416,6 +494,13 @@ func FormatTeam(resp *TeamListResponse) string {
 		if m.Runtime != "" {
 			fmt.Fprintf(&out, "Runtime:  %s\n", m.Runtime)
 		}
+
+		// Context: CR.6 / thrum-6qmf.1.21. Renders the cached
+		// context-usage percentage with per-tier glyph suffixes.
+		// ContextKnown distinguishes "no measurement" (e.g. parser
+		// not registered for this runtime or agent not enrolled)
+		// from a meaningful 0% reading on a fresh session.
+		fmt.Fprintf(&out, "Context:  %s\n", formatContextColumn(m.ContextPct, m.ContextApprox, m.ContextKnown))
 
 		// Worktree and hostname as separate fields
 		if m.WorktreePath != "" {

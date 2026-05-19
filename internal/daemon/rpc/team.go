@@ -190,6 +190,29 @@ type TeamMember struct {
 	// so we don't run it for the full team listing). Empty for the
 	// compact view.
 	Body string `json:"body,omitempty"`
+
+	// --- CR.6 context-usage fields (thrum-6qmf.1.20) ---
+	//
+	// Populated by decorateWithContext from the contextpoll.Poller's
+	// cached usage. Wire shape per plan §CR.6:
+	//
+	//   ContextKnown=false (parser not registered for this runtime,
+	//                       or agent not enrolled with the Poller):
+	//                       CLI renders "unknown"; ContextPct +
+	//                       ContextApprox omitted from JSON.
+	//   ContextKnown=true,  ContextApprox=false: direct cumulative
+	//                       count (Claude, Codex). CLI: "N% ctx".
+	//   ContextKnown=true,  ContextApprox=true: reconstruction-based
+	//                       (OpenCode). CLI: "~N% ctx".
+	//
+	// Above the warn threshold the CLI suffixes a tier glyph (⚠ or
+	// 🔥); the warn/auto cutoffs come from cfg.Restart.* on the
+	// renderer side, NOT carried on the TeamMember — keeping the
+	// per-row payload small.
+
+	ContextPct    int  `json:"context_pct,omitempty"`
+	ContextApprox bool `json:"context_approx,omitempty"`
+	ContextKnown  bool `json:"context_known,omitempty"`
 }
 
 // TeamUsageSummary is today's per-agent telemetry summary from the
@@ -499,6 +522,15 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 	// see the new fields stay at zero values.
 	members = h.decorateWithLifecycle(ctx, members)
 
+	// CR.6 T6.1 (thrum-6qmf.1.20): decorate with cached context-usage
+	// readings from the contextpoll.Poller. nil-safe — pre-v0.11 daemons
+	// or tests that didn't call SetContextProvider leave the three new
+	// fields at their zero values, which the CLI renders as "unknown".
+	// Runs alongside the other decorators (outside the state lock); the
+	// poller's ContextUsageFor is a cheap in-memory map lookup behind
+	// its own mutex, no SQL/IO.
+	members = h.decorateWithContext(members)
+
 	// E6.8 .89 single-agent filter: when the request scopes to one
 	// agent (`thrum team @<name>`), keep that member only and
 	// populate Body via the §7.6 fallback chain. Filtering happens
@@ -514,6 +546,39 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 	}
 
 	return &TeamListResponse{Members: members, SharedMessages: sharedPtr}, nil
+}
+
+// decorateWithContext populates each TeamMember's
+// ContextPct/ContextApprox/ContextKnown from the wired ContextProvider
+// (typically a *contextpoll.Poller from cmd/thrum/main.go). The lookup
+// is keyed on AgentID — same key the Poller uses on Enroll/Unenroll.
+//
+// nil-safe: when the handler was constructed (or test-injected) without
+// SetContextProvider, the new fields stay at their zero values and the
+// CLI renders the column as "unknown". This branch is the hot path for
+// pre-v0.11 daemons and for the many test fixtures that don't care
+// about context-poll integration.
+//
+// Per-member: when the provider has no cached usage for an agent (no
+// parser matched its runtime, no Enroll happened, parse error mid-cycle,
+// etc.), ContextKnown stays false. The renderer treats false as the
+// neutral "I don't know" state rather than confidently displaying 0% —
+// a 0% reading with ContextKnown=true is meaningful (fresh session),
+// distinct from "we never measured".
+func (h *TeamHandler) decorateWithContext(members []TeamMember) []TeamMember {
+	if h.contextProvider == nil {
+		return members
+	}
+	for i := range members {
+		usage, ok := h.contextProvider.ContextUsageFor(members[i].AgentID)
+		if !ok {
+			continue
+		}
+		members[i].ContextPct = usage.UsedPercentage
+		members[i].ContextApprox = usage.Approximate
+		members[i].ContextKnown = true
+	}
+	return members
 }
 
 // filterMembersByAgent returns a one-element slice containing the
