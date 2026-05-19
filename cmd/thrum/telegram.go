@@ -17,7 +17,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:9493-9502
 // Destination: telegram.go:23-32
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func telegramCmd() *cobra.Command {
@@ -34,7 +34,7 @@ func telegramCmd() *cobra.Command {
 // ORIGIN[thrum-8kxh]: moved from main.go:9504-9544
 // Destination: telegram.go:40-80
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func telegramConfigureCmd() *cobra.Command {
@@ -82,7 +82,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:9546-9664
 // Destination: telegram.go:88-206
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func runTelegramConfigure(token, target, userID string, skipConfirm bool, allowFrom, chatID int64, pairTimeout time.Duration, skipPair bool) error {
@@ -208,7 +208,7 @@ func runTelegramConfigure(token, target, userID string, skipConfirm bool, allowF
 // ORIGIN[thrum-8kxh]: moved from main.go:9666-9674
 // Destination: telegram.go:214-222
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func telegramStatusCmd() *cobra.Command {
@@ -224,7 +224,7 @@ func telegramStatusCmd() *cobra.Command {
 // ORIGIN[thrum-8kxh]: moved from main.go:9676-9746
 // Destination: telegram.go:230-300
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func runTelegramStatus() error {
@@ -302,7 +302,7 @@ func runTelegramStatus() error {
 // ORIGIN[thrum-8kxh]: moved from main.go:9748-9771
 // Destination: telegram.go:308-331
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func telegramPairCmd() *cobra.Command {
@@ -333,7 +333,7 @@ The daemon must be running with a configured Telegram token.`,
 // ORIGIN[thrum-8kxh]: moved from main.go:9773-9834
 // Destination: telegram.go:339-400
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func runTelegramPair(pairTimeout time.Duration, autoAccept bool) error {
@@ -402,7 +402,7 @@ func runTelegramPair(pairTimeout time.Duration, autoAccept bool) error {
 // ORIGIN[thrum-8kxh]: moved from main.go:9836-9854
 // Destination: telegram.go:408-426
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func isValidBotToken(token string) bool {
@@ -428,7 +428,7 @@ func isValidBotToken(token string) bool {
 // ORIGIN[thrum-8kxh]: moved from main.go:9856-9861
 // Destination: telegram.go:434-439
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func maskToken(token string) string {
@@ -441,7 +441,7 @@ func maskToken(token string) string {
 // ORIGIN[thrum-8kxh]: moved from main.go:9863-9874
 // Destination: telegram.go:447-458
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: c1143d7462
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func detectGitUser() string {

@@ -18,7 +18,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:8901-8952
 // Destination: backup.go:24-75
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 56560885ec
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func backupCmd() *cobra.Command {
@@ -77,7 +77,7 @@ func backupCmd() *cobra.Command {
 // ORIGIN[thrum-8kxh]: moved from main.go:8954-8999
 // Destination: backup.go:83-128
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 56560885ec
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func scheduleCmd() *cobra.Command {
@@ -130,7 +130,7 @@ Use 'thrum backup plugin add' to manage plugins via CLI.`,
 // ORIGIN[thrum-8kxh]: moved from main.go:9001-9070
 // Destination: backup.go:136-205
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 56560885ec
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func runBackupSchedule(args []string, dirOverride string) error {
@@ -207,7 +207,7 @@ func runBackupSchedule(args []string, dirOverride string) error {
 // ORIGIN[thrum-8kxh]: moved from main.go:9072-9136
 // Destination: backup.go:213-277
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 56560885ec
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func runBackupCreate(dirOverride string) error {
@@ -279,7 +279,7 @@ func runBackupCreate(dirOverride string) error {
 // ORIGIN[thrum-8kxh]: moved from main.go:9138-9215
 // Destination: backup.go:285-362
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 56560885ec
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func runBackupStatus(dirOverride string) error {
@@ -364,7 +364,7 @@ func runBackupStatus(dirOverride string) error {
 // ORIGIN[thrum-8kxh]: moved from main.go:9217-9255
 // Destination: backup.go:370-408
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 56560885ec
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func runBackupConfig() error {
@@ -410,7 +410,7 @@ func runBackupConfig() error {
 // ORIGIN[thrum-8kxh]: moved from main.go:9257-9348
 // Destination: backup.go:416-507
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 56560885ec
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func runBackupRestore(dirOverride, archivePath string, skipConfirm bool) error {

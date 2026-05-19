@@ -11,7 +11,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:5465-5515
 // Destination: presence.go:17-67
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 8e856b779d
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func overviewCmd() *cobra.Command {
@@ -69,7 +69,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:5517-5648
 // Destination: presence.go:75-206
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 8e856b779d
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func teamCmd() *cobra.Command {
@@ -208,7 +208,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:5656-5679
 // Destination: presence.go:220-243
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 8e856b779d
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 // probeAgentListFiles calls agent.listFiles for the target agent and
@@ -245,7 +245,7 @@ func probeAgentListFiles(client *cli.Client, agentName string) ([]string, bool, 
 // ORIGIN[thrum-8kxh]: moved from main.go:5681-5718
 // Destination: presence.go:251-288
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 8e856b779d
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func whoHasCmd() *cobra.Command {
@@ -290,7 +290,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:5720-5769
 // Destination: presence.go:296-345
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 8e856b779d
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func pingCmd() *cobra.Command {

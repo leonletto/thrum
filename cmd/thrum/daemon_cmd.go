@@ -12,7 +12,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:1615-1720
 // Destination: daemon_cmd.go:18-123
 // Tests: cmd/thrum/main_test.go (indirect via Execute()); cmd/thrum/daemon_bootstrap_test.go (sibling, unaffected)
-// Commit: <pending>
+// Commit: 69a0f569a9
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func daemonCmd() *cobra.Command {
@@ -125,7 +125,7 @@ func daemonCmd() *cobra.Command {
 // ORIGIN[thrum-8kxh]: moved from main.go:1722-1758
 // Destination: daemon_cmd.go:131-167
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 69a0f569a9
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func daemonLogsCmd() *cobra.Command {
@@ -169,7 +169,7 @@ they are written. Use --since to filter by timestamp (e.g. "1h", "7d",
 // ORIGIN[thrum-8kxh]: moved from main.go:1760-1769
 // Destination: daemon_cmd.go:175-184
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 69a0f569a9
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func daemonRunCmd(flagLocal *bool, flagForce *bool) *cobra.Command {

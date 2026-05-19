@@ -13,7 +13,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:9350-9396
 // Destination: plugin.go:19-65
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 184cf28e7f
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func pluginCmd() *cobra.Command {
@@ -67,7 +67,7 @@ func pluginCmd() *cobra.Command {
 // ORIGIN[thrum-8kxh]: moved from main.go:9398-9435
 // Destination: plugin.go:73-110
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 184cf28e7f
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func runPluginAdd(name, command string, includes []string, preset string) error {
@@ -112,7 +112,7 @@ func runPluginAdd(name, command string, includes []string, preset string) error 
 // ORIGIN[thrum-8kxh]: moved from main.go:9437-9466
 // Destination: plugin.go:118-147
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 184cf28e7f
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func runPluginList() error {
@@ -149,7 +149,7 @@ func runPluginList() error {
 // ORIGIN[thrum-8kxh]: moved from main.go:9468-9489
 // Destination: plugin.go:155-176
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 184cf28e7f
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func runPluginRemove(name string) error {

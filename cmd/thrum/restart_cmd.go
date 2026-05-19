@@ -15,7 +15,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:9876-9884
 // Destination: restart_cmd.go:21-29
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: f516ec027e
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func restartCmd() *cobra.Command {
@@ -31,7 +31,7 @@ func restartCmd() *cobra.Command {
 // ORIGIN[thrum-8kxh]: moved from main.go:9888-10062
 // Destination: restart_cmd.go:39-213
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: f516ec027e
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 // restartSnapshotSubcmds returns the save, restore, and check subcommands for

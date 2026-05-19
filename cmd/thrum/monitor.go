@@ -13,7 +13,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:2123-2329
 // Destination: monitor.go:19-225
 // Tests: cmd/thrum/main_test.go (indirect via Execute()); internal/daemon/rpc/monitor_trust_boundary_test.go (Phase 3 hazard — RPC handlers still in runDaemon, unaffected by this Phase 1 CLI-surface move)
-// Commit: <pending>
+// Commit: 4217e1fc89
 // Phase: 1
 // Remove this ORIGIN marker once refactor verified green.
 func monitorCmd() *cobra.Command {
