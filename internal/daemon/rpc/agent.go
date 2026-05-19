@@ -226,12 +226,23 @@ type AgentWorkContext struct {
 
 // AgentHandler handles agent-related RPC methods.
 type AgentHandler struct {
-	state *state.State
+	state          *state.State
+	lifecycleStore state.AgentLifecycleStore // optional; nil → ack-RPCs skip lifecycle Append (matches TeamHandler injection pattern)
 }
 
 // NewAgentHandler creates a new agent handler.
 func NewAgentHandler(s *state.State) *AgentHandler {
 	return &AgentHandler{state: s}
+}
+
+// SetLifecycleStore wires the agent_lifecycle_events writer used by the
+// operator-ack RPCs (agent.ack_respawn_alert, future ack_state_corruption)
+// to append cleared-events after a successful clear. Optional; if unset,
+// the ack RPCs still mutate the registry but skip the Append (production
+// wiring in cmd/thrum/main.go always sets it — same setter shape as
+// TeamHandler.SetLifecycleStore).
+func (h *AgentHandler) SetLifecycleStore(store state.AgentLifecycleStore) {
+	h.lifecycleStore = store
 }
 
 // HandleRegister handles the agent.register RPC method.
@@ -1634,4 +1645,87 @@ func (h *AgentHandler) getWorktreeName() string {
 		}
 	}
 	return ""
+}
+
+// AckRespawnAlertRequest is the input to agent.ack_respawn_alert (spec
+// §5.1 + §9.12). Operator-initiated clear of the auto-respawn loop-guard
+// trip marker for the named agent.
+type AckRespawnAlertRequest struct {
+	AgentName string `json:"agent_name"`
+}
+
+// AckRespawnAlertResponse is the output of agent.ack_respawn_alert.
+// Cleared:false signals the no-op idempotent path (agent existed but had
+// no disabled-at to clear) — exit 0, not an error condition. When
+// Cleared:true, PriorDisabledAt carries the timestamp of the cleared trip
+// so operators can correlate against the lifecycle journal.
+type AckRespawnAlertResponse struct {
+	AgentName       string     `json:"agent_name"`
+	Cleared         bool       `json:"cleared"`
+	PriorDisabledAt *time.Time `json:"prior_disabled_at,omitempty"`
+}
+
+// HandleAckRespawnAlert handles the agent.ack_respawn_alert RPC method
+// (B-B1 E6.11 Task 52; spec §9.12.1 / plan §3622-3635).
+//
+// Behavior:
+//   - Unknown agent → registry.ErrAgentNotFound surfaces wrapped (spec
+//     §5.1 "Refuses when unknown agent_name").
+//   - AutoRespawnDisabledAt == nil → no-op, returns {Cleared: false},
+//     no lifecycle event appended (spec §9.12.3 idempotent).
+//   - AutoRespawnDisabledAt set → clears via registry, appends
+//     EventRespawnAckCleared via lifecycleStore, returns {Cleared: true,
+//     PriorDisabledAt: <captured>}.
+//
+// Auth: matches agent.delete pattern — anonymous callers are rejected at
+// the server.handleConnection middleware (this method is intentionally
+// absent from anonymousAllowedMethods at server.go). Spec §9.12.6 also
+// requires "agents-without-operator-role rejected"; v0.11 lacks role-
+// discrimination plumbing on ResolvedIdentity, so the literal "operator
+// role" check reduces to "anonymous rejected" via the middleware gate,
+// matching what agent.delete already does. Tightening to a true role-
+// based gate is a follow-up when role plumbing lands on peercred.
+func (h *AgentHandler) HandleAckRespawnAlert(ctx context.Context, params json.RawMessage) (any, error) {
+	var req AckRespawnAlertRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+	if req.AgentName == "" {
+		return nil, errors.New("agent_name is required")
+	}
+
+	reg := agent.NewSQLiteRegistry(h.state.DB())
+	agentRow, err := reg.Lookup(ctx, req.AgentName)
+	if err != nil {
+		return nil, err // wraps ErrAgentNotFound for unknown; pass through any DB error
+	}
+
+	if agentRow.AutoRespawnDisabledAt == nil {
+		// Do NOT append a lifecycle event on the no-op path — would
+		// pollute the journal with non-state-change rows.
+		return &AckRespawnAlertResponse{AgentName: req.AgentName, Cleared: false}, nil
+	}
+
+	priorAt := *agentRow.AutoRespawnDisabledAt
+	if err := reg.ClearAutoRespawnDisabledAt(ctx, req.AgentName); err != nil {
+		return nil, fmt.Errorf("clear auto_respawn_disabled_at for %s: %w", req.AgentName, err)
+	}
+
+	if h.lifecycleStore != nil {
+		// Best-effort: clear is already committed; log, don't abort.
+		if _, appendErr := h.lifecycleStore.Append(ctx, state.AgentLifecycleEvent{
+			AgentName: req.AgentName,
+			EventKind: state.EventRespawnAckCleared,
+			EventTime: time.Now().UTC(),
+		}); appendErr != nil {
+			slog.Warn("ack_respawn_alert: lifecycle append failed",
+				"agent", req.AgentName, "err", appendErr)
+		}
+	}
+
+	return &AckRespawnAlertResponse{
+		AgentName:       req.AgentName,
+		Cleared:         true,
+		PriorDisabledAt: &priorAt,
+	}, nil
 }

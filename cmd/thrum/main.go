@@ -6329,6 +6329,11 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 
 	// Agent management
 	agentHandler := rpc.NewAgentHandler(st)
+	// B-B1 E6.11 Task 52: wire the agent_lifecycle_events store so
+	// agent.ack_respawn_alert can append respawn_ack_cleared events.
+	// Same setter-injection pattern as teamHandler.SetLifecycleStore
+	// (Migration 27 table always present post-B-B1).
+	agentHandler.SetLifecycleStore(state.NewAgentLifecycleStore(st.DB()))
 	server.RegisterHandler("agent.register", agentHandler.HandleRegister)
 	server.RegisterHandler("agent.list", agentHandler.HandleList)
 	server.RegisterHandler("agent.whoami", agentHandler.HandleWhoami)
@@ -6336,6 +6341,7 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	server.RegisterHandler("agent.delete", agentHandler.HandleDelete)
 	server.RegisterHandler("agent.cleanup", agentHandler.HandleCleanup)
 	server.RegisterHandler("agent.set-status", agentHandler.HandleSetAgentStatus)
+	server.RegisterHandler("agent.ack_respawn_alert", agentHandler.HandleAckRespawnAlert)
 
 	// B-B1 E6.2 Task 26: agent.mark_state_corruption RPC for the
 	// /thrum:recover-agent-state skill flow per spec §6.5. Router is
