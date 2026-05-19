@@ -8132,14 +8132,15 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	ctxPoller.OnPreFire(onPreFire)
 	ctxPoller.OnFire(onFire)
 	// Register per-runtime parsers. Order is first-Matches-wins — parsers
-	// must have non-overlapping first-line anchors. ClaudeParserV2x keys on
-	// any non-empty top-level "type" field; CodexParserV1 keys on
-	// type=="session_meta" + payload.originator=="codex_cli_rs". Codex is
-	// registered first so its more-specific anchor wins on a Codex
-	// transcript even though Claude's would also match the bare "type"
-	// presence. CR.8 (.24) will register OpenCodeParserV1 here too —
-	// OpenCode keys on the SQLite magic in the first 16 bytes, so it
-	// doesn't conflict with either JSONL anchor.
+	// must have non-overlapping first-line anchors. OpenCodeParserV1 keys
+	// on the SQLite magic in the first 16 bytes, CodexParserV1 keys on
+	// type=="session_meta" + payload.originator=="codex_cli_rs", and
+	// ClaudeParserV2x keys on any non-empty top-level "type" field. The
+	// more-specific anchors are registered first so they win when both
+	// would match — Claude's bare "type" presence would also match a
+	// Codex session_meta line, so Codex must come before Claude. OpenCode
+	// is binary (SQLite) and disjoint from both JSONL anchors.
+	ctxPoller.RegisterParser(contextpoll.OpenCodeParserV1{})
 	ctxPoller.RegisterParser(contextpoll.CodexParserV1{})
 	ctxPoller.RegisterParser(contextpoll.ClaudeParserV2x{})
 

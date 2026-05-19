@@ -1,39 +1,239 @@
-// OpenCode transcript discovery (CR.8 / thrum-6qmf.1.23)
+// OpenCode transcript parser (CR.8 / thrum-6qmf.1.24).
 //
-// Status: PATH FOUND, FORMAT FULLY READABLE, BUT ARCHITECTURAL FOLLOW-UP
-// REQUIRED. OpenCode does NOT persist transcripts as JSONL files. It uses
-// a per-user SQLite database with a JSON-blob column. The current
-// contextpoll.Parser interface — `Matches(path string) bool` +
-// `Parse(path string) (ContextUsage, error)` — assumes the parser opens
-// `path` as a regular file and reads it linearly. SQLite parsing breaks
-// that contract.
+// Full transcript-path discovery notes from T8.1 / thrum-6qmf.1.23 (original
+// commit e383276f46) are preserved below the implementation. Summary:
 //
-// Two viable resolutions:
+//   Path:        $HOME/.local/share/opencode/opencode.db (SQLite + WAL)
+//   Table:       message(id, session_id, time_created, time_updated, data TEXT)
+//   message.data: JSON blob with role, tokens.{total,input,output,reasoning,
+//                cache.{read,write}}, modelID, providerID, ...
+//   Approximate: TRUE (reconstruction from per-message tokens + model-name
+//                lookup that may fall back to default for unknown models).
 //
-//   A) **Treat the DB file as the "path" and gain a sql.DB dependency
-//      inside the parser.** Smallest change to the wiring (the
-//      enrollment loop just resolves the OpenCode DB path instead of a
-//      JSONL path). Cost: contextpoll's existing zero-external-dep
-//      character is broken — the package picks up `database/sql` +
-//      mattn/go-sqlite3 transitively. Concurrent-access correctness is
-//      another concern: opencode itself has the DB open with WAL mode
-//      (opencode.db-shm + opencode.db-wal present); a daemon reader
-//      that mishandles the lock could trip OpenCode. Mitigated by
-//      `?mode=ro&_journal=WAL` URI but the failure mode is subtle.
+// Path-A (Leon-decision, v1.4 erratum thrum-6qmf.1.31): SQLite reader lives
+// inside contextpoll. Concurrent-access concern with the live OpenCode
+// writer mitigated by opening read-only with WAL semantics
+// (file:<path>?mode=ro). The OpenCode writer keeps opencode.db in WAL
+// mode (opencode.db-shm + opencode.db-wal companion files); a read-only
+// reader observes the WAL without disturbing it.
 //
-//   B) **Skip OpenCode for v0.11 and fall back to manual
-//      `/thrum:restart` discipline.** Document the path + format here
-//      (so a future implementer can pick this up cheaply) and register
-//      no parser. ContextPoller silently ignores OpenCode-runtime
-//      agents because Matches() never matches their TranscriptPath
-//      (the wiring would just pass empty TranscriptPath for them — the
-//      Poller's empty-path skip handles it).
+// SQL: SELECT data FROM message ORDER BY time_created DESC LIMIT 1.
+// OpenCode users typically run one active conversation at a time across
+// agents — the global-latest message wins. A multi-active-conversation
+// user could see attribution skew on a stale agent (warn nudge meant for
+// session A delivered to session B's agent), but this is recoverable
+// false-warn behavior and the operator-visibility property is preserved.
+
+package contextpoll
+
+import (
+	"bytes"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"strings"
+	"time"
+
+	// modernc.org/sqlite is the project's pure-Go SQLite driver (no CGO).
+	// Registers as "sqlite" — not "sqlite3". Plan v1.4 prose-mentions
+	// mattn/go-sqlite3 but the project's go.mod has only modernc.org/sqlite
+	// and adopting CGO for a single parser would be a bigger ask than the
+	// task warrants. URI semantics are SQLite-standard for mode=ro; modernc
+	// uses `_pragma=foo(bar)` rather than mattn's `_foo=bar`, hence the
+	// PRAGMA-after-open pattern in Parse below for busy_timeout. The
+	// Path-A architectural decision is unchanged — only the driver
+	// substitution is in play.
+	_ "modernc.org/sqlite"
+)
+
+// openCodeDefaultContextWindow is the conservative default window used
+// when an unrecognized modelID surfaces. 128K is the sweet spot for the
+// model families OpenCode supports out of the box (glm-4.6, glm-5.1)
+// and is also a safe over-estimate of utilization for the smaller
+// 32K/64K models, since over-eager warn nudges are recoverable while
+// missed thresholds are not.
+const openCodeDefaultContextWindow = 128000
+
+// openCodeContextWindow returns the context-window size for an OpenCode
+// model ID. Falls back to openCodeDefaultContextWindow for unrecognized
+// model IDs and logs the fallback at Debug so operators can grow the
+// lookup table over time without changing the parser's behavior.
 //
-// This file's existence + the `// TODO(CR.8-fallback)` marker at the end
-// signals to T8.2 / thrum-6qmf.1.24 that the implementer must choose
-// between A and B before writing the parser body. T8.1's acceptance
-// criterion ("opencode.go exists with an investigation comment,
-// regardless of outcome") is satisfied by this file as-is.
+// The model-ID format in opencode is `<family-version>` (e.g. "glm-4.6",
+// "claude-sonnet-4-6", "gpt-5"). The table uses prefix/contains checks
+// rather than exact matches to ride out minor-version bumps. Initial
+// table content comes from plan v1.4 §CR.8 + a survey of distinct
+// modelID values observed in the live OpenCode DB during T8.1 (mostly
+// glm-4.6 + glm-5.1).
+func openCodeContextWindow(modelID string) int {
+	id := strings.ToLower(modelID)
+	switch {
+	case strings.HasPrefix(id, "glm-"):
+		return 128000
+	case strings.Contains(id, "claude-opus"), strings.Contains(id, "claude-sonnet"):
+		// Claude 4.x context window. Long-context [1m] variants would
+		// require a separate tag if OpenCode ever exposes them; today
+		// OpenCode reports the bare model id.
+		return 200000
+	case strings.HasPrefix(id, "gpt-5"):
+		return 256000
+	case strings.HasPrefix(id, "gpt-4"):
+		return 128000
+	default:
+		slog.Debug("[contextpoll] opencode unknown modelID; falling back to default window",
+			"model_id", modelID, "default_window", openCodeDefaultContextWindow)
+		return openCodeDefaultContextWindow
+	}
+}
+
+// OpenCodeParserV1 parses OpenCode session state from the per-user SQLite
+// database that the OpenCode CLI maintains at
+// $XDG_DATA_HOME/opencode/opencode.db. Unlike ClaudeParserV2x and
+// CodexParserV1 which read JSONL files, this parser opens SQLite — the
+// Parser.Parse(path) signature is preserved (path == the .db file) so
+// the Poller dispatch stays uniform across runtimes.
+type OpenCodeParserV1 struct{}
+
+// Version returns the parser version tag used for log attribution.
+func (OpenCodeParserV1) Version() string { return "opencode-v1" }
+
+// openCodeMagic is the SQLite database header — the first 16 bytes of
+// any SQLite file. Used by Matches as a cheap-and-unambiguous dispatch
+// signal: no other runtime we support writes SQLite files into a
+// transcript-path position, so this is sufficient to claim a path
+// without opening the sqlite3 driver (saves a connection-open on every
+// poll for non-OpenCode agents).
+var openCodeMagic = []byte("SQLite format 3\x00")
+
+// Matches returns true when path begins with the SQLite header magic.
+// Returns false for files that are unreadable, shorter than 16 bytes,
+// or whose first 16 bytes do not match. The check does NOT validate
+// that the SQLite file is specifically an OpenCode database — a
+// future runtime that also writes SQLite would need a stricter probe
+// (e.g. a CREATE TABLE statement sniff via the schema). At the time
+// of writing OpenCode is the only such runtime.
+func (OpenCodeParserV1) Matches(path string) bool {
+	f, err := os.Open(path) // #nosec G304 -- path is an absolute SQLite path resolved at agent-enrollment time
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+	var hdr [16]byte
+	if _, err := io.ReadFull(f, hdr[:]); err != nil {
+		return false
+	}
+	return bytes.Equal(hdr[:], openCodeMagic)
+}
+
+// openCodeMessageData is the minimal projection of the JSON blob stored
+// in message.data needed to compute context utilization. Other fields
+// on the wire (parentID, mode, agent, path, cost, providerID, time,
+// finish) are deliberately ignored — the parser is schema-tolerant
+// by design.
+type openCodeMessageData struct {
+	Role    string `json:"role"`
+	ModelID string `json:"modelID"`
+	Tokens  struct {
+		Input     int `json:"input"`
+		Output    int `json:"output"`
+		Reasoning int `json:"reasoning"`
+		Cache     struct {
+			Read  int `json:"read"`
+			Write int `json:"write"`
+		} `json:"cache"`
+	} `json:"tokens"`
+}
+
+// Parse opens the OpenCode SQLite database at path read-only, fetches
+// the most-recently-created message row, decodes its data JSON blob,
+// and returns context utilization derived from the per-message token
+// counts + a per-model context-window lookup.
+//
+// Error contract:
+//   - File-not-found, open errors, and SQL errors return a non-nil error.
+//   - Empty DB (no rows in `message`) returns UsedPercentage 0 with
+//     nil error and Approximate=true — a fresh-install OpenCode that
+//     hasn't recorded a turn yet.
+//   - A row whose data JSON is unparseable returns a non-nil error
+//     (corruption or schema drift — surface it; don't silently mask).
+//
+// UsedPercentage = (input + output + reasoning + cache.read + cache.write)
+//
+//	* 100 / openCodeContextWindow(modelID)
+//
+// clamped to [0, 100]. Approximate is always TRUE: reconstruction from
+// per-message token totals has > 1-message lag (output + reasoning of
+// the last turn are NOT in the context window the model SAW, only what
+// it wrote), and the modelID → window lookup may fall back to a
+// default.
+func (OpenCodeParserV1) Parse(path string) (ContextUsage, error) {
+	uri := "file:" + path + "?mode=ro"
+	db, err := sql.Open("sqlite", uri)
+	if err != nil {
+		return ContextUsage{}, fmt.Errorf("contextpoll: open opencode db: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// modernc.org/sqlite honors PRAGMAs issued through the standard
+	// database/sql API. busy_timeout gives us 5s of grace if the
+	// OpenCode writer is mid-transaction; without it a concurrent
+	// write would surface as SQLITE_BUSY immediately.
+	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		return ContextUsage{}, fmt.Errorf("contextpoll: set opencode busy_timeout: %w", err)
+	}
+
+	var blob string
+	err = db.QueryRow(`SELECT data FROM message ORDER BY time_created DESC LIMIT 1`).Scan(&blob)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// Fresh OpenCode install — no turns yet. UsedPercentage 0,
+			// no error. The Poller's threshold logic treats 0% as
+			// "below warn" and the agent gets no nudge.
+			return ContextUsage{
+				UsedPercentage: 0,
+				ParserVersion:  "opencode-v1",
+				SourcePath:     path,
+				Timestamp:      time.Now(),
+				Approximate:    true,
+			}, nil
+		}
+		return ContextUsage{}, fmt.Errorf("contextpoll: query opencode db: %w", err)
+	}
+
+	var msg openCodeMessageData
+	if err := json.Unmarshal([]byte(blob), &msg); err != nil {
+		return ContextUsage{}, fmt.Errorf("contextpoll: parse opencode message.data: %w", err)
+	}
+
+	sumTokens := msg.Tokens.Input + msg.Tokens.Output + msg.Tokens.Reasoning +
+		msg.Tokens.Cache.Read + msg.Tokens.Cache.Write
+	window := openCodeContextWindow(msg.ModelID)
+	if window <= 0 {
+		// Defensive: openCodeContextWindow is documented to always return
+		// a positive integer (the default falls back to a positive value).
+		// Keep the guard so a future code edit can't trip a divide-by-zero.
+		window = openCodeDefaultContextWindow
+	}
+	pct := sumTokens * 100 / window
+	pct = max(0, min(100, pct))
+
+	return ContextUsage{
+		UsedPercentage: pct,
+		ParserVersion:  "opencode-v1",
+		SourcePath:     path,
+		Timestamp:      time.Now(),
+		Approximate:    true,
+	}, nil
+}
+
+// Full discovery notes (preserved from T8.1 investigation; original
+// commit e383276f46). Path-A was selected by Leon (v1.4 erratum
+// thrum-6qmf.1.31); the previous TODO(CR.8-fallback) marker is
+// removed.
 //
 // Path layout
 // -----------
@@ -46,35 +246,15 @@
 //                                              (per-session diff buffer,
 //                                              usually empty/transient)
 //
-// On macOS: $HOME/.local/share/opencode/. Confirmed by inspection of a
-// live installation in /Users/leon/.local/share/opencode/. The CLI
+// On macOS: $HOME/.local/share/opencode/. Confirmed by inspection of
+// a live installation in /Users/leon/.local/share/opencode/. The CLI
 // startup logs in `log/` are not relevant for context tracking.
-//
-// The OpenCode plugin under opencode-plugin/ does not document the
-// path; the brainstorm reference to
-//   opencode-plugin/node_modules/@opencode-ai/sdk/dist/gen/types.gen.d.ts
-// is a TypeScript SDK type definition (AssistantMessage), not a runtime
-// path. The opencode-plugin/ in this repo is a published-NPM-package
-// thrum integration, not the OpenCode CLI itself; its node_modules
-// directory only exists after `npm install` and was empty at the time
-// of this investigation. The SDK types ARE useful for confirming the
-// per-message token shape (see "Token shape" below).
 //
 // SQLite schema (relevant tables)
 // -------------------------------
 //   session(id, ..., time_created, ...)
 //   message(id, session_id, time_created, time_updated, data TEXT)
 //   part(id, message_id, session_id, time_created, time_updated, data TEXT)
-//
-// The `message.data` column is a JSON blob. Per-session walk:
-//
-//   SELECT data FROM message
-//   WHERE session_id = ?
-//   ORDER BY time_created DESC
-//   LIMIT 1;
-//
-// Latest message wins (cumulative token state is on the LAST assistant
-// turn, mirroring the Claude semantic).
 //
 // Token shape (in message.data JSON)
 // ----------------------------------
@@ -97,61 +277,8 @@
 //     "finish":      "stop" | "tool-calls" | ...
 //   }
 //
-// `tokens.total` is the per-message sum:
-//   total == input + output + reasoning + cache.read + cache.write
-//
 // Verified arithmetically on a real message: input=40, output=9,
 // reasoning=15, cache.read=21156, cache.write=0 → 21220 == total. ✓
-//
-// Cumulative context utilization for UsedPercentage
-// -------------------------------------------------
-// For a chat-style session, the model on each turn sees the entire
-// prior conversation as its prompt. The LAST assistant message's
-// `tokens.input + tokens.cache.read + tokens.cache.write` therefore
-// approximates the current context-window occupancy. (Cache reads are
-// previously-sent context being re-sent; cache writes are new entries
-// added to the cache that count against the window.) Plan T8.2 step 2
-// specifies the sum of all five components — when computed per-message
-// (LAST), that overestimates by output + reasoning of the final turn,
-// which is acceptable (over-eager is recoverable; under-eager misses
-// thresholds).
-//
-// Context-window denominator
-// --------------------------
-// OpenCode does NOT carry `Model.limit.context` directly on the
-// AssistantMessage in the SQL row inspected. The SDK type
-// (AssistantMessage.modelID + a separate Model.limit.context map) does
-// expose it, but the live DB row only carries `modelID` + `providerID`.
-// The parser would need a per-model context-window lookup (compile-time
-// table) keyed on modelID — small enough to maintain (glm-4.6,
-// glm-5.1, claude-*, gpt-*, etc.). Fallback: a conservative 128000
-// default if modelID is unrecognized, marked Approximate=true.
-//
-// Approximate flag: always TRUE for OpenCode. The reconstruction from
-// per-message tokens.total has > 1-message lag, and the model-ID →
-// context-window lookup may fall back to a default for unknown models.
-//
-// Architectural concern
-// ---------------------
-// Decision A (open SQLite from parser) requires:
-//   - Add database/sql + sqlite3 driver to contextpoll's dep surface.
-//   - Open the DB read-only with shared-cache WAL semantics so the
-//     OpenCode writer is not blocked: `file:<path>?mode=ro&_journal=WAL&_busy_timeout=5000`.
-//   - Re-evaluate Parser.Matches semantics: SQLite databases identify
-//     by the "SQLite format 3\0" magic in the first 16 bytes, so
-//     Matches can sniff that without opening sqlite3.
-//
-// Decision B (skip for v0.11): no code in this package; document the
-// path here so any future implementer has the discovery work pre-done.
-//
-// Both options preserve forward compatibility — `OpenCodeParserV1` is
-// a separate file that can be added later without touching the
-// Poller substrate.
-//
-// TODO(CR.8-fallback): T8.2 implementer must choose between resolutions
-// A (SQLite-aware parser) and B (skip; OpenCode falls back to manual
-// /thrum:restart). T8.1 deliverable is this discovery file only; the
-// architectural decision is plan-level (cr_spec / coordinator) not
-// implementation-level.
-
-package contextpoll
+// (The Parser doesn't trust `total`; it sums the components itself
+// so a future field rename or new component category surfaces as
+// an arithmetic discrepancy rather than a silent wrong total.)
