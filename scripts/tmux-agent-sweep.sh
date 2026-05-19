@@ -168,40 +168,60 @@ for line in "${agent_lines[@]}"; do
         fi
     fi
 
-    # ctx_used from JSONL latest usage block. Window defaults to 1M (Opus 4.7
-    # 1m-context, current fleet default); per-model window detection deferred
-    # to daemon-side impl. Falls through to "(n/a)" when no transcript (non-
-    # claude runtimes like Codex/Cursor).
+    # Extract richer state from JSONL transcript in one jq pass:
+    #   ctx tokens + window + model + stop_reason + last-assistant timestamp +
+    #   api-error text (if latest assistant is one). All derived from the tail
+    #   of the transcript so historical state doesn't leak into the report.
+    # Falls through to "(n/a)" / pane fallbacks when no transcript (non-claude).
     ctx_used="(n/a)"
-    if [[ -n "$transcript" ]]; then
-        used_tokens=$(tail -200 "$transcript" 2>/dev/null | jq -rs '
-            map(select(.message.usage != null)) | last | .message.usage |
-            ((.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0))
-        ' 2>/dev/null || echo "")
-        if [[ -n "$used_tokens" && "$used_tokens" != "null" && "$used_tokens" != "0" ]]; then
-            ctx_used=$(awk -v u="$used_tokens" -v w=1000000 'BEGIN { printf "%.1f%%", (u/w)*100 }')
-        fi
-    fi
-
-    # Detect Anthropic API errors from JSONL transcript. The agent is currently
-    # stuck IFF the LATEST assistant message's content is an API Error text
-    # entry (stop_reason: "stop_sequence", content[0].text starts with "API
-    # Error:"). Historical errors from earlier in the same session that have
-    # since recovered are correctly NOT flagged — only the tail of the
-    # conversation matters. Falls back to pane regex for non-claude runtimes
-    # where no transcript is available.
+    state="(n/a)"
+    last_msg_ago="(n/a)"
     api_errors="(none)"
+    model=""
     if [[ -n "$transcript" ]]; then
-        latest_error=$(tail -200 "$transcript" 2>/dev/null | jq -rs '
-            map(select(.type == "assistant")) | last |
-            (.message.content // [])[0] |
-            select(.type == "text") |
-            .text | select(startswith("API Error"))
+        jsonl_state=$(tail -200 "$transcript" 2>/dev/null | jq -rs '
+            (map(select(.type == "assistant")) | last) as $a |
+            (map(select(.message.usage != null)) | last | .message.usage) as $u |
+            [
+              ($u // {} | ((.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0)) | tostring),
+              ($a.message.model // ""),
+              ($a.message.stop_reason // ""),
+              ($a.timestamp // ""),
+              (($a.message.content // [])[0] | select(.type == "text") | .text | select(startswith("API Error"))) // ""
+            ] | @tsv
         ' 2>/dev/null || echo "")
-        [[ -n "$latest_error" ]] && api_errors="$latest_error"
+        if [[ -n "$jsonl_state" ]]; then
+            IFS=$'\t' read -r used_tokens model stop_reason ts api_text <<<"$jsonl_state"
+            # Window detection by model (1M for Opus 4.7 1m-context fleet default;
+            # 200k otherwise — conservative for unknown models).
+            case "$model" in
+                claude-opus-4-7*) window=1000000 ;;
+                *) window=200000 ;;
+            esac
+            if [[ -n "$used_tokens" && "$used_tokens" != "0" ]]; then
+                ctx_used=$(awk -v u="$used_tokens" -v w="$window" 'BEGIN { printf "%.1f%% (%dk/%dk %s)", (u/w)*100, u/1000, w/1000, "MODEL" }' | sed "s/MODEL/${model##claude-}/")
+            fi
+            # Activity state from stop_reason
+            case "$stop_reason" in
+                end_turn) state="idle" ;;
+                tool_use) state="working" ;;
+                stop_sequence) state="error" ;;
+                "") state="(no assistant msg)" ;;
+                *) state="$stop_reason" ;;
+            esac
+            # Interaction-level idleness from latest assistant timestamp
+            if [[ -n "$ts" ]]; then
+                ts_epoch=$(date -u -j -f "%Y-%m-%dT%H:%M:%S" "${ts%%.*}" +%s 2>/dev/null || echo 0)
+                if [[ "$ts_epoch" -gt 0 ]]; then
+                    delta_min=$(( (now_epoch - ts_epoch) / 60 ))
+                    last_msg_ago="${delta_min}m ago"
+                fi
+            fi
+            # api_errors flag from latest-assistant-message text
+            [[ -n "$api_text" ]] && api_errors="$api_text"
+        fi
     elif [[ "$pane_capture_ok" -eq 1 ]]; then
-        # Non-claude runtime: fall back to pane scan with the ⎿ anchor to
-        # avoid recursive false-positives from source/sweep-output echoes.
+        # Non-claude runtime: pane scan for api_errors with ⎿ anchor.
         api_errors=$(printf '%s\n' "$pane" | { grep -oE '⎿[[:space:]]+API Error[^\n]*' || true; } | sort -u | paste -sd '; ' -)
         [[ -z "$api_errors" ]] && api_errors="(none)"
     else
@@ -216,6 +236,8 @@ for line in "${agent_lines[@]}"; do
     agent_section+="last_seen:  $last_seen_display\n"
     agent_section+="status:     $status\n"
     agent_section+="ctx_used:   $ctx_used\n"
+    agent_section+="state:      $state\n"
+    agent_section+="last_msg:   $last_msg_ago\n"
     agent_section+="api_errors: $api_errors\n"
     agent_section+="--- pane (bottom $LINES lines) ---\n"
     if [[ "$pane_capture_ok" -eq 1 ]]; then
@@ -232,8 +254,8 @@ for line in "${agent_lines[@]}"; do
     # Evaluate whether this agent needs attention
     needs_attention=0
 
-    # ctx_used >= threshold?
-    if [[ "$ctx_used" =~ ^([0-9]+)\.([0-9]+)%$ ]]; then
+    # ctx_used >= threshold? Format is "X.X% (...)" — match the leading percent.
+    if [[ "$ctx_used" =~ ^([0-9]+)\.([0-9]+)% ]]; then
         ctx_int="${BASH_REMATCH[1]}"
         if [[ "$ctx_int" -ge "$CTX_THRESHOLD" ]]; then
             needs_attention=1
@@ -242,7 +264,7 @@ for line in "${agent_lines[@]}"; do
         # Capture failure is a real concern — flag it
         needs_attention=1
     fi
-    # ctx_used == "(n/a)" is NOT a flag — Codex/Cursor runtimes have no footer
+    # ctx_used == "(n/a)" is NOT a flag — Codex/Cursor runtimes have no transcript
 
     # api_errors present?
     if [[ "$api_errors" != "(none)" && "$api_errors" != "(capture failed)" ]]; then
