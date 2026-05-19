@@ -182,3 +182,42 @@ func TestPool_Add_Idempotent(t *testing.T) {
 		t.Fatalf("duplicate Add should be idempotent; expected Size()=1, got %d", got)
 	}
 }
+
+// TestPool_List_ReturnsSnapshot covers the diagnostics surface used by
+// the sync.pending_pool.list RPC (Task 13 / thrum-s6os.9). The returned
+// slice is a snapshot copy; mutating the pool after List() must not
+// affect the previously-returned slice.
+func TestPool_List_ReturnsSnapshot(t *testing.T) {
+	t.Parallel()
+	p := pending.New()
+	p.Add(makeOrphan("msg-A", "tg:foo"))
+	p.Add(makeOrphan("msg-B", "agt:bar"))
+
+	got := p.List()
+	if len(got) != 2 {
+		t.Fatalf("expected 2 orphans, got %d", len(got))
+	}
+
+	// Snapshot must be independent of subsequent pool mutations.
+	p.Add(makeOrphan("msg-C", "tg:baz"))
+	if len(got) != 2 {
+		t.Errorf("List() result must not reflect post-call mutations; got %d", len(got))
+	}
+	if newGot := p.List(); len(newGot) != 3 {
+		t.Errorf("subsequent List() should see new orphan; got %d", len(newGot))
+	}
+}
+
+// TestPool_List_EmptyPool returns an empty (non-nil) slice — the
+// RPC handler can JSON-marshal it as [] rather than null.
+func TestPool_List_EmptyPool(t *testing.T) {
+	t.Parallel()
+	p := pending.New()
+	got := p.List()
+	if got == nil {
+		t.Error("List() on empty pool should return non-nil empty slice, got nil")
+	}
+	if len(got) != 0 {
+		t.Errorf("expected empty list, got %d entries", len(got))
+	}
+}

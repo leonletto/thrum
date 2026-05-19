@@ -100,6 +100,24 @@ func (p *Pool) Size() int {
 	return len(p.orphans)
 }
 
+// List returns a snapshot copy of all current orphans. Order is not
+// guaranteed (map iteration). Returned slice is safe to use after
+// release of the pool's mutex — entries are value-copied.
+//
+// Intended for the sync.pending_pool.list diagnostics RPC; do NOT
+// rely on this for live pool queries inside the projector hot path
+// (use ResolveOnStateLand which performs the targeted lookup under
+// a single mutex acquisition).
+func (p *Pool) List() []OrphanedMessage {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]OrphanedMessage, 0, len(p.orphans))
+	for _, o := range p.orphans {
+		out = append(out, o)
+	}
+	return out
+}
+
 // intersects reports whether any element of blockedBy is present in known.
 func intersects(blockedBy []string, known map[string]struct{}) bool {
 	for _, b := range blockedBy {
