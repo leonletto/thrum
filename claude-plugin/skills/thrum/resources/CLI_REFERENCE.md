@@ -22,8 +22,9 @@ These flags apply to every command:
 ### send
 
 ```bash
-thrum send <message> --to @name
-thrum send <message> --to @everyone            # Broadcast to all agents
+thrum send <message> --to @name                # Direct message (canonical form)
+thrum send <message> --broadcast               # Explicit team-wide fanout (preferred)
+thrum send <message> --to @everyone            # Broadcast (legacy keyword form)
 thrum send <message> --to @name --scope type:value --scope type:value2
 thrum send <message> --to @name --ref type:value
 thrum send <message> --to @name --mention @role
@@ -31,10 +32,15 @@ thrum send <message> --to @name --format plain
 thrum send <message> --to @name --structured '{"key":"value"}'
 ```
 
+A recipient flag is REQUIRED — `thrum send 'msg'` with no `--to` or
+`--broadcast` is a hard error (thrum-t698). `--to` and `--broadcast` are
+mutually exclusive.
+
 Flags:
 
 ```text
---to string           Recipient — @agent_name or @everyone for broadcast
+--to string           Recipient — @agent_name or @everyone for broadcast (mutex with --broadcast)
+--broadcast           Fan out to the entire team (mutex with --to)
 --mention strings     Mention a role (repeatable, format: @role)
 --ref strings         Add reference (repeatable, format: type:value)
 --scope strings       Add scope (repeatable, format: type:value)

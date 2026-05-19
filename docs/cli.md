@@ -506,18 +506,22 @@ have an active session.
 thrum send MESSAGE [flags]
 ```
 
-| Flag           | Description                                            | Default    |
-| -------------- | ------------------------------------------------------ | ---------- |
-| `--to`         | Recipient — `@agent_name` or `@everyone` for broadcast |            |
-| `--scope`      | Add scope (repeatable, format: `type:value`)           |            |
-| `--ref`        | Add reference (repeatable, format: `type:value`)       |            |
-| `--mention`    | Mention a role (repeatable, format: `@role`)           |            |
-| `--structured` | Structured payload (JSON string)                       |            |
-| `--format`     | Message format (`markdown`, `plain`, `json`)           | `markdown` |
+| Flag           | Description                                                         | Default    |
+| -------------- | ------------------------------------------------------------------- | ---------- |
+| `--to`         | Recipient — `@agent_name` or `@everyone` (mutex with `--broadcast`) |            |
+| `--broadcast`  | Fan out to the entire team (mutex with `--to`)                      | `false`    |
+| `--scope`      | Add scope (repeatable, format: `type:value`)                        |            |
+| `--ref`        | Add reference (repeatable, format: `type:value`)                    |            |
+| `--mention`    | Mention a role (repeatable, format: `@role`)                        |            |
+| `--structured` | Structured payload (JSON string)                                    |            |
+| `--format`     | Message format (`markdown`, `plain`, `json`)                        | `markdown` |
 
-The `--to` flag adds the recipient as a mention, making it a directed message.
-Recipients can be agents (`@alice`), roles (`@reviewer`), or `@everyone` for
-broadcast.
+A recipient flag is **required**. `thrum send 'msg'` with no `--to` or
+`--broadcast` hard-errors (exit 1) with a conversational prompt offering both
+paths — the previous silent-broadcast default was a footgun (thrum-t698).
+`--to @agent_name` is the canonical directed-send form (matches CLAUDE.md
+convention); `--broadcast` is the explicit team-wide fanout form;
+`--to @everyone` continues to work as the legacy keyword form.
 
 This command emits contextual hints — see [CLI Hints](cli-hints.md).
 
@@ -528,9 +532,13 @@ $ thrum send "PR ready for review" --to @reviewer --scope module:auth --ref pr:4
 ✓ Message sent: msg_01HXE8Z7...
   Created: 2026-02-03T10:00:00Z
 
-# Send to all agents
-$ thrum send "Deploy complete" --to @everyone
+# Explicit team-wide fanout (preferred form for broadcasts)
+$ thrum send "Deploy complete" --broadcast
 ✓ Message sent: msg_01HXE8Z8...
+
+# Legacy keyword form — still works
+$ thrum send "Deploy complete" --to @everyone
+✓ Message sent: msg_01HXE8Z9...
 ```
 
 ### thrum reply
