@@ -503,24 +503,12 @@ func (m *Merger) listRemoteDirFiles(ctx context.Context, subDir string) (map[str
 // small JSON files (e.g. state/agents/ and state/bridge-groups/). Old peers
 // that don't write these directories are naturally handled: if the directory
 // is absent on the remote the function is a no-op.
+//
+// Local files are not enumerated — the author-owned-rule (spec §3.1) means
+// each daemon writes only its own state files, so a "local-only" file
+// already belongs to this daemon and will land on the remote at its next
+// CommitAndPush. The merge step only needs to pull peer files into local.
 func (m *Merger) mergeJSONDir(ctx context.Context, localDir, remoteSubDir, remoteTmpDir string, archiveErr error) error {
-	// List local .json files in the directory.
-	var localJSONFiles map[string]bool
-	if _, err := os.Stat(localDir); os.IsNotExist(err) {
-		localJSONFiles = make(map[string]bool)
-	} else {
-		entries, err := os.ReadDir(localDir)
-		if err != nil {
-			return fmt.Errorf("read dir %s: %w", localDir, err)
-		}
-		localJSONFiles = make(map[string]bool, len(entries))
-		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".json") {
-				localJSONFiles[e.Name()] = true
-			}
-		}
-	}
-
 	// List remote .json files.
 	var remoteJSONFiles map[string]bool
 	if archiveErr == nil {
@@ -587,8 +575,10 @@ func (m *Merger) mergeJSONDir(ctx context.Context, localDir, remoteSubDir, remot
 		}
 	}
 
-	// Local-only files are kept as-is (will be pushed on next commit).
-	_ = localJSONFiles
+	// Local-only files are kept as-is — author-owned-rule means each
+	// daemon writes only its own state files, so a "local-only" file
+	// belongs to this daemon and will land on the remote on the next
+	// CommitAndPush. No reconciliation required here.
 
 	return nil
 }
