@@ -51,27 +51,20 @@ plausible.init()
 breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG.md</a>.</p>
-<h2>v0.10.5 — rc.4 in soak</h2>
-<p><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.4"><code>v0.10.5-rc.4</code></a>
-tagged 2026-05-19, in 48h FULL soak through 2026-05-21. rc.4 resolves the
-multi-binary upgrade trap: agents and users running both v0.11 substrate work
-(thrum-agents branch) and v0.10.5 binaries no longer hit the &quot;daemon won&#39;t
-start, schema is version N this binary supports up to M&quot; wall when switching
-between them. The rc.4 binary forward-ports schema migrations v25-v32 from
-thrum-agents — they&#39;re dead-end on v0.10.5 (no consumer code references them)
-but live when v0.11 ships, so a v32 DB created by a thrum-agents binary opens
-cleanly under v0.10.5-rc.4. The downgrade-guard error now also includes the
-binary&#39;s schema range, the DB&#39;s current version, and two concrete recovery
-paths (re-install matching binary, or <code>thrum daemon stop</code> + remove the DB
-file) plus a pointer to a new &quot;Multi-Binary Worktree Footgun&quot; section in
-<code>CLAUDE.md</code> (thrum-quth). Polish on top: <code>/thrum:restart</code> skill §1 mandate +
-11-section structure forward-ported from later RCs, <code>bd comments add</code> syntax
-correction in role-preamble templates, and a doc note explaining the daemon
-backstop nudger (full doc rewrite deferred to v0.10.6 per thrum-peh0). Earlier
-RCs in this line: rc.3 closed the tmux-path self-echo regression (thrum-1zfk);
-rc.2 was a docs-only patch on rc.1&#39;s release surface. The Added/Changed/Fixed
-and Upgrade Notes sections below describe the v0.10.5 release surface as a
-whole.</p>
+<h2>v0.10.5 — rc.5 in soak</h2>
+<p><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.5"><code>v0.10.5-rc.5</code></a>
+tagged 2026-05-19, in 24h soak through 2026-05-20. rc.5 fixes the
+post-tmux-launch silence-watchdog nudge (thrum-qpw7): a freshly-launched agent
+that acks the launch banner (the <code>@&lt;name&gt; primed (&lt;role&gt;). Standing by.</code>
+printf) without actually reading its prime briefing now correctly receives the
+corrective &quot;finish reading the prime&quot; nudge. Before rc.5, that ack line was
+registering as engagement, so the watchdog stayed silent and the agent could
+appear primed while operating on truncated context. Closes the last silent gap
+from the launch-nudge work in the v0.10.5 line. Earlier RCs in this line: rc.4
+shipped the multi-binary upgrade trap fix + downgrade-guard recovery UX
+(thrum-quth); rc.3 closed the tmux-path self-echo regression (thrum-1zfk); rc.2
+was a docs-only patch on rc.1&#39;s release surface. The Added/Changed/Fixed and
+Upgrade Notes sections below describe the v0.10.5 release surface as a whole.</p>
 <p>Backstop and hygiene. The headline change is operational: a daemon-side backstop
 nudger re-emits delivery notifications for stale-unread messages on its own
 schedule, replacing the per-agent <code>thrum-inbox-poll.sh</code> cron that previously had
@@ -159,30 +152,38 @@ dispatch path (Layer 4) didn&#39;t honor the same self-skip the spool dispatcher
 (Layer 2) does, so an outbound <code>thrum send</code> could still produce a phantom
 <code>New message from @&lt;self&gt;</code> reminder in the sender&#39;s own pane. Layer 4 now
 mirrors Layer 2; both dispatch paths skip self-delivery symmetrically.</li>
-<li><strong>Schema forward-port from thrum-agents — multi-binary upgrade trap</strong>
-(rc.4). The v0.10.5 binary now ships schema migrations v25-v32 from the
-thrum-agents (v0.11 substrate) line. The migrations are dead-end on
-v0.10.5 — no consumer code references the new tables/columns — but they
-let the daemon open a v32 DB cleanly. Before rc.4, an operator who&#39;d
-bounced between v0.10.5 and a thrum-agents binary would hit a hard
-&quot;daemon won&#39;t start, schema is version 32 this binary supports up to 24&quot;
-wall on the v0.10.5 side. Now the wall is gone for the v25-v32 range.</li>
+<li><strong>Schema forward-port from thrum-agents — multi-binary upgrade trap</strong> (rc.4).
+The v0.10.5 binary now ships schema migrations v25-v32 from the thrum-agents
+(v0.11 substrate) line. The migrations are dead-end on v0.10.5 — no consumer
+code references the new tables/columns — but they let the daemon open a v32 DB
+cleanly. Before rc.4, an operator who&#39;d bounced between v0.10.5 and a
+thrum-agents binary would hit a hard &quot;daemon won&#39;t start, schema is version 32
+this binary supports up to 24&quot; wall on the v0.10.5 side. Now the wall is gone
+for the v25-v32 range.</li>
 <li><strong>Downgrade-guard error message with concrete recovery paths</strong> (thrum-quth,
 rc.4). When the schema-version wall <em>does</em> fire (e.g. you&#39;re on a binary
-outside the supported range), the error now names the binary&#39;s schema
-range, the DB&#39;s current version, and two concrete recovery paths
-(re-install the matching binary, OR <code>thrum daemon stop</code> + remove the DB
-file). It also points at a new &quot;Multi-Binary Worktree Footgun&quot; section in
-<code>CLAUDE.md</code> that explains the failure mode and how to avoid it.</li>
+outside the supported range), the error now names the binary&#39;s schema range,
+the DB&#39;s current version, and two concrete recovery paths (re-install the
+matching binary, OR <code>thrum daemon stop</code> + remove the DB file). It also points
+at a new &quot;Multi-Binary Worktree Footgun&quot; section in <code>CLAUDE.md</code> that explains
+the failure mode and how to avoid it.</li>
 <li><strong>Restart-skill UX consistency + bd-comments syntax + backstop-nudger doc
 note</strong> (rc.4 polish). <code>/thrum:restart</code> skill&#39;s §1 mandate + 11-section
-structure forward-ported from later RCs so the restart UX reads
-consistently across the v0.10.5 line. <code>bd comments add</code> syntax correction
-applied to role-preamble templates (the canonical form is
-<code>bd comments add &lt;id&gt; &quot;comment&quot;</code>, not <code>bd comments &lt;id&gt; add &quot;comment&quot;</code>).
-Brief doc note explaining the daemon backstop nudger added inline; the
-full doc rewrite for the backstop subsystem is deferred to v0.10.6 per
-thrum-peh0.</li>
+structure forward-ported from later RCs so the restart UX reads consistently
+across the v0.10.5 line. <code>bd comments add</code> syntax correction applied to
+role-preamble templates (the canonical form is
+<code>bd comments add &lt;id&gt; &quot;comment&quot;</code>, not <code>bd comments &lt;id&gt; add &quot;comment&quot;</code>). Brief
+doc note explaining the daemon backstop nudger added inline; the full doc
+rewrite for the backstop subsystem is deferred to v0.10.6 per thrum-peh0.</li>
+<li><strong>Post-tmux-launch silence-watchdog nudge no longer false-positives on the
+launch-ack line</strong> (thrum-qpw7, rc.5). After <code>thrum tmux launch</code>, the daemon
+watches the pane for engagement and sends a &quot;finish reading the prime&quot;
+nudge if the agent doesn&#39;t actually engage within the configured threshold.
+Before rc.5, the printf-mandated ack line (<code>@&lt;name&gt; primed (&lt;role&gt;). Standing by.</code>) was itself registering as engagement — so an agent that
+acked the launch banner but never read the (potentially truncated) prime
+briefing appeared primed to the watchdog and never got the corrective
+nudge. The watchdog now correctly distinguishes the ack-line printf from
+real engagement, closing the last silent gap in the launch-nudge work.</li>
 </ul>
 <h3>Upgrade Notes</h3>
 <ul>

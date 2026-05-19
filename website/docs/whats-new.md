@@ -16,27 +16,21 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 [CHANGELOG.md](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-## v0.10.5 — rc.4 in soak
+## v0.10.5 — rc.5 in soak
 
-[`v0.10.5-rc.4`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.4)
-tagged 2026-05-19, in 48h FULL soak through 2026-05-21. rc.4 resolves the
-multi-binary upgrade trap: agents and users running both v0.11 substrate work
-(thrum-agents branch) and v0.10.5 binaries no longer hit the "daemon won't
-start, schema is version N this binary supports up to M" wall when switching
-between them. The rc.4 binary forward-ports schema migrations v25-v32 from
-thrum-agents — they're dead-end on v0.10.5 (no consumer code references them)
-but live when v0.11 ships, so a v32 DB created by a thrum-agents binary opens
-cleanly under v0.10.5-rc.4. The downgrade-guard error now also includes the
-binary's schema range, the DB's current version, and two concrete recovery paths
-(re-install matching binary, or `thrum daemon stop` + remove the DB file) plus a
-pointer to a new "Multi-Binary Worktree Footgun" section in `CLAUDE.md`
-(thrum-quth). Polish on top: `/thrum:restart` skill §1 mandate + 11-section
-structure forward-ported from later RCs, `bd comments add` syntax correction in
-role-preamble templates, and a doc note explaining the daemon backstop nudger
-(full doc rewrite deferred to v0.10.6 per thrum-peh0). Earlier RCs in this line:
-rc.3 closed the tmux-path self-echo regression (thrum-1zfk); rc.2 was a
-docs-only patch on rc.1's release surface. The Added/Changed/Fixed and Upgrade
-Notes sections below describe the v0.10.5 release surface as a whole.
+[`v0.10.5-rc.5`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.5)
+tagged 2026-05-19, in 24h soak through 2026-05-20. rc.5 fixes the
+post-tmux-launch silence-watchdog nudge (thrum-qpw7): a freshly-launched agent
+that acks the launch banner (the `@<name> primed (<role>). Standing by.` printf)
+without actually reading its prime briefing now correctly receives the
+corrective "finish reading the prime" nudge. Before rc.5, that ack line was
+registering as engagement, so the watchdog stayed silent and the agent could
+appear primed while operating on truncated context. Closes the last silent gap
+from the launch-nudge work in the v0.10.5 line. Earlier RCs in this line: rc.4
+shipped the multi-binary upgrade trap fix + downgrade-guard recovery UX
+(thrum-quth); rc.3 closed the tmux-path self-echo regression (thrum-1zfk); rc.2
+was a docs-only patch on rc.1's release surface. The Added/Changed/Fixed and
+Upgrade Notes sections below describe the v0.10.5 release surface as a whole.
 
 Backstop and hygiene. The headline change is operational: a daemon-side backstop
 nudger re-emits delivery notifications for stale-unread messages on its own
@@ -150,6 +144,16 @@ v0.11 agent epics build on for ephemeral-worktree flows. The URL migration to
   `bd comments add <id> "comment"`, not `bd comments <id> add "comment"`). Brief
   doc note explaining the daemon backstop nudger added inline; the full doc
   rewrite for the backstop subsystem is deferred to v0.10.6 per thrum-peh0.
+- **Post-tmux-launch silence-watchdog nudge no longer false-positives on the
+  launch-ack line** (thrum-qpw7, rc.5). After `thrum tmux launch`, the daemon
+  watches the pane for engagement and sends a "finish reading the prime" nudge
+  if the agent doesn't actually engage within the configured threshold. Before
+  rc.5, the printf-mandated ack line (`@<name> primed (<role>). Standing by.`)
+  was itself registering as engagement — so an agent that acked the launch
+  banner but never read the (potentially truncated) prime briefing appeared
+  primed to the watchdog and never got the corrective nudge. The watchdog now
+  correctly distinguishes the ack-line printf from real engagement, closing the
+  last silent gap in the launch-nudge work.
 
 ### Upgrade Notes
 
