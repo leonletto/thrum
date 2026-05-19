@@ -177,6 +177,7 @@ thrum init [flags]
 | `--worktrees-root`  | Pre-fill the wizard's worktrees-root prompt (must be an absolute path outside the repo)       |         |
 | `--roles`           | Pre-fill the wizard's role-template choice (`enhanced` \| `default` \| `skip`)                |         |
 | `--no-daemon`       | Skip auto-starting the daemon at the end of the wizard                                        | `false` |
+| `--yes`             | Auto-confirm any safety prompts (e.g. the v0.10.x → v0.11 .gitignore upgrade)                 | `false` |
 
 #### Worktree base path migration (v0.10.0)
 
@@ -335,18 +336,9 @@ agent to consume.
 thrum prime [flags]
 ```
 
-| Flag      | Description                               | Default |
-| --------- | ----------------------------------------- | ------- |
-| `--force` | Bypass G5 ownership guard (use with care) | `false` |
-| `--quiet` | Suppress hint output                      | `false` |
-
-**G5 guard (prime_ownership):** `thrum prime` must be run from the top-level AI
-runtime process, not from inside a sub-agent (a tool call spawned within a
-Claude Code session). If a sub-agent invokes `thrum prime`, the guard detects
-that the closest runtime ancestor in the caller's PID chain is not the owner
-recorded in the identity file and refuses the call. Run `thrum prime` from the
-outermost runtime session. Pass `--force` only when you understand the ownership
-model and are intentionally bypassing this check.
+| Flag      | Description          | Default |
+| --------- | -------------------- | ------- |
+| `--quiet` | Suppress hint output | `false` |
 
 Example:
 
@@ -573,14 +565,16 @@ are automatically marked as read (unless filtering with `--unread`).
 thrum inbox [flags]
 ```
 
-| Flag          | Description                            | Default |
-| ------------- | -------------------------------------- | ------- |
-| `--scope`     | Filter by scope (format: `type:value`) |         |
-| `--mentions`  | Only messages mentioning me            | `false` |
-| `--unread`    | Only unread messages                   | `false` |
-| `--page-size` | Results per page                       | `10`    |
-| `--limit N`   | Alias for `--page-size`                | `10`    |
-| `--page`      | Page number                            | `1`     |
+| Flag          | Description                                                             | Default |
+| ------------- | ----------------------------------------------------------------------- | ------- |
+| `--scope`     | Filter by scope (format: `type:value`)                                  |         |
+| `--mentions`  | Only messages mentioning me                                             | `false` |
+| `--from`      | Filter to messages from a specific sender (format: `@agent` or `agent`) |         |
+| `--unread`    | Only unread messages                                                    | `false` |
+| `--all`, `-a` | Show all messages (disable auto-filtering)                              | `false` |
+| `--page-size` | Results per page                                                        | `10`    |
+| `--limit N`   | Alias for `--page-size`                                                 | `10`    |
+| `--page`      | Page number                                                             | `1`     |
 
 The output adapts to terminal width and shows read/unread indicators.
 
@@ -2507,7 +2501,7 @@ thrum worktree create <name> [flags]
 | `--module`       | Agent module                                                                |                  |
 | `--intent`       | Initial work intent description                                             |                  |
 | `--runtime`      | Runtime preset: `claude`, `codex`, `cursor`, `gemini`, `opencode`, `auggie` |                  |
-| `--force`        | Overwrite existing runtime config files                                     | `false`          |
+| `--detach`       | Create detached HEAD worktree                                               | `false`          |
 
 The worktree is created at `worktrees.base_path/<name>` (default:
 `~/.workspaces/<project>/<name>`). The name cannot contain `/`, `\`, or `..`.
@@ -2555,8 +2549,12 @@ See [thrum worktree create](#thrum-worktree-create) for the full flag table.
 Remove a worktree and clean up Thrum artifacts (identity files).
 
 ```text
-thrum worktree teardown <name>
+thrum worktree teardown <name> [flags]
 ```
+
+| Flag              | Description                                                                        | Default |
+| ----------------- | ---------------------------------------------------------------------------------- | ------- |
+| `--delete-branch` | Delete the worktree's branch after removing the worktree (branch stays by default) | `false` |
 
 Example:
 
