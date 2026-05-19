@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1235,8 +1236,36 @@ func TestMigrate_DowngradeGuard(t *testing.T) {
 	if err == nil {
 		t.Fatal("Migrate() should return error when DB version > CurrentVersion")
 	}
-	if !strings.Contains(err.Error(), "cannot downgrade") {
+	errStr := err.Error()
+	if !strings.Contains(errStr, "cannot downgrade") {
 		t.Fatalf("error should mention 'cannot downgrade', got: %v", err)
+	}
+	// thrum-quth: the user-facing error must carry the version pair AND
+	// both recovery paths. Pin each so future refactors can't silently
+	// drop the help the operator depends on.
+	if !strings.Contains(errStr, fmt.Sprintf("version %d", futurVersion)) {
+		t.Errorf("error should mention DB version %d; got: %v", futurVersion, err)
+	}
+	if !strings.Contains(errStr, fmt.Sprintf("supports up to %d", schema.CurrentVersion)) {
+		t.Errorf("error should mention binary max version %d; got: %v", schema.CurrentVersion, err)
+	}
+	if !strings.Contains(errStr, "Re-install a newer binary") {
+		t.Errorf("error should include the reinstall recovery hint; got: %v", err)
+	}
+	if !strings.Contains(errStr, "make install") {
+		t.Errorf("error should include the concrete 'make install' command; got: %v", err)
+	}
+	if !strings.Contains(errStr, "thrum daemon stop") {
+		t.Errorf("error should instruct stopping the daemon before rm so file locks release; got: %v", err)
+	}
+	if !strings.Contains(errStr, "LOSES local message history") {
+		t.Errorf("error should warn that rm-the-DB destroys local history; got: %v", err)
+	}
+	if !strings.Contains(errStr, dbPath) {
+		t.Errorf("error should include the on-disk DB path %q so user knows what to rm; got: %v", dbPath, err)
+	}
+	if !strings.Contains(errStr, "Multi-binary worktree footgun") {
+		t.Errorf("error should point at the CLAUDE.md prevention section; got: %v", err)
 	}
 }
 

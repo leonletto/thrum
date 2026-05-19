@@ -520,18 +520,44 @@ func Migrate(db *sql.DB) error {
 		return nil
 	}
 
+	// Resolve the on-disk DB path once via PRAGMA database_list. Used both
+	// by the downgrade-guard error message (so operators see exactly which
+	// file to remove) and by the pre-migration backup block below.
+	// Empty string for in-memory test DBs; both consumers degrade
+	// gracefully on the empty case.
+	var dbSeq int
+	var dbName, dbFile string
+	_ = db.QueryRow("PRAGMA database_list").Scan(&dbSeq, &dbName, &dbFile)
+
 	// Downgrade guard: refuse to run against a DB from a newer binary.
+	// thrum-quth: include both recovery paths in the error so users on
+	// multi-binary worktree machines have an immediate path forward
+	// instead of having to grep the codebase for the message.
 	if currentVersion > CurrentVersion {
-		return fmt.Errorf("database schema is version %d, this binary supports up to %d — cannot downgrade; use a newer binary or delete the database to start fresh", currentVersion, CurrentVersion)
+		dbPath := dbFile
+		if dbPath == "" {
+			dbPath = `<unknown path; locate via "find ~ -name state.db">`
+		}
+		return fmt.Errorf(`database schema is version %d, this binary supports up to %d — cannot downgrade.
+
+Recovery options:
+  1. Re-install a newer binary that supports schema v%d or above:
+       cd <worktree-with-newer-branch> && make install
+  2. Delete the database to start fresh (LOSES local message history + spool):
+       thrum daemon stop   # release file locks first
+       rm %s
+       rm %s-wal %s-shm    # if present
+  3. See CLAUDE.md § "Multi-binary worktree footgun" for prevention`,
+			currentVersion, CurrentVersion,
+			currentVersion,
+			dbPath, dbPath, dbPath)
 	}
 
 	// Back up the DB file + WAL/SHM sidecars before any migration runs so the
 	// operator can revert cleanly by renaming the backup back.  Backup-once:
 	// never overwrite an existing backup (a later startup must not clobber the
 	// true pre-upgrade snapshot).  Skip when file == "" (in-memory test DB).
-	var dbSeq int
-	var dbName, dbFile string
-	if err := db.QueryRow("PRAGMA database_list").Scan(&dbSeq, &dbName, &dbFile); err == nil && dbFile != "" {
+	if dbFile != "" {
 		suffix := fmt.Sprintf(".pre-migration-v%d-bak", currentVersion)
 		if err := backupFileOnce(dbFile, dbFile+suffix); err != nil {
 			log.Printf("[schema] DB backup failed (migration proceeding): %v", err)
