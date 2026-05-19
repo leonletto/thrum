@@ -164,13 +164,16 @@ type RuntimeConfig struct {
 }
 
 // DaemonConfig holds daemon-specific settings.
+// Note: sync_interval was removed in v0.10.6 (thrum-s6os); the field is
+// silently ignored when present in legacy config files (spec §7.2).
 type DaemonConfig struct {
-	LocalOnly       bool   `json:"local_only,omitempty"`
-	SyncInterval    int    `json:"sync_interval,omitempty"` // seconds; 0 means use default (60)
-	WSPort          string `json:"ws_port,omitempty"`       // "auto" or specific port number
-	PeerPort        string `json:"peer_port,omitempty"`     // "auto" or specific port number for peer connections
-	SingleAgentMode bool   `json:"single_agent_mode,omitempty"`
-	LogLevel        string `json:"log_level,omitempty"` // "debug", "info", "warn", "error"; default "info"
+	LocalOnly                 bool   `json:"local_only,omitempty"`
+	WSPort                    string `json:"ws_port,omitempty"`   // "auto" or specific port number
+	PeerPort                  string `json:"peer_port,omitempty"` // "auto" or specific port number for peer connections
+	SingleAgentMode           bool   `json:"single_agent_mode,omitempty"`
+	LogLevel                  string `json:"log_level,omitempty"`                    // "debug", "info", "warn", "error"; default "info"
+	EventsRetentionDays       int    `json:"events_retention_days,omitempty"`        // retention window for .thrum/events.jsonl + SQLite events table (default 2)
+	CompactionSizeThresholdMB int    `json:"compaction_size_threshold_mb,omitempty"` // per-file size threshold above which compaction rewrites the file (default 10)
 }
 
 // BackupConfig holds backup-related settings.
@@ -231,8 +234,15 @@ const (
 	DefaultRetentionMonthly = -1
 )
 
-// DefaultSyncInterval is the default git sync interval in seconds.
-const DefaultSyncInterval = 60
+// DefaultEventsRetentionDays is the default retention window (in days)
+// for the local-only .thrum/events.jsonl journal and the SQLite events
+// table. Beyond this cutoff, the compactor trims rows from both.
+const DefaultEventsRetentionDays = 2
+
+// DefaultCompactionSizeThresholdMB is the default per-file size
+// threshold above which compaction rewrites messages-v2/<id>.jsonl
+// and receipts/<id>.jsonl into deduped form.
+const DefaultCompactionSizeThresholdMB = 10
 
 // DefaultWSPort is the default WebSocket port strategy.
 const DefaultWSPort = "auto"
@@ -328,14 +338,17 @@ func LoadThrumConfig(thrumDir string) (*ThrumConfig, error) {
 // Note: LocalOnly defaults to true (local-first). Users must explicitly
 // set local_only=false in config.json to enable remote git sync.
 func applyDefaults(cfg *ThrumConfig) {
-	if cfg.Daemon.SyncInterval == 0 {
-		cfg.Daemon.SyncInterval = DefaultSyncInterval
-	}
 	if cfg.Daemon.WSPort == "" {
 		cfg.Daemon.WSPort = DefaultWSPort
 	}
 	if cfg.Daemon.LogLevel == "" {
 		cfg.Daemon.LogLevel = DefaultLogLevel
+	}
+	if cfg.Daemon.EventsRetentionDays == 0 {
+		cfg.Daemon.EventsRetentionDays = DefaultEventsRetentionDays
+	}
+	if cfg.Daemon.CompactionSizeThresholdMB == 0 {
+		cfg.Daemon.CompactionSizeThresholdMB = DefaultCompactionSizeThresholdMB
 	}
 	if cfg.Backup.Retention.Daily == nil {
 		cfg.Backup.Retention.Daily = IntPtr(DefaultRetentionDaily)

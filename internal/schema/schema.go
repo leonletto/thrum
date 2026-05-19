@@ -20,7 +20,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 24
+const CurrentVersion = 25
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -94,20 +94,21 @@ func createTables(tx *sql.Tx) error {
 	tables := []string{
 		// Messages table
 		`CREATE TABLE IF NOT EXISTS messages (
-			message_id   TEXT PRIMARY KEY,
-			thread_id    TEXT,
-			agent_id     TEXT NOT NULL,
-			session_id   TEXT NOT NULL,
-			created_at   TEXT NOT NULL,
-			updated_at   TEXT,
-			body_format  TEXT NOT NULL,
-			body_content TEXT NOT NULL,
-			body_structured TEXT,
-			deleted      INTEGER DEFAULT 0,
-			deleted_at   TEXT,
-			delete_reason TEXT,
-			authored_by  TEXT,
-			disclosed    INTEGER DEFAULT 0
+			message_id               TEXT PRIMARY KEY,
+			thread_id                TEXT,
+			agent_id                 TEXT NOT NULL,
+			session_id               TEXT NOT NULL,
+			created_at               TEXT NOT NULL,
+			updated_at               TEXT,
+			body_format              TEXT NOT NULL,
+			body_content             TEXT NOT NULL,
+			body_structured          TEXT,
+			deleted                  INTEGER DEFAULT 0,
+			deleted_at               TEXT,
+			delete_reason            TEXT,
+			authored_by              TEXT,
+			disclosed                INTEGER DEFAULT 0,
+			pending_route_resolution INTEGER NOT NULL DEFAULT 0
 		)`,
 
 		// Message scopes table
@@ -1075,6 +1076,32 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_telegram_msg_map_thrum ON telegram_msg_map(thrum_msg_id)`)
 		if err != nil {
 			return fmt.Errorf("migration 23→24: create idx_telegram_msg_map_thrum: %w", err)
+		}
+	}
+
+	// Migration from version 24 to 25: Add pending_route_resolution column to
+	// messages table (thrum-s6os E11). The column flags messages whose author_id
+	// or scope/group references were missing state files on this clone at ingest
+	// time. The pending.Pool holds the corresponding OrphanedMessage entries;
+	// projection.ProjectionResolver.Resolve clears the flag when the missing
+	// files arrive. Idempotent: guarded by columnSet check (SQLite does not
+	// support ADD COLUMN IF NOT EXISTS).
+	if startVersion < 25 && endVersion >= 25 {
+		hasMessages, err := tableExists(tx, "messages")
+		if err != nil {
+			return fmt.Errorf("migration 24→25: check messages table: %w", err)
+		}
+		if hasMessages {
+			msgCols, err := columnSet(tx, "messages")
+			if err != nil {
+				return fmt.Errorf("migration 24→25: inspect messages: %w", err)
+			}
+			if !msgCols["pending_route_resolution"] {
+				_, err = tx.Exec(`ALTER TABLE messages ADD COLUMN pending_route_resolution INTEGER NOT NULL DEFAULT 0`)
+				if err != nil {
+					return fmt.Errorf("migration 24→25: add pending_route_resolution column: %w", err)
+				}
+			}
 		}
 	}
 

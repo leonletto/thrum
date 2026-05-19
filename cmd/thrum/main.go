@@ -44,15 +44,21 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
+	"github.com/leonletto/thrum/internal/gitctx"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/netdetect"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/process"
+	"github.com/leonletto/thrum/internal/projection"
 	"github.com/leonletto/thrum/internal/restart"
 	"github.com/leonletto/thrum/internal/runtime"
 	"github.com/leonletto/thrum/internal/subscriptions"
 	thrumSync "github.com/leonletto/thrum/internal/sync"
+	syncCompact "github.com/leonletto/thrum/internal/sync/compact"
+	syncPending "github.com/leonletto/thrum/internal/sync/pending"
+	syncSnapshot "github.com/leonletto/thrum/internal/sync/snapshot"
+	syncState "github.com/leonletto/thrum/internal/sync/state"
 	"github.com/leonletto/thrum/internal/timeparse"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
@@ -5555,15 +5561,14 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		fmt.Fprintf(os.Stderr, "Warning: sync worktree not found at %s (sync disabled)\n", syncDir)
 	}
 
-	// Load config.json (used for local-only, sync interval, WS port)
+	// Load config.json (used for local-only, WS port)
 	thrumCfg, cfgErr := config.LoadThrumConfig(thrumDir)
 	if cfgErr != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to read config.json: %v\n", cfgErr)
 		thrumCfg = &config.ThrumConfig{
 			Daemon: config.DaemonConfig{
-				SyncInterval: config.DefaultSyncInterval,
-				WSPort:       config.DefaultWSPort,
-				LogLevel:     config.DefaultLogLevel,
+				WSPort:   config.DefaultWSPort,
+				LogLevel: config.DefaultLogLevel,
 			},
 		}
 	}
@@ -5639,25 +5644,103 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		log.Printf("daemon: permission found %d pending nudge(s) still in flight", len(rows))
 	}
 
-	// Resolve sync interval: env var > config.json > default
-	syncInterval := time.Duration(thrumCfg.Daemon.SyncInterval) * time.Second
-	if envInterval := os.Getenv("THRUM_SYNC_INTERVAL"); envInterval != "" {
-		if n, err := strconv.Atoi(envInterval); err == nil && n > 0 {
-			syncInterval = time.Duration(n) * time.Second
-		}
-	}
-
-	// Create sync loop for periodic git sync
+	// Create sync loop for event-triggered git sync
 	ctx := context.Background()
 	var syncLoop *thrumSync.SyncLoop
+	var pendingPool *syncPending.Pool // thrum-s6os: nil when syncDir is absent
 	if _, err := os.Stat(syncDir); err == nil {
 		syncer := thrumSync.NewSyncer(absPath, syncDir, localOnly)
-		syncLoop = thrumSync.NewSyncLoop(syncer, st.Projector(), absPath, syncDir, thrumDir, syncInterval, localOnly)
+		syncLoop = thrumSync.NewSyncLoop(syncer, st.Projector(), absPath, syncDir, thrumDir, localOnly)
 		// Route synced events through State.IngestSyncedEvent so the
 		// event-write hook fires on cross-repo ingest, not just local
 		// writes. Without this, replies arriving via sync from a peer
 		// repo never reach the permission reply interceptor.
 		syncLoop.SetIngester(st)
+
+		// thrum-s6os v0.10.6 — wire the structural-event sync path.
+		// Order is load-bearing:
+		//   1. Construct triggers + sync-state writer + snapshot
+		//      writers + walker.
+		//   2. Triggers.SetWalker so SyncOnWrite drives the walker.
+		//   3. State.SetSyncTrigger so WriteEvent fires SyncOnWrite on
+		//      a structural event (spec §3.2 whitelist).
+		//   4. CompactAll once before serving so the local journal +
+		//      messages-v2/receipts are within retention. Non-fatal:
+		//      a stale journal is recoverable; the rearchitect
+		//      should still come up.
+		// All wiring happens BEFORE syncLoop.Start() so there is no
+		// race window where WriteEvent fires but the trigger is
+		// unwired.
+		triggers := thrumSync.NewTriggers(syncLoop)
+
+		stateOwnerResolver := func(agentID string) (string, error) {
+			var od string
+			err := st.DB().QueryRowContext(context.Background(),
+				"SELECT origin_daemon FROM agents WHERE agent_id = ?", agentID).Scan(&od)
+			if errors.Is(err, sql.ErrNoRows) {
+				// Unknown agent → not owned by anyone yet; the writer
+				// treats this as not-owned-by-caller per its
+				// ("", nil) contract.
+				return "", nil
+			}
+			return od, err
+		}
+		stateBranchResolver := func(ctx context.Context, worktree string) string {
+			wc, err := gitctx.ExtractWorkContext(ctx, worktree)
+			if err != nil || wc == nil {
+				return ""
+			}
+			return wc.Branch
+		}
+		stateWriter := syncState.NewWriter(syncDir, st.DaemonID(), stateOwnerResolver, stateBranchResolver)
+		msgWriter := syncSnapshot.NewMessageStateWriter(syncDir, st.DaemonID())
+		recWriter := syncSnapshot.NewReceiptStateWriter(syncDir, st.DaemonID())
+		walker := syncSnapshot.NewWalker(st.DB(), stateWriter, msgWriter, recWriter, syncDir, st.DaemonID())
+		triggers.SetWalker(walker)
+		st.SetSyncTrigger(triggers.SyncOnWrite)
+
+		// Bootstrap-ingest legacy events.jsonl from the sync worktree into
+		// the local journal + SQLite on first daemon run after upgrade to
+		// v0.10.6. Idempotent via sentinel file (.thrum/legacy_ingested).
+		// Runs BEFORE CompactAll so legacy events are present before the
+		// retention cutoff scan (spec §4.6, plan Task 14 anti-pattern §3).
+		if rows, err := thrumSync.BootstrapIngestLegacyEvents(ctx, thrumDir, syncDir, st.DB()); err != nil {
+			log.Printf("sync: legacy events bootstrap-ingest failed: %v", err)
+			slog.Warn("sync.legacy_ingest_failed", "err", err)
+		} else if rows > 0 {
+			log.Printf("sync: bootstrap-ingested %d legacy events from sync worktree", rows)
+		}
+
+		compactor := syncCompact.New(thrumDir, syncDir,
+			thrumCfg.Daemon.EventsRetentionDays,
+			thrumCfg.Daemon.CompactionSizeThresholdMB)
+		if err := compactor.CompactAll(ctx, st.DB()); err != nil {
+			// Non-fatal — log + slog and proceed. A failed compaction
+			// at startup leaves the journal in its previous state,
+			// which is recoverable on the next sync-trigger.
+			log.Printf("sync: startup CompactAll failed: %v", err)
+			slog.Warn("compaction.startup_failed", "err", err)
+		}
+		// Per spec §5.3, CompactAll fires at sync-trigger time in
+		// addition to daemon startup. Wire the closure so
+		// Triggers.SyncOnWrite invokes compaction after the walker
+		// writes succeed and before TriggerSync — any rewrite of
+		// messages-v2/<id>.jsonl / receipts/<id>.jsonl folds into
+		// the same commit as the walker's appends.
+		triggers.SetCompactor(func(ctx context.Context) error {
+			return compactor.CompactAll(ctx, st.DB())
+		})
+
+		// Construct the orphan pool and wire it into the projector so
+		// applyMessageCreate can flag orphaned messages and register them
+		// with the pool (thrum-s6os E11 / Task 16). The resolver must be
+		// wired BEFORE syncLoop.Start so the catch-up sync on first boot
+		// sees the pool-integration path.
+		pendingPool = syncPending.New()
+		projResolver := projection.NewProjectionResolver(st.Projector())
+		st.Projector().SetPendingPool(syncDir, pendingPool)
+		st.Projector().SetPendingResolver(projResolver)
+
 		if err := syncLoop.Start(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to start sync loop: %v\n", err)
 		} else {
@@ -5788,6 +5871,22 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		syncStatusHandler = rpc.NewSyncStatusHandler(syncLoop)
 		server.RegisterHandler("sync.force", syncForceHandler.Handle)
 		server.RegisterHandler("sync.status", syncStatusHandler.Handle)
+	}
+
+	// thrum-s6os v0.10.6: pending-pool diagnostics surface.
+	// Read-only RPC; returns the current orphan list + count for
+	// CLI inspection. Authentication piggybacks on the daemon's
+	// existing per-connection identity resolver — no privileged
+	// caller required (spec §5.4 + plan Task 13 anti-pattern #2).
+	if pendingPool != nil {
+		pool := pendingPool
+		server.RegisterHandler("sync.pending_pool.list", func(_ context.Context, _ json.RawMessage) (any, error) {
+			orphans := pool.List()
+			return map[string]any{
+				"size":    len(orphans),
+				"orphans": orphans,
+			}, nil
+		})
 	}
 
 	// Tailscale peer sync management
