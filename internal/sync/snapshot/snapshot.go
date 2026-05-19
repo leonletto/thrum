@@ -429,9 +429,18 @@ func (w *Walker) buildAgentSnapshot(ctx context.Context, agentID string) (*state
 		lastSeen = time.Now().UTC()
 	}
 
+	// Name = AgentID by design. The agents projection table has no
+	// separate `name` column — the wire-stream display string lives
+	// in the Display field, which the inbox UI (and any other
+	// consumer of AgentStateSnapshot) reads instead. Do NOT derive a
+	// separate display name from this Name field; treat it as an
+	// identity-only handle. If a future projection schema migration
+	// adds a dedicated name column, swap the assignment here; until
+	// then, agentID is the only stable identifier on hand at
+	// snapshot derivation time.
 	return &state.AgentStateSnapshot{
 		AgentID:    agentID,
-		Name:       agentID, // name is not stored separately in agents table; use agentID as fallback
+		Name:       agentID,
 		Role:       role,
 		Module:     module,
 		Display:    display,
