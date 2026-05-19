@@ -9096,148 +9096,35 @@ func runBackupRestore(dirOverride, archivePath string, skipConfirm bool) error {
 	return nil
 }
 
-func pluginCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "plugin",
-		Short: "Manage backup plugins",
-	}
+// MOVED[thrum-8kxh]: pluginCmd → plugin.go:19-65
+// Original range: main.go:9350-9396
+// Tests: cmd/thrum/main_test.go (indirect via Execute())
+// Commit: <pending>
+// Phase: 1
+// Remove once refactor verified green.
 
-	// plugin add
-	var addName, addCommand, addPreset string
-	var addIncludes []string
-	addCmd := &cobra.Command{
-		Use:   "add",
-		Short: "Add a backup plugin",
-		Long:  "Add a plugin by name/command/include or use --preset for built-in plugins.",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPluginAdd(addName, addCommand, addIncludes, addPreset)
-		},
-	}
-	addCmd.Flags().StringVar(&addName, "name", "", "Plugin name")
-	addCmd.Flags().StringVar(&addCommand, "command", "", "Command to run before collecting files")
-	addCmd.Flags().StringSliceVar(&addIncludes, "include", nil, "File patterns to collect (glob)")
-	addCmd.Flags().StringVar(&addPreset, "preset", "", "Use built-in preset (beads, beads-rust)")
-	cmd.AddCommand(addCmd)
+// MOVED[thrum-8kxh]: runPluginAdd → plugin.go:73-110
+// Original range: main.go:9398-9435
+// Tests: cmd/thrum/main_test.go (indirect via Execute())
+// Commit: <pending>
+// Phase: 1
+// Remove once refactor verified green.
 
-	// plugin list
-	cmd.AddCommand(&cobra.Command{
-		Use:   "list",
-		Short: "List configured plugins",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPluginList()
-		},
-	})
+// MOVED[thrum-8kxh]: runPluginList → plugin.go:118-147
+// Original range: main.go:9437-9466
+// Tests: cmd/thrum/main_test.go (indirect via Execute())
+// Commit: <pending>
+// Phase: 1
+// Remove once refactor verified green.
 
-	// plugin remove
-	var removeName string
-	removeCmd := &cobra.Command{
-		Use:   "remove",
-		Short: "Remove a backup plugin",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPluginRemove(removeName)
-		},
-	}
-	removeCmd.Flags().StringVar(&removeName, "name", "", "Plugin name to remove")
-	_ = removeCmd.MarkFlagRequired("name")
-	cmd.AddCommand(removeCmd)
+// MOVED[thrum-8kxh]: runPluginRemove → plugin.go:155-176
+// Original range: main.go:9468-9489
+// Tests: cmd/thrum/main_test.go (indirect via Execute())
+// Commit: <pending>
+// Phase: 1
+// Remove once refactor verified green.
 
-	return cmd
-}
-
-func runPluginAdd(name, command string, includes []string, preset string) error {
-	if preset != "" {
-		p, ok := backup.PluginPresets[preset]
-		if !ok {
-			return fmt.Errorf("unknown preset %q (available: beads, beads-rust)", preset)
-		}
-		name = p.Name
-		command = p.Command
-		includes = p.Include
-	}
-
-	if name == "" {
-		return fmt.Errorf("--name or --preset is required")
-	}
-
-	thrumDir, err := paths.ResolveThrumDir(flagRepo)
-	if err != nil {
-		return fmt.Errorf("resolve thrum dir: %w", err)
-	}
-
-	cfg, err := config.LoadThrumConfig(thrumDir)
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
-
-	cfg.AddPlugin(config.PluginConfig{
-		Name:    name,
-		Command: command,
-		Include: includes,
-	})
-
-	if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
-		return fmt.Errorf("save config: %w", err)
-	}
-
-	fmt.Printf("Plugin %q added.\n", name)
-	return nil
-}
-
-func runPluginList() error {
-	thrumDir, err := paths.ResolveThrumDir(flagRepo)
-	if err != nil {
-		return fmt.Errorf("resolve thrum dir: %w", err)
-	}
-
-	cfg, err := config.LoadThrumConfig(thrumDir)
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
-
-	if len(cfg.Backup.Plugins) == 0 {
-		fmt.Println("No plugins configured.")
-		return nil
-	}
-
-	if flagJSON {
-		return cli.EmitJSON(cfg.Backup.Plugins)
-	}
-	for _, p := range cfg.Backup.Plugins {
-		fmt.Printf("  %s\n", p.Name)
-		if p.Command != "" {
-			fmt.Printf("    command: %s\n", p.Command)
-		}
-		if len(p.Include) > 0 {
-			fmt.Printf("    include: %v\n", p.Include)
-		}
-	}
-	return nil
-}
-
-func runPluginRemove(name string) error {
-	thrumDir, err := paths.ResolveThrumDir(flagRepo)
-	if err != nil {
-		return fmt.Errorf("resolve thrum dir: %w", err)
-	}
-
-	cfg, err := config.LoadThrumConfig(thrumDir)
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
-
-	if !cfg.RemovePlugin(name) {
-		return fmt.Errorf("plugin %q not found", name)
-	}
-
-	if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
-		return fmt.Errorf("save config: %w", err)
-	}
-
-	fmt.Printf("Plugin %q removed.\n", name)
-	return nil
-}
-
-// getWorktreeName extracts the worktree name from the repo path.
+// Cleanup: removed dangling orphan doc comment formerly at main.go:9491 — documented a long-inlined-or-removed helper; no associated function body existed.
 
 func telegramCmd() *cobra.Command {
 	cmd := &cobra.Command{
