@@ -8127,7 +8127,72 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		WarnThreshold:   warnCfg.WarnThresholdValue(),
 		AutoThreshold:   warnCfg.AutoThresholdValue(),
 	})
-	onWarn, onPreFire, onFire := buildContextPollCallbacks(warnCfg, tmuxHandler)
+	// RestartTrigger adapter (CR.4 T4.1 / thrum-6qmf.1.16). Wraps the
+	// snapshot-write + tmuxHandler.RestartSession + ctxPoller.PostRestart
+	// sequence so OnFire can invoke a single Restart(ctx, agentName, reason)
+	// call without the contextpoll package gaining a dependency on the rpc
+	// package (spec §5.2 import-cycle constraint).
+	//
+	// Snapshot semantics: writes the YAML-frontmatter snapshot to
+	// thrumDir/restart/<agent>.md BEFORE invoking RestartSession. Because
+	// RestartSession's force-flow fallback (rpc/tmux.go:1198) checks
+	// SnapshotExists and skips re-extraction if a snapshot is already
+	// present, our pre-write WINS — the agent's resume plan will record
+	// reason="automatic context-threshold restart at N%" rather than
+	// RestartSession's hardcoded "external". Snapshot write is best-effort:
+	// a failure to locate JSONL or extract content does not block the
+	// restart itself; the new session simply starts without a prose
+	// continuation.
+	restartTrigger := contextpoll.RestartTriggerFunc(func(ctx context.Context, agentName, reason string) error {
+		// Resolve identity from the shared identities dir. For worktrees
+		// that DON'T share thrumDir via redirect this lookup misses; the
+		// adapter then falls through to RestartSession with no snapshot
+		// pre-write, and RestartSession's own force-flow extraction takes
+		// over (with reason="external"). Most production agents share the
+		// redirect, so this is the hot path.
+		idPath := filepath.Join(thrumDir, "identities", agentName+".json")
+		if data, readErr := os.ReadFile(idPath); readErr == nil { // #nosec G304 -- identity path within thrumDir
+			var idFile config.IdentityFile
+			if jsonErr := json.Unmarshal(data, &idFile); jsonErr == nil {
+				homeDir, _ := os.UserHomeDir()
+				claudeDir := filepath.Join(homeDir, ".claude")
+				var jsonlPath string
+				if idFile.AgentPID > 0 {
+					jsonlPath, _ = restart.FindSessionJSONL(claudeDir, idFile.AgentPID)
+				}
+				if jsonlPath == "" && idFile.Worktree != "" {
+					jsonlPath, _ = restart.FindLatestJSONLForCwd(claudeDir, idFile.Worktree)
+				}
+				if jsonlPath != "" {
+					maxLines := warnCfg.RestartMaxLines()
+					if conversation, extractErr := restart.ExtractConversation(jsonlPath, maxLines); extractErr == nil {
+						snapshot := restart.FormatRestartSnapshot(agentName, idFile.SessionID, reason, conversation)
+						if saveErr := restart.SaveSnapshot(thrumDir, agentName, snapshot); saveErr != nil {
+							// Best-effort: log and proceed to RestartSession. The
+							// new session starts without a prose continuation
+							// — recoverable.
+							slog.Warn("[contextpoll] save snapshot failed; restart proceeds without prose continuation",
+								"agent", agentName, "reason", reason, "err", saveErr)
+						}
+					}
+				}
+			}
+		}
+		// Trigger the restart. RestartSession sees the snapshot we just wrote
+		// (if any) and skips its own extraction. Force=true bypasses the
+		// graceful-snapshot wait.
+		if _, err := tmuxHandler.RestartSession(ctx, agentName, rpc.RestartSessionOpts{Force: true}); err != nil {
+			return fmt.Errorf("restart %s (reason: %s): %w", agentName, reason, err)
+		}
+		// Clear poller state so the new session is re-evaluated from a fresh
+		// baseline. PostRestart drops the sticky parser choice + threshold
+		// debounce flags + restartInFlight guard; the next poll observes the
+		// new session's transcript path (via the wiring's re-Enroll path on
+		// identity refresh) and starts cycling from 0%.
+		ctxPoller.PostRestart(agentName)
+		return nil
+	})
+	onWarn, onPreFire, onFire := buildContextPollCallbacks(warnCfg, tmuxHandler, restartTrigger)
 	ctxPoller.OnWarn(onWarn)
 	ctxPoller.OnPreFire(onPreFire)
 	ctxPoller.OnFire(onFire)
@@ -8379,7 +8444,7 @@ type contextpollNudger interface {
 
 // buildContextPollCallbacks returns the three callback closures that the
 // contextpoll.Poller invokes at threshold crossings. Factored out of
-// daemonRun's body for CR.3 T3.1 / T3.2 testability:
+// daemonRun's body for CR.3 T3.1 / T3.2 + CR.4 T4.2 testability:
 //
 //   - OnWarn (§3.4.1 + spec §3.1.4): fires for every agent that crosses the
 //     warn tier, INCLUDING agents listed in AutoDisabledAgents. Operator
@@ -8388,15 +8453,23 @@ type contextpollNudger interface {
 //   - OnPreFire (§3.4.2 + spec §3.1.4): suppressed for AutoDisabledAgents.
 //     The pre-fire nudge is the last warning before force-fire; if
 //     force-fire is disabled, the pre-fire message would be false-urgency.
-//   - OnFire (§3.1.4): suppressed for AutoDisabledAgents. The real
-//     RestartTrigger.Restart call lands at CR.4 T4.3 (thrum-6qmf.1.18);
-//     T2.3 carries the slog.Info breadcrumb so operators can see the auto
-//     path would have fired even while the substrate is incomplete.
+//   - OnFire (§3.1.4 + spec §3.5): suppressed for AutoDisabledAgents. For
+//     enabled agents, delegates to the supplied RestartTrigger which performs
+//     the snapshot-write + RestartSession + PostRestart sequence. A failure
+//     is logged at Warn level so the in-flight guard still trips (preventing
+//     a tight retry loop) and the InFlightMaxWait backstop eventually clears
+//     it. A nil trigger short-circuits to the T2.3 slog.Info breadcrumb —
+//     useful for the small set of tests that don't care about the force-fire
+//     side of the contract.
 //
 // Body texts are the canonical plan §3.4.1 + brainstorm §Q2 / §Q4 prose,
 // inlined byte-for-byte. Future body refinements live here, not in the
 // daemon wiring.
-func buildContextPollCallbacks(warnCfg config.RestartConfig, sender contextpollNudger) (
+func buildContextPollCallbacks(
+	warnCfg config.RestartConfig,
+	sender contextpollNudger,
+	trigger contextpoll.RestartTrigger,
+) (
 	contextpoll.WarnCallback,
 	contextpoll.PreFireCallback,
 	contextpoll.FireCallback,
@@ -8424,18 +8497,30 @@ func buildContextPollCallbacks(warnCfg config.RestartConfig, sender contextpollN
 			"Run `/thrum:restart` now to preserve your prose continuation."
 		sender.SendSystemNudge(ctx, agentName, body)
 	}
-	onFire := func(_ context.Context, agentName string, usage contextpoll.ContextUsage) {
+	onFire := func(ctx context.Context, agentName string, usage contextpoll.ContextUsage) {
 		if warnCfg.IsAutoDisabled(agentName) {
 			return
 		}
-		// CR.4 T4.3 (thrum-6qmf.1.18) swaps this slog.Info for a real
-		// RestartTrigger.Restart call. The stub keeps the threshold engine
-		// end-to-end exercised: the Poller's in-flight guard still sets after
-		// this fires, the InFlightMaxWait backstop still clears it after 5
-		// min, and operators see a breadcrumb in the daemon log every time
-		// the auto path would have triggered a restart.
-		slog.Info("[contextpoll] OnFire stub — CR.4 T4.3 wires the real RestartTrigger",
-			"agent", agentName, "usage_pct", usage.UsedPercentage)
+		if trigger == nil {
+			// T2.3-shape stub: no trigger wired. Log the breadcrumb so an
+			// operator running an older daemon (pre-CR.4 land) still sees
+			// the auto path would have fired. Also covers tests that
+			// build the callbacks with a nil trigger to assert only the
+			// warn / pre-fire halves of the contract.
+			slog.Info("[contextpoll] OnFire stub — no RestartTrigger wired",
+				"agent", agentName, "usage_pct", usage.UsedPercentage)
+			return
+		}
+		reason := fmt.Sprintf("automatic context-threshold restart at %d%%", usage.UsedPercentage)
+		if err := trigger.Restart(ctx, agentName, reason); err != nil {
+			// Don't return the error — there's no caller to surface it to.
+			// The in-flight guard set by the Poller will prevent a tight
+			// retry loop; the InFlightMaxWait backstop (default 5min)
+			// re-arms the callback after the wall-clock window.
+			slog.Warn("[contextpoll] OnFire: RestartTrigger failed",
+				"agent", agentName, "usage_pct", usage.UsedPercentage,
+				"reason", reason, "err", err)
+		}
 	}
 	return onWarn, onPreFire, onFire
 }

@@ -73,8 +73,27 @@ type Parser interface {
 // This pattern mirrors agentdispatch.Restarter at
 // internal/daemon/agentdispatch/respawn.go:32, which exists for the same
 // cycle-prevention reason in B-B1's auto-respawn path.
+//
+// The reason argument is the human-readable cause of the restart — for the
+// auto-restart path this looks like "automatic context-threshold restart at
+// 82%". It flows through to FormatRestartSnapshot's YAML frontmatter so an
+// operator (or the post-restart agent reading the resume plan) can see WHY
+// the session was force-restarted, distinguishing this from a graceful
+// /thrum:restart or an external operator-initiated restart.
 type RestartTrigger interface {
-	Restart(ctx context.Context, agentName string) error
+	Restart(ctx context.Context, agentName, reason string) error
+}
+
+// RestartTriggerFunc adapts a plain function value into a RestartTrigger. The
+// daemon wires the real adapter via this helper so cmd/thrum/main.go's
+// boot-time block can construct the closure inline without declaring a
+// dedicated type — matching the http.HandlerFunc / sort.SliceStable patterns
+// that callers expect from Go's standard library.
+type RestartTriggerFunc func(ctx context.Context, agentName, reason string) error
+
+// Restart implements RestartTrigger by invoking the underlying function.
+func (f RestartTriggerFunc) Restart(ctx context.Context, agentName, reason string) error {
+	return f(ctx, agentName, reason)
 }
 
 // ContextProvider is the read-only surface TeamHandler uses to read cached
