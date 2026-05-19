@@ -262,26 +262,36 @@ func (l *SyncLoop) doSync(ctx context.Context) {
 		}
 	}
 
-	// 5. Commit and push if local changes
+	// 5. Commit and push if local changes.
+	// Capture HEAD before CommitAndPush so the post-call comparison can
+	// tell whether a new commit actually landed. Spec §10 requires
+	// sync.commit to fire "per commit landed on a-sync" — emitting on
+	// every doSync (including no-op CommitAndPush paths) would mint
+	// false-positive telemetry that downstream operators can't easily
+	// distinguish from real commits.
+	preSHA := ""
+	if shaBytes, shaErr := safecmd.Git(ctx, l.syncDir, "rev-parse", "HEAD"); shaErr == nil {
+		preSHA = strings.TrimSpace(string(shaBytes))
+	}
 	if err := l.syncer.CommitAndPush(ctx); err != nil {
 		l.setError(fmt.Errorf("commit and push: %w", err))
 		return
 	}
 
-	// 6. Emit sync.commit telemetry after a successful commit.
-	// Resolve commit SHA from HEAD; non-fatal if it fails (offline / no commit).
-	commitSHA := ""
+	// 6. Emit sync.commit telemetry only when a new commit actually
+	// landed (post-HEAD differs from pre-HEAD).
+	postSHA := ""
 	if shaBytes, shaErr := safecmd.Git(ctx, l.syncDir, "rev-parse", "HEAD"); shaErr == nil {
-		commitSHA = strings.TrimSpace(string(shaBytes))
+		postSHA = strings.TrimSpace(string(shaBytes))
 	}
-	if commitSHA != "" {
+	if postSHA != "" && postSHA != preSHA {
 		stateFiles, msgRows, rcptRows := 0, 0, 0
 		if l.walkerCounts != nil {
 			stateFiles, msgRows, rcptRows = l.walkerCounts()
 		}
 		filesChanged := stateFiles + msgRows + rcptRows
 		slog.Info("sync.commit",
-			"commit_sha", commitSHA,
+			"commit_sha", postSHA,
 			"files_changed", filesChanged,
 			"state_files", stateFiles,
 			"message_rows", msgRows,

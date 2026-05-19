@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	gosync "sync"
 	"time"
 
@@ -400,9 +401,23 @@ func (w *Walker) buildAgentSnapshot(ctx context.Context, agentID string) (*state
 	}
 
 	// Attempt to resolve the worktree path from agent_work_contexts.
+	// The table is optional enrichment — agents that haven't yet
+	// registered a work context get an empty Worktree field (the
+	// downstream branchResolver tolerates ""). The table itself is
+	// also optional for callers that operate against a minimal
+	// schema (unit tests with hand-rolled DDL, early-bootstrap
+	// states). Tolerate both ErrNoRows AND "no such table" by
+	// continuing with an empty worktree; propagate any other error
+	// so the walker aborts cleanly rather than producing a
+	// half-populated snapshot for a real DB problem (corrupted
+	// index, ctx cancelled, lock timeout, etc.).
 	var worktree string
 	const wq = `SELECT worktree_path FROM agent_work_contexts WHERE agent_id = ? LIMIT 1`
-	_ = w.db.QueryRowContext(ctx, wq, agentID).Scan(&worktree)
+	if err := w.db.QueryRowContext(ctx, wq, agentID).Scan(&worktree); err != nil {
+		if err != sql.ErrNoRows && !strings.Contains(err.Error(), "no such table") {
+			return nil, fmt.Errorf("query worktree for agent %s: %w", agentID, err)
+		}
+	}
 
 	var lastSeen time.Time
 	if lastSeenAt != "" {
