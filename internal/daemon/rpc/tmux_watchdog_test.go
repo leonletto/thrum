@@ -392,6 +392,42 @@ func TestPaneAgentEngaged_TwoAckLines_NotEngaged(t *testing.T) {
 	}
 }
 
+// TestPaneAgentEngaged_LongBannerJoinedPostKtp8_NotEngaged pins thrum-ktp8: the
+// full identity-banner printf body (Agent/Role/Worktree/Branch lines + the
+// must-read sentinel) is long enough that without tmux's `-J` capture flag
+// the sentinel wraps mid-string across two pane lines. When that happens,
+// `strings.Contains(line, sentinel)` finds NEITHER half → topIdx stays at
+// -1 → paneAgentEngaged returns true conservatively → no corrective nudge
+// fires → the rc.5 thrum-qpw7 ack-line exclusion never runs (masked bug).
+// The fix is to add `-J` to CapturePane (internal/tmux/tmux.go) so tmux
+// joins wrapped lines BEFORE returning. This test pins the failure surface:
+// when CapturePane returns the realistic full-banner content in JOINED form
+// (one logical line per printf arg, sentinel intact), paneAgentEngaged
+// correctly walks the region between sentinel and spinner and falls through
+// to the ack-exclusion path, returning false (not engaged → nudge fires).
+//
+// Fixture mirrors the actual pane shape from Leon's rc.5 spot-check of
+// @impl_writer_website_dev (bd thrum-ktp8 description) — the live trigger
+// case that surfaced the wrap bug.
+func TestPaneAgentEngaged_LongBannerJoinedPostKtp8_NotEngaged(t *testing.T) {
+	pane := "Agent: @impl_writer_website_dev\n" +
+		"Role:  implementer\n" +
+		"Worktree: /Users/leon/.thrum/worktrees/thrum/website-dev\n" +
+		"Branch: website-dev\n" +
+		identitybanner.PrimeTruncationSentinel + "\n" +
+		"\n" +
+		"@impl_writer_website_dev primed (implementer/website-dev). Standing by for website-dev tasks. Standing by.\n" +
+		"\n" +
+		"✻ Cooked for 3s\n" +
+		"\n" +
+		"────────────────────────────────────────\n" +
+		"❯                                       \n"
+	got := paneAgentEngaged(pane, testBottomAnchorRe, testSpinnerRe)
+	if got {
+		t.Error("expected false (not engaged) for the post-ktp8 joined-form full-banner pane — sentinel must be detected on its own line, decision region must contain only blanks + the canonical ack line, and the watchdog must fire the corrective nudge")
+	}
+}
+
 // ── nudgeSilentPaneAfter integration tests ───────────────────────────────────
 
 // stableActivity returns a tmuxLastActivityFn stub that always reports
