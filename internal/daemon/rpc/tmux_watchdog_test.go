@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/identitybanner"
+	"github.com/leonletto/thrum/internal/runtime"
 )
 
 // buildClaudeFreshPane returns a simulated pane snapshot that mimics a freshly
@@ -43,13 +44,24 @@ func buildClaudeRespondedPane() string {
 		"│ >                                     │\n"
 }
 
+// Per spec §9.11.1 (Task 71), pane-region anchor regexes consumed by
+// the watchdog tests source from the canonical runtime registry rather
+// than redeclaring. init() panics on registry miss — fail-fast at
+// test setup is the correct response (every test in this file would
+// otherwise mis-execute against zero-value regex pointers).
 var (
-	testBottomAnchorRe = regexp.MustCompile(`^─{20,}$`)
-	// testSpinnerRe uses \S+ (not \w+) to handle unicode verb suffixes like
-	// "Sautéed", and accepts both short ("for 17s") and long ("for 1m 45s")
-	// duration formats. Mirrors claudeSpinnerRegex in internal/runtime/presets.go.
-	testSpinnerRe = regexp.MustCompile(`^✻ \S+ for \d+(?:m \d+)?s$`)
+	testBottomAnchorRe *regexp.Regexp
+	testSpinnerRe      *regexp.Regexp
 )
+
+func init() {
+	preset, err := runtime.GetPreset("claude")
+	if err != nil {
+		panic(fmt.Sprintf("tmux_watchdog_test setup: runtime.GetPreset(\"claude\"): %v", err))
+	}
+	testBottomAnchorRe = preset.BottomAnchorRegex
+	testSpinnerRe = preset.SpinnerRegex
+}
 
 // ── paneAgentEngaged unit tests ──────────────────────────────────────────────
 
