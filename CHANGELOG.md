@@ -105,12 +105,12 @@ authors until they upgrade.
 - **Schema v25-v32 forward-port from thrum-agents** — `CurrentVersion` bumped
   from 24 to 32 with 7 new migration blocks (scheduler_job_state +
   scheduler_job_events, agent column extensions, agent_lifecycle_events,
-  reminders, email_msg_seen + email_outbound_queue + email_peer_rate_state).
-  The tables are intentionally dead-end on v0.10.5 — no consumer code reads
-  from them. Goal is binary-supports-v32-schema-on-disk so v0.10.5 binaries
-  can open DBs previously touched by v0.11-substrate work on multi-binary
-  worktree machines. v29 is a deliberate gap (reserved for substrate
-  follow-ups); `runMigrations` handles gapped sequences naturally.
+  reminders, email_msg_seen + email_outbound_queue + email_peer_rate_state). The
+  tables are intentionally dead-end on v0.10.5 — no consumer code reads from
+  them. Goal is binary-supports-v32-schema-on-disk so v0.10.5 binaries can open
+  DBs previously touched by v0.11-substrate work on multi-binary worktree
+  machines. v29 is a deliberate gap (reserved for substrate follow-ups);
+  `runMigrations` handles gapped sequences naturally.
 
 ### Changed
 
@@ -134,23 +134,22 @@ authors until they upgrade.
   features were removed in earlier releases; the README is now consistent with
   the current CLI surface.
 - **`/thrum:restart` skill: §1 Big picture mandate + 11-section structure.**
-  Restart snapshots must now begin with a `## 1. Big picture — what shipped
-  this session` heading (1-3 specific sentences naming artifacts, decisions,
-  cycles closed), so the snapshot doubles as the agent's own log entry
-  visible in `thrum agent sessions list`. The free-form prose enumeration
-  was replaced with a numbered structure (sections 2-11) covering artifact
-  state, players, decisions-with-context, repo-owner questions, outstanding
-  work, patterns-that-burned-us, file paths, resume plan, honest unknowns,
-  and end-of-continuation reflection. Forward-ported from thrum-agents into
-  release/v0.10.5 so rc.4 ships the mandate.
+  Restart snapshots must now begin with a
+  `## 1. Big picture — what shipped this session` heading (1-3 specific
+  sentences naming artifacts, decisions, cycles closed), so the snapshot doubles
+  as the agent's own log entry visible in `thrum agent sessions list`. The
+  free-form prose enumeration was replaced with a numbered structure (sections
+  2-11) covering artifact state, players, decisions-with-context, repo-owner
+  questions, outstanding work, patterns-that-burned-us, file paths, resume plan,
+  honest unknowns, and end-of-continuation reflection. Forward-ported from
+  thrum-agents into release/v0.10.5 so rc.4 ships the mandate.
 - **`bd comments` invocation syntax corrected across docs.** Role-preamble
-  templates (`internal/context/roleconfig/templates/roles/implementer-*.md`)
-  and `bd` reference docs (`website/docs/beads-and-thrum.md`,
+  templates (`internal/context/roleconfig/templates/roles/implementer-*.md`) and
+  `bd` reference docs (`website/docs/beads-and-thrum.md`,
   `docs/beads-and-thrum.md`) listed the subcommand as
   `bd comments <id> add "note"`; the actual CLI is
-  `bd comments add <id> "note"`. Silently failed on every invocation against
-  the wrong shape. Corrected; column alignment preserved on code-block
-  examples.
+  `bd comments add <id> "note"`. Silently failed on every invocation against the
+  wrong shape. Corrected; column alignment preserved on code-block examples.
 
 ### Fixed
 
@@ -184,17 +183,28 @@ authors until they upgrade.
 - **SEO: BlogPosting JSON-LD non-critical warnings cleaned up** — Schema.org
   warnings on generated blog pages.
 - **Downgrade-guard error message: actionable recovery hints + CLAUDE.md
-  prevention** (thrum-quth, P1). When a binary's max supported schema is
-  below the on-disk DB's schema (common after `make install` from a
-  newer-schema branch on a multi-binary worktree machine), the daemon
-  refuses to start. Pre-rc.4 the error named the version pair but gave
-  no recovery path beyond a one-line hint. The expanded error now includes:
-  binary's `CurrentVersion`, DB's current schema, two concrete recovery
-  paths (re-install matching binary; daemon-stop-first then rm the DB +
-  WAL/SHM with explicit `LOSES local message history` warning), and a
-  pointer to a new "Multi-Binary Worktree Footgun" section in CLAUDE.md
-  explaining why/avoid/recover. Test pin expanded from 1 to 9 contract
-  substrings.
+  prevention** (thrum-quth, P1). When a binary's max supported schema is below
+  the on-disk DB's schema (common after `make install` from a newer-schema
+  branch on a multi-binary worktree machine), the daemon refuses to start.
+  Pre-rc.4 the error named the version pair but gave no recovery path beyond a
+  one-line hint. The expanded error now includes: binary's `CurrentVersion`,
+  DB's current schema, two concrete recovery paths (re-install matching binary;
+  daemon-stop-first then rm the DB + WAL/SHM with explicit
+  `LOSES local message history` warning), and a pointer to a new "Multi-Binary
+  Worktree Footgun" section in CLAUDE.md explaining why/avoid/recover. Test pin
+  expanded from 1 to 9 contract substrings.
+- **Post-launch silence watchdog detects ack-without-act** (thrum-qpw7). After
+  the identity-banner printf injection at tmux launch/restart, the watchdog
+  (`paneAgentEngaged`) treated the model's printf-mandated ack line
+  (`@<name> primed (<role>). Standing by.`) as real agent output — a
+  false-positive that suppressed the corrective nudge when the model
+  acknowledged the printf body WITHOUT Reading the (possibly truncated) prime
+  briefing. The engagement check now ignores lines matching the canonical ack
+  pattern `@\S+\s+primed\s*\(`, so the watchdog still nudges the agent into
+  running `thrum prime`. The regex is anchored on the literal `(` opener that
+  all 5 runtime plugins emit (claude/cursor/opencode/codex/kiro), so unrelated
+  prose like `@impl_v0105 primed the database` is not mis-classified and real
+  agent output still suppresses the nudge correctly.
 
 ## [0.10.4] - 2026-05-16
 

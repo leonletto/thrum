@@ -1366,6 +1366,22 @@ func sendKeysAndSubmit(target, text string) error {
 	return nil
 }
 
+// printfAckLineRe matches the one-line ack pattern an agent emits in response
+// to the identity printf at the end of the launch banner (e.g.
+// `@impl_v0105 primed (implementer/v0105). Standing by.`). Runtimes can print
+// this line WITHOUT having Read the (possibly truncated) prime briefing — the
+// printf body looks like a complete prompt and the model acknowledges it
+// without following the embedded "must read it now" directive. paneAgentEngaged
+// treats matches of this regex as "no real output" so the post-launch silence
+// watchdog still nudges the agent into running the prime. thrum-qpw7.
+//
+// The pattern requires the canonical `primed (` opener — all 5 runtime plugins
+// (claude/cursor/opencode/codex/kiro) emit the ack as
+// `@<name> primed (<role>[/<module>]). <intent>. Standing by.`, so anchoring
+// on the literal `(` eliminates false-positives on unrelated prose like
+// `@impl_v0105 primed the database` while keeping every canonical ack matched.
+var printfAckLineRe = regexp.MustCompile(`@\S+\s+primed\s*\(`)
+
 // paneAgentEngaged reports whether a captured pane snapshot contains real
 // agent output in the decision region bounded by two anchors. It is used by
 // nudgeSilentPaneAfter (thrum-84xc) to replace the naive byte-equality diff
@@ -1388,6 +1404,8 @@ func sendKeysAndSubmit(target, text string) error {
 //     confidently, don't nudge).
 //  4. For each line in [topIdx+1 .. bottomIdx-1]:
 //     - Trim whitespace; if empty → ignore.
+//     - If matches printfAckLineRe (printf-mandated ack with no Read of the
+//     prime briefing — thrum-qpw7) → ignore.
 //     - Else → real agent output → return true (engaged, no nudge).
 //  5. Loop completes with no real output → return false (not engaged, nudge).
 //
@@ -1437,11 +1455,19 @@ func paneAgentEngaged(captured string, bottomAnchorRe, spinnerRe *regexp.Regexp)
 	}
 
 	for _, l := range lines[topIdx+1 : bottomIdx] {
-		if strings.TrimSpace(l) != "" {
-			return true // real agent output found
+		trimmed := strings.TrimSpace(l)
+		if trimmed == "" {
+			continue
 		}
+		if printfAckLineRe.MatchString(trimmed) {
+			// thrum-qpw7: agent printed the printf-mandated ack but
+			// did NOT Read the prime briefing. Not real output —
+			// let the watchdog fire the corrective nudge.
+			continue
+		}
+		return true // real agent output found
 	}
-	return false // only blanks between sentinel and spinner/divider — not engaged
+	return false // only blanks (and/or ack lines) between sentinel and spinner/divider — not engaged
 }
 
 // nudgeSilentPaneAfter implements thrum-puhr.10 + thrum-84xc: after a
