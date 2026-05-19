@@ -18,8 +18,9 @@ SessionStart and PreCompact).
 ### Messaging
 
 ```bash
-thrum send "msg" --to @name              Direct message
-thrum send "msg" --to @everyone          Broadcast to all agents
+thrum send "msg" --to @name              Direct message (canonical form)
+thrum send "msg" --broadcast             Explicit team-wide fanout
+thrum send "msg" --to @everyone          Broadcast (legacy keyword; --broadcast preferred)
 thrum reply <msg-id> "response"          Reply (same audience)
 thrum inbox                              List messages (auto-marks displayed as read)
 thrum inbox --unread                     Unread only (does not mark as read)

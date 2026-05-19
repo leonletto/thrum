@@ -24,20 +24,28 @@ message-listener:
 Task(subagent_type="message-listener", run_in_background=true, prompt="...")
 ```
 
-## 4. Using --broadcast or --everyone to Broadcast
+## 4. Sending Without an Explicit Recipient Flag
 
-Those flags don't exist. The only broadcast form is `--to @everyone`:
+`thrum send 'msg'` with no `--to` or `--broadcast` is a hard error (thrum-t698,
+v0.10.6+). The previous default — silent broadcast to every team agent — was a
+real footgun, so the CLI now requires the recipient to be explicit:
 
 ```bash
-# Wrong — these flags don't exist
-thrum send "msg" --broadcast
-thrum send "msg" --everyone
+# Wrong — hard-errors with a "missing recipient" prompt
+thrum send "msg"
 
-# Right
+# Right — directed send (canonical form, matches CLAUDE.md convention)
+thrum send "msg" --to @coordinator_main
+
+# Right — explicit team-wide fanout (new in v0.10.6)
+thrum send "msg" --broadcast
+
+# Right — legacy keyword form (still works; --broadcast is preferred)
 thrum send "msg" --to @everyone
 ```
 
-`@everyone` is auto-created and handles membership dynamically.
+`--to` and `--broadcast` are mutually exclusive. `@everyone` continues to be
+auto-created and handles membership dynamically.
 
 ## 5. Skipping Registration
 
