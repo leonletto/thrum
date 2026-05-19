@@ -29,7 +29,7 @@ of the tier ladder below. That keeps the discipline single-sourced.
 ## Step 1 — Run the sweep
 
 ```bash
-bash scripts/tmux-agent-sweep.sh --lines 20 --out /tmp/agent-sweep.txt
+bash scripts/tmux-agent-sweep.sh --out /tmp/agent-sweep.txt
 grep -E 'ctx_used:|^===== ' /tmp/agent-sweep.txt
 ```
 
@@ -120,28 +120,39 @@ After force-restart, re-send the agent's current dispatch as if it were a fresh
 dispatch — their previous in-flight work may need to resume from scratch (any
 WIP files in their worktree are theirs to audit salvage-vs-discard).
 
-## Step 6 — API-error nudge (orthogonal to ctx tier ladder)
+## Step 6 — API-error auto-nudge (handled by the sweep script)
 
-Separate from context % entirely: the sweep script's `api_errors:` line
-surfaces any Anthropic API errors detected in the captured pane (`529
-Overloaded`, `API Error`, `Rate limit`, `status.claude.com`, `Try again`).
+The sweep script now auto-nudges every agent whose pane shows an `API Error`
+line. The script types `continue` into the affected pane via `tmux send-keys`
+(bypassing the `thrum tmux send` wrapper queue, which stalls on fully-silent
+panes per `thrum-7yhs`). You do not need to fire these nudges yourself.
 
-For any agent with `api_errors: (something other than (none))`:
+The sweep report's header lists every agent that was auto-nudged in the
+current run, e.g.:
 
-```bash
-thrum tmux send <tmux_session> 'continue'
+```
+# auto-nudged 3 agent(s) on api_errors with 'continue':
+#   - impl_foo @ foo-impl:0.0
+#   - impl_bar @ bar-impl:0.0
+#   ...
 ```
 
-That's it. No question, no inbox message — just types `continue` into their
-pane. The runtime retries the API call and they pick up where they left off.
+Anthropic 529s and rate limits are transient (typically resolve in
+seconds-to-minutes); the agent's previous tool call is queued in-session, so a
+single `continue` reactivates them without losing in-flight state. Sweeps fire
+every ~20 min, so a single rate-limit episode rarely spans more than one
+sweep — auto-nudge converges naturally.
 
-Anthropic 529s are transient (typically resolve in seconds-to-minutes); the
-agent's previous tool call is already queued in their session, so a single
-`continue` reactivates them without losing in-flight state.
+**When to escalate:** if the same agent appears in `auto-nudged` lines on TWO
+consecutive sweeps despite the nudge, the issue isn't transient — surface to
+operator as SUSPECTED-STUCK and investigate manually (status.claude.com,
+network, account limits).
 
-If the same agent shows api_errors on TWO consecutive sweeps despite the nudge,
-the issue isn't transient — surface to operator as SUSPECTED-STUCK and
-investigate manually (status.claude.com, network, account limits).
+**When NOT to auto-nudge:** if you're about to ship a release and you'd
+prefer the agent's stuck-state held to fold one more fix into the current
+cycle, surface to operator BEFORE the next sweep so the auto-nudge can be
+held. Once `continue` fires, the agent resumes its previous tool call
+immediately — there's no recovery window.
 
 ## Cron-fire safety checks
 

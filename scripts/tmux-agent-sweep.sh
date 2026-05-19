@@ -26,7 +26,7 @@
 
 set -euo pipefail
 
-LINES=15
+LINES=10
 ROLE_FILTER=""   # empty = no filter
 OUT=""           # empty = stdout
 SHOW_ALL=0       # 0 = only emit flagged agents (default); 1 = emit all
@@ -127,6 +127,7 @@ fi
 ATTENTION_BUF=$(mktemp)
 ALL_BUF=$(mktemp)
 ATTENTION_COUNT=0
+auto_nudges=()
 trap 'rm -f "$ATTENTION_BUF" "$ALL_BUF"' EXIT
 
 for line in "${agent_lines[@]}"; do
@@ -171,12 +172,15 @@ for line in "${agent_lines[@]}"; do
     # remediation is `thrum tmux send <session> 'continue'` — see
     # coordinator-context-monitoring SKILL §Step 6.
     if [[ "$pane_capture_ok" -eq 1 ]]; then
-        # Look for Claude Code's specific error-display phrases. Patterns are
-        # tightened against false-positive on agents whose panes happen to
-        # show source code containing regex-like fragments (coord viewing this
-        # very script triggered "API Error[^." matches). grep returns non-zero
-        # on no-match under pipefail; suppress with || true.
-        api_errors=$(printf '%s\n' "$pane" | { grep -oE 'API Error: [0-9]{3}[^\n]*|529 Overloaded|status\.claude\.com|This is a server-side issue|Try again in a moment' || true; } | sort -u | paste -sd '; ' -)
+        # Match Claude Code's "⎿  API Error: ..." tool-result error lines.
+        # Phrasing of the error suffix varies (3-digit codes, "Server is
+        # temporarily limiting requests", "Rate limited", etc.) so we don't
+        # constrain the tail — but we DO anchor to the ⎿ tool-result prefix
+        # so that source code containing "API Error" strings (this very script,
+        # commit messages, comments) and prior sweep output (which echoes
+        # captured error text back) don't trigger recursive false-positives.
+        # grep returns non-zero on no-match under pipefail; suppress with || true.
+        api_errors=$(printf '%s\n' "$pane" | { grep -oE '⎿[[:space:]]+API Error[^\n]*' || true; } | sort -u | paste -sd '; ' -)
         [[ -z "$api_errors" ]] && api_errors="(none)"
     else
         api_errors="(capture failed)"
@@ -221,6 +225,19 @@ for line in "${agent_lines[@]}"; do
     # api_errors present?
     if [[ "$api_errors" != "(none)" && "$api_errors" != "(capture failed)" ]]; then
         needs_attention=1
+        # Auto-nudge: API errors (rate limits, transient server-side issues) are
+        # deterministically recoverable by typing "continue" into the affected
+        # pane — Claude Code retries the previous tool call from the same session
+        # state. The thrum tmux send wrapper's queue stalls on fully-silent panes
+        # (filed as thrum-7yhs), so we bypass via raw tmux send-keys here. Only
+        # fires when this specific agent's pane contains an api_errors match, so
+        # no cross-agent carry-over.
+        if [[ -n "$tmux_session" && "$tmux_session" != "(none)" ]]; then
+            tmux_target="${tmux_session%%:*}:0.0"
+            tmux send-keys -t "$tmux_target" "continue" Enter 2>/dev/null && \
+                auto_nudges+=("$agent_id @ $tmux_target") || \
+                auto_nudges+=("$agent_id @ $tmux_target (FAILED)")
+        fi
     fi
 
     if [[ "$needs_attention" -eq 1 ]]; then
@@ -235,6 +252,10 @@ echo "# generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 echo "# lines per pane: $LINES"
 [[ -n "$ROLE_FILTER" ]] && echo "# role filter: $ROLE_FILTER"
 echo "# alive agents: ${#agent_lines[@]}; flagged: $ATTENTION_COUNT (ctx>=${CTX_THRESHOLD}% or api_errors or capture-fail)"
+if [[ ${#auto_nudges[@]} -gt 0 ]]; then
+    echo "# auto-nudged ${#auto_nudges[@]} agent(s) on api_errors with 'continue':"
+    for n in "${auto_nudges[@]}"; do echo "#   - $n"; done
+fi
 
 # Emit body: --all forces full emit; otherwise only flagged agents
 if [[ "$SHOW_ALL" -eq 1 ]]; then
