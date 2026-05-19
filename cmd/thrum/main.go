@@ -51,6 +51,7 @@ import (
 	"github.com/leonletto/thrum/internal/netdetect"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/process"
+	"github.com/leonletto/thrum/internal/projection"
 	"github.com/leonletto/thrum/internal/restart"
 	"github.com/leonletto/thrum/internal/runtime"
 	"github.com/leonletto/thrum/internal/subscriptions"
@@ -5878,11 +5879,15 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			slog.Warn("compaction.startup_failed", "err", err)
 		}
 
-		// Construct the orphan pool. Task 16 / thrum-s6os.12 wires it
-		// into the projection's message-apply path (pool.Add +
-		// ResolveOnStateLand calls); here we just construct + register
-		// the diagnostics RPC so the surface is reachable from day one.
+		// Construct the orphan pool and wire it into the projector so
+		// applyMessageCreate can flag orphaned messages and register them
+		// with the pool (thrum-s6os E11 / Task 16). The resolver must be
+		// wired BEFORE syncLoop.Start so the catch-up sync on first boot
+		// sees the pool-integration path.
 		pendingPool = syncPending.New()
+		projResolver := projection.NewProjectionResolver(st.Projector())
+		st.Projector().SetPendingPool(syncDir, pendingPool)
+		st.Projector().SetPendingResolver(projResolver)
 
 		if err := syncLoop.Start(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to start sync loop: %v\n", err)
