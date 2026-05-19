@@ -5878,6 +5878,15 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			log.Printf("sync: startup CompactAll failed: %v", err)
 			slog.Warn("compaction.startup_failed", "err", err)
 		}
+		// Per spec §5.3, CompactAll fires at sync-trigger time in
+		// addition to daemon startup. Wire the closure so
+		// Triggers.SyncOnWrite invokes compaction after the walker
+		// writes succeed and before TriggerSync — any rewrite of
+		// messages-v2/<id>.jsonl / receipts/<id>.jsonl folds into
+		// the same commit as the walker's appends.
+		triggers.SetCompactor(func(ctx context.Context) error {
+			return compactor.CompactAll(ctx, st.DB())
+		})
 
 		// Construct the orphan pool and wire it into the projector so
 		// applyMessageCreate can flag orphaned messages and register them

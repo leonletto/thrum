@@ -78,6 +78,18 @@ func (c *Compactor) CompactEventsJournal(ctx context.Context, db *safedb.DB) (in
 
 	journalPath := filepath.Join(c.thrumDir, "events.jsonl")
 
+	// Stat the file pre-compaction to compute bytes_saved for the slog
+	// event (jsonl.RemoveBeforeTimestamp only returns the row count;
+	// the messages/receipts dedup paths compute bytes_saved from their
+	// own pre/post sizes so events should match for consistent telemetry).
+	// Missing file is a normal pre-first-write state and produces
+	// bytes_saved=0; any other stat error degrades the telemetry without
+	// failing the compaction.
+	preSize := int64(0)
+	if info, statErr := os.Stat(journalPath); statErr == nil {
+		preSize = info.Size()
+	}
+
 	// JSONL side: reuse the existing helper (spec §5.3, plan Task 6).
 	journalRemoved, err := jsonl.RemoveBeforeTimestamp(journalPath, "timestamp", cutoff)
 	if err != nil {
@@ -95,10 +107,14 @@ func (c *Compactor) CompactEventsJournal(ctx context.Context, db *safedb.DB) (in
 	}
 
 	if journalRemoved > 0 {
+		bytesSaved := int64(0)
+		if info, statErr := os.Stat(journalPath); statErr == nil {
+			bytesSaved = preSize - info.Size()
+		}
 		slog.Info("compaction.trimmed",
 			"path", journalPath,
 			"rows_removed", journalRemoved,
-			"bytes_saved", 0)
+			"bytes_saved", bytesSaved)
 	}
 
 	return journalRemoved, nil
