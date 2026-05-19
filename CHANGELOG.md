@@ -81,17 +81,17 @@ and this project adheres to
 - **BREAKING: `thrum send` requires explicit recipient flag** (thrum-t698).
   Invoking `thrum send 'msg'` without either `--to @<agent>` or the new
   `--broadcast` flag now hard-errors (exit 1) with a conversational stderr
-  message offering the two valid paths. Previously the no-flag default
-  silently broadcast to every team agent — a real footgun that scaled with
-  team size (coord live-demonstrated it during Session 75 with an accidental
-  94-agent broadcast). The CLAUDE.md convention has long said "always use
-  `--to @<specific-name>`, never role names"; this aligns the CLI default
-  with the convention. Migration: explicit `--to @<agent_name>` (the common
-  case) or `--broadcast` (when team fanout is genuinely intended).
-  `--to @everyone` continues to work as the legacy keyword form. `--to` and
-  `--broadcast` are mutually exclusive. CLI_REFERENCE.md + thrum SKILL.md
-  updated; the broader doc audit (quickstart.md, messaging.md, identity.md,
-  llms.txt, llms-full.txt) is queued for the rc.6-cycle doc-cleanup pass.
+  message offering the two valid paths. Previously the no-flag default silently
+  broadcast to every team agent — a real footgun that scaled with team size
+  (coord live-demonstrated it during Session 75 with an accidental 94-agent
+  broadcast). The CLAUDE.md convention has long said "always use
+  `--to @<specific-name>`, never role names"; this aligns the CLI default with
+  the convention. Migration: explicit `--to @<agent_name>` (the common case) or
+  `--broadcast` (when team fanout is genuinely intended). `--to @everyone`
+  continues to work as the legacy keyword form. `--to` and `--broadcast` are
+  mutually exclusive. CLI_REFERENCE.md + thrum SKILL.md updated; the broader doc
+  audit (quickstart.md, messaging.md, identity.md, llms.txt, llms-full.txt) is
+  queued for the rc.6-cycle doc-cleanup pass.
 
 ### Fixed
 
@@ -152,17 +152,16 @@ and this project adheres to
   content for the `PrimeTruncationSentinel` to bound the decision region.
   Without tmux's `-J` flag, long identity-banner content (Agent + Role +
   Worktree + Branch + sentinel, frequently > 100 chars on typical terminals)
-  wrapped mid-string, splitting the sentinel across two pane lines. The
-  per-line `strings.Contains(line, sentinel)` check then failed to match
-  on any single line → `topIdx = -1` → conservative `return true` → no
-  nudge fired. This silently masked the rc.5 thrum-qpw7 ack-exclusion fix
-  (which was correct but never reached because sentinel detection failed
-  first). `-J` joins wrapped lines (and preserves trailing spaces); all 5
-  non-watchdog `CapturePane` callers (HandleCapture RPC, queue captured-
-  output, alert-silence run-shell, permission paneStillMatches) are text-
-  search consumers that benefit from joined output, none depend on wrap-
-  preservation. Surfaced during Leon's @impl_writer_website_dev rc.5
-  spot-check.
+  wrapped mid-string, splitting the sentinel across two pane lines. The per-line
+  `strings.Contains(line, sentinel)` check then failed to match on any single
+  line → `topIdx = -1` → conservative `return true` → no nudge fired. This
+  silently masked the rc.5 thrum-qpw7 ack-exclusion fix (which was correct but
+  never reached because sentinel detection failed first). `-J` joins wrapped
+  lines (and preserves trailing spaces); all 5 non-watchdog `CapturePane`
+  callers (HandleCapture RPC, queue captured- output, alert-silence run-shell,
+  permission paneStillMatches) are text- search consumers that benefit from
+  joined output, none depend on wrap- preservation. Surfaced during Leon's
+  @impl_writer_website_dev rc.5 spot-check.
 
 ## [0.10.4] - 2026-05-16
 
