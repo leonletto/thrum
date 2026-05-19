@@ -1844,9 +1844,25 @@ var (
 	getUserOptionFn    = ttmux.GetUserOption
 	setUserOptionFn    = ttmux.SetUserOption
 	capturePaneFn      = ttmux.CapturePane
+	isSilentFn         = ttmux.IsSilent
 	sleepFn            = time.Sleep
 	tmuxLastActivityFn = ttmux.LastActivity
 	timeNowFn          = time.Now
+)
+
+// Dispatch-watchdog tunables for the queue's bootstrap path (thrum-7yhs).
+// pollDispatchSilence polls IsSilent every dispatchPollInterval while a
+// queued command waits at position 1, and force-flushes after
+// maxDispatchWait regardless of pane state. The force-flush handles
+// "stuck-static-with-ticking-spinner" panes (e.g. claude TUI ticking
+// "Cooked for 15m 10s" during an API rate-limit stall) where tmux's
+// silence detector never fires because the spinner counts as activity.
+//
+// Vars (not consts) so tests can shorten them. Tests must restore via
+// t.Cleanup after override.
+var (
+	maxDispatchWait      = 30 * time.Second
+	dispatchPollInterval = 2 * time.Second
 )
 
 // silenceThreshold is the consecutive-silence window the watchdog waits for

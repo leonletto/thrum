@@ -15,6 +15,13 @@ import (
 
 // setupTmuxHandlerTest creates a TmuxHandler backed by an in-memory state instance.
 // Returns the handler and a cleanup function. Mirrors setupPurgeTest in purge_test.go.
+//
+// Side effect: neutralizes the dispatch watchdog (thrum-7yhs) for the test
+// duration by setting dispatchPollInterval to 24h. HandleQueue's "pane busy"
+// else-branch spawns pollDispatchSilence in a background goroutine; without
+// neutralization, that goroutine would still be ticking when the test's state
+// is closed, racing against cleanup. Tests that specifically exercise the
+// watchdog must override dispatchPollInterval themselves.
 func setupTmuxHandlerTest(t *testing.T) (*TmuxHandler, func()) {
 	t.Helper()
 	tmpDir := t.TempDir()
@@ -35,6 +42,11 @@ func setupTmuxHandlerTest(t *testing.T) (*TmuxHandler, func()) {
 	if err := os.WriteFile(filepath.Join(identitiesDir, "test_agent.json"), []byte(idJSON), 0o600); err != nil {
 		t.Fatalf("write identity: %v", err)
 	}
+
+	// Park the watchdog so it doesn't tick during ordinary tests.
+	prevInterval := dispatchPollInterval
+	dispatchPollInterval = 24 * time.Hour
+	t.Cleanup(func() { dispatchPollInterval = prevInterval })
 
 	handler := NewTmuxHandler(thrumDir, st)
 	cleanup := func() { _ = st.Close() }
