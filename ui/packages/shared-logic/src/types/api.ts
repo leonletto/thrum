@@ -91,6 +91,7 @@ export const MessageSchema = z.object({
   authored_by: z.string().optional(),
   disclosed: z.boolean().optional(),
   mentions: z.array(z.string()).optional(),
+  pending_route_resolution: z.boolean().optional(),
 });
 
 export type Message = z.infer<typeof MessageSchema>;
