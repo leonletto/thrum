@@ -107,12 +107,18 @@ func ConfigShow(repoPath string) (*ConfigShowResult, error) {
 		result.Daemon.LocalOnly = ConfigValue{Value: "true", Source: "env"}
 	}
 
-	// Sync interval: env > config > default
+	// Sync interval: env > config > default. As of v0.10.6 (thrum-s6os)
+	// the field is silently ignored at runtime — sync is event-triggered
+	// and no longer relies on a polling interval. The display surface is
+	// kept so users with the key in legacy configs can still see its
+	// resolved value, but the source-detection logic uses field == 0 as
+	// the "not set" sentinel since applyDefaults no longer populates it.
+	// Slated for full removal in Task 12 alongside the field/const.
 	result.Daemon.SyncInterval = ConfigValue{
 		Value:  strconv.Itoa(cfg.Daemon.SyncInterval) + "s",
 		Source: "default",
 	}
-	if cfg.Daemon.SyncInterval != config.DefaultSyncInterval {
+	if cfg.Daemon.SyncInterval != 0 {
 		result.Daemon.SyncInterval.Source = "config.json"
 	}
 	if envInterval := os.Getenv("THRUM_SYNC_INTERVAL"); envInterval != "" {

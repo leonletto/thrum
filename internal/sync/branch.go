@@ -273,15 +273,28 @@ func (b *BranchManager) CreateSyncWorktree(ctx context.Context, syncDir string) 
 }
 
 // configureSparseCheckout sets up sparse checkout in the worktree so only
-// events.jsonl and messages/ are checked out.
+// the thrum-sync wire-stream paths are checked out. The pattern list is the
+// union of:
+//   - legacy paths kept for soft-cutover read-fallback (events.jsonl,
+//     messages/, messages.jsonl)
+//   - v0.10.6 wire-stream paths introduced by thrum-s6os (state/,
+//     messages-v2/, receipts/)
 func (b *BranchManager) configureSparseCheckout(ctx context.Context, syncDir string) error {
 	// Initialize sparse checkout (non-cone mode for pattern matching)
 	if _, err := safecmd.Git(ctx, syncDir, "sparse-checkout", "init", "--no-cone"); err != nil {
 		return fmt.Errorf("sparse-checkout init: %w", err)
 	}
 
-	// Set patterns (messages.jsonl is the old monolithic format, kept for migration support)
-	if _, err := safecmd.Git(ctx, syncDir, "sparse-checkout", "set", "/events.jsonl", "/messages/", "/messages.jsonl"); err != nil {
+	// Pattern list — legacy first, then v0.10.6 skeleton. messages.jsonl
+	// is the pre-thrum-mgsd monolithic format kept for migration support.
+	if _, err := safecmd.Git(ctx, syncDir, "sparse-checkout", "set",
+		"/events.jsonl",
+		"/messages/",
+		"/messages.jsonl",
+		"/state/",
+		"/messages-v2/",
+		"/receipts/",
+	); err != nil {
 		return fmt.Errorf("sparse-checkout set: %w", err)
 	}
 
@@ -327,6 +340,14 @@ func (b *BranchManager) isHealthyWorktree(ctx context.Context, syncDir string) b
 	}
 	sparse := string(sparseContent)
 	if !strings.Contains(sparse, "events.jsonl") || !strings.Contains(sparse, "messages") {
+		return false
+	}
+	// thrum-s6os E10: a worktree missing the v0.10.6 wire-stream patterns
+	// is considered unhealthy so that on next init it is recreated with
+	// the expanded sparse set. The worktree is derived state (a checkout
+	// of a-sync), so recreation is safe — the underlying branch is not
+	// touched.
+	if !strings.Contains(sparse, "state/") || !strings.Contains(sparse, "messages-v2/") || !strings.Contains(sparse, "receipts/") {
 		return false
 	}
 

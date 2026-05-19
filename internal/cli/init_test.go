@@ -106,6 +106,23 @@ func TestInit(t *testing.T) {
 		t.Error("messages directory was not created in worktree")
 	}
 
+	// thrum-s6os E10 (T-init-1): fresh init creates the v0.10.6
+	// wire-stream skeleton alongside legacy paths. state/agents/ +
+	// state/bridge-groups/ hold per-agent / per-bridge-group JSON;
+	// messages-v2/ + receipts/ replace the legacy messages/ for the
+	// post-cutover sync stream.
+	for _, sub := range []string{
+		filepath.Join("state", "agents"),
+		filepath.Join("state", "bridge-groups"),
+		"messages-v2",
+		"receipts",
+	} {
+		path := filepath.Join(syncDir, sub)
+		if info, err := os.Stat(path); err != nil || !info.IsDir() {
+			t.Errorf("E10: expected %s/ skeleton dir in sync worktree, got err=%v", sub, err)
+		}
+	}
+
 	// Row 2 config invariant: fresh init with no remote leaves LocalOnly=true.
 	cfg, err := config.LoadThrumConfig(thrumDir)
 	if err != nil {
@@ -907,6 +924,88 @@ func TestInit_GitignoreContainsCheckInboxScript(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "scripts/thrum-check-inbox.sh") {
 		t.Errorf("expected scripts/thrum-check-inbox.sh in .gitignore, got:\n%s", data)
+	}
+}
+
+// TestInit_SyncWorktreeSkeleton_IdempotentReinit covers T-init-2 from the
+// thrum-s6os plan §11 E10 acceptance block. A --force re-init must
+// preserve any previously-created v0.10.6 skeleton dirs (os.MkdirAll
+// is the underlying primitive, so this is really pinning the
+// idempotency contract end-to-end).
+func TestInit_SyncWorktreeSkeleton_IdempotentReinit(t *testing.T) {
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	if err := Init(InitOptions{RepoPath: tmpDir, Force: false}); err != nil {
+		t.Fatalf("first init: %v", err)
+	}
+	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
+
+	// Drop a sentinel into one of the new dirs so we can verify re-init
+	// neither stomps existing contents nor errors on a populated dir.
+	sentinel := filepath.Join(syncDir, "state", "agents", "sentinel.txt")
+	if err := os.WriteFile(sentinel, []byte("keep-me"), 0600); err != nil {
+		t.Fatalf("write sentinel: %v", err)
+	}
+
+	if err := Init(InitOptions{RepoPath: tmpDir, Force: true}); err != nil {
+		t.Fatalf("re-init with --force: %v", err)
+	}
+
+	// All four skeleton dirs must still be present after re-init.
+	for _, sub := range []string{
+		filepath.Join("state", "agents"),
+		filepath.Join("state", "bridge-groups"),
+		"messages-v2",
+		"receipts",
+	} {
+		path := filepath.Join(syncDir, sub)
+		if info, err := os.Stat(path); err != nil || !info.IsDir() {
+			t.Errorf("T-init-2: %s/ missing after re-init, err=%v", sub, err)
+		}
+	}
+
+	// Pre-existing contents in the new skeleton must survive idempotent
+	// re-init. The Init re-init path resets the sync worktree to the
+	// current a-sync tip; untracked sentinel files (legitimate state-
+	// writer outputs in production) must not be torn down.
+	if data, err := os.ReadFile(sentinel); err != nil || string(data) != "keep-me" {
+		t.Errorf("T-init-2: sentinel under state/agents/ should survive re-init, got err=%v data=%q", err, string(data))
+	}
+}
+
+// TestInit_SyncWorktreeSkeleton_LegacyPathsUndisturbed covers T-init-3.
+// Soft-cutover requires that legacy events.jsonl + messages/ remain in
+// place after the v0.10.6 skeleton is created. Both legacy paths are
+// created by ensureSyncWorktree itself, so this asserts they coexist
+// with the new skeleton rather than being replaced.
+func TestInit_SyncWorktreeSkeleton_LegacyPathsUndisturbed(t *testing.T) {
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	if err := Init(InitOptions{RepoPath: tmpDir, Force: false}); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
+
+	// Legacy events.jsonl must remain readable post-cutover.
+	if _, err := os.Stat(filepath.Join(syncDir, "events.jsonl")); err != nil {
+		t.Errorf("T-init-3: legacy events.jsonl should remain, err=%v", err)
+	}
+	// Legacy messages/ dir must remain present (read-fallback target).
+	if info, err := os.Stat(filepath.Join(syncDir, "messages")); err != nil || !info.IsDir() {
+		t.Errorf("T-init-3: legacy messages/ should remain a dir, err=%v", err)
+	}
+	// New skeleton must be present too — soft-cutover means both, not either.
+	for _, sub := range []string{
+		filepath.Join("state", "agents"),
+		filepath.Join("state", "bridge-groups"),
+		"messages-v2",
+		"receipts",
+	} {
+		if info, err := os.Stat(filepath.Join(syncDir, sub)); err != nil || !info.IsDir() {
+			t.Errorf("T-init-3: %s/ should coexist with legacy paths, err=%v", sub, err)
+		}
 	}
 }
 
