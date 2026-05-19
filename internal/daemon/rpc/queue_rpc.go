@@ -122,7 +122,7 @@ func (h *TmuxHandler) HandleQueue(ctx context.Context, params json.RawMessage) (
 	// dispatch immediately. The alert-silence hook won't fire for detached
 	// sessions (no client attached), so we check the silence flag directly.
 	if position == 1 && queue.Active() == nil {
-		if ttmux.IsSilent(req.Session) {
+		if isSilentFn(req.Session) {
 			// Pane already idle — dispatch now. Use Background context because
 			// the RPC request context will be canceled after we return.
 			go h.sendQueuedCommand(context.Background(), req.Session, queue, cmd) // #nosec G118 -- intentional: goroutine outlives RPC request
@@ -140,6 +140,19 @@ func (h *TmuxHandler) HandleQueue(ctx context.Context, params json.RawMessage) (
 			if err := ttmux.SetMonitorSilence(req.Session, silenceSec, bin, h.thrumDir); err != nil {
 				slog.Error("[queue] SetMonitorSilence on enqueue failed", "seconds", silenceSec, "session", req.Session, "err", err)
 			}
+			// Dispatch-side fallback (thrum-7yhs): if the alert-silence hook
+			// fails to fire — either because the session has no attached
+			// client (tmux issue #1384) or because the pane is stuck with
+			// a periodic-update spinner that tmux sees as activity (e.g.
+			// claude TUI's "Cooked for Xm Ys" timer during an API rate-
+			// limit stall) — pollDispatchSilence polls IsSilent and
+			// force-flushes after maxDispatchWait. Symmetric with the
+			// completion-side pollSilenceFlag. Background context: outlives
+			// the RPC request.
+			// Snapshot the tunables synchronously in this goroutine so the
+			// watchdog goroutine doesn't read the package vars (which tests
+			// can override under t.Cleanup, racing dangling goroutines).
+			go h.pollDispatchSilence(context.Background(), req.Session, queue, cmd, maxDispatchWait, dispatchPollInterval) // #nosec G118 -- intentional: goroutine outlives RPC request
 		}
 	}
 
@@ -242,18 +255,33 @@ func (h *TmuxHandler) completeCommand(ctx context.Context, session string, queue
 // commands would sit in StateQueued forever: next silence event would never
 // fire because monitor-silence requires a live pane.
 func (h *TmuxHandler) sendQueuedCommand(ctx context.Context, session string, queue *SessionQueue, cmd *QueuedCommand) {
+	// One-shot claim: only the first caller proceeds. Closes the dispatch
+	// race between HandleQueue's bootstrap fast path, HandleCheckPane's
+	// alert-silence hook, completeCommand's continuation, and the thrum-7yhs
+	// dispatch watchdog (pollDispatchSilence).
+	if !cmd.dispatchClaimed.CompareAndSwap(false, true) {
+		return
+	}
+
 	target := session + ":0.0"
 
 	// Type the command and press Enter — do this before taking cmd.mu so
 	// slow tmux calls don't block concurrent cancel attempts.
+	//
+	// Direct ttmux call (not sendKeysFn seam) on purpose: the seam is shared
+	// with HandleSend-path tests and our nested goroutines (pollSilenceFlag
+	// reaches here through completeCommand → sendQueuedCommand) outlive the
+	// test that spawned them. Routing through the var would expose a cross-
+	// test write/read race when another test rewrites sendKeysFn while a
+	// dangling goroutine is still in flight.
 	if err := ttmux.SendKeys(target, cmd.Text); err != nil {
 		slog.Error("[queue] SendKeys failed", "session", session, "err", err)
-		h.handleSendFailure(ctx, session, err)
+		h.handleSendFailure(ctx, session, cmd, err)
 		return
 	}
 	if err := ttmux.SendSpecialKey(target, "Enter"); err != nil {
 		slog.Error("[queue] SendSpecialKey failed", "session", session, "err", err)
-		h.handleSendFailure(ctx, session, err)
+		h.handleSendFailure(ctx, session, cmd, err)
 		return
 	}
 
@@ -324,12 +352,74 @@ func (h *TmuxHandler) pollSilenceFlag(ctx context.Context, session string, queue
 			if terminal {
 				return // hook or cancel already handled it
 			}
+			// Direct ttmux call (not isSilentFn) on purpose — see comment
+			// in sendQueuedCommand. This goroutine outlives the spawning
+			// test and routing through the seam would race tests that
+			// rewrite isSilentFn.
 			if ttmux.IsSilent(session) {
 				h.completeCommand(ctx, session, queue, cmd)
 				return
 			}
 			// Not silent yet — reset timer and try again.
 			timer.Reset(interval)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// pollDispatchSilence is the dispatch-side counterpart to pollSilenceFlag:
+// it polls IsSilent while a queued command waits at position 1 and triggers
+// sendQueuedCommand when the pane becomes silent. After maxWait elapses it
+// force-flushes the command regardless of pane state — the thrum-7yhs
+// scenario where a stuck pane keeps producing periodic spinner updates so
+// tmux's silence detector never fires.
+//
+// Exits early if the command already left StateQueued (alert-silence hook
+// or another path fired first), if the queue head moved off this command
+// (canceled / drained), or if the context is canceled. The atomic claim
+// inside sendQueuedCommand guarantees that even if this watchdog races
+// the hook, only one path actually types the command.
+//
+// maxWait and pollInterval are taken as parameters (rather than reading
+// the package vars maxDispatchWait / dispatchPollInterval) so the parent
+// goroutine snapshots them synchronously at spawn time. If this function
+// read the package vars inside its own goroutine, a test that overrides
+// those vars under t.Cleanup would race the dangling goroutine that's
+// still reading them after the test body returns. Same rationale applies
+// to using ttmux.IsSilent and time.Now directly (not the isSilentFn /
+// timeNowFn seams).
+func (h *TmuxHandler) pollDispatchSilence(ctx context.Context, session string, queue *SessionQueue, cmd *QueuedCommand, maxWait, pollInterval time.Duration) {
+	deadline := time.Now().Add(maxWait)
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			// Another path already dispatched (alert-silence hook fired)
+			// or canceled this command — nothing to do.
+			if cmd.stateSnapshot() != StateQueued {
+				return
+			}
+			// Queue head moved (cancel removed cmd) — nothing to do.
+			if head := queue.Peek(); head == nil || head.ID != cmd.ID {
+				return
+			}
+
+			if ttmux.IsSilent(session) {
+				h.sendQueuedCommand(ctx, session, queue, cmd)
+				return
+			}
+
+			if time.Now().After(deadline) {
+				slog.Warn("[queue] dispatch watchdog flushing stuck queue",
+					"session", session,
+					"command_id", cmd.ID,
+					"max_wait", maxWait)
+				h.sendQueuedCommand(ctx, session, queue, cmd)
+				return
+			}
 		case <-ctx.Done():
 			return
 		}
@@ -732,9 +822,18 @@ func (h *TmuxHandler) RecoverQueueState(ctx context.Context) error {
 			interrupted++
 
 		case StateQueued:
-			// Reload into the in-memory queue. The command will be picked
-			// up by HandleCheckPane on the next silence event.
-			h.getOrCreateQueue(cmd.sessionName).Enqueue(cmd)
+			// Reload into the in-memory queue. HandleCheckPane will pick
+			// the command up on the next silence event — but for stuck
+			// panes (e.g. claude TUI spinner ticking during a rate-limit
+			// stall) that silence event never fires, so we also spawn the
+			// thrum-7yhs dispatch watchdog. Symmetric with HandleQueue's
+			// "pane busy" else-branch: without this, recovery would
+			// re-introduce the exact bug the watchdog was added to fix
+			// any time the daemon restarts while a pane is stuck.
+			queue := h.getOrCreateQueue(cmd.sessionName)
+			queue.Enqueue(cmd)
+			// Snapshot tunables synchronously (see pollDispatchSilence doc).
+			go h.pollDispatchSilence(context.Background(), cmd.sessionName, queue, cmd, maxDispatchWait, dispatchPollInterval) // #nosec G118 -- intentional: goroutine outlives this loop iteration
 			reloaded++
 		}
 	}
@@ -757,12 +856,21 @@ func (h *TmuxHandler) drainQueueOnKill(ctx context.Context, session string) {
 // every command in the queue transitions to StateInterrupted and the queue
 // is removed from the in-memory map. The specific SendKeys/SendSpecialKey
 // error is already logged by the caller.
-func (h *TmuxHandler) handleSendFailure(ctx context.Context, session string, cause error) {
+//
+// On the transient-failure path (session still alive), we release cmd's
+// dispatchClaimed flag so a subsequent dispatch attempt (the next
+// HandleCheckPane silence event, the pollDispatchSilence watchdog re-entry,
+// or completeCommand's continuation) can retry the SendKeys. Without this
+// reset, the one-shot atomic claim would leave cmd permanently stuck in
+// StateQueued — the very stuck-queue symptom this watchdog is here to
+// prevent.
+func (h *TmuxHandler) handleSendFailure(ctx context.Context, session string, cmd *QueuedCommand, cause error) {
 	if ttmux.HasSession(session) {
 		// Session is still alive — the failure was probably transient.
 		// We leave the queue alone; next silence event will retry the
 		// dispatch path. The command itself stays in StateQueued since
 		// the caller has not yet persisted StateSent.
+		cmd.dispatchClaimed.Store(false)
 		slog.Warn("[queue] transient SendKeys failure for live session, leaving queue intact", "session", session, "err", cause)
 		return
 	}
