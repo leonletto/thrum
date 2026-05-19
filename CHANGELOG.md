@@ -123,6 +123,19 @@ and this project adheres to
   pointer to a new "Multi-Binary Worktree Footgun" section in CLAUDE.md
   explaining why/avoid/recover. Test pin expanded from 1 to 9 contract
   substrings.
+- **Post-launch silence watchdog detects ack-without-act**
+  (thrum-qpw7). After the identity-banner printf injection at tmux
+  launch/restart, the watchdog (`paneAgentEngaged`) treated the model's
+  printf-mandated ack line (`@<name> primed (<role>). Standing by.`) as
+  real agent output — a false-positive that suppressed the corrective
+  nudge when the model acknowledged the printf body WITHOUT Reading the
+  (possibly truncated) prime briefing. The engagement check now ignores
+  lines matching the canonical ack pattern `@\S+\s+primed\s*\(`, so the
+  watchdog still nudges the agent into running `thrum prime`. The regex
+  is anchored on the literal `(` opener that all 5 runtime plugins emit
+  (claude/cursor/opencode/codex/kiro), so unrelated prose like
+  `@impl_v0105 primed the database` is not mis-classified and real
+  agent output still suppresses the nudge correctly.
 
 ## [0.10.4] - 2026-05-16
 
