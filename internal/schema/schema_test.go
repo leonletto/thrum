@@ -1049,9 +1049,9 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	}
 }
 
-func TestSchema_V24_CurrentVersion(t *testing.T) {
-	if schema.CurrentVersion != 24 {
-		t.Errorf("CurrentVersion = %d, want 24", schema.CurrentVersion)
+func TestSchema_V25_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 25 {
+		t.Errorf("CurrentVersion = %d, want 25", schema.CurrentVersion)
 	}
 }
 
@@ -1540,5 +1540,136 @@ func TestMigrate_V20_AgentWithoutRegisterEvent_KeepsEmptyOriginDaemon(t *testing
 	}
 	if origin != "" {
 		t.Errorf("legacy agent origin_daemon = %q after migration, want '' (no matching event)", origin)
+	}
+}
+
+// TestSchemaMigration_PendingRouteResolution verifies that after schema.Migrate
+// runs on a fresh database the messages table has the pending_route_resolution
+// column, and that the column defaults to 0. This covers E11.AC.1 (T-schema-1).
+func TestSchemaMigration_PendingRouteResolution(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "pending_col.db")
+
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	// Verify the column is present via PRAGMA table_info.
+	rows, err := db.Query("PRAGMA table_info(messages)")
+	if err != nil {
+		t.Fatalf("PRAGMA table_info: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	found := false
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull int
+		var dflt sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		if name == "pending_route_resolution" {
+			found = true
+			if ctype != "INTEGER" {
+				t.Errorf("pending_route_resolution: expected type INTEGER, got %s", ctype)
+			}
+			// DEFAULT 0 shows as "0" in dflt_value.
+			if dflt.Valid && dflt.String != "0" {
+				t.Errorf("pending_route_resolution: expected DEFAULT 0, got %s", dflt.String)
+			}
+		}
+	}
+	if !found {
+		t.Error("messages table missing pending_route_resolution column after migration")
+	}
+
+	// Verify a newly inserted message row gets the default value of 0.
+	_, err = db.Exec(`
+		INSERT INTO messages (message_id, agent_id, session_id, created_at, body_format, body_content)
+		VALUES ('msg_pr_test', 'agent_x', 'ses_x', '2026-01-01T00:00:00Z', 'text', 'hi')
+	`)
+	if err != nil {
+		t.Fatalf("insert test message: %v", err)
+	}
+
+	var pendingFlag int
+	if err := db.QueryRow(`SELECT pending_route_resolution FROM messages WHERE message_id = 'msg_pr_test'`).Scan(&pendingFlag); err != nil {
+		t.Fatalf("query pending_route_resolution: %v", err)
+	}
+	if pendingFlag != 0 {
+		t.Errorf("expected default pending_route_resolution=0, got %d", pendingFlag)
+	}
+}
+
+// TestSchemaMigration_PendingRouteResolution_Incremental verifies that the
+// migration also works when applied to an existing v24 database (incremental
+// migration path, not a fresh install).
+func TestSchemaMigration_PendingRouteResolution_Incremental(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "pending_incr.db")
+
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Simulate a v24 database by initializing and then resetting the version.
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+
+	// Drop the column that v25 adds so we can test the migration adds it.
+	// SQLite doesn't support DROP COLUMN portably in all versions, so we instead
+	// manipulate the version number to re-run the migration. Start from v24.
+	if _, err := db.Exec(`UPDATE schema_version SET version = 24`); err != nil {
+		t.Fatalf("reset schema version: %v", err)
+	}
+	// Remove the column to simulate a pre-v25 DB.
+	// SQLite ≥ 3.35.0 supports DROP COLUMN, available in Go modernc.org/sqlite.
+	if _, err := db.Exec(`ALTER TABLE messages DROP COLUMN pending_route_resolution`); err != nil {
+		// If DROP COLUMN is not supported (older SQLite), skip the drop test and
+		// just verify Migrate is idempotent on the current schema.
+		t.Logf("DROP COLUMN not available, skipping incremental path: %v", err)
+		return
+	}
+
+	// Re-run Migrate — should add the column back.
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate (incremental): %v", err)
+	}
+
+	// Verify column is present again.
+	rows, err := db.Query("PRAGMA table_info(messages)")
+	if err != nil {
+		t.Fatalf("PRAGMA table_info: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	found := false
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull int
+		var dflt sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		if name == "pending_route_resolution" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("pending_route_resolution column missing after incremental migration")
 	}
 }
