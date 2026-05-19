@@ -19,8 +19,9 @@ test.describe.serial('Overview & Status Tests', () => {
   });
 
   test('SC-65: Combined overview', async () => {
-    // Arrange: send some messages for the overview to show
-    thrum(['send', 'Test message for overview']);
+    // Arrange: send some messages for the overview to show (thrum-t698:
+    // explicit --to; overview content doesn't depend on directed-vs-broadcast)
+    thrum(['send', 'Test message for overview', '--to', '@e2e_implementer']);
 
     // Act: run overview command
     const overview = thrum(['overview']);
