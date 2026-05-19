@@ -209,9 +209,8 @@ func Init(opts InitOptions) error {
 		}
 		cfg := &config.ThrumConfig{
 			Daemon: config.DaemonConfig{
-				LocalOnly:    localOnly,
-				SyncInterval: config.DefaultSyncInterval,
-				WSPort:       config.DefaultWSPort,
+				LocalOnly: localOnly,
+				WSPort:    config.DefaultWSPort,
 			},
 		}
 		if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {

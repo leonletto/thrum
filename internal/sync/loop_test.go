@@ -23,15 +23,15 @@ func TestSyncLoop_StartStop(t *testing.T) {
 	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), false)
 	projector := setupTestProjector(t, tmpDir)
 
-	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 100*time.Millisecond, false)
+	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), false)
 
 	ctx := context.Background()
 	if err := loop.Start(ctx); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
 
-	// Let loop run through a few cycles (intentional - testing start/stop/restart behavior)
-	time.Sleep(250 * time.Millisecond)
+	// Brief pause before stop/restart test
+	time.Sleep(50 * time.Millisecond)
 
 	if err := loop.Stop(); err != nil {
 		t.Fatalf("Stop failed: %v", err)
@@ -54,8 +54,7 @@ func TestSyncLoop_ManualTrigger(t *testing.T) {
 	syncer := NewSyncer(tmpDir, syncDir, false)
 	projector := setupTestProjector(t, tmpDir)
 
-	// Use a long interval so manual trigger is the only way it runs
-	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, false)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), false)
 
 	ctx := context.Background()
 	if err := loop.Start(ctx); err != nil {
@@ -93,7 +92,7 @@ func TestSyncLoop_Status(t *testing.T) {
 	syncer := NewSyncer(tmpDir, syncDir, false)
 	projector := setupTestProjector(t, tmpDir)
 
-	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 1*time.Second, false)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), false)
 
 	// Check status before start
 	status := loop.GetStatus()
@@ -136,7 +135,7 @@ func TestSyncLoop_NotifyChannel(t *testing.T) {
 	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), false)
 	projector := setupTestProjector(t, tmpDir)
 
-	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 100*time.Millisecond, false)
+	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), false)
 
 	// Get notify channel before starting
 	notifyCh := loop.NotifyChannel()
@@ -153,20 +152,6 @@ func TestSyncLoop_NotifyChannel(t *testing.T) {
 	}
 }
 
-func TestSyncLoop_DefaultInterval(t *testing.T) {
-	tmpDir := setupTestRepoWithCommit(t)
-	setupThrumFiles(t, tmpDir)
-
-	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), false)
-	projector := setupTestProjector(t, tmpDir)
-
-	// Pass 0 interval to get default
-	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 0, false)
-
-	if loop.interval != 60*time.Second {
-		t.Errorf("Expected default interval of 60s, got %v", loop.interval)
-	}
-}
 
 func TestLockAcquireRelease(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -312,7 +297,7 @@ func TestSyncLoop_IsLocalOnly(t *testing.T) {
 	t.Run("false", func(t *testing.T) {
 		syncer := NewSyncer(tmpDir, syncDir, false)
 		projector := setupTestProjector(t, tmpDir)
-		loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 1*time.Second, false)
+		loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), false)
 		if loop.IsLocalOnly() {
 			t.Error("expected IsLocalOnly()=false")
 		}
@@ -321,7 +306,7 @@ func TestSyncLoop_IsLocalOnly(t *testing.T) {
 	t.Run("true", func(t *testing.T) {
 		syncer := NewSyncer(tmpDir, syncDir, true)
 		projector := setupTestProjector(t, tmpDir)
-		loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 1*time.Second, true)
+		loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), true)
 		if !loop.IsLocalOnly() {
 			t.Error("expected IsLocalOnly()=true")
 		}
@@ -335,7 +320,7 @@ func TestSyncLoop_LocalOnly_StatusReportsMode(t *testing.T) {
 	syncer := NewSyncer(tmpDir, syncDir, true)
 	projector := setupTestProjector(t, tmpDir)
 
-	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 1*time.Second, true)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), true)
 
 	// Check status shows local-only before start
 	status := loop.GetStatus()
@@ -384,8 +369,7 @@ func TestSyncLoop_LocalOnly_FullCycle(t *testing.T) {
 	syncer := NewSyncer(tmpDir, syncDir, true)
 	projector := setupTestProjector(t, tmpDir)
 
-	// Use local-only mode with a long interval, rely on manual trigger
-	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, true)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), true)
 
 	ctx := context.Background()
 	if err := loop.Start(ctx); err != nil {
@@ -465,7 +449,7 @@ func TestSyncLoop_LocalOnly_MissingWorktree(t *testing.T) {
 
 	syncer := NewSyncer(tmpDir, syncDir, true)
 	projector := setupTestProjector(t, tmpDir)
-	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, true)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), true)
 
 	// Start must succeed — it should create the missing worktree.
 	if err := loop.Start(ctx); err != nil {
@@ -504,7 +488,7 @@ func TestLoop_SetError(t *testing.T) {
 
 	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), false)
 	projector := setupTestProjector(t, tmpDir)
-	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 1*time.Second, false)
+	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), false)
 
 	// Set an error
 	testErr := fmt.Errorf("test error")
@@ -571,7 +555,7 @@ func TestUpdateProjection(t *testing.T) {
 
 	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), false)
 	projector := setupTestProjector(t, tmpDir)
-	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 1*time.Second, false)
+	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), false)
 
 	// Write some test events to JSONL
 	jsonlPath := filepath.Join(tmpDir, ".thrum", "messages.jsonl")

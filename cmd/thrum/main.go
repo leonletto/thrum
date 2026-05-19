@@ -5712,15 +5712,14 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		fmt.Fprintf(os.Stderr, "Warning: sync worktree not found at %s (sync disabled)\n", syncDir)
 	}
 
-	// Load config.json (used for local-only, sync interval, WS port)
+	// Load config.json (used for local-only, WS port)
 	thrumCfg, cfgErr := config.LoadThrumConfig(thrumDir)
 	if cfgErr != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to read config.json: %v\n", cfgErr)
 		thrumCfg = &config.ThrumConfig{
 			Daemon: config.DaemonConfig{
-				SyncInterval: config.DefaultSyncInterval,
-				WSPort:       config.DefaultWSPort,
-				LogLevel:     config.DefaultLogLevel,
+				WSPort:   config.DefaultWSPort,
+				LogLevel: config.DefaultLogLevel,
 			},
 		}
 	}
@@ -5796,20 +5795,12 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		log.Printf("daemon: permission found %d pending nudge(s) still in flight", len(rows))
 	}
 
-	// Resolve sync interval: env var > config.json > default
-	syncInterval := time.Duration(thrumCfg.Daemon.SyncInterval) * time.Second
-	if envInterval := os.Getenv("THRUM_SYNC_INTERVAL"); envInterval != "" {
-		if n, err := strconv.Atoi(envInterval); err == nil && n > 0 {
-			syncInterval = time.Duration(n) * time.Second
-		}
-	}
-
-	// Create sync loop for periodic git sync
+	// Create sync loop for event-triggered git sync
 	ctx := context.Background()
 	var syncLoop *thrumSync.SyncLoop
 	if _, err := os.Stat(syncDir); err == nil {
 		syncer := thrumSync.NewSyncer(absPath, syncDir, localOnly)
-		syncLoop = thrumSync.NewSyncLoop(syncer, st.Projector(), absPath, syncDir, thrumDir, syncInterval, localOnly)
+		syncLoop = thrumSync.NewSyncLoop(syncer, st.Projector(), absPath, syncDir, thrumDir, localOnly)
 		// Route synced events through State.IngestSyncedEvent so the
 		// event-write hook fires on cross-repo ingest, not just local
 		// writes. Without this, replies arriving via sync from a peer
