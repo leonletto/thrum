@@ -68,20 +68,25 @@ mechanics (binary + plugins + rollback) are shared further down the page —
 they&#39;re parameterized over <code>VERSION</code> and the release branch.</p>
 <h2>Stable-track current pre-release</h2>
 <blockquote>
-<p><strong><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.5"><code>v0.10.5-rc.5</code></a></strong>
+<p><strong><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.6"><code>v0.10.5-rc.6</code></a></strong>
 (2026-05-19, in 24h soak through 2026-05-20).</p>
-<p>rc.5 fixes the post-tmux-launch silence-watchdog nudge (thrum-qpw7): a
-freshly-launched agent that acks the launch banner (the
-<code>@&lt;name&gt; primed (&lt;role&gt;). Standing by.</code> printf) without actually reading
-its prime briefing now correctly receives the corrective &quot;finish reading
-the prime&quot; nudge. Before rc.5, that ack line was registering as engagement,
-so the watchdog stayed silent and the agent could appear primed while
-operating on truncated context. Closes the last silent gap from the
-launch-nudge work in the v0.10.5 line.</p>
-<p>Everything from rc.1-rc.4 carries forward: multi-binary upgrade trap fix
-(rc.4, thrum-quth), tmux self-echo guard (rc.3, thrum-1zfk), restart-skill
-structure forward-port (rc.2), backstop nudger + runtime-init
-managed-template fix + new CLI flags (rc.1).</p>
+<p><strong>BREAKING:</strong> <code>thrum send</code> no longer broadcasts by default. The bare form
+<code>thrum send &quot;msg&quot;</code> now requires either <code>--to @&lt;agent&gt;</code> for a directed send or
+<code>--broadcast</code> for explicit team fanout (thrum-t698). The previous silent
+default was a 94-agent accidental-fanout footgun. <code>--to @everyone</code> continues
+to work as the legacy keyword form for the broadcast case. Update any scripts
+or aliases that rely on the bare form.</p>
+<p>rc.6 also fixes the upstream tmux <code>capture-pane</code> wrap that had been masking
+rc.5&#39;s thrum-qpw7 fix downstream (thrum-ktp8): long identity-banner content
+was splitting the prime-truncation sentinel across pane lines, so
+<code>paneAgentEngaged</code> couldn&#39;t find it in any single line and the silence
+watchdog stayed conservative. <code>capture-pane</code> now uses tmux&#39;s <code>-J</code> flag to
+join wrapped lines before returning the buffer.</p>
+<p>Everything from rc.1-rc.5 carries forward: post-tmux-launch silence-watchdog
+nudge fix (rc.5, thrum-qpw7), multi-binary upgrade trap fix (rc.4,
+thrum-quth), tmux self-echo guard (rc.3, thrum-1zfk), restart-skill structure
+forward-port (rc.2), backstop nudger + runtime-init managed-template fix +
+new CLI flags (rc.1).</p>
 <p>What&#39;s new in v0.10.5 overall:</p>
 <ul>
 <li><strong>Daemon-side backstop nudger for stale-unread messages</strong> replaces the
@@ -103,10 +108,10 @@ command.</li>
 <a href="https://github.com/leonletto/thrum/releases/tag/v0.10.4"><code>v0.10.4</code></a> — see
 <a href="whats-new.html">What&#39;s New</a> for v0.10.4 + v0.10.5 highlights.</p>
 </blockquote>
-<h3>Quick install for <code>v0.10.5-rc.5</code></h3>
+<h3>Quick install for <code>v0.10.5-rc.6</code></h3>
 <p>Binary and Codex plugin (run in your shell):</p>
 <pre><code># Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.5 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.6 sh
 
 # Codex plugin (matches release/v0.10.5)
 THRUM_INSTALL_REF=release/v0.10.5 bash &lt;(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.5/codex-plugin/plugins/thrum/scripts/install-plugin.sh)</code></pre>
