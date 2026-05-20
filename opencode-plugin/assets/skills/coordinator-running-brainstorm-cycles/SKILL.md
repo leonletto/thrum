@@ -38,14 +38,21 @@ A coordinator-orchestrated brainstorm is the right shape when:
 
 ## What this skill does (and what it hands off)
 
-This skill owns the **front-end** of the design pipeline:
+This skill owns the **entire researcher-side design pipeline** with review
+gates at every stage:
 
-1. Spawn researcher → 2. Brainstorm interactively with user → 3. Dual-review
-cycles → 4. Iterate to ready-to-merge → 5. (Optional) Overarching coherence
-pass when sibling brainstorms close → 6. Hand off to `project-setup`.
+1. Spawn researcher → 2. Brainstorm interactively with user → 3. **Dual-review
+the brainstorm** → 4. Iterate to LOCK → 5. (Optional) Overarching coherence
+pass when sibling brainstorms close → 6. Researcher writes plan + **dual-review
+the plan** → 7. Researcher runs `project-setup` + **dual-review the impl prompt**
+→ 8. Hand off to coord for implementer dispatch.
 
-`project-setup` then converts the resulting plan/spec into beads epics, tasks,
-implementation prompts, and worktrees — that's where this skill stops.
+**Three explicit review gates** at stages 3, 6, and 7 — same dual-axis pattern
+each time (verify-against-plan + code-reviewer, sonnet sub-agents in parallel).
+Skipping any review gate is a documented anti-pattern. The brainstorm review
+catches design issues; the plan review catches contract-drift and quality
+issues `writing-plans`' internal reviewer misses; the prompt review catches
+plan→prompt translation errors before the implementer executes against them.
 
 ## Phase 1 — Set up the worktree, branch, and agent
 
@@ -260,18 +267,78 @@ follow-up brainstorm if the issue spans multiple). Do not skip this pass
 when ≥ 3 brainstorms close in the same program — the integration layer is
 where the most expensive footguns hide.
 
-## Phase 6 — Hand off to project-setup
+## Phase 6 — Researcher writes the plan (with dual-review gate)
 
-Once the brainstorm is approved AND any companion design spec is approved
-(and any overarching coherence findings are addressed):
+Once the brainstorm is LOCKED (and any companion design spec is LOCKED), the
+researcher runs `superpowers:writing-plans` to convert brainstorm + spec into
+the implementation plan doc.
 
-1. Confirm the plan file path (output of `writing-plans` skill, or the
-   approved design spec if it doubles as the plan).
-2. Invoke the `project-setup` skill with that path. It handles bd epics +
-   tasks + worktrees + implementation prompts.
-3. Stand the researcher down at-pane after merge or after coherence-pass
-   findings are absorbed. Don't leave brainstorm researchers spinning idle
-   indefinitely; they consume tmux sessions.
+**The plan doc gets the SAME dual-review treatment as the brainstorm.** This
+review step is mandatory — `writing-plans` has an internal reviewer, but real-
+world experience shows that's not sufficient. Independent review catches
+contract-drift and quality issues the internal reviewer misses.
+
+**The researcher (not coord) dispatches the dual-review** in their own worktree:
+
+1. Researcher writes plan v1 via `writing-plans` skill.
+2. Researcher spawns two parallel sonnet sub-agents:
+   - **verify-against-plan** (or equivalent contract-conformance check) —
+     verifies the plan honors every brainstorm + spec LOCKED decision; flags
+     drift, missed scope, over-scoping.
+   - **code-reviewer** (superpowers' standard code-reviewer or equivalent) —
+     checks the plan for quality: per-task acceptance criteria precision,
+     anti-pattern enumeration, risk register completeness, sequencing logic.
+3. Researcher consolidates findings into ONE numbered list (all findings,
+   all severities, per the same format Phase 3 uses for brainstorm dual-review).
+4. Researcher folds findings inline → plan v2.
+5. Researcher repeats only if cycle-1 introduces new design surface (rare for
+   bounded mechanical plans); otherwise v2 LOCKED.
+6. Researcher signals plan LOCKED back to coord, citing both review passes.
+
+If the researcher skips this step, send them back. Don't let them proceed to
+`project-setup` until the plan has passed dual-review.
+
+## Phase 7 — Researcher runs project-setup (with dual-review gate)
+
+Plan LOCKED → researcher runs `thrum:project-setup` to produce the bundled
+output: bd tickets + implementer prompt + cross-references.
+
+**The implementer-prompt doc gets the SAME dual-review treatment as the plan.**
+The prompt is the artifact the implementer executes against turn-by-turn;
+errors propagate. The plan dual-review caught contract-drift in the plan; the
+prompt review catches translation errors (plan → prompt) plus prompt-specific
+quality (instructions clarity, anti-pattern enumeration, dispatch-readiness).
+
+**The researcher (not coord) dispatches the post-setup dual-review**:
+
+1. Researcher runs `project-setup` skill (bd tickets + prompt land together).
+2. Researcher spawns two parallel sonnet sub-agents on the impl prompt:
+   - **verify-against-plan** — verifies the prompt faithfully translates the
+     LOCKED plan's per-task content + acceptance criteria + risk callouts.
+     Flags missing scope, divergent wording, dropped anti-patterns.
+   - **code-reviewer** — checks prompt quality: clarity of instructions,
+     standing-pre-auth scope language, dispatch-readiness, sub-agent model
+     guidance, DONE-shape spec.
+3. Researcher consolidates → folds inline → re-issues prompt.
+4. Researcher signals "project-setup complete + post-setup dual-review applied"
+   back to coord, citing both review passes + final artifact paths.
+
+If the researcher signals "project-setup complete" WITHOUT mentioning the
+post-setup reviews, ASK explicitly: "did the post-setup dual-review run on the
+impl prompt?" Send them back if not. The artifact the implementer executes
+must be reviewed.
+
+## Phase 8 — Hand off to coord
+
+With plan LOCKED + reviewed AND project-setup complete + reviewed:
+
+1. Researcher provides coord: plan path, prompt path, bd-epic ID, bd-task
+   ID list, prereq verifications (philosophy.md, bd version, etc.).
+2. Coord verifies the artifacts briefly + proceeds to Phase 0 implementer
+   dispatch (worktree creation, hard-freeze if applicable, impl dispatch).
+3. Stand the researcher down at-pane (or keep on standby for impl-time Q&A
+   if Leon explicitly requests continuity). Don't leave brainstorm researchers
+   spinning idle indefinitely; they consume tmux sessions.
 
 ## Anti-patterns
 
@@ -283,6 +350,19 @@ include the verbatim protocol block in every briefing.
 
 ❌ **Half-batched findings.** Sending review findings before BOTH dual
 reviews complete. Researcher fixes batch 1 and never sees batch 2.
+
+❌ **Skipping the post-plan dual-review.** Treating `writing-plans` skill's
+internal reviewer as sufficient and proceeding directly to `project-setup`
+without an independent review of the plan doc. Documented gap as of S76
+(2026-05-20); see [[feedback-post-project-setup-review]]. The plan and the
+impl prompt MUST get the same dual-axis review treatment the brainstorm
+gets — Phase 6 + Phase 7 explicit.
+
+❌ **Skipping the post-project-setup dual-review on the impl prompt.** The
+prompt is the artifact the implementer executes against turn-by-turn. Errors
+in it propagate into every task. `project-setup` runs the bundle (bd + prompt)
+mechanically; the prompt content is the implementer's spec. Treat it as such
+and review it before dispatch.
 
 ❌ **Misread BLOCKINGs forwarded as gospel.** Reviewers (sub-agents)
 sometimes misread cited code or stretch citations. Spot-verify any BLOCKING
