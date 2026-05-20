@@ -33,11 +33,12 @@ func printAgentSummaryField(w io.Writer, s *cli.AgentSummary, field string) erro
 	return err
 }
 
+// agentSummaryField returns the stringified value of a named field on
 // AgentSummary, plus a boolean ok flag. Booleans render as "true"/"false".
 // Zero integers render as "0". Empty strings render as the empty string
 // (the newline from Fprintln is still emitted so callers can | xargs etc.).
 // ORIGIN[thrum-8kxh]: moved from main.go:1394-1435
-// Destination: agent.go:45-86
+// Destination: agent.go:46-87
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
 // Commit: <pending>
 // Phase: 2
@@ -89,7 +90,7 @@ func agentSummaryField(s *cli.AgentSummary, field string) (string, bool) {
 // and `thrum agent whoami`. It loads identity, optionally enriches from the
 // daemon, then prints the result.
 // ORIGIN[thrum-8kxh]: moved from main.go:1440-1474
-// Destination: agent.go:97-131
+// Destination: agent.go:98-132
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
 // Commit: <pending>
 // Phase: 2
@@ -131,7 +132,7 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 }
 
 // ORIGIN[thrum-8kxh]: moved from main.go:1476-1495
-// Destination: agent.go:139-158
+// Destination: agent.go:140-159
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
 // Commit: <pending>
 // Phase: 2
@@ -158,7 +159,7 @@ Examples:
 }
 
 // ORIGIN[thrum-8kxh]: moved from main.go:1671-2095
-// Destination: agent.go:166-590
+// Destination: agent.go:167-591
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
 // Commit: <pending>
 // Phase: 2
@@ -590,7 +591,7 @@ Examples:
 }
 
 // ORIGIN[thrum-8kxh]: moved from main.go:2237-2266
-// Destination: agent.go:598-627
+// Destination: agent.go:599-628
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
 // Commit: <pending>
 // Phase: 2
@@ -627,7 +628,7 @@ Examples:
 }
 
 // ORIGIN[thrum-8kxh]: moved from main.go:2268-2287
-// Destination: agent.go:635-654
+// Destination: agent.go:636-655
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
 // Commit: <pending>
 // Phase: 2
@@ -654,7 +655,7 @@ func setLocalAgentStatus(status string) error {
 }
 
 // ORIGIN[thrum-8kxh]: moved from main.go:2289-2304
-// Destination: agent.go:662-677
+// Destination: agent.go:663-678
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
 // Commit: <pending>
 // Phase: 2

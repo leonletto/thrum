@@ -1382,21 +1382,21 @@ The daemon must be running and you must have an active session.`,
 // Remove once refactor verified green.
 
 // agentSummaryField returns the stringified value of a named field on
-// MOVED[thrum-8kxh]: agentSummaryField → agent.go:45-86
+// MOVED[thrum-8kxh]: agentSummaryField → agent.go:46-87
 // Original range: main.go:1394-1435
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
 // Commit: <pending>
 // Phase: 2
 // Remove once refactor verified green.
 
-// MOVED[thrum-8kxh]: runWhoami → agent.go:97-131
+// MOVED[thrum-8kxh]: runWhoami → agent.go:98-132
 // Original range: main.go:1440-1474
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
 // Commit: <pending>
 // Phase: 2
 // Remove once refactor verified green.
 
-// MOVED[thrum-8kxh]: whoamiCmd → agent.go:139-158
+// MOVED[thrum-8kxh]: whoamiCmd → agent.go:140-159
 // Original range: main.go:1476-1495
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
 // Commit: <pending>
@@ -1577,7 +1577,7 @@ Exit codes:
 // Phase: 1
 // Remove once refactor verified green.
 
-// MOVED[thrum-8kxh]: agentCmd → agent.go:166-590
+// MOVED[thrum-8kxh]: agentCmd → agent.go:167-591
 // Original range: main.go:1671-2095
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
 // Commit: <pending>
@@ -1724,21 +1724,21 @@ Exit codes:
 // Phase: 2
 // Remove once refactor verified green.
 
-// MOVED[thrum-8kxh]: agentSetStatusCmd → agent.go:598-627
+// MOVED[thrum-8kxh]: agentSetStatusCmd → agent.go:599-628
 // Original range: main.go:2237-2266
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
 // Commit: <pending>
 // Phase: 2
 // Remove once refactor verified green.
 
-// MOVED[thrum-8kxh]: setLocalAgentStatus → agent.go:635-654
+// MOVED[thrum-8kxh]: setLocalAgentStatus → agent.go:636-655
 // Original range: main.go:2268-2287
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
 // Commit: <pending>
 // Phase: 2
 // Remove once refactor verified green.
 
-// MOVED[thrum-8kxh]: setRemoteAgentStatus → agent.go:662-677
+// MOVED[thrum-8kxh]: setRemoteAgentStatus → agent.go:663-678
 // Original range: main.go:2289-2304
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
 // Commit: <pending>
