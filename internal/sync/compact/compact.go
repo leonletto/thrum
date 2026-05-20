@@ -347,6 +347,8 @@ func (c *Compactor) compactJSONLByKey(
 
 	rowsRemoved := len(lines) - len(keepSet)
 	if rowsRemoved > 0 {
+		// #nosec G706 -- path is a daemon-controlled sync-state file path
+		// from compactor iteration over syncDir, not external input.
 		slog.Info("compaction.trimmed",
 			"path", path,
 			"rows_removed", rowsRemoved,
