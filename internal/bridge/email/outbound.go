@@ -18,8 +18,8 @@ type MessageNotification struct {
 	Author struct {
 		AgentID string `json:"agent_id"`
 	} `json:"author"`
-	To         string `json:"to"`          // recipient mention or Prefix:Name
-	ReplyTo    string `json:"reply_to"`    // optional parent thrum_msg_id
+	To         string `json:"to"`           // recipient mention or Prefix:Name
+	ReplyTo    string `json:"reply_to"`     // optional parent thrum_msg_id
 	ThrumMsgID string `json:"thrum_msg_id"` // this message's own id (for msgmap)
 	Subject    string `json:"subject"`
 }
@@ -43,7 +43,7 @@ type OutboundConfig struct {
 	// MyDaemonID would never match (D-B1 brainstormer review BLOCKING-1).
 	MyBridgeUserAgentID string
 
-	Host                  string                      // mail-domain for Message-Ids
+	Host                  string // mail-domain for Message-Ids
 	FromAddress           string
 	FromDisplayNameFormat string                      // "{agent} @ {handle}" template
 	DaemonHandle          string                      // for {handle} substitution

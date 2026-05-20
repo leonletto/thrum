@@ -1,10 +1,12 @@
 ---
 name: researcher-answering-queries
-description: "Use when another agent has asked you a research question, when fielding a research request, or when responding to a query. Loads the lookup-and-respond protocol so cached findings get reused before fresh investigation starts."
+description:
+  "Use when another agent has asked you a research question, when fielding a
+  research request, or when responding to a query. Loads the lookup-and-respond
+  protocol so cached findings get reused before fresh investigation starts."
 # source: claude-plugin/skills/researcher-answering-queries/SKILL.md
 # generated-by: scripts/sync-skills.sh
 ---
-
 
 ## Researcher: Answering Queries
 

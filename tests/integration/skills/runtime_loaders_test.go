@@ -24,14 +24,14 @@
 // Per-runtime verdict (operator-side audit pending):
 //
 //   - claude-plugin:    Untested in-process. Source inspection of
-//                       claude-plugin/skills/*/SKILL.md shows every
-//                       shipped skill uses the nested form;
-//                       compatibility with the nested form is
-//                       therefore assumed.
+//     claude-plugin/skills/*/SKILL.md shows every
+//     shipped skill uses the nested form;
+//     compatibility with the nested form is
+//     therefore assumed.
 //   - opencode-plugin:  Untested. Operational audit deferred to
-//                       E10.10 deliverable.
+//     E10.10 deliverable.
 //   - codex-plugin:     Untested. Operational audit deferred to
-//                       E10.10 deliverable.
+//     E10.10 deliverable.
 //
 // If any runtime loader audit comes back as nested-rejected, the
 // mirror sub-package's EncodeFlatFrontmatter (E11.1) is the

@@ -213,4 +213,3 @@ func TestMessageRPCAdapter_EmptyCallerRejects(t *testing.T) {
 		t.Errorf("error should mention empty callerAgentID; got %v", err)
 	}
 }
-

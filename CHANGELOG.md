@@ -8,6 +8,229 @@ and this project adheres to
 
 ## [Unreleased]
 
+### ⚠ Mixed-Cluster Upgrade Warning (v0.10.6)
+
+**v0.10.6 changes the sync wire format.** The local projection journal
+(`.thrum/events.jsonl`, gitignored) is now split from the cross-machine wire
+stream, and the wire stream lives in new paths (`state/`, `messages-v2/`,
+`receipts/`) instead of the legacy `messages/` shards. The 60-second polling
+ticker is gone — sync is now purely event-triggered on the structural-event
+whitelist (`agent.register`, `group.*`, `message.create`).
+
+**v0.10.5 peers cannot read messages from upgraded v0.10.6 peers.** The new code
+writes ONLY to `messages-v2/<id>.jsonl`. Pre-v0.10.6 peers don't know about that
+path and will silently miss messages authored by upgraded peers until they
+upgrade themselves. This is the intentional D6 verdict (no double-write to
+legacy `messages/<id>.jsonl`).
+
+**Recommended upgrade flow:** upgrade all peers in the cluster in one window.
+The asymmetric-receive behavior is by design but surprising in mixed clusters:
+v0.10.6 peers continue to read messages FROM v0.10.5 peers via the legacy-read
+fallback (so upgraded peers stay fully functional), but v0.10.5 peers lose
+visibility into v0.10.6 authors until they upgrade.
+
+### Added (v0.10.6 — sync re-architecture)
+
+- **Sync re-architecture (thrum-s6os)**: the cross-machine wire stream now
+  derives from per-agent + per-bridge-group state files rather than from a
+  synced event journal. Daemon-local truth (heartbeats, session boundaries,
+  work-context updates, message edits/deletes, receipts) is no longer
+  git-committed to peers. Idle daemons produce zero commits on `a-sync`; busy
+  multi-agent clusters stop accumulating heartbeat noise (the falcon-backend
+  11K-commits-per-week stream is now a trickle proportional to actual message
+  volume).
+- New daemon config keys: `daemon.events_retention_days` (default 2) controls
+  the rolling window for the local-only events journal + SQLite events table;
+  `daemon.compaction_size_threshold_mb` (default 10) controls the per-file size
+  threshold above which `messages-v2/` and `receipts/` files are dedup-compacted
+  at sync-trigger time.
+- New diagnostics RPC `sync.pending_pool.list` — returns the current
+  orphaned-message pool for inspection. Auto-resolves when missing state files
+  land via fetch+merge; the inbox UI renders an inline
+  `(pending — waiting for route resolution from peer)` placeholder while the
+  orphan is unresolved.
+- New SQLite column `messages.pending_route_resolution` (schema **v33** —
+  renumbered from v25 during the rc.4 → thrum-dev forward-merge because the
+  v0.11 substrate forward-port took v25 for scheduler) — flags messages parked
+  in the pending pool. Cleared automatically when the referenced state file
+  lands.
+
+### Removed (v0.10.6)
+
+- `daemon.sync_interval` config key. The field is silently ignored if present in
+  pre-v0.10.6 configs (no deprecation warning emitted) — forward-compatible
+  silent drop per spec §7.2.
+- `config.DefaultSyncInterval = 60` constant.
+- The 60-second polling ticker in `internal/sync/loop.go`. There is no fallback
+  poll: sync is purely event-triggered. The single initial sync at daemon start
+  remains, for peer-events catch-up.
+- The per-agent `messages/<id>.jsonl` writer wiring from
+  `internal/daemon/state.NewState`. The legacy path remains readable
+  (read-fallback for mixed clusters) but is no longer written by v0.10.6 code.
+
+### Added (v0.10.5 — forward-merged via rc.4 reconciliation)
+
+> All v0.10.5 entries below shipped on `release/v0.10.5` (rc.1 through rc.4) and
+> forward-merged to thrum-dev so the v0.10.6 release line doesn't regress on
+> them. The schema v25-v32 forward-port from thrum-agents is paired with the v33
+> renumber of `pending_route_resolution` documented in the v0.10.6 section
+> above.
+
+- **`thrum inbox --from @agent` filter** — scope unread inbox to messages from a
+  single sender. Useful for catching up on a specific agent's traffic without
+  reading the rest of the queue.
+- **`thrum worktree teardown --delete-branch` flag** — tear down a worktree and
+  delete its branch in one step. Previously the branch was kept and required a
+  separate `git branch -D` after teardown.
+- **Daemon-side backstop nudger** — the daemon now polls for stale-unread
+  messages and re-emits delivery nudges, replacing the user-side
+  `thrum-inbox-poll.sh` cron pattern. More reliable (survives runtime restarts)
+  and lower-overhead than a per-agent cron schedule.
+- **Headless `worktree.Create` / `worktree.Destroy` Go API** — the worktree
+  lifecycle moves to a single shared package (`internal/worktree`), used by both
+  the cobra commands and future programmatic callers (notably the v0.11
+  substrate epics). Behavior-equivalent to the previous cobra-only path; opens
+  the door to ephemeral-worktree flows.
+- **`thrum prime` first-turn ack instruction** — the prime briefing now asks the
+  runtime to emit a short scrollback line on receipt, giving the agent visible
+  signal that context loaded. Previously some runtimes (notably Claude Code's
+  SessionStart hook) silently absorbed the prime briefing with no observable
+  first-turn anchor.
+- **Schema v25-v32 forward-port from thrum-agents** — `CurrentVersion` bumped
+  from 24 to 32 with 7 new migration blocks (scheduler_job_state +
+  scheduler_job_events, agent column extensions, agent_lifecycle_events,
+  reminders, email_msg_seen + email_outbound_queue + email_peer_rate_state). The
+  tables are intentionally dead-end on v0.10.5 — no consumer code reads from
+  them. Goal is binary-supports-v32-schema-on-disk so v0.10.5 binaries can open
+  DBs previously touched by v0.11-substrate work on multi-binary worktree
+  machines. v29 is a deliberate gap (reserved for substrate follow-ups);
+  `runMigrations` handles gapped sequences naturally.
+
+### Changed
+
+- **URLs migrated from `leonletto.github.io/thrum` to `thrum.team`** (Phase 6.3
+  cleanup). README, website content, docs, and SEO references updated. Old
+  GitHub Pages URLs still resolve via redirect; canonical now points at
+  `thrum.team`.
+- **`thrum-inbox-poll.sh` cron deprecated** in favor of the daemon-side backstop
+  nudger. Existing installations continue to function but the cron is no longer
+  recommended; the daemon backstop is enabled by default. Removal of the
+  user-side cron is queued for a future release.
+- **`project-setup` skill follows `.thrum/redirect` when checking
+  `philosophy.md`.** Previously failed in redirected worktrees because it looked
+  at the worktree-local path directly. Now resolves the redirect before the
+  philosophy-presence check.
+- **`thrum worktree create` / `thrum worktree teardown` rewired through
+  `internal/worktree`** — cobra commands now delegate to the shared package
+  rather than inlining worktree-lifecycle logic. No user-visible behavior
+  change, but makes worktree-related bug fixes land in one place.
+- **README dropped removed-feature references** (groups + subscriptions) — these
+  features were removed in earlier releases; the README is now consistent with
+  the current CLI surface.
+- **`/thrum:restart` skill: §1 Big picture mandate + 11-section structure.**
+  Restart snapshots must now begin with a
+  `## 1. Big picture — what shipped this session` heading (1-3 specific
+  sentences naming artifacts, decisions, cycles closed), so the snapshot doubles
+  as the agent's own log entry visible in `thrum agent sessions list`. The
+  free-form prose enumeration was replaced with a numbered structure (sections
+  2-11) covering artifact state, players, decisions-with-context, repo-owner
+  questions, outstanding work, patterns-that-burned-us, file paths, resume plan,
+  honest unknowns, and end-of-continuation reflection. Forward-ported from
+  thrum-agents into release/v0.10.5 so rc.4 ships the mandate.
+- **`bd comments` invocation syntax corrected across docs.** Role-preamble
+  templates (`internal/context/roleconfig/templates/roles/implementer-*.md`) and
+  `bd` reference docs (`website/docs/beads-and-thrum.md`,
+  `docs/beads-and-thrum.md`) listed the subcommand as
+  `bd comments <id> add "note"`; the actual CLI is
+  `bd comments add <id> "note"`. Silently failed on every invocation against the
+  wrong shape. Corrected; column alignment preserved on code-block examples.
+- **BREAKING: `thrum send` requires explicit recipient flag** (thrum-t698).
+  Invoking `thrum send 'msg'` without either `--to @<agent>` or the new
+  `--broadcast` flag now hard-errors (exit 1) with a conversational stderr
+  message offering the two valid paths. Previously the no-flag default silently
+  broadcast to every team agent — a real footgun that scaled with team size
+  (coord live-demonstrated it during Session 75 with an accidental 94-agent
+  broadcast). The CLAUDE.md convention has long said "always use
+  `--to @<specific-name>`, never role names"; this aligns the CLI default with
+  the convention. Migration: explicit `--to @<agent_name>` (the common case) or
+  `--broadcast` (when team fanout is genuinely intended). `--to @everyone`
+  continues to work as the legacy keyword form. `--to` and `--broadcast` are
+  mutually exclusive. CLI_REFERENCE.md + thrum SKILL.md updated; the broader doc
+  audit (quickstart.md, messaging.md, identity.md, llms.txt, llms-full.txt) is
+  queued for the rc.6-cycle doc-cleanup pass.
+
+### Fixed
+
+- **`runtime-init` no longer leaves stale daemon-managed scripts in worktrees**
+  (thrum-akqv, P1). Daemon-managed templates (`scripts/thrum-startup.sh`,
+  `scripts/thrum-check-inbox.sh`, `.claude/settings.json`) were skipped on
+  `runtime-init` when the files already existed, causing drift in long-running
+  worktrees as the template content evolved across releases. The init logic now
+  distinguishes daemon-managed scripts (overwrite on init) from user-customized
+  configs (preserve on init).
+- **`thrum prime` ack interpolation strips backticks from identity fields**
+  (thrum-x7rb). Identity fields containing backticks were leaking literal
+  markdown/shell interpretation into the rendered ack template. Now sanitized
+  via explicit backtick strip in the interpolation path.
+- **Inbox backstop spool envelopes preserved from janitor reaping** — the
+  janitor was prematurely deleting backstop-pending envelopes, causing
+  stale-unread messages to disappear from inbox before the backstop nudger could
+  re-deliver them.
+- **Self-delivery: `read_at` stamped at insert; author preserved in
+  recipientSet** — E1 self-mention semantic fix. Messages with explicit
+  self-mention now route correctly to the author's own inbox without being
+  filtered out by the recipient-set construction.
+- **Self-echo nudge guard for tmux dispatch** (thrum-1zfk; regression of
+  thrum-kfn3 introduced by the self-delivery fix above). The DispatchTmux tmux
+  nudge path was missing the self-skip guard symmetric to the spool path. With
+  the author now preserved in `recipientSet` for `read_at` stamping, every send
+  touching role-group expansion or self-@mention reached the unguarded tmux
+  nudge path, firing phantom "new message" notifications back to the sender.
+  Layer 4 (DispatchTmux) now self-skips with `[nudge] tmux.skip self` for grep
+  parity with the existing `[nudge] spool.skip self` log.
+- **SEO: BlogPosting JSON-LD non-critical warnings cleaned up** — Schema.org
+  warnings on generated blog pages.
+- **Downgrade-guard error message: actionable recovery hints + CLAUDE.md
+  prevention** (thrum-quth, P1). When a binary's max supported schema is below
+  the on-disk DB's schema (common after `make install` from a newer-schema
+  branch on a multi-binary worktree machine), the daemon refuses to start.
+  Pre-rc.4 the error named the version pair but gave no recovery path beyond a
+  one-line hint. The expanded error now includes: binary's `CurrentVersion`,
+  DB's current schema, two concrete recovery paths (re-install matching binary;
+  daemon-stop-first then rm the DB + WAL/SHM with explicit
+  `LOSES local message history` warning), and a pointer to a new "Multi-Binary
+  Worktree Footgun" section in CLAUDE.md explaining why/avoid/recover. Test pin
+  expanded from 1 to 9 contract substrings.
+- **Post-launch silence watchdog detects ack-without-act** (thrum-qpw7). After
+  the identity-banner printf injection at tmux launch/restart, the watchdog
+  (`paneAgentEngaged`) treated the model's printf-mandated ack line
+  (`@<name> primed (<role>). Standing by.`) as real agent output — a
+  false-positive that suppressed the corrective nudge when the model
+  acknowledged the printf body WITHOUT Reading the (possibly truncated) prime
+  briefing. The engagement check now ignores lines matching the canonical ack
+  pattern `@\S+\s+primed\s*\(`, so the watchdog still nudges the agent into
+  running `thrum prime`. The regex is anchored on the literal `(` opener that
+  all 5 runtime plugins emit (claude/cursor/opencode/codex/kiro), so unrelated
+  prose like `@impl_v0105 primed the database` is not mis-classified and real
+  agent output still suppresses the nudge correctly.
+- **`tmux capture-pane` joins wrapped lines (`-J` flag)** (thrum-ktp8). The
+  post-launch silence watchdog's `paneAgentEngaged` searches captured pane
+  content for the `PrimeTruncationSentinel` to bound the decision region.
+  Without tmux's `-J` flag, long identity-banner content (Agent + Role +
+  Worktree + Branch + sentinel, frequently > 100 chars on typical terminals)
+  wrapped mid-string, splitting the sentinel across two pane lines. The per-line
+  `strings.Contains(line, sentinel)` check then failed to match on any single
+  line → `topIdx = -1` → conservative `return true` → no nudge fired. This
+  silently masked the rc.5 thrum-qpw7 ack-exclusion fix (which was correct but
+  never reached because sentinel detection failed first). `-J` joins wrapped
+  lines (and preserves trailing spaces); all 5 non-watchdog `CapturePane`
+  callers (HandleCapture RPC, queue captured- output, alert-silence run-shell,
+  permission paneStillMatches) are text- search consumers that benefit from
+  joined output, none depend on wrap- preservation. Surfaced during Leon's
+  @impl_writer_website_dev rc.5 spot-check.
+
+## [0.10.4] - 2026-05-16
+
 ### Fixed
 
 - **`thrum` mutating commands now fail closed under cross-worktree identity
@@ -45,8 +268,8 @@ and this project adheres to
     preserve the single-document JSON contract; equivalent context routes
     through the slog bridge's hints array.
   - The `cross_worktree` guard's remediation message reads
-    `cd to the correct worktree or run 'thrum prime' to re-claim`. Agents
-    that hit the abort should fix their cwd; there is no user-facing bypass.
+    `cd to the correct worktree or run 'thrum prime' to re-claim`. Agents that
+    hit the abort should fix their cwd; there is no user-facing bypass.
   - `TestEveryLeafHasCrossWorktreeResponse` CI gate fails the build if any new
     cobra leaf lacks a class annotation — prevents silent taxonomy drift.
 

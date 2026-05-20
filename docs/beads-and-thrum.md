@@ -189,7 +189,7 @@ bd update <id> -s in_progress      # Start working on issue
 bd update <id> --claim             # Atomically claim (assign + in_progress)
 bd close <id>                      # Mark done
 bd close <id> --suggest-next       # Mark done + show newly unblocked
-bd comments <id> add "note"        # Add comment
+bd comments add <id> "note"        # Add comment
 bd dep <blocker> --blocks <blocked>  # Add dependency
 ```
 

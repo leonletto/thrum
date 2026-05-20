@@ -116,8 +116,8 @@ type EmailStatusRequest struct {
 
 // EmailStatusResponse is the wire shape returned by email.status.
 type EmailStatusResponse struct {
-	Running   bool   `json:"running"`
-	ConnectedAt int64  `json:"connected_at"`   // unix ms; 0 when not running
+	Running     bool   `json:"running"`
+	ConnectedAt int64  `json:"connected_at"` // unix ms; 0 when not running
 	LastError   string `json:"last_error,omitempty"`
 
 	InboundCount          int64    `json:"inbound_count"`

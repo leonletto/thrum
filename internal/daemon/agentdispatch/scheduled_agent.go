@@ -436,9 +436,9 @@ func (h *ScheduledAgentHandler) Dispatch(ctx context.Context, job scheduler.JobS
 		_ = reporter.Transition(scheduler.StateFailed,
 			fmt.Sprintf("stage 5: tmux launch: %v", err),
 			map[string]any{
-				"worktree_path_destroyed":  createResult.Path,
-				"branch_name_destroyed":    createResult.Branch,
-				"tmux_session_killed":      target,
+				"worktree_path_destroyed": createResult.Path,
+				"branch_name_destroyed":   createResult.Branch,
+				"tmux_session_killed":     target,
 			})
 		return fmt.Errorf("stage 5: tmux launch: %w", err)
 	}
@@ -456,9 +456,9 @@ func (h *ScheduledAgentHandler) Dispatch(ctx context.Context, job scheduler.JobS
 		_ = reporter.Transition(scheduler.StateFailed,
 			fmt.Sprintf("stage 6: pane-ready timeout: %v", err),
 			map[string]any{
-				"worktree_path_destroyed":  createResult.Path,
-				"branch_name_destroyed":    createResult.Branch,
-				"tmux_session_killed":      target,
+				"worktree_path_destroyed": createResult.Path,
+				"branch_name_destroyed":   createResult.Branch,
+				"tmux_session_killed":     target,
 			})
 		return fmt.Errorf("stage 6: pane-ready timeout: %w", err)
 	}

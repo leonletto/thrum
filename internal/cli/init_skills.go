@@ -181,4 +181,3 @@ func SkillsBootstrapNeeded(repoPath string) bool {
 	hasNegation := containsTrimmed(lines, skillsNegationLine)
 	return hasBlanket && !hasNegation
 }
-

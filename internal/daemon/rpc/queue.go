@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/safedb"
@@ -58,6 +59,16 @@ type QueuedCommand struct {
 	CompletedAt    time.Time
 	CapturedOutput string
 	timer          *time.Timer // timeout goroutine handle
+
+	// dispatchClaimed is a one-shot atomic guard that ensures sendQueuedCommand
+	// is invoked at most once per command. Set via CompareAndSwap at the top
+	// of sendQueuedCommand. Closes a dispatch race between (1) HandleQueue's
+	// bootstrap IsSilent=true fast path, (2) HandleCheckPane's alert-silence
+	// hook firing, (3) completeCommand's next-after-completion continuation,
+	// and (4) the thrum-7yhs dispatch watchdog (pollDispatchSilence). Any two
+	// of these can fire roughly simultaneously; without this guard both could
+	// type the command into the pane.
+	dispatchClaimed atomic.Bool
 
 	// Written once by loadPendingCommands during restart recovery; read-only
 	// thereafter.

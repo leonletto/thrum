@@ -104,8 +104,10 @@ func defaultOutboundCfg() email.OutboundConfig {
 // notification produces a basic MessageNotification for tests.
 func notification(to, authorID, body string) email.MessageNotification {
 	return email.MessageNotification{
-		Body:       body,
-		Author:     struct{ AgentID string `json:"agent_id"` }{AgentID: authorID},
+		Body: body,
+		Author: struct {
+			AgentID string `json:"agent_id"`
+		}{AgentID: authorID},
 		To:         to,
 		ThrumMsgID: "msg_01TEST",
 		Subject:    "hello",
@@ -287,8 +289,10 @@ func TestOutbound_ReplyToThreadingPopulated(t *testing.T) {
 
 	o := email.NewOutbound(cfg, sub, newTestMsgMap(t), newTestLimiterForOutbound(t), email.NewQueue(db))
 	notif := email.MessageNotification{
-		Body:       "a reply",
-		Author:     struct{ AgentID string `json:"agent_id"` }{AgentID: "agent_a"},
+		Body: "a reply",
+		Author: struct {
+			AgentID string `json:"agent_id"`
+		}{AgentID: "agent_a"},
 		To:         "@coordinator_main",
 		ThrumMsgID: "msg_REPLY",
 		ReplyTo:    "msg_PARENT",

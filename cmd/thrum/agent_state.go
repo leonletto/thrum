@@ -324,4 +324,3 @@ func writeStateMD(path string, s *agentstate.StateMD) error {
 	}
 	return nil
 }
-

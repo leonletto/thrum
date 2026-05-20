@@ -1943,14 +1943,14 @@ func TestConcurrentDispatches_SharedHandler_NoRace(t *testing.T) {
 // handler code — not in test bookkeeping.
 type raceCleanTmux struct{}
 
-func (raceCleanTmux) CheckPane(_ context.Context, _ string) (bool, error)        { return false, nil }
+func (raceCleanTmux) CheckPane(_ context.Context, _ string) (bool, error) { return false, nil }
 func (raceCleanTmux) TmuxCreate(_ context.Context, _ string, _ agentdispatch.TmuxCreateOpts) error {
 	return nil
 }
-func (raceCleanTmux) TmuxLaunch(_ context.Context, _ string) error        { return nil }
-func (raceCleanTmux) WaitForPaneReady(_ context.Context, _ string) error  { return nil }
-func (raceCleanTmux) TmuxKillSession(_ context.Context, _ string) error   { return nil }
-func (raceCleanTmux) PaneSendCtrlCExit(_ context.Context, _ string) error  { return nil }
+func (raceCleanTmux) TmuxLaunch(_ context.Context, _ string) error          { return nil }
+func (raceCleanTmux) WaitForPaneReady(_ context.Context, _ string) error    { return nil }
+func (raceCleanTmux) TmuxKillSession(_ context.Context, _ string) error     { return nil }
+func (raceCleanTmux) PaneSendCtrlCExit(_ context.Context, _ string) error   { return nil }
 func (raceCleanTmux) PaneInjectPrompt(_ context.Context, _, _ string) error { return nil }
 
 type raceCleanMessage struct{}

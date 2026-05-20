@@ -424,4 +424,3 @@ func backoffDelay(attempt int) time.Duration {
 	}
 	return reconnectBackoff[attempt]
 }
-

@@ -32,13 +32,14 @@ type ConfigRuntimeInfo struct {
 }
 
 // ConfigDaemonInfo contains daemon configuration details.
+// Note: sync_interval was removed in v0.10.6 (thrum-s6os); it is no longer
+// displayed here. Legacy configs carrying the key are silently ignored.
 type ConfigDaemonInfo struct {
-	LocalOnly    ConfigValue `json:"local_only"`
-	SyncInterval ConfigValue `json:"sync_interval"`
-	WSPort       ConfigValue `json:"ws_port"`
-	Status       string      `json:"status"`
-	PID          int         `json:"pid,omitempty"`
-	Socket       string      `json:"socket,omitempty"`
+	LocalOnly ConfigValue `json:"local_only"`
+	WSPort    ConfigValue `json:"ws_port"`
+	Status    string      `json:"status"`
+	PID       int         `json:"pid,omitempty"`
+	Socket    string      `json:"socket,omitempty"`
 }
 
 // ConfigIdentityInfo contains current agent identity.
@@ -107,18 +108,6 @@ func ConfigShow(repoPath string) (*ConfigShowResult, error) {
 		result.Daemon.LocalOnly = ConfigValue{Value: "true", Source: "env"}
 	}
 
-	// Sync interval: env > config > default
-	result.Daemon.SyncInterval = ConfigValue{
-		Value:  strconv.Itoa(cfg.Daemon.SyncInterval) + "s",
-		Source: "default",
-	}
-	if cfg.Daemon.SyncInterval != config.DefaultSyncInterval {
-		result.Daemon.SyncInterval.Source = "config.json"
-	}
-	if envInterval := os.Getenv("THRUM_SYNC_INTERVAL"); envInterval != "" {
-		result.Daemon.SyncInterval = ConfigValue{Value: envInterval + "s", Source: "env"}
-	}
-
 	// WS port: env > config > default
 	result.Daemon.WSPort = ConfigValue{
 		Value:  cfg.Daemon.WSPort,
@@ -165,7 +154,6 @@ func ConfigShow(repoPath string) (*ConfigShowResult, error) {
 		{"THRUM_ROLE"},
 		{"THRUM_MODULE"},
 		{"THRUM_LOCAL"},
-		{"THRUM_SYNC_INTERVAL"},
 		{"THRUM_WS_PORT"},
 	}
 	for _, e := range envOverrides {
@@ -197,7 +185,6 @@ func FormatConfigShow(result *ConfigShowResult) string {
 	// Daemon section
 	b.WriteString("\nDaemon\n")
 	fmt.Fprintf(&b, "  Local-only:    %s (%s)\n", result.Daemon.LocalOnly.Value, result.Daemon.LocalOnly.Source)
-	fmt.Fprintf(&b, "  Sync interval: %s (%s)\n", result.Daemon.SyncInterval.Value, result.Daemon.SyncInterval.Source)
 	fmt.Fprintf(&b, "  WS port:       %s (%s)\n", result.Daemon.WSPort.Value, result.Daemon.WSPort.Source)
 	fmt.Fprintf(&b, "  Status:        %s\n", result.Daemon.Status)
 	if result.Daemon.Socket != "" {

@@ -163,7 +163,7 @@ type openCodeMessageData struct {
 //
 // UsedPercentage = (input + output + reasoning + cache.read + cache.write)
 //
-//	* 100 / openCodeContextWindow(modelID)
+//   - 100 / openCodeContextWindow(modelID)
 //
 // clamped to [0, 100]. Approximate is always TRUE: reconstruction from
 // per-message token totals has > 1-message lag (output + reasoning of

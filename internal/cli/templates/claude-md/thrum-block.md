@@ -2,10 +2,9 @@
 
 ## Thrum — Agent Messaging
 
-This repo uses [Thrum](https://thrum.team/) for persistent
-cross-session, cross-agent messaging. The Thrum daemon delivers messages between
-agents coordinating on shared work and preserves conversation state across
-restarts.
+This repo uses [Thrum](https://thrum.team/) for persistent cross-session,
+cross-agent messaging. The Thrum daemon delivers messages between agents
+coordinating on shared work and preserves conversation state across restarts.
 
 ### Essential commands
 

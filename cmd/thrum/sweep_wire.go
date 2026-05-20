@@ -26,7 +26,7 @@ import (
 //     (the same store the dispatcher uses; sweep mints rows the
 //     dispatcher fires).
 //   - SchedulerState — wraps st.DB() (the scheduler_job_state read)
-//     + sched.JobSpec (the job_id → agent join). Per
+//   - sched.JobSpec (the job_id → agent join). Per
 //     sweep/scheduler_state.go the placement here keeps A-B1's
 //     substrate package isolated from cross-epic joins.
 //   - PaneSource — wraps the daemon identity-file directory walk

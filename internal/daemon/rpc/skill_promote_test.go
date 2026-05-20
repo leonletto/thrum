@@ -94,15 +94,15 @@ func fixedClock(t time.Time) func() time.Time {
 // a fake staleness, a captured-logs slog, plus an in-memory DB with a
 // coordinator agent row pre-inserted.
 type promoteFixture struct {
-	t          *testing.T
-	root       string
-	db         *sql.DB
-	messenger  *recordingMessenger
-	staleness  *recordingStaleness
-	logBuf     *bytes.Buffer
-	logger     *slog.Logger
-	handler    *SkillHandler
-	clockTime  time.Time
+	t         *testing.T
+	root      string
+	db        *sql.DB
+	messenger *recordingMessenger
+	staleness *recordingStaleness
+	logBuf    *bytes.Buffer
+	logger    *slog.Logger
+	handler   *SkillHandler
+	clockTime time.Time
 }
 
 func newPromoteFixture(t *testing.T) *promoteFixture {
@@ -256,9 +256,9 @@ func TestPromote_EditPath(t *testing.T) {
 		"WIDGET BODY V2")
 
 	resp, err := f.callPromote(SkillPromoteRequest{
-		CallerAgentID:  "@coordinator_main",
-		Path:           path,
-		MsgThreadID:    "msg_thread_revisionA",
+		CallerAgentID: "@coordinator_main",
+		Path:          path,
+		MsgThreadID:   "msg_thread_revisionA",
 	})
 	if err != nil {
 		t.Fatalf("HandlePromote: %v", err)

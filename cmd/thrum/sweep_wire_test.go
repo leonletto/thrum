@@ -127,13 +127,13 @@ func TestIdentityFileAgentRegistry_MissingDir_ReturnsEmpty(t *testing.T) {
 func TestIdentityFileAgentRegistry_ReadsAgents(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "identities")
 	writeIdentity(t, dir, "docs_bot", config.IdentityFile{
-		Version: 3,
-		Agent:   config.AgentConfig{Name: "docs_bot", Role: "implementer", Module: "docs"},
+		Version:     3,
+		Agent:       config.AgentConfig{Name: "docs_bot", Role: "implementer", Module: "docs"},
 		TmuxSession: "docs:0.0",
 	})
 	writeIdentity(t, dir, "billing_bot", config.IdentityFile{
-		Version: 3,
-		Agent:   config.AgentConfig{Name: "billing_bot", Role: "implementer", Module: "billing"},
+		Version:     3,
+		Agent:       config.AgentConfig{Name: "billing_bot", Role: "implementer", Module: "billing"},
 		TmuxSession: "billing:0.0",
 	})
 

@@ -59,7 +59,7 @@ type Bridge struct {
 	outboundEnqueued atomic.Int64
 
 	startedAt atomic.Value // stores time.Time; zero until first successful run start
-	lastError  atomic.Value // stores string
+	lastError atomic.Value // stores string
 
 	// Test hooks — replaced by tests to compress wall-clock waits.
 	HeartbeatInterval time.Duration // default 30s

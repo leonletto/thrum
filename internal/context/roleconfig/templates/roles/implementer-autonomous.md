@@ -69,7 +69,7 @@ across worktrees and projects when missing.
 The `update-project` skill and edits to `.thrum/context/project_state.md` are
 coordinator-only actions. If you need to preserve session context before a
 restart or compaction, send a status message to the coordinator and wait — they
-update state on your behalf. Use `bd comments <task-id> add "<note>"` for urgent
+update state on your behalf. Use `bd comments add <task-id> "<note>"` for urgent
 task-scoped notes.
 
 ### Always pass an explicit `model:` parameter on every sub-agent spawn
@@ -90,12 +90,12 @@ discipline.
 
 ### Run thrum commands from your worktree, never from the main repo or another worktree
 
-Your worktree (`{{.RepoRoot}}` here) is your home — the `.thrum/` identity
-file lives here. Running thrum CLI from the main repo would pick up the
-coordinator's identity and route messages under the wrong sender. Same
-hazard if you `cd` into another agent's worktree. Always run from
-`{{.RepoRoot}}`, or anchor explicitly with `--repo {{.RepoRoot}}`. If a Bash
-command `cd`s outside your worktree, return to it before any thrum CLI call.
+Your worktree (`{{.RepoRoot}}` here) is your home — the `.thrum/` identity file
+lives here. Running thrum CLI from the main repo would pick up the coordinator's
+identity and route messages under the wrong sender. Same hazard if you `cd` into
+another agent's worktree. Always run from `{{.RepoRoot}}`, or anchor explicitly
+with `--repo {{.RepoRoot}}`. If a Bash command `cd`s outside your worktree,
+return to it before any thrum CLI call.
 
 ### Send to specific agent names, never to role names
 
@@ -136,20 +136,20 @@ catches anything that arrived during a tool call or context shift.
 
 ### Context-restart discipline
 
-When the daemon nudges you at `warn_threshold` (default 70%): wrap your
-current sub-task, compose a continuation from your working context, save it,
-and run `/thrum:restart` yourself. The continuation should be a tight prose
-summary of what you know — drawn directly from your own context, not from
-fresh investigation.
+When the daemon nudges you at `warn_threshold` (default 70%): wrap your current
+sub-task, compose a continuation from your working context, save it, and run
+`/thrum:restart` yourself. The continuation should be a tight prose summary of
+what you know — drawn directly from your own context, not from fresh
+investigation.
 
-Specifically: **at warn-tier, do NOT dispatch sub-agents (Agent, Explore,
-etc.). Do NOT re-read large files. Do NOT spawn web fetches.** Write what you
-know directly. Each of those would cost context you don't have to spend.
+Specifically: **at warn-tier, do NOT dispatch sub-agents (Agent, Explore, etc.).
+Do NOT re-read large files. Do NOT spawn web fetches.** Write what you know
+directly. Each of those would cost context you don't have to spend.
 
-If you can't compose in your remaining runway, the daemon will force-restart
-you at 80% + 3 minutes. The new session will receive the last 200 lines of
-your transcript as its restart snapshot — your in-flight decisions and
-judgment calls will be lost, but the system makes progress.
+If you can't compose in your remaining runway, the daemon will force-restart you
+at 80% + 3 minutes. The new session will receive the last 200 lines of your
+transcript as its restart snapshot — your in-flight decisions and judgment calls
+will be lost, but the system makes progress.
 
 ---
 

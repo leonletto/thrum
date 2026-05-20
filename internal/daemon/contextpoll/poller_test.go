@@ -128,7 +128,7 @@ func TestPoller_WarnCallback_ResetsAfterRestart(t *testing.T) {
 	enrollOne(p, "agent-1")
 
 	p.pollOnce(context.Background()) // fires
-	p.PostRestart("agent-1")          // clears flags
+	p.PostRestart("agent-1")         // clears flags
 	p.pollOnce(context.Background()) // should fire again
 
 	if got := warn.calls(); got != 2 {
@@ -503,9 +503,9 @@ func TestPoller_InFlightMaxWait_Backstop(t *testing.T) {
 	p.OnFire(fr)
 	enrollOne(p, "agent-1")
 
-	p.pollOnce(context.Background())             // warn + preFire
+	p.pollOnce(context.Background()) // warn + preFire
 	time.Sleep(5 * time.Millisecond)
-	p.pollOnce(context.Background())             // onFire — sets inFlight
+	p.pollOnce(context.Background()) // onFire — sets inFlight
 
 	// Confirm warn deduped (warnFired set).
 	beforeWarn := warn.calls()

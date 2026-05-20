@@ -221,9 +221,8 @@ func Init(opts InitOptions) error {
 		}
 		cfg := &config.ThrumConfig{
 			Daemon: config.DaemonConfig{
-				LocalOnly:    localOnly,
-				SyncInterval: config.DefaultSyncInterval,
-				WSPort:       config.DefaultWSPort,
+				LocalOnly: localOnly,
+				WSPort:    config.DefaultWSPort,
 			},
 		}
 		if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
@@ -533,6 +532,25 @@ func initASyncBranch(repoPath string, recon SyncReconciliation) error {
 	messagesDir := filepath.Join(syncDir, "messages")
 	if err := os.MkdirAll(messagesDir, 0750); err != nil {
 		return fmt.Errorf("create messages dir: %w", err)
+	}
+
+	// thrum-s6os E10: create the v0.10.6 wire-stream skeleton alongside
+	// the legacy paths. state/agents/ + state/bridge-groups/ hold per-
+	// agent and per-bridge-group state JSON; messages-v2/ + receipts/
+	// hold per-author append-only jsonl. Empty dirs are not tracked by
+	// git — peers materialize them lazily on the first file write —
+	// so no .gitkeep is added (would otherwise carry into every fresh
+	// repo's initial commit on a-sync). Legacy events.jsonl + messages/
+	// are deliberately left in place for soft-cutover read-fallback.
+	for _, dir := range []string{
+		filepath.Join(syncDir, "state", "agents"),
+		filepath.Join(syncDir, "state", "bridge-groups"),
+		filepath.Join(syncDir, "messages-v2"),
+		filepath.Join(syncDir, "receipts"),
+	} {
+		if err := os.MkdirAll(dir, 0750); err != nil {
+			return fmt.Errorf("create %s: %w", dir, err)
+		}
 	}
 
 	// Stage and commit initial files in the worktree

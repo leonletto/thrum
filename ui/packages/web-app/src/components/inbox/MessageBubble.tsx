@@ -196,6 +196,11 @@ export const MessageBubble = memo(function MessageBubble({ message, isOwn }: Mes
           </div>
         ) : (
           <div className={cn('prose prose-sm max-w-none', isOwn && 'prose-invert')}>
+            {message.pending_route_resolution && (
+              <span className="text-muted-foreground italic text-sm">
+                (pending — waiting for route resolution from peer)
+              </span>
+            )}
             <ReactMarkdown
               components={{
                 p: ({ children }) => {
@@ -310,11 +315,12 @@ export const MessageBubble = memo(function MessageBubble({ message, isOwn }: Mes
     </>
   );
 }, (prevProps, nextProps) => {
-  // Only re-render if message ID, updated_at, or deleted_at changes
+  // Only re-render if message ID, updated_at, deleted_at, or pending_route_resolution changes
   return (
     prevProps.message.message_id === nextProps.message.message_id &&
     prevProps.message.updated_at === nextProps.message.updated_at &&
     prevProps.message.deleted_at === nextProps.message.deleted_at &&
+    prevProps.message.pending_route_resolution === nextProps.message.pending_route_resolution &&
     prevProps.isOwn === nextProps.isOwn
   );
 });

@@ -20,10 +20,10 @@ import (
 // re-declaring the test plumbing.
 
 type recordingTmux struct {
-	killCalls       []string
-	killErr         error
-	checkPaneAlive  bool // controls waitForPaneExit polling
-	checkPaneCalls  int
+	killCalls      []string
+	killErr        error
+	checkPaneAlive bool // controls waitForPaneExit polling
+	checkPaneCalls int
 }
 
 func (r *recordingTmux) CheckPane(_ context.Context, _ string) (bool, error) {
@@ -39,7 +39,7 @@ func (r *recordingTmux) TmuxKillSession(_ context.Context, target string) error 
 	r.killCalls = append(r.killCalls, target)
 	return r.killErr
 }
-func (r *recordingTmux) PaneSendCtrlCExit(_ context.Context, _ string) error  { return nil }
+func (r *recordingTmux) PaneSendCtrlCExit(_ context.Context, _ string) error   { return nil }
 func (r *recordingTmux) PaneInjectPrompt(_ context.Context, _, _ string) error { return nil }
 
 type recordingWorktree struct {
@@ -257,4 +257,3 @@ func TestRouteEscalation_PropagatesRouterError(t *testing.T) {
 		t.Errorf("err = %v; want wraps %v", err, wantErr)
 	}
 }
-

@@ -27,10 +27,10 @@ type stubRespawnRegistry struct {
 	agentRow  agent.Agent
 	lookupErr error
 
-	lookupCalls         []string
-	setDisabledAtCalls  []time.Time
-	setDisabledAtAgent  string
-	setDisabledAtErr    error
+	lookupCalls        []string
+	setDisabledAtCalls []time.Time
+	setDisabledAtAgent string
+	setDisabledAtErr   error
 }
 
 func (s *stubRespawnRegistry) Lookup(_ context.Context, name string) (agent.Agent, error) {
@@ -62,7 +62,7 @@ func (s *stubRespawnRegistry) ClearStateMdParseFailedAt(_ context.Context, _ str
 // (crash_detected always; respawn_fired only on success;
 // respawn_skipped_loopguard on guard trip).
 type stubLifecycleStore struct {
-	appended []state.AgentLifecycleEvent
+	appended  []state.AgentLifecycleEvent
 	appendErr error
 
 	loopGuardCount    int

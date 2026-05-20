@@ -273,7 +273,7 @@ func TestPrimeAgentSkill_NoEarlyExit(t *testing.T) {
 		"you may stop",
 		"skip step 2",
 		"step 2 is optional",
-		"only if",       // "only if the inbox is empty" pattern
+		"only if",        // "only if the inbox is empty" pattern
 		"otherwise exit", // any "exit before Step 2" pattern
 	}
 	for _, phrase := range earlyExitDriftPhrases {

@@ -242,4 +242,3 @@ func TestDestinationsForWorktrees_SkipsMissingWorktrees(t *testing.T) {
 		t.Error("destinations is empty; want entries for the one extant worktree")
 	}
 }
-

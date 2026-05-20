@@ -57,7 +57,7 @@ type SupervisorMaybeRouter interface {
 //	                                 target_agent
 type DeliverySink struct {
 	msg        MessageSender
-	email      EmailQueue          // optional; nil → skip email chain entries
+	email      EmailQueue            // optional; nil → skip email chain entries
 	supervisor SupervisorMaybeRouter // optional; nil → skip permission-prompt detection
 }
 
