@@ -275,8 +275,8 @@ func CapturePane(target string, lines int) (string, error) {
 
 // SessionName returns the session name of the current tmux session (from inside).
 // Uses TmuxLocal which preserves TMUX env — needed to identify the current session.
-func SessionName() (string, error) {
-	out, err := safecmd.TmuxLocal(context.Background(), "display-message", "-p", "#S")
+func SessionName(ctx context.Context) (string, error) {
+	out, err := safecmd.TmuxLocal(ctx, "display-message", "-p", "#S")
 	if err != nil {
 		return "", fmt.Errorf("tmux display-message failed: %w", err)
 	}
@@ -285,8 +285,8 @@ func SessionName() (string, error) {
 
 // PaneTarget returns the full target (session:window.pane) for the current pane.
 // Uses TmuxLocal which preserves TMUX env — needed to identify the current pane.
-func PaneTarget() (string, error) {
-	out, err := safecmd.TmuxLocal(context.Background(), "display-message", "-p", "#{session_name}:#{window_index}.#{pane_index}")
+func PaneTarget(ctx context.Context) (string, error) {
+	out, err := safecmd.TmuxLocal(ctx, "display-message", "-p", "#{session_name}:#{window_index}.#{pane_index}")
 	if err != nil {
 		return "", fmt.Errorf("tmux display-message failed: %w", err)
 	}
