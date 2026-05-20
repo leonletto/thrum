@@ -15,7 +15,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:3108-3153
 // Destination: session.go:21-66
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: d03544a037
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func sessionStartRunE(cmd *cobra.Command, args []string) error {
@@ -69,7 +69,7 @@ func sessionStartRunE(cmd *cobra.Command, args []string) error {
 // ORIGIN[thrum-8kxh]: moved from main.go:3156-3199
 // Destination: session.go:75-118
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: d03544a037
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func sessionEndRunE(cmd *cobra.Command, args []string) error {
@@ -121,7 +121,7 @@ func sessionEndRunE(cmd *cobra.Command, args []string) error {
 // ORIGIN[thrum-8kxh]: moved from main.go:3202-3242
 // Destination: session.go:127-167
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: d03544a037
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func sessionSetIntentRunE(cmd *cobra.Command, args []string) error {
@@ -170,7 +170,7 @@ func sessionSetIntentRunE(cmd *cobra.Command, args []string) error {
 // ORIGIN[thrum-8kxh]: moved from main.go:3245-3277
 // Destination: session.go:176-208
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: d03544a037
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func sessionSetTaskRunE(cmd *cobra.Command, args []string) error {
@@ -210,7 +210,7 @@ func sessionSetTaskRunE(cmd *cobra.Command, args []string) error {
 // ORIGIN[thrum-8kxh]: moved from main.go:3279-3410
 // Destination: session.go:216-347
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: d03544a037
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func sessionCmd() *cobra.Command {
@@ -350,7 +350,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:4448-4523
 // Destination: session.go:356-431
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: d03544a037
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func sessionHeartbeatRunE(cmd *cobra.Command, args []string) error {

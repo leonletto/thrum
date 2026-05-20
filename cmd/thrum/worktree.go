@@ -20,7 +20,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:2609-2630
 // Destination: worktree.go:26-47
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: aeab1f8579
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func worktreeCmd() *cobra.Command {
@@ -49,7 +49,7 @@ func worktreeCmd() *cobra.Command {
 // ORIGIN[thrum-8kxh]: moved from main.go:2632-2798
 // Destination: worktree.go:55-221
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: aeab1f8579
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func worktreeCreateCmd() *cobra.Command {
@@ -223,7 +223,7 @@ func worktreeCreateCmd() *cobra.Command {
 // ORIGIN[thrum-8kxh]: moved from main.go:2800-2900
 // Destination: worktree.go:229-329
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: aeab1f8579
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func worktreeTeardownCmd() *cobra.Command {
@@ -331,7 +331,7 @@ func worktreeTeardownCmd() *cobra.Command {
 // ORIGIN[thrum-8kxh]: moved from main.go:2902-2981
 // Destination: worktree.go:337-416
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: aeab1f8579
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func worktreeListCmd() *cobra.Command {
@@ -418,7 +418,7 @@ func worktreeListCmd() *cobra.Command {
 // ORIGIN[thrum-8kxh]: moved from main.go:2983-3036
 // Destination: worktree.go:424-477
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: aeab1f8579
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func worktreeListJSON(repoPath string) error {
