@@ -254,11 +254,6 @@ func (c *Compactor) compactJSONLByKey(
 	}
 	defer func() { _ = f.Close() }()
 
-	type indexedLine struct {
-		raw   []byte
-		order int // position in file; used to preserve order for non-dedup rows
-	}
-
 	// Two-pass approach:
 	// Pass 1: scan all lines, recording the LAST index for each key.
 	// Pass 2: emit only lines that are the last occurrence of their key,

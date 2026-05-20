@@ -256,11 +256,7 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 		if msgActions[i].agentID != "" {
 			continue // already resolved (shouldn't happen, but guard for safety)
 		}
-		agentID, err := w.lookupMessageAuthor(ctx, msgActions[i].msgID, msgActions[i].payload)
-		if err != nil {
-			return fmt.Errorf("snapshot: lookup author for %s: %w", msgActions[i].msgID, err)
-		}
-		msgActions[i].agentID = agentID
+		msgActions[i].agentID = w.lookupMessageAuthor(ctx, msgActions[i].msgID, msgActions[i].payload)
 	}
 	// Filter out actions where author could not be resolved.
 	filtered := msgActions[:0]
@@ -360,10 +356,7 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 
 	// 4. Receipt rows — append to receipts/<issuerID>.jsonl.
 	for _, ra := range receiptActions {
-		row, err := w.buildReceiptRow(ctx, ra.issuerID, ra.messageID)
-		if err != nil {
-			return fmt.Errorf("snapshot: build receipt row (%s, %s): %w", ra.issuerID, ra.messageID, err)
-		}
+		row := w.buildReceiptRow(ctx, ra.issuerID, ra.messageID)
 		if row == nil {
 			continue
 		}
@@ -539,9 +532,10 @@ func (w *Walker) buildMessageRow(ctx context.Context, agentID, msgID string) (*M
 }
 
 // buildReceiptRow constructs a ReceiptStateRow for the given (issuerID, messageID) pair.
-// Returns (nil, nil) when the message is absent (so we can't populate CreatedAt, but
-// we still write the receipt with the current time as ReadAt).
-func (w *Walker) buildReceiptRow(ctx context.Context, issuerID, messageID string) (*ReceiptStateRow, error) {
+// Always returns a populated row (no error path: SQL lookup failures fall back to
+// ReadAt=now). Caller must still nil-check the result for future-proofing if the
+// signature ever grows an error path.
+func (w *Walker) buildReceiptRow(ctx context.Context, issuerID, messageID string) *ReceiptStateRow {
 	// Look up read_at from message_deliveries if the table is available.
 	var readAt time.Time
 	const rdq = `SELECT read_at FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ? LIMIT 1`
@@ -560,22 +554,23 @@ func (w *Walker) buildReceiptRow(ctx context.Context, issuerID, messageID string
 		AgentID:   issuerID,
 		ReadAt:    readAt,
 		Version:   1,
-	}, nil
+	}
 }
 
 // lookupMessageAuthor returns the agentID of the message author by checking
 // the messages table first, then falling back to agent_id in the event payload.
-func (w *Walker) lookupMessageAuthor(ctx context.Context, msgID string, raw map[string]any) (string, error) {
+// Returns empty string when neither source resolves; callers filter on that.
+func (w *Walker) lookupMessageAuthor(ctx context.Context, msgID string, raw map[string]any) string {
 	var agentID string
 	const q = `SELECT agent_id FROM messages WHERE message_id = ? LIMIT 1`
 	if err := w.db.QueryRowContext(ctx, q, msgID).Scan(&agentID); err == nil {
-		return agentID, nil
+		return agentID
 	}
 	// Fallback: agent_id from event payload (message.create carries it).
 	if fallback, ok := raw["agent_id"].(string); ok && fallback != "" {
-		return fallback, nil
+		return fallback
 	}
-	return "", nil
+	return ""
 }
 
 // ---------------------------------------------------------------------------

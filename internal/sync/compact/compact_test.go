@@ -219,11 +219,6 @@ func TestCompactor_EventsJournal_RetentionCutoff(t *testing.T) {
 	// Build 1000 events: spread across 5 days, newest last.
 	// Day 0 = 5 days ago (should be trimmed), Day 4 = today (should be kept).
 	// Events per day: 200
-	type event struct {
-		EventID   string `json:"event_id"`
-		Timestamp string `json:"timestamp"`
-	}
-
 	total := 1000
 	eventsPerDay := total / 5 // 200 per day
 
