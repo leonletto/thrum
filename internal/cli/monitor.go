@@ -193,17 +193,84 @@ func MonitorShowJSON(client *Client, id string) (MonitorJobView, error) {
 	return job, nil
 }
 
-// MonitorStop sends monitor.stop for the given monitor ID.
-func MonitorStop(client *Client, id string) error {
+// MonitorStop sends monitor.stop for the given monitor identifier and returns
+// the resolved monitor ID so callers can surface the canonical reference even
+// when the user supplied a name. The identifier may be either a monitor ID
+// (mon_<ULID>) or a name; names are resolved to IDs via monitor.list before
+// the RPC is dispatched. Stop only considers running monitors when resolving
+// names — a stopped monitor's name returns "no running monitor named ..."
+// rather than a silent no-op.
+func MonitorStop(client *Client, identifier string) (string, error) {
+	id, err := resolveMonitorIdentifier(client, identifier, false)
+	if err != nil {
+		return "", fmt.Errorf("monitor stop: %w", err)
+	}
+
 	req := struct {
 		ID string `json:"id"`
 	}{ID: id}
 
 	var result map[string]string
 	if err := client.Call("monitor.stop", req, &result); err != nil {
-		return fmt.Errorf("monitor stop: %w", err)
+		return "", fmt.Errorf("monitor stop: %w", err)
 	}
-	return nil
+	return id, nil
+}
+
+// monitorIDPrefix is the canonical prefix for monitor IDs minted by
+// internal/daemon/monitor.newMonitorID ("mon_<ULID>", 30 chars total).
+const monitorIDPrefix = "mon_"
+
+// isMonitorID reports whether s has the exact shape of a daemon-minted
+// monitor ID: the "mon_" prefix followed by a 26-character ULID using
+// Crockford-base32's uppercase alphanumeric subset. Validating the shape
+// (not just the prefix) prevents a user-supplied name that happens to start
+// with "mon_" — e.g., "mon_daily" — from being silently routed to the
+// daemon as an ID lookup that returns "not found" with no hint.
+func isMonitorID(s string) bool {
+	const ulidLen = 26
+	if !strings.HasPrefix(s, monitorIDPrefix) {
+		return false
+	}
+	suffix := s[len(monitorIDPrefix):]
+	if len(suffix) != ulidLen {
+		return false
+	}
+	for _, r := range suffix {
+		if !((r >= '0' && r <= '9') || (r >= 'A' && r <= 'Z')) {
+			return false
+		}
+	}
+	return true
+}
+
+// resolveMonitorIdentifier maps a user-supplied identifier (ID or name) to a
+// monitor ID. Identifiers matching the daemon's ID shape are returned
+// unchanged; anything else is looked up by name via monitor.list.
+// includeAll controls whether stopped/dead monitors are searched alongside
+// running ones (true for `logs`, since logs are a historical query; false
+// for `stop`, which only makes sense against a live monitor).
+func resolveMonitorIdentifier(client *Client, identifier string, includeAll bool) (string, error) {
+	if isMonitorID(identifier) {
+		return identifier, nil
+	}
+	jobs, err := MonitorListJSON(client, includeAll)
+	if err != nil {
+		return "", fmt.Errorf("resolve name %q: %w", identifier, err)
+	}
+	for _, j := range jobs {
+		if j.Name == identifier {
+			return j.ID, nil
+		}
+	}
+	scope := "running monitor"
+	listFlag := ""
+	if includeAll {
+		scope = "monitor"
+		listFlag = " --all"
+	}
+	return "", fmt.Errorf("no %s named %q (use `thrum monitor list%s` to see available monitors)",
+		scope, identifier, listFlag)
 }
 
 // MonitorRestart sends monitor.restart for the given monitor ID.
@@ -231,8 +298,15 @@ type MonitorLogEntry struct {
 // MonitorLogs fetches the last N recent monitor matches from the messages
 // table and renders them as a newline-separated log. Default limit is
 // whatever the daemon decides (20) unless the caller passes a non-zero
-// value.
-func MonitorLogs(client *Client, id string, limit int, out io.Writer) error {
+// value. The identifier may be either a monitor ID (mon_<ULID>) or a name;
+// names are resolved to IDs via monitor.list (including stopped/dead
+// monitors, since logs are a historical query) before the RPC is dispatched.
+func MonitorLogs(client *Client, identifier string, limit int, out io.Writer) error {
+	id, err := resolveMonitorIdentifier(client, identifier, true)
+	if err != nil {
+		return fmt.Errorf("monitor logs: %w", err)
+	}
+
 	req := struct {
 		ID    string `json:"id"`
 		Limit int    `json:"limit,omitempty"`

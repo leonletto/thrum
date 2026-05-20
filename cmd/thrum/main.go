@@ -2142,8 +2142,9 @@ Examples:
   thrum monitor add --name errors --match "ERROR" --to @team -- tail -F /tmp/app.log
   thrum monitor list
   thrum monitor show <id>
-  thrum monitor stop <id>
-  thrum monitor restart <id>`,
+  thrum monitor stop <name|id>
+  thrum monitor restart <id>
+  thrum monitor logs <name|id>`,
 	}
 
 	// thrum monitor add -- COMMAND ARGS...
@@ -2277,10 +2278,10 @@ The command and its arguments must be separated from monitor flags with '--':
 		},
 	})
 
-	// thrum monitor stop <id>
+	// thrum monitor stop <name|id>
 	cmd.AddCommand(&cobra.Command{
-		Use:   "stop <id>",
-		Short: "Stop and remove a monitor job",
+		Use:   "stop <name|id>",
+		Short: "Stop and remove a monitor job (accepts name or ID)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := getClient()
@@ -2288,10 +2289,15 @@ The command and its arguments must be separated from monitor flags with '--':
 				return fmt.Errorf("connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
-			if err := cli.MonitorStop(client, args[0]); err != nil {
+			resolvedID, err := cli.MonitorStop(client, args[0])
+			if err != nil {
 				return err
 			}
-			fmt.Printf("Stopped monitor %s\n", args[0])
+			if resolvedID != args[0] {
+				fmt.Printf("Stopped monitor %s (%s)\n", args[0], resolvedID)
+			} else {
+				fmt.Printf("Stopped monitor %s\n", resolvedID)
+			}
 			return nil
 		},
 	})
@@ -2316,12 +2322,12 @@ The command and its arguments must be separated from monitor flags with '--':
 		},
 	})
 
-	// thrum monitor logs <id>
+	// thrum monitor logs <name|id>
 	{
 		var logsLimit int
 		logsCmd := &cobra.Command{
-			Use:   "logs <id>",
-			Short: "Show the most recent monitor matches (historical lookup)",
+			Use:   "logs <name|id>",
+			Short: "Show the most recent monitor matches (historical lookup, accepts name or ID)",
 			Args:  cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				client, err := getClient()
