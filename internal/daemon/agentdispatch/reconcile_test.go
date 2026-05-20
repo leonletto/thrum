@@ -83,15 +83,27 @@ func (s *reconTmuxStub) PaneInjectPrompt(_ context.Context, _, _ string) error {
 	panic("reconTmuxStub: PaneInjectPrompt not used in reconcile tests")
 }
 
-// reconWorktreeStub answers Destroy; Create panics. The Reconciler
-// never creates worktrees.
+// reconWorktreeStub answers Destroy; Create panics. Per
+// thrum-6qmf.4.92: this stub is intentionally NOT consolidated with
+// stubWorktreeMgr (scheduled_agent_test.go) because the two test
+// files live in different packages — reconcile_test.go is `package
+// agentdispatch` (needs internal access to BootReconciler.pathExists
+// + nowFn fields), while scheduled_agent_test.go is `package
+// agentdispatch_test` (external/black-box). A shared stub would
+// require either (a) capitalizing identifiers + moving to a non-
+// test file, or (b) restructuring one test file's package
+// declaration — both heavier than the duplication being eliminated.
+// The Create-panic safety net pins "Reconciler never creates
+// worktrees"; an accidental Create() invocation during refactor
+// surfaces immediately rather than silently passing a happy-path
+// Create through.
 type reconWorktreeStub struct {
 	destroyCalls []worktree.DestroyOpts
 	destroyErr   error
 }
 
 func (s *reconWorktreeStub) Create(_ context.Context, _ worktree.CreateOpts) (*worktree.CreateResult, error) {
-	panic("reconWorktreeStub: Create not used in reconcile tests")
+	panic("reconWorktreeStub: Create not used in reconcile tests — see type docstring for the consolidation rationale (thrum-6qmf.4.92)")
 }
 
 func (s *reconWorktreeStub) Destroy(_ context.Context, opts worktree.DestroyOpts) (*worktree.DestroyResult, error) {

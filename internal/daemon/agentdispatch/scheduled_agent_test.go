@@ -131,6 +131,17 @@ func (m *stubMessageRPC) MessageSend(_ context.Context, target, subject, body st
 // set, Destroy appends "destroy" to the tmux stub's callOrder slice
 // so sequence tests can pin kill-before-destroy alongside the
 // ctrlc-before-kill assertion that lives on the tmux stub.
+//
+// Per thrum-6qmf.4.92: this stub is intentionally NOT consolidated
+// with reconWorktreeStub (reconcile_test.go) because the two test
+// files live in different packages — this file is `package
+// agentdispatch_test` (external/black-box), while reconcile_test.go
+// is `package agentdispatch` (internal access needed for BootReconciler.
+// pathExists + nowFn). A shared stub would require either capitalizing
+// identifiers + moving to a non-test file, or restructuring one test
+// file's package — both heavier than the duplication being eliminated.
+// reconWorktreeStub is the narrower (Create-panics) counterpart used
+// where the Reconciler must never create worktrees.
 type stubWorktreeMgr struct {
 	createResult  *worktree.CreateResult
 	createErr     error
