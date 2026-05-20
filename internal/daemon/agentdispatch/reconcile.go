@@ -2,6 +2,7 @@ package agentdispatch
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -215,16 +216,31 @@ func (r *BootReconciler) ReconcileRun(
 		return scheduler.StateScheduled, nil
 	}
 
-	// Row 2: worktree_path journaled, worktree gone from disk. The
-	// row's transition back to StateScheduled (written by
-	// scheduler/reconcile.go's reconcileOne after we return) IS the
-	// journal-of-discrepancy that spec §7.7 row 2 calls for; no
-	// separate lifecycle event is appended because operator
-	// hand-cleanup is the dominant cause and a crash_detected row
-	// for that case would misclassify operator action as a crash.
-	// Skip Destroy — double-destroy against an already-gone path
-	// surfaces spurious git errors.
+	// Row 2: worktree_path journaled, worktree gone from disk.
+	// Emit a distinct reconcile_worktree_discrepancy lifecycle event
+	// (per thrum-6qmf.4.91) so operators see the row in `thrum team
+	// --journal` — crash_detected would misclassify operator
+	// hand-cleanup as a system anomaly. Skip Destroy: double-destroy
+	// against an already-gone path surfaces spurious git errors.
 	if !r.pathExists(jstate.WorktreePath) {
+		if r.lifecycleStore != nil {
+			details, _ := json.Marshal(map[string]any{
+				"reconciliation_row":   "Row 2",
+				"worktree_path":        jstate.WorktreePath,
+				"journal_state_before": string(lastState),
+				"detected_state":       "path-missing",
+				"resolution":           "rolled-back-to-scheduled",
+			})
+			if _, appendErr := r.lifecycleStore.Append(ctx, state.AgentLifecycleEvent{
+				AgentName: job.ScheduledAgent.Target,
+				EventKind: state.EventReconcileWorktreeDiscrepancy,
+				EventTime: r.nowFn(),
+				Details:   details,
+			}); appendErr != nil {
+				slog.Warn("reconcile: lifecycle append failed (row 2)",
+					"err", appendErr, "path", jstate.WorktreePath, "run_id", runID)
+			}
+		}
 		return scheduler.StateScheduled, nil
 	}
 
@@ -295,7 +311,7 @@ func (r *BootReconciler) ReconcileRun(
 			"err", destroyErr,
 		)
 	}
-	if job.ScheduledAgent != nil {
+	if job.ScheduledAgent != nil && r.lifecycleStore != nil {
 		if _, appendErr := r.lifecycleStore.Append(ctx, state.AgentLifecycleEvent{
 			AgentName:       job.ScheduledAgent.Target,
 			EventKind:       state.EventCrashDetected,
