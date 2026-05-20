@@ -1,0 +1,5 @@
+One small syntax point I need you to lock: for `agent:<name>`, is the value literal `@coordinator_main` (with the `@`, matching how thrum addresses agents in `thrum send --to`) or bare `coordinator_main` (no `@`)? I'd vote literal `@` for consistency with the rest of thrum, but it's a minor call.
+
+**(2 & 3) Still need your call:**
+
+What's your call?
