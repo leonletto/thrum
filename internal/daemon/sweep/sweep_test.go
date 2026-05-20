@@ -50,7 +50,7 @@ func (f fakeChain) Resolve(context.Context) ([]string, error) {
 // the idempotency match-key still runs end-to-end (the recorder is for
 // observability; correctness comes from the real Store).
 type mintRecorder struct {
-	delegate reminders.Store
+	delegate  reminders.Store
 	mintedFor []string
 }
 

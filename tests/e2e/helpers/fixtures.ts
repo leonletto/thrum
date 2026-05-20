@@ -51,16 +51,35 @@ export function quickstartAgent(
 
 /**
  * Send a message via CLI.
+ *
+ * thrum-t698 (v0.10.5-rc.6): `thrum send` requires an explicit recipient
+ * flag — either `--to @<agent>` or `--broadcast`. Callers must specify
+ * one via `options.to` or `options.broadcast`; passing neither is a
+ * caller error and throws. The two are mutually exclusive at the CLI
+ * level too.
  */
 export function sendMessage(
   text: string,
-  options?: { to?: string; mention?: string },
+  options: { to?: string; broadcast?: boolean; mention?: string },
 ): string {
+  if (!options.to && !options.broadcast) {
+    throw new Error(
+      'sendMessage: must specify options.to or options.broadcast (thrum-t698: `thrum send` no longer accepts an implicit recipient)',
+    );
+  }
+  if (options.to && options.broadcast) {
+    throw new Error(
+      'sendMessage: options.to and options.broadcast are mutually exclusive (cobra MarkFlagsMutuallyExclusive)',
+    );
+  }
   const args = ['send', text];
-  if (options?.to) {
+  if (options.to) {
     args.push('--to', options.to);
   }
-  if (options?.mention) {
+  if (options.broadcast) {
+    args.push('--broadcast');
+  }
+  if (options.mention) {
     args.push('--mention', options.mention);
   }
   return thrum(args);

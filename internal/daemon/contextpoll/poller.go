@@ -269,8 +269,9 @@ func (p *Poller) pollOnce(ctx context.Context) {
 // fire callbacks. Mutating reads/writes on agentPollState happen under the
 // Poller's lock — but parsers and callbacks run unlocked.
 //
-//nolint:revive // arg count is acceptable for a per-agent worker; collapsing
 // these into a struct would obscure the per-cycle snapshot semantics.
+//
+//nolint:revive // arg count is acceptable for a per-agent worker; collapsing
 func (p *Poller) pollAgent(
 	ctx context.Context,
 	name string,

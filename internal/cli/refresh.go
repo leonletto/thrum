@@ -60,8 +60,25 @@ var detectAncestor = process.FindClaudeAncestor
 //
 // Returns (nil, nil) when no identity file exists (pre-quickstart case).
 // Returns a non-nil result on success; zero-valued result means the happy
-// path (nothing drifted). Callers should log errors to stderr and continue
-// — refresh failures must not abort the calling command.
+// path (nothing drifted).
+//
+// Callers MUST discriminate refresh errors via the canonical errors.As
+// idiom:
+//
+//		var ge *guard.Error
+//		if errors.As(err, &ge) { ... }
+//
+//	  - A *guard.Error is a catastrophic ownership refusal (cross_worktree,
+//	    unauthenticated_rpc, prime_ownership, …). Callers must propagate
+//	    the error so the command exits non-zero and the structured guard
+//	    fire reaches stderr. cmd/thrum's getClient() handles this via
+//	    classifyRefreshError, which also implements cross_worktree's
+//	    per-command response-class overrides (banner/whoami) for leaves
+//	    where useful output from the wrong cwd is still legitimate.
+//	  - Any other error (wrapped I/O failure, daemon-unreachable,
+//	    config-load problem) is advisory. Callers should log it to stderr
+//	    and continue — refresh failures of this class must not abort the
+//	    calling command (e.g. `thrum status` reporting "daemon down").
 func RefreshLocalIdentity(client *Client, repoPath string) (*RefreshResult, error) {
 	ctx := context.Background()
 

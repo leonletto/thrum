@@ -13,7 +13,7 @@
 //   - Parse(content)            — strict structural parse
 //   - (*StateMD).Write(w)       — round-trip writer
 //   - PromoteAndDrop(s, entry)  — sliding-window logic per
-//                                  brainstorm Q1 cycle-2
+//     brainstorm Q1 cycle-2
 package agentstate
 
 import (
@@ -53,7 +53,7 @@ type StateMD struct {
 // Source line shape (em-dash and ASCII `--` both accepted by the
 // parser; the writer emits em-dash to match spec §7.5 examples):
 //
-//	1. <session-id> · <date> — <one-line summary>
+//  1. <session-id> · <date> — <one-line summary>
 type VerbatimEntry struct {
 	SessionID string
 	Date      string // free-form date string (writer + parser don't enforce a fixed format)
@@ -108,11 +108,11 @@ type ReferenceEntry struct {
 //	floor = 4 + 2*5 + 1 = 15 (just after dropping a full block)
 //	peak  = 4 + 3*5     = 19 (just after a new entry lands)
 const (
-	MaxVerbatim          = 4
-	MaxSummaryBlocks     = 3
-	MaxEntriesPerBlock   = 5
-	WindowFloor          = 15
-	WindowPeak           = 19
+	MaxVerbatim        = 4
+	MaxSummaryBlocks   = 3
+	MaxEntriesPerBlock = 5
+	WindowFloor        = 15
+	WindowPeak         = 19
 )
 
 // Structural error sentinels. The parser returns these so the

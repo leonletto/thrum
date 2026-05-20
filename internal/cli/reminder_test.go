@@ -11,12 +11,12 @@ import (
 // supply a canned response. Each call is recorded so a test can verify
 // the exact wire shape that ReminderXxx produced.
 type fakeRPC struct {
-	t           *testing.T
+	t            *testing.T
 	expectMethod string
-	respond     func(method string, params any) any
-	gotMethod   string
-	gotParams   map[string]any
-	callCount   int
+	respond      func(method string, params any) any
+	gotMethod    string
+	gotParams    map[string]any
+	callCount    int
 }
 
 func newFakeRPC(t *testing.T) *fakeRPC {

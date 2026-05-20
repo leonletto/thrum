@@ -23,17 +23,21 @@ import (
 //
 // Gap 29 remains intentional per the v0.11 substrate brainstorm: the
 // migration numbering is LOCKED across parallel epics so the slots
-// don't reshuffle on each merge. As-of 2026-05-17 thrum-dev / thrum-
-// agents carries:
+// don't reshuffle on each merge. As-of 2026-05-19 thrum-agents carries:
 //   - v25 (A-B1 scheduler_job_state + scheduler_job_events)
 //   - v26 (B-B1 agents-ALTER: mode + identity + 4 runtime cols) — this branch
 //   - v27 (B-B1 agent_lifecycle_events table)                    — this branch
 //   - v28 (A-B4 reminders unified substrate)
 //   - v30/v31/v32 (D-B1 email_msg_seen + email_outbound_queue + email_peer_rate_state)
+//   - v33 (thrum-s6os pending_route_resolution column on messages — forward-
+//     merged from thrum-dev; took the next available slot since v25 was already
+//     claimed by scheduler substrate on this branch)
+//
 // Reserved slot awaiting downstream cascade:
 //   - v29 (MB-1.S6 scheduler_telemetry — reserved)
+//
 // runMigrations switch handles the gap cleanly (no-op case jumps version forward).
-const CurrentVersion = 32
+const CurrentVersion = 33
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -107,20 +111,21 @@ func createTables(tx *sql.Tx) error {
 	tables := []string{
 		// Messages table
 		`CREATE TABLE IF NOT EXISTS messages (
-			message_id   TEXT PRIMARY KEY,
-			thread_id    TEXT,
-			agent_id     TEXT NOT NULL,
-			session_id   TEXT NOT NULL,
-			created_at   TEXT NOT NULL,
-			updated_at   TEXT,
-			body_format  TEXT NOT NULL,
-			body_content TEXT NOT NULL,
-			body_structured TEXT,
-			deleted      INTEGER DEFAULT 0,
-			deleted_at   TEXT,
-			delete_reason TEXT,
-			authored_by  TEXT,
-			disclosed    INTEGER DEFAULT 0
+			message_id               TEXT PRIMARY KEY,
+			thread_id                TEXT,
+			agent_id                 TEXT NOT NULL,
+			session_id               TEXT NOT NULL,
+			created_at               TEXT NOT NULL,
+			updated_at               TEXT,
+			body_format              TEXT NOT NULL,
+			body_content             TEXT NOT NULL,
+			body_structured          TEXT,
+			deleted                  INTEGER DEFAULT 0,
+			deleted_at               TEXT,
+			delete_reason            TEXT,
+			authored_by              TEXT,
+			disclosed                INTEGER DEFAULT 0,
+			pending_route_resolution INTEGER NOT NULL DEFAULT 0
 		)`,
 
 		// Message scopes table
@@ -1545,6 +1550,37 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_peer_rate_paused ON email_peer_rate_state(paused_at) WHERE paused_at IS NOT NULL`)
 		if err != nil {
 			return fmt.Errorf("migration 31→32: idx_peer_rate_paused: %w", err)
+		}
+	}
+
+	// Migration 32→33: Add pending_route_resolution column to messages table
+	// (thrum-s6os E11). The column flags messages whose author_id or
+	// scope/group references were missing state files on this clone at ingest
+	// time. The pending.Pool holds the corresponding OrphanedMessage entries;
+	// projection.ProjectionResolver.Resolve clears the flag when the missing
+	// files arrive. Idempotent: guarded by columnSet check (SQLite does not
+	// support ADD COLUMN IF NOT EXISTS).
+	//
+	// Originally landed on thrum-dev as v25 alongside the thrum-s6os sync
+	// re-architecture. Renumbered to v33 during the thrum-dev → thrum-agents
+	// forward-merge because the v0.11 substrate had already claimed v25 for
+	// scheduler. v33 is the new highest version on thrum-agents post-merge.
+	if startVersion < 33 && endVersion >= 33 {
+		hasMessages, err := tableExists(tx, "messages")
+		if err != nil {
+			return fmt.Errorf("migration 32→33: check messages table: %w", err)
+		}
+		if hasMessages {
+			msgCols, err := columnSet(tx, "messages")
+			if err != nil {
+				return fmt.Errorf("migration 32→33: inspect messages: %w", err)
+			}
+			if !msgCols["pending_route_resolution"] {
+				_, err = tx.Exec(`ALTER TABLE messages ADD COLUMN pending_route_resolution INTEGER NOT NULL DEFAULT 0`)
+				if err != nil {
+					return fmt.Errorf("migration 32→33: add pending_route_resolution column: %w", err)
+				}
+			}
 		}
 	}
 

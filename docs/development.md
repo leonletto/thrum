@@ -66,7 +66,7 @@ thrum/
 │   ├── mcp/                 # MCP stdio server (4 tools, WebSocket waiter)
 │   ├── paths/               # Path resolution, .thrum/redirect, sync worktree path
 │   ├── projection/          # JSONL to SQLite event replay (projector)
-│   ├── schema/              # SQLite schema, DDL, and migrations (v24)
+│   ├── schema/              # SQLite schema, DDL, and migrations (v32)
 │   ├── subscriptions/       # Notification dispatcher and subscription service
 │   ├── sync/                # Sync engine (loop, merge, push, dedup, branch management)
 │   ├── tmux/                # Tmux operations, nudge delivery, session management (v0.7.1)
@@ -342,7 +342,9 @@ case "my.new":
 ### Modifying Database Schema
 
 1. Update table definitions in `internal/schema/schema.go`
-2. Increment `CurrentVersion` constant (currently v24)
+2. Increment `CurrentVersion` constant (currently v32; v25-v32 are
+   forward-ported from v0.11 substrate work and intentionally dead-end on
+   v0.10.5 — no consumer code)
 3. Add migration logic in the `Migrate()` function
 4. Write tests for the new schema
 5. Update `docs/architecture.md`

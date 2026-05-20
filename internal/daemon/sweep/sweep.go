@@ -6,10 +6,10 @@
 //  2. Enumerates live tmux panes via PaneSource
 //  3. For each pane outside the skip-set whose last activity is older
 //     than the threshold:
-//       a. Captures the pane snapshot via tmux.CapturePane
-//       b. Mints a condition_pane_quiet reminder via
-//          reminders.Store.MintConditionForAgent (idempotent — Q3.8
-//          match-key collapses repeat-mints into a single open row)
+//     a. Captures the pane snapshot via tmux.CapturePane
+//     b. Mints a condition_pane_quiet reminder via
+//     reminders.Store.MintConditionForAgent (idempotent — Q3.8
+//     match-key collapses repeat-mints into a single open row)
 //
 // Stays a thin orchestrator: all collaborators are injected so the
 // handler is straightforwardly unit-testable without a daemon, real

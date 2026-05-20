@@ -353,12 +353,12 @@ func TestDelivery_ChainEntries_UnknownShapeSkipped(t *testing.T) {
 
 func TestIsAgentRef(t *testing.T) {
 	cases := map[string]bool{
-		"@coord":      true,
-		"@x":          true,
-		"@":           false, // empty after @
-		"coord":       false,
-		"leon@x.com":  false,
-		"":            false,
+		"@coord":     true,
+		"@x":         true,
+		"@":          false, // empty after @
+		"coord":      false,
+		"leon@x.com": false,
+		"":           false,
 	}
 	for in, want := range cases {
 		if got := isAgentRef(in); got != want {

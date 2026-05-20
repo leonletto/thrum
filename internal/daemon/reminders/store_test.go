@@ -495,11 +495,13 @@ func TestStore_MintConditionForAgent_PerAgentScoping(t *testing.T) {
 func TestStore_TerminalTransitions_RejectAllMutations(t *testing.T) {
 	terminal := []State{StateFired, StateCleared, StateCancelled}
 	ops := map[string]func(*SQLStore, string) error{
-		"Defer":        func(s *SQLStore, id string) error { return s.Defer(ctx, id, time.Now().Add(time.Hour), "tester") },
-		"Clear":        func(s *SQLStore, id string) error { return s.Clear(ctx, id, "tester") },
-		"Cancel":       func(s *SQLStore, id string) error { return s.Cancel(ctx, id, "tester") },
-		"Fire":         func(s *SQLStore, id string) error { return s.Fire(ctx, id, time.Now()) },
-		"FireAndRearm": func(s *SQLStore, id string) error { return s.FireAndRearm(ctx, id, time.Now(), time.Now().Add(time.Hour)) },
+		"Defer":  func(s *SQLStore, id string) error { return s.Defer(ctx, id, time.Now().Add(time.Hour), "tester") },
+		"Clear":  func(s *SQLStore, id string) error { return s.Clear(ctx, id, "tester") },
+		"Cancel": func(s *SQLStore, id string) error { return s.Cancel(ctx, id, "tester") },
+		"Fire":   func(s *SQLStore, id string) error { return s.Fire(ctx, id, time.Now()) },
+		"FireAndRearm": func(s *SQLStore, id string) error {
+			return s.FireAndRearm(ctx, id, time.Now(), time.Now().Add(time.Hour))
+		},
 	}
 	for _, term := range terminal {
 		for opName, op := range ops {

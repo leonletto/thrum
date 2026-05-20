@@ -385,4 +385,3 @@ func truncateError(s string) string {
 	}
 	return s[:limit] + "…"
 }
-

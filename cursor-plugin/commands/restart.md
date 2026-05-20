@@ -34,9 +34,9 @@ Every restart snapshot MUST begin with a section using this exact heading:
 ## 1. Big picture — what shipped this session
 ```
 
-Followed by 1-3 sentences (a single paragraph or up to 3 short ones)
-summarizing what the session accomplished. Be specific: name the artifacts,
-the decisions, the cycles closed. Examples:
+Followed by 1-3 sentences (a single paragraph or up to 3 short ones) summarizing
+what the session accomplished. Be specific: name the artifacts, the decisions,
+the cycles closed. Examples:
 
 > Locked the session-archive spec v2 with §1 Big picture requirement, five
 > Q-Spec approvals, and Q-Spec-5 deferred to impl-time. Hand-off pending
@@ -46,17 +46,16 @@ the decisions, the cycles closed. Examples:
 > the lock-substrate fence is the right fix. Filed thrum-XXX with 4 BLOCKING
 > evidence points.
 
-> Closed B-B1 E6.0 brainstormer-third pass. 2 BLOCKING + 5 IMPORTANT + 10
-> MINOR. All three load-bearing traps PASSed. Standing by for E6.1 next batch.
+> Closed B-B1 E6.0 brainstormer-third pass. 2 BLOCKING + 5 IMPORTANT + 10 MINOR.
+> All three load-bearing traps PASSed. Standing by for E6.1 next batch.
 
-This section becomes YOUR OWN log entry, visible in
-`thrum agent sessions list` alongside the archives of every other session
-you've ever restarted from. Future-you (and other agents inspecting your
-history) skim §1 to decide which sessions are worth re-reading. Write it
-first — before the Resume Plan, before file paths, before patterns —
-because composing the §1 summary forces you to identify what was actually
-load-bearing about this session, and that priority shapes everything else
-you write below it.
+This section becomes YOUR OWN log entry, visible in `thrum agent sessions list`
+alongside the archives of every other session you've ever restarted from.
+Future-you (and other agents inspecting your history) skim §1 to decide which
+sessions are worth re-reading. Write it first — before the Resume Plan, before
+file paths, before patterns — because composing the §1 summary forces you to
+identify what was actually load-bearing about this session, and that priority
+shapes everything else you write below it.
 
 After the §1 block:
 
@@ -146,8 +145,8 @@ instructions below.
 ## After Restart: Session Archive
 
 After restart, your snapshot doesn't disappear — it moves to
-`.thrum/agents/<your-agent-id>/sessions/` and stays there as a persistent
-log entry. Browse the archive with:
+`.thrum/agents/<your-agent-id>/sessions/` and stays there as a persistent log
+entry. Browse the archive with:
 
 ```bash
 thrum agent sessions list                    # default: this agent
@@ -157,16 +156,15 @@ thrum agent sessions list --all              # every agent, grouped
 ```
 
 Permissions are user-only (`0600` for each snapshot file, `0700` for the
-sessions folder). Operators on multi-user machines must copy explicitly
-to share archives with another account.
+sessions folder). Operators on multi-user machines must copy explicitly to share
+archives with another account.
 
 Worktree-resident ephemeral agents archive into the worktree's own
-`.thrum/agents/<id>/sessions/` — so the archive vanishes when the
-worktree is removed. **By design.** If an ephemeral agent's history
-matters across the worktree teardown, export those snapshots manually
-before `git worktree remove`.
+`.thrum/agents/<id>/sessions/` — so the archive vanishes when the worktree is
+removed. **By design.** If an ephemeral agent's history matters across the
+worktree teardown, export those snapshots manually before `git worktree remove`.
 
-The next session's `thrum prime` output includes a "Past Sessions"
-discovery hint summarizing the most recent archive's §1 — so future-you
-gets a one-line reminder of last session's headline without re-reading
-the full snapshot. That hint is why §1 above is required.
+The next session's `thrum prime` output includes a "Past Sessions" discovery
+hint summarizing the most recent archive's §1 — so future-you gets a one-line
+reminder of last session's headline without re-reading the full snapshot. That
+hint is why §1 above is required.

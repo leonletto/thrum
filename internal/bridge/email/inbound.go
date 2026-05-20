@@ -50,10 +50,10 @@ type MeshHandler interface {
 // InboundConfig holds all routing policy for an Inbound instance.
 type InboundConfig struct {
 	MyDaemonID       string
-	HopCeiling       int    // X-Thrum-Hop-Count > this → drop (L2)
-	UnknownRecipient string // "drop" is the only implemented policy in D-B1
-	MoveAfterProcess bool   // true: MoveToFolder; false: MarkSeen
-	MoveFolder       string // folder when MoveAfterProcess=true
+	HopCeiling       int             // X-Thrum-Hop-Count > this → drop (L2)
+	UnknownRecipient string          // "drop" is the only implemented policy in D-B1
+	MoveAfterProcess bool            // true: MoveToFolder; false: MarkSeen
+	MoveFolder       string          // folder when MoveAfterProcess=true
 	KnownPeers       map[string]bool // daemon-id → known
 	LocalAgents      map[string]bool // local agent names
 }

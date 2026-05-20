@@ -179,29 +179,52 @@ func resolveLocalMentionRole() (string, error) {
 // classifyRefreshError decides what to do when RefreshLocalIdentity
 // returned an error. Returns:
 //   - fatalErr non-nil: getClient must close the client and propagate
-//     (Class A abort path).
-//   - absorbed=true: a Class B / Class C banner was emitted, or the
-//     user explicitly passed --repo as an operator override; the
-//     caller should NOT print the raw refresh error.
-//   - fatalErr=nil + absorbed=false: not a cross_worktree fire; caller
-//     keeps the legacy log-and-proceed contract for other guard
-//     reasons (dead_pid_auto_reclaim etc.).
+//     (the command exits non-zero with the structured guard error).
+//   - absorbed=true: a cross_worktree banner was emitted, or the user
+//     explicitly passed --repo as an operator override; the caller
+//     should NOT print the raw refresh error.
+//   - fatalErr=nil + absorbed=false: non-guard error; caller keeps the
+//     legacy log-and-proceed contract (daemon-unreachable, config-load
+//     failures, and similar advisory failures per brainstorm §4.3).
+//
+// Policy (brainstorm §4.5): any error matched by
+//
+//	var ge *guard.Error
+//	if errors.As(refreshErr, &ge) { ... }
+//
+// is a catastrophic ownership refusal that must fail closed.
+// cross_worktree is the only guard with per-leaf
+// response classes (diagnostic_banner / whoami) that absorb the fire so
+// commands like `thrum team` / `thrum whoami` can still surface useful
+// output from the wrong cwd; all other guards (unauthenticated_rpc,
+// prime_ownership, …) fail closed unconditionally. Non-guard errors
+// (wrapped I/O, daemon RPC down) fall through to the caller's
+// warn-and-proceed branch — `thrum status` and similar diagnostics
+// rely on that path.
 //
 // --repo escape hatch: when the user explicitly passes --repo on the
 // command line, they are asserting "I'm intentionally operating on
 // this other repo" — the same operator-override intent the
-// cross_worktree remediation message advertises. Suppress the guard
-// fire in that case regardless of response class. Other guard
-// reasons (dead_pid_auto_reclaim) still pass through to legacy
-// log-and-proceed since they're unrelated to the cross-worktree
-// scenario --repo overrides.
+// cross_worktree remediation message advertises. Suppress the
+// cross_worktree fire in that case regardless of response class.
+// Other guard types are not absorbed by --repo: the override is
+// scoped to the cross-worktree scenario the flag was designed for.
 //
 // Factored out of getClient for unit testability — the policy
 // decision is exercised independently of the daemon connection.
+//
+// thrum-dev forward-merge: tightened policy per brainstorm §4.5 — all
+// non-cross_worktree *guard.Error values now fail closed (previously
+// they fell through to log-and-proceed alongside non-guard errors).
 func classifyRefreshError(cmd *cobra.Command, refreshErr error) (fatalErr error, absorbed bool) {
 	var ge *guard.Error
-	if !errors.As(refreshErr, &ge) || ge.Guard != "cross_worktree" {
+	if !errors.As(refreshErr, &ge) {
 		return nil, false
+	}
+	if ge.Guard != "cross_worktree" {
+		// Per §4.5: every non-cross_worktree *guard.Error is a
+		// catastrophic refusal with no per-command escape hatch.
+		return refreshErr, false
 	}
 	if explicitRepoFlag(cmd) {
 		// Operator override: --repo is the documented escape

@@ -17,7 +17,7 @@ hit `releases/latest`. This guide covers how to opt in, what to expect, and how
 to report what you find.
 
 > **Current pre-release:
-> [`v0.10.3-rc.9`](https://github.com/leonletto/thrum/releases/tag/v0.10.3-rc.9)**
+> [`v0.10.5-rc.4`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.4)**
 > (tagged 2026-05-15, in soak). Highlights: codex plugin first-class,
 > post-launch tmux silence watchdog, first-launch trust-gate detection,
 > self-echo nudge fix, cwd-anchored identity precedence. rc.9 closes the inbox
@@ -30,22 +30,22 @@ to report what you find.
 > [What's New](whats-new.md) and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-### Quick install for `v0.10.3-rc.9`
+### Quick install for `v0.10.5-rc.4`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.3-rc.9 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.4 sh
 
-# Codex plugin (matches release/v0.10.3)
-THRUM_INSTALL_REF=release/v0.10.3 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.3/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+# Codex plugin (matches release/v0.10.5)
+THRUM_INSTALL_REF=release/v0.10.5 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.5/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
 ```
 
 Claude Code plugin (run inside Claude):
 
 ```text
-/plugin marketplace add leonletto/thrum#release/v0.10.3
+/plugin marketplace add leonletto/thrum#release/v0.10.5
 /plugin install thrum@thrum
 /reload-plugins
 ```

@@ -51,7 +51,7 @@ test.describe('Web UI', () => {
   test('SC-50: Live Feed shows real messages', async ({ page }) => {
     // Arrange: send a unique message via CLI
     const uniqueMessage = `E2E test message ${Date.now()}`;
-    sendMessage(uniqueMessage);
+    sendMessage(uniqueMessage, { broadcast: true });
 
     // Act: navigate to Live Feed (default view)
     await page.goto(getWebUIUrl());
@@ -70,7 +70,7 @@ test.describe('Web UI', () => {
 
     // Act: send a message while browser is watching
     const realtimeMessage = `Real-time test ${Date.now()}`;
-    sendMessage(realtimeMessage);
+    sendMessage(realtimeMessage, { broadcast: true });
 
     // Assert: new message appears without page refresh
     // WebSocket push notification should trigger React Query invalidation
@@ -80,7 +80,7 @@ test.describe('Web UI', () => {
   test('SC-52: Inbox view shows real messages', async ({ page }) => {
     // Arrange: send a message addressed to current session
     const inboxMessage = `Inbox test ${Date.now()}`;
-    sendMessage(inboxMessage);
+    sendMessage(inboxMessage, { broadcast: true });
 
     // Act: navigate and click "My Inbox" (same selector as SC-53)
     await page.goto(getWebUIUrl());

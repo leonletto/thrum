@@ -36,16 +36,16 @@ func TestParseID_ExtractsAgent(t *testing.T) {
 
 func TestParseID_RejectsMalformed(t *testing.T) {
 	bad := []string{
-		"reminder-foo",            // missing numeric
-		"reminder-foo-12-3456",    // wrong digit grouping (2-4 instead of 3-4)
-		"reminder-foo-123-456",    // wrong digit grouping (3-3 instead of 3-4)
-		"foo-bar-123-4567",        // wrong prefix
-		"reminder--123-4567",      // empty agent
-		"reminder-foo-abc-defg",   // non-numeric
-		"reminder-Foo-123-4567",   // uppercase not allowed
-		"reminder-foo-bar-1234567",// missing hyphen split
-		"",                        // empty
-		"reminder-foo-1234-567",   // swapped digit grouping (4-3)
+		"reminder-foo",             // missing numeric
+		"reminder-foo-12-3456",     // wrong digit grouping (2-4 instead of 3-4)
+		"reminder-foo-123-456",     // wrong digit grouping (3-3 instead of 3-4)
+		"foo-bar-123-4567",         // wrong prefix
+		"reminder--123-4567",       // empty agent
+		"reminder-foo-abc-defg",    // non-numeric
+		"reminder-Foo-123-4567",    // uppercase not allowed
+		"reminder-foo-bar-1234567", // missing hyphen split
+		"",                         // empty
+		"reminder-foo-1234-567",    // swapped digit grouping (4-3)
 	}
 	for _, s := range bad {
 		if _, _, err := ParseID(s); err == nil {

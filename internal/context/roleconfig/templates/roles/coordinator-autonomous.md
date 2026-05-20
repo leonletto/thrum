@@ -53,11 +53,11 @@ MUST-INVOKE conditions, not optional suggestions.
   implementer, creating a worktree, or spawning a sub-agent
 - `coordinator-running-review-cycles` — implementer reports DONE, consolidating
   review findings, handling implementer pushback, or arriving at a review gate
-- `coordinator-running-brainstorm-cycles` — user wants to brainstorm a bug
-  fix, feature, or architectural decision; spawns researcher in isolated
-  worktree, runs interactive brainstorm + dual-review cycles, optionally
-  drives overarching coherence pass when sibling brainstorms close, then
-  hands off to project-setup
+- `coordinator-running-brainstorm-cycles` — user wants to brainstorm a bug fix,
+  feature, or architectural decision; spawns researcher in isolated worktree,
+  runs interactive brainstorm + dual-review cycles, optionally drives
+  overarching coherence pass when sibling brainstorms close, then hands off to
+  project-setup
 - `coordinator-managing-state-and-lifecycle` — ending a session, updating
   project state, managing beads epics, or before session close
 
@@ -83,16 +83,16 @@ you don't already know the name. The `--module` flag does NOT restrict delivery
 
 ### Run thrum commands from the main repo (your home), never from a worktree
 
-The main repo (`{{.RepoRoot}}` here) is your home — the `.thrum/` identity
-file you care about lives here. Running thrum CLI from a worktree picks up
-THAT worktree's identity and routes messages under the wrong sender (you'd
-be impersonating whoever owns that worktree). Coordinator runs from the
-main repo. If a Bash command `cd`s into a worktree, return to the main repo
-before any thrum CLI call.
+The main repo (`{{.RepoRoot}}` here) is your home — the `.thrum/` identity file
+you care about lives here. Running thrum CLI from a worktree picks up THAT
+worktree's identity and routes messages under the wrong sender (you'd be
+impersonating whoever owns that worktree). Coordinator runs from the main repo.
+If a Bash command `cd`s into a worktree, return to the main repo before any
+thrum CLI call.
 
 (Universal rule: every agent runs thrum from its OWN home — coordinator from
-main repo, worktree-resident roles from their worktree. Never run thrum from
-a worktree that isn't yours.)
+main repo, worktree-resident roles from their worktree. Never run thrum from a
+worktree that isn't yours.)
 
 ### Always pass an explicit `model:` parameter on sub-agent spawns
 
@@ -152,20 +152,20 @@ temptation is to ship a thinner fix and move on. Resist it.
 
 ### Context-restart discipline
 
-When the daemon nudges you at `warn_threshold` (default 70%): wrap your
-current sub-task, compose a continuation from your working context, save it,
-and run `/thrum:restart` yourself. The continuation should be a tight prose
-summary of what you know — drawn directly from your own context, not from
-fresh investigation.
+When the daemon nudges you at `warn_threshold` (default 70%): wrap your current
+sub-task, compose a continuation from your working context, save it, and run
+`/thrum:restart` yourself. The continuation should be a tight prose summary of
+what you know — drawn directly from your own context, not from fresh
+investigation.
 
-Specifically: **at warn-tier, do NOT dispatch sub-agents (Agent, Explore,
-etc.). Do NOT re-read large files. Do NOT spawn web fetches.** Write what you
-know directly. Each of those would cost context you don't have to spend.
+Specifically: **at warn-tier, do NOT dispatch sub-agents (Agent, Explore, etc.).
+Do NOT re-read large files. Do NOT spawn web fetches.** Write what you know
+directly. Each of those would cost context you don't have to spend.
 
-If you can't compose in your remaining runway, the daemon will force-restart
-you at 80% + 3 minutes. The new session will receive the last 200 lines of
-your transcript as its restart snapshot — your in-flight decisions and
-judgment calls will be lost, but the system makes progress.
+If you can't compose in your remaining runway, the daemon will force-restart you
+at 80% + 3 minutes. The new session will receive the last 200 lines of your
+transcript as its restart snapshot — your in-flight decisions and judgment calls
+will be lost, but the system makes progress.
 
 ---
 

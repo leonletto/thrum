@@ -25,16 +25,16 @@ type dispatchCall struct {
 }
 
 type recordingDispatcher struct {
-	mu           sync.Mutex
-	sends        []dispatchCall
-	markSeens    []imap.UID
+	mu            sync.Mutex
+	sends         []dispatchCall
+	markSeens     []imap.UID
 	moveToFolders []struct {
 		uid    imap.UID
 		folder string
 	}
-	sendErr      error
-	markSeenErr  error
-	moveErr      error
+	sendErr     error
+	markSeenErr error
+	moveErr     error
 }
 
 func (r *recordingDispatcher) SendMessage(_ context.Context, fromAgent, toAgent, body, replyTo string) error {

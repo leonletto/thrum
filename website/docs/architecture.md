@@ -709,7 +709,15 @@ schema_version      # Migration tracking
 
 ### Schema Version
 
-Current version: **24**
+Current version: **32**
+
+> **v0.10.5 note:** migrations 25-32 are forward-ported from the v0.11 substrate
+> work (`thrum-agents` branch) so the v0.10.5 binary can open DBs previously
+> touched by a v0.11-substrate binary on multi-binary worktree machines. The new
+> tables (scheduler, agent lifecycle, reminders, email) are intentionally
+> **dead-end on v0.10.5** — no consumer code reads from them. v29 is a
+> deliberate gap (reserved for substrate follow-ups); `runMigrations` handles
+> gapped sequences naturally.
 
 Key migrations:
 
@@ -749,6 +757,19 @@ Key migrations:
 - v23 -> v24: `telegram_msg_map` table added (durable Telegram message ID ↔
   Thrum message ID mapping; survives daemon restart so in-flight permission
   approvals route correctly)
+- v24 -> v25: `scheduler_job_state` + `scheduler_job_events` tables added (v0.11
+  substrate forward-port; dead-end on v0.10.5)
+- v25 -> v26: agents table extended with `mode`, `identity`, and 4 runtime
+  columns (`auto_respawn_enabled`, `auto_respawn_disabled_at`,
+  `state_md_parse_failed_at`, `last_pane_alive_at`) (v0.11 forward-port)
+- v26 -> v27: `agent_lifecycle_events` append-only journal (v0.11 forward-port)
+- v27 -> v28: `reminders` polymorphic table (time-triggered + condition-
+  triggered reminder substrate; v0.11 forward-port)
+- v28 -> v29: deliberate gap (reserved for substrate follow-ups)
+- v29 -> v30: `email_msg_seen` table (v0.11 D-B1 forward-port)
+- v30 -> v31: `email_outbound_queue` table (v0.11 D-B1 forward-port)
+- v31 -> v32: `email_peer_rate_state` table with partial index on `paused_at`
+  (v0.11 D-B1 forward-port)
 
 ### Initialization
 
@@ -962,16 +983,50 @@ mid-migration, they're how you get back.
 ### Downgrade Guard
 
 `Migrate()` refuses to start if the database schema version exceeds the binary's
-`CurrentVersion`. Error text:
+`CurrentVersion`. Error text (v0.10.5+ — see "Multi-Binary Worktree Footgun"
+below for the why):
 
 ```text
-database schema is version N, this binary supports up to M — cannot downgrade;
-use a newer binary or delete the database to start fresh
+database schema is version N, this binary supports up to M — cannot downgrade.
+
+Recovery options:
+  1. Re-install a newer binary that supports schema vN or above:
+       cd <worktree-with-newer-branch> && make install
+  2. Delete the database to start fresh (LOSES local message history + spool):
+       thrum daemon stop   # release file locks first
+       rm <ABS_PATH>
+       rm <ABS_PATH>-wal <ABS_PATH>-shm    # if present
+  3. See CLAUDE.md § "Multi-binary worktree footgun" for prevention
 ```
 
 This is the first hard stop Thrum has ever had for schema mismatches.
 Previously, running an older binary against a migrated database would silently
-corrupt state. Now it fails loudly before touching anything.
+corrupt state. Now it fails loudly before touching anything — and the expanded
+recovery hints give operators an actionable path forward without hunting through
+code.
+
+### Multi-Binary Worktree Footgun
+
+Each Thrum worktree builds its own `bin/thrum`, and each build can support a
+different DB schema range. The shared daemon binary at `~/.local/bin/thrum` gets
+replaced by whichever worktree most recently ran `make install`. When a
+`make install` from a worktree on a newer-schema branch (e.g. `thrum-agents`
+substrate work) migrates the on-disk DB up, a later `make install` from a
+worktree on an older-schema branch (e.g. `release/v0.10.x`) ships a binary that
+fails the Downgrade Guard above.
+
+**Why it happens:** the DB lives under `<repo-root>/.thrum/var/state.db` and is
+shared across every worktree's binary (worktrees redirect their `.thrum/` to the
+main repo's `.thrum/` via the `.thrum/redirect` file). Schema migrations are
+one-way: newer binaries can migrate up; older binaries cannot migrate down.
+
+**Avoid:** Only `make install` from a worktree whose schema `CurrentVersion` is
+at least the on-disk DB's schema. For local-iteration inside a single worktree,
+prefer `make dev` (per-worktree `./bin/thrum` + restart of that worktree's
+daemon) over `make install`.
+
+**Recover:** the Downgrade Guard error walks you through it; the in-repo
+CLAUDE.md § "Multi-binary worktree footgun" carries the dev-facing expansion.
 
 ### Recovering from a Failed Upgrade
 

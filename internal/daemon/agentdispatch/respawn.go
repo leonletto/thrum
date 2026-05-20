@@ -85,8 +85,8 @@ Re-enable (after diagnosing the underlying crash cause):
 //     - SetAutoRespawnDisabledAt(now)
 //     - Append respawn_skipped_loopguard event
 //     - Route operator escalation via Escalation.Route — nil-safe
-//       per F2 forward-flag (E6.4 pattern), so a partial-config
-//       daemon doesn't nil-deref but still records the bookkeeping.
+//     per F2 forward-flag (E6.4 pattern), so a partial-config
+//     daemon doesn't nil-deref but still records the bookkeeping.
 //     - return nil (loop-guard trip is not an error)
 //  5. Fire respawn via Restarter.Restart. On success, append
 //     respawn_fired event. F1 forward-flag: ErrHandlerWiringPending

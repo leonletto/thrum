@@ -34,9 +34,10 @@ test('smoke: CLI message sent while UI is open', async ({ page }) => {
     }
   }
 
-  // Act: send a message via CLI
+  // Act: send a message via CLI (thrum-t698: explicit --broadcast — smoke
+  // test verifies the message appears in the UI feed, not a specific recipient)
   const uniqueMsg = `Smoke test ${Date.now()}`;
-  thrum(['send', uniqueMsg]);
+  thrum(['send', uniqueMsg, '--broadcast']);
 
   // Assert: message appears in the UI (real-time via WebSocket)
   await expect(page.getByText(uniqueMsg)).toBeVisible({ timeout: 10_000 });

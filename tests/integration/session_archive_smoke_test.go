@@ -208,14 +208,14 @@ func TestSessionArchiveSmoke_BigPictureSentinels(t *testing.T) {
 	// edited without re-syncing or an adapter started rewriting
 	// content it shouldn't.
 	sentinels := []string{
-		expectedBigPictureHeading,                                                 // exact heading parser expects
-		"Every restart snapshot MUST begin with",                                  // mandate framing
-		"1-3 sentences",                                                           // expected length contract
-		"becomes YOUR OWN log entry",                                              // why-this-matters framing
-		"thrum agent sessions list",                                               // browse command name
-		"`.thrum/agents/<your-agent-id>/sessions/`",                               // archive path
-		"Permissions are user-only",                                               // permission contract
-		"ephemeral agents archive into the worktree",                              // ephemeral caveat
+		expectedBigPictureHeading,                    // exact heading parser expects
+		"Every restart snapshot MUST begin with",     // mandate framing
+		"1-3 sentences",                              // expected length contract
+		"becomes YOUR OWN log entry",                 // why-this-matters framing
+		"thrum agent sessions list",                  // browse command name
+		"`.thrum/agents/<your-agent-id>/sessions/`",  // archive path
+		"Permissions are user-only",                  // permission contract
+		"ephemeral agents archive into the worktree", // ephemeral caveat
 	}
 
 	for _, m := range runtimeMirrors[1:] { // skip source-of-truth itself

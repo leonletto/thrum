@@ -69,9 +69,9 @@ func newTestMesh(t *testing.T, configPath string) *email.MeshHandlerImpl {
 	}
 	t.Cleanup(func() { _ = wal.Close() })
 	cfg := email.MeshConfig{
-		MyDaemonID:    "test-daemon-0000",
-		MyDaemonShort: "test-dae",
-		ConfigPath:    configPath,
+		MyDaemonID:     "test-daemon-0000",
+		MyDaemonShort:  "test-dae",
+		ConfigPath:     configPath,
 		PairPendingTTL: 24 * time.Hour,
 	}
 	return email.NewMeshHandler(cfg, wal, nil, nil)
@@ -163,7 +163,7 @@ func TestRpcEmail_SendUnauthorizedNoAgent(t *testing.T) {
 	h := NewEmailHandler(bridge, db)
 
 	cases := []struct {
-		name    string
+		name     string
 		callerID string
 	}{
 		{"empty", ""},

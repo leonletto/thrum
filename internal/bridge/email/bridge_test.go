@@ -40,13 +40,13 @@ import (
 // invocations and can be pre-seeded with per-method responses. Notifications
 // returns a channel that is closed when mockWSConn.close is called.
 type mockWSConn struct {
-	mu           sync.Mutex
-	calls        []mockCall
-	responses    map[string]json.RawMessage // method → canned result
-	callErr      map[string]error           // method → error to return
-	notifyCh     chan bridge.Notification
-	closed       atomic.Bool
-	closeOnce    sync.Once
+	mu        sync.Mutex
+	calls     []mockCall
+	responses map[string]json.RawMessage // method → canned result
+	callErr   map[string]error           // method → error to return
+	notifyCh  chan bridge.Notification
+	closed    atomic.Bool
+	closeOnce sync.Once
 }
 
 type mockCall struct {

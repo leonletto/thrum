@@ -1,6 +1,14 @@
 ---
 name: coordinator-context-monitoring
-description: Use when managing live implementer/brainstormer agents during a long coordination session, at epic merge gates, after a busy dispatch hour, or whenever you suspect an agent is approaching context limits. Prevents 97%-context silent blow-ups by running a sweep + pre-emptive restart before the agent degrades. Safe to wire into a recurring cron that INVOKES this skill — the skill applies tier-ladder judgment, only firing autonomous restarts at the >85% tier. What's forbidden is a cron/script that fires restarts unconditionally without going through this skill's tier ladder.
+description:
+  Use when managing live implementer/brainstormer agents during a long
+  coordination session, at epic merge gates, after a busy dispatch hour, or
+  whenever you suspect an agent is approaching context limits. Prevents
+  97%-context silent blow-ups by running a sweep + pre-emptive restart before
+  the agent degrades. Safe to wire into a recurring cron that INVOKES this skill
+  — the skill applies tier-ladder judgment, only firing autonomous restarts at
+  the >85% tier. What's forbidden is a cron/script that fires restarts
+  unconditionally without going through this skill's tier ladder.
 ---
 
 # Coordinator: Context Monitoring and Pre-emptive Restart
@@ -14,7 +22,8 @@ Trigger this pattern at each of:
 - After any agent has been running for 60+ minutes without a restart
 - When a keepalive cron fires AND inbox has activity from a long-running agent
 - When you observe slow or degraded responses from an implementer
-- Manually whenever the session feels "intense" (lots of cycles in a short window)
+- Manually whenever the session feels "intense" (lots of cycles in a short
+  window)
 
 A recurring cron MAY invoke this skill — the skill itself applies tier-ladder
 judgment, so the >85% autonomous-restart tier fires conditionally, not on every
@@ -23,8 +32,8 @@ sweep. What's forbidden is a script or cron that bypasses this skill and fires
 `feedback_restart_discipline` — burn the runway, don't restart on schedule).
 
 Per the cron-triggers-skills pattern, the cron prompt should be a one-line
-"Invoke the coordinator-context-monitoring skill" — never a re-implementation
-of the tier ladder below. That keeps the discipline single-sourced.
+"Invoke the coordinator-context-monitoring skill" — never a re-implementation of
+the tier ladder below. That keeps the discipline single-sourced.
 
 ## Step 1 — Run the sweep
 
@@ -34,29 +43,29 @@ grep -E 'ctx_used:|^===== ' /tmp/agent-sweep.txt
 ```
 
 The script emits one `ctx_used: X.X%` line per live agent. It captures the
-Claude Code status bar footer, normalizing UTF-8 non-breaking spaces (`\xc2\xa0`)
-before matching `Ctx Used: X.X%`. Runtimes without that footer (Codex, Cursor)
-fall back to `(n/a)`.
+Claude Code status bar footer, normalizing UTF-8 non-breaking spaces
+(`\xc2\xa0`) before matching `Ctx Used: X.X%`. Runtimes without that footer
+(Codex, Cursor) fall back to `(n/a)`.
 
 ## Step 2 — Threshold logic
 
-| ctx_used | Action |
-|---|---|
-| < 50% | No action — agent has runway |
-| 50% – 70% | Directed inbox restart request (polite, agent writes snapshot) |
-| 70% – 85% | Tmux-send nudge directly into their pane (bypasses inbox; more forceful) |
-| > 85% | Force-restart immediately without waiting for response |
-| `(n/a)` | Pane capture failed OR runtime has no Ctx footer — check tmux session manually |
+| ctx_used  | Action                                                                         |
+| --------- | ------------------------------------------------------------------------------ |
+| < 50%     | No action — agent has runway                                                   |
+| 50% – 70% | Directed inbox restart request (polite, agent writes snapshot)                 |
+| 70% – 85% | Tmux-send nudge directly into their pane (bypasses inbox; more forceful)       |
+| > 85%     | Force-restart immediately without waiting for response                         |
+| `(n/a)`   | Pane capture failed OR runtime has no Ctx footer — check tmux session manually |
 
 **Reliability ladder rationale:** the inbox → tmux-send → force-restart
 progression goes from polite to forceful. Inbox messages can fail (delivery
-bugs, agent too degraded to check inbox at high ctx, or the documented
-self-echo regression). Tmux-send types literally into the agent's input field —
-bypasses inbox entirely. Force-restart bypasses the agent altogether.
+bugs, agent too degraded to check inbox at high ctx, or the documented self-echo
+regression). Tmux-send types literally into the agent's input field — bypasses
+inbox entirely. Force-restart bypasses the agent altogether.
 
-The thresholds reflect the pattern session-2-ago coordinator established:
-agents degrade *silently* before they blow, and 50% is the "still coherent
-enough to write a good snapshot" window.
+The thresholds reflect the pattern session-2-ago coordinator established: agents
+degrade _silently_ before they blow, and 50% is the "still coherent enough to
+write a good snapshot" window.
 
 ## Step 3 — Directed inbox restart request for 50% – 70% agents
 
@@ -69,16 +78,16 @@ idle. Coordinator waits for the "snapshot written" acknowledgement before
 re-dispatching the next task.
 
 If the agent acks without writing the snapshot first (anti-pattern), gently
-remind them to write the snapshot before going idle so the next session
-restores cleanly.
+remind them to write the snapshot before going idle so the next session restores
+cleanly.
 
 If the agent doesn't respond within ~5 minutes OR you see them keep working,
 escalate to Step 4 (tmux-send nudge).
 
 ## Step 4 — Tmux-send nudge for 70% – 85% agents
 
-The inbox path may not be reaching them at this context level. Bypass the
-inbox by typing the restart command directly into their input field:
+The inbox path may not be reaching them at this context level. Bypass the inbox
+by typing the restart command directly into their input field:
 
 ```bash
 thrum tmux send <tmux_session_name> '/thrum:restart'
@@ -104,13 +113,14 @@ thrum tmux restart <agent_name> --force
 "surface first, restart on authorization" policy resulted in an agent stuck at
 97% ctx because the surface message scrolled past during a busy coordination
 window; the autonomous restart would have caught it sooner. Restart is
-non-destructive — snapshot is preserved + worktree state survives — so the
-cost of a false-positive restart is far lower than the cost of a missed catch).
+non-destructive — snapshot is preserved + worktree state survives — so the cost
+of a false-positive restart is far lower than the cost of a missed catch).
 
 Do NOT wait for the agent to respond. The `--force` flag sends the restart
 signal even if the agent is mid-tool-call. After the new session starts, it
 auto-primes from the restart snapshot (if one was written) or from `bd prime`
-+ `thrum prime`.
+
+- `thrum prime`.
 
 Surface to the operator AFTER the restart in a brief status note ("Force-
 restarted @<agent_name> at <ctx>% — snapshot at .thrum/restart/<agent>.md
@@ -127,8 +137,8 @@ line. The script types `continue` into the affected pane via `tmux send-keys`
 (bypassing the `thrum tmux send` wrapper queue, which stalls on fully-silent
 panes per `thrum-7yhs`). You do not need to fire these nudges yourself.
 
-The sweep report's header lists every agent that was auto-nudged in the
-current run, e.g.:
+The sweep report's header lists every agent that was auto-nudged in the current
+run, e.g.:
 
 ```
 # auto-nudged 3 agent(s) on api_errors with 'continue':
@@ -140,30 +150,31 @@ current run, e.g.:
 Anthropic 529s and rate limits are transient (typically resolve in
 seconds-to-minutes); the agent's previous tool call is queued in-session, so a
 single `continue` reactivates them without losing in-flight state. Sweeps fire
-every ~20 min, so a single rate-limit episode rarely spans more than one
-sweep — auto-nudge converges naturally.
+every ~20 min, so a single rate-limit episode rarely spans more than one sweep —
+auto-nudge converges naturally.
 
 **When to escalate:** if the same agent appears in `auto-nudged` lines on TWO
 consecutive sweeps despite the nudge, the issue isn't transient — surface to
 operator as SUSPECTED-STUCK and investigate manually (status.claude.com,
 network, account limits).
 
-**When NOT to auto-nudge:** if you're about to ship a release and you'd
-prefer the agent's stuck-state held to fold one more fix into the current
-cycle, surface to operator BEFORE the next sweep so the auto-nudge can be
-held. Once `continue` fires, the agent resumes its previous tool call
-immediately — there's no recovery window.
+**When NOT to auto-nudge:** if you're about to ship a release and you'd prefer
+the agent's stuck-state held to fold one more fix into the current cycle,
+surface to operator BEFORE the next sweep so the auto-nudge can be held. Once
+`continue` fires, the agent resumes its previous tool call immediately — there's
+no recovery window.
 
 ## Cron-fire safety checks
 
 If this skill is triggered from a keepalive cron, add these guards BEFORE
 running the sweep:
 
-1. **Verify the daemon is reachable**: `thrum team --json | jq '.members | length'`
-   — if 0 or error, daemon is down; skip the sweep, surface to operator.
-2. **Check if any agent is mid-commit** (active tool call): look for `Running bash`
-   or active spinner in the sweep pane lines — if so, defer restart for that
-   agent until the tool completes.
+1. **Verify the daemon is reachable**:
+   `thrum team --json | jq '.members | length'` — if 0 or error, daemon is down;
+   skip the sweep, surface to operator.
+2. **Check if any agent is mid-commit** (active tool call): look for
+   `Running bash` or active spinner in the sweep pane lines — if so, defer
+   restart for that agent until the tool completes.
 3. **Never force-restart an agent whose pane shows a Git merge conflict or
    active rebase** — that corrupts the worktree. Surface to operator instead.
 4. **Cooldown**: do not restart the same agent twice within 30 minutes. If an
@@ -176,8 +187,8 @@ When a restart fires (Step 4 or 5):
 
 1. Wait for the agent to come back online (`thrum team` shows them active again,
    or their pane shows the runtime prompt).
-2. Re-send their current dispatch with the full scope + plan refs + AC targets
-   — treat them as a fresh implementer who needs the full briefing again.
+2. Re-send their current dispatch with the full scope + plan refs + AC targets —
+   treat them as a fresh implementer who needs the full briefing again.
 3. Note any WIP files they may have left in their worktree from the prior
    attempt (they'll audit salvage-vs-discard before substantive code).
 4. If they had a partial DONE, the coordinator's git log should still have it;

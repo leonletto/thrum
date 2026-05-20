@@ -75,7 +75,7 @@ func TestParseAgentRunContext_InvalidJSON(t *testing.T) {
 	cases := []string{
 		"",
 		"{not json",
-		"[]", // wrong shape (array, not object)
+		"[]",             // wrong shape (array, not object)
 		`{"job_id": 42}`, // wrong type for job_id
 	}
 	for _, raw := range cases {

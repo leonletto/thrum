@@ -1,4 +1,4 @@
-# Thrum v0.10.4 -- Complete Agent Reference
+# Thrum v0.10.5 -- Complete Agent Reference
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -311,7 +311,6 @@ All commands accept:
 
   --role VALUE        Agent role (or THRUM_ROLE env var)
   --module VALUE      Agent module (or THRUM_MODULE env var)
-  --repo PATH         Repository path (default: ".")
   --json              JSON output for scripting
   --quiet             Suppress non-essential output
   --verbose           Debug output

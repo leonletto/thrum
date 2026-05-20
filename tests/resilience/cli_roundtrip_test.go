@@ -280,9 +280,14 @@ func TestCLI_StatusOverview(t *testing.T) {
 // TestCLI_GroupSend tests sending a role-broadcast message via CLI.
 // (Historical name: this used to send --to @<role> to a user-facing group.
 // Groups were removed as a user-facing concept in the S26-28 CLI audit;
-// role broadcast is now expressed via --mention @<role>. The replier needs
-// to be registered so the daemon knows a @coordinator exists; the fixture
-// provides coordinator_0000 by default.)
+// role broadcast is now expressed via --broadcast + --mention @<role>. The
+// fixture provides coordinator_0000 by default so the daemon knows a
+// @coordinator exists.)
+//
+// Under thrum-t698 (v0.10.5-rc.6), `thrum send` requires an explicit
+// recipient flag — --to @<agent> or --broadcast. This test combines
+// --broadcast (team-wide fanout) with --mention @coordinator (role-mention
+// metadata) to preserve the original "role broadcast" semantic.
 func TestCLI_GroupSend(t *testing.T) {
 	bin := buildThrum(t)
 	repoDir := setupCLIFixture(t)
@@ -293,10 +298,10 @@ func TestCLI_GroupSend(t *testing.T) {
 		t.Fatalf("session start: %v\nstderr: %s", err, stderr)
 	}
 
-	// Broadcast to the coordinator role via --mention.
+	// Broadcast to the team with @coordinator role-mention metadata.
 	start := time.Now()
 	stdout, stderr, err := runThrum(t, bin, repoDir, "coordinator_0000",
-		"send", "Role broadcast test message", "--mention", "@coordinator")
+		"send", "Role broadcast test message", "--broadcast", "--mention", "@coordinator")
 	duration := time.Since(start)
 	if err != nil {
 		t.Fatalf("role broadcast send failed: %v\nstderr: %s\nstdout: %s", err, stderr, stdout)

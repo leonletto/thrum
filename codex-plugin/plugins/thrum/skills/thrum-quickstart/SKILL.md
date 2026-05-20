@@ -7,10 +7,9 @@ description: Register agent and start session
 
 # Thrum Quickstart
 
-Use this skill when the user explicitly wants the `quickstart` Thrum
-workflow. Prefer the umbrella `thrum` skill when the request spans multiple
-commands or needs broader coordination judgment.
-
+Use this skill when the user explicitly wants the `quickstart` Thrum workflow.
+Prefer the umbrella `thrum` skill when the request spans multiple commands or
+needs broader coordination judgment.
 
 Register as an agent, start a session, and set intent in one step.
 

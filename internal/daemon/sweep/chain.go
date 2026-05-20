@@ -84,10 +84,10 @@ var _ ChainResolver = (*ChainResolverImpl)(nil)
 // that would cause the dispatcher to infinite-loop on every fire tick.
 //
 // Setup that triggers the loop:
-//   1. AlertChain configured with ONLY email entries (no @agent refs).
-//   2. EmailQueue NOT wired — either D-B1 substrate absent (pre-v0.11)
-//      or thrumCfg.Email.Enabled=false (bridge disabled at runtime;
-//      worker doesn't drain the queue table).
+//  1. AlertChain configured with ONLY email entries (no @agent refs).
+//  2. EmailQueue NOT wired — either D-B1 substrate absent (pre-v0.11)
+//     or thrumCfg.Email.Enabled=false (bridge disabled at runtime;
+//     worker doesn't drain the queue table).
 //
 // Symptom without this guard:
 //   - DeliverySink.fanToChain processes the chain

@@ -86,7 +86,7 @@ func (CodexParserV1) Matches(path string) bool {
 type codexEventMsg struct {
 	Type    string `json:"type"`
 	Payload struct {
-		Type string             `json:"type"`
+		Type string               `json:"type"`
 		Info *codexTokenCountInfo `json:"info"`
 	} `json:"payload"`
 }

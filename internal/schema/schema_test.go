@@ -1049,9 +1049,67 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	}
 }
 
-func TestSchema_V32_CurrentVersion(t *testing.T) {
-	if schema.CurrentVersion != 32 {
-		t.Errorf("CurrentVersion = %d, want 32 (A-B1 v25 + B-B1 v26/v27 + A-B4 v28 + D-B1 v30/31/32; v29 reserved for MB-1.S6 per canonical-ref §3.1)", schema.CurrentVersion)
+func TestSchema_V33_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 33 {
+		t.Errorf("CurrentVersion = %d, want 33 (A-B1 v25 + B-B1 v26/v27 + A-B4 v28 + D-B1 v30/31/32 + thrum-s6os v33 pending_route_resolution; v29 reserved for MB-1.S6 per canonical-ref §3.1)", schema.CurrentVersion)
+	}
+}
+
+// TestSchema_V33_PendingRouteResolution_Renumbered exercises the v33
+// migration that owns the pending_route_resolution column on the messages
+// table. The migration originally landed on thrum-dev as v25 alongside
+// the thrum-s6os sync re-architecture; renumbered to v33 during the
+// thrum-dev → thrum-agents forward-merge because the v0.11 substrate
+// had already claimed v25 for scheduler. This pins both the new version
+// slot AND the fresh-install vs migration parity for the renumbered block.
+func TestSchema_V33_PendingRouteResolution_Renumbered(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "v33.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+
+	// Fresh-install path must already have the column (createTables
+	// includes it inline on the messages table).
+	msgCols, err := db.Query("PRAGMA table_info(messages)")
+	if err != nil {
+		t.Fatalf("PRAGMA messages: %v", err)
+	}
+	have := map[string]bool{}
+	for msgCols.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := msgCols.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		have[name] = true
+	}
+	_ = msgCols.Close()
+	if !have["pending_route_resolution"] {
+		t.Errorf("fresh-install messages table missing pending_route_resolution column (Guard 1 fresh-vs-upgrade parity)")
+	}
+
+	// Migration path: rewind to v32 and run migrate; the v33 block must
+	// be a clean no-op when the column is already present (idempotency).
+	if _, err := db.Exec("UPDATE schema_version SET version = 32"); err != nil {
+		t.Fatalf("rewind to v32: %v", err)
+	}
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v32→v33 (column already present): %v", err)
+	}
+	v, err := schema.GetSchemaVersion(db)
+	if err != nil {
+		t.Fatalf("GetSchemaVersion: %v", err)
+	}
+	if v != 33 {
+		t.Errorf("schema_version after migrate = %d; want 33", v)
 	}
 }
 

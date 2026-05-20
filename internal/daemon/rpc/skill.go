@@ -273,12 +273,12 @@ type SkillPromoteRequest struct {
 // SkillPromoteResponse. Mirrors skills.ReviewBlock but with stable JSON
 // tags pinned to the spec §7.5 sample.
 type PromoteReview struct {
-	ReviewedBy          string                       `json:"reviewed_by"`
-	ReviewedAt          time.Time                    `json:"reviewed_at"`
-	CheckSkillVersion   string                       `json:"check_skill_version"`
-	Revisions           []skills.RevisionEntry       `json:"revisions"`
-	SecretScanOverrides []skills.SecretScanOverride  `json:"secret_scan_overrides,omitempty"`
-	ForceOverride       string                       `json:"force_override,omitempty"`
+	ReviewedBy          string                      `json:"reviewed_by"`
+	ReviewedAt          time.Time                   `json:"reviewed_at"`
+	CheckSkillVersion   string                      `json:"check_skill_version"`
+	Revisions           []skills.RevisionEntry      `json:"revisions"`
+	SecretScanOverrides []skills.SecretScanOverride `json:"secret_scan_overrides,omitempty"`
+	ForceOverride       string                      `json:"force_override,omitempty"`
 }
 
 // PromoteSecretFinding is the JSON shape for one secret-scan hit in

@@ -47,8 +47,8 @@ type WindowActivityFn func(ctx context.Context, session string) (string, error)
 // SessionExistsFn filters dead sessions, WindowActivityFn returns the
 // raw tmux activity string for parsing.
 type DaemonPaneSource struct {
-	registry      AgentRegistry
-	sessionExists SessionExistsFn
+	registry       AgentRegistry
+	sessionExists  SessionExistsFn
 	windowActivity WindowActivityFn
 }
 

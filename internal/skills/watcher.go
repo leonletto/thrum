@@ -86,12 +86,12 @@ type WatcherOpts struct {
 // for test introspection. Production code does not consume this —
 // production effects flow through Mirror/Staleness/Supervisor.
 type WatcherEvent struct {
-	Kind       string // "library_change", "proposal_new", "proposal_removed", "reconcile"
-	Path       string
-	SkillName  string
-	Author     string
+	Kind        string // "library_change", "proposal_new", "proposal_removed", "reconcile"
+	Path        string
+	SkillName   string
+	Author      string
 	Frontmatter Frontmatter
-	Err        error
+	Err         error
 }
 
 // Watcher wraps an fsnotify.Watcher and translates filesystem events

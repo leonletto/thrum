@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/projection"
 )
@@ -23,9 +26,8 @@ type EventIngester interface {
 	IngestSyncedEvent(ctx context.Context, event []byte) error
 }
 
-// SyncLoop manages the periodic sync cycle.
+// SyncLoop manages the event-triggered sync cycle.
 type SyncLoop struct {
-	interval     time.Duration
 	syncer       *Syncer
 	projector    *projection.Projector
 	ingester     EventIngester // optional; when set, updateProjection routes through it
@@ -41,6 +43,10 @@ type SyncLoop struct {
 	running      bool
 	lastSyncAt   time.Time
 	lastError    error
+	// walkerCounts provides per-walk row counts for the sync.commit telemetry
+	// event. Set via SetCommitCountsProvider from bootstrap; nil is safe (emits
+	// zeros for the count fields). The provider returns (stateFiles, msgRows, rcptRows).
+	walkerCounts func() (stateFiles, msgRows, rcptRows int)
 }
 
 // SetIngester installs an EventIngester so synced events flow through
@@ -53,21 +59,34 @@ func (l *SyncLoop) SetIngester(ing EventIngester) {
 	l.ingester = ing
 }
 
+// SetCommitCountsProvider wires a callback that returns the per-walk row
+// counts (stateFiles, msgRows, rcptRows) from the most recent snapshot
+// walker run. Called from bootstrap after the Walker is constructed:
+//
+//	syncLoop.SetCommitCountsProvider(func() (int, int, int) {
+//	    c := walker.LastCounts()
+//	    return c.StateFiles, c.MessageRows, c.ReceiptRows
+//	})
+//
+// When nil (tests that don't construct a walker), doSync emits zero
+// counts in the sync.commit event — safe and non-fatal.
+func (l *SyncLoop) SetCommitCountsProvider(fn func() (stateFiles, msgRows, rcptRows int)) {
+	l.walkerCounts = fn
+}
+
 // NewSyncLoop creates a new sync loop.
 // - syncer: handles git operations (fetch, merge, push)
 // - projector: applies events to SQLite
 // - repoPath: path to the git repository
 // - syncDir: path to sync worktree (.git/thrum-sync/a-sync)
 // - thrumDir: path to .thrum/ directory (used for lock path)
-// - interval: how often to sync (default: 60 seconds)
 // - localOnly: when true, skip all remote git operations (push/fetch).
-func NewSyncLoop(syncer *Syncer, projector *projection.Projector, repoPath string, syncDir string, thrumDir string, interval time.Duration, localOnly bool) *SyncLoop {
-	if interval == 0 {
-		interval = 60 * time.Second
-	}
-
+//
+// Sync is event-triggered (via Triggers.SyncOnWrite) as of v0.10.6
+// (thrum-s6os). The periodic ticker has been removed; sync runs on
+// structural writes and once at startup for catch-up.
+func NewSyncLoop(syncer *Syncer, projector *projection.Projector, repoPath string, syncDir string, thrumDir string, localOnly bool) *SyncLoop {
 	return &SyncLoop{
-		interval:     interval,
 		syncer:       syncer,
 		projector:    projector,
 		repoPath:     repoPath,
@@ -179,10 +198,9 @@ type SyncStatus struct {
 func (l *SyncLoop) run(ctx context.Context) {
 	defer close(l.stoppedCh)
 
-	ticker := time.NewTicker(l.interval)
-	defer ticker.Stop()
-
-	// Do an initial sync
+	// Do an initial sync to catch up on any peer events written while the
+	// daemon was offline. Subsequent syncs are triggered by SyncOnWrite
+	// (structural events) or TriggerSync (manual/RPC).
 	l.doSync(ctx)
 
 	for {
@@ -191,8 +209,6 @@ func (l *SyncLoop) run(ctx context.Context) {
 			return
 		case <-l.stopCh:
 			return
-		case <-ticker.C:
-			l.doSync(ctx)
 		case <-l.manualSyncCh:
 			l.doSync(ctx)
 		}
@@ -246,10 +262,40 @@ func (l *SyncLoop) doSync(ctx context.Context) {
 		}
 	}
 
-	// 5. Commit and push if local changes
+	// 5. Commit and push if local changes.
+	// Capture HEAD before CommitAndPush so the post-call comparison can
+	// tell whether a new commit actually landed. Spec §10 requires
+	// sync.commit to fire "per commit landed on a-sync" — emitting on
+	// every doSync (including no-op CommitAndPush paths) would mint
+	// false-positive telemetry that downstream operators can't easily
+	// distinguish from real commits.
+	preSHA := ""
+	if shaBytes, shaErr := safecmd.Git(ctx, l.syncDir, "rev-parse", "HEAD"); shaErr == nil {
+		preSHA = strings.TrimSpace(string(shaBytes))
+	}
 	if err := l.syncer.CommitAndPush(ctx); err != nil {
 		l.setError(fmt.Errorf("commit and push: %w", err))
 		return
+	}
+
+	// 6. Emit sync.commit telemetry only when a new commit actually
+	// landed (post-HEAD differs from pre-HEAD).
+	postSHA := ""
+	if shaBytes, shaErr := safecmd.Git(ctx, l.syncDir, "rev-parse", "HEAD"); shaErr == nil {
+		postSHA = strings.TrimSpace(string(shaBytes))
+	}
+	if postSHA != "" && postSHA != preSHA {
+		stateFiles, msgRows, rcptRows := 0, 0, 0
+		if l.walkerCounts != nil {
+			stateFiles, msgRows, rcptRows = l.walkerCounts()
+		}
+		filesChanged := stateFiles + msgRows + rcptRows
+		slog.Info("sync.commit",
+			"commit_sha", postSHA,
+			"files_changed", filesChanged,
+			"state_files", stateFiles,
+			"message_rows", msgRows,
+			"receipt_rows", rcptRows)
 	}
 
 	// Success - update status

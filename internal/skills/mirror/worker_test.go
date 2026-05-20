@@ -650,8 +650,8 @@ func waitForFile(t *testing.T, path string, timeout time.Duration) {
 	t.Fatalf("file did not materialize at %s within %v", path, timeout)
 }
 
-func skillNameI(i int) string  { return "s-" + itoa3(i) }
-func bodyForI(i int) string    { return "body-" + itoa3(i) }
+func skillNameI(i int) string { return "s-" + itoa3(i) }
+func bodyForI(i int) string   { return "body-" + itoa3(i) }
 func itoa3(i int) string {
 	out := []byte("000")
 	out[2] = byte('0' + (i % 10))

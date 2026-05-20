@@ -45,10 +45,10 @@ type dispatchRecord struct {
 
 // inboundRecordingDispatcher implements email.MessageDispatcher. Thread-safe.
 type inboundRecordingDispatcher struct {
-	mu       sync.Mutex
-	sends    []dispatchRecord
-	seens    []goImap.UID
-	sendErr  error
+	mu      sync.Mutex
+	sends   []dispatchRecord
+	seens   []goImap.UID
+	sendErr error
 }
 
 func (d *inboundRecordingDispatcher) SendMessage(_ context.Context, fromAgent, toAgent, body, replyTo string) error {

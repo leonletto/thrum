@@ -179,4 +179,3 @@ func TestDeriveCrashedBanner(t *testing.T) {
 		})
 	}
 }
-

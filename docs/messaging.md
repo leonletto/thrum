@@ -544,7 +544,6 @@ These flags are available on all commands:
 | `--verbose` | Debug output                                  |
 | `--role`    | Agent role (or `THRUM_ROLE` env var)          |
 | `--module`  | Agent module (or `THRUM_MODULE` env var)      |
-| `--repo`    | Repository path (default: `.`)                |
 
 ---
 

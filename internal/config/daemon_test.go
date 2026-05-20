@@ -20,10 +20,8 @@ func TestLoadThrumConfig_NoFile(t *testing.T) {
 	if cfg.Daemon.LocalOnly {
 		t.Error("expected LocalOnly=false when no config file exists")
 	}
-	// Defaults should be applied
-	if cfg.Daemon.SyncInterval != config.DefaultSyncInterval {
-		t.Errorf("expected SyncInterval=%d, got %d", config.DefaultSyncInterval, cfg.Daemon.SyncInterval)
-	}
+	// Defaults should be applied; retention/compaction defaults are
+	// exercised in T-config-2 / T-config-3.
 	if cfg.Daemon.WSPort != config.DefaultWSPort {
 		t.Errorf("expected WSPort=%q, got %q", config.DefaultWSPort, cfg.Daemon.WSPort)
 	}
@@ -78,10 +76,6 @@ func TestLoadThrumConfig_EmptyJSON(t *testing.T) {
 	if cfg.Daemon.LocalOnly {
 		t.Error("expected LocalOnly=false for empty config")
 	}
-	// Defaults should be applied
-	if cfg.Daemon.SyncInterval != config.DefaultSyncInterval {
-		t.Errorf("expected SyncInterval=%d, got %d", config.DefaultSyncInterval, cfg.Daemon.SyncInterval)
-	}
 	if cfg.Daemon.WSPort != config.DefaultWSPort {
 		t.Errorf("expected WSPort=%q, got %q", config.DefaultWSPort, cfg.Daemon.WSPort)
 	}
@@ -103,6 +97,8 @@ func TestLoadThrumConfig_InvalidJSON(t *testing.T) {
 func TestLoadThrumConfig_FullSchema(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
+	// sync_interval is silently ignored as of v0.10.6 (spec §7.2); verify
+	// the config still loads cleanly when legacy configs carry the key.
 	data := `{
 		"runtime": {"primary": "claude"},
 		"daemon": {
@@ -125,9 +121,6 @@ func TestLoadThrumConfig_FullSchema(t *testing.T) {
 	if !cfg.Daemon.LocalOnly {
 		t.Error("expected LocalOnly=true")
 	}
-	if cfg.Daemon.SyncInterval != 30 {
-		t.Errorf("expected SyncInterval=30, got %d", cfg.Daemon.SyncInterval)
-	}
 	if cfg.Daemon.WSPort != "9999" {
 		t.Errorf("expected WSPort=9999, got %q", cfg.Daemon.WSPort)
 	}
@@ -148,15 +141,98 @@ func TestLoadThrumConfig_BackwardsCompat(t *testing.T) {
 	if !cfg.Daemon.LocalOnly {
 		t.Error("expected LocalOnly=true")
 	}
-	// New fields should get defaults
-	if cfg.Daemon.SyncInterval != config.DefaultSyncInterval {
-		t.Errorf("expected default SyncInterval, got %d", cfg.Daemon.SyncInterval)
-	}
 	if cfg.Daemon.WSPort != config.DefaultWSPort {
 		t.Errorf("expected default WSPort, got %q", cfg.Daemon.WSPort)
 	}
 	if cfg.Runtime.Primary != "" {
 		t.Errorf("expected empty Runtime.Primary, got %q", cfg.Runtime.Primary)
+	}
+}
+
+// TestLoadThrumConfig_LegacySyncIntervalSilentlyIgnored covers T-config-1
+// from the thrum-s6os plan §11 E9 acceptance block. Pre-v0.10.6 user
+// configs frequently carry `daemon.sync_interval`; in v0.10.6 the field
+// is removed from DaemonConfig and the JSON key is silently dropped by
+// json.Unmarshal (unknown fields are ignored). Legacy configs must
+// continue to load without error (spec §7.2).
+func TestLoadThrumConfig_LegacySyncIntervalSilentlyIgnored(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	// 6000s would have been a meaningful (overly-long) interval pre-rearch
+	if err := os.WriteFile(configPath, []byte(`{"daemon":{"sync_interval":6000}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("legacy config with sync_interval should load without error, got: %v", err)
+	}
+	// The key is silently ignored; other defaults still apply.
+	if cfg.Daemon.WSPort != config.DefaultWSPort {
+		t.Errorf("expected default WSPort after legacy config load, got %q", cfg.Daemon.WSPort)
+	}
+}
+
+// TestLoadThrumConfig_EventsRetentionDaysDefault covers T-config-2.
+// Absent from JSON, the field must default to DefaultEventsRetentionDays (2).
+func TestLoadThrumConfig_EventsRetentionDaysDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Daemon.EventsRetentionDays != config.DefaultEventsRetentionDays {
+		t.Errorf("expected EventsRetentionDays=%d, got %d",
+			config.DefaultEventsRetentionDays, cfg.Daemon.EventsRetentionDays)
+	}
+}
+
+// TestLoadThrumConfig_EventsRetentionDays_UserValueOverridesDefault confirms
+// applyDefaults does not stomp a user-supplied value.
+func TestLoadThrumConfig_EventsRetentionDays_UserValueOverridesDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"daemon":{"events_retention_days":7}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Daemon.EventsRetentionDays != 7 {
+		t.Errorf("expected user-supplied EventsRetentionDays=7, got %d", cfg.Daemon.EventsRetentionDays)
+	}
+}
+
+// TestLoadThrumConfig_CompactionSizeThresholdMBDefault covers T-config-3.
+// Absent from JSON, the field must default to
+// DefaultCompactionSizeThresholdMB (10).
+func TestLoadThrumConfig_CompactionSizeThresholdMBDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Daemon.CompactionSizeThresholdMB != config.DefaultCompactionSizeThresholdMB {
+		t.Errorf("expected CompactionSizeThresholdMB=%d, got %d",
+			config.DefaultCompactionSizeThresholdMB, cfg.Daemon.CompactionSizeThresholdMB)
+	}
+}
+
+// TestLoadThrumConfig_CompactionSizeThresholdMB_UserValueOverridesDefault
+// confirms applyDefaults does not stomp a user-supplied value.
+func TestLoadThrumConfig_CompactionSizeThresholdMB_UserValueOverridesDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"daemon":{"compaction_size_threshold_mb":25}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Daemon.CompactionSizeThresholdMB != 25 {
+		t.Errorf("expected user-supplied CompactionSizeThresholdMB=25, got %d", cfg.Daemon.CompactionSizeThresholdMB)
 	}
 }
 
@@ -182,7 +258,7 @@ func TestSaveThrumConfig_WithRuntime(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := &config.ThrumConfig{
 		Runtime: config.RuntimeConfig{Primary: "claude"},
-		Daemon:  config.DaemonConfig{LocalOnly: true, SyncInterval: 30, WSPort: "9999"},
+		Daemon:  config.DaemonConfig{LocalOnly: true, WSPort: "9999"},
 	}
 
 	if err := config.SaveThrumConfig(tmpDir, cfg); err != nil {
@@ -195,9 +271,6 @@ func TestSaveThrumConfig_WithRuntime(t *testing.T) {
 	}
 	if loaded.Runtime.Primary != "claude" {
 		t.Errorf("expected Runtime.Primary=claude, got %q", loaded.Runtime.Primary)
-	}
-	if loaded.Daemon.SyncInterval != 30 {
-		t.Errorf("expected SyncInterval=30, got %d", loaded.Daemon.SyncInterval)
 	}
 	if loaded.Daemon.WSPort != "9999" {
 		t.Errorf("expected WSPort=9999, got %q", loaded.Daemon.WSPort)

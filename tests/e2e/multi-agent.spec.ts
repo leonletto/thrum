@@ -60,7 +60,8 @@ test.describe('Multi-Agent Scenarios', () => {
 
   test('SC-59: Human supervises agents via browser', async ({ page }) => {
     // Send a message from coordinator for the browser to display
-    thrumIn(getTestRoot(), ['send', 'Task assigned for browser test'], 10_000, coordEnv());
+    // (thrum-t698: explicit --to; browser-display test, not delivery-pathway)
+    thrumIn(getTestRoot(), ['send', 'Task assigned for browser test', '--to', '@e2e_implementer'], 10_000, coordEnv());
 
     // Act: open browser
     await page.goto(getWebUIUrl());

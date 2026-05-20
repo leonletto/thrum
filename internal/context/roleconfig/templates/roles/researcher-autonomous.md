@@ -125,29 +125,29 @@ mechanical work, `sonnet` for judgment, `opus` only when justified.
 
 ### Run thrum commands from your worktree, never from the main repo or another worktree
 
-Your worktree (`{{.RepoRoot}}` here) is your home — the `.thrum/` identity
-file lives here, and routing depends on the CLI's CWD. Running thrum CLI
-from the main repo would resolve identity to the coordinator and route
-every message under their name, polluting audit trails. Same hazard if you
-`cd` into another agent's worktree. Always run from `{{.RepoRoot}}`, or
-anchor explicitly with `--repo {{.RepoRoot}}`.
+Your worktree (`{{.RepoRoot}}` here) is your home — the `.thrum/` identity file
+lives here, and routing depends on the CLI's CWD. Running thrum CLI from the
+main repo would resolve identity to the coordinator and route every message
+under their name, polluting audit trails. Same hazard if you `cd` into another
+agent's worktree. Always run from `{{.RepoRoot}}`, or anchor explicitly with
+`--repo {{.RepoRoot}}`.
 
 ### Context-restart discipline
 
-When the daemon nudges you at `warn_threshold` (default 70%): wrap your
-current sub-task, compose a continuation from your working context, save it,
-and run `/thrum:restart` yourself. The continuation should be a tight prose
-summary of what you know — drawn directly from your own context, not from
-fresh investigation.
+When the daemon nudges you at `warn_threshold` (default 70%): wrap your current
+sub-task, compose a continuation from your working context, save it, and run
+`/thrum:restart` yourself. The continuation should be a tight prose summary of
+what you know — drawn directly from your own context, not from fresh
+investigation.
 
-Specifically: **at warn-tier, do NOT dispatch sub-agents (Agent, Explore,
-etc.). Do NOT re-read large files. Do NOT spawn web fetches.** Write what you
-know directly. Each of those would cost context you don't have to spend.
+Specifically: **at warn-tier, do NOT dispatch sub-agents (Agent, Explore, etc.).
+Do NOT re-read large files. Do NOT spawn web fetches.** Write what you know
+directly. Each of those would cost context you don't have to spend.
 
-If you can't compose in your remaining runway, the daemon will force-restart
-you at 80% + 3 minutes. The new session will receive the last 200 lines of
-your transcript as its restart snapshot — your in-flight decisions and
-judgment calls will be lost, but the system makes progress.
+If you can't compose in your remaining runway, the daemon will force-restart you
+at 80% + 3 minutes. The new session will receive the last 200 lines of your
+transcript as its restart snapshot — your in-flight decisions and judgment calls
+will be lost, but the system makes progress.
 
 ---
 

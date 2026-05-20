@@ -47,10 +47,10 @@ func TestMsgid_ParseRoundTrip(t *testing.T) {
 
 func TestMsgid_ParseRejectsNonThrumIds(t *testing.T) {
 	cases := []string{
-		"<user@example.com>",                // not thrum-prefixed
-		"<thrum-onlyone@host.com>",          // missing msg segment
-		"thrum-ab12cd34-msg@host.com",       // missing angle brackets
-		"",                                  // empty
+		"<user@example.com>",          // not thrum-prefixed
+		"<thrum-onlyone@host.com>",    // missing msg segment
+		"thrum-ab12cd34-msg@host.com", // missing angle brackets
+		"",                            // empty
 	}
 	for _, c := range cases {
 		if _, _, ok := email.ParseMessageId(c); ok {
