@@ -120,9 +120,20 @@ func formatUptime(d time.Duration) string {
 }
 
 // MonitorShow fetches and renders a single monitor's full spec to out.
+// The identifier may be either a monitor ID (mon_<ULID>) or a name; names
+// are resolved to IDs via monitor.list before the RPC is dispatched. Show
+// is read-only inspection so resolution uses `includeAll=true` — operators
+// inspecting historical/stopped monitors by name shouldn't hit a running-only
+// filter (see thrum-09wl design notes; sibling of thrum-puhr.9.1's stop/logs
+// and thrum-tv6z's restart).
 // Env values are rendered as KEY=<redacted> — the daemon already redacts them;
 // the CLI also ensures no raw secret values appear in its output.
-func MonitorShow(client *Client, id string, out io.Writer) error {
+func MonitorShow(client *Client, identifier string, out io.Writer) error {
+	id, err := resolveMonitorIdentifier(client, identifier, true)
+	if err != nil {
+		return fmt.Errorf("monitor show: %w", err)
+	}
+
 	req := struct {
 		ID string `json:"id"`
 	}{ID: id}
@@ -180,8 +191,15 @@ func MonitorListJSON(client *Client, includeAll bool) ([]MonitorJobView, error) 
 }
 
 // MonitorShowJSON fetches a single monitor's details for emission through
-// cli.EmitJSON. See MonitorListJSON for the rationale.
-func MonitorShowJSON(client *Client, id string) (MonitorJobView, error) {
+// cli.EmitJSON. See MonitorListJSON for the rationale. The identifier
+// resolution semantics match MonitorShow: name lookup uses includeAll=true
+// since show is read-only inspection.
+func MonitorShowJSON(client *Client, identifier string) (MonitorJobView, error) {
+	id, err := resolveMonitorIdentifier(client, identifier, true)
+	if err != nil {
+		return MonitorJobView{}, fmt.Errorf("monitor show: %w", err)
+	}
+
 	req := struct {
 		ID string `json:"id"`
 	}{ID: id}
