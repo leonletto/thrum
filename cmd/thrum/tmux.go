@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -181,8 +180,8 @@ func tmuxCmd() *cobra.Command {
 			rtOverride, _ := cmd.Flags().GetString("runtime")
 			rt := "claude"
 			// Resolution: --runtime flag > identity PreferredRuntime > config > "claude"
-			out, err := exec.Command("tmux", "display-message", // #nosec G204 -- args are session name from CLI
-				"-t", args[0], "-p", "#{pane_current_path}").Output()
+			out, err := safecmd.TmuxLocal(cmd.Context(),
+				"display-message", "-t", args[0], "-p", "#{pane_current_path}")
 			if err == nil {
 				sessionCwd := strings.TrimSpace(string(out))
 				thrumDir := filepath.Join(sessionCwd, ".thrum")
