@@ -19,11 +19,11 @@ import (
 
 // detectTmuxSession returns the current tmux pane target if running inside tmux,
 // or an empty string if not in tmux.
-func detectTmuxSession() (string, error) {
+func detectTmuxSession(ctx context.Context) (string, error) {
 	if !ttmux.InTmux() {
 		return "", nil
 	}
-	return ttmux.PaneTarget()
+	return ttmux.PaneTarget(ctx)
 }
 
 // QuickstartOptions contains options for the quickstart command.

@@ -387,7 +387,7 @@ func TestQuickstart_DetectsTmux(t *testing.T) {
 	t.Setenv("TMUX", "/tmp/tmux-501/default,12345,0")
 	t.Setenv("TMUX_PANE", "%0")
 
-	session, err := detectTmuxSession()
+	session, err := detectTmuxSession(context.Background())
 	if err != nil {
 		// If tmux isn't installed in CI, skip
 		t.Skip("tmux not available")
@@ -400,7 +400,7 @@ func TestQuickstart_DetectsTmux(t *testing.T) {
 func TestQuickstart_NoTmux(t *testing.T) {
 	t.Setenv("TMUX", "")
 
-	session, err := detectTmuxSession()
+	session, err := detectTmuxSession(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

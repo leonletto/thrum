@@ -100,7 +100,7 @@ func buildCheckContext(ctx context.Context, repoPath string, cfg Config, logger 
 		IdentityAgentPID: idFile.AgentPID,
 		IsPIDAlive:       func(pid int) bool { return process.IsRunning(pid) },
 		CWDMatches:       cwdMatches(effective, idFile.Worktree),
-		TmuxMatches:      tmuxMatches(idFile.TmuxSession),
+		TmuxMatches:      tmuxMatches(ctx, idFile.TmuxSession),
 		IdentitiesDir:    identitiesDir,
 		ExpectedAgent:    idFile.Agent.Name,
 		warnLogger:       logger,
@@ -132,10 +132,10 @@ func cwdMatches(cwd, worktree string) bool {
 
 // tmuxMatches implements the "equal, or absent on both sides"
 // convention from CheckContext.TmuxMatches.
-func tmuxMatches(stored string) bool {
+func tmuxMatches(ctx context.Context, stored string) bool {
 	live := ""
 	if ttmux.InTmux() {
-		if t, err := ttmux.PaneTarget(); err == nil {
+		if t, err := ttmux.PaneTarget(ctx); err == nil {
 			live = t
 		}
 	}
@@ -195,7 +195,7 @@ func reconcileDrift(ctx context.Context, repoPath string, idFile *config.Identit
 	// circuits the != check below so no write happens.
 	tmuxTarget := ""
 	if ttmux.InTmux() {
-		if target, err := ttmux.PaneTarget(); err == nil {
+		if target, err := ttmux.PaneTarget(ctx); err == nil {
 			tmuxTarget = worktree.PaneTargetForIdentity(target, repoPath, worktree.SafeTmuxOpts{})
 		}
 	}

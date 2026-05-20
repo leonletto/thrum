@@ -306,7 +306,7 @@ Examples:
 				// and refuses cross-worktree writes silently (no field
 				// changed when it returns "").
 				if ttmux.InTmux() {
-					if target, err := ttmux.PaneTarget(); err == nil {
+					if target, err := ttmux.PaneTarget(cmd.Context()); err == nil {
 						safe := worktree.PaneTargetForIdentity(target, flagRepo, worktree.SafeTmuxOpts{})
 						if safe != "" && idFile.TmuxSession != safe {
 							idFile.TmuxSession = safe
