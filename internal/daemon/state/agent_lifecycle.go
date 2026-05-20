@@ -20,18 +20,20 @@ import (
 )
 
 // AgentLifecycleEventKind pins the canonical event vocabulary per
-// substrate-canonical-reference.md §3.4. Any other value passed to
-// Append will be persisted as-is — the SQL CHECK constraint only
-// guards detection_method, not event_kind.
+// substrate-canonical-reference.md §3.4. Append() validates against this
+// allowlist at the Go layer (thrum-6qmf.4.91); the SQL CHECK constraint
+// still guards only detection_method, so the Go-layer switch is the
+// single enforcement point for event_kind values.
 type AgentLifecycleEventKind string
 
 const (
-	EventRespawnFired            AgentLifecycleEventKind = "respawn_fired"
-	EventRespawnSkippedLoopguard AgentLifecycleEventKind = "respawn_skipped_loopguard"
-	EventCrashDetected           AgentLifecycleEventKind = "crash_detected"
-	EventStateMdParseFailed      AgentLifecycleEventKind = "state_md_parse_failed"
-	EventStateMdAckCleared       AgentLifecycleEventKind = "state_md_ack_cleared"
-	EventRespawnAckCleared       AgentLifecycleEventKind = "respawn_ack_cleared"
+	EventRespawnFired                  AgentLifecycleEventKind = "respawn_fired"
+	EventRespawnSkippedLoopguard       AgentLifecycleEventKind = "respawn_skipped_loopguard"
+	EventCrashDetected                 AgentLifecycleEventKind = "crash_detected"
+	EventStateMdParseFailed            AgentLifecycleEventKind = "state_md_parse_failed"
+	EventStateMdAckCleared             AgentLifecycleEventKind = "state_md_ack_cleared"
+	EventRespawnAckCleared             AgentLifecycleEventKind = "respawn_ack_cleared"
+	EventReconcileWorktreeDiscrepancy  AgentLifecycleEventKind = "reconcile_worktree_discrepancy"
 )
 
 // DetectionMethod is the canonical-vocabulary value persisted in the
@@ -115,6 +117,25 @@ func nullString(s string) sql.NullString {
 }
 
 func (s *agentLifecycleStore) Append(ctx context.Context, e AgentLifecycleEvent) (int64, error) {
+	// Reject unknown event_kind values per thrum-6qmf.4.91. The SQL
+	// CHECK constraint guards only detection_method, so this switch
+	// is the single enforcement point for the canonical vocabulary —
+	// drift here would land unknown kinds in the journal and render
+	// as opaque rows in `thrum team --journal`.
+	switch e.EventKind {
+	case EventRespawnFired,
+		EventRespawnSkippedLoopguard,
+		EventCrashDetected,
+		EventStateMdParseFailed,
+		EventStateMdAckCleared,
+		EventRespawnAckCleared,
+		EventReconcileWorktreeDiscrepancy:
+		// OK
+	default:
+		return 0, fmt.Errorf("invalid event_kind %q (see AgentLifecycleEventKind canonical vocabulary)",
+			e.EventKind)
+	}
+
 	// Defense-in-depth per spec §3.2 + brainstormer-third B1: reject
 	// unknown detection_method values at the Go layer so callers get a
 	// clean error before round-tripping bad data through the SQLite

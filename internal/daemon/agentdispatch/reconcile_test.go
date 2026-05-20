@@ -2,6 +2,7 @@ package agentdispatch
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -221,12 +222,17 @@ func TestReconcileRun_Row1_NoWorktreeJournaled_RollsBackToScheduled(t *testing.T
 	}
 }
 
-// TestReconcileRun_Row2_WorktreeGoneFromDisk_RollsBackSilently covers
-// spec §7.7 row 2: `worktree_path` journaled but the directory is
-// gone from disk (operator hand-cleanup, partition unmount,
+// TestReconcileRun_Row2_WorktreeGoneFromDisk_RollsBackAndJournalsDiscrepancy
+// covers spec §7.7 row 2: `worktree_path` journaled but the directory
+// is gone from disk (operator hand-cleanup, partition unmount,
 // pre-existing daemon crash already cleaned). Result: roll back
-// without attempting Destroy.
-func TestReconcileRun_Row2_WorktreeGoneFromDisk_RollsBackSilently(t *testing.T) {
+// without attempting Destroy + append ONE reconcile_worktree_discrepancy
+// lifecycle event for operator visibility. Pins thrum-6qmf.4.91: the
+// distinct event kind synthesizes B1's option-B interpretation
+// (operator-cleanup is not a crash) with the spec's
+// 'journal the discrepancy' clause — operators see the row in
+// `thrum team --journal` without it misclassifying as crash_detected.
+func TestReconcileRun_Row2_WorktreeGoneFromDisk_RollsBackAndJournalsDiscrepancy(t *testing.T) {
 	f := newReconcileFixture(t)
 	f.journal.events = []scheduler.Event{
 		stage3CompleteEvent(f.now, "r1", "/gone/wt1", "agent/x/job-r1"),
@@ -244,11 +250,50 @@ func TestReconcileRun_Row2_WorktreeGoneFromDisk_RollsBackSilently(t *testing.T) 
 	if len(f.wt.destroyCalls) != 0 {
 		t.Errorf("Destroy called %d times, want 0 (worktree already gone)", len(f.wt.destroyCalls))
 	}
-	if len(f.lifecycle.appended) != 0 {
-		t.Errorf("lifecycle events appended %d, want 0 (row 2 is silent)", len(f.lifecycle.appended))
-	}
 	if !slices.Contains(f.pathQueriedAt, "/gone/wt1") {
 		t.Errorf("pathExists not queried for /gone/wt1; queries: %v", f.pathQueriedAt)
+	}
+
+	// Exactly one reconcile_worktree_discrepancy event, NOT crash_detected.
+	// Crash-misclassification is the failure mode the distinct event kind
+	// exists to prevent (operator hand-cleanup is intentional, not a crash).
+	if len(f.lifecycle.appended) != 1 {
+		t.Fatalf("lifecycle events appended %d, want 1 (row 2 discrepancy)", len(f.lifecycle.appended))
+	}
+	ev := f.lifecycle.appended[0]
+	if ev.EventKind != state.EventReconcileWorktreeDiscrepancy {
+		t.Errorf("EventKind = %q, want %q",
+			ev.EventKind, state.EventReconcileWorktreeDiscrepancy)
+	}
+	if ev.EventKind == state.EventCrashDetected {
+		t.Error("Row 2 emitted crash_detected; must use distinct kind to avoid misclassifying operator cleanup")
+	}
+	if ev.AgentName != "docs_bot" {
+		t.Errorf("AgentName = %q, want %q", ev.AgentName, "docs_bot")
+	}
+	if ev.DetectionMethod != "" {
+		t.Errorf("DetectionMethod = %q, want empty (Row 2 is a reconciliation observation, not a detection)", ev.DetectionMethod)
+	}
+
+	// Details JSON shape per thrum-6qmf.4.91: reconciliation_row,
+	// worktree_path, journal_state_before, detected_state, resolution.
+	var details map[string]any
+	if err := json.Unmarshal(ev.Details, &details); err != nil {
+		t.Fatalf("unmarshal details: %v (raw: %s)", err, string(ev.Details))
+	}
+	wantFields := map[string]any{
+		"reconciliation_row":   "Row 2",
+		"worktree_path":        "/gone/wt1",
+		"journal_state_before": "running",
+		"detected_state":       "path-missing",
+		"resolution":           "rolled-back-to-scheduled",
+	}
+	for k, want := range wantFields {
+		if got, ok := details[k]; !ok {
+			t.Errorf("details missing field %q (got: %+v)", k, details)
+		} else if got != want {
+			t.Errorf("details[%q] = %v, want %v", k, got, want)
+		}
 	}
 }
 

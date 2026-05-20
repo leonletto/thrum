@@ -492,3 +492,60 @@ func TestAgentLifecycleStore_PruneOlderThan_BoundaryEventSurvives(t *testing.T) 
 		t.Errorf("surviving event time = %v; want %v", remaining[0].EventTime, cutoff.UTC())
 	}
 }
+
+// TestAgentLifecycleStore_AppendRejectsInvalidEventKind pins thrum-6qmf.4.91:
+// Append() validates event_kind at the Go layer (defense-in-depth). The
+// SQL CHECK constraint guards only detection_method, so the Go-layer
+// allowlist is the only enforcement point for event_kind. Without this,
+// paraphrasing drift would silently land bad kinds in the DB and
+// render as unknown rows in `thrum team --journal`.
+//
+// Mirrors TestAgentLifecycleStore_AppendRejectsInvalidDetectionMethod
+// in shape: reject + verify no row leaks + canonical-kinds-loop passes.
+func TestAgentLifecycleStore_AppendRejectsInvalidEventKind(t *testing.T) {
+	s := state.NewAgentLifecycleStore(newLifecycleStoreDB(t))
+	ctx := context.Background()
+
+	_, err := s.Append(ctx, state.AgentLifecycleEvent{
+		AgentName: "victim",
+		EventKind: "totally_made_up",
+		EventTime: time.Now(),
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid event_kind, got nil")
+	}
+	if !strings.Contains(err.Error(), "event_kind") {
+		t.Errorf("err = %q; want substring 'event_kind'", err.Error())
+	}
+
+	// Verify no row was persisted (Go-layer rejection short-circuits
+	// before the INSERT, so the failed attempt leaves no audit trail).
+	events, err := s.ListByAgent(ctx, "victim", 10)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(events) != 0 {
+		t.Errorf("invalid append leaked a row: %d events", len(events))
+	}
+
+	// All canonical event kinds must pass. detection_method left empty
+	// so detection_method validation doesn't shadow event_kind validation.
+	for _, ek := range []state.AgentLifecycleEventKind{
+		state.EventRespawnFired,
+		state.EventRespawnSkippedLoopguard,
+		state.EventCrashDetected,
+		state.EventStateMdParseFailed,
+		state.EventStateMdAckCleared,
+		state.EventRespawnAckCleared,
+		state.EventReconcileWorktreeDiscrepancy,
+	} {
+		_, err := s.Append(ctx, state.AgentLifecycleEvent{
+			AgentName: "victim",
+			EventKind: ek,
+			EventTime: time.Now(),
+		})
+		if err != nil {
+			t.Errorf("canonical event_kind %q rejected: %v", ek, err)
+		}
+	}
+}
