@@ -189,6 +189,15 @@ Environment variables:
 			}
 			// If not found, keep "." — downstream will report the real error
 		}
+
+		// thrum-7b84.11: cross-worktree preflight for Class B/C leaves.
+		// Fires the diagnostic banner BEFORE the leaf RunE so commands
+		// that bypass getClient (daemon status / logs / start / stop /
+		// restart / run, backup status, telegram status) still surface
+		// the wrong-worktree cue. Annotation-gated; no-op for Class A
+		// (abort), bypass (help/version), and --repo override paths.
+		crossWorktreePreflight(cmd, flagRepo)
+
 		return nil
 	}
 
@@ -5335,6 +5344,15 @@ func classifyRefreshError(cmd *cobra.Command, refreshErr error) (fatalErr error,
 		// user-specified repo.
 		return nil, true
 	}
+	// thrum-7b84.11: if the PersistentPreRunE preflight already
+	// emitted the banner for this invocation, mark absorbed and skip
+	// the second emit. The preflight fires for Class B/C leaves
+	// regardless of whether the leaf later flows through getClient
+	// (e.g. `thrum team` runs preflight AND classify). Without this
+	// dedup, those leaves would emit two banners.
+	if crossWorktreeAbsorbed {
+		return nil, true
+	}
 	switch crossWorktreeResponseFor(cmd) {
 	case CrossWorktreeResponseDiagnosticBanner:
 		emitCrossWorktreeBanner(ge, false)
@@ -5401,6 +5419,69 @@ func emitCrossWorktreeBanner(ge *guard.Error, stdoutToo bool) {
 		_, _ = fmt.Fprintln(os.Stdout, banner)
 		_ = os.Stdout.Sync()
 	}
+}
+
+// crossWorktreeAbsorbed is set by crossWorktreePreflight when it
+// emits a cross-worktree banner. classifyRefreshError consults the
+// flag to suppress a duplicate banner when a Class B/C leaf later
+// flows through getClient (which runs RefreshLocalIdentity → fires
+// the same guard). Cobra invokes exactly one leaf per CLI invocation
+// so process-level state is safe; tests that exercise the cobra tree
+// multiple times in one process must reset the flag between runs
+// (see resetCrossWorktreeAbsorbed in cross_worktree_preflight_test.go).
+// Same caveat as currentCobraCmd and flagJSON which predate this PR.
+var crossWorktreeAbsorbed bool
+
+// checkCrossWorktreeGuard is the indirection point so tests can
+// inject controlled guard-fire scenarios without spinning up real
+// identity files or a daemon. Tests should use the
+// withCrossWorktreeGuardStub helper in cross_worktree_preflight_test.go
+// (which restores via t.Cleanup) rather than assigning directly.
+var checkCrossWorktreeGuard = cli.CheckCrossWorktreeGuard
+
+// crossWorktreePreflight runs the cross_worktree guard check during
+// PersistentPreRunE so Class B/C leaves (banner / whoami) fire the
+// diagnostic banner even when they bypass getClient — e.g. `thrum
+// daemon status` calls cli.DaemonStatus directly without a daemon
+// client, and the existing classifyRefreshError path lives inside
+// getClient. Without preflight, those leaves run silently from the
+// wrong worktree, defeating the diagnostic-banner contract.
+//
+// No-op for Class A leaves (default abort) — getClient still aborts
+// on cross_worktree per Enhanced Policy 2.
+// No-op for bypass leaves (help / version) — they never touch identity.
+// No-op on explicit --repo (operator override; same as classify path).
+// No-op on non-cross_worktree guard fires — those are handled by
+// classifyRefreshError's catastrophic-refusal path inside getClient.
+//
+// See thrum-7b84.11.
+func crossWorktreePreflight(cmd *cobra.Command, repoPath string) {
+	resp := crossWorktreeResponseFor(cmd)
+	if resp != CrossWorktreeResponseDiagnosticBanner && resp != CrossWorktreeResponseWhoami {
+		return
+	}
+	if explicitRepoFlag(cmd) {
+		return
+	}
+	guardErr := checkCrossWorktreeGuard(repoPath)
+	if guardErr == nil {
+		return
+	}
+	var ge *guard.Error
+	if !errors.As(guardErr, &ge) || ge.Guard != "cross_worktree" {
+		// Non-cross_worktree guard errors are catastrophic refusals
+		// (unauthenticated_rpc, prime_ownership, …). Let getClient's
+		// classifyRefreshError handle those uniformly so the abort
+		// path stays in one place.
+		return
+	}
+	switch resp {
+	case CrossWorktreeResponseDiagnosticBanner:
+		emitCrossWorktreeBanner(ge, false)
+	case CrossWorktreeResponseWhoami:
+		emitCrossWorktreeBanner(ge, true)
+	}
+	crossWorktreeAbsorbed = true
 }
 
 // getClientNoRefresh opens a daemon connection without running the identity
