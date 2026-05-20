@@ -137,11 +137,16 @@ func TestMonitorArgvFromDash(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMonitorShowRedactedEnv(t *testing.T) {
+	// Valid 26-char ULID-shape ID so MonitorShow short-circuits past the
+	// name-resolution lookup (which would otherwise need a monitor.list mock
+	// in this single-handler setup).
+	const monID = "mon_01KR70C8NTMMTPNKFJMH8G5C07"
+
 	// The daemon returns env values already redacted.
 	client := setupMonitorDaemon(t, mockMonitorHandler{
 		method: "monitor.show",
 		response: map[string]any{
-			"id":               "mon_ABCDE",
+			"id":               monID,
 			"name":             "secret-test",
 			"argv":             []string{"echo", "test"},
 			"match":            ".",
@@ -160,7 +165,7 @@ func TestMonitorShowRedactedEnv(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	if err := MonitorShow(client, "mon_ABCDE", &buf); err != nil {
+	if err := MonitorShow(client, monID, &buf); err != nil {
 		t.Fatalf("MonitorShow: %v", err)
 	}
 
@@ -773,5 +778,192 @@ func TestMonRestart_PrefixedName(t *testing.T) {
 	if capturedID != testMonitorIDDaily {
 		t.Errorf("expected resolved id %s in restart RPC (name lookup must run for shape-invalid mon_ inputs), got %q",
 			testMonitorIDDaily, capturedID)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Show name-resolution tests (thrum-09wl) — third sibling of puhr.9.1 and
+// tv6z; same CLI-layer name→ID resolution pattern applied to `thrum monitor
+// show`. Show is read-only inspection so resolution uses `includeAll=true`
+// (matching logs, NOT stop/restart's running-only scope) — operators
+// inspecting historical/stopped monitors by name shouldn't hit a filter.
+// ---------------------------------------------------------------------------
+
+// monitorShowResponse builds a monitor.show response payload with the given
+// ID + name and zeroed-out fields elsewhere. Existing TestMonitorShowRedactedEnv
+// covers the rendering details; these resolution tests only need to assert
+// that the right ID reached the RPC, not re-validate rendering.
+func monitorShowResponse(id, name, status string) map[string]any {
+	return map[string]any{
+		"id":               id,
+		"name":             name,
+		"argv":             []string{},
+		"match":            "",
+		"target":           "",
+		"cwd":              "",
+		"debounce_seconds": 0,
+		"status":           status,
+		"created_at":       "2026-05-20T00:00:00Z",
+		"updated_at":       "2026-05-20T00:00:00Z",
+		"env":              map[string]any{},
+	}
+}
+
+func TestMonShow_AcceptsID(t *testing.T) {
+	var capturedID string
+	client := setupMonitorDaemonSequence(t, mockMonitorHandler{
+		method: "monitor.show",
+		validateParams: func(t *testing.T, params map[string]any) {
+			t.Helper()
+			capturedID, _ = params["id"].(string)
+		},
+		response: monitorShowResponse(testMonitorIDDaily, "daily-backup", "running"),
+	})
+
+	var buf bytes.Buffer
+	if err := MonitorShow(client, testMonitorIDDaily, &buf); err != nil {
+		t.Fatalf("MonitorShow: %v", err)
+	}
+	if capturedID != testMonitorIDDaily {
+		t.Errorf("expected RPC to receive id %s (no list round-trip), got %q", testMonitorIDDaily, capturedID)
+	}
+}
+
+func TestMonShow_ResolvesName(t *testing.T) {
+	var listIncludeAll any
+	var capturedShowID string
+
+	client := setupMonitorDaemonSequence(t,
+		mockMonitorHandler{
+			method: "monitor.list",
+			validateParams: func(t *testing.T, params map[string]any) {
+				t.Helper()
+				listIncludeAll = params["include_all"]
+			},
+			// Mix running + stopped to verify include_all=true scope.
+			response: monitorListResponse(
+				[3]string{testMonitorIDDaily, "daily-backup", "stopped"},
+				[3]string{testMonitorIDOther, "other-monitor", "running"},
+			),
+		},
+		mockMonitorHandler{
+			method: "monitor.show",
+			validateParams: func(t *testing.T, params map[string]any) {
+				t.Helper()
+				capturedShowID, _ = params["id"].(string)
+			},
+			response: monitorShowResponse(testMonitorIDDaily, "daily-backup", "stopped"),
+		},
+	)
+
+	var buf bytes.Buffer
+	if err := MonitorShow(client, "daily-backup", &buf); err != nil {
+		t.Fatalf("MonitorShow(name): %v", err)
+	}
+
+	// Show is read-only inspection — resolution MUST include stopped/dead so
+	// operators can inspect historical monitors by name.
+	if listIncludeAll != true {
+		t.Errorf("show: monitor.list include_all should be true, got %v", listIncludeAll)
+	}
+	if capturedShowID != testMonitorIDDaily {
+		t.Errorf("expected show RPC to receive resolved id %s, got %q", testMonitorIDDaily, capturedShowID)
+	}
+}
+
+func TestMonShow_NameNotFound(t *testing.T) {
+	client := setupMonitorDaemonSequence(t, mockMonitorHandler{
+		method:   "monitor.list",
+		response: monitorListResponse(),
+	})
+
+	var buf bytes.Buffer
+	err := MonitorShow(client, "missing-name", &buf)
+	if err == nil {
+		t.Fatal("expected error for unknown name, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "missing-name") {
+		t.Errorf("error should reference the typed name; got %q", msg)
+	}
+	// Show scope is "monitor" (not "running monitor") since include_all=true.
+	if strings.Contains(msg, "running monitor") {
+		t.Errorf("show should NOT scope to running-only; got %q", msg)
+	}
+	if !strings.Contains(msg, "thrum monitor list --all") {
+		t.Errorf("error should suggest `thrum monitor list --all`; got %q", msg)
+	}
+}
+
+// TestMonShowJSON_ResolvesName covers the --json entry point. The resolution
+// helper is shared with MonitorShow so name handling is structurally
+// equivalent, but the JSON path is independently wired and worth a sanity
+// check — if a future refactor accidentally drops the resolveMonitorIdentifier
+// call from MonitorShowJSON, the text-path tests would still pass and this
+// test would be the canary.
+func TestMonShowJSON_ResolvesName(t *testing.T) {
+	var capturedShowID string
+
+	client := setupMonitorDaemonSequence(t,
+		mockMonitorHandler{
+			method: "monitor.list",
+			response: monitorListResponse(
+				[3]string{testMonitorIDDaily, "daily-backup", "running"},
+			),
+		},
+		mockMonitorHandler{
+			method: "monitor.show",
+			validateParams: func(t *testing.T, params map[string]any) {
+				t.Helper()
+				capturedShowID, _ = params["id"].(string)
+			},
+			response: monitorShowResponse(testMonitorIDDaily, "daily-backup", "running"),
+		},
+	)
+
+	job, err := MonitorShowJSON(client, "daily-backup")
+	if err != nil {
+		t.Fatalf("MonitorShowJSON(name): %v", err)
+	}
+	if capturedShowID != testMonitorIDDaily {
+		t.Errorf("expected show RPC to receive resolved id %s, got %q", testMonitorIDDaily, capturedShowID)
+	}
+	if job.ID != testMonitorIDDaily {
+		t.Errorf("expected returned view ID %s, got %q", testMonitorIDDaily, job.ID)
+	}
+}
+
+// TestMonShow_PrefixedName mirrors the stop/restart prefix-regression guards:
+// a user-typed name beginning with "mon_" but failing the ULID-shape check
+// must route through monitor.list, not be sent straight to the daemon as an
+// ID. (Short test name to fit macOS's 104-char unix-socket path limit.)
+func TestMonShow_PrefixedName(t *testing.T) {
+	const namedLikeID = "mon_archive" // lowercase + too short → shape-invalid
+
+	var capturedID string
+	client := setupMonitorDaemonSequence(t,
+		mockMonitorHandler{
+			method: "monitor.list",
+			response: monitorListResponse(
+				[3]string{testMonitorIDHistoric, namedLikeID, "stopped"},
+			),
+		},
+		mockMonitorHandler{
+			method: "monitor.show",
+			validateParams: func(t *testing.T, params map[string]any) {
+				t.Helper()
+				capturedID, _ = params["id"].(string)
+			},
+			response: monitorShowResponse(testMonitorIDHistoric, namedLikeID, "stopped"),
+		},
+	)
+
+	var buf bytes.Buffer
+	if err := MonitorShow(client, namedLikeID, &buf); err != nil {
+		t.Fatalf("MonitorShow(mon_-prefixed name): %v", err)
+	}
+	if capturedID != testMonitorIDHistoric {
+		t.Errorf("expected resolved id %s in show RPC (name lookup must run for shape-invalid mon_ inputs), got %q",
+			testMonitorIDHistoric, capturedID)
 	}
 }

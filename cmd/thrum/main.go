@@ -2141,7 +2141,7 @@ delivers matching lines as thrum messages to the specified target.
 Examples:
   thrum monitor add --name errors --match "ERROR" --to @team -- tail -F /tmp/app.log
   thrum monitor list
-  thrum monitor show <id>
+  thrum monitor show <name|id>
   thrum monitor stop <name|id>
   thrum monitor restart <name|id>
   thrum monitor logs <name|id>`,
@@ -2256,10 +2256,10 @@ The command and its arguments must be separated from monitor flags with '--':
 		cmd.AddCommand(listCmd)
 	}
 
-	// thrum monitor show <id> [--json]
+	// thrum monitor show <name|id> [--json]
 	cmd.AddCommand(&cobra.Command{
-		Use:   "show <id>",
-		Short: "Show details of a monitor job",
+		Use:   "show <name|id>",
+		Short: "Show details of a monitor job (accepts name or ID)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := getClient()
