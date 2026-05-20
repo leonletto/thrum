@@ -1380,7 +1380,6 @@ The daemon must be running and you must have an active session.`,
 // Phase: 2
 // Remove once refactor verified green.
 
-// agentSummaryField returns the stringified value of a named field on
 // MOVED[thrum-8kxh]: agentSummaryField → agent.go:46-87
 // Original range: main.go:1394-1435
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
