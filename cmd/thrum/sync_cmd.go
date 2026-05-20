@@ -20,7 +20,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:4398-4455
 // Destination: sync_cmd.go:26-83
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: b941148d85
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func syncCmd() *cobra.Command {
@@ -85,7 +85,7 @@ This will fetch new messages from the remote and push local messages.`,
 // ORIGIN[thrum-8kxh]: moved from main.go:4457-4737
 // Destination: sync_cmd.go:91-371
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: b941148d85
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func quickstartCmd() *cobra.Command {

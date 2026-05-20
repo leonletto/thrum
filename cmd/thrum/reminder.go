@@ -19,7 +19,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:2103-2136
 // Destination: reminder.go:25-58
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func reminderCmd() *cobra.Command {
@@ -65,7 +65,7 @@ func reminderCmd() *cobra.Command {
 // ORIGIN[thrum-8kxh]: moved from main.go:2143-2195
 // Destination: reminder.go:71-123
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func runReminderLookup(cmd *cobra.Command, args []string) error {
@@ -134,7 +134,7 @@ func runReminderLookup(cmd *cobra.Command, args []string) error {
 // ORIGIN[thrum-8kxh]: moved from main.go:2206-2281
 // Destination: reminder.go:140-215
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func formatReminderLookup(r cli.ReminderRow, now time.Time) string {
@@ -220,7 +220,7 @@ func formatReminderLookup(r cli.ReminderRow, now time.Time) string {
 // ORIGIN[thrum-8kxh]: moved from main.go:2286-2312
 // Destination: reminder.go:226-252
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func formatLookupElapsed(d time.Duration) string {
@@ -257,7 +257,7 @@ func formatLookupElapsed(d time.Duration) string {
 // ORIGIN[thrum-8kxh]: moved from main.go:2317-2323
 // Destination: reminder.go:263-269
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func lastNLines(s string, n int) []string {
@@ -275,7 +275,7 @@ func lastNLines(s string, n int) []string {
 // ORIGIN[thrum-8kxh]: moved from main.go:2329-2351
 // Destination: reminder.go:281-303
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func reminderListCmd() *cobra.Command {
@@ -307,7 +307,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:2355-2361
 // Destination: reminder.go:313-319
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 type reminderListFlags struct {
@@ -327,7 +327,7 @@ type reminderListFlags struct {
 // ORIGIN[thrum-8kxh]: moved from main.go:2369-2383
 // Destination: reminder.go:333-347
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func buildReminderListOpts(f reminderListFlags, self string) cli.ReminderListOpts {
@@ -349,7 +349,7 @@ func buildReminderListOpts(f reminderListFlags, self string) cli.ReminderListOpt
 // ORIGIN[thrum-8kxh]: moved from main.go:2385-2429
 // Destination: reminder.go:355-399
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func runReminderList(cmd *cobra.Command, _ []string) error {
@@ -404,7 +404,7 @@ func runReminderList(cmd *cobra.Command, _ []string) error {
 // ORIGIN[thrum-8kxh]: moved from main.go:2434-2446
 // Destination: reminder.go:410-422
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func formatReminderListRow(r cli.ReminderRow) string {
@@ -428,10 +428,11 @@ func formatReminderListRow(r cli.ReminderRow) string {
 //   - state=fired                   → "fired"
 //   - state=cleared                 → "cleared"
 //   - state=cancelled               → "cancelled"
+//
 // ORIGIN[thrum-8kxh]: moved from main.go:2455-2471
 // Destination: reminder.go:437-453
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func fireStateLabel(r cli.ReminderRow) string {
@@ -458,7 +459,7 @@ func fireStateLabel(r cli.ReminderRow) string {
 // ORIGIN[thrum-8kxh]: moved from main.go:2476-2484
 // Destination: reminder.go:464-472
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func truncateBody(s string, limit int) string {
@@ -477,7 +478,7 @@ func truncateBody(s string, limit int) string {
 // ORIGIN[thrum-8kxh]: moved from main.go:2489-2515
 // Destination: reminder.go:483-509
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func reminderSetCmd() *cobra.Command {
@@ -511,7 +512,7 @@ later shows which is which.`,
 // ORIGIN[thrum-8kxh]: moved from main.go:2517-2573
 // Destination: reminder.go:517-573
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func runReminderSet(cmd *cobra.Command, _ []string) error {
@@ -585,7 +586,7 @@ func runReminderSet(cmd *cobra.Command, _ []string) error {
 // ORIGIN[thrum-8kxh]: moved from main.go:2585-2607
 // Destination: reminder.go:591-613
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func parseFutureDuration(s string) (time.Duration, error) {

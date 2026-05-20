@@ -20,7 +20,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:5140-5805
 // Destination: tmux.go:26-691
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: e2e502d9d8
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func tmuxCmd() *cobra.Command {
@@ -693,7 +693,7 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 // ORIGIN[thrum-8kxh]: moved from main.go:5807-5812
 // Destination: tmux.go:699-704
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: e2e502d9d8
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func tmuxAttach(session string) error {

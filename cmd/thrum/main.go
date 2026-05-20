@@ -1026,14 +1026,14 @@ is idempotent: running it twice produces byte-identical file content.`,
 // MOVED[thrum-8kxh]: sendCmd → messaging.go:21-160
 // Original range: main.go:1026-1165
 // Tests: cmd/thrum/main_test.go (indirect via Execute()); cmd/thrum/send_test.go (t698)
-// Commit: <pending>
+// Commit: a07612c4fb
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: sentCmd → messaging.go:168-225
 // Original range: main.go:1167-1224
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: a07612c4fb
 // Phase: 2
 // Remove once refactor verified green.
 
@@ -1043,7 +1043,7 @@ is idempotent: running it twice produces byte-identical file content.`,
 // MOVED[thrum-8kxh]: inboxCmd → messaging.go:233-371
 // Original range: main.go:1229-1367
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: a07612c4fb
 // Phase: 2
 // Remove once refactor verified green.
 
@@ -1057,35 +1057,35 @@ is idempotent: running it twice produces byte-identical file content.`,
 // MOVED[thrum-8kxh]: printAgentSummaryField → agent.go:27-34
 // Original range: main.go:1381-1388
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 70df71eabd
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: agentSummaryField → agent.go:46-87
 // Original range: main.go:1394-1435
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 70df71eabd
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: runWhoami → agent.go:98-132
 // Original range: main.go:1440-1474
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 70df71eabd
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: whoamiCmd → agent.go:140-159
 // Original range: main.go:1476-1495
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 70df71eabd
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: waitCmd → messaging.go:379-516
 // Original range: main.go:1404-1541
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: a07612c4fb
 // Phase: 2
 // Remove once refactor verified green.
 
@@ -1127,217 +1127,217 @@ is idempotent: running it twice produces byte-identical file content.`,
 // MOVED[thrum-8kxh]: agentCmd → agent.go:167-591
 // Original range: main.go:1671-2095
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 70df71eabd
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: reminderCmd → reminder.go:25-58
 // Original range: main.go:2103-2136
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: runReminderLookup → reminder.go:71-123
 // Original range: main.go:2143-2195
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: formatReminderLookup → reminder.go:140-215
 // Original range: main.go:2206-2281
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: formatLookupElapsed → reminder.go:226-252
 // Original range: main.go:2286-2312
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: lastNLines → reminder.go:263-269
 // Original range: main.go:2317-2323
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: reminderListCmd → reminder.go:281-303
 // Original range: main.go:2329-2351
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: reminderListFlags → reminder.go:313-319
 // Original range: main.go:2355-2361
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: buildReminderListOpts → reminder.go:333-347
 // Original range: main.go:2369-2383
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: runReminderList → reminder.go:355-399
 // Original range: main.go:2385-2429
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: formatReminderListRow → reminder.go:410-422
 // Original range: main.go:2434-2446
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: fireStateLabel → reminder.go:437-453
 // Original range: main.go:2455-2471
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: truncateBody → reminder.go:464-472
 // Original range: main.go:2476-2484
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: reminderSetCmd → reminder.go:483-509
 // Original range: main.go:2489-2515
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: runReminderSet → reminder.go:517-573
 // Original range: main.go:2517-2573
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: parseFutureDuration → reminder.go:591-613
 // Original range: main.go:2585-2607
 // Tests: cmd/thrum/main_reminder_test.go
-// Commit: <pending>
+// Commit: 0030e046a7
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: worktreeCmd → worktree.go:26-47
 // Original range: main.go:2609-2630
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: aeab1f8579
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: worktreeCreateCmd → worktree.go:55-221
 // Original range: main.go:2632-2798
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: aeab1f8579
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: worktreeTeardownCmd → worktree.go:229-329
 // Original range: main.go:2800-2900
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: aeab1f8579
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: worktreeListCmd → worktree.go:337-416
 // Original range: main.go:2902-2981
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: aeab1f8579
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: worktreeListJSON → worktree.go:424-477
 // Original range: main.go:2983-3036
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: aeab1f8579
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: agentSetStatusCmd → agent.go:599-628
 // Original range: main.go:2237-2266
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 70df71eabd
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: setLocalAgentStatus → agent.go:636-655
 // Original range: main.go:2268-2287
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 70df71eabd
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: setRemoteAgentStatus → agent.go:663-678
 // Original range: main.go:2289-2304
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 70df71eabd
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: sessionStartRunE → session.go:21-66
 // Original range: main.go:3108-3153
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: d03544a037
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: sessionEndRunE → session.go:75-118
 // Original range: main.go:3156-3199
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: d03544a037
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: sessionSetIntentRunE → session.go:127-167
 // Original range: main.go:3202-3242
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: d03544a037
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: sessionSetTaskRunE → session.go:176-208
 // Original range: main.go:3245-3277
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: d03544a037
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: sessionCmd → session.go:216-347
 // Original range: main.go:3279-3410
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: d03544a037
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: replyCmd → messaging.go:524-580
 // Original range: main.go:1781-1837
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: a07612c4fb
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: messageCmd → messaging.go:588-828
 // Original range: main.go:1839-2079
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: a07612c4fb
 // Phase: 2
 // Remove once refactor verified green.
 
@@ -1347,49 +1347,49 @@ is idempotent: running it twice produces byte-identical file content.`,
 // MOVED[thrum-8kxh]: contextCmd → context.go:30-43
 // Original range: main.go:2086-2099
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: contextSaveCmd → context.go:51-112
 // Original range: main.go:2101-2162
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: contextShowCmd → context.go:120-265
 // Original range: main.go:2164-2309
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: contextClearCmd → context.go:273-317
 // Original range: main.go:2311-2355
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: contextPreambleCmd → context.go:325-407
 // Original range: main.go:2357-2439
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: preambleRPCCaller → context.go:417-419
 // Original range: main.go:2443-2445
 // Tests: cmd/thrum/preamble_init_test.go (interface fake)
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: runPreambleInit → context.go:431-476
 // Original range: main.go:2451-2496
 // Tests: cmd/thrum/preamble_init_test.go
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove once refactor verified green.
 
@@ -1409,21 +1409,21 @@ func loadInitBootstrapMode(dir string) guard.Mode {
 // MOVED[thrum-8kxh]: resolvePrimeIdentityPath → context.go:489-507
 // Original range: main.go:2516-2534
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: loadPrimeOwnershipMode → context.go:519-525
 // Original range: main.go:2540-2546
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: primeCmd → context.go:533-633
 // Original range: main.go:2548-2648
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove once refactor verified green.
 
@@ -1437,28 +1437,28 @@ func loadInitBootstrapMode(dir string) guard.Mode {
 // MOVED[thrum-8kxh]: contextSyncCmd → context.go:641-738
 // Original range: main.go:2657-2754
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: readContextFile → context.go:747-757
 // Original range: main.go:2757-2767
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: syncCmd → sync_cmd.go:26-83
 // Original range: main.go:4398-4455
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: b941148d85
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: quickstartCmd → sync_cmd.go:91-371
 // Original range: main.go:4457-4737
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: b941148d85
 // Phase: 2
 // Remove once refactor verified green.
 
@@ -1500,7 +1500,7 @@ func loadInitBootstrapMode(dir string) guard.Mode {
 // MOVED[thrum-8kxh]: sessionHeartbeatRunE → session.go:356-431
 // Original range: main.go:4448-4523
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: d03544a037
 // Phase: 2
 // Remove once refactor verified green.
 
@@ -4402,13 +4402,13 @@ func queryMessageReadState(ctx context.Context, st *state.State, msgID, agentID 
 // MOVED[thrum-8kxh]: tmuxCmd → tmux.go:26-691
 // Original range: main.go:5140-5805
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: e2e502d9d8
 // Phase: 2
 // Remove once refactor verified green.
 
 // MOVED[thrum-8kxh]: tmuxAttach → tmux.go:699-704
 // Original range: main.go:5807-5812
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: e2e502d9d8
 // Phase: 2
 // Remove once refactor verified green.

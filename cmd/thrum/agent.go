@@ -21,7 +21,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:1381-1388
 // Destination: agent.go:27-34
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 70df71eabd
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func printAgentSummaryField(w io.Writer, s *cli.AgentSummary, field string) error {
@@ -40,7 +40,7 @@ func printAgentSummaryField(w io.Writer, s *cli.AgentSummary, field string) erro
 // ORIGIN[thrum-8kxh]: moved from main.go:1394-1435
 // Destination: agent.go:46-87
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 70df71eabd
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func agentSummaryField(s *cli.AgentSummary, field string) (string, bool) {
@@ -92,7 +92,7 @@ func agentSummaryField(s *cli.AgentSummary, field string) (string, bool) {
 // ORIGIN[thrum-8kxh]: moved from main.go:1440-1474
 // Destination: agent.go:98-132
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 70df71eabd
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func runWhoami(cmd *cobra.Command, args []string) error {
@@ -134,7 +134,7 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 // ORIGIN[thrum-8kxh]: moved from main.go:1476-1495
 // Destination: agent.go:140-159
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 70df71eabd
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func whoamiCmd() *cobra.Command {
@@ -161,7 +161,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:1671-2095
 // Destination: agent.go:167-591
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 70df71eabd
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func agentCmd() *cobra.Command {
@@ -593,7 +593,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:2237-2266
 // Destination: agent.go:599-628
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 70df71eabd
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func agentSetStatusCmd() *cobra.Command {
@@ -630,7 +630,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:2268-2287
 // Destination: agent.go:636-655
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 70df71eabd
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func setLocalAgentStatus(status string) error {
@@ -657,7 +657,7 @@ func setLocalAgentStatus(status string) error {
 // ORIGIN[thrum-8kxh]: moved from main.go:2289-2304
 // Destination: agent.go:663-678
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 70df71eabd
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func setRemoteAgentStatus(agentName, status string) error {

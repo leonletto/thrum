@@ -15,7 +15,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:1026-1165
 // Destination: messaging.go:21-160
 // Tests: cmd/thrum/main_test.go (indirect via Execute()); cmd/thrum/send_test.go (t698)
-// Commit: <pending>
+// Commit: a07612c4fb
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func sendCmd() *cobra.Command {
@@ -162,7 +162,7 @@ intended.`,
 // ORIGIN[thrum-8kxh]: moved from main.go:1167-1224
 // Destination: messaging.go:168-225
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: a07612c4fb
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func sentCmd() *cobra.Command {
@@ -227,7 +227,7 @@ to inspect a message with full recipient state.`,
 // ORIGIN[thrum-8kxh]: moved from main.go:1229-1367
 // Destination: messaging.go:233-371
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: a07612c4fb
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func inboxCmd() *cobra.Command {
@@ -373,7 +373,7 @@ The daemon must be running and you must have an active session.`,
 // ORIGIN[thrum-8kxh]: moved from main.go:1404-1541
 // Destination: messaging.go:379-516
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: a07612c4fb
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func waitCmd() *cobra.Command {
@@ -518,7 +518,7 @@ Exit codes:
 // ORIGIN[thrum-8kxh]: moved from main.go:1781-1837
 // Destination: messaging.go:524-580
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: a07612c4fb
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func replyCmd() *cobra.Command {
@@ -582,7 +582,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:1839-2079
 // Destination: messaging.go:588-828
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: a07612c4fb
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func messageCmd() *cobra.Command {

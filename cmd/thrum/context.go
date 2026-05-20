@@ -24,7 +24,7 @@ import (
 // ORIGIN[thrum-8kxh]: moved from main.go:2086-2099
 // Destination: context.go:30-43
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func contextCmd() *cobra.Command {
@@ -45,7 +45,7 @@ func contextCmd() *cobra.Command {
 // ORIGIN[thrum-8kxh]: moved from main.go:2101-2162
 // Destination: context.go:51-112
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func contextSaveCmd() *cobra.Command {
@@ -114,7 +114,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:2164-2309
 // Destination: context.go:120-265
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func contextShowCmd() *cobra.Command {
@@ -267,7 +267,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:2311-2355
 // Destination: context.go:273-317
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func contextClearCmd() *cobra.Command {
@@ -319,7 +319,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:2357-2439
 // Destination: context.go:325-407
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func contextPreambleCmd() *cobra.Command {
@@ -411,7 +411,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:2443-2445
 // Destination: context.go:417-419
 // Tests: cmd/thrum/preamble_init_test.go (interface fake)
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 type preambleRPCCaller interface {
@@ -425,7 +425,7 @@ type preambleRPCCaller interface {
 // ORIGIN[thrum-8kxh]: moved from main.go:2451-2496
 // Destination: context.go:431-476
 // Tests: cmd/thrum/preamble_init_test.go
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func runPreambleInit(client preambleRPCCaller, agentID, role, repoPath, agentName string) error {
@@ -483,7 +483,7 @@ func runPreambleInit(client preambleRPCCaller, agentID, role, repoPath, agentNam
 // ORIGIN[thrum-8kxh]: moved from main.go:2516-2534
 // Destination: context.go:489-507
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func resolvePrimeIdentityPath(agentID string) (repoPath, idPath string, runtimePID, storedPID int, ok bool) {
@@ -513,7 +513,7 @@ func resolvePrimeIdentityPath(agentID string) (repoPath, idPath string, runtimeP
 // ORIGIN[thrum-8kxh]: moved from main.go:2540-2546
 // Destination: context.go:519-525
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func loadPrimeOwnershipMode(repoPath string) guard.Mode {
@@ -527,7 +527,7 @@ func loadPrimeOwnershipMode(repoPath string) guard.Mode {
 // ORIGIN[thrum-8kxh]: moved from main.go:2548-2648
 // Destination: context.go:533-633
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func primeCmd() *cobra.Command {
@@ -635,7 +635,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:2657-2754
 // Destination: context.go:641-738
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func contextSyncCmd() *cobra.Command {
@@ -741,7 +741,7 @@ Examples:
 // ORIGIN[thrum-8kxh]: moved from main.go:2757-2767
 // Destination: context.go:747-757
 // Tests: cmd/thrum/main_test.go (indirect via Execute())
-// Commit: <pending>
+// Commit: 157524b058
 // Phase: 2
 // Remove this ORIGIN marker once refactor verified green.
 func readContextFile(thrumDir, agentName string) ([]byte, error) {
