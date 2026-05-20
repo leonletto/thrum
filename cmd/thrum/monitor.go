@@ -28,7 +28,7 @@ Examples:
   thrum monitor list
   thrum monitor show <id>
   thrum monitor stop <name|id>
-  thrum monitor restart <id>
+  thrum monitor restart <name|id>
   thrum monitor logs <name|id>`,
 	}
 
@@ -187,10 +187,10 @@ The command and its arguments must be separated from monitor flags with '--':
 		},
 	})
 
-	// thrum monitor restart <id>
+	// thrum monitor restart <name|id>
 	cmd.AddCommand(&cobra.Command{
-		Use:   "restart <id>",
-		Short: "Restart a monitor job (preserves the same ID)",
+		Use:   "restart <name|id>",
+		Short: "Restart a monitor job (preserves the same ID, accepts name or ID)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := getClient()
@@ -198,11 +198,15 @@ The command and its arguments must be separated from monitor flags with '--':
 				return fmt.Errorf("connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
-			result, err := cli.MonitorRestart(client, args[0])
+			resolvedID, err := cli.MonitorRestart(client, args[0])
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Restarted — ID: %s\n", result.ID)
+			if resolvedID != args[0] {
+				fmt.Printf("Restarted monitor %s (%s)\n", args[0], resolvedID)
+			} else {
+				fmt.Printf("Restarted monitor %s\n", resolvedID)
+			}
 			return nil
 		},
 	})

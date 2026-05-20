@@ -264,18 +264,24 @@ func TestMonitorStop_SendsIDParam(t *testing.T) {
 // TestMonitorRestart
 // ---------------------------------------------------------------------------
 
+// TestMonitorRestart_PreservesIDOnIDInput verifies that supplying a valid
+// monitor ID short-circuits past the name lookup and the daemon's restart
+// response is consumed without error. HandleRestart preserves the ID, so
+// MonitorRestart should echo that same ID back to the caller.
 func TestMonitorRestartNewID(t *testing.T) {
+	const monID = "mon_01KR70C8NTMMTPNKFJMH8G5C20"
+
 	client := setupMonitorDaemon(t, mockMonitorHandler{
 		method:   "monitor.restart",
-		response: map[string]string{"id": "mon_NEW001"},
+		response: map[string]string{"id": monID},
 	})
 
-	result, err := MonitorRestart(client, "mon_OLD001")
+	resolvedID, err := MonitorRestart(client, monID)
 	if err != nil {
 		t.Fatalf("MonitorRestart: %v", err)
 	}
-	if result.ID != "mon_NEW001" {
-		t.Errorf("expected id mon_NEW001, got %s", result.ID)
+	if resolvedID != monID {
+		t.Errorf("expected resolvedID to echo input %s, got %s", monID, resolvedID)
 	}
 }
 
@@ -635,5 +641,137 @@ func TestMonitorLogs_NameNotFound(t *testing.T) {
 	}
 	if !strings.Contains(msg, "thrum monitor list --all") {
 		t.Errorf("error should suggest `thrum monitor list --all`; got %q", msg)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Restart name-resolution tests (thrum-tv6z) — sibling of puhr.9.1; same
+// CLI-layer name→ID resolution pattern applied to `thrum monitor restart`.
+// Restart scopes to running monitors only (mirroring stop), since "restart"
+// semantically operates on a live process.
+// ---------------------------------------------------------------------------
+
+func TestMonRestart_AcceptsID(t *testing.T) {
+	var capturedID string
+	client := setupMonitorDaemonSequence(t, mockMonitorHandler{
+		method: "monitor.restart",
+		validateParams: func(t *testing.T, params map[string]any) {
+			t.Helper()
+			capturedID, _ = params["id"].(string)
+		},
+		response: map[string]string{"id": testMonitorIDDaily},
+	})
+
+	resolvedID, err := MonitorRestart(client, testMonitorIDDaily)
+	if err != nil {
+		t.Fatalf("MonitorRestart: %v", err)
+	}
+	if capturedID != testMonitorIDDaily {
+		t.Errorf("expected RPC to receive id %s, got %q", testMonitorIDDaily, capturedID)
+	}
+	if resolvedID != testMonitorIDDaily {
+		t.Errorf("expected resolvedID to echo ID input %s, got %q", testMonitorIDDaily, resolvedID)
+	}
+}
+
+func TestMonRestart_ResolvesName(t *testing.T) {
+	var listIncludeAll any
+	var capturedRestartID string
+
+	client := setupMonitorDaemonSequence(t,
+		mockMonitorHandler{
+			method: "monitor.list",
+			validateParams: func(t *testing.T, params map[string]any) {
+				t.Helper()
+				listIncludeAll = params["include_all"]
+			},
+			response: monitorListResponse(
+				[3]string{testMonitorIDDaily, "daily-backup", "running"},
+			),
+		},
+		mockMonitorHandler{
+			method: "monitor.restart",
+			validateParams: func(t *testing.T, params map[string]any) {
+				t.Helper()
+				capturedRestartID, _ = params["id"].(string)
+			},
+			response: map[string]string{"id": testMonitorIDDaily},
+		},
+	)
+
+	resolvedID, err := MonitorRestart(client, "daily-backup")
+	if err != nil {
+		t.Fatalf("MonitorRestart(name): %v", err)
+	}
+
+	// Restart semantics: resolution must NOT include stopped/dead (mirrors
+	// stop). JSON unmarshal of an absent `include_all` field yields nil,
+	// which the daemon treats as false (omitempty wire tag).
+	if listIncludeAll != nil && listIncludeAll != false {
+		t.Errorf("restart: monitor.list include_all should be false/absent, got %v", listIncludeAll)
+	}
+	if capturedRestartID != testMonitorIDDaily {
+		t.Errorf("expected restart RPC to receive resolved id %s, got %q", testMonitorIDDaily, capturedRestartID)
+	}
+	if resolvedID != testMonitorIDDaily {
+		t.Errorf("expected MonitorRestart to return resolved id %s, got %q", testMonitorIDDaily, resolvedID)
+	}
+}
+
+func TestMonRestart_NameNotFound(t *testing.T) {
+	client := setupMonitorDaemonSequence(t, mockMonitorHandler{
+		method: "monitor.list",
+		response: monitorListResponse(
+			[3]string{testMonitorIDOther, "other-monitor", "running"},
+		),
+	})
+
+	_, err := MonitorRestart(client, "missing-name")
+	if err == nil {
+		t.Fatal("expected error for unknown name, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "missing-name") {
+		t.Errorf("error should reference the typed name; got %q", msg)
+	}
+	if !strings.Contains(msg, "running monitor") {
+		t.Errorf("restart should hint at running-only scope; got %q", msg)
+	}
+	if !strings.Contains(msg, "thrum monitor list") {
+		t.Errorf("error should suggest `thrum monitor list`; got %q", msg)
+	}
+}
+
+// TestMonRestart_PrefixedName mirrors TestMonitorStop_PrefixedName: a
+// user-typed name starting with "mon_" but failing the ULID-shape check must
+// route through monitor.list, not be sent straight to the daemon as an ID.
+// (Test name kept short to stay under macOS's 104-char unix-socket limit.)
+func TestMonRestart_PrefixedName(t *testing.T) {
+	const namedLikeID = "mon_nightly"
+
+	var capturedID string
+	client := setupMonitorDaemonSequence(t,
+		mockMonitorHandler{
+			method: "monitor.list",
+			response: monitorListResponse(
+				[3]string{testMonitorIDDaily, namedLikeID, "running"},
+			),
+		},
+		mockMonitorHandler{
+			method: "monitor.restart",
+			validateParams: func(t *testing.T, params map[string]any) {
+				t.Helper()
+				capturedID, _ = params["id"].(string)
+			},
+			response: map[string]string{"id": testMonitorIDDaily},
+		},
+	)
+
+	if _, err := MonitorRestart(client, namedLikeID); err != nil {
+		t.Fatalf("MonitorRestart(mon_-prefixed name): %v", err)
+	}
+	if capturedID != testMonitorIDDaily {
+		t.Errorf("expected resolved id %s in restart RPC (name lookup must run for shape-invalid mon_ inputs), got %q",
+			testMonitorIDDaily, capturedID)
 	}
 }

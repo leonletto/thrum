@@ -273,18 +273,36 @@ func resolveMonitorIdentifier(client *Client, identifier string, includeAll bool
 		scope, identifier, listFlag)
 }
 
-// MonitorRestart sends monitor.restart for the given monitor ID.
-// Returns the new monitor ID assigned after the restart.
-func MonitorRestart(client *Client, id string) (*MonitorStartResult, error) {
+// MonitorRestart sends monitor.restart for the given monitor identifier and
+// returns the resolved monitor ID so callers can surface the canonical
+// reference even when the user supplied a name. The identifier may be either
+// a monitor ID (mon_<ULID>) or a name; names are resolved to IDs via
+// monitor.list before the RPC is dispatched. Restart scopes the lookup to
+// running monitors only — mirroring MonitorStop, since "restart"
+// semantically operates on a live process. A stopped monitor's name returns
+// "no running monitor named ..." rather than silently resurrecting whatever
+// dead row happened to match.
+//
+// HandleRestart preserves the monitor ID (see internal/daemon/rpc/monitor.go),
+// so the returned resolvedID is the same ID the daemon now owns. The
+// daemon's MonitorStartResult is consumed but not surfaced — the existing
+// caller has no use for the (today-equal) result.ID; expand the signature
+// if a future caller needs it.
+func MonitorRestart(client *Client, identifier string) (string, error) {
+	id, err := resolveMonitorIdentifier(client, identifier, false)
+	if err != nil {
+		return "", fmt.Errorf("monitor restart: %w", err)
+	}
+
 	req := struct {
 		ID string `json:"id"`
 	}{ID: id}
 
 	var result MonitorStartResult
 	if err := client.Call("monitor.restart", req, &result); err != nil {
-		return nil, fmt.Errorf("monitor restart: %w", err)
+		return "", fmt.Errorf("monitor restart: %w", err)
 	}
-	return &result, nil
+	return id, nil
 }
 
 // MonitorLogEntry matches the daemon's monitorLogEntry shape — one
