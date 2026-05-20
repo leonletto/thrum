@@ -43,6 +43,17 @@ const MinDebounceSeconds = 30
 // DefaultDebounceSeconds is used when the caller does not specify a debounce.
 const DefaultDebounceSeconds = 60
 
+// stopSyncWait bounds how long Stop blocks the RPC critical path waiting for
+// the runner goroutine to actually exit. The DB row is marked stopped
+// synchronously regardless; this wait only governs whether the RPC response
+// is held until the in-process runner finishes its cleanup. Override in tests
+// via the package-level variable; production callers receive the const value.
+//
+// See thrum-puhr.9.2: previously this was 10s and gated the RPC response on
+// runner exit, so a stuck reader goroutine (e.g. grandchildren holding the
+// child's stdout/stderr pipe open) wedged the daemon's response writer.
+var stopSyncWait = 2 * time.Second
+
 // Typed errors returned by Add (translated to user-friendly messages by the
 // RPC handler layer in Epic B).
 var (
@@ -265,9 +276,10 @@ func (s *MonitorSupervisor) Add(ctx context.Context, spec SubmitSpec) (string, e
 	return job.ID, nil
 }
 
-// Stop cancels the runner for the given ID, waits for it to exit, and then
-// deletes the row from the DB.  Returns ErrNotFound if no running monitor has
-// that ID.
+// Stop cancels the runner for the given ID, marks the DB row stopped, and
+// best-effort waits briefly (stopSyncWait) for the runner goroutine to exit.
+// The row is RETAINED (status=stopped) so subsequent Restart calls can find
+// it. Returns ErrNotFound if no running monitor has that ID.
 func (s *MonitorSupervisor) Stop(ctx context.Context, id string) error {
 	s.mu.Lock()
 	h, ok := s.runners[id]
@@ -288,13 +300,29 @@ func (s *MonitorSupervisor) Stop(ctx context.Context, id string) error {
 	h.stoppedByUser.Store(true)
 
 	h.cancel()
-	select {
-	case <-h.done:
-	case <-time.After(10 * time.Second):
-		return errors.New("runner did not exit in time")
+
+	// Mark the row stopped synchronously so the DB reflects user intent
+	// immediately, regardless of how long OS-level cleanup of the child
+	// takes. Without this, a stuck reader goroutine (e.g. grandchildren
+	// holding the stdout/stderr pipe open) would leave the row in
+	// running state forever after Stop's wait timed out. See
+	// thrum-puhr.9.2.
+	if err := s.store.MarkStopped(ctx, id); err != nil {
+		return err
 	}
 
-	return s.store.MarkStopped(ctx, id)
+	// Best-effort: wait briefly for the runner goroutine to actually
+	// exit so callers observing the child's PID right after Stop see
+	// a clean state in common cases. If the runner doesn't exit
+	// within stopSyncWait, return success anyway — the runner's
+	// shutdown watcher SIGKILLs the process group and the goroutine
+	// finishes asynchronously. Blocking the RPC longer wedges the
+	// daemon's response path.
+	select {
+	case <-h.done:
+	case <-time.After(stopSyncWait):
+	}
+	return nil
 }
 
 // HasRunner reports whether a live runner with the given ID is currently
@@ -458,9 +486,11 @@ func (s *MonitorSupervisor) launch(job *MonitorJob) error {
 			jobName, exitCode, duration.Round(time.Second), pid, jobID, tail,
 		)
 		_ = s.delivery.Deliver(context.Background(), jobName, jobTarget, content)
-		// Review finding 9: skip MarkDead when Stop already set the flag —
-		// Stop is about to call store.Delete on this row, so the MarkDead
-		// write is wasted I/O that would be immediately overwritten.
+		// Skip MarkDead when Stop already wrote MarkStopped — overwriting
+		// stopped→dead would mis-record user-initiated stops as crashes.
+		// Stop sets stoppedByUser before cancel() and writes MarkStopped
+		// synchronously, so by the time this exitNotice fires the row is
+		// already in the correct state.
 		if !handle.stoppedByUser.Load() {
 			_ = s.store.MarkDead(context.Background(), jobID, exitCode, time.Now())
 		}
