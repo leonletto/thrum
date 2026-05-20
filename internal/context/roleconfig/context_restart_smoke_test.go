@@ -46,12 +46,19 @@ func TestContextRestartDiscipline_PresentInLongRunningRoles(t *testing.T) {
 			}
 			// Spot-check three load-bearing phrases from the brainstorm
 			// §Q3 verbatim text — catches paraphrasing drift.
+			//
+			// Whitespace-normalize before substring check so the assertions
+			// survive markdown reflow (prettier's fmt-all can shift line-
+			// break positions without changing semantic content; the brain-
+			// storm §Q3 spec is about the load-bearing phrasing, not exact
+			// wrap columns). thrum-mn8s.
+			normalized := strings.Join(strings.Fields(body), " ")
 			for _, phrase := range []string{
 				"warn_threshold` (default 70%)",
 				"do NOT dispatch sub-agents",
-				"force-restart\nyou at 80% + 3 minutes",
+				"force-restart you at 80% + 3 minutes",
 			} {
-				if !strings.Contains(body, phrase) {
+				if !strings.Contains(normalized, phrase) {
 					t.Errorf("%s missing verbatim phrase %q", name, phrase)
 				}
 			}
