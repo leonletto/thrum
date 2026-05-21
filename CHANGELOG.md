@@ -42,6 +42,15 @@ and this project adheres to
 
 ### Changed
 
+- **Beads integration now via `bd setup claude`** (or auto-installed by Thrum's
+  runtime-init when `Worktrees.BeadsEnabled=true` and `bd` is on `PATH`). The
+  standalone Beads plugin is no longer recommended and should be uninstalled.
+  Migration: `/plugin uninstall beads@beads-marketplace` →
+  `/plugin marketplace remove beads-marketplace` → `brew install beads` →
+  `bd setup claude` → restart Claude Code. Thrum auto-handles step 4
+  (`bd setup claude`) in Thrum-managed projects once `bd` is on `PATH`. If `bd`
+  state changes (installed or uninstalled) after `thrum init`, re-run
+  `thrum init` to refresh the bd-hook presence in `.claude/settings.json`.
 - **URLs migrated from `leonletto.github.io/thrum` to `thrum.team`** (Phase 6.3
   cleanup). README, website content, docs, and SEO references updated. Old
   GitHub Pages URLs still resolve via redirect; canonical now points at

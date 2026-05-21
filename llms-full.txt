@@ -1878,7 +1878,7 @@ Unknown event types are silently ignored (forward compatibility).
 
   toolkit/agents/                 Claude Code agent definitions
     thrum-agent.md                Thrum messaging coordination guide
-    (Beads plugin)                Install via /install-plugin beads (recommended over agent file)
+    (Beads)                       Install via brew install beads; auto-detected by thrum-managed projects.
     message-listener.md           Background message polling agent (Haiku model)
     README.md                     Installation and usage instructions
 

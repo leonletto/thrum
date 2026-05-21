@@ -53,8 +53,9 @@ context hooks, and 8 resource docs — all in a single install.</p>
 </blockquote>
 <p>Claude Code agent definitions teach Claude how to use Thrum effectively. These
 <code>.md</code> files with YAML frontmatter ship in <code>toolkit/agents/</code> and load into your
-project&#39;s <code>.claude/agents/</code> directory. For Beads task tracking, we recommend
-installing the <a href="#beads-plugin-recommended">Beads plugin</a> instead.</p>
+project&#39;s <code>.claude/agents/</code> directory. For Beads task tracking, see
+<a href="#beads-setup-bd-setup-claude">Beads Setup (<code>bd setup claude</code>)</a> below — that&#39;s
+the canonical integration path.</p>
 <h2>Install the agent configs</h2>
 <p>Copy the agent definitions to your project:</p>
 <pre><code>mkdir -p .claude/agents
@@ -80,20 +81,33 @@ send/receive messages, and coordinate with teammates via the CLI.</p>
 <li>MCP server integration with async notifications</li>
 <li>Session management and heartbeats</li>
 </ul>
-<h3>Beads Plugin (recommended)</h3>
-<p>For Beads issue tracking, <strong>install the Beads plugin</strong> instead of using a local
-agent file. The plugin provides richer functionality:</p>
-<ul>
-<li><strong>30+ slash commands</strong> (<code>/beads:ready</code>, <code>/beads:create</code>, <code>/beads:close</code>,
-<code>/beads:sync</code>, etc.)</li>
-<li><strong>15+ resource files</strong> covering dependencies, workflows, troubleshooting, and
-more</li>
-<li><strong>Hooks</strong> that auto-run <code>bd prime</code> on session start for workflow context</li>
-<li><strong>Session protocol</strong> with CLI reference and resource links</li>
-</ul>
-<p>Install the plugin in Claude Code:</p>
-<pre><code>/install-plugin beads</code></pre>
-<p>Or visit the <a href="https://github.com/steveyegge/beads">Beads project</a> for details.</p>
+<h3>Beads Setup (<code>bd setup claude</code>)</h3>
+<p>For Beads issue tracking, install the <strong>Beads CLI</strong> and let <code>bd setup claude</code>
+configure the SessionStart hook. Upstream Beads now ships this as the canonical
+Claude Code integration path — lighter-weight than the standalone plugin and the
+hook auto-runs <code>bd prime</code> so agents start every session with full workflow
+context.</p>
+<p>If you&#39;re working in a Thrum-managed project, you don&#39;t need to do this yourself
+— <code>thrum init</code> (and the runtime-init pass on each session) installs the bd
+<code>SessionStart</code> hook in <code>.claude/settings.json</code> whenever <code>Worktrees.BeadsEnabled</code>
+is true (the default) <strong>and</strong> <code>bd</code> is on <code>PATH</code>. The hook is removed
+automatically if <code>bd</code> is uninstalled.</p>
+<p>To configure manually (outside a Thrum project, or to set it up yourself):</p>
+<pre><code>brew install beads
+bd setup claude</code></pre>
+<p>Then restart Claude Code so the SessionStart hook loads. See the
+<a href="https://github.com/steveyegge/beads">Beads project</a> for the full CLI reference.</p>
+<p><strong>Migrating from the standalone Beads plugin</strong> — run these five steps in order:</p>
+<ol>
+<li><code>/plugin uninstall beads@beads-marketplace</code> (inside Claude Code)</li>
+<li><code>/plugin marketplace remove beads-marketplace</code> (inside Claude Code)</li>
+<li><code>brew install beads</code></li>
+<li><code>bd setup claude</code></li>
+<li>Restart Claude Code</li>
+</ol>
+<p>The standalone plugin is no longer recommended. If <code>bd</code> state changes (installed
+or uninstalled) after your first <code>thrum init</code>, re-run <code>thrum init</code> to refresh
+the bd-hook presence in <code>.claude/settings.json</code>.</p>
 <h3>message-listener</h3>
 <p>Lightweight background listener that watches for incoming Thrum messages so you
 don&#39;t have to manually check your inbox. Runs on Haiku for cost efficiency

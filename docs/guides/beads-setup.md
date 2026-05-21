@@ -383,25 +383,43 @@ automatically:
 ./scripts/setup-worktree-thrum.sh ~/.workspaces/project/feature feature/name
 ```
 
-### Claude Code Plugin
+### Claude Code Integration (`bd setup claude`)
 
-Install the Beads plugin for Claude Code to get slash commands (`/beads:ready`,
-`/beads:create`, etc.) and an MCP server for native tool integration:
+Run `bd setup claude` to install the SessionStart hook that auto-loads
+`bd prime` context into every Claude Code session. Upstream Beads ships this as
+the canonical Claude Code integration — lighter-weight than the standalone
+plugin and recommended over it.
 
 ```bash
-# In Claude Code
-/plugin marketplace add steveyegge/beads
-/plugin install beads
+brew install beads
+bd setup claude
 ```
 
-Restart Claude Code after installation. See the
-[Beads plugin docs](https://github.com/steveyegge/beads/blob/main/docs/PLUGIN.md)
-for the full command reference.
+Restart Claude Code so the hook loads.
+
+If you're using Thrum, you don't need to run these commands yourself —
+`thrum init` (and runtime-init on each session) installs the bd `SessionStart`
+hook in `.claude/settings.json` automatically whenever `Worktrees.BeadsEnabled`
+is true (default) and `bd` is on `PATH`. If `bd` state changes after the first
+`thrum init`, re-run `thrum init` to refresh the hook presence.
+
+**Migrating from the standalone Beads plugin** (existing users) — run these five
+steps in order:
+
+1. `/plugin uninstall beads@beads-marketplace` (inside Claude Code)
+2. `/plugin marketplace remove beads-marketplace` (inside Claude Code)
+3. `brew install beads`
+4. `bd setup claude`
+5. Restart Claude Code
+
+The standalone plugin is no longer recommended; upstream Beads now treats the
+SessionStart-hook path as canonical.
 
 ### CLAUDE.md Configuration
 
-For agents that don't use the plugin (or as a supplement), add these
-instructions to your `CLAUDE.md`:
+To pin agent behavior in your repo's `CLAUDE.md` (or to give sub-agents the same
+workflow context the SessionStart hook loads into the main session), add these
+instructions:
 
 ```markdown
 ## Task Tracking

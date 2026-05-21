@@ -200,8 +200,9 @@ For agent workflows — where context loss is the primary failure mode — that&
 the right tradeoff.</p>
 <h2>Beads Command Reference for Sub-Agents</h2>
 <p>Sub-agents (spawned via the Task tool in Claude Code, or similar delegation in
-other frameworks) typically <strong>don&#39;t receive plugin context</strong>. They can run <code>bd</code>
-commands via Bash, but they don&#39;t know the correct syntax unless you tell them.</p>
+other frameworks) <strong>don&#39;t inherit SessionStart hook context</strong> — the <code>bd prime</code>
+briefing only runs in the main session. They can run <code>bd</code> commands via Bash, but
+they don&#39;t know the correct syntax unless you tell them.</p>
 <p>If you use Beads for task tracking, add the block below to your project&#39;s
 <code>CLAUDE.md</code> (for Claude Code / Auggie) or <code>AGENTS.md</code> (for other agent
 frameworks). This prevents sub-agents from guessing wrong commands like
@@ -209,8 +210,9 @@ frameworks). This prevents sub-agents from guessing wrong commands like
 <h3>Recommended Block for CLAUDE.md / AGENTS.md</h3>
 <pre><code>## Beads (bd) Quick Reference
 
-Task tracking uses Beads (`bd`). Sub-agents don&#39;t get the beads plugin context,
-so this section ensures all agents know the correct commands.
+Task tracking uses Beads (`bd`). Sub-agents don&#39;t inherit the SessionStart hook
+context that the main session gets from `bd setup claude`, so this section
+ensures all agents know the correct commands.
 
 ### Essential Commands
 
@@ -224,7 +226,7 @@ bd update &lt;id&gt; -s in_progress      # Start working on issue
 bd update &lt;id&gt; --claim             # Atomically claim (assign + in_progress)
 bd close &lt;id&gt;                      # Mark done
 bd close &lt;id&gt; --suggest-next       # Mark done + show newly unblocked
-bd comments &lt;id&gt; add &quot;note&quot;        # Add comment
+bd comments add &lt;id&gt; &quot;note&quot;        # Add comment
 bd dep &lt;blocker&gt; --blocks &lt;blocked&gt;  # Add dependency
 ```
 
