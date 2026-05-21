@@ -1,4 +1,3 @@
-
 ## What This Is
 
 Monitor jobs let you attach a regex filter to any subprocess and turn matching

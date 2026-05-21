@@ -141,4 +141,3 @@ func InstallThrumClaudeHooks(settingsPath string) error {
 	}
 	return Save(settingsPath, settings)
 }
-

@@ -108,8 +108,8 @@ func TestMergeClaudeSettings_MergeAddsMissingHooks(t *testing.T) {
 	want := map[string]bool{
 		"bd prime --hook-json": false,
 		"user custom":          false,
-		`bash "${CLAUDE_PROJECT_DIR}/scripts/thrum-startup.sh"`:                            false,
-		`HOOK_EVENT=Stop bash "${CLAUDE_PROJECT_DIR}/scripts/thrum-check-inbox.sh"`:        false,
+		`bash "${CLAUDE_PROJECT_DIR}/scripts/thrum-startup.sh"`:                     false,
+		`HOOK_EVENT=Stop bash "${CLAUDE_PROJECT_DIR}/scripts/thrum-check-inbox.sh"`: false,
 	}
 	for _, c := range cmds {
 		if _, ok := want[c.Command]; ok {

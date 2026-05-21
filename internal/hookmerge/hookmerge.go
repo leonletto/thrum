@@ -293,4 +293,3 @@ func getOrCreateHooksMap(settings Settings) map[string]any {
 	}
 	return hooksMap
 }
-

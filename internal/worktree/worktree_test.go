@@ -228,12 +228,12 @@ func TestEnsureRedirects_InstallsThrumClaudeHooks(t *testing.T) {
 	}
 	body := string(got)
 	for _, must := range []string{
-		"third-party hook",                // preserved
-		"thrum-startup.sh",                // thrum SessionStart added
-		"HOOK_EVENT=Stop",                 // thrum Stop added
-		"HOOK_EVENT=PostToolUse",          // thrum PostToolUse added
-		"HOOK_EVENT=UserPromptSubmit",     // thrum UserPromptSubmit added
-		"HOOK_EVENT=PreCompact",           // thrum PreCompact added
+		"third-party hook",            // preserved
+		"thrum-startup.sh",            // thrum SessionStart added
+		"HOOK_EVENT=Stop",             // thrum Stop added
+		"HOOK_EVENT=PostToolUse",      // thrum PostToolUse added
+		"HOOK_EVENT=UserPromptSubmit", // thrum UserPromptSubmit added
+		"HOOK_EVENT=PreCompact",       // thrum PreCompact added
 	} {
 		if !strings.Contains(body, must) {
 			t.Errorf("expected %q in merged settings.json\n%s", must, body)

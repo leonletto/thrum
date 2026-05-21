@@ -1,4 +1,3 @@
-
 ## What's New
 
 This page tracks the user-visible changes in recent Thrum releases — highlights,
@@ -22,15 +21,16 @@ as searchable session log entries.
 
 rc.7 (in soak) adds: `thrum monitor stop`, `show`, `logs`, and `restart` now
 accept the monitor's human-readable name in addition to the ULID-style ID — use
-the name shown in `thrum monitor list` instead of hunting for the ID. `thrum
-monitor stop` reliability is improved: the RPC no longer blocks the daemon's
-critical-path handler, and child processes are killed as a process group so
-shell wrappers can't outlive the stop command. `thrum init` now JSON-merges
-hook entries into an existing `.claude/settings.json` rather than skipping the
-file when it already exists; the `bd setup claude` hook is auto-installed (and
-kept current) whenever `bd` is on PATH. The Class B/C cross-worktree diagnostic
-banner is now wired uniformly across all eight daemon-management leaves
-(status/logs/start/stop/restart/run, backup status, telegram status).
+the name shown in `thrum monitor list` instead of hunting for the ID.
+`thrum monitor stop` reliability is improved: the RPC no longer blocks the
+daemon's critical-path handler, and child processes are killed as a process
+group so shell wrappers can't outlive the stop command. `thrum init` now
+JSON-merges hook entries into an existing `.claude/settings.json` rather than
+skipping the file when it already exists; the `bd setup claude` hook is
+auto-installed (and kept current) whenever `bd` is on PATH. The Class B/C
+cross-worktree diagnostic banner is now wired uniformly across all eight
+daemon-management leaves (status/logs/start/stop/restart/run, backup status,
+telegram status).
 
 See the [Beta Channel](beta-channel.md) guide for how to opt in. Stable
 promotion follows the standard 48-hour soak window once no P0/P1 bugs are open
