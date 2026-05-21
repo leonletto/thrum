@@ -117,7 +117,7 @@ user produce confident-but-wrong commitments that cost a full review cycle to
 undo. The "interactive scribe" framing keeps the user in the loop and the
 researcher in capture-mode rather than design-mode.
 
-```
+```text
 ═══ INTERACTIVE-WITH-LEON SCRIBE PROTOCOL ═══
 
 Stand by at-pane. Do NOT autonomously draft a brainstorm doc. <user> will
@@ -178,7 +178,7 @@ buggy global rule was reaching for).
 Always include an explicit instruction in the Identity-Reminder section of the
 briefing, e.g.:
 
-```
+```text
 ⚠ Run thrum commands from THIS worktree
 (/Users/<you>/.thrum/worktrees/thrum/<topic>-brainstorm), not from the
 main repo or any other worktree. The global CLAUDE.md "main repo only"

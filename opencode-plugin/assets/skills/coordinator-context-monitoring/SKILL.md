@@ -140,7 +140,7 @@ panes per `thrum-7yhs`). You do not need to fire these nudges yourself.
 The sweep report's header lists every agent that was auto-nudged in the current
 run, e.g.:
 
-```
+```text
 # auto-nudged 3 agent(s) on api_errors with 'continue':
 #   - impl_foo @ foo-impl:0.0
 #   - impl_bar @ bar-impl:0.0
