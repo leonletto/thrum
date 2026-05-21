@@ -1,12 +1,10 @@
 ---
 name: coordinator-running-review-cycles
-description:
-  "Use when an implementer reports DONE, when consolidating review findings,
-  when handling implementer pushback on a finding, or when arriving at a review
-  gate. Loads coordinator-specific discipline for running review cycles cleanly."
+description: "Use when an implementer reports DONE, when consolidating review findings, when handling implementer pushback on a finding, or when arriving at a review gate. Loads coordinator-specific discipline for running review cycles cleanly."
 # source: claude-plugin/skills/coordinator-running-review-cycles/SKILL.md
 # generated-by: scripts/sync-skills.sh
 ---
+
 
 ## Coordinator: Running Review Cycles
 
@@ -107,6 +105,27 @@ regression by: (1) listing specific failure modes a regression would produce
 those modes occurred (wire-level status codes, specific log assertions, expected
 state present); (3) documenting the upstream blocker in a tracking issue so the
 green-test check can be re-run when it clears.
+
+### Prose-pre vs code-post: what this review cycle covers
+
+**Why:** Once the planning-skill review loop ships, there are two distinct
+review surfaces and conflating them double-reviews one artifact. The planning
+loop reviews PROSE artifacts (brainstorm, plan, impl-prompt) BEFORE
+implementation; the review cycle in THIS skill reviews the implementer's CODE
+AFTER they report DONE. They target different artifacts and both are needed.
+
+**How to apply:**
+
+- The planning loop's prompt gate already reviewed the impl-prompt; its
+  `THRUM-REVIEW: stage=prompt verdict=Ready:Yes` stamp satisfies the
+  pre-dispatch review (see `coordinator-dispatching-work`). Do not re-review the
+  prompt here.
+- This skill's dual review (code-quality + spec-compliance, in parallel) runs on
+  the CODE the implementer produced — the diff on their branch. That always runs
+  at DONE regardless of any planning-loop stamps, because the code is a new
+  artifact the planning loop never saw.
+- Net: the prompt is reviewed once (in the planning loop, pre-dispatch); the
+  code is reviewed once (here, post-DONE). No artifact is reviewed twice.
 
 ### Project-specific rules (already loaded)
 
