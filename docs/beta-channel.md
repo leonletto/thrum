@@ -24,28 +24,39 @@ they're parameterized over `VERSION` and the release branch.
 
 ## Stable-track current pre-release
 
-> **[`v0.10.5-rc.6`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.6)**
-> (2026-05-19, in 24h soak through 2026-05-20).
+> **[`v0.10.5-rc.7`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.7)**
+> (2026-05-21, in 48h soak through 2026-05-23).
 >
-> **BREAKING:** `thrum send` no longer broadcasts by default. The bare form
-> `thrum send "msg"` now requires either `--to @<agent>` for a directed send or
-> `--broadcast` for explicit team fanout (thrum-t698). The previous silent
-> default was a 94-agent accidental-fanout footgun. `--to @everyone` continues
-> to work as the legacy keyword form for the broadcast case. Update any scripts
-> or aliases that rely on the bare form.
+> rc.7 lands two upstream-track fixes that affect every Thrum-managed project:
+> `thrum init` now **JSON-merges hook entries into an existing
+> `.claude/settings.json`** instead of skipping the file when it already exists
+> (thrum-nh88) — third-party hooks (notably `bd setup claude`'s SessionStart
+> entry) are preserved while thrum hooks are added via exact-string match. And
+> the **Beads integration** now goes through `bd setup claude` (or thrum's
+> runtime-init when `Worktrees.BeadsEnabled=true` and `bd` is on `PATH`); the
+> standalone Beads plugin is no longer recommended (thrum-psde.5).
 >
-> rc.6 also fixes the upstream tmux `capture-pane` wrap that had been masking
-> rc.5's thrum-qpw7 fix downstream (thrum-ktp8): long identity-banner content
-> was splitting the prime-truncation sentinel across pane lines, so
-> `paneAgentEngaged` couldn't find it in any single line and the silence
-> watchdog stayed conservative. `capture-pane` now uses tmux's `-J` flag to join
-> wrapped lines before returning the buffer.
+> The rc.7 cherry-pick bundle also brings monitor-job reliability fixes:
+> `thrum monitor stop` no longer hangs the RPC critical path on slow runners and
+> reaps grandchild processes (thrum-puhr.9.2); `monitor stop/logs/restart/show`
+> accept the monitor's human-readable name as well as the ULID-style ID
+> (thrum-puhr.9.1 / 09wl / tv6z); and Class B/C diagnostic commands
+> (`daemon status/logs/start/stop/restart/run`, `backup status`,
+> `telegram status`) now fire the cross-worktree banner uniformly via
+> `PersistentPreRunE` preflight instead of running silently from the wrong
+> worktree (thrum-7b84.11).
 >
-> Everything from rc.1-rc.5 carries forward: post-tmux-launch silence-watchdog
-> nudge fix (rc.5, thrum-qpw7), multi-binary upgrade trap fix (rc.4,
-> thrum-quth), tmux self-echo guard (rc.3, thrum-1zfk), restart-skill structure
-> forward-port (rc.2), backstop nudger + runtime-init managed-template fix + new
-> CLI flags (rc.1).
+> **BREAKING (carried from rc.6):** `thrum send` no longer broadcasts by
+> default. The bare form `thrum send "msg"` requires either `--to @<agent>` or
+> `--broadcast` (thrum-t698). `--to @everyone` continues to work as the legacy
+> keyword form. Update scripts and aliases that use the bare form.
+>
+> Earlier RCs carry forward: tmux `capture-pane` `-J` wrap fix that had been
+> masking rc.5's thrum-qpw7 downstream (rc.6, thrum-ktp8); post-tmux-launch
+> silence-watchdog nudge fix (rc.5, thrum-qpw7); multi-binary upgrade trap fix
+> (rc.4, thrum-quth); tmux self-echo guard (rc.3, thrum-1zfk); restart-skill
+> structure forward-port (rc.2); backstop nudger + runtime-init managed-template
+> fix + new CLI flags (rc.1).
 >
 > What's new in v0.10.5 overall:
 >
@@ -69,13 +80,13 @@ they're parameterized over `VERSION` and the release branch.
 > [`v0.10.4`](https://github.com/leonletto/thrum/releases/tag/v0.10.4) — see
 > [What's New](whats-new.md) for v0.10.4 + v0.10.5 highlights.
 
-### Quick install for `v0.10.5-rc.6`
+### Quick install for `v0.10.5-rc.7`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.6 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.7 sh
 
 # Codex plugin (matches release/v0.10.5)
 THRUM_INSTALL_REF=release/v0.10.5 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.5/codex-plugin/plugins/thrum/scripts/install-plugin.sh)

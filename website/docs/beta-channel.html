@@ -68,25 +68,35 @@ mechanics (binary + plugins + rollback) are shared further down the page —
 they&#39;re parameterized over <code>VERSION</code> and the release branch.</p>
 <h2>Stable-track current pre-release</h2>
 <blockquote>
-<p><strong><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.6"><code>v0.10.5-rc.6</code></a></strong>
-(2026-05-19, in 24h soak through 2026-05-20).</p>
-<p><strong>BREAKING:</strong> <code>thrum send</code> no longer broadcasts by default. The bare form
-<code>thrum send &quot;msg&quot;</code> now requires either <code>--to @&lt;agent&gt;</code> for a directed send or
-<code>--broadcast</code> for explicit team fanout (thrum-t698). The previous silent
-default was a 94-agent accidental-fanout footgun. <code>--to @everyone</code> continues
-to work as the legacy keyword form for the broadcast case. Update any scripts
-or aliases that rely on the bare form.</p>
-<p>rc.6 also fixes the upstream tmux <code>capture-pane</code> wrap that had been masking
-rc.5&#39;s thrum-qpw7 fix downstream (thrum-ktp8): long identity-banner content
-was splitting the prime-truncation sentinel across pane lines, so
-<code>paneAgentEngaged</code> couldn&#39;t find it in any single line and the silence
-watchdog stayed conservative. <code>capture-pane</code> now uses tmux&#39;s <code>-J</code> flag to
-join wrapped lines before returning the buffer.</p>
-<p>Everything from rc.1-rc.5 carries forward: post-tmux-launch silence-watchdog
-nudge fix (rc.5, thrum-qpw7), multi-binary upgrade trap fix (rc.4,
-thrum-quth), tmux self-echo guard (rc.3, thrum-1zfk), restart-skill structure
-forward-port (rc.2), backstop nudger + runtime-init managed-template fix +
-new CLI flags (rc.1).</p>
+<p><strong><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.7"><code>v0.10.5-rc.7</code></a></strong>
+(2026-05-21, in 48h soak through 2026-05-23).</p>
+<p>rc.7 lands two upstream-track fixes that affect every Thrum-managed project:
+<code>thrum init</code> now <strong>JSON-merges hook entries into an existing
+<code>.claude/settings.json</code></strong> instead of skipping the file when it already exists
+(thrum-nh88) — third-party hooks (notably <code>bd setup claude</code>&#39;s SessionStart
+entry) are preserved while thrum hooks are added via exact-string match. And
+the <strong>Beads integration</strong> now goes through <code>bd setup claude</code> (or thrum&#39;s
+runtime-init when <code>Worktrees.BeadsEnabled=true</code> and <code>bd</code> is on <code>PATH</code>); the
+standalone Beads plugin is no longer recommended (thrum-psde.5).</p>
+<p>The rc.7 cherry-pick bundle also brings monitor-job reliability fixes:
+<code>thrum monitor stop</code> no longer hangs the RPC critical path on slow runners
+and reaps grandchild processes (thrum-puhr.9.2); <code>monitor stop/logs/restart/show</code>
+accept the monitor&#39;s human-readable name as well as the ULID-style ID
+(thrum-puhr.9.1 / 09wl / tv6z); and Class B/C diagnostic commands
+(<code>daemon status/logs/start/stop/restart/run</code>, <code>backup status</code>,
+<code>telegram status</code>) now fire the cross-worktree banner uniformly via
+<code>PersistentPreRunE</code> preflight instead of running silently from the wrong
+worktree (thrum-7b84.11).</p>
+<p><strong>BREAKING (carried from rc.6):</strong> <code>thrum send</code> no longer broadcasts by
+default. The bare form <code>thrum send &quot;msg&quot;</code> requires either <code>--to @&lt;agent&gt;</code> or
+<code>--broadcast</code> (thrum-t698). <code>--to @everyone</code> continues to work as the legacy
+keyword form. Update scripts and aliases that use the bare form.</p>
+<p>Earlier RCs carry forward: tmux <code>capture-pane</code> <code>-J</code> wrap fix that had been
+masking rc.5&#39;s thrum-qpw7 downstream (rc.6, thrum-ktp8); post-tmux-launch
+silence-watchdog nudge fix (rc.5, thrum-qpw7); multi-binary upgrade trap fix
+(rc.4, thrum-quth); tmux self-echo guard (rc.3, thrum-1zfk); restart-skill
+structure forward-port (rc.2); backstop nudger + runtime-init managed-template
+fix + new CLI flags (rc.1).</p>
 <p>What&#39;s new in v0.10.5 overall:</p>
 <ul>
 <li><strong>Daemon-side backstop nudger for stale-unread messages</strong> replaces the
@@ -108,10 +118,10 @@ command.</li>
 <a href="https://github.com/leonletto/thrum/releases/tag/v0.10.4"><code>v0.10.4</code></a> — see
 <a href="whats-new.html">What&#39;s New</a> for v0.10.4 + v0.10.5 highlights.</p>
 </blockquote>
-<h3>Quick install for <code>v0.10.5-rc.6</code></h3>
+<h3>Quick install for <code>v0.10.5-rc.7</code></h3>
 <p>Binary and Codex plugin (run in your shell):</p>
 <pre><code># Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.6 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.7 sh
 
 # Codex plugin (matches release/v0.10.5)
 THRUM_INSTALL_REF=release/v0.10.5 bash &lt;(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.5/codex-plugin/plugins/thrum/scripts/install-plugin.sh)</code></pre>
