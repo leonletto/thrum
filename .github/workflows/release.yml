@@ -162,4 +162,8 @@ jobs:
       - name: Build and publish opencode-thrum
         if: steps.version-check.outputs.should_publish == 'true'
         working-directory: opencode-plugin
-        run: npm ci && npm run build && npm publish
+        # npm OIDC trusted publishing requires npm >= 11.5.1; Node 22 ships
+        # npm 10.x, which carries the id-token permission but never performs
+        # the OIDC token exchange (publish goes out unauthenticated → E404).
+        # Pin a floor at 11.5.1 to enable the handshake.
+        run: npm install -g npm@^11.5.1 && npm ci && npm run build && npm publish
