@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/leonletto/thrum/internal/hookmerge"
 )
 
 func TestRenderTemplate(t *testing.T) {
@@ -212,13 +215,26 @@ func TestRuntimeInit_CreateFiles(t *testing.T) {
 	}
 }
 
-func TestRuntimeInit_SkipExisting(t *testing.T) {
+// TestRuntimeInit_MergeExistingClaudeSettings verifies thrum-nh88's
+// JSON-merge behavior for .claude/settings.json: when the file already
+// exists, third-party hook entries (bd, user) are preserved and thrum's
+// own hooks are reconciled additively.
+func TestRuntimeInit_MergeExistingClaudeSettings(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create a pre-existing file
+	// Pre-existing file with a third-party (bd) hook + a user hook.
 	claudeDir := filepath.Join(tmpDir, ".claude")
 	_ = os.MkdirAll(claudeDir, 0750)
-	_ = os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte("existing"), 0600)
+	pre := `{
+  "hooks": {
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "bd prime --hook-json"}]},
+      {"hooks": [{"type": "command", "command": "user custom"}]}
+    ]
+  },
+  "model": "claude-sonnet-4-5"
+}`
+	_ = os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte(pre), 0600)
 
 	opts := RuntimeInitOptions{
 		RepoPath:  tmpDir,
@@ -226,27 +242,41 @@ func TestRuntimeInit_SkipExisting(t *testing.T) {
 		Force:     false,
 		AgentName: "test_agent",
 	}
-
 	result, err := RuntimeInit(opts)
 	if err != nil {
 		t.Fatalf("RuntimeInit failed: %v", err)
 	}
 
-	// First file (settings.json) should be skipped
-	skipped := false
-	for _, f := range result.Files {
-		if f.Path == ".claude/settings.json" && f.Skipped {
-			skipped = true
+	var settingsAction *FileAction
+	for i := range result.Files {
+		if result.Files[i].Path == ".claude/settings.json" {
+			settingsAction = &result.Files[i]
+			break
 		}
 	}
-	if !skipped {
-		t.Error("expected settings.json to be skipped when it already exists")
+	if settingsAction == nil {
+		t.Fatal("expected FileAction for .claude/settings.json in result")
+	}
+	if settingsAction.Skipped {
+		t.Fatal("merge-mode template must not produce Skipped=true")
+	}
+	if settingsAction.Action != "merge" {
+		t.Errorf("expected action=merge, got %q", settingsAction.Action)
 	}
 
-	// Verify existing file was not modified
-	content, _ := os.ReadFile(filepath.Clean(filepath.Join(claudeDir, "settings.json")))
-	if string(content) != "existing" {
-		t.Error("existing file should not be modified without --force")
+	// Verify on-disk content: bd hook + user hook + thrum SessionStart hook
+	// must all be present.
+	mergedRaw, _ := os.ReadFile(filepath.Clean(filepath.Join(claudeDir, "settings.json")))
+	got := string(mergedRaw)
+	for _, must := range []string{
+		"bd prime --hook-json",
+		"user custom",
+		"thrum-startup.sh",
+		"claude-sonnet-4-5",
+	} {
+		if !strings.Contains(got, must) {
+			t.Errorf("merged file missing expected substring %q\nfile content:\n%s", must, got)
+		}
 	}
 }
 
@@ -530,14 +560,16 @@ func TestRuntimeInit_ManagedTemplateOverwritesExisting(t *testing.T) {
 }
 
 // TestRuntimeInit_UserConfigTemplatePreservesEdits verifies that
-// user-customizable configs (managed: false, the default) keep skip-on-exists
-// so re-quickstart never bulldozes local edits (thrum-akqv).
+// user-customizable configs (managed=false, merge=false, the default) keep
+// skip-on-exists so re-quickstart never bulldozes local edits (thrum-akqv).
+//
+// The claude .claude/settings.json case is excluded — it uses the merge
+// mode (thrum-nh88) and is covered by TestRuntimeInit_MergeExistingClaudeSettings.
 func TestRuntimeInit_UserConfigTemplatePreservesEdits(t *testing.T) {
 	cases := []struct {
 		runtime string
 		path    string
 	}{
-		{"claude", ".claude/settings.json"},
 		{"codex", "AGENTS.md"},
 		{"cursor", ".cursorrules"},
 		{"gemini", ".gemini/settings.json"},
@@ -593,6 +625,39 @@ func TestRuntimeInit_UserConfigTemplatePreservesEdits(t *testing.T) {
 				t.Errorf("user-config %q content changed; expected preservation", tc.path)
 			}
 		})
+	}
+}
+
+// TestClaudeTemplateMatchesCanonicalHooks asserts that the rendered claude
+// settings template extracts to exactly the same (event, command) pairs
+// listed in hookmerge.CanonicalThrumHooks. Worktree.EnsureRedirects relies
+// on the constant; runtime-init in the main repo renders the template.
+// Both must agree, otherwise a worktree's hooks would drift from the
+// main repo's. thrum-nh88.
+func TestClaudeTemplateMatchesCanonicalHooks(t *testing.T) {
+	rendered, err := renderTemplatePath("templates/claude/settings.json.tmpl", TemplateData{})
+	if err != nil {
+		t.Fatalf("render claude template: %v", err)
+	}
+	var parsed hookmerge.Settings
+	if err := json.Unmarshal([]byte(rendered), &parsed); err != nil {
+		t.Fatalf("rendered template is invalid JSON: %v\n%s", err, rendered)
+	}
+	got := hookmerge.ExtractCommands(parsed)
+
+	if len(got) != len(hookmerge.CanonicalThrumHooks) {
+		t.Fatalf("hook count mismatch: template has %d, CanonicalThrumHooks has %d\ngot=%+v\nwant=%+v",
+			len(got), len(hookmerge.CanonicalThrumHooks), got, hookmerge.CanonicalThrumHooks)
+	}
+	// Build sets keyed by event:command for order-independent compare.
+	gotSet := make(map[string]struct{}, len(got))
+	for _, c := range got {
+		gotSet[c.Event+"::"+c.Command] = struct{}{}
+	}
+	for _, want := range hookmerge.CanonicalThrumHooks {
+		if _, ok := gotSet[want.Event+"::"+want.Command]; !ok {
+			t.Errorf("CanonicalThrumHooks entry not found in rendered template: %+v", want)
+		}
 	}
 }
 

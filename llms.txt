@@ -935,7 +935,7 @@ All commands accept these flags:
 
   toolkit/agents/           Claude Code agent definitions
     thrum-agent.md          Thrum messaging coordination guide
-    (Beads)                 Install via brew install beads; auto-detected by thrum-managed projects.
+    (Beads)                 Install via brew install beads; SessionStart hook auto-installed by thrum-managed projects (thrum-nh88).
     message-listener.md     Background message polling agent (Haiku model)
 
   toolkit/templates/        Agent development workflow patterns
