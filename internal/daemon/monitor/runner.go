@@ -109,6 +109,16 @@ func (r *Runner) Run(ctx context.Context) error {
 	cmd.Dir = r.job.GetCwd()
 	cmd.Env = buildEnv(r.job)
 
+	// Setpgid:true makes the child the leader of a new process group whose
+	// pgid equals its pid. On shutdown we signal the whole group via
+	// syscall.Kill(-pgid, ...) so any grandchildren the child spawned are
+	// killed alongside it. Without this, grandchildren that inherited the
+	// daemon→child stdout/stderr pipe FDs keep the pipe open after the
+	// direct child dies; lr.ReadLine() then blocks forever waiting for EOF,
+	// cmd.Wait() is never reached, the child stays a zombie, and
+	// monitor.stop wedges the RPC critical path. See thrum-puhr.9.2.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
 	// Merge stdout and stderr into a single pipe so the LineReader sees
 	// both streams interleaved as the child emits them. We use os.Pipe()
 	// explicitly rather than cmd.StdoutPipe() to avoid races with
@@ -152,17 +162,22 @@ func (r *Runner) Run(ctx context.Context) error {
 	processDone := make(chan struct{})
 
 	// Shutdown watcher: on ctx cancellation, SIGTERM → 5s → SIGKILL.
+	// Signals target the whole process group (-pgid) so grandchildren
+	// inheriting the daemon→child pipe FDs are killed alongside the
+	// direct child. The leader's pid equals its pgid because of the
+	// Setpgid:true above. See thrum-puhr.9.2.
 	go func() {
 		select {
 		case <-ctx.Done():
 			if cmd.Process != nil {
-				_ = cmd.Process.Signal(syscall.SIGTERM)
+				pgid := cmd.Process.Pid
+				_ = syscall.Kill(-pgid, syscall.SIGTERM)
 				select {
 				case <-processDone:
 					// Child exited cleanly after SIGTERM — nothing more to do.
 				case <-time.After(r.shutdownGrace):
-					// Grace period elapsed; force-kill.
-					_ = cmd.Process.Kill()
+					// Grace period elapsed; force-kill the whole group.
+					_ = syscall.Kill(-pgid, syscall.SIGKILL)
 				}
 			}
 		case <-processDone:

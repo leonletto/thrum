@@ -194,7 +194,7 @@ cp docs/claude-agent-integration.md .  # For reference
 ```
 
 Or see the full agent definitions in the
-[documentation site](https://leonletto.github.io/thrum).
+[documentation site](https://thrum.team).
 
 ## Next Steps
 

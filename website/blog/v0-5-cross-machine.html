@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>Cross-Machine · Thrum Blog</title>
+  <meta name="description" content="v0.5.6 through v0.5.9. v0.5 had built a working messaging substrate on one machine. The second half of the line was about whether it survived contact with reality: a runtime registry that knew what kind of agent it was talking to, a hook that prevented a footgun that destroyed .git directories, and the March 18 evening I finally watched a message cross from my Mac Mini to my MacBook Pro over Tailscale.">
+  <link rel="canonical" href="https://leonletto.github.io/thrum/blog/v0-5-cross-machine.html">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Cross-Machine">
+  <meta property="og:description" content="v0.5.6 through v0.5.9. v0.5 had built a working messaging substrate on one machine. The second half of the line was about whether it survived contact with reality: a runtime registry that knew what kind of agent it was talking to, a hook that prevented a footgun that destroyed .git directories, and the March 18 evening I finally watched a message cross from my Mac Mini to my MacBook Pro over Tailscale.">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/blog/v0-5-cross-machine.html">
+  <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <meta property="article:published_time" content="2026-03-18">
+  <meta property="article:author" content="Leon Letto">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Cross-Machine">
+  <meta name="twitter:description" content="v0.5.6 through v0.5.9. v0.5 had built a working messaging substrate on one machine. The second half of the line was about whether it survived contact with reality: a runtime registry that knew what kind of agent it was talking to, a hook that prevented a footgun that destroyed .git directories, and the March 18 evening I finally watched a message cross from my Mac Mini to my MacBook Pro over Tailscale.">
+  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <!-- JSON-LD structured data (BlogPosting) -->
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"Cross-Machine","description":"v0.5.6 through v0.5.9. v0.5 had built a working messaging substrate on one machine. The second half of the line was about whether it survived contact with reality: a runtime registry that knew what kind of agent it was talking to, a hook that prevented a footgun that destroyed .git directories, and the March 18 evening I finally watched a message cross from my Mac Mini to my MacBook Pro over Tailscale.","author":{"@type":"Person","name":"Leon Letto","url":"https://leonletto.github.io/"},"datePublished":"2026-03-18T12:00:00-07:00","image":"https://leonletto.github.io/thrum/img/social-card.png","url":"https://leonletto.github.io/thrum/blog/v0-5-cross-machine.html","mainEntityOfPage":{"@type":"WebPage","@id":"https://leonletto.github.io/thrum/blog/v0-5-cross-machine.html"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum"},"keywords":"release, v0.5, tailscale, multi-runtime"}</script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/landing.css">
+  <link rel="stylesheet" href="../css/blog.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link">Docs</a>
+          <a href="../blog.html" class="nav-link nav-link-active">Blog</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+          <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+            <span class="icon-sun">&#x2600;</span>
+            <span class="icon-moon">&#x263E;</span>
+          </button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <article class="section blog-post-section">
+    <div class="container-narrow">
+      <p class="post-eyebrow"><a href="../blog.html">&larr; All posts</a></p>
+      <h1 class="post-title">Cross-Machine</h1>
+      <p class="post-meta">
+        <span class="post-date">March 18, 2026</span>
+        <span class="post-meta-sep">&middot;</span>
+        <span class="post-author">Leon Letto</span>
+        <span class="post-meta-sep">&middot;</span>
+        <span class="post-reading-time">9 min read</span>
+      </p>
+      <div class="post-tags"><span class="post-tag">release</span><span class="post-tag">v0.5</span><span class="post-tag">tailscale</span><span class="post-tag">multi-runtime</span></div>
+      
+      <div class="post-body">
+<p>By March 14, the substrate from the first half of v0.5 was settled enough that I
+could start poking at the edges. The web UI worked. Identity was pinned to
+worktrees. Messages had read receipts. Role templates had been rewritten by what
+a 31-task session taught me. The system was solid in the sense that it stopped
+breaking under load.</p>
+<p>It was not yet solid in the sense that it survived contact with reality. Five
+days later, v0.5.9 shipped, and the line had cleared three real-use papercuts (a
+footgun that destroyed <code>.git</code> directories, an &quot;agent deleted&quot; button that did
+not actually delete anything, a sync layer that worked on one machine and could
+not be relied on across two) plus the first time I watched a message cross from
+my Mac Mini to my MacBook Pro over Tailscale and arrive within seconds.</p>
+<p>This is the second of two posts about v0.5. The first one covered v0.5.0 through
+v0.5.5 from the CHANGELOG, because the episodic-memory plugin that records my
+conversations with the coordinator was not running yet. This second post is
+mostly the same shape, with one exception: March 18 has a real archive of the
+Tailscale work, and that part of the story has Leon-quotes in it.</p>
+<h2>What the System Could Tell About Itself</h2>
+<p>v0.5.6 shipped March 14. The headline addition was a three-tier agent detection
+registry. Until then, the daemon&#39;s only way to know what kind of runtime was
+running on the other end of a process tree was to hardcode the names it
+expected. Claude Code was the main one. As soon as I wanted to support Codex and
+Aider, that approach stopped scaling. The runtime registry that v0.5.6
+introduced detected agents in three increasingly authoritative tiers:
+environment variables first (<code>CLAUDE_PROJECT_DIR</code> and equivalents), config files
+second (<code>~/.codex/config.toml</code>, <code>.cursor/</code>, etc.), binary verification third
+(does <code>which codex</code> resolve and is it executable). Each runtime got a registry
+entry with these three signals and a label. The registry was data-driven so
+adding a new runtime meant adding a registry entry, not editing twelve switch
+statements.</p>
+<p>In the same release, <code>thrum init --skills</code> got added: a lightweight installation
+path that installs just the Thrum skill into an agent&#39;s plugin directory without
+running the full registration flow. Useful for multi-agent environments where an
+agent just needs the messaging commands and the rest of Thrum&#39;s identity model
+would be overkill. The skill content for that path got embedded into the binary,
+so the installation worked without a network round-trip.</p>
+<p>Two smaller changes mattered more than they sounded. First, <code>thrum wait</code> started
+emitting structured action directives rather than raw message content. The stop
+hook also moved onto the directive format. Before this, the wait command&#39;s
+output was just the message text and the hook had to parse it heuristically;
+after, both spoke a single protocol. Second, the stop hook + listener heartbeat
+became a hybrid pair so that messages did not get lost in the gap between
+listener re-arms. The previous model had a window of a few seconds where an
+inbound message could arrive after the listener exited and before the next one
+was spawned. The hybrid closed it.</p>
+<p>The CHANGELOG entry also notes a README rewrite to match the website voice and
+the removal of &quot;git-backed&quot; from the front-page identity language. I had been
+talking about Thrum as a git-backed messaging system, which is technically
+accurate but reads like marketing. The new framing positioned the CLI as primary
+and MCP as optional, which was a better description of how I actually used it.</p>
+<h2>The Footgun That Destroyed <code>.git</code></h2>
+<p>v0.5.7 shipped March 15. The release contains two fixes that together were as
+close as I came to a &quot;do not do that ever again&quot; patch.</p>
+<p>The first was a small bug with a large failure mode. Clicking &quot;delete agent&quot; in
+the web UI was returning &quot;Method not found.&quot; The <code>agent.delete</code> and
+<code>agent.cleanup</code> RPC handlers existed in the daemon but had never been registered
+on the WebSocket registry, so the UI&#39;s call resolved against nothing. The agent
+appeared deleted in the UI, sort of, and came back the next time anything
+queried the agent table. The fix was one registration call and a real cleanup
+pass: orphaned sessions, session child tables (refs, scopes), and the
+corresponding events in <code>events.jsonl</code> all got scrubbed, not just the agent row.</p>
+<p>The second was the a-sync worktree protection. The sync layer maintains its own
+git worktree at <code>.git/thrum-sync/a-sync/</code>, separate from the user-facing
+worktrees. That detached worktree shares the underlying <code>.git</code> directory with
+the rest of the repo. Running <code>git checkout</code>, <code>git switch</code>, <code>git reset</code>,
+<code>git merge</code>, <code>git rebase</code>, or <code>git pull</code> inside that worktree, or running <code>cd</code>
+into it and then doing any of those, can destroy the <code>.git</code> directory. Not the
+worktree&#39;s local state. The repository&#39;s actual git database.</p>
+<p>Somebody hit this. I do not need to know who or what triggered it to know
+somebody hit this, because the v0.5.7 fix is shaped like the response of someone
+who watched a <code>.git</code> directory go away in front of them. The fix is a PreToolUse
+hook (<code>block-sync-worktree-cd.sh</code>) that intercepts shell tool calls and refuses
+anything that would <code>cd</code> or <code>pushd</code> into the sync worktree, and refuses any
+<code>git -C</code> command targeted at it. Whatever was lost when someone discovered this
+was lost. After v0.5.7, it could not happen to anybody else.</p>
+<p>The CHANGELOG entry&#39;s only comment on it is matter-of-fact: &quot;Checking out a
+different branch there destroys the entire <code>.git</code> directory.&quot; That sentence is
+the shape of &quot;we are not going to talk about how I learned this.&quot;</p>
+<h2>Purge</h2>
+<p>v0.5.8 shipped March 17. One substantial feature, no story. <code>thrum purge</code> lets
+you remove messages, sessions, and events before a cutoff date. Relative
+durations (<code>2d</code>, <code>24h</code>), date-only formats (<code>2026-03-15</code>), full RFC 3339
+timestamps. <code>--all</code> purges everything. <code>--confirm</code> is required to actually
+execute (a dry-run preview is the default). Agents, groups, and subscriptions
+are not touched. The implementation cleaned both the SQLite tables and the JSONL
+files. A <code>RemoveBeforeTimestamp()</code> helper in the JSONL package did the file
+rewriting.</p>
+<p>The feature was straightforward. The purge command shipped, did what it said,
+and looked perfectly fine.</p>
+<h2>The Mac Mini and the .env File</h2>
+<p>March 18. I had been waiting for this for a while. My Mac Mini and my MacBook
+Pro were finally on the same Tailscale network, and I was setting up
+cross-machine sync between them for the first time. v0.5.9 was open and I was
+running through the setup with the coordinator.</p>
+<blockquote>
+<p>&quot;now I am setting up to test tailscale sync with my other computer as well.
+Here is what is working on the other computer: Tailscale sync is running:
+tailscale: enabled: true hostname: leonsmacmini connected_peers: 0
+sync_status: idle&quot;</p>
+</blockquote>
+<p>That was the first time the cross-machine architecture was being tested on
+actual hardware rather than on a script that simulated two daemons on the same
+box. The Tailscale daemon was up on both ends. The peering had been established.
+The sync status said idle, which was correct because nothing had been sent yet.</p>
+<p>Then I tried to actually run a sync. It did not work.</p>
+<p>The agent dug into it. The <code>THRUM_TS_AUTHKEY</code> and other Tailscale env vars were
+sitting in a <code>.env</code> file at the repo root, the way the documentation suggested.
+The daemon was not reading them. The variables were not in the process
+environment because the daemon&#39;s start path didn&#39;t load the .env. I&#39;d been
+exporting them manually every time I started the daemon and had not noticed that
+the documented path didn&#39;t actually work end-to-end. That gap was the kind of
+thing you only find by doing the setup as a real user would, not as someone who
+has the env vars cached in their shell.</p>
+<p>The fix landed in v0.5.9 as <code>.env</code> auto-loading at daemon start. <code>THRUM_TS_*</code>
+and <code>TAILSCALE_*</code> variables now load from either repo root or <code>.thrum/.env</code>
+automatically. No more manual export. Same release also fixed an adjacent
+diagnostic gap: <code>thrum sync status --json</code> was not surfacing Tailscale state
+even when the env vars were loaded, which made the manual-export workaround
+harder to diagnose than it should have been.</p>
+<p>Same v0.5.9 also dropped the periodic sync interval from five minutes to fifteen
+seconds, with a ten-second recent-message threshold. Combined with the push
+notifications that had landed earlier, cross-machine message delivery dropped
+from &quot;eventually&quot; to under twenty seconds. The scheduler also learned to run an
+initial sync at startup instead of waiting for the first tick, which removed the
+up-to-fifteen-second cold-start gap.</p>
+<p>Two other Tailscale issues got cleaned up in v0.5.9. First, every RPC had a
+hardcoded ten-second context timeout, and <code>peer.wait_pairing</code> is a long-poll
+operation that runs for minutes. The pairing RPC was getting killed by the
+timeout immediately. Fix: a separate <code>RegisterLongPollHandler</code> with a six-minute
+timeout for pairing operations. Second, tsnet creates hostnames with a <code>-1</code>
+suffix that regular DNS cannot resolve, so <code>peer join</code> had been failing whenever
+a peer used the tsnet hostname instead of the underlying Tailscale IP. Fix: use
+the IP, not the hostname. This is the same hostname-versus-IP friction that came
+back as a Leon-quote in v0.6.0, where the same lesson got generalized: names for
+display, IPs for transport.</p>
+<p>There was one other v0.5.9 fix that does not belong in the Tailscale section but
+matters. The <code>DefaultPreamble</code> had been showing the old &quot;Wait for messages&quot;
+one-liner instead of the new <code>Background Message Listener</code> section that
+contained the actual STEP_1 / STEP_2 spawn pattern. The background listener
+pattern had been upgraded weeks earlier and the preamble had silently fallen
+behind. Docs said one thing, code did another. The fix was to bring the preamble
+back in sync with what the listener pattern actually needed.</p>
+<h2>What v0.5&#39;s Second Half Bought</h2>
+<p>The cost of v0.5.6 through v0.5.9 was a five-day stretch where the only piece
+that looks like a feature in the release notes (<code>thrum purge</code>) was the smallest
+piece of work. The big ones (the runtime registry, the a-sync hook, the .env
+auto-loading, the long-poll timeout fix, the IP-based peer addressing, the
+listener preamble correction) all read like maintenance.</p>
+<p>The benefit was that the system survived contact with a second machine. Identity
+worked across worktrees. Messages had receipts. Templates encoded what the
+multi-agent stress test had taught. The runtime registry meant the system could
+talk to Codex and Aider as easily as Claude Code. The .git destruction footgun
+had a hook in front of it. And on the night of March 18, a message left my
+MacBook Pro and arrived on the Mac Mini in under twenty seconds, the way I had
+been describing the system for weeks before it could actually do it.</p>
+<p>The heuristic from this stretch: a system that has not been used across two
+machines does not yet exist. It is a hypothesis. The .env loading gap, the
+hostname-versus-IP confusion, the long-poll timeout, the missing <code>THRUM_TS_*</code>
+plumbing in <code>sync status --json</code>: every one of those was a hypothesis the system
+had been carrying that broke the moment the second machine was real. The work
+that closed those gaps is what made the architecture into a system instead of a
+sketch.</p>
+<p>That is the breather. The next session pivoted to the Tailscale peering redesign
+that became v0.6.0, which is a different story.</p>
+
+      </div>
+      <hr class="post-divider">
+      <p class="post-footer-nav"><a href="../blog.html">&larr; Back to all posts</a></p>
+    </div>
+  </article>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-brand">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+          <span class="text-muted">&middot; Persistent messaging for AI agents</span>
+        </div>
+        <div class="footer-links">
+          <a href="../docs.html">Documentation</a>
+          <a href="../blog.html">Blog</a>
+          <a href="https://github.com/leonletto/thrum" target="_blank" rel="noopener">GitHub</a>
+          <a href="../llms.txt">llms.txt</a>
+          <a href="../llms-full.txt">llms-full.txt</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById('theme-toggle').addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme');
+      var next = current === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('thrum-theme', next);
+    });
+  </script>
+</body>
+</html>

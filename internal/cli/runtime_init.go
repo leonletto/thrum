@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"text/template"
+
+	"github.com/leonletto/thrum/internal/hookmerge"
 )
 
 // safeIdentifierRE validates template variables interpolated into shell commands.
@@ -55,10 +57,24 @@ type RuntimeInitResult struct {
 }
 
 // runtimeTemplate maps a runtime to its template and output path.
+//
+// Three mutually exclusive write modes:
+//
+//   - managed=true marks daemon-owned scripts that have no user-editable
+//     surface and must be overwritten on every quickstart so agents pick
+//     up embedded template improvements (thrum-akqv).
+//   - merge=true marks JSON config files (currently only Claude Code's
+//     .claude/settings.json) that thrum reconciles in place — thrum's
+//     own hook entries are kept current via additive merge, third-party
+//     hook entries (bd, user customizations) are preserved (thrum-nh88).
+//   - both false (the default) preserves the original skip-on-exists
+//     policy for user-customizable configs.
 type runtimeTemplate struct {
 	tmplPath string // path within embedded FS
 	outPath  string // output path relative to repo root
 	mode     os.FileMode
+	managed  bool // true → overwrite-on-exists; false → skip-on-exists
+	merge    bool // true → JSON-merge thrum hooks into existing file (additive, idempotent)
 }
 
 // runtimeTemplates returns the template-to-output mappings for a given runtime.
@@ -66,42 +82,45 @@ func runtimeTemplates(runtime string) []runtimeTemplate {
 	switch runtime {
 	case "claude":
 		return []runtimeTemplate{
-			{"templates/claude/settings.json.tmpl", ".claude/settings.json", 0644},
-			{"templates/shared/startup.sh.tmpl", "scripts/thrum-startup.sh", 0755},
-			{"templates/shared/thrum-check-inbox.sh.tmpl", "scripts/thrum-check-inbox.sh", 0755},
+			// merge=true so thrum hook entries are reconciled into an existing
+			// .claude/settings.json without clobbering user/bd entries. Behaviour
+			// equivalent of bd setup claude's addHookCommand semantics (thrum-nh88).
+			{tmplPath: "templates/claude/settings.json.tmpl", outPath: ".claude/settings.json", mode: 0644, merge: true},
+			{tmplPath: "templates/shared/startup.sh.tmpl", outPath: "scripts/thrum-startup.sh", mode: 0755, managed: true},
+			{tmplPath: "templates/shared/thrum-check-inbox.sh.tmpl", outPath: "scripts/thrum-check-inbox.sh", mode: 0755, managed: true},
 		}
 	case "codex":
 		return []runtimeTemplate{
-			{"templates/codex/session-start.sh.tmpl", ".codex/hooks/session-start", 0755},
-			{"templates/codex/AGENTS.md.tmpl", "AGENTS.md", 0644},
-			{"templates/shared/startup.sh.tmpl", "scripts/thrum-startup.sh", 0755},
+			{tmplPath: "templates/codex/session-start.sh.tmpl", outPath: ".codex/hooks/session-start", mode: 0755, managed: true},
+			{tmplPath: "templates/codex/AGENTS.md.tmpl", outPath: "AGENTS.md", mode: 0644},
+			{tmplPath: "templates/shared/startup.sh.tmpl", outPath: "scripts/thrum-startup.sh", mode: 0755, managed: true},
 		}
 	case "cursor":
 		return []runtimeTemplate{
-			{"templates/cursor/cursorrules.tmpl", ".cursorrules", 0644},
-			{"templates/shared/startup.sh.tmpl", "scripts/thrum-startup.sh", 0755},
+			{tmplPath: "templates/cursor/cursorrules.tmpl", outPath: ".cursorrules", mode: 0644},
+			{tmplPath: "templates/shared/startup.sh.tmpl", outPath: "scripts/thrum-startup.sh", mode: 0755, managed: true},
 		}
 	case "gemini":
 		return []runtimeTemplate{
-			{"templates/gemini/instructions.md.tmpl", ".gemini/instructions.md", 0644},
-			{"templates/gemini/settings.json.tmpl", ".gemini/settings.json", 0644},
-			{"templates/shared/startup.sh.tmpl", "scripts/thrum-startup.sh", 0755},
+			{tmplPath: "templates/gemini/instructions.md.tmpl", outPath: ".gemini/instructions.md", mode: 0644},
+			{tmplPath: "templates/gemini/settings.json.tmpl", outPath: ".gemini/settings.json", mode: 0644},
+			{tmplPath: "templates/shared/startup.sh.tmpl", outPath: "scripts/thrum-startup.sh", mode: 0755, managed: true},
 		}
 	case "opencode":
 		return []runtimeTemplate{
-			{"templates/opencode/opencode.json.tmpl", "opencode.json", 0644},
-			{"templates/shared/startup.sh.tmpl", "scripts/thrum-startup.sh", 0755},
+			{tmplPath: "templates/opencode/opencode.json.tmpl", outPath: "opencode.json", mode: 0644},
+			{tmplPath: "templates/shared/startup.sh.tmpl", outPath: "scripts/thrum-startup.sh", mode: 0755, managed: true},
 		}
 	case "auggie":
 		return []runtimeTemplate{
-			{"templates/auggie/settings.json.tmpl", ".augment/settings.json", 0644},
-			{"templates/auggie/rules.md.tmpl", ".augment/rules/thrum.md", 0644},
-			{"templates/shared/startup.sh.tmpl", "scripts/thrum-startup.sh", 0755},
+			{tmplPath: "templates/auggie/settings.json.tmpl", outPath: ".augment/settings.json", mode: 0644},
+			{tmplPath: "templates/auggie/rules.md.tmpl", outPath: ".augment/rules/thrum.md", mode: 0644},
+			{tmplPath: "templates/shared/startup.sh.tmpl", outPath: "scripts/thrum-startup.sh", mode: 0755, managed: true},
 		}
 	case "cli-only":
 		return []runtimeTemplate{
-			{"templates/shared/startup.sh.tmpl", "scripts/thrum-startup.sh", 0755},
-			{"templates/cli-only/polling-loop.sh.tmpl", "scripts/thrum-polling.sh", 0755},
+			{tmplPath: "templates/shared/startup.sh.tmpl", outPath: "scripts/thrum-startup.sh", mode: 0755, managed: true},
+			{tmplPath: "templates/cli-only/polling-loop.sh.tmpl", outPath: "scripts/thrum-polling.sh", mode: 0755, managed: true},
 		}
 	default:
 		return nil
@@ -191,9 +210,40 @@ func RuntimeInit(opts RuntimeInitOptions) (*RuntimeInitResult, error) {
 				Template: tmpl.tmplPath,
 			}
 
-			// Check if file exists
+			// JSON-merge path: thrum hook entries are reconciled into
+			// the existing file additively. Renders the template, then
+			// asks hookmerge to add any missing thrum hooks while
+			// preserving third-party (bd, user) entries (thrum-nh88).
+			if tmpl.merge {
+				rendered, err := renderTemplatePath(tmpl.tmplPath, data)
+				if err != nil {
+					return nil, fmt.Errorf("render %s: %w", tmpl.tmplPath, err)
+				}
+				var res hookmerge.MergeResult
+				if opts.DryRun {
+					// DryRun: compute what the action WOULD be by
+					// loading + simulating merge in-memory. More
+					// accurate than a stat-only guess: a file that
+					// already carries every thrum hook reports
+					// "noop", not "merge".
+					res, err = hookmerge.PreviewClaudeMerge(outPath, rendered, opts.Force)
+				} else {
+					res, err = hookmerge.MergeClaudeSettings(outPath, rendered, opts.Force)
+				}
+				if err != nil {
+					return nil, fmt.Errorf("merge %s: %w", tmpl.outPath, err)
+				}
+				action.Action = res.Action
+				result.Files = append(result.Files, action)
+				continue
+			}
+
+			// Check if file exists. Managed templates overwrite on
+			// every run so daemon-owned scripts pick up embedded
+			// template updates; user-customizable configs preserve
+			// edits unless --force (thrum-akqv).
 			if _, err := os.Stat(outPath); err == nil {
-				if !opts.Force {
+				if !opts.Force && !tmpl.managed {
 					action.Action = "skip"
 					action.Skipped = true
 					action.SkipReason = "file exists (use --force to overwrite)"

@@ -161,8 +161,9 @@ the right tradeoff.
 ## Beads Command Reference for Sub-Agents
 
 Sub-agents (spawned via the Task tool in Claude Code, or similar delegation in
-other frameworks) typically **don't receive plugin context**. They can run `bd`
-commands via Bash, but they don't know the correct syntax unless you tell them.
+other frameworks) **don't inherit SessionStart hook context** — the `bd prime`
+briefing only runs in the main session. They can run `bd` commands via Bash, but
+they don't know the correct syntax unless you tell them.
 
 If you use Beads for task tracking, add the block below to your project's
 `CLAUDE.md` (for Claude Code / Auggie) or `AGENTS.md` (for other agent
@@ -174,8 +175,9 @@ frameworks). This prevents sub-agents from guessing wrong commands like
 ````markdown
 ## Beads (bd) Quick Reference
 
-Task tracking uses Beads (`bd`). Sub-agents don't get the beads plugin context,
-so this section ensures all agents know the correct commands.
+Task tracking uses Beads (`bd`). Sub-agents don't inherit the SessionStart hook
+context that the main session gets from `bd setup claude`, so this section
+ensures all agents know the correct commands.
 
 ### Essential Commands
 
@@ -189,7 +191,7 @@ bd update <id> -s in_progress      # Start working on issue
 bd update <id> --claim             # Atomically claim (assign + in_progress)
 bd close <id>                      # Mark done
 bd close <id> --suggest-next       # Mark done + show newly unblocked
-bd comments <id> add "note"        # Add comment
+bd comments add <id> "note"        # Add comment
 bd dep <blocker> --blocks <blocked>  # Add dependency
 ```
 

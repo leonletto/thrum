@@ -23,6 +23,10 @@
   <meta name="twitter:title" content="Thrum — Persistent Messaging for AI Agents">
   <meta name="twitter:description" content="Offline-first, persistent communication for AI agent coordination across sessions, worktrees, and machines.">
   <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <link rel="canonical" href="https://leonletto.github.io/thrum/">
+  <!-- JSON-LD structured data: SoftwareApplication for the project itself, WebSite for sitelinks search -->
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Thrum","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux","description":"Offline-first, persistent communication for AI agent coordination across sessions, worktrees, and machines.","url":"https://leonletto.github.io/thrum/","author":{"@type":"Person","name":"Leon Letto"},"license":"https://github.com/leonletto/thrum/blob/main/LICENSE","codeRepository":"https://github.com/leonletto/thrum","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Thrum","url":"https://leonletto.github.io/thrum/","description":"Offline-first, persistent communication for AI agent coordination across sessions, worktrees, and machines.","publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum/"}}</script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -31,6 +35,12 @@
   <link rel="stylesheet" href="css/landing.css">
   <script>
     (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
   </script>
 </head>
 <body>
@@ -46,6 +56,7 @@
         <div class="nav-links">
           <a href="docs.html" class="nav-link">Docs</a>
           <a href="docs.html#quickstart" class="nav-link">Quickstart</a>
+          <a href="blog.html" class="nav-link">Blog</a>
           <a href="about.html" class="nav-link">About</a>
           <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
           <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
@@ -337,6 +348,7 @@
         </div>
         <div class="footer-links">
           <a href="docs.html">Documentation</a>
+          <a href="blog.html">Blog</a>
           <a href="https://github.com/leonletto/thrum" target="_blank" rel="noopener">GitHub</a>
           <a href="llms.txt">llms.txt</a>
           <a href="llms-full.txt">llms-full.txt</a>

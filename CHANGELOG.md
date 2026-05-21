@@ -8,6 +8,256 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.10.5] - 2026-05-21
+
+### Added
+
+- **`thrum inbox --from @agent` filter** — scope unread inbox to messages from a
+  single sender. Useful for catching up on a specific agent's traffic without
+  reading the rest of the queue.
+- **`thrum worktree teardown --delete-branch` flag** — tear down a worktree and
+  delete its branch in one step. Previously the branch was kept and required a
+  separate `git branch -D` after teardown.
+- **Daemon-side backstop nudger** — the daemon now polls for stale-unread
+  messages and re-emits delivery nudges, replacing the user-side
+  `thrum-inbox-poll.sh` cron pattern. More reliable (survives runtime restarts)
+  and lower-overhead than a per-agent cron schedule.
+- **Headless `worktree.Create` / `worktree.Destroy` Go API** — the worktree
+  lifecycle moves to a single shared package (`internal/worktree`), used by both
+  the cobra commands and future programmatic callers (notably the v0.11
+  substrate epics). Behavior-equivalent to the previous cobra-only path; opens
+  the door to ephemeral-worktree flows.
+- **`thrum prime` first-turn ack instruction** — the prime briefing now asks the
+  runtime to emit a short scrollback line on receipt, giving the agent visible
+  signal that context loaded. Previously some runtimes (notably Claude Code's
+  SessionStart hook) silently absorbed the prime briefing with no observable
+  first-turn anchor.
+- **`coordinator-post-restart-sweep` skill + `waiting-on-coord-agent-sweep.sh`
+  script** (thrum-e1n0). New coordinator discipline tool that detects agents
+  blocked waiting on coord decisions by pattern-matching the latest assistant
+  message body from each Claude agent's JSONL transcript. Pattern library
+  empirically mined from project conversation archive (20 regex rules +
+  trailing-question-end-turn structural signal). Wraps with a decision-tree
+  skill for post-prime use. Sibling sweep
+  `scripts/error-and-context-agent-sweep.sh` (no rename on this branch; the
+  release line didn't carry the prior `tmux-agent-sweep.sh` baseline) provides
+  ctx-% / api-error sweeps with the same JSONL substrate.
+- **`coordinator-context-monitoring` skill** (thrum-dtad backport). Tier-ladder
+  discipline for managing live agent context limits during long coordination
+  sessions — sweep + pre-emptive restart before an agent hits a 97%-context
+  silent blow-up. Safe to wire into a recurring keepalive cron that INVOKES the
+  skill; the skill itself applies the tier ladder and only fires autonomous
+  restarts at the >85% tier. Closes the rc.7 "Unknown skill" error path that
+  fired when the keepalive cron invoked this skill on a release-line install
+  that didn't yet carry it. Mirrored to claude + cursor + opencode plugins.
+- **`coordinator-running-brainstorm-cycles` skill: three explicit review gates**
+  (thrum-dtad backport). The skill now owns the entire researcher-side design
+  pipeline with dual-review gates at three stages (brainstorm, plan, impl
+  prompt) — each a verify-against-plan + code-reviewer parallel-sonnet pass.
+  Codifies the post-`project-setup` review discipline so plan→prompt translation
+  errors get caught before the implementer executes against them. Mirrored to
+  claude + cursor + opencode plugins.
+- **Schema v25-v32 forward-port from thrum-agents** — `CurrentVersion` bumped
+  from 24 to 32 with 7 new migration blocks (scheduler_job_state +
+  scheduler_job_events, agent column extensions, agent_lifecycle_events,
+  reminders, email_msg_seen + email_outbound_queue + email_peer_rate_state). The
+  tables are intentionally dead-end on v0.10.5 — no consumer code reads from
+  them. Goal is binary-supports-v32-schema-on-disk so v0.10.5 binaries can open
+  DBs previously touched by v0.11-substrate work on multi-binary worktree
+  machines. v29 is a deliberate gap (reserved for substrate follow-ups);
+  `runMigrations` handles gapped sequences naturally.
+
+### Changed
+
+- **`thrum init` now JSON-merges `.claude/settings.json` instead of skipping
+  when the file exists** (thrum-nh88, P0). Previously `runtime_init` skipped the
+  file on existence (only `--force` would overwrite), which prevented thrum from
+  refreshing hook strings once a project had any settings file — including
+  project files written by `bd setup claude`. The new merge path preserves
+  third-party entries (bd's `bd prime --hook-json` SessionStart hook,
+  user-customized commands) and only adds missing thrum hook entries via
+  exact-string match. Idempotent: re-running on an already-current file produces
+  no diff (2-space `json.MarshalIndent` format matches bd's writer). Same merge
+  runs against each worktree's settings.json from `worktree.EnsureRedirects` so
+  worktrees get hooks too. Operator opt-out remains:
+  `Worktrees.ThrumEnabled=false` skips the merge entirely.
+- **`Worktrees.BeadsEnabled` default is now detection-based, not hardcoded
+  true** (thrum-nh88 scope F). `thrum init` runs `bd --version`; on exit code 0
+  the integration enables and the canonical `bd prime --hook-json` SessionStart
+  hook is installed into `.claude/settings.json`; on missing bd the flag
+  defaults false and a one-line install hint surfaces (`brew install beads` +
+  re-run `thrum init`). Marketplace-plugin detection
+  (`enabledPlugins.beads=true` in project / global / local settings)
+  automatically skips install to avoid double-fire. Legacy bd entries on
+  `.claude/settings.local.json` are stripped as part of the same pass.
+  User-customized variants on the `bd prime` command string (e.g.
+  `bd prime --hook-json --custom-flag`) are left untouched — only the bare-form
+  legacy variants enumerated in the spec are swept. Sibling runtime configs
+  (`.codex/hooks/`, `opencode.json`, `.gemini/settings.json`) do not use
+  hook-array JSON; no equivalent merge applies — Claude Code's settings.json is
+  the only target for this release.
+- **Beads integration now via `bd setup claude`** (or auto-installed by Thrum's
+  runtime-init when `Worktrees.BeadsEnabled=true` and `bd` is on `PATH`). The
+  standalone Beads plugin is no longer recommended and should be uninstalled.
+  Migration: `/plugin uninstall beads@beads-marketplace` →
+  `/plugin marketplace remove beads-marketplace` → `brew install beads` →
+  `bd setup claude` → restart Claude Code. Thrum auto-handles step 4
+  (`bd setup claude`) in Thrum-managed projects once `bd` is on `PATH`. If `bd`
+  state changes (installed or uninstalled) after `thrum init`, re-run
+  `thrum init` to refresh the bd-hook presence in `.claude/settings.json`.
+- **URLs migrated from `leonletto.github.io/thrum` to `thrum.team`** (Phase 6.3
+  cleanup). README, website content, docs, and SEO references updated. Old
+  GitHub Pages URLs still resolve via redirect; canonical now points at
+  `thrum.team`.
+- **`thrum-inbox-poll.sh` cron deprecated** in favor of the daemon-side backstop
+  nudger. Existing installations continue to function but the cron is no longer
+  recommended; the daemon backstop is enabled by default. Removal of the
+  user-side cron is queued for a future release.
+- **`project-setup` skill follows `.thrum/redirect` when checking
+  `philosophy.md`.** Previously failed in redirected worktrees because it looked
+  at the worktree-local path directly. Now resolves the redirect before the
+  philosophy-presence check.
+- **`thrum worktree create` / `thrum worktree teardown` rewired through
+  `internal/worktree`** — cobra commands now delegate to the shared package
+  rather than inlining worktree-lifecycle logic. No user-visible behavior
+  change, but makes worktree-related bug fixes land in one place.
+- **README dropped removed-feature references** (groups + subscriptions) — these
+  features were removed in earlier releases; the README is now consistent with
+  the current CLI surface.
+- **`/thrum:restart` skill: §1 Big picture mandate + 11-section structure.**
+  Restart snapshots must now begin with a
+  `## 1. Big picture — what shipped this session` heading (1-3 specific
+  sentences naming artifacts, decisions, cycles closed), so the snapshot doubles
+  as the agent's own log entry visible in `thrum agent sessions list`. The
+  free-form prose enumeration was replaced with a numbered structure (sections
+  2-11) covering artifact state, players, decisions-with-context, repo-owner
+  questions, outstanding work, patterns-that-burned-us, file paths, resume plan,
+  honest unknowns, and end-of-continuation reflection. Forward-ported from
+  thrum-agents into release/v0.10.5 so rc.4 ships the mandate.
+- **`bd comments` invocation syntax corrected across docs.** Role-preamble
+  templates (`internal/context/roleconfig/templates/roles/implementer-*.md`) and
+  `bd` reference docs (`website/docs/beads-and-thrum.md`,
+  `docs/beads-and-thrum.md`) listed the subcommand as
+  `bd comments <id> add "note"`; the actual CLI is
+  `bd comments add <id> "note"`. Silently failed on every invocation against the
+  wrong shape. Corrected; column alignment preserved on code-block examples.
+- **BREAKING: `thrum send` requires explicit recipient flag** (thrum-t698).
+  Invoking `thrum send 'msg'` without either `--to @<agent>` or the new
+  `--broadcast` flag now hard-errors (exit 1) with a conversational stderr
+  message offering the two valid paths. Previously the no-flag default silently
+  broadcast to every team agent — a real footgun that scaled with team size
+  (coord live-demonstrated it during Session 75 with an accidental 94-agent
+  broadcast). The CLAUDE.md convention has long said "always use
+  `--to @<specific-name>`, never role names"; this aligns the CLI default with
+  the convention. Migration: explicit `--to @<agent_name>` (the common case) or
+  `--broadcast` (when team fanout is genuinely intended). `--to @everyone`
+  continues to work as the legacy keyword form. `--to` and `--broadcast` are
+  mutually exclusive. CLI_REFERENCE.md + thrum SKILL.md updated; the broader doc
+  audit (quickstart.md, messaging.md, identity.md, llms.txt, llms-full.txt) is
+  queued for the rc.6-cycle doc-cleanup pass.
+
+### Fixed
+
+- **`runtime-init` no longer leaves stale daemon-managed scripts in worktrees**
+  (thrum-akqv, P1). Daemon-managed templates (`scripts/thrum-startup.sh`,
+  `scripts/thrum-check-inbox.sh`, `.claude/settings.json`) were skipped on
+  `runtime-init` when the files already existed, causing drift in long-running
+  worktrees as the template content evolved across releases. The init logic now
+  distinguishes daemon-managed scripts (overwrite on init) from user-customized
+  configs (preserve on init).
+- **`thrum prime` ack interpolation strips backticks from identity fields**
+  (thrum-x7rb). Identity fields containing backticks were leaking literal
+  markdown/shell interpretation into the rendered ack template. Now sanitized
+  via explicit backtick strip in the interpolation path.
+- **Inbox backstop spool envelopes preserved from janitor reaping** — the
+  janitor was prematurely deleting backstop-pending envelopes, causing
+  stale-unread messages to disappear from inbox before the backstop nudger could
+  re-deliver them.
+- **Self-delivery: `read_at` stamped at insert; author preserved in
+  recipientSet** — E1 self-mention semantic fix. Messages with explicit
+  self-mention now route correctly to the author's own inbox without being
+  filtered out by the recipient-set construction.
+- **Self-echo nudge guard for tmux dispatch** (thrum-1zfk; regression of
+  thrum-kfn3 introduced by the self-delivery fix above). The DispatchTmux tmux
+  nudge path was missing the self-skip guard symmetric to the spool path. With
+  the author now preserved in `recipientSet` for `read_at` stamping, every send
+  touching role-group expansion or self-@mention reached the unguarded tmux
+  nudge path, firing phantom "new message" notifications back to the sender.
+  Layer 4 (DispatchTmux) now self-skips with `[nudge] tmux.skip self` for grep
+  parity with the existing `[nudge] spool.skip self` log.
+- **SEO: BlogPosting JSON-LD non-critical warnings cleaned up** — Schema.org
+  warnings on generated blog pages.
+- **Downgrade-guard error message: actionable recovery hints + CLAUDE.md
+  prevention** (thrum-quth, P1). When a binary's max supported schema is below
+  the on-disk DB's schema (common after `make install` from a newer-schema
+  branch on a multi-binary worktree machine), the daemon refuses to start.
+  Pre-rc.4 the error named the version pair but gave no recovery path beyond a
+  one-line hint. The expanded error now includes: binary's `CurrentVersion`,
+  DB's current schema, two concrete recovery paths (re-install matching binary;
+  daemon-stop-first then rm the DB + WAL/SHM with explicit
+  `LOSES local message history` warning), and a pointer to a new "Multi-Binary
+  Worktree Footgun" section in CLAUDE.md explaining why/avoid/recover. Test pin
+  expanded from 1 to 9 contract substrings.
+- **Post-launch silence watchdog detects ack-without-act** (thrum-qpw7). After
+  the identity-banner printf injection at tmux launch/restart, the watchdog
+  (`paneAgentEngaged`) treated the model's printf-mandated ack line
+  (`@<name> primed (<role>). Standing by.`) as real agent output — a
+  false-positive that suppressed the corrective nudge when the model
+  acknowledged the printf body WITHOUT Reading the (possibly truncated) prime
+  briefing. The engagement check now ignores lines matching the canonical ack
+  pattern `@\S+\s+primed\s*\(`, so the watchdog still nudges the agent into
+  running `thrum prime`. The regex is anchored on the literal `(` opener that
+  all 5 runtime plugins emit (claude/cursor/opencode/codex/kiro), so unrelated
+  prose like `@impl_v0105 primed the database` is not mis-classified and real
+  agent output still suppresses the nudge correctly.
+- **`thrum monitor stop` no longer hangs RPC critical path on slow-runner
+  monitors + reaps grandchild processes** (thrum-puhr.9.2, P1). Two-part fix:
+  (Path A) stop returns promptly even when the runner is slow — DB row marked
+  stopped synchronously, then 2s best-effort wait, returns unconditionally;
+  (Path B) `Setpgid: true` on the monitor command + `syscall.Kill(-pgid, ...)`
+  on shutdown so grandchildren that inherited the stdout pipe are killed too
+  instead of inheriting a dangling FD. Eliminates the zombie-hang failure mode
+  where `monitor stop` blocked for tens of seconds before the runner finally
+  exited.
+- **`thrum monitor stop` / `logs` / `restart` / `show` accept name as well as
+  ID** (thrum-puhr.9.1 / 09wl / tv6z). Operators reach for the monitor name —
+  the prominent column in `monitor list` — and previously hit
+  `RPC error -32000: monitor not found` because the CLI passed the user-supplied
+  identifier straight to the daemon's ID-keyed RPC. The four subcommands now
+  resolve name→ID at the CLI layer via `monitor.list` lookup before dispatching
+  the real RPC. ULID-shape detection (`mon_<26-char>` validated) routes
+  user-typed names like `mon_daily` through the lookup path rather than the
+  not-found cliff. Not-found errors hint at `thrum monitor list` / `list --all`
+  so operators can discover what's actually available. Daemon RPC surface
+  unchanged.
+- **Class B/C commands fire the cross-worktree diagnostic banner uniformly via
+  `PersistentPreRunE` preflight** (thrum-7b84.11, P2). The 8 leaves that bypass
+  `getClient` (daemon status / logs / start / stop / restart / run, backup
+  status, telegram status) previously ran silently from the wrong worktree
+  because `classifyRefreshError`'s banner emit lived inside `getClient`. A
+  `crossWorktreePreflight` hook in `rootCmd.PersistentPreRunE` now fires the
+  banner for Class B/C leaves regardless of whether the leaf later flows through
+  `getClient`; an absorbed-flag dedups the second emit when both paths fire
+  (e.g. `thrum team`). Annotation-gated; no-op for Class A (abort) and bypass
+  (help/version) and explicit `--repo` overrides.
+- **`tmux capture-pane` joins wrapped lines (`-J` flag)** (thrum-ktp8). The
+  post-launch silence watchdog's `paneAgentEngaged` searches captured pane
+  content for the `PrimeTruncationSentinel` to bound the decision region.
+  Without tmux's `-J` flag, long identity-banner content (Agent + Role +
+  Worktree + Branch + sentinel, frequently > 100 chars on typical terminals)
+  wrapped mid-string, splitting the sentinel across two pane lines. The per-line
+  `strings.Contains(line, sentinel)` check then failed to match on any single
+  line → `topIdx = -1` → conservative `return true` → no nudge fired. This
+  silently masked the rc.5 thrum-qpw7 ack-exclusion fix (which was correct but
+  never reached because sentinel detection failed first). `-J` joins wrapped
+  lines (and preserves trailing spaces); all 5 non-watchdog `CapturePane`
+  callers (HandleCapture RPC, queue captured- output, alert-silence run-shell,
+  permission paneStillMatches) are text- search consumers that benefit from
+  joined output, none depend on wrap- preservation. Surfaced during Leon's
+  @impl_writer_website_dev rc.5 spot-check.
+
+## [0.10.4] - 2026-05-16
+
 ### Fixed
 
 - **`thrum` mutating commands now fail closed under cross-worktree identity
@@ -45,8 +295,8 @@ and this project adheres to
     preserve the single-document JSON contract; equivalent context routes
     through the slog bridge's hints array.
   - The `cross_worktree` guard's remediation message reads
-    `cd to the correct worktree or run 'thrum prime' to re-claim`. Agents
-    that hit the abort should fix their cwd; there is no user-facing bypass.
+    `cd to the correct worktree or run 'thrum prime' to re-claim`. Agents that
+    hit the abort should fix their cwd; there is no user-facing bypass.
   - `TestEveryLeafHasCrossWorktreeResponse` CI gate fails the build if any new
     cobra leaf lacks a class annotation — prevents silent taxonomy drift.
 
@@ -1504,7 +1754,7 @@ these pins.
 
 The web dashboard has been rebuilt from scratch as a Slack-style 3-panel
 interface. Full documentation:
-**[Web UI Guide](https://leonletto.github.io/thrum/docs.html#web-ui.html)**
+**[Web UI Guide](https://thrum.team/docs.html#web-ui.html)**
 
 ### Added
 

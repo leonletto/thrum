@@ -5,6 +5,45 @@ before being promoted to stable. Beta users help catch regressions before they
 hit `releases/latest`. This guide covers how to opt in, what to expect, and how
 to report what you find.
 
+> **Current pre-release:
+> [`v0.10.5-rc.4`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.4)**
+> (tagged 2026-05-15, in soak). Highlights: codex plugin first-class,
+> post-launch tmux silence watchdog, first-launch trust-gate detection,
+> self-echo nudge fix, cwd-anchored identity precedence. rc.9 closes the inbox
+> read-race silent-loss class: `message.markRead` now accepts an optional
+> `marked_before` RFC3339Nano watermark, and the CLI captures the listing
+> timestamp before display so messages arriving in the listing→mark gap don't
+> get silently marked read. Inbox listings also carry a `HiddenByFilter` count,
+> so the unread footer is honest when a for-agent filter is hiding more. All
+> wire-additive — pre-rc.9 clients see byte-identical RPC behavior. Full notes:
+> [What's New](whats-new.md) and the
+> [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
+
+### Quick install for `v0.10.5-rc.4`
+
+Binary and Codex plugin (run in your shell):
+
+```bash
+# Binary
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.4 sh
+
+# Codex plugin (matches release/v0.10.5)
+THRUM_INSTALL_REF=release/v0.10.5 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.5/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+```
+
+Claude Code plugin (run inside Claude):
+
+```text
+/plugin marketplace add leonletto/thrum#release/v0.10.5
+/plugin install thrum@thrum
+/reload-plugins
+```
+
+For refresh between rc.N bumps, switch-back to stable, and the parameterized
+versions of these commands, see
+[How to install the matching plugins](#how-to-install-the-matching-claude-code-and-codex-plugins)
+below.
+
 ## What this is
 
 When a new version is ready for soak, the coordinator cuts a `release/vX.Y.Z`
@@ -64,6 +103,66 @@ thrum daemon restart
 You don't need to uninstall the previous RC first — the install script
 overwrites the binary in place.
 
+## How to install the matching Claude Code and Codex plugins
+
+The plugins live in the same repo as the binary, so the release branch
+(`release/vX.Y.Z`) carries the plugin payload that matches the RC binary you
+just installed. Install from that branch instead of the default marketplace so
+the plugin's slash commands, hooks, and skills stay in lockstep with the daemon.
+
+### Claude Code plugin
+
+Inside Claude Code, add the marketplace pinned to the release branch using the
+`<github-user>/<repo>#<branch>` shorthand, then install the plugin:
+
+```text
+/plugin marketplace add leonletto/thrum#release/vX.Y.Z
+/plugin install thrum@thrum
+/reload-plugins
+```
+
+The first command registers the marketplace named `thrum` and pins it to the
+release branch. The second installs the `thrum` plugin from that marketplace
+(`<plugin-name>@<marketplace-name>`).
+
+When a new rc.N drops on the same release branch, refresh the marketplace
+without re-adding it:
+
+```text
+/plugin marketplace update thrum
+/reload-plugins
+```
+
+If you've previously installed the stable marketplace and want to switch back to
+it after a release ships, remove the beta marketplace first:
+
+```text
+/plugin marketplace remove thrum
+/plugin marketplace add leonletto/thrum
+/plugin install thrum@thrum
+```
+
+### Codex plugin
+
+The Codex installer accepts a `THRUM_INSTALL_REF` env var. Set it to the release
+branch and run the installer from that same branch so both the script and the
+plugin payload come from the same revision:
+
+```bash
+THRUM_INSTALL_REF=release/vX.Y.Z bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/vX.Y.Z/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+```
+
+When a new rc.N drops on the same release branch, re-run the same command — the
+installer is idempotent on size+mtime and re-stages the cache from the latest
+revision of the branch.
+
+To switch back to stable after a release ships, rerun the installer with the
+default ref:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+```
+
 ## How to roll back to stable
 
 Before opting into the beta channel for the first time, take a backup of your
@@ -122,8 +221,10 @@ be seen until after stable ships.
 
 ## Leaving the beta channel
 
-When you're done testing, install the latest stable and restart the daemon.
-You're done — no further configuration needed:
+When you're done testing, revert the binary and any plugins you installed from
+the release branch back to their stable counterparts.
+
+### Binary
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
@@ -134,6 +235,39 @@ thrum version
 Stable releases come without a `-rc.N` suffix. Once you're back on stable,
 you'll only receive non-prerelease updates until you opt back in with a specific
 `VERSION=`.
+
+### Claude Code plugin
+
+If you installed the plugin from a release branch (via
+`leonletto/thrum#release/vX.Y.Z`), remove that marketplace and re-add the stable
+one before re-installing:
+
+```text
+/plugin marketplace remove thrum
+/plugin marketplace add leonletto/thrum
+/plugin install thrum@thrum
+/reload-plugins
+```
+
+The remove step is required — Claude Code keeps the cached source URL with the
+branch ref pinned, so re-adding without removing first leaves you on the same
+beta source.
+
+### Codex plugin
+
+Rerun the installer without `THRUM_INSTALL_REF`, pulling from `thrum-dev`:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+```
+
+The installer is idempotent and re-stages the cache, so the previous branch
+state is overwritten in place. No remove step is needed for the Codex plugin.
+
+> **Note:** the Codex plugin currently tracks `thrum-dev` rather than a
+> versioned release tag. Once the plugin starts shipping versioned releases (the
+> way the Claude plugin does via `marketplace.json`), the revert command here
+> will gain a version pin similar to the Claude flow above.
 
 ## Note for Homebrew users
 

@@ -56,10 +56,10 @@ ID    NAME         STATUS   UPTIME    PID     MATCH
 m_01  dev-errors   running  4m32s     91234   (?i)(error|exception|panic)
 ```
 
-Stop it when you're done:
+Stop it when you're done (use the name or the ID):
 
 ```bash
-thrum monitor stop m_01
+thrum monitor stop dev-errors
 ```
 
 ---
@@ -140,7 +140,7 @@ m_02  build-watch  stopped  —         —       ^(FAIL|PASS|error)
 Full detail on a single monitor.
 
 ```bash
-thrum monitor show <id>
+thrum monitor show <id|name>
 ```
 
 Shows the full command, env vars (redacted — values are `[redacted]`), match
@@ -153,7 +153,7 @@ count, recent matches, debounce config, and PID.
 Stop a running monitor.
 
 ```bash
-thrum monitor stop <id>
+thrum monitor stop <id|name>
 ```
 
 Sends SIGTERM. Waits 5 seconds for the process to exit. If it's still running,
@@ -167,7 +167,7 @@ restart.
 View captured output from a monitor's process.
 
 ```bash
-thrum monitor logs <id>
+thrum monitor logs <id|name>
 ```
 
 Shows the last N bytes of combined stdout+stderr from the child process. Useful
@@ -181,7 +181,7 @@ process was doing before it exited.
 Restart a stopped or dead monitor.
 
 ```bash
-thrum monitor restart <id>
+thrum monitor restart <id|name>
 ```
 
 Respawns the child process from the saved spec. The monitor must already exist

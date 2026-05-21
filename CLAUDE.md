@@ -11,7 +11,7 @@ machines. The system consists of a Go CLI + embedded daemon with a React SPA web
 UI served over WebSocket.
 
 **Module:** `github.com/leonletto/thrum` **Go version:** 1.26 **Version:**
-v0.10.4
+v0.10.5
 
 ## On Session Start
 
@@ -113,6 +113,59 @@ thrum daemon restart
 # Check daemon status
 thrum daemon status
 ```
+
+## Multi-Binary Worktree Footgun
+
+Each worktree under `~/.thrum/worktrees/thrum/` builds its own `bin/thrum`, and
+each build can support a different DB schema range. The shared daemon runs
+`~/.local/bin/thrum` (installed via `make install` from whichever worktree last
+ran it). When a `make install` from a worktree on a branch with a NEWER schema
+(e.g. `thrum-agents` with v32 substrate work) migrates the on-disk DB up, a
+later `make install` from a worktree on an OLDER schema branch (e.g.
+`release/v0.10.5` at v24) ships a binary that refuses to start:
+
+```
+database schema is version 32, this binary supports up to 24 — cannot downgrade.
+
+Recovery options:
+  1. Re-install a newer binary that supports schema v32 or above:
+       cd <worktree-with-newer-branch> && make install
+  2. Delete the database to start fresh (LOSES local message history + spool):
+       thrum daemon stop   # release file locks first
+       rm /Users/<you>/dev/opensource/thrum/.thrum/var/state.db
+       rm /Users/<you>/dev/opensource/thrum/.thrum/var/state.db-wal /Users/<you>/dev/opensource/thrum/.thrum/var/state.db-shm
+  3. See CLAUDE.md § "Multi-binary worktree footgun" for prevention
+```
+
+**Why it happens:** The DB lives under `<repo-root>/.thrum/var/state.db` and is
+shared across every worktree's binary (worktrees redirect their `.thrum/` to the
+main repo's `.thrum/` via the `.thrum/redirect` file). Schema migrations are
+one-way: a newer binary migrates the DB up; an older binary cannot migrate it
+back down.
+
+**How to avoid:**
+
+- Only `make install` from a worktree on a branch whose schema `CurrentVersion`
+  is `>=` what's currently on disk. The highest-schema branch you actively use
+  is the safe install source.
+- If you maintain release-line work (`release/v0.10.x`) alongside substrate work
+  (`thrum-agents`), DO NOT cross-install: install from `thrum-agents` is one-way
+  unless you're prepared to wipe the DB.
+- For local dev iteration inside a single worktree, prefer `make dev`
+  (per-worktree `./bin/thrum` + `./bin/thrum daemon restart`) over
+  `make install` — `make dev` does not touch the shared binary.
+
+**How to recover (the error message walks you through this):**
+
+1. If another worktree on this machine has a binary supporting the on-disk
+   schema version, `cd` there and `make install`. The shared
+   `~/.local/bin/thrum` gets replaced with one that can open the DB.
+2. If no such worktree is available (or you don't care about local history),
+   stop the daemon, delete the DB + WAL/SHM sidecars, and restart. The daemon
+   will initialize a fresh DB on next start.
+3. Long-term prevention belongs in a `make install` pre-flight check
+   (`thrum-quth` follow-ups) — for now the daemon's startup error is the primary
+   detection point.
 
 ## Browser Automation
 

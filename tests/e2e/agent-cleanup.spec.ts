@@ -73,8 +73,10 @@ test.describe('Agent Cleanup Tests', () => {
       THRUM_MODULE: 'cleanup-test',
     });
 
-    // Send a message from this agent
-    thrum(['send', `Test message from ${agentName}`], 10_000, {
+    // Send a message from this agent (thrum-t698: explicit --broadcast;
+    // the test agent is ephemeral and may be the only registered agent
+    // in this test's env, so --to @<directed> isn't always available)
+    thrum(['send', `Test message from ${agentName}`, '--broadcast'], 10_000, {
       ...process.env,
       THRUM_NAME: agentName,
       THRUM_ROLE: 'tester',

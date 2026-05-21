@@ -197,6 +197,30 @@ func loadGuardConfig(repoPath string) guard.Config {
 	return guard.LoadConfigFromDir(paths.EffectiveRepoPath(repoPath))
 }
 
+// CheckCrossWorktreeGuard runs the identity guard check without
+// opening a daemon connection. Returns the same *guard.Error values
+// RefreshLocalIdentity would surface, so callers can feed the result
+// into the cmd/thrum classifyRefreshError pipeline.
+//
+// Used by cmd/thrum's PersistentPreRunE preflight (thrum-7b84.11) so
+// Class B/C leaves that bypass getClient — `thrum daemon status`,
+// `thrum daemon logs`, `thrum backup status`, `thrum telegram status`
+// and the daemon lifecycle subcommands — still fire the diagnostic
+// banner when invoked from the wrong worktree. Without preflight,
+// those leaves run silently because guard.Check is never reached.
+//
+// Side effect: guard.Check reconciles identity-file drift (runtime,
+// branch, tmux session fields) when no ownership violation is
+// detected. Callers that also flow through RefreshLocalIdentity in
+// the same invocation will trigger two reconcile passes. Both
+// produce the same values today (reconciliation is idempotent), so
+// the duplicate write is a small wasted IO but not a correctness
+// hazard. If reconcileDrift ever grows a non-idempotent field
+// (counter, timestamp), revisit this seam.
+func CheckCrossWorktreeGuard(repoPath string) error {
+	return guard.Check(context.Background(), repoPath, loadGuardConfig(repoPath), nil)
+}
+
 // isNoIdentityFile returns true when err indicates "no identity file was
 // found at repoPath" — a legitimate non-error case for refresh.
 //

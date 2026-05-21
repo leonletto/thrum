@@ -1,4 +1,4 @@
-# Thrum v0.10.4 -- Complete Agent Reference
+# Thrum v0.10.5 -- Complete Agent Reference
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -311,7 +311,6 @@ All commands accept:
 
   --role VALUE        Agent role (or THRUM_ROLE env var)
   --module VALUE      Agent module (or THRUM_MODULE env var)
-  --repo PATH         Repository path (default: ".")
   --json              JSON output for scripting
   --quiet             Suppress non-essential output
   --verbose           Debug output
@@ -950,17 +949,17 @@ All commands accept:
     List monitors. Without --all, shows only running monitors.
     Columns: ID | NAME | STATUS | MATCH | TO | PID | STARTED
 
-  thrum monitor show <id>
+  thrum monitor show <id|name>
     Show full monitor config: name, argv, match regex, target agent, debounce,
     env vars (redacted), pid, status, start time, exit code (if stopped).
 
-  thrum monitor stop <id>
+  thrum monitor stop <id|name>
     Send SIGTERM to the child process. Monitor moves to "stopped" state.
 
-  thrum monitor logs <id>
+  thrum monitor logs <id|name>
     Show recent captured output lines from the monitor's ring buffer.
 
-  thrum monitor restart <id>
+  thrum monitor restart <id|name>
     Restart a stopped or failed monitor using the same config.
 
 ### thrum tmux snapshot save | restore | check (v0.7.1)
@@ -1879,7 +1878,7 @@ Unknown event types are silently ignored (forward compatibility).
 
   toolkit/agents/                 Claude Code agent definitions
     thrum-agent.md                Thrum messaging coordination guide
-    (Beads plugin)                Install via /install-plugin beads (recommended over agent file)
+    (Beads)                       Install via brew install beads; SessionStart hook auto-installed by thrum-managed projects.
     message-listener.md           Background message polling agent (Haiku model)
     README.md                     Installation and usage instructions
 

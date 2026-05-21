@@ -513,9 +513,11 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 			}
 			refs = append(refs, types.Ref{Type: "mention", Value: toVal})
 			audiences = append(audiences, MessageAudience{Type: "agent", Value: toVal})
-			if toVal != agentID {
-				recipientSet[toVal] = struct{}{}
-			}
+			// Keep author in recipientSet for explicit self-mention. The projector
+			// stamps read_at on the self-delivery row at insert so the message
+			// drops out of --unread without a round-trip. Broadcasts (--to
+			// everyone / implicit) strip self via queryAllOtherAgents's SQL.
+			recipientSet[toVal] = struct{}{}
 			resolvedTo++
 		}
 	}
@@ -561,9 +563,9 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 				return nil, fmt.Errorf("expand group %q: %w", role, err)
 			}
 			for _, recipientAgentID := range members {
-				if recipientAgentID == agentID {
-					continue
-				}
+				// Keep author in recipientSet on explicit group mention (group
+				// names are addressed deliberately; the projector stamps
+				// read_at on the author's self-delivery row).
 				recipientSet[recipientAgentID] = struct{}{}
 			}
 		} else {
@@ -581,9 +583,9 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 				}
 				audiences = append(audiences, MessageAudience{Type: audienceType, Value: role})
 				for _, recipientAgentID := range matchedAgents {
-					if recipientAgentID == agentID {
-						continue
-					}
+					// Keep author in recipientSet on explicit agent or role
+					// mention that resolves to author. Projector stamps
+					// read_at on the self-delivery row.
 					recipientSet[recipientAgentID] = struct{}{}
 				}
 				resolvedTo++

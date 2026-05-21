@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/leonletto/thrum/internal/hookmerge"
 )
 
 // --- EnsureRedirects tests ---
@@ -80,6 +82,193 @@ func TestEnsureRedirects_SkipsBeadsWhenNotPresent(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(wt, ".beads")); !os.IsNotExist(err) {
 		t.Error(".beads should not exist when main repo has no .beads/")
+	}
+}
+
+// TestEnsureRedirects_InstallsBdHookWhenAvailable pins thrum-nh88 scope (C):
+// when BeadsEnabled is true AND bd is on PATH, EnsureRedirects installs the
+// canonical "bd prime --hook-json" SessionStart hook into the worktree's
+// .claude/settings.json. The hookmerge.BdBinaryAvailable function variable
+// is stubbed so the test does not depend on the CI host's binary set.
+func TestEnsureRedirects_InstallsBdHookWhenAvailable(t *testing.T) {
+	original := hookmerge.BdBinaryAvailable
+	hookmerge.BdBinaryAvailable = func() bool { return true }
+	t.Cleanup(func() { hookmerge.BdBinaryAvailable = original })
+
+	mainRepo := t.TempDir()
+	thrumDir := filepath.Join(mainRepo, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	cfgJSON := `{"worktrees":{"base_path":"/tmp","beads_enabled":true,"thrum_enabled":true}}`
+	if err := os.WriteFile(filepath.Join(thrumDir, "config.json"), []byte(cfgJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	wt := t.TempDir()
+	if err := os.WriteFile(filepath.Join(wt, ".git"),
+		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EnsureRedirects(wt, mainRepo); err != nil {
+		t.Fatalf("EnsureRedirects: %v", err)
+	}
+
+	settings, err := hookmerge.Load(filepath.Join(wt, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatalf("Load worktree settings: %v", err)
+	}
+	cmds := hookmerge.ExtractCommands(settings)
+	foundBd, foundThrum := false, false
+	for _, c := range cmds {
+		if c.Command == hookmerge.CanonicalBdCommand && c.Event == "SessionStart" {
+			foundBd = true
+		}
+		if strings.Contains(c.Command, "thrum-startup.sh") {
+			foundThrum = true
+		}
+	}
+	if !foundBd {
+		t.Errorf("expected canonical bd SessionStart hook installed, got %+v", cmds)
+	}
+	if !foundThrum {
+		t.Errorf("expected thrum startup hook installed alongside bd, got %+v", cmds)
+	}
+}
+
+// TestEnsureRedirects_SkipsBdHookWhenMarketplacePluginActive pins
+// thrum-nh88 acceptance #5: when the beads marketplace plugin is enabled
+// (enabledPlugins.beads=true in the worktree's settings file), bd hook
+// install is skipped to avoid double-fire — even if BeadsEnabled is true
+// and bd is on PATH.
+func TestEnsureRedirects_SkipsBdHookWhenMarketplacePluginActive(t *testing.T) {
+	original := hookmerge.BdBinaryAvailable
+	hookmerge.BdBinaryAvailable = func() bool { return true }
+	t.Cleanup(func() { hookmerge.BdBinaryAvailable = original })
+
+	mainRepo := t.TempDir()
+	thrumDir := filepath.Join(mainRepo, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	cfgJSON := `{"worktrees":{"base_path":"/tmp","beads_enabled":true,"thrum_enabled":true}}`
+	if err := os.WriteFile(filepath.Join(thrumDir, "config.json"), []byte(cfgJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	wt := t.TempDir()
+	if err := os.WriteFile(filepath.Join(wt, ".git"),
+		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	settingsPath := filepath.Join(wt, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	pre := `{"enabledPlugins":{"beads":true}}`
+	if err := os.WriteFile(settingsPath, []byte(pre), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EnsureRedirects(wt, mainRepo); err != nil {
+		t.Fatalf("EnsureRedirects: %v", err)
+	}
+
+	settings, _ := hookmerge.Load(settingsPath)
+	cmds := hookmerge.ExtractCommands(settings)
+	for _, c := range cmds {
+		if c.Command == hookmerge.CanonicalBdCommand {
+			t.Errorf("bd hook installed despite marketplace plugin guard: %+v", cmds)
+		}
+	}
+}
+
+// TestEnsureRedirects_InstallsThrumClaudeHooks pins thrum-nh88 scope (B):
+// when the main repo's ThrumConfig has Worktrees.ThrumEnabled, the worktree's
+// .claude/settings.json is reconciled with thrum's canonical hooks. Any
+// pre-existing third-party hook entries are preserved.
+func TestEnsureRedirects_InstallsThrumClaudeHooks(t *testing.T) {
+	mainRepo := t.TempDir()
+	thrumDir := filepath.Join(mainRepo, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	// Seed a ThrumConfig with ThrumEnabled (BeadsEnabled left false to
+	// keep this test focused on the thrum-hook path).
+	cfgJSON := `{"worktrees":{"base_path":"/tmp","beads_enabled":false,"thrum_enabled":true}}`
+	if err := os.WriteFile(filepath.Join(thrumDir, "config.json"), []byte(cfgJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	wt := t.TempDir()
+	if err := os.WriteFile(filepath.Join(wt, ".git"),
+		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pre-seed a third-party hook in the worktree's settings.json to
+	// verify merge (not overwrite).
+	settingsPath := filepath.Join(wt, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	pre := `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"third-party hook"}]}]}}`
+	if err := os.WriteFile(settingsPath, []byte(pre), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EnsureRedirects(wt, mainRepo); err != nil {
+		t.Fatalf("EnsureRedirects: %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Clean(settingsPath))
+	if err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+	body := string(got)
+	for _, must := range []string{
+		"third-party hook",            // preserved
+		"thrum-startup.sh",            // thrum SessionStart added
+		"HOOK_EVENT=Stop",             // thrum Stop added
+		"HOOK_EVENT=PostToolUse",      // thrum PostToolUse added
+		"HOOK_EVENT=UserPromptSubmit", // thrum UserPromptSubmit added
+		"HOOK_EVENT=PreCompact",       // thrum PreCompact added
+	} {
+		if !strings.Contains(body, must) {
+			t.Errorf("expected %q in merged settings.json\n%s", must, body)
+		}
+	}
+}
+
+// TestEnsureRedirects_SkipsHookMergeWhenThrumDisabled covers the case where
+// the operator has flipped Worktrees.ThrumEnabled to false — no hook merge
+// should occur. The worktree settings file (if pre-existing) stays untouched.
+func TestEnsureRedirects_SkipsHookMergeWhenThrumDisabled(t *testing.T) {
+	mainRepo := t.TempDir()
+	thrumDir := filepath.Join(mainRepo, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	cfgJSON := `{"worktrees":{"base_path":"/tmp","beads_enabled":false,"thrum_enabled":false}}`
+	if err := os.WriteFile(filepath.Join(thrumDir, "config.json"), []byte(cfgJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	wt := t.TempDir()
+	if err := os.WriteFile(filepath.Join(wt, ".git"),
+		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EnsureRedirects(wt, mainRepo); err != nil {
+		t.Fatalf("EnsureRedirects: %v", err)
+	}
+
+	// No settings.json should have been created.
+	settingsPath := filepath.Join(wt, ".claude", "settings.json")
+	if _, err := os.Stat(settingsPath); !os.IsNotExist(err) {
+		t.Fatalf("expected .claude/settings.json NOT created when ThrumEnabled=false; err=%v", err)
 	}
 }
 

@@ -5,6 +5,7 @@
 <title>Session Restart & Context Recovery — Thrum</title>
 <meta name="description" content="Save conversation history and resume where you left off — from daily shutdown to automated mid-task restarts">
 <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#session-restart.html">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Session Restart & Context Recovery","description":"Save conversation history and resume where you left off — from daily shutdown to automated mid-task restarts","url":"https://leonletto.github.io/thrum/docs.html#session-restart.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://leonletto.github.io/thrum/docs.html"}}</script>
 <style>
 body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
 pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
@@ -16,6 +17,12 @@ nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-h
 h2{margin-top:2rem}
 a{color:#0366d6}
 </style>
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+<script>
+window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+plausible.init()
+</script>
 </head>
 <body>
 <nav>
@@ -233,7 +240,8 @@ thrum tmux restart implementer-api --runtime opencode</code></pre>
 <pre><code>restart:
   max_lines: 200 # Max lines in snapshot (default: 200)
   auto_threshold: 0 # Context % trigger, 0 = disabled (default: 0)
-  graceful_timeout: 30 # Seconds to wait for graceful save (default: 30)</code></pre>
+  graceful_timeout: 30 # Seconds to wait for graceful save (default: 30)
+  silence_watchdog_seconds: 30 # Post-launch silence threshold (default: 30)</code></pre>
 <p><code>max_lines</code> controls how much conversation history to keep. 200 lines captures
 the recent conversation tail; older context is covered by the appended git and
 Thrum hints (<code>git log</code>, <code>git status</code>, <code>bd ready</code>, <code>thrum inbox</code>) that the
@@ -244,6 +252,12 @@ automatic restart. Set to 0 to disable (the default). A value like 80 means
 &quot;restart when 80% of the context window is used.&quot;</p>
 <p><code>graceful_timeout</code> is how long <code>thrum tmux restart</code> waits for the agent to save
 its own snapshot before falling back to force extraction.</p>
+<p><code>silence_watchdog_seconds</code> controls the post-launch silence watchdog. After
+<code>thrum tmux launch</code> or <code>thrum tmux restart</code>, the daemon monitors the agent pane
+for this many seconds. If the pane produces no output, a contextual nudge is
+sent so the agent doesn&#39;t sit idle having missed the prime output. An
+actively-producing pane is never interrupted. Set to a negative value to
+disable.</p>
 <hr>
 <h2>How It Fits Together</h2>
 <p>The context preservation story has layers:</p>

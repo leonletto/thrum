@@ -57,6 +57,23 @@ func DispatchTmux(thrumDir string, recipients []string, senderName string) {
 		return
 	}
 	for _, recipientName := range recipients {
+		// thrum-1zfk: never nudge the sender's own pane. HandleSend now
+		// intentionally KEEPS the author in the recipients list (see
+		// HandleSend's recipientSet loop in rpc/message.go: "Keep author
+		// in recipientSet on explicit agent or role mention that resolves
+		// to author") so the projector can stamp read_at on the
+		// self-delivery row. That invariant change (commit c6b2072e04,
+		// 2026-05-16) broke the unguarded assumption here. Mirror the
+		// spool-dispatcher guard in cmd/thrum/main.go's SetOnEventWrite
+		// closure so the tmux-nudge path is symmetric defense-in-depth.
+		if recipientName == senderName {
+			slog.Info("[nudge] tmux.skip self",
+				"site", "nudge.DispatchTmux",
+				"sender", senderName,
+				"recipient", recipientName,
+			)
+			continue
+		}
 		go func(name string) {
 			target := ResolveTarget(thrumDir, name)
 			if target == "" {
@@ -81,7 +98,6 @@ func DispatchTmux(thrumDir string, recipients []string, senderName string) {
 				"recipient", name,
 				"target", target,
 				"session", session,
-				"self_echo", name == senderName,
 			)
 			_ = ttmux.Nudge(target, senderName)
 		}(recipientName)

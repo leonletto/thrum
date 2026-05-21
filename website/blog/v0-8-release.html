@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>Toward an Orchestrator · Thrum Blog</title>
+  <meta name="description" content="v0.8 spans five days and three releases. The framing question on day one was whether two features were really the same plan. By day five Thrum had an orchestrator role, three runtimes launching through the same primitives, a refreshed identity model, and the three bugs the work uncovered along the way.">
+  <link rel="canonical" href="https://leonletto.github.io/thrum/blog/v0-8-release.html">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Toward an Orchestrator">
+  <meta property="og:description" content="v0.8 spans five days and three releases. The framing question on day one was whether two features were really the same plan. By day five Thrum had an orchestrator role, three runtimes launching through the same primitives, a refreshed identity model, and the three bugs the work uncovered along the way.">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/blog/v0-8-release.html">
+  <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <meta property="article:published_time" content="2026-04-13">
+  <meta property="article:author" content="Leon Letto">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Toward an Orchestrator">
+  <meta name="twitter:description" content="v0.8 spans five days and three releases. The framing question on day one was whether two features were really the same plan. By day five Thrum had an orchestrator role, three runtimes launching through the same primitives, a refreshed identity model, and the three bugs the work uncovered along the way.">
+  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <!-- JSON-LD structured data (BlogPosting) -->
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"Toward an Orchestrator","description":"v0.8 spans five days and three releases. The framing question on day one was whether two features were really the same plan. By day five Thrum had an orchestrator role, three runtimes launching through the same primitives, a refreshed identity model, and the three bugs the work uncovered along the way.","author":{"@type":"Person","name":"Leon Letto","url":"https://leonletto.github.io/"},"datePublished":"2026-04-13T12:00:00-07:00","image":"https://leonletto.github.io/thrum/img/social-card.png","url":"https://leonletto.github.io/thrum/blog/v0-8-release.html","mainEntityOfPage":{"@type":"WebPage","@id":"https://leonletto.github.io/thrum/blog/v0-8-release.html"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum"},"keywords":"release, v0.8, orchestrator, multi-runtime"}</script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/landing.css">
+  <link rel="stylesheet" href="../css/blog.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link">Docs</a>
+          <a href="../blog.html" class="nav-link nav-link-active">Blog</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+          <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+            <span class="icon-sun">&#x2600;</span>
+            <span class="icon-moon">&#x263E;</span>
+          </button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <article class="section blog-post-section">
+    <div class="container-narrow">
+      <p class="post-eyebrow"><a href="../blog.html">&larr; All posts</a></p>
+      <h1 class="post-title">Toward an Orchestrator</h1>
+      <p class="post-meta">
+        <span class="post-date">April 13, 2026</span>
+        <span class="post-meta-sep">&middot;</span>
+        <span class="post-author">Leon Letto</span>
+        <span class="post-meta-sep">&middot;</span>
+        <span class="post-reading-time">9 min read</span>
+      </p>
+      <div class="post-tags"><span class="post-tag">release</span><span class="post-tag">v0.8</span><span class="post-tag">orchestrator</span><span class="post-tag">multi-runtime</span></div>
+      
+      <div class="post-body">
+<p>The day after v0.7.2 went out, I opened a session with the coordinator and asked
+a sequencing question. Two features had been sitting on the backlog:
+multi-runtime tmux (the work that would let OpenCode and Codex launch the same
+way Claude Code does), and a real orchestrator role with worktree management and
+review gates. I&#39;d been thinking about both for a while. The question was which
+one to do first.</p>
+<blockquote>
+<p>&quot;Can you analyze those two features to see which one we should implement first
+because I think they both are part of the same overall plan to make thrum more
+of an orchestrator?&quot;</p>
+</blockquote>
+<p>The coordinator made the case for multi-runtime first: it renamed <code>ClaudePID</code> to
+<code>AgentPID</code> (schema v17, a breaking change), and the orchestrator role would
+build on top of runtime-aware identity rather than re-derive it. I agreed.</p>
+<blockquote>
+<p>&quot;yes. Lets do that.&quot;</p>
+</blockquote>
+<p>Five days later, v0.8.2 shipped. The orchestrator role was real, three runtimes
+were launching through the same primitives, the daemon&#39;s view of &quot;who is who&quot;
+had been redesigned around a refresh primitive instead of an edge case, and
+three of the more interesting bugs we found weren&#39;t on any list when the week
+started.</p>
+<h2>Inbox: 380 Unread</h2>
+<p>Same April 8 session. The coordinator dispatched the first multi-runtime task to
+a brand-new agent in a fresh worktree, and I pasted back what the agent saw the
+moment it ran prime.</p>
+<blockquote>
+<p>&quot;Inbox: 380 unread (380 total) - process these before starting new work&quot;</p>
+</blockquote>
+<p>A new agent, with no history, seeing every group and broadcast message anyone
+had ever sent. The inbox filter was supposed to scope to the agent. It wasn&#39;t.</p>
+<p>Two bugs underneath. In <code>internal/cli/prime.go</code>, the prime command never set
+<code>ForAgent</code> or <code>ForAgentRole</code> in its inbox query, so the unread count came back
+unscoped. And in <code>internal/daemon/rpc/message.go</code>, there was no time boundary on
+group and broadcast queries, so a new agent saw everything historical regardless
+of when its identity was registered. The fix needed both: pass the whoami fields
+through prime, and add a <code>registered_at</code> floor so a new agent only sees messages
+from its own existence forward.</p>
+<blockquote>
+<p>&quot;create beads for both and then I think you can fix them here using
+sub-agents. And now that we have the thrum tmux commands working, you can even
+test it in a new work tree and then just remove the work tree when you&#39;re
+done.&quot;</p>
+</blockquote>
+<p>That instruction is its own small story. The thing I was building with (tmux
+commands from v0.7.1) was the thing I used to test the fix for a bug in the
+thing I&#39;m currently building. The new feature lets you spin up a test agent on
+demand, hit it with the failing scenario, and tear it down. Filed as thrum-8rj
+(P1) and thrum-2ue (P2). Both fixed the same session.</p>
+<p>Same evening, while I was at it, I noticed <code>thrum tmux start</code> was sending
+<code>/thrum:prime</code> at T+8s and <code>HandleLaunch</code> was independently sending it at T+10s.
+Two prime commands from two different places. Duplicate removed. Commit:
+&quot;fix(tmux): remove duplicate prime in start command.&quot;</p>
+<h2>Stale, and Wrong-Prefixed</h2>
+<p>April 10. The multi-runtime work was reaching the point where I could actually
+launch a Codex agent through <code>thrum tmux start --runtime codex</code>. The first time
+I tried it, the prime command went into the pane and Codex stared at it.</p>
+<blockquote>
+<p>&quot;It actually wants the dollar sign instead of the slash.&quot;</p>
+</blockquote>
+<p>Codex uses <code>$thrum-prime</code>, not <code>/thrum:prime</code>. One <code>case &quot;codex&quot;:</code> addition in
+<code>primeCommandForRuntime()</code>. Tested.</p>
+<blockquote>
+<p>&quot;it worked perfect. commit.&quot;</p>
+</blockquote>
+<p>But that fix exposed a much bigger problem. I had four worktrees up at the time:
+Claude Code in one, OpenCode in another, Codex in a third, the coordinator main
+in a fourth. I ran <code>thrum team</code>.</p>
+<blockquote>
+<p>&quot;You&#39;ll notice that you are showing a stale and website dev is showing a stale
+and team-fix is showing a stale and multi-runtime is showing a stale. Also you
+can&#39;t tell which runtime they&#39;re on and we were supposed to be detecting
+that.&quot;</p>
+</blockquote>
+<p>Every agent showed <code>[stale]</code>. None of them showed which runtime they were on.
+The daemon had no current view of the things it was supposed to be tracking.</p>
+<p>My framing for the fix was important to me. I didn&#39;t want the answer to be
+&quot;patch prime to refresh on the way in.&quot; I wanted the daemon&#39;s view of identity
+to converge automatically:</p>
+<blockquote>
+<p>&quot;From what I understand from the few commits ago when we built this new
+feature, the daemon is supposed to keep track of who&#39;s who and what they&#39;re
+running and what PID they are, that type of thing... I guess we can start
+there and build a shared function that does the work. That way if we want to
+add that function to other thrum commands, which are run more often, so that
+they also double check and update the identity file if needed, we can do that
+later. Any fix should be not just an edge case in thrum prime. Does this make
+sense?&quot;</p>
+</blockquote>
+<p>That turned into a six-section design session. The coordinator walked through
+the architectural decisions as a series of questions; I gave terse approvals.
+Where does the refresh run (every <code>getClient()</code> call, so every CLI command
+participates). How does it detect drift (compare in-process state to identity
+file mtime and content). How does it trigger re-registration (it doesn&#39;t on its
+own; the next quickstart or tmux-start does, but the team listing is now always
+live). How does the daemon&#39;s <code>team.list</code> build its picture (scan all worktree
+identity files instead of relying on cached rows).</p>
+<p>One addition from me that mattered:</p>
+<blockquote>
+<p>&quot;Don&#39;t forget to use safeCmds for the os level stuff so we don&#39;t introduce
+locking bugs.&quot;</p>
+</blockquote>
+<p>The <code>process.go</code> <code>ps</code> calls were using bare <code>exec.Command</code>. That&#39;s the pattern
+that bit us in v0.6 and again later. Flagging it inline meant the safecmd
+migration covered it from the start instead of getting added as a 0.8.1 patch.</p>
+<p>The result of that conversation is what shipped as <code>RefreshLocalIdentity</code> in
+v0.8.0, alongside the multi-runtime work and the new orchestrator role with
+<code>thrum worktree create/teardown/list</code> and the <code>thrum:orchestrate</code> skill. And
+alongside the tmux command queue, the daemon&#39;s per-session FIFO that finally
+gives commands a reliable place to land instead of racing the pane state. And
+alongside the OpenCode and Codex plugins, with the Codex plugin pulled into
+alignment with the Claude Code source-of-truth via <code>sync-skills.sh</code>. And
+alongside the safecmd migration, 47 call sites moved off bare <code>exec.Command</code>
+across 11 files.</p>
+<p>v0.8.0 went out the evening of April 10.</p>
+<h2>And Then the Same-Day Patch</h2>
+<p>About an hour after the tag pushed, the release workflow failed on
+<code>npm publish</code>. The cause was almost embarrassing.
+<code>opencode-plugin/package-lock.json</code> was in <code>.gitignore</code>, because some earlier
+pattern had matched it. The release workflow runs <code>npm ci</code>, which requires a
+lockfile. The lockfile was on disk but not in git. CI checked out a tree without
+it. <code>npm ci</code> refused.</p>
+<p>The fix was a one-line negation pattern in <code>.gitignore</code> to un-ignore that
+specific lockfile. v0.8.1 went out the same day. The thing about same-day
+patches is they don&#39;t really feel like releases. They feel like getting the
+tagging right.</p>
+<h2>Housekeeping, the Breather, and What Came After</h2>
+<p>The next two days were quieter. I dispatched a CLI audit to clean up things that
+had accumulated as the surface area grew. Remove groups as a user-facing concept
+(about 2400 lines of code gone across 24 files). Restrict <code>--to</code> to agent IDs
+and <code>@everyone</code>. Fix a latent bug where <code>@everyone</code> was leaking across
+git-synced repos because of how scope matching had been written.</p>
+<p>Then April 13 morning. I came back to a daemon running v0.8.1 and a list of 22
+remote branches in the repo, most of which were stale from earlier feature work
+that had been cherry-picked into the trunk. I spent the first hour cleaning. 18
+branches deleted. Bidirectional merge between <code>website-dev</code> and <code>thrum-dev</code> to
+reconcile some divergent doc edits. A <code>git filter-repo</code> run to purge <code>dev-docs/</code>
+out of git history entirely (about 9.5MB, 28 commits), because the dev-docs were
+supposed to be gitignored and somehow had sneaked into history during an earlier
+merge. Then a pre-commit guard to make sure that didn&#39;t happen again.</p>
+<p>At 10:15 AM I sent the coordinator the sentence that, in retrospect, was the
+breather moment of the line.</p>
+<blockquote>
+<p>&quot;Excellent. Now we can get back to work. Can you look at the previous couple
+of commits in this branch and the backlog and beads to see what we need to do
+before we can do the next release?&quot;</p>
+</blockquote>
+<p>The housekeeping had been the actual reset. That sentence was the return to
+feature work. The backlog scan came back with two issues that needed to go out
+before the next tag.</p>
+<h2>The Monitor That Never Delivered</h2>
+<p>The first one was thrum-taa, a P0. The monitor feature, which had shipped in
+v0.8.0 three days earlier, never actually delivered messages. The matcher fired.
+The matching agent was identified. The delivery call happened. Nothing landed.</p>
+<p>Root cause was elegant and embarrassing in equal measure. <code>HandleStart</code> for a
+monitor never registered a synthetic agent and session row for the
+<code>monitor:&lt;name&gt;</code> sender identity. <code>HandleSend</code> requires both rows to exist
+before it will deliver. The delivery closure in the monitor code silently
+swallowed the resulting error and returned. So every monitor match looked
+successful at the matcher layer and silently dropped at the delivery layer.</p>
+<p>The integration test masked the bug by pre-seeding the rows manually. That&#39;s the
+cliché of every &quot;broken from day one&quot; bug: a test that helpfully sets up the
+world for the code under test, and never asks whether the code under test is
+supposed to set up the world itself.</p>
+<p>Fix: an <code>ensureMonitorSender()</code> call in <code>HandleStart</code>, <code>HandleRestart</code>, and an
+<code>EnsureAllMonitorSenders()</code> pass at daemon startup so monitors that survive a
+restart get their rows back. Twelve minutes from dispatch to working fix.</p>
+<p>The second one was thrum-ltj, a P2 I&#39;d flagged a day earlier. <code>SyncLoop.Start()</code>
+was calling <code>EnsureSyncBranch</code> but never <code>CreateSyncWorktree</code>. When the sync
+directory existed without a valid worktree, <code>git status</code> failed every 30 seconds
+for the life of the daemon. Fixed by adding the idempotent <code>CreateSyncWorktree</code>
+call before the loop starts.</p>
+<blockquote>
+<p>&quot;Excellent. Can you fix both of them here using subagents?&quot;</p>
+</blockquote>
+<p>Both fixes back in twelve minutes. Committed, pushed.</p>
+<p>Then one more thing for the release.</p>
+<blockquote>
+<p>&quot;Now I have one more thing to add to the release, which is the cursor plugin.&quot;</p>
+</blockquote>
+<p>The Cursor Agent plugin. Five hooks, two rules, four skills, eleven commands,
+MCP config, a <code>local-install.sh</code> for deployment. Pulled into alignment with the
+Claude Code plugin source of truth via <code>sync-skills.sh</code>, the same primitive that
+synced OpenCode and Codex. Four runtimes through one syncing script. Tagged as
+v0.8.2 that afternoon.</p>
+<h2>What Five Days Cost and Bought</h2>
+<p>The cost was a line that didn&#39;t stop. v0.8.0 on April 10 with the big drop.
+v0.8.1 the same day for a CI gitignore mistake. v0.8.2 three days later with the
+P0 monitor fix, the sync worktree fix, the CLI audit, and the Cursor plugin.
+Plus the housekeeping morning that purged 28 commits of history and 18 stale
+branches before any of v0.8.2&#39;s actual content got written.</p>
+<p>The benefit was that Thrum stopped being a Claude Code feature with a daemon
+attached and became an agent orchestrator with four supported runtimes. The
+orchestrator role meant I could hand a multi-epic plan to a coordinator and
+watch it dispatched to a fleet of agents in their own worktrees without me being
+the conductor. The refresh primitive meant <code>thrum team</code> actually showed live
+state without anyone running prime first. The tmux command queue meant a command
+sent to an agent landed in a known order and a known channel instead of racing
+the pane. And the inbox finally only showed each agent its own messages.</p>
+<p>The heuristic from this line: the test you didn&#39;t write is the bug you have.
+Monitor delivery looked working for three days because the test set up its own
+world. The 380-message flood looked working until a brand-new agent ran prime.
+Stale identities looked working until four runtimes were up at once. Each one of
+those was a feature exercising a scenario its own tests hadn&#39;t simulated. The
+fix in every case was small. The lesson was the same.</p>
+
+      </div>
+      <hr class="post-divider">
+      <p class="post-footer-nav"><a href="../blog.html">&larr; Back to all posts</a></p>
+    </div>
+  </article>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-brand">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+          <span class="text-muted">&middot; Persistent messaging for AI agents</span>
+        </div>
+        <div class="footer-links">
+          <a href="../docs.html">Documentation</a>
+          <a href="../blog.html">Blog</a>
+          <a href="https://github.com/leonletto/thrum" target="_blank" rel="noopener">GitHub</a>
+          <a href="../llms.txt">llms.txt</a>
+          <a href="../llms-full.txt">llms-full.txt</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById('theme-toggle').addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme');
+      var next = current === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('thrum-theme', next);
+    });
+  </script>
+</body>
+</html>

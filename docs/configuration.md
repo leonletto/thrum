@@ -168,14 +168,19 @@ Directory where `thrum worktree create` puts new worktrees.
 
 ### `worktrees.beads_enabled`
 
-Whether to create `.beads/redirect` in new worktrees.
+Whether to create `.beads/redirect` in new worktrees and whether to auto-install
+the beads `SessionStart` hook during `thrum init`.
 
 - **Type:** boolean
-- **Default:** `true` (set by `thrum init`)
+- **Default:** detection-based — `true` when `bd` is on `PATH` at `thrum init`
+  time; `false` otherwise. Set explicitly to override detection.
 
 ### `worktrees.thrum_enabled`
 
-Whether to create `.thrum/redirect` and `.thrum/identities/` in new worktrees.
+Whether to create `.thrum/redirect` and `.thrum/identities/` in new worktrees,
+and whether `thrum init` performs the `.claude/settings.json` JSON-merge step.
+Set to `false` to skip the merge entirely (useful when managing
+`.claude/settings.json` externally).
 
 - **Type:** boolean
 - **Default:** `true` (set by `thrum init`)

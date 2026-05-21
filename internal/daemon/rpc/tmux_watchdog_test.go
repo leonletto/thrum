@@ -290,6 +290,144 @@ func TestPaneAgentEngaged_MultiLineResponse(t *testing.T) {
 	}
 }
 
+// TestPaneAgentEngaged_AckLineOnly_NotEngaged pins thrum-qpw7: an agent that
+// prints the one-line ack mandated by the identity printf (`@<name> primed
+// (...). Standing by.`) but takes no further action — most importantly does
+// NOT invoke Read on the (potentially truncated) prime briefing — must not
+// false-positive as engaged. The old algorithm walked sentinel..spinner and
+// treated the ack line as "real agent output" → no nudge → agent stuck
+// operating on truncated context. The fix excludes ack-pattern lines from the
+// non-blank check so the corrective nudge fires.
+func TestPaneAgentEngaged_AckLineOnly_NotEngaged(t *testing.T) {
+	pane := "Agent: @test-agent\n" +
+		identitybanner.PrimeTruncationSentinel + "\n" +
+		"\n" +
+		"@test-agent primed (implementer/test-branch). Standing by for next dispatch.\n" +
+		"\n" +
+		"✻ Cooked for 3s\n" +
+		"────────────────────────────────────────\n" +
+		"❯                                       \n"
+	got := paneAgentEngaged(pane, testBottomAnchorRe, testSpinnerRe)
+	if got {
+		t.Error("expected false (not engaged) when only the ack line + blanks appear between sentinel and spinner — the printf-mandated ack is not evidence the agent read the prime")
+	}
+}
+
+// TestPaneAgentEngaged_AckLinePlusResponse_Engaged is the positive counterpart
+// to AckLineOnly: when the agent both acks AND produces real prose (e.g.
+// reporting what it found in the prime), engaged must return true so the
+// nudge does NOT fire. This pins the no-double-nudge guarantee from the bug's
+// acceptance criteria.
+func TestPaneAgentEngaged_AckLinePlusResponse_Engaged(t *testing.T) {
+	pane := "Agent: @test-agent\n" +
+		identitybanner.PrimeTruncationSentinel + "\n" +
+		"\n" +
+		"@test-agent primed (implementer/test-branch). Reviewing Resume Plan.\n" +
+		"Inbox empty; standing by for coord dispatch.\n" +
+		"\n" +
+		"✻ Cooked for 5s\n" +
+		"────────────────────────────────────────\n"
+	got := paneAgentEngaged(pane, testBottomAnchorRe, testSpinnerRe)
+	if !got {
+		t.Error("expected true (engaged) when the ack line is followed by real agent prose between sentinel and spinner — only the ack itself is ignored, not legitimate content alongside it")
+	}
+}
+
+// TestPaneAgentEngaged_AckLineWithBlankPadding_NotEngaged is a positional-
+// invariance counterpart to AckLineOnly: the ack line may appear immediately
+// after the sentinel, or after multiple blanks, depending on runtime render
+// pacing. Either way the algorithm must classify the region as not-engaged.
+func TestPaneAgentEngaged_AckLineWithBlankPadding_NotEngaged(t *testing.T) {
+	pane := identitybanner.PrimeTruncationSentinel + "\n" +
+		"\n" +
+		"\n" +
+		"\n" +
+		"@another-agent primed (researcher/feature/branch-name). Standing by.\n" +
+		"\n" +
+		"\n" +
+		"✻ Churned for 1s\n" +
+		"────────────────────────────────────────\n"
+	got := paneAgentEngaged(pane, testBottomAnchorRe, testSpinnerRe)
+	if got {
+		t.Error("expected false (not engaged) when the ack line is surrounded by blanks regardless of position between sentinel and spinner")
+	}
+}
+
+// TestPaneAgentEngaged_PrimedProseNotAck_Engaged pins the regex narrowness:
+// the printfAckLineRe pattern anchors on the canonical `primed (` opener so
+// unrelated prose that happens to use the word "primed" after an @-mention
+// (e.g. an agent's status message about a database initialization) is NOT
+// mis-classified as an ack and the engagement check correctly returns true.
+// Without the literal `(` anchor, a looser pattern would suppress real
+// agent output and fire a redundant nudge.
+func TestPaneAgentEngaged_PrimedProseNotAck_Engaged(t *testing.T) {
+	pane := identitybanner.PrimeTruncationSentinel + "\n" +
+		"\n" +
+		"@impl_v0105 primed the database with 12 fixtures.\n" +
+		"\n" +
+		"✻ Cooked for 2s\n" +
+		"────────────────────────────────────────\n"
+	got := paneAgentEngaged(pane, testBottomAnchorRe, testSpinnerRe)
+	if !got {
+		t.Error("expected true (engaged) — `@<name> primed <prose>` without a literal `(` opener is not an ack and must count as real agent output")
+	}
+}
+
+// TestPaneAgentEngaged_TwoAckLines_NotEngaged is a defensive case for the
+// rare scenario where two ack lines appear in the decision region (e.g. a
+// coordinator handoff banner followed by an implementer's own ack injected
+// before the agent had a chance to Read the prime). All ack-matching lines
+// must be filtered, so the watchdog still fires the corrective nudge.
+func TestPaneAgentEngaged_TwoAckLines_NotEngaged(t *testing.T) {
+	pane := identitybanner.PrimeTruncationSentinel + "\n" +
+		"\n" +
+		"@coordinator_main primed (coordinator/main). Standing by.\n" +
+		"@impl_v0105 primed (implementer/v0105). Standing by.\n" +
+		"\n" +
+		"✻ Cooked for 1s\n" +
+		"────────────────────────────────────────\n"
+	got := paneAgentEngaged(pane, testBottomAnchorRe, testSpinnerRe)
+	if got {
+		t.Error("expected false (not engaged) when multiple canonical ack lines appear back-to-back between sentinel and spinner — each must be filtered as not-real-output")
+	}
+}
+
+// TestPaneAgentEngaged_LongBannerJoinedPostKtp8_NotEngaged pins thrum-ktp8: the
+// full identity-banner printf body (Agent/Role/Worktree/Branch lines + the
+// must-read sentinel) is long enough that without tmux's `-J` capture flag
+// the sentinel wraps mid-string across two pane lines. When that happens,
+// `strings.Contains(line, sentinel)` finds NEITHER half → topIdx stays at
+// -1 → paneAgentEngaged returns true conservatively → no corrective nudge
+// fires → the rc.5 thrum-qpw7 ack-line exclusion never runs (masked bug).
+// The fix is to add `-J` to CapturePane (internal/tmux/tmux.go) so tmux
+// joins wrapped lines BEFORE returning. This test pins the failure surface:
+// when CapturePane returns the realistic full-banner content in JOINED form
+// (one logical line per printf arg, sentinel intact), paneAgentEngaged
+// correctly walks the region between sentinel and spinner and falls through
+// to the ack-exclusion path, returning false (not engaged → nudge fires).
+//
+// Fixture mirrors the actual pane shape from Leon's rc.5 spot-check of
+// @impl_writer_website_dev (bd thrum-ktp8 description) — the live trigger
+// case that surfaced the wrap bug.
+func TestPaneAgentEngaged_LongBannerJoinedPostKtp8_NotEngaged(t *testing.T) {
+	pane := "Agent: @impl_writer_website_dev\n" +
+		"Role:  implementer\n" +
+		"Worktree: /Users/leon/.thrum/worktrees/thrum/website-dev\n" +
+		"Branch: website-dev\n" +
+		identitybanner.PrimeTruncationSentinel + "\n" +
+		"\n" +
+		"@impl_writer_website_dev primed (implementer/website-dev). Standing by for website-dev tasks. Standing by.\n" +
+		"\n" +
+		"✻ Cooked for 3s\n" +
+		"\n" +
+		"────────────────────────────────────────\n" +
+		"❯                                       \n"
+	got := paneAgentEngaged(pane, testBottomAnchorRe, testSpinnerRe)
+	if got {
+		t.Error("expected false (not engaged) for the post-ktp8 joined-form full-banner pane — sentinel must be detected on its own line, decision region must contain only blanks + the canonical ack line, and the watchdog must fire the corrective nudge")
+	}
+}
+
 // ── nudgeSilentPaneAfter integration tests ───────────────────────────────────
 
 // stableActivity returns a tmuxLastActivityFn stub that always reports

@@ -5,6 +5,7 @@
 <title>Configuration — Thrum</title>
 <meta name="description" content="Thrum configuration model — config.json schema, runtime tiers, priority chain, and the config show command">
 <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#configuration.html">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Configuration","description":"Thrum configuration model — config.json schema, runtime tiers, priority chain, and the config show command","url":"https://leonletto.github.io/thrum/docs.html#configuration.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://leonletto.github.io/thrum/docs.html"}}</script>
 <style>
 body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
 pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
@@ -16,6 +17,12 @@ nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-h
 h2{margin-top:2rem}
 a{color:#0366d6}
 </style>
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+<script>
+window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+plausible.init()
+</script>
 </head>
 <body>
 <nav>
@@ -382,12 +389,23 @@ before falling back to force extraction.</p>
 <li><strong>Type:</strong> integer (seconds)</li>
 <li><strong>Default:</strong> <code>30</code></li>
 </ul>
+<h3><code>restart.silence_watchdog_seconds</code></h3>
+<p>How long after <code>thrum tmux launch</code> or <code>thrum tmux restart</code> the daemon waits for
+the agent pane to produce output before injecting a contextual nudge. The
+watchdog fires only if the pane is silent for the configured duration; an
+actively-producing agent is not interrupted.</p>
+<ul>
+<li><strong>Type:</strong> integer (seconds)</li>
+<li><strong>Default:</strong> <code>30</code></li>
+<li><strong>Special values:</strong> <code>0</code> → use default (30s); negative → disable the watchdog</li>
+</ul>
 <p>Example config with restart enabled:</p>
 <pre><code>{
   &quot;restart&quot;: {
     &quot;max_lines&quot;: 200,
     &quot;auto_threshold&quot;: 80,
-    &quot;graceful_timeout&quot;: 30
+    &quot;graceful_timeout&quot;: 30,
+    &quot;silence_watchdog_seconds&quot;: 30
   }
 }</code></pre>
 <h2>Daemon Identity</h2>

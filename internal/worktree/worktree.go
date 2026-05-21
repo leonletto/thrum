@@ -10,7 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
+	"github.com/leonletto/thrum/internal/hookmerge"
 )
 
 // EnforceOpts configures defense-in-depth checks for
@@ -139,6 +141,19 @@ func EnsureRedirects(worktreePath, mainRepo string) error {
 			slog.String("error", err.Error()))
 	}
 
+	// Hook reconciliation (thrum-nh88): when the main repo's config has
+	// ThrumEnabled (default true), merge thrum's canonical .claude/settings.json
+	// hooks into the worktree's settings.json. When BeadsEnabled is also set
+	// and bd is on PATH, install bd's SessionStart hook as well. Both
+	// operations preserve third-party hook entries (user customizations,
+	// other tools).
+	//
+	// Best-effort: hook-merge errors are logged but do not fail worktree
+	// setup. The redirect / hook-script setup above is already complete and
+	// is the load-bearing piece; an unmerged settings.json simply means the
+	// operator runs `thrum init` in the worktree later to refresh it.
+	installWorktreeClaudeHooks(worktreePath, mainRepo)
+
 	// Beads redirect (conditional)
 	mainBeadsDir := filepath.Join(mainRepo, ".beads")
 	if _, err := os.Stat(mainBeadsDir); err == nil {
@@ -156,6 +171,60 @@ func EnsureRedirects(worktreePath, mainRepo string) error {
 	}
 
 	return nil
+}
+
+// installWorktreeClaudeHooks reconciles thrum + (optionally) bd hooks into
+// a worktree's .claude/settings.json. Reads ThrumConfig from the main repo
+// to decide which install paths run. Best-effort: each step logs and
+// continues on error so a partial hook setup does not block worktree
+// creation.
+//
+// Decision flow:
+//   - Load main-repo ThrumConfig. On error, skip everything (worktree still
+//     usable; operator can run `thrum init` later).
+//   - If Worktrees.ThrumEnabled: run hookmerge.InstallThrumClaudeHooks so
+//     the worktree's settings.json carries SessionStart / Stop /
+//     PostToolUse / UserPromptSubmit / PreCompact entries for thrum scripts.
+//   - If Worktrees.BeadsEnabled AND bd is available on PATH: run
+//     hookmerge.InstallBdHook to add the canonical "bd prime --hook-json"
+//     SessionStart hook, sweep legacy bd variants, and migrate any
+//     .claude/settings.local.json bd hooks. Marketplace-plugin detection
+//     (HasBeadsPlugin in any guard file) skips the install automatically.
+func installWorktreeClaudeHooks(worktreePath, mainRepo string) {
+	cfg, err := config.LoadThrumConfig(filepath.Join(mainRepo, ".thrum"))
+	if err != nil || cfg == nil {
+		// LoadThrumConfig returns (nil, nil) on missing file; treat any
+		// error as "no config" and silently skip. The main repo might be
+		// pre-init or the file may have been deleted — either way the
+		// worktree setup itself succeeded.
+		return
+	}
+
+	settingsPath := filepath.Join(worktreePath, ".claude", "settings.json")
+
+	if cfg.Worktrees.ThrumEnabled {
+		if err := hookmerge.InstallThrumClaudeHooks(settingsPath); err != nil {
+			slog.Warn("worktree.EnsureRedirects: install thrum claude hooks failed",
+				slog.String("worktree", worktreePath),
+				slog.String("settings", settingsPath),
+				slog.String("error", err.Error()))
+		}
+	}
+
+	if cfg.Worktrees.BeadsEnabled && hookmerge.BdBinaryAvailable() {
+		homeDir, _ := os.UserHomeDir()
+		opts := hookmerge.InstallBdHookOptions{
+			SettingsPath:      settingsPath,
+			LocalSettingsPath: filepath.Join(worktreePath, ".claude", "settings.local.json"),
+			PluginGuardPaths:  hookmerge.DefaultGuardPaths(homeDir, worktreePath),
+		}
+		if _, err := hookmerge.InstallBdHook(opts); err != nil {
+			slog.Warn("worktree.EnsureRedirects: install bd hook failed",
+				slog.String("worktree", worktreePath),
+				slog.String("settings", settingsPath),
+				slog.String("error", err.Error()))
+		}
+	}
 }
 
 // hookScripts is the canonical list of per-worktree hook scripts that

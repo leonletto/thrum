@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>Building the Floor · Thrum Blog</title>
+  <meta name="description" content="v0.5.0 through v0.5.5: the line where the glamour shipped (a Slack-style web UI) on top of the load-bearing work that nobody is going to remember (durable read receipts, pinned worktree identity, role templates rewritten after a 31-task multi-agent session). I started Thrum in late January and the first eight weeks were too fluid to write about. This post is what I can reconstruct.">
+  <link rel="canonical" href="https://leonletto.github.io/thrum/blog/v0-5-foundations.html">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Building the Floor">
+  <meta property="og:description" content="v0.5.0 through v0.5.5: the line where the glamour shipped (a Slack-style web UI) on top of the load-bearing work that nobody is going to remember (durable read receipts, pinned worktree identity, role templates rewritten after a 31-task multi-agent session). I started Thrum in late January and the first eight weeks were too fluid to write about. This post is what I can reconstruct.">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/blog/v0-5-foundations.html">
+  <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <meta property="article:published_time" content="2026-03-09">
+  <meta property="article:author" content="Leon Letto">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Building the Floor">
+  <meta name="twitter:description" content="v0.5.0 through v0.5.5: the line where the glamour shipped (a Slack-style web UI) on top of the load-bearing work that nobody is going to remember (durable read receipts, pinned worktree identity, role templates rewritten after a 31-task multi-agent session). I started Thrum in late January and the first eight weeks were too fluid to write about. This post is what I can reconstruct.">
+  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <!-- JSON-LD structured data (BlogPosting) -->
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"Building the Floor","description":"v0.5.0 through v0.5.5: the line where the glamour shipped (a Slack-style web UI) on top of the load-bearing work that nobody is going to remember (durable read receipts, pinned worktree identity, role templates rewritten after a 31-task multi-agent session). I started Thrum in late January and the first eight weeks were too fluid to write about. This post is what I can reconstruct.","author":{"@type":"Person","name":"Leon Letto","url":"https://leonletto.github.io/"},"datePublished":"2026-03-09T12:00:00-07:00","image":"https://leonletto.github.io/thrum/img/social-card.png","url":"https://leonletto.github.io/thrum/blog/v0-5-foundations.html","mainEntityOfPage":{"@type":"WebPage","@id":"https://leonletto.github.io/thrum/blog/v0-5-foundations.html"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum"},"keywords":"release, v0.5, ui, identity"}</script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/landing.css">
+  <link rel="stylesheet" href="../css/blog.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link">Docs</a>
+          <a href="../blog.html" class="nav-link nav-link-active">Blog</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+          <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+            <span class="icon-sun">&#x2600;</span>
+            <span class="icon-moon">&#x263E;</span>
+          </button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <article class="section blog-post-section">
+    <div class="container-narrow">
+      <p class="post-eyebrow"><a href="../blog.html">&larr; All posts</a></p>
+      <h1 class="post-title">Building the Floor</h1>
+      <p class="post-meta">
+        <span class="post-date">March 9, 2026</span>
+        <span class="post-meta-sep">&middot;</span>
+        <span class="post-author">Leon Letto</span>
+        <span class="post-meta-sep">&middot;</span>
+        <span class="post-reading-time">7 min read</span>
+      </p>
+      <div class="post-tags"><span class="post-tag">release</span><span class="post-tag">v0.5</span><span class="post-tag">ui</span><span class="post-tag">identity</span></div>
+      
+      <div class="post-body">
+<p>I started this project in late January. The first eight or nine weeks were fluid
+enough that it&#39;s hard now to find the narrative to talk about it as a blog post.
+The episodic-memory plugin that records my conversations with the coordinator
+wasn&#39;t running yet, so I have no transcripts to go back to. Decisions came and
+went on the same day. The agents I was building it with lost most of the work to
+context compactions before any of it became durable. By the time the line that
+became v0.5 settled into a shape worth describing, it was a few weeks of
+accumulated momentum that already had its own grammar.</p>
+<p>This post is therefore reconstructed from the CHANGELOG and what I remember. I
+will be brief where I cannot say more than the release notes already do, and I
+will mark where a real moment landed when I can.</p>
+<p>The window covered here is v0.5.0 (February 23) through v0.5.5 (March 9). I&#39;ll
+do v0.5.6 through v0.5.9, where the archive does pick up, in a second post.</p>
+<h2>The Web UI Was the Glamour</h2>
+<p>v0.5.0 on February 23 was the biggest single release of the line. The web
+dashboard got rebuilt from scratch as a Slack-style three-panel interface:
+sidebar navigation on the left, a list view in the middle, a context panel on
+the right. Live Feed for the activity stream. My Inbox for direct messages.
+Group Channels with member management and channel-scoped messaging. Agent Inbox
+with context (intent, branch, session info). Who Has? for file coordination, so
+I could see which agent was editing what. Keyboard shortcuts for the views,
+<code>Cmd+K</code> for search. ComposeBar with <code>@mention</code> autocomplete. Unread badges.
+Message deep-linking from Live Feed into inbox conversations.</p>
+<p>This was the first version of Thrum that I could show someone and have them
+understand what it was without watching me run CLI commands for ten minutes. The
+CHANGELOG entry for v0.5.0 is the longest single entry in the whole v0.5
+section, and the web UI is most of it.</p>
+<p>The thing the UI was sitting on top of mattered more, though. v0.4.5 the week
+before had landed <code>safedb</code> (compile-time context enforcement on every SQLite
+query), <code>safecmd</code> (context-aware git and exec wrappers with timeouts), name-only
+routing (messages route by agent name and group membership; role strings stopped
+matching inboxes), and a resilience test suite of 32 scenarios covering RPC,
+concurrency, crash recovery, and multi-daemon races. v0.5.0 was the visible
+layer on top of a substrate that had finally stopped breaking under load.</p>
+<p>The visible-versus-load-bearing pattern carries the rest of this post.</p>
+<h2>The Worktree Identity Problem</h2>
+<p>March 6, v0.5.3. Three new environment variables landed: <code>THRUM_HOME</code>,
+<code>THRUM_AGENT_ID</code>, <code>THRUM_NAME</code>. Agents working in git worktrees stopped silently
+drifting to the daemon&#39;s default identity.</p>
+<p>The problem had been quietly poisoning multi-agent workflows for weeks. Each
+agent in a session ran in its own worktree of the repo. The daemon ran out of
+whichever worktree it had been started in. When the CLI in worktree B asked the
+daemon &quot;who am I?&quot;, the resolution path had no concept of caller worktree, so it
+answered with the daemon&#39;s own anchor (worktree A). Messages got routed to the
+wrong agent. Status reports landed under the wrong identity. Two agents would
+each think they were the coordinator. The web UI Live Feed would show traffic
+attributed to whoever the daemon had registered first.</p>
+<p>v0.5.3 fixed this by pinning identity at the CLI layer. The startup script set
+<code>THRUM_HOME</code>, <code>THRUM_AGENT_ID</code>, and <code>THRUM_NAME</code> when Claude launched, and every
+CLI command then bound to its home repo via <code>--repo &quot;$THRUM_HOME&quot;</code>. The env vars
+also got persisted into Claude Code&#39;s session environment through
+<code>CLAUDE_ENV_FILE</code>, so SessionStart hooks saw the right identity from boot.</p>
+<p>This is the same <code>THRUM_HOME</code> machinery that gave us trouble again in v0.10,
+when a primed shell&#39;s env leaked into a daemon and that daemon then leaked it
+into every tmux pane it spawned. The footgun was born here in v0.5.3. The fix
+was correct for the scope it covered. The scope just kept expanding.</p>
+<p>Same release also embedded three strategy reference files (sub-agent dispatch,
+registration, resume-after-context-loss) into the binary itself, so <code>thrum init</code>
+could write them out to <code>.thrum/strategies/</code> without needing a network
+round-trip. The preamble pointed agents at the strategies directory for
+operational patterns. Less giant-block-of-rules in the preamble, more &quot;read X if
+you hit Y.&quot;</p>
+<h2>Did My Message Arrive</h2>
+<p>March 9 morning, v0.5.4. The new command was <code>thrum sent</code>, and the thing it gave
+you was the answer to &quot;did anyone read what I sent.&quot; Before v0.5.4, sending a
+message was fire and forget. The daemon accepted it, wrote it to the JSONL, and
+the recipient might or might not have ever seen it. There was no command to ask.</p>
+<p>After v0.5.4, every <code>send</code> wrote durable rows into a new <code>message_deliveries</code>
+table tracking each recipient with a <code>delivered_at</code> and a <code>read_at</code> timestamp.
+<code>mark-read</code> updated the receipts. <code>thrum sent</code> listed your outbound messages
+with read status per recipient. <code>thrum sent --unread</code> filtered to messages whose
+recipients had not opened them yet. <code>thrum sent show MSG_ID</code> gave you the full
+recipient breakdown for a single message.</p>
+<p>The CHANGELOG framing for this release was &quot;eliminating guesswork about
+routing.&quot; That was the truth of it. The first time I ran <code>thrum sent --unread</code>
+against my own outbox and saw four messages I had assumed were received and
+weren&#39;t, the system felt like something different than it had felt the day
+before.</p>
+<p>Same release also fixed a latent bug in <code>thrum wait</code>. The wait command wasn&#39;t
+waking for direct mentions in replies, and it wasn&#39;t waking for group messages
+where the agent was a member. Inbox display rules and wait rules had drifted.
+v0.5.4 aligned them, and <code>wait</code> finally returned only what the agent was
+actually addressed by.</p>
+<h2>What a 31-Task Session Taught the Templates</h2>
+<p>March 9 evening, v0.5.5. Same day as v0.5.4. I had spent some hours that week
+running a 31-task multi-agent session. I don&#39;t have the transcript of it (the
+archive doesn&#39;t go back that far), but the CHANGELOG entry that came out of it
+is unusually specific: &quot;Role templates updated with learnings from a 31-task
+multi-agent session: mandatory sub-agent delegation, CAN/CANNOT scope
+boundaries, background listener pattern, and <code>thrum sent</code> integration.&quot;</p>
+<p>The shape of those four changes tells you what went wrong during the test.</p>
+<p><strong>Mandatory sub-agent delegation.</strong> Implementer agents were doing their own work
+directly in their main session instead of dispatching to sub-agents. This burned
+context fast and meant that any restart lost the whole investigation. v0.5.5
+baked into the implementer role template a 5-step task protocol with required
+sub-agent delegation for research and verification.</p>
+<p><strong>CAN/CANNOT scope boundaries.</strong> Coordinators were editing implementer code.
+Implementers were editing other implementers&#39; worktrees. Researchers were
+committing. None of these were catastrophic on their own, but they accumulated
+into a mess where you couldn&#39;t tell from a diff which agent had touched what.
+v0.5.5 wrote CAN and CANNOT lists into each role template so every agent knew
+its authority surface at registration time, not by inference from past behavior.</p>
+<p><strong>Background listener pattern.</strong> Agents needed to receive messages without
+blocking their primary work. The pattern that fell out (a background
+<code>thrum wait</code> process that survived context compactions through a heartbeat file)
+got encoded into every role template that needed it. The cron watchdog from
+v0.6.3 was still two weeks away from being invented; this was the half-step
+before it.</p>
+<p><strong><code>thrum sent --unread</code>.</strong> Coordinators had a habit of sending a directive and
+then forgetting whether the recipient acted on it. The new command went into the
+preamble and the strategies, so the coordinator could routinely scan for un-read
+directives before declaring something done.</p>
+<p>There was one safety addition from v0.5.5 worth naming. The <code>DefaultPreamble</code>
+got a line warning agents against running <code>thrum context save</code> manually. That
+command was destroying accumulated session state when called outside the proper
+flow, and agents were casually calling it on the theory that &quot;saving is always
+good.&quot; The fix was to direct them at the <code>/thrum:update-context</code> skill instead,
+which preserves state correctly. It turns out that &quot;saving is always good&quot; is
+wrong when the save command destroys the state it was supposed to preserve.</p>
+<h2>What the Floor Was For</h2>
+<p>The cost of v0.5.0 through v0.5.5 was that I spent two weeks shipping work most
+of which was load-bearing in a way that doesn&#39;t take a screenshot. The web UI
+took the screenshots. Everything else just made the messages route correctly and
+the identities pin and the deliveries stick and the agents not destroy their own
+context.</p>
+<p>The benefit was that by March 9 the system had a working foundation. The next
+four days of patches (v0.5.6 through v0.5.9, covered in the next post) were
+about operational hardening on top of that floor, leading up to the first
+cross-machine sync session over Tailscale.</p>
+<p>The heuristic from this stretch: the first version of any system that survives
+real use is the version after the first user. Until then you are designing for
+what you imagined the system would need. v0.5.0 was the version I designed for.
+v0.5.5 was the version a 31-task session told me to design.</p>
+
+      </div>
+      <hr class="post-divider">
+      <p class="post-footer-nav"><a href="../blog.html">&larr; Back to all posts</a></p>
+    </div>
+  </article>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-brand">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+          <span class="text-muted">&middot; Persistent messaging for AI agents</span>
+        </div>
+        <div class="footer-links">
+          <a href="../docs.html">Documentation</a>
+          <a href="../blog.html">Blog</a>
+          <a href="https://github.com/leonletto/thrum" target="_blank" rel="noopener">GitHub</a>
+          <a href="../llms.txt">llms.txt</a>
+          <a href="../llms-full.txt">llms-full.txt</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById('theme-toggle').addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme');
+      var next = current === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('thrum-theme', next);
+    });
+  </script>
+</body>
+</html>

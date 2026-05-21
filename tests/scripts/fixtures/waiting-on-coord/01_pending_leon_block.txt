@@ -1,0 +1,3 @@
+═══ PENDING LEON ═══ (2 items)
+1. **[thrum-6qmf.1 context-restart plan-author]** — Path A authorized; awaiting explicit go to spawn the sonnet sub-agent (~45min)
+2. **[First-trigger force-restart authorization policy]** (Tooling, not blocking): When an agent crosses 85% ctx, do I execute `thrum tmux restart --force` autonomously per the new skill OR surface to you first? Currently I surface. Could be configured either way; documenting now would save heartbeat-fire round-trips later.

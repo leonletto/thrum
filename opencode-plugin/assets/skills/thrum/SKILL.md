@@ -4,7 +4,7 @@ description: >
   Multi-agent coordination via messaging, groups, and shared context. Use when
   agents need to communicate, delegate work, or coordinate across worktrees.
 allowed-tools: "Bash(thrum:*)"
-version: "0.10.3"
+version: "0.10.5"
 author: "Leon Letto <https://github.com/leonletto>"
 license: "MIT"
 ---
@@ -19,8 +19,9 @@ SessionStart and PreCompact).
 ### Messaging
 
 ```bash
-thrum send "msg" --to @name              Direct message
-thrum send "msg" --to @everyone          Broadcast to all agents
+thrum send "msg" --to @name              Direct message (canonical form)
+thrum send "msg" --broadcast             Explicit team-wide fanout
+thrum send "msg" --to @everyone          Broadcast (legacy keyword; --broadcast preferred)
 thrum reply <msg-id> "response"          Reply (same audience)
 thrum inbox                              List messages (auto-marks displayed as read)
 thrum inbox --unread                     Unread only (does not mark as read)

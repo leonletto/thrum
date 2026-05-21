@@ -3,10 +3,13 @@
   "version": "1.0.0",
   "description": "Documentation website for Thrum - Git-backed messaging for AI agent coordination",
   "scripts": {
+    "build": "npm run build-docs && npm run build-blog && npm run build-sitemap",
     "build-docs": "node scripts/build-docs.js",
+    "build-blog": "node scripts/build-blog.js",
+    "build-sitemap": "node scripts/build-sitemap.js",
     "serve": "npx http-server . -p 8140 -o",
-    "dev": "concurrently -k \"chokidar 'docs/**/*.md' -c 'node scripts/build-docs.js' -d 500 --initial\" \"npx http-server . -p 8140 -o\"",
-    "deploy": "npm run build-docs && echo 'Ready for deployment'"
+    "dev": "concurrently -k \"chokidar 'docs/**/*.md' -c 'node scripts/build-docs.js' -d 500 --initial\" \"chokidar 'blog/**/*.md' -c 'node scripts/build-blog.js' -d 500 --initial\" \"npx http-server . -p 8140 -o\"",
+    "deploy": "npm run build && echo 'Ready for deployment'"
   },
   "keywords": [
     "thrum",

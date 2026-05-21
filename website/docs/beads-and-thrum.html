@@ -5,6 +5,7 @@
 <title>Beads and Thrum — Thrum</title>
 <meta name="description" content="How persistent task tracking and agent messaging work together for multi-agent development">
 <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#beads-and-thrum.html">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Beads and Thrum","description":"How persistent task tracking and agent messaging work together for multi-agent development","url":"https://leonletto.github.io/thrum/docs.html#beads-and-thrum.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://leonletto.github.io/thrum/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://leonletto.github.io/thrum/docs.html"}}</script>
 <style>
 body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
 pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
@@ -16,6 +17,12 @@ nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-h
 h2{margin-top:2rem}
 a{color:#0366d6}
 </style>
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-H8-fSgAXYxNjVrtePBTu3.js"></script>
+<script>
+window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+plausible.init()
+</script>
 </head>
 <body>
 <nav>
@@ -193,8 +200,9 @@ For agent workflows — where context loss is the primary failure mode — that&
 the right tradeoff.</p>
 <h2>Beads Command Reference for Sub-Agents</h2>
 <p>Sub-agents (spawned via the Task tool in Claude Code, or similar delegation in
-other frameworks) typically <strong>don&#39;t receive plugin context</strong>. They can run <code>bd</code>
-commands via Bash, but they don&#39;t know the correct syntax unless you tell them.</p>
+other frameworks) <strong>don&#39;t inherit SessionStart hook context</strong> — the <code>bd prime</code>
+briefing only runs in the main session. They can run <code>bd</code> commands via Bash, but
+they don&#39;t know the correct syntax unless you tell them.</p>
 <p>If you use Beads for task tracking, add the block below to your project&#39;s
 <code>CLAUDE.md</code> (for Claude Code / Auggie) or <code>AGENTS.md</code> (for other agent
 frameworks). This prevents sub-agents from guessing wrong commands like
@@ -202,8 +210,9 @@ frameworks). This prevents sub-agents from guessing wrong commands like
 <h3>Recommended Block for CLAUDE.md / AGENTS.md</h3>
 <pre><code>## Beads (bd) Quick Reference
 
-Task tracking uses Beads (`bd`). Sub-agents don&#39;t get the beads plugin context,
-so this section ensures all agents know the correct commands.
+Task tracking uses Beads (`bd`). Sub-agents don&#39;t inherit the SessionStart hook
+context that the main session gets from `bd setup claude`, so this section
+ensures all agents know the correct commands.
 
 ### Essential Commands
 
@@ -217,7 +226,7 @@ bd update &lt;id&gt; -s in_progress      # Start working on issue
 bd update &lt;id&gt; --claim             # Atomically claim (assign + in_progress)
 bd close &lt;id&gt;                      # Mark done
 bd close &lt;id&gt; --suggest-next       # Mark done + show newly unblocked
-bd comments &lt;id&gt; add &quot;note&quot;        # Add comment
+bd comments add &lt;id&gt; &quot;note&quot;        # Add comment
 bd dep &lt;blocker&gt; --blocks &lt;blocked&gt;  # Add dependency
 ```
 
