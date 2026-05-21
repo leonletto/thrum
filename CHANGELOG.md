@@ -40,6 +40,21 @@ and this project adheres to
   `scripts/error-and-context-agent-sweep.sh` (no rename on this branch; the
   release line didn't carry the prior `tmux-agent-sweep.sh` baseline) provides
   ctx-% / api-error sweeps with the same JSONL substrate.
+- **`coordinator-context-monitoring` skill** (thrum-dtad backport). Tier-ladder
+  discipline for managing live agent context limits during long coordination
+  sessions — sweep + pre-emptive restart before an agent hits a 97%-context
+  silent blow-up. Safe to wire into a recurring keepalive cron that INVOKES the
+  skill; the skill itself applies the tier ladder and only fires autonomous
+  restarts at the >85% tier. Closes the rc.7 "Unknown skill" error path that
+  fired when the keepalive cron invoked this skill on a release-line install
+  that didn't yet carry it. Mirrored to claude + cursor + opencode plugins.
+- **`coordinator-running-brainstorm-cycles` skill: three explicit review gates**
+  (thrum-dtad backport). The skill now owns the entire researcher-side design
+  pipeline with dual-review gates at three stages (brainstorm, plan, impl
+  prompt) — each a verify-against-plan + code-reviewer parallel-sonnet pass.
+  Codifies the post-`project-setup` review discipline so plan→prompt translation
+  errors get caught before the implementer executes against them. Mirrored to
+  claude + cursor + opencode plugins.
 - **Schema v25-v32 forward-port from thrum-agents** — `CurrentVersion` bumped
   from 24 to 32 with 7 new migration blocks (scheduler_job_state +
   scheduler_job_events, agent column extensions, agent_lifecycle_events,
