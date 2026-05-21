@@ -5,18 +5,26 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 [CHANGELOG.md](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-## v0.10.5 — rc.6 in soak
+## v0.10.5 — rc.7 in soak
 
-[`v0.10.5-rc.6`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.6)
-tagged 2026-05-19, in 24h soak through 2026-05-20. rc.6 ships a **BREAKING**
-change to `thrum send` (thrum-t698) and an upstream tmux fix that had been
-masking rc.5's thrum-qpw7 downstream (thrum-ktp8). `thrum send "msg"` now
-requires either `--to @<agent>` or `--broadcast` — the previous silent-broadcast
-default was a 94-agent accidental-fanout footgun. `--to @everyone` continues to
-work as the legacy keyword form. Separately, tmux `capture-pane` now uses the
-`-J` flag to join wrapped lines, so long identity banners no longer split the
-prime-truncation sentinel across pane lines (which had been defeating rc.5's
-ack-exclusion fix downstream). Earlier RCs in this line: rc.5 fixed the
+[`v0.10.5-rc.7`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.7)
+tagged 2026-05-21, in 48h soak through 2026-05-23. rc.7 lands two upstream-track
+behavior changes that touch every Thrum-managed project: `thrum init` now
+JSON-merges hook entries into an existing `.claude/settings.json` instead of
+skipping the file when it already exists (thrum-nh88) — third-party hook entries
+(most importantly `bd setup claude`'s SessionStart hook) are preserved while
+thrum hooks are added via exact-string match. And the Beads integration goes
+through `bd setup claude` (or thrum's runtime-init when
+`Worktrees.BeadsEnabled=true` and `bd` is on `PATH`); the standalone Beads
+plugin is no longer recommended (thrum-psde.5). rc.7 also brings monitor-job
+reliability fixes: `thrum monitor stop` no longer hangs RPC on slow runners +
+reaps grandchildren (thrum-puhr.9.2); `monitor stop/logs/restart/show` accept
+the human-readable name as well as the ULID-style ID (thrum-puhr.9.1 / 09wl /
+tv6z); and Class B/C diagnostic commands fire the cross-worktree banner
+uniformly via `PersistentPreRunE` preflight (thrum-7b84.11). Earlier RCs in this
+line: rc.6 shipped the **BREAKING** `thrum send` change requiring `--to` or
+`--broadcast` (thrum-t698) and the upstream tmux `capture-pane -J` wrap fix that
+had been masking rc.5's thrum-qpw7 downstream (thrum-ktp8); rc.5 fixed the
 post-tmux-launch silence-watchdog nudge false-positive on the launch-ack line
 (thrum-qpw7); rc.4 shipped the multi-binary upgrade trap fix + downgrade-guard
 recovery UX (thrum-quth); rc.3 closed the tmux-path self-echo regression
@@ -67,6 +75,14 @@ v0.11 agent epics build on for ephemeral-worktree flows. The URL migration to
   the cobra commands and future programmatic callers (substrate-track agent
   epics in particular). Behavior-equivalent to the previous cobra-only path;
   opens the door to ephemeral-worktree flows.
+- **`coordinator-post-restart-sweep` skill + `waiting-on-coord-agent-sweep.sh`
+  script** (thrum-e1n0, rc.7). New coordinator-side discipline tool that detects
+  agents blocked waiting on coord decisions by pattern-matching the latest
+  assistant message body from each Claude agent's JSONL transcript. Pattern
+  library empirically mined from project conversation archive (20 regex rules +
+  trailing-question structural signal). Wraps with a decision-tree skill for
+  post-prime use. Sibling sweep `scripts/error-and-context-agent-sweep.sh`
+  provides ctx-% / api-error sweeps over the same JSONL substrate.
 
 ### Changed
 
@@ -93,6 +109,30 @@ v0.11 agent epics build on for ephemeral-worktree flows. The URL migration to
   Cobra commands now delegate to the shared package rather than inlining
   worktree-lifecycle logic. No user-visible behavior change, but bug fixes to
   worktree handling now land in one place.
+- **`thrum init` JSON-merges `.claude/settings.json` instead of skipping**
+  (thrum-nh88, rc.7, P0). Previously `runtime-init` skipped
+  `.claude/settings.json` on existence (only `--force` overwrote), which
+  prevented thrum from refreshing hook strings once a project had any settings
+  file — including files written by `bd setup claude`. The new merge path
+  preserves third-party entries (bd's `bd prime --hook-json` SessionStart hook,
+  user-customized commands) and only adds missing thrum hook entries via
+  exact-string match. Idempotent: re-running on an already-current file produces
+  no diff. The same merge runs against each worktree's settings.json from
+  `worktree.EnsureRedirects` so worktrees get hooks too. Operator opt-out
+  remains `Worktrees.ThrumEnabled=false`.
+- **Beads integration via `bd setup claude`; standalone Beads plugin no longer
+  recommended** (thrum-psde.5, rc.7). Upstream Beads ships `bd setup claude` as
+  the canonical Claude Code integration path — a CLI subcommand that installs a
+  `SessionStart` hook into `.claude/settings.json`. Thrum's runtime-init
+  auto-installs the same hook in Thrum-managed projects when
+  `Worktrees.BeadsEnabled=true` (default, detection-based via `bd --version`)
+  AND `bd` is on `PATH`. Migration for existing plugin users:
+  `/plugin uninstall beads@beads-marketplace` →
+  `/plugin marketplace remove beads-marketplace` → `brew install beads` →
+  `bd setup claude` → restart Claude Code. Thrum auto-handles step 4
+  (`bd setup claude`) in Thrum-managed projects once `bd` is on `PATH`. If `bd`
+  state changes after the first `thrum init`, re-run `thrum init` to refresh the
+  bd-hook presence.
 
 ### Fixed
 
@@ -162,6 +202,34 @@ v0.11 agent epics build on for ephemeral-worktree flows. The URL migration to
   even on the new binary. `capture-pane` now passes `-J` so tmux joins wrapped
   lines before returning the buffer, restoring the semantics every text-search
   consumer in the codebase expects.
+- **`thrum monitor stop` no longer hangs RPC on slow runners + reaps grandchild
+  processes** (thrum-puhr.9.2, rc.7, P1). Two-part fix: (Path A) `monitor stop`
+  returns promptly even when the runner is slow — the DB row is marked stopped
+  synchronously, then a 2s best-effort wait, then unconditional return; (Path B)
+  `Setpgid: true` on the monitor command + `syscall.Kill(-pgid, ...)` on
+  shutdown so grandchild processes that inherited the stdout pipe are killed
+  too, instead of leaving dangling FDs. Eliminates the zombie-hang mode where
+  `monitor stop` blocked for tens of seconds before the runner finally exited.
+- **`thrum monitor stop / logs / restart / show` accept name as well as ID**
+  (thrum-puhr.9.1 / 09wl / tv6z, rc.7). Operators reach for the monitor name —
+  the prominent column in `monitor list` — and previously hit
+  `RPC error -32000: monitor not found` because the CLI passed the user-supplied
+  identifier straight to the daemon's ID-keyed RPC. The four subcommands now
+  resolve name → ID at the CLI layer via `monitor.list` lookup before
+  dispatching. ULID-shape detection (`mon_<26-char>`) routes user-typed names
+  like `mon_daily` through the lookup path rather than the not-found cliff.
+  Not-found errors hint at `thrum monitor list` / `list --all` so operators can
+  discover what's available. Daemon RPC surface unchanged.
+- **Class B/C commands fire the cross-worktree banner uniformly via
+  `PersistentPreRunE` preflight** (thrum-7b84.11, rc.7, P2). The 8 leaves that
+  bypass `getClient` (`daemon status` / `logs` / `start` / `stop` / `restart` /
+  `run`, `backup status`, `telegram status`) previously ran silently from the
+  wrong worktree because `classifyRefreshError`'s banner emit lived inside
+  `getClient`. A `crossWorktreePreflight` hook in `rootCmd.PersistentPreRunE`
+  now fires the banner for Class B/C leaves regardless of whether the leaf later
+  flows through `getClient`; an absorbed-flag dedups the second emit when both
+  paths fire (e.g. `thrum team`). Annotation-gated; no-op for Class A (abort)
+  and bypass (help/version) commands and explicit `--repo` overrides.
 
 ### Upgrade Notes
 
