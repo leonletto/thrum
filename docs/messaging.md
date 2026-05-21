@@ -1,3 +1,4 @@
+
 ## Thrum Messaging System
 
 > **TL;DR:** Send messages with `thrum send`, check them with `thrum inbox`,
@@ -56,7 +57,7 @@ Tailscale), see [Peers](peers.md).
 ### Basic Send
 
 ```bash
-thrum send "Test suite is green, ready for review"
+thrum send --to @coordinator_main "Test suite is green, ready for review"
 ```
 
 The daemon resolves your current agent identity and session automatically. It
@@ -66,14 +67,15 @@ SQLite.
 
 ### Flags
 
-| Flag           | Format                  | Description                                            |
-| -------------- | ----------------------- | ------------------------------------------------------ |
-| `--to`         | `@name`                 | Recipient — `@agent_name` or `@everyone` for broadcast |
-| `--scope`      | `type:value`            | Attach scope context (repeatable)                      |
-| `--ref`        | `type:value`            | Attach reference (repeatable)                          |
-| `--mention`    | `@role`                 | Mention an agent role (repeatable)                     |
-| `--format`     | `markdown\|plain\|json` | Content format (default: `markdown`)                   |
-| `--structured` | JSON string             | Typed payload for machine-readable data                |
+| Flag           | Format                  | Description                                                                   | Default |
+| -------------- | ----------------------- | ----------------------------------------------------------------------------- | ------- |
+| `--to`         | `@name`                 | Recipient — `@agent_name` or `@everyone` (mutually exclusive with `--broadcast`) |         |
+| `--broadcast`  | —                       | Fan out to the entire team (mutually exclusive with `--to`)                   | `false` |
+| `--scope`      | `type:value`            | Attach scope context (repeatable)                                             |         |
+| `--ref`        | `type:value`            | Attach reference (repeatable)                                                 |         |
+| `--mention`    | `@role`                 | Mention an agent role (repeatable)                                            |         |
+| `--format`     | `markdown\|plain\|json` | Content format (default: `markdown`)                                          |         |
+| `--structured` | JSON string             | Typed payload for machine-readable data                                       |         |
 
 ### Direct Messaging with --to
 

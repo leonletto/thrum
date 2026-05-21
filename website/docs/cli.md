@@ -4,7 +4,7 @@ description:
   "Complete reference for the thrum command-line interface — all commands,
   flags, and usage examples"
 category: "reference"
-last_updated: "2026-04-24"
+last_updated: "2026-05-20"
 ---
 
 ## Thrum CLI Reference
@@ -166,6 +166,16 @@ daemon-start step, `thrum init` exits early with an OS-appropriate install hint
 (`brew install tmux` on macOS, `apt install tmux` on Debian/Ubuntu). Install
 tmux and re-run, or pass `--no-daemon` to skip the daemon-start step entirely.
 
+**settings.json merge (v0.10.5+):** `thrum init` now JSON-merges
+`.claude/settings.json` when it exists, rather than skipping the file
+entirely. This preserves third-party hook entries (including those written by
+`bd setup claude`) while injecting Thrum's own hooks alongside them. The
+operation is idempotent — re-running `thrum init` produces no diff when
+Thrum's entries are already present. When `bd` is on `PATH`, the beads
+`SessionStart` hook is auto-installed based on detection rather than a
+hardcoded default. Per-worktree redirect consistency is enforced via
+`worktree.EnsureRedirects` on each init run.
+
 This command emits contextual hints — see [CLI Hints](cli-hints.md).
 
 ```text
@@ -186,7 +196,6 @@ thrum init [flags]
 | `--worktrees-root`  | Pre-fill the wizard's worktrees-root prompt (must be an absolute path outside the repo)       |         |
 | `--roles`           | Pre-fill the wizard's role-template choice (`enhanced` \| `default` \| `skip`)                |         |
 | `--no-daemon`       | Skip auto-starting the daemon at the end of the wizard                                        | `false` |
-| `--yes`             | Auto-confirm any safety prompts (e.g. the v0.10.x → v0.11 .gitignore upgrade)                 | `false` |
 
 #### Worktree base path migration (v0.10.0)
 
@@ -855,8 +864,12 @@ AGENT          SESSION      BRANCH               COMMITS  FILES INTENT          
 Show the current agent identity and active session.
 
 ```text
-thrum agent whoami
+thrum agent whoami [flags]
 ```
+
+| Flag              | Description                                                                     | Default |
+| ----------------- | ------------------------------------------------------------------------------- | ------- |
+| `--field <name>`  | Print a single field's value (e.g. `agent_id`, `tmux_alive`) and exit          |         |
 
 Identity is resolved from: (1) command-line flags (`--role`, `--module`), (2)
 environment variables (`THRUM_ROLE`, `THRUM_MODULE`, `THRUM_NAME`), (3) identity
@@ -872,6 +885,9 @@ Module:    auth
 Display:   Auth Developer
 Source:    environment
 Session:   ses_01HXF2A9... (2h ago)
+
+$ thrum agent whoami --field agent_id
+implementer_35HV62T9B9
 ```
 
 ### thrum agent delete

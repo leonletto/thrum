@@ -307,6 +307,13 @@ Flags:
 thrum agent whoami
 thrum whoami
 thrum whoami --json
+thrum whoami --field agent_id    # Print a single field's value and exit
+```
+
+Flags:
+
+```text
+--field string   Print a single field's value (e.g. agent_id, tmux_alive) and exit
 ```
 
 ### session list
@@ -461,7 +468,6 @@ Flags:
 --module string         Pre-fill the wizard's module prompt
 --worktrees-root string Pre-fill the wizard's worktrees-root prompt (absolute path outside the repo)
 --roles string          Pre-fill the wizard's role-template choice: enhanced|default|skip
---yes                   Auto-confirm any safety prompts (e.g. the v0.10.x → v0.11 .gitignore upgrade)
 ```
 
 The wizard's suggested default agent name is derived from the repo directory,
@@ -840,8 +846,8 @@ lines as Thrum messages. Jobs persist across daemon restarts. Max 100
 concurrent. The command must follow `--`.
 
 ```bash
-thrum monitor add --name <n> --match <re> --to @agent -- <cmd> [args...]
-thrum monitor add --name <n> --match <re> --to @agent \
+thrum monitor start --name <n> --match <re> --to @agent -- <cmd> [args...]
+thrum monitor start --name <n> --match <re> --to @agent \
   --debounce 120s --env KEY=VALUE -- <cmd>
 thrum monitor list                             # Running jobs only
 thrum monitor list --all                       # Include stopped/dead (<1 week)
@@ -852,7 +858,9 @@ thrum monitor logs <id|name> -n 50             # Last 50 matched lines
 thrum monitor restart <id|name>                # Restart dead/stopped monitor
 ```
 
-`monitor add` flags:
+Note: `monitor add` is retained as an alias for `monitor start`.
+
+`monitor start` flags:
 
 ```text
 --name string         Unique monitor name (required)

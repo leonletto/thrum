@@ -1,3 +1,4 @@
+
 ## Thrum Quickstart Guide
 
 Install Thrum, register an agent, send your first message. Five minutes.
@@ -362,7 +363,7 @@ and pull on the `a-sync` branch.
 
 ```bash
 # Make changes, send messages
-thrum send "Completed feature X"
+thrum send --to @coordinator_main "Completed feature X"
 
 # Sync happens automatically every 60s
 # Or force sync
@@ -425,7 +426,7 @@ manual approach:
 cd ~/project-features/auth
 thrum setup --main-repo ~/project
 thrum session start
-thrum send "Experimenting with auth approaches"
+thrum send --to @coordinator_main "Experimenting with auth approaches"
 ```
 
 The `thrum setup --main-repo <path>` command creates a `.thrum/redirect` file
