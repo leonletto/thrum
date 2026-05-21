@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>28 Agents and a Release on the Side · Thrum Blog</title>
+  <meta name="description" content="v0.10.5 shipped while the team was heads-down on something else. One agent ran the whole release; close to 28 others were building the next version. The release turned out to be the boring part.">
+  <link rel="canonical" href="https://thrum.team/blog/28-agents-and-a-release-on-the-side.html">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="28 Agents and a Release on the Side">
+  <meta property="og:description" content="v0.10.5 shipped while the team was heads-down on something else. One agent ran the whole release; close to 28 others were building the next version. The release turned out to be the boring part.">
+  <meta property="og:url" content="https://thrum.team/blog/28-agents-and-a-release-on-the-side.html">
+  <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="https://thrum.team/img/social-card.png">
+  <meta property="article:published_time" content="2026-05-21">
+  <meta property="article:author" content="Leon Letto">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="28 Agents and a Release on the Side">
+  <meta name="twitter:description" content="v0.10.5 shipped while the team was heads-down on something else. One agent ran the whole release; close to 28 others were building the next version. The release turned out to be the boring part.">
+  <meta name="twitter:image" content="https://thrum.team/img/social-card.png">
+  <!-- JSON-LD structured data (BlogPosting) -->
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"28 Agents and a Release on the Side","description":"v0.10.5 shipped while the team was heads-down on something else. One agent ran the whole release; close to 28 others were building the next version. The release turned out to be the boring part.","author":{"@type":"Person","name":"Leon Letto","url":"https://leonletto.github.io/"},"datePublished":"2026-05-21T12:00:00-07:00","image":"https://thrum.team/img/social-card.png","url":"https://thrum.team/blog/28-agents-and-a-release-on-the-side.html","mainEntityOfPage":{"@type":"WebPage","@id":"https://thrum.team/blog/28-agents-and-a-release-on-the-side.html"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://thrum.team"},"keywords":"release, v0.10.5, agents, parallelism"}</script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/inter.woff2" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="../assets/fonts/ibm-plex-mono-regular.woff2" crossorigin>
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/landing.css">
+  <link rel="stylesheet" href="../css/blog.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-0EO0yjcXim9oq9r4-I2w1.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link">Docs</a>
+          <a href="../blog.html" class="nav-link nav-link-active">Blog</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+          <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+            <span class="icon-sun">&#x2600;</span>
+            <span class="icon-moon">&#x263E;</span>
+          </button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <article class="section blog-post-section">
+    <div class="container-narrow">
+      <p class="post-eyebrow"><a href="../blog.html">&larr; All posts</a></p>
+      <h1 class="post-title">28 Agents and a Release on the Side</h1>
+      <p class="post-meta">
+        <span class="post-date">May 21, 2026</span>
+        <span class="post-meta-sep">&middot;</span>
+        <span class="post-author">Leon Letto</span>
+        <span class="post-meta-sep">&middot;</span>
+        <span class="post-reading-time">5 min read</span>
+      </p>
+      <div class="post-tags"><span class="post-tag">release</span><span class="post-tag">v0.10.5</span><span class="post-tag">agents</span><span class="post-tag">parallelism</span></div>
+      
+      <div class="post-body">
+<p>Shipping a release used to mean stopping. You freeze the work, cut a branch, fix
+whatever the soak turns up, and nobody touches anything important until the
+version is out the door. v0.10.5 did not go that way. It shipped while the team
+was heads-down on something else entirely.</p>
+<p>The something else was v0.11, the personal-agent substrate, and at the peak
+there were close to 28 agents working on it at once. The release ran off to
+the side, handled start to finish by a single dedicated agent while the rest of
+the machine kept building the next thing.</p>
+<h2>What 28 Agents Looks Like</h2>
+<p>On the v0.11 side, the parallelism was the point. The SafeHandler migration ran
+across sixteen branches at once, <code>m1</code> through <code>m16</code>, one per package. The
+<code>main.go</code> teardown took the file from 10,736 lines down to 4,414, a 59 percent
+cut, by extracting twenty command families into their own files. Separate tracks
+for the pane watcher, the agent-lifecycle work, the context-restart engine, all
+moving at the same time. One of those tracks was the substrate architect itself,
+building the very thing that let the rest of them run at all: the tool holding
+up the work of improving the tool.</p>
+<p>It is not free. On May 19 at 9:37 in the evening I sent the coordinator a plain
+request:</p>
+<blockquote>
+<p>I see 33 agents running. Can you assess them and which ones are not needed
+anymore? my memory is under pressure.</p>
+</blockquote>
+<p><img src="/img/blog/v0105-memory-pressure.png" alt="Activity Monitor showing a wall of agent processes and the memory-pressure readout near the ceiling."></p>
+<p>The screenshot is what I normally see running: somewhere between 20 and 28
+agents, some of them bigger than others. That evening I noticed my computer
+hesitating, and when I checked I had 12 GB of swap. I panicked, killed
+everything except VS Code, and sent that message to the coordinator.</p>
+<p>The coordinator ran <code>thrum tmux status</code>, found 28 actually alive (the other
+handful were zombie peers I had miscounted), and sorted every one of them into
+buckets: ten safe to tear down, work complete; four paused; five that had
+drifted from the last snapshot and needed a look; eight to keep, including
+itself and the release agent mid-merge. It tore down twelve, caught two cases
+where the snapshot was stale, verified the release agent&#39;s in-flight work along
+the way, and came back six minutes later:</p>
+<blockquote>
+<p>Memory sweep complete: 28 to 16 alive (12 agents torn down).</p>
+</blockquote>
+<p>The teardowns were non-destructive. Worktrees, branches, and task state all
+persist; a torn-down agent comes back with a single <code>thrum tmux launch</code>. The
+ceiling I hit at 28 agents was not the coordination layer. It was the
+machine the coordination layer was running on.</p>
+<p>Side note: I need a new computer!</p>
+<h2>One Agent, Eight Candidates</h2>
+<p>The release agent was called <code>v0105-parallel</code>, and it owned v0.10.5 from end to
+end. Eight release candidates, rc.1 on May 17 through rc.8 on May 21, four days.
+Each bump meant the same loop: version the codebase, swap the what&#39;s-new and
+beta-channel callouts to the new rc, run the soak, fix what came back.</p>
+<p>It also ran the forward-merges, the unglamorous work that keeps a release branch
+and a development branch from drifting into two different codebases. Every fix
+that landed on the release line got merged forward into the development line the
+same day: the tmux capture fix, the breaking send change, a paneAgentEngaged
+correction, a six-pick cherry batch. Four merge cycles in four days, each one a
+small reconciliation nobody wants to do by hand.</p>
+<p>I gave it the release and went back to watching the substrate. That is the part
+that still surprises me. The release was real work, eight candidates and a
+breaking change, and it ran as a background process.</p>
+<h2>The Load Was the Test</h2>
+<p>The release is modest on features, and it should be. The attention was
+elsewhere. But the reason it took eight candidates to feel solid is the same
+reason the substrate mattered: 28 agents hammering the same message bus all
+day was the most thorough load test the system had ever had, and it kept finding
+edges.</p>
+<p>The bugs it surfaced were the small, concurrency-shaped kind you never hit with
+three agents. A nudge that echoed back to the agent that sent it, a regression
+of an earlier fix that only reappeared under volume. Pane-engagement detection
+that mistook a one-line acknowledgment for real activity. A tmux capture that
+broke when an agent&#39;s output wrapped across lines. Messages sitting unread
+because nothing reminded the agent they were there, which is what the new
+daemon-side backstop nudger fixes. A monitor that left zombie processes behind
+when it stopped. None of these are headline features. All of them are the
+difference between a message bus you can trust at scale and one you cannot, and
+none of them would have shown up if the team had been three agents instead of
+28.</p>
+<p>The one deliberate change is breaking: <code>thrum send</code> now requires an explicit
+recipient, either <code>--to @agent</code> or <code>--broadcast</code>. The old behavior let a missing
+flag fall through to a default, which is the kind of convenience that sends a
+message to the wrong place at the worst possible time. After enough near-misses,
+making the recipient explicit was worth the break.</p>
+<p>Then the quieter additions: the headless worktree API, forward-ported from the
+substrate work, and a uniform cross-worktree identity preflight, which is the
+next section&#39;s story.</p>
+<h2>What Held It Together</h2>
+<p>The thing that made 28 agents survivable was the cross-worktree guard, the
+fix from the last post. Each agent is pinned to its own worktree by process
+identity, and any command run from the wrong directory aborts instead of acting
+under the wrong name. At three agents that is a nicety. At 28 it is the only
+reason the message log means anything: every message is provably from who it
+says it is from, because the alternative fails closed.</p>
+<p>v0.10.5 extended that guard to fire uniformly across the command surface, not
+just the obvious mutating verbs. The forward-merges were the other half: the
+release line and the development line stayed one codebase the whole time, so a
+fix never had to be written twice.</p>
+<h2>The Boring Part</h2>
+<p>The interesting thing here is not that 28 agents ran at once. It is that the
+release stopped being the event. A couple months ago, cutting a version was the
+whole day&#39;s work, the thing everything else waited on. This time it was the
+piece I handed to one agent so I could pay attention to something harder.</p>
+<p>The tool has gotten good enough to get out of the way. That is a strange thing
+to be proud of, a release you barely noticed shipping. But getting out of the
+way is most of what good infrastructure does, and the day the release became the
+boring part was the day this started to feel finished.</p>
+<h2>What&#39;s Coming?</h2>
+<p>I think v0.11 is going to be a much more interesting release because there are a
+lot of features. It&#39;s probably going to have many more release candidates before
+it&#39;s solid. But that&#39;ll be fun.</p>
+<p>There&#39;s <a href="https://thrum.team/docs/substrate/overview.html">a page about it here</a>
+if you want to see what&#39;s coming.</p>
+
+      </div>
+      <hr class="post-divider">
+      <p class="post-footer-nav"><a href="../blog.html">&larr; Back to all posts</a></p>
+    </div>
+  </article>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-brand">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+          <span class="text-muted">&middot; Persistent messaging for AI agents</span>
+        </div>
+        <div class="footer-links">
+          <a href="../docs.html">Documentation</a>
+          <a href="../blog.html">Blog</a>
+          <a href="https://github.com/leonletto/thrum" target="_blank" rel="noopener">GitHub</a>
+          <a href="../llms.txt">llms.txt</a>
+          <a href="../llms-full.txt">llms-full.txt</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById('theme-toggle').addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme');
+      var next = current === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('thrum-theme', next);
+    });
+  </script>
+</body>
+</html>
