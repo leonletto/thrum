@@ -86,8 +86,9 @@ dual-review batch without reformatting.
 ```markdown
 ## Verify-Against-Source Findings
 
-**Artifact:** <path> **Source(s):** <path[, path...]> **Summary:** <N> BLOCKING,
-<N> IMPORTANT, <N> MINOR
+- **Artifact:** <path>
+- **Source(s):** <path[, path...]>
+- **Summary:** <N> BLOCKING, <N> IMPORTANT, <N> MINOR
 
 ---
 

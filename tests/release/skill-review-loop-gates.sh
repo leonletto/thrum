@@ -68,10 +68,20 @@ CDW="$SKILLS/coordinator-dispatching-work/SKILL.md"
 grep -qF '## Phase 0 — Review gate' "$PS" && ok "project-setup has Phase 0 gate" || bad "project-setup missing Phase 0 gate"
 grep -qF 'grep -F' "$PS" && ok "project-setup Phase 0 uses grep -F" || bad "project-setup Phase 0 must use grep -F"
 grep -qF "$READY" "$PS" && grep -qF "$OVERRIDE" "$PS" && ok "project-setup accepts Ready:Yes OR OVERRIDE" || bad "project-setup must accept Ready:Yes AND OVERRIDE"
-# The skill must DIRECT case-sensitive matching (it mentions "grep -i" only to forbid it).
-grep -qiE 'case-sensitive' "$PS" && grep -qiE 'never .*grep -i|not .*grep -i|never `?grep -i' "$PS" \
-  && ok "project-setup directs case-sensitive matching (forbids grep -i)" \
-  || bad "project-setup must direct case-sensitive matching and forbid grep -i"
+# The case-sensitivity directive must live INSIDE Phase 0 (not just Step 5) —
+# extract the Phase 0 section so a future regression that strips it from Phase 0
+# while keeping it elsewhere is still caught.
+PS_PHASE0="$(awk '/^## Phase 0/{p=1} /^## When to Use/{p=0} p' "$PS")"
+printf '%s' "$PS_PHASE0" | grep -qiE 'case-sensitive' \
+  && printf '%s' "$PS_PHASE0" | grep -qiE 'never .*grep -i|not .*grep -i|never `?grep -i' \
+  && ok "project-setup Phase 0 directs case-sensitive matching (forbids grep -i)" \
+  || bad "project-setup Phase 0 must direct case-sensitive matching and forbid grep -i"
+
+# coordinator-running-review-cycles carries the prose-pre vs code-post boundary
+CRRC="$SKILLS/coordinator-running-review-cycles/SKILL.md"
+grep -qF 'No artifact is reviewed twice' "$CRRC" \
+  && ok "review-cycles has the prose-pre/code-post no-double-review boundary" \
+  || bad "review-cycles missing the no-double-review boundary"
 
 # verify-against-source: prose-only pre-flight (must NOT inherit verify-against-plan bails)
 grep -qiE 'no.+non-empty-diff|no.+diff check' "$VAS" && ok "verify-against-source disclaims a diff bail" || bad "verify-against-source must state NO diff requirement"
