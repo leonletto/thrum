@@ -180,8 +180,8 @@ Directory where `thrum worktree create` puts new worktrees.
 
 ### `worktrees.beads_enabled`
 
-Whether to create `.beads/redirect` in new worktrees and whether to
-auto-install the beads `SessionStart` hook during `thrum init`.
+Whether to create `.beads/redirect` in new worktrees and whether to auto-install
+the beads `SessionStart` hook during `thrum init`.
 
 - **Type:** boolean
 - **Default:** detection-based — `true` when `bd` is on `PATH` at `thrum init`
