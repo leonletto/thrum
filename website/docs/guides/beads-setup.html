@@ -340,18 +340,34 @@ any worktree are immediately visible everywhere.</p>
 <p>If your project includes the Thrum worktree setup script, this is handled
 automatically:</p>
 <pre><code>./scripts/setup-worktree-thrum.sh ~/.workspaces/project/feature feature/name</code></pre>
-<h3>Claude Code Plugin</h3>
-<p>Install the Beads plugin for Claude Code to get slash commands (<code>/beads:ready</code>,
-<code>/beads:create</code>, etc.) and an MCP server for native tool integration:</p>
-<pre><code># In Claude Code
-/plugin marketplace add steveyegge/beads
-/plugin install beads</code></pre>
-<p>Restart Claude Code after installation. See the
-<a href="https://github.com/steveyegge/beads/blob/main/docs/PLUGIN.html">Beads plugin docs</a>
-for the full command reference.</p>
+<h3>Claude Code Integration (<code>bd setup claude</code>)</h3>
+<p>Run <code>bd setup claude</code> to install the SessionStart hook that auto-loads
+<code>bd prime</code> context into every Claude Code session. Upstream Beads ships this as
+the canonical Claude Code integration — lighter-weight than the standalone
+plugin and recommended over it.</p>
+<pre><code>brew install beads
+bd setup claude</code></pre>
+<p>Restart Claude Code so the hook loads.</p>
+<p>If you&#39;re using Thrum, you don&#39;t need to run these commands yourself —
+<code>thrum init</code> (and runtime-init on each session) installs the bd <code>SessionStart</code>
+hook in <code>.claude/settings.json</code> automatically whenever <code>Worktrees.BeadsEnabled</code>
+is true (default) and <code>bd</code> is on <code>PATH</code>. If <code>bd</code> state changes after the first
+<code>thrum init</code>, re-run <code>thrum init</code> to refresh the hook presence.</p>
+<p><strong>Migrating from the standalone Beads plugin</strong> (existing users) — run these
+five steps in order:</p>
+<ol>
+<li><code>/plugin uninstall beads@beads-marketplace</code> (inside Claude Code)</li>
+<li><code>/plugin marketplace remove beads-marketplace</code> (inside Claude Code)</li>
+<li><code>brew install beads</code></li>
+<li><code>bd setup claude</code></li>
+<li>Restart Claude Code</li>
+</ol>
+<p>The standalone plugin is no longer recommended; upstream Beads now treats the
+SessionStart-hook path as canonical.</p>
 <h3>CLAUDE.md Configuration</h3>
-<p>For agents that don&#39;t use the plugin (or as a supplement), add these
-instructions to your <code>CLAUDE.md</code>:</p>
+<p>To pin agent behavior in your repo&#39;s <code>CLAUDE.md</code> (or to give sub-agents the same
+workflow context the SessionStart hook loads into the main session), add these
+instructions:</p>
 <pre><code>## Task Tracking
 
 Use `bd` (beads) for all task tracking. Do not use TodoWrite, TaskCreate, or
