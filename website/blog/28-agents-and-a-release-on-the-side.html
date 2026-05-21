@@ -81,9 +81,9 @@ whatever the soak turns up, and nobody touches anything important until the
 version is out the door. v0.10.5 did not go that way. It shipped while the team
 was heads-down on something else entirely.</p>
 <p>The something else was v0.11, the personal-agent substrate, and at the peak
-there were close to 28 agents working on it at once. The release ran off to
-the side, handled start to finish by a single dedicated agent while the rest of
-the machine kept building the next thing.</p>
+close to 28 agents were working on it at once. The release ran off to the side,
+handled start to finish by a single dedicated agent while the rest of the
+machine kept building the next thing.</p>
 <h2>What 28 Agents Looks Like</h2>
 <p>On the v0.11 side, the parallelism was the point. The SafeHandler migration ran
 across sixteen branches at once, <code>m1</code> through <code>m16</code>, one per package. The
@@ -100,7 +100,7 @@ request:</p>
 anymore? my memory is under pressure.</p>
 </blockquote>
 <p><img src="/img/blog/v0105-memory-pressure.png" alt="Activity Monitor showing a wall of agent processes and the memory-pressure readout near the ceiling."></p>
-<p>The screenshot is what I normally see running: somewhere between 20 and 28
+<p>The screenshot shows what I normally have running: somewhere between 20 and 28
 agents, some of them bigger than others. That evening I noticed my computer
 hesitating, and when I checked I had 12 GB of swap. I panicked, killed
 everything except VS Code, and sent that message to the coordinator.</p>
@@ -116,8 +116,8 @@ the way, and came back six minutes later:</p>
 </blockquote>
 <p>The teardowns were non-destructive. Worktrees, branches, and task state all
 persist; a torn-down agent comes back with a single <code>thrum tmux launch</code>. The
-ceiling I hit at 28 agents was not the coordination layer. It was the
-machine the coordination layer was running on.</p>
+ceiling I hit at 28 agents was not the coordination layer. It was the machine
+the coordination layer was running on.</p>
 <p>Side note: I need a new computer!</p>
 <h2>One Agent, Eight Candidates</h2>
 <p>The release agent was called <code>v0105-parallel</code>, and it owned v0.10.5 from end to
@@ -126,18 +126,18 @@ Each bump meant the same loop: version the codebase, swap the what&#39;s-new and
 beta-channel callouts to the new rc, run the soak, fix what came back.</p>
 <p>It also ran the forward-merges, the unglamorous work that keeps a release branch
 and a development branch from drifting into two different codebases. Every fix
-that landed on the release line got merged forward into the development line the
-same day: the tmux capture fix, the breaking send change, a paneAgentEngaged
-correction, a six-pick cherry batch. Four merge cycles in four days, each one a
-small reconciliation nobody wants to do by hand.</p>
+that landed on the release line went into the development line the same day: the
+tmux capture fix, the breaking send change, a paneAgentEngaged correction, a
+six-pick cherry batch. Four merge cycles in four days, each one a small
+reconciliation nobody wants to do by hand.</p>
 <p>I gave it the release and went back to watching the substrate. That is the part
 that still surprises me. The release was real work, eight candidates and a
 breaking change, and it ran as a background process.</p>
 <h2>The Load Was the Test</h2>
 <p>The release is modest on features, and it should be. The attention was
 elsewhere. But the reason it took eight candidates to feel solid is the same
-reason the substrate mattered: 28 agents hammering the same message bus all
-day was the most thorough load test the system had ever had, and it kept finding
+reason the substrate mattered: 28 agents hammering the same message bus all day
+was the most thorough load test the system had ever had, and it kept finding
 edges.</p>
 <p>The bugs it surfaced were the small, concurrency-shaped kind you never hit with
 three agents. A nudge that echoed back to the agent that sent it, a regression
@@ -148,8 +148,8 @@ because nothing reminded the agent they were there, which is what the new
 daemon-side backstop nudger fixes. A monitor that left zombie processes behind
 when it stopped. None of these are headline features. All of them are the
 difference between a message bus you can trust at scale and one you cannot, and
-none of them would have shown up if the team had been three agents instead of
-28.</p>
+none of them would have shown up if the team had been three agents instead
+of 28.</p>
 <p>The one deliberate change is breaking: <code>thrum send</code> now requires an explicit
 recipient, either <code>--to @agent</code> or <code>--broadcast</code>. The old behavior let a missing
 flag fall through to a default, which is the kind of convenience that sends a
@@ -159,12 +159,12 @@ making the recipient explicit was worth the break.</p>
 substrate work, and a uniform cross-worktree identity preflight, which is the
 next section&#39;s story.</p>
 <h2>What Held It Together</h2>
-<p>The thing that made 28 agents survivable was the cross-worktree guard, the
-fix from the last post. Each agent is pinned to its own worktree by process
-identity, and any command run from the wrong directory aborts instead of acting
-under the wrong name. At three agents that is a nicety. At 28 it is the only
-reason the message log means anything: every message is provably from who it
-says it is from, because the alternative fails closed.</p>
+<p>What made 28 agents survivable was the cross-worktree guard, the fix from the
+last post. Each agent is pinned to its own worktree by process identity, and any
+command run from the wrong directory aborts instead of acting under the wrong
+name. At three agents that is a nicety. At 28 it is the only reason the message
+log means anything: every message is provably from who it says it is from,
+because the alternative fails closed.</p>
 <p>v0.10.5 extended that guard to fire uniformly across the command surface, not
 just the obvious mutating verbs. The forward-merges were the other half: the
 release line and the development line stayed one codebase the whole time, so a

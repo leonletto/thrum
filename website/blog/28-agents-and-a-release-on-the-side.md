@@ -5,8 +5,8 @@ date: "2026-05-21"
 author: "Leon Letto"
 description:
   "v0.10.5 shipped while the team was heads-down on something else. One agent
-  ran the whole release; close to 28 others were building the next version.
-  The release turned out to be the boring part."
+  ran the whole release; close to 28 others were building the next version. The
+  release turned out to be the boring part."
 tags: ["release", "v0.10.5", "agents", "parallelism"]
 draft: false
 ---
@@ -17,9 +17,9 @@ version is out the door. v0.10.5 did not go that way. It shipped while the team
 was heads-down on something else entirely.
 
 The something else was v0.11, the personal-agent substrate, and at the peak
-there were close to 28 agents working on it at once. The release ran off to
-the side, handled start to finish by a single dedicated agent while the rest of
-the machine kept building the next thing.
+close to 28 agents were working on it at once. The release ran off to the side,
+handled start to finish by a single dedicated agent while the rest of the
+machine kept building the next thing.
 
 ## What 28 Agents Looks Like
 
@@ -40,7 +40,7 @@ request:
 
 ![Activity Monitor showing a wall of agent processes and the memory-pressure readout near the ceiling.](/img/blog/v0105-memory-pressure.png)
 
-The screenshot is what I normally see running: somewhere between 20 and 28
+The screenshot shows what I normally have running: somewhere between 20 and 28
 agents, some of them bigger than others. That evening I noticed my computer
 hesitating, and when I checked I had 12 GB of swap. I panicked, killed
 everything except VS Code, and sent that message to the coordinator.
@@ -57,8 +57,8 @@ the way, and came back six minutes later:
 
 The teardowns were non-destructive. Worktrees, branches, and task state all
 persist; a torn-down agent comes back with a single `thrum tmux launch`. The
-ceiling I hit at 28 agents was not the coordination layer. It was the
-machine the coordination layer was running on.
+ceiling I hit at 28 agents was not the coordination layer. It was the machine
+the coordination layer was running on.
 
 Side note: I need a new computer!
 
@@ -71,10 +71,10 @@ beta-channel callouts to the new rc, run the soak, fix what came back.
 
 It also ran the forward-merges, the unglamorous work that keeps a release branch
 and a development branch from drifting into two different codebases. Every fix
-that landed on the release line got merged forward into the development line the
-same day: the tmux capture fix, the breaking send change, a paneAgentEngaged
-correction, a six-pick cherry batch. Four merge cycles in four days, each one a
-small reconciliation nobody wants to do by hand.
+that landed on the release line went into the development line the same day: the
+tmux capture fix, the breaking send change, a paneAgentEngaged correction, a
+six-pick cherry batch. Four merge cycles in four days, each one a small
+reconciliation nobody wants to do by hand.
 
 I gave it the release and went back to watching the substrate. That is the part
 that still surprises me. The release was real work, eight candidates and a
@@ -84,8 +84,8 @@ breaking change, and it ran as a background process.
 
 The release is modest on features, and it should be. The attention was
 elsewhere. But the reason it took eight candidates to feel solid is the same
-reason the substrate mattered: 28 agents hammering the same message bus all
-day was the most thorough load test the system had ever had, and it kept finding
+reason the substrate mattered: 28 agents hammering the same message bus all day
+was the most thorough load test the system had ever had, and it kept finding
 edges.
 
 The bugs it surfaced were the small, concurrency-shaped kind you never hit with
@@ -97,8 +97,8 @@ because nothing reminded the agent they were there, which is what the new
 daemon-side backstop nudger fixes. A monitor that left zombie processes behind
 when it stopped. None of these are headline features. All of them are the
 difference between a message bus you can trust at scale and one you cannot, and
-none of them would have shown up if the team had been three agents instead of
-28.
+none of them would have shown up if the team had been three agents instead
+of 28.
 
 The one deliberate change is breaking: `thrum send` now requires an explicit
 recipient, either `--to @agent` or `--broadcast`. The old behavior let a missing
@@ -112,12 +112,12 @@ next section's story.
 
 ## What Held It Together
 
-The thing that made 28 agents survivable was the cross-worktree guard, the
-fix from the last post. Each agent is pinned to its own worktree by process
-identity, and any command run from the wrong directory aborts instead of acting
-under the wrong name. At three agents that is a nicety. At 28 it is the only
-reason the message log means anything: every message is provably from who it
-says it is from, because the alternative fails closed.
+What made 28 agents survivable was the cross-worktree guard, the fix from the
+last post. Each agent is pinned to its own worktree by process identity, and any
+command run from the wrong directory aborts instead of acting under the wrong
+name. At three agents that is a nicety. At 28 it is the only reason the message
+log means anything: every message is provably from who it says it is from,
+because the alternative fails closed.
 
 v0.10.5 extended that guard to fire uniformly across the command surface, not
 just the obvious mutating verbs. The forward-merges were the other half: the
@@ -144,4 +144,3 @@ it's solid. But that'll be fun.
 
 There's [a page about it here](https://thrum.team/docs/substrate/overview.html)
 if you want to see what's coming.
-
