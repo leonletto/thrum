@@ -46,10 +46,20 @@ they're parameterized over `VERSION` and the release branch.
 
 ## Stable-track current pre-release
 
-> **[`v0.10.5-rc.7`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.7)**
-> (2026-05-21, in 48h soak through 2026-05-23).
+> **[`v0.10.5-rc.8`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.8)**
+> (2026-05-21, in 24h abbreviated soak through 2026-05-22T16:10Z).
 >
-> rc.7 lands two upstream-track fixes that affect every Thrum-managed project:
+> rc.8 is a docs/skill + CI delta with **zero binary change** (hence the
+> abbreviated soak): it backports two coordinator-discipline skills from the
+> v0.11 line — `coordinator-context-monitoring` (the 4-tier context-threshold
+> restart ladder) and the review-gate steps in
+> `coordinator-running-brainstorm-cycles` — plus OIDC CI-publish prep for the
+> release pipeline. No breaking changes, no regressions. On the v0.10.5 line
+> `/plugin update` won't cleanly pick up rc.8 (plugin.json stays pinned at
+> 0.10.5 until v0.10.6), so this is an informational bump — your installed rc.7
+> binary is unchanged.
+>
+> rc.7 landed two upstream-track fixes that affect every Thrum-managed project:
 > `thrum init` now **JSON-merges hook entries into an existing
 > `.claude/settings.json`** instead of skipping the file when it already exists
 > (thrum-nh88) — third-party hooks (notably `bd setup claude`'s SessionStart
@@ -102,13 +112,13 @@ they're parameterized over `VERSION` and the release branch.
 > [`v0.10.4`](https://github.com/leonletto/thrum/releases/tag/v0.10.4) — see
 > [What's New](whats-new.md) for v0.10.4 + v0.10.5 highlights.
 
-### Quick install for `v0.10.5-rc.7`
+### Quick install for `v0.10.5-rc.8`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.7 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.8 sh
 
 # Codex plugin (matches release/v0.10.5)
 THRUM_INSTALL_REF=release/v0.10.5 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.5/codex-plugin/plugins/thrum/scripts/install-plugin.sh)

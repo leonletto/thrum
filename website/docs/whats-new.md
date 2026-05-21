@@ -16,32 +16,42 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 [CHANGELOG.md](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-## v0.10.5 — rc.7 in soak
+## v0.10.5 — rc.8 in soak
+
+[`v0.10.5-rc.8`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.8)
+tagged 2026-05-21, in a 24h abbreviated soak through 2026-05-22T16:10Z. rc.8 is
+a docs/skill + CI delta with **zero binary change**: it backports two
+coordinator-discipline skills from the v0.11 line —
+`coordinator-context-monitoring` (the 4-tier context-threshold restart ladder)
+and the review-gate steps in `coordinator-running-brainstorm-cycles` — plus OIDC
+CI-publish prep for the release pipeline. No breaking changes, no regressions.
+Because nothing in the binary changed, `/plugin update` on the v0.10.5 line
+won't pick rc.8 up (plugin.json stays pinned at 0.10.5 until v0.10.6); your
+installed rc.7 binary is unaffected.
 
 [`v0.10.5-rc.7`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.7)
-tagged 2026-05-21, in 48h soak through 2026-05-23. rc.7 lands two upstream-track
-behavior changes that touch every Thrum-managed project: `thrum init` now
-JSON-merges hook entries into an existing `.claude/settings.json` instead of
-skipping the file when it already exists (thrum-nh88) — third-party hook entries
-(most importantly `bd setup claude`'s SessionStart hook) are preserved while
-thrum hooks are added via exact-string match. And the Beads integration goes
-through `bd setup claude` (or thrum's runtime-init when
-`Worktrees.BeadsEnabled=true` and `bd` is on `PATH`); the standalone Beads
-plugin is no longer recommended (thrum-psde.5). rc.7 also brings monitor-job
-reliability fixes: `thrum monitor stop` no longer hangs RPC on slow runners +
-reaps grandchildren (thrum-puhr.9.2); `monitor stop/logs/restart/show` accept
-the human-readable name as well as the ULID-style ID (thrum-puhr.9.1 / 09wl /
-tv6z); and Class B/C diagnostic commands fire the cross-worktree banner
-uniformly via `PersistentPreRunE` preflight (thrum-7b84.11). Earlier RCs in this
-line: rc.6 shipped the **BREAKING** `thrum send` change requiring `--to` or
-`--broadcast` (thrum-t698) and the upstream tmux `capture-pane -J` wrap fix that
-had been masking rc.5's thrum-qpw7 downstream (thrum-ktp8); rc.5 fixed the
-post-tmux-launch silence-watchdog nudge false-positive on the launch-ack line
-(thrum-qpw7); rc.4 shipped the multi-binary upgrade trap fix + downgrade-guard
-recovery UX (thrum-quth); rc.3 closed the tmux-path self-echo regression
-(thrum-1zfk); rc.2 was a docs-only patch on rc.1's release surface. The
-Added/Changed/Fixed and Upgrade Notes sections below describe the v0.10.5
-release surface as a whole.
+tagged 2026-05-21. rc.7 landed two upstream-track behavior changes that touch
+every Thrum-managed project: `thrum init` now JSON-merges hook entries into an
+existing `.claude/settings.json` instead of skipping the file when it already
+exists (thrum-nh88) — third-party hook entries (most importantly
+`bd setup claude`'s SessionStart hook) are preserved while thrum hooks are added
+via exact-string match. And the Beads integration goes through `bd setup claude`
+(or thrum's runtime-init when `Worktrees.BeadsEnabled=true` and `bd` is on
+`PATH`); the standalone Beads plugin is no longer recommended (thrum-psde.5).
+rc.7 also brings monitor-job reliability fixes: `thrum monitor stop` no longer
+hangs RPC on slow runners + reaps grandchildren (thrum-puhr.9.2);
+`monitor stop/logs/restart/show` accept the human-readable name as well as the
+ULID-style ID (thrum-puhr.9.1 / 09wl / tv6z); and Class B/C diagnostic commands
+fire the cross-worktree banner uniformly via `PersistentPreRunE` preflight
+(thrum-7b84.11). Earlier RCs in this line: rc.6 shipped the **BREAKING**
+`thrum send` change requiring `--to` or `--broadcast` (thrum-t698) and the
+upstream tmux `capture-pane -J` wrap fix that had been masking rc.5's thrum-qpw7
+downstream (thrum-ktp8); rc.5 fixed the post-tmux-launch silence-watchdog nudge
+false-positive on the launch-ack line (thrum-qpw7); rc.4 shipped the
+multi-binary upgrade trap fix + downgrade-guard recovery UX (thrum-quth); rc.3
+closed the tmux-path self-echo regression (thrum-1zfk); rc.2 was a docs-only
+patch on rc.1's release surface. The Added/Changed/Fixed and Upgrade Notes
+sections below describe the v0.10.5 release surface as a whole.
 
 Backstop and hygiene. The headline change is operational: a daemon-side backstop
 nudger re-emits delivery notifications for stale-unread messages on its own
@@ -94,6 +104,11 @@ v0.11 agent epics build on for ephemeral-worktree flows. The URL migration to
   trailing-question structural signal). Wraps with a decision-tree skill for
   post-prime use. Sibling sweep `scripts/error-and-context-agent-sweep.sh`
   provides ctx-% / api-error sweeps over the same JSONL substrate.
+- **Coordinator-discipline skills backported from the v0.11 line** (rc.8).
+  `coordinator-context-monitoring` adds a 4-tier context-threshold restart
+  ladder (no action below 50%; directed inbox restart 50-70%; tmux-send nudge
+  70-85%; force-restart above 85%), and `coordinator-running-brainstorm-cycles`
+  gains explicit review-gate steps. Docs/skill-only — zero binary change.
 
 ### Changed
 
