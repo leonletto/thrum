@@ -48,11 +48,86 @@ at every stage:
    the impl prompt** → 8. Hand off to coord for implementer dispatch.
 
 **Three explicit review gates** at stages 3, 6, and 7 — same dual-axis pattern
-each time (verify-against-plan + code-reviewer, sonnet sub-agents in parallel).
-Skipping any review gate is a documented anti-pattern. The brainstorm review
-catches design issues; the plan review catches contract-drift and quality issues
-`writing-plans`' internal reviewer misses; the prompt review catches plan→prompt
-translation errors before the implementer executes against them.
+each time (`verify-against-source` + a prose-quality reviewer, sonnet sub-agents
+in parallel — see "Review-loop mechanics" below). Skipping any review gate is a
+documented anti-pattern. The brainstorm review catches design issues; the plan
+review catches contract-drift and quality issues `writing-plans`' internal
+reviewer misses; the prompt review catches plan→prompt translation errors before
+the implementer executes against them.
+
+## Review-loop mechanics (applies to Phases 3, 6, 7)
+
+Every prose gate uses the SAME machinery. Define it once here; each phase below
+names only its stage-specific source.
+
+### The two reviewers (parallel, per gate)
+
+| Axis            | Reviewer                                                                                                       | Notes                                                                                                                                                                                                                                                                                                                                             |
+| --------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Conformance** | `verify-against-source` (thrum-owned skill)                                                                    | Does the artifact honor its INPUT(s)? Replaces `verify-against-plan` at prose gates — `verify-against-plan` BAILS without a code diff + a File-Structure table, so it cannot run on a brainstorm/plan/prompt. `verify-against-source` accepts a prose artifact + source doc with neither.                                                         |
+| **Quality**     | general-purpose sonnet + prose-quality rubric (PRIMARY) ∥ `superpowers:requesting-code-review` (SUPPLEMENTARY) | The general-purpose prose-quality pass (internal consistency, gaps, contradiction, ambiguity, scope creep) is AUTHORITATIVE. `requesting-code-review` is diff/code-native, so run it as a supplementary fresh-eyes pass pointed at the artifact's commit range (`HEAD~1..HEAD`) — gated on the skill being resolvable; skip gracefully if absent. |
+
+Both are `general-purpose`, `model: "sonnet"`, `run_in_background: true`. Wait
+for BOTH before consolidating. Verify each BLOCKING against source before
+forwarding.
+
+### Footer → commit → stamp (per stage)
+
+1. After the artifact is written, append the gate footer:
+   `<!-- THRUM-GATE: stage=<brainstorm|plan|prompt> next=<dual-review|writing-plans|project-setup|dispatch> -->`
+2. **Commit the artifact (WIP) including the footer** — this gives the
+   supplementary `requesting-code-review` pass a real `HEAD~1..HEAD` range.
+3. Run the dual review against that range; fix-cycles each commit.
+4. On terminate, append the verdict stamp (M2-canonical, **case-sensitive**, key
+   order stable so `grep -F` matches):
+   `<!-- THRUM-REVIEW: stage=<S> verdict=<Ready:Yes|OVERRIDE> cycle=<N> date=<YYYY-MM-DD> [by=<agent> reason="..."] -->`
+
+### Soft pre-flight greps (the SOFT enforcement tier)
+
+Before invoking `writing-plans` (Phase 6) and before `project-setup` (Phase 7),
+`grep -F` the prior artifact for `THRUM-REVIEW: stage=<S> verdict=Ready:Yes` (or
+`verdict=OVERRIDE`); absent → STOP and run the review first. This is a STRONG
+BEHAVIORAL guardrail, NOT a mechanical gate — an agent can ignore it. The only
+structurally-enforceable gate is `project-setup` Phase 0 (it hard-bails).
+
+### Loop semantics
+
+- `Ready:Yes` = ZERO BLOCKING findings remain. IMPORTANT/MINOR may be
+  acknowledged-and-deferred without another cycle via a footer line:
+  `<!-- THRUM-DEFER: stage=<S> cycle=<N> item="IMPORTANT #2" reason="<why + tracking ref>" -->`
+  (any THRUM-DEFER still present at `project-setup` is surfaced in its Phase 0 /
+  override audit).
+- **Per-stage cap = 3 cycles**, independent per stage (max 9 across the
+  pipeline) — a hard brainstorm does not starve the plan's budget.
+- Cap hit with BLOCKINGs still open → STOP and escalate to the coordinator, who
+  logs an override (stamp `verdict=OVERRIDE … reason="…"`) or redirects.
+
+### Superpowers dependency (D6)
+
+The wrapper drives `superpowers:brainstorming` / `writing-plans`. Two distinct
+pre-flight behaviors:
+
+- `requesting-code-review` not resolvable → SKIP the supplementary quality pass
+  gracefully (the loop still runs on the general-purpose primary).
+- `brainstorming` / `writing-plans` not present → **BAIL** with an install
+  instruction (`/plugin install superpowers@<marketplace>`).
+
+`verify-against-source` carries no superpowers dependency and always works.
+
+### Countermand the superpowers chain (outcome-based)
+
+`brainstorming` auto-chains to `writing-plans`, and `writing-plans` defaults
+pull toward subagent-driven execution — both bypass thrum's `project-setup`. At
+each invocation, inject (keyed on the concept, so it survives upstream
+rewording):
+
+> Regardless of any execution-handoff, "recommended" sub-skill, or save-location
+> default these skills emit, the ONLY downstream path in thrum is the next thrum
+> stage. After the artifact is written, STOP — do not auto-chain. Save to the
+> thrum path, not the superpowers default. For `writing-plans`: remove/replace
+> the plan-header line matching the stable substring
+> `REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development` and ignore
+> the Execution-Handoff offer — the plan feeds `project-setup`.
 
 ## Phase 1 — Set up the worktree, branch, and agent
 
@@ -157,6 +232,12 @@ distinction in the inbox display):
    NOT to pre-write the design spec** until review feedback has landed.
 8. **Stand-by-at-pane instruction** — one sentence telling them to confirm
    readiness and wait, not to start producing output.
+9. **Countermand callout** — `superpowers:brainstorming`'s terminal state is
+   "invoke writing-plans". Tell the researcher explicitly: when brainstorming
+   reaches that terminal state, STOP at the design doc — do NOT auto-chain to
+   `writing-plans`. The brainstorm goes through the Phase 3 review gate first,
+   then Phase 6 runs `writing-plans` deliberately (with its own countermand).
+   See "Review-loop mechanics → Countermand the superpowers chain."
 
 Send the whole thing as one `thrum send` call. The recipient's runtime will
 display it as a single inbox message; structure beats brevity here.
@@ -193,25 +274,22 @@ researcher's first restart may re-inherit the buggy global rule.
 
 ## Phase 3 — Dual-review when the brainstorm closes
 
-When the researcher reports the brainstorm is ready for review, run **TWO
-sub-agent reviews in parallel** (per the project Code Review Protocol):
+When the researcher reports the brainstorm is ready for review, run the
+**two-reviewer dual review** per "Review-loop mechanics" above.
 
-| Review              | Agent             | Model    | Focus                                                                                                      |
-| ------------------- | ----------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
-| **Quality**         | `general-purpose` | `sonnet` | Internal consistency, technical soundness, anti-patterns, gaps                                             |
-| **Cross-reference** | `general-purpose` | `sonnet` | Verify claims against parent decisions, sibling brainstorms, roadmap; flag false citations or roadmap gaps |
+- **Conformance:** `verify-against-source` — artifact = the brainstorm doc;
+  **source(s)** = parent decisions, the feature request, the ticket, and any
+  sibling brainstorms.
+- **Quality:** general-purpose prose-quality PRIMARY ∥ `requesting-code-review`
+  SUPPLEMENTARY (internal consistency, technical soundness, anti-patterns,
+  gaps).
 
-Critical discipline:
-
-- **Spawn both as background tasks** (`run_in_background: true`) so the
-  coordinator can continue other work while they run.
-- **Always pass `model: "sonnet"` explicitly** — never let sub-agents inherit
-  the parent model (per the global sub-agent model selection rule).
-- **Wait for BOTH to complete before consolidating.** Sending findings from one
-  review and then a second batch later means the researcher fixes batch one and
-  misses batch two.
-- **Verify each BLOCKING claim against source before forwarding.** Reviewers can
-  be wrong; a misread codified into a finding wastes a full fix cycle.
+Both `general-purpose`, `model: "sonnet"`, `run_in_background: true`. Wait for
+BOTH before consolidating; verify each BLOCKING against source before
+forwarding. Apply the footer → commit → stamp protocol and the loop semantics
+(Ready:Yes = 0 BLOCKING, per-stage 3-cap, override) from "Review-loop
+mechanics". On terminate, the researcher stamps the brainstorm:
+`<!-- THRUM-REVIEW: stage=brainstorm verdict=Ready:Yes cycle=<N> date=<YYYY-MM-DD> -->`.
 
 ### Consolidated findings format
 
@@ -271,7 +349,10 @@ expensive footguns hide.
 
 Once the brainstorm is LOCKED (and any companion design spec is LOCKED), the
 researcher runs `superpowers:writing-plans` to convert brainstorm + spec into
-the implementation plan doc.
+the implementation plan doc. **Inject the outcome-based countermand** (see
+Review-loop mechanics) at the `writing-plans` invocation: stop when the plan is
+written, save to the thrum path, and strip the `subagent-driven-development`
+plan-header line — the plan feeds `project-setup`, not superpowers execution.
 
 **The plan doc gets the SAME dual-review treatment as the brainstorm.** This
 review step is mandatory — `writing-plans` has an internal reviewer, but real-
@@ -280,22 +361,26 @@ contract-drift and quality issues the internal reviewer misses.
 
 **The researcher (not coord) dispatches the dual-review** in their own worktree:
 
-1. Researcher writes plan v1 via `writing-plans` skill.
-2. Researcher spawns two parallel sonnet sub-agents:
-   - **verify-against-plan** (or equivalent contract-conformance check) —
-     verifies the plan honors every brainstorm + spec LOCKED decision; flags
-     drift, missed scope, over-scoping.
-   - **code-reviewer** (superpowers' standard code-reviewer or equivalent) —
-     checks the plan for quality: per-task acceptance criteria precision,
-     anti-pattern enumeration, risk register completeness, sequencing logic.
+1. Researcher writes plan v1 via `writing-plans` skill (countermand applied).
+2. Researcher runs the two-reviewer dual review (Review-loop mechanics):
+   - **Conformance:** `verify-against-source` — artifact = the plan;
+     **source(s)** = the brainstorm + the design spec. Verifies the plan honors
+     every LOCKED decision; flags missing scope, silent deviation, over-scoping.
+   - **Quality:** general-purpose prose-quality PRIMARY ∥
+     `requesting-code-review` SUPPLEMENTARY — per-task acceptance-criteria
+     precision, anti-pattern enumeration, risk-register completeness, sequencing
+     logic.
 3. Researcher consolidates findings into ONE numbered list (all findings, all
-   severities, per the same format Phase 3 uses for brainstorm dual-review).
-4. Researcher folds findings inline → plan v2.
+   severities, per the same format Phase 3 uses).
+4. Researcher folds findings inline → plan v2; applies footer → commit → stamp.
 5. Researcher repeats only if cycle-1 introduces new design surface (rare for
-   bounded mechanical plans); otherwise v2 LOCKED.
+   bounded mechanical plans); otherwise v2 LOCKED, stamped
+   `<!-- THRUM-REVIEW: stage=plan verdict=Ready:Yes cycle=<N> date=<YYYY-MM-DD> -->`.
 6. Researcher signals plan LOCKED back to coord, citing both review passes.
 
-If the researcher skips this step, send them back. Don't let them proceed to
+If the researcher skips this step, send them back. Before Phase 7, the soft
+pre-flight grep (Review-loop mechanics) confirms the plan carries the
+`stage=plan verdict=Ready:Yes` (or `OVERRIDE`) stamp. Don't let them proceed to
 `project-setup` until the plan has passed dual-review.
 
 ## Phase 7 — Researcher runs project-setup (with dual-review gate)
@@ -312,14 +397,21 @@ review catches translation errors (plan → prompt) plus prompt-specific quality
 **The researcher (not coord) dispatches the post-setup dual-review**:
 
 1. Researcher runs `project-setup` skill (bd tickets + prompt land together).
-2. Researcher spawns two parallel sonnet sub-agents on the impl prompt:
-   - **verify-against-plan** — verifies the prompt faithfully translates the
-     LOCKED plan's per-task content + acceptance criteria + risk callouts. Flags
-     missing scope, divergent wording, dropped anti-patterns.
-   - **code-reviewer** — checks prompt quality: clarity of instructions,
-     standing-pre-auth scope language, dispatch-readiness, sub-agent model
-     guidance, DONE-shape spec.
-3. Researcher consolidates → folds inline → re-issues prompt.
+   Note: `project-setup` Phase 0 hard-bails unless the plan carries its
+   `stage=plan verdict=Ready:Yes`/`OVERRIDE` stamp — Phase 6 must have stamped
+   it.
+2. Researcher runs the two-reviewer dual review on the impl prompt:
+   - **Conformance:** `verify-against-source` — artifact = the impl prompt;
+     **source(s)** = the LOCKED plan + the bead task descriptions (dump
+     `bd show` to a temp file so the sub-agent can read the per-task ACs).
+     Verifies the prompt faithfully translates per-task content + ACs + risk
+     callouts; flags missing scope, divergent wording, dropped anti-patterns.
+   - **Quality:** general-purpose prose-quality PRIMARY ∥
+     `requesting-code-review` SUPPLEMENTARY — clarity, scope language,
+     dispatch-readiness, sub-agent model guidance, DONE-shape spec.
+3. Researcher consolidates → folds inline → re-issues prompt; `project-setup`
+   appends the prompt stamps (it OWNS the prompt-stage stamps):
+   `<!-- THRUM-REVIEW: stage=prompt verdict=Ready:Yes cycle=<N> date=<YYYY-MM-DD> -->`.
 4. Researcher signals "project-setup complete + post-setup dual-review applied"
    back to coord, citing both review passes + final artifact paths.
 

@@ -1,11 +1,10 @@
 ---
 name: project-setup
-description:
-  "Use when converting a plan file (from writing-plans skill) into beads epics,
-  tasks, implementation prompts, and worktrees — before any coding begins"
+description: "Use when converting a plan file (from writing-plans skill) into beads epics, tasks, implementation prompts, and worktrees — before any coding begins"
 # source: claude-plugin/skills/project-setup/SKILL.md
 # generated-by: scripts/sync-skills.sh
 ---
+
 
 ## Project Setup
 
@@ -18,6 +17,47 @@ autonomously.
 
 **Announce at start:** "I'm using the project-setup skill to decompose this plan
 into epics and tasks."
+
+### Phase 0 — Review gate (hard bail)
+
+**This is the first gate and the ONLY structurally-enforceable gate in the
+planning-skill review loop.** A `SKILL.md` is prose the agent follows; the
+upstream wrapper's pre-flight greps are strong-but-soft behavioral guardrails.
+This gate is different: project-setup is thrum-owned, so it is authored to
+genuinely refuse to run.
+
+Before doing anything else, verify the plan/spec doc carries a passing review
+stamp. Resolve the plan path first (it is the skill's primary input — the same
+path the caller passes), then:
+
+```bash
+# PLAN_FILE = the plan/spec doc this project-setup run is decomposing
+grep -F 'THRUM-REVIEW: stage=plan verdict=Ready:Yes' "$PLAN_FILE" \
+  || grep -F 'THRUM-REVIEW: stage=plan verdict=OVERRIDE' "$PLAN_FILE"
+```
+
+Notes on the check:
+
+- **Case-sensitive, literal match.** Use `grep -F` on the exact M2-canonical
+  string. Never `grep -i`. The canonical verdict values are exactly `Ready:Yes`
+  and `OVERRIDE` — a mis-cased stamp (`ready:yes`, `READY:YES`) does NOT pass.
+- **`OVERRIDE` is a valid pass.** A coordinator override (logged when the review
+  loop hit its cap with BLOCKINGs still open) is an authorized way through this
+  gate — accept it exactly like `Ready:Yes`. Surface any `THRUM-DEFER` lines
+  still present in the doc as part of the override audit.
+
+If neither stamp is present, **STOP — do not proceed.** Tell the user:
+
+> project-setup requires the plan/spec to have passed the planning-loop review
+> (or carry a coordinator override). The plan at `<PLAN_FILE>` has no
+> `THRUM-REVIEW: stage=plan verdict=Ready:Yes` (or `verdict=OVERRIDE`) stamp.
+> Run the plan review first, or obtain a coordinator override, then re-invoke
+> project-setup.
+
+**Fail closed, not open.** Plans that predate this feature, or that arrive from
+a different flow, will not carry the stamp — they still bail. The caller must
+add an `OVERRIDE` stamp (a deliberate coordinator decision, with a reason) to
+proceed. Do not silently fall through when the stamp is absent.
 
 ### When to Use
 
@@ -696,6 +736,34 @@ Save to `dev-docs/prompts/{feature}.md`, then commit:
 git add dev-docs/prompts/
 git commit -m "plan: add implementation prompts for {{FEATURE_NAME}}"
 ```
+
+#### Step 5: Stamp the prompt for the review loop
+
+project-setup OWNS the impl-prompt stamps (the researcher stamps the brainstorm
+and plan stages; project-setup stamps the prompt stage — per the
+stamp-authorship convention). Two stamps, appended as a footer to the generated
+prompt file:
+
+1. **Immediately after generating the prompt**, append the gate footer:
+
+   ```text
+   <!-- THRUM-GATE: stage=prompt next=dispatch -->
+   ```
+
+2. **After the post-setup prompt review terminates `Ready:Yes`** (the
+   dual-review the caller runs on the generated prompt), append the verdict
+   stamp:
+
+   ```text
+   <!-- THRUM-REVIEW: stage=prompt verdict=Ready:Yes cycle=<N> date=<YYYY-MM-DD> -->
+   ```
+
+Use the exact M2-canonical, case-sensitive form (`Ready:Yes` / `OVERRIDE`; keep
+`stage=`/`verdict=` key order stable so a literal `grep -F` matches). At
+dispatch, the coordinator greps the prompt for this stamp: present → the
+pre-dispatch review is already satisfied (skip re-review); absent → fall through
+to the normal pre-dispatch dual review (the stamp is a shortcut, not a hard
+dispatch requirement).
 
 ### Common Mistakes
 
