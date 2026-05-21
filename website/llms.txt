@@ -596,16 +596,16 @@ All commands accept these flags:
   thrum monitor list [--all]
     List running monitors. --all includes stopped ones.
 
-  thrum monitor show <id>
+  thrum monitor show <id|name>
     Show monitor config, status, and recent log lines.
 
-  thrum monitor stop <id>
+  thrum monitor stop <id|name>
     Stop a monitor. Sends SIGTERM to the child process.
 
-  thrum monitor logs <id>
+  thrum monitor logs <id|name>
     Tail recent output from a monitor's captured log buffer.
 
-  thrum monitor restart <id>
+  thrum monitor restart <id|name>
     Restart a stopped or failed monitor.
 
 ### Monitor Jobs workflow

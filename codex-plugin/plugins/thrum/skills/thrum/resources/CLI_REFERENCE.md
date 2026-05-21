@@ -845,11 +845,11 @@ thrum monitor add --name <n> --match <re> --to @agent \
   --debounce 120s --env KEY=VALUE -- <cmd>
 thrum monitor list                             # Running jobs only
 thrum monitor list --all                       # Include stopped/dead (<1 week)
-thrum monitor show <id>                        # Full detail (env values redacted)
-thrum monitor stop <id>                        # SIGTERM → 5s → SIGKILL
-thrum monitor logs <id>                        # Last 20 matched lines
-thrum monitor logs <id> -n 50                  # Last 50 matched lines
-thrum monitor restart <id>                     # Restart dead/stopped monitor
+thrum monitor show <id|name>                   # Full detail (env values redacted)
+thrum monitor stop <id|name>                   # SIGTERM → 5s → SIGKILL
+thrum monitor logs <id|name>                   # Last 20 matched lines
+thrum monitor logs <id|name> -n 50             # Last 50 matched lines
+thrum monitor restart <id|name>                # Restart dead/stopped monitor
 ```
 
 `monitor add` flags:

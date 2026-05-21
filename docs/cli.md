@@ -1,3 +1,4 @@
+
 ## Thrum CLI Reference
 
 > **TL;DR:** You only need 8 commands for daily use — they're in the
@@ -2660,7 +2661,7 @@ mon_01KNTG3B1...             ci-failures  running    @team          15m30s     1
 Show full details for a monitor job. Env var values are always redacted.
 
 ```text
-thrum monitor show <id>
+thrum monitor show <id|name>
 ```
 
 Example:
@@ -2686,7 +2687,7 @@ Stop a running monitor job. Sends SIGTERM, waits 5 seconds, then sends SIGKILL
 if still running.
 
 ```text
-thrum monitor stop <id>
+thrum monitor stop <id|name>
 ```
 
 Example:
@@ -2702,7 +2703,7 @@ Show the most recent matched output lines for a monitor job (historical lookup
 from the messages table, not live tail).
 
 ```text
-thrum monitor logs <id> [flags]
+thrum monitor logs <id|name> [flags]
 ```
 
 | Flag            | Description                     | Default |
@@ -2725,7 +2726,7 @@ $ thrum monitor logs mon_01KNTF2A9 -n 5
 Restart a stopped or dead monitor job. Returns a new monitor ID.
 
 ```text
-thrum monitor restart <id>
+thrum monitor restart <id|name>
 ```
 
 Example:

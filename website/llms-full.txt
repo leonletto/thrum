@@ -949,17 +949,17 @@ All commands accept:
     List monitors. Without --all, shows only running monitors.
     Columns: ID | NAME | STATUS | MATCH | TO | PID | STARTED
 
-  thrum monitor show <id>
+  thrum monitor show <id|name>
     Show full monitor config: name, argv, match regex, target agent, debounce,
     env vars (redacted), pid, status, start time, exit code (if stopped).
 
-  thrum monitor stop <id>
+  thrum monitor stop <id|name>
     Send SIGTERM to the child process. Monitor moves to "stopped" state.
 
-  thrum monitor logs <id>
+  thrum monitor logs <id|name>
     Show recent captured output lines from the monitor's ring buffer.
 
-  thrum monitor restart <id>
+  thrum monitor restart <id|name>
     Restart a stopped or failed monitor using the same config.
 
 ### thrum tmux snapshot save | restore | check (v0.7.1)

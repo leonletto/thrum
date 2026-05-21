@@ -18,7 +18,7 @@ machine-readable history lives in
 
 ## v0.10.5 — In Soak (RC)
 
-v0.10.5 is currently a release candidate. The latest tag is `v0.10.5-rc.4`,
+v0.10.5 is currently a release candidate. The latest tag is `v0.10.5-rc.6`,
 which adds a `--from` filter to `thrum inbox`, a daemon-side backstop nudger
 that replaces the user-side cron pattern for stale-unread re-delivery, a
 `--delete-branch` flag for `thrum worktree teardown`, an expanded
@@ -29,6 +29,18 @@ can open DBs previously touched by v0.11-substrate work (intentionally dead-end
 on v0.10.5 — no consumer code). The `/thrum:restart` skill now mandates a §1 Big
 picture section and follows an 11-section numbered structure so snapshots double
 as searchable session log entries.
+
+rc.7 (in soak) adds: `thrum monitor stop`, `show`, `logs`, and `restart` now
+accept the monitor's human-readable name in addition to the ULID-style ID — use
+the name shown in `thrum monitor list` instead of hunting for the ID. `thrum
+monitor stop` reliability is improved: the RPC no longer blocks the daemon's
+critical-path handler, and child processes are killed as a process group so
+shell wrappers can't outlive the stop command. `thrum init` now JSON-merges
+hook entries into an existing `.claude/settings.json` rather than skipping the
+file when it already exists; the `bd setup claude` hook is auto-installed (and
+kept current) whenever `bd` is on PATH. The Class B/C cross-worktree diagnostic
+banner is now wired uniformly across all eight daemon-management leaves
+(status/logs/start/stop/restart/run, backup status, telegram status).
 
 See the [Beta Channel](beta-channel.md) guide for how to opt in. Stable
 promotion follows the standard 48-hour soak window once no P0/P1 bugs are open
