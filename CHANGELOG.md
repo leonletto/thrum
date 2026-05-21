@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.10.5] - 2026-05-21
+
 ### Added
 
 - **`thrum inbox --from @agent` filter** — scope unread inbox to messages from a
