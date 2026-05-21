@@ -24,91 +24,21 @@ they're parameterized over `VERSION` and the release branch.
 
 ## Stable-track current pre-release
 
-> **[`v0.10.5-rc.8`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.8)**
-> (2026-05-21, in 24h abbreviated soak through 2026-05-22T16:10Z).
+> No stable-track pre-release right now.
+> **[`v0.10.5`](https://github.com/leonletto/thrum/releases/tag/v0.10.5)**
+> shipped to stable on 2026-05-21 — see [What's New](whats-new.md) for the full
+> release notes (note the **BREAKING** `thrum send` change: the bare form now
+> requires `--to @<agent>` or `--broadcast`).
 >
-> rc.8 is a docs/skill + CI delta with **zero binary change** (hence the
-> abbreviated soak): it backports two coordinator-discipline skills from the
-> v0.11 line — `coordinator-context-monitoring` (the 4-tier context-threshold
-> restart ladder) and the review-gate steps in
-> `coordinator-running-brainstorm-cycles` — plus OIDC CI-publish prep for the
-> release pipeline. No breaking changes, no regressions. On the v0.10.5 line
-> `/plugin update` won't cleanly pick up rc.8 (plugin.json stays pinned at
-> 0.10.5 until v0.10.6), so this is an informational bump — your installed rc.7
-> binary is unchanged.
+> When the first `v0.10.6-rc.N` tags, this section will carry its callout + a
+> Quick install block pinned to the `release/v0.10.6` branch. Until then,
+> install the current stable release the normal way — no `VERSION=` override
+> needed:
 >
-> rc.7 landed two upstream-track fixes that affect every Thrum-managed project:
-> `thrum init` now **JSON-merges hook entries into an existing
-> `.claude/settings.json`** instead of skipping the file when it already exists
-> (thrum-nh88) — third-party hooks (notably `bd setup claude`'s SessionStart
-> entry) are preserved while thrum hooks are added via exact-string match. And
-> the **Beads integration** now goes through `bd setup claude` (or thrum's
-> runtime-init when `Worktrees.BeadsEnabled=true` and `bd` is on `PATH`); the
-> standalone Beads plugin is no longer recommended (thrum-psde.5).
->
-> The rc.7 cherry-pick bundle also brings monitor-job reliability fixes:
-> `thrum monitor stop` no longer hangs the RPC critical path on slow runners and
-> reaps grandchild processes (thrum-puhr.9.2); `monitor stop/logs/restart/show`
-> accept the monitor's human-readable name as well as the ULID-style ID
-> (thrum-puhr.9.1 / 09wl / tv6z); and Class B/C diagnostic commands
-> (`daemon status/logs/start/stop/restart/run`, `backup status`,
-> `telegram status`) now fire the cross-worktree banner uniformly via
-> `PersistentPreRunE` preflight instead of running silently from the wrong
-> worktree (thrum-7b84.11).
->
-> **BREAKING (carried from rc.6):** `thrum send` no longer broadcasts by
-> default. The bare form `thrum send "msg"` requires either `--to @<agent>` or
-> `--broadcast` (thrum-t698). `--to @everyone` continues to work as the legacy
-> keyword form. Update scripts and aliases that use the bare form.
->
-> Earlier RCs carry forward: tmux `capture-pane` `-J` wrap fix that had been
-> masking rc.5's thrum-qpw7 downstream (rc.6, thrum-ktp8); post-tmux-launch
-> silence-watchdog nudge fix (rc.5, thrum-qpw7); multi-binary upgrade trap fix
-> (rc.4, thrum-quth); tmux self-echo guard (rc.3, thrum-1zfk); restart-skill
-> structure forward-port (rc.2); backstop nudger + runtime-init managed-template
-> fix + new CLI flags (rc.1).
->
-> What's new in v0.10.5 overall:
->
-> - **Daemon-side backstop nudger for stale-unread messages** replaces the
->   per-agent `thrum-inbox-poll.sh` cron. More reliable (survives runtime
->   restarts) and lower overhead than a per-agent cron schedule. Existing cron
->   installs continue to work as no-ops alongside it.
-> - **`runtime-init` refreshes stale daemon-managed scripts** so long-running
->   worktrees stop drifting from the embedded template
->   (`scripts/thrum-startup.sh`, `scripts/thrum-check-inbox.sh`). User-edited
->   configs like `.claude/settings.json` and `AGENTS.md` stay preserved.
-> - **`thrum prime` first-turn ack** — the briefing now leaves a visible
->   scrollback line so you can confirm at a glance that context loaded.
-> - **`thrum inbox --from @agent`** filters unread by sender.
-> - **`thrum worktree teardown --delete-branch`** drops the branch in the same
->   command.
->
-> No config changes required. Full release notes: [What's New](whats-new.md).
->
-> Previous stable:
-> [`v0.10.4`](https://github.com/leonletto/thrum/releases/tag/v0.10.4) — see
-> [What's New](whats-new.md) for v0.10.4 + v0.10.5 highlights.
-
-### Quick install for `v0.10.5-rc.8`
-
-Binary and Codex plugin (run in your shell):
-
-```bash
-# Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.8 sh
-
-# Codex plugin (matches release/v0.10.5)
-THRUM_INSTALL_REF=release/v0.10.5 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.5/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
-```
-
-Claude Code plugin (run inside Claude):
-
-```text
-/plugin marketplace add leonletto/thrum#release/v0.10.5
-/plugin install thrum@thrum
-/reload-plugins
-```
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
+> thrum daemon restart
+> ```
 
 ## Substrate-track current pre-release
 

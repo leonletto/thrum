@@ -248,76 +248,18 @@ mechanics (binary + plugins + rollback) are shared further down the page —
 they&#39;re parameterized over <code>VERSION</code> and the release branch.</p>
 <h2>Stable-track current pre-release</h2>
 <blockquote>
-<p><strong><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.8"><code>v0.10.5-rc.8</code></a></strong>
-(2026-05-21, in 24h abbreviated soak through 2026-05-22T16:10Z).</p>
-<p>rc.8 is a docs/skill + CI delta with <strong>zero binary change</strong> (hence the
-abbreviated soak): it backports two coordinator-discipline skills from the
-v0.11 line — <code>coordinator-context-monitoring</code> (the 4-tier context-threshold
-restart ladder) and the review-gate steps in
-<code>coordinator-running-brainstorm-cycles</code> — plus OIDC CI-publish prep for the
-release pipeline. No breaking changes, no regressions. On the v0.10.5 line
-<code>/plugin update</code> won&#39;t cleanly pick up rc.8 (plugin.json stays pinned at
-0.10.5 until v0.10.6), so this is an informational bump — your installed
-rc.7 binary is unchanged.</p>
-<p>rc.7 landed two upstream-track fixes that affect every Thrum-managed project:
-<code>thrum init</code> now <strong>JSON-merges hook entries into an existing
-<code>.claude/settings.json</code></strong> instead of skipping the file when it already exists
-(thrum-nh88) — third-party hooks (notably <code>bd setup claude</code>&#39;s SessionStart
-entry) are preserved while thrum hooks are added via exact-string match. And
-the <strong>Beads integration</strong> now goes through <code>bd setup claude</code> (or thrum&#39;s
-runtime-init when <code>Worktrees.BeadsEnabled=true</code> and <code>bd</code> is on <code>PATH</code>); the
-standalone Beads plugin is no longer recommended (thrum-psde.5).</p>
-<p>The rc.7 cherry-pick bundle also brings monitor-job reliability fixes:
-<code>thrum monitor stop</code> no longer hangs the RPC critical path on slow runners and
-reaps grandchild processes (thrum-puhr.9.2); <code>monitor stop/logs/restart/show</code>
-accept the monitor&#39;s human-readable name as well as the ULID-style ID
-(thrum-puhr.9.1 / 09wl / tv6z); and Class B/C diagnostic commands
-(<code>daemon status/logs/start/stop/restart/run</code>, <code>backup status</code>,
-<code>telegram status</code>) now fire the cross-worktree banner uniformly via
-<code>PersistentPreRunE</code> preflight instead of running silently from the wrong
-worktree (thrum-7b84.11).</p>
-<p><strong>BREAKING (carried from rc.6):</strong> <code>thrum send</code> no longer broadcasts by
-default. The bare form <code>thrum send &quot;msg&quot;</code> requires either <code>--to @&lt;agent&gt;</code> or
-<code>--broadcast</code> (thrum-t698). <code>--to @everyone</code> continues to work as the legacy
-keyword form. Update scripts and aliases that use the bare form.</p>
-<p>Earlier RCs carry forward: tmux <code>capture-pane</code> <code>-J</code> wrap fix that had been
-masking rc.5&#39;s thrum-qpw7 downstream (rc.6, thrum-ktp8); post-tmux-launch
-silence-watchdog nudge fix (rc.5, thrum-qpw7); multi-binary upgrade trap fix
-(rc.4, thrum-quth); tmux self-echo guard (rc.3, thrum-1zfk); restart-skill
-structure forward-port (rc.2); backstop nudger + runtime-init managed-template
-fix + new CLI flags (rc.1).</p>
-<p>What&#39;s new in v0.10.5 overall:</p>
-<ul>
-<li><strong>Daemon-side backstop nudger for stale-unread messages</strong> replaces the
-per-agent <code>thrum-inbox-poll.sh</code> cron. More reliable (survives runtime
-restarts) and lower overhead than a per-agent cron schedule. Existing cron
-installs continue to work as no-ops alongside it.</li>
-<li><strong><code>runtime-init</code> refreshes stale daemon-managed scripts</strong> so long-running
-worktrees stop drifting from the embedded template
-(<code>scripts/thrum-startup.sh</code>, <code>scripts/thrum-check-inbox.sh</code>). User-edited
-configs like <code>.claude/settings.json</code> and <code>AGENTS.md</code> stay preserved.</li>
-<li><strong><code>thrum prime</code> first-turn ack</strong> — the briefing now leaves a visible
-scrollback line so you can confirm at a glance that context loaded.</li>
-<li><strong><code>thrum inbox --from @agent</code></strong> filters unread by sender.</li>
-<li><strong><code>thrum worktree teardown --delete-branch</code></strong> drops the branch in the same
-command.</li>
-</ul>
-<p>No config changes required. Full release notes: <a href="whats-new.html">What&#39;s New</a>.</p>
-<p>Previous stable:
-<a href="https://github.com/leonletto/thrum/releases/tag/v0.10.4"><code>v0.10.4</code></a> — see
-<a href="whats-new.html">What&#39;s New</a> for v0.10.4 + v0.10.5 highlights.</p>
+<p>No stable-track pre-release right now.
+<strong><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.5"><code>v0.10.5</code></a></strong>
+shipped to stable on 2026-05-21 — see <a href="whats-new.html">What&#39;s New</a> for the full
+release notes (note the <strong>BREAKING</strong> <code>thrum send</code> change: the bare form now
+requires <code>--to @&lt;agent&gt;</code> or <code>--broadcast</code>).</p>
+<p>When the first <code>v0.10.6-rc.N</code> tags, this section will carry its callout + a
+Quick install block pinned to the <code>release/v0.10.6</code> branch. Until then,
+install the current stable release the normal way — no <code>VERSION=</code> override
+needed:</p>
+<pre><code class="language-bash hljs">curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
+thrum daemon restart</code></pre>
 </blockquote>
-<h3>Quick install for <code>v0.10.5-rc.8</code></h3>
-<p>Binary and Codex plugin (run in your shell):</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Binary</span>
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.8 sh
-
-<span class="hljs-comment"># Codex plugin (matches release/v0.10.5)</span>
-THRUM_INSTALL_REF=release/v0.10.5 bash &lt;(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.5/codex-plugin/plugins/thrum/scripts/install-plugin.sh)</code></pre>
-<p>Claude Code plugin (run inside Claude):</p>
-<pre><code class="language-text hljs">/plugin marketplace add leonletto/thrum#release/v0.10.5
-/plugin install thrum@thrum
-/reload-plugins</code></pre>
 <h2>Substrate-track current pre-release</h2>
 <blockquote>
 <p>No substrate-track pre-release yet. First will be <code>v0.11.0-rc.1</code>.</p>
