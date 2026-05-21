@@ -38,9 +38,10 @@ grep -F 'THRUM-REVIEW: stage=plan verdict=Ready:Yes' "$PLAN_FILE" \
 
 Notes on the check:
 
-- **Case-sensitive, literal match.** Use `grep -F` on the exact M2-canonical
-  string. Never `grep -i`. The canonical verdict values are exactly `Ready:Yes`
-  and `OVERRIDE` — a mis-cased stamp (`ready:yes`, `READY:YES`) does NOT pass.
+- **Case-sensitive, literal match.** Use `grep -F` on the exact canonical
+  (fixed-key-order) string. Never `grep -i`. The canonical verdict values are
+  exactly `Ready:Yes` and `OVERRIDE` — a mis-cased stamp (`ready:yes`,
+  `READY:YES`) does NOT pass.
 - **`OVERRIDE` is a valid pass.** A coordinator override (logged when the review
   loop hit its cap with BLOCKINGs still open) is an authorized way through this
   gate — accept it exactly like `Ready:Yes`. Surface any `THRUM-DEFER` lines
@@ -750,20 +751,25 @@ prompt file:
    <!-- THRUM-GATE: stage=prompt next=dispatch -->
    ```
 
-2. **After the post-setup prompt review terminates `Ready:Yes`** (the
-   dual-review the caller runs on the generated prompt), append the verdict
-   stamp:
+2. **After the post-setup prompt review terminates `Ready:Yes`**, append the
+   verdict stamp:
 
    ```text
    <!-- THRUM-REVIEW: stage=prompt verdict=Ready:Yes cycle=<N> date=<YYYY-MM-DD> -->
    ```
 
-Use the exact M2-canonical, case-sensitive form (`Ready:Yes` / `OVERRIDE`; keep
-`stage=`/`verdict=` key order stable so a literal `grep -F` matches). At
-dispatch, the coordinator greps the prompt for this stamp: present → the
-pre-dispatch review is already satisfied (skip re-review); absent → fall through
-to the normal pre-dispatch dual review (the stamp is a shortcut, not a hard
-dispatch requirement).
+   This review happens **within the same project-setup session**: after Step 4
+   generates the prompt, you dispatch the prompt dual-review (per the
+   `coordinator-running-brainstorm-cycles` Phase 7 flow), wait for it to
+   terminate, then append this stamp before closing out. Do NOT end the session
+   at Step 4 and re-invoke project-setup later for the stamp.
+
+Use the exact canonical, case-sensitive form (`Ready:Yes` / `OVERRIDE`; keep
+keys in the fixed order `stage=`, `verdict=`, `cycle=`, `date=` so a literal
+`grep -F` matches). At dispatch, the coordinator greps the prompt for this
+stamp: present → the pre-dispatch review is already satisfied (skip re-review);
+absent → fall through to the normal pre-dispatch dual review (the stamp is a
+shortcut, not a hard dispatch requirement).
 
 ### Common Mistakes
 
