@@ -44,6 +44,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
+	"github.com/leonletto/thrum/internal/hookmerge"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/netdetect"
@@ -499,6 +500,16 @@ Examples:
 				}
 			}
 
+			// Detect bd binary availability once for this init run.
+			// Reused below in step 3 (fresh-init default for
+			// Worktrees.BeadsEnabled) and step 4b (runtime gate for
+			// the bd hook install). Single exec avoids the double
+			// `bd --version` subprocess (thrum-nh88).
+			bdAvailable := false
+			if !dryRun && selectedRuntime != "" {
+				bdAvailable = hookmerge.BdBinaryAvailable()
+			}
+
 			// Step 3: Save runtime selection to config.json
 			if !dryRun && selectedRuntime != "" {
 				thrumDir := filepath.Join(flagRepo, ".thrum")
@@ -512,10 +523,19 @@ Examples:
 				// messaging after upgrade. cfg already carries the loaded value from
 				// LoadThrumConfig; zero-value (false) applies for fresh installs.
 				if cfg.Worktrees.BasePath == "" {
+					// BeadsEnabled defaults to runtime detection rather
+					// than a hardcoded true (thrum-nh88 scope F): if `bd
+					// --version` exits 0 the integration is auto-enabled;
+					// otherwise default off + we surface an install hint
+					// below. Users can flip the flag manually in
+					// .thrum/config.json and re-run thrum init.
 					cfg.Worktrees = config.WorktreesConfig{
 						BasePath:     worktree.InferBasePath(flagRepo),
-						BeadsEnabled: true,
+						BeadsEnabled: bdAvailable,
 						ThrumEnabled: true,
+					}
+					if !bdAvailable && !flagQuiet {
+						fmt.Fprintln(os.Stderr, "Hint: bd (beads) not detected on PATH. To enable bd context auto-injection, install bd (brew install beads) and re-run thrum init.")
 					}
 				}
 				if cfg.Orchestration.MergeTarget == "" {
@@ -596,6 +616,45 @@ Examples:
 					}
 				} else if !flagQuiet {
 					fmt.Print(cli.FormatRuntimeInit(result))
+				}
+			}
+
+			// Step 4b (thrum-nh88): install bd's canonical SessionStart hook into
+			// the main repo's .claude/settings.json when both gates pass:
+			// BeadsEnabled (config) AND bd binary present on PATH AND the claude
+			// runtime is in use. The merge preserves thrum's hooks (installed in
+			// step 4) and skips automatically when the beads marketplace plugin
+			// is detected to avoid double-fire.
+			if !dryRun && selectedRuntime == "claude" {
+				thrumDir := filepath.Join(flagRepo, ".thrum")
+				cfg, _ := config.LoadThrumConfig(thrumDir)
+				// Reuse the bdAvailable result from earlier in this
+				// handler to avoid a second `bd --version` exec
+				// (thrum-nh88).
+				if cfg != nil && cfg.Worktrees.BeadsEnabled && bdAvailable {
+					settingsPath := filepath.Join(flagRepo, ".claude", "settings.json")
+					homeDir, _ := os.UserHomeDir()
+					res, err := hookmerge.InstallBdHook(hookmerge.InstallBdHookOptions{
+						SettingsPath:      settingsPath,
+						LocalSettingsPath: filepath.Join(flagRepo, ".claude", "settings.local.json"),
+						PluginGuardPaths:  hookmerge.DefaultGuardPaths(homeDir, flagRepo),
+					})
+					switch {
+					case err != nil:
+						fmt.Fprintf(os.Stderr, "Warning: bd hook install failed: %v\n", err)
+					case res.Skipped:
+						if !flagQuiet {
+							fmt.Printf("✓ Skipped bd hook install: %s\n", res.SkippedReason)
+						}
+					case res.Added && !flagQuiet:
+						fmt.Println("✓ Added bd SessionStart hook to .claude/settings.json")
+					}
+					if res.LegacyRemoved > 0 && !flagQuiet {
+						fmt.Printf("✓ Cleaned %d legacy bd hook entries\n", res.LegacyRemoved)
+					}
+					if res.LocalMigrated && !flagQuiet {
+						fmt.Println("✓ Migrated legacy bd hooks from .claude/settings.local.json")
+					}
 				}
 			}
 

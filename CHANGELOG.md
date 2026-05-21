@@ -52,6 +52,34 @@ and this project adheres to
 
 ### Changed
 
+- **`thrum init` now JSON-merges `.claude/settings.json` instead of skipping
+  when the file exists** (thrum-nh88, P0). Previously `runtime_init` skipped
+  the file on existence (only `--force` would overwrite), which prevented
+  thrum from refreshing hook strings once a project had any settings file —
+  including project files written by `bd setup claude`. The new merge path
+  preserves third-party entries (bd's `bd prime --hook-json` SessionStart
+  hook, user-customized commands) and only adds missing thrum hook entries
+  via exact-string match. Idempotent: re-running on an already-current file
+  produces no diff (2-space `json.MarshalIndent` format matches bd's writer).
+  Same merge runs against each worktree's settings.json from
+  `worktree.EnsureRedirects` so worktrees get hooks too. Operator opt-out
+  remains: `Worktrees.ThrumEnabled=false` skips the merge entirely.
+- **`Worktrees.BeadsEnabled` default is now detection-based, not hardcoded
+  true** (thrum-nh88 scope F). `thrum init` runs `bd --version`; on exit
+  code 0 the integration enables and the canonical `bd prime --hook-json`
+  SessionStart hook is installed into `.claude/settings.json`; on missing
+  bd the flag defaults false and a one-line install hint surfaces
+  (`brew install beads` + re-run `thrum init`). Marketplace-plugin
+  detection (`enabledPlugins.beads=true` in project / global / local
+  settings) automatically skips install to avoid double-fire. Legacy
+  bd entries on `.claude/settings.local.json` are stripped as part of
+  the same pass. User-customized variants on the `bd prime` command
+  string (e.g. `bd prime --hook-json --custom-flag`) are left untouched
+  — only the bare-form legacy variants enumerated in the spec are
+  swept. Sibling runtime configs (`.codex/hooks/`, `opencode.json`,
+  `.gemini/settings.json`) do not use hook-array JSON; no equivalent
+  merge applies — Claude Code's settings.json is the only target for
+  this release.
 - **Beads integration now via `bd setup claude`** (or auto-installed by Thrum's
   runtime-init when `Worktrees.BeadsEnabled=true` and `bd` is on `PATH`). The
   standalone Beads plugin is no longer recommended and should be uninstalled.
