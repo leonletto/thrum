@@ -1,51 +1,231 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>CLI Reference — Thrum</title>
-<meta name="description" content="Complete reference for the thrum command-line interface — all commands, flags, and usage examples">
-<link rel="canonical" href="https://thrum.team/docs.html#cli.html">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"CLI Reference","description":"Complete reference for the thrum command-line interface — all commands, flags, and usage examples","url":"https://thrum.team/docs.html#cli.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://thrum.team/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://thrum.team/docs.html"}}</script>
-<style>
-body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
-pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
-code{font-family:ui-monospace,monospace;font-size:0.9em}
-table{border-collapse:collapse;width:100%}
-th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
-th{background:#f5f5f5}
-nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
-h2{margin-top:2rem}
-a{color:#0366d6}
-</style>
-<!-- Privacy-friendly analytics by Plausible -->
-<script async src="https://plausible.io/js/pa-0EO0yjcXim9oq9r4-I2w1.js"></script>
-<script>
-window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
-plausible.init()
-</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>CLI Reference — Thrum</title>
+  <meta name="description" content="Complete reference for the thrum command-line interface — all commands, flags, and usage examples">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="CLI Reference — Thrum">
+  <meta property="og:description" content="Complete reference for the thrum command-line interface — all commands, flags, and usage examples">
+  <meta property="og:url" content="https://thrum.team/docs/cli.html">
+  <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="https://thrum.team/img/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="CLI Reference — Thrum">
+  <meta name="twitter:description" content="Complete reference for the thrum command-line interface — all commands, flags, and usage examples">
+  <meta name="twitter:image" content="https://thrum.team/img/social-card.png">
+  <link rel="canonical" href="https://thrum.team/docs/cli.html">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"CLI Reference","description":"Complete reference for the thrum command-line interface — all commands, flags, and usage examples","url":"https://thrum.team/docs/cli.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://thrum.team/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://thrum.team/docs/overview.html"}}</script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/inter.woff2" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/ibm-plex-mono-regular.woff2" crossorigin>
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-0EO0yjcXim9oq9r4-I2w1.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
 </head>
 <body>
-<nav>
-<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Reference &rsaquo; CLI Reference
-<hr>
-<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="whats-new.html">What's New</a><br>
-<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
-  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
-<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
-<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
-<strong>Guides</strong>: <a href="beta-channel.html">Beta Channel</a><br>
-<strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
-<strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
-<strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
-<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
-<strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
-<strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <strong>CLI Reference</strong> | <a href="rpc-api.html">RPC API</a><br>
-<strong>substrate</strong>: <a href="substrate/overview.html">Personal Agent Substrate</a><br>
-<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
-</nav>
-<main>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="/index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="/index.html" class="nav-link">Home</a>
+          <a href="/docs/overview.html" class="nav-link nav-link-active">Docs</a>
+          <a href="/blog.html" class="nav-link">Blog</a>
+          <a href="/about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+          <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+            <span class="icon-sun">&#x2600;</span>
+            <span class="icon-moon">&#x263E;</span>
+          </button>
+        </div>
+        <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle navigation">
+          <span></span><span></span><span></span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Layout -->
+  <div class="docs-layout">
+
+    <!-- Sidebar -->
+    <aside class="docs-sidebar" id="docs-sidebar">
+      <div class="sidebar-search">
+        <input type="text" id="search-input" placeholder="Search docs... (Ctrl+K)" autocomplete="off">
+        <div class="search-results" id="search-results"></div>
+      </div>
+      <nav class="sidebar-nav" id="sidebar-nav">
+        <div class="sidebar-category" data-category="overview">
+          <span class="sidebar-category-label">Overview</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/philosophy.html" data-path="philosophy.html" data-category="overview" title="Why Thrum exists — a messaging system designed for human-centric AI agent coordination, not another orchestration engine">Philosophy</a>
+          <a class="sidebar-link" href="/docs/overview.html" data-path="overview.html" data-category="overview" title="Thrum — coordinate AI coding agents across worktrees, repos, and machines">Overview</a>
+          <a class="sidebar-link" href="/docs/whats-new.html" data-path="whats-new.html" data-category="overview" title="Release-by-release highlights, breaking changes, and migration notes for recent Thrum versions.">What's New</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="onboarding">
+          <span class="sidebar-category-label">Onboarding</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/scenarios/solo-dev.html" data-path="scenarios/solo-dev.html" data-category="onboarding" title="Use Thrum as a single-developer tool: one agent, one machine, no hand-holding">Solo Dev with One Agent</a>
+          <a class="sidebar-link" href="/docs/scenarios/team.html" data-path="scenarios/team.html" data-category="onboarding" title="Run multiple agents in parallel worktrees with Thrum as the coordination layer">Team on Your Machine</a>
+          <a class="sidebar-link" href="/docs/scenarios/across-boundaries.html" data-path="scenarios/across-boundaries.html" data-category="onboarding" title="Connect Thrum daemons in different repos or on different machines via peers">Agents Across Repos/Machines</a>
+          <a class="sidebar-link" href="/docs/scenarios/orchestration.html" data-path="scenarios/orchestration.html" data-category="onboarding" title="Hand off a plan you wrote and let the orchestrator run the execution phase">Automated Plan Execution</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="quickstart">
+          <span class="sidebar-category-label">Getting Started</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/quickstart.html" data-path="quickstart.html" data-category="quickstart" title="Get up and running with Thrum in 5 minutes - initialization, daemon setup, agent registration, and first message">Quickstart Guide</a>
+        <div class="sidebar-category sidebar-subcategory" data-category="tools">
+          <span class="sidebar-category-label sidebar-subcategory-label collapsible"><span class="sidebar-chevron">▸</span><span>Recommended Tools</span></span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/recommended-tools.html" data-path="guides/recommended-tools.html" data-category="tools" title="Tools, extensions, and integrations that work well with Thrum for AI agent coordination workflows">Recommended Tools</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-setup.html" data-path="guides/beads-setup.html" data-category="tools" title="Set up Beads for git-backed task tracking alongside Thrum — installation, initialization, agent workflow, and worktree configuration">Beads Setup Guide</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-ui-setup.html" data-path="guides/beads-ui-setup.html" data-category="tools" title="Set up Beads UI for a live web dashboard of your agent task board — installation, usage, and multi-project support">Beads UI Setup Guide</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-migration-to-embedded.html" data-path="guides/beads-migration-to-embedded.html" data-category="tools" title="Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.">Beads Migration to Embedded Mode (bd 1.0+)</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/playwright-cli-setup.html" data-path="guides/playwright-cli-setup.html" data-category="tools" title="Set up Playwright CLI for browser automation in Claude Code agent workflows — screenshots, page context, form filling, and web testing">Playwright CLI Setup Guide</a>
+          </div>
+        </div>
+
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="orchestration">
+          <span class="sidebar-category-label">Orchestration</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/orchestrator-role.html" data-path="orchestrator-role.html" data-category="orchestration" title="Hand off a plan you wrote and let the orchestrator run the execution phase">Orchestrator Role</a>
+          <a class="sidebar-link" href="/docs/tmux-sessions.html" data-path="tmux-sessions.html" data-category="orchestration" title="Run agent teams in daemon-managed tmux sessions with instant message delivery, zero background listeners, and coordinator-managed lifecycle">Tmux-Managed Sessions</a>
+          <a class="sidebar-link" href="/docs/monitor-jobs.html" data-path="monitor-jobs.html" data-category="orchestration" title="Watch any process output for pattern matches and deliver results as synthetic Thrum messages — no polling, no shell, no manual piping">Monitor Jobs</a>
+          <a class="sidebar-link" href="/docs/multi-runtime.html" data-path="multi-runtime.html" data-category="orchestration" title="Run Claude, Codex, Aider, Gemini, and other agent runtimes in tmux-managed sessions">Multi-Runtime Support</a>
+          <a class="sidebar-link" href="/docs/single-agent-mode.html" data-path="single-agent-mode.html" data-category="orchestration" title="Use Thrum's context management without the messaging layer — single-agent mode as default, three-tier context, and when to switch to multi-agent">Single-Agent Mode</a>
+          <a class="sidebar-link" href="/docs/workflow-templates.html" data-path="workflow-templates.html" data-category="orchestration" title="Four-phase skill pipeline for designing, planning, setting up, and implementing features with AI agents">Workflow Templates</a>
+          <a class="sidebar-link" href="/docs/permission-prompts.html" data-path="permission-prompts.html" data-category="orchestration" title="How Thrum detects when an agent is stuck on a permission prompt and routes it to a supervisor — silence-hash poller, supervisor reply paths (CLI, web UI, Telegram), reminder cadence, restart resilience">Permission Prompts</a>
+          <a class="sidebar-link" href="/docs/session-restart.html" data-path="session-restart.html" data-category="orchestration" title="Save conversation history and resume where you left off — from daily shutdown to automated mid-task restarts">Session Restart &amp; Context Recovery</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="identity">
+          <span class="sidebar-category-label">Identity &amp; Agents</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/identity.html" data-path="identity.html" data-category="identity" title="Named agents, deterministic IDs, identity resolution, registration, conflicts, cleanup, and multi-agent worktrees">Agent Identity &amp; Registration</a>
+          <a class="sidebar-link" href="/docs/agent-configs.html" data-path="agent-configs.html" data-category="identity" title="Ready-to-use Claude Code agent definitions for Thrum messaging and Beads task tracking">Agent Configurations</a>
+          <a class="sidebar-link" href="/docs/claude-agent-integration.html" data-path="claude-agent-integration.html" data-category="identity" title="Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup">Claude Code Agent Integration</a>
+          <a class="sidebar-link" href="/docs/role-templates.html" data-path="role-templates.html" data-category="identity" title="Auto-generate agent preambles from role templates with scope boundaries, task protocol, communication patterns, and behavioral directives">Role-Based Preamble Templates</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="messaging">
+          <span class="sidebar-category-label">Messaging</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/peers.html" data-path="peers.html" data-category="messaging" title="Cross-repo and cross-machine messaging between Thrum daemons">Peers</a>
+          <a class="sidebar-link" href="/docs/inbox-query-methods.html" data-path="inbox-query-methods.html" data-category="messaging" title="RPC methods for querying messages, agents, and managing read state with filtering and pagination">Inbox Query Methods</a>
+          <a class="sidebar-link" href="/docs/telegram-bridge.html" data-path="telegram-bridge.html" data-category="messaging" title="One Telegram connection, unified inbox for your whole team of agents — any agent can ping you, replies route back to the original author">Telegram Bridge</a>
+          <a class="sidebar-link" href="/docs/telegram-groups.html" data-path="telegram-groups.html" data-category="messaging" title="Share a Telegram group with your team so everyone can interact with the same Thrum agent — send instructions, see responses, and coordinate through one chat">Telegram Groups</a>
+          <a class="sidebar-link" href="/docs/messaging.html" data-path="messaging.html" data-category="messaging" title="Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering">Messaging</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="substrate">
+          <span class="sidebar-category-label">Personal Agent Substrate</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/substrate/overview.html" data-path="substrate/overview.html" data-category="substrate" title="v0.11 turns thrum into the substrate beneath personal-agent harnesses (scheduling, scheduled-agent lifecycle, skill registration, email transport, reminders). What it is, why it exists, and how the pieces fit together.">Personal Agent Substrate</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="coordination">
+          <span class="sidebar-category-label">Coordination</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/agent-coordination.html" data-path="agent-coordination.html" data-category="coordination" title="Multi-agent workflows, Beads integration, session templates, and coordination patterns for AI agent teams">Agent Coordination</a>
+          <a class="sidebar-link" href="/docs/multi-agent.html" data-path="multi-agent.html" data-category="coordination" title="Runtime presets, thrum prime, and coordination patterns for running multiple AI agents across worktrees and platforms">Multi-Agent Support</a>
+          <a class="sidebar-link" href="/docs/context.html" data-path="context.html" data-category="coordination" title="Per-agent context storage for persisting volatile project state across sessions and machines">Agent Context Management</a>
+          <a class="sidebar-link" href="/docs/guides/coordinate-two-agents.html" data-path="guides/coordinate-two-agents.html" data-category="coordination" title="Walk through registering two agents, sending messages between them, and seeing what everyone is working on — the most common Thrum use case">Coordinate Two Agents</a>
+          <a class="sidebar-link" href="/docs/guides/review-workflow.html" data-path="guides/review-workflow.html" data-category="coordination" title="Walk through the implement-then-review cycle: one agent writes code on a feature branch, another reviews it, Thrum handles the communication">Code Review Workflow</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="integrations">
+          <span class="sidebar-category-label">Integrations</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/web-ui.html" data-path="web-ui.html" data-category="integrations" title="Browser-based dashboard for monitoring agents and reading messages — served from the daemon on a single port">Web UI</a>
+          <a class="sidebar-link" href="/docs/claude-code-plugin.html" data-path="claude-code-plugin.html" data-category="integrations" title="Install and use the Thrum plugin for Claude Code — slash commands, automatic context injection, and multi-agent coordination without manual configuration">Claude Code Plugin</a>
+          <a class="sidebar-link" href="/docs/beads-and-thrum.html" data-path="beads-and-thrum.html" data-category="integrations" title="How persistent task tracking and agent messaging work together for multi-agent development">Beads and Thrum</a>
+          <a class="sidebar-link" href="/docs/codex-plugin.html" data-path="codex-plugin.html" data-category="integrations" title="Install and use Thrum's Codex skill bundle — the Claude thrum skill surface, mirrored as top-level Codex skills">Codex Plugin</a>
+          <a class="sidebar-link" href="/docs/cursor-plugin.html" data-path="cursor-plugin.html" data-category="integrations" title="Install and use Thrum's Cursor plugin — rules, hooks, skills, commands, and MCP configuration for multi-agent coordination in Cursor">Cursor Plugin</a>
+          <a class="sidebar-link" href="/docs/mcp-server.html" data-path="mcp-server.html" data-category="integrations" title="Thrum MCP server for native AI agent integration — tools, identity, message handling, and Claude Code setup">MCP Server</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="infrastructure">
+          <span class="sidebar-category-label">Infrastructure</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/daemon.html" data-path="daemon.html" data-category="infrastructure" title="Background service managing state, RPC handlers, sync loop, WebSocket server, and embedded UI on single port">Daemon Architecture</a>
+          <a class="sidebar-link" href="/docs/sync.html" data-path="sync.html" data-category="infrastructure" title="Git-based message synchronization using orphan branch, sync worktree, conflict-free merging, and offline-first design">Sync Protocol</a>
+          <a class="sidebar-link" href="/docs/configuration.html" data-path="configuration.html" data-category="infrastructure" title="Thrum configuration model — config.json schema, runtime tiers, priority chain, and the config show command">Configuration</a>
+          <a class="sidebar-link" href="/docs/guides/cross-machine-sync.html" data-path="guides/cross-machine-sync.html" data-category="infrastructure" title="Walk through enabling cross-machine sync, sending a message from one machine and receiving it on another, and verifying sync status">Sync Across Machines</a>
+          <a class="sidebar-link" href="/docs/tailscale-sync.html" data-path="tailscale-sync.html" data-category="infrastructure" title="Direct machine-to-machine sync via Tailscale — setup, architecture, pairing, and CLI commands">Tailscale Sync</a>
+          <a class="sidebar-link" href="/docs/tailscale-security.html" data-path="tailscale-security.html" data-category="infrastructure" title="Security model for Thrum's Tailscale peer sync — pairing, encryption, access control, and threat mitigations">Tailscale Sync Security</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="reference">
+          <span class="sidebar-category-label">Reference</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/development.html" data-path="development.html" data-category="reference" title="Setup, testing, building, contributing - complete guide for developing and extending Thrum">Development Guide</a>
+          <a class="sidebar-link" href="/docs/cli-hints.html" data-path="cli-hints.html" data-category="reference" title="Inline contextual hints from Thrum CLI commands — pre-action warnings, post-action next steps, and JSON output for tooling. Covers Phase B (thrum send / tmux create / init) and the THRUM_NO_HINTS opt-out.">CLI Hints</a>
+          <a class="sidebar-link" href="/docs/security-cicd.html" data-path="security-cicd.html" data-category="reference" title="Automated security scanning, CI/CD pipelines, and deployment workflows for Thrum">Security &amp; CI/CD</a>
+          <a class="sidebar-link" href="/docs/security-model.html" data-path="security-model.html" data-category="reference" title="How Thrum's daemon decides who's calling — kernel-verified peer credentials, anonymous-caller read-only allowlist, author-only message operations, and WebSocket origin restriction. Covers the v0.9.0 sec.1–sec.8 hardening.">Local Security Model</a>
+          <a class="sidebar-link" href="/docs/architecture.html" data-path="architecture.html" data-category="reference" title="Thrum architecture — daemon design, storage, sync engine, transport layer, key features, and foundation packages">Architecture</a>
+          <a class="sidebar-link active" href="/docs/cli.html" data-path="cli.html" data-category="reference" title="Complete reference for the thrum command-line interface — all commands, flags, and usage examples">CLI Reference</a>
+          <a class="sidebar-link" href="/docs/rpc-api.html" data-path="rpc-api.html" data-category="reference" title="Thrum daemon JSON-RPC 2.0 API reference — all RPC methods, parameters, and response formats">RPC API</a>
+        <div class="sidebar-category sidebar-subcategory" data-category="agent-protocols">
+          <span class="sidebar-category-label sidebar-subcategory-label collapsible"><span class="sidebar-chevron">▸</span><span>Agent Protocols</span></span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/sub-agent-strategy.html" data-path="strategies/sub-agent-strategy.html" data-category="agent-protocols" title="When and how to delegate work to sub-agents for context efficiency">Sub-Agent Strategy</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/thrum-registration.html" data-path="strategies/thrum-registration.html" data-category="agent-protocols" title="How to register with Thrum at session start and communicate with other agents">Thrum Registration</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/resume-after-context-loss.html" data-path="strategies/resume-after-context-loss.html" data-category="agent-protocols" title="How to recover and pick up work after compaction, a new session, or a crash">Resume After Context Loss</a>
+          </div>
+        </div>
+
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="api">
+          <span class="sidebar-category-label">API Reference</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/api/authentication.html" data-path="api/authentication.html" data-category="api" title="Authentication and authorization in the Thrum API — agent identity, session tokens, and security model">Authentication</a>
+          <a class="sidebar-link" href="/docs/api/events.html" data-path="api/events.html" data-category="api" title="All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events">Event Reference</a>
+          <a class="sidebar-link" href="/docs/api/websocket.html" data-path="api/websocket.html" data-category="api" title="Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events">WebSocket API</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="guides">
+          <span class="sidebar-category-label">Guides</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="troubleshooting">
+          <span class="sidebar-category-label">troubleshooting</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/troubleshooting-identity.html" data-path="troubleshooting-identity.html" data-category="troubleshooting" title="Identity guard error messages and how to fix them — cross_worktree pid_mismatch, anonymous_mutating_rpc, non_git_bootstrap, and the rest of the v0.9.0 guard catalog with remediation steps.">Troubleshooting Identity Issues</a>
+          </div>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- Content -->
+    <main class="docs-content" id="docs-content">
+      <div class="docs-content-inner" id="docs-content-inner">
 <h2>Thrum CLI Reference</h2>
 <blockquote>
 <p><strong>TL;DR:</strong> You only need 8 commands for daily use — they&#39;re in the
@@ -515,7 +695,7 @@ daemon-start step, <code>thrum init</code> exits early with an OS-appropriate in
 (<code>brew install tmux</code> on macOS, <code>apt install tmux</code> on Debian/Ubuntu). Install
 tmux and re-run, or pass <code>--no-daemon</code> to skip the daemon-start step entirely.</p>
 <p>This command emits contextual hints — see <a href="cli-hints.html">CLI Hints</a>.</p>
-<pre><code>thrum init [flags]</code></pre>
+<pre><code class="language-text hljs">thrum init [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -591,10 +771,10 @@ tmux and re-run, or pass <code>--no-daemon</code> to skip the daemon-start step 
 explicit <code>Worktrees.BasePath</code> in <code>.thrum/config.json</code> are unaffected. If you
 relied on the legacy fallback and want to keep existing worktrees in place, set
 the override before the next <code>thrum worktree create</code>:</p>
-<pre><code>thrum config set worktrees.base_path &quot;$HOME/.workspaces/&lt;project&gt;&quot;</code></pre>
+<pre><code class="language-bash hljs">thrum config <span class="hljs-built_in">set</span> worktrees.base_path <span class="hljs-string">&quot;<span class="hljs-variable">$HOME</span>/.workspaces/&lt;project&gt;&quot;</span></code></pre>
 <p>The wizard also offers to set this path interactively.</p>
 <p>Example (legacy silent path, with <code>--non-interactive</code> or piped stdin):</p>
-<pre><code>$ thrum init --non-interactive
+<pre><code class="language-text hljs">$ thrum init --non-interactive
 ✓ Thrum initialized successfully
   Repository: .
   Created: .thrum/ directory structure
@@ -602,7 +782,7 @@ the override before the next <code>thrum worktree create</code>:</p>
   Updated: .gitignore
 ✓ Runtime saved to .thrum/config.json (primary: cli-only)
 
-Done. Run &#39;thrum quickstart --name &lt;name&gt; --role &lt;role&gt; --module &lt;module&gt;&#39; to register an agent.</code></pre>
+Done. Run &#x27;thrum quickstart --name &lt;name&gt; --role &lt;role&gt; --module &lt;module&gt;&#x27; to register an agent.</code></pre>
 <p>The post-init <code>quickstart</code> tip lands on stdout (not the hints stream) so it
 survives <code>THRUM_NO_HINTS</code> and <code>--quiet</code>. It&#39;s there to prevent the
 silent-confusion case where you forget to register an agent after running
@@ -612,7 +792,7 @@ already ran <code>quickstart</code> for you.</p>
 <p>Use <code>--skills</code> to install just the thrum skill without full runtime
 configuration. Detects your agent automatically and installs to the correct
 skills directory:</p>
-<pre><code>$ thrum init --skills
+<pre><code class="language-text hljs">$ thrum init --skills
 Detected: Claude Code (found .claude/settings.json)
 Skill installed to .claude/skills/thrum/
   SKILL.md
@@ -626,7 +806,7 @@ to override). If no agent-specific directory is found, falls back to
 <h3>thrum config show</h3>
 <p>Show effective configuration resolved from all sources. Displays each value and
 where it came from (config.json, environment variable, default).</p>
-<pre><code>thrum config show [flags]</code></pre>
+<pre><code class="language-text hljs">thrum config show [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -642,7 +822,7 @@ where it came from (config.json, environment variable, default).</p>
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum config show
+<pre><code class="language-text hljs">$ thrum config show
 Thrum Configuration
   Config file: .thrum/config.json
 
@@ -660,7 +840,7 @@ Daemon
 state with the main repository. Creates a <code>.thrum/redirect</code> file pointing to the
 main repo&#39;s <code>.thrum/</code> directory and a local <code>.thrum/identities/</code> directory for
 per-worktree agent identities.</p>
-<pre><code>thrum setup [flags]</code></pre>
+<pre><code class="language-text hljs">thrum setup [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -676,16 +856,16 @@ per-worktree agent identities.</p>
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum setup --main-repo /path/to/main/repo
+<pre><code class="language-text hljs">$ thrum setup --main-repo /path/to/main/repo
 Connected to daemon
 ✓ Thrum worktree setup complete</code></pre>
 <h3>thrum setup claude-md</h3>
 <p>Install or manage a Thrum-managed block in <code>CLAUDE.md</code>. Prints the template to
 stdout by default; <code>--apply</code> writes to <code>./CLAUDE.md</code>; <code>--apply --force</code> replaces
 an existing Thrum block idempotently.</p>
-<pre><code>thrum setup claude-md                   # Print template to stdout
-thrum setup claude-md --apply           # Create CLAUDE.md or append block
-thrum setup claude-md --apply --force   # Replace existing Thrum block</code></pre>
+<pre><code class="language-bash hljs">thrum setup claude-md                   <span class="hljs-comment"># Print template to stdout</span>
+thrum setup claude-md --apply           <span class="hljs-comment"># Create CLAUDE.md or append block</span>
+thrum setup claude-md --apply --force   <span class="hljs-comment"># Replace existing Thrum block</span></code></pre>
 <p>Flags:</p>
 <ul>
 <li><code>--apply</code> — Write to <code>./CLAUDE.md</code>. Creates the file with template-only
@@ -713,7 +893,7 @@ block without <code>--force</code>, IO failures) go to stderr; exit code is non-
 file, active session state, saved context, and any pending restart snapshot,
 then assembles a consolidated prompt block that is printed to stdout for the
 agent to consume.</p>
-<pre><code>thrum prime [flags]</code></pre>
+<pre><code class="language-text hljs">thrum prime [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -741,7 +921,7 @@ recorded in the identity file and refuses the call. Run <code>thrum prime</code>
 outermost runtime session. Pass <code>--force</code> only when you understand the ownership
 model and are intentionally bypassing this check.</p>
 <p>Example:</p>
-<pre><code>$ thrum prime
+<pre><code class="language-text hljs">$ thrum prime
 # Outputs session context block to stdout
 # Agent reads this at session start via /thrum:prime skill</code></pre>
 <p><strong>Drift Hints:</strong> <code>thrum prime</code> emits up to one <code>slog.Warn</code>-level hint per run
@@ -787,7 +967,7 @@ no-op, used by <code>scripts/thrum-startup.sh</code> on every SessionStart.</p>
 a live process in a different worktree, the registration is refused. Pass
 <code>--force</code> to displace the existing identity (use only when you are certain the
 other process has exited), or choose a different name.</p>
-<pre><code>thrum quickstart --name AGENT_NAME --role ROLE --module MODULE [flags]</code></pre>
+<pre><code class="language-text hljs">thrum quickstart --name AGENT_NAME --role ROLE --module MODULE [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -847,7 +1027,7 @@ vars). The <code>--runtime</code> value is written to <code>preferred_runtime</c
 file.</p>
 <p>The <code>THRUM_NAME</code> environment variable takes priority over the <code>--name</code> flag.</p>
 <p>Example:</p>
-<pre><code>$ thrum quickstart --name implementer_auth --role implementer --module auth --intent &quot;Fixing token refresh&quot;
+<pre><code class="language-text hljs">$ thrum quickstart --name implementer_auth --role implementer --module auth --intent &quot;Fixing token refresh&quot;
 ✓ Registered as @implementer (implementer_35HV62T9B9)
 ✓ Session started: ses_01HXF2A9...
 ✓ Intent set: Fixing token refresh
@@ -860,9 +1040,9 @@ $ thrum quickstart --name furiosa --role implementer --module auth --intent &quo
 <h3>thrum overview</h3>
 <p>Show a comprehensive orientation view combining identity, work context, team
 activity, inbox counts, and sync status.</p>
-<pre><code>thrum overview</code></pre>
+<pre><code class="language-text hljs">thrum overview</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum overview
+<pre><code class="language-text hljs">$ thrum overview
 You: @implementer (implementer_35HV62T9B9)
 Session: active for 2h15m
 Intent: Fixing token refresh
@@ -882,7 +1062,7 @@ populated automatically when an agent has a <code>worktree</code> session ref se
 happens on <code>session start</code> and <code>quickstart</code>. When an agent has an active session
 with a worktree ref, the daemon extracts the current branch, number of commits
 ahead of the default branch, and the list of changed files on each heartbeat.</p>
-<pre><code>thrum team [flags]</code></pre>
+<pre><code class="language-text hljs">thrum team [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -906,7 +1086,7 @@ ahead of the default branch, and the list of changed files on each heartbeat.</p
 <code>@supervisor_&lt;project&gt;</code>. Status glyphs: <code>●</code> active, <code>○</code> offline, <code>⊙</code> reserved
 (system pseudo-agent).</p>
 <p>Example:</p>
-<pre><code>$ thrum team
+<pre><code class="language-text hljs">$ thrum team
 @implementer [active]
   PID:      12345 [live]
   Module:   auth
@@ -928,7 +1108,7 @@ an <code>agent_pid</code> skip this line. See
 <h3>thrum send</h3>
 <p>Send a message to the messaging system. The daemon must be running and you must
 have an active session.</p>
-<pre><code>thrum send MESSAGE [flags]</code></pre>
+<pre><code class="language-text hljs">thrum send MESSAGE [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -975,7 +1155,7 @@ discouraged because they fan out to every agent with that role and cause
 cross-talk.</p>
 <p>This command emits contextual hints — see <a href="cli-hints.html">CLI Hints</a>.</p>
 <p>Example:</p>
-<pre><code>$ thrum send &quot;PR ready for review&quot; --to @reviewer_main --scope module:auth --ref pr:42
+<pre><code class="language-text hljs">$ thrum send &quot;PR ready for review&quot; --to @reviewer_main --scope module:auth --ref pr:42
 ✓ Message sent: msg_01HXE8Z7...
   Created: 2026-02-03T10:00:00Z
 
@@ -987,7 +1167,7 @@ $ thrum send &quot;Deploy complete&quot; --to @everyone
 with the original message in your inbox. The replied-to message is marked as
 read. Replies automatically create or join threads. See
 <a href="messaging.html#auto-threading-v050">Auto-Threading</a> for details.</p>
-<pre><code>thrum reply MSG_ID TEXT [flags]</code></pre>
+<pre><code class="language-text hljs">thrum reply MSG_ID TEXT [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1003,13 +1183,13 @@ read. Replies automatically create or join threads. See
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum reply msg_01HXE8Z7 &quot;Good idea, let&#39;s do that&quot;
+<pre><code class="language-text hljs">$ thrum reply msg_01HXE8Z7 &quot;Good idea, let&#x27;s do that&quot;
 ✓ Reply sent: msg_01HXE9A3...
   In reply to: msg_01HXE8Z7</code></pre>
 <h3>thrum inbox</h3>
 <p>List messages in your inbox with filtering and pagination. Displayed messages
 are automatically marked as read (unless filtering with <code>--unread</code>).</p>
-<pre><code>thrum inbox [flags]</code></pre>
+<pre><code class="language-text hljs">thrum inbox [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1051,7 +1231,7 @@ are automatically marked as read (unless filtering with <code>--unread</code>).<
 </tbody></table>
 <p>The output adapts to terminal width and shows read/unread indicators.</p>
 <p>Example:</p>
-<pre><code>$ thrum inbox --unread
+<pre><code class="language-text hljs">$ thrum inbox --unread
 ┌──────────────────────────────────────────────────────────┐
 │ ● msg_01HXE8Z7  @planner  2m ago                       │
 │ We should refactor the sync daemon before adding embeds. │
@@ -1063,18 +1243,18 @@ Showing 1-2 of 12 messages (5 unread)</code></pre>
 <h3>thrum sent</h3>
 <p>List messages you authored, including resolved recipients and durable
 delivery/read state.</p>
-<pre><code>thrum sent [flags]</code></pre>
+<pre><code class="language-text hljs">thrum sent [flags]</code></pre>
 <p>Common examples:</p>
-<pre><code>thrum sent
+<pre><code class="language-text hljs">thrum sent
 thrum sent --unread
 thrum sent --to @implementer_api
 thrum message get msg_01HXE8Z7</code></pre>
 <h3>thrum message get</h3>
 <p>Get a single message with full details. The message is automatically marked as
 read.</p>
-<pre><code>thrum message get MSG_ID</code></pre>
+<pre><code class="language-text hljs">thrum message get MSG_ID</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum message get msg_01HXE8Z7
+<pre><code class="language-text hljs">$ thrum message get msg_01HXE8Z7
 Message: msg_01HXE8Z7
   From:    @planner
   Time:    2m ago
@@ -1085,13 +1265,13 @@ We should refactor the sync daemon before adding embeddings.</code></pre>
 <h3>thrum message edit</h3>
 <p>Edit a message by replacing its content entirely. Only the message author can
 edit their own messages.</p>
-<pre><code>thrum message edit MSG_ID TEXT</code></pre>
+<pre><code class="language-text hljs">thrum message edit MSG_ID TEXT</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum message edit msg_01HXE8Z7 &quot;Updated: refactor sync daemon first&quot;
+<pre><code class="language-text hljs">$ thrum message edit msg_01HXE8Z7 &quot;Updated: refactor sync daemon first&quot;
 ✓ Message edited: msg_01HXE8Z7 (version 2)</code></pre>
 <h3>thrum message delete</h3>
 <p>Delete a message by ID. Requires the <code>--force</code> flag to confirm.</p>
-<pre><code>thrum message delete MSG_ID --force</code></pre>
+<pre><code class="language-text hljs">thrum message delete MSG_ID --force</code></pre>
 <table>
 <thead>
 <tr>
@@ -1107,11 +1287,11 @@ edit their own messages.</p>
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum message delete msg_01HXE8Z7 --force
+<pre><code class="language-text hljs">$ thrum message delete msg_01HXE8Z7 --force
 ✓ Message deleted: msg_01HXE8Z7</code></pre>
 <h3>thrum message read</h3>
 <p>Mark one or more messages as read, or all unread messages at once.</p>
-<pre><code>thrum message read MSG_ID [MSG_ID...]
+<pre><code class="language-text hljs">thrum message read MSG_ID [MSG_ID...]
 thrum message read --all</code></pre>
 <table>
 <thead>
@@ -1128,7 +1308,7 @@ thrum message read --all</code></pre>
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum message read msg_01 msg_02 msg_03
+<pre><code class="language-text hljs">$ thrum message read msg_01 msg_02 msg_03
 ✓ Marked 3 messages as read
 
 $ thrum message read --all
@@ -1136,7 +1316,7 @@ $ thrum message read --all
 <h3>thrum purge</h3>
 <p>Remove messages, sessions, and events before a cutoff date. By default shows a
 preview of what would be deleted. Use <code>--confirm</code> to execute.</p>
-<pre><code>thrum purge --before DURATION|DATE
+<pre><code class="language-text hljs">thrum purge --before DURATION|DATE
 thrum purge --all</code></pre>
 <table>
 <thead>
@@ -1164,7 +1344,7 @@ thrum purge --all</code></pre>
 </tbody></table>
 <p><code>--before</code> and <code>--all</code> are mutually exclusive. One is required.</p>
 <p>Example:</p>
-<pre><code>$ thrum purge --before 2d
+<pre><code class="language-text hljs">$ thrum purge --before 2d
 Purge preview (before 2026-03-14T00:00:00Z):
 
   Messages:  142
@@ -1208,7 +1388,7 @@ worktrees)</li>
 <code>THRUM_NAME</code> env var, (2) <code>--name</code> flag, (3) environment variables
 (<code>THRUM_ROLE</code>, <code>THRUM_MODULE</code>), (4) identity file in <code>.thrum/identities/</code>
 directory.</p>
-<pre><code>thrum agent register [flags]</code></pre>
+<pre><code class="language-text hljs">thrum agent register [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1241,7 +1421,7 @@ directory.</p>
 <p>Requires <code>--role</code> and <code>--module</code> (via global flags or env vars). On successful
 registration, saves an identity file to <code>.thrum/identities/{name}.json</code>.</p>
 <p>Example:</p>
-<pre><code>$ thrum --role=implementer --module=auth agent register --display &quot;Auth Developer&quot;
+<pre><code class="language-text hljs">$ thrum --role=implementer --module=auth agent register --display &quot;Auth Developer&quot;
 ✓ Agent registered: implementer_35HV62T9B9
 
 # With a human-readable name
@@ -1249,7 +1429,7 @@ $ thrum --role=implementer --module=auth agent register --name furiosa --display
 ✓ Agent registered: furiosa</code></pre>
 <h3>thrum agent list</h3>
 <p>List all registered agents with session status and work context.</p>
-<pre><code>thrum agent list [flags]</code></pre>
+<pre><code class="language-text hljs">thrum agent list [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1277,7 +1457,7 @@ $ thrum --role=implementer --module=auth agent register --name furiosa --display
 <p>Without <code>--context</code>, shows a detailed card view per agent with active/offline
 status. With <code>--context</code>, shows a compact table of work contexts.</p>
 <p>Example (default view):</p>
-<pre><code>$ thrum agent list
+<pre><code class="language-text hljs">$ thrum agent list
 Registered agents (2):
 
 ┌─ ● @implementer (active)
@@ -1292,18 +1472,18 @@ Registered agents (2):
 │  Last seen: 2h ago
 └─</code></pre>
 <p>Example (context table):</p>
-<pre><code>$ thrum agent list --context
+<pre><code class="language-text hljs">$ thrum agent list --context
 AGENT          SESSION      BRANCH               COMMITS  FILES INTENT                         UPDATED
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
 @implementer   ses_01HXF... feature/auth               3      5 Fixing token refresh           5m ago</code></pre>
 <h3>thrum agent whoami</h3>
 <p>Show the current agent identity and active session.</p>
-<pre><code>thrum agent whoami</code></pre>
+<pre><code class="language-text hljs">thrum agent whoami</code></pre>
 <p>Identity is resolved from: (1) command-line flags (<code>--role</code>, <code>--module</code>), (2)
 environment variables (<code>THRUM_ROLE</code>, <code>THRUM_MODULE</code>, <code>THRUM_NAME</code>), (3) identity
 files in <code>.thrum/identities/</code> directory.</p>
 <p>Example:</p>
-<pre><code>$ thrum agent whoami
+<pre><code class="language-text hljs">$ thrum agent whoami
 Agent ID:  implementer_35HV62T9B9
 Role:      @implementer
 Module:    auth
@@ -1314,16 +1494,16 @@ Session:   ses_01HXF2A9... (2h ago)</code></pre>
 <p>Delete an agent and all its associated data. This removes the identity file
 (<code>identities/{name}.json</code>), message file (<code>messages/{name}.jsonl</code>), and the
 agent record from the database. Prompts for confirmation before deletion.</p>
-<pre><code>thrum agent delete &lt;name&gt;</code></pre>
+<pre><code class="language-text hljs">thrum agent delete &lt;name&gt;</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum agent delete furiosa
-Delete agent &#39;furiosa&#39; and all associated data? [y/N] y
+<pre><code class="language-text hljs">$ thrum agent delete furiosa
+Delete agent &#x27;furiosa&#x27; and all associated data? [y/N] y
 ✓ Agent deleted: furiosa</code></pre>
 <h3>thrum agent cleanup</h3>
 <p>Detect and remove orphaned agents whose worktrees or branches no longer exist.
 Scans all registered agents and identifies orphans based on missing worktree,
 missing branch, or staleness (not seen in a long time).</p>
-<pre><code>thrum agent cleanup [flags]</code></pre>
+<pre><code class="language-text hljs">thrum agent cleanup [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1350,7 +1530,7 @@ missing branch, or staleness (not seen in a long time).</p>
 </tbody></table>
 <p>The <code>--dry-run</code> and <code>--force</code> flags are mutually exclusive.</p>
 <p>Example:</p>
-<pre><code>$ thrum agent cleanup --dry-run
+<pre><code class="language-text hljs">$ thrum agent cleanup --dry-run
 Orphaned agents (2):
   implementer_35HV... — missing worktree
   reviewer_8KBN...    — not seen in 45 days
@@ -1362,10 +1542,10 @@ $ thrum agent cleanup --force
 <h3>thrum agent start</h3>
 <p>Start a new work session. This is an alias for <code>thrum session start</code>. The agent
 must be registered first.</p>
-<pre><code>thrum agent start</code></pre>
+<pre><code class="language-text hljs">thrum agent start</code></pre>
 <h3>thrum agent end</h3>
 <p>End the current session. This is an alias for <code>thrum session end</code>.</p>
-<pre><code>thrum agent end [flags]</code></pre>
+<pre><code class="language-text hljs">thrum agent end [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1388,22 +1568,22 @@ must be registered first.</p>
 <h3>thrum agent set-intent</h3>
 <p>Set the work intent for the current session. This is an alias for
 <code>thrum session set-intent</code>. Pass an empty string to clear.</p>
-<pre><code>thrum agent set-intent TEXT</code></pre>
+<pre><code class="language-text hljs">thrum agent set-intent TEXT</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum agent set-intent &quot;Fixing memory leak in connection pool&quot;
+<pre><code class="language-text hljs">$ thrum agent set-intent &quot;Fixing memory leak in connection pool&quot;
 ✓ Intent set: Fixing memory leak in connection pool</code></pre>
 <h3>thrum agent set-task</h3>
 <p>Set the current task identifier for the session. This is an alias for
 <code>thrum session set-task</code>. Pass an empty string to clear.</p>
-<pre><code>thrum agent set-task TASK</code></pre>
+<pre><code class="language-text hljs">thrum agent set-task TASK</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum agent set-task beads:thrum-42
+<pre><code class="language-text hljs">$ thrum agent set-task beads:thrum-42
 ✓ Task set: beads:thrum-42</code></pre>
 <h3>thrum agent set-status</h3>
 <p>Set the operational status of an agent. Without <code>--agent</code>, updates the local
 identity file directly. With <code>--agent</code>, sends an RPC to the daemon to update a
 remote agent&#39;s identity file (including across worktrees).</p>
-<pre><code>thrum agent set-status &lt;working|idle|blocked&gt; [flags]</code></pre>
+<pre><code class="language-text hljs">thrum agent set-status &lt;working|idle|blocked&gt; [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1423,7 +1603,7 @@ remote agent&#39;s identity file (including across worktrees).</p>
 has been silent but its status is <code>&quot;working&quot;</code>, the daemon fires a nudge on the
 next silence event to wake the agent.</p>
 <p>Example:</p>
-<pre><code>$ thrum agent set-status working
+<pre><code class="language-text hljs">$ thrum agent set-status working
 ✓ Status set: working
 
 $ thrum agent set-status idle --agent implementer_api
@@ -1432,7 +1612,7 @@ $ thrum agent set-status idle --agent implementer_api
 <p>Send a heartbeat for the current session. This is an alias for
 <code>thrum session heartbeat</code>. Triggers git context extraction and updates the
 agent&#39;s last-seen time.</p>
-<pre><code>thrum agent heartbeat [flags]</code></pre>
+<pre><code class="language-text hljs">thrum agent heartbeat [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1465,15 +1645,15 @@ agent&#39;s last-seen time.</p>
 <h3>thrum session start</h3>
 <p>Start a new work session. Automatically detects the current agent from whoami
 and recovers any orphaned sessions.</p>
-<pre><code>thrum session start</code></pre>
+<pre><code class="language-text hljs">thrum session start</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum session start
+<pre><code class="language-text hljs">$ thrum session start
 ✓ Session started: ses_01HXF2A9...
   Agent:      implementer_35HV62T9B9
   Started:    2026-02-03 10:00:00</code></pre>
 <h3>thrum session end</h3>
 <p>End the current or specified session.</p>
-<pre><code>thrum session end [flags]</code></pre>
+<pre><code class="language-text hljs">thrum session end [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1494,13 +1674,13 @@ and recovers any orphaned sessions.</p>
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum session end
+<pre><code class="language-text hljs">$ thrum session end
 ✓ Session ended: ses_01HXF2A9...
   Ended:      2026-02-03 12:00:00
   Duration:   2h</code></pre>
 <h3>thrum session list</h3>
 <p>List all sessions (active and ended) with optional filtering.</p>
-<pre><code>thrum session list [flags]</code></pre>
+<pre><code class="language-text hljs">thrum session list [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1521,7 +1701,7 @@ and recovers any orphaned sessions.</p>
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum session list
+<pre><code class="language-text hljs">$ thrum session list
 Sessions (3):
   ses_01HXF2A9  implementer_35HV  active  2h ago   Fixing token refresh
   ses_01HXF1B8  reviewer_8KBN     ended   4h ago   Reviewing PR #42
@@ -1533,7 +1713,7 @@ Sessions (1):
 <h3>thrum session heartbeat</h3>
 <p>Send a heartbeat for the current session. Triggers git context extraction and
 updates the agent&#39;s last-seen time. Optionally add or remove scopes and refs.</p>
-<pre><code>thrum session heartbeat [flags]</code></pre>
+<pre><code class="language-text hljs">thrum session heartbeat [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1564,22 +1744,22 @@ updates the agent&#39;s last-seen time. Optionally add or remove scopes and refs
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum session heartbeat --add-scope module:auth
+<pre><code class="language-text hljs">$ thrum session heartbeat --add-scope module:auth
 ✓ Heartbeat sent: ses_01HXF2A9...
   Context: branch: feature/auth, 3 commits, 5 files</code></pre>
 <h3>thrum session set-intent</h3>
 <p>Set a free-text description of what the agent is currently working on. Appears
 in <code>thrum agent list --context</code>. Pass an empty string to clear.</p>
-<pre><code>thrum session set-intent TEXT</code></pre>
+<pre><code class="language-text hljs">thrum session set-intent TEXT</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum session set-intent &quot;Refactoring login flow&quot;
+<pre><code class="language-text hljs">$ thrum session set-intent &quot;Refactoring login flow&quot;
 ✓ Intent set: Refactoring login flow</code></pre>
 <h3>thrum session set-task</h3>
 <p>Set the current task identifier for the session (e.g., a beads issue ID).
 Appears in <code>thrum agent list --context</code>. Pass an empty string to clear.</p>
-<pre><code>thrum session set-task TASK</code></pre>
+<pre><code class="language-text hljs">thrum session set-task TASK</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum session set-task beads:thrum-42
+<pre><code class="language-text hljs">$ thrum session set-task beads:thrum-42
 ✓ Task set: beads:thrum-42</code></pre>
 <h2>Coordination</h2>
 <h3>thrum who-has</h3>
@@ -1589,9 +1769,9 @@ information.</p>
 <p>The daemon extracts live git state from each agent&#39;s worktree on every call
 (about 500ms for a handful of worktrees) rather than serving stale cached data
 from the last heartbeat. What you see is what&#39;s actually on disk right now.</p>
-<pre><code>thrum who-has FILE</code></pre>
+<pre><code class="language-text hljs">thrum who-has FILE</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum who-has internal/auth/auth.go
+<pre><code class="language-text hljs">$ thrum who-has internal/auth/auth.go
 @implementer is editing internal/auth/auth.go (2 uncommitted changes, branch: feature/auth)
 
 $ thrum who-has unknown.go
@@ -1600,9 +1780,9 @@ No agents are currently editing unknown.go</code></pre>
 <p>Check the presence status of an agent. Shows whether the agent is active or
 offline, along with their current intent, task, and branch if active. The agent
 can be specified with or without the <code>@</code> prefix.</p>
-<pre><code>thrum ping AGENT</code></pre>
+<pre><code class="language-text hljs">thrum ping AGENT</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum ping @reviewer
+<pre><code class="language-text hljs">$ thrum ping @reviewer
 @reviewer: active, last heartbeat 5m ago
   Intent: Reviewing PR #42
   Task: beads:thrum-55
@@ -1614,7 +1794,7 @@ $ thrum ping planner
 <h3>thrum context save</h3>
 <p>Save agent context from a file or stdin. Context is stored in
 <code>.thrum/context/{agent-name}.md</code> for persistence across sessions.</p>
-<pre><code>thrum context save [flags]</code></pre>
+<pre><code class="language-text hljs">thrum context save [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1635,7 +1815,7 @@ $ thrum ping planner
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum context save --file dev-docs/Continuation_Prompt.md
+<pre><code class="language-text hljs">$ thrum context save --file dev-docs/Continuation_Prompt.md
 ✓ Context saved for furiosa (1234 bytes)
 
 # Save from stdin
@@ -1648,7 +1828,7 @@ whereas running the command manually with arbitrary input can overwrite
 accumulated session state.</p>
 <h3>thrum context show</h3>
 <p>Display the saved context for the current agent.</p>
-<pre><code>thrum context show [flags]</code></pre>
+<pre><code class="language-text hljs">thrum context show [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1674,7 +1854,7 @@ accumulated session state.</p>
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum context show
+<pre><code class="language-text hljs">$ thrum context show
 Context for furiosa (1.2 KB, updated 5m ago):
 
 # Current Work
@@ -1687,15 +1867,15 @@ $ thrum context show --raw &gt; backup.md</code></pre>
 <p>Alias for <code>thrum context show</code>. Same flags, same output. Named for the common
 use case: a downstream tool (a runtime&#39;s session-restore, a scripted workflow)
 that &quot;loads&quot; the saved context back into the current session.</p>
-<pre><code>thrum context load [flags]</code></pre>
+<pre><code class="language-text hljs">thrum context load [flags]</code></pre>
 <p>See <a href="#thrum-context-show">thrum context show</a> for the full flag table.</p>
 <p>Example:</p>
-<pre><code># In a session-restore hook: load the previous snapshot
+<pre><code class="language-bash hljs"><span class="hljs-comment"># In a session-restore hook: load the previous snapshot</span>
 thrum context load --raw &gt; /tmp/restore.md</code></pre>
 <h3>thrum context clear</h3>
 <p>Remove the context file for the current agent. Idempotent — running clear when
 no context exists is a no-op.</p>
-<pre><code>thrum context clear [flags]</code></pre>
+<pre><code class="language-text hljs">thrum context clear [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1711,12 +1891,12 @@ no context exists is a no-op.</p>
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum context clear
+<pre><code class="language-text hljs">$ thrum context clear
 ✓ Context cleared for furiosa</code></pre>
 <h3>thrum context sync</h3>
 <p>Copy the context file to the a-sync branch for sharing across worktrees and
 machines. This is a manual operation — context is never synced automatically.</p>
-<pre><code>thrum context sync [flags]</code></pre>
+<pre><code class="language-text hljs">thrum context sync [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1740,7 +1920,7 @@ machines. This is a manual operation — context is never synced automatically.<
 <p>No-op when no remote is configured (local-only mode) or when the <code>--local</code>
 daemon flag is set.</p>
 <p>Example:</p>
-<pre><code>$ thrum context sync
+<pre><code class="language-text hljs">$ thrum context sync
 ✓ Context synced for furiosa
   Committed and pushed to a-sync branch</code></pre>
 <h3>thrum context preamble</h3>
@@ -1749,7 +1929,7 @@ daemon flag is set.</p>
 into a session by <code>thrum prime</code> before the agent&#39;s own saved context. Preambles
 live at <code>.thrum/context/preambles/{agent}.md</code> and are produced by
 <code>thrum roles deploy</code> from templates under <code>.thrum/roles/</code>.</p>
-<pre><code>thrum context preamble [flags]</code></pre>
+<pre><code class="language-text hljs">thrum context preamble [flags]</code></pre>
 <p>Without flags, prints the current preamble to stdout.</p>
 <table>
 <thead>
@@ -1776,10 +1956,10 @@ live at <code>.thrum/context/preambles/{agent}.md</code> and are produced by
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code># View current preamble
+<pre><code class="language-text hljs"># View current preamble
 $ thrum context preamble
 # Role: implementer
-You build what you&#39;re assigned…
+You build what you&#x27;re assigned…
 
 # Reset to the role default
 $ thrum context preamble --init
@@ -1796,7 +1976,7 @@ agent that matches a template.</p>
 <p>Block until a matching message arrives or timeout occurs. Useful for automation
 and hooks. Always filters by the calling agent&#39;s identity — only returns
 messages directed to this agent by name or role. There is no <code>--all</code> flag.</p>
-<pre><code>thrum wait [flags]</code></pre>
+<pre><code class="language-text hljs">thrum wait [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1830,7 +2010,7 @@ messages directed to this agent by name or role. There is no <code>--all</code> 
 <p><strong>Output:</strong> <code>thrum wait</code> does not print message content. On success it prints an
 action directive telling the caller to check inbox; on timeout it prints a
 timeout notice to stderr.</p>
-<pre><code># Plain text output (default)
+<pre><code class="language-text hljs"># Plain text output (default)
 $ thrum wait --after -30s --timeout=5m
 ACTION REQUIRED: You have unread messages. Run `thrum inbox --unread` now to read and respond to them.
 
@@ -1852,7 +2032,7 @@ RPC) and a combined WebSocket + SPA server on port 9999.</p>
 <p><strong>G2 guard:</strong> <code>thrum daemon start</code> hard-errors if the current working directory
 is not inside a git repository. Pass <code>--force</code> to override for ephemeral non-git
 environments.</p>
-<pre><code>thrum daemon start [flags]</code></pre>
+<pre><code class="language-text hljs">thrum daemon start [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1875,17 +2055,17 @@ environments.</p>
 <p>The daemon performs pre-startup duplicate detection by checking if another
 daemon is already serving this repository (via JSON PID files and <code>flock()</code>).</p>
 <p>Example:</p>
-<pre><code># Start in local-only mode (no git push/fetch)
+<pre><code class="language-text hljs"># Start in local-only mode (no git push/fetch)
 thrum daemon start --local</code></pre>
 <h3>thrum daemon stop</h3>
 <p>Stop the daemon gracefully by sending SIGTERM.</p>
-<pre><code>thrum daemon stop</code></pre>
+<pre><code class="language-text hljs">thrum daemon stop</code></pre>
 <h3>thrum daemon status</h3>
 <p>Show daemon status including PID, uptime, version, repository path, and (when
 the daemon is running) the daemon identity block.</p>
-<pre><code>thrum daemon status</code></pre>
+<pre><code class="language-text hljs">thrum daemon status</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum daemon status
+<pre><code class="language-text hljs">$ thrum daemon status
 Daemon: running (PID 7718, uptime 3h24m)
   Version:  v0.9.0
   Socket:   .thrum/var/thrum.sock
@@ -1900,11 +2080,11 @@ Identity:
   init_at:    2026-04-17T06:30:00Z</code></pre>
 <h3>thrum daemon restart</h3>
 <p>Restart the daemon (stop + start).</p>
-<pre><code>thrum daemon restart</code></pre>
+<pre><code class="language-text hljs">thrum daemon restart</code></pre>
 <h3>thrum daemon logs</h3>
 <p>View the daemon log file. By default prints the last 50 lines from
 <code>.thrum/var/daemon.log</code>. Supports streaming, line limits, and time filtering.</p>
-<pre><code>thrum daemon logs [flags]</code></pre>
+<pre><code class="language-text hljs">thrum daemon logs [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1930,7 +2110,7 @@ Identity:
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum daemon logs
+<pre><code class="language-text hljs">$ thrum daemon logs
 2026/04/09 21:15:03.000000 [daemon] started (v0.8.0)
 2026/04/09 21:15:03.100000 [sync] loop started (interval: 60s)
 ...
@@ -1952,20 +2132,20 @@ compression. The log level is controlled by the <code>daemon.log_level</code> co
 <h3>thrum sync status</h3>
 <p>Show sync loop status, last sync time, and any errors. When local-only mode is
 active, displays &quot;Mode: local-only&quot; instead of &quot;Mode: normal&quot;.</p>
-<pre><code>thrum sync status</code></pre>
+<pre><code class="language-text hljs">thrum sync status</code></pre>
 <p>Sync states: <code>stopped</code>, <code>idle</code>, <code>synced</code>, <code>error</code>.</p>
 <h3>thrum sync force</h3>
 <p>Trigger an immediate sync (non-blocking). Fetches new messages from the remote
 and pushes local messages. The default sync interval is 60 seconds. When
 local-only mode is active, displays &quot;local-only (remote sync disabled)&quot;.</p>
-<pre><code>thrum sync force</code></pre>
+<pre><code class="language-text hljs">thrum sync force</code></pre>
 <h2>Backup &amp; Restore</h2>
 <h3>thrum backup</h3>
 <p>Snapshot all thrum data (events, messages, config, and identity files) to a
 backup directory. By default, backups are written to <code>.thrum/backup/</code> inside the
 repo. The backup directory can be overridden via <code>--dir</code> or configured in
 <code>.thrum/config.json</code>.</p>
-<pre><code>thrum backup [flags]</code></pre>
+<pre><code class="language-text hljs">thrum backup [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1982,7 +2162,7 @@ repo. The backup directory can be overridden via <code>--dir</code> or configure
 </tbody></table>
 <p>The <code>--dir</code> flag is a persistent flag inherited by all <code>backup</code> subcommands.</p>
 <p>Example:</p>
-<pre><code>$ thrum backup
+<pre><code class="language-text hljs">$ thrum backup
 Backup complete: .thrum/backup/my-repo/current
   Events: 1240 lines
   Message files: 3
@@ -1994,9 +2174,9 @@ Backup complete: /path/to/backups/my-repo/current</code></pre>
 <h3>thrum backup status</h3>
 <p>Show information about the most recent backup — timestamp, counts, and archive
 history.</p>
-<pre><code>thrum backup status [--dir DIR]</code></pre>
+<pre><code class="language-text hljs">thrum backup status [--dir DIR]</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum backup status
+<pre><code class="language-text hljs">$ thrum backup status
 Last backup: 2026-03-01 22:15:03
   Events: 1240 lines
   Message files: 3
@@ -2007,9 +2187,9 @@ Archives: 7 (12.3 MB)
 <h3>thrum backup config</h3>
 <p>Show the effective backup configuration including directory, retention policy,
 and any configured plugins.</p>
-<pre><code>thrum backup config</code></pre>
+<pre><code class="language-text hljs">thrum backup config</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum backup config
+<pre><code class="language-text hljs">$ thrum backup config
 Backup directory: .thrum/backup (default)
 Retention:
   Daily: 7
@@ -2019,7 +2199,7 @@ Retention:
 <p>Restore thrum data from the latest backup or a specific archive zip. A safety
 backup is automatically created before restoring, and the daemon is stopped
 during the restore to avoid file handle conflicts.</p>
-<pre><code>thrum backup restore [archive.zip] [flags]</code></pre>
+<pre><code class="language-text hljs">thrum backup restore [archive.zip] [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -2035,7 +2215,7 @@ during the restore to avoid file handle conflicts.</p>
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum backup restore
+<pre><code class="language-text hljs">$ thrum backup restore
 This will restore thrum data from backup.
   Backup dir: .thrum/backup
   Repo: my-repo
@@ -2050,10 +2230,10 @@ Restored from: .thrum/backup/my-repo/current
 $ thrum backup restore .thrum/backup/my-repo/2026-02-15T10:00:00Z.zip --yes</code></pre>
 <h3>thrum backup plugin list</h3>
 <p>List all backup plugins configured in <code>.thrum/config.json</code>.</p>
-<pre><code>thrum backup plugin list</code></pre>
+<pre><code class="language-text hljs">thrum backup plugin list</code></pre>
 <h3>thrum backup plugin add</h3>
 <p>Add a backup plugin by name/command/include pattern, or use a built-in preset.</p>
-<pre><code>thrum backup plugin add [flags]</code></pre>
+<pre><code class="language-text hljs">thrum backup plugin add [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -2079,15 +2259,15 @@ $ thrum backup restore .thrum/backup/my-repo/2026-02-15T10:00:00Z.zip --yes</cod
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>thrum backup plugin add --preset beads
-thrum backup plugin add --name myplugin --command &quot;bd backup --force&quot; --include &quot;.beads/backup/*.jsonl&quot;</code></pre>
+<pre><code class="language-bash hljs">thrum backup plugin add --preset beads
+thrum backup plugin add --name myplugin --<span class="hljs-built_in">command</span> <span class="hljs-string">&quot;bd backup --force&quot;</span> --include <span class="hljs-string">&quot;.beads/backup/*.jsonl&quot;</span></code></pre>
 <h3>thrum backup plugin remove</h3>
 <p>Remove a configured backup plugin by name.</p>
-<pre><code>thrum backup plugin remove --name NAME</code></pre>
+<pre><code class="language-text hljs">thrum backup plugin remove --name NAME</code></pre>
 <h3>thrum backup schedule</h3>
 <p>View or configure the automatic backup schedule. The daemon runs a backup at the
 configured interval when it is running.</p>
-<pre><code>thrum backup schedule [interval|off] [flags]</code></pre>
+<pre><code class="language-text hljs">thrum backup schedule [interval|off] [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -2103,7 +2283,7 @@ configured interval when it is running.</p>
 </tr>
 </tbody></table>
 <p>Examples:</p>
-<pre><code># Show current schedule
+<pre><code class="language-text hljs"># Show current schedule
 $ thrum backup schedule
 
 # Back up every 24 hours
@@ -2122,12 +2302,12 @@ $ thrum backup schedule off</code></pre>
 <h2>Role Templates</h2>
 <h3>thrum roles list</h3>
 <p>List all role templates and show which registered agents match each template.</p>
-<pre><code>thrum roles list</code></pre>
+<pre><code class="language-text hljs">thrum roles list</code></pre>
 <h3>thrum roles deploy</h3>
 <p>Re-render agent preambles from role templates. By default deploys for all
 agents. Use <code>--agent</code> to target a single agent, and <code>--dry-run</code> to preview
 changes without writing files.</p>
-<pre><code>thrum roles deploy [flags]</code></pre>
+<pre><code class="language-text hljs">thrum roles deploy [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -2148,7 +2328,7 @@ changes without writing files.</p>
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum roles list
+<pre><code class="language-text hljs">$ thrum roles list
 Role Templates:
   implementer   → 2 agents (alice, bob)
   reviewer      → 1 agent  (carol)
@@ -2170,7 +2350,7 @@ to the current shipped <code>body_hash</code> so drift hints clear on the next
 <code>thrum prime</code>.</p>
 <p>Per-agent template tokens (<code>{{.AgentName}}</code> etc.) are kept literal so the
 existing per-agent deploy pass can substitute them.</p>
-<pre><code>thrum roles refresh</code></pre>
+<pre><code class="language-text hljs">thrum roles refresh</code></pre>
 <p>This command takes no additional flags. Run it after upgrading Thrum to
 re-render templates without re-running <code>/thrum:configure-roles</code>.</p>
 <h3>thrum roles save-config</h3>
@@ -2179,18 +2359,18 @@ internal CLI shim used by the <code>/thrum:configure-roles</code> skill to persi
 Reads a <code>RoleConfig</code> JSON object, fills in defaults (<code>schema_version</code>,
 <code>rendered_hash</code>) and atomically writes the <code>role_config</code> key while preserving
 all other top-level keys byte-identical.</p>
-<pre><code>thrum roles save-config</code></pre>
+<pre><code class="language-text hljs">thrum roles save-config</code></pre>
 <p>Reads from stdin; exit code is non-zero on decode or write failure.</p>
 <h3>thrum roles templates print</h3>
 <p>Print an embedded shipped role template to stdout. Used by the
 <code>/thrum:configure-roles</code> skill to read reference content via CLI rather than a
 raw filesystem path (the binary may run from any directory).</p>
-<pre><code>thrum roles templates print &lt;role&gt;-&lt;autonomy&gt;</code></pre>
+<pre><code class="language-text hljs">thrum roles templates print &lt;role&gt;-&lt;autonomy&gt;</code></pre>
 <p><code>&lt;role&gt;-&lt;autonomy&gt;</code> must match an embedded template name, e.g.
 <code>implementer-autonomous</code> or <code>coordinator-strict</code>. Exit code is non-zero if the
 template is not found.</p>
 <p>Example:</p>
-<pre><code>$ thrum roles templates print implementer-autonomous
+<pre><code class="language-text hljs">$ thrum roles templates print implementer-autonomous
 # Agent: {{.AgentName}}
 ...</code></pre>
 <h2>Runtime Presets</h2>
@@ -2204,7 +2384,7 @@ built-in presets ship with Thrum; user-defined presets live at
 <h3>thrum runtime list</h3>
 <p>List all runtime presets (built-in + user-defined) with their detection status
 on the current host.</p>
-<pre><code>thrum runtime list [--json]</code></pre>
+<pre><code class="language-text hljs">thrum runtime list [--json]</code></pre>
 <table>
 <thead>
 <tr>
@@ -2220,7 +2400,7 @@ on the current host.</p>
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum runtime list
+<pre><code class="language-text hljs">$ thrum runtime list
 PRESET       BINARY       DETECTED   DEFAULT
 claude       claude       yes        ✓
 codex        codex        yes
@@ -2233,9 +2413,9 @@ cli-only     (none)       n/a</code></pre>
 <h3>thrum runtime show</h3>
 <p>Show the full definition for a single preset: launch command, binary paths,
 detection pattern, permission-prompt pattern, approve/deny keys.</p>
-<pre><code>thrum runtime show &lt;name&gt; [--json]</code></pre>
+<pre><code class="language-text hljs">thrum runtime show &lt;name&gt; [--json]</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum runtime show claude
+<pre><code class="language-text hljs">$ thrum runtime show claude
 Runtime: claude
   Binary: claude
   Launch: claude
@@ -2250,9 +2430,9 @@ disambiguation.</p>
 <p>Set the default runtime preset used when no <code>--runtime</code> flag is passed to
 commands like <code>thrum tmux create</code> / <code>thrum tmux launch</code>. The default is
 persisted to <code>.thrum/config.json</code> under <code>runtime.default</code>.</p>
-<pre><code>thrum runtime set-default &lt;name&gt;</code></pre>
+<pre><code class="language-text hljs">thrum runtime set-default &lt;name&gt;</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum runtime set-default opencode
+<pre><code class="language-text hljs">$ thrum runtime set-default opencode
 ✓ Default runtime set to opencode</code></pre>
 <p>The default applies per-repo, not per-agent. Override on any individual launch
 with <code>thrum tmux launch &lt;session&gt; --runtime &lt;name&gt;</code>.</p>
@@ -2268,7 +2448,7 @@ until the remote machine connects or the session times out (5 minutes).</p>
 without <code>--type</code> must add <code>--type tailscale</code> (or another value) to restore
 equivalent behavior.</p>
 </blockquote>
-<pre><code>thrum peer add --type TYPE [flags]</code></pre>
+<pre><code class="language-text hljs">thrum peer add --type TYPE [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -2331,7 +2511,7 @@ equivalent behavior.</p>
 <p>If <code>THRUM_TS_AUTHKEY</code> is not set and <code>--type tailscale</code> is used, the command
 prompts for a Tailscale auth key and saves it to <code>.thrum/.env</code>.</p>
 <p>Example:</p>
-<pre><code>$ thrum peer add --type tailscale
+<pre><code class="language-text hljs">$ thrum peer add --type tailscale
 Waiting for connection...
 Pairing code: alice:100.64.1.5:44123:7392
 
@@ -2349,7 +2529,7 @@ Pairing code: alice:127.0.0.1:44123:7392</code></pre>
 <p><strong>BREAKING CHANGE (v0.9.0):</strong> <code>--type</code> is now mandatory. See the transport
 type table above (<code>thrum peer add</code>) for valid values and when to use each.</p>
 </blockquote>
-<pre><code>thrum peer join --type TYPE [peercode] [flags]</code></pre>
+<pre><code class="language-text hljs">thrum peer join --type TYPE [peercode] [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -2378,7 +2558,7 @@ type table above (<code>thrum peer add</code>) for valid values and when to use 
 through stdin, or entered interactively.</p>
 <p><strong>Peercode format:</strong> <code>name:ip:port:code</code></p>
 <p>Example:</p>
-<pre><code>$ thrum peer join --type tailscale --peercode alice:100.64.1.5:44123:7392
+<pre><code class="language-text hljs">$ thrum peer join --type tailscale --peercode alice:100.64.1.5:44123:7392
 Paired with &quot;alice&quot;. Syncing started.
 
 # Local same-machine peer
@@ -2391,9 +2571,9 @@ Re-paired with &quot;alice&quot;. Syncing resumed.</code></pre>
 <p>List all paired peers with address, last sync time, and sequence number. When
 auto-reconciliation cannot resolve a peer&#39;s address drift, an inline hint row
 appears under that peer.</p>
-<pre><code>thrum peer list [--json]</code></pre>
+<pre><code class="language-text hljs">thrum peer list [--json]</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum peer list
+<pre><code class="language-text hljs">$ thrum peer list
 NAME                 ADDRESS                LAST SYNC          LAST SEQ
 alice                100.64.1.5:44123       48 minutes ago     1042
   └─ drift detected — run: thrum peer join --type repair alice
@@ -2404,14 +2584,14 @@ using the stored bearer token in <code>peers.json</code> — no new peercode req
 successful repair resets the status to healthy and the hint row disappears.</p>
 <h3>thrum peer status</h3>
 <p>Show detailed per-peer health including pairing time and authentication status.</p>
-<pre><code>thrum peer status [--json]</code></pre>
+<pre><code class="language-text hljs">thrum peer status [--json]</code></pre>
 <h3>thrum peer remove</h3>
 <p>Remove a paired peer by name. Stops syncing immediately.</p>
-<pre><code>thrum peer remove &lt;name&gt;</code></pre>
+<pre><code class="language-text hljs">thrum peer remove &lt;name&gt;</code></pre>
 <h3>thrum peer configure</h3>
 <p>Manage proxy agents for a peer. Proxy agents are local stand-ins that route
 messages to agents on the remote peer&#39;s machine.</p>
-<pre><code>thrum peer configure &lt;peer-name&gt; &lt;action&gt; &lt;agent-name&gt;</code></pre>
+<pre><code class="language-text hljs">thrum peer configure &lt;peer-name&gt; &lt;action&gt; &lt;agent-name&gt;</code></pre>
 <table>
 <thead>
 <tr>
@@ -2433,17 +2613,17 @@ messages to agents on the remote peer&#39;s machine.</p>
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum peer configure alice add-agent planner
+<pre><code class="language-text hljs">$ thrum peer configure alice add-agent planner
 ✓ alice: add-agent planner</code></pre>
 <h2>Single-Agent Mode</h2>
 <h3>thrum single-agent-mode</h3>
 <p>Toggle or query single-agent mode. When enabled, Thrum skips messaging
 infrastructure (listener, inbox, stop hook) and focuses on context management.</p>
-<pre><code>thrum single-agent-mode [true|false|on|off]</code></pre>
+<pre><code class="language-text hljs">thrum single-agent-mode [true|false|on|off]</code></pre>
 <p>Without arguments, prints the current mode. Changes take effect on the next
 daemon start or <code>thrum prime</code>.</p>
 <p>Example:</p>
-<pre><code>$ thrum single-agent-mode
+<pre><code class="language-text hljs">$ thrum single-agent-mode
 single-agent mode: enabled
 
 $ thrum single-agent-mode false
@@ -2454,7 +2634,7 @@ Single-agent mode disabled. Full messaging active on next thrum prime.</code></p
 <p>Configure the Telegram bridge. When all flags are provided with <code>--yes</code>, runs
 non-interactively. When flags are omitted, runs in interactive mode and prompts
 for each value.</p>
-<pre><code>thrum telegram configure [flags]</code></pre>
+<pre><code class="language-text hljs">thrum telegram configure [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -2485,7 +2665,7 @@ for each value.</p>
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code># Interactive mode (prompts for each value)
+<pre><code class="language-text hljs"># Interactive mode (prompts for each value)
 $ thrum telegram configure
 
 # Non-interactive
@@ -2493,9 +2673,9 @@ $ thrum telegram configure --token 123456:ABC-DEF --target @mychat --user alice 
 ✓ Telegram bridge configured</code></pre>
 <h3>thrum telegram status</h3>
 <p>Show the current Telegram bridge connection status and configuration.</p>
-<pre><code>thrum telegram status</code></pre>
+<pre><code class="language-text hljs">thrum telegram status</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum telegram status
+<pre><code class="language-text hljs">$ thrum telegram status
 Telegram Bridge
   Status:  connected
   Bot:     @my_thrum_bot
@@ -2511,7 +2691,7 @@ and attaches the current terminal — all in sequence. This is the shortest path
 from &quot;I want to start an agent in this worktree&quot; to &quot;I&#39;m sitting at its prompt.&quot;
 If any step fails, the session is left in place so you can inspect what happened
 with <code>thrum tmux status</code> and <code>thrum tmux capture</code>.</p>
-<pre><code>thrum tmux start [flags]</code></pre>
+<pre><code class="language-text hljs">thrum tmux start [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -2536,7 +2716,7 @@ session name and agent identity from the worktree at <code>$PWD</code>. Use
 <a href="#thrum-tmux-create">thrum tmux create</a> when you need to target a different path
 or pass agent registration flags (<code>--role</code>, <code>--module</code>, etc.).</p>
 <p>Example:</p>
-<pre><code>$ thrum tmux start impl-api --cwd ../worktrees/api-feature \
+<pre><code class="language-text hljs">$ thrum tmux start impl-api --cwd ../worktrees/api-feature \
     --name impl_api --role implementer --module api
 Session created: impl-api
 Agent registered: impl_api
@@ -2544,9 +2724,9 @@ Runtime launched: opencode (PID 58421)
 Priming session…
 [attaches to session]</code></pre>
 <p>Under the hood this is equivalent to:</p>
-<pre><code>thrum tmux create impl-api --cwd … --name impl_api --role implementer --module api
+<pre><code class="language-bash hljs">thrum tmux create impl-api --cwd … --name impl_api --role implementer --module api
 thrum tmux launch impl-api
-thrum tmux send impl-api &quot;/thrum:prime&quot;
+thrum tmux send impl-api <span class="hljs-string">&quot;/thrum:prime&quot;</span>
 thrum tmux connect impl-api</code></pre>
 <p>Use the lower-level commands directly when you need to inspect intermediate
 state (e.g. verify the identity file was written before launching), or when
@@ -2557,7 +2737,7 @@ scripting multi-session setups where attach doesn&#39;t fit.</p>
 <code>--role</code>, <code>--module</code>) are required unless you pass <code>--no-agent</code>. After
 quickstart runs, any old identity files in the session&#39;s worktree are cleaned up
 — one identity per worktree is enforced.</p>
-<pre><code>thrum tmux create &lt;name&gt; --cwd &lt;path&gt; --name &lt;agent-name&gt; --role &lt;role&gt; --module &lt;module&gt; [flags]</code></pre>
+<pre><code class="language-text hljs">thrum tmux create &lt;name&gt; --cwd &lt;path&gt; --name &lt;agent-name&gt; --role &lt;role&gt; --module &lt;module&gt; [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -2611,7 +2791,7 @@ quickstart runs, any old identity files in the session&#39;s worktree are cleane
 are all missing.</p>
 <p>This command emits contextual hints — see <a href="cli-hints.html">CLI Hints</a>.</p>
 <p>Example:</p>
-<pre><code>$ thrum tmux create implementer-api --cwd ../worktrees/api-feature \
+<pre><code class="language-text hljs">$ thrum tmux create implementer-api --cwd ../worktrees/api-feature \
     --name impl_api --role implementer --module api
 Session created: implementer-api
 Agent registered: impl_api
@@ -2621,11 +2801,11 @@ Session created: scratch</code></pre>
 <h3>thrum tmux quickstart</h3>
 <p>Alias for <code>thrum tmux create</code>. Same flags, same behavior. Use whichever name
 reads better in your scripts.</p>
-<pre><code>thrum tmux quickstart &lt;name&gt; --cwd &lt;path&gt; --name &lt;agent-name&gt; --role &lt;role&gt; --module &lt;module&gt; [flags]</code></pre>
+<pre><code class="language-text hljs">thrum tmux quickstart &lt;name&gt; --cwd &lt;path&gt; --name &lt;agent-name&gt; --role &lt;role&gt; --module &lt;module&gt; [flags]</code></pre>
 <p>See <a href="#thrum-tmux-create">thrum tmux create</a> for the full flag table.</p>
 <h3>thrum tmux launch</h3>
 <p>Start an AI tool inside an existing tmux session.</p>
-<pre><code>thrum tmux launch &lt;name&gt; [flags]</code></pre>
+<pre><code class="language-text hljs">thrum tmux launch &lt;name&gt; [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -2641,7 +2821,7 @@ reads better in your scripts.</p>
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum tmux launch implementer-api
+<pre><code class="language-text hljs">$ thrum tmux launch implementer-api
 Launched claude in session implementer-api
 
 $ thrum tmux launch implementer-api --runtime opencode
@@ -2657,10 +2837,10 @@ itself.</p>
 <p>Attach your terminal to a tmux-managed session. With no arguments, prints an
 interactive picker listing every session visible to <code>thrum tmux status</code>; pass a
 session name to attach directly.</p>
-<pre><code>thrum tmux connect            # interactive picker
+<pre><code class="language-text hljs">thrum tmux connect            # interactive picker
 thrum tmux connect &lt;name&gt;     # attach directly</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum tmux connect
+<pre><code class="language-text hljs">$ thrum tmux connect
 Managed sessions:
   1. coordinator-main       (coordinator_main · claude)
   2. implementer-api        (impl_api · opencode)
@@ -2680,10 +2860,10 @@ all the usual tmux attach semantics apply (Ctrl-b d to detach, etc.).</p>
 branch. Includes sessions created with <code>--no-agent</code> (they&#39;re tagged
 <code>@thrum-managed=1</code> as a tmux user-option and still show up here, with an empty
 agent column).</p>
-<pre><code>thrum tmux status</code></pre>
+<pre><code class="language-text hljs">thrum tmux status</code></pre>
 <p><code>thrum tmux list</code> is an alias.</p>
 <p>Example:</p>
-<pre><code>$ thrum tmux status
+<pre><code class="language-text hljs">$ thrum tmux status
 SESSION                   AGENT                STATE        RUNTIME    BRANCH
 coordinator-main          coordinator_main     alive        claude     thrum-dev
 implementer-api           impl_api             alive        opencode   feature/api
@@ -2691,9 +2871,9 @@ implementer-website-dev   impl_website_dev     stale        claude     website-d
 <h3>thrum tmux kill</h3>
 <p>Tear down a tmux session and clear <code>tmux_session</code> from the agent&#39;s identity
 file.</p>
-<pre><code>thrum tmux kill &lt;name&gt;</code></pre>
+<pre><code class="language-text hljs">thrum tmux kill &lt;name&gt;</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum tmux kill implementer-api
+<pre><code class="language-text hljs">$ thrum tmux kill implementer-api
 Session implementer-api killed</code></pre>
 <h3>thrum tmux send</h3>
 <p>Send text into a tmux session via <code>send-keys</code>. Useful for coordinator debugging
@@ -2703,13 +2883,13 @@ daemon&#39;s command queue so <code>@system</code> completion semantics and <cod
 coordination stay intact. For sessions created with <code>--no-agent</code>, there is no
 agent identity to queue against — <code>tmux send</code> bypasses the queue and writes the
 keystrokes directly into the pane.</p>
-<pre><code>thrum tmux send &lt;name&gt; &quot;text&quot;</code></pre>
+<pre><code class="language-text hljs">thrum tmux send &lt;name&gt; &quot;text&quot;</code></pre>
 <p>Example:</p>
-<pre><code>thrum tmux send implementer-api &quot;thrum inbox --unread&quot;</code></pre>
+<pre><code class="language-text hljs">thrum tmux send implementer-api &quot;thrum inbox --unread&quot;</code></pre>
 <h3>thrum tmux capture</h3>
 <p>Capture the visible content of a tmux pane. Useful for coordinator inspection or
 permission prompt detection.</p>
-<pre><code>thrum tmux capture &lt;name&gt; [flags]</code></pre>
+<pre><code class="language-text hljs">thrum tmux capture &lt;name&gt; [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -2725,7 +2905,7 @@ permission prompt detection.</p>
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>thrum tmux capture implementer-api --lines 10</code></pre>
+<pre><code class="language-text hljs">thrum tmux capture implementer-api --lines 10</code></pre>
 <h3>thrum tmux restart</h3>
 <p>Restart a tmux-managed agent session with a context snapshot. By default, the
 daemon asks the agent to save its own snapshot (graceful flow), falling back to
@@ -2734,7 +2914,7 @@ prompt and extracts directly from the JSONL transcript. Either way, the session
 is killed, a new one is created, and the new session loads the snapshot via
 <code>thrum prime</code>. See <a href="session-restart.html">Session Restart</a> for details on the
 graceful vs force flows.</p>
-<pre><code>thrum tmux restart &lt;name&gt; [flags]</code></pre>
+<pre><code class="language-text hljs">thrum tmux restart &lt;name&gt; [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -2755,7 +2935,7 @@ graceful vs force flows.</p>
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum tmux restart implementer-api
+<pre><code class="language-text hljs">$ thrum tmux restart implementer-api
 Session implementer-api restarted (847 snapshot lines)
 
 $ thrum tmux restart implementer-api --runtime opencode
@@ -2765,7 +2945,7 @@ Session implementer-api restarted (847 snapshot lines)</code></pre>
 at a time per session. The daemon sends the command when the pane goes silent,
 waits for completion (detected by the next silence event), and captures the
 output.</p>
-<pre><code>thrum tmux queue &lt;session&gt; &lt;command&gt; [flags]</code></pre>
+<pre><code class="language-text hljs">thrum tmux queue &lt;session&gt; &lt;command&gt; [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -2800,7 +2980,7 @@ completes, times out, or is cancelled. With <code>--wait</code>, the CLI blocks 
 command finishes and <code>@system</code> notifications are suppressed (you get the output
 directly).</p>
 <p>Example:</p>
-<pre><code>$ thrum tmux queue implementer-api &quot;git status&quot;
+<pre><code class="language-text hljs">$ thrum tmux queue implementer-api &quot;git status&quot;
 Queued cmd_01KNTF2A9... (position 1)
 
 $ thrum tmux queue implementer-api &quot;make test&quot; --wait --timeout 300
@@ -2811,18 +2991,18 @@ ok   github.com/user/repo/... 45.1s</code></pre>
 <h3>thrum tmux queue-status</h3>
 <p>Show the command queue for a tmux session — the active command (if any) and all
 queued commands waiting to run.</p>
-<pre><code>thrum tmux queue-status &lt;session&gt;</code></pre>
+<pre><code class="language-text hljs">thrum tmux queue-status &lt;session&gt;</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum tmux queue-status implementer-api
+<pre><code class="language-text hljs">$ thrum tmux queue-status implementer-api
 Active: cmd_01KNTF2A9 &quot;git status&quot; (sent)
 Queued: 2 commands
   [0] cmd_01KNTF3B1 &quot;make test&quot;
   [1] cmd_01KNTF4C2 &quot;make lint&quot;</code></pre>
 <h3>thrum tmux cancel</h3>
 <p>Cancel a queued or active command by its command ID.</p>
-<pre><code>thrum tmux cancel &lt;command-id&gt;</code></pre>
+<pre><code class="language-text hljs">thrum tmux cancel &lt;command-id&gt;</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum tmux cancel cmd_01KNTF2A9
+<pre><code class="language-text hljs">$ thrum tmux cancel cmd_01KNTF2A9
 Canceled cmd_01KNTF2A9 (state: cancelled)</code></pre>
 <h2>Worktree Management</h2>
 <h3>thrum worktree create</h3>
@@ -2842,7 +3022,7 @@ you run that command.</p>
 <p><strong>Repo-root guard:</strong> the command errors out if the resolved worktree path or
 <code>worktrees.base_path</code> is the repo root itself, to prevent accidentally turning
 the main worktree into a &quot;feature&quot; worktree.</p>
-<pre><code>thrum worktree create &lt;name&gt; [flags]</code></pre>
+<pre><code class="language-text hljs">thrum worktree create &lt;name&gt; [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -2898,7 +3078,7 @@ the main worktree into a &quot;feature&quot; worktree.</p>
 copied from the main repo into the new worktree so SessionStart hooks fire
 correctly.</p>
 <p>Example:</p>
-<pre><code>$ thrum worktree create api-feature
+<pre><code class="language-text hljs">$ thrum worktree create api-feature
 Worktree created: ~/.workspaces/thrum/api-feature
   Branch: feature/api-feature
   Thrum: .thrum/redirect → /path/to/main/.thrum
@@ -2919,21 +3099,21 @@ Worktree created: ~/.workspaces/thrum/auth-feature
     thrum tmux launch auth-feature [--runtime &lt;runtime&gt;]</code></pre>
 <h3>thrum worktree setup</h3>
 <p>Alias for <code>thrum worktree create</code>. Same flags, same behavior.</p>
-<pre><code>thrum worktree setup &lt;name&gt; [flags]</code></pre>
+<pre><code class="language-text hljs">thrum worktree setup &lt;name&gt; [flags]</code></pre>
 <p>See <a href="#thrum-worktree-create">thrum worktree create</a> for the full flag table.</p>
 <h3>thrum worktree teardown</h3>
 <p>Remove a worktree and clean up Thrum artifacts (identity files).</p>
-<pre><code>thrum worktree teardown &lt;name&gt;</code></pre>
+<pre><code class="language-text hljs">thrum worktree teardown &lt;name&gt;</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum worktree teardown api-feature
+<pre><code class="language-text hljs">$ thrum worktree teardown api-feature
 ✓ Cleaned up 1 identity file(s)
 ✓ Worktree removed: ~/.workspaces/thrum/api-feature</code></pre>
 <h3>thrum worktree list</h3>
 <p>List git worktrees with Thrum agent info. Reads identity files from each
 worktree to show which agent is active there.</p>
-<pre><code>thrum worktree list</code></pre>
+<pre><code class="language-text hljs">thrum worktree list</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum worktree list
+<pre><code class="language-text hljs">$ thrum worktree list
 WORKTREE                            BRANCH              HEAD       AGENT                STATUS
 /path/to/thrum                      thrum-dev           b3c6352    coordinator_main     working
 /home/user/.workspaces/thrum/api    feature/api         a1b2c3d    impl_api             idle
@@ -2943,7 +3123,7 @@ WORKTREE                            BRANCH              HEAD       AGENT        
 matching lines as Thrum messages to an agent. Jobs persist across daemon
 restarts. Max 100 concurrent jobs.</p>
 <p>The command must come after <code>--</code>:</p>
-<pre><code>thrum monitor start --name &lt;name&gt; --match &lt;regex&gt; --to @&lt;agent&gt; [flags] -- &lt;command&gt; [args...]</code></pre>
+<pre><code class="language-text hljs">thrum monitor start --name &lt;name&gt; --match &lt;regex&gt; --to @&lt;agent&gt; [flags] -- &lt;command&gt; [args...]</code></pre>
 <h3>thrum monitor start</h3>
 <p>Start a monitor job. (<code>add</code> is a retained alias.)</p>
 <table>
@@ -2996,7 +3176,7 @@ restarts. Max 100 concurrent jobs.</p>
 immediately, then the monitor goes quiet for the debounce window before it can
 fire again. Lines longer than 2KB are truncated.</p>
 <p>Example:</p>
-<pre><code>$ thrum monitor start --name app-errors --match &quot;ERROR|FATAL&quot; --to @coordinator_main \
+<pre><code class="language-text hljs">$ thrum monitor start --name app-errors --match &quot;ERROR|FATAL&quot; --to @coordinator_main \
     --debounce 120s -- tail -F /var/log/app.log
 Started monitor app-errors (mon_01KNTF2A9...) — target @coordinator_main
 
@@ -3005,7 +3185,7 @@ $ thrum monitor start --name ci-failures --match &quot;FAIL&quot; --to @impl_ci 
 Started monitor ci-failures (mon_01KNTG3B1...) — target @impl_ci</code></pre>
 <h3>thrum monitor list</h3>
 <p>List monitor jobs. Shows running jobs by default.</p>
-<pre><code>thrum monitor list [--all]</code></pre>
+<pre><code class="language-text hljs">thrum monitor list [--all]</code></pre>
 <table>
 <thead>
 <tr>
@@ -3022,15 +3202,15 @@ Started monitor ci-failures (mon_01KNTG3B1...) — target @impl_ci</code></pre>
 </tbody></table>
 <p>Output columns: <code>ID</code>, <code>NAME</code>, <code>STATUS</code>, <code>TARGET</code>, <code>UPTIME</code>, <code>PID</code>.</p>
 <p>Example:</p>
-<pre><code>$ thrum monitor list
+<pre><code class="language-text hljs">$ thrum monitor list
 ID                           NAME         STATUS     TARGET         UPTIME     PID
 mon_01KNTF2A9...             app-errors   running    @coordinator   3h42m      18421
 mon_01KNTG3B1...             ci-failures  running    @team          15m30s     19033</code></pre>
 <h3>thrum monitor show</h3>
 <p>Show full details for a monitor job. Env var values are always redacted.</p>
-<pre><code>thrum monitor show &lt;id&gt;</code></pre>
+<pre><code class="language-text hljs">thrum monitor show &lt;id&gt;</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum monitor show mon_01KNTF2A9
+<pre><code class="language-text hljs">$ thrum monitor show mon_01KNTF2A9
 ID:       mon_01KNTF2A9...
 Name:     app-errors
 Status:   running
@@ -3045,14 +3225,14 @@ Env:
 <h3>thrum monitor stop</h3>
 <p>Stop a running monitor job. Sends SIGTERM, waits 5 seconds, then sends SIGKILL
 if still running.</p>
-<pre><code>thrum monitor stop &lt;id&gt;</code></pre>
+<pre><code class="language-text hljs">thrum monitor stop &lt;id&gt;</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum monitor stop mon_01KNTF2A9
+<pre><code class="language-text hljs">$ thrum monitor stop mon_01KNTF2A9
 Stopped monitor mon_01KNTF2A9...</code></pre>
 <h3>thrum monitor logs</h3>
 <p>Show the most recent matched output lines for a monitor job (historical lookup
 from the messages table, not live tail).</p>
-<pre><code>thrum monitor logs &lt;id&gt; [flags]</code></pre>
+<pre><code class="language-text hljs">thrum monitor logs &lt;id&gt; [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -3069,15 +3249,15 @@ from the messages table, not live tail).</p>
 </tbody></table>
 <p>Output is oldest-first (reads like a normal log tail).</p>
 <p>Example:</p>
-<pre><code>$ thrum monitor logs mon_01KNTF2A9 -n 5
+<pre><code class="language-text hljs">$ thrum monitor logs mon_01KNTF2A9 -n 5
 2026-04-10T09:03:12Z  ERROR: connection timeout on db-primary
 2026-04-10T09:15:44Z  ERROR: retry limit exceeded for job 98312
 2026-04-10T10:02:01Z  FATAL: out of memory, shutting down</code></pre>
 <h3>thrum monitor restart</h3>
 <p>Restart a stopped or dead monitor job. Returns a new monitor ID.</p>
-<pre><code>thrum monitor restart &lt;id&gt;</code></pre>
+<pre><code class="language-text hljs">thrum monitor restart &lt;id&gt;</code></pre>
 <p>Example:</p>
-<pre><code>$ thrum monitor restart mon_01KNTF2A9
+<pre><code class="language-text hljs">$ thrum monitor restart mon_01KNTF2A9
 Restarted — new ID: mon_01KNTH4C2...</code></pre>
 <h2>Session Restart</h2>
 <p>Save and restore conversation snapshots for session restart. See
@@ -3086,7 +3266,7 @@ Restarted — new ID: mon_01KNTH4C2...</code></pre>
 <p>Save a conversation snapshot for the current agent. Extracts user + assistant
 text from the Claude Code JSONL transcript, truncates to the configured line
 limit, and writes to <code>.thrum/restart/&lt;agent&gt;.md</code>.</p>
-<pre><code>thrum tmux snapshot save [flags]</code></pre>
+<pre><code class="language-text hljs">thrum tmux snapshot save [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -3102,7 +3282,7 @@ limit, and writes to <code>.thrum/restart/&lt;agent&gt;.md</code>.</p>
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum tmux snapshot save
+<pre><code class="language-text hljs">$ thrum tmux snapshot save
 Restart snapshot saved for impl_api (847 lines)
 
 $ thrum tmux snapshot save --reason context-threshold
@@ -3110,20 +3290,20 @@ Restart snapshot saved for impl_api (847 lines)</code></pre>
 <h3>thrum tmux snapshot restore</h3>
 <p>Output a restart snapshot to stdout and delete the file. Manual escape hatch for
 non-tmux agents or when <code>thrum prime</code> is not used.</p>
-<pre><code>thrum tmux snapshot restore</code></pre>
+<pre><code class="language-text hljs">thrum tmux snapshot restore</code></pre>
 <p>Exits with code 1 if no snapshot exists.</p>
 <h3>thrum tmux snapshot check</h3>
 <p>Check if a restart snapshot exists for the current agent. Exits 0 if yes, 1 if
 no. No stdout — for scripting.</p>
-<pre><code>thrum tmux snapshot check</code></pre>
+<pre><code class="language-text hljs">thrum tmux snapshot check</code></pre>
 <p>Example:</p>
-<pre><code>if thrum tmux snapshot check; then echo &quot;Snapshot ready&quot;; fi</code></pre>
+<pre><code class="language-text hljs">if thrum tmux snapshot check; then echo &quot;Snapshot ready&quot;; fi</code></pre>
 <h2>MCP Server</h2>
 <h3>thrum mcp serve</h3>
 <p>Start an MCP (Model Context Protocol) server on stdin/stdout for native
 tool-based agent messaging. This allows Claude Code agents to communicate via
 MCP tools instead of shelling out to the CLI.</p>
-<pre><code>thrum mcp serve [flags]</code></pre>
+<pre><code class="language-text hljs">thrum mcp serve [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -3166,25 +3346,25 @@ internally for identity resolution.</p>
 </tr>
 </tbody></table>
 <p><strong>Configuration in Claude Code&#39;s <code>.claude/settings.json</code>:</strong></p>
-<pre><code>{
-  &quot;mcpServers&quot;: {
-    &quot;thrum&quot;: {
-      &quot;type&quot;: &quot;stdio&quot;,
-      &quot;command&quot;: &quot;thrum&quot;,
-      &quot;args&quot;: [&quot;mcp&quot;, &quot;serve&quot;]
-    }
-  }
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;mcpServers&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;thrum&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;stdio&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;command&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thrum&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;args&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;mcp&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;serve&quot;</span><span class="hljs-punctuation">]</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p>For multi-agent worktrees, use <code>--agent-id</code> or set <code>THRUM_NAME</code>:</p>
-<pre><code>{
-  &quot;mcpServers&quot;: {
-    &quot;thrum&quot;: {
-      &quot;type&quot;: &quot;stdio&quot;,
-      &quot;command&quot;: &quot;thrum&quot;,
-      &quot;args&quot;: [&quot;mcp&quot;, &quot;serve&quot;, &quot;--agent-id&quot;, &quot;furiosa&quot;]
-    }
-  }
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;mcpServers&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;thrum&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;stdio&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;command&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thrum&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;args&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;mcp&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;serve&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;--agent-id&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">]</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h2>Environment Variables</h2>
 <table>
 <thead>
@@ -3247,26 +3427,26 @@ select the correct one.</p>
 <p>Per-agent identity files stored in the <code>.thrum/identities/</code> directory. Created
 automatically on successful registration. The filename is derived from the agent
 name (e.g., <code>furiosa.json</code> or <code>implementer_35HV62T9B9.json</code>).</p>
-<pre><code>{
-  &quot;version&quot;: 5,
-  &quot;repo_id&quot;: &quot;r_0123456789AB&quot;,
-  &quot;agent&quot;: {
-    &quot;kind&quot;: &quot;agent&quot;,
-    &quot;name&quot;: &quot;furiosa&quot;,
-    &quot;role&quot;: &quot;implementer&quot;,
-    &quot;module&quot;: &quot;auth&quot;,
-    &quot;display&quot;: &quot;Auth Developer&quot;
-  },
-  &quot;worktree&quot;: &quot;main&quot;,
-  &quot;tmux_session&quot;: &quot;implementer-auth:0.0&quot;,
-  &quot;runtime&quot;: &quot;claude&quot;,
-  &quot;preferred_runtime&quot;: &quot;claude&quot;,
-  &quot;agent_pid&quot;: 12345,
-  &quot;agent_status&quot;: &quot;working&quot;,
-  &quot;agent_status_updated_at&quot;: &quot;2026-02-03T10:05:00Z&quot;,
-  &quot;confirmed_by&quot;: &quot;&quot;,
-  &quot;updated_at&quot;: &quot;2026-02-03T10:00:00Z&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;version&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">5</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;repo_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;r_0123456789AB&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;agent&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;kind&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;display&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Auth Developer&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;worktree&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;main&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;tmux_session&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer-auth:0.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;runtime&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;claude&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;preferred_runtime&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;claude&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;agent_pid&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">12345</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;agent_status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;working&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;agent_status_updated_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T10:05:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;confirmed_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;updated_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T10:00:00Z&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <hr>
 <p><em>The section below covers storage internals. You don&#39;t need it for normal use.</em></p>
 <h3>Storage Layout</h3>
@@ -3329,10 +3509,23 @@ wraps</li>
 <li><a href="overview.html">Overview</a> — which 8 commands you actually need day-to-day</li>
 </ul>
 
-</main>
-<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
-<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
-</footer>
-<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#cli.html')}</script>
+      </div>
+    </main>
+
+  </div>
+
+  <script src="/js/vendor/minisearch.js"></script>
+  <script src="/js/search.js" data-docs-base="/docs/" data-search-index="/assets/docs/search-index.json"></script>
+  <script>
+    document.getElementById('theme-toggle').addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme');
+      var next = current === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('thrum-theme', next);
+    });
+    document.getElementById('sidebar-toggle').addEventListener('click', function() {
+      document.getElementById('docs-sidebar').classList.toggle('open');
+    });
+  </script>
 </body>
 </html>

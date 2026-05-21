@@ -1,51 +1,231 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>WebSocket API — Thrum</title>
-<meta name="description" content="Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events">
-<link rel="canonical" href="https://thrum.team/docs.html#api/websocket.html">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"WebSocket API","description":"Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events","url":"https://thrum.team/docs.html#api/websocket.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://thrum.team/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://thrum.team/docs.html"}}</script>
-<style>
-body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
-pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
-code{font-family:ui-monospace,monospace;font-size:0.9em}
-table{border-collapse:collapse;width:100%}
-th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
-th{background:#f5f5f5}
-nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
-h2{margin-top:2rem}
-a{color:#0366d6}
-</style>
-<!-- Privacy-friendly analytics by Plausible -->
-<script async src="https://plausible.io/js/pa-0EO0yjcXim9oq9r4-I2w1.js"></script>
-<script>
-window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
-plausible.init()
-</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>WebSocket API — Thrum</title>
+  <meta name="description" content="Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="WebSocket API — Thrum">
+  <meta property="og:description" content="Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events">
+  <meta property="og:url" content="https://thrum.team/docs/api/websocket.html">
+  <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="https://thrum.team/img/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="WebSocket API — Thrum">
+  <meta name="twitter:description" content="Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events">
+  <meta name="twitter:image" content="https://thrum.team/img/social-card.png">
+  <link rel="canonical" href="https://thrum.team/docs/api/websocket.html">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"WebSocket API","description":"Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events","url":"https://thrum.team/docs/api/websocket.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://thrum.team/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://thrum.team/docs/overview.html"}}</script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/inter.woff2" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/ibm-plex-mono-regular.woff2" crossorigin>
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-0EO0yjcXim9oq9r4-I2w1.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
 </head>
 <body>
-<nav>
-<strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; API Reference &rsaquo; WebSocket API
-<hr>
-<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a> | <a href="../overview.html">Overview</a> | <a href="../whats-new.html">What's New</a><br>
-<strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
-  <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <a href="../guides/beads-setup.html">Beads Setup Guide</a> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="../guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
-<strong>Messaging</strong>: <a href="../peers.html">Peers</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../telegram-bridge.html">Telegram Bridge</a> | <a href="../telegram-groups.html">Telegram Groups</a> | <a href="../messaging.html">Messaging</a><br>
-<strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../role-templates.html">Role-Based Preamble Templates</a><br>
-<strong>Guides</strong>: <a href="../beta-channel.html">Beta Channel</a><br>
-<strong>API Reference</strong>: <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <strong>WebSocket API</strong><br>
-<strong>agent-protocols</strong>: <a href="../strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="../strategies/thrum-registration.html">Thrum Registration</a> | <a href="../strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
-<strong>coordination</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../context.html">Agent Context Management</a> | <a href="../guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="../guides/review-workflow.html">Code Review Workflow</a><br>
-<strong>infrastructure</strong>: <a href="../daemon.html">Daemon Architecture</a> | <a href="../sync.html">Sync Protocol</a> | <a href="../configuration.html">Configuration</a> | <a href="../guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a><br>
-<strong>integrations</strong>: <a href="../web-ui.html">Web UI</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../cursor-plugin.html">Cursor Plugin</a> | <a href="../mcp-server.html">MCP Server</a><br>
-<strong>onboarding</strong>: <a href="../scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="../scenarios/team.html">Team on Your Machine</a> | <a href="../scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="../scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="../orchestrator-role.html">Orchestrator Role</a> | <a href="../tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="../monitor-jobs.html">Monitor Jobs</a> | <a href="../multi-runtime.html">Multi-Runtime Support</a> | <a href="../single-agent-mode.html">Single-Agent Mode</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../permission-prompts.html">Permission Prompts</a> | <a href="../session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <a href="../development.html">Development Guide</a> | <a href="../cli-hints.html">CLI Hints</a> | <a href="../security-cicd.html">Security & CI/CD</a> | <a href="../security-model.html">Local Security Model</a> | <a href="../architecture.html">Architecture</a> | <a href="../cli.html">CLI Reference</a> | <a href="../rpc-api.html">RPC API</a><br>
-<strong>substrate</strong>: <a href="../substrate/overview.html">Personal Agent Substrate</a><br>
-<strong>troubleshooting</strong>: <a href="../troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
-</nav>
-<main>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="/index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="/index.html" class="nav-link">Home</a>
+          <a href="/docs/overview.html" class="nav-link nav-link-active">Docs</a>
+          <a href="/blog.html" class="nav-link">Blog</a>
+          <a href="/about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+          <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+            <span class="icon-sun">&#x2600;</span>
+            <span class="icon-moon">&#x263E;</span>
+          </button>
+        </div>
+        <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle navigation">
+          <span></span><span></span><span></span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Layout -->
+  <div class="docs-layout">
+
+    <!-- Sidebar -->
+    <aside class="docs-sidebar" id="docs-sidebar">
+      <div class="sidebar-search">
+        <input type="text" id="search-input" placeholder="Search docs... (Ctrl+K)" autocomplete="off">
+        <div class="search-results" id="search-results"></div>
+      </div>
+      <nav class="sidebar-nav" id="sidebar-nav">
+        <div class="sidebar-category" data-category="overview">
+          <span class="sidebar-category-label">Overview</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/philosophy.html" data-path="philosophy.html" data-category="overview" title="Why Thrum exists — a messaging system designed for human-centric AI agent coordination, not another orchestration engine">Philosophy</a>
+          <a class="sidebar-link" href="/docs/overview.html" data-path="overview.html" data-category="overview" title="Thrum — coordinate AI coding agents across worktrees, repos, and machines">Overview</a>
+          <a class="sidebar-link" href="/docs/whats-new.html" data-path="whats-new.html" data-category="overview" title="Release-by-release highlights, breaking changes, and migration notes for recent Thrum versions.">What's New</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="onboarding">
+          <span class="sidebar-category-label">Onboarding</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/scenarios/solo-dev.html" data-path="scenarios/solo-dev.html" data-category="onboarding" title="Use Thrum as a single-developer tool: one agent, one machine, no hand-holding">Solo Dev with One Agent</a>
+          <a class="sidebar-link" href="/docs/scenarios/team.html" data-path="scenarios/team.html" data-category="onboarding" title="Run multiple agents in parallel worktrees with Thrum as the coordination layer">Team on Your Machine</a>
+          <a class="sidebar-link" href="/docs/scenarios/across-boundaries.html" data-path="scenarios/across-boundaries.html" data-category="onboarding" title="Connect Thrum daemons in different repos or on different machines via peers">Agents Across Repos/Machines</a>
+          <a class="sidebar-link" href="/docs/scenarios/orchestration.html" data-path="scenarios/orchestration.html" data-category="onboarding" title="Hand off a plan you wrote and let the orchestrator run the execution phase">Automated Plan Execution</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="quickstart">
+          <span class="sidebar-category-label">Getting Started</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/quickstart.html" data-path="quickstart.html" data-category="quickstart" title="Get up and running with Thrum in 5 minutes - initialization, daemon setup, agent registration, and first message">Quickstart Guide</a>
+        <div class="sidebar-category sidebar-subcategory" data-category="tools">
+          <span class="sidebar-category-label sidebar-subcategory-label collapsible"><span class="sidebar-chevron">▸</span><span>Recommended Tools</span></span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/recommended-tools.html" data-path="guides/recommended-tools.html" data-category="tools" title="Tools, extensions, and integrations that work well with Thrum for AI agent coordination workflows">Recommended Tools</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-setup.html" data-path="guides/beads-setup.html" data-category="tools" title="Set up Beads for git-backed task tracking alongside Thrum — installation, initialization, agent workflow, and worktree configuration">Beads Setup Guide</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-ui-setup.html" data-path="guides/beads-ui-setup.html" data-category="tools" title="Set up Beads UI for a live web dashboard of your agent task board — installation, usage, and multi-project support">Beads UI Setup Guide</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-migration-to-embedded.html" data-path="guides/beads-migration-to-embedded.html" data-category="tools" title="Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.">Beads Migration to Embedded Mode (bd 1.0+)</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/playwright-cli-setup.html" data-path="guides/playwright-cli-setup.html" data-category="tools" title="Set up Playwright CLI for browser automation in Claude Code agent workflows — screenshots, page context, form filling, and web testing">Playwright CLI Setup Guide</a>
+          </div>
+        </div>
+
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="orchestration">
+          <span class="sidebar-category-label">Orchestration</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/orchestrator-role.html" data-path="orchestrator-role.html" data-category="orchestration" title="Hand off a plan you wrote and let the orchestrator run the execution phase">Orchestrator Role</a>
+          <a class="sidebar-link" href="/docs/tmux-sessions.html" data-path="tmux-sessions.html" data-category="orchestration" title="Run agent teams in daemon-managed tmux sessions with instant message delivery, zero background listeners, and coordinator-managed lifecycle">Tmux-Managed Sessions</a>
+          <a class="sidebar-link" href="/docs/monitor-jobs.html" data-path="monitor-jobs.html" data-category="orchestration" title="Watch any process output for pattern matches and deliver results as synthetic Thrum messages — no polling, no shell, no manual piping">Monitor Jobs</a>
+          <a class="sidebar-link" href="/docs/multi-runtime.html" data-path="multi-runtime.html" data-category="orchestration" title="Run Claude, Codex, Aider, Gemini, and other agent runtimes in tmux-managed sessions">Multi-Runtime Support</a>
+          <a class="sidebar-link" href="/docs/single-agent-mode.html" data-path="single-agent-mode.html" data-category="orchestration" title="Use Thrum's context management without the messaging layer — single-agent mode as default, three-tier context, and when to switch to multi-agent">Single-Agent Mode</a>
+          <a class="sidebar-link" href="/docs/workflow-templates.html" data-path="workflow-templates.html" data-category="orchestration" title="Four-phase skill pipeline for designing, planning, setting up, and implementing features with AI agents">Workflow Templates</a>
+          <a class="sidebar-link" href="/docs/permission-prompts.html" data-path="permission-prompts.html" data-category="orchestration" title="How Thrum detects when an agent is stuck on a permission prompt and routes it to a supervisor — silence-hash poller, supervisor reply paths (CLI, web UI, Telegram), reminder cadence, restart resilience">Permission Prompts</a>
+          <a class="sidebar-link" href="/docs/session-restart.html" data-path="session-restart.html" data-category="orchestration" title="Save conversation history and resume where you left off — from daily shutdown to automated mid-task restarts">Session Restart &amp; Context Recovery</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="identity">
+          <span class="sidebar-category-label">Identity &amp; Agents</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/identity.html" data-path="identity.html" data-category="identity" title="Named agents, deterministic IDs, identity resolution, registration, conflicts, cleanup, and multi-agent worktrees">Agent Identity &amp; Registration</a>
+          <a class="sidebar-link" href="/docs/agent-configs.html" data-path="agent-configs.html" data-category="identity" title="Ready-to-use Claude Code agent definitions for Thrum messaging and Beads task tracking">Agent Configurations</a>
+          <a class="sidebar-link" href="/docs/claude-agent-integration.html" data-path="claude-agent-integration.html" data-category="identity" title="Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup">Claude Code Agent Integration</a>
+          <a class="sidebar-link" href="/docs/role-templates.html" data-path="role-templates.html" data-category="identity" title="Auto-generate agent preambles from role templates with scope boundaries, task protocol, communication patterns, and behavioral directives">Role-Based Preamble Templates</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="messaging">
+          <span class="sidebar-category-label">Messaging</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/peers.html" data-path="peers.html" data-category="messaging" title="Cross-repo and cross-machine messaging between Thrum daemons">Peers</a>
+          <a class="sidebar-link" href="/docs/inbox-query-methods.html" data-path="inbox-query-methods.html" data-category="messaging" title="RPC methods for querying messages, agents, and managing read state with filtering and pagination">Inbox Query Methods</a>
+          <a class="sidebar-link" href="/docs/telegram-bridge.html" data-path="telegram-bridge.html" data-category="messaging" title="One Telegram connection, unified inbox for your whole team of agents — any agent can ping you, replies route back to the original author">Telegram Bridge</a>
+          <a class="sidebar-link" href="/docs/telegram-groups.html" data-path="telegram-groups.html" data-category="messaging" title="Share a Telegram group with your team so everyone can interact with the same Thrum agent — send instructions, see responses, and coordinate through one chat">Telegram Groups</a>
+          <a class="sidebar-link" href="/docs/messaging.html" data-path="messaging.html" data-category="messaging" title="Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering">Messaging</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="substrate">
+          <span class="sidebar-category-label">Personal Agent Substrate</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/substrate/overview.html" data-path="substrate/overview.html" data-category="substrate" title="v0.11 turns thrum into the substrate beneath personal-agent harnesses (scheduling, scheduled-agent lifecycle, skill registration, email transport, reminders). What it is, why it exists, and how the pieces fit together.">Personal Agent Substrate</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="coordination">
+          <span class="sidebar-category-label">Coordination</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/agent-coordination.html" data-path="agent-coordination.html" data-category="coordination" title="Multi-agent workflows, Beads integration, session templates, and coordination patterns for AI agent teams">Agent Coordination</a>
+          <a class="sidebar-link" href="/docs/multi-agent.html" data-path="multi-agent.html" data-category="coordination" title="Runtime presets, thrum prime, and coordination patterns for running multiple AI agents across worktrees and platforms">Multi-Agent Support</a>
+          <a class="sidebar-link" href="/docs/context.html" data-path="context.html" data-category="coordination" title="Per-agent context storage for persisting volatile project state across sessions and machines">Agent Context Management</a>
+          <a class="sidebar-link" href="/docs/guides/coordinate-two-agents.html" data-path="guides/coordinate-two-agents.html" data-category="coordination" title="Walk through registering two agents, sending messages between them, and seeing what everyone is working on — the most common Thrum use case">Coordinate Two Agents</a>
+          <a class="sidebar-link" href="/docs/guides/review-workflow.html" data-path="guides/review-workflow.html" data-category="coordination" title="Walk through the implement-then-review cycle: one agent writes code on a feature branch, another reviews it, Thrum handles the communication">Code Review Workflow</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="integrations">
+          <span class="sidebar-category-label">Integrations</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/web-ui.html" data-path="web-ui.html" data-category="integrations" title="Browser-based dashboard for monitoring agents and reading messages — served from the daemon on a single port">Web UI</a>
+          <a class="sidebar-link" href="/docs/claude-code-plugin.html" data-path="claude-code-plugin.html" data-category="integrations" title="Install and use the Thrum plugin for Claude Code — slash commands, automatic context injection, and multi-agent coordination without manual configuration">Claude Code Plugin</a>
+          <a class="sidebar-link" href="/docs/beads-and-thrum.html" data-path="beads-and-thrum.html" data-category="integrations" title="How persistent task tracking and agent messaging work together for multi-agent development">Beads and Thrum</a>
+          <a class="sidebar-link" href="/docs/codex-plugin.html" data-path="codex-plugin.html" data-category="integrations" title="Install and use Thrum's Codex skill bundle — the Claude thrum skill surface, mirrored as top-level Codex skills">Codex Plugin</a>
+          <a class="sidebar-link" href="/docs/cursor-plugin.html" data-path="cursor-plugin.html" data-category="integrations" title="Install and use Thrum's Cursor plugin — rules, hooks, skills, commands, and MCP configuration for multi-agent coordination in Cursor">Cursor Plugin</a>
+          <a class="sidebar-link" href="/docs/mcp-server.html" data-path="mcp-server.html" data-category="integrations" title="Thrum MCP server for native AI agent integration — tools, identity, message handling, and Claude Code setup">MCP Server</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="infrastructure">
+          <span class="sidebar-category-label">Infrastructure</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/daemon.html" data-path="daemon.html" data-category="infrastructure" title="Background service managing state, RPC handlers, sync loop, WebSocket server, and embedded UI on single port">Daemon Architecture</a>
+          <a class="sidebar-link" href="/docs/sync.html" data-path="sync.html" data-category="infrastructure" title="Git-based message synchronization using orphan branch, sync worktree, conflict-free merging, and offline-first design">Sync Protocol</a>
+          <a class="sidebar-link" href="/docs/configuration.html" data-path="configuration.html" data-category="infrastructure" title="Thrum configuration model — config.json schema, runtime tiers, priority chain, and the config show command">Configuration</a>
+          <a class="sidebar-link" href="/docs/guides/cross-machine-sync.html" data-path="guides/cross-machine-sync.html" data-category="infrastructure" title="Walk through enabling cross-machine sync, sending a message from one machine and receiving it on another, and verifying sync status">Sync Across Machines</a>
+          <a class="sidebar-link" href="/docs/tailscale-sync.html" data-path="tailscale-sync.html" data-category="infrastructure" title="Direct machine-to-machine sync via Tailscale — setup, architecture, pairing, and CLI commands">Tailscale Sync</a>
+          <a class="sidebar-link" href="/docs/tailscale-security.html" data-path="tailscale-security.html" data-category="infrastructure" title="Security model for Thrum's Tailscale peer sync — pairing, encryption, access control, and threat mitigations">Tailscale Sync Security</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="reference">
+          <span class="sidebar-category-label">Reference</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/development.html" data-path="development.html" data-category="reference" title="Setup, testing, building, contributing - complete guide for developing and extending Thrum">Development Guide</a>
+          <a class="sidebar-link" href="/docs/cli-hints.html" data-path="cli-hints.html" data-category="reference" title="Inline contextual hints from Thrum CLI commands — pre-action warnings, post-action next steps, and JSON output for tooling. Covers Phase B (thrum send / tmux create / init) and the THRUM_NO_HINTS opt-out.">CLI Hints</a>
+          <a class="sidebar-link" href="/docs/security-cicd.html" data-path="security-cicd.html" data-category="reference" title="Automated security scanning, CI/CD pipelines, and deployment workflows for Thrum">Security &amp; CI/CD</a>
+          <a class="sidebar-link" href="/docs/security-model.html" data-path="security-model.html" data-category="reference" title="How Thrum's daemon decides who's calling — kernel-verified peer credentials, anonymous-caller read-only allowlist, author-only message operations, and WebSocket origin restriction. Covers the v0.9.0 sec.1–sec.8 hardening.">Local Security Model</a>
+          <a class="sidebar-link" href="/docs/architecture.html" data-path="architecture.html" data-category="reference" title="Thrum architecture — daemon design, storage, sync engine, transport layer, key features, and foundation packages">Architecture</a>
+          <a class="sidebar-link" href="/docs/cli.html" data-path="cli.html" data-category="reference" title="Complete reference for the thrum command-line interface — all commands, flags, and usage examples">CLI Reference</a>
+          <a class="sidebar-link" href="/docs/rpc-api.html" data-path="rpc-api.html" data-category="reference" title="Thrum daemon JSON-RPC 2.0 API reference — all RPC methods, parameters, and response formats">RPC API</a>
+        <div class="sidebar-category sidebar-subcategory" data-category="agent-protocols">
+          <span class="sidebar-category-label sidebar-subcategory-label collapsible"><span class="sidebar-chevron">▸</span><span>Agent Protocols</span></span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/sub-agent-strategy.html" data-path="strategies/sub-agent-strategy.html" data-category="agent-protocols" title="When and how to delegate work to sub-agents for context efficiency">Sub-Agent Strategy</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/thrum-registration.html" data-path="strategies/thrum-registration.html" data-category="agent-protocols" title="How to register with Thrum at session start and communicate with other agents">Thrum Registration</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/resume-after-context-loss.html" data-path="strategies/resume-after-context-loss.html" data-category="agent-protocols" title="How to recover and pick up work after compaction, a new session, or a crash">Resume After Context Loss</a>
+          </div>
+        </div>
+
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="api">
+          <span class="sidebar-category-label">API Reference</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/api/authentication.html" data-path="api/authentication.html" data-category="api" title="Authentication and authorization in the Thrum API — agent identity, session tokens, and security model">Authentication</a>
+          <a class="sidebar-link" href="/docs/api/events.html" data-path="api/events.html" data-category="api" title="All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events">Event Reference</a>
+          <a class="sidebar-link active" href="/docs/api/websocket.html" data-path="api/websocket.html" data-category="api" title="Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events">WebSocket API</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="guides">
+          <span class="sidebar-category-label">Guides</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="troubleshooting">
+          <span class="sidebar-category-label">troubleshooting</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/troubleshooting-identity.html" data-path="troubleshooting-identity.html" data-category="troubleshooting" title="Identity guard error messages and how to fix them — cross_worktree pid_mismatch, anonymous_mutating_rpc, non_git_bootstrap, and the rest of the v0.9.0 guard catalog with remediation steps.">Troubleshooting Identity Issues</a>
+          </div>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- Content -->
+    <main class="docs-content" id="docs-content">
+      <div class="docs-content-inner" id="docs-content-inner">
 <h2>WebSocket API</h2>
 <p>The Thrum WebSocket API provides real-time, bidirectional communication between
 clients and the Thrum daemon using JSON-RPC 2.0 over WebSocket.</p>
@@ -83,32 +263,32 @@ alive. Clients must respond with pong frames (handled automatically by most
 WebSocket libraries). The read deadline is 60 seconds -- connections that don&#39;t
 respond to pings within this window are closed.</p>
 <h3>Example Connection</h3>
-<pre><code>const ws = new WebSocket(&quot;ws://localhost:9999/ws&quot;);
+<pre><code class="language-javascript hljs"><span class="hljs-keyword">const</span> ws = <span class="hljs-keyword">new</span> <span class="hljs-title class_">WebSocket</span>(<span class="hljs-string">&quot;ws://localhost:9999/ws&quot;</span>);
 
-ws.onopen = () =&gt; {
-  // Register as user
-  ws.send(
-    JSON.stringify({
-      jsonrpc: &quot;2.0&quot;,
-      method: &quot;user.register&quot;,
-      params: {
-        username: &quot;alice&quot;,
-        display_name: &quot;Alice Smith&quot;,
+ws.<span class="hljs-property">onopen</span> = <span class="hljs-function">() =&gt;</span> {
+  <span class="hljs-comment">// Register as user</span>
+  ws.<span class="hljs-title function_">send</span>(
+    <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">stringify</span>({
+      <span class="hljs-attr">jsonrpc</span>: <span class="hljs-string">&quot;2.0&quot;</span>,
+      <span class="hljs-attr">method</span>: <span class="hljs-string">&quot;user.register&quot;</span>,
+      <span class="hljs-attr">params</span>: {
+        <span class="hljs-attr">username</span>: <span class="hljs-string">&quot;alice&quot;</span>,
+        <span class="hljs-attr">display_name</span>: <span class="hljs-string">&quot;Alice Smith&quot;</span>,
       },
-      id: 1,
+      <span class="hljs-attr">id</span>: <span class="hljs-number">1</span>,
     }),
   );
 };
 
-ws.onmessage = (event) =&gt; {
-  const message = JSON.parse(event.data);
+ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
+  <span class="hljs-keyword">const</span> message = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(event.<span class="hljs-property">data</span>);
 
-  if (message.id) {
-    // This is a response to a request we sent
-    console.log(&quot;Response:&quot;, message);
-  } else if (message.method) {
-    // This is a push notification (no id field)
-    console.log(&quot;Notification:&quot;, message.method, message.params);
+  <span class="hljs-keyword">if</span> (message.<span class="hljs-property">id</span>) {
+    <span class="hljs-comment">// This is a response to a request we sent</span>
+    <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">&quot;Response:&quot;</span>, message);
+  } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (message.<span class="hljs-property">method</span>) {
+    <span class="hljs-comment">// This is a push notification (no id field)</span>
+    <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">&quot;Notification:&quot;</span>, message.<span class="hljs-property">method</span>, message.<span class="hljs-property">params</span>);
   }
 };</code></pre>
 <h2>Authentication</h2>
@@ -117,21 +297,21 @@ ws.onmessage = (event) =&gt; {
 stable user ID based on the username.</p>
 <p><strong>Method</strong>: <code>user.register</code></p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;username&quot;: &quot;alice&quot;, // required: username (lowercase, alphanumeric + hyphens)
-  &quot;display_name&quot;: &quot;Alice Smith&quot; // optional: human-readable display name
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;username&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;alice&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// required: username (lowercase, alphanumeric + hyphens)</span>
+  <span class="hljs-attr">&quot;display_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Alice Smith&quot;</span> <span class="hljs-comment">// optional: human-readable display name</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code>{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;result&quot;: {
-    &quot;user_id&quot;: &quot;user:alice&quot;,
-    &quot;session_id&quot;: &quot;ses_01HXE...&quot;,
-    &quot;username&quot;: &quot;alice&quot;,
-    &quot;display_name&quot;: &quot;Alice Smith&quot;
-  },
-  &quot;id&quot;: 1
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;user_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;user:alice&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ses_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;username&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;alice&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;display_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Alice Smith&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Errors</strong>:</p>
 <ul>
 <li><code>-32602</code>: Invalid username (must be lowercase, alphanumeric + hyphens)</li>
@@ -142,20 +322,20 @@ stable user ID based on the username.</p>
 method.</p>
 <p><strong>Method</strong>: <code>agent.register</code></p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;role&quot;: &quot;assistant&quot;, // required: agent role
-  &quot;module&quot;: &quot;claude&quot;, // required: agent module
-  &quot;display&quot;: &quot;Claude&quot; // optional: display name
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;assistant&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// required: agent role</span>
+  <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;claude&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// required: agent module</span>
+  <span class="hljs-attr">&quot;display&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Claude&quot;</span> <span class="hljs-comment">// optional: display name</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code>{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;result&quot;: {
-    &quot;agent_id&quot;: &quot;agent:assistant:claude:ABC123&quot;,
-    &quot;status&quot;: &quot;registered&quot;
-  },
-  &quot;id&quot;: 1
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:assistant:claude:ABC123&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;registered&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h2>RPC Methods</h2>
 <p>All RPC methods follow JSON-RPC 2.0 specification:</p>
 <ul>
@@ -170,24 +350,24 @@ daemon. All handlers are registered on both transports.</p>
 <h4>agent.list</h4>
 <p>Lists all registered agents with optional filtering.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;role&quot;: &quot;assistant&quot;, // optional: filter by role
-  &quot;module&quot;: &quot;claude&quot; // optional: filter by module
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;assistant&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: filter by role</span>
+  <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;claude&quot;</span> <span class="hljs-comment">// optional: filter by module</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code>{
-  &quot;agents&quot;: [
-    {
-      &quot;agent_id&quot;: &quot;agent:assistant:claude:ABC123&quot;,
-      &quot;kind&quot;: &quot;agent&quot;,
-      &quot;role&quot;: &quot;assistant&quot;,
-      &quot;module&quot;: &quot;claude&quot;,
-      &quot;display&quot;: &quot;Claude Assistant&quot;,
-      &quot;registered_at&quot;: &quot;2026-02-03T10:00:00Z&quot;,
-      &quot;last_seen_at&quot;: &quot;2026-02-03T12:00:00Z&quot;
-    }
-  ]
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;agents&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+    <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:assistant:claude:ABC123&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;kind&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;assistant&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;claude&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;display&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Claude Assistant&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;registered_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T10:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;last_seen_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">]</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h4>agent.whoami</h4>
 <p>Returns the current agent&#39;s identity information.</p>
 <h4>agent.listContext</h4>
@@ -197,30 +377,30 @@ daemon. All handlers are registered on both transports.</p>
 <p>Sends a new message to the system. Triggers subscription-based push
 notifications.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;content&quot;: &quot;Hello, world!&quot;, // required: message content
-  &quot;thread_id&quot;: &quot;thr_abc123&quot;, // optional: reply to thread
-  &quot;scopes&quot;: [
-    // optional: message scopes
-    { &quot;type&quot;: &quot;task&quot;, &quot;value&quot;: &quot;PROJ-123&quot; }
-  ],
-  &quot;refs&quot;: [
-    // optional: references
-    { &quot;type&quot;: &quot;mention&quot;, &quot;value&quot;: &quot;reviewer&quot; }
-  ],
-  &quot;body&quot;: {
-    // optional: structured body
-    &quot;format&quot;: &quot;markdown&quot;,
-    &quot;structured&quot;: &quot;{\&quot;key\&quot;:\&quot;value\&quot;}&quot;
-  },
-  &quot;acting_as&quot;: &quot;agent:assistant:claude:ABC123&quot; // optional: impersonation (users only)
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Hello, world!&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// required: message content</span>
+  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_abc123&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: reply to thread</span>
+  <span class="hljs-attr">&quot;scopes&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+    <span class="hljs-comment">// optional: message scopes</span>
+    <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;task&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;PROJ-123&quot;</span> <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;refs&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+    <span class="hljs-comment">// optional: references</span>
+    <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mention&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span> <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;body&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-comment">// optional: structured body</span>
+    <span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;markdown&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;structured&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;{\&quot;key\&quot;:\&quot;value\&quot;}&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;acting_as&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:assistant:claude:ABC123&quot;</span> <span class="hljs-comment">// optional: impersonation (users only)</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code>{
-  &quot;message_id&quot;: &quot;msg_01HXE...&quot;,
-  &quot;thread_id&quot;: &quot;thr_abc123&quot;,
-  &quot;created_at&quot;: &quot;2026-02-03T12:00:00Z&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_abc123&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Errors</strong>:</p>
 <ul>
 <li><code>-32602</code>: Invalid parameters (missing content, invalid scope format)</li>
@@ -231,68 +411,68 @@ notifications.</p>
 <h4>message.list</h4>
 <p>Lists messages with filtering and pagination.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;thread_id&quot;: &quot;thr_abc123&quot;, // optional: filter by thread
-  &quot;author_id&quot;: &quot;agent:...&quot;, // optional: filter by author
-  &quot;scope&quot;: {
-    // optional: filter by scope
-    &quot;type&quot;: &quot;task&quot;,
-    &quot;value&quot;: &quot;PROJ-123&quot;
-  },
-  &quot;ref&quot;: {
-    // optional: filter by reference
-    &quot;type&quot;: &quot;mention&quot;,
-    &quot;value&quot;: &quot;reviewer&quot;
-  },
-  &quot;page_size&quot;: 50, // optional: results per page (max 100)
-  &quot;page&quot;: 1, // optional: page number
-  &quot;sort_by&quot;: &quot;created_at&quot;, // optional: &quot;created_at&quot; or &quot;updated_at&quot;
-  &quot;sort_order&quot;: &quot;desc&quot; // optional: &quot;asc&quot; or &quot;desc&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_abc123&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: filter by thread</span>
+  <span class="hljs-attr">&quot;author_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: filter by author</span>
+  <span class="hljs-attr">&quot;scope&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-comment">// optional: filter by scope</span>
+    <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;task&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;PROJ-123&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;ref&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-comment">// optional: filter by reference</span>
+    <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mention&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;page_size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">50</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: results per page (max 100)</span>
+  <span class="hljs-attr">&quot;page&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: page number</span>
+  <span class="hljs-attr">&quot;sort_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;created_at&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: &quot;created_at&quot; or &quot;updated_at&quot;</span>
+  <span class="hljs-attr">&quot;sort_order&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;desc&quot;</span> <span class="hljs-comment">// optional: &quot;asc&quot; or &quot;desc&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code>{
-  &quot;messages&quot;: [
-    {
-      &quot;message_id&quot;: &quot;msg_01HXE...&quot;,
-      &quot;thread_id&quot;: &quot;thr_abc123&quot;,
-      &quot;author&quot;: {
-        &quot;agent_id&quot;: &quot;agent:assistant:claude:ABC123&quot;,
-        &quot;session_id&quot;: &quot;ses_01HXE...&quot;
-      },
-      &quot;body&quot;: {
-        &quot;format&quot;: &quot;markdown&quot;,
-        &quot;content&quot;: &quot;Hello, world!&quot;
-      },
-      &quot;scopes&quot;: [],
-      &quot;refs&quot;: [],
-      &quot;created_at&quot;: &quot;2026-02-03T12:00:00Z&quot;
-    }
-  ],
-  &quot;page&quot;: 1,
-  &quot;page_size&quot;: 50,
-  &quot;total_count&quot;: 150,
-  &quot;total_pages&quot;: 3
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;messages&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+    <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_abc123&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;author&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:assistant:claude:ABC123&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ses_01HXE...&quot;</span>
+      <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;body&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;markdown&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Hello, world!&quot;</span>
+      <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;scopes&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;refs&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;page&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;page_size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">50</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;total_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">150</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;total_pages&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">3</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h4>message.get</h4>
 <p>Retrieves a single message by ID.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;message_id&quot;: &quot;msg_01HXE...&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response</strong>: Same structure as a single message from <code>message.list</code></p>
 <h4>message.edit</h4>
 <p>Edits an existing message (must be message author).</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;message_id&quot;: &quot;msg_01HXE...&quot;,
-  &quot;content&quot;: &quot;Updated content&quot;,
-  &quot;structured&quot;: &quot;{\&quot;updated\&quot;:true}&quot; // optional
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Updated content&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;structured&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;{\&quot;updated\&quot;:true}&quot;</span> <span class="hljs-comment">// optional</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code>{
-  &quot;message_id&quot;: &quot;msg_01HXE...&quot;,
-  &quot;updated_at&quot;: &quot;2026-02-03T13:00:00Z&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;updated_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T13:00:00Z&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Errors</strong>:</p>
 <ul>
 <li><code>-32003</code>: Not authorized (not the message author)</li>
@@ -301,149 +481,149 @@ notifications.</p>
 <h4>message.delete</h4>
 <p>Soft-deletes a message (must be message author).</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;message_id&quot;: &quot;msg_01HXE...&quot;,
-  &quot;reason&quot;: &quot;spam&quot; // optional
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;reason&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;spam&quot;</span> <span class="hljs-comment">// optional</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code>{
-  &quot;message_id&quot;: &quot;msg_01HXE...&quot;,
-  &quot;deleted_at&quot;: &quot;2026-02-03T13:00:00Z&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;deleted_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T13:00:00Z&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h4>message.markRead</h4>
 <p>Marks a message as read for the current session.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;message_id&quot;: &quot;msg_01HXE...&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h3>Thread Methods</h3>
 <h4>thread.create</h4>
 <p>Creates a new conversation thread.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;title&quot;: &quot;Discussion about feature X&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Discussion about feature X&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code>{
-  &quot;thread_id&quot;: &quot;thr_01HXE...&quot;,
-  &quot;title&quot;: &quot;Discussion about feature X&quot;,
-  &quot;created_at&quot;: &quot;2026-02-03T12:00:00Z&quot;,
-  &quot;created_by&quot;: &quot;agent:assistant:claude:ABC123&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Discussion about feature X&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;created_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:assistant:claude:ABC123&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h4>thread.list</h4>
 <p>Lists threads with pagination.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;page_size&quot;: 20, // optional: results per page
-  &quot;page&quot;: 1 // optional: page number
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;page_size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">20</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: results per page</span>
+  <span class="hljs-attr">&quot;page&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span> <span class="hljs-comment">// optional: page number</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code>{
-  &quot;threads&quot;: [
-    {
-      &quot;thread_id&quot;: &quot;thr_01HXE...&quot;,
-      &quot;title&quot;: &quot;Discussion about feature X&quot;,
-      &quot;created_at&quot;: &quot;2026-02-03T12:00:00Z&quot;,
-      &quot;created_by&quot;: &quot;agent:assistant:claude:ABC123&quot;,
-      &quot;message_count&quot;: 5,
-      &quot;last_message_at&quot;: &quot;2026-02-03T13:00:00Z&quot;
-    }
-  ],
-  &quot;page&quot;: 1,
-  &quot;page_size&quot;: 20,
-  &quot;total_count&quot;: 50,
-  &quot;total_pages&quot;: 3
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;threads&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+    <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Discussion about feature X&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;created_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:assistant:claude:ABC123&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;message_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">5</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;last_message_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T13:00:00Z&quot;</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;page&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;page_size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">20</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;total_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">50</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;total_pages&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">3</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h4>thread.get</h4>
 <p>Gets thread details with messages.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;thread_id&quot;: &quot;thr_01HXE...&quot;,
-  &quot;page_size&quot;: 50, // optional: messages per page
-  &quot;page&quot;: 1 // optional: page number
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;page_size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">50</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: messages per page</span>
+  <span class="hljs-attr">&quot;page&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span> <span class="hljs-comment">// optional: page number</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code>{
-  &quot;thread_id&quot;: &quot;thr_01HXE...&quot;,
-  &quot;title&quot;: &quot;Discussion about feature X&quot;,
-  &quot;created_at&quot;: &quot;2026-02-03T12:00:00Z&quot;,
-  &quot;created_by&quot;: &quot;agent:assistant:claude:ABC123&quot;,
-  &quot;messages&quot;: [
-    // ... message objects
-  ],
-  &quot;page&quot;: 1,
-  &quot;page_size&quot;: 50,
-  &quot;total_messages&quot;: 5
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Discussion about feature X&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;created_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:assistant:claude:ABC123&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;messages&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+    <span class="hljs-comment">// ... message objects</span>
+  <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;page&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;page_size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">50</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;total_messages&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">5</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h3>Session Methods</h3>
 <h4>session.start</h4>
 <p>Starts a new session for an agent.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;agent_id&quot;: &quot;agent:assistant:claude:ABC123&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:assistant:claude:ABC123&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code>{
-  &quot;session_id&quot;: &quot;ses_01HXE...&quot;,
-  &quot;agent_id&quot;: &quot;agent:assistant:claude:ABC123&quot;,
-  &quot;started_at&quot;: &quot;2026-02-03T12:00:00Z&quot;,
-  &quot;recovered_sessions&quot;: []
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ses_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:assistant:claude:ABC123&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;started_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;recovered_sessions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">]</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h4>session.end</h4>
 <p>Ends an active session.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;session_id&quot;: &quot;ses_01HXE...&quot;,
-  &quot;reason&quot;: &quot;normal&quot; // optional: &quot;normal&quot; or &quot;crash&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ses_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;reason&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;normal&quot;</span> <span class="hljs-comment">// optional: &quot;normal&quot; or &quot;crash&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code>{
-  &quot;session_id&quot;: &quot;ses_01HXE...&quot;,
-  &quot;ended_at&quot;: &quot;2026-02-03T13:00:00Z&quot;,
-  &quot;duration&quot;: &quot;1h0m0s&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ses_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;ended_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T13:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;duration&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;1h0m0s&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h4>session.list</h4>
 <p>Lists sessions with optional filtering.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;agent_id&quot;: &quot;agent:...&quot;, // optional: filter by agent
-  &quot;active_only&quot;: true // optional: only active sessions
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: filter by agent</span>
+  <span class="hljs-attr">&quot;active_only&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-comment">// optional: only active sessions</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h4>session.heartbeat</h4>
 <p>Updates the session&#39;s last-seen timestamp.</p>
 <h4>session.setIntent</h4>
 <p>Sets the agent&#39;s current intent/description of work.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;intent&quot;: &quot;Working on authentication module&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;intent&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Working on authentication module&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h4>session.setTask</h4>
 <p>Sets the agent&#39;s current task.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;task&quot;: &quot;thrum-abc1&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;task&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thrum-abc1&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h3>Subscription Methods</h3>
 <h4>subscribe</h4>
 <p>Creates a subscription for event notifications. At least one of <code>scope</code>,
 <code>mention_role</code>, or <code>all</code> must be specified.</p>
 <p><strong>Method</strong>: <code>subscribe</code></p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;scope&quot;: {
-    // optional: scope filter
-    &quot;type&quot;: &quot;task&quot;,
-    &quot;value&quot;: &quot;PROJ-123&quot;
-  },
-  &quot;mention_role&quot;: &quot;reviewer&quot;, // optional: mention filter
-  &quot;all&quot;: false // optional: firehose (receive all messages)
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;scope&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-comment">// optional: scope filter</span>
+    <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;task&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;PROJ-123&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;mention_role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: mention filter</span>
+  <span class="hljs-attr">&quot;all&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span> <span class="hljs-comment">// optional: firehose (receive all messages)</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code>{
-  &quot;subscription_id&quot;: 42,
-  &quot;session_id&quot;: &quot;ses_01HXE...&quot;,
-  &quot;created_at&quot;: &quot;2026-02-03T12:00:00Z&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;subscription_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">42</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ses_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Errors</strong>:</p>
 <ul>
 <li>Missing all parameters:
@@ -456,38 +636,38 @@ notifications.</p>
 remove it.</p>
 <p><strong>Method</strong>: <code>unsubscribe</code></p>
 <p><strong>Parameters</strong>:</p>
-<pre><code>{
-  &quot;subscription_id&quot;: 42
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;subscription_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">42</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code>{
-  &quot;removed&quot;: true
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;removed&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h4>subscriptions.list</h4>
 <p>Lists active subscriptions for the current session.</p>
 <p><strong>Method</strong>: <code>subscriptions.list</code></p>
 <p><strong>Parameters</strong>: <code>{}</code> (empty)</p>
 <p><strong>Response</strong>:</p>
-<pre><code>{
-  &quot;subscriptions&quot;: [
-    {
-      &quot;id&quot;: 42,
-      &quot;scope_type&quot;: &quot;task&quot;,
-      &quot;scope_value&quot;: &quot;PROJ-123&quot;,
-      &quot;created_at&quot;: &quot;2026-02-03T12:00:00Z&quot;
-    },
-    {
-      &quot;id&quot;: 43,
-      &quot;mention_role&quot;: &quot;reviewer&quot;,
-      &quot;created_at&quot;: &quot;2026-02-03T12:05:00Z&quot;
-    },
-    {
-      &quot;id&quot;: 44,
-      &quot;all&quot;: true,
-      &quot;created_at&quot;: &quot;2026-02-03T12:10:00Z&quot;
-    }
-  ]
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;subscriptions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+    <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">42</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;scope_type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;task&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;scope_value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;PROJ-123&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span>
+    <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">43</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;mention_role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:05:00Z&quot;</span>
+    <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">44</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;all&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:10:00Z&quot;</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">]</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h3>Sync Methods</h3>
 <h4>sync.force</h4>
 <p>Triggers an immediate sync operation.</p>
@@ -498,60 +678,60 @@ remove it.</p>
 <p>Health check endpoint.</p>
 <p><strong>Parameters</strong>: <code>{}</code> (empty)</p>
 <p><strong>Response</strong>:</p>
-<pre><code>{
-  &quot;status&quot;: &quot;ok&quot;,
-  &quot;uptime_ms&quot;: 5445000,
-  &quot;version&quot;: &quot;0.1.0&quot;,
-  &quot;repo_id&quot;: &quot;r_ABC123&quot;,
-  &quot;sync_state&quot;: &quot;idle&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ok&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;uptime_ms&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">5445000</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;version&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;0.1.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;repo_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;r_ABC123&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;sync_state&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;idle&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h2>Push Notifications</h2>
 <p>Push notifications are sent as JSON-RPC notifications (no <code>id</code> field, no
 response expected). They are delivered to clients that have active subscriptions
 matching the event.</p>
 <h3>Notification Format</h3>
-<pre><code>{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;method&quot;: &quot;notification.message&quot;,
-  &quot;params&quot;: {
-    // event-specific payload
-  }
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;notification.message&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-comment">// event-specific payload</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h3>Notification Types</h3>
 <h4>notification.message</h4>
 <p>Sent when a new message matches a client&#39;s subscription.</p>
 <p><strong>Payload</strong>:</p>
-<pre><code>{
-  &quot;message_id&quot;: &quot;msg_01HXE...&quot;,
-  &quot;thread_id&quot;: &quot;thr_01HXE...&quot;,
-  &quot;author&quot;: {
-    &quot;agent_id&quot;: &quot;furiosa&quot;,
-    &quot;name&quot;: &quot;furiosa&quot;,
-    &quot;role&quot;: &quot;implementer&quot;,
-    &quot;module&quot;: &quot;&quot;
-  },
-  &quot;preview&quot;: &quot;First 100 characters...&quot;,
-  &quot;scopes&quot;: [{ &quot;type&quot;: &quot;module&quot;, &quot;value&quot;: &quot;auth&quot; }],
-  &quot;matched_subscription&quot;: {
-    &quot;subscription_id&quot;: 42,
-    &quot;match_type&quot;: &quot;scope&quot;
-  },
-  &quot;timestamp&quot;: &quot;2026-02-03T12:00:00Z&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;author&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;preview&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;First 100 characters...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;scopes&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;module&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;matched_subscription&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;subscription_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">42</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;match_type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;scope&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><code>match_type</code> values: <code>&quot;scope&quot;</code>, <code>&quot;mention&quot;</code>, <code>&quot;all&quot;</code></p>
 <h4>notification.thread.updated</h4>
 <p>Sent when a thread has new activity. Delivered to all sessions with any active
 subscription.</p>
 <p><strong>Payload</strong>:</p>
-<pre><code>{
-  &quot;thread_id&quot;: &quot;thr_01HXE...&quot;,
-  &quot;message_count&quot;: 5,
-  &quot;unread_count&quot;: 2,
-  &quot;last_activity&quot;: &quot;2026-02-03T12:00:00Z&quot;,
-  &quot;last_sender&quot;: &quot;furiosa&quot;,
-  &quot;preview&quot;: &quot;Latest message text...&quot;,
-  &quot;timestamp&quot;: &quot;2026-02-03T12:00:00Z&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;message_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">5</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;unread_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;last_activity&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;last_sender&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;preview&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Latest message text...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h2>Error Codes</h2>
 <h3>Standard JSON-RPC Errors</h3>
 <ul>
@@ -570,18 +750,18 @@ subscription.</p>
 <li><code>-32004</code>: Validation error (invalid format, constraints)</li>
 </ul>
 <h3>Error Response Format</h3>
-<pre><code>{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;error&quot;: {
-    &quot;code&quot;: -32602,
-    &quot;message&quot;: &quot;Invalid params&quot;,
-    &quot;data&quot;: {
-      &quot;field&quot;: &quot;username&quot;,
-      &quot;reason&quot;: &quot;must be lowercase alphanumeric&quot;
-    }
-  },
-  &quot;id&quot;: 1
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;error&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;code&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">-32602</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;message&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Invalid params&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;data&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;field&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;username&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;reason&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;must be lowercase alphanumeric&quot;</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h2>WebSocket Server Architecture</h2>
 <h3>Server Components</h3>
 <table>
@@ -650,9 +830,9 @@ subscription.</p>
 <h3>Client Registry</h3>
 <p>The WebSocket client registry tracks connected clients by session ID and
 supports push notifications:</p>
-<pre><code>type ClientRegistry struct {
+<pre><code class="language-go hljs"><span class="hljs-keyword">type</span> ClientRegistry <span class="hljs-keyword">struct</span> {
     mu      sync.RWMutex
-    clients map[string]*Connection
+    clients <span class="hljs-keyword">map</span>[<span class="hljs-type">string</span>]*Connection
 }</code></pre>
 <p><strong>Methods</strong>:</p>
 <ul>
@@ -714,10 +894,23 @@ mentions and receive push notifications</li>
 available over this WebSocket connection</li>
 </ul>
 
-</main>
-<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
-<a href="../../llms.txt">llms.txt</a> | <a href="../../llms-full.txt">llms-full.txt</a> | <a href="../../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
-</footer>
-<script>if(location.search.indexOf('nospa')===-1){location.replace('../../docs.html#api/websocket.html')}</script>
+      </div>
+    </main>
+
+  </div>
+
+  <script src="/js/vendor/minisearch.js"></script>
+  <script src="/js/search.js" data-docs-base="/docs/" data-search-index="/assets/docs/search-index.json"></script>
+  <script>
+    document.getElementById('theme-toggle').addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme');
+      var next = current === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('thrum-theme', next);
+    });
+    document.getElementById('sidebar-toggle').addEventListener('click', function() {
+      document.getElementById('docs-sidebar').classList.toggle('open');
+    });
+  </script>
 </body>
 </html>

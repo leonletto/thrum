@@ -17,7 +17,9 @@ const CONFIG = {
   websiteDir: path.join(__dirname, '..'),
   siteUrl: 'https://thrum.team',
   // Top-level HTML files to include. 404.html and the like are excluded.
-  rootPages: ['index.html', 'docs.html', 'about.html', 'blog.html'],
+  // docs.html intentionally omitted — it's a redirect to /docs/overview.html;
+  // sitemap should only list canonical, indexable URLs.
+  rootPages: ['index.html', 'about.html', 'blog.html'],
   // Subdirs to walk for additional HTML pages.
   walkDirs: ['blog', 'docs'],
   // Files to skip even if they match the walk.

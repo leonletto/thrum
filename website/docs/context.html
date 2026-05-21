@@ -1,51 +1,231 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Agent Context Management — Thrum</title>
-<meta name="description" content="Per-agent context storage for persisting volatile project state across sessions and machines">
-<link rel="canonical" href="https://thrum.team/docs.html#context.html">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Agent Context Management","description":"Per-agent context storage for persisting volatile project state across sessions and machines","url":"https://thrum.team/docs.html#context.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://thrum.team/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://thrum.team/docs.html"}}</script>
-<style>
-body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
-pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
-code{font-family:ui-monospace,monospace;font-size:0.9em}
-table{border-collapse:collapse;width:100%}
-th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
-th{background:#f5f5f5}
-nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
-h2{margin-top:2rem}
-a{color:#0366d6}
-</style>
-<!-- Privacy-friendly analytics by Plausible -->
-<script async src="https://plausible.io/js/pa-0EO0yjcXim9oq9r4-I2w1.js"></script>
-<script>
-window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
-plausible.init()
-</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>Agent Context Management — Thrum</title>
+  <meta name="description" content="Per-agent context storage for persisting volatile project state across sessions and machines">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Agent Context Management — Thrum">
+  <meta property="og:description" content="Per-agent context storage for persisting volatile project state across sessions and machines">
+  <meta property="og:url" content="https://thrum.team/docs/context.html">
+  <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="https://thrum.team/img/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Agent Context Management — Thrum">
+  <meta name="twitter:description" content="Per-agent context storage for persisting volatile project state across sessions and machines">
+  <meta name="twitter:image" content="https://thrum.team/img/social-card.png">
+  <link rel="canonical" href="https://thrum.team/docs/context.html">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Agent Context Management","description":"Per-agent context storage for persisting volatile project state across sessions and machines","url":"https://thrum.team/docs/context.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://thrum.team/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://thrum.team/docs/overview.html"}}</script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/inter.woff2" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/ibm-plex-mono-regular.woff2" crossorigin>
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-0EO0yjcXim9oq9r4-I2w1.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
 </head>
 <body>
-<nav>
-<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; coordination &rsaquo; Agent Context Management
-<hr>
-<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="whats-new.html">What's New</a><br>
-<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
-  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
-<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
-<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
-<strong>Guides</strong>: <a href="beta-channel.html">Beta Channel</a><br>
-<strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
-<strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
-<strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <strong>Agent Context Management</strong> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
-<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
-<strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
-<strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
-<strong>substrate</strong>: <a href="substrate/overview.html">Personal Agent Substrate</a><br>
-<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
-</nav>
-<main>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="/index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="/index.html" class="nav-link">Home</a>
+          <a href="/docs/overview.html" class="nav-link nav-link-active">Docs</a>
+          <a href="/blog.html" class="nav-link">Blog</a>
+          <a href="/about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+          <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+            <span class="icon-sun">&#x2600;</span>
+            <span class="icon-moon">&#x263E;</span>
+          </button>
+        </div>
+        <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle navigation">
+          <span></span><span></span><span></span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Layout -->
+  <div class="docs-layout">
+
+    <!-- Sidebar -->
+    <aside class="docs-sidebar" id="docs-sidebar">
+      <div class="sidebar-search">
+        <input type="text" id="search-input" placeholder="Search docs... (Ctrl+K)" autocomplete="off">
+        <div class="search-results" id="search-results"></div>
+      </div>
+      <nav class="sidebar-nav" id="sidebar-nav">
+        <div class="sidebar-category" data-category="overview">
+          <span class="sidebar-category-label">Overview</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/philosophy.html" data-path="philosophy.html" data-category="overview" title="Why Thrum exists — a messaging system designed for human-centric AI agent coordination, not another orchestration engine">Philosophy</a>
+          <a class="sidebar-link" href="/docs/overview.html" data-path="overview.html" data-category="overview" title="Thrum — coordinate AI coding agents across worktrees, repos, and machines">Overview</a>
+          <a class="sidebar-link" href="/docs/whats-new.html" data-path="whats-new.html" data-category="overview" title="Release-by-release highlights, breaking changes, and migration notes for recent Thrum versions.">What's New</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="onboarding">
+          <span class="sidebar-category-label">Onboarding</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/scenarios/solo-dev.html" data-path="scenarios/solo-dev.html" data-category="onboarding" title="Use Thrum as a single-developer tool: one agent, one machine, no hand-holding">Solo Dev with One Agent</a>
+          <a class="sidebar-link" href="/docs/scenarios/team.html" data-path="scenarios/team.html" data-category="onboarding" title="Run multiple agents in parallel worktrees with Thrum as the coordination layer">Team on Your Machine</a>
+          <a class="sidebar-link" href="/docs/scenarios/across-boundaries.html" data-path="scenarios/across-boundaries.html" data-category="onboarding" title="Connect Thrum daemons in different repos or on different machines via peers">Agents Across Repos/Machines</a>
+          <a class="sidebar-link" href="/docs/scenarios/orchestration.html" data-path="scenarios/orchestration.html" data-category="onboarding" title="Hand off a plan you wrote and let the orchestrator run the execution phase">Automated Plan Execution</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="quickstart">
+          <span class="sidebar-category-label">Getting Started</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/quickstart.html" data-path="quickstart.html" data-category="quickstart" title="Get up and running with Thrum in 5 minutes - initialization, daemon setup, agent registration, and first message">Quickstart Guide</a>
+        <div class="sidebar-category sidebar-subcategory" data-category="tools">
+          <span class="sidebar-category-label sidebar-subcategory-label collapsible"><span class="sidebar-chevron">▸</span><span>Recommended Tools</span></span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/recommended-tools.html" data-path="guides/recommended-tools.html" data-category="tools" title="Tools, extensions, and integrations that work well with Thrum for AI agent coordination workflows">Recommended Tools</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-setup.html" data-path="guides/beads-setup.html" data-category="tools" title="Set up Beads for git-backed task tracking alongside Thrum — installation, initialization, agent workflow, and worktree configuration">Beads Setup Guide</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-ui-setup.html" data-path="guides/beads-ui-setup.html" data-category="tools" title="Set up Beads UI for a live web dashboard of your agent task board — installation, usage, and multi-project support">Beads UI Setup Guide</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-migration-to-embedded.html" data-path="guides/beads-migration-to-embedded.html" data-category="tools" title="Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.">Beads Migration to Embedded Mode (bd 1.0+)</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/playwright-cli-setup.html" data-path="guides/playwright-cli-setup.html" data-category="tools" title="Set up Playwright CLI for browser automation in Claude Code agent workflows — screenshots, page context, form filling, and web testing">Playwright CLI Setup Guide</a>
+          </div>
+        </div>
+
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="orchestration">
+          <span class="sidebar-category-label">Orchestration</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/orchestrator-role.html" data-path="orchestrator-role.html" data-category="orchestration" title="Hand off a plan you wrote and let the orchestrator run the execution phase">Orchestrator Role</a>
+          <a class="sidebar-link" href="/docs/tmux-sessions.html" data-path="tmux-sessions.html" data-category="orchestration" title="Run agent teams in daemon-managed tmux sessions with instant message delivery, zero background listeners, and coordinator-managed lifecycle">Tmux-Managed Sessions</a>
+          <a class="sidebar-link" href="/docs/monitor-jobs.html" data-path="monitor-jobs.html" data-category="orchestration" title="Watch any process output for pattern matches and deliver results as synthetic Thrum messages — no polling, no shell, no manual piping">Monitor Jobs</a>
+          <a class="sidebar-link" href="/docs/multi-runtime.html" data-path="multi-runtime.html" data-category="orchestration" title="Run Claude, Codex, Aider, Gemini, and other agent runtimes in tmux-managed sessions">Multi-Runtime Support</a>
+          <a class="sidebar-link" href="/docs/single-agent-mode.html" data-path="single-agent-mode.html" data-category="orchestration" title="Use Thrum's context management without the messaging layer — single-agent mode as default, three-tier context, and when to switch to multi-agent">Single-Agent Mode</a>
+          <a class="sidebar-link" href="/docs/workflow-templates.html" data-path="workflow-templates.html" data-category="orchestration" title="Four-phase skill pipeline for designing, planning, setting up, and implementing features with AI agents">Workflow Templates</a>
+          <a class="sidebar-link" href="/docs/permission-prompts.html" data-path="permission-prompts.html" data-category="orchestration" title="How Thrum detects when an agent is stuck on a permission prompt and routes it to a supervisor — silence-hash poller, supervisor reply paths (CLI, web UI, Telegram), reminder cadence, restart resilience">Permission Prompts</a>
+          <a class="sidebar-link" href="/docs/session-restart.html" data-path="session-restart.html" data-category="orchestration" title="Save conversation history and resume where you left off — from daily shutdown to automated mid-task restarts">Session Restart &amp; Context Recovery</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="identity">
+          <span class="sidebar-category-label">Identity &amp; Agents</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/identity.html" data-path="identity.html" data-category="identity" title="Named agents, deterministic IDs, identity resolution, registration, conflicts, cleanup, and multi-agent worktrees">Agent Identity &amp; Registration</a>
+          <a class="sidebar-link" href="/docs/agent-configs.html" data-path="agent-configs.html" data-category="identity" title="Ready-to-use Claude Code agent definitions for Thrum messaging and Beads task tracking">Agent Configurations</a>
+          <a class="sidebar-link" href="/docs/claude-agent-integration.html" data-path="claude-agent-integration.html" data-category="identity" title="Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup">Claude Code Agent Integration</a>
+          <a class="sidebar-link" href="/docs/role-templates.html" data-path="role-templates.html" data-category="identity" title="Auto-generate agent preambles from role templates with scope boundaries, task protocol, communication patterns, and behavioral directives">Role-Based Preamble Templates</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="messaging">
+          <span class="sidebar-category-label">Messaging</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/peers.html" data-path="peers.html" data-category="messaging" title="Cross-repo and cross-machine messaging between Thrum daemons">Peers</a>
+          <a class="sidebar-link" href="/docs/inbox-query-methods.html" data-path="inbox-query-methods.html" data-category="messaging" title="RPC methods for querying messages, agents, and managing read state with filtering and pagination">Inbox Query Methods</a>
+          <a class="sidebar-link" href="/docs/telegram-bridge.html" data-path="telegram-bridge.html" data-category="messaging" title="One Telegram connection, unified inbox for your whole team of agents — any agent can ping you, replies route back to the original author">Telegram Bridge</a>
+          <a class="sidebar-link" href="/docs/telegram-groups.html" data-path="telegram-groups.html" data-category="messaging" title="Share a Telegram group with your team so everyone can interact with the same Thrum agent — send instructions, see responses, and coordinate through one chat">Telegram Groups</a>
+          <a class="sidebar-link" href="/docs/messaging.html" data-path="messaging.html" data-category="messaging" title="Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering">Messaging</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="substrate">
+          <span class="sidebar-category-label">Personal Agent Substrate</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/substrate/overview.html" data-path="substrate/overview.html" data-category="substrate" title="v0.11 turns thrum into the substrate beneath personal-agent harnesses (scheduling, scheduled-agent lifecycle, skill registration, email transport, reminders). What it is, why it exists, and how the pieces fit together.">Personal Agent Substrate</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="coordination">
+          <span class="sidebar-category-label">Coordination</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/agent-coordination.html" data-path="agent-coordination.html" data-category="coordination" title="Multi-agent workflows, Beads integration, session templates, and coordination patterns for AI agent teams">Agent Coordination</a>
+          <a class="sidebar-link" href="/docs/multi-agent.html" data-path="multi-agent.html" data-category="coordination" title="Runtime presets, thrum prime, and coordination patterns for running multiple AI agents across worktrees and platforms">Multi-Agent Support</a>
+          <a class="sidebar-link active" href="/docs/context.html" data-path="context.html" data-category="coordination" title="Per-agent context storage for persisting volatile project state across sessions and machines">Agent Context Management</a>
+          <a class="sidebar-link" href="/docs/guides/coordinate-two-agents.html" data-path="guides/coordinate-two-agents.html" data-category="coordination" title="Walk through registering two agents, sending messages between them, and seeing what everyone is working on — the most common Thrum use case">Coordinate Two Agents</a>
+          <a class="sidebar-link" href="/docs/guides/review-workflow.html" data-path="guides/review-workflow.html" data-category="coordination" title="Walk through the implement-then-review cycle: one agent writes code on a feature branch, another reviews it, Thrum handles the communication">Code Review Workflow</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="integrations">
+          <span class="sidebar-category-label">Integrations</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/web-ui.html" data-path="web-ui.html" data-category="integrations" title="Browser-based dashboard for monitoring agents and reading messages — served from the daemon on a single port">Web UI</a>
+          <a class="sidebar-link" href="/docs/claude-code-plugin.html" data-path="claude-code-plugin.html" data-category="integrations" title="Install and use the Thrum plugin for Claude Code — slash commands, automatic context injection, and multi-agent coordination without manual configuration">Claude Code Plugin</a>
+          <a class="sidebar-link" href="/docs/beads-and-thrum.html" data-path="beads-and-thrum.html" data-category="integrations" title="How persistent task tracking and agent messaging work together for multi-agent development">Beads and Thrum</a>
+          <a class="sidebar-link" href="/docs/codex-plugin.html" data-path="codex-plugin.html" data-category="integrations" title="Install and use Thrum's Codex skill bundle — the Claude thrum skill surface, mirrored as top-level Codex skills">Codex Plugin</a>
+          <a class="sidebar-link" href="/docs/cursor-plugin.html" data-path="cursor-plugin.html" data-category="integrations" title="Install and use Thrum's Cursor plugin — rules, hooks, skills, commands, and MCP configuration for multi-agent coordination in Cursor">Cursor Plugin</a>
+          <a class="sidebar-link" href="/docs/mcp-server.html" data-path="mcp-server.html" data-category="integrations" title="Thrum MCP server for native AI agent integration — tools, identity, message handling, and Claude Code setup">MCP Server</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="infrastructure">
+          <span class="sidebar-category-label">Infrastructure</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/daemon.html" data-path="daemon.html" data-category="infrastructure" title="Background service managing state, RPC handlers, sync loop, WebSocket server, and embedded UI on single port">Daemon Architecture</a>
+          <a class="sidebar-link" href="/docs/sync.html" data-path="sync.html" data-category="infrastructure" title="Git-based message synchronization using orphan branch, sync worktree, conflict-free merging, and offline-first design">Sync Protocol</a>
+          <a class="sidebar-link" href="/docs/configuration.html" data-path="configuration.html" data-category="infrastructure" title="Thrum configuration model — config.json schema, runtime tiers, priority chain, and the config show command">Configuration</a>
+          <a class="sidebar-link" href="/docs/guides/cross-machine-sync.html" data-path="guides/cross-machine-sync.html" data-category="infrastructure" title="Walk through enabling cross-machine sync, sending a message from one machine and receiving it on another, and verifying sync status">Sync Across Machines</a>
+          <a class="sidebar-link" href="/docs/tailscale-sync.html" data-path="tailscale-sync.html" data-category="infrastructure" title="Direct machine-to-machine sync via Tailscale — setup, architecture, pairing, and CLI commands">Tailscale Sync</a>
+          <a class="sidebar-link" href="/docs/tailscale-security.html" data-path="tailscale-security.html" data-category="infrastructure" title="Security model for Thrum's Tailscale peer sync — pairing, encryption, access control, and threat mitigations">Tailscale Sync Security</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="reference">
+          <span class="sidebar-category-label">Reference</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/development.html" data-path="development.html" data-category="reference" title="Setup, testing, building, contributing - complete guide for developing and extending Thrum">Development Guide</a>
+          <a class="sidebar-link" href="/docs/cli-hints.html" data-path="cli-hints.html" data-category="reference" title="Inline contextual hints from Thrum CLI commands — pre-action warnings, post-action next steps, and JSON output for tooling. Covers Phase B (thrum send / tmux create / init) and the THRUM_NO_HINTS opt-out.">CLI Hints</a>
+          <a class="sidebar-link" href="/docs/security-cicd.html" data-path="security-cicd.html" data-category="reference" title="Automated security scanning, CI/CD pipelines, and deployment workflows for Thrum">Security &amp; CI/CD</a>
+          <a class="sidebar-link" href="/docs/security-model.html" data-path="security-model.html" data-category="reference" title="How Thrum's daemon decides who's calling — kernel-verified peer credentials, anonymous-caller read-only allowlist, author-only message operations, and WebSocket origin restriction. Covers the v0.9.0 sec.1–sec.8 hardening.">Local Security Model</a>
+          <a class="sidebar-link" href="/docs/architecture.html" data-path="architecture.html" data-category="reference" title="Thrum architecture — daemon design, storage, sync engine, transport layer, key features, and foundation packages">Architecture</a>
+          <a class="sidebar-link" href="/docs/cli.html" data-path="cli.html" data-category="reference" title="Complete reference for the thrum command-line interface — all commands, flags, and usage examples">CLI Reference</a>
+          <a class="sidebar-link" href="/docs/rpc-api.html" data-path="rpc-api.html" data-category="reference" title="Thrum daemon JSON-RPC 2.0 API reference — all RPC methods, parameters, and response formats">RPC API</a>
+        <div class="sidebar-category sidebar-subcategory" data-category="agent-protocols">
+          <span class="sidebar-category-label sidebar-subcategory-label collapsible"><span class="sidebar-chevron">▸</span><span>Agent Protocols</span></span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/sub-agent-strategy.html" data-path="strategies/sub-agent-strategy.html" data-category="agent-protocols" title="When and how to delegate work to sub-agents for context efficiency">Sub-Agent Strategy</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/thrum-registration.html" data-path="strategies/thrum-registration.html" data-category="agent-protocols" title="How to register with Thrum at session start and communicate with other agents">Thrum Registration</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/resume-after-context-loss.html" data-path="strategies/resume-after-context-loss.html" data-category="agent-protocols" title="How to recover and pick up work after compaction, a new session, or a crash">Resume After Context Loss</a>
+          </div>
+        </div>
+
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="api">
+          <span class="sidebar-category-label">API Reference</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/api/authentication.html" data-path="api/authentication.html" data-category="api" title="Authentication and authorization in the Thrum API — agent identity, session tokens, and security model">Authentication</a>
+          <a class="sidebar-link" href="/docs/api/events.html" data-path="api/events.html" data-category="api" title="All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events">Event Reference</a>
+          <a class="sidebar-link" href="/docs/api/websocket.html" data-path="api/websocket.html" data-category="api" title="Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events">WebSocket API</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="guides">
+          <span class="sidebar-category-label">Guides</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="troubleshooting">
+          <span class="sidebar-category-label">troubleshooting</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/troubleshooting-identity.html" data-path="troubleshooting-identity.html" data-category="troubleshooting" title="Identity guard error messages and how to fix them — cross_worktree pid_mismatch, anonymous_mutating_rpc, non_git_bootstrap, and the rest of the v0.9.0 guard catalog with remediation steps.">Troubleshooting Identity Issues</a>
+          </div>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- Content -->
+    <main class="docs-content" id="docs-content">
+      <div class="docs-content-inner" id="docs-content-inner">
 <h2>Agent Context Management</h2>
 <blockquote>
 <p><strong>TL;DR:</strong> Context lets agents save notes that survive session restarts and
@@ -91,7 +271,7 @@ needs to survive session boundaries.</p>
 <li>Code or configuration (use proper git-tracked files)</li>
 </ul>
 <p><strong>Location:</strong></p>
-<pre><code>.thrum/
+<pre><code class="language-text hljs">.thrum/
 ├── context/
 │   ├── furiosa.md                  # Agent context (volatile) + user overlay
 │   ├── furiosa_preamble.md         # Agent preamble (stable)
@@ -125,40 +305,40 @@ directly or replace it with <code>thrum context preamble --file custom.md</code>
 <li>Removed on agent delete - cleaned up alongside context</li>
 </ul>
 <p><strong>Default content:</strong></p>
-<pre><code>## Thrum Quick Reference
+<pre><code class="language-markdown hljs"><span class="hljs-section">## Thrum Quick Reference</span>
 
-**Check messages:** `thrum inbox --unread` (does not mark as read) **Check sent
-status:** `thrum sent --unread` (messages with unread recipients) **Mark all
-read:** `thrum message read --all` **Send message:**
-`thrum send &quot;message&quot; --to @&lt;agent_name&gt;` — ALWAYS use the specific agent name
-(e.g., `@coordinator_main`), NEVER the role (e.g., `@coordinator`). Role names
-fan out to ALL agents with that role. Run `thrum team` to find exact names.
-**Reply:** `thrum reply &lt;MSG_ID&gt; &quot;response&quot;` **Status:** `thrum overview`
-**Who&#39;s online:** `thrum team` **Save context:** Use `/thrum:update-project`
-skill. **NEVER run `thrum context save` manually** — it overwrites accumulated
+<span class="hljs-strong">**Check messages:**</span> <span class="hljs-code">`thrum inbox --unread`</span> (does not mark as read) <span class="hljs-strong">**Check sent
+status:**</span> <span class="hljs-code">`thrum sent --unread`</span> (messages with unread recipients) <span class="hljs-strong">**Mark all
+read:**</span> <span class="hljs-code">`thrum message read --all`</span> <span class="hljs-strong">**Send message:**</span>
+<span class="hljs-code">`thrum send &quot;message&quot; --to @&lt;agent_name&gt;`</span> — ALWAYS use the specific agent name
+(e.g., <span class="hljs-code">`@coordinator_main`</span>), NEVER the role (e.g., <span class="hljs-code">`@coordinator`</span>). Role names
+fan out to ALL agents with that role. Run <span class="hljs-code">`thrum team`</span> to find exact names.
+<span class="hljs-strong">**Reply:**</span> <span class="hljs-code">`thrum reply &lt;MSG_ID&gt; &quot;response&quot;`</span> <span class="hljs-strong">**Status:**</span> <span class="hljs-code">`thrum overview`</span>
+<span class="hljs-strong">**Who&#x27;s online:**</span> <span class="hljs-code">`thrum team`</span> <span class="hljs-strong">**Save context:**</span> Use <span class="hljs-code">`/thrum:update-project`</span>
+skill. <span class="hljs-strong">**NEVER run `thrum context save` manually**</span> — it overwrites accumulated
 session state.
 
-## Background Message Listener
+<span class="hljs-section">## Background Message Listener</span>
 
 ALWAYS keep a background listener running. Spawn on session start; it loops
 automatically for up to 4 hours — no manual re-arming needed. Set up a cron
-watchdog (`CronCreate`, every 30 min) to auto-respawn it if it stops. Run
-`thrum prime` to get the spawn command with the correct repo path pre-filled.</code></pre>
+watchdog (<span class="hljs-code">`CronCreate`</span>, every 30 min) to auto-respawn it if it stops. Run
+<span class="hljs-code">`thrum prime`</span> to get the spawn command with the correct repo path pre-filled.</code></pre>
 <p><strong>Customization examples:</strong></p>
 <p>You can edit the preamble to add project conventions, role-specific
 instructions, team rosters, or boot sequences:</p>
-<pre><code># Edit the preamble directly
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Edit the preamble directly</span>
 vim .thrum/context/furiosa_preamble.md
 
-# Or replace it from a file
-cat &gt; my-preamble.md &lt;&lt;&#39;EOF&#39;
-## Project Conventions
+<span class="hljs-comment"># Or replace it from a file</span>
+<span class="hljs-built_in">cat</span> &gt; my-preamble.md &lt;&lt;<span class="hljs-string">&#x27;EOF&#x27;</span>
+<span class="hljs-comment">## Project Conventions</span>
 
 **Architecture:** Hexagonal (ports/adapters)
-**Testing:** Always run `make test` before committing
+**Testing:** Always run `make <span class="hljs-built_in">test</span>` before committing
 **Commits:** Follow Conventional Commits (feat:, fix:, docs:)
 
-## Thrum Quick Reference
+<span class="hljs-comment">## Thrum Quick Reference</span>
 ... (default commands) ...
 EOF
 
@@ -166,7 +346,7 @@ thrum context preamble --file my-preamble.md</code></pre>
 <h2>CLI Commands</h2>
 <h3>thrum context save</h3>
 <p>Save context content from a file or stdin.</p>
-<pre><code>thrum context save [flags]</code></pre>
+<pre><code class="language-bash hljs">thrum context save [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -187,13 +367,13 @@ thrum context preamble --file my-preamble.md</code></pre>
 </tr>
 </tbody></table>
 <p><strong>Examples:</strong></p>
-<pre><code># Save from a file
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Save from a file</span>
 thrum context save --file notes.md
 
-# Save from stdin
-echo &quot;Working on auth module&quot; | thrum context save
+<span class="hljs-comment"># Save from stdin</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;Working on auth module&quot;</span> | thrum context save
 
-# Save for a different agent
+<span class="hljs-comment"># Save for a different agent</span>
 thrum context save --agent coordinator --file notes.md</code></pre>
 <p><strong>Agent safety note:</strong> Agents should use the <code>/thrum:update-project</code> skill
 instead of running <code>thrum context save</code> directly. The skill composes a
@@ -203,7 +383,7 @@ accumulated session state.</p>
 <hr>
 <h3>thrum context show</h3>
 <p>Display the saved context for the current agent.</p>
-<pre><code>thrum context show [flags]</code></pre>
+<pre><code class="language-bash hljs">thrum context show [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -229,20 +409,20 @@ accumulated session state.</p>
 </tr>
 </tbody></table>
 <p><strong>Examples:</strong></p>
-<pre><code># Show preamble + context (default)
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Show preamble + context (default)</span>
 thrum context show
 
-# Show context for a different agent
+<span class="hljs-comment"># Show context for a different agent</span>
 thrum context show --agent furiosa
 
-# Raw output with file boundary markers
+<span class="hljs-comment"># Raw output with file boundary markers</span>
 thrum context show --raw
 
-# Context only, no preamble
+<span class="hljs-comment"># Context only, no preamble</span>
 thrum context show --no-preamble</code></pre>
 <p><strong>Output modes:</strong></p>
 <p>Default (preamble + context with header):</p>
-<pre><code># Context for furiosa (1234 bytes, updated 2026-02-11T10:00:00Z)
+<pre><code class="language-text hljs"># Context for furiosa (1234 bytes, updated 2026-02-11T10:00:00Z)
 
 ## Thrum Quick Reference
 ...
@@ -250,7 +430,7 @@ thrum context show --no-preamble</code></pre>
 # Current Work
 - Implementing JWT token refresh</code></pre>
 <p>Raw (<code>--raw</code>, shows file boundaries):</p>
-<pre><code>&lt;!-- preamble: .thrum/context/furiosa_preamble.md --&gt;
+<pre><code class="language-text hljs">&lt;!-- preamble: .thrum/context/furiosa_preamble.md --&gt;
 ## Thrum Quick Reference
 ...
 &lt;!-- end preamble --&gt;
@@ -260,7 +440,7 @@ thrum context show --no-preamble</code></pre>
 <hr>
 <h3>thrum context clear</h3>
 <p>Remove the context file for the current agent.</p>
-<pre><code>thrum context clear [flags]</code></pre>
+<pre><code class="language-bash hljs">thrum context clear [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -276,17 +456,17 @@ thrum context show --no-preamble</code></pre>
 </tr>
 </tbody></table>
 <p><strong>Examples:</strong></p>
-<pre><code># Clear context for current agent
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Clear context for current agent</span>
 thrum context clear
 
-# Clear context for a different agent
+<span class="hljs-comment"># Clear context for a different agent</span>
 thrum context clear --agent furiosa</code></pre>
 <p>Note: Idempotent - running clear when no context exists is a no-op.</p>
 <hr>
 <h3>thrum context sync</h3>
 <p>Copy the context file to the a-sync branch for sharing across worktrees and
 machines.</p>
-<pre><code>thrum context sync [flags]</code></pre>
+<pre><code class="language-bash hljs">thrum context <span class="hljs-built_in">sync</span> [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -302,11 +482,11 @@ machines.</p>
 </tr>
 </tbody></table>
 <p><strong>Examples:</strong></p>
-<pre><code># Sync context for current agent
-thrum context sync
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Sync context for current agent</span>
+thrum context <span class="hljs-built_in">sync</span>
 
-# Sync context for a different agent
-thrum context sync --agent furiosa</code></pre>
+<span class="hljs-comment"># Sync context for a different agent</span>
+thrum context <span class="hljs-built_in">sync</span> --agent furiosa</code></pre>
 <p><strong>What it does:</strong></p>
 <ol>
 <li>Copies <code>.thrum/context/{agent}.md</code> to the sync worktree at
@@ -323,7 +503,7 @@ thrum context sync --agent furiosa</code></pre>
 <hr>
 <h3>thrum context preamble</h3>
 <p>Show or manage the preamble for the current agent.</p>
-<pre><code>thrum context preamble [flags]</code></pre>
+<pre><code class="language-bash hljs">thrum context preamble [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -349,16 +529,16 @@ thrum context sync --agent furiosa</code></pre>
 </tr>
 </tbody></table>
 <p><strong>Examples:</strong></p>
-<pre><code># Show current preamble
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Show current preamble</span>
 thrum context preamble
 
-# Create/reset to default preamble
+<span class="hljs-comment"># Create/reset to default preamble</span>
 thrum context preamble --init
 
-# Set preamble from a custom file
+<span class="hljs-comment"># Set preamble from a custom file</span>
 thrum context preamble --file my-preamble.md
 
-# Show preamble for a different agent
+<span class="hljs-comment"># Show preamble for a different agent</span>
 thrum context preamble --agent furiosa</code></pre>
 <p><strong>Role-aware <code>--init</code>:</strong> When a role template exists in
 <code>.thrum/role_templates/{role}.md</code>, <code>--init</code> uses it instead of the generic
@@ -385,51 +565,51 @@ decisions made, current state, and what the next session needs to know.</li>
 <li>The sub-agent returns a brief summary of what was updated.</li>
 </ol>
 <p><strong>Example:</strong></p>
-<pre><code>User: /thrum:update-project
-Agent: Please write a brief narrative of what you worked on this session,
-       key decisions, current state, and what the next session needs to know.
-User: We&#39;re refactoring the auth module. Decided to use JWT with
-      refresh tokens. Need to add rate limiting tests.
-Agent: [Spawns sub-agent to gather git/task state and update project_state.md]
-      ✓ Project state updated (5 sections edited)</code></pre>
+<pre><code class="language-yaml hljs"><span class="hljs-attr">User:</span> <span class="hljs-string">/thrum:update-project</span>
+<span class="hljs-attr">Agent:</span> <span class="hljs-string">Please</span> <span class="hljs-string">write</span> <span class="hljs-string">a</span> <span class="hljs-string">brief</span> <span class="hljs-string">narrative</span> <span class="hljs-string">of</span> <span class="hljs-string">what</span> <span class="hljs-string">you</span> <span class="hljs-string">worked</span> <span class="hljs-string">on</span> <span class="hljs-string">this</span> <span class="hljs-string">session,</span>
+       <span class="hljs-string">key</span> <span class="hljs-string">decisions,</span> <span class="hljs-string">current</span> <span class="hljs-string">state,</span> <span class="hljs-string">and</span> <span class="hljs-string">what</span> <span class="hljs-string">the</span> <span class="hljs-string">next</span> <span class="hljs-string">session</span> <span class="hljs-string">needs</span> <span class="hljs-string">to</span> <span class="hljs-string">know.</span>
+<span class="hljs-attr">User:</span> <span class="hljs-string">We&#x27;re</span> <span class="hljs-string">refactoring</span> <span class="hljs-string">the</span> <span class="hljs-string">auth</span> <span class="hljs-string">module.</span> <span class="hljs-string">Decided</span> <span class="hljs-string">to</span> <span class="hljs-string">use</span> <span class="hljs-string">JWT</span> <span class="hljs-string">with</span>
+      <span class="hljs-string">refresh</span> <span class="hljs-string">tokens.</span> <span class="hljs-string">Need</span> <span class="hljs-string">to</span> <span class="hljs-string">add</span> <span class="hljs-string">rate</span> <span class="hljs-string">limiting</span> <span class="hljs-string">tests.</span>
+<span class="hljs-attr">Agent:</span> [<span class="hljs-string">Spawns</span> <span class="hljs-string">sub-agent</span> <span class="hljs-string">to</span> <span class="hljs-string">gather</span> <span class="hljs-string">git/task</span> <span class="hljs-string">state</span> <span class="hljs-string">and</span> <span class="hljs-string">update</span> <span class="hljs-string">project_state.md</span>]
+      <span class="hljs-string">✓</span> <span class="hljs-string">Project</span> <span class="hljs-string">state</span> <span class="hljs-string">updated</span> <span class="hljs-string">(5</span> <span class="hljs-string">sections</span> <span class="hljs-string">edited)</span></code></pre>
 <p>The skill reduces the friction of updating project state and ensures consistent
 formatting by combining your narrative with automatically gathered repo and task
 state.</p>
 <hr>
 <h2>Use Cases and Patterns</h2>
 <h3>Single-Agent Session Continuity</h3>
-<pre><code># At the end of a work session
-echo &quot;# Next Steps
+<pre><code class="language-bash hljs"><span class="hljs-comment"># At the end of a work session</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;# Next Steps
 - Finish JWT implementation
 - Add rate limiting tests
-- Review security considerations&quot; | thrum context save
+- Review security considerations&quot;</span> | thrum context save
 
-# Next session
+<span class="hljs-comment"># Next session</span>
 thrum context show</code></pre>
 <h3>Multi-Agent Handoff</h3>
-<pre><code># Agent A saves context before handing off
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Agent A saves context before handing off</span>
 thrum context save --file handoff-notes.md
-thrum context sync  # Share across worktrees
+thrum context <span class="hljs-built_in">sync</span>  <span class="hljs-comment"># Share across worktrees</span>
 
-# Agent B (in another worktree) pulls and reads
+<span class="hljs-comment"># Agent B (in another worktree) pulls and reads</span>
 git fetch origin
 thrum context show --agent furiosa</code></pre>
 <h3>Context Updates at Decision Points</h3>
 <p>Save context when you make a significant decision, discover something important,
 or reach a natural breakpoint:</p>
-<pre><code># After architectural decision
-echo &quot;# Decision: Using JWT with refresh tokens
+<pre><code class="language-bash hljs"><span class="hljs-comment"># After architectural decision</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;# Decision: Using JWT with refresh tokens
 - Token expiry: 15 min (access), 7 days (refresh)
 - Storage: Redis for refresh tokens
-- Rate limit: 100 req/min per IP&quot; | thrum context save</code></pre>
+- Rate limit: 100 req/min per IP&quot;</span> | thrum context save</code></pre>
 <h3>Integration with thrum overview</h3>
 <p>The <code>thrum overview</code> command shows context file size and age when context
 exists:</p>
-<pre><code>$ thrum overview
+<pre><code class="language-bash hljs">$ thrum overview
 You: @implementer (furiosa)
-Session: active for 2h15m
+Session: active <span class="hljs-keyword">for</span> 2h15m
 Intent: Implementing JWT refresh
-Context: 1.2 KB (updated 5m ago)    # ← Context indicator
+Context: 1.2 KB (updated 5m ago)    <span class="hljs-comment"># ← Context indicator</span>
 Inbox: 3 unread (12 total)
 Sync: ✓ synced</code></pre>
 <hr>
@@ -437,114 +617,114 @@ Sync: ✓ synced</code></pre>
 <p>Context operations are available via the daemon&#39;s RPC API:</p>
 <h3>context.save</h3>
 <p><strong>Request:</strong></p>
-<pre><code>{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;method&quot;: &quot;context.save&quot;,
-  &quot;params&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;,
-    &quot;content&quot;: &quot;base64-encoded-content&quot;
-  }
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;context.save&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;base64-encoded-content&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response:</strong></p>
-<pre><code>{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;result&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;,
-    &quot;message&quot;: &quot;Context saved for furiosa (248 bytes)&quot;
-  }
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;message&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Context saved for furiosa (248 bytes)&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <hr>
 <h3>context.show</h3>
 <p><strong>Request:</strong></p>
-<pre><code>{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;method&quot;: &quot;context.show&quot;,
-  &quot;params&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;,
-    &quot;include_preamble&quot;: true
-  }
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;context.show&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;include_preamble&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p>The <code>include_preamble</code> field is optional and defaults to <code>true</code> when omitted.</p>
 <p><strong>Response:</strong></p>
-<pre><code>{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;result&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;,
-    &quot;preamble&quot;: &quot;base64-encoded-preamble&quot;,
-    &quot;content&quot;: &quot;base64-encoded-content&quot;,
-    &quot;has_context&quot;: true,
-    &quot;has_preamble&quot;: true,
-    &quot;preamble_size&quot;: 256,
-    &quot;size&quot;: 1234,
-    &quot;updated_at&quot;: &quot;2026-02-11T10:00:00Z&quot;
-  }
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;preamble&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;base64-encoded-preamble&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;base64-encoded-content&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;has_context&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;has_preamble&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;preamble_size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">256</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1234</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;updated_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-11T10:00:00Z&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <hr>
 <h3>context.preamble.show</h3>
 <p><strong>Request:</strong></p>
-<pre><code>{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;method&quot;: &quot;context.preamble.show&quot;,
-  &quot;params&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;
-  }
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;context.preamble.show&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response:</strong></p>
-<pre><code>{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;result&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;,
-    &quot;content&quot;: &quot;base64-encoded-preamble&quot;,
-    &quot;has_preamble&quot;: true
-  }
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;base64-encoded-preamble&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;has_preamble&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <hr>
 <h3>context.preamble.save</h3>
 <p><strong>Request:</strong></p>
-<pre><code>{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;method&quot;: &quot;context.preamble.save&quot;,
-  &quot;params&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;,
-    &quot;content&quot;: &quot;base64-encoded-content&quot;
-  }
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;context.preamble.save&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;base64-encoded-content&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response:</strong></p>
-<pre><code>{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;result&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;,
-    &quot;message&quot;: &quot;Preamble saved for furiosa (256 bytes)&quot;
-  }
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;message&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Preamble saved for furiosa (256 bytes)&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <hr>
 <h3>context.clear</h3>
 <p><strong>Request:</strong></p>
-<pre><code>{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;method&quot;: &quot;context.clear&quot;,
-  &quot;params&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;
-  }
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;context.clear&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Response:</strong></p>
-<pre><code>{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;result&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;,
-    &quot;message&quot;: &quot;Context cleared for furiosa&quot;
-  }
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;message&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Context cleared for furiosa&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <hr>
 <h2>Implementation Notes</h2>
 <h3>Locking Strategy</h3>
@@ -582,16 +762,16 @@ share.</p>
 <p>Context files should be high-signal summaries, not exhaustive logs. Prefer
 bullet points over paragraphs.</p>
 <p><strong>Good:</strong></p>
-<pre><code># Next Steps
+<pre><code class="language-markdown hljs"><span class="hljs-section"># Next Steps</span>
 
-- Finish JWT implementation (see src/auth/jwt.go)
-- Add rate limiting (decided on 100 req/min per IP)
-- Review security: check token expiry edge cases</code></pre>
+<span class="hljs-bullet">-</span> Finish JWT implementation (see src/auth/jwt.go)
+<span class="hljs-bullet">-</span> Add rate limiting (decided on 100 req/min per IP)
+<span class="hljs-bullet">-</span> Review security: check token expiry edge cases</code></pre>
 <p><strong>Bad:</strong></p>
-<pre><code># What I Did Today
+<pre><code class="language-markdown hljs"><span class="hljs-section"># What I Did Today</span>
 
 I started by looking at the auth module and then I realized that we need JWT so
-I implemented a basic version but it&#39;s not complete yet and I still need to add
+I implemented a basic version but it&#x27;s not complete yet and I still need to add
 rate limiting which I discussed with the team and we decided on 100 requests per
 minute...</code></pre>
 <h3>Update Context at Decision Points</h3>
@@ -623,10 +803,23 @@ including context handoff between agents</li>
 recovery with <code>thrum prime</code></li>
 </ul>
 
-</main>
-<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
-<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
-</footer>
-<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#context.html')}</script>
+      </div>
+    </main>
+
+  </div>
+
+  <script src="/js/vendor/minisearch.js"></script>
+  <script src="/js/search.js" data-docs-base="/docs/" data-search-index="/assets/docs/search-index.json"></script>
+  <script>
+    document.getElementById('theme-toggle').addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme');
+      var next = current === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('thrum-theme', next);
+    });
+    document.getElementById('sidebar-toggle').addEventListener('click', function() {
+      document.getElementById('docs-sidebar').classList.toggle('open');
+    });
+  </script>
 </body>
 </html>

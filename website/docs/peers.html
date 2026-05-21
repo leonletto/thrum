@@ -1,51 +1,231 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Peers — Thrum</title>
-<meta name="description" content="Cross-repo and cross-machine messaging between Thrum daemons">
-<link rel="canonical" href="https://thrum.team/docs.html#peers.html">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Peers","description":"Cross-repo and cross-machine messaging between Thrum daemons","url":"https://thrum.team/docs.html#peers.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://thrum.team/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://thrum.team/docs.html"}}</script>
-<style>
-body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
-pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
-code{font-family:ui-monospace,monospace;font-size:0.9em}
-table{border-collapse:collapse;width:100%}
-th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
-th{background:#f5f5f5}
-nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
-h2{margin-top:2rem}
-a{color:#0366d6}
-</style>
-<!-- Privacy-friendly analytics by Plausible -->
-<script async src="https://plausible.io/js/pa-0EO0yjcXim9oq9r4-I2w1.js"></script>
-<script>
-window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
-plausible.init()
-</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>Peers — Thrum</title>
+  <meta name="description" content="Cross-repo and cross-machine messaging between Thrum daemons">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Peers — Thrum">
+  <meta property="og:description" content="Cross-repo and cross-machine messaging between Thrum daemons">
+  <meta property="og:url" content="https://thrum.team/docs/peers.html">
+  <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="https://thrum.team/img/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Peers — Thrum">
+  <meta name="twitter:description" content="Cross-repo and cross-machine messaging between Thrum daemons">
+  <meta name="twitter:image" content="https://thrum.team/img/social-card.png">
+  <link rel="canonical" href="https://thrum.team/docs/peers.html">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Peers","description":"Cross-repo and cross-machine messaging between Thrum daemons","url":"https://thrum.team/docs/peers.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://thrum.team/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://thrum.team/docs/overview.html"}}</script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/inter.woff2" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/ibm-plex-mono-regular.woff2" crossorigin>
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-0EO0yjcXim9oq9r4-I2w1.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
 </head>
 <body>
-<nav>
-<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Messaging &rsaquo; Peers
-<hr>
-<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="whats-new.html">What's New</a><br>
-<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
-  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
-<strong>Messaging</strong>: <strong>Peers</strong> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
-<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
-<strong>Guides</strong>: <a href="beta-channel.html">Beta Channel</a><br>
-<strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
-<strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
-<strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
-<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
-<strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
-<strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
-<strong>substrate</strong>: <a href="substrate/overview.html">Personal Agent Substrate</a><br>
-<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
-</nav>
-<main>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="/index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="/index.html" class="nav-link">Home</a>
+          <a href="/docs/overview.html" class="nav-link nav-link-active">Docs</a>
+          <a href="/blog.html" class="nav-link">Blog</a>
+          <a href="/about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+          <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+            <span class="icon-sun">&#x2600;</span>
+            <span class="icon-moon">&#x263E;</span>
+          </button>
+        </div>
+        <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle navigation">
+          <span></span><span></span><span></span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Layout -->
+  <div class="docs-layout">
+
+    <!-- Sidebar -->
+    <aside class="docs-sidebar" id="docs-sidebar">
+      <div class="sidebar-search">
+        <input type="text" id="search-input" placeholder="Search docs... (Ctrl+K)" autocomplete="off">
+        <div class="search-results" id="search-results"></div>
+      </div>
+      <nav class="sidebar-nav" id="sidebar-nav">
+        <div class="sidebar-category" data-category="overview">
+          <span class="sidebar-category-label">Overview</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/philosophy.html" data-path="philosophy.html" data-category="overview" title="Why Thrum exists — a messaging system designed for human-centric AI agent coordination, not another orchestration engine">Philosophy</a>
+          <a class="sidebar-link" href="/docs/overview.html" data-path="overview.html" data-category="overview" title="Thrum — coordinate AI coding agents across worktrees, repos, and machines">Overview</a>
+          <a class="sidebar-link" href="/docs/whats-new.html" data-path="whats-new.html" data-category="overview" title="Release-by-release highlights, breaking changes, and migration notes for recent Thrum versions.">What's New</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="onboarding">
+          <span class="sidebar-category-label">Onboarding</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/scenarios/solo-dev.html" data-path="scenarios/solo-dev.html" data-category="onboarding" title="Use Thrum as a single-developer tool: one agent, one machine, no hand-holding">Solo Dev with One Agent</a>
+          <a class="sidebar-link" href="/docs/scenarios/team.html" data-path="scenarios/team.html" data-category="onboarding" title="Run multiple agents in parallel worktrees with Thrum as the coordination layer">Team on Your Machine</a>
+          <a class="sidebar-link" href="/docs/scenarios/across-boundaries.html" data-path="scenarios/across-boundaries.html" data-category="onboarding" title="Connect Thrum daemons in different repos or on different machines via peers">Agents Across Repos/Machines</a>
+          <a class="sidebar-link" href="/docs/scenarios/orchestration.html" data-path="scenarios/orchestration.html" data-category="onboarding" title="Hand off a plan you wrote and let the orchestrator run the execution phase">Automated Plan Execution</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="quickstart">
+          <span class="sidebar-category-label">Getting Started</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/quickstart.html" data-path="quickstart.html" data-category="quickstart" title="Get up and running with Thrum in 5 minutes - initialization, daemon setup, agent registration, and first message">Quickstart Guide</a>
+        <div class="sidebar-category sidebar-subcategory" data-category="tools">
+          <span class="sidebar-category-label sidebar-subcategory-label collapsible"><span class="sidebar-chevron">▸</span><span>Recommended Tools</span></span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/recommended-tools.html" data-path="guides/recommended-tools.html" data-category="tools" title="Tools, extensions, and integrations that work well with Thrum for AI agent coordination workflows">Recommended Tools</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-setup.html" data-path="guides/beads-setup.html" data-category="tools" title="Set up Beads for git-backed task tracking alongside Thrum — installation, initialization, agent workflow, and worktree configuration">Beads Setup Guide</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-ui-setup.html" data-path="guides/beads-ui-setup.html" data-category="tools" title="Set up Beads UI for a live web dashboard of your agent task board — installation, usage, and multi-project support">Beads UI Setup Guide</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-migration-to-embedded.html" data-path="guides/beads-migration-to-embedded.html" data-category="tools" title="Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.">Beads Migration to Embedded Mode (bd 1.0+)</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/playwright-cli-setup.html" data-path="guides/playwright-cli-setup.html" data-category="tools" title="Set up Playwright CLI for browser automation in Claude Code agent workflows — screenshots, page context, form filling, and web testing">Playwright CLI Setup Guide</a>
+          </div>
+        </div>
+
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="orchestration">
+          <span class="sidebar-category-label">Orchestration</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/orchestrator-role.html" data-path="orchestrator-role.html" data-category="orchestration" title="Hand off a plan you wrote and let the orchestrator run the execution phase">Orchestrator Role</a>
+          <a class="sidebar-link" href="/docs/tmux-sessions.html" data-path="tmux-sessions.html" data-category="orchestration" title="Run agent teams in daemon-managed tmux sessions with instant message delivery, zero background listeners, and coordinator-managed lifecycle">Tmux-Managed Sessions</a>
+          <a class="sidebar-link" href="/docs/monitor-jobs.html" data-path="monitor-jobs.html" data-category="orchestration" title="Watch any process output for pattern matches and deliver results as synthetic Thrum messages — no polling, no shell, no manual piping">Monitor Jobs</a>
+          <a class="sidebar-link" href="/docs/multi-runtime.html" data-path="multi-runtime.html" data-category="orchestration" title="Run Claude, Codex, Aider, Gemini, and other agent runtimes in tmux-managed sessions">Multi-Runtime Support</a>
+          <a class="sidebar-link" href="/docs/single-agent-mode.html" data-path="single-agent-mode.html" data-category="orchestration" title="Use Thrum's context management without the messaging layer — single-agent mode as default, three-tier context, and when to switch to multi-agent">Single-Agent Mode</a>
+          <a class="sidebar-link" href="/docs/workflow-templates.html" data-path="workflow-templates.html" data-category="orchestration" title="Four-phase skill pipeline for designing, planning, setting up, and implementing features with AI agents">Workflow Templates</a>
+          <a class="sidebar-link" href="/docs/permission-prompts.html" data-path="permission-prompts.html" data-category="orchestration" title="How Thrum detects when an agent is stuck on a permission prompt and routes it to a supervisor — silence-hash poller, supervisor reply paths (CLI, web UI, Telegram), reminder cadence, restart resilience">Permission Prompts</a>
+          <a class="sidebar-link" href="/docs/session-restart.html" data-path="session-restart.html" data-category="orchestration" title="Save conversation history and resume where you left off — from daily shutdown to automated mid-task restarts">Session Restart &amp; Context Recovery</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="identity">
+          <span class="sidebar-category-label">Identity &amp; Agents</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/identity.html" data-path="identity.html" data-category="identity" title="Named agents, deterministic IDs, identity resolution, registration, conflicts, cleanup, and multi-agent worktrees">Agent Identity &amp; Registration</a>
+          <a class="sidebar-link" href="/docs/agent-configs.html" data-path="agent-configs.html" data-category="identity" title="Ready-to-use Claude Code agent definitions for Thrum messaging and Beads task tracking">Agent Configurations</a>
+          <a class="sidebar-link" href="/docs/claude-agent-integration.html" data-path="claude-agent-integration.html" data-category="identity" title="Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup">Claude Code Agent Integration</a>
+          <a class="sidebar-link" href="/docs/role-templates.html" data-path="role-templates.html" data-category="identity" title="Auto-generate agent preambles from role templates with scope boundaries, task protocol, communication patterns, and behavioral directives">Role-Based Preamble Templates</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="messaging">
+          <span class="sidebar-category-label">Messaging</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link active" href="/docs/peers.html" data-path="peers.html" data-category="messaging" title="Cross-repo and cross-machine messaging between Thrum daemons">Peers</a>
+          <a class="sidebar-link" href="/docs/inbox-query-methods.html" data-path="inbox-query-methods.html" data-category="messaging" title="RPC methods for querying messages, agents, and managing read state with filtering and pagination">Inbox Query Methods</a>
+          <a class="sidebar-link" href="/docs/telegram-bridge.html" data-path="telegram-bridge.html" data-category="messaging" title="One Telegram connection, unified inbox for your whole team of agents — any agent can ping you, replies route back to the original author">Telegram Bridge</a>
+          <a class="sidebar-link" href="/docs/telegram-groups.html" data-path="telegram-groups.html" data-category="messaging" title="Share a Telegram group with your team so everyone can interact with the same Thrum agent — send instructions, see responses, and coordinate through one chat">Telegram Groups</a>
+          <a class="sidebar-link" href="/docs/messaging.html" data-path="messaging.html" data-category="messaging" title="Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering">Messaging</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="substrate">
+          <span class="sidebar-category-label">Personal Agent Substrate</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/substrate/overview.html" data-path="substrate/overview.html" data-category="substrate" title="v0.11 turns thrum into the substrate beneath personal-agent harnesses (scheduling, scheduled-agent lifecycle, skill registration, email transport, reminders). What it is, why it exists, and how the pieces fit together.">Personal Agent Substrate</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="coordination">
+          <span class="sidebar-category-label">Coordination</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/agent-coordination.html" data-path="agent-coordination.html" data-category="coordination" title="Multi-agent workflows, Beads integration, session templates, and coordination patterns for AI agent teams">Agent Coordination</a>
+          <a class="sidebar-link" href="/docs/multi-agent.html" data-path="multi-agent.html" data-category="coordination" title="Runtime presets, thrum prime, and coordination patterns for running multiple AI agents across worktrees and platforms">Multi-Agent Support</a>
+          <a class="sidebar-link" href="/docs/context.html" data-path="context.html" data-category="coordination" title="Per-agent context storage for persisting volatile project state across sessions and machines">Agent Context Management</a>
+          <a class="sidebar-link" href="/docs/guides/coordinate-two-agents.html" data-path="guides/coordinate-two-agents.html" data-category="coordination" title="Walk through registering two agents, sending messages between them, and seeing what everyone is working on — the most common Thrum use case">Coordinate Two Agents</a>
+          <a class="sidebar-link" href="/docs/guides/review-workflow.html" data-path="guides/review-workflow.html" data-category="coordination" title="Walk through the implement-then-review cycle: one agent writes code on a feature branch, another reviews it, Thrum handles the communication">Code Review Workflow</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="integrations">
+          <span class="sidebar-category-label">Integrations</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/web-ui.html" data-path="web-ui.html" data-category="integrations" title="Browser-based dashboard for monitoring agents and reading messages — served from the daemon on a single port">Web UI</a>
+          <a class="sidebar-link" href="/docs/claude-code-plugin.html" data-path="claude-code-plugin.html" data-category="integrations" title="Install and use the Thrum plugin for Claude Code — slash commands, automatic context injection, and multi-agent coordination without manual configuration">Claude Code Plugin</a>
+          <a class="sidebar-link" href="/docs/beads-and-thrum.html" data-path="beads-and-thrum.html" data-category="integrations" title="How persistent task tracking and agent messaging work together for multi-agent development">Beads and Thrum</a>
+          <a class="sidebar-link" href="/docs/codex-plugin.html" data-path="codex-plugin.html" data-category="integrations" title="Install and use Thrum's Codex skill bundle — the Claude thrum skill surface, mirrored as top-level Codex skills">Codex Plugin</a>
+          <a class="sidebar-link" href="/docs/cursor-plugin.html" data-path="cursor-plugin.html" data-category="integrations" title="Install and use Thrum's Cursor plugin — rules, hooks, skills, commands, and MCP configuration for multi-agent coordination in Cursor">Cursor Plugin</a>
+          <a class="sidebar-link" href="/docs/mcp-server.html" data-path="mcp-server.html" data-category="integrations" title="Thrum MCP server for native AI agent integration — tools, identity, message handling, and Claude Code setup">MCP Server</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="infrastructure">
+          <span class="sidebar-category-label">Infrastructure</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/daemon.html" data-path="daemon.html" data-category="infrastructure" title="Background service managing state, RPC handlers, sync loop, WebSocket server, and embedded UI on single port">Daemon Architecture</a>
+          <a class="sidebar-link" href="/docs/sync.html" data-path="sync.html" data-category="infrastructure" title="Git-based message synchronization using orphan branch, sync worktree, conflict-free merging, and offline-first design">Sync Protocol</a>
+          <a class="sidebar-link" href="/docs/configuration.html" data-path="configuration.html" data-category="infrastructure" title="Thrum configuration model — config.json schema, runtime tiers, priority chain, and the config show command">Configuration</a>
+          <a class="sidebar-link" href="/docs/guides/cross-machine-sync.html" data-path="guides/cross-machine-sync.html" data-category="infrastructure" title="Walk through enabling cross-machine sync, sending a message from one machine and receiving it on another, and verifying sync status">Sync Across Machines</a>
+          <a class="sidebar-link" href="/docs/tailscale-sync.html" data-path="tailscale-sync.html" data-category="infrastructure" title="Direct machine-to-machine sync via Tailscale — setup, architecture, pairing, and CLI commands">Tailscale Sync</a>
+          <a class="sidebar-link" href="/docs/tailscale-security.html" data-path="tailscale-security.html" data-category="infrastructure" title="Security model for Thrum's Tailscale peer sync — pairing, encryption, access control, and threat mitigations">Tailscale Sync Security</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="reference">
+          <span class="sidebar-category-label">Reference</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/development.html" data-path="development.html" data-category="reference" title="Setup, testing, building, contributing - complete guide for developing and extending Thrum">Development Guide</a>
+          <a class="sidebar-link" href="/docs/cli-hints.html" data-path="cli-hints.html" data-category="reference" title="Inline contextual hints from Thrum CLI commands — pre-action warnings, post-action next steps, and JSON output for tooling. Covers Phase B (thrum send / tmux create / init) and the THRUM_NO_HINTS opt-out.">CLI Hints</a>
+          <a class="sidebar-link" href="/docs/security-cicd.html" data-path="security-cicd.html" data-category="reference" title="Automated security scanning, CI/CD pipelines, and deployment workflows for Thrum">Security &amp; CI/CD</a>
+          <a class="sidebar-link" href="/docs/security-model.html" data-path="security-model.html" data-category="reference" title="How Thrum's daemon decides who's calling — kernel-verified peer credentials, anonymous-caller read-only allowlist, author-only message operations, and WebSocket origin restriction. Covers the v0.9.0 sec.1–sec.8 hardening.">Local Security Model</a>
+          <a class="sidebar-link" href="/docs/architecture.html" data-path="architecture.html" data-category="reference" title="Thrum architecture — daemon design, storage, sync engine, transport layer, key features, and foundation packages">Architecture</a>
+          <a class="sidebar-link" href="/docs/cli.html" data-path="cli.html" data-category="reference" title="Complete reference for the thrum command-line interface — all commands, flags, and usage examples">CLI Reference</a>
+          <a class="sidebar-link" href="/docs/rpc-api.html" data-path="rpc-api.html" data-category="reference" title="Thrum daemon JSON-RPC 2.0 API reference — all RPC methods, parameters, and response formats">RPC API</a>
+        <div class="sidebar-category sidebar-subcategory" data-category="agent-protocols">
+          <span class="sidebar-category-label sidebar-subcategory-label collapsible"><span class="sidebar-chevron">▸</span><span>Agent Protocols</span></span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/sub-agent-strategy.html" data-path="strategies/sub-agent-strategy.html" data-category="agent-protocols" title="When and how to delegate work to sub-agents for context efficiency">Sub-Agent Strategy</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/thrum-registration.html" data-path="strategies/thrum-registration.html" data-category="agent-protocols" title="How to register with Thrum at session start and communicate with other agents">Thrum Registration</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/resume-after-context-loss.html" data-path="strategies/resume-after-context-loss.html" data-category="agent-protocols" title="How to recover and pick up work after compaction, a new session, or a crash">Resume After Context Loss</a>
+          </div>
+        </div>
+
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="api">
+          <span class="sidebar-category-label">API Reference</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/api/authentication.html" data-path="api/authentication.html" data-category="api" title="Authentication and authorization in the Thrum API — agent identity, session tokens, and security model">Authentication</a>
+          <a class="sidebar-link" href="/docs/api/events.html" data-path="api/events.html" data-category="api" title="All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events">Event Reference</a>
+          <a class="sidebar-link" href="/docs/api/websocket.html" data-path="api/websocket.html" data-category="api" title="Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events">WebSocket API</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="guides">
+          <span class="sidebar-category-label">Guides</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="troubleshooting">
+          <span class="sidebar-category-label">troubleshooting</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/troubleshooting-identity.html" data-path="troubleshooting-identity.html" data-category="troubleshooting" title="Identity guard error messages and how to fix them — cross_worktree pid_mismatch, anonymous_mutating_rpc, non_git_bootstrap, and the rest of the v0.9.0 guard catalog with remediation steps.">Troubleshooting Identity Issues</a>
+          </div>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- Content -->
+    <main class="docs-content" id="docs-content">
+      <div class="docs-content-inner" id="docs-content-inner">
 <h2>What a Peer Is</h2>
 <p>A peer is a link between two Thrum daemons. Each daemon is bound to one repo.
 Peers let agents in different repos — or on different machines — message each
@@ -53,7 +233,7 @@ other directly, as if they were all registered with the same daemon.</p>
 <p>You register <code>coordinator_main</code> in your main repo. Your colleague runs
 <code>reviewer_api</code> in the API repo on a different machine. Without peers, those two
 agents can&#39;t talk. With a peer, you send:</p>
-<pre><code>thrum send &quot;Auth module ready for review&quot; --to @api:reviewer_api</code></pre>
+<pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Auth module ready for review&quot;</span> --to @api:reviewer_api</code></pre>
 <p>The daemon routes it through the peer connection. The reviewer gets it in their
 inbox. No relay, no manual handoff.</p>
 <p>Peers are bidirectional and persistent. Pair once; the connection re-establishes
@@ -109,27 +289,27 @@ pair.</p>
 <h2>The Pairing Flow</h2>
 <p>Pairing happens once. After that, peers reconnect automatically.</p>
 <p><strong>On the first machine</strong> (the listener):</p>
-<pre><code>thrum peer add --type tailscale</code></pre>
+<pre><code class="language-bash hljs">thrum peer add --<span class="hljs-built_in">type</span> tailscale</code></pre>
 <p>The <code>--type</code> flag is <strong>mandatory</strong> (v0.9.0+). The daemon generates a 16-digit
 numeric pairing code and blocks waiting for the other side. It prints the full
 peercode:</p>
-<pre><code>Waiting for connection...
+<pre><code class="language-text hljs">Waiting for connection...
 
 Share this with the other machine:
   thrum peer join --type tailscale --peercode alice:100.64.1.5:44123:4829175036284719
 
 Paired with &quot;bob&quot; (100.64.1.9:44123). Syncing started.</code></pre>
 <p><strong>On the second machine</strong> (the joiner):</p>
-<pre><code>thrum peer join --type tailscale --peercode alice:100.64.1.5:44123:4829175036284719</code></pre>
+<pre><code class="language-bash hljs">thrum peer <span class="hljs-built_in">join</span> --<span class="hljs-built_in">type</span> tailscale --peercode alice:100.64.1.5:44123:4829175036284719</code></pre>
 <p>For a local peer on the same machine, use <code>--type local</code> and add <code>--repo-path</code>:</p>
-<pre><code>thrum peer join --type local --peercode alice:127.0.0.1:44123:4829175036284719 \
+<pre><code class="language-bash hljs">thrum peer <span class="hljs-built_in">join</span> --<span class="hljs-built_in">type</span> <span class="hljs-built_in">local</span> --peercode alice:127.0.0.1:44123:4829175036284719 \
   --repo-path /path/to/other/repo</code></pre>
 <p>The <code>--repo-path</code> flag tells the daemon where to find the other repo&#39;s port
 file. It&#39;s only needed for local peers — the joining side has filesystem access
 and can read the port directly.</p>
 <h3>Pairing Code Details</h3>
 <p>The peercode format is <code>name:ip:port:code</code>. Example:</p>
-<pre><code>mock-salesforce:127.0.0.1:9342:4829175036284719</code></pre>
+<pre><code class="language-text hljs">mock-salesforce:127.0.0.1:9342:4829175036284719</code></pre>
 <p>The 16-digit numeric code is short-lived — it expires after 5 minutes. It&#39;s a
 handshake secret, not a long-term credential. During pairing, both sides
 exchange a 32-byte auth token that gets stored in <code>peers.json</code> and used for all
@@ -203,15 +383,15 @@ method signature.</p>
 <h3>Proxy Agents</h3>
 <p>Remote agents don&#39;t appear in your daemon automatically. You register them
 explicitly as proxy agents using <code>thrum peer configure</code>:</p>
-<pre><code>thrum peer configure mock-salesforce add-agent coordinator_main</code></pre>
+<pre><code class="language-bash hljs">thrum peer configure mock-salesforce add-agent coordinator_main</code></pre>
 <p>This registers <code>mock-sf:coordinator_main</code> in your local daemon. You can then
 send to it by name:</p>
-<pre><code>thrum send &quot;Request complete&quot; --to @mock-sf:coordinator_main</code></pre>
+<pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Request complete&quot;</span> --to @mock-sf:coordinator_main</code></pre>
 <p>The daemon sees <code>mock-sf:</code> as the proxy prefix, routes the message through the
 peer connection, strips the prefix, and delivers it to <code>coordinator_main</code> on the
 remote daemon.</p>
 <p>Proxy agents appear in <code>thrum team</code> like any other agent:</p>
-<pre><code>NAME                     ROLE           STATUS
+<pre><code class="language-text hljs">NAME                     ROLE           STATUS
 coordinator_main         coordinator    active
 mock-sf:coordinator_main coordinator    active (via peer)</code></pre>
 <h3>Name Prefixing</h3>
@@ -219,9 +399,9 @@ mock-sf:coordinator_main coordinator    active (via peer)</code></pre>
 stored in <code>peers.json</code> — set during pairing, typically a short slug of the peer
 name (<code>mock-sf</code>, <code>api</code>, <code>infra</code>).</p>
 <p>The full routing path:</p>
-<pre><code>@mock-sf:coordinator_main
+<pre><code class="language-text hljs">@mock-sf:coordinator_main
   → local daemon recognizes &quot;mock-sf&quot; as peer prefix
-  → relays to mock-salesforce peer&#39;s transport bridge
+  → relays to mock-salesforce peer&#x27;s transport bridge
   → remote daemon strips prefix, delivers to &quot;coordinator_main&quot;</code></pre>
 <p>Reply threading works across the connection. The <code>MessageMap</code> tracks local and
 remote message IDs so replies stay in the same thread.</p>
@@ -234,15 +414,15 @@ resolves cross-repo agents.</p>
 <hr>
 <h2>Configuration</h2>
 <h3>config.json</h3>
-<pre><code>{
-  &quot;daemon&quot;: {
-    &quot;peer_port&quot;: &quot;auto&quot;
-  },
-  &quot;peers&quot;: {
-    &quot;auto_connect&quot;: true,
-    &quot;pairing_code_length&quot;: 16
-  }
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;daemon&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;peer_port&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auto&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;peers&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;auto_connect&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;pairing_code_length&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">16</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <table>
 <thead>
 <tr>
@@ -270,24 +450,24 @@ resolves cross-repo agents.</p>
 <h3>peers.json</h3>
 <p>The peer registry is managed automatically by the pairing flow. It&#39;s stored at
 <code>.thrum/var/peers.json</code>. You don&#39;t edit it directly, but you can read it:</p>
-<pre><code>{
-  &quot;peers&quot;: [
-    {
-      &quot;name&quot;: &quot;mock-salesforce&quot;,
-      &quot;address&quot;: &quot;127.0.0.1:9342&quot;,
-      &quot;repo_path&quot;: &quot;/Users/leon/dev/falcondev/mock-salesforce&quot;,
-      &quot;token&quot;: &quot;...&quot;,
-      &quot;transport&quot;: &quot;local&quot;,
-      &quot;proxy_prefix&quot;: &quot;mock-sf&quot;,
-      &quot;remote_agents&quot;: [&quot;coordinator_main&quot;],
-      &quot;paired_at&quot;: &quot;2026-04-05T20:00:00Z&quot;,
-      &quot;remote_repo_name&quot;: &quot;mock-salesforce&quot;,
-      &quot;remote_hostname&quot;: &quot;leon-macbook&quot;,
-      &quot;remote_repo_path&quot;: &quot;/Users/leon/dev/falcondev/mock-salesforce&quot;,
-      &quot;remote_git_origin_url&quot;: &quot;git@github.com:falcondev/mock-salesforce.git&quot;
-    }
-  ]
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;peers&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+    <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mock-salesforce&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;address&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;127.0.0.1:9342&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;repo_path&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;/Users/leon/dev/falcondev/mock-salesforce&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;token&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;...&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;transport&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;local&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;proxy_prefix&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mock-sf&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;remote_agents&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;coordinator_main&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;paired_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-04-05T20:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;remote_repo_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mock-salesforce&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;remote_hostname&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;leon-macbook&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;remote_repo_path&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;/Users/leon/dev/falcondev/mock-salesforce&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;remote_git_origin_url&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;git@github.com:falcondev/mock-salesforce.git&quot;</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">]</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p>The four <code>remote_*</code> fields (<code>remote_repo_name</code>, <code>remote_hostname</code>,
 <code>remote_repo_path</code>, <code>remote_git_origin_url</code>) were added in v0.9.0. They are
 exchanged at pairing time and stored locally for future routing logic. All four
@@ -358,7 +538,7 @@ exits. Any script calling <code>thrum peer add</code> without a type flag must a
 </blockquote>
 <p>Blocks for up to 5 minutes waiting for the other side. Prints the full peercode
 to share:</p>
-<pre><code>$ thrum peer add --type tailscale
+<pre><code class="language-text hljs">$ thrum peer add --type tailscale
 Waiting for connection...
 
 Share this with the other machine:
@@ -398,18 +578,18 @@ below.</p>
 <code>thrum peer add</code> above.</p>
 </blockquote>
 <p>Pass the peercode as a flag, a positional argument, or pipe it from stdin:</p>
-<pre><code># Tailscale peer (cross-host)
-thrum peer join --type tailscale --peercode alice:100.64.1.5:44123:7392031846291057
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Tailscale peer (cross-host)</span>
+thrum peer <span class="hljs-built_in">join</span> --<span class="hljs-built_in">type</span> tailscale --peercode alice:100.64.1.5:44123:7392031846291057
 
-# Local peer (same machine, different repo)
-thrum peer join --type local --peercode alice:127.0.0.1:9342:7392031846291057 \
+<span class="hljs-comment"># Local peer (same machine, different repo)</span>
+thrum peer <span class="hljs-built_in">join</span> --<span class="hljs-built_in">type</span> <span class="hljs-built_in">local</span> --peercode alice:127.0.0.1:9342:7392031846291057 \
   --repo-path /path/to/alice-repo
 
-# Network peer (direct TCP, no Tailscale)
-thrum peer join --type network --peercode alice:192.168.1.10:44123:7392031846291057
+<span class="hljs-comment"># Network peer (direct TCP, no Tailscale)</span>
+thrum peer <span class="hljs-built_in">join</span> --<span class="hljs-built_in">type</span> network --peercode alice:192.168.1.10:44123:7392031846291057
 
-# Re-establish a broken peer using stored secrets (no new peercode needed)
-thrum peer join --type repair alice</code></pre>
+<span class="hljs-comment"># Re-establish a broken peer using stored secrets (no new peercode needed)</span>
+thrum peer <span class="hljs-built_in">join</span> --<span class="hljs-built_in">type</span> repair alice</code></pre>
 <p><strong><code>--type</code> values for <code>peer join</code>:</strong></p>
 <table>
 <thead>
@@ -441,7 +621,7 @@ thrum peer join --type repair alice</code></pre>
 </tr>
 </tbody></table>
 <h3><code>thrum peer list</code></h3>
-<pre><code>$ thrum peer list
+<pre><code class="language-text hljs">$ thrum peer list
 NAME                 ADDRESS                LAST SYNC          LAST SEQ
 mock-salesforce      127.0.0.1:9342         5 seconds ago      482
 alice                100.64.1.5:44123       2 minutes ago      1042</code></pre>
@@ -451,10 +631,10 @@ sequence numbers. Use <code>--json</code> for scripting.</p>
 <h3><code>thrum peer configure</code></h3>
 <p>Add or remove proxy agents for a peer. Changes take effect immediately if the
 peer is connected — no daemon restart needed:</p>
-<pre><code># Register a remote agent as a proxy
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Register a remote agent as a proxy</span>
 thrum peer configure mock-salesforce add-agent coordinator_main
 
-# Remove it
+<span class="hljs-comment"># Remove it</span>
 thrum peer configure mock-salesforce remove-agent coordinator_main</code></pre>
 <hr>
 <h2>Automatic Drift Recovery</h2>
@@ -484,21 +664,21 @@ If the remote&#39;s <code>daemon_id</code> has rotated, the registry entry is re
 <h3><code>drift_reconcile_failed</code> Status</h3>
 <p>When auto-reconciliation cannot resolve drift, <code>thrum peer list</code> renders an
 inline hint row under the affected peer:</p>
-<pre><code>NAME                 ADDRESS                LAST SYNC          LAST SEQ
+<pre><code class="language-text hljs">NAME                 ADDRESS                LAST SYNC          LAST SEQ
 alice                100.64.1.5:44123       48 minutes ago     1042
   └─ drift detected — run: thrum peer join --type repair alice</code></pre>
 <p>The <code>└─</code> row appears only when <code>ReconcileStatus == &quot;drift_reconcile_failed&quot;</code>. A
 successful reconcile (or a manual <code>thrum peer join --type repair</code>) resets the
 status to healthy and removes the hint row.</p>
 <p><strong>Manual recovery:</strong></p>
-<pre><code>thrum peer join --type repair alice</code></pre>
+<pre><code class="language-bash hljs">thrum peer <span class="hljs-built_in">join</span> --<span class="hljs-built_in">type</span> repair alice</code></pre>
 <p>If the stored token has been invalidated (the remote daemon was wiped and
 re-initialized), you must re-pair:</p>
-<pre><code># On the remote machine
-thrum peer add --type tailscale   # (or local/network)
+<pre><code class="language-bash hljs"><span class="hljs-comment"># On the remote machine</span>
+thrum peer add --<span class="hljs-built_in">type</span> tailscale   <span class="hljs-comment"># (or local/network)</span>
 
-# On your machine
-thrum peer join --type tailscale --peercode alice:...</code></pre>
+<span class="hljs-comment"># On your machine</span>
+thrum peer <span class="hljs-built_in">join</span> --<span class="hljs-built_in">type</span> tailscale --peercode alice:...</code></pre>
 <hr>
 <h2>Troubleshooting</h2>
 <h3>Pairing fails or times out</h3>
@@ -521,7 +701,7 @@ notify peers of the new address using the last-known address. If both machines
 moved simultaneously, this fails — re-pair with <code>thrum peer add</code> and
 <code>thrum peer join</code>.</p>
 <h3><code>thrum peer status</code> output explained</h3>
-<pre><code>NAME             ADDRESS              HAS_TOKEN  PAIRED_AT               LAST_SYNC
+<pre><code class="language-text hljs">NAME             ADDRESS              HAS_TOKEN  PAIRED_AT               LAST_SYNC
 mock-salesforce  127.0.0.1:9342       true       2026-04-05T20:00:00Z    5s ago
 alice            100.64.1.5:44123     true       2026-03-01T12:00:00Z    2m ago</code></pre>
 <ul>
@@ -604,10 +784,23 @@ and threat model</li>
 <li><a href="sync.html">Sync Protocol</a> — Git-backed async state replication</li>
 </ul>
 
-</main>
-<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
-<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
-</footer>
-<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#peers.html')}</script>
+      </div>
+    </main>
+
+  </div>
+
+  <script src="/js/vendor/minisearch.js"></script>
+  <script src="/js/search.js" data-docs-base="/docs/" data-search-index="/assets/docs/search-index.json"></script>
+  <script>
+    document.getElementById('theme-toggle').addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme');
+      var next = current === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('thrum-theme', next);
+    });
+    document.getElementById('sidebar-toggle').addEventListener('click', function() {
+      document.getElementById('docs-sidebar').classList.toggle('open');
+    });
+  </script>
 </body>
 </html>

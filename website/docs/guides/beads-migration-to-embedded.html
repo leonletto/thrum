@@ -1,51 +1,231 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Beads Migration to Embedded Mode (bd 1.0+) — Thrum</title>
-<meta name="description" content="Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.">
-<link rel="canonical" href="https://thrum.team/docs.html#guides/beads-migration-to-embedded.html">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Beads Migration to Embedded Mode (bd 1.0+)","description":"Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.","url":"https://thrum.team/docs.html#guides/beads-migration-to-embedded.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://thrum.team/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://thrum.team/docs.html"}}</script>
-<style>
-body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
-pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
-code{font-family:ui-monospace,monospace;font-size:0.9em}
-table{border-collapse:collapse;width:100%}
-th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
-th{background:#f5f5f5}
-nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
-h2{margin-top:2rem}
-a{color:#0366d6}
-</style>
-<!-- Privacy-friendly analytics by Plausible -->
-<script async src="https://plausible.io/js/pa-0EO0yjcXim9oq9r4-I2w1.js"></script>
-<script>
-window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
-plausible.init()
-</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>Beads Migration to Embedded Mode (bd 1.0+) — Thrum</title>
+  <meta name="description" content="Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Beads Migration to Embedded Mode (bd 1.0+) — Thrum">
+  <meta property="og:description" content="Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.">
+  <meta property="og:url" content="https://thrum.team/docs/guides/beads-migration-to-embedded.html">
+  <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="https://thrum.team/img/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Beads Migration to Embedded Mode (bd 1.0+) — Thrum">
+  <meta name="twitter:description" content="Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.">
+  <meta name="twitter:image" content="https://thrum.team/img/social-card.png">
+  <link rel="canonical" href="https://thrum.team/docs/guides/beads-migration-to-embedded.html">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Beads Migration to Embedded Mode (bd 1.0+)","description":"Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.","url":"https://thrum.team/docs/guides/beads-migration-to-embedded.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://thrum.team/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://thrum.team/docs/overview.html"}}</script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/inter.woff2" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/ibm-plex-mono-regular.woff2" crossorigin>
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-0EO0yjcXim9oq9r4-I2w1.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
 </head>
 <body>
-<nav>
-<strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; Recommended Tools &rsaquo; Beads Migration to Embedded Mode (bd 1.0+)
-<hr>
-<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a> | <a href="../overview.html">Overview</a> | <a href="../whats-new.html">What's New</a><br>
-<strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
-  <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <a href="../guides/beads-setup.html">Beads Setup Guide</a> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <strong>Beads Migration to Embedded Mode (bd 1.0+)</strong> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
-<strong>Messaging</strong>: <a href="../peers.html">Peers</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../telegram-bridge.html">Telegram Bridge</a> | <a href="../telegram-groups.html">Telegram Groups</a> | <a href="../messaging.html">Messaging</a><br>
-<strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../role-templates.html">Role-Based Preamble Templates</a><br>
-<strong>Guides</strong>: <a href="../beta-channel.html">Beta Channel</a><br>
-<strong>API Reference</strong>: <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <a href="../api/websocket.html">WebSocket API</a><br>
-<strong>agent-protocols</strong>: <a href="../strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="../strategies/thrum-registration.html">Thrum Registration</a> | <a href="../strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
-<strong>coordination</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../context.html">Agent Context Management</a> | <a href="../guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="../guides/review-workflow.html">Code Review Workflow</a><br>
-<strong>infrastructure</strong>: <a href="../daemon.html">Daemon Architecture</a> | <a href="../sync.html">Sync Protocol</a> | <a href="../configuration.html">Configuration</a> | <a href="../guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a><br>
-<strong>integrations</strong>: <a href="../web-ui.html">Web UI</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../cursor-plugin.html">Cursor Plugin</a> | <a href="../mcp-server.html">MCP Server</a><br>
-<strong>onboarding</strong>: <a href="../scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="../scenarios/team.html">Team on Your Machine</a> | <a href="../scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="../scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="../orchestrator-role.html">Orchestrator Role</a> | <a href="../tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="../monitor-jobs.html">Monitor Jobs</a> | <a href="../multi-runtime.html">Multi-Runtime Support</a> | <a href="../single-agent-mode.html">Single-Agent Mode</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../permission-prompts.html">Permission Prompts</a> | <a href="../session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <a href="../development.html">Development Guide</a> | <a href="../cli-hints.html">CLI Hints</a> | <a href="../security-cicd.html">Security & CI/CD</a> | <a href="../security-model.html">Local Security Model</a> | <a href="../architecture.html">Architecture</a> | <a href="../cli.html">CLI Reference</a> | <a href="../rpc-api.html">RPC API</a><br>
-<strong>substrate</strong>: <a href="../substrate/overview.html">Personal Agent Substrate</a><br>
-<strong>troubleshooting</strong>: <a href="../troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
-</nav>
-<main>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="/index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="/index.html" class="nav-link">Home</a>
+          <a href="/docs/overview.html" class="nav-link nav-link-active">Docs</a>
+          <a href="/blog.html" class="nav-link">Blog</a>
+          <a href="/about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+          <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+            <span class="icon-sun">&#x2600;</span>
+            <span class="icon-moon">&#x263E;</span>
+          </button>
+        </div>
+        <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle navigation">
+          <span></span><span></span><span></span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Layout -->
+  <div class="docs-layout">
+
+    <!-- Sidebar -->
+    <aside class="docs-sidebar" id="docs-sidebar">
+      <div class="sidebar-search">
+        <input type="text" id="search-input" placeholder="Search docs... (Ctrl+K)" autocomplete="off">
+        <div class="search-results" id="search-results"></div>
+      </div>
+      <nav class="sidebar-nav" id="sidebar-nav">
+        <div class="sidebar-category" data-category="overview">
+          <span class="sidebar-category-label">Overview</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/philosophy.html" data-path="philosophy.html" data-category="overview" title="Why Thrum exists — a messaging system designed for human-centric AI agent coordination, not another orchestration engine">Philosophy</a>
+          <a class="sidebar-link" href="/docs/overview.html" data-path="overview.html" data-category="overview" title="Thrum — coordinate AI coding agents across worktrees, repos, and machines">Overview</a>
+          <a class="sidebar-link" href="/docs/whats-new.html" data-path="whats-new.html" data-category="overview" title="Release-by-release highlights, breaking changes, and migration notes for recent Thrum versions.">What's New</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="onboarding">
+          <span class="sidebar-category-label">Onboarding</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/scenarios/solo-dev.html" data-path="scenarios/solo-dev.html" data-category="onboarding" title="Use Thrum as a single-developer tool: one agent, one machine, no hand-holding">Solo Dev with One Agent</a>
+          <a class="sidebar-link" href="/docs/scenarios/team.html" data-path="scenarios/team.html" data-category="onboarding" title="Run multiple agents in parallel worktrees with Thrum as the coordination layer">Team on Your Machine</a>
+          <a class="sidebar-link" href="/docs/scenarios/across-boundaries.html" data-path="scenarios/across-boundaries.html" data-category="onboarding" title="Connect Thrum daemons in different repos or on different machines via peers">Agents Across Repos/Machines</a>
+          <a class="sidebar-link" href="/docs/scenarios/orchestration.html" data-path="scenarios/orchestration.html" data-category="onboarding" title="Hand off a plan you wrote and let the orchestrator run the execution phase">Automated Plan Execution</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="quickstart">
+          <span class="sidebar-category-label">Getting Started</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/quickstart.html" data-path="quickstart.html" data-category="quickstart" title="Get up and running with Thrum in 5 minutes - initialization, daemon setup, agent registration, and first message">Quickstart Guide</a>
+        <div class="sidebar-category sidebar-subcategory" data-category="tools">
+          <span class="sidebar-category-label sidebar-subcategory-label collapsible"><span class="sidebar-chevron">▸</span><span>Recommended Tools</span></span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/recommended-tools.html" data-path="guides/recommended-tools.html" data-category="tools" title="Tools, extensions, and integrations that work well with Thrum for AI agent coordination workflows">Recommended Tools</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-setup.html" data-path="guides/beads-setup.html" data-category="tools" title="Set up Beads for git-backed task tracking alongside Thrum — installation, initialization, agent workflow, and worktree configuration">Beads Setup Guide</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-ui-setup.html" data-path="guides/beads-ui-setup.html" data-category="tools" title="Set up Beads UI for a live web dashboard of your agent task board — installation, usage, and multi-project support">Beads UI Setup Guide</a>
+          <a class="sidebar-link sidebar-sublink active" href="/docs/guides/beads-migration-to-embedded.html" data-path="guides/beads-migration-to-embedded.html" data-category="tools" title="Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.">Beads Migration to Embedded Mode (bd 1.0+)</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/playwright-cli-setup.html" data-path="guides/playwright-cli-setup.html" data-category="tools" title="Set up Playwright CLI for browser automation in Claude Code agent workflows — screenshots, page context, form filling, and web testing">Playwright CLI Setup Guide</a>
+          </div>
+        </div>
+
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="orchestration">
+          <span class="sidebar-category-label">Orchestration</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/orchestrator-role.html" data-path="orchestrator-role.html" data-category="orchestration" title="Hand off a plan you wrote and let the orchestrator run the execution phase">Orchestrator Role</a>
+          <a class="sidebar-link" href="/docs/tmux-sessions.html" data-path="tmux-sessions.html" data-category="orchestration" title="Run agent teams in daemon-managed tmux sessions with instant message delivery, zero background listeners, and coordinator-managed lifecycle">Tmux-Managed Sessions</a>
+          <a class="sidebar-link" href="/docs/monitor-jobs.html" data-path="monitor-jobs.html" data-category="orchestration" title="Watch any process output for pattern matches and deliver results as synthetic Thrum messages — no polling, no shell, no manual piping">Monitor Jobs</a>
+          <a class="sidebar-link" href="/docs/multi-runtime.html" data-path="multi-runtime.html" data-category="orchestration" title="Run Claude, Codex, Aider, Gemini, and other agent runtimes in tmux-managed sessions">Multi-Runtime Support</a>
+          <a class="sidebar-link" href="/docs/single-agent-mode.html" data-path="single-agent-mode.html" data-category="orchestration" title="Use Thrum's context management without the messaging layer — single-agent mode as default, three-tier context, and when to switch to multi-agent">Single-Agent Mode</a>
+          <a class="sidebar-link" href="/docs/workflow-templates.html" data-path="workflow-templates.html" data-category="orchestration" title="Four-phase skill pipeline for designing, planning, setting up, and implementing features with AI agents">Workflow Templates</a>
+          <a class="sidebar-link" href="/docs/permission-prompts.html" data-path="permission-prompts.html" data-category="orchestration" title="How Thrum detects when an agent is stuck on a permission prompt and routes it to a supervisor — silence-hash poller, supervisor reply paths (CLI, web UI, Telegram), reminder cadence, restart resilience">Permission Prompts</a>
+          <a class="sidebar-link" href="/docs/session-restart.html" data-path="session-restart.html" data-category="orchestration" title="Save conversation history and resume where you left off — from daily shutdown to automated mid-task restarts">Session Restart &amp; Context Recovery</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="identity">
+          <span class="sidebar-category-label">Identity &amp; Agents</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/identity.html" data-path="identity.html" data-category="identity" title="Named agents, deterministic IDs, identity resolution, registration, conflicts, cleanup, and multi-agent worktrees">Agent Identity &amp; Registration</a>
+          <a class="sidebar-link" href="/docs/agent-configs.html" data-path="agent-configs.html" data-category="identity" title="Ready-to-use Claude Code agent definitions for Thrum messaging and Beads task tracking">Agent Configurations</a>
+          <a class="sidebar-link" href="/docs/claude-agent-integration.html" data-path="claude-agent-integration.html" data-category="identity" title="Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup">Claude Code Agent Integration</a>
+          <a class="sidebar-link" href="/docs/role-templates.html" data-path="role-templates.html" data-category="identity" title="Auto-generate agent preambles from role templates with scope boundaries, task protocol, communication patterns, and behavioral directives">Role-Based Preamble Templates</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="messaging">
+          <span class="sidebar-category-label">Messaging</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/peers.html" data-path="peers.html" data-category="messaging" title="Cross-repo and cross-machine messaging between Thrum daemons">Peers</a>
+          <a class="sidebar-link" href="/docs/inbox-query-methods.html" data-path="inbox-query-methods.html" data-category="messaging" title="RPC methods for querying messages, agents, and managing read state with filtering and pagination">Inbox Query Methods</a>
+          <a class="sidebar-link" href="/docs/telegram-bridge.html" data-path="telegram-bridge.html" data-category="messaging" title="One Telegram connection, unified inbox for your whole team of agents — any agent can ping you, replies route back to the original author">Telegram Bridge</a>
+          <a class="sidebar-link" href="/docs/telegram-groups.html" data-path="telegram-groups.html" data-category="messaging" title="Share a Telegram group with your team so everyone can interact with the same Thrum agent — send instructions, see responses, and coordinate through one chat">Telegram Groups</a>
+          <a class="sidebar-link" href="/docs/messaging.html" data-path="messaging.html" data-category="messaging" title="Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering">Messaging</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="substrate">
+          <span class="sidebar-category-label">Personal Agent Substrate</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/substrate/overview.html" data-path="substrate/overview.html" data-category="substrate" title="v0.11 turns thrum into the substrate beneath personal-agent harnesses (scheduling, scheduled-agent lifecycle, skill registration, email transport, reminders). What it is, why it exists, and how the pieces fit together.">Personal Agent Substrate</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="coordination">
+          <span class="sidebar-category-label">Coordination</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/agent-coordination.html" data-path="agent-coordination.html" data-category="coordination" title="Multi-agent workflows, Beads integration, session templates, and coordination patterns for AI agent teams">Agent Coordination</a>
+          <a class="sidebar-link" href="/docs/multi-agent.html" data-path="multi-agent.html" data-category="coordination" title="Runtime presets, thrum prime, and coordination patterns for running multiple AI agents across worktrees and platforms">Multi-Agent Support</a>
+          <a class="sidebar-link" href="/docs/context.html" data-path="context.html" data-category="coordination" title="Per-agent context storage for persisting volatile project state across sessions and machines">Agent Context Management</a>
+          <a class="sidebar-link" href="/docs/guides/coordinate-two-agents.html" data-path="guides/coordinate-two-agents.html" data-category="coordination" title="Walk through registering two agents, sending messages between them, and seeing what everyone is working on — the most common Thrum use case">Coordinate Two Agents</a>
+          <a class="sidebar-link" href="/docs/guides/review-workflow.html" data-path="guides/review-workflow.html" data-category="coordination" title="Walk through the implement-then-review cycle: one agent writes code on a feature branch, another reviews it, Thrum handles the communication">Code Review Workflow</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="integrations">
+          <span class="sidebar-category-label">Integrations</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/web-ui.html" data-path="web-ui.html" data-category="integrations" title="Browser-based dashboard for monitoring agents and reading messages — served from the daemon on a single port">Web UI</a>
+          <a class="sidebar-link" href="/docs/claude-code-plugin.html" data-path="claude-code-plugin.html" data-category="integrations" title="Install and use the Thrum plugin for Claude Code — slash commands, automatic context injection, and multi-agent coordination without manual configuration">Claude Code Plugin</a>
+          <a class="sidebar-link" href="/docs/beads-and-thrum.html" data-path="beads-and-thrum.html" data-category="integrations" title="How persistent task tracking and agent messaging work together for multi-agent development">Beads and Thrum</a>
+          <a class="sidebar-link" href="/docs/codex-plugin.html" data-path="codex-plugin.html" data-category="integrations" title="Install and use Thrum's Codex skill bundle — the Claude thrum skill surface, mirrored as top-level Codex skills">Codex Plugin</a>
+          <a class="sidebar-link" href="/docs/cursor-plugin.html" data-path="cursor-plugin.html" data-category="integrations" title="Install and use Thrum's Cursor plugin — rules, hooks, skills, commands, and MCP configuration for multi-agent coordination in Cursor">Cursor Plugin</a>
+          <a class="sidebar-link" href="/docs/mcp-server.html" data-path="mcp-server.html" data-category="integrations" title="Thrum MCP server for native AI agent integration — tools, identity, message handling, and Claude Code setup">MCP Server</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="infrastructure">
+          <span class="sidebar-category-label">Infrastructure</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/daemon.html" data-path="daemon.html" data-category="infrastructure" title="Background service managing state, RPC handlers, sync loop, WebSocket server, and embedded UI on single port">Daemon Architecture</a>
+          <a class="sidebar-link" href="/docs/sync.html" data-path="sync.html" data-category="infrastructure" title="Git-based message synchronization using orphan branch, sync worktree, conflict-free merging, and offline-first design">Sync Protocol</a>
+          <a class="sidebar-link" href="/docs/configuration.html" data-path="configuration.html" data-category="infrastructure" title="Thrum configuration model — config.json schema, runtime tiers, priority chain, and the config show command">Configuration</a>
+          <a class="sidebar-link" href="/docs/guides/cross-machine-sync.html" data-path="guides/cross-machine-sync.html" data-category="infrastructure" title="Walk through enabling cross-machine sync, sending a message from one machine and receiving it on another, and verifying sync status">Sync Across Machines</a>
+          <a class="sidebar-link" href="/docs/tailscale-sync.html" data-path="tailscale-sync.html" data-category="infrastructure" title="Direct machine-to-machine sync via Tailscale — setup, architecture, pairing, and CLI commands">Tailscale Sync</a>
+          <a class="sidebar-link" href="/docs/tailscale-security.html" data-path="tailscale-security.html" data-category="infrastructure" title="Security model for Thrum's Tailscale peer sync — pairing, encryption, access control, and threat mitigations">Tailscale Sync Security</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="reference">
+          <span class="sidebar-category-label">Reference</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/development.html" data-path="development.html" data-category="reference" title="Setup, testing, building, contributing - complete guide for developing and extending Thrum">Development Guide</a>
+          <a class="sidebar-link" href="/docs/cli-hints.html" data-path="cli-hints.html" data-category="reference" title="Inline contextual hints from Thrum CLI commands — pre-action warnings, post-action next steps, and JSON output for tooling. Covers Phase B (thrum send / tmux create / init) and the THRUM_NO_HINTS opt-out.">CLI Hints</a>
+          <a class="sidebar-link" href="/docs/security-cicd.html" data-path="security-cicd.html" data-category="reference" title="Automated security scanning, CI/CD pipelines, and deployment workflows for Thrum">Security &amp; CI/CD</a>
+          <a class="sidebar-link" href="/docs/security-model.html" data-path="security-model.html" data-category="reference" title="How Thrum's daemon decides who's calling — kernel-verified peer credentials, anonymous-caller read-only allowlist, author-only message operations, and WebSocket origin restriction. Covers the v0.9.0 sec.1–sec.8 hardening.">Local Security Model</a>
+          <a class="sidebar-link" href="/docs/architecture.html" data-path="architecture.html" data-category="reference" title="Thrum architecture — daemon design, storage, sync engine, transport layer, key features, and foundation packages">Architecture</a>
+          <a class="sidebar-link" href="/docs/cli.html" data-path="cli.html" data-category="reference" title="Complete reference for the thrum command-line interface — all commands, flags, and usage examples">CLI Reference</a>
+          <a class="sidebar-link" href="/docs/rpc-api.html" data-path="rpc-api.html" data-category="reference" title="Thrum daemon JSON-RPC 2.0 API reference — all RPC methods, parameters, and response formats">RPC API</a>
+        <div class="sidebar-category sidebar-subcategory" data-category="agent-protocols">
+          <span class="sidebar-category-label sidebar-subcategory-label collapsible"><span class="sidebar-chevron">▸</span><span>Agent Protocols</span></span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/sub-agent-strategy.html" data-path="strategies/sub-agent-strategy.html" data-category="agent-protocols" title="When and how to delegate work to sub-agents for context efficiency">Sub-Agent Strategy</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/thrum-registration.html" data-path="strategies/thrum-registration.html" data-category="agent-protocols" title="How to register with Thrum at session start and communicate with other agents">Thrum Registration</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/resume-after-context-loss.html" data-path="strategies/resume-after-context-loss.html" data-category="agent-protocols" title="How to recover and pick up work after compaction, a new session, or a crash">Resume After Context Loss</a>
+          </div>
+        </div>
+
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="api">
+          <span class="sidebar-category-label">API Reference</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/api/authentication.html" data-path="api/authentication.html" data-category="api" title="Authentication and authorization in the Thrum API — agent identity, session tokens, and security model">Authentication</a>
+          <a class="sidebar-link" href="/docs/api/events.html" data-path="api/events.html" data-category="api" title="All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events">Event Reference</a>
+          <a class="sidebar-link" href="/docs/api/websocket.html" data-path="api/websocket.html" data-category="api" title="Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events">WebSocket API</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="guides">
+          <span class="sidebar-category-label">Guides</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="troubleshooting">
+          <span class="sidebar-category-label">troubleshooting</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/troubleshooting-identity.html" data-path="troubleshooting-identity.html" data-category="troubleshooting" title="Identity guard error messages and how to fix them — cross_worktree pid_mismatch, anonymous_mutating_rpc, non_git_bootstrap, and the rest of the v0.9.0 guard catalog with remediation steps.">Troubleshooting Identity Issues</a>
+          </div>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- Content -->
+    <main class="docs-content" id="docs-content">
+      <div class="docs-content-inner" id="docs-content-inner">
 <h2>Beads Migration to Embedded Mode (bd 1.0+)</h2>
 <blockquote>
 <p><strong>Field report, not official beads documentation.</strong> This is a user-written
@@ -104,11 +284,11 @@ upgrade it (via <code>brew upgrade beads</code> or the install script), <strong>
 machine that was on bd 0.62 server mode breaks at once</strong>. The wrong move now is
 running <code>bd</code> commands against the stale data — bd 1.0 can&#39;t read the 0.62
 server-mode layout and will give you misleading errors like:</p>
-<pre><code>Error: failed to open database: embeddeddolt: init schema:
+<pre><code class="language-text hljs">Error: failed to open database: embeddeddolt: init schema:
   creating schema_migrations table: Error 1105: no database selected
 warning: no beads configuration found in .beads/dolt/.beads</code></pre>
 <p>or</p>
-<pre><code>Error: &#39;bd dolt start&#39; is not supported in embedded mode (no Dolt server)</code></pre>
+<pre><code class="language-text hljs">Error: &#x27;bd dolt start&#x27; is not supported in embedded mode (no Dolt server)</code></pre>
 <p>These errors do <strong>not</strong> mean your data is gone. Your data is at
 <code>.beads/dolt/&lt;dbname&gt;/.dolt/</code> (the REAL database dir — not
 <code>.beads/dolt/.dolt/</code>), and raw <code>dolt</code> can still read it fine. You just have to
@@ -192,10 +372,10 @@ that has no <code>.beads/issues.jsonl</code>)</li>
 <li>Enough disk space to keep <code>.beads/</code> aside as a safety copy</li>
 </ul>
 <p>Verify versions before starting:</p>
-<pre><code>bd version
+<pre><code class="language-bash hljs">bd version
 dolt version
-which bd
-which dolt</code></pre>
+<span class="hljs-built_in">which</span> bd
+<span class="hljs-built_in">which</span> dolt</code></pre>
 <p>The paths tell you which channel to use for upgrades:</p>
 <ul>
 <li><code>/usr/local/bin/bd</code> → installed via the
@@ -210,21 +390,21 @@ machine-wide</strong> and breaks all of them at once. Before migrating any singl
 build a list of every stale install so you can work through them in order.</p>
 <p>A minimal discovery one-liner — lists every <code>.beads/</code> directory under your
 common dev roots and classifies it:</p>
-<pre><code>for beads in $(find ~/dev ~/work /srv -type d -name .beads 2&gt;/dev/null); do
-  if   [ -f &quot;$beads/redirect&quot; ];            then mode=redirect
-  elif [ -d &quot;$beads/embeddeddolt&quot; ];        then mode=embedded
-  elif [ -d &quot;$beads/dolt&quot; ];                then mode=server
-  elif [ -f &quot;$beads/metadata.json&quot; ];       then mode=unknown
-  else                                          mode=nonbd
-  fi
-  printf &#39;%-9s %s\n&#39; &quot;$mode&quot; &quot;$beads&quot;
-done
+<pre><code class="language-bash hljs"><span class="hljs-keyword">for</span> beads <span class="hljs-keyword">in</span> $(find ~/dev ~/work /srv -<span class="hljs-built_in">type</span> d -name .beads 2&gt;/dev/null); <span class="hljs-keyword">do</span>
+  <span class="hljs-keyword">if</span>   [ -f <span class="hljs-string">&quot;<span class="hljs-variable">$beads</span>/redirect&quot;</span> ];            <span class="hljs-keyword">then</span> mode=redirect
+  <span class="hljs-keyword">elif</span> [ -d <span class="hljs-string">&quot;<span class="hljs-variable">$beads</span>/embeddeddolt&quot;</span> ];        <span class="hljs-keyword">then</span> mode=embedded
+  <span class="hljs-keyword">elif</span> [ -d <span class="hljs-string">&quot;<span class="hljs-variable">$beads</span>/dolt&quot;</span> ];                <span class="hljs-keyword">then</span> mode=server
+  <span class="hljs-keyword">elif</span> [ -f <span class="hljs-string">&quot;<span class="hljs-variable">$beads</span>/metadata.json&quot;</span> ];       <span class="hljs-keyword">then</span> mode=unknown
+  <span class="hljs-keyword">else</span>                                          mode=nonbd
+  <span class="hljs-keyword">fi</span>
+  <span class="hljs-built_in">printf</span> <span class="hljs-string">&#x27;%-9s %s\n&#x27;</span> <span class="hljs-string">&quot;<span class="hljs-variable">$mode</span>&quot;</span> <span class="hljs-string">&quot;<span class="hljs-variable">$beads</span>&quot;</span>
+<span class="hljs-keyword">done</span>
 
-# Cross-reference orphan dolt servers with their data directories:
-for pid in $(pgrep -f &#39;dolt sql-server&#39;); do
-  cwd=$(lsof -p &quot;$pid&quot; 2&gt;/dev/null | awk &#39;$4==&quot;cwd&quot;{print $NF; exit}&#39;)
-  echo &quot;PID $pid  cwd=$cwd&quot;
-done</code></pre>
+<span class="hljs-comment"># Cross-reference orphan dolt servers with their data directories:</span>
+<span class="hljs-keyword">for</span> pid <span class="hljs-keyword">in</span> $(pgrep -f <span class="hljs-string">&#x27;dolt sql-server&#x27;</span>); <span class="hljs-keyword">do</span>
+  cwd=$(lsof -p <span class="hljs-string">&quot;<span class="hljs-variable">$pid</span>&quot;</span> 2&gt;/dev/null | awk <span class="hljs-string">&#x27;$4==&quot;cwd&quot;{print $NF; exit}&#x27;</span>)
+  <span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;PID <span class="hljs-variable">$pid</span>  cwd=<span class="hljs-variable">$cwd</span>&quot;</span>
+<span class="hljs-keyword">done</span></code></pre>
 <p>Mode meanings:</p>
 <table>
 <thead>
@@ -276,11 +456,11 @@ holding nothing useful.</p>
 <h3>Step 1: Stop any running bd / dolt server</h3>
 <p><strong>Critical.</strong> The old bd server can&#39;t be holding the dolt database open when you
 dump it.</p>
-<pre><code># If bd is still 0.62.x (has `bd dolt stop`):
-bd dolt stop 2&gt;/dev/null || true
+<pre><code class="language-bash hljs"><span class="hljs-comment"># If bd is still 0.62.x (has `bd dolt stop`):</span>
+bd dolt stop 2&gt;/dev/null || <span class="hljs-literal">true</span>
 
-# If bd has already been upgraded to 1.0+, skip the bd command entirely
-# and go straight to killing orphan dolt processes.</code></pre>
+<span class="hljs-comment"># If bd has already been upgraded to 1.0+, skip the bd command entirely</span>
+<span class="hljs-comment"># and go straight to killing orphan dolt processes.</span></code></pre>
 <h4>Orphan <code>dolt sql-server</code> processes across the machine</h4>
 <p>On a machine with multiple bd 0.62 repos, upgrading to 1.0 leaves <strong>one orphan
 <code>dolt sql-server</code> per unmigrated repo</strong> running in the background. bd 1.0 has no
@@ -288,24 +468,24 @@ concept of the server lifecycle, so it can&#39;t clean them up. They keep runnin
 indefinitely and can block dolt dumps if they still hold a file lock on the data
 directory.</p>
 <p>List them:</p>
-<pre><code>ps aux | grep &#39;[d]olt sql-server&#39;</code></pre>
+<pre><code class="language-bash hljs">ps aux | grep <span class="hljs-string">&#x27;[d]olt sql-server&#x27;</span></code></pre>
 <p>Typical output looks like:</p>
-<pre><code>youruser  &lt;pid1&gt;  ... /opt/homebrew/bin/dolt sql-server -H 127.0.0.1 -P &lt;port1&gt;
+<pre><code class="language-text hljs">youruser  &lt;pid1&gt;  ... /opt/homebrew/bin/dolt sql-server -H 127.0.0.1 -P &lt;port1&gt;
 youruser  &lt;pid2&gt;  ... /opt/homebrew/bin/dolt sql-server -H 127.0.0.1 -P &lt;port2&gt;
 ...</code></pre>
 <p>Figure out which process belongs to which repo by checking its working
 directory:</p>
-<pre><code>for pid in $(pgrep -f &#39;dolt sql-server&#39;); do
-  cwd=$(lsof -p $pid 2&gt;/dev/null | awk &#39;$4==&quot;cwd&quot;{print $NF; exit}&#39;)
-  echo &quot;PID $pid  cwd=$cwd&quot;
-done</code></pre>
+<pre><code class="language-bash hljs"><span class="hljs-keyword">for</span> pid <span class="hljs-keyword">in</span> $(pgrep -f <span class="hljs-string">&#x27;dolt sql-server&#x27;</span>); <span class="hljs-keyword">do</span>
+  cwd=$(lsof -p <span class="hljs-variable">$pid</span> 2&gt;/dev/null | awk <span class="hljs-string">&#x27;$4==&quot;cwd&quot;{print $NF; exit}&#x27;</span>)
+  <span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;PID <span class="hljs-variable">$pid</span>  cwd=<span class="hljs-variable">$cwd</span>&quot;</span>
+<span class="hljs-keyword">done</span></code></pre>
 <p><strong>For this migration</strong>, kill ONLY the process whose <code>cwd</code> is the repo you&#39;re
 migrating. Leave the others running until you migrate their repos — killing them
 now just means bd would fail to read their data if it tried (which it won&#39;t,
 since you&#39;re not running bd in those repos until they migrate).</p>
-<pre><code>kill &lt;pid-for-this-repo&gt;</code></pre>
+<pre><code class="language-bash hljs"><span class="hljs-built_in">kill</span> &lt;pid-for-this-repo&gt;</code></pre>
 <p>Verify:</p>
-<pre><code>ps aux | grep &#39;[d]olt sql-server&#39;  # should no longer show this repo&#39;s pid</code></pre>
+<pre><code class="language-bash hljs">ps aux | grep <span class="hljs-string">&#x27;[d]olt sql-server&#x27;</span>  <span class="hljs-comment"># should no longer show this repo&#x27;s pid</span></code></pre>
 <h4>If you have many repos to migrate</h4>
 <p>Use the discovery one-liner in the <strong>&quot;Before you start&quot;</strong> section to inventory
 every <code>.beads/</code> directory before touching any of them. Work through the
@@ -314,8 +494,8 @@ every <code>.beads/</code> directory before touching any of them. Work through t
 <h3>Step 2: Locate the real database directory</h3>
 <p>This is where every manual recovery goes wrong. In bd 0.62 server mode, the data
 layout is:</p>
-<pre><code>.beads/
-├── dolt/                     # bd&#39;s dolt data root
+<pre><code class="language-text hljs">.beads/
+├── dolt/                     # bd&#x27;s dolt data root
 │   ├── config.yaml           # dolt server config
 │   ├── .dolt/                # ← server-level config (empty branches)
 │   └── thrum/                # ← THIS is the actual database
@@ -328,8 +508,8 @@ from <code>.beads/dolt/</code> and you&#39;ll get confusing errors like
 <code>database not found: thrum</code> (show databases lists it, but use fails) or
 <code>non-string column in &#39;SELECT active_branch()&#39;</code>.</p>
 <p>Confirm the real location:</p>
-<pre><code>ls .beads/dolt/&lt;project-name&gt;/.dolt/
-# Should contain: noms/, repo_state.json, config.json</code></pre>
+<pre><code class="language-bash hljs"><span class="hljs-built_in">ls</span> .beads/dolt/&lt;project-name&gt;/.dolt/
+<span class="hljs-comment"># Should contain: noms/, repo_state.json, config.json</span></code></pre>
 <p>Replace <code>&lt;project-name&gt;</code> with your bd database name (check the <code>&quot;dolt_database&quot;</code>
 field in <code>.beads/metadata.json</code>).</p>
 <h4>Git worktrees: per-worktree migration vs shared DB via redirect</h4>
@@ -344,15 +524,15 @@ shared state, no coordination cost, but diverged issue histories per branch.</p>
 only the main repo, then in each worktree create a <code>.beads/redirect</code> file
 pointing at the main repo&#39;s <code>.beads/</code> directory. All worktrees read/write the
 same database:</p>
-<pre><code># In the main repo (already migrated to embedded):
-MAIN_BEADS=&quot;$(cd &lt;main-repo&gt;/.beads &amp;&amp; pwd)&quot;
+<pre><code class="language-bash hljs"><span class="hljs-comment"># In the main repo (already migrated to embedded):</span>
+MAIN_BEADS=<span class="hljs-string">&quot;<span class="hljs-subst">$(cd &lt;main-repo&gt;/.beads &amp;&amp; pwd)</span>&quot;</span>
 
-# In each worktree:
-cd &lt;worktree&gt;
-rm -rf .beads         # remove the old server-mode .beads/dolt/
-mkdir .beads
-echo &quot;$MAIN_BEADS&quot; &gt; .beads/redirect
-bd ready              # sanity check — should list the main repo&#39;s issues</code></pre>
+<span class="hljs-comment"># In each worktree:</span>
+<span class="hljs-built_in">cd</span> &lt;worktree&gt;
+<span class="hljs-built_in">rm</span> -rf .beads         <span class="hljs-comment"># remove the old server-mode .beads/dolt/</span>
+<span class="hljs-built_in">mkdir</span> .beads
+<span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;<span class="hljs-variable">$MAIN_BEADS</span>&quot;</span> &gt; .beads/redirect
+bd ready              <span class="hljs-comment"># sanity check — should list the main repo&#x27;s issues</span></code></pre>
 <p>This is the bd 1.0 worktree pattern (see <code>docs/ADVANCED.md</code> in the beads
 repo: &quot;Database Redirects&quot;). Single-level redirects only; the target
 <code>.beads/</code> must exist and have a valid embedded database.</p>
@@ -396,9 +576,9 @@ very old bd versions (see Troubleshooting: &quot;<code>bd ready</code> errors wi
 <h4>Step 3.1: Move the entire <code>.beads/</code> directory aside (filesystem snapshot) — COMMON</h4>
 <p>Same for both paths. This is your ground-truth recovery point if anything goes
 wrong later.</p>
-<pre><code>cp -a .beads .beads.server-backup
-# or (saves space, only if you&#39;re confident):
-# mv .beads .beads.server-backup</code></pre>
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cp</span> -a .beads .beads.server-backup
+<span class="hljs-comment"># or (saves space, only if you&#x27;re confident):</span>
+<span class="hljs-comment"># mv .beads .beads.server-backup</span></code></pre>
 <p>Keep the safety copy until the new embedded install has been exercised for at
 least a day.</p>
 <h4>Step 3A: Produce a JSONL export (PATH A)</h4>
@@ -407,39 +587,39 @@ count matches the source database&#39;s issue count — you can skip ahead to
 <a href="#step-6a-import-the-jsonl-into-the-new-embedded-database-path-a">Step 6A</a>.
 Otherwise regenerate it.</p>
 <h5>Verify an existing <code>.beads/issues.jsonl</code></h5>
-<pre><code># Count lines (= number of issue records):
-wc -l .beads.server-backup/issues.jsonl
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Count lines (= number of issue records):</span>
+<span class="hljs-built_in">wc</span> -l .beads.server-backup/issues.jsonl
 
-# Spot-check against the source database if possible. For SQLite-era:
-sqlite3 .beads.server-backup/beads.db &quot;select count(*) from issues;&quot;
+<span class="hljs-comment"># Spot-check against the source database if possible. For SQLite-era:</span>
+sqlite3 .beads.server-backup/beads.db <span class="hljs-string">&quot;select count(*) from issues;&quot;</span>
 
-# For server-mode dolt — count via the old store:
-cd .beads.server-backup/dolt/&lt;dbname&gt;
-dolt sql -q &quot;select count(*) from issues;&quot;</code></pre>
+<span class="hljs-comment"># For server-mode dolt — count via the old store:</span>
+<span class="hljs-built_in">cd</span> .beads.server-backup/dolt/&lt;dbname&gt;
+dolt sql -q <span class="hljs-string">&quot;select count(*) from issues;&quot;</span></code></pre>
 <p>If the counts match, the JSONL is usable — proceed to Step 4. If it&#39;s stale or
 missing, regenerate it:</p>
 <h5>Regenerate the JSONL from SQLite (bd ≤ 0.54 source)</h5>
 <p>bd 1.0 can read its own <code>bd export</code> JSONL format but can&#39;t read the old SQLite
 directly. The re-export path is plain <code>sqlite3</code>:</p>
-<pre><code>sqlite3 .beads.server-backup/beads.db &quot;SELECT json_object(
-  &#39;id&#39;, id,
-  &#39;title&#39;, title,
-  &#39;description&#39;, description,
-  &#39;design&#39;, coalesce(design, &#39;&#39;),
-  &#39;acceptance_criteria&#39;, coalesce(acceptance_criteria, &#39;&#39;),
-  &#39;notes&#39;, coalesce(notes, &#39;&#39;),
-  &#39;status&#39;, status,
-  &#39;priority&#39;, priority,
-  &#39;issue_type&#39;, issue_type,
-  &#39;assignee&#39;, coalesce(assignee, &#39;&#39;),
-  &#39;created_at&#39;, created_at,
-  &#39;updated_at&#39;, updated_at,
-  &#39;closed_at&#39;, closed_at,
-  &#39;close_reason&#39;, close_reason
-) FROM issues ORDER BY created_at;&quot; \
+<pre><code class="language-bash hljs">sqlite3 .beads.server-backup/beads.db <span class="hljs-string">&quot;SELECT json_object(
+  &#x27;id&#x27;, id,
+  &#x27;title&#x27;, title,
+  &#x27;description&#x27;, description,
+  &#x27;design&#x27;, coalesce(design, &#x27;&#x27;),
+  &#x27;acceptance_criteria&#x27;, coalesce(acceptance_criteria, &#x27;&#x27;),
+  &#x27;notes&#x27;, coalesce(notes, &#x27;&#x27;),
+  &#x27;status&#x27;, status,
+  &#x27;priority&#x27;, priority,
+  &#x27;issue_type&#x27;, issue_type,
+  &#x27;assignee&#x27;, coalesce(assignee, &#x27;&#x27;),
+  &#x27;created_at&#x27;, created_at,
+  &#x27;updated_at&#x27;, updated_at,
+  &#x27;closed_at&#x27;, closed_at,
+  &#x27;close_reason&#x27;, close_reason
+) FROM issues ORDER BY created_at;&quot;</span> \
   &gt; .beads.server-backup/issues.jsonl
 
-wc -l .beads.server-backup/issues.jsonl   # should equal SQLite issue count</code></pre>
+<span class="hljs-built_in">wc</span> -l .beads.server-backup/issues.jsonl   <span class="hljs-comment"># should equal SQLite issue count</span></code></pre>
 <p>This gives you a minimal but <code>bd import</code>-compatible JSONL. Dependencies and
 comments need separate SELECTs if you want them — in practice most SQLite-era
 repos are small enough (&lt; 100 issues) that losing dep/comment history is
@@ -464,44 +644,44 @@ running a parallel migration to the same path.</p>
 name.</strong> That way there&#39;s no collision with other repos and the dump gets
 cleaned up automatically when you <code>rm -rf .beads.server-backup/</code> in Step 12.</p>
 </blockquote>
-<pre><code>cd .beads.server-backup/dolt/&lt;project-name&gt;
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> .beads.server-backup/dolt/&lt;project-name&gt;
 
-# Derive the repo name from git (or set REPO_NAME manually)
-REPO_NAME=$(git -C ../../.. rev-parse --show-toplevel 2&gt;/dev/null | xargs basename)
-REPO_NAME=${REPO_NAME:-$(basename &quot;$PWD&quot;)}
+<span class="hljs-comment"># Derive the repo name from git (or set REPO_NAME manually)</span>
+REPO_NAME=$(git -C ../../.. rev-parse --show-toplevel 2&gt;/dev/null | xargs <span class="hljs-built_in">basename</span>)
+REPO_NAME=<span class="hljs-variable">${REPO_NAME:-$(basename &quot;$PWD&quot;)}</span>
 
-# Write the dump into .beads.server-backup/ (two levels up from dolt/&lt;dbname&gt;/)
-dolt dump -f -fn &quot;../../${REPO_NAME}-bd-dump.sql&quot;
+<span class="hljs-comment"># Write the dump into .beads.server-backup/ (two levels up from dolt/&lt;dbname&gt;/)</span>
+dolt dump -f -fn <span class="hljs-string">&quot;../../<span class="hljs-variable">${REPO_NAME}</span>-bd-dump.sql&quot;</span>
 
-# Output: &quot;Successfully exported data.&quot;
-DUMP_PATH=&quot;$(cd ../.. &amp;&amp; pwd)/${REPO_NAME}-bd-dump.sql&quot;
-ls -lh &quot;$DUMP_PATH&quot;
-head -5 &quot;$DUMP_PATH&quot;
-# Should start with: CREATE DATABASE IF NOT EXISTS `&lt;project-name&gt;`; USE `&lt;project-name&gt;`;</code></pre>
+<span class="hljs-comment"># Output: &quot;Successfully exported data.&quot;</span>
+DUMP_PATH=<span class="hljs-string">&quot;<span class="hljs-subst">$(cd ../.. &amp;&amp; pwd)</span>/<span class="hljs-variable">${REPO_NAME}</span>-bd-dump.sql&quot;</span>
+<span class="hljs-built_in">ls</span> -lh <span class="hljs-string">&quot;<span class="hljs-variable">$DUMP_PATH</span>&quot;</span>
+<span class="hljs-built_in">head</span> -5 <span class="hljs-string">&quot;<span class="hljs-variable">$DUMP_PATH</span>&quot;</span>
+<span class="hljs-comment"># Should start with: CREATE DATABASE IF NOT EXISTS `&lt;project-name&gt;`; USE `&lt;project-name&gt;`;</span></code></pre>
 <p>Verify the dump contains your current state by grepping for a recent issue ID
 you know exists:</p>
-<pre><code>grep -c &quot;your-issue-id&quot; &quot;$DUMP_PATH&quot;</code></pre>
+<pre><code class="language-bash hljs">grep -c <span class="hljs-string">&quot;your-issue-id&quot;</span> <span class="hljs-string">&quot;<span class="hljs-variable">$DUMP_PATH</span>&quot;</span></code></pre>
 <p>Hold onto the <code>$DUMP_PATH</code> value —
 <a href="#step-6b-load-the-dolt-sql-dump-into-the-new-embedded-database-path-b">Step 6B</a>
 needs it.</p>
 <h3>Step 4: Upgrade bd and dolt</h3>
 <p>Use the channel that matches your current install.</p>
 <h4>bd via quick-install script (path: <code>/usr/local/bin/bd</code>)</h4>
-<pre><code>curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash</code></pre>
+<pre><code class="language-bash hljs">curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash</code></pre>
 <p>The installer detects your platform, downloads and verifies the release
 checksum, installs the binary in place (overwrites <code>/usr/local/bin/bd</code>), and
 creates a <code>beads</code> alias.</p>
 <h4>bd via Homebrew</h4>
-<pre><code>brew upgrade beads</code></pre>
+<pre><code class="language-bash hljs">brew upgrade beads</code></pre>
 <h4>dolt via Homebrew</h4>
-<pre><code>brew upgrade dolt</code></pre>
+<pre><code class="language-bash hljs">brew upgrade dolt</code></pre>
 <h4>Verify</h4>
-<pre><code>bd version   # should print 1.0.0 or later
-dolt version # should print 1.86.0 or later</code></pre>
+<pre><code class="language-bash hljs">bd version   <span class="hljs-comment"># should print 1.0.0 or later</span>
+dolt version <span class="hljs-comment"># should print 1.86.0 or later</span></code></pre>
 <h3>Step 5: Initialize the new embedded database</h3>
 <p><code>bd init</code> creates a fresh <code>.beads/</code> directory in embedded mode. Since the old
 <code>.beads/</code> has been moved aside, bd sees nothing and initializes cleanly.</p>
-<pre><code>cd &lt;project-root&gt;
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> &lt;project-root&gt;
 bd init --prefix=&lt;your-prefix&gt; --non-interactive --role=maintainer</code></pre>
 <p>Replace <code>&lt;your-prefix&gt;</code> with your original issue prefix (e.g. <code>thrum</code>,
 <code>my-project</code>, <code>MYPROJECT</code>). Check <code>.beads.server-backup/metadata.json</code> if you
@@ -517,15 +697,15 @@ can&#39;t remember it.</p>
 <li>Set a dolt remote pointing at the current git origin</li>
 </ul>
 <p>Verify the init:</p>
-<pre><code>bd version
+<pre><code class="language-bash hljs">bd version
 bd stats
-# Expected: 0 total issues (the db is empty at this point)</code></pre>
+<span class="hljs-comment"># Expected: 0 total issues (the db is empty at this point)</span></code></pre>
 <h3>Step 6: Load your data into the new embedded database</h3>
 <h4>Step 6A: Import the JSONL into the new embedded database (PATH A)</h4>
 <p>From the project root, with the fresh embedded db in place:</p>
-<pre><code>cd &lt;project-root&gt;
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> &lt;project-root&gt;
 bd import .beads.server-backup/issues.jsonl
-# Output: &quot;Imported N issues from .beads.server-backup/issues.jsonl&quot;</code></pre>
+<span class="hljs-comment"># Output: &quot;Imported N issues from .beads.server-backup/issues.jsonl&quot;</span></code></pre>
 <p><code>bd import</code> is the bd 1.0 replacement for the old <code>bd init --from-jsonl</code> flow.
 It creates or upserts issues from the file, auto-detects memory records
 (<code>&quot;_type&quot;:&quot;memory&quot;</code>) and imports them as persistent memories (equivalent to
@@ -534,7 +714,7 @@ you set <code>dolt.auto-commit=on</code> before importing (recommended — see S
 import commits automatically. Otherwise it sits in the working set and you&#39;ll
 need to commit it manually like Path B (see Step 6C).</p>
 <p>Verify the import:</p>
-<pre><code>bd stats
+<pre><code class="language-bash hljs">bd stats
 bd ready
 bd show &lt;known-issue-id&gt;</code></pre>
 <p>If <code>bd ready</code> and <code>bd show</code> both work and the issue count matches the source,
@@ -544,10 +724,10 @@ Path A is done for this repo.</p>
 <h4>Step 6B: Load the dolt SQL dump into the new embedded database (PATH B)</h4>
 <p>The new embedded db is a standard dolt database, so <code>dolt sql</code> works against it
 directly. Load the dump produced in Step 3B:</p>
-<pre><code>cd .beads/embeddeddolt/&lt;your-prefix&gt;
-# $DUMP_PATH was set in Step 3B; the file lives inside .beads.server-backup/
-dolt sql &lt; &quot;$DUMP_PATH&quot;
-# Silent on success. Takes 5–30 seconds for a typical project.</code></pre>
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> .beads/embeddeddolt/&lt;your-prefix&gt;
+<span class="hljs-comment"># $DUMP_PATH was set in Step 3B; the file lives inside .beads.server-backup/</span>
+dolt sql &lt; <span class="hljs-string">&quot;<span class="hljs-variable">$DUMP_PATH</span>&quot;</span>
+<span class="hljs-comment"># Silent on success. Takes 5–30 seconds for a typical project.</span></code></pre>
 <blockquote>
 <p><strong>⚠ Database name mismatch when prefix contains a dash.</strong> If your prefix has a
 dash (e.g. <code>my-project</code>), the dump&#39;s <code>CREATE DATABASE IF NOT EXISTS</code> / <code>USE</code>
@@ -556,57 +736,57 @@ but <code>bd init</code> may have created the embedded db under an underscore-no
 name (e.g. <code>my_project</code>) or a short name like <code>MP</code>. The dump will then fail
 silently or create an unlinked orphan database. Fix with a one-liner sed on
 the dump before loading:</p>
-<pre><code># Edit the dump&#39;s CREATE DATABASE / USE lines to match the embedded db name.
-# Replace &lt;old-dash-name&gt; and &lt;new-name&gt; with the actual names for your repo:
-sed -i &#39;&#39; &#39;s/`&lt;old-dash-name&gt;`/`&lt;new-name&gt;`/g&#39; \
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Edit the dump&#x27;s CREATE DATABASE / USE lines to match the embedded db name.</span>
+<span class="hljs-comment"># Replace &lt;old-dash-name&gt; and &lt;new-name&gt; with the actual names for your repo:</span>
+sed -i <span class="hljs-string">&#x27;&#x27;</span> <span class="hljs-string">&#x27;s/`&lt;old-dash-name&gt;`/`&lt;new-name&gt;`/g&#x27;</span> \
   .beads.server-backup/&lt;your-repo&gt;-bd-dump.sql</code></pre>
 <p>Then re-run <code>dolt sql &lt; $DUMP_PATH</code>. Verify with
 <code>dolt sql -q &quot;show databases;&quot;</code> — there should be exactly one project
 database.</p>
 </blockquote>
 <p>Verify the load worked:</p>
-<pre><code>dolt sql -q &quot;select count(*) from issues;&quot;
-# Should match the count from the old database
+<pre><code class="language-bash hljs">dolt sql -q <span class="hljs-string">&quot;select count(*) from issues;&quot;</span>
+<span class="hljs-comment"># Should match the count from the old database</span>
 
-dolt sql -q &quot;select id, status, title from issues where id like &#39;&lt;your-prefix&gt;%&#39; order by id;&quot;
-# Substitute your own recent-work prefix</code></pre>
+dolt sql -q <span class="hljs-string">&quot;select id, status, title from issues where id like &#x27;&lt;your-prefix&gt;%&#x27; order by id;&quot;</span>
+<span class="hljs-comment"># Substitute your own recent-work prefix</span></code></pre>
 <h4>Step 6C: Patch schema drift from very old bd versions (PATH B, old sources only)</h4>
 <p>If the source dolt data came from a very old bd version (pre-0.60ish), the
 loaded schema will be missing columns and tables that bd 1.0 requires at query
 time. Symptoms:</p>
-<pre><code>bd ready
-# Error: get ready work: fetch issues: get issues by IDs from issues:
-#   Error 1105: column &quot;no_history&quot; could not be found in any table in scope</code></pre>
+<pre><code class="language-bash hljs">bd ready
+<span class="hljs-comment"># Error: get ready work: fetch issues: get issues by IDs from issues:</span>
+<span class="hljs-comment">#   Error 1105: column &quot;no_history&quot; could not be found in any table in scope</span></code></pre>
 <p>or</p>
-<pre><code>bd close &lt;id&gt;
-# Error: resolving ID &lt;id&gt;: failed to search issues: search wisps (merge):
-#   search wisps: Error 1105: column &quot;no_history&quot; could not be found in any table in scope</code></pre>
+<pre><code class="language-bash hljs">bd close &lt;<span class="hljs-built_in">id</span>&gt;
+<span class="hljs-comment"># Error: resolving ID &lt;id&gt;: failed to search issues: search wisps (merge):</span>
+<span class="hljs-comment">#   search wisps: Error 1105: column &quot;no_history&quot; could not be found in any table in scope</span></code></pre>
 <p>The dump replayed the old CREATE TABLE DDL, which overwrote the fresh bd 1.0
 schema with the old one. Patch in place against the embedded store:</p>
-<pre><code>cd .beads/embeddeddolt/&lt;your-prefix&gt;
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> .beads/embeddeddolt/&lt;your-prefix&gt;
 
-# Add missing columns to issues and wisps:
-dolt sql -q &quot;ALTER TABLE issues ADD COLUMN no_history TINYINT(1) DEFAULT 0;&quot;
-dolt sql -q &quot;ALTER TABLE wisps ADD COLUMN no_history TINYINT(1) DEFAULT 0;&quot;
+<span class="hljs-comment"># Add missing columns to issues and wisps:</span>
+dolt sql -q <span class="hljs-string">&quot;ALTER TABLE issues ADD COLUMN no_history TINYINT(1) DEFAULT 0;&quot;</span>
+dolt sql -q <span class="hljs-string">&quot;ALTER TABLE wisps ADD COLUMN no_history TINYINT(1) DEFAULT 0;&quot;</span>
 
-# Add missing tables (bd 1.0 expects them to exist, even if empty):
-dolt sql -q &quot;CREATE TABLE IF NOT EXISTS custom_statuses (
+<span class="hljs-comment"># Add missing tables (bd 1.0 expects them to exist, even if empty):</span>
+dolt sql -q <span class="hljs-string">&quot;CREATE TABLE IF NOT EXISTS custom_statuses (
   name varchar(64) NOT NULL,
-  category varchar(32) NOT NULL DEFAULT &#39;unspecified&#39;,
+  category varchar(32) NOT NULL DEFAULT &#x27;unspecified&#x27;,
   PRIMARY KEY (name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;&quot;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;&quot;</span>
 
-dolt sql -q &quot;CREATE TABLE IF NOT EXISTS custom_types (
+dolt sql -q <span class="hljs-string">&quot;CREATE TABLE IF NOT EXISTS custom_types (
   name varchar(64) NOT NULL,
   PRIMARY KEY (name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;&quot;</code></pre>
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;&quot;</span></code></pre>
 <p>The leftover <code>crystallizes</code> and <code>quality_score</code> columns from the old <code>issues</code>
 schema are harmless — bd 1.0 ignores unknown columns. Leave them alone; dropping
 them is unnecessary risk.</p>
 <p>To diff an old-source schema against a known-good bd 1.0 schema (e.g. from a
 freshly-initialized reference repo):</p>
-<pre><code>(cd &lt;reference-repo&gt;/.beads/embeddeddolt/&lt;prefix&gt; &amp;&amp; dolt sql -q &quot;describe issues;&quot;) &gt; /tmp/good.txt
-(cd .beads/embeddeddolt/&lt;your-prefix&gt; &amp;&amp; dolt sql -q &quot;describe issues;&quot;) &gt; /tmp/mine.txt
+<pre><code class="language-bash hljs">(<span class="hljs-built_in">cd</span> &lt;reference-repo&gt;/.beads/embeddeddolt/&lt;prefix&gt; &amp;&amp; dolt sql -q <span class="hljs-string">&quot;describe issues;&quot;</span>) &gt; /tmp/good.txt
+(<span class="hljs-built_in">cd</span> .beads/embeddeddolt/&lt;your-prefix&gt; &amp;&amp; dolt sql -q <span class="hljs-string">&quot;describe issues;&quot;</span>) &gt; /tmp/mine.txt
 diff /tmp/good.txt /tmp/mine.txt</code></pre>
 <p>Re-run <code>bd ready</code> and <code>bd close &lt;id&gt;</code> after the ALTERs to confirm the drift is
 fixed.</p>
@@ -618,18 +798,18 @@ queryable by bd, but never committed to dolt history and never pushed to any
 remote. Subsequent bd writes will also stay in the working set until you either
 turn auto-commit on or commit manually.</p>
 <p>Fix in this order:</p>
-<pre><code>cd &lt;project-root&gt;
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> &lt;project-root&gt;
 
-# 1. Tell bd to commit to dolt on every write from now on:
-bd config set dolt.auto-commit on
+<span class="hljs-comment"># 1. Tell bd to commit to dolt on every write from now on:</span>
+bd config <span class="hljs-built_in">set</span> dolt.auto-commit on
 
-# 2. Commit the existing working set (the Path B data or pre-auto-commit Path A data):
-cd .beads/embeddeddolt/&lt;your-prefix&gt;
-dolt status   # should show modified tables: issues, wisps, events, etc.
+<span class="hljs-comment"># 2. Commit the existing working set (the Path B data or pre-auto-commit Path A data):</span>
+<span class="hljs-built_in">cd</span> .beads/embeddeddolt/&lt;your-prefix&gt;
+dolt status   <span class="hljs-comment"># should show modified tables: issues, wisps, events, etc.</span>
 dolt add -A
-dolt commit -m &quot;migrate: import historical data from bd &lt;old-version&gt; &lt;mode&gt;&quot;
-dolt log --oneline | head -5   # should now show your migrate commit at HEAD
-cd -</code></pre>
+dolt commit -m <span class="hljs-string">&quot;migrate: import historical data from bd &lt;old-version&gt; &lt;mode&gt;&quot;</span>
+dolt <span class="hljs-built_in">log</span> --oneline | <span class="hljs-built_in">head</span> -5   <span class="hljs-comment"># should now show your migrate commit at HEAD</span>
+<span class="hljs-built_in">cd</span> -</code></pre>
 <blockquote>
 <p><strong>auto-commit values:</strong> <code>bd config set dolt.auto-commit &lt;value&gt;</code> accepts
 <code>off</code>, <code>on</code>, or <code>batch</code>. Default is <code>off</code>. <code>on</code> commits synchronously after
@@ -638,14 +818,14 @@ SIGTERM/SIGHUP. For migrated repos, use <code>on</code> unless you have a specif
 to batch.</p>
 </blockquote>
 <p>Now verify bd can read the restored data end-to-end:</p>
-<pre><code>cd &lt;project-root&gt;
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> &lt;project-root&gt;
 bd stats
 bd ready
 bd show &lt;some-issue-id&gt;
-bd migrate   # confirms schema version is current</code></pre>
+bd migrate   <span class="hljs-comment"># confirms schema version is current</span></code></pre>
 <p>All of these should succeed. <code>bd migrate</code> with no subcommand is a schema check —
 no-op if everything is current — and should print:</p>
-<pre><code>Dolt database version: 1.0.0
+<pre><code class="language-text hljs">Dolt database version: 1.0.0
 ✓ Version matches
 ✓ All metadata fields present</code></pre>
 <h3>Step 8: Configure backup and sync per repo</h3>
@@ -665,57 +845,57 @@ the native Dolt sync path; the hidden ref is invisible to <code>git log</code> /
 want beads history to sync across machines without living in tracked files.</li>
 </ul>
 <p><strong>Public repos / external backup workflow</strong> (e.g. thrum):</p>
-<pre><code># .beads/config.yaml
-backup:
-  git-push: false</code></pre>
+<pre><code class="language-yaml hljs"><span class="hljs-comment"># .beads/config.yaml</span>
+<span class="hljs-attr">backup:</span>
+  <span class="hljs-attr">git-push:</span> <span class="hljs-literal">false</span></code></pre>
 <p>Don&#39;t set <code>dolt.auto-push=true</code> on a public repo unless you want the hidden dolt
 ref published to the public git remote.</p>
 <p><strong>Private repos with no external backup script</strong> (most personal repos):</p>
-<pre><code># .beads/config.yaml:
+<pre><code class="language-bash hljs"><span class="hljs-comment"># .beads/config.yaml:</span>
 backup:
-  git-push: true
+  git-push: <span class="hljs-literal">true</span>
 
-# And via bd config (stored in-db):
-bd config set dolt.auto-push true
-# (dolt.auto-commit=on was already set in Step 7)</code></pre>
+<span class="hljs-comment"># And via bd config (stored in-db):</span>
+bd config <span class="hljs-built_in">set</span> dolt.auto-push <span class="hljs-literal">true</span>
+<span class="hljs-comment"># (dolt.auto-commit=on was already set in Step 7)</span></code></pre>
 <p><strong>Initial push to establish the remote baseline:</strong></p>
 <p>After <code>bd init</code> auto-configures the dolt remote and you commit the working set
 in Step 7, run one initial manual push. <code>dolt.auto-push</code> only fires on an
 interval, so the remote won&#39;t have your data until the first scheduled push —
 don&#39;t wait for that:</p>
-<pre><code>cd .beads/embeddeddolt/&lt;your-prefix&gt;
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> .beads/embeddeddolt/&lt;your-prefix&gt;
 dolt push origin main
-# Expect: &quot;[new branch] main -&gt; main&quot; on first run</code></pre>
+<span class="hljs-comment"># Expect: &quot;[new branch] main -&gt; main&quot; on first run</span></code></pre>
 <p>If the push fails with <code>unknown push error; no common ancestor</code>, the remote
 already has a divergent <code>refs/dolt/data</code> ref from a prior install. See
 Troubleshooting: &quot;dolt push fails with &#39;no common ancestor&#39;&quot;.</p>
 <p><strong>Verify the remote ref:</strong></p>
-<pre><code>cd &lt;project-root&gt;
-git ls-remote origin &#39;refs/dolt/*&#39;
-# Should show a single hash next to refs/dolt/data</code></pre>
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> &lt;project-root&gt;
+git ls-remote origin <span class="hljs-string">&#x27;refs/dolt/*&#x27;</span>
+<span class="hljs-comment"># Should show a single hash next to refs/dolt/data</span></code></pre>
 <h3>Step 9: Clean up <code>CLAUDE.md</code> / <code>AGENTS.md</code> integration</h3>
 <p><code>bd init</code> adds a &quot;Beads Issue Tracker&quot; section to <code>CLAUDE.md</code> (between
 <code>&lt;!-- BEGIN BEADS INTEGRATION --&gt;</code> and <code>&lt;!-- END BEADS INTEGRATION --&gt;</code>
 markers). In embedded mode, the boilerplate session-close workflow in that
 section references <code>bd dolt push</code>, which is <strong>server-mode only</strong>:</p>
-<pre><code>git pull --rebase
-bd dolt push        # ← invalid in embedded mode
+<pre><code class="language-bash hljs">git pull --rebase
+bd dolt push        <span class="hljs-comment"># ← invalid in embedded mode</span>
 git push</code></pre>
 <p>Remove that line, or the whole section if you maintain your own. It&#39;s safe to
 edit inside the markers — bd won&#39;t regenerate the section on subsequent
 <code>bd init</code> runs unless you pass <code>--force</code>.</p>
 <h3>Step 10: Smoke test</h3>
-<pre><code># Read path
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Read path</span>
 bd ready
 bd show &lt;some-open-issue&gt;
 
-# Write path (create a throwaway test issue)
-bd create --title=&quot;migration smoke test&quot; --type=task --priority=4
-# Note the ID, then:
+<span class="hljs-comment"># Write path (create a throwaway test issue)</span>
+bd create --title=<span class="hljs-string">&quot;migration smoke test&quot;</span> --<span class="hljs-built_in">type</span>=task --priority=4
+<span class="hljs-comment"># Note the ID, then:</span>
 bd close &lt;that-id&gt;
 
-# Dependency path
-bd dep --help</code></pre>
+<span class="hljs-comment"># Dependency path</span>
+bd dep --<span class="hljs-built_in">help</span></code></pre>
 <h3>Step 11: Audit your agent memory for stale bd guidance</h3>
 <p><strong>This step is easy to skip and will bite you later.</strong> If you have any AI agent
 with persistent memory — <code>MEMORY.md</code> files, Claude Code memory, <code>bd remember</code>
@@ -725,10 +905,10 @@ certainly contain bd 0.62-era commands that won&#39;t work anymore. Future sessi
 will confidently quote them and burn time debugging why <code>bd dolt push</code> fails or
 why <code>bd import</code> doesn&#39;t exist.</p>
 <p>Grep your memory stores for stale bd patterns and fix each hit:</p>
-<pre><code># Adjust paths to match where your agent keeps persistent memory.
-# Include global agent definitions — they apply to ALL projects on the
-# machine and almost always contain stale bd guidance.
-grep -rn &quot;bd backup --force\|bd import\|bd sync\|bd onboard\|bd dolt push\|bd dolt start\|bd dolt stop\|bd dolt status\|bd dolt show&quot; \
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Adjust paths to match where your agent keeps persistent memory.</span>
+<span class="hljs-comment"># Include global agent definitions — they apply to ALL projects on the</span>
+<span class="hljs-comment"># machine and almost always contain stale bd guidance.</span>
+grep -rn <span class="hljs-string">&quot;bd backup --force\|bd import\|bd sync\|bd onboard\|bd dolt push\|bd dolt start\|bd dolt stop\|bd dolt status\|bd dolt show&quot;</span> \
   ~/.claude/projects/*/memory/ \
   ~/.claude/CLAUDE.md \
   ~/.claude/*.md \
@@ -825,17 +1005,17 @@ content rather than the stale entries.</p>
 <h3>Step 12: Clean up the safety copy</h3>
 <p><strong>Only after</strong> you&#39;ve exercised the new install for at least a day and are
 confident nothing is missing:</p>
-<pre><code>rm -rf .beads.server-backup
-# If you also took a .beads.pre-migration/ copy (double-safety), remove it too:
-rm -rf .beads.pre-migration 2&gt;/dev/null || true</code></pre>
+<pre><code class="language-bash hljs"><span class="hljs-built_in">rm</span> -rf .beads.server-backup
+<span class="hljs-comment"># If you also took a .beads.pre-migration/ copy (double-safety), remove it too:</span>
+<span class="hljs-built_in">rm</span> -rf .beads.pre-migration 2&gt;/dev/null || <span class="hljs-literal">true</span></code></pre>
 <p>The dump file lives inside <code>.beads.server-backup/</code> (per Step 3b), so removing
 the directory removes the dump too. No <code>/tmp/</code> cleanup needed.</p>
 <p>Keep them longer if you have any doubt. Disk is cheap; re-migrating is not.</p>
 <h4>.gitignore the safety copies</h4>
 <p>Before committing anything post-migration, add the safety copies to your ignore
 list so they don&#39;t get accidentally staged:</p>
-<pre><code>cat &gt;&gt; .git/info/exclude &lt;&lt;&#39;EOF&#39;
-# Beads 0.62 → 1.0 migration safety copies (see migration guide Step 12)
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cat</span> &gt;&gt; .git/info/exclude &lt;&lt;<span class="hljs-string">&#x27;EOF&#x27;</span>
+<span class="hljs-comment"># Beads 0.62 → 1.0 migration safety copies (see migration guide Step 12)</span>
 .beads.server-backup/
 .beads.pre-migration/
 EOF</code></pre>
@@ -846,7 +1026,7 @@ temporary entries — otherwise the <code>.gitignore</code> entry lingers in his
 <h4><code>bd doctor</code> says &quot;No dolt database found&quot; but one exists</h4>
 <p><code>bd doctor</code> in 1.0.0 isn&#39;t supported in embedded mode. It prints a placeholder
 pointing you at manual checks:</p>
-<pre><code>Note: &#39;bd doctor&#39; is not yet supported in embedded mode.
+<pre><code class="language-text hljs">Note: &#x27;bd doctor&#x27; is not yet supported in embedded mode.
   • Verify database exists:  ls -la .beads/embeddeddolt/
   • Check bd version:        bd version
   • Reinitialize if needed:  bd init --force</code></pre>
@@ -855,7 +1035,7 @@ fields.</p>
 <h4><code>bd dolt start</code> / <code>bd dolt push</code> / <code>bd dolt status</code> all error</h4>
 <p>Expected. Embedded mode has no dolt server, so all <code>bd dolt &lt;server-lifecycle&gt;</code>
 commands return:</p>
-<pre><code>Error: &#39;bd dolt ...&#39; is not supported in embedded mode (no Dolt server)</code></pre>
+<pre><code class="language-text hljs">Error: &#x27;bd dolt ...&#x27; is not supported in embedded mode (no Dolt server)</code></pre>
 <p>That includes <code>bd dolt push</code>. For dolt-native off-machine backup in embedded
 mode, use <code>bd backup sync</code> (writes to a local directory or DoltHub remote) or
 run <code>dolt</code> directly against the embedded store.</p>
@@ -875,7 +1055,7 @@ directly. See Step 3B and Step 6B.</li>
 </ul>
 <h4><code>bd ready</code> errors with <code>column &quot;no_history&quot; could not be found</code></h4>
 <p>Full error:</p>
-<pre><code>Error: get ready work: fetch issues: get issues by IDs from issues:
+<pre><code class="language-text hljs">Error: get ready work: fetch issues: get issues by IDs from issues:
   Error 1105: column &quot;no_history&quot; could not be found in any table in scope</code></pre>
 <p>Path B only, and only when the source dolt data came from a very old bd version
 (pre-0.60ish). The dump replayed the old CREATE TABLE DDL, which overwrote the
@@ -883,31 +1063,31 @@ fresh bd 1.0 schema with the old one. Fix with the ALTER + CREATE TABLE
 statements in
 <a href="#step-6c-patch-schema-drift-from-very-old-bd-versions-path-b-old-sources-only">Step 6C</a>.</p>
 <p>Write operations show the same symptom:</p>
-<pre><code>Error: resolving ID &lt;id&gt;: failed to search issues: search wisps (merge):
+<pre><code class="language-text hljs">Error: resolving ID &lt;id&gt;: failed to search issues: search wisps (merge):
   search wisps: Error 1105: column &quot;no_history&quot; could not be found in any table in scope</code></pre>
 <p>Same fix — the <code>wisps</code> table needs the column too.</p>
 <h4><code>dolt push origin main</code> fails with <code>unknown push error; no common ancestor</code></h4>
 <p>The remote already has a <code>refs/dolt/data</code> ref from a prior install. The
 freshly-migrated local dolt history has no commits in common with it.</p>
 <p>Fix:</p>
-<pre><code>cd &lt;project-root&gt;
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> &lt;project-root&gt;
 
-# Verify the stale remote ref exists:
-git ls-remote origin &#39;refs/dolt/*&#39;
-# e.g.: abc1234def5678...  refs/dolt/data
+<span class="hljs-comment"># Verify the stale remote ref exists:</span>
+git ls-remote origin <span class="hljs-string">&#x27;refs/dolt/*&#x27;</span>
+<span class="hljs-comment"># e.g.: abc1234def5678...  refs/dolt/data</span>
 
-# Delete the remote ref (destructive — but this is a migrated repo,
-# and the old ref is no longer reachable from any current install):
+<span class="hljs-comment"># Delete the remote ref (destructive — but this is a migrated repo,</span>
+<span class="hljs-comment"># and the old ref is no longer reachable from any current install):</span>
 git push origin :refs/dolt/data
 
-# Confirm it&#39;s gone:
-git ls-remote origin &#39;refs/dolt/*&#39;
-# (no output)
+<span class="hljs-comment"># Confirm it&#x27;s gone:</span>
+git ls-remote origin <span class="hljs-string">&#x27;refs/dolt/*&#x27;</span>
+<span class="hljs-comment"># (no output)</span>
 
-# Now the dolt push will establish a new baseline:
-cd .beads/embeddeddolt/&lt;your-prefix&gt;
+<span class="hljs-comment"># Now the dolt push will establish a new baseline:</span>
+<span class="hljs-built_in">cd</span> .beads/embeddeddolt/&lt;your-prefix&gt;
 dolt push origin main
-# Expect: &quot;[new branch] main -&gt; main&quot;</code></pre>
+<span class="hljs-comment"># Expect: &quot;[new branch] main -&gt; main&quot;</span></code></pre>
 <p>Safe if you&#39;re the only active consumer of that beads database. If multiple
 machines still have copies pointing at the old ref, migrate them all before
 deleting the remote ref.</p>
@@ -917,16 +1097,16 @@ deleting the remote ref.</p>
 commits to send. Exit code is 0, the remote looks current, but the issues you
 just loaded are stranded locally in the dolt working set.</p>
 <p>Verify:</p>
-<pre><code>cd .beads/embeddeddolt/&lt;your-prefix&gt;
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> .beads/embeddeddolt/&lt;your-prefix&gt;
 dolt status
-# If it shows &quot;Changes not staged for commit&quot; on issues/wisps/events/etc.,
-# you have uncommitted data in the working set.
+<span class="hljs-comment"># If it shows &quot;Changes not staged for commit&quot; on issues/wisps/events/etc.,</span>
+<span class="hljs-comment"># you have uncommitted data in the working set.</span>
 
-dolt log --oneline
-# HEAD should be at a &quot;migrate: ...&quot; commit, not at &quot;bd init&quot;</code></pre>
+dolt <span class="hljs-built_in">log</span> --oneline
+<span class="hljs-comment"># HEAD should be at a &quot;migrate: ...&quot; commit, not at &quot;bd init&quot;</span></code></pre>
 <p>Fix: commit and push.</p>
-<pre><code>dolt add -A
-dolt commit -m &quot;migrate: import historical data&quot;
+<pre><code class="language-bash hljs">dolt add -A
+dolt commit -m <span class="hljs-string">&quot;migrate: import historical data&quot;</span>
 dolt push origin main</code></pre>
 <p>Set <code>bd config set dolt.auto-commit on</code> (Step 7) so future writes don&#39;t
 accumulate in the working set.</p>
@@ -934,9 +1114,9 @@ accumulate in the working set.</p>
 <p>You&#39;re running dolt from the wrong directory. The actual database is at
 <code>.beads/dolt/&lt;dbname&gt;/.dolt/</code>, not <code>.beads/dolt/.dolt/</code>. The outer <code>.dolt/</code> is a
 dolt-sql-server workspace config with no branches.</p>
-<pre><code>cd .beads/dolt/&lt;dbname&gt;
-dolt status          # should show branch info, not nil-column error
-dolt sql -q &quot;select count(*) from issues;&quot;</code></pre>
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> .beads/dolt/&lt;dbname&gt;
+dolt status          <span class="hljs-comment"># should show branch info, not nil-column error</span>
+dolt sql -q <span class="hljs-string">&quot;select count(*) from issues;&quot;</span></code></pre>
 <h4><code>dolt dump</code> fails with &quot;The current directory is not a valid dolt repository&quot;</h4>
 <p>Same cause: you need to be inside <code>.beads/dolt/&lt;dbname&gt;/</code> (or
 <code>.beads.server-backup/dolt/&lt;dbname&gt;/</code>), not its parent.</p>
@@ -955,17 +1135,17 @@ started setting up dolt (creating <code>.beads/dolt/config.yaml</code>) but the 
 <h4><code>dolt dump -d /path</code> or <code>dolt dump --data-dir</code> errors</h4>
 <p><code>dolt dump</code> doesn&#39;t support global data-dir flags. Run from inside the database
 directory and use <code>-fn /path/to/output.sql</code> instead:</p>
-<pre><code>cd .beads.server-backup/dolt/&lt;dbname&gt;
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> .beads.server-backup/dolt/&lt;dbname&gt;
 dolt dump -f -fn /tmp/doltdump.sql</code></pre>
 <h4><code>bd init</code> says &quot;database &#39;thrum&#39; already exists&quot;</h4>
 <p>The embedded store at <code>.beads/embeddeddolt/&lt;prefix&gt;/</code> already has schema and
 schema_migrations rows. Pass <code>--force</code>:</p>
-<pre><code>bd init --force --prefix=&lt;your-prefix&gt; --non-interactive --role=maintainer</code></pre>
+<pre><code class="language-bash hljs">bd init --force --prefix=&lt;your-prefix&gt; --non-interactive --role=maintainer</code></pre>
 <p>Or delete <code>.beads/embeddeddolt/</code> first.</p>
 <h4><code>bd backup restore --force /tmp/dump</code> says &quot;Error 1105: database already exists, use --force&quot;</h4>
 <p>That error refers to the dolt database itself, not the backup destination. Pass
 <code>--force</code>:</p>
-<pre><code>bd backup restore --force /path/to/backup</code></pre>
+<pre><code class="language-bash hljs">bd backup restore --force /path/to/backup</code></pre>
 <p>Only useful for restoring from a proper <code>bd backup sync</code> destination, not from
 the old server-mode <code>.beads/backup/</code> directory.</p>
 <h4><code>bd dolt pull</code> fails with merge conflict on the <code>issues</code> table (pre-upgrade)</h4>
@@ -991,8 +1171,8 @@ PID with its repo, then migrate repos one by one. Each migration naturally kills
 its own orphan in Step 1.</p>
 <p>If you find an orphan whose <code>cwd</code> points at a deleted directory or the trash,
 just kill it — nothing depends on it:</p>
-<pre><code>lsof -p &lt;pid&gt; 2&gt;&amp;1 | grep cwd  # sanity check the cwd first
-kill &lt;pid&gt;</code></pre>
+<pre><code class="language-bash hljs">lsof -p &lt;pid&gt; 2&gt;&amp;1 | grep cwd  <span class="hljs-comment"># sanity check the cwd first</span>
+<span class="hljs-built_in">kill</span> &lt;pid&gt;</code></pre>
 <h4>Worktrees still have old <code>.beads/dolt/</code> directories</h4>
 <p>See the worktree subsection after Step 2: per-worktree migration vs shared DB
 via <code>.beads/redirect</code> file. The redirect option is the bd 1.0 documented pattern
@@ -1001,21 +1181,21 @@ for sharing a database across worktrees.</p>
 <p><code>bd init</code> on a repo with a git remote auto-configures a dolt remote pointed at
 the git origin. In an offline-backup workflow (where you have your own external
 script) this is harmless noise. But if it causes confusion:</p>
-<pre><code># Remove the auto-configured dolt remote:
-bd dolt remote remove origin 2&gt;/dev/null || true
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Remove the auto-configured dolt remote:</span>
+bd dolt remote remove origin 2&gt;/dev/null || <span class="hljs-literal">true</span>
 
-# Or disable auto-push in .beads/config.yaml:
-# (covered in Step 8 of this guide)</code></pre>
+<span class="hljs-comment"># Or disable auto-push in .beads/config.yaml:</span>
+<span class="hljs-comment"># (covered in Step 8 of this guide)</span></code></pre>
 <h4>Backup scripts break: <code>bd backup --force</code> no longer exists</h4>
 <p>In bd 0.62 your script probably does:</p>
-<pre><code>(cd &quot;$PROJECT&quot; &amp;&amp; bd backup --force 2&gt;/dev/null || true)
-cp &quot;$PROJECT/.beads/backup/&quot;*.jsonl &quot;$BACKUP_DEST/&quot; 2&gt;/dev/null || true</code></pre>
+<pre><code class="language-bash hljs">(<span class="hljs-built_in">cd</span> <span class="hljs-string">&quot;<span class="hljs-variable">$PROJECT</span>&quot;</span> &amp;&amp; bd backup --force 2&gt;/dev/null || <span class="hljs-literal">true</span>)
+<span class="hljs-built_in">cp</span> <span class="hljs-string">&quot;<span class="hljs-variable">$PROJECT</span>/.beads/backup/&quot;</span>*.jsonl <span class="hljs-string">&quot;<span class="hljs-variable">$BACKUP_DEST</span>/&quot;</span> 2&gt;/dev/null || <span class="hljs-literal">true</span></code></pre>
 <p>The <code>|| true</code> silently swallows the error, and the <code>cp</code> copies whatever JSONL
 files happen to be lying around — which after the migration may be <strong>empty or
 stale</strong>. Update the script to use <code>bd export</code>:</p>
-<pre><code>(cd &quot;$PROJECT&quot; &amp;&amp; bd export --all -o &quot;$PROJECT/.beads/backup/issues.jsonl&quot;) \
-  2&gt;/dev/null || true
-cp &quot;$PROJECT/.beads/backup/&quot;*.jsonl &quot;$BACKUP_DEST/&quot; 2&gt;/dev/null || true</code></pre>
+<pre><code class="language-bash hljs">(<span class="hljs-built_in">cd</span> <span class="hljs-string">&quot;<span class="hljs-variable">$PROJECT</span>&quot;</span> &amp;&amp; bd <span class="hljs-built_in">export</span> --all -o <span class="hljs-string">&quot;<span class="hljs-variable">$PROJECT</span>/.beads/backup/issues.jsonl&quot;</span>) \
+  2&gt;/dev/null || <span class="hljs-literal">true</span>
+<span class="hljs-built_in">cp</span> <span class="hljs-string">&quot;<span class="hljs-variable">$PROJECT</span>/.beads/backup/&quot;</span>*.jsonl <span class="hljs-string">&quot;<span class="hljs-variable">$BACKUP_DEST</span>/&quot;</span> 2&gt;/dev/null || <span class="hljs-literal">true</span></code></pre>
 <p><code>bd export</code> writes a single JSONL containing all issues (and memories,
 dependencies, comments, labels, etc.) in a format that&#39;s human-readable and
 greppable — which is usually what these backup scripts actually want.</p>
@@ -1049,10 +1229,23 @@ install causes <code>no common ancestor</code> push errors that must be cleared 
 </li>
 </ul>
 
-</main>
-<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
-<a href="../../llms.txt">llms.txt</a> | <a href="../../llms-full.txt">llms-full.txt</a> | <a href="../../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
-</footer>
-<script>if(location.search.indexOf('nospa')===-1){location.replace('../../docs.html#guides/beads-migration-to-embedded.html')}</script>
+      </div>
+    </main>
+
+  </div>
+
+  <script src="/js/vendor/minisearch.js"></script>
+  <script src="/js/search.js" data-docs-base="/docs/" data-search-index="/assets/docs/search-index.json"></script>
+  <script>
+    document.getElementById('theme-toggle').addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme');
+      var next = current === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('thrum-theme', next);
+    });
+    document.getElementById('sidebar-toggle').addEventListener('click', function() {
+      document.getElementById('docs-sidebar').classList.toggle('open');
+    });
+  </script>
 </body>
 </html>

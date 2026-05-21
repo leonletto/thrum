@@ -12,7 +12,13 @@
 (function () {
   'use strict';
 
-  var SEARCH_INDEX_URL = 'assets/docs/search-index.json';
+  // Resolve search index URL from the script tag's data-search-index attribute
+  // (set by build-docs.js for per-doc pages). Falls back to the SPA-relative
+  // path used by docs.html.
+  var _scriptTag = document.querySelector('script[data-search-index]');
+  var SEARCH_INDEX_URL = _scriptTag
+    ? _scriptTag.getAttribute('data-search-index')
+    : 'assets/docs/search-index.json';
   var CATEGORY_LABELS = {
     overview: 'Overview',
     quickstart: 'Getting Started',
@@ -213,9 +219,17 @@
     hideResults();
     searchInput.value = '';
     if (window.__docsNav) {
+      // Legacy SPA mode (docs.html with docs-nav.js). Swap content in place.
       window.__docsNav.loadDoc(path);
     } else {
-      window.location.hash = path;
+      // Static-pages mode: every doc is its own URL. Determine the docs/
+      // base from the script tag's data-docs-base attribute (set by
+      // build-docs.js when emitting per-doc pages) so links work whether
+      // the current page is at /docs/foo.html or /docs/sub/bar.html.
+      var script = document.querySelector('script[data-docs-base]');
+      var base = script ? script.getAttribute('data-docs-base') : 'docs/';
+      // Search index `path` entries already include the .html extension.
+      window.location.href = base + path;
     }
     // Close mobile sidebar
     var sidebar = document.getElementById('docs-sidebar');

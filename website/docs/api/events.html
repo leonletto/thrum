@@ -1,63 +1,243 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Event Reference — Thrum</title>
-<meta name="description" content="All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events">
-<link rel="canonical" href="https://thrum.team/docs.html#api/events.html">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Event Reference","description":"All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events","url":"https://thrum.team/docs.html#api/events.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://thrum.team/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://thrum.team/docs.html"}}</script>
-<style>
-body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
-pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
-code{font-family:ui-monospace,monospace;font-size:0.9em}
-table{border-collapse:collapse;width:100%}
-th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
-th{background:#f5f5f5}
-nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
-h2{margin-top:2rem}
-a{color:#0366d6}
-</style>
-<!-- Privacy-friendly analytics by Plausible -->
-<script async src="https://plausible.io/js/pa-0EO0yjcXim9oq9r4-I2w1.js"></script>
-<script>
-window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
-plausible.init()
-</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>Event Reference — Thrum</title>
+  <meta name="description" content="All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Event Reference — Thrum">
+  <meta property="og:description" content="All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events">
+  <meta property="og:url" content="https://thrum.team/docs/api/events.html">
+  <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="https://thrum.team/img/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Event Reference — Thrum">
+  <meta name="twitter:description" content="All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events">
+  <meta name="twitter:image" content="https://thrum.team/img/social-card.png">
+  <link rel="canonical" href="https://thrum.team/docs/api/events.html">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Event Reference","description":"All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events","url":"https://thrum.team/docs/api/events.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://thrum.team/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://thrum.team/docs/overview.html"}}</script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/inter.woff2" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/ibm-plex-mono-regular.woff2" crossorigin>
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-0EO0yjcXim9oq9r4-I2w1.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
 </head>
 <body>
-<nav>
-<strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; API Reference &rsaquo; Event Reference
-<hr>
-<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a> | <a href="../overview.html">Overview</a> | <a href="../whats-new.html">What's New</a><br>
-<strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
-  <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <a href="../guides/beads-setup.html">Beads Setup Guide</a> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="../guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
-<strong>Messaging</strong>: <a href="../peers.html">Peers</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../telegram-bridge.html">Telegram Bridge</a> | <a href="../telegram-groups.html">Telegram Groups</a> | <a href="../messaging.html">Messaging</a><br>
-<strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../role-templates.html">Role-Based Preamble Templates</a><br>
-<strong>Guides</strong>: <a href="../beta-channel.html">Beta Channel</a><br>
-<strong>API Reference</strong>: <a href="../api/authentication.html">Authentication</a> | <strong>Event Reference</strong> | <a href="../api/websocket.html">WebSocket API</a><br>
-<strong>agent-protocols</strong>: <a href="../strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="../strategies/thrum-registration.html">Thrum Registration</a> | <a href="../strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
-<strong>coordination</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../context.html">Agent Context Management</a> | <a href="../guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="../guides/review-workflow.html">Code Review Workflow</a><br>
-<strong>infrastructure</strong>: <a href="../daemon.html">Daemon Architecture</a> | <a href="../sync.html">Sync Protocol</a> | <a href="../configuration.html">Configuration</a> | <a href="../guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a><br>
-<strong>integrations</strong>: <a href="../web-ui.html">Web UI</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../cursor-plugin.html">Cursor Plugin</a> | <a href="../mcp-server.html">MCP Server</a><br>
-<strong>onboarding</strong>: <a href="../scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="../scenarios/team.html">Team on Your Machine</a> | <a href="../scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="../scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="../orchestrator-role.html">Orchestrator Role</a> | <a href="../tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="../monitor-jobs.html">Monitor Jobs</a> | <a href="../multi-runtime.html">Multi-Runtime Support</a> | <a href="../single-agent-mode.html">Single-Agent Mode</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../permission-prompts.html">Permission Prompts</a> | <a href="../session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <a href="../development.html">Development Guide</a> | <a href="../cli-hints.html">CLI Hints</a> | <a href="../security-cicd.html">Security & CI/CD</a> | <a href="../security-model.html">Local Security Model</a> | <a href="../architecture.html">Architecture</a> | <a href="../cli.html">CLI Reference</a> | <a href="../rpc-api.html">RPC API</a><br>
-<strong>substrate</strong>: <a href="../substrate/overview.html">Personal Agent Substrate</a><br>
-<strong>troubleshooting</strong>: <a href="../troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
-</nav>
-<main>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="/index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="/index.html" class="nav-link">Home</a>
+          <a href="/docs/overview.html" class="nav-link nav-link-active">Docs</a>
+          <a href="/blog.html" class="nav-link">Blog</a>
+          <a href="/about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+          <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+            <span class="icon-sun">&#x2600;</span>
+            <span class="icon-moon">&#x263E;</span>
+          </button>
+        </div>
+        <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle navigation">
+          <span></span><span></span><span></span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Layout -->
+  <div class="docs-layout">
+
+    <!-- Sidebar -->
+    <aside class="docs-sidebar" id="docs-sidebar">
+      <div class="sidebar-search">
+        <input type="text" id="search-input" placeholder="Search docs... (Ctrl+K)" autocomplete="off">
+        <div class="search-results" id="search-results"></div>
+      </div>
+      <nav class="sidebar-nav" id="sidebar-nav">
+        <div class="sidebar-category" data-category="overview">
+          <span class="sidebar-category-label">Overview</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/philosophy.html" data-path="philosophy.html" data-category="overview" title="Why Thrum exists — a messaging system designed for human-centric AI agent coordination, not another orchestration engine">Philosophy</a>
+          <a class="sidebar-link" href="/docs/overview.html" data-path="overview.html" data-category="overview" title="Thrum — coordinate AI coding agents across worktrees, repos, and machines">Overview</a>
+          <a class="sidebar-link" href="/docs/whats-new.html" data-path="whats-new.html" data-category="overview" title="Release-by-release highlights, breaking changes, and migration notes for recent Thrum versions.">What's New</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="onboarding">
+          <span class="sidebar-category-label">Onboarding</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/scenarios/solo-dev.html" data-path="scenarios/solo-dev.html" data-category="onboarding" title="Use Thrum as a single-developer tool: one agent, one machine, no hand-holding">Solo Dev with One Agent</a>
+          <a class="sidebar-link" href="/docs/scenarios/team.html" data-path="scenarios/team.html" data-category="onboarding" title="Run multiple agents in parallel worktrees with Thrum as the coordination layer">Team on Your Machine</a>
+          <a class="sidebar-link" href="/docs/scenarios/across-boundaries.html" data-path="scenarios/across-boundaries.html" data-category="onboarding" title="Connect Thrum daemons in different repos or on different machines via peers">Agents Across Repos/Machines</a>
+          <a class="sidebar-link" href="/docs/scenarios/orchestration.html" data-path="scenarios/orchestration.html" data-category="onboarding" title="Hand off a plan you wrote and let the orchestrator run the execution phase">Automated Plan Execution</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="quickstart">
+          <span class="sidebar-category-label">Getting Started</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/quickstart.html" data-path="quickstart.html" data-category="quickstart" title="Get up and running with Thrum in 5 minutes - initialization, daemon setup, agent registration, and first message">Quickstart Guide</a>
+        <div class="sidebar-category sidebar-subcategory" data-category="tools">
+          <span class="sidebar-category-label sidebar-subcategory-label collapsible"><span class="sidebar-chevron">▸</span><span>Recommended Tools</span></span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/recommended-tools.html" data-path="guides/recommended-tools.html" data-category="tools" title="Tools, extensions, and integrations that work well with Thrum for AI agent coordination workflows">Recommended Tools</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-setup.html" data-path="guides/beads-setup.html" data-category="tools" title="Set up Beads for git-backed task tracking alongside Thrum — installation, initialization, agent workflow, and worktree configuration">Beads Setup Guide</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-ui-setup.html" data-path="guides/beads-ui-setup.html" data-category="tools" title="Set up Beads UI for a live web dashboard of your agent task board — installation, usage, and multi-project support">Beads UI Setup Guide</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-migration-to-embedded.html" data-path="guides/beads-migration-to-embedded.html" data-category="tools" title="Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.">Beads Migration to Embedded Mode (bd 1.0+)</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/playwright-cli-setup.html" data-path="guides/playwright-cli-setup.html" data-category="tools" title="Set up Playwright CLI for browser automation in Claude Code agent workflows — screenshots, page context, form filling, and web testing">Playwright CLI Setup Guide</a>
+          </div>
+        </div>
+
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="orchestration">
+          <span class="sidebar-category-label">Orchestration</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/orchestrator-role.html" data-path="orchestrator-role.html" data-category="orchestration" title="Hand off a plan you wrote and let the orchestrator run the execution phase">Orchestrator Role</a>
+          <a class="sidebar-link" href="/docs/tmux-sessions.html" data-path="tmux-sessions.html" data-category="orchestration" title="Run agent teams in daemon-managed tmux sessions with instant message delivery, zero background listeners, and coordinator-managed lifecycle">Tmux-Managed Sessions</a>
+          <a class="sidebar-link" href="/docs/monitor-jobs.html" data-path="monitor-jobs.html" data-category="orchestration" title="Watch any process output for pattern matches and deliver results as synthetic Thrum messages — no polling, no shell, no manual piping">Monitor Jobs</a>
+          <a class="sidebar-link" href="/docs/multi-runtime.html" data-path="multi-runtime.html" data-category="orchestration" title="Run Claude, Codex, Aider, Gemini, and other agent runtimes in tmux-managed sessions">Multi-Runtime Support</a>
+          <a class="sidebar-link" href="/docs/single-agent-mode.html" data-path="single-agent-mode.html" data-category="orchestration" title="Use Thrum's context management without the messaging layer — single-agent mode as default, three-tier context, and when to switch to multi-agent">Single-Agent Mode</a>
+          <a class="sidebar-link" href="/docs/workflow-templates.html" data-path="workflow-templates.html" data-category="orchestration" title="Four-phase skill pipeline for designing, planning, setting up, and implementing features with AI agents">Workflow Templates</a>
+          <a class="sidebar-link" href="/docs/permission-prompts.html" data-path="permission-prompts.html" data-category="orchestration" title="How Thrum detects when an agent is stuck on a permission prompt and routes it to a supervisor — silence-hash poller, supervisor reply paths (CLI, web UI, Telegram), reminder cadence, restart resilience">Permission Prompts</a>
+          <a class="sidebar-link" href="/docs/session-restart.html" data-path="session-restart.html" data-category="orchestration" title="Save conversation history and resume where you left off — from daily shutdown to automated mid-task restarts">Session Restart &amp; Context Recovery</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="identity">
+          <span class="sidebar-category-label">Identity &amp; Agents</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/identity.html" data-path="identity.html" data-category="identity" title="Named agents, deterministic IDs, identity resolution, registration, conflicts, cleanup, and multi-agent worktrees">Agent Identity &amp; Registration</a>
+          <a class="sidebar-link" href="/docs/agent-configs.html" data-path="agent-configs.html" data-category="identity" title="Ready-to-use Claude Code agent definitions for Thrum messaging and Beads task tracking">Agent Configurations</a>
+          <a class="sidebar-link" href="/docs/claude-agent-integration.html" data-path="claude-agent-integration.html" data-category="identity" title="Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup">Claude Code Agent Integration</a>
+          <a class="sidebar-link" href="/docs/role-templates.html" data-path="role-templates.html" data-category="identity" title="Auto-generate agent preambles from role templates with scope boundaries, task protocol, communication patterns, and behavioral directives">Role-Based Preamble Templates</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="messaging">
+          <span class="sidebar-category-label">Messaging</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/peers.html" data-path="peers.html" data-category="messaging" title="Cross-repo and cross-machine messaging between Thrum daemons">Peers</a>
+          <a class="sidebar-link" href="/docs/inbox-query-methods.html" data-path="inbox-query-methods.html" data-category="messaging" title="RPC methods for querying messages, agents, and managing read state with filtering and pagination">Inbox Query Methods</a>
+          <a class="sidebar-link" href="/docs/telegram-bridge.html" data-path="telegram-bridge.html" data-category="messaging" title="One Telegram connection, unified inbox for your whole team of agents — any agent can ping you, replies route back to the original author">Telegram Bridge</a>
+          <a class="sidebar-link" href="/docs/telegram-groups.html" data-path="telegram-groups.html" data-category="messaging" title="Share a Telegram group with your team so everyone can interact with the same Thrum agent — send instructions, see responses, and coordinate through one chat">Telegram Groups</a>
+          <a class="sidebar-link" href="/docs/messaging.html" data-path="messaging.html" data-category="messaging" title="Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering">Messaging</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="substrate">
+          <span class="sidebar-category-label">Personal Agent Substrate</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/substrate/overview.html" data-path="substrate/overview.html" data-category="substrate" title="v0.11 turns thrum into the substrate beneath personal-agent harnesses (scheduling, scheduled-agent lifecycle, skill registration, email transport, reminders). What it is, why it exists, and how the pieces fit together.">Personal Agent Substrate</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="coordination">
+          <span class="sidebar-category-label">Coordination</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/agent-coordination.html" data-path="agent-coordination.html" data-category="coordination" title="Multi-agent workflows, Beads integration, session templates, and coordination patterns for AI agent teams">Agent Coordination</a>
+          <a class="sidebar-link" href="/docs/multi-agent.html" data-path="multi-agent.html" data-category="coordination" title="Runtime presets, thrum prime, and coordination patterns for running multiple AI agents across worktrees and platforms">Multi-Agent Support</a>
+          <a class="sidebar-link" href="/docs/context.html" data-path="context.html" data-category="coordination" title="Per-agent context storage for persisting volatile project state across sessions and machines">Agent Context Management</a>
+          <a class="sidebar-link" href="/docs/guides/coordinate-two-agents.html" data-path="guides/coordinate-two-agents.html" data-category="coordination" title="Walk through registering two agents, sending messages between them, and seeing what everyone is working on — the most common Thrum use case">Coordinate Two Agents</a>
+          <a class="sidebar-link" href="/docs/guides/review-workflow.html" data-path="guides/review-workflow.html" data-category="coordination" title="Walk through the implement-then-review cycle: one agent writes code on a feature branch, another reviews it, Thrum handles the communication">Code Review Workflow</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="integrations">
+          <span class="sidebar-category-label">Integrations</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/web-ui.html" data-path="web-ui.html" data-category="integrations" title="Browser-based dashboard for monitoring agents and reading messages — served from the daemon on a single port">Web UI</a>
+          <a class="sidebar-link" href="/docs/claude-code-plugin.html" data-path="claude-code-plugin.html" data-category="integrations" title="Install and use the Thrum plugin for Claude Code — slash commands, automatic context injection, and multi-agent coordination without manual configuration">Claude Code Plugin</a>
+          <a class="sidebar-link" href="/docs/beads-and-thrum.html" data-path="beads-and-thrum.html" data-category="integrations" title="How persistent task tracking and agent messaging work together for multi-agent development">Beads and Thrum</a>
+          <a class="sidebar-link" href="/docs/codex-plugin.html" data-path="codex-plugin.html" data-category="integrations" title="Install and use Thrum's Codex skill bundle — the Claude thrum skill surface, mirrored as top-level Codex skills">Codex Plugin</a>
+          <a class="sidebar-link" href="/docs/cursor-plugin.html" data-path="cursor-plugin.html" data-category="integrations" title="Install and use Thrum's Cursor plugin — rules, hooks, skills, commands, and MCP configuration for multi-agent coordination in Cursor">Cursor Plugin</a>
+          <a class="sidebar-link" href="/docs/mcp-server.html" data-path="mcp-server.html" data-category="integrations" title="Thrum MCP server for native AI agent integration — tools, identity, message handling, and Claude Code setup">MCP Server</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="infrastructure">
+          <span class="sidebar-category-label">Infrastructure</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/daemon.html" data-path="daemon.html" data-category="infrastructure" title="Background service managing state, RPC handlers, sync loop, WebSocket server, and embedded UI on single port">Daemon Architecture</a>
+          <a class="sidebar-link" href="/docs/sync.html" data-path="sync.html" data-category="infrastructure" title="Git-based message synchronization using orphan branch, sync worktree, conflict-free merging, and offline-first design">Sync Protocol</a>
+          <a class="sidebar-link" href="/docs/configuration.html" data-path="configuration.html" data-category="infrastructure" title="Thrum configuration model — config.json schema, runtime tiers, priority chain, and the config show command">Configuration</a>
+          <a class="sidebar-link" href="/docs/guides/cross-machine-sync.html" data-path="guides/cross-machine-sync.html" data-category="infrastructure" title="Walk through enabling cross-machine sync, sending a message from one machine and receiving it on another, and verifying sync status">Sync Across Machines</a>
+          <a class="sidebar-link" href="/docs/tailscale-sync.html" data-path="tailscale-sync.html" data-category="infrastructure" title="Direct machine-to-machine sync via Tailscale — setup, architecture, pairing, and CLI commands">Tailscale Sync</a>
+          <a class="sidebar-link" href="/docs/tailscale-security.html" data-path="tailscale-security.html" data-category="infrastructure" title="Security model for Thrum's Tailscale peer sync — pairing, encryption, access control, and threat mitigations">Tailscale Sync Security</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="reference">
+          <span class="sidebar-category-label">Reference</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/development.html" data-path="development.html" data-category="reference" title="Setup, testing, building, contributing - complete guide for developing and extending Thrum">Development Guide</a>
+          <a class="sidebar-link" href="/docs/cli-hints.html" data-path="cli-hints.html" data-category="reference" title="Inline contextual hints from Thrum CLI commands — pre-action warnings, post-action next steps, and JSON output for tooling. Covers Phase B (thrum send / tmux create / init) and the THRUM_NO_HINTS opt-out.">CLI Hints</a>
+          <a class="sidebar-link" href="/docs/security-cicd.html" data-path="security-cicd.html" data-category="reference" title="Automated security scanning, CI/CD pipelines, and deployment workflows for Thrum">Security &amp; CI/CD</a>
+          <a class="sidebar-link" href="/docs/security-model.html" data-path="security-model.html" data-category="reference" title="How Thrum's daemon decides who's calling — kernel-verified peer credentials, anonymous-caller read-only allowlist, author-only message operations, and WebSocket origin restriction. Covers the v0.9.0 sec.1–sec.8 hardening.">Local Security Model</a>
+          <a class="sidebar-link" href="/docs/architecture.html" data-path="architecture.html" data-category="reference" title="Thrum architecture — daemon design, storage, sync engine, transport layer, key features, and foundation packages">Architecture</a>
+          <a class="sidebar-link" href="/docs/cli.html" data-path="cli.html" data-category="reference" title="Complete reference for the thrum command-line interface — all commands, flags, and usage examples">CLI Reference</a>
+          <a class="sidebar-link" href="/docs/rpc-api.html" data-path="rpc-api.html" data-category="reference" title="Thrum daemon JSON-RPC 2.0 API reference — all RPC methods, parameters, and response formats">RPC API</a>
+        <div class="sidebar-category sidebar-subcategory" data-category="agent-protocols">
+          <span class="sidebar-category-label sidebar-subcategory-label collapsible"><span class="sidebar-chevron">▸</span><span>Agent Protocols</span></span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/sub-agent-strategy.html" data-path="strategies/sub-agent-strategy.html" data-category="agent-protocols" title="When and how to delegate work to sub-agents for context efficiency">Sub-Agent Strategy</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/thrum-registration.html" data-path="strategies/thrum-registration.html" data-category="agent-protocols" title="How to register with Thrum at session start and communicate with other agents">Thrum Registration</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/resume-after-context-loss.html" data-path="strategies/resume-after-context-loss.html" data-category="agent-protocols" title="How to recover and pick up work after compaction, a new session, or a crash">Resume After Context Loss</a>
+          </div>
+        </div>
+
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="api">
+          <span class="sidebar-category-label">API Reference</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/api/authentication.html" data-path="api/authentication.html" data-category="api" title="Authentication and authorization in the Thrum API — agent identity, session tokens, and security model">Authentication</a>
+          <a class="sidebar-link active" href="/docs/api/events.html" data-path="api/events.html" data-category="api" title="All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events">Event Reference</a>
+          <a class="sidebar-link" href="/docs/api/websocket.html" data-path="api/websocket.html" data-category="api" title="Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events">WebSocket API</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="guides">
+          <span class="sidebar-category-label">Guides</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="troubleshooting">
+          <span class="sidebar-category-label">troubleshooting</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/troubleshooting-identity.html" data-path="troubleshooting-identity.html" data-category="troubleshooting" title="Identity guard error messages and how to fix them — cross_worktree pid_mismatch, anonymous_mutating_rpc, non_git_bootstrap, and the rest of the v0.9.0 guard catalog with remediation steps.">Troubleshooting Identity Issues</a>
+          </div>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- Content -->
+    <main class="docs-content" id="docs-content">
+      <div class="docs-content-inner" id="docs-content-inner">
 <h2>Event Reference</h2>
 <p>This document provides detailed documentation for all events emitted by the
 Thrum daemon over WebSocket connections.</p>
 <h2>Event Format</h2>
 <p>Events are sent as JSON-RPC 2.0 notifications (without an <code>id</code> field):</p>
-<pre><code>{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;method&quot;: &quot;event.type&quot;,
-  &quot;params&quot;: {
-    // event-specific payload
-  }
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;event.type&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-comment">// event-specific payload</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Key characteristics</strong>:</p>
 <ul>
 <li>No <code>id</code> field (notifications don&#39;t expect responses)</li>
@@ -85,12 +265,12 @@ miss events</li>
 </ul>
 <h2>Common Fields</h2>
 <p>All persisted events share a common base structure:</p>
-<pre><code>{
-  &quot;type&quot;: &quot;event.type&quot;,
-  &quot;timestamp&quot;: &quot;2024-01-01T12:00:00Z&quot;,
-  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
-  &quot;v&quot;: 1
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;event.type&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <table>
 <thead>
 <tr>
@@ -123,7 +303,7 @@ miss events</li>
 <h2>JSONL Storage</h2>
 <p>Events are persisted as sharded JSONL files in the sync worktree at
 <code>.git/thrum-sync/a-sync/</code>:</p>
-<pre><code>.git/thrum-sync/a-sync/
+<pre><code class="language-text hljs">.git/thrum-sync/a-sync/
 ├── events.jsonl              Agent lifecycle events
 └── messages/
     └── {agent_name}.jsonl    Per-agent message events</code></pre>
@@ -159,35 +339,35 @@ can be rebuilt from the JSONL at any time.</p>
 </ul>
 <p><strong>Stored in</strong>: <code>messages/{agent_name}.jsonl</code></p>
 <p><strong>Payload</strong> (MessageCreateEvent):</p>
-<pre><code>{
-  &quot;type&quot;: &quot;message.create&quot;,
-  &quot;timestamp&quot;: &quot;2024-01-01T12:00:00Z&quot;,
-  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
-  &quot;v&quot;: 1,
-  &quot;message_id&quot;: &quot;msg_xyz789&quot;,
-  &quot;thread_id&quot;: &quot;thread_abc123&quot;,
-  &quot;agent_id&quot;: &quot;furiosa&quot;,
-  &quot;session_id&quot;: &quot;s_abc123&quot;,
-  &quot;body&quot;: {
-    &quot;format&quot;: &quot;markdown&quot;,
-    &quot;content&quot;: &quot;Hello, world!&quot;,
-    &quot;structured&quot;: &quot;{\&quot;key\&quot;:\&quot;value\&quot;}&quot;
-  },
-  &quot;scopes&quot;: [
-    {
-      &quot;type&quot;: &quot;task&quot;,
-      &quot;value&quot;: &quot;PROJ-123&quot;
-    }
-  ],
-  &quot;refs&quot;: [
-    {
-      &quot;type&quot;: &quot;mention&quot;,
-      &quot;value&quot;: &quot;reviewer&quot;
-    }
-  ],
-  &quot;authored_by&quot;: &quot;&quot;,
-  &quot;disclosed&quot;: false
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;message.create&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_xyz789&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thread_abc123&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;s_abc123&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;body&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;markdown&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Hello, world!&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;structured&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;{\&quot;key\&quot;:\&quot;value\&quot;}&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;scopes&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+    <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;task&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;PROJ-123&quot;</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;refs&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+    <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mention&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;authored_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;disclosed&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
@@ -210,12 +390,12 @@ join the existing thread.</li>
 </ul>
 <p><strong>Related methods</strong>: <code>message.send</code>, <code>message.list</code></p>
 <p><strong>Example usage</strong>:</p>
-<pre><code>ws.onmessage = (event) =&gt; {
-  const msg = JSON.parse(event.data);
-  if (msg.method === &quot;message.create&quot;) {
-    const message = msg.params;
-    console.log(
-      `New message from ${message.agent_id}: ${message.body.content}`,
+<pre><code class="language-javascript hljs">ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
+  <span class="hljs-keyword">const</span> msg = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(event.<span class="hljs-property">data</span>);
+  <span class="hljs-keyword">if</span> (msg.<span class="hljs-property">method</span> === <span class="hljs-string">&quot;message.create&quot;</span>) {
+    <span class="hljs-keyword">const</span> message = msg.<span class="hljs-property">params</span>;
+    <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(
+      <span class="hljs-string">`New message from <span class="hljs-subst">${message.agent_id}</span>: <span class="hljs-subst">${message.body.content}</span>`</span>,
     );
   }
 };</code></pre>
@@ -229,18 +409,18 @@ join the existing thread.</li>
 </ul>
 <p><strong>Stored in</strong>: <code>messages/{agent_name}.jsonl</code></p>
 <p><strong>Payload</strong> (MessageEditEvent):</p>
-<pre><code>{
-  &quot;type&quot;: &quot;message.edit&quot;,
-  &quot;timestamp&quot;: &quot;2024-01-01T13:00:00Z&quot;,
-  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
-  &quot;v&quot;: 1,
-  &quot;message_id&quot;: &quot;msg_xyz789&quot;,
-  &quot;body&quot;: {
-    &quot;format&quot;: &quot;markdown&quot;,
-    &quot;content&quot;: &quot;Updated content&quot;,
-    &quot;structured&quot;: &quot;{\&quot;updated\&quot;:true}&quot;
-  }
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;message.edit&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T13:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_xyz789&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;body&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;markdown&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Updated content&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;structured&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;{\&quot;updated\&quot;:true}&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
@@ -258,11 +438,11 @@ table) and includes:</p>
 </ul>
 <p><strong>Related methods</strong>: <code>message.edit</code>, <code>message.get</code></p>
 <p><strong>Example usage</strong>:</p>
-<pre><code>ws.onmessage = (event) =&gt; {
-  const msg = JSON.parse(event.data);
-  if (msg.method === &quot;message.edit&quot;) {
-    const edit = msg.params;
-    updateMessageInUI(edit.message_id, edit.body.content);
+<pre><code class="language-javascript hljs">ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
+  <span class="hljs-keyword">const</span> msg = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(event.<span class="hljs-property">data</span>);
+  <span class="hljs-keyword">if</span> (msg.<span class="hljs-property">method</span> === <span class="hljs-string">&quot;message.edit&quot;</span>) {
+    <span class="hljs-keyword">const</span> edit = msg.<span class="hljs-property">params</span>;
+    <span class="hljs-title function_">updateMessageInUI</span>(edit.<span class="hljs-property">message_id</span>, edit.<span class="hljs-property">body</span>.<span class="hljs-property">content</span>);
   }
 };</code></pre>
 <h4>message.delete</h4>
@@ -275,14 +455,14 @@ table) and includes:</p>
 </ul>
 <p><strong>Stored in</strong>: <code>messages/{agent_name}.jsonl</code></p>
 <p><strong>Payload</strong> (MessageDeleteEvent):</p>
-<pre><code>{
-  &quot;type&quot;: &quot;message.delete&quot;,
-  &quot;timestamp&quot;: &quot;2024-01-01T14:00:00Z&quot;,
-  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
-  &quot;v&quot;: 1,
-  &quot;message_id&quot;: &quot;msg_xyz789&quot;,
-  &quot;reason&quot;: &quot;spam&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;message.delete&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T14:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_xyz789&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;reason&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;spam&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
@@ -295,11 +475,11 @@ database. The message content is preserved for audit purposes.</p>
 <p><strong>Related methods</strong>: <code>message.delete</code>, <code>message.list</code> (with <code>include_deleted</code>
 param)</p>
 <p><strong>Example usage</strong>:</p>
-<pre><code>ws.onmessage = (event) =&gt; {
-  const msg = JSON.parse(event.data);
-  if (msg.method === &quot;message.delete&quot;) {
-    const deletion = msg.params;
-    removeMessageFromUI(deletion.message_id);
+<pre><code class="language-javascript hljs">ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
+  <span class="hljs-keyword">const</span> msg = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(event.<span class="hljs-property">data</span>);
+  <span class="hljs-keyword">if</span> (msg.<span class="hljs-property">method</span> === <span class="hljs-string">&quot;message.delete&quot;</span>) {
+    <span class="hljs-keyword">const</span> deletion = msg.<span class="hljs-property">params</span>;
+    <span class="hljs-title function_">removeMessageFromUI</span>(deletion.<span class="hljs-property">message_id</span>);
   }
 };</code></pre>
 <h3>Thread Events</h3>
@@ -312,15 +492,15 @@ param)</p>
 </ul>
 <p><strong>Stored in</strong>: <code>messages/{agent_name}.jsonl</code></p>
 <p><strong>Payload</strong> (ThreadCreateEvent):</p>
-<pre><code>{
-  &quot;type&quot;: &quot;thread.create&quot;,
-  &quot;timestamp&quot;: &quot;2024-01-01T12:00:00Z&quot;,
-  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
-  &quot;v&quot;: 1,
-  &quot;thread_id&quot;: &quot;thread_abc123&quot;,
-  &quot;title&quot;: &quot;Discussion about feature X&quot;,
-  &quot;created_by&quot;: &quot;furiosa&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thread.create&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thread_abc123&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Discussion about feature X&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;created_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
@@ -339,18 +519,18 @@ event is a WebSocket notification only and is <strong>not persisted</strong> to 
 <li>Sent to clients with matching subscriptions</li>
 </ul>
 <p><strong>Payload</strong> (ThreadUpdatedEvent):</p>
-<pre><code>{
-  &quot;type&quot;: &quot;thread.updated&quot;,
-  &quot;timestamp&quot;: &quot;2024-01-01T13:00:00Z&quot;,
-  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
-  &quot;v&quot;: 1,
-  &quot;thread_id&quot;: &quot;thread_abc123&quot;,
-  &quot;message_count&quot;: 5,
-  &quot;unread_count&quot;: 2,
-  &quot;last_activity&quot;: &quot;2024-01-01T13:00:00Z&quot;,
-  &quot;last_sender&quot;: &quot;furiosa&quot;,
-  &quot;preview&quot;: &quot;Latest message text...&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thread.updated&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T13:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thread_abc123&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;message_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">5</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;unread_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;last_activity&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T13:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;last_sender&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;preview&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Latest message text...&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>thread_id</code>: Thread that was updated</li>
@@ -370,19 +550,19 @@ event is a WebSocket notification only and is <strong>not persisted</strong> to 
 </ul>
 <p><strong>Stored in</strong>: <code>events.jsonl</code></p>
 <p><strong>Payload</strong> (AgentRegisterEvent):</p>
-<pre><code>{
-  &quot;type&quot;: &quot;agent.register&quot;,
-  &quot;timestamp&quot;: &quot;2024-01-01T12:00:00Z&quot;,
-  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
-  &quot;v&quot;: 1,
-  &quot;agent_id&quot;: &quot;furiosa&quot;,
-  &quot;kind&quot;: &quot;agent&quot;,
-  &quot;name&quot;: &quot;furiosa&quot;,
-  &quot;role&quot;: &quot;implementer&quot;,
-  &quot;module&quot;: &quot;auth&quot;,
-  &quot;worktree&quot;: &quot;main&quot;,
-  &quot;display&quot;: &quot;Auth Implementer&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent.register&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;kind&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;worktree&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;main&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;display&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Auth Implementer&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
@@ -412,15 +592,15 @@ Names must match <code>[a-z0-9_]+</code> and cannot use reserved words (<code>da
 </ul>
 <p><strong>Stored in</strong>: <code>events.jsonl</code></p>
 <p><strong>Payload</strong> (AgentCleanupEvent):</p>
-<pre><code>{
-  &quot;type&quot;: &quot;agent.cleanup&quot;,
-  &quot;timestamp&quot;: &quot;2024-01-01T15:00:00Z&quot;,
-  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
-  &quot;v&quot;: 1,
-  &quot;agent_id&quot;: &quot;furiosa&quot;,
-  &quot;reason&quot;: &quot;manual deletion&quot;,
-  &quot;method&quot;: &quot;manual&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent.cleanup&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T15:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;reason&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;manual deletion&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;manual&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
@@ -439,28 +619,28 @@ Names must match <code>[a-z0-9_]+</code> and cannot use reserved words (<code>da
 </ul>
 <p><strong>Stored in</strong>: <code>messages/{agent_name}.jsonl</code></p>
 <p><strong>Payload</strong> (AgentUpdateEvent):</p>
-<pre><code>{
-  &quot;type&quot;: &quot;agent.update&quot;,
-  &quot;timestamp&quot;: &quot;2024-01-01T12:30:00Z&quot;,
-  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
-  &quot;v&quot;: 1,
-  &quot;agent_id&quot;: &quot;furiosa&quot;,
-  &quot;work_contexts&quot;: [
-    {
-      &quot;session_id&quot;: &quot;s_abc123&quot;,
-      &quot;branch&quot;: &quot;feature/auth&quot;,
-      &quot;worktree_path&quot;: &quot;/path/to/repo&quot;,
-      &quot;unmerged_commits&quot;: [{ &quot;sha&quot;: &quot;abc1234&quot;, &quot;message&quot;: &quot;Add login form&quot; }],
-      &quot;uncommitted_files&quot;: [&quot;auth.go&quot;],
-      &quot;changed_files&quot;: [&quot;auth.go&quot;, &quot;auth_test.go&quot;],
-      &quot;git_updated_at&quot;: &quot;2024-01-01T12:30:00Z&quot;,
-      &quot;current_task&quot;: &quot;Implement login flow&quot;,
-      &quot;task_updated_at&quot;: &quot;2024-01-01T12:00:00Z&quot;,
-      &quot;intent&quot;: &quot;Building auth module&quot;,
-      &quot;intent_updated_at&quot;: &quot;2024-01-01T12:00:00Z&quot;
-    }
-  ]
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent.update&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:30:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;work_contexts&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+    <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;s_abc123&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;branch&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;feature/auth&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;worktree_path&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;/path/to/repo&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;unmerged_commits&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;sha&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;abc1234&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;message&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Add login form&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;uncommitted_files&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;auth.go&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;changed_files&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;auth.go&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;auth_test.go&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;git_updated_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:30:00Z&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;current_task&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Implement login flow&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;task_updated_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;intent&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Building auth module&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;intent_updated_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:00:00Z&quot;</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">]</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
@@ -488,14 +668,14 @@ the same session, the one with the newer <code>git_updated_at</code> wins.</p>
 </ul>
 <p><strong>Stored in</strong>: <code>events.jsonl</code></p>
 <p><strong>Payload</strong> (AgentSessionStartEvent):</p>
-<pre><code>{
-  &quot;type&quot;: &quot;agent.session.start&quot;,
-  &quot;timestamp&quot;: &quot;2024-01-01T12:00:00Z&quot;,
-  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
-  &quot;v&quot;: 1,
-  &quot;session_id&quot;: &quot;s_abc123&quot;,
-  &quot;agent_id&quot;: &quot;furiosa&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent.session.start&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;s_abc123&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
@@ -522,14 +702,14 @@ the same session, the one with the newer <code>git_updated_at</code> wins.</p>
 </ul>
 <p><strong>Stored in</strong>: <code>events.jsonl</code></p>
 <p><strong>Payload</strong> (AgentSessionEndEvent):</p>
-<pre><code>{
-  &quot;type&quot;: &quot;agent.session.end&quot;,
-  &quot;timestamp&quot;: &quot;2024-01-01T13:00:00Z&quot;,
-  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
-  &quot;v&quot;: 1,
-  &quot;session_id&quot;: &quot;s_abc123&quot;,
-  &quot;reason&quot;: &quot;normal&quot;
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent.session.end&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T13:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;s_abc123&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;reason&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;normal&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
@@ -548,18 +728,18 @@ the same session, the one with the newer <code>git_updated_at</code> wins.</p>
 <h3>Scope-Based Subscriptions</h3>
 <p>Only receive events for messages that match the subscribed scope.</p>
 <p><strong>Example</strong>: Subscribe to all messages in task &quot;PROJ-123&quot;</p>
-<pre><code>{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;method&quot;: &quot;subscribe.create&quot;,
-  &quot;params&quot;: {
-    &quot;filter_type&quot;: &quot;scope&quot;,
-    &quot;scope&quot;: {
-      &quot;type&quot;: &quot;task&quot;,
-      &quot;value&quot;: &quot;PROJ-123&quot;
-    }
-  },
-  &quot;id&quot;: 1
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;subscribe.create&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;filter_type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;scope&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;scope&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;task&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;PROJ-123&quot;</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Matching logic</strong>:</p>
 <ul>
 <li>Event&#39;s <code>scopes</code> array contains an exact match for the subscribed scope</li>
@@ -568,15 +748,15 @@ the same session, the one with the newer <code>git_updated_at</code> wins.</p>
 <h3>Mention-Based Subscriptions</h3>
 <p>Only receive events for messages that mention a specific role.</p>
 <p><strong>Example</strong>: Subscribe to messages mentioning &quot;@reviewer&quot;</p>
-<pre><code>{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;method&quot;: &quot;subscribe.create&quot;,
-  &quot;params&quot;: {
-    &quot;filter_type&quot;: &quot;mention&quot;,
-    &quot;mention&quot;: &quot;reviewer&quot;
-  },
-  &quot;id&quot;: 1
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;subscribe.create&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;filter_type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mention&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;mention&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Matching logic</strong>:</p>
 <ul>
 <li>Event&#39;s <code>refs</code> array contains a reference with <code>type: &quot;mention&quot;</code> and
@@ -585,14 +765,14 @@ the same session, the one with the newer <code>git_updated_at</code> wins.</p>
 <h3>All-Events Subscriptions</h3>
 <p>Receive all events (use with caution, high volume).</p>
 <p><strong>Example</strong>: Subscribe to all events</p>
-<pre><code>{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;method&quot;: &quot;subscribe.create&quot;,
-  &quot;params&quot;: {
-    &quot;filter_type&quot;: &quot;all&quot;
-  },
-  &quot;id&quot;: 1
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;subscribe.create&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;filter_type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;all&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Use cases</strong>:</p>
 <ul>
 <li>Admin dashboards</li>
@@ -699,88 +879,88 @@ for the same message).</p>
 </ol>
 <h2>Example Event Handlers</h2>
 <h3>JavaScript/TypeScript</h3>
-<pre><code>const eventHandlers = {
-  &quot;message.create&quot;: (params: MessageCreateEvent) =&gt; {
-    console.log(`New message: ${params.message_id}`);
-    addMessageToUI(params);
+<pre><code class="language-typescript hljs"><span class="hljs-keyword">const</span> eventHandlers = {
+  <span class="hljs-string">&quot;message.create&quot;</span>: <span class="hljs-function">(<span class="hljs-params"><span class="hljs-attr">params</span>: <span class="hljs-title class_">MessageCreateEvent</span></span>) =&gt;</span> {
+    <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">`New message: <span class="hljs-subst">${params.message_id}</span>`</span>);
+    <span class="hljs-title function_">addMessageToUI</span>(params);
   },
 
-  &quot;message.edit&quot;: (params: MessageEditEvent) =&gt; {
-    console.log(`Message edited: ${params.message_id}`);
-    updateMessageInUI(params);
+  <span class="hljs-string">&quot;message.edit&quot;</span>: <span class="hljs-function">(<span class="hljs-params"><span class="hljs-attr">params</span>: <span class="hljs-title class_">MessageEditEvent</span></span>) =&gt;</span> {
+    <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">`Message edited: <span class="hljs-subst">${params.message_id}</span>`</span>);
+    <span class="hljs-title function_">updateMessageInUI</span>(params);
   },
 
-  &quot;message.delete&quot;: (params: MessageDeleteEvent) =&gt; {
-    console.log(`Message deleted: ${params.message_id}`);
-    removeMessageFromUI(params);
+  <span class="hljs-string">&quot;message.delete&quot;</span>: <span class="hljs-function">(<span class="hljs-params"><span class="hljs-attr">params</span>: <span class="hljs-title class_">MessageDeleteEvent</span></span>) =&gt;</span> {
+    <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">`Message deleted: <span class="hljs-subst">${params.message_id}</span>`</span>);
+    <span class="hljs-title function_">removeMessageFromUI</span>(params);
   },
 };
 
-ws.onmessage = (event) =&gt; {
-  const msg = JSON.parse(event.data);
+ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
+  <span class="hljs-keyword">const</span> msg = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(event.<span class="hljs-property">data</span>);
 
-  // Handle events (no id field)
-  if (!msg.id &amp;&amp; msg.method) {
-    const handler = eventHandlers[msg.method];
-    if (handler) {
-      handler(msg.params);
-    } else {
-      console.warn(`Unknown event type: ${msg.method}`);
+  <span class="hljs-comment">// Handle events (no id field)</span>
+  <span class="hljs-keyword">if</span> (!msg.<span class="hljs-property">id</span> &amp;&amp; msg.<span class="hljs-property">method</span>) {
+    <span class="hljs-keyword">const</span> handler = eventHandlers[msg.<span class="hljs-property">method</span>];
+    <span class="hljs-keyword">if</span> (handler) {
+      <span class="hljs-title function_">handler</span>(msg.<span class="hljs-property">params</span>);
+    } <span class="hljs-keyword">else</span> {
+      <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">warn</span>(<span class="hljs-string">`Unknown event type: <span class="hljs-subst">${msg.method}</span>`</span>);
     }
   }
 
-  // Handle RPC responses (has id field)
-  else if (msg.id) {
-    handleRPCResponse(msg);
+  <span class="hljs-comment">// Handle RPC responses (has id field)</span>
+  <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (msg.<span class="hljs-property">id</span>) {
+    <span class="hljs-title function_">handleRPCResponse</span>(msg);
   }
 };</code></pre>
 <h3>Go</h3>
-<pre><code>type EventHandler func(json.RawMessage) error
+<pre><code class="language-go hljs"><span class="hljs-keyword">type</span> EventHandler <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(json.RawMessage)</span></span> <span class="hljs-type">error</span>
 
-handlers := map[string]EventHandler{
-    &quot;message.create&quot;: func(params json.RawMessage) error {
-        var event types.MessageCreateEvent
-        if err := json.Unmarshal(params, &amp;event); err != nil {
-            return err
+handlers := <span class="hljs-keyword">map</span>[<span class="hljs-type">string</span>]EventHandler{
+    <span class="hljs-string">&quot;message.create&quot;</span>: <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(params json.RawMessage)</span></span> <span class="hljs-type">error</span> {
+        <span class="hljs-keyword">var</span> event types.MessageCreateEvent
+        <span class="hljs-keyword">if</span> err := json.Unmarshal(params, &amp;event); err != <span class="hljs-literal">nil</span> {
+            <span class="hljs-keyword">return</span> err
         }
-        log.Printf(&quot;New message: %s&quot;, event.MessageID)
-        return addMessageToUI(event)
+        log.Printf(<span class="hljs-string">&quot;New message: %s&quot;</span>, event.MessageID)
+        <span class="hljs-keyword">return</span> addMessageToUI(event)
     },
 
-    &quot;message.edit&quot;: func(params json.RawMessage) error {
-        var event types.MessageEditEvent
-        if err := json.Unmarshal(params, &amp;event); err != nil {
-            return err
+    <span class="hljs-string">&quot;message.edit&quot;</span>: <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(params json.RawMessage)</span></span> <span class="hljs-type">error</span> {
+        <span class="hljs-keyword">var</span> event types.MessageEditEvent
+        <span class="hljs-keyword">if</span> err := json.Unmarshal(params, &amp;event); err != <span class="hljs-literal">nil</span> {
+            <span class="hljs-keyword">return</span> err
         }
-        log.Printf(&quot;Message edited: %s&quot;, event.MessageID)
-        return updateMessageInUI(event)
+        log.Printf(<span class="hljs-string">&quot;Message edited: %s&quot;</span>, event.MessageID)
+        <span class="hljs-keyword">return</span> updateMessageInUI(event)
     },
 }
 
-func handleMessage(data []byte) error {
-    var msg struct {
-        JSONRPC string          `json:&quot;jsonrpc&quot;`
-        Method  string          `json:&quot;method,omitempty&quot;`
-        Params  json.RawMessage `json:&quot;params,omitempty&quot;`
-        ID      *int            `json:&quot;id,omitempty&quot;`
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">handleMessage</span><span class="hljs-params">(data []<span class="hljs-type">byte</span>)</span></span> <span class="hljs-type">error</span> {
+    <span class="hljs-keyword">var</span> msg <span class="hljs-keyword">struct</span> {
+        JSONRPC <span class="hljs-type">string</span>          <span class="hljs-string">`json:&quot;jsonrpc&quot;`</span>
+        Method  <span class="hljs-type">string</span>          <span class="hljs-string">`json:&quot;method,omitempty&quot;`</span>
+        Params  json.RawMessage <span class="hljs-string">`json:&quot;params,omitempty&quot;`</span>
+        ID      *<span class="hljs-type">int</span>            <span class="hljs-string">`json:&quot;id,omitempty&quot;`</span>
     }
 
-    if err := json.Unmarshal(data, &amp;msg); err != nil {
-        return err
+    <span class="hljs-keyword">if</span> err := json.Unmarshal(data, &amp;msg); err != <span class="hljs-literal">nil</span> {
+        <span class="hljs-keyword">return</span> err
     }
 
-    // Event (no ID field)
-    if msg.ID == nil &amp;&amp; msg.Method != &quot;&quot; {
+    <span class="hljs-comment">// Event (no ID field)</span>
+    <span class="hljs-keyword">if</span> msg.ID == <span class="hljs-literal">nil</span> &amp;&amp; msg.Method != <span class="hljs-string">&quot;&quot;</span> {
         handler, ok := handlers[msg.Method]
-        if !ok {
-            log.Printf(&quot;Unknown event: %s&quot;, msg.Method)
-            return nil
+        <span class="hljs-keyword">if</span> !ok {
+            log.Printf(<span class="hljs-string">&quot;Unknown event: %s&quot;</span>, msg.Method)
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>
         }
-        return handler(msg.Params)
+        <span class="hljs-keyword">return</span> handler(msg.Params)
     }
 
-    // RPC response (has ID)
-    return handleRPCResponse(&amp;msg)
+    <span class="hljs-comment">// RPC response (has ID)</span>
+    <span class="hljs-keyword">return</span> handleRPCResponse(&amp;msg)
 }</code></pre>
 <h2>Next Steps</h2>
 <ul>
@@ -794,10 +974,23 @@ subscribing to events</li>
 internals that route events to subscribers</li>
 </ul>
 
-</main>
-<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
-<a href="../../llms.txt">llms.txt</a> | <a href="../../llms-full.txt">llms-full.txt</a> | <a href="../../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
-</footer>
-<script>if(location.search.indexOf('nospa')===-1){location.replace('../../docs.html#api/events.html')}</script>
+      </div>
+    </main>
+
+  </div>
+
+  <script src="/js/vendor/minisearch.js"></script>
+  <script src="/js/search.js" data-docs-base="/docs/" data-search-index="/assets/docs/search-index.json"></script>
+  <script>
+    document.getElementById('theme-toggle').addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme');
+      var next = current === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('thrum-theme', next);
+    });
+    document.getElementById('sidebar-toggle').addEventListener('click', function() {
+      document.getElementById('docs-sidebar').classList.toggle('open');
+    });
+  </script>
 </body>
 </html>

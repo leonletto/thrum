@@ -70,15 +70,6 @@ renderer.code = function({ text, lang, escaped }) {
   return `<pre><code${langClass}>${escapedText}</code></pre>\n`;
 };
 
-/**
- * Plain renderer for SEO/agent pages — no syntax highlighting spans
- */
-const plainRenderer = new marked.Renderer();
-plainRenderer.code = function({ text, lang, escaped }) {
-  const escapedText = escaped ? text : escape(text);
-  return `<pre><code>${escapedText}</code></pre>\n`;
-};
-
 // Helper function for HTML escaping
 function escape(html) {
   return html
@@ -165,188 +156,293 @@ async function processMarkdownFile(filePath, docsDir, outputDir) {
   };
 }
 
-// Category ordering and labels for SEO page sitemap nav
-// (mirrors docs-nav.js CATEGORY_ORDER / CATEGORY_LABELS)
-const SEO_CATEGORY_ORDER = [
-  'overview', 'quickstart', 'webui', 'cli', 'messaging', 'identity',
-  'guides', 'api', 'daemon', 'mcp', 'sync', 'development'
+// Category ordering, labels, and parent→children relationships.
+// MUST match js/docs-nav.js so per-doc SEO pages render the same sidebar
+// as the (legacy) SPA. Update both together when categories change.
+const SPA_CATEGORY_ORDER = [
+  'overview',
+  'onboarding',
+  'quickstart',
+  'orchestration',
+  'identity',
+  'messaging',
+  'substrate',
+  'coordination',
+  'integrations',
+  'infrastructure',
+  'reference',
+  'api'
 ];
 
-const SEO_CATEGORY_LABELS = {
+const SPA_CATEGORY_LABELS = {
   overview: 'Overview',
+  onboarding: 'Onboarding',
   quickstart: 'Getting Started',
   tools: 'Recommended Tools',
-  webui: 'Web UI',
-  cli: 'CLI',
+  orchestration: 'Orchestration',
+  identity: 'Identity & Agents',
   messaging: 'Messaging',
-  identity: 'Identity',
-  guides: 'Guides',
-  api: 'API Reference',
+  substrate: 'Personal Agent Substrate',
+  coordination: 'Coordination',
+  integrations: 'Integrations',
+  infrastructure: 'Infrastructure',
   reference: 'Reference',
-  daemon: 'Daemon',
-  mcp: 'MCP Server',
-  sync: 'Sync',
-  context: 'Context',
-  architecture: 'Architecture',
-  development: 'Development'
+  'agent-protocols': 'Agent Protocols',
+  api: 'API Reference',
+  guides: 'Guides'
 };
 
-const SEO_CATEGORY_CHILDREN = {
-  quickstart: ['tools']
+const SPA_CATEGORY_CHILDREN = {
+  quickstart: ['tools'],
+  reference: ['agent-protocols']
 };
 
 /**
- * Build a static sitemap nav HTML string from the docs index.
- * Groups pages by category, marks the current page as bold text (no link).
+ * Generate per-doc static pages at /docs/<path>.html — each is the canonical
+ * URL for its content. Pages are pre-rendered with the full SPA chrome
+ * (header, sidebar, content, footer), use self-canonical URLs (no SPA
+ * fragment), and serve their content statically with no JS redirect. The
+ * docs.html SPA shell exists only as a redirect to /docs/overview.html now.
+ *
+ * See `spaTemplate` and `buildSpaSidebar` below for the rendering logic.
  */
-function buildSitemapNav(docs, currentDoc) {
-  // Group docs by category
+async function generateSEOPages(docs, docsDir) {
+  let count = 0;
+  for (const doc of docs) {
+    // Render content with hljs syntax-highlighting markup (same as the
+    // assets/docs/<path>.html artifacts the legacy SPA fetched) so per-doc
+    // pages display code identically.
+    const contentHtml = rewriteLinks(marked.parse(doc.content));
+    // doc.path already includes the .html extension (e.g. "beta-channel.html",
+    // "api/events.html") so we don't append another one.
+    const canonicalUrl = `${CONFIG.siteUrl}/docs/${doc.path}`;
+    const sidebarHtml = buildSpaSidebar(docs, doc);
+    const seoPath = path.join(docsDir, doc.path);
+    await fs.ensureDir(path.dirname(seoPath));
+    await fs.writeFile(seoPath, spaTemplate(doc, contentHtml, sidebarHtml, canonicalUrl));
+    count++;
+  }
+  return count;
+}
+
+/**
+ * Build the pre-rendered sidebar nav HTML for a per-doc page.
+ *
+ * Mirrors the structure that js/docs-nav.js produces at runtime so the
+ * pre-rendered page renders an identical sidebar to the (legacy) SPA. The
+ * current doc's link gets `.active`. Sub-categories use the same
+ * `.sidebar-subcategory` + `.collapsible` markup; the chevron is rendered
+ * (▸) — without docs-nav.js loaded, sub-categories stay expanded.
+ *
+ * Links use absolute root-relative URLs (`/docs/<path>`) so the same href
+ * works from any per-doc page regardless of depth.
+ */
+function buildSpaSidebar(docs, currentDoc) {
+  // Group by category (skip uncategorized)
   const groups = {};
   for (const doc of docs) {
-    const cat = doc.category || 'uncategorized';
-    if (!groups[cat]) groups[cat] = [];
-    groups[cat].push(doc);
+    if (doc.category === 'uncategorized') continue;
+    if (!groups[doc.category]) groups[doc.category] = [];
+    groups[doc.category].push(doc);
   }
-
-  // Sort within each group by order then title
+  // Sort within each group by order, then title
   for (const cat of Object.keys(groups)) {
     groups[cat].sort((a, b) => {
       if (a.order !== b.order) return a.order - b.order;
       return a.title.localeCompare(b.title);
     });
   }
-
-  // Collect all categories that appear, ordered by SEO_CATEGORY_ORDER
-  const childCats = new Set();
-  for (const children of Object.values(SEO_CATEGORY_CHILDREN)) {
-    for (const c of children) childCats.add(c);
-  }
-
-  const orderedCats = [];
-  for (const cat of SEO_CATEGORY_ORDER) {
-    if (groups[cat]) {
-      orderedCats.push(cat);
-      // Add children inline after parent
-      const children = SEO_CATEGORY_CHILDREN[cat] || [];
-      for (const child of children) {
-        if (groups[child]) orderedCats.push(child);
-      }
+  // child→parent map for skip logic
+  const childToParent = {};
+  for (const [parent, children] of Object.entries(SPA_CATEGORY_CHILDREN)) {
+    for (const child of children) {
+      childToParent[child] = parent;
     }
   }
-  // Add any remaining categories not in the order list
-  for (const cat of Object.keys(groups)) {
-    if (!orderedCats.includes(cat)) orderedCats.push(cat);
-  }
 
-  // Compute relative prefix for links (pages in subdirs need different paths)
-  const currentDepth = (currentDoc.path.match(/\//g) || []).length;
-  const linkPrefix = currentDepth > 0 ? '../'.repeat(currentDepth) : '';
+  function renderCategoryBlock(cat, isSub) {
+    if (!groups[cat]) return '';
+    const label = SPA_CATEGORY_LABELS[cat] || cat;
+    const catClass = isSub
+      ? 'sidebar-category sidebar-subcategory'
+      : 'sidebar-category';
+    const labelClass = isSub
+      ? 'sidebar-category-label sidebar-subcategory-label collapsible'
+      : 'sidebar-category-label';
+
+    const labelHtml = isSub
+      ? `<span class="${labelClass}"><span class="sidebar-chevron">▸</span><span>${escapeAttr(label)}</span></span>`
+      : `<span class="${labelClass}">${escapeAttr(label)}</span>`;
+
+    const baseLinkClass = isSub ? 'sidebar-link sidebar-sublink' : 'sidebar-link';
+    const linksHtml = groups[cat].map(doc => {
+      const isActive = doc.path === currentDoc.path;
+      const cls = isActive ? `${baseLinkClass} active` : baseLinkClass;
+      // doc.path already includes the .html extension. Use absolute root-
+      // relative URL so the same href works from any page depth.
+      const href = `/docs/${doc.path}`;
+      const titleAttr = doc.description ? ` title="${escapeAttr(doc.description)}"` : '';
+      return `          <a class="${cls}" href="${href}" data-path="${doc.path}" data-category="${cat}"${titleAttr}>${escapeAttr(doc.title)}</a>`;
+    }).join('\n');
+
+    // Render child sub-categories inline after the links (matches docs-nav.js)
+    let childrenHtml = '';
+    for (const childCat of (SPA_CATEGORY_CHILDREN[cat] || [])) {
+      childrenHtml += renderCategoryBlock(childCat, true);
+    }
+
+    return `        <div class="${catClass}" data-category="${cat}">
+          ${labelHtml}
+          <div class="sidebar-category-content">
+${linksHtml}${childrenHtml ? '\n' + childrenHtml : ''}
+          </div>
+        </div>
+`;
+  }
 
   let html = '';
-  for (const cat of orderedCats) {
-    const label = SEO_CATEGORY_LABELS[cat] || cat;
-    const indent = childCats.has(cat) ? '  ' : '';
-    html += `${indent}<strong>${label}</strong>: `;
-    const links = groups[cat].map(doc => {
-      if (doc.path === currentDoc.path) {
-        return `<strong>${doc.title}</strong>`;
-      }
-      return `<a href="${linkPrefix}${doc.path}">${doc.title}</a>`;
-    });
-    html += links.join(' | ') + '<br>\n';
+  // Top-level categories in declared order; skip those rendered as children
+  for (const cat of SPA_CATEGORY_ORDER) {
+    if (childToParent[cat]) continue;
+    html += renderCategoryBlock(cat, false);
   }
-
+  // Catch-all: any category seen in docs but not declared
+  for (const cat of Object.keys(groups)) {
+    if (SPA_CATEGORY_ORDER.includes(cat)) continue;
+    if (childToParent[cat]) continue;
+    html += renderCategoryBlock(cat, false);
+  }
   return html;
 }
 
 /**
- * Render markdown to plain HTML without syntax highlighting.
- * Used for SEO/agent pages to minimize token overhead.
+ * Per-doc static page template — full SPA chrome (header, sidebar, content,
+ * footer), self-canonical, indexable. Every doc gets one of these at
+ * /docs/<path>.html.
  */
-function renderPlainHTML(markdown) {
-  let html = marked.parse(markdown, { renderer: plainRenderer, breaks: false, gfm: true });
-  return rewriteLinks(html);
-}
-
-/**
- * Generate per-doc SEO pages optimized for AI agents and crawlers.
- *
- * Each doc gets a lightweight HTML page at docs/{name}.html that:
- * - Has minimal <head> (title, description, canonical — no OG/Twitter/fonts/CSS)
- * - Includes a sitemap nav showing all doc categories and pages
- * - Renders content without syntax highlighting spans
- * - Redirects browsers to the SPA (docs.html#{path})
- */
-async function generateSEOPages(docs, docsDir) {
-  const seoTemplate = (doc, html, sitemapNav) => `<!DOCTYPE html>
+function spaTemplate(doc, contentHtml, sidebarHtml, canonicalUrl) {
+  const jsonLd = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'TechArticle',
+    headline: doc.title,
+    description: doc.description,
+    url: canonicalUrl,
+    author: { '@type': 'Person', name: 'Leon Letto' },
+    publisher: {
+      '@type': 'Organization',
+      name: 'Thrum',
+      url: `${CONFIG.siteUrl}/`,
+    },
+    isPartOf: {
+      '@type': 'TechArticle',
+      name: 'Thrum Documentation',
+      url: `${CONFIG.siteUrl}/docs/overview.html`,
+    },
+  });
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>${doc.title} — Thrum</title>
-<meta name="description" content="${escapeAttr(doc.description)}">
-<link rel="canonical" href="${CONFIG.siteUrl}/docs.html#${doc.path}">
-<script type="application/ld+json">${JSON.stringify({
-  '@context': 'https://schema.org',
-  '@type': 'TechArticle',
-  headline: doc.title,
-  description: doc.description,
-  url: `${CONFIG.siteUrl}/docs.html#${doc.path}`,
-  author: { '@type': 'Person', name: 'Leon Letto' },
-  publisher: {
-    '@type': 'Organization',
-    name: 'Thrum',
-    url: `${CONFIG.siteUrl}/`,
-  },
-  isPartOf: {
-    '@type': 'TechArticle',
-    name: 'Thrum Documentation',
-    url: `${CONFIG.siteUrl}/docs.html`,
-  },
-})}</script>
-<style>
-body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
-pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
-code{font-family:ui-monospace,monospace;font-size:0.9em}
-table{border-collapse:collapse;width:100%}
-th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
-th{background:#f5f5f5}
-nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
-h2{margin-top:2rem}
-a{color:#0366d6}
-</style>
-<!-- Privacy-friendly analytics by Plausible -->
-<script async src="https://plausible.io/js/pa-0EO0yjcXim9oq9r4-I2w1.js"></script>
-<script>
-window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
-plausible.init()
-</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>${escapeAttr(doc.title)} — Thrum</title>
+  <meta name="description" content="${escapeAttr(doc.description)}">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="${escapeAttr(doc.title)} — Thrum">
+  <meta property="og:description" content="${escapeAttr(doc.description)}">
+  <meta property="og:url" content="${canonicalUrl}">
+  <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="${CONFIG.siteUrl}/img/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="${escapeAttr(doc.title)} — Thrum">
+  <meta name="twitter:description" content="${escapeAttr(doc.description)}">
+  <meta name="twitter:image" content="${CONFIG.siteUrl}/img/social-card.png">
+  <link rel="canonical" href="${canonicalUrl}">
+  <script type="application/ld+json">${jsonLd}</script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/inter.woff2" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/ibm-plex-mono-regular.woff2" crossorigin>
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-0EO0yjcXim9oq9r4-I2w1.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
 </head>
 <body>
-<nav>
-<strong><a href="${doc.path.includes('/') ? '../' : ''}../docs.html">Thrum Docs</a></strong> &rsaquo; ${SEO_CATEGORY_LABELS[doc.category] || doc.category} &rsaquo; ${doc.title}
-<hr>
-${sitemapNav}</nav>
-<main>
-${html}
-</main>
-<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
-<a href="${doc.path.includes('/') ? '../' : ''}../llms.txt">llms.txt</a> | <a href="${doc.path.includes('/') ? '../' : ''}../llms-full.txt">llms-full.txt</a> | <a href="${doc.path.includes('/') ? '../' : ''}../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
-</footer>
-<script>if(location.search.indexOf('nospa')===-1){location.replace('${doc.path.includes('/') ? '../' : ''}../docs.html#${doc.path}')}</script>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="/index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="/index.html" class="nav-link">Home</a>
+          <a href="/docs/overview.html" class="nav-link nav-link-active">Docs</a>
+          <a href="/blog.html" class="nav-link">Blog</a>
+          <a href="/about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+          <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+            <span class="icon-sun">&#x2600;</span>
+            <span class="icon-moon">&#x263E;</span>
+          </button>
+        </div>
+        <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle navigation">
+          <span></span><span></span><span></span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Layout -->
+  <div class="docs-layout">
+
+    <!-- Sidebar -->
+    <aside class="docs-sidebar" id="docs-sidebar">
+      <div class="sidebar-search">
+        <input type="text" id="search-input" placeholder="Search docs... (Ctrl+K)" autocomplete="off">
+        <div class="search-results" id="search-results"></div>
+      </div>
+      <nav class="sidebar-nav" id="sidebar-nav">
+${sidebarHtml}      </nav>
+    </aside>
+
+    <!-- Content -->
+    <main class="docs-content" id="docs-content">
+      <div class="docs-content-inner" id="docs-content-inner">
+${contentHtml}
+      </div>
+    </main>
+
+  </div>
+
+  <script src="/js/vendor/minisearch.js"></script>
+  <script src="/js/search.js" data-docs-base="/docs/" data-search-index="/assets/docs/search-index.json"></script>
+  <script>
+    document.getElementById('theme-toggle').addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme');
+      var next = current === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('thrum-theme', next);
+    });
+    document.getElementById('sidebar-toggle').addEventListener('click', function() {
+      document.getElementById('docs-sidebar').classList.toggle('open');
+    });
+  </script>
 </body>
 </html>`;
-
-  let count = 0;
-  for (const doc of docs) {
-    // Render plain HTML from original markdown (no hljs)
-    const plainHtml = renderPlainHTML(doc.content);
-    const sitemapNav = buildSitemapNav(docs, doc);
-    const seoPath = path.join(docsDir, doc.path);
-    await fs.ensureDir(path.dirname(seoPath));
-    await fs.writeFile(seoPath, seoTemplate(doc, plainHtml, sitemapNav));
-    count++;
-  }
-  return count;
 }
 
 function escapeAttr(str) {

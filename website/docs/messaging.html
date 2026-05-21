@@ -1,51 +1,231 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Messaging — Thrum</title>
-<meta name="description" content="Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering">
-<link rel="canonical" href="https://thrum.team/docs.html#messaging.html">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Messaging","description":"Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering","url":"https://thrum.team/docs.html#messaging.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://thrum.team/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://thrum.team/docs.html"}}</script>
-<style>
-body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
-pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
-code{font-family:ui-monospace,monospace;font-size:0.9em}
-table{border-collapse:collapse;width:100%}
-th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
-th{background:#f5f5f5}
-nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
-h2{margin-top:2rem}
-a{color:#0366d6}
-</style>
-<!-- Privacy-friendly analytics by Plausible -->
-<script async src="https://plausible.io/js/pa-0EO0yjcXim9oq9r4-I2w1.js"></script>
-<script>
-window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
-plausible.init()
-</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>Messaging — Thrum</title>
+  <meta name="description" content="Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Messaging — Thrum">
+  <meta property="og:description" content="Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering">
+  <meta property="og:url" content="https://thrum.team/docs/messaging.html">
+  <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="https://thrum.team/img/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Messaging — Thrum">
+  <meta name="twitter:description" content="Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering">
+  <meta name="twitter:image" content="https://thrum.team/img/social-card.png">
+  <link rel="canonical" href="https://thrum.team/docs/messaging.html">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Messaging","description":"Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering","url":"https://thrum.team/docs/messaging.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://thrum.team/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://thrum.team/docs/overview.html"}}</script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/inter.woff2" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/ibm-plex-mono-regular.woff2" crossorigin>
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-0EO0yjcXim9oq9r4-I2w1.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
 </head>
 <body>
-<nav>
-<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Messaging &rsaquo; Messaging
-<hr>
-<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="whats-new.html">What's New</a><br>
-<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
-  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
-<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <strong>Messaging</strong><br>
-<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
-<strong>Guides</strong>: <a href="beta-channel.html">Beta Channel</a><br>
-<strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
-<strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
-<strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
-<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
-<strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
-<strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="permission-prompts.html">Permission Prompts</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
-<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="cli-hints.html">CLI Hints</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="security-model.html">Local Security Model</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
-<strong>substrate</strong>: <a href="substrate/overview.html">Personal Agent Substrate</a><br>
-<strong>troubleshooting</strong>: <a href="troubleshooting-identity.html">Troubleshooting Identity Issues</a><br>
-</nav>
-<main>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="/index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="/index.html" class="nav-link">Home</a>
+          <a href="/docs/overview.html" class="nav-link nav-link-active">Docs</a>
+          <a href="/blog.html" class="nav-link">Blog</a>
+          <a href="/about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+          <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+            <span class="icon-sun">&#x2600;</span>
+            <span class="icon-moon">&#x263E;</span>
+          </button>
+        </div>
+        <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle navigation">
+          <span></span><span></span><span></span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Layout -->
+  <div class="docs-layout">
+
+    <!-- Sidebar -->
+    <aside class="docs-sidebar" id="docs-sidebar">
+      <div class="sidebar-search">
+        <input type="text" id="search-input" placeholder="Search docs... (Ctrl+K)" autocomplete="off">
+        <div class="search-results" id="search-results"></div>
+      </div>
+      <nav class="sidebar-nav" id="sidebar-nav">
+        <div class="sidebar-category" data-category="overview">
+          <span class="sidebar-category-label">Overview</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/philosophy.html" data-path="philosophy.html" data-category="overview" title="Why Thrum exists — a messaging system designed for human-centric AI agent coordination, not another orchestration engine">Philosophy</a>
+          <a class="sidebar-link" href="/docs/overview.html" data-path="overview.html" data-category="overview" title="Thrum — coordinate AI coding agents across worktrees, repos, and machines">Overview</a>
+          <a class="sidebar-link" href="/docs/whats-new.html" data-path="whats-new.html" data-category="overview" title="Release-by-release highlights, breaking changes, and migration notes for recent Thrum versions.">What's New</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="onboarding">
+          <span class="sidebar-category-label">Onboarding</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/scenarios/solo-dev.html" data-path="scenarios/solo-dev.html" data-category="onboarding" title="Use Thrum as a single-developer tool: one agent, one machine, no hand-holding">Solo Dev with One Agent</a>
+          <a class="sidebar-link" href="/docs/scenarios/team.html" data-path="scenarios/team.html" data-category="onboarding" title="Run multiple agents in parallel worktrees with Thrum as the coordination layer">Team on Your Machine</a>
+          <a class="sidebar-link" href="/docs/scenarios/across-boundaries.html" data-path="scenarios/across-boundaries.html" data-category="onboarding" title="Connect Thrum daemons in different repos or on different machines via peers">Agents Across Repos/Machines</a>
+          <a class="sidebar-link" href="/docs/scenarios/orchestration.html" data-path="scenarios/orchestration.html" data-category="onboarding" title="Hand off a plan you wrote and let the orchestrator run the execution phase">Automated Plan Execution</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="quickstart">
+          <span class="sidebar-category-label">Getting Started</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/quickstart.html" data-path="quickstart.html" data-category="quickstart" title="Get up and running with Thrum in 5 minutes - initialization, daemon setup, agent registration, and first message">Quickstart Guide</a>
+        <div class="sidebar-category sidebar-subcategory" data-category="tools">
+          <span class="sidebar-category-label sidebar-subcategory-label collapsible"><span class="sidebar-chevron">▸</span><span>Recommended Tools</span></span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/recommended-tools.html" data-path="guides/recommended-tools.html" data-category="tools" title="Tools, extensions, and integrations that work well with Thrum for AI agent coordination workflows">Recommended Tools</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-setup.html" data-path="guides/beads-setup.html" data-category="tools" title="Set up Beads for git-backed task tracking alongside Thrum — installation, initialization, agent workflow, and worktree configuration">Beads Setup Guide</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-ui-setup.html" data-path="guides/beads-ui-setup.html" data-category="tools" title="Set up Beads UI for a live web dashboard of your agent task board — installation, usage, and multi-project support">Beads UI Setup Guide</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-migration-to-embedded.html" data-path="guides/beads-migration-to-embedded.html" data-category="tools" title="Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.">Beads Migration to Embedded Mode (bd 1.0+)</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/playwright-cli-setup.html" data-path="guides/playwright-cli-setup.html" data-category="tools" title="Set up Playwright CLI for browser automation in Claude Code agent workflows — screenshots, page context, form filling, and web testing">Playwright CLI Setup Guide</a>
+          </div>
+        </div>
+
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="orchestration">
+          <span class="sidebar-category-label">Orchestration</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/orchestrator-role.html" data-path="orchestrator-role.html" data-category="orchestration" title="Hand off a plan you wrote and let the orchestrator run the execution phase">Orchestrator Role</a>
+          <a class="sidebar-link" href="/docs/tmux-sessions.html" data-path="tmux-sessions.html" data-category="orchestration" title="Run agent teams in daemon-managed tmux sessions with instant message delivery, zero background listeners, and coordinator-managed lifecycle">Tmux-Managed Sessions</a>
+          <a class="sidebar-link" href="/docs/monitor-jobs.html" data-path="monitor-jobs.html" data-category="orchestration" title="Watch any process output for pattern matches and deliver results as synthetic Thrum messages — no polling, no shell, no manual piping">Monitor Jobs</a>
+          <a class="sidebar-link" href="/docs/multi-runtime.html" data-path="multi-runtime.html" data-category="orchestration" title="Run Claude, Codex, Aider, Gemini, and other agent runtimes in tmux-managed sessions">Multi-Runtime Support</a>
+          <a class="sidebar-link" href="/docs/single-agent-mode.html" data-path="single-agent-mode.html" data-category="orchestration" title="Use Thrum's context management without the messaging layer — single-agent mode as default, three-tier context, and when to switch to multi-agent">Single-Agent Mode</a>
+          <a class="sidebar-link" href="/docs/workflow-templates.html" data-path="workflow-templates.html" data-category="orchestration" title="Four-phase skill pipeline for designing, planning, setting up, and implementing features with AI agents">Workflow Templates</a>
+          <a class="sidebar-link" href="/docs/permission-prompts.html" data-path="permission-prompts.html" data-category="orchestration" title="How Thrum detects when an agent is stuck on a permission prompt and routes it to a supervisor — silence-hash poller, supervisor reply paths (CLI, web UI, Telegram), reminder cadence, restart resilience">Permission Prompts</a>
+          <a class="sidebar-link" href="/docs/session-restart.html" data-path="session-restart.html" data-category="orchestration" title="Save conversation history and resume where you left off — from daily shutdown to automated mid-task restarts">Session Restart &amp; Context Recovery</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="identity">
+          <span class="sidebar-category-label">Identity &amp; Agents</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/identity.html" data-path="identity.html" data-category="identity" title="Named agents, deterministic IDs, identity resolution, registration, conflicts, cleanup, and multi-agent worktrees">Agent Identity &amp; Registration</a>
+          <a class="sidebar-link" href="/docs/agent-configs.html" data-path="agent-configs.html" data-category="identity" title="Ready-to-use Claude Code agent definitions for Thrum messaging and Beads task tracking">Agent Configurations</a>
+          <a class="sidebar-link" href="/docs/claude-agent-integration.html" data-path="claude-agent-integration.html" data-category="identity" title="Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup">Claude Code Agent Integration</a>
+          <a class="sidebar-link" href="/docs/role-templates.html" data-path="role-templates.html" data-category="identity" title="Auto-generate agent preambles from role templates with scope boundaries, task protocol, communication patterns, and behavioral directives">Role-Based Preamble Templates</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="messaging">
+          <span class="sidebar-category-label">Messaging</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/peers.html" data-path="peers.html" data-category="messaging" title="Cross-repo and cross-machine messaging between Thrum daemons">Peers</a>
+          <a class="sidebar-link" href="/docs/inbox-query-methods.html" data-path="inbox-query-methods.html" data-category="messaging" title="RPC methods for querying messages, agents, and managing read state with filtering and pagination">Inbox Query Methods</a>
+          <a class="sidebar-link" href="/docs/telegram-bridge.html" data-path="telegram-bridge.html" data-category="messaging" title="One Telegram connection, unified inbox for your whole team of agents — any agent can ping you, replies route back to the original author">Telegram Bridge</a>
+          <a class="sidebar-link" href="/docs/telegram-groups.html" data-path="telegram-groups.html" data-category="messaging" title="Share a Telegram group with your team so everyone can interact with the same Thrum agent — send instructions, see responses, and coordinate through one chat">Telegram Groups</a>
+          <a class="sidebar-link active" href="/docs/messaging.html" data-path="messaging.html" data-category="messaging" title="Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering">Messaging</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="substrate">
+          <span class="sidebar-category-label">Personal Agent Substrate</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/substrate/overview.html" data-path="substrate/overview.html" data-category="substrate" title="v0.11 turns thrum into the substrate beneath personal-agent harnesses (scheduling, scheduled-agent lifecycle, skill registration, email transport, reminders). What it is, why it exists, and how the pieces fit together.">Personal Agent Substrate</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="coordination">
+          <span class="sidebar-category-label">Coordination</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/agent-coordination.html" data-path="agent-coordination.html" data-category="coordination" title="Multi-agent workflows, Beads integration, session templates, and coordination patterns for AI agent teams">Agent Coordination</a>
+          <a class="sidebar-link" href="/docs/multi-agent.html" data-path="multi-agent.html" data-category="coordination" title="Runtime presets, thrum prime, and coordination patterns for running multiple AI agents across worktrees and platforms">Multi-Agent Support</a>
+          <a class="sidebar-link" href="/docs/context.html" data-path="context.html" data-category="coordination" title="Per-agent context storage for persisting volatile project state across sessions and machines">Agent Context Management</a>
+          <a class="sidebar-link" href="/docs/guides/coordinate-two-agents.html" data-path="guides/coordinate-two-agents.html" data-category="coordination" title="Walk through registering two agents, sending messages between them, and seeing what everyone is working on — the most common Thrum use case">Coordinate Two Agents</a>
+          <a class="sidebar-link" href="/docs/guides/review-workflow.html" data-path="guides/review-workflow.html" data-category="coordination" title="Walk through the implement-then-review cycle: one agent writes code on a feature branch, another reviews it, Thrum handles the communication">Code Review Workflow</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="integrations">
+          <span class="sidebar-category-label">Integrations</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/web-ui.html" data-path="web-ui.html" data-category="integrations" title="Browser-based dashboard for monitoring agents and reading messages — served from the daemon on a single port">Web UI</a>
+          <a class="sidebar-link" href="/docs/claude-code-plugin.html" data-path="claude-code-plugin.html" data-category="integrations" title="Install and use the Thrum plugin for Claude Code — slash commands, automatic context injection, and multi-agent coordination without manual configuration">Claude Code Plugin</a>
+          <a class="sidebar-link" href="/docs/beads-and-thrum.html" data-path="beads-and-thrum.html" data-category="integrations" title="How persistent task tracking and agent messaging work together for multi-agent development">Beads and Thrum</a>
+          <a class="sidebar-link" href="/docs/codex-plugin.html" data-path="codex-plugin.html" data-category="integrations" title="Install and use Thrum's Codex skill bundle — the Claude thrum skill surface, mirrored as top-level Codex skills">Codex Plugin</a>
+          <a class="sidebar-link" href="/docs/cursor-plugin.html" data-path="cursor-plugin.html" data-category="integrations" title="Install and use Thrum's Cursor plugin — rules, hooks, skills, commands, and MCP configuration for multi-agent coordination in Cursor">Cursor Plugin</a>
+          <a class="sidebar-link" href="/docs/mcp-server.html" data-path="mcp-server.html" data-category="integrations" title="Thrum MCP server for native AI agent integration — tools, identity, message handling, and Claude Code setup">MCP Server</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="infrastructure">
+          <span class="sidebar-category-label">Infrastructure</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/daemon.html" data-path="daemon.html" data-category="infrastructure" title="Background service managing state, RPC handlers, sync loop, WebSocket server, and embedded UI on single port">Daemon Architecture</a>
+          <a class="sidebar-link" href="/docs/sync.html" data-path="sync.html" data-category="infrastructure" title="Git-based message synchronization using orphan branch, sync worktree, conflict-free merging, and offline-first design">Sync Protocol</a>
+          <a class="sidebar-link" href="/docs/configuration.html" data-path="configuration.html" data-category="infrastructure" title="Thrum configuration model — config.json schema, runtime tiers, priority chain, and the config show command">Configuration</a>
+          <a class="sidebar-link" href="/docs/guides/cross-machine-sync.html" data-path="guides/cross-machine-sync.html" data-category="infrastructure" title="Walk through enabling cross-machine sync, sending a message from one machine and receiving it on another, and verifying sync status">Sync Across Machines</a>
+          <a class="sidebar-link" href="/docs/tailscale-sync.html" data-path="tailscale-sync.html" data-category="infrastructure" title="Direct machine-to-machine sync via Tailscale — setup, architecture, pairing, and CLI commands">Tailscale Sync</a>
+          <a class="sidebar-link" href="/docs/tailscale-security.html" data-path="tailscale-security.html" data-category="infrastructure" title="Security model for Thrum's Tailscale peer sync — pairing, encryption, access control, and threat mitigations">Tailscale Sync Security</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="reference">
+          <span class="sidebar-category-label">Reference</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/development.html" data-path="development.html" data-category="reference" title="Setup, testing, building, contributing - complete guide for developing and extending Thrum">Development Guide</a>
+          <a class="sidebar-link" href="/docs/cli-hints.html" data-path="cli-hints.html" data-category="reference" title="Inline contextual hints from Thrum CLI commands — pre-action warnings, post-action next steps, and JSON output for tooling. Covers Phase B (thrum send / tmux create / init) and the THRUM_NO_HINTS opt-out.">CLI Hints</a>
+          <a class="sidebar-link" href="/docs/security-cicd.html" data-path="security-cicd.html" data-category="reference" title="Automated security scanning, CI/CD pipelines, and deployment workflows for Thrum">Security &amp; CI/CD</a>
+          <a class="sidebar-link" href="/docs/security-model.html" data-path="security-model.html" data-category="reference" title="How Thrum's daemon decides who's calling — kernel-verified peer credentials, anonymous-caller read-only allowlist, author-only message operations, and WebSocket origin restriction. Covers the v0.9.0 sec.1–sec.8 hardening.">Local Security Model</a>
+          <a class="sidebar-link" href="/docs/architecture.html" data-path="architecture.html" data-category="reference" title="Thrum architecture — daemon design, storage, sync engine, transport layer, key features, and foundation packages">Architecture</a>
+          <a class="sidebar-link" href="/docs/cli.html" data-path="cli.html" data-category="reference" title="Complete reference for the thrum command-line interface — all commands, flags, and usage examples">CLI Reference</a>
+          <a class="sidebar-link" href="/docs/rpc-api.html" data-path="rpc-api.html" data-category="reference" title="Thrum daemon JSON-RPC 2.0 API reference — all RPC methods, parameters, and response formats">RPC API</a>
+        <div class="sidebar-category sidebar-subcategory" data-category="agent-protocols">
+          <span class="sidebar-category-label sidebar-subcategory-label collapsible"><span class="sidebar-chevron">▸</span><span>Agent Protocols</span></span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/sub-agent-strategy.html" data-path="strategies/sub-agent-strategy.html" data-category="agent-protocols" title="When and how to delegate work to sub-agents for context efficiency">Sub-Agent Strategy</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/thrum-registration.html" data-path="strategies/thrum-registration.html" data-category="agent-protocols" title="How to register with Thrum at session start and communicate with other agents">Thrum Registration</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/strategies/resume-after-context-loss.html" data-path="strategies/resume-after-context-loss.html" data-category="agent-protocols" title="How to recover and pick up work after compaction, a new session, or a crash">Resume After Context Loss</a>
+          </div>
+        </div>
+
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="api">
+          <span class="sidebar-category-label">API Reference</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/api/authentication.html" data-path="api/authentication.html" data-category="api" title="Authentication and authorization in the Thrum API — agent identity, session tokens, and security model">Authentication</a>
+          <a class="sidebar-link" href="/docs/api/events.html" data-path="api/events.html" data-category="api" title="All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events">Event Reference</a>
+          <a class="sidebar-link" href="/docs/api/websocket.html" data-path="api/websocket.html" data-category="api" title="Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events">WebSocket API</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="guides">
+          <span class="sidebar-category-label">Guides</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          </div>
+        </div>
+        <div class="sidebar-category" data-category="troubleshooting">
+          <span class="sidebar-category-label">troubleshooting</span>
+          <div class="sidebar-category-content">
+          <a class="sidebar-link" href="/docs/troubleshooting-identity.html" data-path="troubleshooting-identity.html" data-category="troubleshooting" title="Identity guard error messages and how to fix them — cross_worktree pid_mismatch, anonymous_mutating_rpc, non_git_bootstrap, and the rest of the v0.9.0 guard catalog with remediation steps.">Troubleshooting Identity Issues</a>
+          </div>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- Content -->
+    <main class="docs-content" id="docs-content">
+      <div class="docs-content-inner" id="docs-content-inner">
 <h2>Thrum Messaging System</h2>
 <blockquote>
 <p><strong>TL;DR:</strong> Send messages with <code>thrum send</code>, check them with <code>thrum inbox</code>,
@@ -128,7 +308,7 @@ Tailscale), see <a href="peers.html">Peers</a>.</p>
 </tbody></table>
 <h2>Sending Messages</h2>
 <h3>Basic Send</h3>
-<pre><code>thrum send &quot;Test suite is green, ready for review&quot;</code></pre>
+<pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Test suite is green, ready for review&quot;</span></code></pre>
 <p>The daemon resolves your current agent identity and session automatically. It
 writes the message as a <code>message.create</code> event to the agent&#39;s sharded JSONL log
 (<code>.git/thrum-sync/a-sync/messages/{agent_name}.jsonl</code>) and projects it into
@@ -178,23 +358,23 @@ SQLite.</p>
 <code>@coordinator_main</code>). Role-name targets like <code>@reviewer</code> also resolve, but they
 fan out to every agent with that role and cause cross-talk in multi-agent setups
 — <strong>prefer specific agent names</strong> for day-to-day routing.</p>
-<pre><code># Preferred: target a specific agent by name
-thrum send &quot;Please review PR #42&quot; --to @reviewer_main
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Preferred: target a specific agent by name</span>
+thrum send <span class="hljs-string">&quot;Please review PR #42&quot;</span> --to @reviewer_main
 
-# Role-name routing works but is discouraged (fans out to all reviewers)
-thrum send &quot;Please review PR #42&quot; --to @reviewer
+<span class="hljs-comment"># Role-name routing works but is discouraged (fans out to all reviewers)</span>
+thrum send <span class="hljs-string">&quot;Please review PR #42&quot;</span> --to @reviewer
 
-# Broadcast to all agents
-thrum send &quot;Deploy complete&quot; --to @everyone</code></pre>
+<span class="hljs-comment"># Broadcast to all agents</span>
+thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --to @everyone</code></pre>
 <p>The <code>@</code> prefix is optional — <code>--to reviewer_main</code> and <code>--to @reviewer_main</code> both
 work.</p>
 <h3>Mention Routing</h3>
 <p>When a message has mentions (via <code>--to</code>, <code>--mention</code>, or <code>@role</code> in the mentions
 list), Thrum stores each one as a ref with type <code>mention</code> and the role name as
 the value:</p>
-<pre><code>{ &quot;type&quot;: &quot;mention&quot;, &quot;value&quot;: &quot;reviewer&quot; }</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mention&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span> <span class="hljs-punctuation">}</span></code></pre>
 <p>Agents filter their inbox to only messages that mention them:</p>
-<pre><code>thrum inbox --mentions
+<pre><code class="language-bash hljs">thrum inbox --mentions
 thrum sent --unread</code></pre>
 <p>This queries for messages where a <code>mention</code> ref matches the current agent&#39;s
 role.</p>
@@ -232,24 +412,24 @@ groups first.</p>
 <code>--name coord_main --role coordinator</code>, not
 <code>--name coordinator --role coordinator</code>.</p>
 <h3>Example: Agent-to-Agent Coordination</h3>
-<pre><code># Implementer finishes a task and notifies the reviewer (use the specific
-# reviewer agent name, not the role, to avoid cross-talk)
-thrum send &quot;Auth module complete, all tests passing&quot; \
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Implementer finishes a task and notifies the reviewer (use the specific</span>
+<span class="hljs-comment"># reviewer agent name, not the role, to avoid cross-talk)</span>
+thrum send <span class="hljs-string">&quot;Auth module complete, all tests passing&quot;</span> \
   --to @reviewer_main \
   --scope module:auth \
   --ref issue:beads-42
 
-# Reviewer checks inbox for messages directed at them
+<span class="hljs-comment"># Reviewer checks inbox for messages directed at them</span>
 thrum inbox --mentions
 
-# Implementer verifies the outgoing message recipients and receipts
+<span class="hljs-comment"># Implementer verifies the outgoing message recipients and receipts</span>
 thrum sent --to @reviewer_main
 
-# Reviewer replies to the message
-thrum reply msg_01HXE... &quot;Looks good, merging now&quot;</code></pre>
+<span class="hljs-comment"># Reviewer replies to the message</span>
+thrum reply msg_01HXE... <span class="hljs-string">&quot;Looks good, merging now&quot;</span></code></pre>
 <h2>Replying to Messages</h2>
 <p><code>reply</code> links your message back to the original with a <code>reply_to</code> reference:</p>
-<pre><code>thrum reply MSG_ID &quot;Your reply text&quot;</code></pre>
+<pre><code class="language-bash hljs">thrum reply MSG_ID <span class="hljs-string">&quot;Your reply text&quot;</span></code></pre>
 <p><strong>What happens internally:</strong></p>
 <ol>
 <li>Creates a new message with a <code>reply_to</code> ref pointing to the original message.</li>
@@ -272,13 +452,13 @@ thrum reply msg_01HXE... &quot;Looks good, merging now&quot;</code></pre>
 </tr>
 </tbody></table>
 <h3>Example</h3>
-<pre><code># Reply to a message
-thrum reply msg_01HXE... &quot;Good idea, let&#39;s do that&quot;
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Reply to a message</span>
+thrum reply msg_01HXE... <span class="hljs-string">&quot;Good idea, let&#x27;s do that&quot;</span>
 
-# Reply with plain text format
-thrum reply msg_01HXF... &quot;Acknowledged&quot; --format plain</code></pre>
+<span class="hljs-comment"># Reply with plain text format</span>
+thrum reply msg_01HXF... <span class="hljs-string">&quot;Acknowledged&quot;</span> --format plain</code></pre>
 <p><strong>Output:</strong></p>
-<pre><code>&gt; Reply sent: msg_01HXG...
+<pre><code class="language-text hljs">&gt; Reply sent: msg_01HXG...
   In reply to: msg_01HXE...</code></pre>
 <h3>Auto-Threading (v0.5.0+)</h3>
 <p>When you reply, Thrum automatically assigns a shared <code>thread_id</code> to both the
@@ -293,20 +473,20 @@ on both the parent and the reply.</li>
 <li>All subsequent replies in the chain share the same <code>thread_id</code>.</li>
 </ol>
 <p><strong>Example:</strong></p>
-<pre><code># Send a message (no thread_id yet)
-thrum send &quot;Auth module ready for review&quot; --to @reviewer1
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Send a message (no thread_id yet)</span>
+thrum send <span class="hljs-string">&quot;Auth module ready for review&quot;</span> --to @reviewer1
 
-# Reply creates a thread — both messages now share thread_id
-thrum reply msg_01HXE... &quot;Looking at it now&quot;
+<span class="hljs-comment"># Reply creates a thread — both messages now share thread_id</span>
+thrum reply msg_01HXE... <span class="hljs-string">&quot;Looking at it now&quot;</span>
 
-# Further replies join the same thread
-thrum reply msg_01HXE... &quot;Approved, merging&quot;</code></pre>
+<span class="hljs-comment"># Further replies join the same thread</span>
+thrum reply msg_01HXE... <span class="hljs-string">&quot;Approved, merging&quot;</span></code></pre>
 <p>The UI groups conversations by <code>thread_id</code>. Messages without a <code>thread_id</code> fall
 back to <code>reply_to</code> chain-walking for backward compatibility.</p>
 <h2>Inbox</h2>
 <p>The inbox displays messages with read/unread indicators, relative timestamps,
 and pagination.</p>
-<pre><code>thrum inbox</code></pre>
+<pre><code class="language-bash hljs">thrum inbox</code></pre>
 <h3>Flags</h3>
 <table>
 <thead>
@@ -347,7 +527,7 @@ and pagination.</p>
 <li><code>○</code> (open circle) -- read</li>
 </ul>
 <p>The header line for each message follows this format:</p>
-<pre><code>│ ● msg_01HXE...  @implementer  5m ago                     │
+<pre><code class="language-text hljs">│ ● msg_01HXE...  @implementer  5m ago                     │
 │ ○ msg_01HXF...  @reviewer     1h ago  (edited)           │
 │ ↳ msg_01HXG...  @implementer  10m ago                    │</code></pre>
 <p>Messages that have been edited show an <code>(edited)</code> tag in the header. Replies are
@@ -357,47 +537,47 @@ displayed with a <code>↳</code> prefix and grouped with the original message.<
 doesn&#39;t block the command). The <code>--unread</code> filter skips this — so you can check
 what&#39;s unread without immediately clearing it.</p>
 <p>The footer shows pagination and unread count:</p>
-<pre><code>Showing 1-10 of 23 messages (3 unread)</code></pre>
+<pre><code class="language-text hljs">Showing 1-10 of 23 messages (3 unread)</code></pre>
 <h3>Empty States</h3>
 <p>When no messages match the current filters, the inbox shows contextual feedback:</p>
-<pre><code># No messages at all
+<pre><code class="language-bash hljs"><span class="hljs-comment"># No messages at all</span>
 thrum inbox
-# Output: No messages in inbox.
+<span class="hljs-comment"># Output: No messages in inbox.</span>
 
-# No messages matching a scope filter
+<span class="hljs-comment"># No messages matching a scope filter</span>
 thrum inbox --scope module:auth
-# Output: No messages matching filter --scope module:auth
-#         Showing 0 of 15 total messages (filter: scope=module:auth)</code></pre>
+<span class="hljs-comment"># Output: No messages matching filter --scope module:auth</span>
+<span class="hljs-comment">#         Showing 0 of 15 total messages (filter: scope=module:auth)</span></code></pre>
 <h2>Message Operations</h2>
 <h3>Get</h3>
 <p>Pull a single message with its full details: author, timestamps, scopes, refs,
 edit and delete status.</p>
-<pre><code>thrum message get msg_01HXE...</code></pre>
+<pre><code class="language-bash hljs">thrum message get msg_01HXE...</code></pre>
 <p><strong>Output:</strong></p>
-<pre><code>Message: msg_01HXE...
-  From:    @implementer
-  Time:    5m ago
-  Scopes:  module:auth
-  Refs:    issue:beads-42, mention:reviewer
-  Edited:  2m ago
+<pre><code class="language-yaml hljs"><span class="hljs-attr">Message:</span> <span class="hljs-string">msg_01HXE...</span>
+  <span class="hljs-attr">From:</span>    <span class="hljs-string">@implementer</span>
+  <span class="hljs-attr">Time:</span>    <span class="hljs-string">5m</span> <span class="hljs-string">ago</span>
+  <span class="hljs-attr">Scopes:</span>  <span class="hljs-string">module:auth</span>
+  <span class="hljs-attr">Refs:</span>    <span class="hljs-string">issue:beads-42,</span> <span class="hljs-string">mention:reviewer</span>
+  <span class="hljs-attr">Edited:</span>  <span class="hljs-string">2m</span> <span class="hljs-string">ago</span>
 
-Auth module complete, all tests passing</code></pre>
+<span class="hljs-string">Auth</span> <span class="hljs-string">module</span> <span class="hljs-string">complete,</span> <span class="hljs-string">all</span> <span class="hljs-string">tests</span> <span class="hljs-string">passing</span></code></pre>
 <p>The <code>get</code> command automatically marks the message as read.</p>
 <h3>Edit</h3>
 <p>Replace a message&#39;s content entirely. Only the original author (matched by
 <code>agent_id</code>) can edit. Deleted messages can&#39;t be edited.</p>
-<pre><code>thrum message edit msg_01HXE... &quot;Updated: auth module complete with rate limiting&quot;</code></pre>
+<pre><code class="language-bash hljs">thrum message edit msg_01HXE... <span class="hljs-string">&quot;Updated: auth module complete with rate limiting&quot;</span></code></pre>
 <p><strong>Output:</strong></p>
-<pre><code>&gt; Message edited: msg_01HXE... (version 2)</code></pre>
+<pre><code class="language-text hljs">&gt; Message edited: msg_01HXE... (version 2)</code></pre>
 <p>Each edit lands in the <code>message_edits</code> table with before/after content, the
 editor&#39;s session, and a timestamp. The version number is the total number of
 edits on that message. Edits trigger live updates to connected WebSocket clients
 just like new messages.</p>
 <h3>Delete</h3>
 <p>Soft-delete a message. Requires the <code>--force</code> flag as a safety confirmation.</p>
-<pre><code>thrum message delete msg_01HXE... --force</code></pre>
+<pre><code class="language-bash hljs">thrum message delete msg_01HXE... --force</code></pre>
 <p><strong>Output:</strong></p>
-<pre><code>&gt; Message deleted: msg_01HXE...</code></pre>
+<pre><code class="language-text hljs">&gt; Message deleted: msg_01HXE...</code></pre>
 <p>Deleted messages:</p>
 <ul>
 <li>Are flagged with <code>deleted=1</code> in SQLite and a <code>message.delete</code> event is
@@ -411,11 +591,11 @@ from inbox listings by default.</li>
 <p>Explicitly mark one or more messages as read — useful when auto mark-as-read was
 skipped or when you&#39;re processing messages programmatically. Use <code>--all</code> to
 clear everything at once.</p>
-<pre><code>thrum message read msg_01HXE...
-thrum message read msg_01 msg_02 msg_03
-thrum message read --all</code></pre>
+<pre><code class="language-bash hljs">thrum message <span class="hljs-built_in">read</span> msg_01HXE...
+thrum message <span class="hljs-built_in">read</span> msg_01 msg_02 msg_03
+thrum message <span class="hljs-built_in">read</span> --all</code></pre>
 <p><strong>Output:</strong></p>
-<pre><code>&gt; Marked 3 messages as read</code></pre>
+<pre><code class="language-text hljs">&gt; Marked 3 messages as read</code></pre>
 <p>Read state is tracked per session and per agent in <code>message_reads</code>. A message is
 &quot;read&quot; if any session or agent matching your current identity has a read record
 for it.</p>
@@ -454,46 +634,46 @@ command still succeeds.</p>
 <h2>Message Structure</h2>
 <h3>Core Fields</h3>
 <p>Every message has these core fields:</p>
-<pre><code>{
-  &quot;message_id&quot;: &quot;msg_01HXE...&quot;,
-  &quot;author&quot;: {
-    &quot;agent_id&quot;: &quot;agent:role:HASH&quot;,
-    &quot;session_id&quot;: &quot;ses_01HXE...&quot;
-  },
-  &quot;body&quot;: {
-    &quot;format&quot;: &quot;markdown&quot;,
-    &quot;content&quot;: &quot;Message content&quot;,
-    &quot;structured&quot;: &quot;{...}&quot;
-  },
-  &quot;scopes&quot;: [],
-  &quot;refs&quot;: [],
-  &quot;metadata&quot;: {},
-  &quot;created_at&quot;: &quot;2026-02-03T10:00:00Z&quot;,
-  &quot;updated_at&quot;: &quot;2026-02-03T11:00:00Z&quot;,
-  &quot;deleted&quot;: false
-}</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;author&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:role:HASH&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ses_01HXE...&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;body&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;markdown&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Message content&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;structured&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;{...}&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;scopes&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;refs&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;metadata&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T10:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;updated_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T11:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;deleted&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h3>Body Formats</h3>
 <p>Messages support three content formats:</p>
 <p><strong>Markdown</strong> (default) -- best for human-readable documentation, notes, and
 status updates:</p>
-<pre><code>{ &quot;format&quot;: &quot;markdown&quot;, &quot;content&quot;: &quot;# Heading\n\nWith **formatting**&quot; }</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;markdown&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;# Heading\n\nWith **formatting**&quot;</span> <span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Plain text</strong> -- best for log messages, simple status, and system
 notifications:</p>
-<pre><code>{ &quot;format&quot;: &quot;plain&quot;, &quot;content&quot;: &quot;Simple unformatted text&quot; }</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;plain&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Simple unformatted text&quot;</span> <span class="hljs-punctuation">}</span></code></pre>
 <p><strong>JSON</strong> -- best for machine-readable data, API responses, and structured
 status:</p>
-<pre><code>{ &quot;format&quot;: &quot;json&quot;, &quot;content&quot;: &quot;{\&quot;type\&quot;:\&quot;status\&quot;,\&quot;value\&quot;:\&quot;complete\&quot;}&quot; }</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;json&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;{\&quot;type\&quot;:\&quot;status\&quot;,\&quot;value\&quot;:\&quot;complete\&quot;}&quot;</span> <span class="hljs-punctuation">}</span></code></pre>
 <h3>Structured Data</h3>
 <p>In addition to the main content, messages can include typed structured data via
 the <code>--structured</code> flag:</p>
-<pre><code>thrum send &quot;Test results for feature X&quot; \
-  --structured &#39;{&quot;type&quot;:&quot;test_result&quot;,&quot;passed&quot;:45,&quot;failed&quot;:2,&quot;coverage&quot;:85.9}&#39;</code></pre>
+<pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Test results for feature X&quot;</span> \
+  --structured <span class="hljs-string">&#x27;{&quot;type&quot;:&quot;test_result&quot;,&quot;passed&quot;:45,&quot;failed&quot;:2,&quot;coverage&quot;:85.9}&#x27;</span></code></pre>
 <p>The <code>structured</code> field lets agents parse machine-readable payloads, build
 dashboards, trigger automated workflows, and index by structured fields.</p>
 <h2>Scopes</h2>
 <p>Scopes tag the context of a message. They answer &quot;What is this message about?&quot;</p>
 <h3>Scope Structure</h3>
-<pre><code>{ &quot;type&quot;: &quot;scope_type&quot;, &quot;value&quot;: &quot;scope_value&quot; }</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;scope_type&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;scope_value&quot;</span> <span class="hljs-punctuation">}</span></code></pre>
 <h3>Common Scope Types</h3>
 <table>
 <thead>
@@ -536,18 +716,18 @@ dashboards, trigger automated workflows, and index by structured fields.</p>
 </tbody></table>
 <h3>Multiple Scopes</h3>
 <p>A message can have multiple scopes:</p>
-<pre><code>thrum send &quot;Fixed authentication bug&quot; \
+<pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Fixed authentication bug&quot;</span> \
   --scope repo:github.com/user/repo \
   --scope file:src/auth.go \
   --scope feature:user-authentication</code></pre>
 <h3>Filtering by Scope</h3>
-<pre><code>thrum inbox --scope file:src/main.go
+<pre><code class="language-bash hljs">thrum inbox --scope file:src/main.go
 thrum inbox --scope module:auth</code></pre>
 <h2>References (Refs)</h2>
 <p>References link messages to external entities. They answer &quot;What does this
 message reference?&quot;</p>
 <h3>Ref Structure</h3>
-<pre><code>{ &quot;type&quot;: &quot;ref_type&quot;, &quot;value&quot;: &quot;ref_value&quot; }</code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ref_type&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ref_value&quot;</span> <span class="hljs-punctuation">}</span></code></pre>
 <h3>Common Ref Types</h3>
 <table>
 <thead>
@@ -594,13 +774,13 @@ message reference?&quot;</p>
 </tr>
 </tbody></table>
 <h3>Multiple Refs</h3>
-<pre><code>thrum send &quot;Implemented feature from design doc, closes issue&quot; \
+<pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Implemented feature from design doc, closes issue&quot;</span> \
   --ref issue:beads-123 \
   --ref commit:abc123def \
   --ref url:https://docs.example.com/design</code></pre>
 <h2>Broadcast</h2>
 <p>Use <code>--to @everyone</code> to send to all agents:</p>
-<pre><code>thrum send &quot;Deploy complete&quot; --to @everyone</code></pre>
+<pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --to @everyone</code></pre>
 <h2>Global Flags</h2>
 <p>These flags are available on all commands:</p>
 <table>
@@ -656,39 +836,39 @@ described below.</p>
 </ol>
 <h3>Tables</h3>
 <h4>messages</h4>
-<pre><code>CREATE TABLE messages (
-  message_id TEXT PRIMARY KEY,
-  agent_id TEXT NOT NULL,
-  session_id TEXT NOT NULL,
-  created_at TEXT NOT NULL,
+<pre><code class="language-sql hljs"><span class="hljs-keyword">CREATE TABLE</span> messages (
+  message_id TEXT <span class="hljs-keyword">PRIMARY KEY</span>,
+  agent_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  session_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  created_at TEXT <span class="hljs-keyword">NOT NULL</span>,
   updated_at TEXT,
-  deleted INTEGER DEFAULT 0,
+  deleted <span class="hljs-type">INTEGER</span> <span class="hljs-keyword">DEFAULT</span> <span class="hljs-number">0</span>,
   deleted_at TEXT,
   delete_reason TEXT,
-  body_format TEXT NOT NULL,
-  body_content TEXT NOT NULL,
+  body_format TEXT <span class="hljs-keyword">NOT NULL</span>,
+  body_content TEXT <span class="hljs-keyword">NOT NULL</span>,
   body_structured TEXT
 )</code></pre>
 <h4>message_scopes</h4>
-<pre><code>CREATE TABLE message_scopes (
-  message_id TEXT NOT NULL,
-  scope_type TEXT NOT NULL,
-  scope_value TEXT NOT NULL,
-  PRIMARY KEY (message_id, scope_type, scope_value)
+<pre><code class="language-sql hljs"><span class="hljs-keyword">CREATE TABLE</span> message_scopes (
+  message_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  scope_type TEXT <span class="hljs-keyword">NOT NULL</span>,
+  scope_value TEXT <span class="hljs-keyword">NOT NULL</span>,
+  <span class="hljs-keyword">PRIMARY KEY</span> (message_id, scope_type, scope_value)
 )</code></pre>
 <h4>message_refs</h4>
-<pre><code>CREATE TABLE message_refs (
-  message_id TEXT NOT NULL,
-  ref_type TEXT NOT NULL,
-  ref_value TEXT NOT NULL,
-  PRIMARY KEY (message_id, ref_type, ref_value)
+<pre><code class="language-sql hljs"><span class="hljs-keyword">CREATE TABLE</span> message_refs (
+  message_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  ref_type TEXT <span class="hljs-keyword">NOT NULL</span>,
+  ref_value TEXT <span class="hljs-keyword">NOT NULL</span>,
+  <span class="hljs-keyword">PRIMARY KEY</span> (message_id, ref_type, ref_value)
 )</code></pre>
 <h4>message_edits</h4>
-<pre><code>CREATE TABLE message_edits (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  message_id TEXT NOT NULL,
-  edited_at TEXT NOT NULL,
-  edited_by TEXT NOT NULL,
+<pre><code class="language-sql hljs"><span class="hljs-keyword">CREATE TABLE</span> message_edits (
+  id <span class="hljs-type">INTEGER</span> <span class="hljs-keyword">PRIMARY KEY</span> AUTOINCREMENT,
+  message_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  edited_at TEXT <span class="hljs-keyword">NOT NULL</span>,
+  edited_by TEXT <span class="hljs-keyword">NOT NULL</span>,
   old_content TEXT,
   new_content TEXT,
   old_structured TEXT,
@@ -697,13 +877,13 @@ described below.</p>
 <p>Each row represents one edit operation with before/after values for both content
 and structured data.</p>
 <h4>message_reads</h4>
-<pre><code>CREATE TABLE message_reads (
-  message_id TEXT NOT NULL,
-  session_id TEXT NOT NULL,
-  agent_id TEXT NOT NULL,
-  read_at TEXT NOT NULL,
-  PRIMARY KEY (message_id, session_id),
-  FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE
+<pre><code class="language-sql hljs"><span class="hljs-keyword">CREATE TABLE</span> message_reads (
+  message_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  session_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  agent_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  read_at TEXT <span class="hljs-keyword">NOT NULL</span>,
+  <span class="hljs-keyword">PRIMARY KEY</span> (message_id, session_id),
+  <span class="hljs-keyword">FOREIGN KEY</span> (message_id) <span class="hljs-keyword">REFERENCES</span> messages(message_id) <span class="hljs-keyword">ON</span> <span class="hljs-keyword">DELETE</span> CASCADE
 )</code></pre>
 <p>Read state is tracked per message per session. A message is considered read for
 an agent if any matching <code>session_id</code> or <code>agent_id</code> has a record. This means
@@ -751,10 +931,23 @@ combining Thrum messaging with Beads task tracking</li>
 building a custom integration</li>
 </ul>
 
-</main>
-<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
-<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
-</footer>
-<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#messaging.html')}</script>
+      </div>
+    </main>
+
+  </div>
+
+  <script src="/js/vendor/minisearch.js"></script>
+  <script src="/js/search.js" data-docs-base="/docs/" data-search-index="/assets/docs/search-index.json"></script>
+  <script>
+    document.getElementById('theme-toggle').addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme');
+      var next = current === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('thrum-theme', next);
+    });
+    document.getElementById('sidebar-toggle').addEventListener('click', function() {
+      document.getElementById('docs-sidebar').classList.toggle('open');
+    });
+  </script>
 </body>
 </html>
