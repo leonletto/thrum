@@ -1,0 +1,1 @@
+**My state is unchanged on the spec.** Still waiting for your final read on `/Users/leon/dev/opensource/thrum/dev-docs/specs/2026-05-18-thrum-memory-store-design.md` before sending the LOCK message to the coordinator and transitioning to `writing-plans`.

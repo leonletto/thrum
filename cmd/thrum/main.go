@@ -189,6 +189,15 @@ Environment variables:
 			}
 			// If not found, keep "." — downstream will report the real error
 		}
+
+		// thrum-7b84.11: cross-worktree preflight for Class B/C leaves.
+		// Fires the diagnostic banner BEFORE the leaf RunE so commands
+		// that bypass getClient (daemon status / logs / start / stop /
+		// restart / run, backup status, telegram status) still surface
+		// the wrong-worktree cue. Annotation-gated; no-op for Class A
+		// (abort), bypass (help/version), and --repo override paths.
+		crossWorktreePreflight(cmd, flagRepo)
+
 		return nil
 	}
 
@@ -2141,9 +2150,10 @@ delivers matching lines as thrum messages to the specified target.
 Examples:
   thrum monitor add --name errors --match "ERROR" --to @team -- tail -F /tmp/app.log
   thrum monitor list
-  thrum monitor show <id>
-  thrum monitor stop <id>
-  thrum monitor restart <id>`,
+  thrum monitor show <name|id>
+  thrum monitor stop <name|id>
+  thrum monitor restart <name|id>
+  thrum monitor logs <name|id>`,
 	}
 
 	// thrum monitor add -- COMMAND ARGS...
@@ -2255,10 +2265,10 @@ The command and its arguments must be separated from monitor flags with '--':
 		cmd.AddCommand(listCmd)
 	}
 
-	// thrum monitor show <id> [--json]
+	// thrum monitor show <name|id> [--json]
 	cmd.AddCommand(&cobra.Command{
-		Use:   "show <id>",
-		Short: "Show details of a monitor job",
+		Use:   "show <name|id>",
+		Short: "Show details of a monitor job (accepts name or ID)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := getClient()
@@ -2277,10 +2287,10 @@ The command and its arguments must be separated from monitor flags with '--':
 		},
 	})
 
-	// thrum monitor stop <id>
+	// thrum monitor stop <name|id>
 	cmd.AddCommand(&cobra.Command{
-		Use:   "stop <id>",
-		Short: "Stop and remove a monitor job",
+		Use:   "stop <name|id>",
+		Short: "Stop and remove a monitor job (accepts name or ID)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := getClient()
@@ -2288,18 +2298,23 @@ The command and its arguments must be separated from monitor flags with '--':
 				return fmt.Errorf("connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
-			if err := cli.MonitorStop(client, args[0]); err != nil {
+			resolvedID, err := cli.MonitorStop(client, args[0])
+			if err != nil {
 				return err
 			}
-			fmt.Printf("Stopped monitor %s\n", args[0])
+			if resolvedID != args[0] {
+				fmt.Printf("Stopped monitor %s (%s)\n", args[0], resolvedID)
+			} else {
+				fmt.Printf("Stopped monitor %s\n", resolvedID)
+			}
 			return nil
 		},
 	})
 
-	// thrum monitor restart <id>
+	// thrum monitor restart <name|id>
 	cmd.AddCommand(&cobra.Command{
-		Use:   "restart <id>",
-		Short: "Restart a monitor job (preserves the same ID)",
+		Use:   "restart <name|id>",
+		Short: "Restart a monitor job (preserves the same ID, accepts name or ID)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := getClient()
@@ -2307,21 +2322,25 @@ The command and its arguments must be separated from monitor flags with '--':
 				return fmt.Errorf("connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
-			result, err := cli.MonitorRestart(client, args[0])
+			resolvedID, err := cli.MonitorRestart(client, args[0])
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Restarted — ID: %s\n", result.ID)
+			if resolvedID != args[0] {
+				fmt.Printf("Restarted monitor %s (%s)\n", args[0], resolvedID)
+			} else {
+				fmt.Printf("Restarted monitor %s\n", resolvedID)
+			}
 			return nil
 		},
 	})
 
-	// thrum monitor logs <id>
+	// thrum monitor logs <name|id>
 	{
 		var logsLimit int
 		logsCmd := &cobra.Command{
-			Use:   "logs <id>",
-			Short: "Show the most recent monitor matches (historical lookup)",
+			Use:   "logs <name|id>",
+			Short: "Show the most recent monitor matches (historical lookup, accepts name or ID)",
 			Args:  cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				client, err := getClient()
@@ -5325,6 +5344,15 @@ func classifyRefreshError(cmd *cobra.Command, refreshErr error) (fatalErr error,
 		// user-specified repo.
 		return nil, true
 	}
+	// thrum-7b84.11: if the PersistentPreRunE preflight already
+	// emitted the banner for this invocation, mark absorbed and skip
+	// the second emit. The preflight fires for Class B/C leaves
+	// regardless of whether the leaf later flows through getClient
+	// (e.g. `thrum team` runs preflight AND classify). Without this
+	// dedup, those leaves would emit two banners.
+	if crossWorktreeAbsorbed {
+		return nil, true
+	}
 	switch crossWorktreeResponseFor(cmd) {
 	case CrossWorktreeResponseDiagnosticBanner:
 		emitCrossWorktreeBanner(ge, false)
@@ -5391,6 +5419,69 @@ func emitCrossWorktreeBanner(ge *guard.Error, stdoutToo bool) {
 		_, _ = fmt.Fprintln(os.Stdout, banner)
 		_ = os.Stdout.Sync()
 	}
+}
+
+// crossWorktreeAbsorbed is set by crossWorktreePreflight when it
+// emits a cross-worktree banner. classifyRefreshError consults the
+// flag to suppress a duplicate banner when a Class B/C leaf later
+// flows through getClient (which runs RefreshLocalIdentity → fires
+// the same guard). Cobra invokes exactly one leaf per CLI invocation
+// so process-level state is safe; tests that exercise the cobra tree
+// multiple times in one process must reset the flag between runs
+// (see resetCrossWorktreeAbsorbed in cross_worktree_preflight_test.go).
+// Same caveat as currentCobraCmd and flagJSON which predate this PR.
+var crossWorktreeAbsorbed bool
+
+// checkCrossWorktreeGuard is the indirection point so tests can
+// inject controlled guard-fire scenarios without spinning up real
+// identity files or a daemon. Tests should use the
+// withCrossWorktreeGuardStub helper in cross_worktree_preflight_test.go
+// (which restores via t.Cleanup) rather than assigning directly.
+var checkCrossWorktreeGuard = cli.CheckCrossWorktreeGuard
+
+// crossWorktreePreflight runs the cross_worktree guard check during
+// PersistentPreRunE so Class B/C leaves (banner / whoami) fire the
+// diagnostic banner even when they bypass getClient — e.g. `thrum
+// daemon status` calls cli.DaemonStatus directly without a daemon
+// client, and the existing classifyRefreshError path lives inside
+// getClient. Without preflight, those leaves run silently from the
+// wrong worktree, defeating the diagnostic-banner contract.
+//
+// No-op for Class A leaves (default abort) — getClient still aborts
+// on cross_worktree per Enhanced Policy 2.
+// No-op for bypass leaves (help / version) — they never touch identity.
+// No-op on explicit --repo (operator override; same as classify path).
+// No-op on non-cross_worktree guard fires — those are handled by
+// classifyRefreshError's catastrophic-refusal path inside getClient.
+//
+// See thrum-7b84.11.
+func crossWorktreePreflight(cmd *cobra.Command, repoPath string) {
+	resp := crossWorktreeResponseFor(cmd)
+	if resp != CrossWorktreeResponseDiagnosticBanner && resp != CrossWorktreeResponseWhoami {
+		return
+	}
+	if explicitRepoFlag(cmd) {
+		return
+	}
+	guardErr := checkCrossWorktreeGuard(repoPath)
+	if guardErr == nil {
+		return
+	}
+	var ge *guard.Error
+	if !errors.As(guardErr, &ge) || ge.Guard != "cross_worktree" {
+		// Non-cross_worktree guard errors are catastrophic refusals
+		// (unauthenticated_rpc, prime_ownership, …). Let getClient's
+		// classifyRefreshError handle those uniformly so the abort
+		// path stays in one place.
+		return
+	}
+	switch resp {
+	case CrossWorktreeResponseDiagnosticBanner:
+		emitCrossWorktreeBanner(ge, false)
+	case CrossWorktreeResponseWhoami:
+		emitCrossWorktreeBanner(ge, true)
+	}
+	crossWorktreeAbsorbed = true
 }
 
 // getClientNoRefresh opens a daemon connection without running the identity

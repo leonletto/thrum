@@ -200,6 +200,84 @@ func TestSupervisor_StopUnknownID(t *testing.T) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// TestSupervisor_StopReturnsPromptlyEvenIfRunnerHangs: thrum-puhr.9.2.
+// Inject a runnerHandle whose done channel never closes (simulating a stuck
+// reader goroutine, e.g. grandchildren holding the stdout/stderr pipe open
+// after the direct child died). Stop must mark the DB row stopped and return
+// within stopSyncWait + a small slack — NOT block the RPC critical path on
+// runner exit. Without the fix, the previous code waited 10s and returned an
+// error without marking the row stopped, leaving the row in running state
+// forever.
+// ─────────────────────────────────────────────────────────────────────────────
+
+func TestSupervisor_StopReturnsPromptlyEvenIfRunnerHangs(t *testing.T) {
+	sup, store := newTestSupervisor(t)
+	ctx := context.Background()
+
+	// Shrink the synchronous wait so the test exercises the timeout path
+	// quickly. Restore at end so subsequent tests see the production value.
+	// Mutating this package-level var means this test (and any sibling
+	// that overrides stopSyncWait) MUST NOT call t.Parallel(); doing so
+	// would race the override and restore.
+	prevWait := stopSyncWait
+	stopSyncWait = 100 * time.Millisecond
+	defer func() { stopSyncWait = prevWait }()
+
+	// Persist a job row in running state directly, bypassing Add (which
+	// would spawn a real subprocess). The injected runnerHandle below is
+	// the artificial substitute for that real runner.
+	now := time.Now().UTC()
+	job := &MonitorJob{
+		ID:              "mon_TEST_STOP_HANG",
+		Name:            "stop-hang",
+		Argv:            []string{"sleep", "60"},
+		MatchPattern:    ".*",
+		Target:          "@t",
+		Cwd:             "/tmp",
+		Env:             map[string]string{},
+		DebounceSeconds: 60,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+		Status:          StatusRunning,
+	}
+	require.NoError(t, store.Insert(ctx, job))
+
+	// Inject a runnerHandle whose done channel never closes.
+	neverDone := make(chan struct{})
+	defer close(neverDone) // cleanup so leaked watchers (if any) exit
+	_, cancel := context.WithCancel(ctx)
+	defer cancel()
+	sup.mu.Lock()
+	sup.runners[job.ID] = &runnerHandle{
+		job:    job,
+		cancel: cancel,
+		done:   neverDone,
+	}
+	sup.mu.Unlock()
+
+	start := time.Now()
+	err := sup.Stop(ctx, job.ID)
+	elapsed := time.Since(start)
+
+	require.NoError(t, err, "Stop must succeed even when the runner is slow to exit")
+	// Allow up to 2x stopSyncWait for slack on slow CI.
+	assert.Less(t, elapsed, 2*stopSyncWait+250*time.Millisecond,
+		"Stop must not block the RPC critical path on runner exit; got %s", elapsed)
+
+	// Row must be marked stopped synchronously, regardless of runner state.
+	persisted, err := store.GetByID(ctx, job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusStopped, persisted.Status,
+		"DB row must reflect stopped status even if runner goroutine is slow to exit")
+
+	// Runner must be removed from the map.
+	sup.mu.Lock()
+	_, inMap := sup.runners[job.ID]
+	sup.mu.Unlock()
+	assert.False(t, inMap, "runner must be removed from the map after Stop")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // TestSupervisor_ConcurrentAddsRespectCap: submit MaxConcurrentMonitors jobs,
 // then verify the (MaxConcurrentMonitors+1)th returns ErrCapExceeded.
 //

@@ -1,0 +1,5 @@
+Stopping here to surface honestly. Two material problems, both need your direction before I proceed.
+
+2. **Plan rework:** authorize the recon + plan-update + re-review cycle, or do you want a different shape (e.g., minimal patches to T2/T5 only, ignore the spec-mandated test gaps for now, lower the bar)?
+
+Standing by.

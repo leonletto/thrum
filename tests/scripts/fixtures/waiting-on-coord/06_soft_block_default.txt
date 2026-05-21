@@ -1,0 +1,11 @@
+Phase plan ready. One question before I dive in:
+
+The brainstorm doc references a `cycles[]` field but the spec settled on `cycles` as a count, not an array. Which shape do you want me to file the bd tasks against?
+
+**Default if you don't specify:** spec wins (count). If that's fine, just say continue.
+
+| Phase | Tasks | Surface to you? |
+|-------|-------|-----------------|
+| 1 | bd file 4 tasks | yes — confirm shape |
+| 2 | impl prompt | no |
+| 3 | dispatch | yes — pick implementer |

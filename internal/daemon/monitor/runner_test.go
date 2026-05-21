@@ -302,6 +302,66 @@ func TestRunner_EnvIsolation(t *testing.T) {
 	assert.True(t, found, "job.Env variable must be present in child environment")
 }
 
+// TestRunner_KillsProcessGroupOnCancel: thrum-puhr.9.2 Path B.
+// The runner spawns a child that backgrounds a long-lived grandchild in the
+// same process group. The grandchild inherits the child's stdout pipe FDs.
+// On ctx cancellation, the runner must signal the whole process group so
+// grandchildren die alongside the direct child. Without Setpgid:true and
+// the syscall.Kill(-pgid, ...) wiring, the backgrounded grandchild outlives
+// the child, keeps the pipe open, and lr.ReadLine() blocks forever waiting
+// for EOF — Run() never returns.
+//
+// To keep the test fast, we override shutdownGrace to 300ms.
+func TestRunner_KillsProcessGroupOnCancel(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping process-group kill test in short mode")
+	}
+
+	job := defaultJob(t)
+	// Spawn a grandchild (sleep 60) in the background and then a foreground
+	// trap-immune busy-wait. The backgrounded sleep stays in the parent's
+	// process group (no `set -m` job control in non-interactive sh) and
+	// inherits stdout, so without process-group kill it keeps the pipe open
+	// after the shell dies.
+	job.argv = []string{"sh", "-c", "sleep 60 & echo started; trap '' TERM; while true; do sleep 0.1; done"}
+	job.matchPattern = "started"
+	re := regexp.MustCompile(job.matchPattern)
+
+	deliver, getEmits := collectEmits(t)
+	r, err := NewRunner(job, re, nil, deliver, nil)
+	require.NoError(t, err)
+	r.shutdownGrace = 300 * time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() {
+		done <- r.Run(ctx)
+	}()
+
+	// Wait until we see the "started" emit so the grandchild has spawned.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(getEmits()) > 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	require.NotEmpty(t, getEmits(), "child must have started and emitted the marker line")
+
+	// Cancel ctx and assert Run returns within a bounded time. Without
+	// the process-group kill, the grandchild keeps the pipe open and Run
+	// blocks indefinitely on ReadLine.
+	cancel()
+
+	select {
+	case err := <-done:
+		assert.NoError(t, err, "Run must return cleanly after process-group kill")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return within 5s; grandchild likely held the pipe open (Setpgid + process-group signal not wired)")
+	}
+}
+
 // TestRunner_SIGTERMThenSIGKILL: when ctx is canceled, the runner sends
 // SIGTERM to the child. If the child ignores SIGTERM (trap ” TERM), the
 // runner must send SIGKILL after the 5-second grace period.
