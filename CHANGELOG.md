@@ -30,6 +30,16 @@ and this project adheres to
   signal that context loaded. Previously some runtimes (notably Claude Code's
   SessionStart hook) silently absorbed the prime briefing with no observable
   first-turn anchor.
+- **`coordinator-post-restart-sweep` skill + `waiting-on-coord-agent-sweep.sh`
+  script** (thrum-e1n0). New coordinator discipline tool that detects agents
+  blocked waiting on coord decisions by pattern-matching the latest assistant
+  message body from each Claude agent's JSONL transcript. Pattern library
+  empirically mined from project conversation archive (20 regex rules +
+  trailing-question-end-turn structural signal). Wraps with a decision-tree
+  skill for post-prime use. Sibling sweep
+  `scripts/error-and-context-agent-sweep.sh` (no rename on this branch; the
+  release line didn't carry the prior `tmux-agent-sweep.sh` baseline) provides
+  ctx-% / api-error sweeps with the same JSONL substrate.
 - **Schema v25-v32 forward-port from thrum-agents** — `CurrentVersion` bumped
   from 24 to 32 with 7 new migration blocks (scheduler_job_state +
   scheduler_job_events, agent column extensions, agent_lifecycle_events,
@@ -147,6 +157,36 @@ and this project adheres to
   all 5 runtime plugins emit (claude/cursor/opencode/codex/kiro), so unrelated
   prose like `@impl_v0105 primed the database` is not mis-classified and real
   agent output still suppresses the nudge correctly.
+- **`thrum monitor stop` no longer hangs RPC critical path on slow-runner
+  monitors + reaps grandchild processes** (thrum-puhr.9.2, P1). Two-part fix:
+  (Path A) stop returns promptly even when the runner is slow — DB row marked
+  stopped synchronously, then 2s best-effort wait, returns unconditionally;
+  (Path B) `Setpgid: true` on the monitor command + `syscall.Kill(-pgid, ...)`
+  on shutdown so grandchildren that inherited the stdout pipe are killed too
+  instead of inheriting a dangling FD. Eliminates the zombie-hang failure mode
+  where `monitor stop` blocked for tens of seconds before the runner finally
+  exited.
+- **`thrum monitor stop` / `logs` / `restart` / `show` accept name as well as
+  ID** (thrum-puhr.9.1 / 09wl / tv6z). Operators reach for the monitor name —
+  the prominent column in `monitor list` — and previously hit `RPC error
+  -32000: monitor not found` because the CLI passed the user-supplied
+  identifier straight to the daemon's ID-keyed RPC. The four subcommands now
+  resolve name→ID at the CLI layer via `monitor.list` lookup before
+  dispatching the real RPC. ULID-shape detection (`mon_<26-char>` validated)
+  routes user-typed names like `mon_daily` through the lookup path rather
+  than the not-found cliff. Not-found errors hint at `thrum monitor list` /
+  `list --all` so operators can discover what's actually available. Daemon
+  RPC surface unchanged.
+- **Class B/C commands fire the cross-worktree diagnostic banner uniformly via
+  `PersistentPreRunE` preflight** (thrum-7b84.11, P2). The 8 leaves that
+  bypass `getClient` (daemon status / logs / start / stop / restart / run,
+  backup status, telegram status) previously ran silently from the wrong
+  worktree because `classifyRefreshError`'s banner emit lived inside
+  `getClient`. A `crossWorktreePreflight` hook in `rootCmd.PersistentPreRunE`
+  now fires the banner for Class B/C leaves regardless of whether the leaf
+  later flows through `getClient`; an absorbed-flag dedups the second emit
+  when both paths fire (e.g. `thrum team`). Annotation-gated; no-op for
+  Class A (abort) and bypass (help/version) and explicit `--repo` overrides.
 - **`tmux capture-pane` joins wrapped lines (`-J` flag)** (thrum-ktp8). The
   post-launch silence watchdog's `paneAgentEngaged` searches captured pane
   content for the `PrimeTruncationSentinel` to bound the decision region.
