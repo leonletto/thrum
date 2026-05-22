@@ -1050,9 +1050,290 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	}
 }
 
-func TestSchema_V32_CurrentVersion(t *testing.T) {
-	if schema.CurrentVersion != 32 {
-		t.Errorf("CurrentVersion = %d, want 32 (v25-v32 forward-ported from thrum-agents per rc.4)", schema.CurrentVersion)
+func TestSchema_V36_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 36 {
+		t.Errorf("CurrentVersion = %d, want 36 (v25-v36 dead-end DDL forward-ported from thrum-agents + feature/b-b1-impl for v0.10.6)", schema.CurrentVersion)
+	}
+}
+
+// TestSchema_V36_AgentAPIErrorRemediation pins the thrum-sdzk v36 table on
+// BOTH paths (canonical-ref §3.11 Guard-1): fresh install (createTables) and
+// upgrade (the v36 migration block). The shared DDL const makes drift
+// impossible, but this guards the wiring — that the const is actually
+// referenced in both places.
+func TestSchema_V36_AgentAPIErrorRemediation(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "v36.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+
+	tableExists := func() bool {
+		var n int
+		if qErr := db.QueryRow(
+			`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agent_api_error_remediation'`,
+		).Scan(&n); qErr != nil {
+			t.Fatalf("query table: %v", qErr)
+		}
+		return n == 1
+	}
+
+	// Fresh-install path.
+	if !tableExists() {
+		t.Fatal("fresh install missing agent_api_error_remediation table (createTables path)")
+	}
+
+	// Expected columns (NULL/DEFAULT shape lives in the shared const).
+	expected := map[string]bool{
+		"agent_name": false, "last_nudge_at": false, "consecutive_nudge_count": false,
+		"last_error": false, "escalation_sent": false, "updated_at": false,
+	}
+	rows, err := db.Query("PRAGMA table_info(agent_api_error_remediation)")
+	if err != nil {
+		t.Fatalf("PRAGMA: %v", err)
+	}
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, ctype string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		if _, ok := expected[name]; ok {
+			expected[name] = true
+		}
+	}
+	_ = rows.Close()
+	for col, seen := range expected {
+		if !seen {
+			t.Errorf("agent_api_error_remediation missing column %q", col)
+		}
+	}
+
+	// Migration-block path: drop the table, rewind to v35, migrate — the v36
+	// block must recreate it (proves the migration, not just createTables).
+	if _, err := db.Exec("DROP TABLE agent_api_error_remediation"); err != nil {
+		t.Fatalf("drop: %v", err)
+	}
+	if _, err := db.Exec("UPDATE schema_version SET version = 35"); err != nil {
+		t.Fatalf("rewind to v35: %v", err)
+	}
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v35→v36: %v", err)
+	}
+	if !tableExists() {
+		t.Fatal("v36 migration block did not recreate agent_api_error_remediation table")
+	}
+}
+
+// TestSchema_V35_EventKindCheck_FreshInstall pins the thrum-6qmf.17 v35
+// event_kind CHECK on the fresh-install path (createTables). A bogus
+// event_kind must be rejected — proving Guard-1 parity (fresh installs carry
+// the same constraint the v35 rebuild adds to upgraded DBs).
+func TestSchema_V35_EventKindCheck_FreshInstall(t *testing.T) {
+	db := setupTestDB(t) // fresh install at CurrentVersion via createTables
+	_, err := db.Exec(
+		`INSERT INTO agent_lifecycle_events (agent_name, event_kind, event_time) VALUES ('a', 'bogus_kind', 1)`)
+	if err == nil {
+		t.Fatal("fresh-install agent_lifecycle_events accepted a bogus event_kind; CHECK missing (Guard-1 parity broken)")
+	}
+	if !strings.Contains(strings.ToUpper(err.Error()), "CONSTRAINT") {
+		t.Errorf("expected a CHECK constraint error, got: %v", err)
+	}
+	// A valid kind still inserts.
+	if _, err := db.Exec(
+		`INSERT INTO agent_lifecycle_events (agent_name, event_kind, event_time) VALUES ('a', 'crash_detected', 1)`); err != nil {
+		t.Errorf("valid event_kind should insert: %v", err)
+	}
+}
+
+// TestSchema_V35_RebuildPreservesRows builds a pre-CHECK agent_lifecycle_events
+// (the original v27 shape, no event_kind CHECK) with rows covering all 7 kinds,
+// then migrates v34→36 and asserts the rebuild preserved every row + id and
+// that the CHECK is now live.
+func TestSchema_V35_RebuildPreservesRows(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "v35rebuild.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Hand-build the OLD (pre-CHECK) table + a v34 schema_version marker.
+	if _, err := db.Exec(`CREATE TABLE schema_version (version INTEGER NOT NULL, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("schema_version: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO schema_version (version) VALUES (34)`); err != nil {
+		t.Fatalf("seed v34: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE agent_lifecycle_events (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		agent_name TEXT NOT NULL,
+		event_kind TEXT NOT NULL,
+		event_time INTEGER NOT NULL,
+		detection_method TEXT,
+		reason TEXT,
+		details TEXT
+	)`); err != nil {
+		t.Fatalf("create old table: %v", err)
+	}
+
+	kinds := []string{
+		"respawn_fired", "respawn_skipped_loopguard", "crash_detected",
+		"state_md_parse_failed", "state_md_ack_cleared", "respawn_ack_cleared",
+		"reconcile_worktree_discrepancy",
+	}
+	for i, k := range kinds {
+		// Mix detection_method set vs NULL across rows.
+		if i%2 == 0 {
+			if _, err := db.Exec(
+				`INSERT INTO agent_lifecycle_events (agent_name, event_kind, event_time, detection_method) VALUES (?, ?, ?, 'health_check_tick')`,
+				"impl_"+k, k, 1000+i); err != nil {
+				t.Fatalf("seed row %s: %v", k, err)
+			}
+		} else {
+			if _, err := db.Exec(
+				`INSERT INTO agent_lifecycle_events (agent_name, event_kind, event_time) VALUES (?, ?, ?)`,
+				"impl_"+k, k, 1000+i); err != nil {
+				t.Fatalf("seed row %s: %v", k, err)
+			}
+		}
+	}
+
+	var preCount, preMaxID int
+	_ = db.QueryRow(`SELECT COUNT(*), COALESCE(MAX(id),0) FROM agent_lifecycle_events`).Scan(&preCount, &preMaxID)
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v34→36: %v", err)
+	}
+
+	var postCount, postMaxID int
+	if err := db.QueryRow(`SELECT COUNT(*), COALESCE(MAX(id),0) FROM agent_lifecycle_events`).Scan(&postCount, &postMaxID); err != nil {
+		t.Fatalf("post-migrate count: %v", err)
+	}
+	if postCount != preCount || postCount != len(kinds) {
+		t.Errorf("row count changed: pre=%d post=%d want=%d", preCount, postCount, len(kinds))
+	}
+	if postMaxID != preMaxID {
+		t.Errorf("MAX(id) not preserved: pre=%d post=%d", preMaxID, postMaxID)
+	}
+
+	// Sample a row intact (id 1 = first kind, detection_method set).
+	var agent, kind string
+	var dm sql.NullString
+	if err := db.QueryRow(`SELECT agent_name, event_kind, detection_method FROM agent_lifecycle_events WHERE id = 1`).Scan(&agent, &kind, &dm); err != nil {
+		t.Fatalf("sample row: %v", err)
+	}
+	if agent != "impl_respawn_fired" || kind != "respawn_fired" || !dm.Valid || dm.String != "health_check_tick" {
+		t.Errorf("row 1 not preserved intact: agent=%q kind=%q dm=%v", agent, kind, dm)
+	}
+
+	// The CHECK is now live on the rebuilt table.
+	if _, err := db.Exec(
+		`INSERT INTO agent_lifecycle_events (agent_name, event_kind, event_time) VALUES ('x', 'bogus_kind', 1)`); err == nil {
+		t.Error("post-migration bogus event_kind accepted; v35 rebuild did not add the CHECK")
+	}
+}
+
+// TestSchema_GapFill_V32_to_V36 is the end-to-end proof of the v0.10.6 dead-end
+// gap-fill: seed a bare v32 DB carrying only the tables the 33-36 blocks touch
+// (messages for v33, agent_lifecycle_events for the v35 rebuild), run Migrate,
+// and assert the DB reaches v36 with all four new schema shapes live — the
+// pending_route_resolution column, the memories table, the agent_lifecycle
+// event_kind CHECK, and the agent_api_error_remediation table.
+func TestSchema_GapFill_V32_to_V36(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "gapfill_v32_v36.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Bare v32 fixture: schema_version=32 + the pre-v33 shapes the migration
+	// blocks reference. messages WITHOUT pending_route_resolution (v33 adds it);
+	// agent_lifecycle_events in the pre-CHECK v27 shape (v35 rebuilds it).
+	if _, err := db.Exec(`CREATE TABLE schema_version (version INTEGER NOT NULL, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("schema_version: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO schema_version (version) VALUES (32)`); err != nil {
+		t.Fatalf("seed v32: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE messages (
+		message_id   TEXT PRIMARY KEY,
+		agent_id     TEXT NOT NULL,
+		session_id   TEXT NOT NULL,
+		created_at   TEXT NOT NULL,
+		body_format  TEXT NOT NULL,
+		body_content TEXT NOT NULL
+	)`); err != nil {
+		t.Fatalf("create messages: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE agent_lifecycle_events (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		agent_name TEXT NOT NULL,
+		event_kind TEXT NOT NULL,
+		event_time INTEGER NOT NULL,
+		detection_method TEXT,
+		reason TEXT,
+		details TEXT
+	)`); err != nil {
+		t.Fatalf("create agent_lifecycle_events: %v", err)
+	}
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v32→v36: %v", err)
+	}
+
+	v, err := schema.GetSchemaVersion(db)
+	if err != nil {
+		t.Fatalf("GetSchemaVersion: %v", err)
+	}
+	if v != 36 {
+		t.Fatalf("schema_version after gap-fill migrate = %d; want 36", v)
+	}
+
+	// v33: pending_route_resolution column present on messages.
+	var colN int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM pragma_table_info('messages') WHERE name='pending_route_resolution'`,
+	).Scan(&colN); err != nil {
+		t.Fatalf("query messages column: %v", err)
+	}
+	if colN != 1 {
+		t.Error("v33 did not add pending_route_resolution column to messages")
+	}
+
+	// v34: memories table present.
+	var memN int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='memories'`,
+	).Scan(&memN); err != nil {
+		t.Fatalf("query memories table: %v", err)
+	}
+	if memN != 1 {
+		t.Error("v34 did not create memories table")
+	}
+
+	// v35: event_kind CHECK live on the rebuilt agent_lifecycle_events.
+	if _, err := db.Exec(
+		`INSERT INTO agent_lifecycle_events (agent_name, event_kind, event_time) VALUES ('x', 'bogus_kind', 1)`); err == nil {
+		t.Error("v35 rebuild did not add the event_kind CHECK (bogus kind accepted)")
+	}
+
+	// v36: agent_api_error_remediation table present.
+	var remN int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agent_api_error_remediation'`,
+	).Scan(&remN); err != nil {
+		t.Fatalf("query remediation table: %v", err)
+	}
+	if remN != 1 {
+		t.Error("v36 did not create agent_api_error_remediation table")
 	}
 }
 
@@ -1087,18 +1368,18 @@ func TestSchema_ForwardPort_V25_to_V32_AllTablesPresent(t *testing.T) {
 	}
 
 	if err := schema.Migrate(db); err != nil {
-		t.Fatalf("Migrate v24→v32: %v", err)
+		t.Fatalf("Migrate v24→v36: %v", err)
 	}
 
 	v, err := schema.GetSchemaVersion(db)
 	if err != nil {
 		t.Fatalf("GetSchemaVersion: %v", err)
 	}
-	if v != 32 {
-		t.Errorf("schema_version after migrate = %d; want 32", v)
+	if v != 36 {
+		t.Errorf("schema_version after migrate = %d; want 36", v)
 	}
 
-	// All 7 new tables must be present.
+	// All forward-ported tables must be present (v25-v36).
 	for _, tbl := range []string{
 		"scheduler_job_state",
 		"scheduler_job_events",
@@ -1107,6 +1388,9 @@ func TestSchema_ForwardPort_V25_to_V32_AllTablesPresent(t *testing.T) {
 		"email_msg_seen",
 		"email_outbound_queue",
 		"email_peer_rate_state",
+		"memories",
+		"memory_scopes",
+		"agent_api_error_remediation",
 	} {
 		var name string
 		err := db.QueryRow(
@@ -1167,8 +1451,8 @@ func TestSchema_FreshInstall_HasForwardPortedTables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSchemaVersion: %v", err)
 	}
-	if v != 32 {
-		t.Errorf("fresh install schema_version = %d; want 32", v)
+	if v != 36 {
+		t.Errorf("fresh install schema_version = %d; want 36", v)
 	}
 	for _, tbl := range []string{
 		"scheduler_job_state",
@@ -1178,6 +1462,9 @@ func TestSchema_FreshInstall_HasForwardPortedTables(t *testing.T) {
 		"email_msg_seen",
 		"email_outbound_queue",
 		"email_peer_rate_state",
+		"memories",
+		"memory_scopes",
+		"agent_api_error_remediation",
 	} {
 		var name string
 		err := db.QueryRow(

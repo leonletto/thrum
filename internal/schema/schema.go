@@ -20,14 +20,19 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-// CurrentVersion is 32 on release/v0.10.5 to mirror the thrum-agents
-// (v0.11 substrate) DDL surface. The release line ships the migrations
-// only — none of the new tables (scheduler_*, reminders, agent_lifecycle_events,
-// email_*) have consumer code on v0.10.5. The goal is binary-supports-v32-
-// schema-on-disk so a v0.10.5-rc.4 install can open a DB that was previously
-// touched by a v0.11-substrate binary. v29 is a deliberate gap (reserved
-// for MB-1.S6 on the substrate plan); runMigrations handles it cleanly.
-const CurrentVersion = 32
+// CurrentVersion is 36 on release/v0.10.6 to mirror the thrum-agents +
+// feature/b-b1-impl (v0.11 substrate) DDL surface. The release line ships the
+// migrations as DEAD-END DDL only — none of the new tables/columns
+// (scheduler_*, reminders, agent_lifecycle_events, email_*, messages.
+// pending_route_resolution, memories/memory_scopes, agent_api_error_remediation)
+// have consumer code on v0.10.6. The goal is binary-supports-v36-schema-on-disk
+// so a v0.10.6 install can open AND co-reside on a DB touched by a v0.11
+// substrate binary. createTables/createIndexes carry full v36 parity so a
+// fresh DB created by a v0.10.6 binary stamps v36 with every table present (a
+// co-resident v0.11 binary then runs no migration and must not crash on a
+// missing table). v29 is a deliberate gap (reserved for MB-1.S6 on the
+// substrate plan); runMigrations handles it cleanly.
+const CurrentVersion = 36
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -96,6 +101,47 @@ func setSchemaVersion(tx *sql.Tx, version int) error {
 	return err
 }
 
+// createAgentAPIErrorRemediationTable is the DDL for the per-agent
+// remediation-state table (thrum-sdzk, schema v36). Defined once and used in
+// BOTH createTables (fresh install) and the v36 migration block (upgrade) so
+// the two can never drift — the canonical-ref §3.11 Guard-1 parity rule.
+// Keyed-mutable (one upserted row per agent), modeled on scheduler_job_state;
+// no FK/sync (operational local-only state). Dead-end on v0.10.6: the table is
+// inert (no remediation handler ported).
+const createAgentAPIErrorRemediationTable = `CREATE TABLE IF NOT EXISTS agent_api_error_remediation (
+	agent_name              TEXT PRIMARY KEY,
+	last_nudge_at           INTEGER,
+	consecutive_nudge_count INTEGER NOT NULL DEFAULT 0,
+	last_error              TEXT,
+	escalation_sent         INTEGER NOT NULL DEFAULT 0,
+	updated_at              INTEGER NOT NULL
+)`
+
+// agentLifecycleEventsColumns is the shared column body of
+// agent_lifecycle_events, referenced by BOTH createTables (fresh install) and
+// the v35 rebuild migration (thrum-6qmf.17). v35 adds the event_kind CHECK
+// via a full table rebuild because SQLite cannot ALTER ... ADD CHECK; sharing
+// the body makes fresh-vs-upgrade DDL parity (canonical-ref §3.11 Guard-1)
+// structurally impossible to break. The 7 event_kind values are verbatim from
+// state.AgentLifecycleEventKind; the detection_method CHECK is unchanged from
+// the original v27 table.
+const agentLifecycleEventsColumns = `
+	id                INTEGER PRIMARY KEY AUTOINCREMENT,
+	agent_name        TEXT    NOT NULL,
+	event_kind        TEXT    NOT NULL CHECK (event_kind IN (
+		'respawn_fired','respawn_skipped_loopguard','crash_detected',
+		'state_md_parse_failed','state_md_ack_cleared','respawn_ack_cleared',
+		'reconcile_worktree_discrepancy'
+	)),
+	event_time        INTEGER NOT NULL,
+	detection_method  TEXT CHECK (
+		detection_method IS NULL OR detection_method IN
+			('health_check_tick', 'restart_reconciliation', 'rpc_observation')
+	),
+	reason            TEXT,
+	details           TEXT
+`
+
 // createTables creates all database tables.
 func createTables(tx *sql.Tx) error {
 	tables := []string{
@@ -114,7 +160,8 @@ func createTables(tx *sql.Tx) error {
 			deleted_at   TEXT,
 			delete_reason TEXT,
 			authored_by  TEXT,
-			disclosed    INTEGER DEFAULT 0
+			disclosed    INTEGER DEFAULT 0,
+			pending_route_resolution INTEGER NOT NULL DEFAULT 0
 		)`,
 
 		// Message scopes table
@@ -415,20 +462,11 @@ func createTables(tx *sql.Tx) error {
 			details     TEXT
 		)`,
 
-		// Agent lifecycle journal (v27, forward-ported from thrum-agents B-B1).
-		// Dead-end on v0.10.5.
-		`CREATE TABLE IF NOT EXISTS agent_lifecycle_events (
-			id                INTEGER PRIMARY KEY AUTOINCREMENT,
-			agent_name        TEXT    NOT NULL,
-			event_kind        TEXT    NOT NULL,
-			event_time        INTEGER NOT NULL,
-			detection_method  TEXT CHECK (
-				detection_method IS NULL OR detection_method IN
-					('health_check_tick', 'restart_reconciliation', 'rpc_observation')
-			),
-			reason            TEXT,
-			details           TEXT
-		)`,
+		// Agent lifecycle journal (v27, forward-ported from thrum-agents B-B1;
+		// event_kind CHECK added at v35 via the shared agentLifecycleEventsColumns
+		// const so fresh-install and the v35 rebuild migration cannot drift).
+		// Dead-end on v0.10.6.
+		"CREATE TABLE IF NOT EXISTS agent_lifecycle_events (" + agentLifecycleEventsColumns + ")",
 
 		// Unified reminder substrate (v28, forward-ported from thrum-agents A-B4).
 		// Dead-end on v0.10.5.
@@ -483,6 +521,35 @@ func createTables(tx *sql.Tx) error {
 			outbound_count      INTEGER NOT NULL DEFAULT 0,
 			paused_at           INTEGER
 		)`,
+
+		// Memories table (v34, E16, forward-ported from thrum-agents).
+		// Dead-end on v0.10.6 (no memory handlers ported).
+		`CREATE TABLE IF NOT EXISTS memories (
+			record_id   TEXT PRIMARY KEY,
+			name        TEXT NOT NULL,
+			description TEXT NOT NULL,
+			body        TEXT NOT NULL,
+			type        TEXT NOT NULL,
+			author      TEXT NOT NULL,
+			created_at  TEXT NOT NULL,
+			updated_at  TEXT NOT NULL,
+			deleted     INTEGER NOT NULL DEFAULT 0
+		)`,
+
+		// Memory scopes join table (v34, E16). FK→memories ON DELETE CASCADE.
+		// Dead-end on v0.10.6.
+		`CREATE TABLE IF NOT EXISTS memory_scopes (
+			record_id   TEXT NOT NULL,
+			scope_type  TEXT NOT NULL,
+			scope_value TEXT NOT NULL,
+			PRIMARY KEY (record_id, scope_type, scope_value),
+			FOREIGN KEY (record_id) REFERENCES memories(record_id) ON DELETE CASCADE
+		)`,
+
+		// API-error auto-remediation per-agent state (v36, thrum-sdzk).
+		// Identical DDL to the v36 migration block via the shared const.
+		// Dead-end on v0.10.6 (no remediation handler ported).
+		createAgentAPIErrorRemediationTable,
 	}
 
 	for _, sql := range tables {
@@ -573,6 +640,16 @@ func createIndexes(tx *sql.Tx) error {
 		"CREATE INDEX IF NOT EXISTS idx_email_msg_seen_proc ON email_msg_seen(processed_at)",
 		"CREATE INDEX IF NOT EXISTS idx_email_queue_next ON email_outbound_queue(next_retry_at, status)",
 		"CREATE INDEX IF NOT EXISTS idx_peer_rate_paused ON email_peer_rate_state(paused_at) WHERE paused_at IS NOT NULL",
+
+		// Memory indexes (v34, E16). idx_memories_not_deleted is partial
+		// (WHERE deleted = 0); idx_memory_scopes_lookup supports the OR-match
+		// scope filter.
+		"CREATE INDEX IF NOT EXISTS idx_memories_name ON memories(name)",
+		"CREATE INDEX IF NOT EXISTS idx_memories_author ON memories(author)",
+		"CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type)",
+		"CREATE INDEX IF NOT EXISTS idx_memories_not_deleted ON memories(deleted) WHERE deleted = 0",
+		"CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at)",
+		"CREATE INDEX IF NOT EXISTS idx_memory_scopes_lookup ON memory_scopes(scope_type, scope_value)",
 	}
 
 	for _, sql := range indexes {
@@ -1479,6 +1556,129 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_peer_rate_paused ON email_peer_rate_state(paused_at) WHERE paused_at IS NOT NULL`)
 		if err != nil {
 			return fmt.Errorf("migration 31→32: idx_peer_rate_paused: %w", err)
+		}
+	}
+
+	// Migrations 33-36 are forward-ported as DEAD-END DDL for v0.10.6 (v33/v34
+	// from thrum-agents, v35/v36 from feature/b-b1-impl). Schema shape only —
+	// no consumer code (s6os routing, memories handlers, lifecycle enforcement,
+	// remediation handler) lands on the release line. Goal: a v0.10.6 binary can
+	// open AND co-reside on a v36 DB touched by a v0.11 substrate binary.
+
+	// Migration 32→33: Add pending_route_resolution column to messages table
+	// (thrum-s6os E11). Flags messages whose author/scope references were
+	// missing state files at ingest. Idempotent: columnSet-guarded (SQLite has
+	// no ADD COLUMN IF NOT EXISTS). NOT NULL DEFAULT 0 auto-fills existing rows;
+	// no backfill UPDATE. Dead-end on v0.10.6 (pending.Pool / ProjectionResolver
+	// code stays out).
+	if startVersion < 33 && endVersion >= 33 {
+		hasMessages, err := tableExists(tx, "messages")
+		if err != nil {
+			return fmt.Errorf("migration 32→33: check messages table: %w", err)
+		}
+		if hasMessages {
+			msgCols, err := columnSet(tx, "messages")
+			if err != nil {
+				return fmt.Errorf("migration 32→33: inspect messages: %w", err)
+			}
+			if !msgCols["pending_route_resolution"] {
+				_, err = tx.Exec(`ALTER TABLE messages ADD COLUMN pending_route_resolution INTEGER NOT NULL DEFAULT 0`)
+				if err != nil {
+					return fmt.Errorf("migration 32→33: add pending_route_resolution column: %w", err)
+				}
+			}
+		}
+	}
+
+	// Migration 33→34: E16 memories substrate. Adds memories + memory_scopes
+	// tables and their six indexes. The lone FK (memory_scopes→memories ON
+	// DELETE CASCADE) is self-contained (both new tables), so it creates fine
+	// and is harmless empty/unused. No backfill. Dead-end on v0.10.6.
+	if startVersion < 34 && endVersion >= 34 {
+		stmts := []string{
+			`CREATE TABLE IF NOT EXISTS memories (
+				record_id   TEXT PRIMARY KEY,
+				name        TEXT NOT NULL,
+				description TEXT NOT NULL,
+				body        TEXT NOT NULL,
+				type        TEXT NOT NULL,
+				author      TEXT NOT NULL,
+				created_at  TEXT NOT NULL,
+				updated_at  TEXT NOT NULL,
+				deleted     INTEGER NOT NULL DEFAULT 0
+			)`,
+			`CREATE TABLE IF NOT EXISTS memory_scopes (
+				record_id   TEXT NOT NULL,
+				scope_type  TEXT NOT NULL,
+				scope_value TEXT NOT NULL,
+				PRIMARY KEY (record_id, scope_type, scope_value),
+				FOREIGN KEY (record_id) REFERENCES memories(record_id) ON DELETE CASCADE
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_memories_name ON memories(name)`,
+			`CREATE INDEX IF NOT EXISTS idx_memories_author ON memories(author)`,
+			`CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type)`,
+			`CREATE INDEX IF NOT EXISTS idx_memories_not_deleted ON memories(deleted) WHERE deleted = 0`,
+			`CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at)`,
+			`CREATE INDEX IF NOT EXISTS idx_memory_scopes_lookup ON memory_scopes(scope_type, scope_value)`,
+		}
+		for _, stmt := range stmts {
+			if _, err := tx.Exec(stmt); err != nil {
+				return fmt.Errorf("migration 33→34: %w (stmt: %s)", err, stmt)
+			}
+		}
+	}
+
+	// Migration 34→35 (thrum-6qmf.17): add the event_kind CHECK to
+	// agent_lifecycle_events. SQLite cannot ALTER ... ADD CHECK, so this is a
+	// full table rebuild. The table has no foreign keys (in or out), so the
+	// rebuild is safe inside this existing transaction. The _new table uses the
+	// shared agentLifecycleEventsColumns const so it can't drift from
+	// createTables; the explicit INSERT column list preserves id (PK) values.
+	// On v0.10.6 the table always exists (migration 27 ≤ v32) so real upgrades
+	// take the rebuild branch; the existence-guard covers bare/synthetic
+	// fixtures that seed schema_version without the pre-version tables.
+	if startVersion < 35 && endVersion >= 35 {
+		var exists int
+		if err = tx.QueryRow(
+			`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agent_lifecycle_events'`,
+		).Scan(&exists); err != nil {
+			return fmt.Errorf("migration 34→35: probe agent_lifecycle_events: %w", err)
+		}
+		if exists == 0 {
+			if _, err = tx.Exec("CREATE TABLE IF NOT EXISTS agent_lifecycle_events (" + agentLifecycleEventsColumns + ")"); err != nil {
+				return fmt.Errorf("migration 34→35: create agent_lifecycle_events: %w", err)
+			}
+		} else {
+			if _, err = tx.Exec("CREATE TABLE agent_lifecycle_events_new (" + agentLifecycleEventsColumns + ")"); err != nil {
+				return fmt.Errorf("migration 34→35: create rebuilt agent_lifecycle_events: %w", err)
+			}
+			if _, err = tx.Exec(`INSERT INTO agent_lifecycle_events_new
+				(id, agent_name, event_kind, event_time, detection_method, reason, details)
+				SELECT id, agent_name, event_kind, event_time, detection_method, reason, details
+				FROM agent_lifecycle_events`); err != nil {
+				return fmt.Errorf("migration 34→35: copy rows: %w", err)
+			}
+			if _, err = tx.Exec(`DROP TABLE agent_lifecycle_events`); err != nil {
+				return fmt.Errorf("migration 34→35: drop old: %w", err)
+			}
+			if _, err = tx.Exec(`ALTER TABLE agent_lifecycle_events_new RENAME TO agent_lifecycle_events`); err != nil {
+				return fmt.Errorf("migration 34→35: rename: %w", err)
+			}
+		}
+		if _, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_agent_lifecycle_agent_time ON agent_lifecycle_events(agent_name, event_time)`); err != nil {
+			return fmt.Errorf("migration 34→35: idx agent_time: %w", err)
+		}
+		if _, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_agent_lifecycle_kind ON agent_lifecycle_events(event_kind, event_time)`); err != nil {
+			return fmt.Errorf("migration 34→35: idx kind: %w", err)
+		}
+	}
+
+	// Migration 35→36 (thrum-sdzk): API-error auto-remediation per-agent state.
+	// Additive new table — same DDL as the createTables fresh-install path via
+	// the shared const (Guard-1 parity). Dead-end on v0.10.6.
+	if startVersion < 36 && endVersion >= 36 {
+		if _, err := tx.Exec(createAgentAPIErrorRemediationTable); err != nil {
+			return fmt.Errorf("migration 35→36: %w", err)
 		}
 	}
 
