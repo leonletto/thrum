@@ -1372,10 +1372,12 @@ func TestSchema_Migrate_BackupFailureHalts(t *testing.T) {
 
 	// Make the DB's directory unwritable so the backup WriteFile fails while
 	// the source DB stays readable. Restore perms before TempDir cleanup.
-	if err := os.Chmod(dir, 0o500); err != nil {
+	// Directory perms need the execute bit, so 0o500/0o700 are intentional here
+	// (gosec G302 targets file perms; this is a directory in a TempDir test).
+	if err := os.Chmod(dir, 0o500); err != nil { // #nosec G302 -- read-only dir for a backup-failure test
 		t.Fatalf("chmod ro: %v", err)
 	}
-	defer func() { _ = os.Chmod(dir, 0o700) }()
+	defer func() { _ = os.Chmod(dir, 0o700) }() // #nosec G302 -- restore dir perms for TempDir cleanup
 
 	err := schema.Migrate(db)
 	if err == nil {
@@ -1447,7 +1449,7 @@ func TestSchema_Migrate_TimestampedBackups(t *testing.T) {
 	if nameA == nameB {
 		t.Errorf("two sequential migrations produced identical backup names: %q", nameA)
 	}
-	if !(nameA < nameB) {
+	if nameA >= nameB {
 		t.Errorf("backup names not lexically (chronologically) ordered: A=%q B=%q", nameA, nameB)
 	}
 }
