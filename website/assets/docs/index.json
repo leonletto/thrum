@@ -869,6 +869,24 @@
     "lastUpdated": "2026-02-27"
   },
   {
+    "path": "guides/superpowers.html",
+    "title": "Superpowers",
+    "description": "Obra Superpowers is the upstream skills library Thrum's coordination workflows build on — brainstorming, writing-plans, TDD, and code review. Install it to run the brainstorm and project-setup pipelines.",
+    "category": "tools",
+    "order": 4,
+    "tags": [
+      "superpowers",
+      "obra",
+      "skills",
+      "brainstorming",
+      "writing-plans",
+      "tdd",
+      "recommended-tools",
+      "setup"
+    ],
+    "lastUpdated": "2026-05-21"
+  },
+  {
     "path": "troubleshooting-identity.html",
     "title": "Troubleshooting Identity Issues",
     "description": "Identity guard error messages and how to fix them — cross_worktree pid_mismatch, anonymous_mutating_rpc, non_git_bootstrap, and the rest of the v0.9.0 guard catalog with remediation steps.",

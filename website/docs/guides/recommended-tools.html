@@ -104,6 +104,7 @@
           <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-ui-setup.html" data-path="guides/beads-ui-setup.html" data-category="tools" title="Set up Beads UI for a live web dashboard of your agent task board — installation, usage, and multi-project support">Beads UI Setup Guide</a>
           <a class="sidebar-link sidebar-sublink" href="/docs/guides/beads-migration-to-embedded.html" data-path="guides/beads-migration-to-embedded.html" data-category="tools" title="Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.">Beads Migration to Embedded Mode (bd 1.0+)</a>
           <a class="sidebar-link sidebar-sublink" href="/docs/guides/playwright-cli-setup.html" data-path="guides/playwright-cli-setup.html" data-category="tools" title="Set up Playwright CLI for browser automation in Claude Code agent workflows — screenshots, page context, form filling, and web testing">Playwright CLI Setup Guide</a>
+          <a class="sidebar-link sidebar-sublink" href="/docs/guides/superpowers.html" data-path="guides/superpowers.html" data-category="tools" title="Obra Superpowers is the upstream skills library Thrum's coordination workflows build on — brainstorming, writing-plans, TDD, and code review. Install it to run the brainstorm and project-setup pipelines.">Superpowers</a>
           </div>
         </div>
 
@@ -257,6 +258,27 @@ boundaries.</p>
 <p><strong>Beads UI</strong> gives developers a browser-based view of what agents are working on
 — a Kanban board, epics view, and issue list that update in real time as agents
 claim and close tasks.</p>
+<h3>Agent Workflow &amp; Discipline</h3>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>What it does</th>
+<th>Install</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><a href="superpowers.html">Superpowers</a></td>
+<td>Skills library: brainstorming, planning, TDD, review</td>
+<td><code>/plugin install</code></td>
+</tr>
+</tbody></table>
+<p><strong>Superpowers</strong> is the upstream skills library Thrum&#39;s coordination workflows
+build on. Its <code>brainstorming</code> and <code>writing-plans</code> skills produce the design doc
+and plan file that Thrum&#39;s <code>project-setup</code> reads to fan work out into Beads
+epics — so it&#39;s a prerequisite for the brainstorm and project-setup pipelines,
+not an optional extra. See the <a href="superpowers.html">Superpowers guide</a> for the full
+skill mapping and per-harness install.</p>
 <h3>Browser Automation</h3>
 <table>
 <thead>
@@ -277,8 +299,10 @@ capture screenshots for context, fill forms, extract data, or verify that a web
 UI renders correctly. It runs as a Claude Code skill using the <code>playwright-cli</code>
 command.</p>
 <h3>How These Tools Work Together</h3>
-<p>A typical multi-agent workflow using all three:</p>
+<p>A typical multi-agent workflow:</p>
 <ol>
+<li><strong>Superpowers</strong> supplies the engineering discipline — brainstorm a design,
+write a plan, and run TDD and code review inside each task</li>
 <li><strong>Beads</strong> tracks the work — epics, tasks, dependencies, and priorities</li>
 <li><strong>Thrum</strong> coordinates the agents — messaging, presence, and session context</li>
 <li><strong>Beads UI</strong> gives the developer a live dashboard of agent progress</li>
