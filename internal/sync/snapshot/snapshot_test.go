@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	gosync "sync"
 	"strings"
+	gosync "sync"
 	"testing"
 	"time"
 

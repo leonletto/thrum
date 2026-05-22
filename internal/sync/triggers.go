@@ -18,8 +18,8 @@ type WalkerInvoker interface {
 
 // Triggers provides methods to trigger sync operations on specific events.
 type Triggers struct {
-	loop   *SyncLoop
-	walker WalkerInvoker          // optional; nil during early bootstrap or in tests that don't wire it
+	loop    *SyncLoop
+	walker  WalkerInvoker               // optional; nil during early bootstrap or in tests that don't wire it
 	compact func(context.Context) error // optional; runs after walker, before TriggerSync. See SetCompactor.
 }
 
