@@ -255,8 +255,11 @@ func InstallBdHook(opts InstallBdHookOptions) (InstallBdResult, error) {
 		}
 	}
 
-	// Legacy settings.local.json migration: strip every bd command
-	// variant from every event in the legacy file. No-op if absent.
+	// Legacy settings.local.json migration: strip every bd command variant
+	// (incl. the canonical hook-json form) from every event in the legacy
+	// file, unconditionally — the local file is no longer thrum-managed, so
+	// the bd-capability probe above is intentionally NOT consulted here.
+	// No-op if absent.
 	if opts.LocalSettingsPath != "" {
 		migrated, err := migrateSettingsLocal(opts.LocalSettingsPath)
 		if err != nil {
