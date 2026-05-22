@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 # tests/release/behavioral/run-behavioral.sh — entry-point runner.
+#
+# Invocation: safe from any context, including from inside a live agent pane.
+# Self-isolates via helpers/self-isolate.sh (default-server tmux re-exec with
+# TMUX/TMUX_PANE stripped) and propagates the inner exit code. Codex two-pass
+# is automatic: card 01 runs under claude, cards 02-05 under codex (filename
+# convention NN-codex-* -> codex). See tests/release/CLAUDE.md.
+#
+# Self-isolation plan: dev-docs/plans/2026-05-22-release-harness-self-isolation-plan.md
 set -euo pipefail
 
 RUNNER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

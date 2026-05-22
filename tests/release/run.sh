@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # tests/release/run.sh — release test framework entry point.
-# See dev-docs/specs/2026-04-26-release-test-framework-design.md
+#
+# Invocation: safe to run from any context, including from inside a live
+# claude/codex agent pane. The harness self-isolates via helpers/self-isolate.sh
+# (process-tree contamination detect + re-exec into a detached default-server
+# tmux session). Inner exit code propagates back. See tests/release/CLAUDE.md.
+#
+# Design spec: dev-docs/specs/2026-04-26-release-test-framework-design.md
+# Self-isolation plan: dev-docs/plans/2026-05-22-release-harness-self-isolation-plan.md
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

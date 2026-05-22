@@ -25,11 +25,26 @@ plan:**
 
 The arg is a glob filter against `scenarios/`.
 
-## Remote scenarios (run-remote.sh)
+## Running from inside an agent session
 
-When the local fixture can't bootstrap (active `claude` session contends with
-the tmux pane probe) or you want a clean-environment release gate, run scenarios
-on a remote host:
+Safe and supported. The harness detects a `claude`/`codex` ancestor in its
+process tree and self-isolates by re-execing into a detached default-server
+tmux session with `TMUX`/`TMUX_PANE` stripped — the inner run has clean
+process ancestry (so the daemon's caller resolver doesn't refuse fixture
+dispatches), and the wrapper propagates the real exit code. See
+[`tests/release/CLAUDE.md`](CLAUDE.md) for details, and
+[`helpers/self-isolate.sh`](helpers/self-isolate.sh) for the mechanism.
+
+You don't need a clean shell or a remote host for the local gate — that
+need predated the codified self-isolation.
+
+## Remote scenarios (run-remote.sh) — NOT the gate
+
+`run-remote.sh` is a small 2-scenario cross-machine smoke under
+`remote-scenarios/` (currently r01). It is **not** the release gate; the gate
+is `run.sh` (108 scenarios) + `run-behavioral.sh` (5 cards) + E2E, all run
+locally via the self-isolating harness. Use `run-remote.sh` for cross-machine
+sync coverage:
 
 ```bash
 make deploy-remote REMOTE=leondev
@@ -40,8 +55,8 @@ make deploy-remote REMOTE=leondev
 Prerequisites on the remote: `thrum` on `PATH` (a symlink from
 `~/.local/bin/thrum` to a `PATH`-visible directory like `/opt/homebrew/bin`
 suffices), plus `tmux`, `jq`, `git`. `claude` is **not** required — the remote
-scenarios exercise CLI + daemon RPC only, sidestepping the tmux-pane-with-claude
-bootstrap that the local `run.sh` needs.
+scenarios exercise CLI + daemon RPC only, so the cross-machine smoke can run
+on hosts without the AI runtime installed.
 
 Remote scenarios live under `remote-scenarios/`. Each scenario manages its own
 remote tempdir under `/tmp/thrum-remote-<name>-<runid>/` and tears itself down
