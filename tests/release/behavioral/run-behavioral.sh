@@ -183,7 +183,14 @@ _register_card_agents() {
          thrum --repo "$FIXTURE_REPO" quickstart \
            --name "$agent_name" --role "$role" --module "$module" \
            --force >/dev/null 2>&1 ) || true
-    tmux new-session -d -s "$session_name" -c "$FIXTURE_REPO" 2>/dev/null || true
+    # Scrub TMUX/TMUX_PANE so the host pane lands on the DEFAULT tmux server,
+    # where the daemon's `thrum tmux launch` looks (safecmd.cleanTmuxEnv forces
+    # the daemon onto the default server). Without this, running the harness
+    # from inside a tmux-exec session inherits $TMUX and creates the fixture
+    # session on the tmux-exec socket — the daemon can't find it and claude
+    # never launches (bare-shell fixture). The default-server parent (pid 1)
+    # carries no claude ancestry, so there's no PID contamination.
+    env -u TMUX -u TMUX_PANE tmux new-session -d -s "$session_name" -c "$FIXTURE_REPO" 2>/dev/null || true
     ( cd "$FIXTURE_REPO" \
       && env -u THRUM_HOME -u THRUM_AGENT_ID -u THRUM_INTENT \
          thrum --repo "$FIXTURE_REPO" tmux launch "$session_name" \

@@ -32,28 +32,31 @@ local status_file="/tmp/kafm3-51-status-${RUNID}.json"
 capture_thrum_json "$COORD_REPO" "test_coordinator_main" "$status_file" \
   tmux status
 
-# Assertion: coord session present and alive
-if jq -e '.sessions[]? | select(.name == "coord" and .state == "alive")' \
+# Assertion: coord session present and alive. Session names come from
+# setup-repo.sh's exports (COORD_PANE/IMPL_PANE) rather than literals — the
+# daemon names sessions by worktree basename, so the fixture uses the
+# collision-proof test-repo / test-repo-worktree names.
+if jq -e --arg n "$COORD_PANE" '.sessions[]? | select(.name == $n and .state == "alive")' \
     "$status_file" >/dev/null 2>&1; then
   emit_pass "$SID" "coord-session-alive"
 else
   local got
   got=$(tr '\n' ' ' < "$status_file" 2>/dev/null | head -c 320)
   emit_fail "$SID" "coord-session-alive" \
-    "tmux status --json contains coord entry with state=alive" \
+    "tmux status --json contains $COORD_PANE entry with state=alive" \
     "${got:-<no status output>}" \
     "scenarios/${SID}.test.sh:$LINENO"
 fi
 
 # Assertion: impl session present and alive
-if jq -e '.sessions[]? | select(.name == "impl" and .state == "alive")' \
+if jq -e --arg n "$IMPL_PANE" '.sessions[]? | select(.name == $n and .state == "alive")' \
     "$status_file" >/dev/null 2>&1; then
   emit_pass "$SID" "impl-session-alive"
 else
   local got
   got=$(tr '\n' ' ' < "$status_file" 2>/dev/null | head -c 320)
   emit_fail "$SID" "impl-session-alive" \
-    "tmux status --json contains impl entry with state=alive" \
+    "tmux status --json contains $IMPL_PANE entry with state=alive" \
     "${got:-<no status output>}" \
     "scenarios/${SID}.test.sh:$LINENO"
 fi

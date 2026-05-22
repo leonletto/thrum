@@ -329,7 +329,13 @@ behavioral_run_card() {
       local to msg
       to="$(yq -r ".steps[$i].send.to" "$card")"
       msg="$(_behavioral_substitute "$(yq -r ".steps[$i].send.message" "$card")")"
-      send_err=$(thrum --repo "${FIXTURE_REPO:-.}" send --to "$to" "$msg" 2>&1 >/dev/null) || send_failed=1
+      # Issue the send from INSIDE the fixture repo (cd) with THRUM_HOME
+      # unset, mirroring assert-daemon.sh's _thrum_as. The daemon's peercred
+      # resolver keys identity on the connecting process's REAL cwd (cwd ->
+      # .git root -> registered worktree); `--repo` only routes the socket, not
+      # the cwd, so a bare `thrum --repo $FIXTURE_REPO send` from the driver's
+      # cwd resolves to the wrong (or no) worktree -> ErrAnonymous (-32002).
+      send_err=$( cd "${FIXTURE_REPO:-.}" && env -u THRUM_HOME thrum send --to "$to" "$msg" 2>&1 >/dev/null ) || send_failed=1
     fi
 
     if [[ $send_failed -eq 1 ]]; then

@@ -8,8 +8,14 @@ run_teardown() {
     return 0
   fi
 
-  thrum tmux kill coord 2>/dev/null || true
-  thrum tmux kill impl 2>/dev/null || true
+  thrum tmux kill test-repo 2>/dev/null || true
+  thrum tmux kill test-repo-worktree 2>/dev/null || true
+  # Raw-tmux backstops: the daemon tracks these (it launched into them), but a
+  # bare kill-session catches any case where daemon tracking is incomplete
+  # (e.g. the coord session is created by a raw `tmux new-session`, not
+  # `thrum tmux create`). Mirrors the kafm6 raw-kill precedent below.
+  tmux kill-session -t test-repo 2>/dev/null || true
+  tmux kill-session -t test-repo-worktree 2>/dev/null || true
   # Defensive cleanup for the kafm.10 queue-test fixture. Scenario 49
   # tears it down explicitly on the happy path; this catches partial
   # failures (e.g. scenario 45 created the session but 46-49 errored

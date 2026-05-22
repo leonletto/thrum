@@ -226,6 +226,42 @@ spawn_sub_fixture_claude() {
   tmux send-keys -t "$tmux_name" Enter
 }
 
+# clear_trust <pane>
+# Clears Claude Code's first-time-cwd folder-trust dialog for a DAEMON-launched
+# fixture pane (thrum tmux launch). The daemon launches claude but it sits at
+# the "Quick safety check: Is this a project you created or one you trust?"
+# dialog; the daemon also skips its own post-launch prime inject while the gate
+# is up. This drives the pane past the dialog:
+#   1. wait for the dialog to render (pane-idle gate, generous timeout),
+#   2. content-confirm the trust dialog is actually on screen (defeats the
+#      render-timing race — an Enter sent mid-render is swallowed),
+#   3. send Enter to confirm "1. Yes, I trust this folder" (the proven
+#      spawn_sub_fixture_claude:226 primitive — the ONLY thing that clears it).
+#
+# We do NOT send /thrum:prime here: the daemon's own post-launch inject
+# (HandleLaunch runPostLaunchInject) auto-primes once the gate clears, and a
+# manual prime-send RACES it (two keystroke senders collide). We also do NOT
+# write .claude/settings.local.json (bypassPermissions) — empirically that adds
+# a SECOND modal ("running in Bypass Permissions mode … 1. No, exit / 2. Yes")
+# whose default is exit, and the `!`-bash-prefix probes run fine without it.
+clear_trust() {
+  local pane="$1"
+  wait_for_pane_idle "$pane" 30
+  local waited=0
+  while [ "$waited" -lt 30 ]; do
+    if tmux capture-pane -t "$pane" -p 2>/dev/null \
+        | grep -qiE "quick safety check|trust this folder|1\. Yes"; then
+      break
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  if [ "$waited" -ge 30 ]; then
+    echo "WARN: clear_trust($pane): trust dialog text not detected within 30s; sending Enter best-effort" >&2
+  fi
+  tmux send-keys -t "$pane" Enter
+}
+
 # capture_thrum_json <repo> <thrum-name> <out-file> <thrum-args... (no --json)>
 # Runs a thrum subcommand inside an ephemeral tmux-exec pane (PID-chain
 # break, identity pinned via THRUM_NAME) and writes the --json output to
