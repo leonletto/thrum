@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/leonletto/thrum/internal/schema"
 )
@@ -1337,6 +1338,120 @@ func TestSchema_GapFill_V32_to_V36(t *testing.T) {
 	}
 }
 
+// seedBareV32DB writes a minimal on-disk v32 fixture (schema_version=32 only)
+// at dbPath and returns the open handle. All v33-v36 blocks are
+// bare-fixture-tolerant, so Migrate reaches v36 from this seed.
+func seedBareV32DB(t *testing.T, dbPath string) *sql.DB {
+	t.Helper()
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE schema_version (version INTEGER NOT NULL, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("schema_version: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO schema_version (version) VALUES (32)`); err != nil {
+		t.Fatalf("seed v32: %v", err)
+	}
+	return db
+}
+
+// TestSchema_Migrate_BackupFailureHalts proves the RC1 hardening: when the
+// pre-migration backup cannot be written (here, a read-only DB directory), the
+// migration aborts — Migrate returns an error AND the on-disk schema version
+// is unchanged, so no partial migration ran. The DB is not rebuildable from
+// JSONL, so refusing to migrate without a recovery snapshot is the safe default.
+func TestSchema_Migrate_BackupFailureHalts(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "rodir")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	dbPath := filepath.Join(dir, "state.db")
+	db := seedBareV32DB(t, dbPath)
+	defer func() { _ = db.Close() }()
+
+	// Make the DB's directory unwritable so the backup WriteFile fails while
+	// the source DB stays readable. Restore perms before TempDir cleanup.
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatalf("chmod ro: %v", err)
+	}
+	defer func() { _ = os.Chmod(dir, 0o700) }()
+
+	err := schema.Migrate(db)
+	if err == nil {
+		t.Fatal("Migrate should have failed when the pre-migration backup could not be written")
+	}
+	if !strings.Contains(err.Error(), "pre-migration DB backup failed") {
+		t.Errorf("expected backup-failure halt error, got: %v", err)
+	}
+
+	// Schema version must be UNCHANGED — no partial migration.
+	v, gErr := schema.GetSchemaVersion(db)
+	if gErr != nil {
+		t.Fatalf("GetSchemaVersion: %v", gErr)
+	}
+	if v != 32 {
+		t.Errorf("schema version changed despite halted migration: got %d, want 32", v)
+	}
+}
+
+// TestSchema_Migrate_TimestampedBackups proves the RC1 hardening's timestamped,
+// always-fresh naming: each migration event writes a backup matching
+// .pre-migration-v<N>-<UTC>.bak, and two sequential migrations of fresh
+// fixtures produce two DISTINCT, lexically-ordered (== chronologically ordered)
+// backup files — never skipped by a stale backup-once snapshot.
+func TestSchema_Migrate_TimestampedBackups(t *testing.T) {
+	backupOf := func(dbPath string) string {
+		t.Helper()
+		matches, err := filepath.Glob(dbPath + ".pre-migration-v32-*.bak")
+		if err != nil {
+			t.Fatalf("glob: %v", err)
+		}
+		if len(matches) != 1 {
+			t.Fatalf("expected exactly 1 timestamped backup for %s, got %d: %v", dbPath, len(matches), matches)
+		}
+		return filepath.Base(matches[0])
+	}
+
+	// First fresh v32 fixture → migrate → one timestamped backup.
+	dbA := filepath.Join(t.TempDir(), "state.db")
+	dbaHandle := seedBareV32DB(t, dbA)
+	if err := schema.Migrate(dbaHandle); err != nil {
+		_ = dbaHandle.Close()
+		t.Fatalf("Migrate A: %v", err)
+	}
+	_ = dbaHandle.Close()
+	nameA := backupOf(dbA)
+
+	// Ensure the second migration lands in a strictly later UTC second so the
+	// timestamps (and thus the lexical order) differ deterministically.
+	time.Sleep(1100 * time.Millisecond)
+
+	// Second fresh v32 fixture (same db basename, different dir) → migrate.
+	dbB := filepath.Join(t.TempDir(), "state.db")
+	dbbHandle := seedBareV32DB(t, dbB)
+	if err := schema.Migrate(dbbHandle); err != nil {
+		_ = dbbHandle.Close()
+		t.Fatalf("Migrate B: %v", err)
+	}
+	_ = dbbHandle.Close()
+	nameB := backupOf(dbB)
+
+	// Pattern check: .pre-migration-v32-<UTC>.bak (UTC form 20060102T150405Z).
+	for _, n := range []string{nameA, nameB} {
+		if !strings.HasPrefix(n, "state.db.pre-migration-v32-") || !strings.HasSuffix(n, "Z.bak") {
+			t.Errorf("backup name %q does not match .pre-migration-v32-<UTC>.bak", n)
+		}
+	}
+	// Distinct + lexically ordered (timestamp form is lexically == chronologically sortable).
+	if nameA == nameB {
+		t.Errorf("two sequential migrations produced identical backup names: %q", nameA)
+	}
+	if !(nameA < nameB) {
+		t.Errorf("backup names not lexically (chronologically) ordered: A=%q B=%q", nameA, nameB)
+	}
+}
+
 // TestSchema_ForwardPort_V25_to_V32_AllTablesPresent exercises the
 // forward-ported migrations end-to-end. Initializes a DB at v24's
 // shape (telegram_msg_map being the last table added pre-forward-port),
@@ -1731,32 +1846,51 @@ func TestMigrate_DBBackupBeforeMigration(t *testing.T) {
 		t.Fatalf("Migrate() failed: %v", err)
 	}
 
-	// Verify backup file exists.
-	bakPath := dbPath + ".pre-migration-v21-bak"
-	bakBytes, err := os.ReadFile(bakPath)
-	if err != nil {
-		t.Fatalf("backup file not created: %v", err)
+	// Verify exactly one timestamped backup exists (RC1 hardening: the suffix
+	// is now .pre-migration-v<N>-<UTC>.bak, not the old fixed -bak form).
+	v21Backups := func() []string {
+		m, gErr := filepath.Glob(dbPath + ".pre-migration-v21-*.bak")
+		if gErr != nil {
+			t.Fatalf("glob: %v", gErr)
+		}
+		return m
+	}
+	first := v21Backups()
+	if len(first) != 1 {
+		t.Fatalf("expected exactly 1 timestamped backup after first Migrate, got %d: %v", len(first), first)
 	}
 
 	// Backup bytes must match the pre-migration snapshot.
+	bakBytes, err := os.ReadFile(first[0])
+	if err != nil {
+		t.Fatalf("read backup: %v", err)
+	}
 	if len(bakBytes) != len(preBytes) {
 		t.Fatalf("backup size mismatch: got %d bytes, want %d bytes", len(bakBytes), len(preBytes))
 	}
 
-	// Run Migrate again — backup must NOT be overwritten.
-	// (First, downgrade version again to force another migration pass.)
+	// Run Migrate again after re-downgrading — RC1 hardening makes each
+	// migration event ALWAYS-FRESH, so a SECOND, distinct timestamped backup
+	// must appear (the old backup-once/never-overwrite behavior is gone). Sleep
+	// past the UTC-second boundary so the second timestamp differs.
 	if _, err := db2.Exec("UPDATE schema_version SET version = ?", oldVersion); err != nil {
 		t.Fatalf("re-downgrade version: %v", err)
 	}
+	time.Sleep(1100 * time.Millisecond)
 	if err := schema.Migrate(db2); err != nil {
 		t.Fatalf("Migrate() second call failed: %v", err)
 	}
-	bakBytes2, err := os.ReadFile(bakPath)
-	if err != nil {
-		t.Fatalf("backup file disappeared: %v", err)
+	second := v21Backups()
+	if len(second) != 2 {
+		t.Fatalf("expected 2 distinct timestamped backups after second Migrate (always-fresh), got %d: %v", len(second), second)
 	}
-	if string(bakBytes2) != string(bakBytes) {
-		t.Fatalf("backup overwritten on second Migrate; want pre-migration bytes unchanged")
+	// The original snapshot must still be intact among them.
+	stillBytes, err := os.ReadFile(first[0])
+	if err != nil {
+		t.Fatalf("original backup disappeared: %v", err)
+	}
+	if string(stillBytes) != string(bakBytes) {
+		t.Fatalf("original pre-migration snapshot was clobbered; want bytes unchanged")
 	}
 }
 

@@ -765,20 +765,22 @@ Recovery options:
 	}
 
 	// Back up the DB file + WAL/SHM sidecars before any migration runs so the
-	// operator can revert cleanly by renaming the backup back.  Backup-once:
-	// never overwrite an existing backup (a later startup must not clobber the
-	// true pre-upgrade snapshot).  Skip when file == "" (in-memory test DB).
+	// operator can revert cleanly by renaming the backup back. Each migration
+	// event gets its own timestamped, lexically-sortable snapshot (UTC), so
+	// repeated migrations keep distinct, time-ordered recovery points (and
+	// repeated test runs are never skipped by a stale backup-once snapshot).
+	// Skip when file == "" (in-memory test DB). A backup failure HALTS the
+	// migration: the DB is NOT rebuildable from JSONL, so we refuse to migrate
+	// without a recovery snapshot. backupFileOnce is a no-op (nil) for an
+	// absent source, so absent WAL/SHM sidecars stay fine; only real failures
+	// (disk full, permissions) halt.
 	if dbFile != "" {
-		suffix := fmt.Sprintf(".pre-migration-v%d-bak", currentVersion)
-		if err := backupFileOnce(dbFile, dbFile+suffix); err != nil {
-			log.Printf("[schema] DB backup failed (migration proceeding): %v", err)
-		}
-		// WAL and SHM sidecars — absence is fine, backupFileOnce is a no-op.
-		if err := backupFileOnce(dbFile+"-wal", dbFile+"-wal"+suffix); err != nil {
-			log.Printf("[schema] WAL backup failed (migration proceeding): %v", err)
-		}
-		if err := backupFileOnce(dbFile+"-shm", dbFile+"-shm"+suffix); err != nil {
-			log.Printf("[schema] SHM backup failed (migration proceeding): %v", err)
+		ts := time.Now().UTC().Format("20060102T150405Z")
+		suffix := fmt.Sprintf(".pre-migration-v%d-%s.bak", currentVersion, ts)
+		for _, src := range []string{dbFile, dbFile + "-wal", dbFile + "-shm"} {
+			if err := backupFileOnce(src, src+suffix); err != nil {
+				return fmt.Errorf("pre-migration DB backup failed: %w — refusing to run schema migration v%d->v%d without a recovery snapshot (the DB is NOT rebuildable from JSONL). Free disk space / fix permissions on %s and restart", err, currentVersion, CurrentVersion, dbFile)
+			}
 		}
 	}
 
