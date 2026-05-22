@@ -1,4 +1,3 @@
-
 ## What "Runtime" Means in Thrum
 
 A runtime is the CLI you're running inside a tmux pane. Not the agent — the tool

@@ -1,4 +1,3 @@
-
 ## Agent Coordination
 
 You run agents in parallel. This page covers the practical patterns: how they

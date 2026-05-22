@@ -1,4 +1,3 @@
-
 ## What a Peer Is
 
 A peer is a link between two Thrum daemons. Each daemon is bound to one repo.

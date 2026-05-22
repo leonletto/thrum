@@ -17,14 +17,14 @@ and this project adheres to
   rebuild (v35), and the `agent_api_error_remediation` table (v36). The
   tables/columns are intentionally dead-end on v0.10.6 — no consumer code reads
   them. `createTables`/`createIndexes` carry full v36 parity so a fresh DB
-  created by a v0.10.6 binary stamps v36 with every table present. Goal:
-  v0.10.6 binaries can open AND co-reside on a v36 DB previously touched by
+  created by a v0.10.6 binary stamps v36 with every table present. Goal: v0.10.6
+  binaries can open AND co-reside on a v36 DB previously touched by
   v0.11-substrate work on multi-binary worktree machines, without a co-resident
   v0.11 binary crashing on a missing table.
 - **`verify-against-source` prose-conformance reviewer skill** (FE.5
   skill-review-loop). A reviewer pass that checks generated prose/specs against
-  their source material for conformance, complementing the existing
-  code-review and verify-against-plan passes.
+  their source material for conformance, complementing the existing code-review
+  and verify-against-plan passes.
 - **`project-setup` Phase 0 review gate + prompt stamping** (FE.5). The
   project-setup skill now runs a review gate before coding begins and stamps the
   generated implementer prompts, so plan→prompt translation errors are caught up

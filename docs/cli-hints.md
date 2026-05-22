@@ -1,4 +1,3 @@
-
 ## CLI Hints
 
 ### Overview

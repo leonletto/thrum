@@ -1,4 +1,3 @@
-
 ## What the Orchestrator Is
 
 The orchestrator is a Thrum role that takes a plan you already wrote, spins up

@@ -1,4 +1,3 @@
-
 ## System Architecture
 
 ![Thrum architecture: Clients (CLI, Web UI, MCP Server) connect to the Daemon via JSON-RPC/WebSocket, which reads and writes to JSONL Logs, SQLite Index, and Git Sync, which push/pull to the remote a-sync branch](../img/architecture.svg)
@@ -975,18 +974,18 @@ safety nets.
 
 Backup files are written before destructive operations. The identity and peers
 backups use a backup-once pattern (never overwritten after the first). The
-schema-migration backup is **timestamped and always-fresh** (since v0.10.6): each
-migration event writes a distinct, UTC-sortable snapshot, so repeated migrations
-keep separate, time-ordered recovery points rather than a single file. A
-migration backup failure now **halts the migration** — `Migrate()` returns an
-error and the daemon refuses to start until disk space / permissions are fixed,
-rather than logging and proceeding without a recovery snapshot.
+schema-migration backup is **timestamped and always-fresh** (since v0.10.6):
+each migration event writes a distinct, UTC-sortable snapshot, so repeated
+migrations keep separate, time-ordered recovery points rather than a single
+file. A migration backup failure now **halts the migration** — `Migrate()`
+returns an error and the daemon refuses to start until disk space / permissions
+are fixed, rather than logging and proceeding without a recovery snapshot.
 
-| Trigger                                                                              | Backup file                                                                   | Location                                 |
-| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- | ---------------------------------------- |
-| `identity.Bootstrap` detects a daemon_id rotation (e.g., legacy hostname-derived ID) | `config.json.pre-identity-bak`                                                | `.thrum/config.json.pre-identity-bak`    |
-| `PeerRegistry` detects a stale daemon_id in peers.json                               | `peers.json.pre-rotation-bak`                                                 | `.thrum/var/peers.json.pre-rotation-bak` |
-| `schema.Migrate` runs any migration step                                             | `thrum.db.pre-migration-v<N>-<UTC>.bak` (plus `-shm` and `-wal` sidecars)     | same directory as `thrum.db`             |
+| Trigger                                                                              | Backup file                                                               | Location                                 |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- | ---------------------------------------- |
+| `identity.Bootstrap` detects a daemon_id rotation (e.g., legacy hostname-derived ID) | `config.json.pre-identity-bak`                                            | `.thrum/config.json.pre-identity-bak`    |
+| `PeerRegistry` detects a stale daemon_id in peers.json                               | `peers.json.pre-rotation-bak`                                             | `.thrum/var/peers.json.pre-rotation-bak` |
+| `schema.Migrate` runs any migration step                                             | `thrum.db.pre-migration-v<N>-<UTC>.bak` (plus `-shm` and `-wal` sidecars) | same directory as `thrum.db`             |
 
 The UTC timestamp form is `YYYYMMDDTHHMMSSZ` (e.g.
 `thrum.db.pre-migration-v32-20260522T181600Z.bak`). You can delete these files
