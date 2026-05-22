@@ -254,11 +254,6 @@ func (c *Compactor) compactJSONLByKey(
 	}
 	defer func() { _ = f.Close() }()
 
-	type indexedLine struct {
-		raw   []byte
-		order int // position in file; used to preserve order for non-dedup rows
-	}
-
 	// Two-pass approach:
 	// Pass 1: scan all lines, recording the LAST index for each key.
 	// Pass 2: emit only lines that are the last occurrence of their key,
@@ -352,6 +347,8 @@ func (c *Compactor) compactJSONLByKey(
 
 	rowsRemoved := len(lines) - len(keepSet)
 	if rowsRemoved > 0 {
+		// #nosec G706 -- path is a daemon-controlled sync-state file path
+		// from compactor iteration over syncDir, not external input.
 		slog.Info("compaction.trimmed",
 			"path", path,
 			"rows_removed", rowsRemoved,

@@ -164,6 +164,10 @@ func (w *Writer) DeleteBridgeGroup(ctx context.Context, groupID string) error {
 
 	// If file exists, check ownership before deleting.
 	if _, err := os.Stat(path); err == nil {
+		// #nosec G304 -- path is daemon-controlled (w.syncDir + fixed
+		// subdirectory + caller-provided groupID joined safely via
+		// filepath.Join). groupID is a daemon-managed identifier, not
+		// external user input.
 		data, readErr := os.ReadFile(path)
 		if readErr != nil {
 			return fmt.Errorf("state: read bridge-group for ownership check: %w", readErr)
@@ -234,6 +238,8 @@ func (r *Reader) ReadAllBridgeGroups(ctx context.Context) ([]BridgeGroupStateSna
 // file does not exist.
 func (r *Reader) ReadAgent(ctx context.Context, agentID string) (*AgentStateSnapshot, error) {
 	path := filepath.Join(r.syncDir, "state", "agents", agentID+".json")
+	// #nosec G304 -- path is daemon-controlled (r.syncDir + fixed
+	// subdirectory + agentID). agentID is a daemon-managed identifier.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -331,6 +337,9 @@ func readJSONDir(dir string, fn func([]byte) error) error {
 		if filepath.Ext(e.Name()) != ".json" {
 			continue
 		}
+		// #nosec G304 -- dir is daemon-controlled (sync state subtree);
+		// e.Name() comes from os.ReadDir(dir) and is filtered to .json
+		// files only. No external input is composed into the path.
 		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
 			return fmt.Errorf("state: read %s: %w", e.Name(), err)
