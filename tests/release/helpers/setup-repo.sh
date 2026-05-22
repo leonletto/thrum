@@ -81,6 +81,12 @@ run_setup() {
   "$TE" exec --cwd "$REPO" --clean -- thrum init --non-interactive --runtime claude \
     || { echo "ERROR: B/thrum init failed" >&2; return 1; }
 
+  # Pre-grant the Bash tool inside the coord fixture so the NL->tool_use
+  # scenarios (56/58/59/60/61) don't stall on per-tool prompts when their
+  # autonomous-claude runs `thrum send/reply/who-has/agent set-intent/team`.
+  # See helpers/fixture-perms.sh for shape + rationale.
+  write_fixture_perms "$REPO"
+
   "$TE" exec --cwd "$REPO" --clean -- thrum quickstart \
       --name test_coordinator_main \
       --role coordinator \
@@ -169,6 +175,11 @@ run_setup() {
     echo "ERROR: C.2 worktree create did not produce $IMPL_WT/" >&2
     return 1
   fi
+
+  # Same pre-grant in the impl worktree so its autonomous-Bash invocations
+  # (e.g. card-01-style `thrum worktree create` / `thrum tmux launch` driven
+  # from the coord pane) don't stall on per-tool prompts.
+  write_fixture_perms "$IMPL_WT"
 
   # C.3 implementer's tmux session — $IMPL_WT IS a secondary worktree (just
   # created by C.2), so the not-a-worktree hint won't fire and `thrum tmux

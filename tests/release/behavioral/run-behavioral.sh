@@ -78,6 +78,13 @@ source "${HELPERS_DIR}/ephemeral-daemon.sh"
 source "${HELPERS_DIR}/render-preamble.sh"
 source "${HELPERS_DIR}/behavioral.sh"
 source "${HELPERS_DIR}/extract-tool-calls.sh"
+# fixture-perms.sh + drive.sh are pure function definitions; safe to source
+# here without dragging run.sh-specific state in. fixture-perms gives
+# write_fixture_perms (per-tool Bash allowlist for autonomous-tool-use cards);
+# drive.sh gives clear_trust (sends Enter to clear the folder-trust dialog on
+# daemon-launched panes — needed by behavioral's _register_card_agents).
+source "${HELPERS_DIR}/fixture-perms.sh"
+source "${HELPERS_DIR}/drive.sh"
 # runtime_version is defined in assert-tmux.sh (sourced transitively by
 # behavioral.sh).
 
@@ -162,6 +169,12 @@ fi
 _register_card_agents() {
   local card="$1"
   local agent_key role module session_name agent_name
+  # Pre-grant the Bash tool in the fixture repo so card 01's coord (and any
+  # other autonomous-tool-use card) doesn't stall on per-tool prompts when
+  # claude invokes `thrum worktree create` / `thrum tmux launch` / etc. via
+  # the Bash tool. Idempotent overwrite (cards share a single $FIXTURE_REPO
+  # but this is called per-card per the design-doc spec).
+  write_fixture_perms "$FIXTURE_REPO"
   while IFS= read -r agent_key; do
     [[ -z "$agent_key" || "$agent_key" == "null" ]] && continue
     role="$(yq -r ".agents.${agent_key}.role // \"\"" "$card")"
@@ -195,6 +208,13 @@ _register_card_agents() {
       && env -u THRUM_HOME -u THRUM_AGENT_ID -u THRUM_INTENT \
          thrum --repo "$FIXTURE_REPO" tmux launch "$session_name" \
            --runtime "$RUNTIME" >/dev/null 2>&1 ) || true
+    # Clear claude's folder-trust dialog so the daemon's runPostLaunchInject
+    # can auto-prime (it skips inject while the trust gate is up + does not
+    # retry). Same drive.sh primitive run.sh setup-repo.sh uses on coord/impl.
+    # Skip for non-claude runtimes (codex doesn't have this dialog).
+    if [[ "$RUNTIME" == "claude" ]]; then
+      clear_trust "$session_name"
+    fi
   done < <(yq -r '.agents | keys // [] | .[]' "$card")
 }
 

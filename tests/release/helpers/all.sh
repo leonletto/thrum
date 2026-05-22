@@ -11,6 +11,8 @@ source "$HELPERS_DIR/output.sh"
 # shellcheck disable=SC1091
 source "$HELPERS_DIR/drive.sh"
 # shellcheck disable=SC1091
+source "$HELPERS_DIR/fixture-perms.sh"
+# shellcheck disable=SC1091
 source "$HELPERS_DIR/assert.sh"
 # shellcheck disable=SC1091
 source "$HELPERS_DIR/setup-repo.sh"
