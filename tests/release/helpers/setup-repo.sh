@@ -45,6 +45,16 @@ run_setup() {
     | xargs -r kill 2>/dev/null \
     || true
 
+  # Stale-dir reaper: each run creates ~/.thrum_release_tests/<RUNID>; killed
+  # runs leave these behind (the daemon kill above handles processes but not
+  # state dirs). Reap direct-child dirs older than 24h — safe for in-progress
+  # parallel runs (their RUNID dirs are fresh), and prevents long-term
+  # accumulation. Idempotent: harmless if the directory is missing or empty.
+  if [ -d "$HOME/.thrum_release_tests" ]; then
+    find "$HOME/.thrum_release_tests" -mindepth 1 -maxdepth 1 -type d -mtime +0 \
+      -exec rm -rf {} + 2>/dev/null || true
+  fi
+
   # A. Prep
   RUNID="$(date +%Y%m%dT%H%M%S)-$$"
   BASE="$HOME/.thrum_release_tests/$RUNID"
