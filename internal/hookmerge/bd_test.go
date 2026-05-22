@@ -6,7 +6,18 @@ import (
 	"testing"
 )
 
+// stubHookJSON pins BdSupportsHookJSON to v for the duration of a test so
+// assertions about which canonical form is emitted are deterministic
+// regardless of the host's bd version. Restores the real probe on cleanup.
+func stubHookJSON(t *testing.T, v bool) {
+	t.Helper()
+	orig := BdSupportsHookJSON
+	BdSupportsHookJSON = func() bool { return v }
+	t.Cleanup(func() { BdSupportsHookJSON = orig })
+}
+
 func TestInstallBdHook_FreshFile(t *testing.T) {
+	stubHookJSON(t, true)
 	dir := t.TempDir()
 	settingsPath := filepath.Join(dir, ".claude", "settings.json")
 
@@ -35,6 +46,7 @@ func TestInstallBdHook_FreshFile(t *testing.T) {
 }
 
 func TestInstallBdHook_Idempotent(t *testing.T) {
+	stubHookJSON(t, true)
 	dir := t.TempDir()
 	settingsPath := filepath.Join(dir, ".claude", "settings.json")
 
@@ -111,6 +123,7 @@ func TestInstallBdHook_SkipWhenGlobalPluginEnabled(t *testing.T) {
 }
 
 func TestInstallBdHook_MigrationSweep(t *testing.T) {
+	stubHookJSON(t, true)
 	dir := t.TempDir()
 	settingsPath := filepath.Join(dir, ".claude", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o750); err != nil {
@@ -176,6 +189,7 @@ func TestInstallBdHook_UserCustomVariantPreserved(t *testing.T) {
 	// Acceptance #8: user-customized variants on the bd prime command
 	// string are left untouched. Migration sweep only removes the legacy
 	// bare-form variants enumerated in legacyBdCommands.
+	stubHookJSON(t, true)
 	dir := t.TempDir()
 	settingsPath := filepath.Join(dir, ".claude", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o750); err != nil {
@@ -217,6 +231,7 @@ func TestInstallBdHook_UserCustomVariantPreserved(t *testing.T) {
 }
 
 func TestInstallBdHook_MigratesLegacyLocalFile(t *testing.T) {
+	stubHookJSON(t, true)
 	dir := t.TempDir()
 	settingsPath := filepath.Join(dir, ".claude", "settings.json")
 	localPath := filepath.Join(dir, ".claude", "settings.local.json")
@@ -307,6 +322,166 @@ func TestDefaultGuardPaths(t *testing.T) {
 func TestInstallBdHook_RequiresSettingsPath(t *testing.T) {
 	if _, err := InstallBdHook(InstallBdHookOptions{}); err == nil {
 		t.Fatal("expected error when SettingsPath is empty")
+	}
+}
+
+func TestInstallBdHook_FreshFile_StaleBd(t *testing.T) {
+	// bd lacks --hook-json (released 1.0.4): emit the bare form so the hook
+	// doesn't error with "unknown flag: --hook-json" on first session.
+	stubHookJSON(t, false)
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, ".claude", "settings.json")
+
+	res, err := InstallBdHook(InstallBdHookOptions{SettingsPath: settingsPath})
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if !res.Added {
+		t.Fatal("expected Added=true on fresh file")
+	}
+	if res.LegacyRemoved != 0 {
+		t.Fatalf("expected no legacy removed on fresh file, got %d", res.LegacyRemoved)
+	}
+
+	settings, err := Load(settingsPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	cmds := ExtractCommands(settings)
+	if len(cmds) != 1 || cmds[0].Command != "bd prime" || cmds[0].Event != "SessionStart" {
+		t.Fatalf("expected single bare `bd prime` hook on SessionStart, got %+v", cmds)
+	}
+}
+
+func TestInstallBdHook_Idempotent_StaleBd(t *testing.T) {
+	stubHookJSON(t, false)
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, ".claude", "settings.json")
+
+	if _, err := InstallBdHook(InstallBdHookOptions{SettingsPath: settingsPath}); err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+	firstBytes, _ := os.ReadFile(settingsPath) //#nosec G304 -- test
+
+	res, err := InstallBdHook(InstallBdHookOptions{SettingsPath: settingsPath})
+	if err != nil {
+		t.Fatalf("second install: %v", err)
+	}
+	if res.Added {
+		t.Fatal("second install should not Add (bare bd prime already present)")
+	}
+	if res.LegacyRemoved != 0 {
+		t.Fatalf("second install should not strip its own canonical, got %d removed", res.LegacyRemoved)
+	}
+	secondBytes, _ := os.ReadFile(settingsPath) //#nosec G304 -- test
+	if string(firstBytes) != string(secondBytes) {
+		t.Fatalf("second install changed bytes:\n---first---\n%s\n---second---\n%s", string(firstBytes), string(secondBytes))
+	}
+}
+
+func TestInstallBdHook_ModernToStale(t *testing.T) {
+	// A repo previously inited against modern bd has `bd prime --hook-json` on
+	// SessionStart; bd is now stale. The broken hook-json form must be stripped
+	// and replaced with the working bare `bd prime`.
+	stubHookJSON(t, false)
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	pre := `{
+  "hooks": {
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "bd prime --hook-json"}]},
+      {"hooks": [{"type": "command", "command": "user hook"}]}
+    ]
+  }
+}`
+	if err := os.WriteFile(settingsPath, []byte(pre), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := InstallBdHook(InstallBdHookOptions{SettingsPath: settingsPath})
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if res.LegacyRemoved != 1 {
+		t.Fatalf("expected 1 broken hook-json removed, got %d", res.LegacyRemoved)
+	}
+	if !res.Added {
+		t.Fatal("expected Added=true (bare bd prime replaces hook-json)")
+	}
+
+	settings, _ := Load(settingsPath)
+	cmds := ExtractCommands(settings)
+	foundBare, foundHookJSON, foundUser := false, false, false
+	for _, c := range cmds {
+		switch c.Command {
+		case "bd prime":
+			foundBare = true
+		case CanonicalBdCommand:
+			foundHookJSON = true
+		case "user hook":
+			foundUser = true
+		}
+	}
+	if !foundBare {
+		t.Error("expected bare `bd prime` after modern->stale transition")
+	}
+	if foundHookJSON {
+		t.Error("broken `bd prime --hook-json` should have been stripped on stale bd")
+	}
+	if !foundUser {
+		t.Error("user hook should be preserved")
+	}
+}
+
+func TestInstallBdHook_StaleToModern(t *testing.T) {
+	// A repo previously inited against stale bd has bare `bd prime`; bd is now
+	// modern. The bare form is upgraded to `bd prime --hook-json`.
+	stubHookJSON(t, true)
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	pre := `{
+  "hooks": {
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "bd prime"}]}
+    ]
+  }
+}`
+	if err := os.WriteFile(settingsPath, []byte(pre), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := InstallBdHook(InstallBdHookOptions{SettingsPath: settingsPath})
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if res.LegacyRemoved != 1 {
+		t.Fatalf("expected 1 bare bd prime removed, got %d", res.LegacyRemoved)
+	}
+	if !res.Added {
+		t.Fatal("expected Added=true (hook-json replaces bare)")
+	}
+
+	settings, _ := Load(settingsPath)
+	cmds := ExtractCommands(settings)
+	if len(cmds) != 1 || cmds[0].Command != CanonicalBdCommand {
+		t.Fatalf("expected single hook-json hook after stale->modern upgrade, got %+v", cmds)
+	}
+}
+
+func TestBdSupportsHookJSON_Smoke(t *testing.T) {
+	// Host-dependent (released bd 1.0.4 returns false; bd HEAD returns true).
+	// Assert only that it doesn't panic and returns a stable value.
+	got := BdSupportsHookJSON()
+	if got {
+		t.Logf("bd supports --hook-json")
+	} else {
+		t.Logf("bd lacks --hook-json (or bd absent)")
 	}
 }
 

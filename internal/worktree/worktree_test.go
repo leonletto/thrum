@@ -94,6 +94,11 @@ func TestEnsureRedirects_InstallsBdHookWhenAvailable(t *testing.T) {
 	original := hookmerge.BdBinaryAvailable
 	hookmerge.BdBinaryAvailable = func() bool { return true }
 	t.Cleanup(func() { hookmerge.BdBinaryAvailable = original })
+	// Pin --hook-json support so the asserted canonical form is host-independent
+	// (released bd 1.0.4 lacks the flag and would emit bare `bd prime`).
+	origHookJSON := hookmerge.BdSupportsHookJSON
+	hookmerge.BdSupportsHookJSON = func() bool { return true }
+	t.Cleanup(func() { hookmerge.BdSupportsHookJSON = origHookJSON })
 
 	mainRepo := t.TempDir()
 	thrumDir := filepath.Join(mainRepo, ".thrum")
