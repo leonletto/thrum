@@ -18,6 +18,12 @@ thrum_release_self_isolate "${RUNNER_DIR}/run-behavioral.sh" "$@"
 
 # CLI defaults
 RUNTIME="claude"
+# RUNTIME_EXPLICIT: 0 = auto-select per card via filename convention
+# (NN-codex-* -> codex; else claude); 1 = user passed --runtime= override
+# which then applies uniformly to every card. The auto-select case is the
+# default so a single `bash run-behavioral.sh` invocation runs card 01 under
+# claude AND cards 02-05 under codex without flags (the "codex two-pass").
+RUNTIME_EXPLICIT=0
 declare -A PREAMBLES=()
 FILTER="*.yaml"
 NO_AUTO_DIAGNOSE=0
@@ -39,7 +45,7 @@ USAGE
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --runtime=*) RUNTIME="${1#--runtime=}"; shift ;;
+    --runtime=*) RUNTIME="${1#--runtime=}"; RUNTIME_EXPLICIT=1; shift ;;
     --preamble=*)
       val="${1#--preamble=}"
       role="${val%%:*}"
@@ -65,13 +71,37 @@ if [[ -n "$_main_repo" && -f "$_main_repo/.env" ]]; then
   set -a; source "$_main_repo/.env"; set +a
 fi
 
-# Preflight
-for tool in thrum tmux jq yq git "$RUNTIME"; do
+# Preflight. Note: the AI runtime (claude/codex) is intentionally NOT in this
+# list — runtime selection is per-card (see _card_runtime below) and each
+# card's required runtime is checked at its turn, with a clear skip+fail
+# message if the binary is absent. That way a partial install (e.g. claude
+# only, no codex) still runs the cards it CAN run instead of failing the
+# whole invocation.
+for tool in thrum tmux jq yq git; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "ERROR: required tool '$tool' not found in PATH" >&2
     exit 2
   fi
 done
+
+# _card_runtime <card-file>
+# Resolve the AI runtime a card should run under. If the user passed an
+# explicit --runtime= override on the command line, that wins (uniform across
+# every card). Otherwise auto-derive from the card filename: NN-codex-*
+# uses codex, anything else uses claude. The behavioral set ships as 01
+# (worktree-create-launch — runtime-agnostic, runs as claude) + 02-05
+# (codex-* — codex-specific hook tests).
+_card_runtime() {
+  local card="$1"
+  if [ "$RUNTIME_EXPLICIT" = "1" ]; then
+    printf '%s' "$RUNTIME"
+    return
+  fi
+  case "$(basename "$card")" in
+    *-codex-*) printf '%s' "codex" ;;
+    *)         printf '%s' "claude" ;;
+  esac
+}
 yq_v="$(yq --version 2>&1 | head -1)"
 if ! { grep -q 'mikefarah' <<<"$yq_v" && grep -q -E 'v?4\.' <<<"$yq_v"; }; then
   echo "ERROR: incompatible yq ('$yq_v'); need mikefarah/yq v4+" >&2
@@ -243,7 +273,18 @@ for card in "${cards[@]}"; do
   bash "${RUNNER_DIR}/validate-card.sh" "$card" || exit 2
   test_id="$(yq -r '.id' "$card")"
   out="${RUN_DIR}/${test_id}.jsonl"
-  echo "==> ${test_id}"
+  # Per-card runtime resolution + availability check. If the resolved
+  # runtime isn't on PATH, surface a clear fail-loud message and count it
+  # as a failure (rather than silently running under the wrong runtime —
+  # the Stop-hook-loop failure mode observed on codex cards run as claude).
+  RUNTIME="$(_card_runtime "$card")"
+  if ! command -v "$RUNTIME" >/dev/null 2>&1; then
+    echo "==> ${test_id}"
+    echo "    SKIP/FAIL: card requires --runtime=${RUNTIME}; '${RUNTIME}' not installed on PATH" >&2
+    total_fail=$((total_fail+1))
+    continue
+  fi
+  echo "==> ${test_id} (runtime: ${RUNTIME})"
   _register_card_agents "$card"
   if behavioral_run_card "$card" "$out"; then
     pass=1
