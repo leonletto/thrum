@@ -8,6 +8,14 @@ HELPERS_DIR="${REPO_ROOT}/tests/release/helpers"
 CARDS_DIR="${RUNNER_DIR}/cards"
 RESULTS_DIR_DEFAULT="${REPO_ROOT}/dev-docs/behavioral"
 
+# Self-isolating launcher (same mechanism as run.sh): if invoked from inside
+# an agent pane (claude/codex ancestor), re-exec into a detached default-
+# server tmux session so the harness runs with clean process ancestry.
+# Must fire BEFORE any further setup / CLI parsing side effects.
+# shellcheck disable=SC1091
+source "${HELPERS_DIR}/self-isolate.sh"
+thrum_release_self_isolate "${RUNNER_DIR}/run-behavioral.sh" "$@"
+
 # CLI defaults
 RUNTIME="claude"
 declare -A PREAMBLES=()

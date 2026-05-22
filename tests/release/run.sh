@@ -7,6 +7,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HELPERS_DIR="$SCRIPT_DIR/helpers"
 SCENARIOS_DIR="$SCRIPT_DIR/scenarios"
 
+# Self-isolating launcher: if invoked from inside an agent pane (claude/codex
+# ancestor), re-exec into a detached default-server tmux session so the
+# harness runs with clean process ancestry. See helpers/self-isolate.sh.
+# Must fire BEFORE the tool-preflight (so the fail-loud diagnostic surfaces
+# on contamination) and before any fixture setup.
+# shellcheck disable=SC1091
+source "$HELPERS_DIR/self-isolate.sh"
+thrum_release_self_isolate "$SCRIPT_DIR/run.sh" "$@"
+
 # Preflight
 for tool in thrum tmux jq git claude expect; do
   if ! command -v "$tool" >/dev/null 2>&1; then
