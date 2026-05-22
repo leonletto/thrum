@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { tmuxKillServer, tmuxExec } from './helpers/tmux-exec';
+import { reapStaleE2EServers, tmuxExec } from './helpers/tmux-exec';
 
 /** Source repo root — used for building and locating the binary. */
 const SOURCE_ROOT = path.resolve(__dirname, '../..');
@@ -119,8 +119,10 @@ export default async function globalSetup(): Promise<void> {
     if (key.startsWith('THRUM_')) delete process.env[key];
   }
 
-  // Kill any stale tmux test server from a prior crashed run.
-  tmuxKillServer();
+  // Reap ALL stale thrum-e2e-* servers leaked by prior runs (pid-keyed
+  // sockets mean a single kill-server can't reach a different run; glob-reap
+  // catches every leak regardless of how the prior run died).
+  reapStaleE2EServers();
 
   // Step 1: Build in source repo
   run('make', ['build-ui'], 'Building UI');

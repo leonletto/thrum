@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { TEST_REPO_FILE, IMPLEMENTER_REPO_FILE, BARE_REMOTE_FILE, WS_PORT_FILE } from './global-setup.js';
+import { tmuxKillServer } from './helpers/tmux-exec.js';
 
 const SOURCE_ROOT = path.resolve(__dirname, '../..');
 const BIN = path.join(SOURCE_ROOT, 'bin', 'thrum');
@@ -37,6 +38,12 @@ export default async function globalTeardown(): Promise<void> {
     console.log(`[global-teardown]   ${BIN} --repo ${coordinatorDir} daemon status`);
   }
   console.log(`[global-teardown] Run 'make clean-e2e' to stop daemon and remove everything.`);
+
+  // Kill THIS run's tmux server on clean exit so its bash pane releases its
+  // pty immediately (don't wait for the next run's preflight reap). Only the
+  // current run's pid-keyed socket is targeted; the daemon + test repos above
+  // are preserved for inspection — the tmux panes are pure scaffolding.
+  tmuxKillServer();
 
   // Remove marker files only (tests are done, markers are stale)
   for (const file of [TEST_REPO_FILE, IMPLEMENTER_REPO_FILE, BARE_REMOTE_FILE, WS_PORT_FILE]) {

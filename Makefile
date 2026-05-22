@@ -207,6 +207,8 @@ clean-e2e:
 	@rm -rf /tmp/thrum-e2e-release
 	@rm -f node_modules/.e2e-test-repo node_modules/.e2e-implementer-repo \
 		node_modules/.e2e-bare-remote node_modules/.e2e-ws-port
+	@echo "Reaping leaked thrum-e2e-* tmux servers..."
+	@scripts/reap-stale-e2e-tmux.sh || true
 	@echo "E2E cleanup complete."
 
 ## Run E2E tests (builds first, creates test environment)
