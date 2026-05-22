@@ -8,6 +8,49 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- **Schema v33–v36 dead-end forward-port** — `CurrentVersion` bumped from 32 to
+  36 with four new migration blocks: `messages.pending_route_resolution` column
+  (v33), `memories` + `memory_scopes` tables and their six indexes (v34), the
+  `agent_lifecycle_events.event_kind` CHECK via an existence-guarded table
+  rebuild (v35), and the `agent_api_error_remediation` table (v36). The
+  tables/columns are intentionally dead-end on v0.10.6 — no consumer code reads
+  them. `createTables`/`createIndexes` carry full v36 parity so a fresh DB
+  created by a v0.10.6 binary stamps v36 with every table present. Goal:
+  v0.10.6 binaries can open AND co-reside on a v36 DB previously touched by
+  v0.11-substrate work on multi-binary worktree machines, without a co-resident
+  v0.11 binary crashing on a missing table.
+- **`verify-against-source` prose-conformance reviewer skill** (FE.5
+  skill-review-loop). A reviewer pass that checks generated prose/specs against
+  their source material for conformance, complementing the existing
+  code-review and verify-against-plan passes.
+- **`project-setup` Phase 0 review gate + prompt stamping** (FE.5). The
+  project-setup skill now runs a review gate before coding begins and stamps the
+  generated implementer prompts, so plan→prompt translation errors are caught up
+  front.
+- **Review loop baked into `coordinator-running-brainstorm-cycles`** (FE.5),
+  with a no-double-review boundary added to the dispatch and review-cycle skills
+  so a single review pass isn't redundantly re-run across skill hand-offs.
+
+### Changed
+
+- **Pre-migration DB backups are now timestamped and always-fresh** — the backup
+  suffix is `.pre-migration-v<N>-<UTC>.bak` (UTC, lexically/chronologically
+  sortable), so each migration event keeps its own distinct, time-ordered
+  recovery snapshot instead of a single backup-once file. A backup failure now
+  HALTS the migration: a non-nil error (main DB or a present WAL/SHM sidecar)
+  aborts `Migrate()` so the daemon refuses to start until disk/permissions are
+  fixed — the DB is not rebuildable from JSONL, so migrating without a recovery
+  snapshot is unsafe. Absent sidecars remain a no-op.
+- **Plugin RC-tag distribution scheme** (PRE-RELEASE-STEPS §3a) — during the RC
+  cycle `claude-plugin/.claude-plugin/plugin.json` and
+  `.claude-plugin/marketplace.json` carry the `X.Y.Z-rc.N` prerelease suffix
+  (the other version files stay at the stable target). Because Claude Code's
+  plugin-install cache is keyed by the `version` field, the advancing suffix
+  lets `/plugin update` upgrade the plugin in place through the rc pipeline — no
+  uninstall/reinstall — mirroring the binary upgrade path.
+
 ## [0.10.5] - 2026-05-21
 
 ### Added

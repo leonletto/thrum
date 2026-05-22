@@ -709,15 +709,19 @@ schema_version      # Migration tracking
 
 ### Schema Version
 
-Current version: **32**
+Current version: **36**
 
-> **v0.10.5 note:** migrations 25-32 are forward-ported from the v0.11 substrate
-> work (`thrum-agents` branch) so the v0.10.5 binary can open DBs previously
-> touched by a v0.11-substrate binary on multi-binary worktree machines. The new
-> tables (scheduler, agent lifecycle, reminders, email) are intentionally
-> **dead-end on v0.10.5** — no consumer code reads from them. v29 is a
-> deliberate gap (reserved for substrate follow-ups); `runMigrations` handles
-> gapped sequences naturally.
+> **v0.10.6 note:** migrations 25-36 are forward-ported from the v0.11 substrate
+> work (`thrum-agents` + `feature/b-b1-impl` branches) so the v0.10.6 binary can
+> open AND co-reside on DBs previously touched by a v0.11-substrate binary on
+> multi-binary worktree machines. The new tables/columns (scheduler, agent
+> lifecycle, reminders, email, memories, API-error remediation,
+> `pending_route_resolution`) are intentionally **dead-end on v0.10.6** — no
+> consumer code reads from them. `createTables`/`createIndexes` carry full v36
+> parity, so a fresh DB created by a v0.10.6 binary stamps v36 with every table
+> present (a co-resident v0.11 binary then runs no migration and must not crash
+> on a missing table). v29 is a deliberate gap (reserved for substrate
+> follow-ups); `runMigrations` handles gapped sequences naturally.
 
 Key migrations:
 
@@ -770,6 +774,15 @@ Key migrations:
 - v30 -> v31: `email_outbound_queue` table (v0.11 D-B1 forward-port)
 - v31 -> v32: `email_peer_rate_state` table with partial index on `paused_at`
   (v0.11 D-B1 forward-port)
+- v32 -> v33: `pending_route_resolution` column added to `messages` table
+  (`thrum-s6os` sync re-architecture forward-port; dead-end on v0.10.6)
+- v33 -> v34: `memories` + `memory_scopes` tables and six indexes (E16 memory
+  substrate forward-port; dead-end on v0.10.6)
+- v34 -> v35: `agent_lifecycle_events.event_kind` CHECK constraint added via an
+  existence-guarded table rebuild (SQLite cannot `ALTER ... ADD CHECK`; v0.11
+  forward-port; dead-end on v0.10.6)
+- v35 -> v36: `agent_api_error_remediation` table (per-agent API-error
+  auto-remediation state; v0.11 forward-port; dead-end on v0.10.6)
 
 ### Initialization
 
@@ -968,17 +981,25 @@ safety nets.
 
 ### Automatic Backup Files
 
-Three backup files are written (backup-once pattern: never overwritten on
-subsequent restarts after the first successful upgrade):
+Backup files are written before destructive operations. The identity and peers
+backups use a backup-once pattern (never overwritten after the first). The
+schema-migration backup is **timestamped and always-fresh** (since v0.10.6): each
+migration event writes a distinct, UTC-sortable snapshot, so repeated migrations
+keep separate, time-ordered recovery points rather than a single file. A
+migration backup failure now **halts the migration** — `Migrate()` returns an
+error and the daemon refuses to start until disk space / permissions are fixed,
+rather than logging and proceeding without a recovery snapshot.
 
-| Trigger                                                                              | Backup file                                                         | Location                                 |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------- | ---------------------------------------- |
-| `identity.Bootstrap` detects a daemon_id rotation (e.g., legacy hostname-derived ID) | `config.json.pre-identity-bak`                                      | `.thrum/config.json.pre-identity-bak`    |
-| `PeerRegistry` detects a stale daemon_id in peers.json                               | `peers.json.pre-rotation-bak`                                       | `.thrum/var/peers.json.pre-rotation-bak` |
-| `schema.Migrate` runs any migration step                                             | `thrum.db.pre-migration-v<N>-bak` (plus `-shm` and `-wal` sidecars) | same directory as `thrum.db`             |
+| Trigger                                                                              | Backup file                                                                   | Location                                 |
+| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- | ---------------------------------------- |
+| `identity.Bootstrap` detects a daemon_id rotation (e.g., legacy hostname-derived ID) | `config.json.pre-identity-bak`                                                | `.thrum/config.json.pre-identity-bak`    |
+| `PeerRegistry` detects a stale daemon_id in peers.json                               | `peers.json.pre-rotation-bak`                                                 | `.thrum/var/peers.json.pre-rotation-bak` |
+| `schema.Migrate` runs any migration step                                             | `thrum.db.pre-migration-v<N>-<UTC>.bak` (plus `-shm` and `-wal` sidecars)     | same directory as `thrum.db`             |
 
-You can delete these files after a successful upgrade. If something goes wrong
-mid-migration, they're how you get back.
+The UTC timestamp form is `YYYYMMDDTHHMMSSZ` (e.g.
+`thrum.db.pre-migration-v32-20260522T181600Z.bak`). You can delete these files
+after a successful upgrade. If something goes wrong mid-migration, they're how
+you get back.
 
 ### Downgrade Guard
 
@@ -1033,8 +1054,9 @@ CLAUDE.md § "Multi-binary worktree footgun" carries the dev-facing expansion.
 If a migration goes wrong:
 
 1. Stop the daemon.
-2. Rename `thrum.db.pre-migration-v<N>-bak` back to `thrum.db` (and the `-shm`
-   and `-wal` sidecars if they exist).
+2. Rename the most recent `thrum.db.pre-migration-v<N>-<UTC>.bak` snapshot back
+   to `thrum.db` (and the `-shm` and `-wal` sidecars if they exist). The UTC
+   suffix sorts lexically, so the highest-sorting name is the newest backup.
 3. Run the older binary.
 
 The downgrade guard will fire on the older binary if the migration already
