@@ -131,6 +131,42 @@ fi
 # overlap with the auto-prime render.
 wait_for_pane_idle "$PANE" 60
 
+# Banner-race guard (thrum-6hqy.1): the daemon's HandleRestart
+# spawns a post-launch goroutine that, ~10s after launchCmd plus
+# waitForPaneReady time, sends the identity banner printf into the
+# pane via sendKeysAndSubmit (internal/daemon/rpc/tmux.go:2304-2336).
+# Without this guard, send_slash_command's text->Enter gap can
+# overlap the banner emit's keystrokes, splicing the banner's
+# `printf '%s\n' 'Agent: @...'` content INTO the in-flight
+# `/thrum:load-context` text — producing concatenated input like
+# `/thrum:load-contextprintf '%s\n' 'Agent: @...'` that claude
+# rejects as "Unknown command" (root cause of this scenario's
+# intermittent context-survives-restart-slash failures observed
+# across iterations on the v0.10.6 release-test harness).
+#
+# Wait for identitybanner.PrimeTruncationSentinel ("If the prime
+# output was truncated, you must read it now.") — the banner's
+# last line — to appear in the pane scrollback before sending the
+# slash command. The sentinel is the canonical sync point because
+# it lands AFTER all other banner lines (printf args order in
+# internal/identitybanner/identitybanner.go:88). Generous 45s
+# budget covers the daemon's 10s sleep + waitForPaneReady headroom
+# + claude render. Tolerate timeout silently — if the banner truly
+# never fires the assertion below will catch the actual missing
+# behavior with a clearer signal than a bare timeout here.
+local banner_waited=0
+while [ "$banner_waited" -lt 45 ]; do
+  if tmux capture-pane -t "$PANE" -S -1000 -p 2>/dev/null | \
+       grep -qF "If the prime output was truncated, you must read it now."; then
+    break
+  fi
+  sleep 1
+  banner_waited=$((banner_waited + 1))
+done
+# Brief settle after banner lands so claude finishes responding to
+# the printf before we type into the same input.
+wait_for_pane_idle "$PANE" 30
+
 # Capture an RFC3339 floor timestamp scoped to AFTER the auto-prime
 # settle so we only match the /thrum:load-context invocation, not
 # the post-restart auto-prime.
