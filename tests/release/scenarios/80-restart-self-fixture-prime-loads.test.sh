@@ -64,12 +64,10 @@ _run_scenario_80() {
 
 # Assertion 1: SessionStart attachment with Previous Session Context
 # heading, timestamp-scoped to entries from 79's relaunch.
-local context_filter='.type == "attachment"
-        and (.attachment.hookEvent == "SessionStart")
-        and (.timestamp >= "'"$KAFM6_S2_RELAUNCH_FLOOR_TS"'")
-        and (((.attachment.stdout // "" | tostring) | contains("# Previous Session Context"))
-             or ((.attachment.content // "" | tostring) | contains("# Previous Session Context")))'
-if wait_for_jsonl_match "$KAFM6_S2_WT" "$context_filter" 90 >/dev/null; then
+# wait_for_attachment handles the .attachment.stdout / .attachment.content
+# union filter; floor_ts is RFC3339-validated at entry (and passed via
+# the safe inlining path the helper documents).
+if wait_for_attachment "$KAFM6_S2_WT" "SessionStart" "# Previous Session Context" 90 "$KAFM6_S2_RELAUNCH_FLOOR_TS" >/dev/null; then
   emit_pass "$SID" "self-restart-previous-context"
 else
   emit_fail "$SID" "self-restart-previous-context" \
@@ -82,12 +80,7 @@ fi
 
 # Assertion 2: same attachment carries the original save-reason
 # marker, proving the rendered context is from THIS run's snapshot.
-local reason_filter='.type == "attachment"
-        and (.attachment.hookEvent == "SessionStart")
-        and (.timestamp >= "'"$KAFM6_S2_RELAUNCH_FLOOR_TS"'")
-        and (((.attachment.stdout // "" | tostring) | contains("'"$KAFM6_S2_SAVE_REASON"'"))
-             or ((.attachment.content // "" | tostring) | contains("'"$KAFM6_S2_SAVE_REASON"'")))'
-if wait_for_jsonl_match "$KAFM6_S2_WT" "$reason_filter" 60 >/dev/null; then
+if wait_for_attachment "$KAFM6_S2_WT" "SessionStart" "$KAFM6_S2_SAVE_REASON" 60 "$KAFM6_S2_RELAUNCH_FLOOR_TS" >/dev/null; then
   emit_pass "$SID" "self-restart-reason-preserved"
 else
   emit_fail "$SID" "self-restart-reason-preserved" \

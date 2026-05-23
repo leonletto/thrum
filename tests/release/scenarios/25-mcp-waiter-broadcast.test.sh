@@ -112,34 +112,11 @@ fi
 # during that flurry races the keystroke-time bash-mode gate. The
 # daemon's inbox state is authoritative; reading it via tmux-exec
 # is deterministic regardless of what claude is doing.
-# Write JSON to a host-accessible file inside the inner pane to
-# sidestep tmux-exec's 80-col capture-pane wrap mangling JSON
-# (see scenarios 22/23/24 rationale).
-out_file="$(mktemp -t kafm2-25.XXXXXX).json"
-_check_impl_inbox_for_broadcast() {
-  "$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$IMPL_REPO" --clean -- \
-    bash -c "env THRUM_NAME=test_implementer thrum inbox --json > '${out_file}' 2>/dev/null" \
-    >/dev/null 2>&1 || true
-  if [ -s "$out_file" ]; then
-    jq -r --arg m "$MARKER" \
-      '[.messages[] | select(.body.content | contains($m))] | length' \
-      < "$out_file" 2>/dev/null
-  fi
-}
-
-elapsed=0
-broadcast_delivered=false
-while [ "$elapsed" -lt 30 ]; do
-  N=$(_check_impl_inbox_for_broadcast || echo 0)
-  if [ "${N:-0}" -ge 1 ]; then
-    broadcast_delivered=true
-    break
-  fi
-  sleep 2
-  elapsed=$((elapsed + 2))
-done
-
-if $broadcast_delivered; then
+# assert_inbox_contains encapsulates the mktemp + tmux-exec + jq poll
+# pattern previously inlined here. The helper's `.messages[]?`
+# null-safety also guards against hints-only daemon responses
+# under load (failure mode that bit scen 95 pre-helper-extraction).
+if assert_inbox_contains test_implementer "$IMPL_REPO" "$MARKER" 30; then
   emit_pass "$SID" "broadcast-marker-in-inbox"
 else
   emit_fail "$SID" "broadcast-marker-in-inbox" \
@@ -147,4 +124,3 @@ else
     "(timeout or marker not delivered to impl inbox)" \
     "scenarios/${SID}.test.sh:$LINENO"
 fi
-rm -f "$out_file"
