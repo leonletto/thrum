@@ -91,7 +91,7 @@ fi
 # thrum calls must wrap through tmux-exec to break the PID chain
 # (same rationale as scenario 02).
 "$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$REPO" --clean -- \
-  thrum tmux restart impl --force >/dev/null 2>&1 || true
+  thrum tmux restart "$IMPL_PANE" --force >/dev/null 2>&1 || true
 
 # Wait for the NEW SessionStart attachment to land in IMPL JSONL.
 # Same race-condition guard as scenarios 02/03: 5s sleep before

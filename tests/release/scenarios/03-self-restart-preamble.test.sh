@@ -40,7 +40,7 @@ fi
 # `thrum tmux restart coord` becomes a no-op (no coord session known to that
 # daemon).
 "$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$REPO" --clean -- \
-  thrum tmux restart coord --force >/dev/null
+  thrum tmux restart "$COORD_PANE" --force >/dev/null
 
 # Step 3: wait for the NEW SessionStart attachment to appear in IMPL JSONL.
 #
