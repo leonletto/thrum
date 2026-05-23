@@ -128,8 +128,15 @@ thrum_release_self_isolate() {
   # env command explicitly. THRUM_RELEASE_NO_TEARDOWN is the canonical
   # one — without this passthrough, the harness always tears down even
   # when the caller explicitly asked it not to.
+  #
+  # PATH is also propagated explicitly: tmux preserves the server's PATH
+  # (set at server start), not the calling client's, so any PATH override
+  # the caller set (e.g. `PATH="$(pwd)/bin:$PATH" bash run-subset.sh ...`
+  # to validate a worktree-local thrum binary) would otherwise be lost
+  # inside the re-exec. Production callers without an override see the
+  # same PATH they would have seen anyway.
   local _passthrough=""
-  for v in THRUM_RELEASE_NO_TEARDOWN THRUM_BEHAVIORAL_NO_TEARDOWN; do
+  for v in THRUM_RELEASE_NO_TEARDOWN THRUM_BEHAVIORAL_NO_TEARDOWN PATH; do
     if [ -n "${!v:-}" ]; then
       _passthrough+=" $(printf '%q' "${v}=${!v}")"
     fi
