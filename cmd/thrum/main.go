@@ -5853,6 +5853,27 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		msgWriter := syncSnapshot.NewMessageStateWriter(syncDir, st.DaemonID())
 		recWriter := syncSnapshot.NewReceiptStateWriter(syncDir, st.DaemonID())
 		walker := syncSnapshot.NewWalker(st.DB(), stateWriter, msgWriter, recWriter, syncDir, st.DaemonID())
+
+		// Seed lastWalkAt from the current max event timestamp so the
+		// first post-restart structural-event trigger doesn't scan all
+		// history (s7is.6: cold-start invariant — Go's zero-value
+		// lastWalkAt caused the walker to scan ~11k events under the
+		// outer state.Lock(), wedging the daemon for >10s and expiring
+		// every concurrent RPC). Empty events table: leave at zero —
+		// there's nothing to walk anyway.
+		var maxTS sql.NullString
+		if err := st.DB().QueryRowContext(ctx, "SELECT MAX(timestamp) FROM events").Scan(&maxTS); err != nil {
+			log.Printf("sync: walker lastWalkAt seed query failed: %v (proceeding with zero value)", err)
+			slog.Warn("sync.walker_seed_query_failed", "err", err)
+		} else if maxTS.Valid {
+			if seedT, perr := time.Parse(time.RFC3339Nano, maxTS.String); perr == nil {
+				walker.SetLastWalkAt(seedT)
+			} else {
+				log.Printf("sync: walker lastWalkAt seed parse failed: %v (proceeding with zero value)", perr)
+				slog.Warn("sync.walker_seed_parse_failed", "err", perr, "raw", maxTS.String)
+			}
+		}
+
 		triggers.SetWalker(walker)
 		st.SetSyncTrigger(triggers.SyncOnWrite)
 

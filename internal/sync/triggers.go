@@ -83,7 +83,15 @@ func (t *Triggers) SyncOnWrite(ctx context.Context) {
 		return
 	}
 	if t.walker != nil {
-		if err := t.walker.WalkAndWrite(ctx); err != nil {
+		// Detach from caller ctx (s7is.6): SyncOnWrite is invoked from
+		// inside state.WriteEvent while state.Lock() is held. The caller
+		// ctx is typically an RPC context with a ~10s deadline. If the
+		// walker is canceled mid-fire by that deadline expiring, the
+		// next walker call still has work to do AND the failure
+		// surfaces as sync.walker_failed (cosmetic-but-noisy). Use
+		// Background so the walker completes regardless of caller
+		// timeouts — work bounded by walker's own internal logic.
+		if err := t.walker.WalkAndWrite(context.Background()); err != nil {
 			log.Printf("sync: snapshot walker failed: %v", err)
 			slog.Error("sync.walker_failed", "err", err)
 			return
