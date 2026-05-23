@@ -31,7 +31,7 @@ mkdir -p "$SUB_REPO"
 
 # Initialize thrum and register the agent.
 "$TE" exec --cwd "$SUB_REPO" --clean -- \
-  thrum init --runtime claude >/dev/null 2>&1 || {
+  thrum init --non-interactive --runtime claude >/dev/null 2>&1 || {
     emit_fail "$SID" "subfixture-thrum-init" "thrum init in $SUB_REPO" "(failed)" \
       "scenarios/${SID}.test.sh:$LINENO"
     return 0
