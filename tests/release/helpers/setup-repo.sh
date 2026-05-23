@@ -62,10 +62,15 @@ run_setup() {
   # --non-interactive hits the v0.9.3 wizard and stalls the pool, then
   # every subsequent tmux-exec exec call times out at 120s — every
   # downstream sub-fixture scenario in this run will also time out.
-  # Probe: send a unique marker echo into the pool and wait briefly for it
-  # to appear in the pane. If it doesn't, kill the server (the pool gets
-  # recreated lazily on the next tmux-exec invocation). Only reaps when
-  # actually stuck — healthy pools (and the no-pool case) pass through.
+  #
+  # Probe: send `echo MARKER` to the pool and look for MARKER on its own
+  # line in the pane within 5s. If a shell prompt is alive, echo runs and
+  # the OUTPUT appears as a standalone-line MARKER. If the pool is stuck
+  # on some prior interactive prompt, our keystrokes get echoed back as
+  # `echo MARKER` (typed-input display) but never execute, so MARKER never
+  # appears on its own line — anchored grep avoids the false-healthy from
+  # matching the typed input. On detected hang, kill the server; lazy
+  # recreate on the next tmux-exec invocation.
   if env -u TMUX -u TMUX_PANE tmux -L tmux-exec has-session \
        -t "tmux-exec-pool-${USER}" 2>/dev/null; then
     local _probe_marker="POOL-HEALTH-$$-${RANDOM}"
@@ -75,7 +80,8 @@ run_setup() {
     local _probe_ok=0
     while [ "$_probe_waited" -lt 10 ]; do  # 10 * 0.5s = 5s budget
       if env -u TMUX -u TMUX_PANE tmux -L tmux-exec capture-pane \
-           -t "tmux-exec-pool-${USER}" -p 2>/dev/null | grep -q "$_probe_marker"; then
+           -t "tmux-exec-pool-${USER}" -p 2>/dev/null \
+           | grep -qE "^[[:space:]]*${_probe_marker}[[:space:]]*$"; then
         _probe_ok=1
         break
       fi
