@@ -105,27 +105,42 @@ thrum_release_self_isolate() {
   local sess="reltest-$$"
   local exit_file="/tmp/${sess}.exit"
   local wrapper="/tmp/${sess}.cmd"
-  rm -f "$exit_file" "$wrapper"
+  local log_file="/tmp/${sess}.log"
+  local fail_dir="/tmp/thrum-release-failures/${sess}"
+  rm -f "$exit_file" "$wrapper" "$log_file"
+  mkdir -p "$fail_dir" 2>/dev/null || true
 
   # Build the wrapper script that the detached tmux pane will execute. Using
   # a file (not an inline tmux command string) avoids shell-quoting tangles
   # for args that contain spaces/specials: printf '%q' inside the file
   # produces bash-safe escaping.
+  #
+  # The harness stdout/stderr is tee'd to $log_file so it persists after the
+  # detached pane is torn down — without this, all scenario output is lost on
+  # session exit. ${PIPESTATUS[0]} preserves the harness's actual exit code
+  # (tee's own exit is irrelevant). THRUM_RELEASE_FAILURES_DIR points the
+  # in-harness per-fail pane-snapshot helper (output.sh:_capture_panes_on_fail)
+  # at a stable location the post-run triage can find.
   {
     echo "#!/usr/bin/env bash"
-    # No `set -e`: we want to capture the harness exit code regardless.
-    printf 'env -u TMUX -u TMUX_PANE THRUM_RELEASE_ISOLATED=1 bash %q' "$script_abs"
+    echo "{"
+    printf '  env -u TMUX -u TMUX_PANE THRUM_RELEASE_ISOLATED=1 THRUM_RELEASE_FAILURES_DIR=%q bash %q' \
+      "$fail_dir" "$script_abs"
     local arg
     for arg in "$@"; do
       printf ' %q' "$arg"
     done
     echo
-    printf 'echo "$?" > %q\n' "$exit_file"
+    echo "} 2>&1 | tee $(printf '%q' "$log_file")"
+    # shellcheck disable=SC2016 # literal — the inner bash evaluates ${PIPESTATUS[0]}
+    printf 'echo "${PIPESTATUS[0]:-1}" > %q\n' "$exit_file"
   } > "$wrapper"
   chmod +x "$wrapper"
 
   echo "tests/release: agent ancestor detected ('$matched'); self-isolating into detached tmux session '$sess' on the default server." >&2
   echo "  attach to watch: tmux attach -t $sess" >&2
+  echo "  log:             $log_file" >&2
+  echo "  fail snapshots:  $fail_dir/" >&2
 
   tmux new-session -d -s "$sess" "$wrapper"
 
@@ -138,8 +153,14 @@ thrum_release_self_isolate() {
 
   local rc
   rc="$(cat "$exit_file" 2>/dev/null || echo 1)"
+  # Keep $log_file and $fail_dir for post-run triage; only reap the
+  # housekeeping wrapper + exit-code marker.
   rm -f "$wrapper" "$exit_file"
 
   echo "tests/release: detached session '$sess' exited with status $rc" >&2
+  echo "  log preserved at: $log_file" >&2
+  if [ -d "$fail_dir" ] && [ -n "$(ls -A "$fail_dir" 2>/dev/null)" ]; then
+    echo "  fail snapshots:   $fail_dir/" >&2
+  fi
   exit "$rc"
 }
