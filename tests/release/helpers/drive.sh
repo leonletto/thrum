@@ -185,7 +185,7 @@ wait_for_pane_idle() {
   return 0
 }
 
-# wait_for_jsonl_match <repo-path> <jq-filter> [timeout-seconds]
+# wait_for_jsonl_match <repo-path> <jq-filter> [timeout-seconds] [floor-ts]
 # Polls all .jsonl files under the agent's Claude project dir for the first
 # line where <jq-filter> evaluates truthy. Echoes the matching line on success,
 # exit 0. Empty + exit 1 on timeout. Default timeout: 30s.
@@ -196,15 +196,31 @@ wait_for_pane_idle() {
 # spawn skill agents). The entry we want may be in any of them, and the
 # "newest by mtime" at poll-start may not be the one that ends up carrying
 # the bash-stdout entry once the conversation lands.
+#
+# floor-ts (optional, RFC3339): when supplied, the function adds an
+# additional `.timestamp >= floor-ts` clause to the user's filter via jq's
+# `and`. Stale-match guard — same rationale as
+# wait_for_bash_stdout_contains' floor-ts. Use a captured
+# `date -u +%Y-%m-%dT%H:%M:%S` from BEFORE the command that produces
+# the awaited entry. Lexicographic comparison works against claude's
+# RFC3339 timestamps including milliseconds (the floor's "no Z" form
+# sorts strictly before any same-second JSONL entry).
 wait_for_jsonl_match() {
-  local repo="$1" filter="$2" timeout="${3:-30}"
+  local repo="$1" filter="$2" timeout="${3:-30}" floor_ts="${4:-}"
   local project_dir="$HOME/.claude/projects/$(encode_cwd "$repo")"
   local elapsed=0
   local interval=1
+  local effective_filter="$filter"
+  if [ -n "$floor_ts" ]; then
+    # Wrap the caller's filter in an outer expression that ANDs in the
+    # timestamp clause. Parens preserve the user's filter precedence
+    # regardless of internal `and`/`or`.
+    effective_filter="(${filter}) and ((.timestamp // \"\") | tostring) >= \"${floor_ts}\""
+  fi
   while [ "$elapsed" -lt "$timeout" ]; do
     if [ -d "$project_dir" ]; then
       local match
-      match=$(jq -c "select($filter)" "$project_dir"/*.jsonl 2>/dev/null | head -n1 || true)
+      match=$(jq -c "select($effective_filter)" "$project_dir"/*.jsonl 2>/dev/null | head -n1 || true)
       if [ -n "$match" ]; then
         printf '%s' "$match"
         return 0
@@ -224,6 +240,141 @@ wait_for_session_start() {
   wait_for_jsonl_match "$repo" \
     '.type == "attachment" and .attachment.hookEvent == "SessionStart"' \
     "$timeout" >/dev/null
+}
+
+# wait_for_attachment <repo> <hook-event> <body-substring> [timeout] [floor-ts]
+# Specialization: polls claude's JSONL for a hook attachment matching
+# <hook-event> whose stdout or content body contains <body-substring>.
+# Covers SessionStart, UserPromptSubmit, Stop, PreToolUse, PostToolUse —
+# any hook that writes an attachment record into the transcript.
+#
+# Single deterministic surface for "did the hook produce the expected
+# content?" — pivots tests away from pane-scrollback grepping (cosmetic,
+# subject to TUI rendering quirks and alt-screen replays) toward the
+# authoritative JSONL representation that claude actually feeds into its
+# model context.
+#
+# Returns 0 on match (echoes matching JSONL line), 1 on timeout. Default
+# timeout: 30s.
+#
+# Use this instead of inlining the `.attachment.hookEvent` + stdout/content
+# union filter; many scenarios need exactly that shape (the prior inlined
+# versions in scens 80, 99, and the kafm.6 chain were all variants of the
+# same filter that subtly disagreed on which body field to check). This
+# helper checks both `.attachment.stdout` AND `.attachment.content` to
+# tolerate claude version variance in attachment shape.
+#
+# Args:
+#   repo            agent's repo path (resolved to project dir via encode_cwd)
+#   hook-event      e.g. "SessionStart", "UserPromptSubmit", "Stop"
+#   body-substring  literal substring to match inside the attachment body
+#   timeout         optional poll timeout seconds (default 30)
+#   floor-ts        optional RFC3339 floor (suppresses stale matches; see
+#                   wait_for_jsonl_match for details)
+wait_for_attachment() {
+  local repo="$1" hook_event="$2" substring="$3" timeout="${4:-30}" floor_ts="${5:-}"
+  # Build the filter with jq variable interpolation via --arg (passed
+  # through the underlying wait_for_jsonl_match by inlining the strings
+  # into the filter expression). We escape via printf %q-style only what
+  # the filter syntax requires: backslash and double-quote in substrings.
+  # Simpler approach: rely on the caller to keep substrings free of
+  # `"` and `\` (matches scen 99/80's existing inline usage patterns).
+  local filter='.type == "attachment"
+        and (.attachment.hookEvent == "'"$hook_event"'")
+        and (((.attachment.stdout // "" | tostring) | contains("'"$substring"'"))
+             or ((.attachment.content // "" | tostring) | contains("'"$substring"'")))'
+  wait_for_jsonl_match "$repo" "$filter" "$timeout" "$floor_ts"
+}
+
+# wait_for_banner_emit <pane> [timeout-seconds]
+# Polls a tmux pane's scrollback for the daemon's identity banner
+# sentinel — `If the prime output was truncated, you must read it now.`
+# (identitybanner.PrimeTruncationSentinel) — which is the LAST line of
+# the banner printf. Its presence proves the post-launch goroutine's
+# emitIdentityBanner has completed sendKeysAndSubmit and all banner
+# keystrokes have landed in the pane.
+#
+# Canonical sync point for scenarios that send subsequent keystrokes
+# (slash commands, `!`-bash) after a tmux start/restart and need the
+# daemon's async banner emit to finish first. Without syncing on this
+# sentinel, the scenario's typed text can splice with the daemon's
+# in-flight printf keystrokes (root cause of scen 21's intermittent
+# concatenation bug in the v0.10.6 RC1 gate; see commit fa45e6e834).
+#
+# Returns 0 on match, 1 on timeout. Default timeout: 45s (covers the
+# daemon's 10s pre-emit sleep + waitForPaneReady + claude render time).
+#
+# Args:
+#   pane     tmux session name to capture
+#   timeout  optional poll timeout seconds (default 45)
+wait_for_banner_emit() {
+  local pane="$1" timeout="${2:-45}"
+  local elapsed=0
+  while [ "$elapsed" -lt "$timeout" ]; do
+    if tmux capture-pane -t "$pane" -S -1000 -p 2>/dev/null | \
+         grep -qF "If the prime output was truncated, you must read it now."; then
+      return 0
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+  return 1
+}
+
+# assert_inbox_contains <agent-name> <repo> <marker-substring> [timeout]
+# Polls <agent-name>'s inbox via tmux-exec for a message whose
+# .body.content contains <marker-substring>. Returns 0 on found, 1 on
+# timeout. Default timeout: 30s.
+#
+# Encapsulates the boilerplate previously duplicated across scens
+# 22/23/24/25 (and similar): mktemp -> capture_thrum_json ... inbox ->
+# jq for message count -> poll loop. Standardizes:
+#   - the `.messages[]?` null-safety against hints-only daemon responses
+#     (the under-load failure mode that bit scen 95 in the gate)
+#   - jq --arg substring escaping (no manual `"` shell-quoting headaches)
+#   - sensible default timeout (matches scens 22/23/24)
+#   - tempfile cleanup
+#
+# Caller is responsible for choosing a sufficiently unique marker
+# substring (RUNID-anchored markers like `kafm2-23-filter-${RUNID}` work
+# well; bare common words don't).
+#
+# Args:
+#   agent-name        THRUM_NAME pin for the inbox query
+#   repo              repo path for tmux-exec --cwd
+#   marker-substring  literal substring jq matches inside .body.content
+#   timeout           optional poll timeout seconds (default 30)
+#
+# Note: if the daemon returns a hints-only response (no .messages
+# field), the `.messages[]?` null-safety treats it as zero matches —
+# the function correctly times out rather than crashing on the missing
+# field. If your test specifically needs to verify daemon-side message
+# routing under load conditions where the inbox-RPC may fail, prefer
+# wait_for_jsonl_match against the recipient's claude JSONL instead;
+# see scen 95 for the precedent.
+assert_inbox_contains() {
+  local agent_name="$1" repo="$2" substring="$3" timeout="${4:-30}"
+  local out_file
+  out_file="$(mktemp -t thrum-rel-inbox.XXXXXX).json"
+  local elapsed=0
+  local interval=2
+  while [ "$elapsed" -lt "$timeout" ]; do
+    capture_thrum_json "$repo" "$agent_name" "$out_file" inbox >/dev/null 2>&1 || true
+    if [ -s "$out_file" ]; then
+      local n
+      n=$(jq -r --arg m "$substring" \
+        '[.messages[]? | select(.body.content // "" | contains($m))] | length' \
+        < "$out_file" 2>/dev/null)
+      if [[ "$n" =~ ^[1-9][0-9]*$ ]]; then
+        rm -f "$out_file"
+        return 0
+      fi
+    fi
+    sleep "$interval"
+    elapsed=$((elapsed + interval))
+  done
+  rm -f "$out_file"
+  return 1
 }
 
 # spawn_sub_fixture_claude <tmux-name> <cwd> [launch-cmd]
