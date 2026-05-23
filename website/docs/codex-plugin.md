@@ -6,7 +6,7 @@ description:
 category: "integrations"
 order: 4
 tags: ["codex", "skills", "thrum", "installation", "agent-coordination"]
-last_updated: "2026-02-24"
+last_updated: "2026-05-23"
 ---
 
 ## Codex Plugin
@@ -28,23 +28,29 @@ The Codex runtime preset has `HasSessionStartHook: true` — the prime-context
 banner fires automatically on session start, on parity with the Claude plugin.
 No manual `thrum prime` is needed at session open.
 
-Registered skills:
+Registered skills (33 total in v0.10.6, grouped by purpose):
 
-- `thrum`
-- `thrum-prime`
-- `thrum-overview`
-- `thrum-update-project`
-- `thrum-team`
-- `thrum-inbox`
-- `thrum-group`
-- `thrum-send`
-- `thrum-reply`
-- `thrum-wait`
-- `thrum-restart`
-- `thrum-load-context`
-- `thrum-quickstart`
-- `thrum-configure-roles`
-- `thrum-project-setup`
+**Thrum CLI mirrors** — invocable as `/<name>` slash commands:
+
+- `thrum`, `thrum-prime`, `thrum-overview`, `thrum-update-project`,
+  `thrum-team`, `thrum-inbox`, `thrum-send`, `thrum-reply`, `thrum-wait`,
+  `thrum-restart`, `thrum-load-context`, `thrum-quickstart`
+
+**Role discipline** — coordinator, implementer, and researcher operating
+patterns:
+
+- `configure-roles`, `project-philosophy`, `coordinator-context-monitoring`,
+  `coordinator-dispatching-work`, `coordinator-managing-state-and-lifecycle`,
+  `coordinator-post-restart-sweep`, `coordinator-running-brainstorm-cycles`,
+  `coordinator-running-review-cycles`, `implementer-receiving-dispatch`,
+  `implementer-receiving-review-feedback`, `implementer-status-and-handoff`,
+  `implementer-tdd-and-quality`, `researcher-answering-queries`,
+  `researcher-investigating`, `researcher-maintaining-memory`
+
+**Workflow + review** — cross-role planning, research, and review:
+
+- `adversarial-critique`, `efficient-multi-agent-research`, `orchestrate`,
+  `project-setup`, `verify-against-plan`, `verify-against-source`
 
 ## Prerequisites
 
@@ -82,7 +88,7 @@ cd thrum
 ```
 
 You can also use the packaged installer guide in `codex-plugin/INSTALL.md`,
-which points at the same script and lists the expected 15 installed skills.
+which points at the same script and lists the expected 33 installed skills.
 
 ### From Local Clone
 

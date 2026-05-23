@@ -6,35 +6,37 @@ hit `releases/latest`. This guide covers how to opt in, what to expect, and how
 to report what you find.
 
 > **Current pre-release:
-> [`v0.10.5-rc.4`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.4)**
-> (tagged 2026-05-15, in soak). Highlights: codex plugin first-class,
-> post-launch tmux silence watchdog, first-launch trust-gate detection,
-> self-echo nudge fix, cwd-anchored identity precedence. rc.9 closes the inbox
-> read-race silent-loss class: `message.markRead` now accepts an optional
-> `marked_before` RFC3339Nano watermark, and the CLI captures the listing
-> timestamp before display so messages arriving in the listing→mark gap don't
-> get silently marked read. Inbox listings also carry a `HiddenByFilter` count,
-> so the unread footer is honest when a for-agent filter is hiding more. All
-> wire-additive — pre-rc.9 clients see byte-identical RPC behavior. Full notes:
+> [`v0.10.6-rc.1`](https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.1)**
+> (in soak). Headline: the **sync re-architecture** (thrum-s6os) — the
+> cross-machine wire stream is now event-triggered rather than 60-second-polled,
+> idle daemons produce zero commits on `a-sync`, and busy clusters stop
+> accumulating heartbeat noise. ⚠ **Mixed-cluster warning:** v0.10.5 peers
+> cannot read messages from upgraded v0.10.6 peers (v0.10.6 writes only to the
+> new `messages-v2/` path); upgrade all peers in one window. Also new:
+> timestamped pre-migration DB backups (with a hard halt if backup fails), an
+> RC-tag plugin distribution scheme so `/plugin update` upgrades cleanly through
+> the rc pipeline, two new daemon config keys (`events_retention_days`,
+> `compaction_size_threshold_mb`), and skill-review-loop improvements
+> (`verify-against-source`, Phase 0 review gate). Full notes:
 > [What's New](whats-new.md) and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-### Quick install for `v0.10.5-rc.4`
+### Quick install for `v0.10.6-rc.1`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.4 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.1 sh
 
-# Codex plugin (matches release/v0.10.5)
-THRUM_INSTALL_REF=release/v0.10.5 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.5/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+# Codex plugin (matches release/v0.10.6)
+THRUM_INSTALL_REF=release/v0.10.6 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.6/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
 ```
 
 Claude Code plugin (run inside Claude):
 
 ```text
-/plugin marketplace add leonletto/thrum#release/v0.10.5
+/plugin marketplace add leonletto/thrum#release/v0.10.6
 /plugin install thrum@thrum
 /reload-plugins
 ```
