@@ -265,6 +265,119 @@ existing code which is faster and reduces token usage.
 - Full test plan: `dev-docs/release-testing/full_test_plan.md`
 - 70 E2E scenarios across Parts A-M
 
+## Release Test Triage Pattern
+
+The release-test harness (`tests/release/run.sh`, 108 scenarios) is slow:
+a full gate run is ~20-30 min. When it fails, triaging scenario-by-scenario
+via full-gate re-runs is unaffordable. The pattern below takes a gate with
+60 failures down to a handful of real residuals in a few iterations, by
+isolating clusters of similar failures and fixing root causes once.
+
+It was validated in v0.10.6 RC1: a first full-gate run (160/220 pass, 113 min)
+was reduced to 222/258 pass in 22.6 min after four small-subset iterations.
+
+### The loop
+
+1. **Run the full gate once** to get a fail list with bucket counts. Group
+   the failures by assertion-name (last token after the final `/`):
+   ```bash
+   LOG=$(ls -t /tmp/reltest-*.log | head -1)
+   grep -oE "/ [a-z][a-z0-9-]+$" "$LOG" | sort | uniq -c | sort -rn | head
+   ```
+   The biggest bucket usually has ONE root cause shared across many
+   scenarios — fix it once, broadcast across the cluster.
+
+2. **Pick the smallest representative subset** (1-3 scenarios from the
+   biggest bucket) and run them in isolation:
+   ```bash
+   bash tests/release/run-subset.sh -g <group-name>      # named group
+   bash tests/release/run-subset.sh 14 31 89             # specific IDs
+   bash tests/release/run-subset.sh -l                   # list groups
+   ```
+   `tests/release/run-subset.sh` sources the same scenario files as
+   `run.sh` (zero drift; any fix proven here applies directly to the
+   gate). Each run takes ~1-5 min vs the full gate's 20+. Failure groups
+   are catalogued in the script and tunable as triage progresses.
+
+3. **When the failure surface hides the real error**, reproduce the exact
+   suppressed command standalone with stderr visible. Most scenarios
+   suppress stderr (`>/dev/null 2>&1`) so `(failed)` is all that emits.
+   Find the failing line, build the minimal fixture, run it bare:
+   ```bash
+   # Example: subfixture-thrum-init was failing across 34 scenarios.
+   # The harness ran `tmux-exec exec --clean -- thrum init --runtime claude`
+   # and suppressed stderr. Direct repro:
+   env -u TMUX -u TMUX_PANE scripts/tmux-exec exec \
+     --cwd /tmp/fresh-fixture --clean --timeout 15 -- thrum init --runtime claude
+   # Real error surfaced: "Agent name [...]:" — the v0.9.3 wizard hanging.
+   # Root cause: missing --non-interactive. Broadcast across 17 scenarios.
+   ```
+   `env -u TMUX -u TMUX_PANE` mirrors what the self-isolating launcher
+   does — required to reproduce harness-internal behavior from a regular
+   agent shell. Short `--timeout` (5-15s) makes the diagnostic fail fast
+   instead of burning the 120s/30s default.
+
+4. **Broadcast the fix across the cluster** with `perl -i -pe` (portable
+   on macOS BSD sed which mangles `-i.bak`):
+   ```bash
+   find tests/release/scenarios -maxdepth 1 -name '*.test.sh' \
+     -not -name '10[123456]-init-wizard-*' \
+     -exec perl -i -pe 's/(thrum init)( --runtime claude)/\1 --non-interactive\2/g' {} \;
+   ```
+   Then re-run the same subset to confirm the broadcast holds.
+
+5. **Re-run the full gate** when several clusters are fixed. Cascade
+   victims (failures that only happened because shared state was
+   corrupted by an earlier failure) auto-resolve. Real residuals appear
+   distinctly. Repeat from step 1.
+
+### Observability prerequisites (already in place)
+
+The pattern depends on three artifacts the harness produces:
+
+- **`tests/release/run-subset.sh`** — the subset runner. Sources scenarios
+  unmodified so the same code paths run as in the gate. Self-isolates
+  via the same launcher.
+- **Tee'd launcher log at `/tmp/reltest-<pid>.log`** — full harness
+  stdout/stderr persisted to disk. `helpers/self-isolate.sh` builds a
+  wrapper that pipes the harness through `tee`, with `${PIPESTATUS[0]}`
+  preserving the harness exit code. Without this, output dies with the
+  detached pane.
+- **Per-fail pane snapshots at `/tmp/thrum-release-failures/reltest-<pid>/`**
+  — `helpers/output.sh:emit_fail` captures the coord + impl panes at
+  the moment of failure (`tmux capture-pane -p -S -200 -J`). For sub-
+  fixture scenarios, the coord pane shows what the driver was doing;
+  pair with direct-command repro (step 3) for the sub-fixture's own
+  error.
+
+### Pre-execute health probes (defense in depth)
+
+Some shared infrastructure can be left in a stuck state by a prior aborted
+run. The release harness's `tmux-exec` pool pane (`tmux-exec-pool-${USER}`)
+is the canonical example — a stuck pool makes every fresh `tmux-exec exec`
+time out. `helpers/setup-repo.sh`'s preflight sends a marker echo into the
+pool and waits for it on a standalone line (the typed-input echo doesn't
+match — anchor with `^[[:space:]]*${marker}[[:space:]]*$`). If the probe
+doesn't return within 5s, kill the server; lazy recreate on the next call.
+
+### Fast default timeouts
+
+`scripts/tmux-exec --timeout` default is **30s**. Anything that
+legitimately needs longer (e.g. `thrum tmux restart`) sets `--timeout 60`
+or higher explicitly per-call. 30s as the default catches hangs in seconds
+instead of letting them burn 2 minutes each — the difference between a
+60-failure gate finishing in 22 min vs 113.
+
+### When to NOT use this pattern
+
+- **A single scenario fails** intermittently across runs — small-subset
+  isolation will hide the contention. Run the full gate (or multiple)
+  to characterize.
+- **A scenario's first-time-ever-green moment** — when something has
+  never run end-to-end before, you need to walk it forward with empirical
+  probes (matches the v0.10.6 RC1 scenario-29 prototyping). Small-subset
+  is the loop *after* the harness fundamentally works.
+
 ## Architecture
 
 ```
