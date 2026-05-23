@@ -33,8 +33,29 @@
 SID="22-mcp-send-caller-id"
 MARKER="kafm2-22-callerid-${RUNID}"
 
-# Step 1: send from coord pane.
-send_command "$COORD_PANE" "! thrum send 'CallerID test (${MARKER})' --to @test_implementer"
+# Step 1: send from coord pane. Use send_bash_and_wait gated on
+# the "Message sent" bash-stdout. Reason: raw send_command returns
+# after typing keystrokes, with no guarantee that claude has
+# fully processed the Enter / rendered the daemon's response.
+# When the next scenario's send_command fires its `!` prefix
+# while this command's input handling is still mid-cycle in
+# claude's UI, the `!` can splice into the trailing position of
+# this command's body — producing `--to @test_implementer!`
+# which the daemon rejects as "unknown recipient" (thrum-rbp6
+# keystroke race; observed in v0.10.6 RC1 gates reltest-48589
+# and reltest-58187 corrupting scen 23's downstream send). The
+# send_bash_and_wait gate forces this command to fully complete
+# (success line landed in JSONL) before returning, closing the
+# transition-race window into scen 23.
+if ! send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
+    "thrum send 'CallerID test (${MARKER})' --to @test_implementer" \
+    "Message sent" 30; then
+  emit_fail "$SID" "agent-id-matches-sender" \
+    "thrum send completes with 'Message sent' confirmation within 30s" \
+    "(send command may have raced — see thrum-rbp6)" \
+    "scenarios/${SID}.test.sh:$LINENO"
+  return 0
+fi
 
 # Step 2: settle COORD before potentially using it in subsequent
 # scenarios — the send response render is short.
