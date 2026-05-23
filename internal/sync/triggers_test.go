@@ -1,9 +1,12 @@
 package sync
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -310,6 +313,118 @@ func TestTriggers_SyncOnWrite_CompactorFailureDoesNotBlockSync(t *testing.T) {
 		default:
 			time.Sleep(20 * time.Millisecond)
 		}
+	}
+}
+
+// slowWalker blocks on ctx.Done() and returns ctx.Err() — simulates
+// a pathological hang where the walker never completes naturally and
+// must be unblocked by ctx cancellation (s7is.7 defense-in-depth).
+type slowWalker struct {
+	called atomic.Int32
+}
+
+func (w *slowWalker) WalkAndWrite(ctx context.Context) error {
+	w.called.Add(1)
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+// TestTriggers_SyncOnWrite_WalkerTimeout_FiresWarnAndSuppressesSync
+// pins the thrum-s7is.7 contract: a walker that never returns must be
+// bounded by syncWalkerTimeout, must emit a sync.walker_timeout slog
+// warning with the duration_ceiling_s + guidance fields, and must
+// suppress TriggerSync (the timed-out walker may have written partial
+// state; committing it would be inconsistent — same gate as
+// WalkerFailure).
+func TestTriggers_SyncOnWrite_WalkerTimeout_FiresWarnAndSuppressesSync(t *testing.T) {
+	// Shrink the ceiling to a test-friendly value; restore on cleanup.
+	originalTimeout := syncWalkerTimeout
+	syncWalkerTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { syncWalkerTimeout = originalTimeout })
+
+	// Capture slog output to verify the sync.walker_timeout warn fires.
+	var logBuf bytes.Buffer
+	captureHandler := slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	originalLogger := slog.Default()
+	slog.SetDefault(slog.New(captureHandler))
+	t.Cleanup(func() { slog.SetDefault(originalLogger) })
+
+	tmpDir := setupMergeTestRepo(t)
+	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
+	syncer := NewSyncer(tmpDir, syncDir, false)
+	projector := setupTestProjector(t, tmpDir)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), false)
+
+	ctx := context.Background()
+	if err := loop.Start(ctx); err != nil {
+		t.Fatalf("Failed to start loop: %v", err)
+	}
+	defer func() { _ = loop.Stop() }()
+
+	// Wait for initial sync so any post-trigger advance is unambiguous.
+	deadline := time.After(2 * time.Second)
+	for loop.GetStatus().LastSyncAt.IsZero() {
+		select {
+		case <-deadline:
+			t.Fatal("Timeout waiting for initial sync")
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	beforeTrigger := loop.GetStatus().LastSyncAt
+
+	walker := &slowWalker{}
+	triggers := NewTriggers(loop)
+	triggers.SetWalker(walker)
+
+	// SyncOnWrite must block until the walker timeout fires (~50ms),
+	// emit the warn, NOT call TriggerSync, and return.
+	start := time.Now()
+	triggers.SyncOnWrite(ctx)
+	elapsed := time.Since(start)
+
+	// Bound elapsed: must be at least the timeout (50ms) and not
+	// excessively over (give ourselves a 2s ceiling for slow CI).
+	if elapsed < 50*time.Millisecond {
+		t.Errorf("SyncOnWrite returned in %v; expected ≥ syncWalkerTimeout (50ms)", elapsed)
+	}
+	if elapsed > 2*time.Second {
+		t.Errorf("SyncOnWrite took %v; expected ≪ 2s (timeout wrapping appears broken)", elapsed)
+	}
+
+	if walker.called.Load() != 1 {
+		t.Errorf("walker should be called exactly once; got %d", walker.called.Load())
+	}
+
+	// Verify the sync.walker_timeout warn fired with the expected
+	// structured fields. JSON output is order-stable enough for
+	// substring checks here.
+	logged := logBuf.String()
+	if !strings.Contains(logged, `"msg":"sync.walker_timeout"`) {
+		t.Errorf("expected sync.walker_timeout slog event; got: %s", logged)
+	}
+	// Presence check only on duration_ceiling_s — under this test the
+	// override is 50ms which integer-divides to 0s, so the emitted value
+	// is "0" (production emits "30"). Both are valid; the contract is
+	// that the field is present.
+	if !strings.Contains(logged, `"duration_ceiling_s":`) {
+		t.Errorf("expected duration_ceiling_s slog attr; got: %s", logged)
+	}
+	if !strings.Contains(logged, `"guidance":"investigate_lastwalkat_drift_or_sqlite_hang"`) {
+		t.Errorf("expected guidance slog attr with the s7is.7 hint string; got: %s", logged)
+	}
+	// The walker_failed error should ALSO fire (the timeout is a
+	// failure mode, not a separate disposition).
+	if !strings.Contains(logged, `"msg":"sync.walker_failed"`) {
+		t.Errorf("expected sync.walker_failed slog event to also fire; got: %s", logged)
+	}
+
+	// TriggerSync must NOT have fired — same gate as the regular
+	// WalkerFailure case: a timed-out walker may have left partial
+	// state on disk; committing it would risk inconsistency.
+	time.Sleep(100 * time.Millisecond) // grace for any racey sync
+	if loop.GetStatus().LastSyncAt.After(beforeTrigger) {
+		t.Error("sync ran after a walker timeout — TriggerSync must be suppressed")
 	}
 }
 

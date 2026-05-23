@@ -2,9 +2,23 @@ package sync
 
 import (
 	"context"
+	"errors"
 	"log"
 	"log/slog"
+	"time"
 )
+
+// syncWalkerTimeout caps WalkAndWrite duration as defense-in-depth
+// against a pathological SQLite hang or unbounded walker work — see
+// thrum-s7is.7. 30s is generous headroom: post-s7is.6 cold-start fix,
+// steady-state incremental walks complete in milliseconds. The bound
+// exists so a misbehaving walker can't lock the daemon indefinitely
+// when triggered from state.WriteEvent (which already detaches from
+// the caller's RPC ctx via context.Background — see SyncOnWrite).
+//
+// Package-level var (not const) so tests can override to a small value
+// without sleeping for the production ceiling.
+var syncWalkerTimeout = 30 * time.Second
 
 // WalkerInvoker is the minimal interface Triggers uses to call the
 // snapshot walker before firing sync. Decouples this package from
@@ -90,8 +104,22 @@ func (t *Triggers) SyncOnWrite(ctx context.Context) {
 		// next walker call still has work to do AND the failure
 		// surfaces as sync.walker_failed (cosmetic-but-noisy). Use
 		// Background so the walker completes regardless of caller
-		// timeouts — work bounded by walker's own internal logic.
-		if err := t.walker.WalkAndWrite(context.Background()); err != nil {
+		// timeouts.
+		//
+		// Cap with syncWalkerTimeout (s7is.7): an unbounded walker
+		// could lock the daemon forever on a pathological SQLite hang.
+		// The bound is defense-in-depth; steady-state incremental
+		// walks finish in milliseconds.
+		walkerCtx, cancel := context.WithTimeout(context.Background(), syncWalkerTimeout)
+		err := t.walker.WalkAndWrite(walkerCtx)
+		cancel()
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				slog.Warn("sync.walker_timeout",
+					"duration_ceiling_s", int(syncWalkerTimeout/time.Second),
+					"guidance", "investigate_lastwalkat_drift_or_sqlite_hang",
+				)
+			}
 			log.Printf("sync: snapshot walker failed: %v", err)
 			slog.Error("sync.walker_failed", "err", err)
 			return
