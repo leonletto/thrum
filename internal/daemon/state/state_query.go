@@ -79,7 +79,7 @@ func (s *State) ListAgentsInWorktree(ctx context.Context, worktree string) []str
 	// enforceWorktreeIdentity hook (which runs under the outer write
 	// lock). Serialization against writers comes from the
 	// single-connection pool — NewState opens the DB with
-	// SetMaxOpenConns(1) (see internal/schema/db.go), so SQLite
+	// SetMaxOpenConns(1) (see internal/schema/schema.go), so SQLite
 	// operations are linearised by the pool regardless of Go-level
 	// locking.
 	rows, err := s.db.QueryContext(ctx, `
