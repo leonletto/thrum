@@ -311,8 +311,11 @@ sync_codex() {
   local PARITY_SKILLS=(
     "adversarial-critique|Adversarial Critique|Critique a plan or proposal adversarially before agreeing."
     "configure-roles|Configure Roles|Configure thrum role templates for this project."
+    "coordinator-context-monitoring|Coordinator: Context Monitoring|Use when managing live agents during a long session to pre-empt context-limit blow-ups."
     "coordinator-dispatching-work|Coordinator: Dispatching Work|Use before dispatching work to an implementer."
     "coordinator-managing-state-and-lifecycle|Coordinator: Managing State|Use when managing agent lifecycle and project state."
+    "coordinator-post-restart-sweep|Coordinator: Post-Restart Sweep|Use after returning from a restart, compaction, or extended absence to detect agents blocked waiting for a decision."
+    "coordinator-running-brainstorm-cycles|Coordinator: Brainstorm Cycles|Use when starting a brainstorm for a bug fix, feature, or architectural decision the coordinator can't trivially decide alone."
     "coordinator-running-review-cycles|Coordinator: Review Cycles|Use when running parallel review cycles on agent branches."
     "efficient-multi-agent-research|Efficient Multi-Agent Research|Use when delegating research across multiple agents."
     "implementer-receiving-dispatch|Implementer: Receiving Dispatch|Use when picking up a new implementation task."
@@ -325,6 +328,7 @@ sync_codex() {
     "researcher-investigating|Researcher: Investigating|Use when starting an investigation or exploration task."
     "researcher-maintaining-memory|Researcher: Maintaining Memory|Use after research to update memory and indexes."
     "verify-against-plan|Verify Against Plan|Use when verifying an implementation against a spec."
+    "verify-against-source|Verify Against Source|Use when verifying a prose artifact (brainstorm, spec, plan) honors its source artifact."
   )
 
   local entry skill_name display_name default_prompt src dst
