@@ -171,6 +171,42 @@ func (h *TmuxHandler) RestoreBinding(session, cwd string) {
 	h.cwdSessions[cwd] = session
 }
 
+// populateSessionCwdFromIdentity looks up the agent identity associated with
+// the given tmux session name and, if found, writes the (session, cwd)
+// binding to sessionCwds / cwdSessions via RestoreBinding. Idempotent: no-op
+// when sessionCwds[name] is already set (preserves HandleCreate's canonical
+// populate byte-for-byte for thrum-managed sessions).
+//
+// Used by HandleLaunch (and indirectly by HandleRestart via RestoreBinding
+// after its own cwd resolution) to defensively populate the binding for
+// externally-created tmux sessions — i.e., a raw `tmux new-session` followed
+// by `thrum tmux launch`, where HandleCreate's canonical populate site never
+// ran. Without this, runPostLaunchInject's emitIdentityBanner bails with
+// map_hit=false (no banner, no /thrum:prime, no SessionStart hook post-
+// restart loud preamble) for every session that wasn't created by
+// `thrum tmux create`.
+//
+// Returns true if a binding was populated by this call, false if the
+// binding already existed or the identity lookup found nothing.
+func (h *TmuxHandler) populateSessionCwdFromIdentity(ctx context.Context, name string) bool {
+	h.sessionMu.RLock()
+	_, hasCwd := h.sessionCwds[name]
+	h.sessionMu.RUnlock()
+	if hasCwd {
+		return false
+	}
+	agentName, idFile, _ := h.findIdentityForSession(ctx, name)
+	if agentName == "" || idFile == nil || idFile.Worktree == "" {
+		return false
+	}
+	cwd := resolveWorktreePath(ctx, filepath.Dir(h.thrumDir), idFile.Worktree)
+	if cwd == "" {
+		return false
+	}
+	h.RestoreBinding(name, cwd)
+	return true
+}
+
 // SetPoller installs the silence-hash poller that bypasses tmux's
 // alert-silence hook. Production daemon boot calls this so HandleLaunch
 // can enroll new sessions and HandleKill can unenroll terminated ones.
@@ -407,6 +443,16 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 	if err != nil {
 		return nil, err
 	}
+
+	// Defensive sessionCwds populate for externally-created tmux sessions.
+	// HandleCreate is the only canonical populate site; sessions created via
+	// raw `tmux new-session` + `thrum tmux launch` (e.g. the release-harness
+	// coord pane, where $REPO is a .git dir that fails HandleCreate's
+	// worktree-validity guard) reach here with no map entry, and the
+	// post-launch inject's emitIdentityBanner then bails out with
+	// map_hit=false. No-op for thrum-managed sessions where HandleCreate
+	// already populated the binding.
+	h.populateSessionCwdFromIdentity(ctx, name)
 
 	runtime := req.Runtime
 	if runtime == "" {
@@ -1128,6 +1174,13 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 	if cwd == "" {
 		return nil, fmt.Errorf("cannot resolve worktree %q to a path for %s", idFile.Worktree, agentName)
 	}
+
+	// Re-establish the (session, cwd) binding cleared earlier by HandleKill
+	// (tmux.go:494). Without this re-bind, the post-launch inject path's
+	// emitIdentityBanner lookup bails with map_hit=false on every restart of
+	// an externally-created session — same root cause as the HandleLaunch
+	// populate above, surfacing on the restart path.
+	h.RestoreBinding(name, cwd)
 
 	snapshotLines := 0
 	wtThrumDir := filepath.Dir(idDir) // identities/ parent is .thrum/
