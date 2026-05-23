@@ -130,11 +130,23 @@ emit_pass "$SID" "restart-success-line"
 # 10s daemon sleep + ~10-15s claude startup + send-keys + render.
 # 35s wall-clock with 1s polling interval gives enough headroom for
 # slow boots without making a healthy run wait the full window.
+#
+# Match shape: the daemon's printf is sent INTO claude's input prompt
+# (sendKeysAndSubmit, see emitIdentityBanner) — claude renders the
+# multi-line banner inside its response area, which the tmux pane
+# preserves with leading whitespace (claude TUI's 2-space response
+# indent). The assertion is intentionally substring-only so it
+# tolerates that indentation + any line wrap claude may apply at
+# pane-width boundaries — the test's contract is that the banner
+# content reaches the pane in a human-readable form, not that it
+# lands at column 0 (which is impossible for hook-runtime emits
+# under the post-launch claude-input mechanism documented in
+# tmux.go:2339-2363).
 local pane_capture banner_seen=0
 local elapsed=0
 while [ "$elapsed" -lt 35 ]; do
   pane_capture=$(tmux capture-pane -t "$RST_SESSION" -S -1000 -p 2>/dev/null || true)
-  if printf '%s' "$pane_capture" | grep -qE "^Agent: @${RST_AGENT}$"; then
+  if printf '%s' "$pane_capture" | grep -qF "Agent: @${RST_AGENT}"; then
     banner_seen=1
     break
   fi
