@@ -80,24 +80,45 @@ send_slash_command() {
   tmux send-keys -t "$pane" Enter
 }
 
-# wait_for_bash_stdout_contains <repo-path> <substring> [timeout-seconds]
+# wait_for_bash_stdout_contains <repo-path> <substring> [timeout-seconds] [floor-ts]
 # Specialization of wait_for_jsonl_match for the most common assertion
 # shape: "wait for a `!`-prefix bash command's <bash-stdout> entry whose
 # content contains <substring>". Uses jq --arg so <substring> can contain
 # any characters (quotes, parens, etc.) without escaping headaches.
 # Echoes the matching JSONL line on success, exit 0. Empty + exit 1 on timeout.
 # Default timeout: 60s.
+#
+# floor-ts (optional, RFC3339): when supplied, only entries with
+# .timestamp >= floor-ts match. Without this filter, a stale bash-stdout
+# entry from a PRIOR scenario whose content happens to contain the
+# substring would short-circuit the wait — a silent false positive
+# masking the real command's failure (root cause of v0.10.6 RC1
+# kafm.6 cascade: scen 02/21's earlier "thrum tmux restart" output
+# stale-matched scen 69's "restarted" substring wait, hiding scen
+# 69's actual --force! typo and allowing the cascade to roll forward).
+# Use a `date -u +%Y-%m-%dT%H:%M:%S` captured BEFORE the send_command
+# that produces the awaited stdout. Lexicographic comparison against
+# claude's RFC3339 timestamps (with trailing 'Z') works correctly
+# because the floor's shorter form sorts before any same-second JSONL
+# entry. thrum-rbp6 covers the underlying keystroke race; this
+# floor_ts filter contains the silent-false-positive symptom.
 wait_for_bash_stdout_contains() {
-  local repo="$1" substring="$2" timeout="${3:-60}"
+  local repo="$1" substring="$2" timeout="${3:-60}" floor_ts="${4:-}"
   local project_dir="$HOME/.claude/projects/$(encode_cwd "$repo")"
   local elapsed=0
   local interval=1
   while [ "$elapsed" -lt "$timeout" ]; do
     if [ -d "$project_dir" ]; then
       local match
-      match=$(jq -c --arg sub "$substring" \
-        'select(.type == "user" and (.message.content | type == "string") and (.message.content | startswith("<bash-stdout>")) and (.message.content | contains($sub)))' \
-        "$project_dir"/*.jsonl 2>/dev/null | head -n1 || true)
+      if [ -n "$floor_ts" ]; then
+        match=$(jq -c --arg sub "$substring" --arg floor "$floor_ts" \
+          'select(.type == "user" and (.message.content | type == "string") and (.message.content | startswith("<bash-stdout>")) and (.message.content | contains($sub)) and (.timestamp // "" | tostring) >= $floor)' \
+          "$project_dir"/*.jsonl 2>/dev/null | head -n1 || true)
+      else
+        match=$(jq -c --arg sub "$substring" \
+          'select(.type == "user" and (.message.content | type == "string") and (.message.content | startswith("<bash-stdout>")) and (.message.content | contains($sub)))' \
+          "$project_dir"/*.jsonl 2>/dev/null | head -n1 || true)
+      fi
       if [ -n "$match" ]; then
         printf '%s' "$match"
         return 0
@@ -115,13 +136,24 @@ wait_for_bash_stdout_contains() {
 # trick) and then waits for a bash-stdout JSONL entry that contains
 # <expected-substring>. Returns 0 on match, 1 on timeout.
 #
+# Captures an RFC3339 floor timestamp BEFORE send_command and passes it
+# to wait_for_bash_stdout_contains so the wait can never short-circuit
+# on a stale bash-stdout entry from a prior scenario. Without this
+# guard, a substring like "restarted" or "Launched" or "Session
+# created" that appears in earlier scenarios' JSONL would let this
+# function return success before the in-flight command has even been
+# typed. See wait_for_bash_stdout_contains' floor-ts doc + thrum-rbp6
+# for the cascade history.
+#
 # Use this instead of inlining `tmux send-keys ... Enter` + a verbose
 # wait_for_jsonl_match jq filter — too easy to typo the filter and break
 # silently. Default timeout: 60s.
 send_bash_and_wait() {
   local pane="$1" repo="$2" cmd="$3" expected="$4" timeout="${5:-60}"
+  local floor_ts
+  floor_ts="$(date -u +%Y-%m-%dT%H:%M:%S)"
   send_command "$pane" "! $cmd"
-  wait_for_bash_stdout_contains "$repo" "$expected" "$timeout" >/dev/null
+  wait_for_bash_stdout_contains "$repo" "$expected" "$timeout" "$floor_ts" >/dev/null
 }
 
 # wait_for_pane_idle <pane> [max-seconds]
