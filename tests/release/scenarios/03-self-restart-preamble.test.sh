@@ -39,7 +39,7 @@ fi
 # the call is attributed to the parent and routed to the wrong daemon, and
 # `thrum tmux restart coord` becomes a no-op (no coord session known to that
 # daemon).
-"$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$REPO" --clean -- \
+"$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$REPO" --clean --timeout 60 -- \
   thrum tmux restart "$COORD_PANE" --force >/dev/null
 
 # Step 3: wait for the NEW SessionStart attachment to appear in IMPL JSONL.
