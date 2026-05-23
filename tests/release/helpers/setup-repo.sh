@@ -55,6 +55,39 @@ run_setup() {
       -exec rm -rf {} + 2>/dev/null || true
   fi
 
+  # tmux-exec pool health probe: every scenario sub-fixture spawn routes
+  # through a persistent per-user pool pane (scripts/tmux-exec § "Pool-
+  # session lifecycle"). If a prior aborted run left it hung on an
+  # interactive prompt — observed: an early scenario's `thrum init` without
+  # --non-interactive hits the v0.9.3 wizard and stalls the pool, then
+  # every subsequent tmux-exec exec call times out at 120s — every
+  # downstream sub-fixture scenario in this run will also time out.
+  # Probe: send a unique marker echo into the pool and wait briefly for it
+  # to appear in the pane. If it doesn't, kill the server (the pool gets
+  # recreated lazily on the next tmux-exec invocation). Only reaps when
+  # actually stuck — healthy pools (and the no-pool case) pass through.
+  if env -u TMUX -u TMUX_PANE tmux -L tmux-exec has-session \
+       -t "tmux-exec-pool-${USER}" 2>/dev/null; then
+    local _probe_marker="POOL-HEALTH-$$-${RANDOM}"
+    env -u TMUX -u TMUX_PANE tmux -L tmux-exec send-keys \
+      -t "tmux-exec-pool-${USER}" "echo $_probe_marker" Enter 2>/dev/null || true
+    local _probe_waited=0
+    local _probe_ok=0
+    while [ "$_probe_waited" -lt 10 ]; do  # 10 * 0.5s = 5s budget
+      if env -u TMUX -u TMUX_PANE tmux -L tmux-exec capture-pane \
+           -t "tmux-exec-pool-${USER}" -p 2>/dev/null | grep -q "$_probe_marker"; then
+        _probe_ok=1
+        break
+      fi
+      sleep 0.5
+      _probe_waited=$((_probe_waited + 1))
+    done
+    if [ "$_probe_ok" -ne 1 ]; then
+      echo "preflight: tmux-exec pool 'tmux-exec-pool-${USER}' not responding to health probe within 5s — reaping (a prior run likely left it hung)" >&2
+      env -u TMUX -u TMUX_PANE tmux -L tmux-exec kill-server 2>/dev/null || true
+    fi
+  fi
+
   # A. Prep
   RUNID="$(date +%Y%m%dT%H%M%S)-$$"
   BASE="$HOME/.thrum_release_tests/$RUNID"
