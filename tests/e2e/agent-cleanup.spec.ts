@@ -104,8 +104,12 @@ test.describe('Agent Cleanup Tests', () => {
     const afterResult = thrumRaw(['agent', 'list', '--json']);
     expect(afterResult.stdout).not.toContain(`"${agentName}"`);
 
-    // Verify events.jsonl contains agent.cleanup event
-    const eventsPath = path.join(syncDir, 'events.jsonl');
+    // Verify events.jsonl contains agent.cleanup event.
+    // Per v0.10.6 sync-rearchitect (state.go:96-100), the canonical event
+    // journal lives at <repo>/.thrum/events.jsonl (LOCAL, not synced). The
+    // sync worktree's events.jsonl is legacy/read-fallback only — no new
+    // events written there (merge.go:84,910). Read the local journal.
+    const eventsPath = path.join(getTestRoot(), '.thrum', 'events.jsonl');
     const events = fs.readFileSync(eventsPath, 'utf-8');
     const cleanupEvents = events
       .split('\n')
@@ -153,9 +157,11 @@ test.describe('Agent Cleanup Tests', () => {
     const deleteResult = thrumRaw(['agent', 'delete', agentName, '--force']);
     expect(deleteResult.exitCode).toBe(0);
 
-    // Read events.jsonl and verify agent.cleanup event
-    const syncDir = getSyncDir();
-    const eventsPath = path.join(syncDir, 'events.jsonl');
+    // Read events.jsonl and verify agent.cleanup event. Per v0.10.6
+    // sync-rearchitect (state.go:96-100), the canonical event journal
+    // is <repo>/.thrum/events.jsonl (LOCAL); sync-worktree path is
+    // legacy/read-fallback only (merge.go:84,910).
+    const eventsPath = path.join(getTestRoot(), '.thrum', 'events.jsonl');
     const events = fs.readFileSync(eventsPath, 'utf-8');
 
     const cleanupEvents = events
