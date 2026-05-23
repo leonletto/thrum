@@ -86,19 +86,18 @@ if ! send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
   return 0
 fi
 
-# Step 3: launch shell. The runtime choice is incidental to the
-# restart contract — shell is the cheap, always-available choice.
-local launch_session_out launch_session_rc
-launch_session_out=$(
-  "$TE" exec --cwd "$COORD_REPO" --clean -- \
-    env THRUM_NAME=test_coordinator_main thrum tmux launch "$FORCE_SESSION" \
-      --runtime shell 2>&1
-)
-launch_session_rc=$?
-if [ "$launch_session_rc" -ne 0 ]; then
+# Step 3: launch shell. Drive from COORD_PANE — tmux-exec ephemeral
+# callers hit the daemon's PaneTargetForIdentity guard against
+# agent-registered sub-fixture sessions (same rationale as scen 77's
+# launch step and scen 100's restart step). The runtime choice is
+# incidental to the restart contract — shell is the cheap,
+# always-available choice.
+if ! send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
+    "thrum tmux launch $FORCE_SESSION --runtime shell" \
+    "Launched" 60; then
   emit_fail "$SID" "force-restart-success" \
-    "thrum tmux launch $FORCE_SESSION --runtime shell succeeds" \
-    "exit ${launch_session_rc}; output: $(printf '%s' "$launch_session_out" | tr '\n' ' ' | head -c 320)" \
+    "thrum tmux launch $FORCE_SESSION --runtime shell (driven from COORD pane) emits 'Launched' line" \
+    "(timeout, no matching bash-stdout entry)" \
     "scenarios/${SID}.test.sh:$LINENO"
   _scenario_69_cleanup
   return 0
@@ -110,20 +109,16 @@ fi
 # restart.
 sleep 3
 
-# Step 4: forced restart.
-local restart_out restart_rc
-restart_out=$(
-  "$TE" exec --cwd "$COORD_REPO" --clean -- \
-    env THRUM_NAME=test_coordinator_main thrum tmux restart "$FORCE_SESSION" \
-      --force 2>&1
-)
-restart_rc=$?
-if [ "$restart_rc" -eq 0 ]; then
+# Step 4: forced restart. Drive from COORD_PANE for the same
+# identity-guard reason as Step 3 above (precedent: scen 100).
+if send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
+    "thrum tmux restart $FORCE_SESSION --force" \
+    "restarted" 60; then
   emit_pass "$SID" "force-restart-success"
 else
   emit_fail "$SID" "force-restart-success" \
-    "thrum tmux restart $FORCE_SESSION --force exits 0" \
-    "exit ${restart_rc}; output: $(printf '%s' "$restart_out" | tr '\n' ' ' | head -c 240)" \
+    "thrum tmux restart $FORCE_SESSION --force (driven from COORD pane) emits 'restarted' line" \
+    "(timeout, no matching bash-stdout entry)" \
     "scenarios/${SID}.test.sh:$LINENO"
   _scenario_69_cleanup
   return 0
