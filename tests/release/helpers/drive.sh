@@ -210,11 +210,31 @@ wait_for_jsonl_match() {
   local project_dir="$HOME/.claude/projects/$(encode_cwd "$repo")"
   local elapsed=0
   local interval=1
+  # Fast-fail validation for floor_ts when supplied. A multi-line or
+  # otherwise-malformed value (e.g. a subshell whose output bled stderr
+  # into the captured string) would inline into the jq filter and
+  # produce a parse error on every poll, which the `|| true` below
+  # swallows — resulting in a silent timeout that looks like the
+  # awaited event never fired. Validating the prefix at entry catches
+  # this loudly and immediately. RFC3339 calendar prefix is sufficient:
+  # we don't need to validate the full format, just that it isn't a
+  # newline-separated multi-value or a non-timestamp string.
+  if [ -n "$floor_ts" ]; then
+    # Strip trailing whitespace (handles the common `$(date ...)`
+    # trailing-newline case explicitly so callers who forget to
+    # `printf '%s'` get sane behavior).
+    floor_ts="${floor_ts%$'\n'}"
+    if [[ ! "$floor_ts" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]]; then
+      echo "wait_for_jsonl_match: floor_ts '$floor_ts' is not RFC3339-prefixed; refusing to inline into jq filter" >&2
+      return 1
+    fi
+  fi
   local effective_filter="$filter"
   if [ -n "$floor_ts" ]; then
     # Wrap the caller's filter in an outer expression that ANDs in the
     # timestamp clause. Parens preserve the user's filter precedence
-    # regardless of internal `and`/`or`.
+    # regardless of internal `and`/`or`. floor_ts validated above so
+    # the inlined string is known-safe.
     effective_filter="(${filter}) and ((.timestamp // \"\") | tostring) >= \"${floor_ts}\""
   fi
   while [ "$elapsed" -lt "$timeout" ]; do
@@ -273,20 +293,50 @@ wait_for_session_start() {
 #                   wait_for_jsonl_match for details)
 wait_for_attachment() {
   local repo="$1" hook_event="$2" substring="$3" timeout="${4:-30}" floor_ts="${5:-}"
-  # Build the filter with jq variable interpolation via --arg (passed
-  # through the underlying wait_for_jsonl_match by inlining the strings
-  # into the filter expression). We escape via printf %q-style only what
-  # the filter syntax requires: backslash and double-quote in substrings.
-  # Simpler approach: rely on the caller to keep substrings free of
-  # `"` and `\` (matches scen 99/80's existing inline usage patterns).
+  local project_dir="$HOME/.claude/projects/$(encode_cwd "$repo")"
+  local elapsed=0
+  local interval=1
+  # Fast-fail floor_ts validation, same shape as wait_for_jsonl_match.
+  if [ -n "$floor_ts" ]; then
+    floor_ts="${floor_ts%$'\n'}"
+    if [[ ! "$floor_ts" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]]; then
+      echo "wait_for_attachment: floor_ts '$floor_ts' is not RFC3339-prefixed; refusing to inline into jq filter" >&2
+      return 1
+    fi
+  fi
+  # hook_event and substring are passed via jq --arg so embedded
+  # double-quotes, backslashes, or other shell metacharacters in
+  # caller input cannot break the filter expression. The prior
+  # inline-interpolation approach was acknowledged as a footgun
+  # in the original review; --arg eliminates the risk entirely.
+  # floor_ts is interpolated as a literal because jq cannot use
+  # --arg inside a string-comparison position in the same way; the
+  # prefix validation above is the safety guarantee.
+  local jq_floor_clause=""
+  if [ -n "$floor_ts" ]; then
+    jq_floor_clause=' and ((.timestamp // "" | tostring) >= "'"$floor_ts"'")'
+  fi
   local filter='.type == "attachment"
-        and (.attachment.hookEvent == "'"$hook_event"'")
-        and (((.attachment.stdout // "" | tostring) | contains("'"$substring"'"))
-             or ((.attachment.content // "" | tostring) | contains("'"$substring"'")))'
-  wait_for_jsonl_match "$repo" "$filter" "$timeout" "$floor_ts"
+        and (.attachment.hookEvent == $ev)
+        and (((.attachment.stdout // "" | tostring) | contains($sub))
+             or ((.attachment.content // "" | tostring) | contains($sub)))'"$jq_floor_clause"
+  while [ "$elapsed" -lt "$timeout" ]; do
+    if [ -d "$project_dir" ]; then
+      local match
+      match=$(jq -c --arg ev "$hook_event" --arg sub "$substring" \
+        "select($filter)" "$project_dir"/*.jsonl 2>/dev/null | head -n1 || true)
+      if [ -n "$match" ]; then
+        printf '%s' "$match"
+        return 0
+      fi
+    fi
+    sleep "$interval"
+    elapsed=$((elapsed + interval))
+  done
+  return 1
 }
 
-# wait_for_banner_emit <pane> [timeout-seconds]
+# wait_for_banner_emit <pane> [timeout-seconds] [since-line-count]
 # Polls a tmux pane's scrollback for the daemon's identity banner
 # sentinel — `If the prime output was truncated, you must read it now.`
 # (identitybanner.PrimeTruncationSentinel) — which is the LAST line of
@@ -301,18 +351,53 @@ wait_for_attachment() {
 # in-flight printf keystrokes (root cause of scen 21's intermittent
 # concatenation bug in the v0.10.6 RC1 gate; see commit fa45e6e834).
 #
+# STICKINESS GUARD: an earlier scenario in the same shared pane (e.g.
+# a prior restart in scens 70-76) leaves the sentinel in scrollback;
+# a fresh call without anchoring would false-positive-match the stale
+# line and return immediately, racing the new banner that is still
+# mid-print. The optional `since-line-count` parameter caps how far
+# back to look (capture-pane -S -<N>) — caller passes the pane's
+# history_size as of BEFORE the new launch/restart, then the helper
+# only sees lines emitted AFTER that point.
+#
+# Capture the pre-emit history_size with:
+#   pre_lines=$(tmux display-message -p -t "$pane" '#{history_size}')
+# then call:
+#   wait_for_banner_emit "$pane" 45 "$pre_lines"
+#
+# Without `since-line-count` the helper falls back to the legacy 1000-
+# line window (backward-compat with existing call sites; safe for
+# single-restart scenarios but a stickiness footgun in multi-restart
+# sequences).
+#
 # Returns 0 on match, 1 on timeout. Default timeout: 45s (covers the
 # daemon's 10s pre-emit sleep + waitForPaneReady + claude render time).
 #
 # Args:
-#   pane     tmux session name to capture
-#   timeout  optional poll timeout seconds (default 45)
+#   pane              tmux session name to capture
+#   timeout           optional poll timeout seconds (default 45)
+#   since-line-count  optional anchor: only check lines newer than the
+#                     captured #{history_size} count. Omit for
+#                     legacy 1000-line lookback.
 wait_for_banner_emit() {
-  local pane="$1" timeout="${2:-45}"
+  local pane="$1" timeout="${2:-45}" since_lines="${3:-}"
   local elapsed=0
   while [ "$elapsed" -lt "$timeout" ]; do
-    if tmux capture-pane -t "$pane" -S -1000 -p 2>/dev/null | \
-         grep -qF "If the prime output was truncated, you must read it now."; then
+    local capture
+    if [ -n "$since_lines" ]; then
+      # Read only the lines newer than the anchor: current
+      # history_size minus the anchor + visible pane rows is the
+      # NEW range. We approximate by capturing back to the anchor
+      # offset directly: -S -(current-since_lines) lines.
+      local now_lines
+      now_lines=$(tmux display-message -p -t "$pane" '#{history_size}' 2>/dev/null || echo "$since_lines")
+      local delta=$(( now_lines - since_lines ))
+      if [ "$delta" -lt 0 ]; then delta=0; fi
+      capture=$(tmux capture-pane -t "$pane" -S "-$delta" -p 2>/dev/null || true)
+    else
+      capture=$(tmux capture-pane -t "$pane" -S -1000 -p 2>/dev/null || true)
+    fi
+    if printf '%s' "$capture" | grep -qF "If the prime output was truncated, you must read it now."; then
       return 0
     fi
     sleep 1
@@ -354,8 +439,14 @@ wait_for_banner_emit() {
 # see scen 95 for the precedent.
 assert_inbox_contains() {
   local agent_name="$1" repo="$2" substring="$3" timeout="${4:-30}"
+  # Single mktemp invocation, no .json suffix dance. The prior shape
+  # `$(mktemp -t thrum-rel-inbox.XXXXXX).json` created TWO paths: the
+  # unsuffixed file mktemp actually created (orphaned), and the
+  # .json-suffixed path we assigned to (the one we used). jq doesn't
+  # care about extension; the suffix-less form is simpler and leaks
+  # zero files.
   local out_file
-  out_file="$(mktemp -t thrum-rel-inbox.XXXXXX).json"
+  out_file="$(mktemp -t thrum-rel-inbox.XXXXXX)"
   local elapsed=0
   local interval=2
   while [ "$elapsed" -lt "$timeout" ]; do
