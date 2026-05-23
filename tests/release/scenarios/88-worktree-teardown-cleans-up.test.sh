@@ -23,7 +23,7 @@
 
 SID="88-worktree-teardown-cleans-up"
 WT_NAME="kafm9-88-orch"
-WT_PATH="$WORKTREE_BASE/repo/${WT_NAME}"
+WT_PATH="$WORKTREE_BASE/$COORD_BASENAME/${WT_NAME}"
 SESSION="kafm9-88-session"
 AGENT="kafm9_88_agent"
 TE="$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec"

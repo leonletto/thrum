@@ -36,7 +36,7 @@
 
 SID="69-multi-runtime-restart-force"
 FORCE_WT_NAME="test-force-restart"
-FORCE_WT="$WORKTREE_BASE/repo/$FORCE_WT_NAME"
+FORCE_WT="$WORKTREE_BASE/$COORD_BASENAME/$FORCE_WT_NAME"
 FORCE_SESSION="force-restart-test"
 TE="$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec"
 

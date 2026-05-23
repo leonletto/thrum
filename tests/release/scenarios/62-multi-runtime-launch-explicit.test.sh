@@ -7,7 +7,7 @@
 # `--no-agent` managed session created with `thrum tmux create`.
 #
 # What the rt-scratch fixture is: a fresh worktree (rt-scratch) under
-# the run-level $WORKTREE_BASE/repo/, used as the cwd for managed
+# the run-level $WORKTREE_BASE/$COORD_BASENAME/, used as the cwd for managed
 # tmux sessions in 10C scenarios that don't need agent registration
 # in the session's pane. tmux create requires --cwd to point at a
 # git worktree with .thrum/redirect (post-nu16 x6e8.6); the run-level
@@ -41,7 +41,7 @@ SID="62-multi-runtime-launch-explicit"
 
 # Fixture identifiers (exported for scenarios 65, 66, 68).
 RT_WT_NAME="rt-scratch"
-RT_WT="$WORKTREE_BASE/repo/$RT_WT_NAME"
+RT_WT="$WORKTREE_BASE/$COORD_BASENAME/$RT_WT_NAME"
 RT_SESSION="runtime-test"
 
 TE="$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec"

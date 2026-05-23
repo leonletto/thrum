@@ -17,7 +17,7 @@
 #
 # Worktree base_path was patched in setup-repo.sh to $WORKTREE_BASE/,
 # and thrum auto-appends the repo basename ("repo"), so the new
-# worktree lands at $WORKTREE_BASE/repo/kafm7-13/.
+# worktree lands at $WORKTREE_BASE/$COORD_BASENAME/kafm7-13/.
 #
 # Per-scenario isolation: teardown the worktree at scenario end so
 # subsequent scenarios start clean. Function-wrapped + cleanup-after-
@@ -26,7 +26,7 @@
 SID="13-worktree-setup-thrum-redirect"
 WT_NAME="kafm7-13"
 WT_BRANCH="feature/${WT_NAME}"
-WT_PATH="$WORKTREE_BASE/repo/${WT_NAME}"
+WT_PATH="$WORKTREE_BASE/$COORD_BASENAME/${WT_NAME}"
 
 _run_scenario_13() {
 

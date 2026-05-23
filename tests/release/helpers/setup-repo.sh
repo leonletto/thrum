@@ -292,5 +292,12 @@ run_setup() {
   export IMPL_PANE="$IMPL_SESSION"
   export COORD_REPO="$REPO"
   export IMPL_REPO="$IMPL_WT"
+  # The basename of $REPO — `thrum worktree create` auto-appends it to
+  # worktrees.base_path (cmd/thrum/main.go:2680), so every scenario worktree
+  # lands at $WORKTREE_BASE/$COORD_BASENAME/<wt-name>. Exposed as a var so
+  # scenarios don't hardcode the literal "test-repo"/"repo" basename —
+  # historically that was "repo" pre-codification and is "test-repo" now;
+  # binding to a basename literal silently breaks any future rename.
+  export COORD_BASENAME="$COORD_SESSION"
   return 0
 }

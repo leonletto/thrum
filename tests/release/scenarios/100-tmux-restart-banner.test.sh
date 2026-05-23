@@ -31,7 +31,7 @@
 
 SID="100-tmux-restart-banner"
 RST_WT_NAME="hqy-100-restart-wt"
-RST_WT="$WORKTREE_BASE/repo/$RST_WT_NAME"
+RST_WT="$WORKTREE_BASE/$COORD_BASENAME/$RST_WT_NAME"
 RST_SESSION="hqy-100-restart"
 RST_AGENT="hqy_100_restart_agent"
 TE="$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec"

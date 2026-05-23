@@ -8,7 +8,7 @@
 # coord identity (mirrors scenario 14's auth pattern: out-of-pane
 # tmux-exec resolves caller via THRUM_NAME, not peercred PID walk).
 #
-# Worktrees land at $WORKTREE_BASE/repo/<name> after thrum's
+# Worktrees land at $WORKTREE_BASE/$COORD_BASENAME/<name> after thrum's
 # auto-append (see setup-repo.sh:113 + cmd/thrum/main.go:2680).
 #
 # Four assertions:
@@ -23,9 +23,9 @@
 SID="43-worktree-flags"
 WT_BRANCH_NAME="kafm1-43-custom-branch"
 WT_BRANCH_BRANCH="my-custom-${RUNID}"
-WT_BRANCH_PATH="$WORKTREE_BASE/repo/${WT_BRANCH_NAME}"
+WT_BRANCH_PATH="$WORKTREE_BASE/$COORD_BASENAME/${WT_BRANCH_NAME}"
 WT_DETACH_NAME="kafm1-43-detach"
-WT_DETACH_PATH="$WORKTREE_BASE/repo/${WT_DETACH_NAME}"
+WT_DETACH_PATH="$WORKTREE_BASE/$COORD_BASENAME/${WT_DETACH_NAME}"
 TE="$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec"
 
 _run_scenario_43() {

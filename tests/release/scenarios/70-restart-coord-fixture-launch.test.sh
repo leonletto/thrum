@@ -36,7 +36,7 @@
 #      against thrum-x6e8.6 stale-PID bug + thrum-x6e8.2 relative-path
 #      bug, both fixed pre-v0.9.0 but still load-bearing for restart).
 #
-# Fixture: $WORKTREE_BASE/repo/kafm6-impl-restart-wt + tmux session
+# Fixture: $WORKTREE_BASE/$COORD_BASENAME/kafm6-impl-restart-wt + tmux session
 # kafm6-impl-restart-test + agent kafm6_test_impl, all torn down by
 # scenario 76.
 
@@ -46,7 +46,7 @@ SID="70-restart-coord-fixture-launch"
 KAFM6_S1_AGENT="kafm6_test_impl"
 KAFM6_S1_SESSION="kafm6-impl-restart-test"
 KAFM6_S1_WT_NAME="kafm6-impl-restart-wt"
-KAFM6_S1_WT="$WORKTREE_BASE/repo/$KAFM6_S1_WT_NAME"
+KAFM6_S1_WT="$WORKTREE_BASE/$COORD_BASENAME/$KAFM6_S1_WT_NAME"
 
 TE="$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec"
 

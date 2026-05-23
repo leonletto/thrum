@@ -33,7 +33,7 @@
 
 SID="91-check-pane-auto-nudge"
 NUDGE_WT_NAME="kafm9-91-nudge-wt"
-NUDGE_WT="$WORKTREE_BASE/repo/$NUDGE_WT_NAME"
+NUDGE_WT="$WORKTREE_BASE/$COORD_BASENAME/$NUDGE_WT_NAME"
 NUDGE_SESSION="kafm9-91-nudge"
 NUDGE_AGENT="kafm9_91_nudge_agent"
 TE="$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec"

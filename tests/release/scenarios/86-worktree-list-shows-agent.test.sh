@@ -29,7 +29,7 @@
 
 SID="86-worktree-list-shows-agent"
 WT_NAME="kafm9-86-orch"
-WT_PATH="$WORKTREE_BASE/repo/${WT_NAME}"
+WT_PATH="$WORKTREE_BASE/$COORD_BASENAME/${WT_NAME}"
 ORCH_SESSION="kafm9-86-orch-session"
 ORCH_AGENT="kafm9_86_orch_agent"
 TE="$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec"
