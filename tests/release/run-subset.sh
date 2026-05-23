@@ -126,8 +126,17 @@ fi
 
 SCENARIOS=()
 for id in "${IDS[@]}"; do
+  # Resolve to the scenario-file prefix. Single-digit IDs get zero-padded
+  # ("2" -> "02-") since the filenames use 2-digit padding for IDs 01-99.
+  # Three-digit IDs (100+) are unpadded already. The trailing hyphen is
+  # required — without it, "2-*" would over-match "20-", "21-", etc.
+  if [[ "$id" =~ ^[0-9]$ ]]; then
+    id_pat="0${id}-"
+  else
+    id_pat="${id}-"
+  fi
   while IFS= read -r f; do SCENARIOS+=("$f"); done < <(
-    cd "$SCENARIOS_DIR" && ls "${id}"*.test.sh 2>/dev/null | sort
+    cd "$SCENARIOS_DIR" && ls "${id_pat}"*.test.sh 2>/dev/null | sort
   )
 done
 if [ "${#SCENARIOS[@]}" -eq 0 ]; then
