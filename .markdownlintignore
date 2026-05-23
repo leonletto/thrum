@@ -21,3 +21,7 @@ node_modules/
 # Ignore release test framework README (wide reference table)
 tests/release/README.md
 
+# Ignore Playwright test artifacts (gitignored output, regenerated each run)
+playwright-report/
+test-results/
+
