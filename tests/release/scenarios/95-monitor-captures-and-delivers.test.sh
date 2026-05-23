@@ -144,15 +144,25 @@ echo "ALERT: disk usage at 95% — ${ALERT_MARKER}" >> "$KAFM11_LOG_FILE"
 #      both that the message routed AND that its caller_id
 #      carries the monitor: prefix.
 expected_caller="monitor:${KAFM11_MON_NAME}"
-marker_filter='(.timestamp != null)
-        and (((.type == "user")
-              and (.message.content | type == "string")
-              and (.message.content | contains("'"$ALERT_MARKER"'")))
-             or ((.type == "assistant")
-                 and (.message.content | type == "array")
-                 and (.message.content
-                      | map(select((.text // "") | tostring | contains("'"$ALERT_MARKER"'")))
-                      | length > 0)))'
+
+# Marker witness: claude autonomously runs `thrum inbox --unread` in
+# response to the inbound nudge (visible in pane snapshots as "Ran 2
+# shell commands"). The full message body — including the
+# RUNID-anchored marker — lands in claude's JSONL via the Bash tool's
+# tool_result entry (under .message.content[].content for user-type
+# entries with tool_result blocks). Verified via direct JSONL
+# inspection of v0.10.6 RC1 gate reltest-20861 fixture: the marker
+# `kafm11-deliver-marker-<RUNID>` appears verbatim in the
+# tool_result content of claude's autonomous Bash call.
+#
+# Match shape: stringify the entire .message.content (which works
+# for both user-message tool_result arrays and assistant text
+# arrays) and check for substring. This is broader than
+# wait_for_bash_stdout_contains (which is `!`-prefix-specific and
+# does NOT match autonomous Bash tool_result entries — the prior
+# pivot to it was misaligned with claude's actual transcript shape
+# here).
+marker_filter='(.message.content // "") | tostring | contains("'"$ALERT_MARKER"'")'
 if wait_for_jsonl_match "$COORD_REPO" "$marker_filter" 60 >/dev/null; then
   emit_pass "$SID" "matching-line-delivered-as-message"
 else

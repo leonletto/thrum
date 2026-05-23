@@ -23,9 +23,27 @@
 SID="23-mcp-inbox-filters-by-agent"
 MARKER="kafm2-23-filter-${RUNID}"
 
-# Step 1: send from coord pane. Plain send_command — we don't gate
-# on response; the recipient-side assertions verify the routed shape.
-send_command "$COORD_PANE" "! thrum send 'For implementer only (${MARKER})' --to @test_implementer"
+# Step 1: send from coord pane. Use send_bash_and_wait (gates on
+# "Message sent" bash-stdout) instead of plain send_command. Reason:
+# under heavy gate load, send_command's pane-idle-gated typing can
+# race with a subsequent send_command's `!` prefix — the next `!`
+# keystroke splices into the trailing position of this command's
+# body BEFORE this command's Enter has fully submitted, producing a
+# corrupted `--to @test_implementer!` arg that the daemon rejects
+# as "unknown recipient" (root cause of v0.10.6 RC1 gate
+# reltest-48589 failure; see thrum-rbp6 for the underlying
+# send_command race). Gating on the actual send-confirmation
+# bash-stdout forces this command to fully complete before any
+# subsequent operation can interleave its keystrokes.
+if ! send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
+    "thrum send 'For implementer only (${MARKER})' --to @test_implementer" \
+    "Message sent" 30; then
+  emit_fail "$SID" "impl-inbox-delivered" \
+    "thrum send completes with 'Message sent' confirmation within 30s" \
+    "(send command may have raced — see thrum-rbp6)" \
+    "scenarios/${SID}.test.sh:$LINENO"
+  return 0
+fi
 
 # Step 2: settle COORD before its inbox query — claude may still be
 # rendering the send response.
