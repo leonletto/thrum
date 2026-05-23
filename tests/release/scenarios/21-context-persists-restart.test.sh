@@ -175,8 +175,22 @@ floor_ts="$(date -u +%Y-%m-%dT%H:%M:%S)"
 
 send_slash_command "$PANE" "/thrum:load-context"
 
-# Poll for the assistant tool_use Bash call to `thrum prime` whose
-# bash-stdout (delivered as the tool_result) contains the marker.
+# Poll for the assistant tool_use Bash call to a context-loading
+# command whose bash-stdout (delivered as the tool_result) contains
+# the marker. The /thrum:load-context skill body
+# (claude-plugin/commands/load-context.md) offers TWO commands as
+# of v0.10.6:
+#
+#   - `thrum prime` — full briefing (project state + session context)
+#   - `thrum context show --session` — session-only payload (the
+#     marker-bearing slice)
+#
+# Post-SessionStart-hook, claude routinely picks the session-only
+# command since the full briefing was already auto-injected by the
+# hook — a rational choice that the skill body explicitly enables.
+# Either tool_use satisfies the assertion's INTENT (slash command
+# routes to autonomous bash invocation of context restoration).
+#
 # We can't filter on the tool_result content from the assistant's
 # tool_use entry alone — instead, wait for the tool_use first to
 # confirm the slash command routed correctly, then poll a separate
@@ -188,11 +202,12 @@ local tool_filter='.type == "assistant"
         and (.message.content
              | map(select(.type == "tool_use"
                           and .name == "Bash"
-                          and (.input.command | tostring | startswith("thrum prime"))))
+                          and ((.input.command | tostring | startswith("thrum prime"))
+                               or (.input.command | tostring | startswith("thrum context show")))))
              | length > 0)'
 if ! wait_for_jsonl_match "$REPO" "$tool_filter" 90 >/dev/null; then
   emit_fail "$SID" "context-survives-restart-slash" \
-    'assistant tool_use Bash call with command starting "thrum prime" within 90s after /thrum:load-context' \
+    'assistant tool_use Bash call to thrum prime OR thrum context show within 90s after /thrum:load-context' \
     "(no matching JSONL entry)" \
     "scenarios/${SID}.test.sh:$LINENO"
   return 0

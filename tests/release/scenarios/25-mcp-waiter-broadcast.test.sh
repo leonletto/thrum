@@ -34,9 +34,18 @@
 SID="25-mcp-waiter-broadcast"
 MARKER="kafm2-25-broadcast-${RUNID}"
 
-# Settle IMPL pane (claude may be auto-processing scenario 24's
-# leftover messages).
+# Settle BOTH panes BEFORE firing wait. Critical ordering: previously
+# COORD was settled BETWEEN firing wait and broadcasting, but
+# wait_for_pane_idle can take up to 60s if COORD's claude is rendering
+# a long response from a prior scenario (e.g. scen 24's autonomous
+# inbox handling can leave COORD busy for 30+s). When that gap ate
+# into the wait's 12s --timeout budget, the broadcast fired AFTER the
+# wait had already timed out — observed in v0.10.6 RC1 gate where
+# IMPL pane shows `NO_MESSAGES_TIMEOUT` followed by the broadcast
+# arrival nudge. Settling both panes up-front decouples the wait's
+# timer from COORD's rendering state.
 wait_for_pane_idle "$IMPL_PANE" 60
+wait_for_pane_idle "$COORD_PANE" 60
 
 # Pre-clear IMPL's unread queue out-of-pane so `thrum wait`'s only
 # viable trigger is OUR broadcast. Without this, a slowly-delivered
@@ -62,10 +71,9 @@ send_command "$IMPL_PANE" "! thrum wait --timeout 12s --json"
 # broadcast can land before the subscriber is registered.
 sleep 2
 
-# Settle COORD pane separately.
-wait_for_pane_idle "$COORD_PANE" 60
-
-# Step 3: broadcast from COORD.
+# Step 3: broadcast from COORD immediately. COORD was already settled
+# above, so this send fires within ~2-3s of the wait subscription,
+# well inside the 12s --timeout window.
 send_command "$COORD_PANE" "! thrum send 'Broadcast for waiter (${MARKER})' --to @everyone"
 
 # Step 4: poll IMPL's JSONL for `thrum wait`'s success-shape output.
