@@ -121,11 +121,25 @@ thrum_release_self_isolate() {
   # (tee's own exit is irrelevant). THRUM_RELEASE_FAILURES_DIR points the
   # in-harness per-fail pane-snapshot helper (output.sh:_capture_panes_on_fail)
   # at a stable location the post-run triage can find.
+  # Propagate select debugging env vars through the tmux re-exec. tmux
+  # new-session does not pass arbitrary parent env to the detached pane
+  # (only what's in update-environment), so any harness-relevant var we
+  # want to honor inside the launcher has to be re-baked into the inner
+  # env command explicitly. THRUM_RELEASE_NO_TEARDOWN is the canonical
+  # one — without this passthrough, the harness always tears down even
+  # when the caller explicitly asked it not to.
+  local _passthrough=""
+  for v in THRUM_RELEASE_NO_TEARDOWN THRUM_BEHAVIORAL_NO_TEARDOWN; do
+    if [ -n "${!v:-}" ]; then
+      _passthrough+=" $(printf '%q' "${v}=${!v}")"
+    fi
+  done
+
   {
     echo "#!/usr/bin/env bash"
     echo "{"
-    printf '  env -u TMUX -u TMUX_PANE THRUM_RELEASE_ISOLATED=1 THRUM_RELEASE_FAILURES_DIR=%q bash %q' \
-      "$fail_dir" "$script_abs"
+    printf '  env -u TMUX -u TMUX_PANE THRUM_RELEASE_ISOLATED=1 THRUM_RELEASE_FAILURES_DIR=%q%s bash %q' \
+      "$fail_dir" "$_passthrough" "$script_abs"
     local arg
     for arg in "$@"; do
       printf ' %q' "$arg"
