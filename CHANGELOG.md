@@ -120,6 +120,24 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **Daemon compactor decoupled from caller RPC context (thrum-roz1)** — the
+  closure registered via `triggers.SetCompactor` previously ran under the
+  caller's RPC ctx (~10s deadline) when invoked from `state.WriteEvent` →
+  `triggers.SyncOnWrite`. On large events tables the events-journal
+  `DELETE FROM events WHERE timestamp < ?` (no timestamp index — see
+  follow-up thrum-7ojv) blew the deadline; the burned ctx then cascaded to
+  the next `agent.register`'s `ensureActiveSession` SELECT in the same RPC,
+  surfacing to the user as `register failed: ... daemon may be unresponsive
+  — try thrum daemon restart` during prime. 99 occurrences across 8+
+  agents in pre-fix daemon.log. The compactor now runs under a fresh
+  `context.WithTimeout(context.Background(), syncCompactorTimeout)` (60s
+  ceiling, generous because the events table lacks a timestamp index;
+  thrum-7ojv would let this drop to the walker's 30s). Mirrors the walker's
+  s7is.7 cancel-shape pattern at the same file. Logs a structured
+  `sync.compactor_timeout` slog warn with `phase` /  `elapsed_s` /
+  `duration_ceiling_s` / `guidance` fields for daemon-log greppability.
+  Compaction remains non-fatal: `TriggerSync` still fires on a compactor
+  failure (preserves existing `CompactorFailureDoesNotBlockSync` contract).
 - **`thrum worktree create --branch <existing>` attaches existing branches
   instead of erroring (thrum-suyb)** — `internal/worktree.Create` previously
   always invoked `git worktree add -b <branch> <path> <base>`, which fails with

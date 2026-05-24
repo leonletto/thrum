@@ -20,6 +20,22 @@ import (
 // without sleeping for the production ceiling.
 var syncWalkerTimeout = 30 * time.Second
 
+// syncCompactorTimeout caps the compactor closure registered via
+// SetCompactor when invoked from SyncOnWrite — see thrum-roz1.
+// 60s (not 30s like the walker) because the events-table DELETE is
+// the dominant compactor cost AND the events table currently has no
+// timestamp index (only sequence/type/origin per
+// internal/schema/schema.go:603-605), so
+// `DELETE FROM events WHERE timestamp < ?` requires a full table scan
+// that runs O(N) in row count. The follow-up thrum-7ojv adds a
+// timestamp index which would let this drop to 30s symmetric with the
+// walker; until that ships the 60s ceiling absorbs the unindexed-scan
+// runtime on large events tables without re-introducing the cascade
+// to agent.register session-resurrect that 30s was too tight to avoid.
+//
+// Package-level var (not const) for the same reason as syncWalkerTimeout.
+var syncCompactorTimeout = 60 * time.Second
+
 // WalkerInvoker is the minimal interface Triggers uses to call the
 // snapshot walker before firing sync. Decouples this package from
 // internal/sync/snapshot to avoid an import cycle (snapshot depends on
@@ -126,10 +142,38 @@ func (t *Triggers) SyncOnWrite(ctx context.Context) {
 		}
 	}
 	if t.compact != nil {
-		if err := t.compact(ctx); err != nil {
+		// Detach from caller ctx (thrum-roz1, same cancel shape as
+		// walker s7is.7; slog fields intentionally extended for
+		// daemon-log greppability per coord review):
+		// SyncOnWrite is invoked from inside state.WriteEvent while
+		// state.Lock() is held. If the compactor used the caller's ctx
+		// (typically a ~10s RPC deadline) and the events-table DELETE
+		// took longer than that, the compactor would error with
+		// "context deadline exceeded" AND burn the deadline for any
+		// concurrent / subsequent op in that RPC — notably the next
+		// agent.register's ensureActiveSession SELECT, which then
+		// fails with "check active session: context deadline exceeded"
+		// and surfaces to the user as "daemon may be unresponsive —
+		// try thrum daemon restart". The cascade had 99 occurrences
+		// across 8+ agents pre-fix. Using Background + a generous
+		// ceiling breaks the coupling at the root.
+		compactStart := time.Now()
+		compactCtx, cancel := context.WithTimeout(context.Background(), syncCompactorTimeout)
+		err := t.compact(compactCtx)
+		elapsed := time.Since(compactStart)
+		cancel()
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				slog.Warn("sync.compactor_timeout",
+					"phase", "[sync/compactor]",
+					"elapsed_s", elapsed.Seconds(),
+					"duration_ceiling_s", int(syncCompactorTimeout/time.Second),
+					"guidance", "investigate_events_table_size_or_add_timestamp_index",
+				)
+			}
 			// Non-fatal: compaction is maintenance, not a sync gate.
-			log.Printf("sync: compactor failed: %v", err)
-			slog.Warn("sync.compactor_failed", "err", err)
+			log.Printf("[sync/compactor] failed (elapsed=%s): %v", elapsed, err)
+			slog.Warn("sync.compactor_failed", "err", err, "elapsed_s", elapsed.Seconds())
 		}
 	}
 	t.loop.TriggerSync()

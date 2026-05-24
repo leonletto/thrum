@@ -460,3 +460,165 @@ func TestTriggers_SyncOnWrite_WalkerFailure_SkipsCompactor(t *testing.T) {
 		t.Errorf("compactor must NOT run when walker fails; got %d calls", got)
 	}
 }
+
+// TestTriggers_SyncOnWrite_CompactorDetachedFromCallerCtx pins the
+// thrum-roz1 contract: the compactor must run under its own
+// Background-derived ctx (capped by syncCompactorTimeout), NOT the
+// caller's RPC ctx. If the compactor inherited the caller ctx, a
+// pre-cancelled or short-deadline caller would force the compactor
+// to error with context.Canceled or context.DeadlineExceeded — and
+// that error previously cascaded to the next agent.register's
+// ensureActiveSession SELECT in the same RPC, surfacing as the
+// "daemon may be unresponsive" prime failure. This test would have
+// failed BEFORE the fix: the compactor's runtime would have ended
+// with ctx.Err() != nil.
+func TestTriggers_SyncOnWrite_CompactorDetachedFromCallerCtx(t *testing.T) {
+	tmpDir := setupMergeTestRepo(t)
+	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
+	syncer := NewSyncer(tmpDir, syncDir, false)
+	projector := setupTestProjector(t, tmpDir)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), false)
+
+	if err := loop.Start(context.Background()); err != nil {
+		t.Fatalf("Failed to start loop: %v", err)
+	}
+	defer func() { _ = loop.Stop() }()
+
+	triggers := NewTriggers(loop)
+	triggers.SetWalker(&stubWalker{})
+
+	// Caller ctx is ALREADY CANCELLED. If the compactor inherited
+	// this ctx the closure would observe ctx.Err() immediately.
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var compactCtxErr error
+	var compactRan atomic.Int32
+	triggers.SetCompactor(func(c context.Context) error {
+		compactRan.Add(1)
+		// Sleep briefly to let any ctx cancellation propagate, then
+		// record the ctx state. The whole point is c.Err() must be
+		// nil because c is a fresh Background-derived ctx, not the
+		// cancelled caller ctx.
+		select {
+		case <-time.After(20 * time.Millisecond):
+		case <-c.Done():
+			compactCtxErr = c.Err()
+			return c.Err()
+		}
+		return nil
+	})
+
+	triggers.SyncOnWrite(cancelledCtx)
+
+	if compactRan.Load() != 1 {
+		t.Fatalf("compactor should have been invoked exactly once; got %d", compactRan.Load())
+	}
+	if compactCtxErr != nil {
+		t.Errorf("compactor ctx had err=%v; expected nil (compactor must be detached from caller ctx per thrum-roz1)",
+			compactCtxErr)
+	}
+}
+
+// TestTriggers_SyncOnWrite_CompactorTimeout_FiresWarnAndContinues
+// pins the thrum-roz1 defense-in-depth bound: a compactor that never
+// returns must be bounded by syncCompactorTimeout, must emit the
+// sync.compactor_timeout slog warn with the phase/elapsed_s/
+// duration_ceiling_s/guidance fields, and (unlike the walker timeout)
+// must NOT suppress TriggerSync — compaction is maintenance, not a
+// sync-correctness gate.
+func TestTriggers_SyncOnWrite_CompactorTimeout_FiresWarnAndContinues(t *testing.T) {
+	// Shrink the ceiling to a test-friendly value; restore on cleanup.
+	originalTimeout := syncCompactorTimeout
+	syncCompactorTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { syncCompactorTimeout = originalTimeout })
+
+	var logBuf bytes.Buffer
+	captureHandler := slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	originalLogger := slog.Default()
+	slog.SetDefault(slog.New(captureHandler))
+	t.Cleanup(func() { slog.SetDefault(originalLogger) })
+
+	tmpDir := setupMergeTestRepo(t)
+	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
+	syncer := NewSyncer(tmpDir, syncDir, false)
+	projector := setupTestProjector(t, tmpDir)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), false)
+
+	ctx := context.Background()
+	if err := loop.Start(ctx); err != nil {
+		t.Fatalf("Failed to start loop: %v", err)
+	}
+	defer func() { _ = loop.Stop() }()
+
+	// Wait for the initial sync so any post-trigger advance is
+	// unambiguously from SyncOnWrite, not the boot sync.
+	deadline := time.After(2 * time.Second)
+	for loop.GetStatus().LastSyncAt.IsZero() {
+		select {
+		case <-deadline:
+			t.Fatal("Timeout waiting for initial sync")
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	beforeTrigger := loop.GetStatus().LastSyncAt
+
+	triggers := NewTriggers(loop)
+	triggers.SetWalker(&stubWalker{})
+	triggers.SetCompactor(func(c context.Context) error {
+		// Block until the compactor ceiling expires.
+		<-c.Done()
+		return c.Err()
+	})
+
+	start := time.Now()
+	triggers.SyncOnWrite(ctx)
+	elapsed := time.Since(start)
+
+	if elapsed < 50*time.Millisecond {
+		t.Errorf("SyncOnWrite returned in %v; expected ≥ syncCompactorTimeout (50ms)", elapsed)
+	}
+	if elapsed > 2*time.Second {
+		t.Errorf("SyncOnWrite took %v; expected ≪ 2s (timeout wrapping appears broken)", elapsed)
+	}
+
+	logged := logBuf.String()
+	if !strings.Contains(logged, `"msg":"sync.compactor_timeout"`) {
+		t.Errorf("expected sync.compactor_timeout slog event; got: %s", logged)
+	}
+	if !strings.Contains(logged, `"phase":"[sync/compactor]"`) {
+		t.Errorf("expected phase '[sync/compactor]' slog attr (for daemon-log greppability); got: %s",
+			logged)
+	}
+	if !strings.Contains(logged, `"elapsed_s":`) {
+		t.Errorf("expected elapsed_s slog attr; got: %s", logged)
+	}
+	if !strings.Contains(logged, `"duration_ceiling_s":`) {
+		t.Errorf("expected duration_ceiling_s slog attr; got: %s", logged)
+	}
+	if !strings.Contains(logged, `"guidance":"investigate_events_table_size_or_add_timestamp_index"`) {
+		t.Errorf("expected guidance attr pointing at thrum-7ojv-style remediation; got: %s", logged)
+	}
+	if !strings.Contains(logged, `"msg":"sync.compactor_failed"`) {
+		t.Errorf("expected sync.compactor_failed slog event to also fire; got: %s", logged)
+	}
+
+	// Unlike the walker timeout (which suppresses sync), the
+	// compactor timeout MUST NOT suppress TriggerSync — compaction
+	// is maintenance, not a sync-correctness gate. Poll for the
+	// LastSyncAt advance to confirm.
+	deadline = time.After(2 * time.Second)
+	for {
+		status := loop.GetStatus()
+		if status.LastSyncAt.After(beforeTrigger) {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatal("sync did not fire after compactor timeout — compactor failure must not block TriggerSync (matches existing CompactorFailureDoesNotBlockSync contract)")
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+}
