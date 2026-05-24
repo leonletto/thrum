@@ -92,6 +92,34 @@ restart threshold (`thrum config show restart`) and let the session run until
 you actually approach it. If you're under the threshold and have a coherent task
 to advance, advance it.
 
+### Destroy an agent before tearing down its worktree
+
+**Why:** `thrum worktree teardown <name>` does exactly what its name says — it
+tears down the **worktree** — and is intentionally not coupled to runtime
+lifecycle. If the agent's runtime is still running in tmux when you teardown,
+the runtime keeps executing zombie-style with its cwd pointing at a deleted
+directory. The next operation the user attempts in that tmux pane fails
+confusingly, and they have to manually `tmux kill-session` and exit. (Source:
+direct user correction — coordinator had reported an agent "removed" after
+running only the worktree teardown.)
+
+**How to apply:** When recycling an agent (epic done, agent should be removed),
+run the two-command destroy sequence **in this order**:
+
+```bash
+thrum tmux kill <session>          # kills tmux + runtime first
+thrum worktree teardown <name>     # then removes worktree + identity
+```
+
+Sanity-check: after teardown, `tmux list-sessions` should NOT show the agent's
+session. If it does, the runtime was never killed and step 1 was skipped.
+
+For batch recycling (multiple agents at once), kill them all first, then
+teardown all worktrees — keeps the daemon's session state consistent across
+the operation. For graceful shutdown of in-flight agents, send a thrum message
+asking them to save state, wait for ack, then run the two-command sequence.
+Done/idle agents on closed epics need no graceful shutdown.
+
 ### Project-specific rules (already loaded)
 
 Project-local rules under `bd memories coordinator-rule-` were loaded at session

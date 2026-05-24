@@ -25,6 +25,16 @@ command yourself. If you've already started one wrong, kill the pane and
 re-launch via the daemon. If the pane doesn't exist yet, use
 `thrum tmux start <name>` (creates, launches, primes, attaches in one command).
 
+### Recycling an agent: destroy then teardown
+
+**Why:** The inverse of dispatch is removal, and it has the same "two-step
+ritual or things break silently" property as dispatch via tmux launch +
+thrum send. See `coordinator-managing-state-and-lifecycle` § "Destroy an agent
+before tearing down its worktree" for the canonical sequence
+(`thrum tmux kill` BEFORE `thrum worktree teardown`). The dispatching skill
+mentions it here so you find the cross-reference when planning a wave
+recycle, not just when reading the lifecycle skill end-to-end.
+
 ### Never spawn sub-agents into worktrees where Thrum agents are running
 
 **Why:** Sub-agents (Agent tool) and Thrum agents (`thrum send`) are different
