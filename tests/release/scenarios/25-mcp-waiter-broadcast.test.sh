@@ -106,21 +106,29 @@ fi
 # with OUR marker. Defends against a "wait unblocked on some
 # unrelated message" false positive.
 #
-# Drive the inbox check OUT OF PANE via tmux-exec — same rationale
-# as scenarios 22/23/24: claude on IMPL is in autonomous-handling
-# mode after receiving the broadcast nudge, and a `!`-bash query
-# during that flurry races the keystroke-time bash-mode gate. The
-# daemon's inbox state is authoritative; reading it via tmux-exec
-# is deterministic regardless of what claude is doing.
-# assert_inbox_contains encapsulates the mktemp + tmux-exec + jq poll
-# pattern previously inlined here. The helper's `.messages[]?`
-# null-safety also guards against hints-only daemon responses
-# under load (failure mode that bit scen 95 pre-helper-extraction).
-if assert_inbox_contains test_implementer "$IMPL_REPO" "$MARKER" 30; then
+# Pivoted from assert_inbox_contains (tmux-exec pool path) to
+# wait_for_jsonl_match against IMPL's claude JSONL — same pivot
+# scen 95 made for its main assertion. The tmux-exec pool path
+# hits the documented thrum-9sxc load-flake (see
+# tests/release/CLAUDE.md "thrum-9sxc" section): the daemon's
+# worktree.PaneTargetForIdentity refusal returns hints-only
+# responses with no .messages field, and assert_inbox_contains'
+# null-safe `.messages[]?` correctly returns 0 — but the polling
+# loop then times out even when delivery succeeded.
+#
+# The JSONL surface is deterministic: claude on IMPL autonomously
+# runs `thrum inbox --unread` in response to the inbound broadcast
+# nudge. Both the autonomous Bash tool_result entry's content and
+# the daemon's inbound nudge user-message ("New message from
+# @test_coordinator_main -- run `thrum inbox --unread` to read")
+# carry the marker, so the broad content-string filter matches
+# either witness.
+marker_filter='(.message.content // "") | tostring | contains("'"$MARKER"'")'
+if wait_for_jsonl_match "$IMPL_REPO" "$marker_filter" 30 >/dev/null; then
   emit_pass "$SID" "broadcast-marker-in-inbox"
 else
   emit_fail "$SID" "broadcast-marker-in-inbox" \
-    "impl inbox contains ≥ 1 message matching broadcast marker '${MARKER}' (within 30s)" \
-    "(timeout or marker not delivered to impl inbox)" \
+    "IMPL JSONL entry containing broadcast marker '${MARKER}' within 30s" \
+    "(no matching JSONL entry — broadcast may not have routed)" \
     "scenarios/${SID}.test.sh:$LINENO"
 fi
