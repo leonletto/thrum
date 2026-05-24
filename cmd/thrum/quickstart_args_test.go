@@ -6,9 +6,9 @@ import (
 
 // TestQuickstartCmd_ArgsConstraint — thrum-9dnh regression. The
 // quickstart command's cobra Args constraint must:
-//   1. Accept zero positionals (caller uses --name or has none yet)
-//   2. Accept one positional (the agent name, lenient form per §4d)
-//   3. Reject two or more positionals (no second-name-arg confusion)
+//  1. Accept zero positionals (caller uses --name or has none yet)
+//  2. Accept one positional (the agent name, lenient form per §4d)
+//  3. Reject two or more positionals (no second-name-arg confusion)
 //
 // Before this constraint, cobra defaulted to ArbitraryArgs and silently
 // discarded positionals — the upstream footgun that caused the

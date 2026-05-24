@@ -146,9 +146,9 @@ Recovery options:
   4. See CLAUDE.md § "Multi-binary worktree footgun" for prevention
 ```
 
-**Why it happens:** The DB lives under `<repo-root>/.thrum/var/messages.db` and is
-shared across every worktree's binary (worktrees redirect their `.thrum/` to the
-main repo's `.thrum/` via the `.thrum/redirect` file). Schema migrations are
+**Why it happens:** The DB lives under `<repo-root>/.thrum/var/messages.db` and
+is shared across every worktree's binary (worktrees redirect their `.thrum/` to
+the main repo's `.thrum/` via the `.thrum/redirect` file). Schema migrations are
 one-way: a newer binary migrates the DB up; an older binary cannot migrate it
 back down.
 
@@ -175,13 +175,13 @@ back down.
    relevant `.bak` over `messages.db` (and copy back `-wal` / `-shm` sidecar
    backups if present), restart.
 3. If neither option works (no newer-schema worktree, no pre-migration backup
-   left), stop the daemon, delete `messages.db` + WAL/SHM sidecars, and
-   restart. The daemon will initialize a BLANK DB on next start — historical
+   left), stop the daemon, delete `messages.db` + WAL/SHM sidecars, and restart.
+   The daemon will initialize a BLANK DB on next start — historical
    message/agent/group/scheduler/checkpoint state is permanently lost. The
-   daemon does NOT rebuild SQLite from JSONL on startup; only NEW events
-   landing after restart populate the fresh DB. See thrum-rtlt for the
-   long-term event-sourcing rework that would make this option truly
-   "rebuild from history."
+   daemon does NOT rebuild SQLite from JSONL on startup; only NEW events landing
+   after restart populate the fresh DB. See thrum-rtlt for the long-term
+   event-sourcing rework that would make this option truly "rebuild from
+   history."
 4. Long-term prevention belongs in a `make install` pre-flight check
    (`thrum-quth` follow-ups) — for now the daemon's startup error is the primary
    detection point.
