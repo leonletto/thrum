@@ -283,10 +283,29 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 	// the existing agent is genuinely bound to it via IsAgentInWorktree
 	// (the thrum-0pos co-located-agent helper).
 	if existingAgent != nil {
+		// peercred.FromContext returns (nil, true) for the
+		// "ran but ErrAnonymous" case AND (nil, false) for the
+		// "peercred never ran" case (non-unix transports, test
+		// contexts that didn't inject WithIdentity). Both flow here;
+		// the inner pid > 0 guard backstops the (nil, false) case
+		// because ConnectingPIDFromContext returns (0, false) when no
+		// kernel PID was injected, leaving the check a no-op for
+		// those callers.
 		if resolved, _ := peercred.FromContext(ctx); resolved == nil {
 			if pid, ok := peercred.ConnectingPIDFromContext(ctx); ok && pid > 0 {
-				callerWorktree, _ := resolveCallerWorktreeFn(pid)
-				if callerWorktree != "" && !h.state.IsAgentInWorktree(ctx, agentID, callerWorktree) {
+				callerWorktree, resolveErr := resolveCallerWorktreeFn(pid)
+				if callerWorktree == "" {
+					// Fail-open on resolver failure (PID dead between accept
+					// and CWD inspection, or CWD outside any git root). Log
+					// the security-relevant skip so daemon logs surface it
+					// for forensic review — silent fail-open on a re-bind
+					// path would mask the protection-gap close.
+					slog.Warn("HandleRegister: anonymous-cross-worktree check skipped — caller worktree unresolved",
+						slog.String("agent_id", agentID),
+						slog.String("name", req.Name),
+						slog.Int("caller_pid", pid),
+						slog.Any("err", resolveErr))
+				} else if !h.state.IsAgentInWorktree(ctx, agentID, callerWorktree) {
 					return nil, fmt.Errorf("agent %q is already registered in a different worktree; "+
 						"this caller is in %q — to register a different agent here, choose a unique --name; "+
 						"to move the existing agent's binding, run 'thrum prime' from its registered "+

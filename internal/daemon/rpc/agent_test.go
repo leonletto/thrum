@@ -2793,6 +2793,12 @@ func TestHandleRegister_AnonymousCallerCannotRebindToDifferentWorktree(t *testin
 	// so the l9e1 check enters its resolveCallerWorktreeFn branch.
 	// Override resolveCallerWorktreeFn to return worktreeB without
 	// requiring a live /proc/<pid>/cwd backed by a real git root.
+	//
+	// resolveCallerWorktreeFn is a package-level var; this swap is
+	// race-safe only because tests in this package run sequentially.
+	// If anyone adds t.Parallel() to this test or the sibling
+	// TestHandleRegister_AnonymousCallerBootstrapStillAllowed, the
+	// shared swap needs to move behind a mutex or to a per-call seam.
 	const fakePID = 7777
 	prev := resolveCallerWorktreeFn
 	resolveCallerWorktreeFn = func(pid int) (string, error) {
@@ -2883,7 +2889,10 @@ func TestHandleRegister_AnonymousCallerBootstrapStillAllowed(t *testing.T) {
 		t.Fatalf("bootstrap of fresh_agent must succeed for anonymous caller: %v", err)
 	}
 	regResp, ok := resp.(*RegisterResponse)
-	if !ok || regResp.Status != "registered" {
-		t.Fatalf("bootstrap Status = %v (resp=%+v), want registered", regResp, resp)
+	if !ok {
+		t.Fatalf("expected *RegisterResponse, got %T (%+v)", resp, resp)
+	}
+	if regResp.Status != "registered" {
+		t.Fatalf("Status = %q, want registered", regResp.Status)
 	}
 }
