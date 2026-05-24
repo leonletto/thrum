@@ -89,9 +89,10 @@ jq --arg bp "$SUB_WT_BASE/" \
 # successfully created (success line prints, redirects + identities
 # directories appear — verified by assertions 1-4 below). The
 # exit-code-vs-warn-hint coupling is tracked separately as
-# thrum-9sxc. We accept either exit 0 OR a non-zero exit accompanied
-# by the canonical success line; the four side-effect assertions
-# below are the authoritative indicators.
+# thrum-9sxc — see tests/release/CLAUDE.md "thrum-9sxc" section
+# for the canonical defense-pattern doc. We accept either exit 0 OR
+# a non-zero exit accompanied by the canonical success line; the
+# four side-effect assertions below are the authoritative indicators.
 local create_out create_rc
 create_out=$(
   "$TE" exec --cwd "$SUB_REPO" --clean -- \

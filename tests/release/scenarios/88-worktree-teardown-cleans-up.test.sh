@@ -98,9 +98,11 @@ td_rc=$?
 # non-zero exit even when the operation itself succeeded (the success
 # line prints, the directory IS removed — verified by assertion 2
 # below). The CLI exit-code-vs-warn-hint coupling is tracked
-# separately (thrum-9sxc). The on-disk side-effect check in
-# assertion 2 is the authoritative success indicator; this
-# assertion only verifies the user-facing success line was emitted.
+# separately (thrum-9sxc) — see tests/release/CLAUDE.md
+# "thrum-9sxc" section for the canonical defense-pattern doc. The
+# on-disk side-effect check in assertion 2 is the authoritative
+# success indicator; this assertion only verifies the user-facing
+# success line was emitted.
 if printf '%s' "$td_out" | grep -qE "Worktree ${WT_NAME} removed"; then
   emit_pass "$SID" "teardown-removed-line"
 else
