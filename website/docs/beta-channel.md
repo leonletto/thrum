@@ -284,7 +284,7 @@ state is overwritten in place. No remove step is needed for the Codex plugin.
 > versioned `X.Y.Z-rc.N` string and Codex keys its plugin cache by that version,
 > so an rc.1 → rc.2 re-install populates a fresh cache directory cleanly. The
 > branch-ref install UX gives users a simple "always-latest" path on a given
-> release line, which is the deliberate ergonomic for Codex.
+> release line, which is the deliberate design choice for Codex.
 
 ## Note for Homebrew users
 
