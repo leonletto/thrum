@@ -258,6 +258,11 @@ server all go through it.</p>
 <td>Cross-machine synchronization</td>
 </tr>
 <tr>
+<td><strong>Subscription Dispatcher</strong></td>
+<td>Route notifications to interested clients</td>
+<td>Targeted communication</td>
+</tr>
+<tr>
 <td><strong>State Management</strong></td>
 <td>JSONL log + SQLite projection</td>
 <td>Persistence + fast queries</td>
@@ -321,8 +326,8 @@ messages and agent activity. Served from the same port as WebSocket (default
 <p><strong>MCP Server</strong> (<code>thrum mcp serve</code>): Exposes Thrum functionality as native MCP
 tools over stdio, enabling LLM agents (e.g., Claude Code) to communicate
 directly through MCP protocol without CLI shell-outs. Connects to the daemon via
-Unix socket for RPC and WebSocket for real-time message updates. Provides 4 core
-messaging tools: <code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>, and
+Unix socket for RPC and WebSocket for real-time push notifications. Provides 4
+core messaging tools: <code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>, and
 <code>list_agents</code>.</p>
 <h2>Key Features</h2>
 <h3>1. Persistent Messaging</h3>
@@ -359,7 +364,7 @@ operations happen within the worktree:</p>
 │  2. Fetch remote in worktree                                 │
 │  3. Merge JSONL (append-only dedup by event ID)             │
 │  4. Project new events into SQLite                           │
-│  5. Notify connected WebSocket clients of new events         │
+│  5. Notify subscribers of new events                         │
 │  6. Commit &amp; push local changes in worktree                  │
 │  7. Release lock                                             │
 └─────────────────────────────────────────────────────────────┘</code></pre>
@@ -382,15 +387,28 @@ thrum session end     <span class="hljs-comment"># Finish</span></code></pre>
 <pre><code class="language-bash hljs">thrum agent delete furiosa           <span class="hljs-comment"># Delete a specific agent</span>
 thrum agent cleanup --dry-run        <span class="hljs-comment"># Preview orphaned agents</span>
 thrum agent cleanup --force          <span class="hljs-comment"># Delete all orphaned agents</span></code></pre>
-<h3>4. Live Inbox</h3>
-<p>The daemon pushes new messages to connected WebSocket clients in real time (used
-by the Web UI and the MCP <code>wait_for_message</code> tool). From the CLI, use
-<code>thrum wait</code> to block until a message arrives addressed to you:</p>
+<h3>4. Subscription-Based Notifications</h3>
+<p>The daemon pushes real-time notifications to connected clients when messages
+match an active subscription. From the CLI, use <code>thrum wait</code> to block until a
+message arrives:</p>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Block until a message arrives (30s default timeout)</span>
 thrum <span class="hljs-built_in">wait</span>
 
 <span class="hljs-comment"># Block up to 5 minutes, include messages from the last 30s</span>
 thrum <span class="hljs-built_in">wait</span> --<span class="hljs-built_in">timeout</span> 5m --after -30s</code></pre>
+<p>The underlying <code>subscribe</code>, <code>unsubscribe</code>, and <code>subscriptions.list</code> RPC methods
+are internal — used by the MCP server and WebSocket clients, not the CLI.</p>
+<p>When matching messages arrive, subscribers receive real-time notifications:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;notification.message&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;preview&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Auth implementation complete...&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;matched_subscription&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;match_type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;scope&quot;</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
 <h3>5. Live Git State Tracking</h3>
 <p>The daemon tracks what each agent is working on in real-time:</p>
 <pre><code class="language-sql hljs"><span class="hljs-comment">-- agent_work_contexts table</span>
@@ -438,6 +456,8 @@ work, intelligent handoffs.</p>
 <code>session.setIntent</code>, <code>session.setTask</code></li>
 <li><code>message.send</code>, <code>message.get</code>, <code>message.list</code>, <code>message.edit</code>,
 <code>message.delete</code>, <code>message.markRead</code></li>
+<li><code>subscribe</code>, <code>unsubscribe</code>, <code>subscriptions.list</code> (internal — used by MCP
+server and WebSocket clients)</li>
 <li><code>sync.force</code>, <code>sync.status</code></li>
 <li><code>peer.start_pairing</code>, <code>peer.wait_pairing</code>, <code>peer.join</code>, <code>peer.list</code>,
 <code>peer.status</code>, <code>peer.remove</code>, <code>peer.configure</code>, <code>peer.address_changed</code></li>
@@ -454,7 +474,7 @@ thrum message delete MSG_ID     <span class="hljs-comment"># Delete a message (r
 <h3>8. Coordination Commands</h3>
 <p>Lightweight commands for checking team activity:</p>
 <pre><code class="language-bash hljs">thrum who-has auth.go           <span class="hljs-comment"># Which agents are editing a file?</span>
-thrum ping @impl_auth           <span class="hljs-comment"># Is an agent online? Show last-seen time</span></code></pre>
+thrum ping @reviewer            <span class="hljs-comment"># Is an agent online? Show last-seen time</span></code></pre>
 <p>These query agent work contexts to provide quick answers without full status
 output.</p>
 <h3>9. Agent Context Management</h3>
@@ -514,7 +534,7 @@ works without network.</p>
 </tr>
 <tr>
 <td><code>thrum wait</code></td>
-<td>WebSocket session + <code>notification.message</code> push events</td>
+<td><code>subscribe</code> RPC + push notifications (internal RPC)</td>
 </tr>
 <tr>
 <td><code>thrum agent list --context</code></td>
@@ -907,7 +927,10 @@ agents              # Registered agents (kind: &quot;agent&quot; or &quot;user&q
 sessions            # Agent work periods
 session_scopes      # Session context scopes
 session_refs        # Session context references
+subscriptions       # Push notification subscriptions
 agent_work_contexts # Live git state per session
+groups              # Named collections for targeted messaging
+group_members       # Group membership (agents and roles)
 events              # Sequence-ordered, deduplicated event log (for sync)
 sync_checkpoints    # Per-peer sync progress tracking
 command_queue       # Queue dispatch for tmux sessions
@@ -917,13 +940,28 @@ daemon_identity     # Local daemon identity cache (v23)
 telegram_msg_map    # Telegram ↔ Thrum message ID map (v24)
 schema_version      # Migration tracking</code></pre>
 <h3>Schema Version</h3>
-<p>Current version: <strong>24</strong></p>
+<p>Current version: <strong>36</strong></p>
+<blockquote>
+<p><strong>v0.10.6 note:</strong> migrations 25-36 are forward-ported from the v0.11 substrate
+work (<code>thrum-agents</code> + <code>feature/b-b1-impl</code> branches) so the v0.10.6 binary can
+open AND co-reside on DBs previously touched by a v0.11-substrate binary on
+multi-binary worktree machines. The new tables/columns (scheduler, agent
+lifecycle, reminders, email, memories, API-error remediation,
+<code>pending_route_resolution</code>) are intentionally <strong>dead-end on v0.10.6</strong> — no
+consumer code reads from them. <code>createTables</code>/<code>createIndexes</code> carry full v36
+parity, so a fresh DB created by a v0.10.6 binary stamps v36 with every table
+present (a co-resident v0.11 binary then runs no migration and must not crash
+on a missing table). v29 is a deliberate gap (reserved for substrate
+follow-ups); <code>runMigrations</code> handles gapped sequences naturally.</p>
+</blockquote>
 <p>Key migrations:</p>
 <ul>
 <li>v3 -&gt; v4: Impersonation support (<code>authored_by</code>, <code>disclosed</code> columns)</li>
 <li>v5 -&gt; v6: Agent work contexts table, message reads, session scopes/refs</li>
 <li>v6 -&gt; v7: Event ID backfill (ULID <code>event_id</code> on all JSONL events), JSONL
 sharding migration</li>
+<li>v7 -&gt; v8: Groups feature (<code>groups</code> and <code>group_members</code> tables), <code>@everyone</code>
+built-in group</li>
 <li>v8 -&gt; v9: <code>events</code> and <code>sync_checkpoints</code> tables added for Tailscale-style
 daemon-to-daemon sync (sequence-ordered deduplicated event log)</li>
 <li>v9 -&gt; v10: <code>file_changes</code> column added to <code>agent_work_contexts</code></li>
@@ -954,6 +992,28 @@ daemon&#39;s identity block, mirrored from <code>.thrum/config.json</code>)</li>
 <li>v23 -&gt; v24: <code>telegram_msg_map</code> table added (durable Telegram message ID ↔
 Thrum message ID mapping; survives daemon restart so in-flight permission
 approvals route correctly)</li>
+<li>v24 -&gt; v25: <code>scheduler_job_state</code> + <code>scheduler_job_events</code> tables added (v0.11
+substrate forward-port; dead-end on v0.10.5)</li>
+<li>v25 -&gt; v26: agents table extended with <code>mode</code>, <code>identity</code>, and 4 runtime
+columns (<code>auto_respawn_enabled</code>, <code>auto_respawn_disabled_at</code>,
+<code>state_md_parse_failed_at</code>, <code>last_pane_alive_at</code>) (v0.11 forward-port)</li>
+<li>v26 -&gt; v27: <code>agent_lifecycle_events</code> append-only journal (v0.11 forward-port)</li>
+<li>v27 -&gt; v28: <code>reminders</code> polymorphic table (time-triggered + condition-
+triggered reminder substrate; v0.11 forward-port)</li>
+<li>v28 -&gt; v29: deliberate gap (reserved for substrate follow-ups)</li>
+<li>v29 -&gt; v30: <code>email_msg_seen</code> table (v0.11 D-B1 forward-port)</li>
+<li>v30 -&gt; v31: <code>email_outbound_queue</code> table (v0.11 D-B1 forward-port)</li>
+<li>v31 -&gt; v32: <code>email_peer_rate_state</code> table with partial index on <code>paused_at</code>
+(v0.11 D-B1 forward-port)</li>
+<li>v32 -&gt; v33: <code>pending_route_resolution</code> column added to <code>messages</code> table
+(<code>thrum-s6os</code> sync re-architecture forward-port; dead-end on v0.10.6)</li>
+<li>v33 -&gt; v34: <code>memories</code> + <code>memory_scopes</code> tables and six indexes (E16 memory
+substrate forward-port; dead-end on v0.10.6)</li>
+<li>v34 -&gt; v35: <code>agent_lifecycle_events.event_kind</code> CHECK constraint added via an
+existence-guarded table rebuild (SQLite cannot <code>ALTER ... ADD CHECK</code>; v0.11
+forward-port; dead-end on v0.10.6)</li>
+<li>v35 -&gt; v36: <code>agent_api_error_remediation</code> table (per-agent API-error
+auto-remediation state; v0.11 forward-port; dead-end on v0.10.6)</li>
 </ul>
 <h3>Initialization</h3>
 <pre><code class="language-go hljs">db, _ := schema.OpenDB(<span class="hljs-string">&quot;thrum.db&quot;</span>)
@@ -977,7 +1037,13 @@ schema.BackfillEventID(syncDir)</code></pre>
 </ul>
 <h2>Projection (<code>internal/projection</code>)</h2>
 <h3>Event Replay</h3>
-<p>The projector rebuilds SQLite from sharded JSONL event logs:</p>
+<p>The projector exposes a <code>Rebuild(syncDir)</code> API that rebuilds SQLite from sharded
+JSONL event logs. <strong>NOTE (thrum-1gar):</strong> as of v0.10.x the daemon&#39;s startup path
+(<code>NewState</code> in <code>internal/daemon/state</code>) does NOT call <code>Rebuild()</code> — the API is
+available for explicit invocation but the daemon treats SQLite as
+authoritative-but-backed-up on startup, not as a projection that gets
+re-derived. See thrum-rtlt for the event-sourcing rework that would make
+startup-rebuild a first-class recovery path.</p>
 <pre><code class="language-go hljs">db, _ := schema.OpenDB(<span class="hljs-string">&quot;thrum.db&quot;</span>)
 schema.InitDB(db)
 
@@ -1021,7 +1087,15 @@ ordering.</p>
 </tr>
 <tr>
 <td><code>thread.updated</code></td>
-<td>Notify connected WebSocket clients of thread activity</td>
+<td>Notify subscribers of thread activity (UI push)</td>
+</tr>
+<tr>
+<td><code>group.create</code></td>
+<td>Insert into groups</td>
+</tr>
+<tr>
+<td><code>group.delete</code></td>
+<td>Delete group and members</td>
 </tr>
 <tr>
 <td><code>agent.register</code></td>
@@ -1109,8 +1183,9 @@ dispatch operations.</p>
 <ul>
 <li><strong>JSONL event logs</strong> — <code>events.jsonl</code> and <code>messages/*.jsonl</code> copied from the
 sync worktree (source of truth)</li>
-<li><strong>Local-only SQLite tables</strong> — <code>message_reads</code> and <code>sync_checkpoints</code> exported
-as JSONL (these are not in the git-synced JSONL logs)</li>
+<li><strong>Local-only SQLite tables</strong> — <code>message_reads</code>, <code>subscriptions</code>, and
+<code>sync_checkpoints</code> exported as JSONL (these are not in the git-synced JSONL
+logs)</li>
 <li><strong>Config files</strong> — <code>.thrum/config.json</code> and related runtime config</li>
 </ul>
 <p><strong>Backup layout</strong> (<code>~/.thrum-backups/&lt;repo&gt;/</code>):</p>
@@ -1126,15 +1201,26 @@ backup and receives <code>THRUM_BACKUP_DIR</code>, <code>THRUM_BACKUP_REPO</code
 <code>THRUM_BACKUP_CURRENT</code> env vars.</p>
 <p><strong>Restore</strong> creates a safety backup of existing data first, then copies JSONL
 back to the sync worktree, imports local tables into SQLite, and removes
-<code>messages.db</code> so the projector rebuilds from JSONL on the next daemon start.
-Plugin restore commands run after the core restore.</p>
+<code>messages.db</code>. <strong>NOTE (thrum-1gar):</strong> the daemon&#39;s <code>NewState</code> does NOT call
+<code>Projector.Rebuild()</code> on startup today — the removed <code>messages.db</code> comes up
+BLANK on the next daemon start and only fills as NEW events arrive. Restore is
+only useful for the local-tables + JSONL files it replaces; historical
+SQLite-projected state (messages, agents, groups) is not recovered until the
+event-sourcing rework lands (thrum-rtlt). Plugin restore commands run after the
+core restore.</p>
 <h2>Upgrade Safety</h2>
 <p>Starting with v0.9.0, the daemon writes defensive backup files automatically on
 the first start after an upgrade. No user action needed — the files are silent
 safety nets.</p>
 <h3>Automatic Backup Files</h3>
-<p>Three backup files are written (backup-once pattern: never overwritten on
-subsequent restarts after the first successful upgrade):</p>
+<p>Backup files are written before destructive operations. The identity and peers
+backups use a backup-once pattern (never overwritten after the first). The
+schema-migration backup is <strong>timestamped and always-fresh</strong> (since v0.10.6):
+each migration event writes a distinct, UTC-sortable snapshot, so repeated
+migrations keep separate, time-ordered recovery points rather than a single
+file. A migration backup failure now <strong>halts the migration</strong> — <code>Migrate()</code>
+returns an error and the daemon refuses to start until disk space / permissions
+are fixed, rather than logging and proceeding without a recovery snapshot.</p>
 <table>
 <thead>
 <tr>
@@ -1155,26 +1241,58 @@ subsequent restarts after the first successful upgrade):</p>
 </tr>
 <tr>
 <td><code>schema.Migrate</code> runs any migration step</td>
-<td><code>thrum.db.pre-migration-v&lt;N&gt;-bak</code> (plus <code>-shm</code> and <code>-wal</code> sidecars)</td>
+<td><code>thrum.db.pre-migration-v&lt;N&gt;-&lt;UTC&gt;.bak</code> (plus <code>-shm</code> and <code>-wal</code> sidecars)</td>
 <td>same directory as <code>thrum.db</code></td>
 </tr>
 </tbody></table>
-<p>You can delete these files after a successful upgrade. If something goes wrong
-mid-migration, they&#39;re how you get back.</p>
+<p>The UTC timestamp form is <code>YYYYMMDDTHHMMSSZ</code> (e.g.
+<code>thrum.db.pre-migration-v32-20260522T181600Z.bak</code>). You can delete these files
+after a successful upgrade. If something goes wrong mid-migration, they&#39;re how
+you get back.</p>
 <h3>Downgrade Guard</h3>
 <p><code>Migrate()</code> refuses to start if the database schema version exceeds the binary&#39;s
-<code>CurrentVersion</code>. Error text:</p>
-<pre><code class="language-text hljs">database schema is version N, this binary supports up to M — cannot downgrade;
-use a newer binary or delete the database to start fresh</code></pre>
+<code>CurrentVersion</code>. Error text (v0.10.5+ — see &quot;Multi-Binary Worktree Footgun&quot;
+below for the why):</p>
+<pre><code class="language-text hljs">database schema is version N, this binary supports up to M — cannot downgrade.
+
+Recovery options:
+  1. Re-install a newer binary that supports schema vN or above:
+       cd &lt;worktree-with-newer-branch&gt; &amp;&amp; make install
+  2. Delete the database to start fresh (LOSES local message history + spool):
+       thrum daemon stop   # release file locks first
+       rm &lt;ABS_PATH&gt;
+       rm &lt;ABS_PATH&gt;-wal &lt;ABS_PATH&gt;-shm    # if present
+  3. See CLAUDE.md § &quot;Multi-binary worktree footgun&quot; for prevention</code></pre>
 <p>This is the first hard stop Thrum has ever had for schema mismatches.
 Previously, running an older binary against a migrated database would silently
-corrupt state. Now it fails loudly before touching anything.</p>
+corrupt state. Now it fails loudly before touching anything — and the expanded
+recovery hints give operators an actionable path forward without hunting through
+code.</p>
+<h3>Multi-Binary Worktree Footgun</h3>
+<p>Each Thrum worktree builds its own <code>bin/thrum</code>, and each build can support a
+different DB schema range. The shared daemon binary at <code>~/.local/bin/thrum</code> gets
+replaced by whichever worktree most recently ran <code>make install</code>. When a
+<code>make install</code> from a worktree on a newer-schema branch (e.g. <code>thrum-agents</code>
+substrate work) migrates the on-disk DB up, a later <code>make install</code> from a
+worktree on an older-schema branch (e.g. <code>release/v0.10.x</code>) ships a binary that
+fails the Downgrade Guard above.</p>
+<p><strong>Why it happens:</strong> the DB lives under <code>&lt;repo-root&gt;/.thrum/var/messages.db</code> and
+is shared across every worktree&#39;s binary (worktrees redirect their <code>.thrum/</code> to
+the main repo&#39;s <code>.thrum/</code> via the <code>.thrum/redirect</code> file). Schema migrations are
+one-way: newer binaries can migrate up; older binaries cannot migrate down.</p>
+<p><strong>Avoid:</strong> Only <code>make install</code> from a worktree whose schema <code>CurrentVersion</code> is
+at least the on-disk DB&#39;s schema. For local-iteration inside a single worktree,
+prefer <code>make dev</code> (per-worktree <code>./bin/thrum</code> + restart of that worktree&#39;s
+daemon) over <code>make install</code>.</p>
+<p><strong>Recover:</strong> the Downgrade Guard error walks you through it; the in-repo
+CLAUDE.md § &quot;Multi-binary worktree footgun&quot; carries the dev-facing expansion.</p>
 <h3>Recovering from a Failed Upgrade</h3>
 <p>If a migration goes wrong:</p>
 <ol>
 <li>Stop the daemon.</li>
-<li>Rename <code>thrum.db.pre-migration-v&lt;N&gt;-bak</code> back to <code>thrum.db</code> (and the <code>-shm</code>
-and <code>-wal</code> sidecars if they exist).</li>
+<li>Rename the most recent <code>thrum.db.pre-migration-v&lt;N&gt;-&lt;UTC&gt;.bak</code> snapshot back
+to <code>thrum.db</code> (and the <code>-shm</code> and <code>-wal</code> sidecars if they exist). The UTC
+suffix sorts lexically, so the highest-sorting name is the newest backup.</li>
 <li>Run the older binary.</li>
 </ol>
 <p>The downgrade guard will fire on the older binary if the migration already

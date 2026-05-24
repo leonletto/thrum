@@ -25,28 +25,42 @@ they're parameterized over `VERSION` and the release branch.
 ## Stable-track current pre-release
 
 > **Current stable-track pre-release:
-> [`v0.10.6-rc.1`](https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.1)**
-> (in soak). Headline: the **sync re-architecture** (thrum-s6os) — the
-> cross-machine wire stream is now event-triggered rather than 60-second-polled,
+> [`v0.10.6-rc.2`](https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.2)**
+> (tagged 2026-05-24, in soak). **rc.2 adds two P1 fixes** on top of rc.1: a
+> security fix (thrum-l9e1) that closes a cross-worktree agent re-bind gap — the
+> daemon now fail-closes when an anonymous register from worktree B would
+> overwrite an identity already claimed by worktree A — and a daemon-sync fix
+> (thrum-roz1) that detaches the sync compactor from the caller's RPC context,
+> ending the `prime-fail-on-restart` cascade seen on long-uptime daemons. Also
+> in rc.2: a `thrum quickstart` precedence fix (positional `<name>` now
+> accepted; `--name` flag → positional → `THRUM_NAME` → identity-file), a
+> worktree CLI fix that lets `thrum worktree create --branch <existing>` attach
+> to an existing branch instead of erroring on `-b` conflict, and recovery-doc
+> corrections in `architecture.md`. Carve-outs from the gate (both pre-existing,
+> non-regressions): a wizard-SIGINT test flake and release-test harness
+> fragility.
+>
+> The v0.10.6 story still leads with the **sync re-architecture** (thrum-s6os):
+> the cross-machine wire stream is event-triggered rather than 60-second-polled,
 > idle daemons produce zero commits on `a-sync`, and busy clusters stop
 > accumulating heartbeat noise. ⚠ **Mixed-cluster warning:** v0.10.5 peers
 > cannot read messages from upgraded v0.10.6 peers (v0.10.6 writes only to the
-> new `messages-v2/` path); upgrade all peers in one window. Also new:
-> timestamped pre-migration DB backups (with a hard halt if backup fails), an
-> RC-tag plugin distribution scheme so `/plugin update` upgrades cleanly through
-> the rc pipeline, two new daemon config keys (`events_retention_days`,
-> `compaction_size_threshold_mb`), and skill-review-loop improvements
-> (`verify-against-source`, Phase 0 review gate). Full notes:
-> [What's New](whats-new.md) and the
+> new `messages-v2/` path); upgrade all peers in one window. Other v0.10.6
+> changes: timestamped pre-migration DB backups (with a hard halt if backup
+> fails), an RC-tag plugin distribution scheme so `/plugin update` upgrades
+> cleanly through the rc pipeline, two new daemon config keys
+> (`events_retention_days`, `compaction_size_threshold_mb`), and
+> skill-review-loop improvements (`verify-against-source`, Phase 0 review gate).
+> Full notes: [What's New](whats-new.md) and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-### Quick install for `v0.10.6-rc.1`
+### Quick install for `v0.10.6-rc.2`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.1 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.2 sh
 
 # Codex plugin (matches release/v0.10.6)
 THRUM_INSTALL_REF=release/v0.10.6 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.6/codex-plugin/plugins/thrum/scripts/install-plugin.sh)

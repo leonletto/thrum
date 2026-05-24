@@ -7,6 +7,15 @@ machine-readable history lives in
 
 ## v0.10.6 — In Soak (RC)
 
+**v0.10.6-rc.2** was tagged 2026-05-24 and is the current pre-release. rc.2 adds
+two P1 fixes on top of rc.1 — a daemon **security** fix (thrum-l9e1) that
+fail-closes anonymous cross-worktree agent re-binds, and a sync fix (thrum-roz1)
+that detaches the compactor from the caller's RPC context and ends the
+`prime-fail-on-restart` cascade — plus a `thrum quickstart` precedence
+correction, a `thrum worktree create --branch <existing>` attach fix, and
+recovery-doc corrections. See the [Beta Channel](beta-channel.md) page for the
+full rc.2 callout + install commands.
+
 v0.10.6's headline is a **sync re-architecture** (thrum-s6os): the cross-machine
 wire stream now derives from per-agent and per-bridge-group state files rather
 than from a synced event journal. The 60-second polling ticker is gone — sync is

@@ -695,6 +695,15 @@ inside a git repository. Pass <code>--force</code> to override for non-git envir
 daemon-start step, <code>thrum init</code> exits early with an OS-appropriate install hint
 (<code>brew install tmux</code> on macOS, <code>apt install tmux</code> on Debian/Ubuntu). Install
 tmux and re-run, or pass <code>--no-daemon</code> to skip the daemon-start step entirely.</p>
+<p><strong>settings.json merge (v0.10.5+):</strong> <code>thrum init</code> now JSON-merges
+<code>.claude/settings.json</code> when it exists, rather than skipping the file entirely.
+This preserves third-party hook entries (including those written by
+<code>bd setup claude</code>) while injecting Thrum&#39;s own hooks alongside them. The
+operation is idempotent — re-running <code>thrum init</code> produces no diff when Thrum&#39;s
+entries are already present. When <code>bd</code> is on <code>PATH</code>, the beads <code>SessionStart</code>
+hook is auto-installed based on detection rather than a hardcoded default.
+Per-worktree redirect consistency is enforced via <code>worktree.EnsureRedirects</code> on
+each init run.</p>
 <p>This command emits contextual hints — see <a href="cli-hints.html">CLI Hints</a>.</p>
 <pre><code class="language-text hljs">thrum init [flags]</code></pre>
 <table>
@@ -903,23 +912,11 @@ agent to consume.</p>
 </tr>
 </thead>
 <tbody><tr>
-<td><code>--force</code></td>
-<td>Bypass G5 ownership guard (use with care)</td>
-<td><code>false</code></td>
-</tr>
-<tr>
 <td><code>--quiet</code></td>
 <td>Suppress hint output</td>
 <td><code>false</code></td>
 </tr>
 </tbody></table>
-<p><strong>G5 guard (prime_ownership):</strong> <code>thrum prime</code> must be run from the top-level AI
-runtime process, not from inside a sub-agent (a tool call spawned within a
-Claude Code session). If a sub-agent invokes <code>thrum prime</code>, the guard detects
-that the closest runtime ancestor in the caller&#39;s PID chain is not the owner
-recorded in the identity file and refuses the call. Run <code>thrum prime</code> from the
-outermost runtime session. Pass <code>--force</code> only when you understand the ownership
-model and are intentionally bypassing this check.</p>
 <p>Example:</p>
 <pre><code class="language-text hljs">$ thrum prime
 # Outputs session context block to stdout
@@ -953,8 +950,10 @@ the hint.</p>
 <p>See also: <a href="identity.html">Identity System</a>, <a href="session-restart.html">Session Restart</a>.</p>
 <h3>thrum quickstart</h3>
 <p>Register, start a session, and set an initial intent in one step. If the agent
-is already registered, it re-registers automatically. Supports agent naming via
-the <code>--name</code> flag or <code>THRUM_NAME</code> environment variable.</p>
+is already registered, it re-registers automatically. The agent name can be
+supplied as a positional argument, via the <code>--name</code> flag, or via the
+<code>THRUM_NAME</code> environment variable. Precedence (highest → lowest): <code>--name</code> flag
+→ positional → <code>THRUM_NAME</code> → identity-file name fallback.</p>
 <p><strong>G1a guard (quickstart_self_rename):</strong> If the caller&#39;s ancestor PID chain
 already owns an identity in this directory (i.e., this runtime has already
 registered), attempting to quickstart under a <strong>different</strong> name is refused —
@@ -967,7 +966,8 @@ no-op, used by <code>scripts/thrum-startup.sh</code> on every SessionStart.</p>
 a live process in a different worktree, the registration is refused. Pass
 <code>--force</code> to displace the existing identity (use only when you are certain the
 other process has exited), or choose a different name.</p>
-<pre><code class="language-text hljs">thrum quickstart --name AGENT_NAME --role ROLE --module MODULE [flags]</code></pre>
+<pre><code class="language-text hljs">thrum quickstart [AGENT_NAME] --role ROLE --module MODULE [flags]
+thrum quickstart --name AGENT_NAME --role ROLE --module MODULE [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -1025,14 +1025,17 @@ other process has exited), or choose a different name.</p>
 <p>Requires <code>--role</code> and <code>--module</code> (via flags or <code>THRUM_ROLE</code>/<code>THRUM_MODULE</code> env
 vars). The <code>--runtime</code> value is written to <code>preferred_runtime</code> in the identity
 file.</p>
-<p>The <code>THRUM_NAME</code> environment variable takes priority over the <code>--name</code> flag.</p>
+<p>Name resolution precedence (highest → lowest): <code>--name</code> flag, positional
+argument, <code>THRUM_NAME</code> env-var, identity-file name fallback. The lenient
+positional form follows the Unix <code>tool [name]</code> convention; the flag wins when
+both are supplied.</p>
 <p>Example:</p>
-<pre><code class="language-text hljs">$ thrum quickstart --name implementer_auth --role implementer --module auth --intent &quot;Fixing token refresh&quot;
-✓ Registered as @implementer (implementer_35HV62T9B9)
+<pre><code class="language-text hljs">$ thrum quickstart implementer_auth --role implementer --module auth --intent &quot;Fixing token refresh&quot;
+✓ Registered as @implementer (implementer_auth)
 ✓ Session started: ses_01HXF2A9...
 ✓ Intent set: Fixing token refresh
 
-# With a human-readable name
+# Equivalent with the explicit flag
 $ thrum quickstart --name furiosa --role implementer --module auth --intent &quot;Fixing token refresh&quot;
 ✓ Registered as @furiosa (furiosa)
 ✓ Session started: ses_01HXF2A9...
@@ -1119,8 +1122,13 @@ have an active session.</p>
 </thead>
 <tbody><tr>
 <td><code>--to</code></td>
-<td>Recipient — <code>@agent_name</code> or <code>@everyone</code> for broadcast</td>
+<td>Recipient — <code>@agent_name</code> or <code>@everyone</code> (mutex with <code>--broadcast</code>)</td>
 <td></td>
+</tr>
+<tr>
+<td><code>--broadcast</code></td>
+<td>Fan out to the entire team (mutex with <code>--to</code>)</td>
+<td><code>false</code></td>
 </tr>
 <tr>
 <td><code>--scope</code></td>
@@ -1148,20 +1156,25 @@ have an active session.</p>
 <td><code>markdown</code></td>
 </tr>
 </tbody></table>
-<p>The <code>--to</code> flag adds the recipient as a mention, making it a directed message.
-Recipients are usually agents (<code>@alice</code>, <code>@reviewer_main</code>); <code>@everyone</code> is the
-critical-broadcast target. Role-name targets like <code>@reviewer</code> also work but are
-discouraged because they fan out to every agent with that role and cause
-cross-talk.</p>
+<p>A recipient flag is <strong>required</strong>. <code>thrum send &#39;msg&#39;</code> with no <code>--to</code> or
+<code>--broadcast</code> hard-errors (exit 1) with a conversational prompt offering both
+paths — the previous silent-broadcast default was a footgun (thrum-t698).
+<code>--to @agent_name</code> is the canonical directed-send form (matches CLAUDE.md
+convention); <code>--broadcast</code> is the explicit team-wide fanout form;
+<code>--to @everyone</code> continues to work as the legacy keyword form.</p>
 <p>This command emits contextual hints — see <a href="cli-hints.html">CLI Hints</a>.</p>
 <p>Example:</p>
-<pre><code class="language-text hljs">$ thrum send &quot;PR ready for review&quot; --to @reviewer_main --scope module:auth --ref pr:42
+<pre><code class="language-text hljs">$ thrum send &quot;PR ready for review&quot; --to @reviewer --scope module:auth --ref pr:42
 ✓ Message sent: msg_01HXE8Z7...
   Created: 2026-02-03T10:00:00Z
 
-# Critical broadcast to all agents
+# Explicit team-wide fanout (preferred form for broadcasts)
+$ thrum send &quot;Deploy complete&quot; --broadcast
+✓ Message sent: msg_01HXE8Z8...
+
+# Legacy keyword form — still works
 $ thrum send &quot;Deploy complete&quot; --to @everyone
-✓ Message sent: msg_01HXE8Z8...</code></pre>
+✓ Message sent: msg_01HXE8Z9...</code></pre>
 <h3>thrum reply</h3>
 <p>Reply to a message by ID. Creates a reply-to reference so replies are grouped
 with the original message in your inbox. The replied-to message is marked as
@@ -1209,8 +1222,18 @@ are automatically marked as read (unless filtering with <code>--unread</code>).<
 <td><code>false</code></td>
 </tr>
 <tr>
+<td><code>--from</code></td>
+<td>Filter to messages from a specific sender (format: <code>@agent</code> or <code>agent</code>)</td>
+<td></td>
+</tr>
+<tr>
 <td><code>--unread</code></td>
 <td>Only unread messages</td>
+<td><code>false</code></td>
+</tr>
+<tr>
+<td><code>--all</code>, <code>-a</code></td>
+<td>Show all messages (disable auto-filtering)</td>
 <td><code>false</code></td>
 </tr>
 <tr>
@@ -1478,7 +1501,21 @@ AGENT          SESSION      BRANCH               COMMITS  FILES INTENT          
 @implementer   ses_01HXF... feature/auth               3      5 Fixing token refresh           5m ago</code></pre>
 <h3>thrum agent whoami</h3>
 <p>Show the current agent identity and active session.</p>
-<pre><code class="language-text hljs">thrum agent whoami</code></pre>
+<pre><code class="language-text hljs">thrum agent whoami [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--field &lt;name&gt;</code></td>
+<td>Print a single field&#39;s value (e.g. <code>agent_id</code>, <code>tmux_alive</code>) and exit</td>
+<td></td>
+</tr>
+</tbody></table>
 <p>Identity is resolved from: (1) command-line flags (<code>--role</code>, <code>--module</code>), (2)
 environment variables (<code>THRUM_ROLE</code>, <code>THRUM_MODULE</code>, <code>THRUM_NAME</code>), (3) identity
 files in <code>.thrum/identities/</code> directory.</p>
@@ -1489,7 +1526,10 @@ Role:      @implementer
 Module:    auth
 Display:   Auth Developer
 Source:    environment
-Session:   ses_01HXF2A9... (2h ago)</code></pre>
+Session:   ses_01HXF2A9... (2h ago)
+
+$ thrum agent whoami --field agent_id
+implementer_35HV62T9B9</code></pre>
 <h3>thrum agent delete</h3>
 <p>Delete an agent and all its associated data. This removes the identity file
 (<code>identities/{name}.json</code>), message file (<code>messages/{name}.jsonl</code>), and the
@@ -2137,9 +2177,9 @@ active, displays &quot;Mode: local-only&quot; instead of &quot;Mode: normal&quot
 <h3>thrum sync force</h3>
 <p>Trigger an immediate sync (non-blocking). Fetches new messages from the remote
 and pushes local messages. Routine sync is event-triggered (as of v0.10.6 — no
-polling interval); <code>sync force</code> exists for the moments you want to confirm
-state immediately. When local-only mode is active, displays
-&quot;local-only (remote sync disabled)&quot;.</p>
+polling interval); <code>sync force</code> exists for the moments you want to confirm state
+immediately. When local-only mode is active, displays &quot;local-only (remote sync
+disabled)&quot;.</p>
 <pre><code class="language-text hljs">thrum sync force</code></pre>
 <h2>Backup &amp; Restore</h2>
 <h3>thrum backup</h3>
@@ -3068,11 +3108,6 @@ the main worktree into a &quot;feature&quot; worktree.</p>
 <td>Runtime preset: <code>claude</code>, <code>codex</code>, <code>cursor</code>, <code>gemini</code>, <code>opencode</code>, <code>auggie</code></td>
 <td></td>
 </tr>
-<tr>
-<td><code>--force</code></td>
-<td>Overwrite existing runtime config files</td>
-<td><code>false</code></td>
-</tr>
 </tbody></table>
 <p>The worktree is created at <code>worktrees.base_path/&lt;name&gt;</code> (default:
 <code>~/.thrum/worktrees/&lt;project&gt;/&lt;name&gt;</code>). The name cannot contain <code>/</code>, <code>\</code>, or
@@ -3106,11 +3141,25 @@ Worktree created: ~/.workspaces/thrum/auth-feature
 <p>See <a href="#thrum-worktree-create">thrum worktree create</a> for the full flag table.</p>
 <h3>thrum worktree teardown</h3>
 <p>Remove a worktree and clean up Thrum artifacts (identity files).</p>
-<pre><code class="language-text hljs">thrum worktree teardown &lt;name&gt;</code></pre>
+<pre><code class="language-text hljs">thrum worktree teardown &lt;name&gt; [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--delete-branch</code></td>
+<td>Delete the worktree&#39;s branch after removing the worktree (branch stays by default)</td>
+<td><code>false</code></td>
+</tr>
+</tbody></table>
 <p>Example:</p>
 <pre><code class="language-text hljs">$ thrum worktree teardown api-feature
 ✓ Cleaned up 1 identity file(s)
-✓ Worktree removed: ~/.thrum/worktrees/thrum/api-feature</code></pre>
+✓ Worktree removed: ~/.workspaces/thrum/api-feature</code></pre>
 <h3>thrum worktree list</h3>
 <p>List git worktrees with Thrum agent info. Reads identity files from each
 worktree to show which agent is active there.</p>
@@ -3211,7 +3260,7 @@ mon_01KNTF2A9...             app-errors   running    @coordinator   3h42m      1
 mon_01KNTG3B1...             ci-failures  running    @team          15m30s     19033</code></pre>
 <h3>thrum monitor show</h3>
 <p>Show full details for a monitor job. Env var values are always redacted.</p>
-<pre><code class="language-text hljs">thrum monitor show &lt;id&gt;</code></pre>
+<pre><code class="language-text hljs">thrum monitor show &lt;id|name&gt;</code></pre>
 <p>Example:</p>
 <pre><code class="language-text hljs">$ thrum monitor show mon_01KNTF2A9
 ID:       mon_01KNTF2A9...
@@ -3228,14 +3277,14 @@ Env:
 <h3>thrum monitor stop</h3>
 <p>Stop a running monitor job. Sends SIGTERM, waits 5 seconds, then sends SIGKILL
 if still running.</p>
-<pre><code class="language-text hljs">thrum monitor stop &lt;id&gt;</code></pre>
+<pre><code class="language-text hljs">thrum monitor stop &lt;id|name&gt;</code></pre>
 <p>Example:</p>
 <pre><code class="language-text hljs">$ thrum monitor stop mon_01KNTF2A9
 Stopped monitor mon_01KNTF2A9...</code></pre>
 <h3>thrum monitor logs</h3>
 <p>Show the most recent matched output lines for a monitor job (historical lookup
 from the messages table, not live tail).</p>
-<pre><code class="language-text hljs">thrum monitor logs &lt;id&gt; [flags]</code></pre>
+<pre><code class="language-text hljs">thrum monitor logs &lt;id|name&gt; [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -3258,7 +3307,7 @@ from the messages table, not live tail).</p>
 2026-04-10T10:02:01Z  FATAL: out of memory, shutting down</code></pre>
 <h3>thrum monitor restart</h3>
 <p>Restart a stopped or dead monitor job. Returns a new monitor ID.</p>
-<pre><code class="language-text hljs">thrum monitor restart &lt;id&gt;</code></pre>
+<pre><code class="language-text hljs">thrum monitor restart &lt;id|name&gt;</code></pre>
 <p>Example:</p>
 <pre><code class="language-text hljs">$ thrum monitor restart mon_01KNTF2A9
 Restarted — new ID: mon_01KNTH4C2...</code></pre>

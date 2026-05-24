@@ -162,7 +162,7 @@
       "plugin",
       "substrate"
     ],
-    "lastUpdated": "2026-05-23"
+    "lastUpdated": "2026-05-24"
   },
   {
     "path": "identity.html",
@@ -669,7 +669,7 @@
       "migration",
       "version"
     ],
-    "lastUpdated": "2026-05-23"
+    "lastUpdated": "2026-05-24"
   },
   {
     "path": "quickstart.html",
@@ -763,7 +763,7 @@
     "category": "reference",
     "order": 999,
     "tags": [],
-    "lastUpdated": "2026-04-24"
+    "lastUpdated": "2026-05-20"
   },
   {
     "path": "rpc-api.html",

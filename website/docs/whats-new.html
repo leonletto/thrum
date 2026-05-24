@@ -233,6 +233,14 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG.md</a>.</p>
 <h2>v0.10.6 — In Soak (RC)</h2>
+<p><strong>v0.10.6-rc.2</strong> was tagged 2026-05-24 and is the current pre-release. rc.2
+adds two P1 fixes on top of rc.1 — a daemon <strong>security</strong> fix (thrum-l9e1) that
+fail-closes anonymous cross-worktree agent re-binds, and a sync fix
+(thrum-roz1) that detaches the compactor from the caller&#39;s RPC context and ends
+the <code>prime-fail-on-restart</code> cascade — plus a <code>thrum quickstart</code> precedence
+correction, a <code>thrum worktree create --branch &lt;existing&gt;</code> attach fix, and
+recovery-doc corrections. See the <a href="beta-channel.html">Beta Channel</a> page for the
+full rc.2 callout + install commands.</p>
 <p>v0.10.6&#39;s headline is a <strong>sync re-architecture</strong> (thrum-s6os): the cross-machine
 wire stream now derives from per-agent and per-bridge-group state files rather
 than from a synced event journal. The 60-second polling ticker is gone — sync is
@@ -246,12 +254,11 @@ volume.</p>
 silently miss messages authored by upgraded peers until they upgrade. v0.10.6
 peers retain a legacy-read fallback for v0.10.5-authored messages, so upgraded
 peers stay fully functional in mixed clusters — but the asymmetry means you
-should <strong>upgrade every peer in one window</strong> rather than running mixed
-long-term.</p>
+should <strong>upgrade every peer in one window</strong> rather than running mixed long-term.</p>
 <p>Other notable v0.10.6 changes: pre-migration DB backups are now timestamped
-(<code>.pre-migration-v&lt;N&gt;-&lt;UTC&gt;.bak</code>) and a failed backup halts the migration so
-you can&#39;t end up without a recovery snapshot; an RC-tag plugin distribution
-scheme (per-RC <code>X.Y.Z-rc.N</code> suffix on <code>plugin.json</code> + <code>marketplace.json</code>) lets
+(<code>.pre-migration-v&lt;N&gt;-&lt;UTC&gt;.bak</code>) and a failed backup halts the migration so you
+can&#39;t end up without a recovery snapshot; an RC-tag plugin distribution scheme
+(per-RC <code>X.Y.Z-rc.N</code> suffix on <code>plugin.json</code> + <code>marketplace.json</code>) lets
 <code>/plugin update</code> upgrade Claude Code plugins cleanly through the rc pipeline
 with no uninstall/reinstall; two new daemon config keys
 (<code>events_retention_days</code>, <code>compaction_size_threshold_mb</code>) tune the local
@@ -260,8 +267,8 @@ keeps a v0.10.6 binary openable on DBs touched by v0.11-substrate work
 (intentionally dead-end here — no consumer code reads them); and the skill
 review loop gained a <code>verify-against-source</code> prose-conformance reviewer plus a
 Phase 0 review gate in <code>project-setup</code>. The <code>daemon.sync_interval</code> config key
-and <code>DefaultSyncInterval = 60</code> constant are removed; legacy configs are
-silently ignored.</p>
+and <code>DefaultSyncInterval = 60</code> constant are removed; legacy configs are silently
+ignored.</p>
 <p>See the <a href="beta-channel.html">Beta Channel</a> guide for how to opt in. Stable
 promotion follows the standard 48-hour soak window once no P0/P1 bugs are open
 against the RC.</p>

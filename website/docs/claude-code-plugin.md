@@ -297,11 +297,11 @@ See the `LISTENER_PATTERN.md` resource for the full template.
 | Feature        | Plugin                                      | Manual (toolkit/agents/)              |
 | -------------- | ------------------------------------------- | ------------------------------------- |
 | Installation   | `claude plugin marketplace add` + `install` | Copy `.md` files to `.claude/agents/` |
-| Updates        | Re-install from source                      | Manual file replacement               |
+| Updates        | In-place via `/plugin marketplace update`   | Manual file replacement               |
 | Slash commands | 11 commands included                        | None                                  |
 | Hooks          | SessionStart + PreCompact + PostCompact     | Manual hook configuration             |
 | Resource docs  | 8 progressive disclosure docs               | Single monolithic agent file          |
-| Maintenance    | Versioned (v0.8.1)                          | Ad-hoc                                |
+| Maintenance    | Versioned (v0.10.6)                         | Ad-hoc                                |
 
 The manual agent definitions (`thrum-agent.md`, `message-listener.md`) still
 work and are available in `toolkit/agents/` for environments that don't support

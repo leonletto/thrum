@@ -157,6 +157,16 @@ daemon-start step, `thrum init` exits early with an OS-appropriate install hint
 (`brew install tmux` on macOS, `apt install tmux` on Debian/Ubuntu). Install
 tmux and re-run, or pass `--no-daemon` to skip the daemon-start step entirely.
 
+**settings.json merge (v0.10.5+):** `thrum init` now JSON-merges
+`.claude/settings.json` when it exists, rather than skipping the file entirely.
+This preserves third-party hook entries (including those written by
+`bd setup claude`) while injecting Thrum's own hooks alongside them. The
+operation is idempotent — re-running `thrum init` produces no diff when Thrum's
+entries are already present. When `bd` is on `PATH`, the beads `SessionStart`
+hook is auto-installed based on detection rather than a hardcoded default.
+Per-worktree redirect consistency is enforced via `worktree.EnsureRedirects` on
+each init run.
+
 This command emits contextual hints — see [CLI Hints](cli-hints.md).
 
 ```text
@@ -334,18 +344,9 @@ agent to consume.
 thrum prime [flags]
 ```
 
-| Flag      | Description                               | Default |
-| --------- | ----------------------------------------- | ------- |
-| `--force` | Bypass G5 ownership guard (use with care) | `false` |
-| `--quiet` | Suppress hint output                      | `false` |
-
-**G5 guard (prime_ownership):** `thrum prime` must be run from the top-level AI
-runtime process, not from inside a sub-agent (a tool call spawned within a
-Claude Code session). If a sub-agent invokes `thrum prime`, the guard detects
-that the closest runtime ancestor in the caller's PID chain is not the owner
-recorded in the identity file and refuses the call. Run `thrum prime` from the
-outermost runtime session. Pass `--force` only when you understand the ownership
-model and are intentionally bypassing this check.
+| Flag      | Description          | Default |
+| --------- | -------------------- | ------- |
+| `--quiet` | Suppress hint output | `false` |
 
 Example:
 
@@ -374,8 +375,10 @@ See also: [Identity System](identity.md), [Session Restart](session-restart.md).
 ### thrum quickstart
 
 Register, start a session, and set an initial intent in one step. If the agent
-is already registered, it re-registers automatically. Supports agent naming via
-the `--name` flag or `THRUM_NAME` environment variable.
+is already registered, it re-registers automatically. The agent name can be
+supplied as a positional argument, via the `--name` flag, or via the
+`THRUM_NAME` environment variable. Precedence (highest → lowest): `--name` flag
+→ positional → `THRUM_NAME` → identity-file name fallback.
 
 **G1a guard (quickstart_self_rename):** If the caller's ancestor PID chain
 already owns an identity in this directory (i.e., this runtime has already
@@ -392,6 +395,7 @@ a live process in a different worktree, the registration is refused. Pass
 other process has exited), or choose a different name.
 
 ```text
+thrum quickstart [AGENT_NAME] --role ROLE --module MODULE [flags]
 thrum quickstart --name AGENT_NAME --role ROLE --module MODULE [flags]
 ```
 
@@ -411,17 +415,20 @@ Requires `--role` and `--module` (via flags or `THRUM_ROLE`/`THRUM_MODULE` env
 vars). The `--runtime` value is written to `preferred_runtime` in the identity
 file.
 
-The `THRUM_NAME` environment variable takes priority over the `--name` flag.
+Name resolution precedence (highest → lowest): `--name` flag, positional
+argument, `THRUM_NAME` env-var, identity-file name fallback. The lenient
+positional form follows the Unix `tool [name]` convention; the flag wins when
+both are supplied.
 
 Example:
 
 ```text
-$ thrum quickstart --name implementer_auth --role implementer --module auth --intent "Fixing token refresh"
-✓ Registered as @implementer (implementer_35HV62T9B9)
+$ thrum quickstart implementer_auth --role implementer --module auth --intent "Fixing token refresh"
+✓ Registered as @implementer (implementer_auth)
 ✓ Session started: ses_01HXF2A9...
 ✓ Intent set: Fixing token refresh
 
-# With a human-readable name
+# Equivalent with the explicit flag
 $ thrum quickstart --name furiosa --role implementer --module auth --intent "Fixing token refresh"
 ✓ Registered as @furiosa (furiosa)
 ✓ Session started: ses_01HXF2A9...
@@ -513,33 +520,39 @@ have an active session.
 thrum send MESSAGE [flags]
 ```
 
-| Flag           | Description                                            | Default    |
-| -------------- | ------------------------------------------------------ | ---------- |
-| `--to`         | Recipient — `@agent_name` or `@everyone` for broadcast |            |
-| `--scope`      | Add scope (repeatable, format: `type:value`)           |            |
-| `--ref`        | Add reference (repeatable, format: `type:value`)       |            |
-| `--mention`    | Mention a role (repeatable, format: `@role`)           |            |
-| `--structured` | Structured payload (JSON string)                       |            |
-| `--format`     | Message format (`markdown`, `plain`, `json`)           | `markdown` |
+| Flag           | Description                                                         | Default    |
+| -------------- | ------------------------------------------------------------------- | ---------- |
+| `--to`         | Recipient — `@agent_name` or `@everyone` (mutex with `--broadcast`) |            |
+| `--broadcast`  | Fan out to the entire team (mutex with `--to`)                      | `false`    |
+| `--scope`      | Add scope (repeatable, format: `type:value`)                        |            |
+| `--ref`        | Add reference (repeatable, format: `type:value`)                    |            |
+| `--mention`    | Mention a role (repeatable, format: `@role`)                        |            |
+| `--structured` | Structured payload (JSON string)                                    |            |
+| `--format`     | Message format (`markdown`, `plain`, `json`)                        | `markdown` |
 
-The `--to` flag adds the recipient as a mention, making it a directed message.
-Recipients are usually agents (`@alice`, `@reviewer_main`); `@everyone` is the
-critical-broadcast target. Role-name targets like `@reviewer` also work but are
-discouraged because they fan out to every agent with that role and cause
-cross-talk.
+A recipient flag is **required**. `thrum send 'msg'` with no `--to` or
+`--broadcast` hard-errors (exit 1) with a conversational prompt offering both
+paths — the previous silent-broadcast default was a footgun (thrum-t698).
+`--to @agent_name` is the canonical directed-send form (matches CLAUDE.md
+convention); `--broadcast` is the explicit team-wide fanout form;
+`--to @everyone` continues to work as the legacy keyword form.
 
 This command emits contextual hints — see [CLI Hints](cli-hints.md).
 
 Example:
 
 ```text
-$ thrum send "PR ready for review" --to @reviewer_main --scope module:auth --ref pr:42
+$ thrum send "PR ready for review" --to @reviewer --scope module:auth --ref pr:42
 ✓ Message sent: msg_01HXE8Z7...
   Created: 2026-02-03T10:00:00Z
 
-# Critical broadcast to all agents
-$ thrum send "Deploy complete" --to @everyone
+# Explicit team-wide fanout (preferred form for broadcasts)
+$ thrum send "Deploy complete" --broadcast
 ✓ Message sent: msg_01HXE8Z8...
+
+# Legacy keyword form — still works
+$ thrum send "Deploy complete" --to @everyone
+✓ Message sent: msg_01HXE8Z9...
 ```
 
 ### thrum reply
@@ -574,14 +587,16 @@ are automatically marked as read (unless filtering with `--unread`).
 thrum inbox [flags]
 ```
 
-| Flag          | Description                            | Default |
-| ------------- | -------------------------------------- | ------- |
-| `--scope`     | Filter by scope (format: `type:value`) |         |
-| `--mentions`  | Only messages mentioning me            | `false` |
-| `--unread`    | Only unread messages                   | `false` |
-| `--page-size` | Results per page                       | `10`    |
-| `--limit N`   | Alias for `--page-size`                | `10`    |
-| `--page`      | Page number                            | `1`     |
+| Flag          | Description                                                             | Default |
+| ------------- | ----------------------------------------------------------------------- | ------- |
+| `--scope`     | Filter by scope (format: `type:value`)                                  |         |
+| `--mentions`  | Only messages mentioning me                                             | `false` |
+| `--from`      | Filter to messages from a specific sender (format: `@agent` or `agent`) |         |
+| `--unread`    | Only unread messages                                                    | `false` |
+| `--all`, `-a` | Show all messages (disable auto-filtering)                              | `false` |
+| `--page-size` | Results per page                                                        | `10`    |
+| `--limit N`   | Alias for `--page-size`                                                 | `10`    |
+| `--page`      | Page number                                                             | `1`     |
 
 The output adapts to terminal width and shows read/unread indicators.
 
@@ -845,8 +860,12 @@ AGENT          SESSION      BRANCH               COMMITS  FILES INTENT          
 Show the current agent identity and active session.
 
 ```text
-thrum agent whoami
+thrum agent whoami [flags]
 ```
+
+| Flag             | Description                                                           | Default |
+| ---------------- | --------------------------------------------------------------------- | ------- |
+| `--field <name>` | Print a single field's value (e.g. `agent_id`, `tmux_alive`) and exit |         |
 
 Identity is resolved from: (1) command-line flags (`--role`, `--module`), (2)
 environment variables (`THRUM_ROLE`, `THRUM_MODULE`, `THRUM_NAME`), (3) identity
@@ -862,6 +881,9 @@ Module:    auth
 Display:   Auth Developer
 Source:    environment
 Session:   ses_01HXF2A9... (2h ago)
+
+$ thrum agent whoami --field agent_id
+implementer_35HV62T9B9
 ```
 
 ### thrum agent delete
@@ -2510,7 +2532,6 @@ thrum worktree create <name> [flags]
 | `--module`       | Agent module                                                                |                  |
 | `--intent`       | Initial work intent description                                             |                  |
 | `--runtime`      | Runtime preset: `claude`, `codex`, `cursor`, `gemini`, `opencode`, `auggie` |                  |
-| `--force`        | Overwrite existing runtime config files                                     | `false`          |
 
 The worktree is created at `worktrees.base_path/<name>` (default:
 `~/.thrum/worktrees/<project>/<name>`). The name cannot contain `/`, `\`, or
@@ -2559,15 +2580,19 @@ See [thrum worktree create](#thrum-worktree-create) for the full flag table.
 Remove a worktree and clean up Thrum artifacts (identity files).
 
 ```text
-thrum worktree teardown <name>
+thrum worktree teardown <name> [flags]
 ```
+
+| Flag              | Description                                                                        | Default |
+| ----------------- | ---------------------------------------------------------------------------------- | ------- |
+| `--delete-branch` | Delete the worktree's branch after removing the worktree (branch stays by default) | `false` |
 
 Example:
 
 ```text
 $ thrum worktree teardown api-feature
 ✓ Cleaned up 1 identity file(s)
-✓ Worktree removed: ~/.thrum/worktrees/thrum/api-feature
+✓ Worktree removed: ~/.workspaces/thrum/api-feature
 ```
 
 ### thrum worktree list
@@ -2658,7 +2683,7 @@ mon_01KNTG3B1...             ci-failures  running    @team          15m30s     1
 Show full details for a monitor job. Env var values are always redacted.
 
 ```text
-thrum monitor show <id>
+thrum monitor show <id|name>
 ```
 
 Example:
@@ -2684,7 +2709,7 @@ Stop a running monitor job. Sends SIGTERM, waits 5 seconds, then sends SIGKILL
 if still running.
 
 ```text
-thrum monitor stop <id>
+thrum monitor stop <id|name>
 ```
 
 Example:
@@ -2700,7 +2725,7 @@ Show the most recent matched output lines for a monitor job (historical lookup
 from the messages table, not live tail).
 
 ```text
-thrum monitor logs <id> [flags]
+thrum monitor logs <id|name> [flags]
 ```
 
 | Flag            | Description                     | Default |
@@ -2723,7 +2748,7 @@ $ thrum monitor logs mon_01KNTF2A9 -n 5
 Restart a stopped or dead monitor job. Returns a new monitor ID.
 
 ```text
-thrum monitor restart <id>
+thrum monitor restart <id|name>
 ```
 
 Example:
@@ -2900,8 +2925,6 @@ name (e.g., `furiosa.json` or `implementer_35HV62T9B9.json`).
   "updated_at": "2026-02-03T10:00:00Z"
 }
 ```
-
----
 
 _The section below covers storage internals. You don't need it for normal use._
 
