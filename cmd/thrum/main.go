@@ -4767,7 +4767,7 @@ This will fetch new messages from the remote and push local messages.`,
 
 func quickstartCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "quickstart",
+		Use:   "quickstart [name]",
 		Short: "Register, start session, and set intent in one step",
 		Long: `Bootstrap an agent session with a single command.
 
@@ -4775,14 +4775,33 @@ Chains together: runtime detect → config generate → agent register →
 session start → set intent. If the agent is already registered, it
 re-registers automatically.
 
+Accepts the agent name as a positional argument OR as --name. The
+positional form mirrors the Unix tool [name] convention; --name takes
+precedence when both are supplied.
+
 Examples:
-  thrum quickstart --name implementer_auth --role implementer --module auth
+  thrum quickstart implementer_auth --role implementer --module auth
   thrum quickstart --name reviewer_auth --role reviewer --module auth --intent "Reviewing PR #42"
-  thrum quickstart --name alice --role impl --module auth --runtime codex
+  thrum quickstart alice --role impl --module auth --runtime codex
   thrum quickstart --name bob --role tester --module api --dry-run
-  thrum quickstart --name planner_core --role planner --module core --no-init`,
+  thrum quickstart planner_core --role planner --module core --no-init`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name, _ := cmd.Flags().GetString("name")
+			// thrum-9dnh: accept positional argument as --name when the
+			// flag is not set. Before this, cobra defaulted to
+			// ArbitraryArgs and silently discarded the positional —
+			// `thrum quickstart researcher_memories --role ...` ran but
+			// adopted the cwd's existing identity-file name instead of
+			// the user's intended one (the upstream footgun that
+			// triggered the thrum-l9e1 cross-worktree-rebind repro). The
+			// lenient form (positional → --name) matches the Unix
+			// `tool [name]` convention; strict NoArgs would reject the
+			// natural shape. See thrum-9dnh §4d for the lenient/strict
+			// tradeoff rationale.
+			if name == "" && len(args) > 0 {
+				name = args[0]
+			}
 			display, _ := cmd.Flags().GetString("display")
 			intent, _ := cmd.Flags().GetString("intent")
 			runtimeFlag, _ := cmd.Flags().GetString("runtime")
@@ -4797,8 +4816,13 @@ Examples:
 				return fmt.Errorf("unknown runtime %q; supported: %s", runtimeFlag, strings.Join(runtime.SupportedRuntimes(), ", "))
 			}
 
-			// THRUM_NAME env var sets a default name; explicit --name flag takes precedence.
-			if envName := os.Getenv("THRUM_NAME"); envName != "" && !cmd.Flags().Changed("name") {
+			// THRUM_NAME env var sets a default name; explicit --name flag
+			// AND a positional argument (per thrum-9dnh, user-typed positional
+			// outranks ambient env-var) both take precedence. The `name == ""`
+			// guard added here handles both override sources uniformly: after
+			// the positional → name fallback above, name is non-empty when
+			// either --name or the positional was supplied.
+			if envName := os.Getenv("THRUM_NAME"); envName != "" && name == "" && !cmd.Flags().Changed("name") {
 				name = envName
 			}
 
