@@ -120,6 +120,19 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **`thrum worktree create --branch <existing>` attaches existing branches
+  instead of erroring (thrum-suyb)** — `internal/worktree.Create` previously
+  always invoked `git worktree add -b <branch> <path> <base>`, which fails with
+  `fatal: a branch named '<branch>' already exists` when the branch already
+  exists in the repo. The create path now probes branch existence via
+  `git rev-parse --verify --quiet refs/heads/<branch>` first: if the branch
+  exists it attaches with `git worktree add <path> <branch>` (no `-b`, no base),
+  otherwise it falls back to the original create-with-`-b` form. The best-effort
+  cleanup closure deletes the branch only when this `Create` invocation actually
+  created it, so an attached pre-existing branch is never destroyed on a
+  downstream failure. Unblocks teardown+recreate of an agent's worktree without
+  losing branch history, pair-coding sessions, and resuming work from a
+  stashed-and-archived branch.
 - **`thrum quickstart` accepts a positional `<name>` argument and corrects
   env-var precedence (thrum-9dnh)** — `thrum quickstart researcher_memories` now
   works (the positional is treated as `--name`); the flag/env precedence is
