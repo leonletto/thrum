@@ -277,10 +277,14 @@ bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/co
 The installer is idempotent and re-stages the cache, so the previous branch
 state is overwritten in place. No remove step is needed for the Codex plugin.
 
-> **Note:** the Codex plugin currently tracks `thrum-dev` rather than a
-> versioned release tag. Once the plugin starts shipping versioned releases (the
-> way the Claude plugin does via `marketplace.json`), the revert command here
-> will gain a version pin similar to the Claude flow above.
+> **Note:** the Codex plugin's install and revert commands track Git branch refs
+> (`release/vX.Y.Z` for the RC channel, `thrum-dev` for the development branch),
+> not version tags. The plugin manifest at
+> `codex-plugin/plugins/thrum/.codex-plugin/plugin.json` does carry the
+> versioned `X.Y.Z-rc.N` string and Codex keys its plugin cache by that version,
+> so an rc.1 → rc.2 re-install populates a fresh cache directory cleanly. The
+> branch-ref install UX gives users a simple "always-latest" path on a given
+> release line, which is the deliberate ergonomic for Codex.
 
 ## Note for Homebrew users
 
