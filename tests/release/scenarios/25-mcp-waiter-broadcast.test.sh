@@ -74,6 +74,13 @@ sleep 2
 # Step 3: broadcast from COORD immediately. COORD was already settled
 # above, so this send fires within ~2-3s of the wait subscription,
 # well inside the 12s --timeout window.
+#
+# Capture floor_ts BEFORE the broadcast so the downstream JSONL match
+# at line 130 (sub-assertion 2) scopes its window to "this broadcast's
+# delivery" only — defends against stale entries with the same RUNID
+# from a prior subset rerun. Per tests/release/CLAUDE.md lesson 2.
+local broadcast_floor_ts
+broadcast_floor_ts="$(date -u +%Y-%m-%dT%H:%M:%S)"
 send_command "$COORD_PANE" "! thrum send 'Broadcast for waiter (${MARKER})' --to @everyone"
 
 # Step 4: poll IMPL's JSONL for `thrum wait`'s success-shape output.
@@ -124,11 +131,11 @@ fi
 # carry the marker, so the broad content-string filter matches
 # either witness.
 marker_filter='(.message.content // "") | tostring | contains("'"$MARKER"'")'
-if wait_for_jsonl_match "$IMPL_REPO" "$marker_filter" 30 >/dev/null; then
+if wait_for_jsonl_match "$IMPL_REPO" "$marker_filter" 60 "$broadcast_floor_ts" >/dev/null; then
   emit_pass "$SID" "broadcast-marker-in-inbox"
 else
   emit_fail "$SID" "broadcast-marker-in-inbox" \
-    "IMPL JSONL entry containing broadcast marker '${MARKER}' within 30s" \
-    "(no matching JSONL entry — broadcast may not have routed)" \
+    "IMPL JSONL entry containing broadcast marker '${MARKER}' within 60s" \
+    "(no matching JSONL entry — broadcast may not have routed, or IMPL claude didn't autorun inbox-read in time)" \
     "scenarios/${SID}.test.sh:$LINENO"
 fi
