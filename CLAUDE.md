@@ -130,14 +130,22 @@ database schema is version 32, this binary supports up to 24 — cannot downgrad
 Recovery options:
   1. Re-install a newer binary that supports schema v32 or above:
        cd <worktree-with-newer-branch> && make install
-  2. Delete the database to start fresh (LOSES local message history + spool):
+  2. Delete the database to start fresh (PERMANENTLY LOSES local message history,
+     spool, scheduler state, sync checkpoints — the daemon does NOT rebuild
+     SQLite from JSONL on startup; the deleted DB stays blank, filling only
+     from NEW events as they arrive):
        thrum daemon stop   # release file locks first
-       rm /Users/<you>/dev/opensource/thrum/.thrum/var/state.db
-       rm /Users/<you>/dev/opensource/thrum/.thrum/var/state.db-wal /Users/<you>/dev/opensource/thrum/.thrum/var/state.db-shm
-  3. See CLAUDE.md § "Multi-binary worktree footgun" for prevention
+       rm /Users/<you>/dev/opensource/thrum/.thrum/var/messages.db
+       rm /Users/<you>/dev/opensource/thrum/.thrum/var/messages.db-wal /Users/<you>/dev/opensource/thrum/.thrum/var/messages.db-shm
+  3. Restore from the pre-migration backup the daemon takes before every
+     migration (LOSES NOTHING, recommended when available):
+       thrum daemon stop
+       ls /Users/<you>/dev/opensource/thrum/.thrum/var/messages.db.pre-migration-*.bak
+       cp messages.db.pre-migration-v<N>-<ts>.bak messages.db
+  4. See CLAUDE.md § "Multi-binary worktree footgun" for prevention
 ```
 
-**Why it happens:** The DB lives under `<repo-root>/.thrum/var/state.db` and is
+**Why it happens:** The DB lives under `<repo-root>/.thrum/var/messages.db` and is
 shared across every worktree's binary (worktrees redirect their `.thrum/` to the
 main repo's `.thrum/` via the `.thrum/redirect` file). Schema migrations are
 one-way: a newer binary migrates the DB up; an older binary cannot migrate it
@@ -160,10 +168,20 @@ back down.
 1. If another worktree on this machine has a binary supporting the on-disk
    schema version, `cd` there and `make install`. The shared
    `~/.local/bin/thrum` gets replaced with one that can open the DB.
-2. If no such worktree is available (or you don't care about local history),
-   stop the daemon, delete the DB + WAL/SHM sidecars, and restart. The daemon
-   will initialize a fresh DB on next start.
-3. Long-term prevention belongs in a `make install` pre-flight check
+2. **Restore from the pre-migration backup** (recommended, loses nothing): the
+   daemon takes a timestamped `messages.db.pre-migration-vN-<ts>.bak` snapshot
+   under `.thrum/var/` before every migration. Stop the daemon, `cp` the
+   relevant `.bak` over `messages.db` (and copy back `-wal` / `-shm` sidecar
+   backups if present), restart.
+3. If neither option works (no newer-schema worktree, no pre-migration backup
+   left), stop the daemon, delete `messages.db` + WAL/SHM sidecars, and
+   restart. The daemon will initialize a BLANK DB on next start — historical
+   message/agent/group/scheduler/checkpoint state is permanently lost. The
+   daemon does NOT rebuild SQLite from JSONL on startup; only NEW events
+   landing after restart populate the fresh DB. See thrum-rtlt for the
+   long-term event-sourcing rework that would make this option truly
+   "rebuild from history."
+4. Long-term prevention belongs in a `make install` pre-flight check
    (`thrum-quth` follow-ups) — for now the daemon's startup error is the primary
    detection point.
 

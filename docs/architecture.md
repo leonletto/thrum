@@ -808,7 +808,13 @@ schema.BackfillEventID(syncDir)
 
 ### Event Replay
 
-The projector rebuilds SQLite from sharded JSONL event logs:
+The projector exposes a `Rebuild(syncDir)` API that rebuilds SQLite from sharded
+JSONL event logs. **NOTE (thrum-1gar):** as of v0.10.x the daemon's startup path
+(`NewState` in `internal/daemon/state`) does NOT call `Rebuild()` — the API is
+available for explicit invocation but the daemon treats SQLite as
+authoritative-but-backed-up on startup, not as a projection that gets
+re-derived. See thrum-rtlt for the event-sourcing rework that would make
+startup-rebuild a first-class recovery path.
 
 ```go
 db, _ := schema.OpenDB("thrum.db")
@@ -961,8 +967,13 @@ backup and receives `THRUM_BACKUP_DIR`, `THRUM_BACKUP_REPO`, and
 
 **Restore** creates a safety backup of existing data first, then copies JSONL
 back to the sync worktree, imports local tables into SQLite, and removes
-`messages.db` so the projector rebuilds from JSONL on the next daemon start.
-Plugin restore commands run after the core restore.
+`messages.db`. **NOTE (thrum-1gar):** the daemon's `NewState` does NOT call
+`Projector.Rebuild()` on startup today — the removed `messages.db` comes up
+BLANK on the next daemon start and only fills as NEW events arrive. Restore is
+only useful for the local-tables + JSONL files it replaces; historical
+SQLite-projected state (messages, agents, groups) is not recovered until the
+event-sourcing rework lands (thrum-rtlt). Plugin restore commands run after the
+core restore.
 
 ## Upgrade Safety
 
@@ -1027,9 +1038,9 @@ substrate work) migrates the on-disk DB up, a later `make install` from a
 worktree on an older-schema branch (e.g. `release/v0.10.x`) ships a binary that
 fails the Downgrade Guard above.
 
-**Why it happens:** the DB lives under `<repo-root>/.thrum/var/state.db` and is
-shared across every worktree's binary (worktrees redirect their `.thrum/` to the
-main repo's `.thrum/` via the `.thrum/redirect` file). Schema migrations are
+**Why it happens:** the DB lives under `<repo-root>/.thrum/var/messages.db` and
+is shared across every worktree's binary (worktrees redirect their `.thrum/` to
+the main repo's `.thrum/` via the `.thrum/redirect` file). Schema migrations are
 one-way: newer binaries can migrate up; older binaries cannot migrate down.
 
 **Avoid:** Only `make install` from a worktree whose schema `CurrentVersion` is

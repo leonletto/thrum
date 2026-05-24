@@ -747,20 +747,25 @@ func Migrate(db *sql.DB) error {
 	if currentVersion > CurrentVersion {
 		dbPath := dbFile
 		if dbPath == "" {
-			dbPath = `<unknown path; locate via "find ~ -name state.db">`
+			dbPath = `<unknown path; locate via "find ~ -name messages.db">`
 		}
 		return fmt.Errorf(`database schema is version %d, this binary supports up to %d — cannot downgrade.
 
 Recovery options:
   1. Re-install a newer binary that supports schema v%d or above:
        cd <worktree-with-newer-branch> && make install
-  2. Delete the database to start fresh (LOSES local message history + spool):
+  2. Restore from the pre-migration backup (LOSES NOTHING, recommended):
+       thrum daemon stop
+       ls %s.pre-migration-*.bak    # pick the one taken before the newer-binary install
+       cp <chosen>.bak %s
+  3. Delete the database to start fresh (PERMANENTLY LOSES local message history, spool, scheduler state, and sync checkpoints — the daemon does NOT rebuild SQLite from JSONL on startup; only NEW events repopulate the fresh DB):
        thrum daemon stop   # release file locks first
        rm %s
        rm %s-wal %s-shm    # if present
-  3. See CLAUDE.md § "Multi-binary worktree footgun" for prevention`,
+  4. See CLAUDE.md § "Multi-binary worktree footgun" for prevention`,
 			currentVersion, CurrentVersion,
 			currentVersion,
+			dbPath, dbPath,
 			dbPath, dbPath, dbPath)
 	}
 
