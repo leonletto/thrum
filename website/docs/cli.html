@@ -833,7 +833,6 @@ Runtime
 
 Daemon
   Local-only:    true (config.json)
-  Sync interval: 60s (default)
   WS port:       auto (default)
   Status:        running (PID 7718)</code></pre>
 <h3>thrum setup</h3>
@@ -2113,7 +2112,7 @@ Identity:
 <p>Example:</p>
 <pre><code class="language-text hljs">$ thrum daemon logs
 2026/04/09 21:15:03.000000 [daemon] started (v0.8.0)
-2026/04/09 21:15:03.100000 [sync] loop started (interval: 60s)
+2026/04/09 21:15:03.100000 [sync] loop started
 ...
 
 $ thrum daemon logs -f
@@ -2137,8 +2136,10 @@ active, displays &quot;Mode: local-only&quot; instead of &quot;Mode: normal&quot
 <p>Sync states: <code>stopped</code>, <code>idle</code>, <code>synced</code>, <code>error</code>.</p>
 <h3>thrum sync force</h3>
 <p>Trigger an immediate sync (non-blocking). Fetches new messages from the remote
-and pushes local messages. The default sync interval is 60 seconds. When
-local-only mode is active, displays &quot;local-only (remote sync disabled)&quot;.</p>
+and pushes local messages. Routine sync is event-triggered (as of v0.10.6 — no
+polling interval); <code>sync force</code> exists for the moments you want to confirm
+state immediately. When local-only mode is active, displays
+&quot;local-only (remote sync disabled)&quot;.</p>
 <pre><code class="language-text hljs">thrum sync force</code></pre>
 <h2>Backup &amp; Restore</h2>
 <h3>thrum backup</h3>
@@ -3074,13 +3075,14 @@ the main worktree into a &quot;feature&quot; worktree.</p>
 </tr>
 </tbody></table>
 <p>The worktree is created at <code>worktrees.base_path/&lt;name&gt;</code> (default:
-<code>~/.workspaces/&lt;project&gt;/&lt;name&gt;</code>). The name cannot contain <code>/</code>, <code>\</code>, or <code>..</code>.</p>
+<code>~/.thrum/worktrees/&lt;project&gt;/&lt;name&gt;</code>). The name cannot contain <code>/</code>, <code>\</code>, or
+<code>..</code>.</p>
 <p>Hook scripts (<code>scripts/thrum-startup.sh</code>, <code>scripts/thrum-check-inbox.sh</code>) are
 copied from the main repo into the new worktree so SessionStart hooks fire
 correctly.</p>
 <p>Example:</p>
 <pre><code class="language-text hljs">$ thrum worktree create api-feature
-Worktree created: ~/.workspaces/thrum/api-feature
+Worktree created: ~/.thrum/worktrees/thrum/api-feature
   Branch: feature/api-feature
   Thrum: .thrum/redirect → /path/to/main/.thrum
   Beads: .beads/redirect → /path/to/main/.beads
@@ -3108,7 +3110,7 @@ Worktree created: ~/.workspaces/thrum/auth-feature
 <p>Example:</p>
 <pre><code class="language-text hljs">$ thrum worktree teardown api-feature
 ✓ Cleaned up 1 identity file(s)
-✓ Worktree removed: ~/.workspaces/thrum/api-feature</code></pre>
+✓ Worktree removed: ~/.thrum/worktrees/thrum/api-feature</code></pre>
 <h3>thrum worktree list</h3>
 <p>List git worktrees with Thrum agent info. Reads identity files from each
 worktree to show which agent is active there.</p>

@@ -242,23 +242,29 @@ top-level Codex skills.</p>
 <p>The Codex runtime preset has <code>HasSessionStartHook: true</code> — the prime-context
 banner fires automatically on session start, on parity with the Claude plugin.
 No manual <code>thrum prime</code> is needed at session open.</p>
-<p>Registered skills:</p>
+<p>Registered skills (33 total in v0.10.6, grouped by purpose):</p>
+<p><strong>Thrum CLI mirrors</strong> — invocable as <code>/&lt;name&gt;</code> slash commands:</p>
 <ul>
-<li><code>thrum</code></li>
-<li><code>thrum-prime</code></li>
-<li><code>thrum-overview</code></li>
-<li><code>thrum-update-project</code></li>
-<li><code>thrum-team</code></li>
-<li><code>thrum-inbox</code></li>
-<li><code>thrum-group</code></li>
-<li><code>thrum-send</code></li>
-<li><code>thrum-reply</code></li>
-<li><code>thrum-wait</code></li>
-<li><code>thrum-restart</code></li>
-<li><code>thrum-load-context</code></li>
-<li><code>thrum-quickstart</code></li>
-<li><code>thrum-configure-roles</code></li>
-<li><code>thrum-project-setup</code></li>
+<li><code>thrum</code>, <code>thrum-prime</code>, <code>thrum-overview</code>, <code>thrum-update-project</code>,
+<code>thrum-team</code>, <code>thrum-inbox</code>, <code>thrum-send</code>, <code>thrum-reply</code>, <code>thrum-wait</code>,
+<code>thrum-restart</code>, <code>thrum-load-context</code>, <code>thrum-quickstart</code></li>
+</ul>
+<p><strong>Role discipline</strong> — coordinator, implementer, and researcher operating
+patterns:</p>
+<ul>
+<li><code>configure-roles</code>, <code>project-philosophy</code>,
+<code>coordinator-context-monitoring</code>, <code>coordinator-dispatching-work</code>,
+<code>coordinator-managing-state-and-lifecycle</code>, <code>coordinator-post-restart-sweep</code>,
+<code>coordinator-running-brainstorm-cycles</code>, <code>coordinator-running-review-cycles</code>,
+<code>implementer-receiving-dispatch</code>, <code>implementer-receiving-review-feedback</code>,
+<code>implementer-status-and-handoff</code>, <code>implementer-tdd-and-quality</code>,
+<code>researcher-answering-queries</code>, <code>researcher-investigating</code>,
+<code>researcher-maintaining-memory</code></li>
+</ul>
+<p><strong>Workflow + review</strong> — cross-role planning, research, and review:</p>
+<ul>
+<li><code>adversarial-critique</code>, <code>efficient-multi-agent-research</code>, <code>orchestrate</code>,
+<code>project-setup</code>, <code>verify-against-plan</code>, <code>verify-against-source</code></li>
 </ul>
 <h2>Prerequisites</h2>
 <ul>
@@ -281,7 +287,7 @@ needed after running it.</p>
 <span class="hljs-built_in">cd</span> thrum
 ./codex-plugin/scripts/install-skills.sh</code></pre>
 <p>You can also use the packaged installer guide in <code>codex-plugin/INSTALL.md</code>,
-which points at the same script and lists the expected 15 installed skills.</p>
+which points at the same script and lists the expected 33 installed skills.</p>
 <h3>From Local Clone</h3>
 <p>If you already have the Thrum repository cloned locally:</p>
 <pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> /path/to/thrum

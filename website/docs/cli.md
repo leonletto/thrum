@@ -268,7 +268,6 @@ Runtime
 
 Daemon
   Local-only:    true (config.json)
-  Sync interval: 60s (default)
   WS port:       auto (default)
   Status:        running (PID 7718)
 ```
@@ -1504,7 +1503,7 @@ Example:
 ```text
 $ thrum daemon logs
 2026/04/09 21:15:03.000000 [daemon] started (v0.8.0)
-2026/04/09 21:15:03.100000 [sync] loop started (interval: 60s)
+2026/04/09 21:15:03.100000 [sync] loop started
 ...
 
 $ thrum daemon logs -f
@@ -1539,8 +1538,10 @@ Sync states: `stopped`, `idle`, `synced`, `error`.
 ### thrum sync force
 
 Trigger an immediate sync (non-blocking). Fetches new messages from the remote
-and pushes local messages. The default sync interval is 60 seconds. When
-local-only mode is active, displays "local-only (remote sync disabled)".
+and pushes local messages. Routine sync is event-triggered (as of v0.10.6 — no
+polling interval); `sync force` exists for the moments you want to confirm state
+immediately. When local-only mode is active, displays "local-only (remote sync
+disabled)".
 
 ```text
 thrum sync force
@@ -2521,7 +2522,8 @@ thrum worktree create <name> [flags]
 | `--force`        | Overwrite existing runtime config files                                     | `false`          |
 
 The worktree is created at `worktrees.base_path/<name>` (default:
-`~/.workspaces/<project>/<name>`). The name cannot contain `/`, `\`, or `..`.
+`~/.thrum/worktrees/<project>/<name>`). The name cannot contain `/`, `\`, or
+`..`.
 
 Hook scripts (`scripts/thrum-startup.sh`, `scripts/thrum-check-inbox.sh`) are
 copied from the main repo into the new worktree so SessionStart hooks fire
@@ -2531,7 +2533,7 @@ Example:
 
 ```text
 $ thrum worktree create api-feature
-Worktree created: ~/.workspaces/thrum/api-feature
+Worktree created: ~/.thrum/worktrees/thrum/api-feature
   Branch: feature/api-feature
   Thrum: .thrum/redirect → /path/to/main/.thrum
   Beads: .beads/redirect → /path/to/main/.beads
@@ -2574,7 +2576,7 @@ Example:
 ```text
 $ thrum worktree teardown api-feature
 ✓ Cleaned up 1 identity file(s)
-✓ Worktree removed: ~/.workspaces/thrum/api-feature
+✓ Worktree removed: ~/.thrum/worktrees/thrum/api-feature
 ```
 
 ### thrum worktree list

@@ -24,21 +24,41 @@ they're parameterized over `VERSION` and the release branch.
 
 ## Stable-track current pre-release
 
-> No stable-track pre-release right now.
-> **[`v0.10.5`](https://github.com/leonletto/thrum/releases/tag/v0.10.5)**
-> shipped to stable on 2026-05-21 — see [What's New](whats-new.md) for the full
-> release notes (note the **BREAKING** `thrum send` change: the bare form now
-> requires `--to @<agent>` or `--broadcast`).
->
-> When the first `v0.10.6-rc.N` tags, this section will carry its callout + a
-> Quick install block pinned to the `release/v0.10.6` branch. Until then,
-> install the current stable release the normal way — no `VERSION=` override
-> needed:
->
-> ```bash
-> curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
-> thrum daemon restart
-> ```
+> **Current stable-track pre-release:
+> [`v0.10.6-rc.1`](https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.1)**
+> (in soak). Headline: the **sync re-architecture** (thrum-s6os) — the
+> cross-machine wire stream is now event-triggered rather than 60-second-polled,
+> idle daemons produce zero commits on `a-sync`, and busy clusters stop
+> accumulating heartbeat noise. ⚠ **Mixed-cluster warning:** v0.10.5 peers
+> cannot read messages from upgraded v0.10.6 peers (v0.10.6 writes only to the
+> new `messages-v2/` path); upgrade all peers in one window. Also new:
+> timestamped pre-migration DB backups (with a hard halt if backup fails), an
+> RC-tag plugin distribution scheme so `/plugin update` upgrades cleanly through
+> the rc pipeline, two new daemon config keys (`events_retention_days`,
+> `compaction_size_threshold_mb`), and skill-review-loop improvements
+> (`verify-against-source`, Phase 0 review gate). Full notes:
+> [What's New](whats-new.md) and the
+> [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
+
+### Quick install for `v0.10.6-rc.1`
+
+Binary and Codex plugin (run in your shell):
+
+```bash
+# Binary
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.1 sh
+
+# Codex plugin (matches release/v0.10.6)
+THRUM_INSTALL_REF=release/v0.10.6 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.6/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+```
+
+Claude Code plugin (run inside Claude):
+
+```text
+/plugin marketplace add leonletto/thrum#release/v0.10.6
+/plugin install thrum@thrum
+/reload-plugins
+```
 
 ## Substrate-track current pre-release
 

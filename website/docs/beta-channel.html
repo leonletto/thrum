@@ -249,18 +249,33 @@ mechanics (binary + plugins + rollback) are shared further down the page —
 they&#39;re parameterized over <code>VERSION</code> and the release branch.</p>
 <h2>Stable-track current pre-release</h2>
 <blockquote>
-<p>No stable-track pre-release right now.
-<strong><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.5"><code>v0.10.5</code></a></strong>
-shipped to stable on 2026-05-21 — see <a href="whats-new.html">What&#39;s New</a> for the full
-release notes (note the <strong>BREAKING</strong> <code>thrum send</code> change: the bare form now
-requires <code>--to @&lt;agent&gt;</code> or <code>--broadcast</code>).</p>
-<p>When the first <code>v0.10.6-rc.N</code> tags, this section will carry its callout + a
-Quick install block pinned to the <code>release/v0.10.6</code> branch. Until then,
-install the current stable release the normal way — no <code>VERSION=</code> override
-needed:</p>
-<pre><code class="language-bash hljs">curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
-thrum daemon restart</code></pre>
+<p><strong>Current stable-track pre-release:
+<a href="https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.1"><code>v0.10.6-rc.1</code></a></strong>
+(in soak). Headline: the <strong>sync re-architecture</strong> (thrum-s6os) — the
+cross-machine wire stream is now event-triggered rather than 60-second-polled,
+idle daemons produce zero commits on <code>a-sync</code>, and busy clusters stop
+accumulating heartbeat noise. ⚠ <strong>Mixed-cluster warning:</strong> v0.10.5 peers
+cannot read messages from upgraded v0.10.6 peers (v0.10.6 writes only to the
+new <code>messages-v2/</code> path); upgrade all peers in one window. Also new:
+timestamped pre-migration DB backups (with a hard halt if backup fails), an
+RC-tag plugin distribution scheme so <code>/plugin update</code> upgrades cleanly through
+the rc pipeline, two new daemon config keys (<code>events_retention_days</code>,
+<code>compaction_size_threshold_mb</code>), and skill-review-loop improvements
+(<code>verify-against-source</code>, Phase 0 review gate). Full notes:
+<a href="whats-new.html">What&#39;s New</a> and the
+<a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG <code>[Unreleased]</code> section</a>.</p>
 </blockquote>
+<h3>Quick install for <code>v0.10.6-rc.1</code></h3>
+<p>Binary and Codex plugin (run in your shell):</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Binary</span>
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.1 sh
+
+<span class="hljs-comment"># Codex plugin (matches release/v0.10.6)</span>
+THRUM_INSTALL_REF=release/v0.10.6 bash &lt;(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.6/codex-plugin/plugins/thrum/scripts/install-plugin.sh)</code></pre>
+<p>Claude Code plugin (run inside Claude):</p>
+<pre><code class="language-text hljs">/plugin marketplace add leonletto/thrum#release/v0.10.6
+/plugin install thrum@thrum
+/reload-plugins</code></pre>
 <h2>Substrate-track current pre-release</h2>
 <blockquote>
 <p>No substrate-track pre-release yet. First will be <code>v0.11.0-rc.1</code>.</p>
