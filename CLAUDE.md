@@ -140,7 +140,8 @@ Recovery options:
   3. Restore from the pre-migration backup the daemon takes before every
      migration (LOSES NOTHING, recommended when available):
        thrum daemon stop
-       ls /Users/<you>/dev/opensource/thrum/.thrum/var/messages.db.pre-migration-*.bak
+       cd /Users/<you>/dev/opensource/thrum/.thrum/var/
+       ls messages.db.pre-migration-*.bak
        cp messages.db.pre-migration-v<N>-<ts>.bak messages.db
   4. See CLAUDE.md § "Multi-binary worktree footgun" for prevention
 ```
