@@ -2709,3 +2709,181 @@ func TestHandleRegister_PreservesCoLocatedAgents(t *testing.T) {
 		}
 	}
 }
+
+// TestHandleRegister_AnonymousCallerCannotRebindToDifferentWorktree —
+// thrum-l9e1 regression. agent.register is anonymous-allowed for the
+// bootstrap chicken-and-egg case (server.go:138-148: a genuinely-new
+// agent in a genuinely-new worktree has no prior session to peercred-
+// resolve against). That allowance must NOT extend to re-binding an
+// EXISTING agent name to a SECOND worktree from an anonymous caller —
+// that's cross-worktree forgery via name collision, observed in the
+// quickstart-in-foreign-worktree repro that coord triggered while
+// setting up a brainstorm worktree.
+//
+// Setup: existing agent bound to worktree A. Anonymous caller from
+// worktree B attempts to register the same name. Expectation: hard-bail
+// before any state change, error mentions both worktrees so the user
+// can self-recover.
+func TestHandleRegister_AnonymousCallerCannotRebindToDifferentWorktree(t *testing.T) {
+	worktreeA := t.TempDir()
+	worktreeB := t.TempDir()
+	if resolved, err := filepath.EvalSymlinks(worktreeA); err == nil {
+		worktreeA = resolved
+	}
+	if resolved, err := filepath.EvalSymlinks(worktreeB); err == nil {
+		worktreeB = resolved
+	}
+	// worktreeA needs a real .git so the peercred shared-worktree
+	// canonicalization in IsAgentInWorktree matches the session_ref
+	// path stored during the bootstrap register below.
+	if out, err := exec.Command("git", "-C", worktreeA, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init worktreeA: %v (%s)", err, out)
+	}
+	thrumDir := filepath.Join(worktreeA, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
+		t.Fatalf("mkdir identities: %v", err)
+	}
+
+	s, err := state.NewState(thrumDir, thrumDir, "repo_l9e1", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	handler := NewAgentHandler(s)
+
+	// Phase 1: register the original agent in worktreeA via the
+	// legitimate bootstrap path (peercred-resolved caller).
+	ctxA := peercred.WithIdentity(context.Background(), &peercred.ResolvedIdentity{
+		AgentID:  "coord_main",
+		Worktree: worktreeA,
+		PID:      os.Getpid(),
+	})
+	reqA, _ := json.Marshal(RegisterRequest{
+		Name:     "coord_main",
+		Role:     "coordinator",
+		Module:   "main",
+		AgentPID: os.Getpid(),
+	})
+	if _, err := handler.HandleRegister(ctxA, reqA); err != nil {
+		t.Fatalf("phase 1 (bootstrap register in worktreeA): %v", err)
+	}
+
+	// Seed a session_refs binding "coord_main → worktreeA" so
+	// IsAgentInWorktree's primary path matches. HandleRegister alone
+	// does not create a session for non-resurrect paths; in production
+	// the binding is written by session.start. Seeding directly keeps
+	// the test scoped to the l9e1 check rather than the full
+	// quickstart flow.
+	const sessionID = "ses_l9e1_phase1"
+	seedSessionRow(t, s, sessionID, "coord_main", "")
+	if _, err := s.RawDB().Exec(`
+		INSERT INTO session_refs (session_id, ref_type, ref_value, added_at)
+		VALUES (?, 'worktree', ?, ?)
+	`, sessionID, worktreeA, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatalf("seed session_ref binding for worktreeA: %v", err)
+	}
+	if !s.IsAgentInWorktree(context.Background(), "coord_main", worktreeA) {
+		t.Fatalf("phase 1 setup invariant violated: coord_main not bound to worktreeA")
+	}
+
+	// Phase 2: simulate an anonymous caller from worktreeB attempting
+	// to register the same agent name. Anonymous context — no
+	// peercred.WithIdentity. WithConnectingPID supplies the fake PID
+	// so the l9e1 check enters its resolveCallerWorktreeFn branch.
+	// Override resolveCallerWorktreeFn to return worktreeB without
+	// requiring a live /proc/<pid>/cwd backed by a real git root.
+	const fakePID = 7777
+	prev := resolveCallerWorktreeFn
+	resolveCallerWorktreeFn = func(pid int) (string, error) {
+		if pid == fakePID {
+			return worktreeB, nil
+		}
+		return prev(pid)
+	}
+	t.Cleanup(func() { resolveCallerWorktreeFn = prev })
+
+	ctxB := peercred.WithConnectingPID(context.Background(), fakePID)
+	reqB, _ := json.Marshal(RegisterRequest{
+		Name:     "coord_main", // same name as the bound agent in worktreeA
+		Role:     "coordinator",
+		Module:   "main",
+		AgentPID: fakePID,
+	})
+	_, err = handler.HandleRegister(ctxB, reqB)
+	if err == nil {
+		t.Fatal("expected anonymous-cross-worktree-binding rejection, got nil error")
+	}
+	if !strings.Contains(err.Error(), "already registered in a different worktree") {
+		t.Errorf("error should mention cross-worktree rebind; got: %v", err)
+	}
+	if !strings.Contains(err.Error(), worktreeB) {
+		t.Errorf("error should mention caller worktree %q for remediation; got: %v", worktreeB, err)
+	}
+
+	// State invariant: coord_main is still bound to worktreeA only.
+	// (Verify nothing leaked into worktreeB by checking the negation.)
+	if s.IsAgentInWorktree(context.Background(), "coord_main", worktreeB) {
+		t.Errorf("coord_main must not be bound to worktreeB after rejected register")
+	}
+	if !s.IsAgentInWorktree(context.Background(), "coord_main", worktreeA) {
+		t.Errorf("coord_main binding to worktreeA must be preserved after rejected register")
+	}
+}
+
+// TestHandleRegister_AnonymousCallerBootstrapStillAllowed — thrum-l9e1
+// negative test: a genuinely-new agent name registered anonymously
+// must still succeed (the bootstrap allowance that the l9e1 check
+// MUST preserve). Sanity-pins that l9e1 only bites cross-worktree
+// re-bind, not first-time registration.
+func TestHandleRegister_AnonymousCallerBootstrapStillAllowed(t *testing.T) {
+	tmpDir := t.TempDir()
+	if resolved, err := filepath.EvalSymlinks(tmpDir); err == nil {
+		tmpDir = resolved
+	}
+	if out, err := exec.Command("git", "-C", tmpDir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v (%s)", err, out)
+	}
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
+		t.Fatalf("mkdir identities: %v", err)
+	}
+
+	s, err := state.NewState(thrumDir, thrumDir, "repo_l9e1_bootstrap", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	handler := NewAgentHandler(s)
+
+	// Anonymous caller (no peercred.WithIdentity). Connecting PID is
+	// set so the l9e1 check enters its resolveCallerWorktreeFn branch
+	// — but with no existingAgent, the check short-circuits BEFORE
+	// invoking resolveCallerWorktreeFn (the `if existingAgent != nil`
+	// guard at the top of the block). Override anyway to a value that
+	// would trigger rejection IF the check fired — proves bootstrap
+	// genuinely skips the check rather than coincidentally matching.
+	const fakePID = 8888
+	prev := resolveCallerWorktreeFn
+	resolveCallerWorktreeFn = func(pid int) (string, error) {
+		return "/some/other/worktree", nil
+	}
+	t.Cleanup(func() { resolveCallerWorktreeFn = prev })
+
+	ctx := peercred.WithConnectingPID(context.Background(), fakePID)
+	req, _ := json.Marshal(RegisterRequest{
+		Name:     "fresh_agent",
+		Role:     "implementer",
+		Module:   "new",
+		AgentPID: fakePID,
+	})
+	resp, err := handler.HandleRegister(ctx, req)
+	if err != nil {
+		t.Fatalf("bootstrap of fresh_agent must succeed for anonymous caller: %v", err)
+	}
+	regResp, ok := resp.(*RegisterResponse)
+	if !ok || regResp.Status != "registered" {
+		t.Fatalf("bootstrap Status = %v (resp=%+v), want registered", regResp, resp)
+	}
+}

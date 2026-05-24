@@ -266,6 +266,37 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		return nil, fmt.Errorf("check for existing agent by id: %w", err)
 	}
 
+	// thrum-l9e1: anonymous-caller cross-worktree binding check.
+	//
+	// agent.register is on the anonymousAllowedMethods allowlist
+	// (server.go:138-148) to enable the bootstrap chicken-and-egg for
+	// genuinely-new agents in genuinely-new worktrees. That allowance is
+	// bounded: an anonymous caller (peercred resolved → ErrAnonymous)
+	// attempting to RE-bind an EXISTING agent name to a SECOND worktree
+	// is not bootstrap — it is cross-worktree forgery via name
+	// collision. Fail closed here so the CLI's post-RPC SaveIdentityFile
+	// never writes a duplicate identity into the foreign worktree.
+	//
+	// Companion to thrum-tgqx.1's CLI-side fail-closed pattern: peercred's
+	// WARN at resolver_unix.go:119 already surfaces the candidate git
+	// root; this check recomputes it via ResolveCallerWorktree and verifies
+	// the existing agent is genuinely bound to it via IsAgentInWorktree
+	// (the thrum-0pos co-located-agent helper).
+	if existingAgent != nil {
+		if resolved, _ := peercred.FromContext(ctx); resolved == nil {
+			if pid, ok := peercred.ConnectingPIDFromContext(ctx); ok && pid > 0 {
+				callerWorktree, _ := resolveCallerWorktreeFn(pid)
+				if callerWorktree != "" && !h.state.IsAgentInWorktree(ctx, agentID, callerWorktree) {
+					return nil, fmt.Errorf("agent %q is already registered in a different worktree; "+
+						"this caller is in %q — to register a different agent here, choose a unique --name; "+
+						"to move the existing agent's binding, run 'thrum prime' from its registered "+
+						"worktree (or 'thrum worktree teardown' if abandoning it)",
+						agentIdentityName(req.Name, agentID), callerWorktree)
+				}
+			}
+		}
+	}
+
 	if existingAgent != nil {
 		// Same agent returning (agent_id matches by construction).
 		// PID self-heal: if the caller provides a PID that differs from
