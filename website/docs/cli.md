@@ -384,8 +384,10 @@ See also: [Identity System](identity.md), [Session Restart](session-restart.md).
 ### thrum quickstart
 
 Register, start a session, and set an initial intent in one step. If the agent
-is already registered, it re-registers automatically. Supports agent naming via
-the `--name` flag or `THRUM_NAME` environment variable.
+is already registered, it re-registers automatically. The agent name can be
+supplied as a positional argument, via the `--name` flag, or via the
+`THRUM_NAME` environment variable. Precedence (highest → lowest): `--name` flag
+→ positional → `THRUM_NAME` → identity-file name fallback.
 
 **G1a guard (quickstart_self_rename):** If the caller's ancestor PID chain
 already owns an identity in this directory (i.e., this runtime has already
@@ -402,6 +404,7 @@ a live process in a different worktree, the registration is refused. Pass
 other process has exited), or choose a different name.
 
 ```text
+thrum quickstart [AGENT_NAME] --role ROLE --module MODULE [flags]
 thrum quickstart --name AGENT_NAME --role ROLE --module MODULE [flags]
 ```
 
@@ -421,17 +424,20 @@ Requires `--role` and `--module` (via flags or `THRUM_ROLE`/`THRUM_MODULE` env
 vars). The `--runtime` value is written to `preferred_runtime` in the identity
 file.
 
-The `THRUM_NAME` environment variable takes priority over the `--name` flag.
+Name resolution precedence (highest → lowest): `--name` flag, positional
+argument, `THRUM_NAME` env-var, identity-file name fallback. The lenient
+positional form follows the Unix `tool [name]` convention; the flag wins when
+both are supplied.
 
 Example:
 
 ```text
-$ thrum quickstart --name implementer_auth --role implementer --module auth --intent "Fixing token refresh"
-✓ Registered as @implementer (implementer_35HV62T9B9)
+$ thrum quickstart implementer_auth --role implementer --module auth --intent "Fixing token refresh"
+✓ Registered as @implementer (implementer_auth)
 ✓ Session started: ses_01HXF2A9...
 ✓ Intent set: Fixing token refresh
 
-# With a human-readable name
+# Equivalent with the explicit flag
 $ thrum quickstart --name furiosa --role implementer --module auth --intent "Fixing token refresh"
 ✓ Registered as @furiosa (furiosa)
 ✓ Session started: ses_01HXF2A9...

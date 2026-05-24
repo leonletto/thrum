@@ -106,6 +106,41 @@ visibility into v0.10.6 authors until they upgrade.
   `internal/daemon/state.NewState`. The legacy path remains readable
   (read-fallback for mixed clusters) but is no longer written by v0.10.6 code.
 
+### Security
+
+- **Reject anonymous cross-worktree agent re-bind in `HandleRegister`
+  (thrum-l9e1)** — closes a P1 gap where an anonymous registration from
+  worktree B could silently re-bind to an agent identity claimed by worktree A,
+  overwriting the original identity file. The daemon now fail-closes the
+  re-bind when the caller's worktree disagrees with the existing agent's
+  worktree and the new request carries no prior identity; the CLI's
+  `SaveIdentityFile` only fires after the RPC ack, so the side-effect is
+  automatically suppressed. Companion to the thrum-tgqx.1 fail-closed pattern;
+  reuses the existing `resolveCallerWorktreeFn` test seam and
+  `IsAgentInWorktree` predicate.
+
+### Fixed
+
+- **`thrum quickstart` accepts a positional `<name>` argument and corrects
+  env-var precedence (thrum-9dnh)** — `thrum quickstart researcher_memories`
+  now works (the positional is treated as `--name`); the flag/env precedence
+  is `--name` flag → positional → `THRUM_NAME` env-var → identity-file
+  fallback. Previously, `THRUM_NAME` could override a positional because the
+  guard only checked `Flags().Changed("name")` and not whether `name` was
+  empty. Matches the Unix `tool [name]` convention.
+- **Recovery docs corrected — real `messages.db` filename + honest
+  "deletion leaves a BLANK DB" framing (thrum-1gar)** — the database-recovery
+  sections in `CLAUDE.md`, `website/docs/architecture.md`, and
+  `internal/backup/restore.go` previously cited the wrong DB filename and
+  implied a deleted SQLite store would auto-rebuild from the JSONL event log.
+  It does not — `NewState` never calls `Projector.Rebuild()`, so a deleted DB
+  comes back blank and only refills from new events. Recovery option 3 now
+  points at the timestamped pre-migration backup the daemon creates at every
+  migration (`messages.db.pre-migration-vN-<UTC>.bak`), with a complete
+  `cd` + `cp` sequence so users in unrelated working directories don't hit a
+  bare-filename failure. See thrum-rtlt for the long-term event-sourcing
+  rework that would make true rebuild-from-history feasible.
+
 ## [0.10.5] - 2026-05-21
 
 ### Added
