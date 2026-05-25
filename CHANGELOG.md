@@ -120,6 +120,21 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **`agent.register` error message names `thrum agent delete` as the
+  stranded-identity resolution (thrum-wk7d, part 1)** — when
+  `HandleRegister` refuses a registration because the agent_id is
+  already bound to a different worktree, the error suggested three
+  resolution paths (pick a unique `--name`, `thrum prime` from the
+  registered worktree, or `thrum worktree teardown` if abandoning).
+  None addressed the stranded-identity scenario that wedged wave-4
+  dispatch earlier today: an agent identity that survives in the DB
+  after its original worktree was torn down (teardown does not
+  cascade-delete the agent identity). The error message now names
+  `thrum agent delete <name> --force` as the fourth path so operators
+  no longer have to grep source to discover the cleanup command.
+  `--force` covers the common stranded-identity case where the agent
+  still has artifacts the CLI refuses to drop silently; on the rare
+  case where `--force` is unnecessary it is a no-op.
 - **Move dead-agent self-heal off the `team.list` hot path
   (thrum-1nkt.6)** — `team.list` used to fire `agent.session.end`
   events inline for active agents with dead PIDs, coupling a read RPC

@@ -315,11 +315,14 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 						slog.Int("caller_pid", pid),
 						slog.Any("err", resolveErr))
 				} else if !h.state.IsAgentInWorktree(ctx, agentID, callerWorktree) {
+					name := agentIdentityName(req.Name, agentID)
 					return nil, fmt.Errorf("agent %q is already registered in a different worktree; "+
 						"this caller is in %q — to register a different agent here, choose a unique --name; "+
 						"to move the existing agent's binding, run 'thrum prime' from its registered "+
-						"worktree (or 'thrum worktree teardown' if abandoning it)",
-						agentIdentityName(req.Name, agentID), callerWorktree)
+						"worktree (or 'thrum worktree teardown' if abandoning it); "+
+						"to clear a stranded identity whose original worktree is no longer present, run "+
+						"'thrum agent delete %s --force'",
+						name, callerWorktree, name)
 				}
 			}
 		}
