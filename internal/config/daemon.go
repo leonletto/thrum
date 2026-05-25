@@ -174,7 +174,7 @@ type DaemonConfig struct {
 	LogLevel                  string `json:"log_level,omitempty"`                    // "debug", "info", "warn", "error"; default "info"
 	EventsRetentionDays       int    `json:"events_retention_days,omitempty"`        // retention window for .thrum/events.jsonl + SQLite events table (default 2)
 	CompactionSizeThresholdMB int    `json:"compaction_size_threshold_mb,omitempty"` // per-file size threshold above which compaction rewrites the file (default 10)
-	MaxMessageBodyBytes       int    `json:"max_message_body_bytes,omitempty"`       // hard cap on a single message.create body.content size at write (default 1 MB; thrum-mhwt). 0 = use default; negative = disable cap (not recommended).
+	MaxMessageBodyBytes       int    `json:"max_message_body_bytes,omitempty"`       // hard cap on a single message.create body.content size at write (default 1 MB; thrum-mhwt). 0 = use default. Negative = disable cap (operator override). Applies to LOCAL writes only: message.send and message.edit RPCs are gated; peer-synced events arriving via sync_apply.go are NOT (they were already committed on the originating peer and the projector applies them unconditionally — a peer with a higher cap can still land oversized bodies in our local DB).
 }
 
 // DefaultMaxMessageBodyBytes bounds a single message body at 1 MB. Above

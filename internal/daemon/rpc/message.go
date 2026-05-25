@@ -388,14 +388,34 @@ func (h *MessageHandler) NotifyMessageCreate(evt types.MessageCreateEvent) {
 	bc.BroadcastAll(buildWSNotification(msgInfo))
 }
 
-// NewMessageHandler creates a new message handler. maxBodyBytes
-// defaults to config.DefaultMaxMessageBodyBytes (1 MB; thrum-mhwt).
-// Use NewMessageHandlerWithDispatcher to override.
+// NewMessageHandler creates a new message handler intended for test
+// fixtures that do not exercise the message body-size cap. The
+// resulting handler has maxBodyBytes = 0, which disables the cap
+// entirely. Production code paths construct the handler via
+// NewMessageHandlerWithDispatcher with the effective cap from
+// DaemonConfig.MaxMessageBodyBytesEffective. thrum-mhwt.
 func NewMessageHandler(state *state.State) *MessageHandler {
 	return &MessageHandler{
 		state:         state,
 		dispatcher:    subscriptions.NewDispatcher(state.DB()),
 		groupResolver: groups.NewResolver(state.DB()),
+	}
+}
+
+// checkBodySize returns a typed RPC error with -32602 (Invalid Params)
+// when content exceeds h.maxBodyBytes, and nil otherwise. h.maxBodyBytes
+// == 0 disables the cap. Used by every write-side handler that accepts
+// caller-supplied message body content (HandleSend + HandleEdit) so the
+// rejection surface is uniform and machine-parseable. thrum-mhwt.
+func (h *MessageHandler) checkBodySize(content string) error {
+	if h.maxBodyBytes <= 0 || len(content) <= h.maxBodyBytes {
+		return nil
+	}
+	return &RPCError{
+		Code: -32602,
+		Message: fmt.Sprintf(
+			"message body too large: %d bytes exceeds the daemon limit of %d bytes (daemon.max_message_body_bytes). Reduce the body size or raise the config; for genuinely large payloads consider attachments instead of inline content",
+			len(content), h.maxBodyBytes),
 	}
 }
 
@@ -466,9 +486,8 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	// compactor's read ceiling. h.maxBodyBytes is the effective limit
 	// (set at construction from DaemonConfig.MaxMessageBodyBytesEffective);
 	// 0 disables the cap (test path).
-	if h.maxBodyBytes > 0 && len(req.Content) > h.maxBodyBytes {
-		return nil, fmt.Errorf("message body too large: %d bytes exceeds the daemon limit of %d bytes (daemon.max_message_body_bytes). Reduce the body size or raise the config; for genuinely large payloads consider attachments instead of inline content",
-			len(req.Content), h.maxBodyBytes)
+	if err := h.checkBodySize(req.Content); err != nil {
+		return nil, err
 	}
 
 	// Generate message ID
@@ -1615,6 +1634,14 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 	// At least one of content or structured must be provided
 	if req.Content == "" && req.Structured == nil {
 		return nil, fmt.Errorf("at least one of content or structured must be provided")
+	}
+
+	// thrum-mhwt: same cap as HandleSend. Without this, an operator
+	// could send a small message and then edit it to an arbitrary
+	// size, bypassing the write-side cap. Same error surface
+	// (-32602 RPCError) so machine consumers handle both alike.
+	if err := h.checkBodySize(req.Content); err != nil {
+		return nil, err
 	}
 
 	// Get current agent and session

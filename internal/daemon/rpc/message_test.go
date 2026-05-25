@@ -2567,6 +2567,44 @@ func TestHandleSend_MaxBodyBytes(t *testing.T) {
 		if !strings.Contains(err.Error(), "too large") {
 			t.Errorf("err = %q, want message mentioning size cap (containing \"too large\")", err)
 		}
+		// thrum-mhwt review finding #2: rejection must be a typed
+		// *RPCError with -32602 (Invalid Params) so the JSON-RPC
+		// surface is machine-parseable, not a generic -32000.
+		rpcErr, ok := err.(*RPCError)
+		if !ok {
+			t.Fatalf("HandleSend err = %T, want *RPCError", err)
+		}
+		if rpcErr.Code != -32602 {
+			t.Errorf("RPCError.Code = %d, want -32602 (Invalid Params)", rpcErr.Code)
+		}
+	})
+
+	t.Run("rejects_over_limit_via_HandleEdit", func(t *testing.T) {
+		// HandleEdit must enforce the same cap as HandleSend; without
+		// this an operator could send a small message and edit it to
+		// arbitrary size (review finding #1).
+		const limit = 100
+		handler := NewMessageHandlerWithDispatcher(st, nil, "", "", "", limit)
+		body := strings.Repeat("q", limit+1)
+		req, _ := json.Marshal(EditRequest{
+			MessageID:     "msg_does_not_exist_yet",
+			Content:       body,
+			CallerAgentID: agentID,
+		})
+		_, err := handler.HandleEdit(context.Background(), req)
+		if err == nil {
+			t.Fatal("HandleEdit with body > limit: got nil err, want size-cap rejection BEFORE the message-existence check")
+		}
+		if !strings.Contains(err.Error(), "too large") {
+			t.Errorf("err = %q, want size-cap error (containing \"too large\"); did the cap fire AFTER the message-existence check?", err)
+		}
+		rpcErr, ok := err.(*RPCError)
+		if !ok {
+			t.Fatalf("HandleEdit err = %T, want *RPCError", err)
+		}
+		if rpcErr.Code != -32602 {
+			t.Errorf("RPCError.Code = %d, want -32602 (Invalid Params)", rpcErr.Code)
+		}
 	})
 
 	t.Run("accepts_at_limit", func(t *testing.T) {
