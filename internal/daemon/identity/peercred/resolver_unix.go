@@ -91,7 +91,11 @@ func (r *unixResolver) Resolve(conn net.Conn) (*ResolvedIdentity, error) {
 	// wrapped with ErrAnonymous) to route through server.go's legacy
 	// fallthrough. The fallthrough is still useful for transient races even
 	// though it's no longer the everyday path on macOS.
-	cwd, err := processCWDFn(pid)
+	// thrum-xir.45: cachedProcessCWD wraps processCWDFn with a short-TTL
+	// per-PID cache. The Darwin processCWD shells out to lsof (~30-300ms);
+	// without caching, every unix-socket RPC pays that cost. See
+	// cwd_cache.go for the cache rationale and TTL choice.
+	cwd, err := cachedProcessCWD(pid)
 	if err != nil {
 		slog.Warn("peercred.resolve step=cwd failed", "pid", pid, "err", err.Error())
 		return nil, fmt.Errorf("peercred: cannot read CWD for PID %d: %w", pid, err)
