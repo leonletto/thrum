@@ -120,6 +120,37 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **applySessionStart now `INSERT OR IGNORE` — peer-replicated
+  `agent.session.start` no longer aborts sync batches (thrum-9jcb.3)**
+  — third soak-mined finding from the same debug-log window that
+  surfaced thrum-10j0 and thrum-mhwt. Peer daemons replicate
+  `agent.session.start` events for sessions whose `session_id` may
+  already exist locally (e.g. session-resurrect cases where the same
+  logical session is announced by more than one daemon during sync
+  catch-up). The projector at
+  `internal/projection/projector.go`'s `applySessionStart` used a bare
+  `INSERT INTO sessions`, which hit the `sessions.session_id` UNIQUE
+  constraint on the second arrival. `sync_apply.go` bails on the first
+  projector error and returns the count-of-applied-so-far, so the
+  remainder of the batch was abandoned and the next `sync.notify`
+  cycle had to retry (eventually consistent via `HasEvent` dedup, but
+  noisy at INFO level — 9 occurrences observed in a 15-min debug-mode
+  soak window — and structurally risky if a legitimate later event in
+  the same batch happens to land alongside the duplicate). Fix is a
+  one-line `INSERT OR IGNORE` at the projector. The choice over
+  `ON CONFLICT(session_id) DO UPDATE` is deliberate: `started_at` is
+  immutable for that session, and `last_seen_at` is touched
+  independently by other apply paths — a late-arriving peer copy of
+  the start event could regress freshness if it overwrote a newer
+  local value. Audit of the sibling INSERT projector handlers
+  confirmed no other peer-replicable handler has the same bug:
+  `agents`, `groups`, `group_members`, `message_deliveries`,
+  `purge_metadata` already use `INSERT OR IGNORE` / `ON CONFLICT`,
+  and `agent_work_contexts` uses a delete-replace per-agent pattern;
+  `message.create` is safe by construction because `message_id` is
+  daemon-scoped. New regression `TestProjector_ApplySessionStart_
+  DuplicateIsNoOp` applies the same event twice through `Apply()` and
+  asserts no error plus exactly one row in `sessions`.
 - **Cap message body size at write — 1 MB default, configurable
   (thrum-mhwt)** — preventative follow-up to thrum-10j0. The
   scanner-buffer bump lets the compactor READ events.jsonl lines up

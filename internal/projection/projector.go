@@ -655,8 +655,16 @@ func (p *Projector) applySessionStart(ctx context.Context, data json.RawMessage)
 		return fmt.Errorf("unmarshal agent.session.start: %w", err)
 	}
 
+	// INSERT OR IGNORE: a peer-replicated agent.session.start for a session
+	// that already exists locally (same session_id arriving via sync after the
+	// originating daemon wrote it) is a no-op. session_id is by ULID
+	// construction unique to one logical session, and started_at is immutable
+	// for that session — there is nothing to update. We deliberately do NOT
+	// UPSERT last_seen_at from the event timestamp because other apply paths
+	// touch last_seen_at independently; a late-arriving peer copy of the start
+	// event could regress freshness if it overwrote a newer value.
 	_, err := p.db.ExecContext(ctx, `
-		INSERT INTO sessions (session_id, agent_id, started_at, last_seen_at)
+		INSERT OR IGNORE INTO sessions (session_id, agent_id, started_at, last_seen_at)
 		VALUES (?, ?, ?, ?)
 	`,
 		event.SessionID,

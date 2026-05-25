@@ -376,6 +376,53 @@ func TestProjector_ApplySessionStart(t *testing.T) {
 	}
 }
 
+// TestProjector_ApplySessionStart_DuplicateIsNoOp guards thrum-9jcb.3: peer
+// sync replicates agent.session.start events for sessions that may already
+// exist locally (same session_id arriving from a peer daemon after the
+// originating daemon wrote it). Before the INSERT OR IGNORE fix, the second
+// apply hit a UNIQUE constraint failure on sessions.session_id, aborting the
+// remainder of the sync batch and forcing a retry round-trip.
+func TestProjector_ApplySessionStart_DuplicateIsNoOp(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	event := types.AgentSessionStartEvent{
+		Type:      "agent.session.start",
+		Timestamp: "2026-01-01T00:00:00Z",
+		SessionID: "ses_dup",
+		AgentID:   "agent:test:DUP",
+	}
+
+	data, _ := json.Marshal(event)
+	if err := p.Apply(context.Background(), data); err != nil {
+		t.Fatalf("first apply failed: %v", err)
+	}
+	if err := p.Apply(context.Background(), data); err != nil {
+		t.Fatalf("second apply failed (regression — should be a no-op, not a UNIQUE constraint error): %v", err)
+	}
+
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM sessions WHERE session_id = ?", "ses_dup").Scan(&count); err != nil {
+		t.Fatalf("count sessions: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected exactly 1 session row after duplicate apply, got %d", count)
+	}
+
+	var agentID, startedAt string
+	if err := db.QueryRow("SELECT agent_id, started_at FROM sessions WHERE session_id = ?", "ses_dup").Scan(&agentID, &startedAt); err != nil {
+		t.Fatalf("query session: %v", err)
+	}
+	if agentID != "agent:test:DUP" {
+		t.Errorf("expected agent_id 'agent:test:DUP', got '%s'", agentID)
+	}
+	if startedAt != "2026-01-01T00:00:00Z" {
+		t.Errorf("expected started_at '2026-01-01T00:00:00Z', got '%s'", startedAt)
+	}
+}
+
 func TestProjector_ApplySessionEnd(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
