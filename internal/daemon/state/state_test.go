@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/leonletto/thrum/internal/types"
 	"github.com/oklog/ulid/v2"
@@ -687,5 +688,91 @@ func TestWriteEvent_NoTriggerSet_DoesNotPanic(t *testing.T) {
 	}
 	if _, err := st.WriteEvent(context.Background(), evt); err != nil {
 		t.Fatalf("WriteEvent with nil sync trigger: %v", err)
+	}
+}
+
+// TestGoPostCommit_NilIsNoOp verifies the nil-fn fast path so callers
+// can pass WriteEvent's return value directly. thrum-1nkt.5.
+func TestGoPostCommit_NilIsNoOp(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	st, err := NewState(thrumDir, thrumDir, "r_GOPC_NIL", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	// Must not panic and must not increment the WaitGroup.
+	st.GoPostCommit(nil)
+	if !st.WaitPostCommit(50 * time.Millisecond) {
+		t.Error("WaitPostCommit timed out after GoPostCommit(nil); the no-op fast path must not register on the WaitGroup")
+	}
+}
+
+// TestGoPostCommit_DrainsOnWait verifies that WaitPostCommit blocks
+// until in-flight GoPostCommit goroutines complete. thrum-1nkt.5.
+func TestGoPostCommit_DrainsOnWait(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	st, err := NewState(thrumDir, thrumDir, "r_GOPC_DRAIN", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	const callers = 8
+	const work = 100 * time.Millisecond
+
+	var done atomic.Int32
+	for range callers {
+		st.GoPostCommit(func() {
+			time.Sleep(work)
+			done.Add(1)
+		})
+	}
+
+	// Short wait must time out because in-flight goroutines still sleep.
+	if st.WaitPostCommit(work / 4) {
+		t.Error("WaitPostCommit returned true with in-flight goroutines (timeout was too short to have drained); drain semantics broken")
+	}
+
+	// Generous wait must succeed and observe all callers complete.
+	if !st.WaitPostCommit(work * 4) {
+		t.Fatalf("WaitPostCommit timed out; expected %d goroutines to finish within budget", callers)
+	}
+	if got := int(done.Load()); got != callers {
+		t.Errorf("done = %d, want %d after drain", got, callers)
+	}
+}
+
+// TestStateClose_DrainsInflightPostCommits verifies Close()'s drain
+// path actually waits for in-flight GoPostCommit goroutines so the DB
+// and JSONL writer don't shut down underneath them. thrum-1nkt.5.
+func TestStateClose_DrainsInflightPostCommits(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	st, err := NewState(thrumDir, thrumDir, "r_GOPC_CLOSE", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+
+	work := 80 * time.Millisecond
+	var done atomic.Bool
+	st.GoPostCommit(func() {
+		time.Sleep(work)
+		done.Store(true)
+	})
+
+	start := time.Now()
+	if err := st.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	elapsed := time.Since(start)
+
+	if !done.Load() {
+		t.Errorf("Close returned before in-flight GoPostCommit goroutine completed (elapsed=%v); drain skipped", elapsed)
+	}
+	if elapsed < work/2 {
+		t.Errorf("Close elapsed = %v, want ≥ %v (must have waited for the in-flight goroutine)", elapsed, work/2)
 	}
 }

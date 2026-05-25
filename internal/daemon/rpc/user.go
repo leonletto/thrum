@@ -149,9 +149,7 @@ func (h *UserHandler) HandleRegister(ctx context.Context, params json.RawMessage
 	}
 	h.state.Unlock()
 	stateLocked = false
-	if postCommit != nil {
-		postCommit()
-	}
+	h.state.GoPostCommit(postCommit)
 	return resp, nil
 }
 

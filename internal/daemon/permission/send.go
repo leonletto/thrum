@@ -88,8 +88,6 @@ func (p *Permission) SendSupervisorMessage(ctx context.Context, to, body, thread
 	if err != nil {
 		return "", fmt.Errorf("write supervisor message: %w", err)
 	}
-	if postCommit != nil {
-		postCommit()
-	}
+	p.state.GoPostCommit(postCommit)
 	return msgID, nil
 }

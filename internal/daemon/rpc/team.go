@@ -595,9 +595,7 @@ func (h *TeamHandler) emitSessionEndForDeadAgent(ctx context.Context, sessionID 
 	if err != nil {
 		return fmt.Errorf("write session.end event: %w", err)
 	}
-	if postCommit != nil {
-		postCommit()
-	}
+	h.state.GoPostCommit(postCommit)
 	return nil
 }
 

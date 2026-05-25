@@ -54,6 +54,10 @@ type State struct {
 	signEvent          func(event map[string]any, key ed25519.PrivateKey) // Injected signing function
 	touchMu            sync.Mutex                                         // Protects touchTimes (thrum-7nuj: agent last_seen debounce)
 	touchTimes         map[string]time.Time                               // Per-agent most-recent TouchAgentLastSeen timestamp
+	// postCommitWG tracks in-flight postCommit goroutines launched via
+	// GoPostCommit. Close() drains it on shutdown so the daemon does
+	// not exit mid-walker/compactor. thrum-1nkt.5.
+	postCommitWG sync.WaitGroup
 }
 
 // NewState creates a new state manager for the given .thrum directory.
@@ -216,9 +220,17 @@ func isStructuralEvent(eventType string) bool {
 	return false
 }
 
-// Close closes the state manager and its resources.
+// Close closes the state manager and its resources. Drains in-flight
+// postCommit goroutines (launched via GoPostCommit) up to
+// postCommitDrainTimeout so walker+compactor work in flight at shutdown
+// gets a chance to complete before the DB closes underneath it.
+// thrum-1nkt.5.
 func (s *State) Close() error {
 	var errs []error
+
+	if !s.WaitPostCommit(postCommitDrainTimeout) {
+		errs = append(errs, fmt.Errorf("postCommit drain timed out after %s; in-flight walker/compactor work was abandoned", postCommitDrainTimeout))
+	}
 
 	if err := s.eventsWriter.Close(); err != nil {
 		errs = append(errs, fmt.Errorf("close events writer: %w", err))
@@ -229,6 +241,58 @@ func (s *State) Close() error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// postCommitDrainTimeout bounds how long Close() waits for in-flight
+// GoPostCommit goroutines (walker + compactor fan-out) before giving
+// up. Sits at the walker's 30s + compactor's 60s sum so even the worst-
+// case structural-event sync window can complete cleanly on a graceful
+// shutdown. thrum-1nkt.5.
+const postCommitDrainTimeout = 90 * time.Second
+
+// GoPostCommit runs fn in a new goroutine while registering it with the
+// state's shutdown WaitGroup. nil fn is a no-op (matches the pre-1nkt.5
+// `if postCommit != nil` guard semantics so callers can pass the
+// WriteEvent return value directly without a nil check). thrum-1nkt.5.
+//
+// The pattern at the 21 structural-event call sites is:
+//
+//	postCommit, err := s.WriteEvent(ctx, event)
+//	s.Unlock()
+//	if err != nil { ... }
+//	s.GoPostCommit(postCommit)
+//
+// The goroutine runs the walker+compactor fan-out outside the caller's
+// RPC window, so the RPC returns as soon as the events table is
+// written. graceful Close() drains in-flight goroutines up to
+// postCommitDrainTimeout before tearing down the DB.
+func (s *State) GoPostCommit(fn func()) {
+	if fn == nil {
+		return
+	}
+	s.postCommitWG.Add(1)
+	go func() {
+		defer s.postCommitWG.Done()
+		fn()
+	}()
+}
+
+// WaitPostCommit blocks until all in-flight GoPostCommit goroutines
+// have completed, or timeout elapses. Returns true if the drain
+// completed cleanly, false if it timed out. Exposed for tests + Close;
+// production callers typically reach this via Close(). thrum-1nkt.5.
+func (s *State) WaitPostCommit(timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		s.postCommitWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
 }
 
 // WriteEvent writes an event to both JSONL and SQLite.

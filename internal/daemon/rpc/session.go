@@ -164,9 +164,7 @@ func (h *SessionHandler) HandleStart(ctx context.Context, params json.RawMessage
 	if err != nil {
 		return nil, fmt.Errorf("write session.start event: %w", err)
 	}
-	if postCommit != nil {
-		postCommit()
-	}
+	h.state.GoPostCommit(postCommit)
 
 	// Store initial scopes
 	for _, scope := range req.Scopes {
@@ -280,9 +278,7 @@ func (h *SessionHandler) HandleEnd(ctx context.Context, params json.RawMessage) 
 	if err != nil {
 		return nil, fmt.Errorf("write session.end event: %w", err)
 	}
-	if postCommit != nil {
-		postCommit()
-	}
+	h.state.GoPostCommit(postCommit)
 
 	// Sync work contexts for this agent
 	if err := h.syncWorkContexts(ctx, session.AgentID); err != nil {
@@ -547,9 +543,7 @@ func (h *SessionHandler) recoverOrphanedSessions(ctx context.Context, agentID st
 		if err != nil {
 			return fmt.Errorf("write crash recovery event for session %s: %w", sessionID, err)
 		}
-		if postCommit != nil {
-			postCommit()
-		}
+		h.state.GoPostCommit(postCommit)
 	}
 
 	return nil
@@ -910,9 +904,7 @@ func (h *SessionHandler) syncWorkContexts(ctx context.Context, agentID string) e
 	if err != nil {
 		return fmt.Errorf("write agent.update event: %w", err)
 	}
-	if postCommit != nil {
-		postCommit()
-	}
+	h.state.GoPostCommit(postCommit)
 
 	return nil
 }

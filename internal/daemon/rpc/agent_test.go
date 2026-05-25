@@ -2108,8 +2108,19 @@ func TestHandleRegister_BurstRegister_NoLockContention(t *testing.T) {
 		preFixWouldTakeAtLeast = time.Duration(burst) * triggerDelay
 	)
 
+	// triggerWg gates the post-handler triggerCount assertion. Post-
+	// thrum-1nkt.5, postCommit fires asynchronously (`go postCommit()`)
+	// so handlers return before the sync-trigger goroutine completes.
+	// Without this WaitGroup, the triggerCount.Load() below would race
+	// the async trigger goroutines and intermittently observe N-1 or
+	// fewer increments. We measure `elapsed` BEFORE triggerWg.Wait()
+	// so the post-bsn7 concurrent-handlers invariant is still asserted
+	// against handler return time only, not trigger wall-clock.
 	var triggerCount atomic.Int32
+	var triggerWg sync.WaitGroup
+	triggerWg.Add(burst)
 	s.SetSyncTrigger(func(ctx context.Context) {
+		defer triggerWg.Done()
 		triggerCount.Add(1)
 		time.Sleep(triggerDelay)
 	})
@@ -2151,6 +2162,11 @@ func TestHandleRegister_BurstRegister_NoLockContention(t *testing.T) {
 		t.Error(e)
 	}
 
+	// Wait for the async sync-trigger goroutines before reading
+	// triggerCount. Post-1nkt.5 these run after handlers return; pre-
+	// 1nkt.5 they ran sync inside the handler and were already complete.
+	triggerWg.Wait()
+
 	if got := int(triggerCount.Load()); got != burst {
 		t.Errorf("triggerCount = %d, want %d (every fresh-agent register emits an agent.register structural event)", got, burst)
 	}
@@ -2161,6 +2177,78 @@ func TestHandleRegister_BurstRegister_NoLockContention(t *testing.T) {
 }
 
 // --- end thrum-kdyf section --------------------------------------------
+
+// TestHandleRegister_PostCommitFireAndForget — thrum-1nkt.5 regression.
+// Post-bsn7, postCommit ran sync after state.Lock release, so HandleRegister
+// still blocked for walker+compactor wall-clock (up to 90s in worst case).
+// thrum-1nkt.5 wraps postCommit in `go` at every structural-event call site
+// so callers return immediately. Assertion: with a slow sync-trigger stub
+// (~300ms), HandleRegister must return in well under triggerDelay and the
+// trigger must NOT have completed by the time the handler returns.
+func TestHandleRegister_PostCommitFireAndForget(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_1nkt5_async", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	const (
+		triggerDelay = 300 * time.Millisecond
+		// handlerCeiling is the maximum acceptable HandleRegister wall-
+		// clock. Anything sync-blocking on triggerDelay would take ≥
+		// triggerDelay. The ceiling sits well below to leave CI jitter
+		// headroom while still failing loudly on regression.
+		handlerCeiling = triggerDelay / 3
+	)
+
+	triggerDone := make(chan struct{}, 1)
+	s.SetSyncTrigger(func(ctx context.Context) {
+		time.Sleep(triggerDelay)
+		select {
+		case triggerDone <- struct{}{}:
+		default:
+		}
+	})
+
+	t.Setenv("THRUM_ROLE", "implementer")
+	t.Setenv("THRUM_MODULE", "1nkt5-async")
+	handler := NewAgentHandler(s)
+
+	req := json.RawMessage(fmt.Sprintf(
+		`{"name":"agent_1nkt5_async","role":"implementer","module":"1nkt5-async","agent_pid":%d}`,
+		os.Getpid(),
+	))
+
+	start := time.Now()
+	if _, regErr := handler.HandleRegister(context.Background(), req); regErr != nil {
+		t.Fatalf("HandleRegister: %v", regErr)
+	}
+	handlerElapsed := time.Since(start)
+
+	if handlerElapsed >= handlerCeiling {
+		t.Errorf("HandleRegister elapsed = %v, want < %v (postCommit must be async; ≥triggerDelay (%v) means we are still blocking on sync trigger)",
+			handlerElapsed, handlerCeiling, triggerDelay)
+	}
+
+	// Affirmatively prove the trigger had NOT completed by handler return.
+	select {
+	case <-triggerDone:
+		t.Errorf("sync trigger completed before HandleRegister returned (elapsed=%v); postCommit ran sync, not async",
+			handlerElapsed)
+	default:
+		// expected: trigger goroutine still sleeping
+	}
+
+	// Wait for the goroutine to finish so test teardown does not race
+	// with an in-flight trigger holding state references.
+	select {
+	case <-triggerDone:
+	case <-time.After(triggerDelay + 2*time.Second):
+		t.Error("async trigger never completed within timeout")
+	}
+}
 
 // --- thrum-xir.18.3: HandleRegister wiring tests ------------------------
 

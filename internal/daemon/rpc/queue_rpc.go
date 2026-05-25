@@ -508,9 +508,7 @@ func (h *TmuxHandler) sendSystemMessage(ctx context.Context, recipient, body str
 		slog.Error("[queue] write @system message failed", "err", err)
 		return
 	}
-	if postCommit != nil {
-		postCommit()
-	}
+	h.state.GoPostCommit(postCommit)
 }
 
 // handleCommandTimeout is invoked by the per-command timer when the configured

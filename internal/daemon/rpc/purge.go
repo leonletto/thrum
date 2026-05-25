@@ -243,9 +243,7 @@ func (h *PurgeHandler) execute(ctx context.Context, before string, cutoff time.T
 	if err != nil {
 		return nil, fmt.Errorf("write purge.executed event: %w", err)
 	}
-	if postCommit != nil {
-		postCommit()
-	}
+	h.state.GoPostCommit(postCommit)
 
 	return resp, nil
 }

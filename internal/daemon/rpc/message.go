@@ -701,10 +701,15 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	if err != nil {
 		return nil, fmt.Errorf("write message.create event: %w", err)
 	}
+	// thrum-1nkt.5: postCommit now runs async via GoPostCommit, so this
+	// metric measures only the goroutine-launch latency (sub-millisecond)
+	// rather than the walker+compactor wall-clock it tracked pre-1nkt.5.
+	// Profile consumers reading near-zero values here should NOT interpret
+	// that as a fast walker — the caller no longer blocks on walker
+	// completion at all. Use the walker's own profile.* slog records
+	// (snapshot.go / compact.go) for actual walker timing.
 	pcStart := time.Now()
-	if postCommit != nil {
-		postCommit()
-	}
+	h.state.GoPostCommit(postCommit)
 	phasePostCommitMs = time.Since(pcStart).Milliseconds()
 	dispatchStart := time.Now()
 	defer func() { phaseDispatchMs = time.Since(dispatchStart).Milliseconds() }()
@@ -1565,9 +1570,7 @@ func (h *MessageHandler) HandleDelete(ctx context.Context, params json.RawMessag
 	if err != nil {
 		return nil, fmt.Errorf("write message.delete event: %w", err)
 	}
-	if postCommit != nil {
-		postCommit()
-	}
+	h.state.GoPostCommit(postCommit)
 
 	return &DeleteMessageResponse{
 		MessageID: req.MessageID,
@@ -1665,9 +1668,7 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 	if err != nil {
 		return nil, fmt.Errorf("write message.edit event: %w", err)
 	}
-	if postCommit != nil {
-		postCommit()
-	}
+	h.state.GoPostCommit(postCommit)
 
 	// Query metadata and dispatch without lock (DB queries + WebSocket I/O)
 	preview := newContent
@@ -2517,9 +2518,7 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 			h.state.Lock()
 			return nil, fmt.Errorf("write message.receipt event: %w", err)
 		}
-		if postCommit != nil {
-			postCommit()
-		}
+		h.state.GoPostCommit(postCommit)
 	}
 
 	// Emit thread.updated for each affected thread

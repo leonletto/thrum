@@ -227,9 +227,7 @@ func (h *GroupHandler) HandleCreate(ctx context.Context, params json.RawMessage)
 	if err != nil {
 		return nil, fmt.Errorf("write group.create event: %w", err)
 	}
-	if postCommit != nil {
-		postCommit()
-	}
+	h.state.GoPostCommit(postCommit)
 
 	return &GroupCreateResponse{
 		GroupID:   groupID,
@@ -341,9 +339,7 @@ func (h *GroupHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 	if err != nil {
 		return nil, fmt.Errorf("write group.delete event: %w", err)
 	}
-	if postCommit != nil {
-		postCommit()
-	}
+	h.state.GoPostCommit(postCommit)
 
 	return &GroupDeleteResponse{
 		Name:      req.Name,
@@ -447,9 +443,7 @@ func (h *GroupHandler) HandleMemberAdd(ctx context.Context, params json.RawMessa
 	if err != nil {
 		return nil, fmt.Errorf("write group.member.add event: %w", err)
 	}
-	if postCommit != nil {
-		postCommit()
-	}
+	h.state.GoPostCommit(postCommit)
 
 	return &GroupMemberAddResponse{
 		Group:       req.Group,
@@ -512,9 +506,7 @@ func (h *GroupHandler) HandleMemberRemove(ctx context.Context, params json.RawMe
 	if err != nil {
 		return nil, fmt.Errorf("write group.member.remove event: %w", err)
 	}
-	if postCommit != nil {
-		postCommit()
-	}
+	h.state.GoPostCommit(postCommit)
 
 	return &GroupMemberRemoveResponse{
 		Group:       req.Group,

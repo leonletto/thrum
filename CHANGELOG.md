@@ -120,6 +120,39 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **Async-wrap `postCommit` at structural-event call sites (thrum-1nkt.5)** —
+  thrum-bsn7 made `postCommit` caller-driven (caller releases `state.Lock`
+  before invoking it) so other goroutines no longer block at
+  `state.Lock()` while one holds it through walker+compactor. But the
+  caller itself still ran `postCommit()` synchronously, so its own RPC
+  did not return until walker+compactor completed — up to a 90s
+  worst-case ceiling under edge conditions, and a measurable wall-clock
+  inflation on every register/send/group operation in the common case.
+  Concretely this surfaced as `tmux.create.quickstart-timeout` failures
+  when wave-4 dispatch tried to spawn fresh implementers: the inline
+  `agent.register` RPC blocked on its own postCommit past the 5-second
+  `waitForIdentityFile` budget. New `state.GoPostCommit(fn)` helper
+  wraps the invocation in a goroutine while registering it on a
+  package-level `sync.WaitGroup`, and `state.Close()` now drains in-
+  flight goroutines (up to a 90s budget matching the walker+compactor
+  worst-case ceiling) before tearing down the JSONL writer and DB. All
+  21 structural-event call sites switch from raw inline invocation to
+  `<receiver>.state.GoPostCommit(postCommit)`: `agent.go` (4),
+  `message.go` (4), `group.go` (4), `session.go` (4), `user.go`,
+  `team.go`, `queue_rpc.go`, `purge.go`, and `permission/send.go`.
+  Each handler now returns as soon as `WriteEvent` commits to the
+  events table; walker+compactor fan-out runs async, serializing
+  harmlessly at the already-existing `walker.mu`. The inbound peer-
+  event path in `sync_apply.go` stays synchronous (no caller is blocked
+  there). New regression tests cover (a) the handler-returns-before-
+  trigger invariant via a slow sync-trigger stub
+  (`TestHandleRegister_PostCommitFireAndForget`), (b) the drain
+  semantics (`TestGoPostCommit_DrainsOnWait`,
+  `TestStateClose_DrainsInflightPostCommits`), and (c) the nil-fn fast
+  path (`TestGoPostCommit_NilIsNoOp`). The existing
+  `TestHandleRegister_BurstRegister_NoLockContention` was adapted to
+  wait for now-async trigger goroutines before asserting trigger
+  count.
 - **`thrum send` no longer fires a `team.list` RPC per send (thrum-1nkt.4)** —
   every `thrum send` invocation ran a `team.list` RPC through the
   CLI hint pipeline (`cli.Collect` → `sendHints` →

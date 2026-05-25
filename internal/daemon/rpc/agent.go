@@ -389,9 +389,7 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		// blocked on the same lock — that was the kdyf failure class
 		// surfacing on every under-lock SELECT, not just
 		// ensureActiveSession's "check active session" path.
-		if postCommit != nil {
-			postCommit()
-		}
+		h.state.GoPostCommit(postCommit)
 
 		resumedID, resumeErr := h.ensureActiveSession(ctx, agentID, req.AgentPID)
 		if resumeErr != nil {
@@ -439,9 +437,7 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 	// HandleRegister/message.create on the same lock.
 	h.state.Unlock()
 	stateLocked = false
-	if postCommit != nil {
-		postCommit()
-	}
+	h.state.GoPostCommit(postCommit)
 	h.enforceWorktreeIdentity(ctx, agentIdentityName(req.Name, agentID))
 	return resp, nil
 }
@@ -921,9 +917,7 @@ func (h *AgentHandler) ensureActiveSession(ctx context.Context, agentID string, 
 	if err != nil {
 		return "", fmt.Errorf("write session.start event: %w", err)
 	}
-	if postCommit != nil {
-		postCommit()
-	}
+	h.state.GoPostCommit(postCommit)
 	return sessionID, nil
 }
 
@@ -1381,9 +1375,7 @@ func (h *AgentHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 	if err != nil {
 		return nil, fmt.Errorf("write agent.cleanup event: %w", err)
 	}
-	if postCommit != nil {
-		postCommit()
-	}
+	h.state.GoPostCommit(postCommit)
 
 	return &DeleteAgentResponse{
 		AgentID: agent.AgentID,
