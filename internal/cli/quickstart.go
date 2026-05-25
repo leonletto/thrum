@@ -65,7 +65,12 @@ func resolveQuickstartAgentPID(ctx context.Context, noAgentPID bool) int {
 	if noAgentPID {
 		return 0
 	}
-	pid, _ := process.FindClaudeAncestor(ctx)
+	// thrum-xir.40: bind to the TOPMOST runtime ancestor, not the
+	// closest. SessionStart hooks may spawn transient claude-sdk
+	// helper subprocesses; recording the closest match binds
+	// agent_pid to a short-lived helper. The topmost claude is the
+	// long-lived session main and is the stable PID to bind to.
+	pid, _ := process.FindTopmostRuntimeAncestor(ctx)
 	return pid
 }
 

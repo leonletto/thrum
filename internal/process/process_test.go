@@ -152,22 +152,23 @@ func TestMatchRuntimeName_BasenameAndFullPath(t *testing.T) {
 	}
 }
 
-// TestFindAncestorTopmost_ReturnsTopmostMatch guards thrum-xir.40: when
-// a runtime spawns a transient sub-process that ALSO matches a known
-// runtime name (e.g. Claude's SessionStart hook spawning a claude-sdk
-// helper, which `ps -o comm=` reports as "claude"), the ancestor walk
-// must return the TOPMOST matching ancestor (the long-lived session
-// main), not the first one encountered. Without this guarantee,
-// quickstart binds agent_pid to a short-lived helper PID and every
-// later RPC from the runtime main fails identity-guard pid_mismatch.
+// TestFindAncestor_TopmostVsClosest guards thrum-xir.40: when a runtime
+// spawns a transient sub-process that ALSO matches a known runtime name
+// (e.g. Claude's SessionStart hook spawning a claude-sdk helper, which
+// `ps -o comm=` reports as "claude"), the binding-write callers must use
+// the TOPMOST ancestor (long-lived session main) while identification /
+// lookup callers must use the CLOSEST ancestor (caller's immediate
+// runtime). Both semantics share the same underlying walk, parameterized
+// by the topmost flag.
 //
 // Simulated chain (parent direction):
 //
 //	caller (start) → 300 (bash) → 200 (claude-sdk-helper) →
 //	100 (claude main) → 1
 //
-// Expected: (100, "claude"). Pre-fix the walk returned (200, "claude").
-func TestFindAncestorTopmost_ReturnsTopmostMatch(t *testing.T) {
+// topmost=true  → (100, "claude")  -- the stable binding target
+// topmost=false → (200, "claude")  -- the immediate runtime context
+func TestFindAncestor_TopmostVsClosest(t *testing.T) {
 	parents := map[int]int{
 		300: 200,
 		200: 100,
@@ -176,47 +177,55 @@ func TestFindAncestorTopmost_ReturnsTopmostMatch(t *testing.T) {
 	names := map[int]string{
 		300: "bash",
 		200: "claude", // helper process: matches knownRuntimes too
-		100: "claude", // session main: the stable target
+		100: "claude", // session main: the stable binding target
 	}
 	nameFn := func(_ context.Context, pid int) string { return names[pid] }
 	parentFn := func(_ context.Context, pid int) int { return parents[pid] }
 
-	gotPID, gotRuntime := findAncestorTopmost(context.Background(), 300, nameFn, parentFn)
-	if gotPID != 100 {
-		t.Errorf("findAncestorTopmost returned PID %d, want 100 (topmost claude ancestor)", gotPID)
+	gotTopPID, gotTopRuntime := findAncestor(context.Background(), 300, nameFn, parentFn, true)
+	if gotTopPID != 100 || gotTopRuntime != "claude" {
+		t.Errorf("findAncestor(topmost=true) returned (%d, %q), want (100, \"claude\")", gotTopPID, gotTopRuntime)
 	}
-	if gotRuntime != "claude" {
-		t.Errorf("findAncestorTopmost returned runtime %q, want \"claude\"", gotRuntime)
+
+	gotCloPID, gotCloRuntime := findAncestor(context.Background(), 300, nameFn, parentFn, false)
+	if gotCloPID != 200 || gotCloRuntime != "claude" {
+		t.Errorf("findAncestor(topmost=false) returned (%d, %q), want (200, \"claude\")", gotCloPID, gotCloRuntime)
 	}
 }
 
-// TestFindAncestorTopmost_NoMatch confirms the zero-return contract when
-// no claude-named process appears in the chain at all.
-func TestFindAncestorTopmost_NoMatch(t *testing.T) {
+// TestFindAncestor_NoMatch confirms the zero-return contract when no
+// runtime appears in the chain at all, for both topmost and closest
+// semantics. Same chain, same expectation.
+func TestFindAncestor_NoMatch(t *testing.T) {
 	parents := map[int]int{50: 40, 40: 30, 30: 1}
 	names := map[int]string{50: "bash", 40: "tmux", 30: "launchd"}
 	nameFn := func(_ context.Context, pid int) string { return names[pid] }
 	parentFn := func(_ context.Context, pid int) int { return parents[pid] }
 
-	gotPID, gotRuntime := findAncestorTopmost(context.Background(), 50, nameFn, parentFn)
-	if gotPID != 0 || gotRuntime != "" {
-		t.Errorf("findAncestorTopmost on non-runtime chain returned (%d, %q), want (0, \"\")", gotPID, gotRuntime)
+	for _, topmost := range []bool{true, false} {
+		gotPID, gotRuntime := findAncestor(context.Background(), 50, nameFn, parentFn, topmost)
+		if gotPID != 0 || gotRuntime != "" {
+			t.Errorf("findAncestor(topmost=%t) on non-runtime chain returned (%d, %q), want (0, \"\")", topmost, gotPID, gotRuntime)
+		}
 	}
 }
 
-// TestFindAncestorTopmost_SingleMatch_TopMost confirms that when only the
-// long-lived session main matches (no transient helper in between), the
-// returned PID is still that single match. Guards against an off-by-one
-// where "topmost" might be misimplemented as "second-highest."
-func TestFindAncestorTopmost_SingleMatch_TopMost(t *testing.T) {
+// TestFindAncestor_SingleMatch confirms that when only one runtime
+// appears in the chain (the common case — no transient helper), both
+// topmost and closest semantics agree on the same PID. This is the
+// passthrough property: callers within a normal single-runtime session
+// see identical behavior regardless of which wrapper they use.
+func TestFindAncestor_SingleMatch(t *testing.T) {
 	parents := map[int]int{300: 200, 200: 100, 100: 1}
 	names := map[int]string{300: "bash", 200: "tmux", 100: "claude"}
 	nameFn := func(_ context.Context, pid int) string { return names[pid] }
 	parentFn := func(_ context.Context, pid int) int { return parents[pid] }
 
-	gotPID, gotRuntime := findAncestorTopmost(context.Background(), 300, nameFn, parentFn)
-	if gotPID != 100 || gotRuntime != "claude" {
-		t.Errorf("findAncestorTopmost with single match returned (%d, %q), want (100, \"claude\")", gotPID, gotRuntime)
+	for _, topmost := range []bool{true, false} {
+		gotPID, gotRuntime := findAncestor(context.Background(), 300, nameFn, parentFn, topmost)
+		if gotPID != 100 || gotRuntime != "claude" {
+			t.Errorf("findAncestor(topmost=%t) with single match returned (%d, %q), want (100, \"claude\")", topmost, gotPID, gotRuntime)
+		}
 	}
 }
 

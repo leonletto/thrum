@@ -49,7 +49,12 @@ type RefreshResult struct {
 
 // detectAncestor is a package-level var so tests can swap in fakes via
 // t.Cleanup. Production callers should go through RefreshLocalIdentity.
-var detectAncestor = process.FindClaudeAncestor
+//
+// thrum-xir.40: refresh writes the detected PID into the identity file
+// when drift is detected. Like quickstart, this is a BINDING-WRITE path,
+// so it uses the TOPMOST runtime ancestor — recording the long-lived
+// session main rather than a transient hook subprocess.
+var detectAncestor = process.FindTopmostRuntimeAncestor
 
 // RefreshLocalIdentity inspects live process, tmux, and git state and
 // reconciles the local identity file + daemon's agent record with reality.
