@@ -120,6 +120,41 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **`FindClaudeAncestor` returns the topmost matching runtime ancestor, not
+  the first one walking up; `pid_mismatch` remediation surfaces the `thrum
+  quickstart --name` recovery path (thrum-xir.40)** — observed during the rc.4
+  cut: an in-flight impl agent's `thrum` CLI calls began failing every RPC
+  with `identity guard "cross_worktree" fired: pid_mismatch`. Root cause: the
+  SessionStart hook spawns transient claude-sdk subprocesses (e.g. for
+  episodic-memory) that also identify as "claude" in `ps -o comm=`. The
+  pre-fix `FindClaudeAncestor` returned on the FIRST claude-named ancestor
+  walking up from `os.Getppid()`, so `quickstart` bound `agent_pid` to the
+  short-lived helper subprocess. Later RPCs from the long-lived Claude
+  session main couldn't reach the helper PID through their own ancestor chain
+  (different process-tree branch), the guard refused every call, and the only
+  hint surfaced ("run `thrum prime` to re-claim") was itself blocked by the
+  same guard — no discoverable recovery path. Fix walks the chain all the
+  way to PID 1 and returns the TOPMOST claude-named ancestor; the long-lived
+  session main is always the highest claude-named process, so binding to it
+  is stable across hook-subprocess lifecycles. Public `FindClaudeAncestor`
+  delegates to a new testable `findAncestorTopmost(ctx, startPID, nameFn,
+  parentFn)` helper; three new regression tests cover the bug chain (caller
+  → bash → claude-sdk-helper(200) → claude main(100) must return 100), the
+  zero-return no-match contract, and an off-by-one guard for single-runtime
+  chains. The `pid_mismatch` remediation message is also extended to mention
+  `thrum quickstart --name <agent>` as the stale-PID recovery path, with the
+  expected-agent name interpolated when available. Operator-script
+  passthrough (Leon's hard constraint on this work) is preserved: `thrum
+  tmux` and `thrum worktree` commands run without a runtime in their ancestor
+  chain still hit the "no runtime ancestor → passthrough" path at guard Rule
+  Step 2/4 unchanged. G5 enforcement was independently verified
+  vindication-not-regression: after the fix, G5 correctly distinguishes
+  "Bash-tool spawn from Claude main" (closest runtime == topmost runtime ==
+  agent_pid → passes) from "run from sub-agent helper" (closest runtime !=
+  agent_pid → denies, which is exactly G5's intended purpose). Discovered
+  by @impl_v0106 trying to deliver a DONE report mid-session; recovery in
+  that case required `thrum quickstart --role implementer --module v0106-rc1
+  --name impl_v0106`.
 - **applySessionStart now `INSERT OR IGNORE` — peer-replicated
   `agent.session.start` no longer aborts sync batches (thrum-9jcb.3)** — third
   soak-mined finding from the same debug-log window that surfaced thrum-10j0 and
