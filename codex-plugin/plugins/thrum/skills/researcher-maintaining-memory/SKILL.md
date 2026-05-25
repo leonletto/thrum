@@ -1,13 +1,10 @@
 ---
 name: researcher-maintaining-memory
-description:
-  "Use after completing research, when updating research memory, when verifying
-  entries, or when working with the research index. Loads the format,
-  seed-skeleton, and staleness-check protocol for the researcher's memory
-  artifacts."
+description: "Use after completing research, when updating research memory, when verifying entries, or when working with the research index. Loads the format, seed-skeleton, and staleness-check protocol for the researcher's memory artifacts."
 # source: claude-plugin/skills/researcher-maintaining-memory/SKILL.md
 # generated-by: scripts/sync-skills.sh
 ---
+
 
 ## Researcher: Maintaining Memory
 

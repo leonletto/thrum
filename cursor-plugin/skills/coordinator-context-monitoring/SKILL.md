@@ -130,58 +130,39 @@ After force-restart, re-send the agent's current dispatch as if it were a fresh
 dispatch — their previous in-flight work may need to resume from scratch (any
 WIP files in their worktree are theirs to audit salvage-vs-discard).
 
-## Step 6 — API-error recovery (who nudges depends on how the sweep runs)
+## Step 6 — API-error auto-nudge (handled by the sweep script)
 
-When you run the sweep **manually** (the command in Step 1, no flags), it still
-auto-nudges every agent whose pane shows an `API Error` line — it types
-`continue` into the affected pane via `tmux send-keys` (bypassing the `thrum
-tmux send` wrapper queue, which stalls on fully-silent panes per `thrum-7yhs`).
-The report header lists who was auto-nudged:
+The sweep script now auto-nudges every agent whose pane shows an `API Error`
+line. The script types `continue` into the affected pane via `tmux send-keys`
+(bypassing the `thrum tmux send` wrapper queue, which stalls on fully-silent
+panes per `thrum-7yhs`). You do not need to fire these nudges yourself.
+
+The sweep report's header lists every agent that was auto-nudged in the current
+run, e.g.:
 
 ```text
 # auto-nudged 3 agent(s) on api_errors with 'continue':
 #   - impl_foo @ foo-impl:0.0
+#   - impl_bar @ bar-impl:0.0
 #   ...
 ```
 
-Pass `--no-nudge` (alias `--report-only`) to get a pure detection run with **no
-pane writes** — useful when you want to inspect before acting.
-
-**The daemon does NOT auto-nudge from the sweep.** The daemon-hosted built-in
-sweep (`internal.sweep_coordinator_sweep`, thrum-d007.2) always runs the script
-with `--no-nudge`: a daemon must not silently type into agent panes as a
-side-effect of a *detection* sweep. It reports flagged agents to the
-coordinator role only.
-
-**Deliberate daemon auto-remediation is a separate, opt-in feature**
-(`internal.api_error_remediation`, thrum-sdzk; `daemon.auto_remediation.enabled`,
-**default OFF**). When an operator turns it on, the daemon — not this skill —
-applies the recovery tier ladder:
-
-- 1st detection of an agent's API error → one `continue` nudge.
-- Still erroring on the next tick (nudge didn't clear it) → it escalates
-  SUSPECTED-STUCK to the operator chain instead of re-nudging (no nudge-loops).
-- It skips panes mid git merge/rebase, audits every nudge/escalation, and
-  resets an agent's state on recovery.
-
-So if `daemon.auto_remediation.enabled` is on, you don't manage API-error
-recovery by hand — the daemon does, with the same no-repeat + escalate
-safeguards described here.
-
 Anthropic 529s and rate limits are transient (typically resolve in
 seconds-to-minutes); the agent's previous tool call is queued in-session, so a
-single `continue` reactivates them without losing in-flight state.
+single `continue` reactivates them without losing in-flight state. Sweeps fire
+every ~20 min, so a single rate-limit episode rarely spans more than one sweep —
+auto-nudge converges naturally.
 
-**When to escalate (manual runs / daemon off):** if the same agent shows an API
-error on TWO consecutive sweeps despite a nudge, the issue isn't transient —
-surface to operator as SUSPECTED-STUCK and investigate manually
-(status.claude.com, network, account limits). (When daemon auto-remediation is
-on, it raises this escalation for you.)
+**When to escalate:** if the same agent appears in `auto-nudged` lines on TWO
+consecutive sweeps despite the nudge, the issue isn't transient — surface to
+operator as SUSPECTED-STUCK and investigate manually (status.claude.com,
+network, account limits).
 
-**When NOT to nudge:** if you're about to ship a release and you'd prefer an
-agent's stuck-state held to fold one more fix into the current cycle, run with
-`--no-nudge` (or hold the manual sweep). Once `continue` fires, the agent
-resumes its previous tool call immediately — there's no recovery window.
+**When NOT to auto-nudge:** if you're about to ship a release and you'd prefer
+the agent's stuck-state held to fold one more fix into the current cycle,
+surface to operator BEFORE the next sweep so the auto-nudge can be held. Once
+`continue` fires, the agent resumes its previous tool call immediately — there's
+no recovery window.
 
 ## Cron-fire safety checks
 

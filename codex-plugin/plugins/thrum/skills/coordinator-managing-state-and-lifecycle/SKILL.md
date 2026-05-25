@@ -1,12 +1,10 @@
 ---
 name: coordinator-managing-state-and-lifecycle
-description:
-  "Use when ending a session, when updating project state, when managing beads
-  epics, or before session close. Loads coordinator-specific discipline for
-  owning project state and shepherding the team's lifecycle."
+description: "Use when ending a session, when updating project state, when managing beads epics, or before session close. Loads coordinator-specific discipline for owning project state and shepherding the team's lifecycle."
 # source: claude-plugin/skills/coordinator-managing-state-and-lifecycle/SKILL.md
 # generated-by: scripts/sync-skills.sh
 ---
+
 
 ## Coordinator: Managing State and Lifecycle
 

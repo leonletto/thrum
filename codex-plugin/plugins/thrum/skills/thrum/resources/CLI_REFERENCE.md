@@ -152,12 +152,16 @@ Bootstrap a full session in one command: detect runtime, generate config,
 register, start, set intent.
 
 ```bash
-thrum quickstart --name implementer_auth --role implementer --module auth
+thrum quickstart implementer_auth --role implementer --module auth
 thrum quickstart --name reviewer_auth --role reviewer --module auth --intent "Reviewing PR #42"
-thrum quickstart --name alice --role impl --module auth --runtime codex
-thrum quickstart --name planner_core --role planner_core --module core --no-init
-thrum quickstart --name tester_api --role tester --module api --dry-run
+thrum quickstart alice --role impl --module auth --runtime codex
+thrum quickstart planner_core --role planner_core --module core --no-init
+thrum quickstart tester_api --role tester --module api --dry-run
 ```
+
+Name can be passed as a positional argument or via `--name`; the flag wins when
+both are supplied. Precedence (highest → lowest): `--name` flag, positional,
+`THRUM_NAME` env-var, identity-file name fallback.
 
 Flags:
 

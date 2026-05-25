@@ -1,16 +1,10 @@
 ---
 name: coordinator-post-restart-sweep
-description:
-  'Use immediately after the coordinator returns from a restart, compaction, or
-  extended absence — as the first deliberate action post-prime. Detects agents
-  whose latest assistant message indicates they are blocked waiting for a
-  coordinator decision the coordinator may not have seen (question surfaced in
-  pane, not in inbox). Safe to run any time the session feels "we''ve been gone
-  a while"; not just post-restart. Pairs with the coordinator-context-monitoring
-  sweep (sibling sweep, different lens).'
+description: "Use immediately after the coordinator returns from a restart, compaction, or extended absence — as the first deliberate action post-prime. Detects agents whose latest assistant message indicates they are blocked waiting for a coordinator decision the coordinator may not have seen (question surfaced in pane, not in inbox). Safe to run any time the session feels \"we've been gone a while\"; not just post-restart. Pairs with the coordinator-context-monitoring sweep (sibling sweep, different lens)."
 # source: claude-plugin/skills/coordinator-post-restart-sweep/SKILL.md
 # generated-by: scripts/sync-skills.sh
 ---
+
 
 ## Coordinator: Post-Restart Sweep for Waiting-on-Coord Agents
 

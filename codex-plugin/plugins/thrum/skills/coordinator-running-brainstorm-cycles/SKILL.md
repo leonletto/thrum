@@ -1,17 +1,10 @@
 ---
 name: coordinator-running-brainstorm-cycles
-description:
-  "Use when starting a brainstorm for a bug fix, feature, or architectural
-  decision the coordinator can't trivially decide alone — spawns a researcher in
-  an isolated worktree, runs the brainstorm interactively with the user,
-  iterates dual-review cycles to ready-to-merge, optionally drives an
-  overarching coherence pass when multiple sibling brainstorms close, then hands
-  off to project-setup. Saves coordinator context by isolating brainstorm work
-  in a sub-agent worktree rather than burning main-context tokens on Q-by-Q
-  dialog."
+description: "Use when starting a brainstorm for a bug fix, feature, or architectural decision the coordinator can't trivially decide alone — spawns a researcher in an isolated worktree, runs the brainstorm interactively with the user, iterates dual-review cycles to ready-to-merge, optionally drives an overarching coherence pass when multiple sibling brainstorms close, then hands off to project-setup. Saves coordinator context by isolating brainstorm work in a sub-agent worktree rather than burning main-context tokens on Q-by-Q dialog."
 # source: claude-plugin/skills/coordinator-running-brainstorm-cycles/SKILL.md
 # generated-by: scripts/sync-skills.sh
 ---
+
 
 ## Coordinator: Running Brainstorm Cycles
 
