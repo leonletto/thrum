@@ -95,7 +95,22 @@ func matchWorktree(candidate string, agents []AgentWorktree) (*AgentWorktree, er
 		wt := a.Worktree
 		canonWt, err := filepath.EvalSymlinks(wt)
 		if err != nil {
-			slog.Warn("peercred.matchWorktree stored EvalSymlinks failed", "path", wt, "err", err)
+			// thrum-g1ux: downgrade to Debug for the
+			// torn-down-worktree case (os.IsNotExist). Teardown
+			// removes the worktree from disk but doesn't end the
+			// agent's sessions, so the session_ref row persists and
+			// surfaces here on every resolution. Other failure modes
+			// (permission errors etc) keep WARN — those are real
+			// diagnostics worth surfacing. Behavior is unchanged:
+			// canonWt = wt fallback below means a deleted path can't
+			// match the (resolvable) candidate, so the iteration
+			// proceeds without a false match. Option B daemon-side
+			// stale-row cleanup is deferred to v0.10.7 / v0.11.
+			if os.IsNotExist(err) {
+				slog.Debug("peercred.matchWorktree stored path missing on disk (torn-down worktree)", "path", wt, "err", err)
+			} else {
+				slog.Warn("peercred.matchWorktree stored EvalSymlinks failed", "path", wt, "err", err)
+			}
 			canonWt = wt
 		}
 		if canon == canonWt {

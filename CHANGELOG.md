@@ -120,6 +120,23 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **`peercred.matchWorktree` stale-worktree log spam downgraded
+  (thrum-g1ux)** — post-`thrum worktree teardown` the agent's
+  `session_refs` row persists (teardown removes the worktree from
+  disk but doesn't end the agent's sessions), so the daemon's
+  peercred resolver kept iterating the now-deleted path and
+  emitting `peercred.matchWorktree stored EvalSymlinks failed`
+  WARN on every resolution against the stale entry. The WARN spam
+  drowned out real diagnostics in `daemon.log`. Fix:
+  `matchWorktree` now checks `os.IsNotExist(err)` in the
+  EvalSymlinks-failure branch and emits `slog.Debug` for the
+  torn-down case; other failure modes (permission errors, etc)
+  keep the WARN as legitimate diagnostics. Functional behavior
+  unchanged — the `canonWt = wt` fallback already produced
+  correct no-match semantics for deleted paths. Option B (daemon
+  RPC + CLI `worktree teardown` wiring to actually delete the
+  stale `session_refs` rows at the source) is deferred to
+  v0.10.7 / v0.11 as the broader cleanup.
 - **`thrum worktree create` cuts new branch from cwd HEAD by default
   (thrum-pqcg)** — previously the CLI silently defaulted to `main` as
   the base ref regardless of the cwd's actual HEAD; a worktree created
