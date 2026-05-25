@@ -120,6 +120,31 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **Cache peercred CWD per PID — eliminates N-1 lsof shell-outs per RPC
+  sequence on Darwin (thrum-xir.45)** — every unix-socket RPC's pre-handler
+  ran `peercred.Resolve`, which on Darwin shells out to `/usr/sbin/lsof -p
+  PID -Fn -d cwd` to resolve the connecting PID's CWD. Measured cost on a
+  current macOS host: ~30ms baseline, spiking to ~300ms under fork
+  contention. Under sustained release-test-gate load (108 scenarios
+  back-to-back), per-RPC pre-handler latency creeps from ~55ms baseline into
+  the 1-2s range and the CLI socket-read deadline fires, surfacing as
+  `tmux.create: i/o timeout` in scenarios 69-75 and 80 of the v0.10.6 rc.3
+  gate (Cluster A, 9 scenarios). Fix is a short-TTL per-PID cache in front
+  of `processCWDFn`: first lookup for a PID misses and calls the underlying
+  resolver (~30ms), caches the (cwd, err) result with a 5s TTL; subsequent
+  lookups within the TTL return the cached value with no subprocess fork.
+  Measured impact via `profile.rpc.dispatch` on the same gate-stressed
+  daemon: `pre_handler_ms = 55-60` on every RPC pre-fix; `pre_handler_ms =
+  55-60 on the first RPC + 1-2 on subsequent` post-fix (~50x reduction on
+  the dominant pre-handler cost when a connection issues 2+ RPCs, which is
+  the CLI's typical refresh + action pattern). Cluster A clears at the
+  gate-harness level: 9 affected scenarios pass after the fix. The cache
+  lock is never held across the subprocess call. Negative results (errors)
+  are cached for the same TTL to bound repeated-shell-out cost; a sharper
+  policy distinguishing transient vs permanent errors is tracked in
+  xir.52. `golang.org/x/sync/singleflight` to collapse concurrent-miss
+  stampedes is tracked in xir.51, and replacing the underlying `lsof`
+  shell-out with libproc `proc_pidinfo` is tracked in xir.48.
 - **`FindClaudeAncestor` returns the topmost matching runtime ancestor, not
   the first one walking up; `pid_mismatch` remediation surfaces the `thrum
   quickstart --name` recovery path (thrum-xir.40)** — observed during the rc.4
