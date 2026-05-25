@@ -30,15 +30,16 @@ import (
 //     v0.10.6 install can co-reside on a DB touched by a v0.11 substrate
 //     binary. createTables/createIndexes carry full v36 parity so a fresh DB
 //     created by a v0.10.6 binary stamps every v36 table.
-//   - v37: RESERVED placeholder for thrum-agents Epic 0 memory-tables back-port
-//     (thrum-j7n5.1). thrum-agents already stamps v37 with the memory-tables
-//     content; the release line's v37 migration is intentionally a no-op so
-//     the version chains can align without the release line carrying the
-//     memory-tables DDL on its own ladder. The canonical CLAUDE.md
-//     dead-end-DDL back-port pattern would put the actual memory-tables DDL
-//     here; this placeholder shortcut keeps the rc chain small and lets v0.11
-//     ship-prep do the proper back-port if needed. See thrum-7ojv / thrum-roz1
-//     for the rationale trail.
+//   - v37: dummy-tables back-port from thrum-agents j7n5 Epic 0
+//     (memory_record / memory_tag / memory_edge / memory_fts /
+//     memory_embeddings / memory_embed_queue + 10 indexes). DDL-only — no
+//     release-line code uses these tables; ensures binary co-residence with
+//     thrum-agents v37+ binaries via .thrum/redirect (without this back-port,
+//     a fresh rc.3 install would create a v38 DB with NO memory tables, and
+//     a later thrum-agents binary on the same DB would crash on every
+//     memory.* operation). Matches the canonical CLAUDE.md dead-end-DDL
+//     back-port pattern (same as v25–v36's substrate-table forward-ports).
+//     See thrum-7ojv / thrum-roz1 for the rationale trail.
 //   - v38: CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)
 //     (thrum-7ojv). Without this index the compactor's
 //     `DELETE FROM events WHERE timestamp < ?` runs O(N) full table scan —
@@ -568,6 +569,85 @@ func createTables(tx *sql.Tx) error {
 		// Identical DDL to the v36 migration block via the shared const.
 		// Dead-end on v0.10.6 (no remediation handler ported).
 		createAgentAPIErrorRemediationTable,
+
+		// memory_record / memory_tag / memory_edge (v37, thrum-j7n5 Epic 0).
+		// Back-ported from thrum-agents per CLAUDE.md "schema migrations
+		// must be back-ported to active release lines BEFORE dev branch
+		// ships — DDL-only, dead-end tables on release line" (thrum-7ojv).
+		// Verbatim DDL copy from thrum-agents internal/schema/schema.go
+		// so cross-binary co-residence is identical: a thrum-agents
+		// binary expecting v37 = these tables and a release-line binary
+		// stamping v37 with the same tables agree byte-for-byte.
+		// Dead-end on v0.10.6 — no release-line Go code touches
+		// memory_record / memory_tag / memory_edge / memory_fts /
+		// memory_embeddings / memory_embed_queue. Mirrored in the
+		// v36→v37 migration block below for fresh-install parity.
+		`CREATE TABLE IF NOT EXISTS memory_record (
+			id                TEXT PRIMARY KEY,
+			kind              TEXT NOT NULL,
+			subkind           TEXT,
+			title             TEXT NOT NULL,
+			body_oneline      TEXT NOT NULL,
+			body_short        TEXT,
+			body_full         TEXT,
+			agent_id          TEXT NOT NULL,
+			created_at        TIMESTAMP NOT NULL,
+			updated_at        TIMESTAMP NOT NULL,
+			status            TEXT NOT NULL DEFAULT 'active',
+			scope             TEXT NOT NULL DEFAULT 'project',
+			parent_id         TEXT,
+			source_session_id TEXT,
+			metadata          TEXT,
+			created_by        TEXT NOT NULL,
+			last_edited_by    TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS memory_tag (
+			memory_id  TEXT NOT NULL,
+			tag        TEXT NOT NULL,
+			PRIMARY KEY (memory_id, tag),
+			FOREIGN KEY (memory_id) REFERENCES memory_record(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS memory_edge (
+			from_id    TEXT NOT NULL,
+			edge_kind  TEXT NOT NULL,
+			to_id      TEXT NOT NULL,
+			created_at TIMESTAMP NOT NULL,
+			PRIMARY KEY (from_id, edge_kind, to_id),
+			FOREIGN KEY (from_id) REFERENCES memory_record(id) ON DELETE CASCADE,
+			FOREIGN KEY (to_id) REFERENCES memory_record(id) ON DELETE CASCADE
+		)`,
+		// memory_fts (v37, j7n5 Task 0.2) — FTS5 SHADOW table; no
+		// `content=` clause. Projection handlers (NOT present on release
+		// line) would maintain it via application-level DML. Storage
+		// only; nothing reads from it on v0.10.6.
+		`CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+			memory_id UNINDEXED,
+			title, body_oneline, body_short, body_full
+		)`,
+		// memory_embeddings (v37, j7n5 Task 0.3) — LOCAL-ONLY; never
+		// sync'd. Compound PK (memory_id, zoom_level, model). Storage
+		// only on release line.
+		`CREATE TABLE IF NOT EXISTS memory_embeddings (
+			memory_id    TEXT NOT NULL,
+			zoom_level   TEXT NOT NULL,
+			model        TEXT NOT NULL,
+			embedded_at  TIMESTAMP NOT NULL,
+			embed_status TEXT NOT NULL,
+			vec          BLOB,
+			PRIMARY KEY (memory_id, zoom_level, model),
+			FOREIGN KEY (memory_id) REFERENCES memory_record(id) ON DELETE CASCADE
+		)`,
+		// memory_embed_queue (v37, j7n5 Task 0.3) — LOCAL-ONLY; durable
+		// across restarts. PK (memory_id, zoom_level) — model change
+		// handled by re-enqueue, not by per-model row tracking.
+		`CREATE TABLE IF NOT EXISTS memory_embed_queue (
+			memory_id   TEXT NOT NULL,
+			zoom_level  TEXT NOT NULL,
+			enqueued_at TIMESTAMP NOT NULL,
+			retry_count INTEGER NOT NULL DEFAULT 0,
+			last_error  TEXT,
+			PRIMARY KEY (memory_id, zoom_level)
+		)`,
 	}
 
 	for _, sql := range tables {
@@ -671,6 +751,27 @@ func createIndexes(tx *sql.Tx) error {
 		"CREATE INDEX IF NOT EXISTS idx_memories_not_deleted ON memories(deleted) WHERE deleted = 0",
 		"CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at)",
 		"CREATE INDEX IF NOT EXISTS idx_memory_scopes_lookup ON memory_scopes(scope_type, scope_value)",
+
+		// memory_record / memory_tag / memory_edge indexes (v37, j7n5 Epic 0).
+		// Back-ported from thrum-agents per the thrum-7ojv DDL-only back-port
+		// pattern. kind/agent/created/updated drive memory.list filters on
+		// thrum-agents; status + scope drive default-assembly narrowing.
+		// memory_edge has a reverse index on (to_id, edge_kind) for
+		// inbound-edge lookups; kind-only index supports observability
+		// filters. No release-line code uses these — index storage only.
+		"CREATE INDEX IF NOT EXISTS idx_memory_kind ON memory_record(kind)",
+		"CREATE INDEX IF NOT EXISTS idx_memory_agent ON memory_record(agent_id)",
+		"CREATE INDEX IF NOT EXISTS idx_memory_created ON memory_record(created_at)",
+		"CREATE INDEX IF NOT EXISTS idx_memory_updated ON memory_record(updated_at)",
+		"CREATE INDEX IF NOT EXISTS idx_memory_status ON memory_record(status)",
+		"CREATE INDEX IF NOT EXISTS idx_memory_scope ON memory_record(scope)",
+		"CREATE INDEX IF NOT EXISTS idx_memory_tag_tag ON memory_tag(tag)",
+		"CREATE INDEX IF NOT EXISTS idx_memory_edge_to ON memory_edge(to_id, edge_kind)",
+		"CREATE INDEX IF NOT EXISTS idx_memory_edge_kind ON memory_edge(edge_kind)",
+		// memory_embeddings worker-scan index (v37, j7n5 Task 0.3). Drives
+		// the "next batch to embed" query the background worker runs on
+		// thrum-agents. Storage only on release line.
+		"CREATE INDEX IF NOT EXISTS idx_memory_embed_status ON memory_embeddings(embed_status)",
 	}
 
 	for _, sql := range indexes {
@@ -1710,26 +1811,99 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		}
 	}
 
-	// Migration 36→37 (thrum-7ojv): RESERVED placeholder for thrum-agents
-	// Epic 0 memory-tables back-port slot. Intentionally empty on the
-	// release line — the actual memory.* DDL lives on thrum-agents under
-	// thrum-j7n5.1 and only needs to back-port here if release-line
-	// consumer code starts using the memory tables (v0.11 substrate work,
-	// not v0.10.6 scope). The version slot exists so release-line and
-	// thrum-agents binaries that share a DB via the .thrum/redirect
-	// mechanism agree on what "v37" means structurally: thrum-agents has
-	// memory tables; release line has nothing here but the schema_version
-	// row says 37 so a co-resident thrum-agents binary doesn't try to
-	// re-run its own v37 migration on a release-line-only DB. See
-	// CurrentVersion doc comment for the full rationale.
-	// Intentional no-op placeholder: the version slot exists for
-	// cross-binary alignment with thrum-agents. The schema_version
-	// UPDATE at the end of runMigrations stamps endVersion in one
-	// shot regardless of which intermediate version blocks ran, so
-	// no explicit body is required here. The if-guard is kept for
-	// shape-symmetry with the surrounding migration blocks and to
-	// give a clear search hit for "v37" / "37→".
-	if startVersion < 37 && endVersion >= 37 { //nolint:staticcheck // SA9003: intentional empty body — thrum-7ojv placeholder
+	// Migration 36→37 (thrum-7ojv): back-port thrum-agents j7n5 Epic 0
+	// memory-tables DDL as dead-end DDL (no consumer code on v0.10.6).
+	// Verbatim copy from thrum-agents internal/schema/schema.go so
+	// cross-binary co-residence works correctly: a thrum-agents binary
+	// (which expects v37 = these tables) sharing a DB with a release-line
+	// binary via .thrum/redirect sees identical schema content stamped
+	// here. Without this back-port a fresh rc.3 install would create a
+	// v38 DB with NO memory tables; a subsequently-installed thrum-agents
+	// / v0.11 binary on that DB would crash on every memory.* operation.
+	// With this back-port, both branches stamp v37 with byte-identical
+	// DDL — no asymmetry, no crash trap. Tables are mirrored in
+	// createTables / createIndexes above for fresh-install parity.
+	if startVersion < 37 && endVersion >= 37 {
+		stmts := []string{
+			`CREATE TABLE IF NOT EXISTS memory_record (
+				id                TEXT PRIMARY KEY,
+				kind              TEXT NOT NULL,
+				subkind           TEXT,
+				title             TEXT NOT NULL,
+				body_oneline      TEXT NOT NULL,
+				body_short        TEXT,
+				body_full         TEXT,
+				agent_id          TEXT NOT NULL,
+				created_at        TIMESTAMP NOT NULL,
+				updated_at        TIMESTAMP NOT NULL,
+				status            TEXT NOT NULL DEFAULT 'active',
+				scope             TEXT NOT NULL DEFAULT 'project',
+				parent_id         TEXT,
+				source_session_id TEXT,
+				metadata          TEXT,
+				created_by        TEXT NOT NULL,
+				last_edited_by    TEXT NOT NULL
+			)`,
+			`CREATE TABLE IF NOT EXISTS memory_tag (
+				memory_id  TEXT NOT NULL,
+				tag        TEXT NOT NULL,
+				PRIMARY KEY (memory_id, tag),
+				FOREIGN KEY (memory_id) REFERENCES memory_record(id) ON DELETE CASCADE
+			)`,
+			`CREATE TABLE IF NOT EXISTS memory_edge (
+				from_id    TEXT NOT NULL,
+				edge_kind  TEXT NOT NULL,
+				to_id      TEXT NOT NULL,
+				created_at TIMESTAMP NOT NULL,
+				PRIMARY KEY (from_id, edge_kind, to_id),
+				FOREIGN KEY (from_id) REFERENCES memory_record(id) ON DELETE CASCADE,
+				FOREIGN KEY (to_id) REFERENCES memory_record(id) ON DELETE CASCADE
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_memory_kind ON memory_record(kind)`,
+			`CREATE INDEX IF NOT EXISTS idx_memory_agent ON memory_record(agent_id)`,
+			`CREATE INDEX IF NOT EXISTS idx_memory_created ON memory_record(created_at)`,
+			`CREATE INDEX IF NOT EXISTS idx_memory_updated ON memory_record(updated_at)`,
+			`CREATE INDEX IF NOT EXISTS idx_memory_status ON memory_record(status)`,
+			`CREATE INDEX IF NOT EXISTS idx_memory_scope ON memory_record(scope)`,
+			`CREATE INDEX IF NOT EXISTS idx_memory_tag_tag ON memory_tag(tag)`,
+			`CREATE INDEX IF NOT EXISTS idx_memory_edge_to ON memory_edge(to_id, edge_kind)`,
+			`CREATE INDEX IF NOT EXISTS idx_memory_edge_kind ON memory_edge(edge_kind)`,
+			// FTS5 SHADOW table (j7n5 Task 0.2). No content= clause;
+			// projection handlers on thrum-agents maintain in lockstep.
+			// Storage only on release line.
+			`CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+				memory_id UNINDEXED,
+				title, body_oneline, body_short, body_full
+			)`,
+			// memory_embeddings + memory_embed_queue (j7n5 Task 0.3) —
+			// LOCAL-ONLY; never sync'd; populated by background embedding
+			// worker on thrum-agents. See createTables comments for
+			// PK/no-FK rationale. Storage only on release line.
+			`CREATE TABLE IF NOT EXISTS memory_embeddings (
+				memory_id    TEXT NOT NULL,
+				zoom_level   TEXT NOT NULL,
+				model        TEXT NOT NULL,
+				embedded_at  TIMESTAMP NOT NULL,
+				embed_status TEXT NOT NULL,
+				vec          BLOB,
+				PRIMARY KEY (memory_id, zoom_level, model),
+				FOREIGN KEY (memory_id) REFERENCES memory_record(id) ON DELETE CASCADE
+			)`,
+			`CREATE TABLE IF NOT EXISTS memory_embed_queue (
+				memory_id   TEXT NOT NULL,
+				zoom_level  TEXT NOT NULL,
+				enqueued_at TIMESTAMP NOT NULL,
+				retry_count INTEGER NOT NULL DEFAULT 0,
+				last_error  TEXT,
+				PRIMARY KEY (memory_id, zoom_level)
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_memory_embed_status ON memory_embeddings(embed_status)`,
+		}
+		for _, stmt := range stmts {
+			if _, err := tx.Exec(stmt); err != nil {
+				return fmt.Errorf("migration 36→37: %w (stmt: %s)", err, stmt)
+			}
+		}
 	}
 
 	// Migration 37→38 (thrum-7ojv): add timestamp index to the events

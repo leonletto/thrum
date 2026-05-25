@@ -2255,6 +2255,107 @@ func TestSchema_V37_to_V38_CrossBinary(t *testing.T) {
 	}
 }
 
+// TestSchema_V36_to_V38_CreatesMemoryTables — thrum-7ojv (back-port
+// pattern). Asserts the v37 dummy-tables back-port actually creates
+// the 6 memory.* tables (memory_record / memory_tag / memory_edge /
+// memory_fts / memory_embeddings / memory_embed_queue) and their 10
+// indexes when migrating forward from v36. Without the back-port a
+// fresh rc.3 install would create a v38 DB with NO memory tables,
+// causing crash on every memory.* operation if a thrum-agents binary
+// later runs against the same DB.
+func TestSchema_V36_to_V38_CreatesMemoryTables(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "v36-memory-backport.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+
+	// Drop the memory tables and indexes that createTables/createIndexes
+	// stamped at fresh-install time, then rewind to v36 so the v37
+	// migration block is the load-bearing thing being exercised.
+	dropStmts := []string{
+		`DROP INDEX IF EXISTS idx_memory_kind`,
+		`DROP INDEX IF EXISTS idx_memory_agent`,
+		`DROP INDEX IF EXISTS idx_memory_created`,
+		`DROP INDEX IF EXISTS idx_memory_updated`,
+		`DROP INDEX IF EXISTS idx_memory_status`,
+		`DROP INDEX IF EXISTS idx_memory_scope`,
+		`DROP INDEX IF EXISTS idx_memory_tag_tag`,
+		`DROP INDEX IF EXISTS idx_memory_edge_to`,
+		`DROP INDEX IF EXISTS idx_memory_edge_kind`,
+		`DROP INDEX IF EXISTS idx_memory_embed_status`,
+		// Order matters for the table drops: drop children before parents
+		// (FK constraints). memory_fts has no FK so can drop standalone.
+		`DROP TABLE IF EXISTS memory_embed_queue`,
+		`DROP TABLE IF EXISTS memory_embeddings`,
+		`DROP TABLE IF EXISTS memory_tag`,
+		`DROP TABLE IF EXISTS memory_edge`,
+		`DROP TABLE IF EXISTS memory_fts`,
+		`DROP TABLE IF EXISTS memory_record`,
+	}
+	for _, s := range dropStmts {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatalf("drop pre-existing %s: %v", s, err)
+		}
+	}
+	if _, err := db.Exec(`UPDATE schema_version SET version = 36`); err != nil {
+		t.Fatalf("rewind to v36: %v", err)
+	}
+
+	// Migrate v36 → v38. The v37 block must create all 6 tables + 10
+	// indexes verbatim from thrum-agents; the v38 block adds the
+	// timestamp index.
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v36→v38: %v", err)
+	}
+
+	// All 6 memory tables present.
+	expectedTables := []string{
+		"memory_record", "memory_tag", "memory_edge",
+		"memory_fts", "memory_embeddings", "memory_embed_queue",
+	}
+	for _, tbl := range expectedTables {
+		var n int
+		if err := db.QueryRow(
+			`SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table','virtual table') AND name = ?`,
+			tbl,
+		).Scan(&n); err != nil {
+			t.Fatalf("query for table %q: %v", tbl, err)
+		}
+		if n != 1 {
+			t.Errorf("table %q missing after v37 back-port (got %d rows in sqlite_master, want 1)", tbl, n)
+		}
+	}
+
+	// All 10 memory indexes present.
+	expectedIndexes := []string{
+		"idx_memory_kind", "idx_memory_agent", "idx_memory_created",
+		"idx_memory_updated", "idx_memory_status", "idx_memory_scope",
+		"idx_memory_tag_tag", "idx_memory_edge_to", "idx_memory_edge_kind",
+		"idx_memory_embed_status",
+	}
+	for _, idx := range expectedIndexes {
+		if !indexExists(t, db, idx) {
+			t.Errorf("index %q missing after v37 back-port", idx)
+		}
+	}
+
+	// v38 index also present (post v37 → v38 migration).
+	if !indexExists(t, db, "idx_events_timestamp") {
+		t.Error("idx_events_timestamp missing after v37 → v38 path")
+	}
+
+	// Schema stamped at v38.
+	if got := schemaVersion(t, db); got != 38 {
+		t.Errorf("post-migrate schema_version = %d, want 38", got)
+	}
+}
+
 // TestSchema_V38_Idempotent — thrum-7ojv. CREATE INDEX IF NOT EXISTS
 // must be idempotent across repeated migration calls. Mirrors the
 // Multi-Binary Worktree Footgun scenario where a co-resident
