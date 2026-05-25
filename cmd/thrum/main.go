@@ -6020,6 +6020,13 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	server.RegisterHandler("agent.cleanup", agentHandler.HandleCleanup)
 	server.RegisterHandler("agent.set-status", agentHandler.HandleSetAgentStatus)
 
+	// agent.lookup: single-agent variant of team.list (thrum-1nkt.4).
+	// CLI hint pipeline (`thrum send` recipient-stale check) uses this
+	// instead of team.list so the hot path does not amortize the full
+	// team-list build per send.
+	agentLookupHandler := rpc.NewAgentLookupHandler(st)
+	server.RegisterHandler("agent.lookup", agentLookupHandler.HandleLookup)
+
 	// Team management
 	teamHandler := rpc.NewTeamHandler(st, thrumDir, supervisorIdentity)
 	server.RegisterHandler("team.list", teamHandler.HandleList)

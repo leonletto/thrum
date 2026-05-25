@@ -37,6 +37,18 @@ type ConflictInfo struct {
 	ConflictPID     int    `json:"conflict_pid,omitempty"` // PID of the conflicting agent
 }
 
+// AgentLookupRequest represents the request for agent.lookup RPC.
+type AgentLookupRequest struct {
+	Name string `json:"name"`
+}
+
+// AgentLookupResponse represents the response from agent.lookup RPC.
+// Member is nil when no agent matches Name (legitimate negative
+// answer, not an error). thrum-1nkt.4.
+type AgentLookupResponse struct {
+	Member *TeamMember `json:"member"`
+}
+
 // AgentInfo represents information about a registered agent.
 type AgentInfo struct {
 	AgentID      string `json:"agent_id"`

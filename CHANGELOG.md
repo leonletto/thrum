@@ -120,6 +120,20 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **`thrum send` no longer fires a `team.list` RPC per send (thrum-1nkt.4)** —
+  every `thrum send` invocation ran a `team.list` RPC through the
+  CLI hint pipeline (`cli.Collect` → `sendHints` →
+  `LiveStateAccessor.AgentByName`) to answer a single-name question for
+  the optional `send.recipient-stale` hint. On the daemon this fanned out
+  to N per-agent mention-count queries, a worktree-wide identity-file
+  walk, and Phase 2 dead-agent self-heal (the same amplifier addressed
+  in thrum-1nkt.3 — under burst, eight concurrent sends meant eight
+  concurrent `team.list` calls all racing through that path). New
+  `agent.lookup` RPC returns a single `TeamMember` via one SQL `SELECT`
+  + one identity-file read, with no per-agent mention fan-out and no
+  Phase 2 self-heal. `AgentByName` now calls `agent.lookup`. Together
+  with thrum-1nkt.1 (pool-size raise) and thrum-1nkt.3 (single-flight
+  self-heal), the send hot path is no longer a `team.list` amplifier.
 - **Redundant `session.end` writes from concurrent `team.list` callers
   (thrum-1nkt.3)** — `team.list` runs in three phases: Phase 1 reads
   active members under RLock and collects dead-but-still-active agents;
