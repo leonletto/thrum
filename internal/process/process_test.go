@@ -152,6 +152,74 @@ func TestMatchRuntimeName_BasenameAndFullPath(t *testing.T) {
 	}
 }
 
+// TestFindAncestorTopmost_ReturnsTopmostMatch guards thrum-xir.40: when
+// a runtime spawns a transient sub-process that ALSO matches a known
+// runtime name (e.g. Claude's SessionStart hook spawning a claude-sdk
+// helper, which `ps -o comm=` reports as "claude"), the ancestor walk
+// must return the TOPMOST matching ancestor (the long-lived session
+// main), not the first one encountered. Without this guarantee,
+// quickstart binds agent_pid to a short-lived helper PID and every
+// later RPC from the runtime main fails identity-guard pid_mismatch.
+//
+// Simulated chain (parent direction):
+//
+//	caller (start) → 300 (bash) → 200 (claude-sdk-helper) →
+//	100 (claude main) → 1
+//
+// Expected: (100, "claude"). Pre-fix the walk returned (200, "claude").
+func TestFindAncestorTopmost_ReturnsTopmostMatch(t *testing.T) {
+	parents := map[int]int{
+		300: 200,
+		200: 100,
+		100: 1,
+	}
+	names := map[int]string{
+		300: "bash",
+		200: "claude", // helper process: matches knownRuntimes too
+		100: "claude", // session main: the stable target
+	}
+	nameFn := func(_ context.Context, pid int) string { return names[pid] }
+	parentFn := func(_ context.Context, pid int) int { return parents[pid] }
+
+	gotPID, gotRuntime := findAncestorTopmost(context.Background(), 300, nameFn, parentFn)
+	if gotPID != 100 {
+		t.Errorf("findAncestorTopmost returned PID %d, want 100 (topmost claude ancestor)", gotPID)
+	}
+	if gotRuntime != "claude" {
+		t.Errorf("findAncestorTopmost returned runtime %q, want \"claude\"", gotRuntime)
+	}
+}
+
+// TestFindAncestorTopmost_NoMatch confirms the zero-return contract when
+// no claude-named process appears in the chain at all.
+func TestFindAncestorTopmost_NoMatch(t *testing.T) {
+	parents := map[int]int{50: 40, 40: 30, 30: 1}
+	names := map[int]string{50: "bash", 40: "tmux", 30: "launchd"}
+	nameFn := func(_ context.Context, pid int) string { return names[pid] }
+	parentFn := func(_ context.Context, pid int) int { return parents[pid] }
+
+	gotPID, gotRuntime := findAncestorTopmost(context.Background(), 50, nameFn, parentFn)
+	if gotPID != 0 || gotRuntime != "" {
+		t.Errorf("findAncestorTopmost on non-runtime chain returned (%d, %q), want (0, \"\")", gotPID, gotRuntime)
+	}
+}
+
+// TestFindAncestorTopmost_SingleMatch_TopMost confirms that when only the
+// long-lived session main matches (no transient helper in between), the
+// returned PID is still that single match. Guards against an off-by-one
+// where "topmost" might be misimplemented as "second-highest."
+func TestFindAncestorTopmost_SingleMatch_TopMost(t *testing.T) {
+	parents := map[int]int{300: 200, 200: 100, 100: 1}
+	names := map[int]string{300: "bash", 200: "tmux", 100: "claude"}
+	nameFn := func(_ context.Context, pid int) string { return names[pid] }
+	parentFn := func(_ context.Context, pid int) int { return parents[pid] }
+
+	gotPID, gotRuntime := findAncestorTopmost(context.Background(), 300, nameFn, parentFn)
+	if gotPID != 100 || gotRuntime != "claude" {
+		t.Errorf("findAncestorTopmost with single match returned (%d, %q), want (100, \"claude\")", gotPID, gotRuntime)
+	}
+}
+
 // TestKnownRuntimes_DotOpencode is a structural regression guard for
 // thrum-9hr2: opencode installs its real binary as `.opencode` (npm shim
 // convention), and FindClaudeAncestor must know that name so it can detect

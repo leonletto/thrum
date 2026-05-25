@@ -148,22 +148,51 @@ var runtimeDisplayName = map[string]string{
 // FindClaudeAncestor walks the process tree from the current process
 // up to PID 1, looking for an ancestor matching a known AI coding runtime.
 // Returns the PID and runtime name, or (0, "") if not found.
+//
+// thrum-xir.40: returns the TOPMOST matching ancestor (not the first one
+// encountered on the way up). A runtime like Claude may spawn transient
+// sub-process helpers — e.g. the claude-sdk subprocess that runs
+// SessionStart hooks for episodic-memory and similar plugins — and those
+// helpers also identify as "claude" in `ps -o comm=`. Returning the first
+// match means `quickstart` would bind agent_pid to a short-lived helper;
+// later invocations from the long-lived runtime main then fail the
+// ancestor walk-up (their walks never reach the dead helper PID) and the
+// identity guard refuses every RPC with pid_mismatch. The long-lived
+// session main is always the highest claude-named process in the chain,
+// so the topmost match is the stable PID to bind to.
 func FindClaudeAncestor(ctx context.Context) (int, string) {
-	pid := os.Getppid()
+	return findAncestorTopmost(ctx, os.Getppid(), processName, parentPID)
+}
+
+// findAncestorTopmost is the testable core of FindClaudeAncestor. It walks
+// from startPID up to PID 1 via parentFn, naming each via nameFn, and
+// returns the topmost process matching a known runtime. Returns (0, "")
+// if no runtime ancestor exists on the chain.
+func findAncestorTopmost(
+	ctx context.Context,
+	startPID int,
+	nameFn func(context.Context, int) string,
+	parentFn func(context.Context, int) int,
+) (int, string) {
+	pid := startPID
+	topPID := 0
+	topRuntime := ""
 	for pid > 1 {
-		name := processName(ctx, pid)
+		name := nameFn(ctx, pid)
 		for _, rt := range knownRuntimes {
 			if matchRuntimeName(name, rt) {
 				displayName := rt
 				if mapped, ok := runtimeDisplayName[rt]; ok {
 					displayName = mapped
 				}
-				return pid, displayName
+				topPID = pid
+				topRuntime = displayName
+				break
 			}
 		}
-		pid = parentPID(ctx, pid)
+		pid = parentFn(ctx, pid)
 	}
-	return 0, ""
+	return topPID, topRuntime
 }
 
 // processName returns the command name of a process via ps.
