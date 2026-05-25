@@ -185,6 +185,24 @@ visibility into v0.10.6 authors until they upgrade.
   `TestTeamList_SingleFlightDeadAgentSelfHeal` fires 8 concurrent calls
   against a dead-PID fixture and asserts exactly one `session.end` event
   is written.
+- **Coalesce inbound peer-event walker — one fire per batch (thrum-1nkt.2)** —
+  `SyncApplier.ApplyRemoteEvents` previously invoked `postCommit` once per
+  applied event in its loop, firing a fresh walker+compactor pass for
+  every inbound structural peer event. The walker is incremental via
+  `lastWalkAt` so the subsequent walks were near-noops in their useful
+  work, but each still paid the `walker.mu` acquire + compactor scan
+  (~40ms each at bpq5 measured rates). At a burst rate of 369
+  `sync.notify` per minute with `event_count=1`, that was 369 walks per
+  minute when 1 per batch sufficed. Now `applyEvent` returns the
+  `postCommit` closure instead of invoking it inline; the loop
+  accumulates the last non-nil closure and fires it once after the
+  loop (or before an early error return, so partial-batch events still
+  propagate). The trigger captures the batch-scoped ctx, so any non-nil
+  closure from the loop is equivalent — the "last" choice is arbitrary.
+  New regression `TestSyncApplier_ApplyRemoteEvents_CoalescesPostCommit`
+  asserts a 5-event structural batch fires the trigger exactly once;
+  `TestSyncApplier_ApplyRemoteEvents_NoTriggerForEmptyOrNonStructural`
+  guards the zero-fire path for empty and non-structural batches.
 - **Sync-notify goroutine pool saturation under multi-peer burst
   (thrum-1nkt.1)** — `internal/daemon/rpc/sync_notify.go`'s bounded semaphore
   capped concurrent peer-sync goroutines at 10. Under 8-concurrent

@@ -3,8 +3,10 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/daemon/checkpoint"
@@ -321,5 +323,100 @@ func TestSyncApply_PurgeExecutedPropagation(t *testing.T) {
 	}
 	if applied2 != 0 || skipped2 != 1 {
 		t.Errorf("expected 0 applied / 1 skipped, got %d / %d", applied2, skipped2)
+	}
+}
+
+// TestSyncApplier_ApplyRemoteEvents_CoalescesPostCommit — thrum-1nkt.2:
+// the per-event sync trigger now fires ONCE per ApplyRemoteEvents batch
+// instead of once per event in the batch. The walker is incremental so
+// the per-event fires were near-noop in their useful work, but each
+// still paid the walker.mu acquire + compactor cost; bpq5 measured this
+// at ~40ms per event under burst. Coalescing collapses N walks into 1.
+func TestSyncApplier_ApplyRemoteEvents_CoalescesPostCommit(t *testing.T) {
+	st := createTestStateForSync(t)
+	applier := NewSyncApplier(st)
+
+	var triggerCount atomic.Int32
+	st.SetSyncTrigger(func(ctx context.Context) {
+		triggerCount.Add(1)
+	})
+
+	const n = 5
+	events := make([]eventlog.Event, 0, n)
+	for i := range n {
+		eventID := fmt.Sprintf("evt_COALESCE_%03d", i)
+		agentID := fmt.Sprintf("coalesce_agent_%d", i)
+		events = append(events, eventlog.Event{
+			EventID:      eventID,
+			Sequence:     int64(200 + i),
+			Type:         "agent.register",
+			Timestamp:    fmt.Sprintf("2026-05-25T12:00:%02dZ", i),
+			OriginDaemon: "d_coalesce",
+			EventJSON: json.RawMessage(fmt.Sprintf(
+				`{"type":"agent.register","timestamp":"2026-05-25T12:00:%02dZ","event_id":%q,"origin_daemon":"d_coalesce","agent_id":%q,"kind":"agent","role":"tester","module":"coalesce","v":1}`,
+				i, eventID, agentID,
+			)),
+		})
+	}
+
+	applied, skipped, err := applier.ApplyRemoteEvents(context.Background(), events)
+	if err != nil {
+		t.Fatalf("ApplyRemoteEvents: %v", err)
+	}
+	if applied != n {
+		t.Fatalf("applied = %d, want %d", applied, n)
+	}
+	if skipped != 0 {
+		t.Errorf("skipped = %d, want 0", skipped)
+	}
+
+	if got := int(triggerCount.Load()); got != 1 {
+		t.Errorf("sync trigger fired %d times for a %d-event structural batch, want 1 (coalesce broken — every event still fires its own walker)",
+			got, n)
+	}
+}
+
+// TestSyncApplier_ApplyRemoteEvents_NoTriggerForEmptyOrNonStructural —
+// thrum-1nkt.2 corollary: the coalesced fire must not run when the
+// batch is empty OR when no event in the batch is structural.
+//
+// Depends on agent.session.start NOT being in
+// state.isStructuralEvent's whitelist. If a future change adds it (or
+// any of the event types this test sends) to the structural whitelist,
+// WriteEvent will start returning a non-nil postCommit and this test
+// will fire the trigger — pick a different non-structural event here.
+func TestSyncApplier_ApplyRemoteEvents_NoTriggerForEmptyOrNonStructural(t *testing.T) {
+	st := createTestStateForSync(t)
+	applier := NewSyncApplier(st)
+
+	var triggerCount atomic.Int32
+	st.SetSyncTrigger(func(ctx context.Context) {
+		triggerCount.Add(1)
+	})
+
+	// Empty batch: zero fires.
+	if _, _, err := applier.ApplyRemoteEvents(context.Background(), nil); err != nil {
+		t.Fatalf("empty batch ApplyRemoteEvents: %v", err)
+	}
+	if got := int(triggerCount.Load()); got != 0 {
+		t.Errorf("empty batch fired trigger %d times, want 0", got)
+	}
+
+	// Non-structural batch: still zero fires (every postCommit is nil).
+	events := []eventlog.Event{
+		{
+			EventID:      "evt_NONSTRUCT_001",
+			Sequence:     300,
+			Type:         "agent.session.start",
+			Timestamp:    "2026-05-25T13:00:00Z",
+			OriginDaemon: "d_nonstruct",
+			EventJSON:    json.RawMessage(`{"type":"agent.session.start","timestamp":"2026-05-25T13:00:00Z","event_id":"evt_NONSTRUCT_001","origin_daemon":"d_nonstruct","agent_id":"nonstruct_agent","session_id":"ses_nonstruct_001","v":1}`),
+		},
+	}
+	if _, _, err := applier.ApplyRemoteEvents(context.Background(), events); err != nil {
+		t.Fatalf("non-structural batch ApplyRemoteEvents: %v", err)
+	}
+	if got := int(triggerCount.Load()); got != 0 {
+		t.Errorf("non-structural batch fired trigger %d times, want 0", got)
 	}
 }

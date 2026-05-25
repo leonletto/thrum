@@ -23,12 +23,28 @@ func NewSyncApplier(st *state.State) *SyncApplier {
 }
 
 // ApplyRemoteEvents applies a batch of remote events to the local store.
-// Returns the number of events applied and skipped (duplicates or before purge cutoff).
+// Returns the number of events applied and skipped (duplicates or before
+// purge cutoff).
+//
+// thrum-1nkt.2: the per-event walker+compactor sync trigger is COALESCED
+// into a single post-batch fire. applyEvent now returns its postCommit
+// closure instead of invoking it inline; the loop accumulates the last
+// non-nil closure across the batch and invokes it once after the loop
+// (or once before an early error return). The walker's lastWalkAt
+// monotonic + walker.mu serialization already makes the per-event walks
+// near-noops, but each still paid the walker.mu acquire + compactor
+// (~40ms each at bpq5 measured rates). Coalescing collapses N near-noop
+// walks into 1 single useful walk that picks up the whole batch's
+// state-file materializations in one pass. The trigger captures the
+// shared ctx (batch-scoped), so any non-nil closure from the loop is
+// equivalent — the "last" choice is arbitrary.
 func (a *SyncApplier) ApplyRemoteEvents(ctx context.Context, events []eventlog.Event) (applied, skipped int, err error) {
 	db := a.state.DB()
 
 	// Load purge cutoff — events before this are discarded (RFC 3339 sorts lexicographically)
 	purgeCutoff := a.loadPurgeCutoff(ctx)
+
+	var coalescedPostCommit func() // single fire-at-end for the batch
 
 	for _, evt := range events {
 		// Skip events before purge cutoff
@@ -38,9 +54,14 @@ func (a *SyncApplier) ApplyRemoteEvents(ctx context.Context, events []eventlog.E
 		}
 
 		// Deduplication: check if event already exists
-		exists, err := eventlog.HasEvent(ctx, db, evt.EventID)
-		if err != nil {
-			return applied, skipped, fmt.Errorf("check event %s: %w", evt.EventID, err)
+		exists, hasErr := eventlog.HasEvent(ctx, db, evt.EventID)
+		if hasErr != nil {
+			// Fire any accumulated trigger before bailing so events
+			// that DID land propagate to other peers.
+			if coalescedPostCommit != nil {
+				coalescedPostCommit()
+			}
+			return applied, skipped, fmt.Errorf("check event %s: %w", evt.EventID, hasErr)
 		}
 		if exists {
 			skipped++
@@ -51,10 +72,23 @@ func (a *SyncApplier) ApplyRemoteEvents(ctx context.Context, events []eventlog.E
 		// - JSONL routing (messages/{agent}.jsonl vs events.jsonl)
 		// - SQLite events table insert (with new local sequence)
 		// - Projection update
-		if err := a.applyEvent(ctx, evt); err != nil {
-			return applied, skipped, fmt.Errorf("apply event %s: %w", evt.EventID, err)
+		pc, applyErr := a.applyEvent(ctx, evt)
+		if applyErr != nil {
+			// Same partial-batch propagation guarantee as above.
+			if coalescedPostCommit != nil {
+				coalescedPostCommit()
+			}
+			return applied, skipped, fmt.Errorf("apply event %s: %w", evt.EventID, applyErr)
+		}
+		if pc != nil {
+			coalescedPostCommit = pc
 		}
 		applied++
+	}
+
+	// Single coalesced fire for the whole batch's structural events.
+	if coalescedPostCommit != nil {
+		coalescedPostCommit()
 	}
 
 	return applied, skipped, nil
@@ -131,13 +165,16 @@ func (a *SyncApplier) GetCheckpoint(peerID string) (int64, error) {
 	return cp.LastSyncedSeq, nil
 }
 
-// applyEvent applies a single remote event to the local store.
-// The event's JSON payload is parsed into a map and written via State.WriteEvent.
-func (a *SyncApplier) applyEvent(ctx context.Context, evt eventlog.Event) error {
+// applyEvent applies a single remote event to the local store and
+// returns the postCommit closure (or nil for non-structural events).
+// See ApplyRemoteEvents above for the batch-level coalescing rationale
+// and the bsn7-audit lock-discipline notes that motivate why
+// sync_apply fires postCommit at all (without holding state.Lock).
+func (a *SyncApplier) applyEvent(ctx context.Context, evt eventlog.Event) (func(), error) {
 	// Parse the event JSON to a map so WriteEvent can process it
 	var eventMap map[string]any
 	if err := json.Unmarshal(evt.EventJSON, &eventMap); err != nil {
-		return fmt.Errorf("unmarshal event JSON: %w", err)
+		return nil, fmt.Errorf("unmarshal event JSON: %w", err)
 	}
 
 	// Ensure key fields are set from the Event struct
@@ -146,22 +183,11 @@ func (a *SyncApplier) applyEvent(ctx context.Context, evt eventlog.Event) error 
 	eventMap["timestamp"] = evt.Timestamp
 	eventMap["origin_daemon"] = evt.OriginDaemon
 
-	// Write via State.WriteEvent which handles JSONL routing, sequence, and projection.
-	// thrum-bsn7 audit: sync_apply does NOT hold state.Lock() during
-	// WriteEvent (ApplyRemoteEvents is lock-free at this layer). Inbound
-	// structural peer events DO fire local walker+compactor via the
-	// returned postCommit closure — this is intentional so peer events
-	// get materialized into our local state files for forwarding to
-	// other peers. The pre-bsn7 inline-trigger behavior is preserved
-	// exactly: invoke postCommit() immediately, lock-free.
 	postCommit, err := a.state.WriteEvent(ctx, eventMap)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if postCommit != nil {
-		postCommit()
-	}
-	return nil
+	return postCommit, nil
 }
 
 // DB returns the database for direct queries (used by tests).
