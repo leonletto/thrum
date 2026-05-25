@@ -273,6 +273,9 @@ func (c *Compactor) compactJSONLByKey(
 	var lines [][]byte
 	scanner := bufio.NewScanner(f)
 	// Allow large lines (up to 4 MB) — message bodies can be long.
+	// Keep this in lockstep with internal/jsonl.maxScannerBufferSize
+	// (writer.go); both ceilings must allow at least the same line
+	// size or one compaction path will silently fail. thrum-10j0.
 	const maxLineBytes = 4 * 1024 * 1024
 	buf := make([]byte, maxLineBytes)
 	scanner.Buffer(buf, maxLineBytes)

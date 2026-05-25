@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -442,6 +443,16 @@ func (r *Reader) Stream(ctx context.Context) <-chan json.RawMessage {
 			case <-ctx.Done():
 				return
 			}
+		}
+		// thrum-10j0 follow-up: Reader.Stream previously dropped
+		// scanner errors silently. The 4 MB ceiling on newJSONLScanner
+		// makes "every line fits" weaker than it used to be; surface
+		// scan failures so a future regression (e.g. an even larger
+		// line landing in the file) leaves a trace. Logging is
+		// best-effort — Stream's caller already lost the streaming
+		// channel by the time we get here.
+		if err := scanner.Err(); err != nil {
+			log.Printf("jsonl.Reader.Stream: scan error: %v", err)
 		}
 	}()
 
