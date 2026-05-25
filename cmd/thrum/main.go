@@ -3064,6 +3064,7 @@ func worktreeTeardownCmd() *cobra.Command {
 				return fmt.Errorf("invalid worktree name %q: must not contain /, \\, or parent references", name)
 			}
 			deleteBranchFlag, _ := cmd.Flags().GetBool("delete-branch")
+			keepAgentFlag, _ := cmd.Flags().GetBool("keep-agent")
 
 			repoPath := paths.EffectiveRepoPath(flagRepo)
 			thrumDir := filepath.Join(repoPath, ".thrum")
@@ -3087,7 +3088,22 @@ func worktreeTeardownCmd() *cobra.Command {
 				return fmt.Errorf("worktree not found: %s", worktreePath)
 			}
 
-			// Clean up identity files that reference this worktree
+			// Clean up identity files that reference this worktree.
+			// thrum-wk7d (part 3): capture each removed identity's
+			// agent name so the cascade-delete below can drop the
+			// matching DB record (the daemon's agents row that the
+			// identity file points to). Without the cascade, a
+			// teardown-and-recreate cycle leaves a stranded agent
+			// identity in the DB that blocks re-registration at any
+			// new worktree path — the exact wedge that bit wave-4
+			// dispatch.
+			//
+			// removedAgents captures ONLY identities whose os.Remove
+			// succeeded; entries that hit a permissions or stat error
+			// are reported via the warning above and intentionally
+			// excluded from the cascade so we never try to drop a DB
+			// record whose on-disk identity file is still around.
+			var removedAgents []string
 			identitiesDir := filepath.Join(worktreePath, ".thrum", "identities")
 			if entries, err := os.ReadDir(identitiesDir); err == nil {
 				for _, entry := range entries {
@@ -3098,15 +3114,44 @@ func worktreeTeardownCmd() *cobra.Command {
 							fmt.Fprintf(os.Stderr, "  Warning: failed to remove identity %s: %v\n", agentName, err)
 						} else {
 							fmt.Printf("  Removed identity: %s\n", agentName)
+							removedAgents = append(removedAgents, agentName)
 						}
 					}
 				}
 			}
 
-			// Kill associated tmux session if any (best-effort, ignore errors)
+			// Kill associated tmux session and cascade-delete the
+			// bound agent identities (unless --keep-agent was passed).
+			// Both are best-effort: a teardown should never fail
+			// because the daemon is unreachable or the agent was
+			// already deleted.
 			if client, err := getClient(); err == nil {
 				defer func() { _ = client.Close() }()
 				_ = cli.TmuxKill(client, name)
+
+				if !keepAgentFlag {
+					// cli.AgentDelete unconditionally drops every
+					// artifact (messages/sessions/refs/events/agent
+					// row + on-disk files); it has no active-agent
+					// guard that could silently skip a live agent.
+					// A "agent not found" error from a previously-
+					// cleaned-up record is benign — warn and continue.
+					for _, agentName := range removedAgents {
+						if _, derr := cli.AgentDelete(client, cli.AgentDeleteOptions{Name: agentName}); derr != nil {
+							fmt.Fprintf(os.Stderr,
+								"  Warning: failed to delete agent %s from daemon: %v (run 'thrum agent delete %s --force' if it persists)\n",
+								agentName, derr, agentName)
+						} else {
+							fmt.Printf("  Deleted agent record: %s\n", agentName)
+						}
+					}
+				} else if len(removedAgents) > 0 {
+					fmt.Printf("  --keep-agent: %d agent identity record(s) left in the daemon's database\n", len(removedAgents))
+				}
+			} else if !keepAgentFlag && len(removedAgents) > 0 {
+				fmt.Fprintf(os.Stderr,
+					"  Warning: daemon unreachable; %d agent identity record(s) NOT deleted (%s). Run 'thrum agent delete <name> --force' for each once the daemon is back up.\n",
+					len(removedAgents), strings.Join(removedAgents, ", "))
 			}
 
 			// Phase C: call headless primitive (spec §4.2 mapping table).
@@ -3152,6 +3197,8 @@ func worktreeTeardownCmd() *cobra.Command {
 	}
 	cmd.Flags().Bool("delete-branch", false,
 		"Delete the worktree's branch after removing the worktree (default: false; branch stays)")
+	cmd.Flags().Bool("keep-agent", false,
+		"Keep the bound agent identity in the daemon's DB after teardown (default: false — cascade-delete so the agent name is reusable in a new worktree without 'thrum agent delete --force' first)")
 	return cmd
 }
 

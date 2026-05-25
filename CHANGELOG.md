@@ -120,6 +120,24 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **`thrum worktree teardown` cascade-deletes the bound agent identity
+  by default (thrum-wk7d, part 3)** — **behavior change:**
+  `thrum worktree teardown <name>` previously removed the worktree's
+  identity files + the git worktree itself but LEFT the agent record
+  in the daemon's `agents` table. Re-creating a worktree of the same
+  name (or registering the same agent in a different worktree) would
+  then hit `agent.register`'s "already registered in a different
+  worktree" rejection — the wedge that bit wave-4 dispatch earlier
+  today and that the part-1 error-message update teaches operators
+  to recover from. Teardown now calls `agent.delete` via the daemon
+  RPC for each identity it removes, so a clean teardown leaves no
+  stranded agent state. Add `--keep-agent` to preserve the prior
+  behavior when an operator wants to retire the worktree but keep
+  the agent record around (e.g. archival, future re-attachment).
+  Both branches surface their action in stdout/stderr so the operator
+  knows what landed. The daemon-unreachable case warns once with the
+  recovery command rather than failing the teardown — teardown
+  should never wedge because the daemon happens to be down.
 - **Quieter peercred no-match log path (thrum-wk7d, part 2)** —
   `peercred.Resolve`'s step=match no-registered-worktree log was
   WARN and fired on every anonymous-allowed RPC (`agent.register`,
