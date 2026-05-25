@@ -120,6 +120,18 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **Quieter peercred no-match log path (thrum-wk7d, part 2)** —
+  `peercred.Resolve`'s step=match no-registered-worktree log was
+  WARN and fired on every anonymous-allowed RPC (`agent.register`,
+  `session.start`, `session.setIntent`, every read-only RPC on the
+  anonymous allowlist) BY DESIGN — those calls happen before the
+  daemon has a binding for the caller. The WARN noise read as an
+  error in operator-facing logs but was routine operation.
+  Downgraded the resolver-side no-match log to DEBUG; added a single
+  WARN at the actual rejection site in `server.go` (when an
+  anonymous caller hits a method NOT on the anonymous allowlist) so
+  the daemon log surfaces real failures clearly while staying silent
+  during normal bootstrap.
 - **`agent.register` error message names `thrum agent delete` as the
   stranded-identity resolution (thrum-wk7d, part 1)** — when
   `HandleRegister` refuses a registration because the agent_id is

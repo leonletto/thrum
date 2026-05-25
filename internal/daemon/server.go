@@ -413,6 +413,18 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 				// methods on the allowlist. Anything else is rejected here,
 				// before the handler runs.
 				if reqIdentity == nil && !anonymousAllowedMethods[req.Method] {
+					// thrum-wk7d (part 2): now that resolver_unix.go's
+					// no-match logs at DEBUG, this is the canonical
+					// daemon-side signal that an anonymous caller hit a
+					// non-allowlisted method. The structured error
+					// response below is the user-facing diagnostic; this
+					// WARN gives operators reading the daemon log a
+					// single line per actual rejection (rather than one
+					// per every anonymous-allowed call).
+					slog.Warn("anonymous caller rejected: method not in anonymous allowlist",
+						"method", req.Method,
+						"remote_addr", conn.RemoteAddr().String(),
+						"code", -32002)
 					reqCancel()
 					resp := jsonRPCResponse{
 						JSONRPC: "2.0",
