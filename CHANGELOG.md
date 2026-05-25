@@ -120,6 +120,28 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **Move dead-agent self-heal off the `team.list` hot path
+  (thrum-1nkt.6)** — `team.list` used to fire `agent.session.end`
+  events inline for active agents with dead PIDs, coupling a read RPC
+  to write workload (plus walker+compactor fan-out per call). New
+  `DeadAgentSweeper` (`internal/daemon/dead_agent_sweeper.go`) runs as
+  a background goroutine on a 10-second ticker, detects dead-active
+  agents with the same logic the old Phase 2 used (PID liveness +
+  identity-file PID cross-check from thrum-pxz.14 + local-origin
+  guard), and emits `session.end` once per dead session. `team.list`
+  Phase 2 collapses to the in-memory mark-offline rewrite only — no
+  more inline writes, no more per-call walker, no more dependency on
+  the thrum-1nkt.3 single-flight gate. Operator UX is unchanged: the
+  caller still sees `status=offline` in the response immediately
+  (Phase 1's dead-agent collection runs unchanged, then Phase 2
+  rewrites the in-memory member list); the persistent
+  `agent.session.end` write lands within at most one sweeper tick. New
+  tests cover the basic emit, idempotent re-sweep, file-PID skip,
+  remote-origin skip, and the ticker lifecycle.
+  `TestTeamList_SingleFlightDeadAgentSelfHeal` was renamed to
+  `TestTeamList_DoesNotEmitSessionEndInline` and its event-count
+  assertion flipped from "exactly 1" (single-flight invariant) to
+  "exactly 0" (pure-read invariant).
 - **Async-wrap `postCommit` at structural-event call sites (thrum-1nkt.5)** —
   thrum-bsn7 made `postCommit` caller-driven (caller releases `state.Lock`
   before invoking it) so other goroutines no longer block at

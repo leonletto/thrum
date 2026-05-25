@@ -7398,6 +7398,13 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	)
 	go spoolJanitor.Start(ctx)
 
+	// thrum-1nkt.6: background sweeper that emits agent.session.end for
+	// active agents whose PID is dead. Replaces the inline Phase 2
+	// self-heal that team.list HandleList used to perform on every
+	// request; team.list is now pure-read.
+	deadAgentSweeper := daemon.NewDeadAgentSweeper(st, thrumDir)
+	go deadAgentSweeper.Start(ctx)
+
 	// thrum-7b84.3 E3: backstop ticker. Every 15 minutes, scan
 	// message_deliveries for unread rows older than the AgeCutoff for
 	// alive agents, and re-fire the existing tmux nudge. Catches the

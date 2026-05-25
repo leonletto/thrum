@@ -348,17 +348,22 @@ func TestTeamList_SelfHealSkipsLiveFilePID(t *testing.T) {
 	}
 }
 
-// TestTeamList_SingleFlightDeadAgentSelfHeal verifies thrum-1nkt.3:
-// concurrent team.list callers that observe the same dead agent in
-// Phase 1 must NOT each emit a redundant session.end in Phase 2. The
-// h.selfHealing sync.Map gate ensures exactly one emit per session_id
-// even when N goroutines race through Phase 2 at the same time. Without
-// the gate, this test would write 8 session.end events for the same
-// dead session (one per concurrent caller).
-func TestTeamList_SingleFlightDeadAgentSelfHeal(t *testing.T) {
+// TestTeamList_DoesNotEmitSessionEndInline verifies thrum-1nkt.6:
+// team.list is now pure-read. Even when concurrent callers observe the
+// same dead agent in Phase 1, NONE of them writes session.end (the
+// background DeadAgentSweeper owns that responsibility). Phase 2's
+// in-memory rewrite still marks the agent offline in every response so
+// callers see the corrected status immediately.
+//
+// This test supersedes thrum-1nkt.3's
+// TestTeamList_SingleFlightDeadAgentSelfHeal: the .3 gate is no longer
+// needed because team.list never writes. The assertion shape stays the
+// same shape (count events + count offline responses) — the expected
+// event count just drops from 1 to 0.
+func TestTeamList_DoesNotEmitSessionEndInline(t *testing.T) {
 	// Make the concurrency guarantee explicit on CI machines that clamp
-	// GOMAXPROCS — the race we are testing only manifests when goroutines
-	// can actually overlap inside Phase 2.
+	// GOMAXPROCS — the contract under test (zero writes) must hold even
+	// when goroutines actually overlap.
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	tmpDir := t.TempDir()
@@ -464,8 +469,8 @@ func TestTeamList_SingleFlightDeadAgentSelfHeal(t *testing.T) {
 	).Scan(&endAfter); err != nil {
 		t.Fatalf("query session.end count after: %v", err)
 	}
-	if delta := endAfter - endBefore; delta != 1 {
-		t.Errorf("session.end events emitted under %d-concurrent burst: got %d, want 1 (single-flight gate must collapse duplicates)",
+	if delta := endAfter - endBefore; delta != 0 {
+		t.Errorf("session.end events emitted by team.list under %d-concurrent burst: got %d, want 0 (post thrum-1nkt.6 team.list is pure-read — DeadAgentSweeper owns the writes)",
 			callers, delta)
 	}
 }
