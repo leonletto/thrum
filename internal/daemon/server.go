@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
+	"github.com/leonletto/thrum/internal/profile"
 	"github.com/leonletto/thrum/internal/transport"
 )
 
@@ -292,6 +294,9 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 		if err != nil {
 			return
 		}
+		// thrum-bpq5 substrate: arrival timestamp + per-phase RPC timing.
+		// Gated by THRUM_PROFILE.
+		rpcArrived := time.Now()
 
 		// Parse JSON-RPC request
 		var req jsonRPCRequest
@@ -433,8 +438,18 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 			// to legacy behavior to avoid wedging the daemon on transient DB errors.
 		}
 
+		handlerStart := time.Now()
+		preHandlerMs := handlerStart.Sub(rpcArrived).Milliseconds()
 		result, err := handler(ctxWithIdentity, reqParams)
 		reqCancel()
+		handlerMs := time.Since(handlerStart).Milliseconds()
+		if profile.Enabled() {
+			slog.Info("profile.rpc.dispatch",
+				"method", req.Method,
+				"pre_handler_ms", preHandlerMs,
+				"handler_ms", handlerMs,
+			)
+		}
 		if err != nil {
 			resp := jsonRPCResponse{
 				JSONRPC: "2.0",

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/jsonl"
+	"github.com/leonletto/thrum/internal/profile"
 	"github.com/leonletto/thrum/internal/projection"
 	"github.com/leonletto/thrum/internal/schema"
 	_ "modernc.org/sqlite"
@@ -245,7 +247,32 @@ func (s *State) Close() error {
 // immediately after the error check — semantically identical to the
 // pre-bsn7 inline-trigger behavior.
 func (s *State) WriteEvent(ctx context.Context, event any) (postCommit func(), err error) {
+	// thrum-bpq5 substrate: per-phase WriteEvent timing. Gated by
+	// THRUM_PROFILE; zero cost when off.
+	weStart := time.Now()
+	var marshalMs, jsonlMs, eventsInsertMs, projectorMs int64
+	defer func() {
+		if !profile.Enabled() {
+			return
+		}
+		evtTypeRaw := ""
+		if event != nil {
+			// best-effort type extraction; cheap
+			if m, ok := event.(map[string]any); ok {
+				evtTypeRaw, _ = m["type"].(string)
+			}
+		}
+		slog.Info("profile.write_event.total",
+			"total_ms", time.Since(weStart).Milliseconds(),
+			"marshal_ms", marshalMs,
+			"jsonl_ms", jsonlMs,
+			"events_insert_ms", eventsInsertMs,
+			"projector_ms", projectorMs,
+			"event_type", evtTypeRaw,
+		)
+	}()
 	// Marshal event to map so we can add fields
+	marshalStart := time.Now()
 	eventBytes, mErr := json.Marshal(event)
 	if mErr != nil {
 		return nil, fmt.Errorf("marshal event: %w", mErr)
@@ -255,6 +282,7 @@ func (s *State) WriteEvent(ctx context.Context, event any) (postCommit func(), e
 	if uErr := json.Unmarshal(eventBytes, &eventMap); uErr != nil {
 		return nil, fmt.Errorf("unmarshal to map: %w", uErr)
 	}
+	marshalMs = time.Since(marshalStart).Milliseconds()
 
 	// Generate and add event_id if not present or empty
 	eventID, _ := eventMap["event_id"].(string)
@@ -291,9 +319,11 @@ func (s *State) WriteEvent(ctx context.Context, event any) (postCommit func(), e
 	eventMap["sequence"] = seq
 
 	// Append enriched event to JSONL (source of truth)
+	jsonlStart := time.Now()
 	if aErr := writer.Append(eventMap); aErr != nil {
 		return nil, fmt.Errorf("append to JSONL: %w", aErr)
 	}
+	jsonlMs = time.Since(jsonlStart).Milliseconds()
 
 	// Marshal enriched event for projector
 	eventJSON, jErr := json.Marshal(eventMap)
@@ -306,17 +336,21 @@ func (s *State) WriteEvent(ctx context.Context, event any) (postCommit func(), e
 	evtType, _ := eventMap["type"].(string)
 	evtTimestamp, _ := eventMap["timestamp"].(string)
 	evtOrigin, _ := eventMap["origin_daemon"].(string)
+	eventsInsertStart := time.Now()
 	if _, iErr := s.db.ExecContext(ctx,
 		`INSERT OR IGNORE INTO events (event_id, sequence, type, timestamp, origin_daemon, event_json) VALUES (?, ?, ?, ?, ?, ?)`,
 		evtID, seq, evtType, evtTimestamp, evtOrigin, string(eventJSON),
 	); iErr != nil {
 		return nil, fmt.Errorf("insert into events table: %w", iErr)
 	}
+	eventsInsertMs = time.Since(eventsInsertStart).Milliseconds()
 
 	// Apply to projector (update SQLite)
+	projectorStart := time.Now()
 	if pErr := s.projector.Apply(ctx, eventJSON); pErr != nil {
 		return nil, fmt.Errorf("apply to projector: %w", pErr)
 	}
+	projectorMs = time.Since(projectorStart).Milliseconds()
 
 	// Notify sync hook (e.g., to broadcast sync.notify to peers).
 	// Passes the enriched event JSON so downstream consumers (e.g.

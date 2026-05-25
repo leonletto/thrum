@@ -30,6 +30,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/jsonl"
+	"github.com/leonletto/thrum/internal/profile"
 )
 
 // Compactor handles retention and compaction for events journals,
@@ -172,22 +173,33 @@ func (c *Compactor) CompactReceiptStateFile(ctx context.Context, agentID string)
 // messages-v2/*.jsonl files, then all receipts/*.jsonl files.
 // Idempotent; safe to call repeatedly.
 func (c *Compactor) CompactAll(ctx context.Context, db *safedb.DB) error {
+	// thrum-bpq5 substrate: per-phase compactor timing.
+	// Gated by THRUM_PROFILE; zero cost when off.
+	defer profile.Time("compactor.total")()
+
 	// 1. Events journal + SQLite parity.
-	if _, err := c.CompactEventsJournal(ctx, db); err != nil {
+	eventsT := profile.NewTimer("compactor.events_journal")
+	rowsDeleted, err := c.CompactEventsJournal(ctx, db)
+	eventsT.Done("rows_deleted", rowsDeleted)
+	if err != nil {
 		return fmt.Errorf("CompactAll events journal: %w", err)
 	}
 
 	// 2. messages-v2/*.jsonl
+	msgsT := profile.NewTimer("compactor.messages_v2")
 	msgsDir := filepath.Join(c.syncDir, "messages-v2")
 	if err := c.compactDir(ctx, msgsDir, c.CompactMessageStateFile); err != nil {
 		return fmt.Errorf("CompactAll messages-v2: %w", err)
 	}
+	msgsT.Done()
 
 	// 3. receipts/*.jsonl
+	receiptsT := profile.NewTimer("compactor.receipts")
 	receiptsDir := filepath.Join(c.syncDir, "receipts")
 	if err := c.compactDir(ctx, receiptsDir, c.CompactReceiptStateFile); err != nil {
 		return fmt.Errorf("CompactAll receipts: %w", err)
 	}
+	receiptsT.Done()
 
 	return nil
 }

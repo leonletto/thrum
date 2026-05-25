@@ -6,6 +6,8 @@ import (
 	"log"
 	"log/slog"
 	"time"
+
+	"github.com/leonletto/thrum/internal/profile"
 )
 
 // syncWalkerTimeout caps WalkAndWrite duration as defense-in-depth
@@ -109,6 +111,10 @@ func (t *Triggers) SetCompactor(fn func(context.Context) error) {
 // sync on a compaction failure would conflate maintenance with
 // correctness.
 func (t *Triggers) SyncOnWrite(ctx context.Context) {
+	// thrum-bpq5: total SyncOnWrite timing — what postCommit blocks
+	// on from the caller's RPC. Gated by THRUM_PROFILE; zero cost when off.
+	defer profile.Time("sync_on_write.total")()
+
 	if t.loop == nil {
 		return
 	}
@@ -178,6 +184,7 @@ func (t *Triggers) SyncOnWrite(ctx context.Context) {
 			slog.Warn("sync.compactor_failed", "err", err, "elapsed_s", elapsed.Seconds())
 		}
 	}
+	defer profile.Time("sync_on_write.trigger_sync")()
 	t.loop.TriggerSync()
 }
 

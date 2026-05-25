@@ -22,6 +22,7 @@ import (
 	"github.com/leonletto/thrum/internal/groups"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/identity/guard"
+	"github.com/leonletto/thrum/internal/profile"
 	"github.com/leonletto/thrum/internal/subscriptions"
 	"github.com/leonletto/thrum/internal/types"
 )
@@ -409,6 +410,24 @@ func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptio
 
 // HandleSend handles the message.send RPC method.
 func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage) (any, error) {
+	// thrum-bpq5 substrate: end-to-end HandleSend timing. Gated by
+	// THRUM_PROFILE; zero cost when off.
+	hsStart := time.Now()
+	var phaseResolveMs, phaseRecipientsMs, phaseWriteEventMs, phasePostCommitMs, phaseDispatchMs int64
+	defer func() {
+		if !profile.Enabled() {
+			return
+		}
+		slog.Info("profile.handle_send.total",
+			"total_ms", time.Since(hsStart).Milliseconds(),
+			"resolve_ms", phaseResolveMs,
+			"recipients_ms", phaseRecipientsMs,
+			"write_event_ms", phaseWriteEventMs,
+			"post_commit_ms", phasePostCommitMs,
+			"dispatch_ms", phaseDispatchMs,
+		)
+	}()
+
 	var req SendRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -433,6 +452,7 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	// Generate message ID
 	messageID := identity.GenerateMessageID()
 
+	resolveStart := time.Now()
 	// Resolve current agent and session
 	callerID, sessionID, err := h.resolveAgentAndSession(ctx, req.CallerAgentID)
 	if err != nil {
@@ -443,6 +463,8 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	// send.recipient-stale hint doesn't false-positive on actively
 	// coordinating agents. Debounced in the state layer.
 	_ = h.state.TouchAgentLastSeen(ctx, callerID)
+	phaseResolveMs = time.Since(resolveStart).Milliseconds()
+	recipientsStart := time.Now()
 
 	// Handle impersonation (users can impersonate agents)
 	agentID := callerID
@@ -665,19 +687,27 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 		Disclosed:  disclosed,
 	}
 
+	phaseRecipientsMs = time.Since(recipientsStart).Milliseconds()
+
 	// Write event to JSONL and SQLite. Lock only for WriteEvent;
 	// thrum-bsn7: release state.Lock() BEFORE invoking postCommit so the
 	// structural-event walker+compactor (up to 90s wall-clock) cannot
 	// starve concurrent message.create / agent.register etc.
+	weStart := time.Now()
 	h.state.Lock()
 	postCommit, err := h.state.WriteEvent(ctx, event)
 	h.state.Unlock()
+	phaseWriteEventMs = time.Since(weStart).Milliseconds()
 	if err != nil {
 		return nil, fmt.Errorf("write message.create event: %w", err)
 	}
+	pcStart := time.Now()
 	if postCommit != nil {
 		postCommit()
 	}
+	phasePostCommitMs = time.Since(pcStart).Milliseconds()
+	dispatchStart := time.Now()
+	defer func() { phaseDispatchMs = time.Since(dispatchStart).Milliseconds() }()
 
 	// No lock for dispatch and emit (WebSocket I/O)
 	preview := req.Content

@@ -26,6 +26,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,6 +34,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/safedb"
+	"github.com/leonletto/thrum/internal/profile"
 	"github.com/leonletto/thrum/internal/sync/state"
 )
 
@@ -121,10 +123,24 @@ func (w *Walker) LastCounts() WalkCounts {
 // the function returns immediately with the error and lastWalkAt is not
 // updated — next call will re-attempt the same window.
 func (w *Walker) WalkAndWrite(ctx context.Context) error {
-	// Serialize concurrent callers. Triggers.SyncOnWrite serializes via the
-	// trigger channel, but the mutex is cheap defense-in-depth.
+	// thrum-bpq5: per-phase instrumentation. Surfaces in daemon.log under
+	// slog phase="walker.*" elapsed_ms=N. Removed once profile captured.
+	walkStart := time.Now()
 	w.mu.Lock()
+	muAcquireMs := time.Since(walkStart).Milliseconds()
 	defer w.mu.Unlock()
+	defer func() {
+		if !profile.Enabled() {
+			return
+		}
+		slog.Info("profile.walker.total",
+			"total_ms", time.Since(walkStart).Milliseconds(),
+			"mu_acquire_ms", muAcquireMs,
+			"state_files", w.lastCounts.StateFiles,
+			"message_rows", w.lastCounts.MessageRows,
+			"receipt_rows", w.lastCounts.ReceiptRows,
+		)
+	}()
 
 	// Reset per-walk counters so LastCounts() always reflects the most
 	// recent walk, not a cumulative total.
@@ -137,11 +153,15 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 	           WHERE timestamp > ?
 	           ORDER BY sequence ASC`
 
+	selectStart := time.Now()
 	rows, err := w.db.QueryContext(ctx, q, w.lastWalkAt.UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return fmt.Errorf("snapshot: query events since lastWalkAt: %w", err)
 	}
+	selectMs := time.Since(selectStart).Milliseconds()
 	defer func() { _ = rows.Close() }()
+	iterateStart := time.Now()
+	var rowCount int
 
 	// Accumulate actions in typed slices so we can apply in spec §8.1 order.
 	type agentAction struct {
@@ -174,6 +194,7 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 	)
 
 	for rows.Next() {
+		rowCount++
 		var evtID, evtType, evtTimestamp, evtJSON string
 		if err := rows.Scan(&evtID, &evtType, &evtTimestamp, &evtJSON); err != nil {
 			return fmt.Errorf("snapshot: scan event row: %w", err)
@@ -246,6 +267,15 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 		return fmt.Errorf("snapshot: iterate events: %w", err)
 	}
 	_ = rows.Close() // release DB connection before doing per-message lookups
+	iterateMs := time.Since(iterateStart).Milliseconds()
+	if profile.Enabled() {
+		slog.Info("profile.walker.events_query",
+			"select_ms", selectMs,
+			"iterate_ms", iterateMs,
+			"row_count", rowCount,
+		)
+	}
+	resolveStart := time.Now()
 
 	// Resolve message authors now that rows is closed and the DB connection
 	// is free.  lookupMessageAuthor queries the messages table; doing this
@@ -267,6 +297,17 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 	}
 	msgActions = filtered
 
+	resolveMs := time.Since(resolveStart).Milliseconds()
+	if profile.Enabled() {
+		slog.Info("profile.walker.resolve_authors",
+			"resolve_ms", resolveMs,
+			"agent_acts", len(agentActions),
+			"bg_acts", len(bridgeGroupActs),
+			"msg_acts", len(msgActions),
+			"receipt_acts", len(receiptActions),
+		)
+	}
+
 	// If nothing to do, advance lastWalkAt and return.
 	if len(agentActions) == 0 &&
 		len(bridgeGroupActs) == 0 &&
@@ -277,12 +318,14 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 		}
 		return nil
 	}
+	writeStart := time.Now()
 
 	// ---------------------------------------------------------------------------
 	// Spec §8.1 ordering: agents → bridge-groups → messages → receipts
 	// ---------------------------------------------------------------------------
 
 	// 1. Agent state files.
+	agentWriteStart := time.Now()
 	for _, a := range agentActions {
 		snap, err := w.buildAgentSnapshot(ctx, a.agentID)
 		if err != nil {
@@ -303,7 +346,10 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 		w.lastCounts.StateFiles++
 	}
 
+	agentWriteMs := time.Since(agentWriteStart).Milliseconds()
+
 	// 2. Bridge-group state files (write + delete).
+	bgWriteStart := time.Now()
 	for _, bg := range bridgeGroupActs {
 		if bg.delete {
 			// DeleteBridgeGroup is idempotent and handles ErrNotOwner internally.
@@ -329,10 +375,13 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 		w.lastCounts.StateFiles++
 	}
 
+	bgWriteMs := time.Since(bgWriteStart).Milliseconds()
+
 	// 3. Message rows — append to messages-v2/<agentID>.jsonl.
 	// De-duplicate by message ID so the most recent state per message is written
 	// when multiple events touch the same message (e.g. create + edit in the same
 	// window). We resolve the final projection state for each unique message ID.
+	msgWriteStart := time.Now()
 	seenMsgIDs := make(map[string]bool, len(msgActions))
 	for _, ma := range msgActions {
 		if seenMsgIDs[ma.msgID] {
@@ -354,7 +403,10 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 		w.lastCounts.MessageRows++
 	}
 
+	msgWriteMs := time.Since(msgWriteStart).Milliseconds()
+
 	// 4. Receipt rows — append to receipts/<issuerID>.jsonl.
+	receiptWriteStart := time.Now()
 	for _, ra := range receiptActions {
 		row := w.buildReceiptRow(ctx, ra.issuerID, ra.messageID)
 		if row == nil {
@@ -364,6 +416,21 @@ func (w *Walker) WalkAndWrite(ctx context.Context) error {
 			return fmt.Errorf("snapshot: append receipt row (%s, %s): %w", ra.issuerID, ra.messageID, appendErr)
 		}
 		w.lastCounts.ReceiptRows++
+	}
+
+	receiptWriteMs := time.Since(receiptWriteStart).Milliseconds()
+	if profile.Enabled() {
+		slog.Info("profile.walker.writes",
+			"total_write_ms", time.Since(writeStart).Milliseconds(),
+			"agents_ms", agentWriteMs,
+			"bridge_groups_ms", bgWriteMs,
+			"messages_ms", msgWriteMs,
+			"receipts_ms", receiptWriteMs,
+			"agent_count", len(agentActions),
+			"bridge_group_count", len(bridgeGroupActs),
+			"message_count_unique", len(seenMsgIDs),
+			"receipt_count", len(receiptActions),
+		)
 	}
 
 	// All writes succeeded — advance lastWalkAt.

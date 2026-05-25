@@ -51,6 +51,7 @@ import (
 	"github.com/leonletto/thrum/internal/netdetect"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/process"
+	"github.com/leonletto/thrum/internal/profile"
 	"github.com/leonletto/thrum/internal/projection"
 	"github.com/leonletto/thrum/internal/restart"
 	"github.com/leonletto/thrum/internal/runtime"
@@ -5649,6 +5650,11 @@ func resolveLocalMentionRole() (string, error) {
 
 // runDaemon runs the daemon server in the foreground.
 func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
+	// Profile instrumentation gate (thrum-bpq5 substrate). Reads
+	// THRUM_PROFILE env at start; default off (no perf cost). Set to "1"
+	// before launching the daemon to surface per-phase slog timing.
+	profile.Init()
+
 	// Resolve to absolute path
 	absPath, err := filepath.Abs(repoPath)
 	if err != nil {
