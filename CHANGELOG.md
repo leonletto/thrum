@@ -120,6 +120,18 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **Sync-notify goroutine pool saturation under multi-peer burst
+  (thrum-1nkt.1)** — `internal/daemon/rpc/sync_notify.go`'s bounded semaphore
+  capped concurrent peer-sync goroutines at 10. Under 8-concurrent
+  `thrum send` on a busy 2-peer cluster, 257 of 327 inbound `sync.notify`
+  RPCs in an 8-second window were dropped at the gate — every drop is a
+  missed pull-sync opportunity that delays event propagation across the
+  cluster. The ceiling now lives at the named constant
+  `syncNotifyPoolSize = 100`. Safe to raise: peers do NOT retry dropped
+  notifications (`BroadcastNotify` in `sync_manager.go` is fire-and-forget),
+  so the higher ceiling does not amplify peer load. First fix in the
+  thrum-1nkt epic; remaining children address the team.list dead-agent
+  self-heal race and the defense-in-depth postCommit decoupling sites.
 - **Daemon lock-contention under register/message burst (thrum-bsn7)** — the
   structural-event sync trigger (snapshot walker, 30s ceiling; compactor, 60s
   ceiling) used to run synchronously inside `state.WriteEvent` while the caller
