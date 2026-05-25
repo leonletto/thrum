@@ -120,6 +120,24 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **Redundant `session.end` writes from concurrent `team.list` callers
+  (thrum-1nkt.3)** — `team.list` runs in three phases: Phase 1 reads
+  active members under RLock and collects dead-but-still-active agents;
+  Phase 2 (no lock) emits `session.end` for each; Phase 3 rewrites the
+  in-memory response so the caller sees the self-healed status. Under
+  N-concurrent `team.list` (the bpq5 8-send burst triggers 8 such calls
+  through the hint pipeline) every goroutine saw the same dead agents
+  in its Phase 1 snapshot and independently entered Phase 2, writing
+  N redundant `session.end` events per dead session — each one a
+  `WriteEvent` + JSONL append + projection apply. The fix adds a
+  `sync.Map` on `TeamHandler` keyed by `session_id`; Phase 2
+  `LoadOrStore` gates the emit, the first caller wins and losers
+  short-circuit. Phase 3 still runs for every caller, so short-circuited
+  callers still observe the corrected `status=offline` in their
+  response. New regression test
+  `TestTeamList_SingleFlightDeadAgentSelfHeal` fires 8 concurrent calls
+  against a dead-PID fixture and asserts exactly one `session.end` event
+  is written.
 - **Sync-notify goroutine pool saturation under multi-peer burst
   (thrum-1nkt.1)** — `internal/daemon/rpc/sync_notify.go`'s bounded semaphore
   capped concurrent peer-sync goroutines at 10. Under 8-concurrent

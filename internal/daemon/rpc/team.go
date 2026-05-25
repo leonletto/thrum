@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
@@ -88,6 +89,21 @@ type TeamHandler struct {
 	state              *state.State
 	thrumDir           string
 	supervisorIdentity *config.IdentityFile // synthesized virtual-supervisor identity; nil in tests
+
+	// selfHealing single-flights Phase 2 dead-agent session.end emission
+	// keyed by session_id. Concurrent team.list callers all see the same
+	// dead agents in their Phase 1 snapshot, so without coordination N
+	// callers would each write a redundant session.end for the same
+	// session. LoadOrStore wins exactly once per session; losers
+	// short-circuit Phase 2 emit but still run Phase 3 (the in-memory
+	// status rewrite), so every caller's response observes the corrected
+	// offline status regardless of who won the gate. The deferred Delete
+	// fires after the winning emit completes — including on the error
+	// path — so the gate is retry-on-error, not a permanent block: if a
+	// future team.list still sees the same dead agent (e.g. the projection
+	// hadn't applied yet, or the emit failed), that next call can re-heal.
+	// thrum-1nkt.3 (bpq5 follow-up).
+	selfHealing sync.Map // sessionID(string) → struct{}
 }
 
 // NewTeamHandler creates a new team handler.
@@ -112,9 +128,14 @@ func NewTeamHandler(state *state.State, thrumDir string, supervisorIdentity *con
 //  2. Phase 2 runs with NO lock held and emits session.end events for each
 //     dead agent via emitSessionEndForDeadAgent. Anti-pattern 1 forbids
 //     holding a read lock across event emission because WriteEvent needs
-//     its own write lock and nested RLock→Lock would deadlock.
+//     its own write lock and nested RLock→Lock would deadlock. Each emit
+//     is single-flighted through h.selfHealing (keyed by session_id) so
+//     concurrent team.list callers do not duplicate session.end writes
+//     for the same dead session (thrum-1nkt.3).
 //  3. Phase 3 rewrites the in-memory response to mark dead agents as
-//     offline so the caller sees the self-healed state immediately.
+//     offline so the caller sees the self-healed state immediately. This
+//     runs for every caller regardless of which Phase 2 emit won, so
+//     short-circuited callers still observe the corrected status.
 func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (any, error) {
 	var req TeamListRequest
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -180,14 +201,25 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 	h.state.RUnlock()
 
 	// PHASE 2: emit session.end events without holding any lock.
+	// Single-flight per session_id via h.selfHealing so concurrent
+	// team.list callers do not race on the same dead agent. Losers of
+	// the LoadOrStore short-circuit Phase 2 emit but still execute
+	// Phase 3 below, so every caller's response observes the corrected
+	// offline status regardless of who won the gate.
 	for _, d := range deadAgents {
-		if emitErr := h.emitSessionEndForDeadAgent(ctx, d.SessionID); emitErr != nil {
-			log.Printf("team.list: failed to emit session.end: agent=%s session=%s err=%v",
-				d.AgentID, d.SessionID, emitErr)
+		if _, alreadyHealing := h.selfHealing.LoadOrStore(d.SessionID, struct{}{}); alreadyHealing {
 			continue
 		}
-		log.Printf("team.list: marking dead agent offline: agent=%s pid=%d",
-			d.AgentID, d.PID)
+		func(d deadAgent) {
+			defer h.selfHealing.Delete(d.SessionID)
+			if emitErr := h.emitSessionEndForDeadAgent(ctx, d.SessionID); emitErr != nil {
+				log.Printf("team.list: failed to emit session.end: agent=%s session=%s err=%v",
+					d.AgentID, d.SessionID, emitErr)
+				return
+			}
+			log.Printf("team.list: marking dead agent offline: agent=%s pid=%d",
+				d.AgentID, d.PID)
+		}(d)
 	}
 
 	// PHASE 3: rewrite in-memory response so the caller sees status=offline.
