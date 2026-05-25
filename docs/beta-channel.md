@@ -25,20 +25,23 @@ they're parameterized over `VERSION` and the release branch.
 ## Stable-track current pre-release
 
 > **Current stable-track pre-release:
-> [`v0.10.6-rc.2`](https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.2)**
-> (tagged 2026-05-24, in soak). **rc.2 adds two P1 fixes** on top of rc.1: a
-> security fix (thrum-l9e1) that closes a cross-worktree agent re-bind gap — the
-> daemon now fail-closes when an anonymous register from worktree B would
-> overwrite an identity already claimed by worktree A — and a daemon-sync fix
-> (thrum-roz1) that detaches the sync compactor from the caller's RPC context,
-> ending the `prime-fail-on-restart` cascade seen on long-uptime daemons. Also
-> in rc.2: a `thrum quickstart` precedence fix (positional `<name>` now
-> accepted; `--name` flag → positional → `THRUM_NAME` → identity-file), a
-> worktree CLI fix that lets `thrum worktree create --branch <existing>` attach
-> to an existing branch instead of erroring on `-b` conflict, and recovery-doc
-> corrections in `architecture.md`. Carve-outs from the gate (both pre-existing,
-> non-regressions): a wizard-SIGINT test flake and release-test harness
-> fragility.
+> [`v0.10.6-rc.3`](https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.3)**
+> (tagged 2026-05-25, in soak). **rc.3 is the biggest reliability win in
+> v0.10.6.** Two P1 fixes — thrum-kdyf (session resurrect) and thrum-bsn7
+> (broader lock-contention) — together resolve the chronic "daemon may be
+> unresponsive under burst" symptom by detaching `state.Lock` from the
+> long-running sync trigger; under burst load the daemon stays responsive
+> instead of stalling agent commands while sync writes finish. Also in rc.3: an
+> `events.timestamp` index (thrum-7ojv) so the events-table sweep stops doing an
+> O(N) full-table scan (lets the compactor timeout drop symmetric to the
+> walker's), `thrum worktree create --base <ref>` (thrum-pqcg) so a new worktree
+> branches from the cwd's HEAD by default instead of silently defaulting to
+> `main` (use `--base main` if you want the old behaviour), and two P3 polish
+> items (thrum-g1ux + thrum-8iux). Carve-out: a known keystroke race in
+> release-test scen 23 (thrum-rbp6, pre-existing, non-regression).
+> Carry-forwards from rc.2: l9e1 security fail-close on anonymous cross-worktree
+> re-bind, roz1 sync compactor ctx-detach, 9dnh quickstart precedence fix, suyb
+> worktree attach-existing-branch fix, and 1gar recovery-doc corrections.
 >
 > The v0.10.6 story still leads with the **sync re-architecture** (thrum-s6os):
 > the cross-machine wire stream is event-triggered rather than 60-second-polled,
@@ -54,13 +57,13 @@ they're parameterized over `VERSION` and the release branch.
 > Full notes: [What's New](whats-new.md) and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-### Quick install for `v0.10.6-rc.2`
+### Quick install for `v0.10.6-rc.3`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.2 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.3 sh
 
 # Codex plugin (matches release/v0.10.6)
 THRUM_INSTALL_REF=release/v0.10.6 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.6/codex-plugin/plugins/thrum/scripts/install-plugin.sh)

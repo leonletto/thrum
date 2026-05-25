@@ -6,7 +6,7 @@ description:
 category: "overview"
 order: 2
 tags: ["release-notes", "changelog", "migration", "version"]
-last_updated: "2026-05-24"
+last_updated: "2026-05-25"
 ---
 
 ## What's New
@@ -18,14 +18,19 @@ machine-readable history lives in
 
 ## v0.10.6 — In Soak (RC)
 
-**v0.10.6-rc.2** was tagged 2026-05-24 and is the current pre-release. rc.2 adds
-two P1 fixes on top of rc.1 — a daemon **security** fix (thrum-l9e1) that
-fail-closes anonymous cross-worktree agent re-binds, and a sync fix (thrum-roz1)
-that detaches the compactor from the caller's RPC context and ends the
-`prime-fail-on-restart` cascade — plus a `thrum quickstart` precedence
-correction, a `thrum worktree create --branch <existing>` attach fix, and
-recovery-doc corrections. See the [Beta Channel](beta-channel.md) page for the
-full rc.2 callout + install commands.
+**v0.10.6-rc.3** was tagged 2026-05-25 and is the current pre-release. rc.3 is
+the biggest reliability win in v0.10.6 — two P1 fixes (thrum-kdyf session
+resurrect + thrum-bsn7 broader lock-contention) together resolve the chronic
+"daemon may be unresponsive under burst" symptom by detaching `state.Lock` from
+the long-running sync trigger. Also in rc.3: an `events.timestamp` index
+(thrum-7ojv) so the events sweep stops doing a full-table scan,
+`thrum worktree create --base <ref>` (thrum-pqcg) so a new worktree branches
+from the cwd's HEAD by default instead of silently defaulting to `main`, and two
+P3 polish items. Carry-forwards from rc.2: l9e1 security fail-close, roz1 sync
+compactor ctx-detach, 9dnh quickstart precedence fix, suyb worktree
+attach-existing-branch fix, and 1gar recovery-doc corrections. See the
+[Beta Channel](beta-channel.md) page for the full rc.3 callout + install
+commands.
 
 v0.10.6's headline is a **sync re-architecture** (thrum-s6os): the cross-machine
 wire stream now derives from per-agent and per-bridge-group state files rather

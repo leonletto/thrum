@@ -2532,15 +2532,27 @@ the main worktree into a "feature" worktree.
 thrum worktree create <name> [flags]
 ```
 
-| Flag             | Description                                                                 | Default          |
-| ---------------- | --------------------------------------------------------------------------- | ---------------- |
-| `--branch`, `-b` | Branch name                                                                 | `feature/<name>` |
-| `--detach`       | Create detached HEAD worktree                                               | `false`          |
-| `--name`         | Agent name (triggers quickstart when combined with role+module)             |                  |
-| `--role`         | Agent role                                                                  |                  |
-| `--module`       | Agent module                                                                |                  |
-| `--intent`       | Initial work intent description                                             |                  |
-| `--runtime`      | Runtime preset: `claude`, `codex`, `cursor`, `gemini`, `opencode`, `auggie` |                  |
+| Flag             | Description                                                                 | Default             |
+| ---------------- | --------------------------------------------------------------------------- | ------------------- |
+| `--branch`, `-b` | Branch name                                                                 | `feature/<name>`    |
+| `--base`         | Base ref for the new branch (any existing branch or commit SHA)             | current HEAD of cwd |
+| `--detach`       | Create detached HEAD worktree                                               | `false`             |
+| `--name`         | Agent name (triggers quickstart when combined with role+module)             |                     |
+| `--role`         | Agent role                                                                  |                     |
+| `--module`       | Agent module                                                                |                     |
+| `--intent`       | Initial work intent description                                             |                     |
+| `--runtime`      | Runtime preset: `claude`, `codex`, `cursor`, `gemini`, `opencode`, `auggie` |                     |
+
+The `--base` flag (added in v0.10.6) controls which existing ref the new branch
+is cut from. Default is the current HEAD of the cwd where
+`thrum worktree create` runs — so a worktree created from a `thrum-dev` checkout
+inherits the `thrum-dev` history, and one created from `release/v0.10.6`
+inherits that release-line history. Pre-fix the CLI silently defaulted to `main`
+regardless of cwd HEAD, which led to lost commits when operators ran the command
+from non-`main` branches. Users who want the pre-fix behavior can pass
+`--base main` explicitly. On detached HEAD or a non-git cwd the command warns
+and falls back to `main`; pass `--base <ref>` to silence the warning and choose
+explicitly.
 
 The worktree is created at `worktrees.base_path/<name>` (default:
 `~/.thrum/worktrees/<project>/<name>`). The name cannot contain `/`, `\`, or

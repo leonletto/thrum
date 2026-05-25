@@ -3079,6 +3079,11 @@ the main worktree into a &quot;feature&quot; worktree.</p>
 <td><code>feature/&lt;name&gt;</code></td>
 </tr>
 <tr>
+<td><code>--base</code></td>
+<td>Base ref for the new branch (any existing branch or commit SHA)</td>
+<td>current HEAD of cwd</td>
+</tr>
+<tr>
 <td><code>--detach</code></td>
 <td>Create detached HEAD worktree</td>
 <td><code>false</code></td>
@@ -3109,6 +3114,16 @@ the main worktree into a &quot;feature&quot; worktree.</p>
 <td></td>
 </tr>
 </tbody></table>
+<p>The <code>--base</code> flag (added in v0.10.6) controls which existing ref the new branch
+is cut from. Default is the current HEAD of the cwd where
+<code>thrum worktree create</code> runs — so a worktree created from a <code>thrum-dev</code> checkout
+inherits the <code>thrum-dev</code> history, and one created from <code>release/v0.10.6</code>
+inherits that release-line history. Pre-fix the CLI silently defaulted to <code>main</code>
+regardless of cwd HEAD, which led to lost commits when operators ran the command
+from non-<code>main</code> branches. Users who want the pre-fix behavior can pass
+<code>--base main</code> explicitly. On detached HEAD or a non-git cwd the command warns
+and falls back to <code>main</code>; pass <code>--base &lt;ref&gt;</code> to silence the warning and choose
+explicitly.</p>
 <p>The worktree is created at <code>worktrees.base_path/&lt;name&gt;</code> (default:
 <code>~/.thrum/worktrees/&lt;project&gt;/&lt;name&gt;</code>). The name cannot contain <code>/</code>, <code>\</code>, or
 <code>..</code>.</p>
