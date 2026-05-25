@@ -174,6 +174,25 @@ type DaemonConfig struct {
 	LogLevel                  string `json:"log_level,omitempty"`                    // "debug", "info", "warn", "error"; default "info"
 	EventsRetentionDays       int    `json:"events_retention_days,omitempty"`        // retention window for .thrum/events.jsonl + SQLite events table (default 2)
 	CompactionSizeThresholdMB int    `json:"compaction_size_threshold_mb,omitempty"` // per-file size threshold above which compaction rewrites the file (default 10)
+	MaxMessageBodyBytes       int    `json:"max_message_body_bytes,omitempty"`       // hard cap on a single message.create body.content size at write (default 1 MB; thrum-mhwt). 0 = use default; negative = disable cap (not recommended).
+}
+
+// DefaultMaxMessageBodyBytes bounds a single message body at 1 MB. Above
+// the size most legitimate inline use cases (the largest organic body
+// observed in production was ~167 KB) and below the events.jsonl scanner
+// ceiling (4 MB, see internal/jsonl.maxScannerBufferSize) so the
+// jsonl-side fix (thrum-10j0) still covers any value the cap accepts.
+// thrum-mhwt.
+const DefaultMaxMessageBodyBytes = 1024 * 1024
+
+// MaxMessageBodyBytesEffective returns the configured cap or the
+// package default when unset. Negative values disable the cap; zero
+// means use the default. thrum-mhwt.
+func (d DaemonConfig) MaxMessageBodyBytesEffective() int {
+	if d.MaxMessageBodyBytes == 0 {
+		return DefaultMaxMessageBodyBytes
+	}
+	return d.MaxMessageBodyBytes
 }
 
 // BackupConfig holds backup-related settings.

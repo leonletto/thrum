@@ -2420,7 +2420,7 @@ func TestQueryAgentsByRecipient_SupervisorFallback(t *testing.T) {
 		canonicalID = "supervisor_thrum_leon_letto"
 		legacyID    = "supervisor_thrum"
 	)
-	handler := NewMessageHandlerWithDispatcher(st, nil, thrumDir, canonicalID, legacyID)
+	handler := NewMessageHandlerWithDispatcher(st, nil, thrumDir, canonicalID, legacyID, 0)
 	ctx := context.Background()
 
 	// Positive: canonical supervisor recipient resolves via the
@@ -2512,4 +2512,80 @@ func TestIsSupervisorRecipient_EmptyLegacyOK(t *testing.T) {
 	if !isSupervisorRecipient(h, "supervisor_x_y") {
 		t.Fatal("canonical must still match with empty supervisorLegacy")
 	}
+}
+
+// TestHandleSend_MaxBodyBytes — thrum-mhwt regression. HandleSend
+// must refuse a request whose body.content exceeds h.maxBodyBytes,
+// accept one exactly at the limit, and impose no cap when
+// maxBodyBytes == 0 (test/default path).
+func TestHandleSend_MaxBodyBytes(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatalf("create .thrum dir: %v", err)
+	}
+	writeGuardOffConfig(t, tmpDir)
+
+	repoID := "r_MHWT_TEST"
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	t.Setenv("THRUM_ROLE", "coordinator")
+	t.Setenv("THRUM_MODULE", "core")
+
+	agentID := identity.GenerateAgentID(repoID, "coordinator", "core", "")
+	agentHandler := NewAgentHandler(st)
+	regParams, _ := json.Marshal(RegisterRequest{Role: "coordinator", Module: "core"})
+	if _, err := agentHandler.HandleRegister(context.Background(), regParams); err != nil {
+		t.Fatalf("register agent: %v", err)
+	}
+
+	sessionHandler := NewSessionHandler(st)
+	sessionParams, _ := json.Marshal(SessionStartRequest{AgentID: agentID})
+	if _, err := sessionHandler.HandleStart(context.Background(), sessionParams); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	// Use the standard constructor (NewMessageHandler) for success-path
+	// tests so the wired dispatcher is non-nil. Inject limits into the
+	// struct directly for the cap parameter — same field the
+	// WithDispatcher constructor would set.
+	t.Run("rejects_over_limit", func(t *testing.T) {
+		// Rejection path runs BEFORE the dispatcher is touched, so the
+		// nil-dispatcher constructor is safe here.
+		const limit = 100
+		handler := NewMessageHandlerWithDispatcher(st, nil, "", "", "", limit)
+		body := strings.Repeat("x", limit+1)
+		req, _ := json.Marshal(SendRequest{Content: body, CallerAgentID: agentID})
+		_, err := handler.HandleSend(context.Background(), req)
+		if err == nil {
+			t.Fatal("HandleSend with body > limit: got nil err, want size-cap rejection")
+		}
+		if !strings.Contains(err.Error(), "too large") {
+			t.Errorf("err = %q, want message mentioning size cap (containing \"too large\")", err)
+		}
+	})
+
+	t.Run("accepts_at_limit", func(t *testing.T) {
+		const limit = 200
+		handler := NewMessageHandler(st)
+		handler.maxBodyBytes = limit
+		body := strings.Repeat("y", limit)
+		req, _ := json.Marshal(SendRequest{Content: body, CallerAgentID: agentID})
+		if _, err := handler.HandleSend(context.Background(), req); err != nil {
+			t.Fatalf("HandleSend at exact limit: %v (must accept; cap is inclusive only of over-limit)", err)
+		}
+	})
+
+	t.Run("no_cap_when_zero", func(t *testing.T) {
+		handler := NewMessageHandler(st) // maxBodyBytes = 0 by default
+		body := strings.Repeat("z", 5*1024)
+		req, _ := json.Marshal(SendRequest{Content: body, CallerAgentID: agentID})
+		if _, err := handler.HandleSend(context.Background(), req); err != nil {
+			t.Fatalf("HandleSend with maxBodyBytes=0: %v (zero must disable the cap)", err)
+		}
+	})
 }

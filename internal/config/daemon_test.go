@@ -888,3 +888,26 @@ func TestValidatePermissionSupervisors(t *testing.T) {
 		})
 	}
 }
+
+// TestDaemonConfig_MaxMessageBodyBytesEffective — thrum-mhwt: 0 →
+// package default; positive → caller value; negative → caller value
+// (call-site interprets negative as "disabled" by gating on > 0).
+func TestDaemonConfig_MaxMessageBodyBytesEffective(t *testing.T) {
+	cases := []struct {
+		name string
+		in   int
+		want int
+	}{
+		{"zero_returns_default", 0, config.DefaultMaxMessageBodyBytes},
+		{"positive_returns_self", 2 * 1024 * 1024, 2 * 1024 * 1024},
+		{"negative_returns_self", -1, -1},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			d := config.DaemonConfig{MaxMessageBodyBytes: tt.in}
+			if got := d.MaxMessageBodyBytesEffective(); got != tt.want {
+				t.Errorf("MaxMessageBodyBytesEffective() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}

@@ -120,6 +120,27 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **Cap message body size at write — 1 MB default, configurable
+  (thrum-mhwt)** — preventative follow-up to thrum-10j0. The
+  scanner-buffer bump lets the compactor READ events.jsonl lines up
+  to 4 MB but does nothing to stop a future operator from WRITING
+  one. `message.HandleSend` now refuses a `body.content` larger than
+  the configured cap with a clear, copy-pasteable error: "message
+  body too large: N bytes exceeds the daemon limit of M bytes
+  (daemon.max_message_body_bytes). Reduce the body size or raise the
+  config; for genuinely large payloads consider attachments instead
+  of inline content." New `daemon.max_message_body_bytes` config
+  field (default 1 MB via `DefaultMaxMessageBodyBytes`) plumbed
+  through `NewMessageHandlerWithDispatcher`. The 1 MB default sits
+  above the largest organic body observed in production (~167 KB
+  coordinator multi-page response) and below the events.jsonl scanner
+  ceiling (4 MB), so the thrum-10j0 read-side fix still covers any
+  value the cap accepts. 0 in the handler field disables the cap
+  (test path); negative is documented but not actively used. Tests:
+  TestHandleSend_MaxBodyBytes covers reject-over-limit, accept-at-
+  exact-limit, and no-cap-when-zero;
+  TestDaemonConfig_MaxMessageBodyBytesEffective covers the config
+  helper's zero/positive/negative paths.
 - **events.jsonl compactor wedged by oversized lines — scanner buffer
   raised to 4 MB (thrum-10j0)** — `internal/jsonl/writer.go`'s four
   scan sites (`Read`, `RemoveByField`, `RemoveBeforeTimestamp`,

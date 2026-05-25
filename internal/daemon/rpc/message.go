@@ -294,6 +294,11 @@ type MessageHandler struct {
 	thrumDir         string       // for tmux nudge resolution
 	supervisorID     string       // canonical virtual-supervisor ID, e.g. "supervisor_thrum_leon-letto"
 	supervisorLegacy string       // pre-upgrade form for receiver compat, e.g. "supervisor_thrum"
+	// maxBodyBytes caps message.create body.content at write. 0 means
+	// use config.DefaultMaxMessageBodyBytes; negative disables the
+	// cap. Wired from DaemonConfig.MaxMessageBodyBytesEffective() in
+	// main.go. thrum-mhwt.
+	maxBodyBytes int
 }
 
 // SetWSBroadcaster configures a broadcaster that will be called after every
@@ -383,7 +388,9 @@ func (h *MessageHandler) NotifyMessageCreate(evt types.MessageCreateEvent) {
 	bc.BroadcastAll(buildWSNotification(msgInfo))
 }
 
-// NewMessageHandler creates a new message handler.
+// NewMessageHandler creates a new message handler. maxBodyBytes
+// defaults to config.DefaultMaxMessageBodyBytes (1 MB; thrum-mhwt).
+// Use NewMessageHandlerWithDispatcher to override.
 func NewMessageHandler(state *state.State) *MessageHandler {
 	return &MessageHandler{
 		state:         state,
@@ -397,7 +404,11 @@ func NewMessageHandler(state *state.State) *MessageHandler {
 // SupervisorID / supervisorLegacy are the canonical and pre-upgrade forms of the
 // virtual supervisor ID; both are consulted by isSupervisorRecipient on the
 // reply receiver path. Empty strings are safe (degrade to never-match).
-func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptions.Dispatcher, thrumDir, supervisorID, supervisorLegacy string) *MessageHandler {
+//
+// MaxBodyBytes caps the size of a single message.create body.content at
+// write (thrum-mhwt). 0 means "use config.DefaultMaxMessageBodyBytes
+// (1 MB)"; negative disables the cap (not recommended outside tests).
+func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptions.Dispatcher, thrumDir, supervisorID, supervisorLegacy string, maxBodyBytes int) *MessageHandler {
 	return &MessageHandler{
 		state:            state,
 		dispatcher:       dispatcher,
@@ -405,6 +416,7 @@ func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptio
 		thrumDir:         thrumDir,
 		supervisorID:     supervisorID,
 		supervisorLegacy: supervisorLegacy,
+		maxBodyBytes:     maxBodyBytes,
 	}
 }
 
@@ -447,6 +459,16 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	// Validate format
 	if format != "markdown" && format != "plain" && format != "json" {
 		return nil, fmt.Errorf("invalid format: %s (must be 'markdown', 'plain', or 'json')", format)
+	}
+
+	// thrum-mhwt: cap body.content size at write so a runaway operator
+	// or hot-loop client cannot inflate events.jsonl past the
+	// compactor's read ceiling. h.maxBodyBytes is the effective limit
+	// (set at construction from DaemonConfig.MaxMessageBodyBytesEffective);
+	// 0 disables the cap (test path).
+	if h.maxBodyBytes > 0 && len(req.Content) > h.maxBodyBytes {
+		return nil, fmt.Errorf("message body too large: %d bytes exceeds the daemon limit of %d bytes (daemon.max_message_body_bytes). Reduce the body size or raise the config; for genuinely large payloads consider attachments instead of inline content",
+			len(req.Content), h.maxBodyBytes)
 	}
 
 	// Generate message ID
