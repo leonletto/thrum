@@ -1,10 +1,14 @@
 ---
 name: verify-against-source
-description: "Use when verifying that a prose artifact (brainstorm, design spec, plan, or implementation prompt) honors its input/source artifact(s) — the prose counterpart to verify-against-plan. Runs as the conformance axis of the planning-skill review loop. Outputs structured findings: missing scope, silent deviations from the source, scope creep, misunderstandings."
+description:
+  "Use when verifying that a prose artifact (brainstorm, design spec, plan, or
+  implementation prompt) honors its input/source artifact(s) — the prose
+  counterpart to verify-against-plan. Runs as the conformance axis of the
+  planning-skill review loop. Outputs structured findings: missing scope, silent
+  deviations from the source, scope creep, misunderstandings."
 # source: claude-plugin/skills/verify-against-source/SKILL.md
 # generated-by: scripts/sync-skills.sh
 ---
-
 
 ## Verify Against Source
 

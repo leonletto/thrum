@@ -120,122 +120,111 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
-- **Daemon lock-contention under register/message burst (thrum-bsn7)** —
-  the structural-event sync trigger (snapshot walker, 30s ceiling; compactor,
-  60s ceiling) used to run synchronously inside `state.WriteEvent` while the
-  caller still held `state.Lock()`. Under a burst of `agent.register` or
+- **Daemon lock-contention under register/message burst (thrum-bsn7)** — the
+  structural-event sync trigger (snapshot walker, 30s ceiling; compactor, 60s
+  ceiling) used to run synchronously inside `state.WriteEvent` while the caller
+  still held `state.Lock()`. Under a burst of `agent.register` or
   `message.create` RPCs, goroutine A would hold the lock for the full
-  walker+compactor wall-clock, while goroutines B..N blocked at
-  `h.state.Lock()` and watched their 10s RPC ctx expire. When B finally
-  acquired the lock, its first under-lock SELECT (`getAgentByID` at the top
-  of `HandleRegister`, `check for existing agent by id`) returned
-  `context.DeadlineExceeded` immediately. This was the same root-cause
-  family as thrum-kdyf but on every under-lock SELECT, not just
-  `ensureActiveSession`'s "check active session" path — kdyf's narrow fix
-  released the lock around the resurrect SELECT only and left the broader
-  pattern exposed. The fix structurally decouples the sync trigger from the
-  caller's lock hold: `state.WriteEvent` now returns
+  walker+compactor wall-clock, while goroutines B..N blocked at `h.state.Lock()`
+  and watched their 10s RPC ctx expire. When B finally acquired the lock, its
+  first under-lock SELECT (`getAgentByID` at the top of `HandleRegister`,
+  `check for existing agent by id`) returned `context.DeadlineExceeded`
+  immediately. This was the same root-cause family as thrum-kdyf but on every
+  under-lock SELECT, not just `ensureActiveSession`'s "check active session"
+  path — kdyf's narrow fix released the lock around the resurrect SELECT only
+  and left the broader pattern exposed. The fix structurally decouples the sync
+  trigger from the caller's lock hold: `state.WriteEvent` now returns
   `(postCommit func(), err error)`; callers MUST invoke `postCommit` AFTER
   releasing any external `state.Lock()` hold. Walker invocations serialize at
-  `walker.mu` (already in place; defense in depth), so concurrent triggers
-  no longer starve each other on the state lock. 22 production WriteEvent
-  call sites updated; new regression test
+  `walker.mu` (already in place; defense in depth), so concurrent triggers no
+  longer starve each other on the state lock. 22 production WriteEvent call
+  sites updated; new regression test
   `TestHandleRegister_BurstRegister_NoLockContention` proves the fix by
-  injecting a slow trigger stub and asserting 8 concurrent registers
-  complete in ~walker_time (concurrent path) rather than 8 × walker_time
-  (serialized path). Inbound peer events via `sync_apply.go` continue to
-  fire local walker/compactor as before (lock-free at that layer; behavior
-  preserved exactly).
+  injecting a slow trigger stub and asserting 8 concurrent registers complete in
+  ~walker_time (concurrent path) rather than 8 × walker_time (serialized path).
+  Inbound peer events via `sync_apply.go` continue to fire local
+  walker/compactor as before (lock-free at that layer; behavior preserved
+  exactly).
 - **Schema v37 + v38: memory-tables back-port + `events.timestamp` index
   (thrum-7ojv)** — two-part schema bump on release/v0.10.6. v38 adds
-  `CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)`
-  so the compactor's `DELETE FROM events WHERE timestamp < ?` (which
-  ran O(N) full table scan because the `events` table had no
-  `timestamp` index) becomes O(log N) seek + sequential range. The
-  unindexed DELETE was the dominant compactor cost feeding the
-  kdyf/roz1 lock-hold ceiling on busy daemons. Once the matching
-  index lands on thrum-agents, the post-roz1 60s
-  `syncCompactorTimeout` ceiling can drop back to the walker's 30s
-  symmetric. v37 back-ports the thrum-agents j7n5 Epic 0 memory-tables
-  DDL (`memory_record`, `memory_tag`, `memory_edge`, `memory_fts`,
-  `memory_embeddings`, `memory_embed_queue` + 10 indexes) as dead-end
-  DDL only — no release-line Go code touches these tables. Per the
-  canonical CLAUDE.md dead-end-DDL back-port pattern (same as the
-  v25–v36 substrate-table forward-ports). Without this back-port a
-  fresh rc.3 install would create a v38 DB with NO memory tables;
-  a subsequently-installed thrum-agents / v0.11 binary on that DB
-  would crash on every `memory.*` operation. With the back-port,
-  both branches stamp v37 with byte-identical DDL — no asymmetry,
-  no crash trap. `createTables`/`createIndexes` mirror both v37
-  tables and the v38 index for fresh-install parity. 5 schema tests
-  pin the contract: V38_CurrentVersion, V36→V38 fresh upgrade,
-  V37→V38 cross-binary upgrade, V36→V38 creates memory tables
-  (proves the DDL actually fires), V38 idempotent. The v18→v22
-  ALTER-guard pattern (`tableExists`) is reused so partial-schema
-  test fixtures don't trip on the new v38 CREATE INDEX.
-- **`peercred.matchWorktree` stale-worktree log spam downgraded
-  (thrum-g1ux)** — post-`thrum worktree teardown` the agent's
-  `session_refs` row persists (teardown removes the worktree from
-  disk but doesn't end the agent's sessions), so the daemon's
-  peercred resolver kept iterating the now-deleted path and
-  emitting `peercred.matchWorktree stored EvalSymlinks failed`
-  WARN on every resolution against the stale entry. The WARN spam
-  drowned out real diagnostics in `daemon.log`. Fix:
-  `matchWorktree` now checks `os.IsNotExist(err)` in the
-  EvalSymlinks-failure branch and emits `slog.Debug` for the
-  torn-down case; other failure modes (permission errors, etc)
-  keep the WARN as legitimate diagnostics. Functional behavior
-  unchanged — the `canonWt = wt` fallback already produced
-  correct no-match semantics for deleted paths. Option B (daemon
-  RPC + CLI `worktree teardown` wiring to actually delete the
-  stale `session_refs` rows at the source) is deferred to
+  `CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)` so the
+  compactor's `DELETE FROM events WHERE timestamp < ?` (which ran O(N) full
+  table scan because the `events` table had no `timestamp` index) becomes O(log
+  N) seek + sequential range. The unindexed DELETE was the dominant compactor
+  cost feeding the kdyf/roz1 lock-hold ceiling on busy daemons. Once the
+  matching index lands on thrum-agents, the post-roz1 60s `syncCompactorTimeout`
+  ceiling can drop back to the walker's 30s symmetric. v37 back-ports the
+  thrum-agents j7n5 Epic 0 memory-tables DDL (`memory_record`, `memory_tag`,
+  `memory_edge`, `memory_fts`, `memory_embeddings`, `memory_embed_queue` + 10
+  indexes) as dead-end DDL only — no release-line Go code touches these tables.
+  Per the canonical CLAUDE.md dead-end-DDL back-port pattern (same as the
+  v25–v36 substrate-table forward-ports). Without this back-port a fresh rc.3
+  install would create a v38 DB with NO memory tables; a subsequently-installed
+  thrum-agents / v0.11 binary on that DB would crash on every `memory.*`
+  operation. With the back-port, both branches stamp v37 with byte-identical DDL
+  — no asymmetry, no crash trap. `createTables`/`createIndexes` mirror both v37
+  tables and the v38 index for fresh-install parity. 5 schema tests pin the
+  contract: V38_CurrentVersion, V36→V38 fresh upgrade, V37→V38 cross-binary
+  upgrade, V36→V38 creates memory tables (proves the DDL actually fires), V38
+  idempotent. The v18→v22 ALTER-guard pattern (`tableExists`) is reused so
+  partial-schema test fixtures don't trip on the new v38 CREATE INDEX.
+- **`peercred.matchWorktree` stale-worktree log spam downgraded (thrum-g1ux)** —
+  post-`thrum worktree teardown` the agent's `session_refs` row persists
+  (teardown removes the worktree from disk but doesn't end the agent's
+  sessions), so the daemon's peercred resolver kept iterating the now-deleted
+  path and emitting `peercred.matchWorktree stored EvalSymlinks failed` WARN on
+  every resolution against the stale entry. The WARN spam drowned out real
+  diagnostics in `daemon.log`. Fix: `matchWorktree` now checks
+  `os.IsNotExist(err)` in the EvalSymlinks-failure branch and emits `slog.Debug`
+  for the torn-down case; other failure modes (permission errors, etc) keep the
+  WARN as legitimate diagnostics. Functional behavior unchanged — the
+  `canonWt = wt` fallback already produced correct no-match semantics for
+  deleted paths. Option B (daemon RPC + CLI `worktree teardown` wiring to
+  actually delete the stale `session_refs` rows at the source) is deferred to
   v0.10.7 / v0.11 as the broader cleanup.
 - **`thrum worktree create` cuts new branch from cwd HEAD by default
-  (thrum-pqcg)** — previously the CLI silently defaulted to `main` as
-  the base ref regardless of the cwd's actual HEAD; a worktree created
-  from a non-`main` checkout (e.g. `thrum-dev`, `release/v0.10.6`)
-  would silently lose all commits unique to that branch. The
-  `CreateOpts.BaseBranch` field was unset by the cobra layer, so
-  `internal/worktree.Create`'s `"main"` fallback always fired. Fix:
-  resolve cwd HEAD via `git symbolic-ref --quiet --short HEAD` and
-  pass it as `BaseBranch`. New `--base` flag lets operators override
-  explicitly (e.g. `--base main` for the pre-fix behavior, or any
-  existing ref / commit SHA for arbitrary bases). On detached HEAD
-  or a non-git cwd the command emits a `slog.Warn` and falls back to
-  `main` so the substitution is no longer silent. `--base` also
-  honored by the `--detach` path (`git worktree add --detach <path>
-  <ref>`). New `cmd/thrum/worktree_base.go` holds the resolver as a
-  small testable helper; 4 new tests pin explicit-flag-wins,
-  cwd-HEAD-default, detached-HEAD-fallback, and non-git-cwd-fallback
-  semantics.
+  (thrum-pqcg)** — previously the CLI silently defaulted to `main` as the base
+  ref regardless of the cwd's actual HEAD; a worktree created from a non-`main`
+  checkout (e.g. `thrum-dev`, `release/v0.10.6`) would silently lose all commits
+  unique to that branch. The `CreateOpts.BaseBranch` field was unset by the
+  cobra layer, so `internal/worktree.Create`'s `"main"` fallback always fired.
+  Fix: resolve cwd HEAD via `git symbolic-ref --quiet --short HEAD` and pass it
+  as `BaseBranch`. New `--base` flag lets operators override explicitly (e.g.
+  `--base main` for the pre-fix behavior, or any existing ref / commit SHA for
+  arbitrary bases). On detached HEAD or a non-git cwd the command emits a
+  `slog.Warn` and falls back to `main` so the substitution is no longer silent.
+  `--base` also honored by the `--detach` path
+  (`git worktree add --detach <path> <ref>`). New `cmd/thrum/worktree_base.go`
+  holds the resolver as a small testable helper; 4 new tests pin
+  explicit-flag-wins, cwd-HEAD-default, detached-HEAD-fallback, and
+  non-git-cwd-fallback semantics.
 - **`agent.register` session-resurrect SELECT decoupled from caller's
   possibly-burned RPC context (thrum-kdyf)** — surfaced to the user as
-  `register failed: ... daemon may be unresponsive — try thrum daemon
-  restart` during fresh agent registrations under a wave-dispatch burst.
-  Independent bug downstream of roz1 (the roz1 compactor-cascade fix made
-  it less common but didn't fix it). Mechanism: HandleRegister holds
-  `h.state.Lock()` through `registerAgent → WriteEvent → triggerSyncOnWrite`,
-  whose synchronous walker (30s ceiling) + compactor (60s ceiling) can
-  burn the entire 10s default RPC deadline. By the time
-  `ensureActiveSession`'s SELECT fired, the caller's ctx was already
-  expired and the SELECT returned `context deadline exceeded` immediately
-  — surfacing as the misleading "check active session" prime-failure
+  `register failed: ... daemon may be unresponsive — try thrum daemon restart`
+  during fresh agent registrations under a wave-dispatch burst. Independent bug
+  downstream of roz1 (the roz1 compactor-cascade fix made it less common but
+  didn't fix it). Mechanism: HandleRegister holds `h.state.Lock()` through
+  `registerAgent → WriteEvent → triggerSyncOnWrite`, whose synchronous walker
+  (30s ceiling) + compactor (60s ceiling) can burn the entire 10s default RPC
+  deadline. By the time `ensureActiveSession`'s SELECT fired, the caller's ctx
+  was already expired and the SELECT returned `context deadline exceeded`
+  immediately — surfacing as the misleading "check active session" prime-failure
   log line. Two-part fix on the surgical-scope path: (1) invert
-  `ensureActiveSession`'s contract from "must be called under lock" to
-  "must NOT be called under lock"; the function self-manages locking via
-  a double-check pattern (lock-free fresh-ctx SELECT first; if a write is
-  needed, acquire `state.Lock()` internally, re-SELECT under lock to catch
-  concurrent-resurrect races, then write the event). (2) restructure
-  `HandleRegister`'s critical section with a tracked-unlock pattern that
-  releases the lock before calling `ensureActiveSession` and re-acquires
-  it briefly only when `persistResurrectWorktreeRef` needs to run (its
-  contract is preserved). The SELECT now runs under
-  `context.WithTimeout(context.Background(), 5*time.Second)` — a fresh
-  deadline decoupled from the caller's possibly-burned ctx. Common-path
-  registers ("session already active → idempotent no-op") now succeed
-  even when the caller ctx has been burned upstream. The structural
-  cleanup that would let walker+compactor run without holding
-  `state.Lock` at all is filed as thrum-bsn7 for v0.10.7 / v0.11.
+  `ensureActiveSession`'s contract from "must be called under lock" to "must NOT
+  be called under lock"; the function self-manages locking via a double-check
+  pattern (lock-free fresh-ctx SELECT first; if a write is needed, acquire
+  `state.Lock()` internally, re-SELECT under lock to catch concurrent-resurrect
+  races, then write the event). (2) restructure `HandleRegister`'s critical
+  section with a tracked-unlock pattern that releases the lock before calling
+  `ensureActiveSession` and re-acquires it briefly only when
+  `persistResurrectWorktreeRef` needs to run (its contract is preserved). The
+  SELECT now runs under
+  `context.WithTimeout(context.Background(), 5*time.Second)` — a fresh deadline
+  decoupled from the caller's possibly-burned ctx. Common-path registers
+  ("session already active → idempotent no-op") now succeed even when the caller
+  ctx has been burned upstream. The structural cleanup that would let
+  walker+compactor run without holding `state.Lock` at all is filed as
+  thrum-bsn7 for v0.10.7 / v0.11.
 - **Daemon compactor decoupled from caller RPC context (thrum-roz1)** — the
   closure registered via `triggers.SetCompactor` previously ran under the
   caller's RPC ctx (~10s deadline) when invoked from `state.WriteEvent` →
@@ -290,11 +279,11 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Internal
 
-- **Re-sync codex/cursor/opencode skill copies to claude-plugin source of
-  truth (thrum-1arf)** — mechanical formatting catch-up only (YAML
-  frontmatter description fields unwrapped to single-line; prose paragraph
-  wraps normalized), no behavior change. Companion to the destroy-then-
-  teardown protocol skill update.
+- **Re-sync codex/cursor/opencode skill copies to claude-plugin source of truth
+  (thrum-1arf)** — mechanical formatting catch-up only (YAML frontmatter
+  description fields unwrapped to single-line; prose paragraph wraps
+  normalized), no behavior change. Companion to the destroy-then- teardown
+  protocol skill update.
 
 ## [0.10.5] - 2026-05-21
 

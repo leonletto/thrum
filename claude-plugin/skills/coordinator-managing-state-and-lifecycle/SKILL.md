@@ -113,8 +113,8 @@ Sanity-check: after teardown, `tmux list-sessions` should NOT show the agent's
 session. If it does, the runtime was never killed and step 1 was skipped.
 
 For batch recycling (multiple agents at once), kill them all first, then
-teardown all worktrees — keeps the daemon's session state consistent across
-the operation. For graceful shutdown of in-flight agents, send a thrum message
+teardown all worktrees — keeps the daemon's session state consistent across the
+operation. For graceful shutdown of in-flight agents, send a thrum message
 asking them to save state, wait for ack, then run the two-command sequence.
 Done/idle agents on closed epics need no graceful shutdown.
 

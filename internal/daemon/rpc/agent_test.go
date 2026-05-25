@@ -2061,6 +2061,7 @@ func TestHandleRegister_ConcurrentRegisterBurst_NoDeadlock(t *testing.T) {
 		t.Error(e)
 	}
 }
+
 // TestHandleRegister_BurstRegister_NoLockContention — thrum-bsn7
 // regression: post-kdyf, narrow fix only released state.Lock() around the
 // ensureActiveSession SELECT. Every OTHER under-lock SELECT in
@@ -2101,9 +2102,9 @@ func TestHandleRegister_BurstRegister_NoLockContention(t *testing.T) {
 	// loudly while leaving generous CI-jitter headroom for the
 	// post-bsn7 concurrent path.
 	const (
-		burst              = 8
-		triggerDelay       = 200 * time.Millisecond
-		serializedCeiling  = 4 * triggerDelay // upper bound for post-bsn7 concurrent path
+		burst                  = 8
+		triggerDelay           = 200 * time.Millisecond
+		serializedCeiling      = 4 * triggerDelay // upper bound for post-bsn7 concurrent path
 		preFixWouldTakeAtLeast = time.Duration(burst) * triggerDelay
 	)
 

@@ -1,10 +1,12 @@
 ---
 name: implementer-receiving-dispatch
-description: "Use when receiving a new task from the coordinator, starting implementation, scoping a fresh task, or receiving dispatch. Loads implementer-specific discipline for kicking off work cleanly."
+description:
+  "Use when receiving a new task from the coordinator, starting implementation,
+  scoping a fresh task, or receiving dispatch. Loads implementer-specific
+  discipline for kicking off work cleanly."
 # source: claude-plugin/skills/implementer-receiving-dispatch/SKILL.md
 # generated-by: scripts/sync-skills.sh
 ---
-
 
 ## Implementer: Receiving Dispatch
 

@@ -7,10 +7,9 @@ description: Check message inbox
 
 # Thrum Inbox
 
-Use this skill when the user explicitly wants the `inbox` Thrum
-workflow. Prefer the umbrella `thrum` skill when the request spans multiple
-commands or needs broader coordination judgment.
-
+Use this skill when the user explicitly wants the `inbox` Thrum workflow. Prefer
+the umbrella `thrum` skill when the request spans multiple commands or needs
+broader coordination judgment.
 
 List messages in your inbox. Messages are auto-marked as read when displayed.
 
