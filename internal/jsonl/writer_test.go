@@ -573,3 +573,141 @@ func TestRemoveBeforeTimestamp(t *testing.T) {
 		}
 	})
 }
+
+// TestScannerHandlesLargeLines — thrum-10j0 regression. Production
+// observed a single 177KB events.jsonl line (a coordinator multi-page
+// message body) that hit bufio.Scanner's default 64KB MaxScanTokenSize
+// and wedged the events.jsonl compactor on every cycle. The
+// newJSONLScanner helper raises the buffer to 4MB; every Read /
+// RemoveByField / RemoveBeforeTimestamp / Iterate call site uses it.
+// This test exercises ALL FOUR scanner sites with a fixture line larger
+// than the old default but smaller than the new ceiling.
+func TestScannerHandlesLargeLines(t *testing.T) {
+	// 200KB body — comfortably above the 64KB default that bit
+	// production and below the 4MB ceiling.
+	largeBody := make([]byte, 200*1024)
+	for i := range largeBody {
+		largeBody[i] = 'x'
+	}
+	largeEvent := testEvent{Type: "large", Data: string(largeBody)}
+	smallEvent := testEvent{Type: "small", Data: "ok"}
+
+	t.Run("Reader_ReadAll_LargeLine", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "large.jsonl")
+		w, err := jsonl.NewWriter(path)
+		if err != nil {
+			t.Fatalf("NewWriter: %v", err)
+		}
+		if err := w.Append(smallEvent); err != nil {
+			t.Fatalf("Append small: %v", err)
+		}
+		if err := w.Append(largeEvent); err != nil {
+			t.Fatalf("Append large: %v", err)
+		}
+		if err := w.Append(smallEvent); err != nil {
+			t.Fatalf("Append small: %v", err)
+		}
+		_ = w.Close()
+
+		r, err := jsonl.NewReader(path)
+		if err != nil {
+			t.Fatalf("NewReader: %v", err)
+		}
+		lines, err := r.ReadAll()
+		if err != nil {
+			t.Fatalf("ReadAll on file with 200KB line: %v (pre-fix default 64KB scanner would have returned token-too-long here)", err)
+		}
+		if len(lines) != 3 {
+			t.Errorf("ReadAll returned %d lines, want 3", len(lines))
+		}
+	})
+
+	t.Run("RemoveBeforeTimestamp_LargeLine", func(t *testing.T) {
+		type timedLargeEvent struct {
+			Type      string `json:"type"`
+			Data      string `json:"data"`
+			CreatedAt string `json:"created_at"`
+		}
+
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "large_ts.jsonl")
+		w, err := jsonl.NewWriter(path)
+		if err != nil {
+			t.Fatalf("NewWriter: %v", err)
+		}
+		// One old + one new, both with a large body that exceeds the
+		// default scanner buffer.
+		if err := w.Append(timedLargeEvent{Type: "old", Data: string(largeBody), CreatedAt: "2024-01-01T00:00:00Z"}); err != nil {
+			t.Fatalf("Append old: %v", err)
+		}
+		if err := w.Append(timedLargeEvent{Type: "new", Data: string(largeBody), CreatedAt: "2026-01-01T00:00:00Z"}); err != nil {
+			t.Fatalf("Append new: %v", err)
+		}
+		_ = w.Close()
+
+		cutoff := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+		removed, err := jsonl.RemoveBeforeTimestamp(path, "created_at", cutoff)
+		if err != nil {
+			t.Fatalf("RemoveBeforeTimestamp on file with 200KB lines: %v (this is the exact path that wedged the events.jsonl compactor in prod)", err)
+		}
+		if removed != 1 {
+			t.Errorf("removed = %d, want 1", removed)
+		}
+	})
+
+	t.Run("RemoveByField_LargeLine", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "large_field.jsonl")
+		w, err := jsonl.NewWriter(path)
+		if err != nil {
+			t.Fatalf("NewWriter: %v", err)
+		}
+		if err := w.Append(testEvent{Type: "small", Data: "keep"}); err != nil {
+			t.Fatalf("Append small: %v", err)
+		}
+		if err := w.Append(largeEvent); err != nil {
+			t.Fatalf("Append large: %v", err)
+		}
+		_ = w.Close()
+
+		removed, err := jsonl.RemoveByField(path, "type", "large")
+		if err != nil {
+			t.Fatalf("RemoveByField on file with 200KB line: %v", err)
+		}
+		if removed != 1 {
+			t.Errorf("removed = %d, want 1", removed)
+		}
+	})
+
+	t.Run("Reader_Stream_LargeLine", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "large_stream.jsonl")
+		w, err := jsonl.NewWriter(path)
+		if err != nil {
+			t.Fatalf("NewWriter: %v", err)
+		}
+		if err := w.Append(smallEvent); err != nil {
+			t.Fatalf("Append small: %v", err)
+		}
+		if err := w.Append(largeEvent); err != nil {
+			t.Fatalf("Append large: %v", err)
+		}
+		_ = w.Close()
+
+		r, err := jsonl.NewReader(path)
+		if err != nil {
+			t.Fatalf("NewReader: %v", err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		ch := r.Stream(ctx)
+		count := 0
+		for range ch {
+			count++
+		}
+		if count != 2 {
+			t.Errorf("Stream yielded %d lines, want 2 (pre-fix the 200KB line would have silently dropped on Stream's scanner.Err)", count)
+		}
+	})
+}

@@ -120,6 +120,23 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **events.jsonl compactor wedged by oversized lines — scanner buffer
+  raised to 4 MB (thrum-10j0)** — `internal/jsonl/writer.go`'s four
+  scan sites (`Read`, `RemoveByField`, `RemoveBeforeTimestamp`,
+  `Reader.Stream`) all used `bufio.NewScanner` with no buffer
+  override. `bufio.Scanner`'s default `MaxScanTokenSize` is 64 KB; a
+  single events.jsonl line larger than that (production observed a
+  177 KB coordinator multi-page message body) returned
+  `bufio.Scanner: token too long` and killed the scan. For the
+  events.jsonl compactor that meant every sync-trigger pass aborted
+  before removing any retention-aged events, and events.jsonl grew
+  unbounded. New `newJSONLScanner` package-level helper sizes the
+  buffer to `maxScannerBufferSize = 4 MB` (mirrors the precedent at
+  `internal/sync/compact/compact.go`'s `compactJSONLByKey`) and every
+  scan site in the package uses it. New regression
+  `TestScannerHandlesLargeLines` writes a 200 KB-bodied event and
+  exercises all four call sites; pre-fix every sub-test would have
+  failed with token-too-long.
 - **`thrum worktree teardown` cascade-deletes the bound agent identity
   by default (thrum-wk7d, part 3)** — **behavior change:**
   `thrum worktree teardown <name>` previously removed the worktree's

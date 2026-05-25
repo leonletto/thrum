@@ -5,12 +5,38 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
 )
+
+// maxScannerBufferSize bounds the largest JSONL line every Read /
+// RemoveByField / RemoveBeforeTimestamp / Iterate scanner in this
+// package can consume. The default bufio.MaxScanTokenSize is 64KB,
+// which silently kills compaction on event journals carrying large
+// message bodies (production observed a single 177 KB line — a
+// coordinator multi-page response — which wedged the events.jsonl
+// compactor on every cycle until the daemon was restarted; see
+// thrum-10j0). 4 MB matches the precedent in
+// internal/sync/compact/compact.go's compactJSONLByKey and gives
+// generous headroom over the worst-case observed line. Keep the two
+// constants aligned: a future schema/body cap (thrum-mhwt) should
+// raise both or neither.
+const maxScannerBufferSize = 4 * 1024 * 1024
+
+// newJSONLScanner returns a bufio.Scanner whose internal buffer is
+// sized to handle JSONL lines up to maxScannerBufferSize. Use this
+// helper at every scan site in this package; the default
+// bufio.NewScanner is too small (thrum-10j0).
+func newJSONLScanner(r io.Reader) *bufio.Scanner {
+	s := bufio.NewScanner(r)
+	buf := make([]byte, maxScannerBufferSize)
+	s.Buffer(buf, maxScannerBufferSize)
+	return s
+}
 
 // Writer provides append-only JSONL writing with file locking.
 type Writer struct {
@@ -152,7 +178,7 @@ func (r *Reader) ReadAll() ([]json.RawMessage, error) {
 	defer func() { _ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) }() // #nosec G115 -- file descriptors are small non-negative integers; uintptr->int conversion cannot overflow
 
 	var messages []json.RawMessage
-	scanner := bufio.NewScanner(file)
+	scanner := newJSONLScanner(file)
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -193,7 +219,7 @@ func RemoveByField(path, field, value string) (int, error) {
 
 	var kept [][]byte
 	removed := 0
-	scanner := bufio.NewScanner(file)
+	scanner := newJSONLScanner(file)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
@@ -290,7 +316,7 @@ func RemoveBeforeTimestamp(path, field string, cutoff time.Time) (int, error) {
 
 	var kept [][]byte
 	removed := 0
-	scanner := bufio.NewScanner(file)
+	scanner := newJSONLScanner(file)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
@@ -393,7 +419,7 @@ func (r *Reader) Stream(ctx context.Context) <-chan json.RawMessage {
 		}
 		defer func() { _ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) }() // #nosec G115 -- file descriptors are small non-negative integers; uintptr->int conversion cannot overflow
 
-		scanner := bufio.NewScanner(file)
+		scanner := newJSONLScanner(file)
 
 		for scanner.Scan() {
 			select {
