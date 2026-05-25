@@ -206,9 +206,18 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 	// Extract worktree name from repo path
 	worktree := h.getWorktreeName()
 
-	// Lock for conflict detection and registration
+	// Lock for conflict detection and registration. Tracked-unlock
+	// pattern (thrum-kdyf) lets us release the lock mid-function around
+	// the ensureActiveSession call (which under its post-kdyf contract
+	// must NOT be called under lock — see ensureActiveSession docstring)
+	// while still cleaning up on every return path including panics.
 	h.state.Lock()
-	defer h.state.Unlock()
+	stateLocked := true
+	defer func() {
+		if stateLocked {
+			h.state.Unlock()
+		}
+	}()
 
 	// Validate name≠role: these checks prevent addressing ambiguity.
 	// Skip during re-registration since the agent already exists.
@@ -362,8 +371,16 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		// on error so the register RPC stays resilient. Failing
 		// register because resurrection failed would break every agent
 		// on every command, which is worse than the bug we are fixing.
-		// ensureActiveSession runs under the same write lock taken at
-		// the top of this method.
+		//
+		// thrum-kdyf: release the state lock before ensureActiveSession.
+		// Under its post-kdyf contract ensureActiveSession self-manages
+		// its locking — calling it under the caller's lock would
+		// deadlock its internal re-acquire. Re-acquire below if and
+		// only if persistResurrectWorktreeRef needs to run (rare path:
+		// a session was actually resumed).
+		h.state.Unlock()
+		stateLocked = false
+
 		resumedID, resumeErr := h.ensureActiveSession(ctx, agentID, req.AgentPID)
 		if resumeErr != nil {
 			log.Printf("agent.register: session resurrect failed: agent=%s err=%v", agentID, resumeErr)
@@ -376,10 +393,26 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 			// worktree→agent match for mutating RPCs (the session
 			// exists but has no worktree ref). Persist a worktree ref
 			// here so peercred can resolve this agent on the next RPC.
+			//
+			// persistResurrectWorktreeRef's contract is preserved
+			// (must be called under lock) per kdyf ratification —
+			// only ensureActiveSession's contract was inverted. Re-
+			// acquire the state lock briefly for this single rare-path
+			// call; the deferred Unlock above handles release.
+			//
+			// Note: persistResurrectWorktreeRef's internal SQL calls
+			// still use the caller's ctx (possibly burned). Hardening
+			// that write path is bsn7 follow-up territory; this kdyf
+			// fix targets the common-path SELECT only.
+			h.state.Lock()
+			stateLocked = true
 			h.persistResurrectWorktreeRef(ctx, agentID, resumedID, req.AgentPID)
 			resp.SessionID = resumedID
 			resp.SessionResumed = true
 		}
+		// enforceWorktreeIdentity is lock-agnostic
+		// (state_query.go:75-79 — read-helpers don't require the lock)
+		// so it's safe to call here regardless of which branch above ran.
 		h.enforceWorktreeIdentity(ctx, agentIdentityName(req.Name, agentID))
 		return resp, nil
 	}
@@ -744,18 +777,38 @@ func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, m
 // Returns "" if pid is zero or dead (the team.list self-heal path owns
 // dead-PID cleanup; resurrect must not race against it).
 //
-// Must be called under h.state.Lock() held by the caller. This method
-// writes a JSONL event via h.state.WriteEvent and does not acquire the
-// state lock itself — acquiring a second write lock would deadlock.
+// Concurrency contract (thrum-kdyf, INVERSE of pre-fix): must NOT be
+// called with h.state.Lock() held. The function self-manages locking
+// via the double-check pattern: a fresh-ctx lock-free SELECT first
+// (common-path fast path); if a write is needed (rare path), it then
+// acquires h.state.Lock() internally, re-SELECTs under lock to catch
+// races, then writes the event. Calling under the caller's lock would
+// deadlock the internal Lock() acquisition (sync.Mutex isn't reentrant).
+//
+// Why fresh ctx for the SELECT (thrum-kdyf): the caller's RPC ctx may
+// already be expired by the time we get here — HandleRegister's
+// registerAgent step runs WriteEvent → triggerSyncOnWrite synchronously,
+// which can burn up to walker(30s) + compactor(60s) of wall time while
+// the caller's RPC has a default 10s deadline. Pre-fix, the SELECT then
+// failed immediately with ctx.Err(), surfacing as the misleading
+// "check active session: context deadline exceeded" prime-failure log
+// line. The fresh Background-derived ctx with 5s deadline gives the
+// SELECT enough headroom to succeed (sub-millisecond on the indexed
+// sessions table) without bleeding into the next RPC. The write path
+// keeps the caller's ctx so explicit user cancellation propagates.
 //
 // Cross-verification discipline (thrum-xir.18, mirroring thrum-pxz.14
 // Fix B): both the DB's active-session state and process.IsRunning(pid)
 // must agree the agent is alive before any state change is written.
 // A single-source decision is the pxz.14 anti-pattern.
 func (h *AgentHandler) ensureActiveSession(ctx context.Context, agentID string, pid int) (string, error) {
-	// Source of truth #1: DB active-session state.
+	// Step 1: lock-free SELECT under a fresh Background-derived ctx.
+	// Detached from caller's possibly-burned RPC ctx — see docstring.
+	selectCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	var existingID sql.NullString
-	err := h.state.DB().QueryRowContext(ctx,
+	err := h.state.DB().QueryRowContext(selectCtx,
 		`SELECT session_id FROM sessions
 		 WHERE agent_id = ? AND ended_at IS NULL
 		 ORDER BY started_at DESC LIMIT 1`,
@@ -769,13 +822,38 @@ func (h *AgentHandler) ensureActiveSession(ctx context.Context, agentID string, 
 		return "", nil
 	}
 
-	// Source of truth #2: live process check. Skip resurrect if PID is
-	// missing or dead — the self-heal path owns that case.
+	// Step 2: live process check. Skip resurrect if PID is missing or
+	// dead — the self-heal path owns that case.
 	if pid <= 0 || !process.IsRunning(pid) {
 		return "", nil
 	}
 
-	// Both sources agree: no active session and the caller's process is
+	// Step 3: write path. Acquire the state lock ourselves (caller is
+	// contractually NOT holding it), re-SELECT under the lock to catch
+	// concurrent resurrect races (another HandleRegister fired between
+	// our step-1 SELECT and our Lock acquisition), then write the event.
+	h.state.Lock()
+	defer h.state.Unlock()
+
+	// Re-SELECT under lock with fresh ctx (same rationale as step 1).
+	reSelectCtx, reSelectCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer reSelectCancel()
+
+	var raceID sql.NullString
+	if err := h.state.DB().QueryRowContext(reSelectCtx,
+		`SELECT session_id FROM sessions
+		 WHERE agent_id = ? AND ended_at IS NULL
+		 ORDER BY started_at DESC LIMIT 1`,
+		agentID,
+	).Scan(&raceID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("check active session (re-check): %w", err)
+	}
+	if raceID.Valid && raceID.String != "" {
+		// Concurrent resurrect won the race. Defer to it; no write here.
+		return "", nil
+	}
+
+	// Both checks agree: no active session and the caller's process is
 	// alive. Emit a minimal agent.session.start event. Deliberately omit
 	// scope/orphan-recovery handling that HandleStart performs — those
 	// belong to the explicit session.start RPC (used by quickstart), not
@@ -788,6 +866,13 @@ func (h *AgentHandler) ensureActiveSession(ctx context.Context, agentID string, 
 		SessionID: sessionID,
 		AgentID:   agentID,
 	}
+	// WriteEvent uses the caller's ctx so explicit user cancellation
+	// propagates. If the caller ctx is already expired here, the write
+	// fails with ctx.Err() — acceptable: the user sees a clear
+	// "write session.start event" error rather than the pre-fix
+	// misleading "check active session" one. The common-path SELECT
+	// fix above is the main kdyf win; the rare-path write hardening
+	// is bsn7 follow-up territory.
 	if err := h.state.WriteEvent(ctx, event); err != nil {
 		return "", fmt.Errorf("write session.start event: %w", err)
 	}

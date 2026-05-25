@@ -167,10 +167,8 @@ func TestHandleRegister_Resurrect_DeadPIDNoResurrectNoRef(t *testing.T) {
 	endedAt := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339Nano)
 	seedSessionRow(t, s, "ses_2b2t_dead_old", agentID, endedAt)
 
-	// Direct call into ensureActiveSession (same pattern as xir.18 tests).
-	s.Lock()
-	defer s.Unlock()
-
+	// thrum-kdyf: ensureActiveSession's contract was inverted —
+	// must NOT be called under state.Lock(). Direct call below.
 	sessionID, err := agentHandler.ensureActiveSession(context.Background(), agentID, 999999)
 	if err != nil {
 		t.Fatalf("ensureActiveSession: %v", err)

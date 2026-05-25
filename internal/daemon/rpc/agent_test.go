@@ -3,10 +3,13 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1689,8 +1692,10 @@ func TestEnsureActiveSession_AlreadyActive(t *testing.T) {
 	seedSessionRow(t, s, "ses_existing_active", agentID, "")
 
 	handler := NewAgentHandler(s)
-	s.Lock()
-	defer s.Unlock()
+	// thrum-kdyf: ensureActiveSession's contract was inverted —
+	// must NOT be called under state.Lock() (it self-manages locking
+	// internally for the write path). Holding the lock here would
+	// deadlock the internal re-acquire on the rare write branch.
 
 	eventsBefore := countSessionStartEvents(t, s)
 	rowsBefore := countActiveSessionRows(t, s, agentID)
@@ -1728,8 +1733,10 @@ func TestEnsureActiveSession_OfflineAgentLivePID(t *testing.T) {
 	seedSessionRow(t, s, "ses_old_ended", agentID, endedAt)
 
 	handler := NewAgentHandler(s)
-	s.Lock()
-	defer s.Unlock()
+	// thrum-kdyf: ensureActiveSession's contract was inverted —
+	// must NOT be called under state.Lock() (it self-manages locking
+	// internally for the write path). Holding the lock here would
+	// deadlock the internal re-acquire on the rare write branch.
 
 	eventsBefore := countSessionStartEvents(t, s)
 
@@ -1772,8 +1779,10 @@ func TestEnsureActiveSession_DeadPIDNoResurrect(t *testing.T) {
 	seedSessionRow(t, s, "ses_old_dead", agentID, endedAt)
 
 	handler := NewAgentHandler(s)
-	s.Lock()
-	defer s.Unlock()
+	// thrum-kdyf: ensureActiveSession's contract was inverted —
+	// must NOT be called under state.Lock() (it self-manages locking
+	// internally for the write path). Holding the lock here would
+	// deadlock the internal re-acquire on the rare write branch.
 
 	eventsBefore := countSessionStartEvents(t, s)
 	rowsBefore := countActiveSessionRows(t, s, agentID)
@@ -1812,8 +1821,10 @@ func TestEnsureActiveSession_ZeroPIDNoResurrect(t *testing.T) {
 	seedSessionRow(t, s, "ses_old_zero", agentID, endedAt)
 
 	handler := NewAgentHandler(s)
-	s.Lock()
-	defer s.Unlock()
+	// thrum-kdyf: ensureActiveSession's contract was inverted —
+	// must NOT be called under state.Lock() (it self-manages locking
+	// internally for the write path). Holding the lock here would
+	// deadlock the internal re-acquire on the rare write branch.
 
 	eventsBefore := countSessionStartEvents(t, s)
 	rowsBefore := countActiveSessionRows(t, s, agentID)
@@ -1832,6 +1843,224 @@ func TestEnsureActiveSession_ZeroPIDNoResurrect(t *testing.T) {
 		t.Errorf("active session rows grew on zero-PID skip: before=%d after=%d", rowsBefore, n)
 	}
 }
+
+// --- thrum-kdyf: ctx-detach + double-check pattern tests ----------------
+
+// TestEnsureActiveSession_BurnedCallerCtx_StillSucceeds — thrum-kdyf
+// regression pin. Pre-fix, ensureActiveSession's SELECT used the caller's
+// RPC ctx. When that ctx was already expired (HandleRegister's
+// registerAgent → triggerSyncOnWrite synchronous walker+compactor burned
+// it), the SELECT returned ctx.Err() immediately even on the common-path
+// "session already exists" branch — surfacing as the misleading prime
+// failure "agent.register: session resurrect failed: check active session:
+// context deadline exceeded". Post-fix, the SELECT uses a fresh
+// Background-derived ctx, so a pre-cancelled caller ctx is irrelevant to
+// the read path.
+func TestEnsureActiveSession_BurnedCallerCtx_StillSucceeds(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_kdyf_burned_ctx", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	const agentID = "agt_kdyf_burned_ctx"
+	// Seed an existing ACTIVE session so the common-path SELECT branch
+	// fires. The whole bug was that this fast path failed when the
+	// caller ctx was already burned.
+	seedAgentRow(t, s, agentID, os.Getpid())
+	seedSessionRow(t, s, "ses_kdyf_active", agentID, "")
+
+	handler := NewAgentHandler(s)
+
+	// Caller ctx is ALREADY cancelled. Pre-fix this would have caused
+	// the SELECT to return ctx.Err() immediately. Post-fix the SELECT
+	// runs under its own Background-derived ctx and ignores the caller's
+	// state — the active-session check still completes correctly.
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	got, err := handler.ensureActiveSession(cancelledCtx, agentID, os.Getpid())
+	if err != nil {
+		t.Fatalf("ensureActiveSession with cancelled caller ctx: got error %v, want nil (SELECT must use its own ctx per thrum-kdyf)", err)
+	}
+	if got != "" {
+		t.Errorf("returned session_id = %q, want empty (session already active → idempotent no-op)", got)
+	}
+}
+
+// TestEnsureActiveSession_ConcurrentResurrects_OnlyOneWrites — thrum-kdyf
+// double-check pattern regression pin. With the contract change to
+// "must NOT be called under lock", concurrent ensureActiveSession calls
+// for the same agent could both observe "no active session" in their
+// step-1 lock-free SELECT and try to write. The step-3 re-SELECT under
+// the internal lock catches that race and the loser returns "" without
+// writing a duplicate session.start event.
+func TestEnsureActiveSession_ConcurrentResurrects_OnlyOneWrites(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_kdyf_race", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	const agentID = "agt_kdyf_race"
+	livePID := os.Getpid()
+	seedAgentRow(t, s, agentID, livePID)
+	endedAt := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339Nano)
+	seedSessionRow(t, s, "ses_race_ended", agentID, endedAt)
+
+	handler := NewAgentHandler(s)
+
+	eventsBefore := countSessionStartEvents(t, s)
+
+	// Fire N concurrent resurrects. Each lock-free SELECT will see no
+	// active session; all N will progress to step 3. The double-check
+	// pattern under the internal lock must serialize so exactly one
+	// writes the new session.start event; the rest return "".
+	const concurrency = 8
+	var (
+		wg            sync.WaitGroup
+		mu            sync.Mutex
+		winners       int
+		losers        int
+		nonNilSession []string
+	)
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sid, err := handler.ensureActiveSession(context.Background(), agentID, livePID)
+			if err != nil {
+				t.Errorf("ensureActiveSession returned error in concurrent goroutine: %v", err)
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if sid == "" {
+				losers++
+			} else {
+				winners++
+				nonNilSession = append(nonNilSession, sid)
+			}
+		}()
+	}
+	wg.Wait()
+
+	if winners != 1 {
+		t.Errorf("winner count = %d, want exactly 1 (double-check pattern must serialize writes per thrum-kdyf)", winners)
+		t.Logf("non-nil session_ids returned: %v", nonNilSession)
+	}
+	// Validate the winner's session_id shape: prevents a regression
+	// where every goroutine returns "" yet event count is still 1
+	// (e.g. via an orphan write from elsewhere) and weak assertion
+	// above passes for the wrong reason.
+	if winners == 1 {
+		got := nonNilSession[0]
+		if !strings.HasPrefix(got, "ses_") || len(got) < 6 {
+			t.Errorf("winner session_id = %q, want ses_-prefixed ULID (per identity.GenerateSessionID)", got)
+		}
+	}
+	if losers != concurrency-1 {
+		t.Errorf("loser count = %d, want %d (every loser returns empty session_id)", losers, concurrency-1)
+	}
+	if n := countSessionStartEvents(t, s); n != eventsBefore+1 {
+		t.Errorf("session.start events grew by %d, want +1 (exactly one write per thrum-kdyf double-check)", n-eventsBefore)
+	}
+	if n := countActiveSessionRows(t, s, agentID); n != 1 {
+		t.Errorf("active session rows = %d, want 1 (one resurrected session, no duplicates)", n)
+	}
+}
+
+// TestHandleRegister_ConcurrentRegisterBurst_NoDeadlock — thrum-kdyf
+// safety pin: HandleRegister now releases h.state.Lock() before
+// ensureActiveSession and re-acquires it for persistResurrectWorktreeRef.
+// Concurrent register bursts must not wedge or deadlock through this
+// release/re-acquire dance. Spawns N concurrent registers of the SAME
+// existing agent (so they all hit the resurrect re-Lock path), asserts
+// all complete + the state is consistent.
+func TestHandleRegister_ConcurrentRegisterBurst_NoDeadlock(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_kdyf_burst", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	livePID := os.Getpid()
+
+	// Step 1: register once so the agent exists in DB. The burst will
+	// hit the existingAgent != nil branch where the lock release/re-
+	// acquire dance happens.
+	t.Setenv("THRUM_ROLE", "implementer")
+	t.Setenv("THRUM_MODULE", "kdyf-burst")
+	handler := NewAgentHandler(s)
+
+	firstReq := json.RawMessage(`{"name":"kdyf_burst_target","role":"implementer","module":"kdyf-burst","agent_pid":` +
+		strconv.Itoa(livePID) + `}`)
+	if _, err := handler.HandleRegister(context.Background(), firstReq); err != nil {
+		t.Fatalf("first HandleRegister: %v", err)
+	}
+
+	// Step 2: end the session so subsequent registers hit the resurrect
+	// write path (rare-path Lock re-acquire). GenerateAgentID returns
+	// the bare name when name is non-empty (identity.go:86-89), so the
+	// agent_id is literally the requested name string, not a derived
+	// role+module+name composite.
+	const burstAgentID = "kdyf_burst_target"
+	_, _ = s.RawDB().Exec(
+		`UPDATE sessions SET ended_at = ? WHERE agent_id = ?`,
+		time.Now().UTC().Add(-1*time.Hour).Format(time.RFC3339Nano),
+		burstAgentID,
+	)
+
+	// Step 3: burst of N concurrent re-registers. Each request carries
+	// re_register: true so HandleRegister enters the `case req.ReRegister`
+	// branch and actually invokes registerAgent (not the same-PID no-op
+	// default branch which would skip ensureActiveSession entirely).
+	// Flow per goroutine: existingAgent != nil → registerAgent (under
+	// lock) → kdyf Unlock → ensureActiveSession (lock-free SELECT; rare-
+	// path internal Lock for the write since session was ended in step 2)
+	// → re-Lock for persistResurrectWorktreeRef.
+	const burst = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, burst)
+	deadline := time.After(30 * time.Second)
+	done := make(chan struct{})
+
+	go func() {
+		for i := 0; i < burst; i++ {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				req := json.RawMessage(`{"name":"kdyf_burst_target","role":"implementer","module":"kdyf-burst","agent_pid":` +
+					strconv.Itoa(livePID) + `,"re_register":true}`)
+				_, regErr := handler.HandleRegister(context.Background(), req)
+				if regErr != nil {
+					errs <- fmt.Errorf("burst goroutine %d: %w", idx, regErr)
+				}
+			}(i)
+		}
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// good — bursted to completion within deadline
+	case <-deadline:
+		t.Fatal("HandleRegister burst did not complete within 30s — likely deadlock or wedge in the lock release/re-acquire dance (thrum-kdyf)")
+	}
+
+	close(errs)
+	for e := range errs {
+		t.Error(e)
+	}
+}
+// --- end thrum-kdyf section --------------------------------------------
 
 // --- thrum-xir.18.3: HandleRegister wiring tests ------------------------
 

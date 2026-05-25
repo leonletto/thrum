@@ -120,6 +120,34 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **`agent.register` session-resurrect SELECT decoupled from caller's
+  possibly-burned RPC context (thrum-kdyf)** — surfaced to the user as
+  `register failed: ... daemon may be unresponsive — try thrum daemon
+  restart` during fresh agent registrations under a wave-dispatch burst.
+  Independent bug downstream of roz1 (the roz1 compactor-cascade fix made
+  it less common but didn't fix it). Mechanism: HandleRegister holds
+  `h.state.Lock()` through `registerAgent → WriteEvent → triggerSyncOnWrite`,
+  whose synchronous walker (30s ceiling) + compactor (60s ceiling) can
+  burn the entire 10s default RPC deadline. By the time
+  `ensureActiveSession`'s SELECT fired, the caller's ctx was already
+  expired and the SELECT returned `context deadline exceeded` immediately
+  — surfacing as the misleading "check active session" prime-failure
+  log line. Two-part fix on the surgical-scope path: (1) invert
+  `ensureActiveSession`'s contract from "must be called under lock" to
+  "must NOT be called under lock"; the function self-manages locking via
+  a double-check pattern (lock-free fresh-ctx SELECT first; if a write is
+  needed, acquire `state.Lock()` internally, re-SELECT under lock to catch
+  concurrent-resurrect races, then write the event). (2) restructure
+  `HandleRegister`'s critical section with a tracked-unlock pattern that
+  releases the lock before calling `ensureActiveSession` and re-acquires
+  it briefly only when `persistResurrectWorktreeRef` needs to run (its
+  contract is preserved). The SELECT now runs under
+  `context.WithTimeout(context.Background(), 5*time.Second)` — a fresh
+  deadline decoupled from the caller's possibly-burned ctx. Common-path
+  registers ("session already active → idempotent no-op") now succeed
+  even when the caller ctx has been burned upstream. The structural
+  cleanup that would let walker+compactor run without holding
+  `state.Lock` at all is filed as thrum-bsn7 for v0.10.7 / v0.11.
 - **Daemon compactor decoupled from caller RPC context (thrum-roz1)** — the
   closure registered via `triggers.SetCompactor` previously ran under the
   caller's RPC ctx (~10s deadline) when invoked from `state.WriteEvent` →
