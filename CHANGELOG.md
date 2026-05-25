@@ -172,6 +172,14 @@ visibility into v0.10.6 authors until they upgrade.
   failure. See thrum-rtlt for the long-term event-sourcing rework that would
   make true rebuild-from-history feasible.
 
+### Internal
+
+- **Re-sync codex/cursor/opencode skill copies to claude-plugin source of
+  truth (thrum-1arf)** — mechanical formatting catch-up only (YAML
+  frontmatter description fields unwrapped to single-line; prose paragraph
+  wraps normalized), no behavior change. Companion to the destroy-then-
+  teardown protocol skill update.
+
 ## [0.10.5] - 2026-05-21
 
 ### Added
