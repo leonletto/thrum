@@ -18,18 +18,28 @@ machine-readable history lives in
 
 ## v0.10.6 — In Soak (RC)
 
-**v0.10.6-rc.3** was tagged 2026-05-25 and is the current pre-release. rc.3 is
-the biggest reliability win in v0.10.6 — two P1 fixes (thrum-kdyf session
-resurrect + thrum-bsn7 broader lock-contention) together resolve the chronic
-"daemon may be unresponsive under burst" symptom by detaching `state.Lock` from
-the long-running sync trigger. Also in rc.3: an `events.timestamp` index
-(thrum-7ojv) so the events sweep stops doing a full-table scan,
-`thrum worktree create --base <ref>` (thrum-pqcg) so a new worktree branches
-from the cwd's HEAD by default instead of silently defaulting to `main`, and two
-P3 polish items. Carry-forwards from rc.2: l9e1 security fail-close, roz1 sync
-compactor ctx-detach, 9dnh quickstart precedence fix, suyb worktree
-attach-existing-branch fix, and 1gar recovery-doc corrections. See the
-[Beta Channel](beta-channel.md) page for the full rc.3 callout + install
+**v0.10.6-rc.4** was tagged 2026-05-25 and is the current pre-release. rc.4
+finishes the burst-latency story rc.3 started. rc.3 detached `state.Lock` from
+the long-running sync trigger; rc.4 follows with a six-commit stack on
+`team.list` and the dead-agent self-heal path (thrum-1nkt) — pool ceiling raised
+from 10 to 100, single-flight on the self-heal, the heal moved off the send hot
+path behind a dedicated `agent.lookup` RPC, `postCommit` async-wrapped at
+structural-event call sites, inbound peer-event walker coalesced to one fire per
+batch, and dead-agent sweeping pushed into a background sweeper so `team.list`
+is pure-read. Two more P1 reliability fixes: a 4MB scanner buffer for the JSONL
+compactor (thrum-10j0) that stops a silent wedge on oversized messages, and a
+1MB cap on message body at write (thrum-mhwt, configurable) that returns a typed
+`-32602` RPC error instead of letting an oversized write poison the log. Sync
+correctness: `applySessionStart` now uses `INSERT OR IGNORE` (thrum-9jcb.3) so
+peer-replicated sessions stop aborting sync batches on UNIQUE constraint
+collisions. Identity-guard gains a PID-ancestor split (thrum-xir.40 — closest vs
+topmost helpers) and the peercred CWD lookup is now cached (thrum-xir.45),
+measured at ~50× speedup on the RPC pre-handler under sustained load. CLI:
+`thrum worktree teardown` cascade-deletes the bound agent identity (thrum-wk7d,
+`--keep-agent` opts out) so a tear-down doesn't leave a stranded identity
+behind. Carry-forwards from rc.3: kdyf session-resurrect, bsn7 broader
+lock-contention, 7ojv events-timestamp index, pqcg worktree-create base flag.
+See the [Beta Channel](beta-channel.md) page for the full rc.4 callout + install
 commands.
 
 v0.10.6's headline is a **sync re-architecture** (thrum-s6os): the cross-machine

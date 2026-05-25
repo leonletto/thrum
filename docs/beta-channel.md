@@ -25,23 +25,30 @@ they're parameterized over `VERSION` and the release branch.
 ## Stable-track current pre-release
 
 > **Current stable-track pre-release:
-> [`v0.10.6-rc.3`](https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.3)**
-> (tagged 2026-05-25, in soak). **rc.3 is the biggest reliability win in
-> v0.10.6.** Two P1 fixes — thrum-kdyf (session resurrect) and thrum-bsn7
-> (broader lock-contention) — together resolve the chronic "daemon may be
-> unresponsive under burst" symptom by detaching `state.Lock` from the
-> long-running sync trigger; under burst load the daemon stays responsive
-> instead of stalling agent commands while sync writes finish. Also in rc.3: an
-> `events.timestamp` index (thrum-7ojv) so the events-table sweep stops doing an
-> O(N) full-table scan (lets the compactor timeout drop symmetric to the
-> walker's), `thrum worktree create --base <ref>` (thrum-pqcg) so a new worktree
-> branches from the cwd's HEAD by default instead of silently defaulting to
-> `main` (use `--base main` if you want the old behaviour), and two P3 polish
-> items (thrum-g1ux + thrum-8iux). Carve-out: a known keystroke race in
-> release-test scen 23 (thrum-rbp6, pre-existing, non-regression).
-> Carry-forwards from rc.2: l9e1 security fail-close on anonymous cross-worktree
-> re-bind, roz1 sync compactor ctx-detach, 9dnh quickstart precedence fix, suyb
-> worktree attach-existing-branch fix, and 1gar recovery-doc corrections.
+> [`v0.10.6-rc.4`](https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.4)**
+> (tagged 2026-05-25, in soak). **rc.4 finishes the burst-latency story rc.3
+> started.** rc.3 detached `state.Lock` from the long-running sync trigger; rc.4
+> follows with a six-commit stack on `team.list` and the dead-agent self-heal
+> path (thrum-1nkt) — pool ceiling raised from 10 to 100, single-flight on the
+> self-heal, the heal moved off the send hot path behind a dedicated
+> `agent.lookup` RPC, `postCommit` async-wrapped at structural-event call sites,
+> inbound peer-event walker coalesced to one fire per batch, and dead-agent
+> sweeping pushed into a background sweeper so `team.list` is pure-read. Two
+> more P1 reliability fixes round it out: a 4MB scanner buffer for the JSONL
+> compactor (thrum-10j0) that stops a silent wedge on oversized messages, and a
+> 1MB cap on message body at write (thrum-mhwt, configurable) returning a typed
+> `-32602` RPC error instead of letting an oversized write poison the log. Sync
+> gets one more correctness fix: `applySessionStart` now uses `INSERT OR IGNORE`
+> (thrum-9jcb.3), so peer-replicated sessions stop aborting entire sync batches
+> on a UNIQUE constraint collision. Identity-guard gains a PID-ancestor split
+> (thrum-xir.40 — closest vs topmost helpers) and the peercred CWD lookup is now
+> cached (thrum-xir.45), measured at ~50× speedup on the RPC pre-handler under
+> sustained load. CLI: `thrum worktree teardown` now cascade-deletes the bound
+> agent identity (thrum-wk7d, `--keep-agent` opts out) so a tear-down doesn't
+> leave a stranded identity behind. Carry-forwards from rc.3: kdyf
+> session-resurrect, bsn7 broader lock-contention, 7ojv events-timestamp index,
+> pqcg worktree-create base flag, plus rc.2's l9e1 anonymous cross-worktree
+> fail-close and roz1 compactor ctx-detach.
 >
 > The v0.10.6 story still leads with the **sync re-architecture** (thrum-s6os):
 > the cross-machine wire stream is event-triggered rather than 60-second-polled,
@@ -57,13 +64,13 @@ they're parameterized over `VERSION` and the release branch.
 > Full notes: [What's New](whats-new.md) and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-### Quick install for `v0.10.6-rc.3`
+### Quick install for `v0.10.6-rc.4`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.3 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.4 sh
 
 # Codex plugin (matches release/v0.10.6)
 THRUM_INSTALL_REF=release/v0.10.6 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.6/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
