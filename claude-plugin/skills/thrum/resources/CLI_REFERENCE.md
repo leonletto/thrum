@@ -803,6 +803,7 @@ thrum config show --json
 ```bash
 thrum worktree create <name>                   # Create worktree with thrum/beads setup
 thrum worktree create <name> -b <branch>       # Specify branch name
+thrum worktree create <name> --base <ref>      # Override base ref (default: cwd HEAD)
 thrum worktree create <name> --detach          # Detached HEAD worktree
 thrum worktree create <name> \
   --name <agent> --role <role> --module <mod>  # Create worktree + register agent
@@ -816,6 +817,7 @@ thrum worktree list                                  # List worktrees with agent
 
 ```text
 --branch, -b string   Branch name (default: feature/<name>)
+--base string         Base ref for the new branch (default: current HEAD of cwd)
 --detach              Create detached HEAD worktree
 --name string         Agent name (triggers quickstart when combined with --role + --module)
 --role string         Agent role

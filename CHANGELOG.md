@@ -120,6 +120,24 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **`thrum worktree create` cuts new branch from cwd HEAD by default
+  (thrum-pqcg)** — previously the CLI silently defaulted to `main` as
+  the base ref regardless of the cwd's actual HEAD; a worktree created
+  from a non-`main` checkout (e.g. `thrum-dev`, `release/v0.10.6`)
+  would silently lose all commits unique to that branch. The
+  `CreateOpts.BaseBranch` field was unset by the cobra layer, so
+  `internal/worktree.Create`'s `"main"` fallback always fired. Fix:
+  resolve cwd HEAD via `git symbolic-ref --quiet --short HEAD` and
+  pass it as `BaseBranch`. New `--base` flag lets operators override
+  explicitly (e.g. `--base main` for the pre-fix behavior, or any
+  existing ref / commit SHA for arbitrary bases). On detached HEAD
+  or a non-git cwd the command emits a `slog.Warn` and falls back to
+  `main` so the substitution is no longer silent. `--base` also
+  honored by the `--detach` path (`git worktree add --detach <path>
+  <ref>`). New `cmd/thrum/worktree_base.go` holds the resolver as a
+  small testable helper; 4 new tests pin explicit-flag-wins,
+  cwd-HEAD-default, detached-HEAD-fallback, and non-git-cwd-fallback
+  semantics.
 - **`agent.register` session-resurrect SELECT decoupled from caller's
   possibly-burned RPC context (thrum-kdyf)** — surfaced to the user as
   `register failed: ... daemon may be unresponsive — try thrum daemon

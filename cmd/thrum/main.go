@@ -2881,8 +2881,15 @@ func worktreeCreateCmd() *cobra.Command {
 			}
 			detach, _ := cmd.Flags().GetBool("detach")
 			branch, _ := cmd.Flags().GetString("branch")
+			baseFlag, _ := cmd.Flags().GetString("base")
 
 			repoPath := paths.EffectiveRepoPath(flagRepo)
+
+			// Default the new worktree's base ref to the repo's
+			// current HEAD instead of silently using "main". See
+			// resolveWorktreeBase for fallback semantics.
+			base := resolveWorktreeBase(cmd.Context(), repoPath, baseFlag)
+
 			thrumDir := filepath.Join(repoPath, ".thrum")
 			cfg, err := config.LoadThrumConfig(thrumDir)
 			if err != nil {
@@ -2919,8 +2926,14 @@ func worktreeCreateCmd() *cobra.Command {
 				// Cobra-only detach path: skip worktree.Create, run git
 				// worktree add --detach inline + EnsureRedirects. The
 				// headless API has no detach mode (B-B1 never needs it).
-				if out, err := safecmd.Git(cmd.Context(), repoPath,
-					"worktree", "add", "--detach", worktreePath); err != nil {
+				// --base also honored here: `git worktree add --detach
+				// <path> <ref>` creates a detached worktree pointing at
+				// <ref>'s commit. Without --base, git uses HEAD by
+				// default (which matches our base-resolution above; we
+				// pass it explicitly so --base + --detach is not a
+				// silent ignore).
+				detachArgs := []string{"worktree", "add", "--detach", worktreePath, base}
+				if out, err := safecmd.Git(cmd.Context(), repoPath, detachArgs...); err != nil {
 					return fmt.Errorf("git worktree add --detach: %s\n%s", err, out)
 				}
 				fmt.Printf("✓ Worktree created at %s (detached)\n", worktreePath)
@@ -2943,6 +2956,7 @@ func worktreeCreateCmd() *cobra.Command {
 					AgentName:      name,
 					Persistent:     true,
 					BranchOverride: branch,
+					BaseBranch:     base, // thrum-pqcg: cwd HEAD by default, --base override
 				})
 				if err != nil {
 					return fmt.Errorf("create worktree: %w", err)
@@ -3029,6 +3043,7 @@ func worktreeCreateCmd() *cobra.Command {
 	}
 	cmd.Flags().Bool("detach", false, "Create detached HEAD worktree")
 	cmd.Flags().StringP("branch", "b", "", "Branch name (default: feature/<name>)")
+	cmd.Flags().String("base", "", "Base ref for the new branch (default: current HEAD of cwd)")
 	cmd.Flags().String("name", "", "Agent name (triggers quickstart in tmux)")
 	cmd.Flags().String("role", "", "Agent role")
 	cmd.Flags().String("module", "", "Agent module")
