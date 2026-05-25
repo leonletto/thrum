@@ -1051,9 +1051,9 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	}
 }
 
-func TestSchema_V36_CurrentVersion(t *testing.T) {
-	if schema.CurrentVersion != 36 {
-		t.Errorf("CurrentVersion = %d, want 36 (v25-v36 dead-end DDL forward-ported from thrum-agents + feature/b-b1-impl for v0.10.6)", schema.CurrentVersion)
+func TestSchema_V38_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 38 {
+		t.Errorf("CurrentVersion = %d, want 38 (v36 base + v37 reserved placeholder for thrum-agents memory-tables alignment + v38 events.timestamp index per thrum-7ojv)", schema.CurrentVersion)
 	}
 }
 
@@ -1294,8 +1294,8 @@ func TestSchema_GapFill_V32_to_V36(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSchemaVersion: %v", err)
 	}
-	if v != 36 {
-		t.Fatalf("schema_version after gap-fill migrate = %d; want 36", v)
+	if v != schema.CurrentVersion {
+		t.Fatalf("schema_version after gap-fill migrate = %d; want %d (schema.CurrentVersion)", v, schema.CurrentVersion)
 	}
 
 	// v33: pending_route_resolution column present on messages.
@@ -1492,8 +1492,8 @@ func TestSchema_ForwardPort_V25_to_V32_AllTablesPresent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSchemaVersion: %v", err)
 	}
-	if v != 36 {
-		t.Errorf("schema_version after migrate = %d; want 36", v)
+	if v != schema.CurrentVersion {
+		t.Errorf("schema_version after migrate = %d; want %d (schema.CurrentVersion)", v, schema.CurrentVersion)
 	}
 
 	// All forward-ported tables must be present (v25-v36).
@@ -1568,8 +1568,8 @@ func TestSchema_FreshInstall_HasForwardPortedTables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSchemaVersion: %v", err)
 	}
-	if v != 36 {
-		t.Errorf("fresh install schema_version = %d; want 36", v)
+	if v != schema.CurrentVersion {
+		t.Errorf("fresh install schema_version = %d; want %d (schema.CurrentVersion)", v, schema.CurrentVersion)
 	}
 	for _, tbl := range []string{
 		"scheduler_job_state",
@@ -2125,5 +2125,175 @@ func TestMigrate_V20_AgentWithoutRegisterEvent_KeepsEmptyOriginDaemon(t *testing
 	}
 	if origin != "" {
 		t.Errorf("legacy agent origin_daemon = %q after migration, want '' (no matching event)", origin)
+	}
+}
+
+// --- thrum-7ojv: v37 placeholder + v38 events.timestamp index ----------
+
+// indexExists returns true if the named index is present in sqlite_master.
+// Helper for the thrum-7ojv migration tests.
+func indexExists(t *testing.T, db *sql.DB, name string) bool {
+	t.Helper()
+	var n int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name = ?`, name,
+	).Scan(&n); err != nil {
+		t.Fatalf("query sqlite_master for index %q: %v", name, err)
+	}
+	return n == 1
+}
+
+// schemaVersion is a t.Fatalf-wrapping helper around
+// schema.GetSchemaVersion for the thrum-7ojv tests where the
+// 3-line err-handling pattern adds noise without value. Existing
+// schema tests use schema.GetSchemaVersion + explicit error handling
+// directly; either pattern is fine, this just centralises the wrap
+// for the 7ojv test trio.
+func schemaVersion(t *testing.T, db *sql.DB) int {
+	t.Helper()
+	v, err := schema.GetSchemaVersion(db)
+	if err != nil {
+		t.Fatalf("GetSchemaVersion: %v", err)
+	}
+	return v
+}
+
+// TestSchema_V36_to_V38_FreshUpgrade — thrum-7ojv. Fresh release-line
+// DB at v36 (a binary built before the 7ojv change shipped) gets
+// migrated forward by a new release-line binary: must run the v37
+// no-op placeholder and the v38 index creation, end at v38 with the
+// idx_events_timestamp index present.
+func TestSchema_V36_to_V38_FreshUpgrade(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "v36-to-v38.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+
+	// Rewind to v36 and DROP the index that createTables/createIndexes
+	// stamped at fresh-install time (the v36→v38 migration path is the
+	// load-bearing one being exercised; we need to prove the migration
+	// itself creates the index, not just that fresh-install does).
+	if _, err := db.Exec(`DROP INDEX IF EXISTS idx_events_timestamp`); err != nil {
+		t.Fatalf("drop pre-existing idx_events_timestamp: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE schema_version SET version = 36`); err != nil {
+		t.Fatalf("rewind to v36: %v", err)
+	}
+
+	// Sanity: pre-Migrate state.
+	if got := schemaVersion(t, db); got != 36 {
+		t.Fatalf("pre-migrate schema_version = %d, want 36", got)
+	}
+	if indexExists(t, db, "idx_events_timestamp") {
+		t.Fatal("pre-migrate idx_events_timestamp should not exist after the drop+rewind")
+	}
+
+	// Migrate: v36 → v38 (runs v37 no-op + v38 index).
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v36→v38: %v", err)
+	}
+
+	if got := schemaVersion(t, db); got != 38 {
+		t.Errorf("post-migrate schema_version = %d, want 38", got)
+	}
+	if !indexExists(t, db, "idx_events_timestamp") {
+		t.Error("v38 migration did not create idx_events_timestamp index")
+	}
+}
+
+// TestSchema_V37_to_V38_CrossBinary — thrum-7ojv. Critical cross-binary
+// case: a DB already at v37 from a thrum-agents binary (which stamps
+// v37 with the memory-tables migration — see CurrentVersion doc) gets
+// migrated forward by a release-line binary. The release line's v37
+// branch is a no-op (must not error or attempt to re-run thrum-agents
+// memory-tables DDL we don't have), then v38 creates the index. Ends
+// at v38 with the index present + the existing v37 schema_version row
+// not double-stamped or downgraded.
+func TestSchema_V37_to_V38_CrossBinary(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "v37-to-v38.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+
+	// Simulate the "DB previously stamped v37 by a thrum-agents binary"
+	// scenario. Drop the index that fresh-install added so we can prove
+	// the v38 migration creates it on this v37 path too.
+	if _, err := db.Exec(`DROP INDEX IF EXISTS idx_events_timestamp`); err != nil {
+		t.Fatalf("drop pre-existing idx_events_timestamp: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE schema_version SET version = 37`); err != nil {
+		t.Fatalf("rewind to v37: %v", err)
+	}
+
+	if got := schemaVersion(t, db); got != 37 {
+		t.Fatalf("pre-migrate schema_version = %d, want 37", got)
+	}
+
+	// Migrate: v37 → v38. The release-line binary must SKIP its v37
+	// no-op block (already at v37) and just run v38's index creation.
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v37→v38 (cross-binary path): %v", err)
+	}
+
+	if got := schemaVersion(t, db); got != 38 {
+		t.Errorf("post-migrate schema_version = %d, want 38", got)
+	}
+	if !indexExists(t, db, "idx_events_timestamp") {
+		t.Error("v38 migration did not create idx_events_timestamp index on v37 starting state")
+	}
+}
+
+// TestSchema_V38_Idempotent — thrum-7ojv. CREATE INDEX IF NOT EXISTS
+// must be idempotent across repeated migration calls. Mirrors the
+// Multi-Binary Worktree Footgun scenario where a co-resident
+// thrum-agents binary adds its own v38 = idx_events_timestamp
+// migration in the future; both binaries running their v38 block
+// against the same DB must not error.
+func TestSchema_V38_Idempotent(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "v38-idempotent.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+
+	// Sanity: fresh install already at v38 with the index in place.
+	if got := schemaVersion(t, db); got != 38 {
+		t.Fatalf("fresh schema_version = %d, want 38", got)
+	}
+	if !indexExists(t, db, "idx_events_timestamp") {
+		t.Fatal("fresh install missing idx_events_timestamp (createIndexes path)")
+	}
+
+	// Rewind to v37 + re-run migrate so the v38 block fires AGAIN against
+	// an index that already exists. CREATE INDEX IF NOT EXISTS should
+	// no-op, not error.
+	if _, err := db.Exec(`UPDATE schema_version SET version = 37`); err != nil {
+		t.Fatalf("rewind to v37: %v", err)
+	}
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v37→v38 with index already present: %v (CREATE INDEX IF NOT EXISTS must be idempotent)", err)
+	}
+	if got := schemaVersion(t, db); got != 38 {
+		t.Errorf("post-migrate schema_version = %d, want 38", got)
+	}
+	if !indexExists(t, db, "idx_events_timestamp") {
+		t.Error("idx_events_timestamp missing after idempotent re-run")
 	}
 }

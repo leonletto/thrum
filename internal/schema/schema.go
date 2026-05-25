@@ -20,19 +20,37 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-// CurrentVersion is 36 on release/v0.10.6 to mirror the thrum-agents +
-// feature/b-b1-impl (v0.11 substrate) DDL surface. The release line ships the
-// migrations as DEAD-END DDL only — none of the new tables/columns
-// (scheduler_*, reminders, agent_lifecycle_events, email_*, messages.
-// pending_route_resolution, memories/memory_scopes, agent_api_error_remediation)
-// have consumer code on v0.10.6. The goal is binary-supports-v36-schema-on-disk
-// so a v0.10.6 install can open AND co-reside on a DB touched by a v0.11
-// substrate binary. createTables/createIndexes carry full v36 parity so a
-// fresh DB created by a v0.10.6 binary stamps v36 with every table present (a
-// co-resident v0.11 binary then runs no migration and must not crash on a
-// missing table). v29 is a deliberate gap (reserved for MB-1.S6 on the
-// substrate plan); runMigrations handles it cleanly.
-const CurrentVersion = 36
+// CurrentVersion is 38 on release/v0.10.6, reached via the following ladder:
+//
+//   - v36: mirrors the thrum-agents + feature/b-b1-impl (v0.11 substrate) DDL
+//     surface as dead-end DDL — none of the v33–v36 tables/columns
+//     (scheduler_*, reminders, agent_lifecycle_events, email_*, memories,
+//     agent_api_error_remediation, messages.pending_route_resolution) have
+//     consumer code on v0.10.6. Goal: binary-supports-v36-schema-on-disk so a
+//     v0.10.6 install can co-reside on a DB touched by a v0.11 substrate
+//     binary. createTables/createIndexes carry full v36 parity so a fresh DB
+//     created by a v0.10.6 binary stamps every v36 table.
+//   - v37: RESERVED placeholder for thrum-agents Epic 0 memory-tables back-port
+//     (thrum-j7n5.1). thrum-agents already stamps v37 with the memory-tables
+//     content; the release line's v37 migration is intentionally a no-op so
+//     the version chains can align without the release line carrying the
+//     memory-tables DDL on its own ladder. The canonical CLAUDE.md
+//     dead-end-DDL back-port pattern would put the actual memory-tables DDL
+//     here; this placeholder shortcut keeps the rc chain small and lets v0.11
+//     ship-prep do the proper back-port if needed. See thrum-7ojv / thrum-roz1
+//     for the rationale trail.
+//   - v38: CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)
+//     (thrum-7ojv). Without this index the compactor's
+//     `DELETE FROM events WHERE timestamp < ?` runs O(N) full table scan —
+//     contributing to the kdyf/roz1 lock-hold ceiling. With the index the
+//     DELETE is O(log N) seek + sequential range. The post-roz1 60s compactor
+//     ceiling (sync/triggers.go:syncCompactorTimeout) can drop to 30s
+//     symmetric with the walker (s7is.7) once this index is in place across
+//     both branches.
+//
+// v29 is a deliberate gap (reserved for MB-1.S6 on the substrate plan);
+// runMigrations handles all skipped/no-op versions cleanly.
+const CurrentVersion = 38
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -599,10 +617,13 @@ func createIndexes(tx *sql.Tx) error {
 		"CREATE INDEX IF NOT EXISTS idx_group_members_group ON group_members(group_id)",
 		"CREATE INDEX IF NOT EXISTS idx_group_members_lookup ON group_members(member_type, member_value)",
 
-		// Events table indexes (for sync)
+		// Events table indexes (for sync + compactor retention DELETE)
 		"CREATE INDEX IF NOT EXISTS idx_events_sequence ON events(sequence)",
 		"CREATE INDEX IF NOT EXISTS idx_events_type ON events(type)",
 		"CREATE INDEX IF NOT EXISTS idx_events_origin ON events(origin_daemon)",
+		// thrum-7ojv: timestamp index added in v0.10.6 v38 migration; mirrored
+		// here so fresh-install DBs stamp it without needing the migration.
+		"CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)",
 
 		// Work contexts indexes
 		"CREATE INDEX IF NOT EXISTS idx_work_contexts_agent ON agent_work_contexts(agent_id)",
@@ -1686,6 +1707,57 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 	if startVersion < 36 && endVersion >= 36 {
 		if _, err := tx.Exec(createAgentAPIErrorRemediationTable); err != nil {
 			return fmt.Errorf("migration 35→36: %w", err)
+		}
+	}
+
+	// Migration 36→37 (thrum-7ojv): RESERVED placeholder for thrum-agents
+	// Epic 0 memory-tables back-port slot. Intentionally empty on the
+	// release line — the actual memory.* DDL lives on thrum-agents under
+	// thrum-j7n5.1 and only needs to back-port here if release-line
+	// consumer code starts using the memory tables (v0.11 substrate work,
+	// not v0.10.6 scope). The version slot exists so release-line and
+	// thrum-agents binaries that share a DB via the .thrum/redirect
+	// mechanism agree on what "v37" means structurally: thrum-agents has
+	// memory tables; release line has nothing here but the schema_version
+	// row says 37 so a co-resident thrum-agents binary doesn't try to
+	// re-run its own v37 migration on a release-line-only DB. See
+	// CurrentVersion doc comment for the full rationale.
+	// Intentional no-op placeholder: the version slot exists for
+	// cross-binary alignment with thrum-agents. The schema_version
+	// UPDATE at the end of runMigrations stamps endVersion in one
+	// shot regardless of which intermediate version blocks ran, so
+	// no explicit body is required here. The if-guard is kept for
+	// shape-symmetry with the surrounding migration blocks and to
+	// give a clear search hit for "v37" / "37→".
+	if startVersion < 37 && endVersion >= 37 { //nolint:staticcheck // SA9003: intentional empty body — thrum-7ojv placeholder
+	}
+
+	// Migration 37→38 (thrum-7ojv): add timestamp index to the events
+	// table so the compactor's
+	//   DELETE FROM events WHERE timestamp < ?
+	// (internal/sync/compact/compact.go:101-107) runs O(log N) seek +
+	// sequential range delete instead of O(N) full table scan.
+	// Idempotent (CREATE INDEX IF NOT EXISTS) so a co-resident
+	// thrum-agents binary that adds the same index in its own v38
+	// migration won't error.
+	//
+	// tableExists guard mirrors the v18→v22 ALTER guards: partial-schema
+	// test fixtures (those that start from very low versions like v17
+	// and don't run createTables) may not have the events table yet.
+	// Production always has it (events table is created in earlier
+	// migrations and in createTables); the guard is purely a test
+	// accommodation that keeps the production code path unchanged.
+	if startVersion < 38 && endVersion >= 38 {
+		hasEvents, hasErr := tableExists(tx, "events")
+		if hasErr != nil {
+			return fmt.Errorf("migration 37→38: check events table: %w", hasErr)
+		}
+		if hasEvents {
+			if _, err := tx.Exec(
+				`CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)`,
+			); err != nil {
+				return fmt.Errorf("migration 37→38: %w", err)
+			}
 		}
 	}
 

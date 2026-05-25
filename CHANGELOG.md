@@ -120,6 +120,29 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **Schema v38: `events.timestamp` index (thrum-7ojv)** —
+  `internal/sync/compact/compact.go`'s
+  `DELETE FROM events WHERE timestamp < ?` previously ran O(N) full
+  table scan because the `events` table had no `timestamp` index
+  (only `sequence`, `type`, `origin_daemon`). The unindexed DELETE was
+  the dominant compactor cost feeding the kdyf/roz1 lock-hold ceiling
+  on busy daemons. v38 adds
+  `CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)`
+  so the DELETE becomes O(log N) seek + sequential range. Once the
+  matching index lands on thrum-agents, the post-roz1 60s
+  `syncCompactorTimeout` ceiling can drop back to the walker's 30s
+  symmetric. `CurrentVersion` bumped 36 → 38 with v37 reserved as
+  an empty placeholder for thrum-agents' Epic 0 memory-tables
+  back-port slot (j7n5.1 already stamps v37 with the memory tables;
+  the release line's v37 is a no-op so cross-binary co-residence
+  via `.thrum/redirect` works — a DB stamped v37 by thrum-agents
+  migrates cleanly through release/v0.10.6's v37→v38 path without
+  re-running thrum-agents-specific DDL). `createTables` /
+  `createIndexes` mirror the new index for fresh-install parity. 3
+  new schema tests pin v36→v38 fresh upgrade, v37→v38 cross-binary
+  upgrade, and v38 idempotency. v18→v22 ALTER-guard pattern
+  (`tableExists`) reused so partial-schema test fixtures don't
+  trip on the new CREATE INDEX.
 - **`peercred.matchWorktree` stale-worktree log spam downgraded
   (thrum-g1ux)** — post-`thrum worktree teardown` the agent's
   `session_refs` row persists (teardown removes the worktree from
