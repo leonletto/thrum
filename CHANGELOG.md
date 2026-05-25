@@ -121,235 +121,209 @@ visibility into v0.10.6 authors until they upgrade.
 ### Fixed
 
 - **applySessionStart now `INSERT OR IGNORE` — peer-replicated
-  `agent.session.start` no longer aborts sync batches (thrum-9jcb.3)**
-  — third soak-mined finding from the same debug-log window that
-  surfaced thrum-10j0 and thrum-mhwt. Peer daemons replicate
-  `agent.session.start` events for sessions whose `session_id` may
-  already exist locally (e.g. session-resurrect cases where the same
-  logical session is announced by more than one daemon during sync
-  catch-up). The projector at
-  `internal/projection/projector.go`'s `applySessionStart` used a bare
-  `INSERT INTO sessions`, which hit the `sessions.session_id` UNIQUE
-  constraint on the second arrival. `sync_apply.go` bails on the first
-  projector error and returns the count-of-applied-so-far, so the
-  remainder of the batch was abandoned and the next `sync.notify`
-  cycle had to retry (eventually consistent via `HasEvent` dedup, but
-  noisy at INFO level — 9 occurrences observed in a 15-min debug-mode
-  soak window — and structurally risky if a legitimate later event in
-  the same batch happens to land alongside the duplicate). Fix is a
-  one-line `INSERT OR IGNORE` at the projector. The choice over
-  `ON CONFLICT(session_id) DO UPDATE` is deliberate: `started_at` is
-  immutable for that session, and `last_seen_at` is touched
-  independently by other apply paths — a late-arriving peer copy of
-  the start event could regress freshness if it overwrote a newer
-  local value. Audit of the sibling INSERT projector handlers
-  confirmed no other peer-replicable handler has the same bug:
-  `agents`, `groups`, `group_members`, `message_deliveries`,
-  `purge_metadata` already use `INSERT OR IGNORE` / `ON CONFLICT`,
-  and `agent_work_contexts` uses a delete-replace per-agent pattern;
+  `agent.session.start` no longer aborts sync batches (thrum-9jcb.3)** — third
+  soak-mined finding from the same debug-log window that surfaced thrum-10j0 and
+  thrum-mhwt. Peer daemons replicate `agent.session.start` events for sessions
+  whose `session_id` may already exist locally (e.g. session-resurrect cases
+  where the same logical session is announced by more than one daemon during
+  sync catch-up). The projector at `internal/projection/projector.go`'s
+  `applySessionStart` used a bare `INSERT INTO sessions`, which hit the
+  `sessions.session_id` UNIQUE constraint on the second arrival. `sync_apply.go`
+  bails on the first projector error and returns the count-of-applied-so-far, so
+  the remainder of the batch was abandoned and the next `sync.notify` cycle had
+  to retry (eventually consistent via `HasEvent` dedup, but noisy at INFO level
+  — 9 occurrences observed in a 15-min debug-mode soak window — and structurally
+  risky if a legitimate later event in the same batch happens to land alongside
+  the duplicate). Fix is a one-line `INSERT OR IGNORE` at the projector. The
+  choice over `ON CONFLICT(session_id) DO UPDATE` is deliberate: `started_at` is
+  immutable for that session, and `last_seen_at` is touched independently by
+  other apply paths — a late-arriving peer copy of the start event could regress
+  freshness if it overwrote a newer local value. Audit of the sibling INSERT
+  projector handlers confirmed no other peer-replicable handler has the same
+  bug: `agents`, `groups`, `group_members`, `message_deliveries`,
+  `purge_metadata` already use `INSERT OR IGNORE` / `ON CONFLICT`, and
+  `agent_work_contexts` uses a delete-replace per-agent pattern;
   `message.create` is safe by construction because `message_id` is
-  daemon-scoped. New regression `TestProjector_ApplySessionStart_
-  DuplicateIsNoOp` applies the same event twice through `Apply()` and
-  asserts no error plus exactly one row in `sessions`.
-- **Cap message body size at write — 1 MB default, configurable
-  (thrum-mhwt)** — preventative follow-up to thrum-10j0. The
-  scanner-buffer bump lets the compactor READ events.jsonl lines up
-  to 4 MB but does nothing to stop a future operator from WRITING
-  one. `message.HandleSend` now refuses a `body.content` larger than
-  the configured cap with a clear, copy-pasteable error: "message
+  daemon-scoped. New regression
+  `TestProjector_ApplySessionStart_ DuplicateIsNoOp` applies the same event
+  twice through `Apply()` and asserts no error plus exactly one row in
+  `sessions`.
+- **Cap message body size at write — 1 MB default, configurable (thrum-mhwt)** —
+  preventative follow-up to thrum-10j0. The scanner-buffer bump lets the
+  compactor READ events.jsonl lines up to 4 MB but does nothing to stop a future
+  operator from WRITING one. `message.HandleSend` now refuses a `body.content`
+  larger than the configured cap with a clear, copy-pasteable error: "message
   body too large: N bytes exceeds the daemon limit of M bytes
-  (daemon.max_message_body_bytes). Reduce the body size or raise the
-  config; for genuinely large payloads consider attachments instead
-  of inline content." New `daemon.max_message_body_bytes` config
-  field (default 1 MB via `DefaultMaxMessageBodyBytes`) plumbed
-  through `NewMessageHandlerWithDispatcher`. The 1 MB default sits
-  above the largest organic body observed in production (~167 KB
-  coordinator multi-page response) and below the events.jsonl scanner
-  ceiling (4 MB), so the thrum-10j0 read-side fix still covers any
-  value the cap accepts. 0 in the handler field disables the cap
-  (test path); negative is documented but not actively used. Tests:
-  TestHandleSend_MaxBodyBytes covers reject-over-limit, accept-at-
-  exact-limit, and no-cap-when-zero;
-  TestDaemonConfig_MaxMessageBodyBytesEffective covers the config
-  helper's zero/positive/negative paths.
-- **events.jsonl compactor wedged by oversized lines — scanner buffer
-  raised to 4 MB (thrum-10j0)** — `internal/jsonl/writer.go`'s four
-  scan sites (`Read`, `RemoveByField`, `RemoveBeforeTimestamp`,
-  `Reader.Stream`) all used `bufio.NewScanner` with no buffer
-  override. `bufio.Scanner`'s default `MaxScanTokenSize` is 64 KB; a
-  single events.jsonl line larger than that (production observed a
-  177 KB coordinator multi-page message body) returned
-  `bufio.Scanner: token too long` and killed the scan. For the
-  events.jsonl compactor that meant every sync-trigger pass aborted
-  before removing any retention-aged events, and events.jsonl grew
-  unbounded. New `newJSONLScanner` package-level helper sizes the
-  buffer to `maxScannerBufferSize = 4 MB` (mirrors the precedent at
-  `internal/sync/compact/compact.go`'s `compactJSONLByKey`) and every
-  scan site in the package uses it. New regression
-  `TestScannerHandlesLargeLines` writes a 200 KB-bodied event and
-  exercises all four call sites; pre-fix every sub-test would have
-  failed with token-too-long.
-- **`thrum worktree teardown` cascade-deletes the bound agent identity
-  by default (thrum-wk7d, part 3)** — **behavior change:**
-  `thrum worktree teardown <name>` previously removed the worktree's
-  identity files + the git worktree itself but LEFT the agent record
-  in the daemon's `agents` table. Re-creating a worktree of the same
-  name (or registering the same agent in a different worktree) would
-  then hit `agent.register`'s "already registered in a different
-  worktree" rejection — the wedge that bit wave-4 dispatch earlier
-  today and that the part-1 error-message update teaches operators
-  to recover from. Teardown now calls `agent.delete` via the daemon
-  RPC for each identity it removes, so a clean teardown leaves no
-  stranded agent state. Add `--keep-agent` to preserve the prior
-  behavior when an operator wants to retire the worktree but keep
-  the agent record around (e.g. archival, future re-attachment).
-  Both branches surface their action in stdout/stderr so the operator
-  knows what landed. The daemon-unreachable case warns once with the
-  recovery command rather than failing the teardown — teardown
-  should never wedge because the daemon happens to be down.
+  (daemon.max_message_body_bytes). Reduce the body size or raise the config; for
+  genuinely large payloads consider attachments instead of inline content." New
+  `daemon.max_message_body_bytes` config field (default 1 MB via
+  `DefaultMaxMessageBodyBytes`) plumbed through
+  `NewMessageHandlerWithDispatcher`. The 1 MB default sits above the largest
+  organic body observed in production (~167 KB coordinator multi-page response)
+  and below the events.jsonl scanner ceiling (4 MB), so the thrum-10j0 read-side
+  fix still covers any value the cap accepts. 0 in the handler field disables
+  the cap (test path); negative is documented but not actively used. Tests:
+  TestHandleSend_MaxBodyBytes covers reject-over-limit, accept-at- exact-limit,
+  and no-cap-when-zero; TestDaemonConfig_MaxMessageBodyBytesEffective covers the
+  config helper's zero/positive/negative paths.
+- **events.jsonl compactor wedged by oversized lines — scanner buffer raised to
+  4 MB (thrum-10j0)** — `internal/jsonl/writer.go`'s four scan sites (`Read`,
+  `RemoveByField`, `RemoveBeforeTimestamp`, `Reader.Stream`) all used
+  `bufio.NewScanner` with no buffer override. `bufio.Scanner`'s default
+  `MaxScanTokenSize` is 64 KB; a single events.jsonl line larger than that
+  (production observed a 177 KB coordinator multi-page message body) returned
+  `bufio.Scanner: token too long` and killed the scan. For the events.jsonl
+  compactor that meant every sync-trigger pass aborted before removing any
+  retention-aged events, and events.jsonl grew unbounded. New `newJSONLScanner`
+  package-level helper sizes the buffer to `maxScannerBufferSize = 4 MB`
+  (mirrors the precedent at `internal/sync/compact/compact.go`'s
+  `compactJSONLByKey`) and every scan site in the package uses it. New
+  regression `TestScannerHandlesLargeLines` writes a 200 KB-bodied event and
+  exercises all four call sites; pre-fix every sub-test would have failed with
+  token-too-long.
+- **`thrum worktree teardown` cascade-deletes the bound agent identity by
+  default (thrum-wk7d, part 3)** — **behavior change:**
+  `thrum worktree teardown <name>` previously removed the worktree's identity
+  files + the git worktree itself but LEFT the agent record in the daemon's
+  `agents` table. Re-creating a worktree of the same name (or registering the
+  same agent in a different worktree) would then hit `agent.register`'s "already
+  registered in a different worktree" rejection — the wedge that bit wave-4
+  dispatch earlier today and that the part-1 error-message update teaches
+  operators to recover from. Teardown now calls `agent.delete` via the daemon
+  RPC for each identity it removes, so a clean teardown leaves no stranded agent
+  state. Add `--keep-agent` to preserve the prior behavior when an operator
+  wants to retire the worktree but keep the agent record around (e.g. archival,
+  future re-attachment). Both branches surface their action in stdout/stderr so
+  the operator knows what landed. The daemon-unreachable case warns once with
+  the recovery command rather than failing the teardown — teardown should never
+  wedge because the daemon happens to be down.
 - **Quieter peercred no-match log path (thrum-wk7d, part 2)** —
-  `peercred.Resolve`'s step=match no-registered-worktree log was
-  WARN and fired on every anonymous-allowed RPC (`agent.register`,
-  `session.start`, `session.setIntent`, every read-only RPC on the
-  anonymous allowlist) BY DESIGN — those calls happen before the
-  daemon has a binding for the caller. The WARN noise read as an
-  error in operator-facing logs but was routine operation.
-  Downgraded the resolver-side no-match log to DEBUG; added a single
-  WARN at the actual rejection site in `server.go` (when an
-  anonymous caller hits a method NOT on the anonymous allowlist) so
-  the daemon log surfaces real failures clearly while staying silent
-  during normal bootstrap.
+  `peercred.Resolve`'s step=match no-registered-worktree log was WARN and fired
+  on every anonymous-allowed RPC (`agent.register`, `session.start`,
+  `session.setIntent`, every read-only RPC on the anonymous allowlist) BY DESIGN
+  — those calls happen before the daemon has a binding for the caller. The WARN
+  noise read as an error in operator-facing logs but was routine operation.
+  Downgraded the resolver-side no-match log to DEBUG; added a single WARN at the
+  actual rejection site in `server.go` (when an anonymous caller hits a method
+  NOT on the anonymous allowlist) so the daemon log surfaces real failures
+  clearly while staying silent during normal bootstrap.
 - **`agent.register` error message names `thrum agent delete` as the
-  stranded-identity resolution (thrum-wk7d, part 1)** — when
-  `HandleRegister` refuses a registration because the agent_id is
-  already bound to a different worktree, the error suggested three
-  resolution paths (pick a unique `--name`, `thrum prime` from the
-  registered worktree, or `thrum worktree teardown` if abandoning).
-  None addressed the stranded-identity scenario that wedged wave-4
-  dispatch earlier today: an agent identity that survives in the DB
-  after its original worktree was torn down (teardown does not
-  cascade-delete the agent identity). The error message now names
-  `thrum agent delete <name> --force` as the fourth path so operators
-  no longer have to grep source to discover the cleanup command.
-  `--force` covers the common stranded-identity case where the agent
-  still has artifacts the CLI refuses to drop silently; on the rare
-  case where `--force` is unnecessary it is a no-op.
-- **Move dead-agent self-heal off the `team.list` hot path
-  (thrum-1nkt.6)** — `team.list` used to fire `agent.session.end`
-  events inline for active agents with dead PIDs, coupling a read RPC
-  to write workload (plus walker+compactor fan-out per call). New
-  `DeadAgentSweeper` (`internal/daemon/dead_agent_sweeper.go`) runs as
-  a background goroutine on a 10-second ticker, detects dead-active
-  agents with the same logic the old Phase 2 used (PID liveness +
-  identity-file PID cross-check from thrum-pxz.14 + local-origin
-  guard), and emits `session.end` once per dead session. `team.list`
-  Phase 2 collapses to the in-memory mark-offline rewrite only — no
-  more inline writes, no more per-call walker, no more dependency on
-  the thrum-1nkt.3 single-flight gate. Operator UX is unchanged: the
-  caller still sees `status=offline` in the response immediately
-  (Phase 1's dead-agent collection runs unchanged, then Phase 2
-  rewrites the in-memory member list); the persistent
-  `agent.session.end` write lands within at most one sweeper tick. New
-  tests cover the basic emit, idempotent re-sweep, file-PID skip,
+  stranded-identity resolution (thrum-wk7d, part 1)** — when `HandleRegister`
+  refuses a registration because the agent_id is already bound to a different
+  worktree, the error suggested three resolution paths (pick a unique `--name`,
+  `thrum prime` from the registered worktree, or `thrum worktree teardown` if
+  abandoning). None addressed the stranded-identity scenario that wedged wave-4
+  dispatch earlier today: an agent identity that survives in the DB after its
+  original worktree was torn down (teardown does not cascade-delete the agent
+  identity). The error message now names `thrum agent delete <name> --force` as
+  the fourth path so operators no longer have to grep source to discover the
+  cleanup command. `--force` covers the common stranded-identity case where the
+  agent still has artifacts the CLI refuses to drop silently; on the rare case
+  where `--force` is unnecessary it is a no-op.
+- **Move dead-agent self-heal off the `team.list` hot path (thrum-1nkt.6)** —
+  `team.list` used to fire `agent.session.end` events inline for active agents
+  with dead PIDs, coupling a read RPC to write workload (plus walker+compactor
+  fan-out per call). New `DeadAgentSweeper`
+  (`internal/daemon/dead_agent_sweeper.go`) runs as a background goroutine on a
+  10-second ticker, detects dead-active agents with the same logic the old Phase
+  2 used (PID liveness + identity-file PID cross-check from thrum-pxz.14 +
+  local-origin guard), and emits `session.end` once per dead session.
+  `team.list` Phase 2 collapses to the in-memory mark-offline rewrite only — no
+  more inline writes, no more per-call walker, no more dependency on the
+  thrum-1nkt.3 single-flight gate. Operator UX is unchanged: the caller still
+  sees `status=offline` in the response immediately (Phase 1's dead-agent
+  collection runs unchanged, then Phase 2 rewrites the in-memory member list);
+  the persistent `agent.session.end` write lands within at most one sweeper
+  tick. New tests cover the basic emit, idempotent re-sweep, file-PID skip,
   remote-origin skip, and the ticker lifecycle.
   `TestTeamList_SingleFlightDeadAgentSelfHeal` was renamed to
-  `TestTeamList_DoesNotEmitSessionEndInline` and its event-count
-  assertion flipped from "exactly 1" (single-flight invariant) to
-  "exactly 0" (pure-read invariant).
+  `TestTeamList_DoesNotEmitSessionEndInline` and its event-count assertion
+  flipped from "exactly 1" (single-flight invariant) to "exactly 0" (pure-read
+  invariant).
 - **Async-wrap `postCommit` at structural-event call sites (thrum-1nkt.5)** —
   thrum-bsn7 made `postCommit` caller-driven (caller releases `state.Lock`
-  before invoking it) so other goroutines no longer block at
-  `state.Lock()` while one holds it through walker+compactor. But the
-  caller itself still ran `postCommit()` synchronously, so its own RPC
-  did not return until walker+compactor completed — up to a 90s
-  worst-case ceiling under edge conditions, and a measurable wall-clock
-  inflation on every register/send/group operation in the common case.
-  Concretely this surfaced as `tmux.create.quickstart-timeout` failures
-  when wave-4 dispatch tried to spawn fresh implementers: the inline
-  `agent.register` RPC blocked on its own postCommit past the 5-second
-  `waitForIdentityFile` budget. New `state.GoPostCommit(fn)` helper
-  wraps the invocation in a goroutine while registering it on a
-  package-level `sync.WaitGroup`, and `state.Close()` now drains in-
-  flight goroutines (up to a 90s budget matching the walker+compactor
-  worst-case ceiling) before tearing down the JSONL writer and DB. All
-  21 structural-event call sites switch from raw inline invocation to
-  `<receiver>.state.GoPostCommit(postCommit)`: `agent.go` (4),
-  `message.go` (4), `group.go` (4), `session.go` (4), `user.go`,
-  `team.go`, `queue_rpc.go`, `purge.go`, and `permission/send.go`.
-  Each handler now returns as soon as `WriteEvent` commits to the
-  events table; walker+compactor fan-out runs async, serializing
-  harmlessly at the already-existing `walker.mu`. The inbound peer-
-  event path in `sync_apply.go` stays synchronous (no caller is blocked
-  there). New regression tests cover (a) the handler-returns-before-
-  trigger invariant via a slow sync-trigger stub
-  (`TestHandleRegister_PostCommitFireAndForget`), (b) the drain
-  semantics (`TestGoPostCommit_DrainsOnWait`,
-  `TestStateClose_DrainsInflightPostCommits`), and (c) the nil-fn fast
-  path (`TestGoPostCommit_NilIsNoOp`). The existing
-  `TestHandleRegister_BurstRegister_NoLockContention` was adapted to
-  wait for now-async trigger goroutines before asserting trigger
-  count.
+  before invoking it) so other goroutines no longer block at `state.Lock()`
+  while one holds it through walker+compactor. But the caller itself still ran
+  `postCommit()` synchronously, so its own RPC did not return until
+  walker+compactor completed — up to a 90s worst-case ceiling under edge
+  conditions, and a measurable wall-clock inflation on every register/send/group
+  operation in the common case. Concretely this surfaced as
+  `tmux.create.quickstart-timeout` failures when wave-4 dispatch tried to spawn
+  fresh implementers: the inline `agent.register` RPC blocked on its own
+  postCommit past the 5-second `waitForIdentityFile` budget. New
+  `state.GoPostCommit(fn)` helper wraps the invocation in a goroutine while
+  registering it on a package-level `sync.WaitGroup`, and `state.Close()` now
+  drains in- flight goroutines (up to a 90s budget matching the walker+compactor
+  worst-case ceiling) before tearing down the JSONL writer and DB. All 21
+  structural-event call sites switch from raw inline invocation to
+  `<receiver>.state.GoPostCommit(postCommit)`: `agent.go` (4), `message.go` (4),
+  `group.go` (4), `session.go` (4), `user.go`, `team.go`, `queue_rpc.go`,
+  `purge.go`, and `permission/send.go`. Each handler now returns as soon as
+  `WriteEvent` commits to the events table; walker+compactor fan-out runs async,
+  serializing harmlessly at the already-existing `walker.mu`. The inbound peer-
+  event path in `sync_apply.go` stays synchronous (no caller is blocked there).
+  New regression tests cover (a) the handler-returns-before- trigger invariant
+  via a slow sync-trigger stub (`TestHandleRegister_PostCommitFireAndForget`),
+  (b) the drain semantics (`TestGoPostCommit_DrainsOnWait`,
+  `TestStateClose_DrainsInflightPostCommits`), and (c) the nil-fn fast path
+  (`TestGoPostCommit_NilIsNoOp`). The existing
+  `TestHandleRegister_BurstRegister_NoLockContention` was adapted to wait for
+  now-async trigger goroutines before asserting trigger count.
 - **`thrum send` no longer fires a `team.list` RPC per send (thrum-1nkt.4)** —
-  every `thrum send` invocation ran a `team.list` RPC through the
-  CLI hint pipeline (`cli.Collect` → `sendHints` →
-  `LiveStateAccessor.AgentByName`) to answer a single-name question for
-  the optional `send.recipient-stale` hint. On the daemon this fanned out
-  to N per-agent mention-count queries, a worktree-wide identity-file
-  walk, and Phase 2 dead-agent self-heal (the same amplifier addressed
-  in thrum-1nkt.3 — under burst, eight concurrent sends meant eight
-  concurrent `team.list` calls all racing through that path). New
+  every `thrum send` invocation ran a `team.list` RPC through the CLI hint
+  pipeline (`cli.Collect` → `sendHints` → `LiveStateAccessor.AgentByName`) to
+  answer a single-name question for the optional `send.recipient-stale` hint. On
+  the daemon this fanned out to N per-agent mention-count queries, a
+  worktree-wide identity-file walk, and Phase 2 dead-agent self-heal (the same
+  amplifier addressed in thrum-1nkt.3 — under burst, eight concurrent sends
+  meant eight concurrent `team.list` calls all racing through that path). New
   `agent.lookup` RPC returns a single `TeamMember` via one SQL `SELECT`
-  + one identity-file read, with no per-agent mention fan-out and no
-  Phase 2 self-heal. `AgentByName` now calls `agent.lookup`. Together
-  with thrum-1nkt.1 (pool-size raise) and thrum-1nkt.3 (single-flight
-  self-heal), the send hot path is no longer a `team.list` amplifier.
+  - one identity-file read, with no per-agent mention fan-out and no Phase 2
+    self-heal. `AgentByName` now calls `agent.lookup`. Together with
+    thrum-1nkt.1 (pool-size raise) and thrum-1nkt.3 (single-flight self-heal),
+    the send hot path is no longer a `team.list` amplifier.
 - **Redundant `session.end` writes from concurrent `team.list` callers
-  (thrum-1nkt.3)** — `team.list` runs in three phases: Phase 1 reads
-  active members under RLock and collects dead-but-still-active agents;
-  Phase 2 (no lock) emits `session.end` for each; Phase 3 rewrites the
-  in-memory response so the caller sees the self-healed status. Under
-  N-concurrent `team.list` (the bpq5 8-send burst triggers 8 such calls
-  through the hint pipeline) every goroutine saw the same dead agents
-  in its Phase 1 snapshot and independently entered Phase 2, writing
-  N redundant `session.end` events per dead session — each one a
-  `WriteEvent` + JSONL append + projection apply. The fix adds a
-  `sync.Map` on `TeamHandler` keyed by `session_id`; Phase 2
-  `LoadOrStore` gates the emit, the first caller wins and losers
-  short-circuit. Phase 3 still runs for every caller, so short-circuited
-  callers still observe the corrected `status=offline` in their
-  response. New regression test
-  `TestTeamList_SingleFlightDeadAgentSelfHeal` fires 8 concurrent calls
-  against a dead-PID fixture and asserts exactly one `session.end` event
-  is written.
+  (thrum-1nkt.3)** — `team.list` runs in three phases: Phase 1 reads active
+  members under RLock and collects dead-but-still-active agents; Phase 2 (no
+  lock) emits `session.end` for each; Phase 3 rewrites the in-memory response so
+  the caller sees the self-healed status. Under N-concurrent `team.list` (the
+  bpq5 8-send burst triggers 8 such calls through the hint pipeline) every
+  goroutine saw the same dead agents in its Phase 1 snapshot and independently
+  entered Phase 2, writing N redundant `session.end` events per dead session —
+  each one a `WriteEvent` + JSONL append + projection apply. The fix adds a
+  `sync.Map` on `TeamHandler` keyed by `session_id`; Phase 2 `LoadOrStore` gates
+  the emit, the first caller wins and losers short-circuit. Phase 3 still runs
+  for every caller, so short-circuited callers still observe the corrected
+  `status=offline` in their response. New regression test
+  `TestTeamList_SingleFlightDeadAgentSelfHeal` fires 8 concurrent calls against
+  a dead-PID fixture and asserts exactly one `session.end` event is written.
 - **Coalesce inbound peer-event walker — one fire per batch (thrum-1nkt.2)** —
   `SyncApplier.ApplyRemoteEvents` previously invoked `postCommit` once per
-  applied event in its loop, firing a fresh walker+compactor pass for
-  every inbound structural peer event. The walker is incremental via
-  `lastWalkAt` so the subsequent walks were near-noops in their useful
-  work, but each still paid the `walker.mu` acquire + compactor scan
-  (~40ms each at bpq5 measured rates). At a burst rate of 369
-  `sync.notify` per minute with `event_count=1`, that was 369 walks per
-  minute when 1 per batch sufficed. Now `applyEvent` returns the
-  `postCommit` closure instead of invoking it inline; the loop
-  accumulates the last non-nil closure and fires it once after the
-  loop (or before an early error return, so partial-batch events still
-  propagate). The trigger captures the batch-scoped ctx, so any non-nil
-  closure from the loop is equivalent — the "last" choice is arbitrary.
-  New regression `TestSyncApplier_ApplyRemoteEvents_CoalescesPostCommit`
-  asserts a 5-event structural batch fires the trigger exactly once;
-  `TestSyncApplier_ApplyRemoteEvents_NoTriggerForEmptyOrNonStructural`
-  guards the zero-fire path for empty and non-structural batches.
+  applied event in its loop, firing a fresh walker+compactor pass for every
+  inbound structural peer event. The walker is incremental via `lastWalkAt` so
+  the subsequent walks were near-noops in their useful work, but each still paid
+  the `walker.mu` acquire + compactor scan (~40ms each at bpq5 measured rates).
+  At a burst rate of 369 `sync.notify` per minute with `event_count=1`, that was
+  369 walks per minute when 1 per batch sufficed. Now `applyEvent` returns the
+  `postCommit` closure instead of invoking it inline; the loop accumulates the
+  last non-nil closure and fires it once after the loop (or before an early
+  error return, so partial-batch events still propagate). The trigger captures
+  the batch-scoped ctx, so any non-nil closure from the loop is equivalent — the
+  "last" choice is arbitrary. New regression
+  `TestSyncApplier_ApplyRemoteEvents_CoalescesPostCommit` asserts a 5-event
+  structural batch fires the trigger exactly once;
+  `TestSyncApplier_ApplyRemoteEvents_NoTriggerForEmptyOrNonStructural` guards
+  the zero-fire path for empty and non-structural batches.
 - **Sync-notify goroutine pool saturation under multi-peer burst
   (thrum-1nkt.1)** — `internal/daemon/rpc/sync_notify.go`'s bounded semaphore
-  capped concurrent peer-sync goroutines at 10. Under 8-concurrent
-  `thrum send` on a busy 2-peer cluster, 257 of 327 inbound `sync.notify`
-  RPCs in an 8-second window were dropped at the gate — every drop is a
-  missed pull-sync opportunity that delays event propagation across the
-  cluster. The ceiling now lives at the named constant
-  `syncNotifyPoolSize = 100`. Safe to raise: peers do NOT retry dropped
-  notifications (`BroadcastNotify` in `sync_manager.go` is fire-and-forget),
-  so the higher ceiling does not amplify peer load. First fix in the
-  thrum-1nkt epic; remaining children address the team.list dead-agent
+  capped concurrent peer-sync goroutines at 10. Under 8-concurrent `thrum send`
+  on a busy 2-peer cluster, 257 of 327 inbound `sync.notify` RPCs in an 8-second
+  window were dropped at the gate — every drop is a missed pull-sync opportunity
+  that delays event propagation across the cluster. The ceiling now lives at the
+  named constant `syncNotifyPoolSize = 100`. Safe to raise: peers do NOT retry
+  dropped notifications (`BroadcastNotify` in `sync_manager.go` is
+  fire-and-forget), so the higher ceiling does not amplify peer load. First fix
+  in the thrum-1nkt epic; remaining children address the team.list dead-agent
   self-heal race and the defense-in-depth postCommit decoupling sites.
 - **Daemon lock-contention under register/message burst (thrum-bsn7)** — the
   structural-event sync trigger (snapshot walker, 30s ceiling; compactor, 60s
