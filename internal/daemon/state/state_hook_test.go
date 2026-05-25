@@ -51,7 +51,7 @@ func TestEventWriteHook_ReceivesPayload(t *testing.T) {
 		Role:      "researcher",
 		Module:    "test",
 	}
-	if err := st.WriteEvent(context.Background(), evt); err != nil {
+	if _, err := st.WriteEvent(context.Background(), evt); err != nil {
 		t.Fatalf("WriteEvent: %v", err)
 	}
 
@@ -99,7 +99,7 @@ func TestMessageCreateHook_FiresOnRPC(t *testing.T) {
 			Content: "hello",
 		},
 	}
-	if err := st.WriteEvent(context.Background(), evt); err != nil {
+	if _, err := st.WriteEvent(context.Background(), evt); err != nil {
 		t.Fatalf("WriteEvent: %v", err)
 	}
 
@@ -122,7 +122,7 @@ func TestEventWriteHook_NilHookIsANoOp(t *testing.T) {
 		Role:      "r",
 		Module:    "m",
 	}
-	if err := st.WriteEvent(context.Background(), evt); err != nil {
+	if _, err := st.WriteEvent(context.Background(), evt); err != nil {
 		t.Fatalf("WriteEvent with nil hook: %v", err)
 	}
 }

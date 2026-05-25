@@ -336,6 +336,7 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		// on every pre-existing agent whose DB PID predates the refresh
 		// feature (thrum-pxz.14 Fix A).
 		var resp *RegisterResponse
+		var postCommit func()
 		var regErr error
 		// thrum-ufv5.2: Force is a distinct trigger from ReRegister. --force on
 		// an existing agent must refresh the agents projection (role, module,
@@ -345,7 +346,7 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		// diverged (see SC-04 repro in the linked bug).
 		switch {
 		case req.AgentPID > 0 && existingAgent.AgentPID != req.AgentPID:
-			resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
+			resp, postCommit, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
 		case req.ReRegister, req.Force:
 			// ReRegister and Force are treated identically — both paths
 			// invoke registerAgent, which emits agent.register and lets
@@ -353,7 +354,7 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 			// quickstart-conflict-retry signal; Force is the user's
 			// explicit --force flag. Merged into one case because there's
 			// no state change that would differentiate them downstream.
-			resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
+			resp, postCommit, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
 		default:
 			// Same agent, same PID (or no PID provided) — no-op return.
 			resp = &RegisterResponse{
@@ -380,6 +381,17 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		// a session was actually resumed).
 		h.state.Unlock()
 		stateLocked = false
+
+		// thrum-bsn7: invoke the deferred agent.register sync trigger
+		// AFTER releasing state.Lock(). The walker (30s ceiling) +
+		// compactor (60s ceiling) inside SyncOnWrite would otherwise
+		// starve every concurrent HandleRegister / message.create / etc
+		// blocked on the same lock — that was the kdyf failure class
+		// surfacing on every under-lock SELECT, not just
+		// ensureActiveSession's "check active session" path.
+		if postCommit != nil {
+			postCommit()
+		}
 
 		resumedID, resumeErr := h.ensureActiveSession(ctx, agentID, req.AgentPID)
 		if resumeErr != nil {
@@ -418,11 +430,20 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 	}
 
 	// Fresh agent — no existing row for this agent_id.
-	resp, err := h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered", req.AgentPID)
-	if err == nil {
-		h.enforceWorktreeIdentity(ctx, agentIdentityName(req.Name, agentID))
+	resp, postCommit, err := h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered", req.AgentPID)
+	if err != nil {
+		return resp, err
 	}
-	return resp, err
+	// thrum-bsn7: release state.Lock() BEFORE invoking the agent.register
+	// sync trigger. Walker+compactor under the lock starves concurrent
+	// HandleRegister/message.create on the same lock.
+	h.state.Unlock()
+	stateLocked = false
+	if postCommit != nil {
+		postCommit()
+	}
+	h.enforceWorktreeIdentity(ctx, agentIdentityName(req.Name, agentID))
+	return resp, nil
 }
 
 // agentIdentityName returns the string used as the per-worktree identity
@@ -736,8 +757,19 @@ func resolveHostname() string {
 	return strings.TrimSuffix(h, ".local")
 }
 
-// registerAgent writes an agent.register event and returns the response.
-func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, module, display, worktree, status string, agentPID int) (*RegisterResponse, error) {
+// registerAgent writes an agent.register event and returns the response
+// plus a deferred sync trigger (thrum-bsn7).
+//
+// CONTRACT (thrum-bsn7): callers MUST capture the returned postCommit
+// closure and invoke it AFTER releasing h.state.Lock() — the agent.register
+// event is on the structural-event whitelist, so postCommit will fire the
+// snapshot walker (30s ceiling) + compactor (60s ceiling). Invoking
+// postCommit while the lock is held would starve every concurrent
+// HandleRegister / message.create / group.* RPC waiting on the same lock
+// (kdyf failure class extended to all SELECTs inside HandleRegister, not
+// just ensureActiveSession). postCommit is nil if no sync trigger is wired
+// (e.g. test states that omit it).
+func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, module, display, worktree, status string, agentPID int) (*RegisterResponse, func(), error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	// Create agent.register event
@@ -755,9 +787,11 @@ func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, m
 		AgentPID:  agentPID,
 	}
 
-	// Write event to JSONL and SQLite
-	if err := h.state.WriteEvent(ctx, event); err != nil {
-		return nil, fmt.Errorf("write agent.register event: %w", err)
+	// Write event to JSONL and SQLite; capture the deferred sync trigger
+	// for the caller (HandleRegister) to fire post-Unlock.
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	if err != nil {
+		return nil, nil, fmt.Errorf("write agent.register event: %w", err)
 	}
 
 	// Auto role group creation removed — role-based filtering uses
@@ -766,7 +800,7 @@ func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, m
 	return &RegisterResponse{
 		AgentID: agentID,
 		Status:  status,
-	}, nil
+	}, postCommit, nil
 }
 
 // ensureActiveSession checks whether the agent has a row in sessions with
@@ -832,8 +866,16 @@ func (h *AgentHandler) ensureActiveSession(ctx context.Context, agentID string, 
 	// contractually NOT holding it), re-SELECT under the lock to catch
 	// concurrent resurrect races (another HandleRegister fired between
 	// our step-1 SELECT and our Lock acquisition), then write the event.
+	// thrum-bsn7 tracked-unlock: release state.Lock() BEFORE invoking
+	// the (always-nil here, since session.start is non-structural)
+	// postCommit so the contract is uniform across handlers.
 	h.state.Lock()
-	defer h.state.Unlock()
+	stateLocked := true
+	defer func() {
+		if stateLocked {
+			h.state.Unlock()
+		}
+	}()
 
 	// Re-SELECT under lock with fresh ctx (same rationale as step 1).
 	reSelectCtx, reSelectCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -873,8 +915,14 @@ func (h *AgentHandler) ensureActiveSession(ctx context.Context, agentID string, 
 	// misleading "check active session" one. The common-path SELECT
 	// fix above is the main kdyf win; the rare-path write hardening
 	// is bsn7 follow-up territory.
-	if err := h.state.WriteEvent(ctx, event); err != nil {
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	h.state.Unlock()
+	stateLocked = false
+	if err != nil {
 		return "", fmt.Errorf("write session.start event: %w", err)
+	}
+	if postCommit != nil {
+		postCommit()
 	}
 	return sessionID, nil
 }
@@ -1326,12 +1374,16 @@ func (h *AgentHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 		Method:    "manual",
 	}
 
-	// Write event to events.jsonl
-	if err := h.state.WriteEvent(ctx, event); err != nil {
-		h.state.Unlock()
+	// Write event to events.jsonl. agent.cleanup is non-structural;
+	// postCommit always nil. thrum-bsn7 signature uniform.
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	h.state.Unlock()
+	if err != nil {
 		return nil, fmt.Errorf("write agent.cleanup event: %w", err)
 	}
-	h.state.Unlock()
+	if postCommit != nil {
+		postCommit()
+	}
 
 	return &DeleteAgentResponse{
 		AgentID: agent.AgentID,

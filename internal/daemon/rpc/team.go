@@ -549,17 +549,22 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 // it. Duplicate emissions from concurrent callers are absorbed as a
 // no-op write (same session_id, same end_reason).
 func (h *TeamHandler) emitSessionEndForDeadAgent(ctx context.Context, sessionID string) error {
-	h.state.Lock()
-	defer h.state.Unlock()
-
 	event := types.AgentSessionEndEvent{
 		Type:      "agent.session.end",
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 		SessionID: sessionID,
 		Reason:    "dead_pid",
 	}
-	if err := h.state.WriteEvent(ctx, event); err != nil {
+	// thrum-bsn7: release state.Lock() before postCommit. session.end is
+	// non-structural so postCommit is nil; pattern uniform for clarity.
+	h.state.Lock()
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	h.state.Unlock()
+	if err != nil {
 		return fmt.Errorf("write session.end event: %w", err)
+	}
+	if postCommit != nil {
+		postCommit()
 	}
 	return nil
 }

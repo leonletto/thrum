@@ -238,8 +238,13 @@ func (h *PurgeHandler) execute(ctx context.Context, before string, cutoff time.T
 		Timestamp: now,
 		Cutoff:    before,
 	}
-	if err := h.state.WriteEvent(ctx, purgeEvent); err != nil {
+	// purge.executed is non-structural; postCommit always nil. thrum-bsn7.
+	postCommit, err := h.state.WriteEvent(ctx, purgeEvent)
+	if err != nil {
 		return nil, fmt.Errorf("write purge.executed event: %w", err)
+	}
+	if postCommit != nil {
+		postCommit()
 	}
 
 	return resp, nil

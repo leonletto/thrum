@@ -35,7 +35,9 @@ import (
 // provides.
 //
 // IMPORTANT: the state.WriteEvent call MUST run under state.Lock().
-// SendSystemMessage establishes this pattern and we copy it.
+// SendSystemMessage establishes this pattern and we copy it. thrum-bsn7:
+// release state.Lock() before invoking the structural-event postCommit
+// so walker+compactor don't starve concurrent message.create handlers.
 func (p *Permission) SendSupervisorMessage(ctx context.Context, to, body, threadID string) (string, error) {
 	if p.state == nil {
 		return "", fmt.Errorf("permission.SendSupervisorMessage: nil state")
@@ -81,9 +83,13 @@ func (p *Permission) SendSupervisorMessage(ctx context.Context, to, body, thread
 	}
 
 	p.state.Lock()
-	defer p.state.Unlock()
-	if err := p.state.WriteEvent(ctx, event); err != nil {
+	postCommit, err := p.state.WriteEvent(ctx, event)
+	p.state.Unlock()
+	if err != nil {
 		return "", fmt.Errorf("write supervisor message: %w", err)
+	}
+	if postCommit != nil {
+		postCommit()
 	}
 	return msgID, nil
 }

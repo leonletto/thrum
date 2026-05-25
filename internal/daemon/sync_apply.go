@@ -146,8 +146,22 @@ func (a *SyncApplier) applyEvent(ctx context.Context, evt eventlog.Event) error 
 	eventMap["timestamp"] = evt.Timestamp
 	eventMap["origin_daemon"] = evt.OriginDaemon
 
-	// Write via State.WriteEvent which handles JSONL routing, sequence, and projection
-	return a.state.WriteEvent(ctx, eventMap)
+	// Write via State.WriteEvent which handles JSONL routing, sequence, and projection.
+	// thrum-bsn7 audit: sync_apply does NOT hold state.Lock() during
+	// WriteEvent (ApplyRemoteEvents is lock-free at this layer). Inbound
+	// structural peer events DO fire local walker+compactor via the
+	// returned postCommit closure — this is intentional so peer events
+	// get materialized into our local state files for forwarding to
+	// other peers. The pre-bsn7 inline-trigger behavior is preserved
+	// exactly: invoke postCommit() immediately, lock-free.
+	postCommit, err := a.state.WriteEvent(ctx, eventMap)
+	if err != nil {
+		return err
+	}
+	if postCommit != nil {
+		postCommit()
+	}
+	return nil
 }
 
 // DB returns the database for direct queries (used by tests).

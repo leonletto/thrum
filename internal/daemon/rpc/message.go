@@ -665,14 +665,19 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 		Disclosed:  disclosed,
 	}
 
-	// Write event to JSONL and SQLite
-	// Lock only for WriteEvent
+	// Write event to JSONL and SQLite. Lock only for WriteEvent;
+	// thrum-bsn7: release state.Lock() BEFORE invoking postCommit so the
+	// structural-event walker+compactor (up to 90s wall-clock) cannot
+	// starve concurrent message.create / agent.register etc.
 	h.state.Lock()
-	if err := h.state.WriteEvent(ctx, event); err != nil {
-		h.state.Unlock()
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	h.state.Unlock()
+	if err != nil {
 		return nil, fmt.Errorf("write message.create event: %w", err)
 	}
-	h.state.Unlock()
+	if postCommit != nil {
+		postCommit()
+	}
 
 	// No lock for dispatch and emit (WebSocket I/O)
 	preview := req.Content
@@ -1521,12 +1526,17 @@ func (h *MessageHandler) HandleDelete(ctx context.Context, params json.RawMessag
 		Reason:    req.Reason,
 	}
 
-	// Write event to JSONL and SQLite
+	// Write event to JSONL and SQLite.
+	// thrum-bsn7: release state.Lock() before invoking postCommit
+	// (no-op for non-structural events; pattern uniform across handlers).
 	h.state.Lock()
-	defer h.state.Unlock()
-
-	if err := h.state.WriteEvent(ctx, event); err != nil {
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	h.state.Unlock()
+	if err != nil {
 		return nil, fmt.Errorf("write message.delete event: %w", err)
+	}
+	if postCommit != nil {
+		postCommit()
 	}
 
 	return &DeleteMessageResponse{
@@ -1617,14 +1627,17 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 		},
 	}
 
-	// Write event to JSONL and SQLite
-	// Lock only for WriteEvent
+	// Write event to JSONL and SQLite. Lock only for WriteEvent;
+	// thrum-bsn7: release state.Lock() before invoking postCommit.
 	h.state.Lock()
-	if err := h.state.WriteEvent(ctx, event); err != nil {
-		h.state.Unlock()
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	h.state.Unlock()
+	if err != nil {
 		return nil, fmt.Errorf("write message.edit event: %w", err)
 	}
-	h.state.Unlock()
+	if postCommit != nil {
+		postCommit()
+	}
 
 	// Query metadata and dispatch without lock (DB queries + WebSocket I/O)
 	preview := newContent
@@ -2467,9 +2480,15 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 	h.state.Unlock()
 
 	for _, event := range receiptEvents {
-		if err := h.state.WriteEvent(ctx, event); err != nil {
+		// thrum-bsn7: message.receipt is non-structural so postCommit is
+		// always nil here; pattern still uniform for clarity.
+		postCommit, err := h.state.WriteEvent(ctx, event)
+		if err != nil {
 			h.state.Lock()
 			return nil, fmt.Errorf("write message.receipt event: %w", err)
+		}
+		if postCommit != nil {
+			postCommit()
 		}
 	}
 

@@ -287,7 +287,7 @@ func TestPushSync_PeriodicSyncSkipsRecentlySynced(t *testing.T) {
 	scheduler.syncFromPeers()
 
 	// Write another event on daemon A (only one new event — no agent re-registration)
-	if err := daemonA.state.WriteEvent(context.Background(), types.MessageCreateEvent{
+	if _, err := daemonA.state.WriteEvent(context.Background(), types.MessageCreateEvent{
 		Type:      "message.create",
 		MessageID: "msg_test_second",
 		AgentID:   "test-agent",
@@ -437,13 +437,13 @@ func writeTestEvent(t *testing.T, st *state.State, eventType string) {
 	switch eventType {
 	case "message.create":
 		// Register an agent first
-		_ = st.WriteEvent(context.Background(), types.AgentRegisterEvent{
+		_, _ = st.WriteEvent(context.Background(), types.AgentRegisterEvent{
 			Type:      "agent.register",
 			AgentID:   "test-agent",
 			Role:      "tester",
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 		})
-		err := st.WriteEvent(context.Background(), types.MessageCreateEvent{
+		_, err := st.WriteEvent(context.Background(), types.MessageCreateEvent{
 			Type:      "message.create",
 			MessageID: "msg_test_" + time.Now().Format("150405.000000"),
 			AgentID:   "test-agent",

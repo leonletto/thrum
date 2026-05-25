@@ -108,9 +108,17 @@ func (h *UserHandler) HandleRegister(ctx context.Context, params json.RawMessage
 	// Generate user ID
 	userID := identity.GenerateUserID(req.Username)
 
-	// Lock for conflict detection and registration
+	// Lock for conflict detection and registration. thrum-bsn7
+	// tracked-unlock: user.register emits an agent.register event
+	// (structural) so postCommit fires the walker+compactor — must
+	// release the lock BEFORE invoking it.
 	h.state.Lock()
-	defer h.state.Unlock()
+	stateLocked := true
+	defer func() {
+		if stateLocked {
+			h.state.Unlock()
+		}
+	}()
 
 	// Check for existing user
 	existingUser, err := h.getUserByID(userID)
@@ -135,7 +143,16 @@ func (h *UserHandler) HandleRegister(ctx context.Context, params json.RawMessage
 	}
 
 	// Register new user
-	return h.registerUser(ctx, userID, req.Username, req.Display)
+	resp, postCommit, err := h.registerUser(ctx, userID, req.Username, req.Display)
+	if err != nil {
+		return nil, err
+	}
+	h.state.Unlock()
+	stateLocked = false
+	if postCommit != nil {
+		postCommit()
+	}
+	return resp, nil
 }
 
 // getUserByID retrieves a user by ID from the database.
@@ -174,7 +191,9 @@ func (h *UserHandler) getUserByID(userID string) (*AgentInfo, error) {
 }
 
 // registerUser writes a user.register event (stored as agent.register with kind="user").
-func (h *UserHandler) registerUser(ctx context.Context, userID, username, display string) (*RegisterUserResponse, error) {
+// thrum-bsn7: returns postCommit which the caller MUST invoke AFTER releasing
+// state.Lock() — agent.register is structural and fires walker+compactor.
+func (h *UserHandler) registerUser(ctx context.Context, userID, username, display string) (*RegisterUserResponse, func(), error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	// Create agent.register event with kind="user"
@@ -189,8 +208,9 @@ func (h *UserHandler) registerUser(ctx context.Context, userID, username, displa
 	}
 
 	// Write event to JSONL and SQLite
-	if err := h.state.WriteEvent(ctx, event); err != nil {
-		return nil, fmt.Errorf("write user.register event: %w", err)
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	if err != nil {
+		return nil, nil, fmt.Errorf("write user.register event: %w", err)
 	}
 
 	// Generate session token for reconnection
@@ -202,7 +222,7 @@ func (h *UserHandler) registerUser(ctx context.Context, userID, username, displa
 		DisplayName: display,
 		Token:       token,
 		Status:      "registered",
-	}, nil
+	}, postCommit, nil
 }
 
 // sanitizeUsername converts a display name to a valid username.

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -2060,6 +2061,104 @@ func TestHandleRegister_ConcurrentRegisterBurst_NoDeadlock(t *testing.T) {
 		t.Error(e)
 	}
 }
+// TestHandleRegister_BurstRegister_NoLockContention — thrum-bsn7
+// regression: post-kdyf, narrow fix only released state.Lock() around the
+// ensureActiveSession SELECT. Every OTHER under-lock SELECT in
+// HandleRegister (notably getAgentByID at the top of the handler) was
+// still exposed to the lock-contention failure class: when goroutine A
+// holds state.Lock through registerAgent → WriteEvent → triggerSyncOnWrite
+// (walker 30s + compactor 60s ceilings), goroutines B..N block at
+// h.state.Lock() for the same wall-clock. Their 10s RPC ctx expires
+// while WAITING; when B finally gets the lock its first SELECT
+// (getAgentByID) immediately returns ctx.Err().
+//
+// The fix structurally decouples the structural-event sync trigger from
+// the caller's state.Lock() hold: WriteEvent now returns a postCommit
+// closure the caller invokes AFTER releasing the lock. Walker invocations
+// serialize at walker.mu (snapshot.go:126); each post-bsn7 state.Lock()
+// hold is sub-millisecond rather than up to 90s.
+//
+// Assertion shape (synthetic time-measurement, per coord guidance): inject
+// a stub sync trigger that Sleeps for `triggerDelay`; fire N concurrent
+// HandleRegisters; the total wall-clock elapsed must be CLOSE to
+// triggerDelay (concurrent, post-bsn7) NOT N×triggerDelay (serialized,
+// pre-bsn7). Pre-bsn7 a regression would inflate elapsed to N × delay
+// because each lock-holder blocks the next.
+func TestHandleRegister_BurstRegister_NoLockContention(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_bsn7_burst", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	// triggerDelay simulates the walker+compactor wall-clock. 200ms is
+	// short enough to keep the test fast yet long enough to clearly
+	// distinguish concurrent (≈200ms total) from serialized
+	// (≈burst×200ms total). The serializedCeiling intentionally sits
+	// well below burst×triggerDelay so pre-bsn7 regression fails
+	// loudly while leaving generous CI-jitter headroom for the
+	// post-bsn7 concurrent path.
+	const (
+		burst              = 8
+		triggerDelay       = 200 * time.Millisecond
+		serializedCeiling  = 4 * triggerDelay // upper bound for post-bsn7 concurrent path
+		preFixWouldTakeAtLeast = time.Duration(burst) * triggerDelay
+	)
+
+	var triggerCount atomic.Int32
+	s.SetSyncTrigger(func(ctx context.Context) {
+		triggerCount.Add(1)
+		time.Sleep(triggerDelay)
+	})
+
+	livePID := os.Getpid()
+	t.Setenv("THRUM_ROLE", "implementer")
+	t.Setenv("THRUM_MODULE", "bsn7-burst")
+	handler := NewAgentHandler(s)
+
+	// burst goroutines each register a DISTINCT fresh agent_id so they all
+	// land on the fresh-agent path (HandleRegister line ≈421). The
+	// fresh-agent path takes h.state.Lock(), runs registerAgent →
+	// WriteEvent, releases the lock, then invokes postCommit (the slow
+	// stub). Concurrent goroutines should serialize only at walker.mu
+	// (snapshot-level, not state.Lock) — and since each invocation calls
+	// the stub directly (no walker indirection here, just a slowed-down
+	// trigger closure), there's no serialization at all in this test
+	// shape, modeling the worst-case post-bsn7 fan-out.
+	var wg sync.WaitGroup
+	errs := make(chan error, burst)
+	start := time.Now()
+	for i := 0; i < burst; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			req := json.RawMessage(fmt.Sprintf(
+				`{"name":"bsn7_burst_agent_%d","role":"implementer","module":"bsn7-burst","agent_pid":%d}`,
+				idx, livePID,
+			))
+			if _, regErr := handler.HandleRegister(context.Background(), req); regErr != nil {
+				errs <- fmt.Errorf("burst goroutine %d: %w", idx, regErr)
+			}
+		}(i)
+	}
+	wg.Wait()
+	elapsed := time.Since(start)
+	close(errs)
+	for e := range errs {
+		t.Error(e)
+	}
+
+	if got := int(triggerCount.Load()); got != burst {
+		t.Errorf("triggerCount = %d, want %d (every fresh-agent register emits an agent.register structural event)", got, burst)
+	}
+	if elapsed >= serializedCeiling {
+		t.Errorf("burst elapsed = %v, want < %v (pre-bsn7 regression would take ≥ %v because state.Lock serialization forces walker/compactor onto critical path)",
+			elapsed, serializedCeiling, preFixWouldTakeAtLeast)
+	}
+}
+
 // --- end thrum-kdyf section --------------------------------------------
 
 // --- thrum-xir.18.3: HandleRegister wiring tests ------------------------
@@ -2400,7 +2499,7 @@ func TestAgentRegister_CrossDaemonCoexistence(t *testing.T) {
 		Hostname:     "leonsmacm1pro",
 		AgentPID:     55765,
 	}
-	if err := s.WriteEvent(context.Background(), remoteEvent); err != nil {
+	if _, err := s.WriteEvent(context.Background(), remoteEvent); err != nil {
 		t.Fatalf("seed remote agent: %v", err)
 	}
 

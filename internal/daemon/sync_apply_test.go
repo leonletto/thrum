@@ -97,7 +97,7 @@ func TestSyncApplier_Deduplication(t *testing.T) {
 		Role:      "tester",
 		Module:    "test",
 	}
-	if err := st.WriteEvent(context.Background(), localEvent); err != nil {
+	if _, err := st.WriteEvent(context.Background(), localEvent); err != nil {
 		t.Fatalf("write local event: %v", err)
 	}
 

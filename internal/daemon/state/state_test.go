@@ -70,7 +70,7 @@ func TestWriteEvent_GeneratesEventID(t *testing.T) {
 	}
 
 	// Write event
-	if err := state.WriteEvent(context.Background(), event); err != nil {
+	if _, err := state.WriteEvent(context.Background(), event); err != nil {
 		t.Fatalf("write event: %v", err)
 	}
 
@@ -149,7 +149,7 @@ func TestWriteEvent_UniqueEventIDs(t *testing.T) {
 			},
 		}
 
-		if err := state.WriteEvent(context.Background(), event); err != nil {
+		if _, err := state.WriteEvent(context.Background(), event); err != nil {
 			t.Fatalf("write event %d: %v", i, err)
 		}
 	}
@@ -213,7 +213,7 @@ func TestWriteEvent_PreservesExistingEventID(t *testing.T) {
 	}
 
 	// Write event
-	if err := state.WriteEvent(context.Background(), event); err != nil {
+	if _, err := state.WriteEvent(context.Background(), event); err != nil {
 		t.Fatalf("write event: %v", err)
 	}
 
@@ -367,7 +367,7 @@ func TestNewState_SeparateSyncDir(t *testing.T) {
 		Role:      "tester",
 		Module:    "test",
 	}
-	if err := s.WriteEvent(context.Background(), event); err != nil {
+	if _, err := s.WriteEvent(context.Background(), event); err != nil {
 		t.Fatalf("write event: %v", err)
 	}
 
@@ -391,7 +391,7 @@ func TestNewState_SeparateSyncDir(t *testing.T) {
 		SessionID: "ses_sep001",
 		Body:      types.MessageBody{Format: "markdown", Content: "separate sync dir"},
 	}
-	if err := s.WriteEvent(context.Background(), msgEvent); err != nil {
+	if _, err := s.WriteEvent(context.Background(), msgEvent); err != nil {
 		t.Fatalf("write message event: %v", err)
 	}
 
@@ -422,7 +422,7 @@ func TestWriteEvent_MarshalError(t *testing.T) {
 	type BadEvent struct {
 		Ch chan int
 	}
-	err = s.WriteEvent(context.Background(), BadEvent{Ch: make(chan int)})
+	_, err = s.WriteEvent(context.Background(), BadEvent{Ch: make(chan int)})
 	if err == nil {
 		t.Error("Expected marshal error for channel type")
 	}
@@ -449,7 +449,7 @@ func TestWriteEvent_NonMessageEvent(t *testing.T) {
 		AgentID:   "agent:test:ABC123",
 	}
 
-	if err := s.WriteEvent(context.Background(), event); err != nil {
+	if _, err := s.WriteEvent(context.Background(), event); err != nil {
 		t.Fatalf("write event: %v", err)
 	}
 
@@ -544,8 +544,12 @@ func TestNewState_UsesCallerIDVerbatim(t *testing.T) {
 }
 
 // TestWriteEvent_StructuralEvent_FiresSyncTrigger pins E3.AC.2 (positive case):
-// agent.register is a structural event and must invoke the trigger hook exactly
-// once after projection completes.
+// agent.register is a structural event and must return a non-nil postCommit
+// closure that, when invoked, fires the trigger hook exactly once.
+//
+// thrum-bsn7 contract: the trigger no longer fires inline inside WriteEvent;
+// callers must invoke the returned postCommit closure after releasing any
+// external lock so walker+compactor cannot starve concurrent lock-holders.
 func TestWriteEvent_StructuralEvent_FiresSyncTrigger(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
@@ -572,12 +576,20 @@ func TestWriteEvent_StructuralEvent_FiresSyncTrigger(t *testing.T) {
 		Role:      "tester",
 		Module:    "test",
 	}
-	if err := st.WriteEvent(context.Background(), evt); err != nil {
+	postCommit, err := st.WriteEvent(context.Background(), evt)
+	if err != nil {
 		t.Fatalf("WriteEvent: %v", err)
 	}
-
+	// Trigger must NOT have fired inline (bsn7 contract — caller-driven).
+	if got := triggerCount.Load(); got != 0 {
+		t.Errorf("triggerCount before postCommit = %d, want 0 (bsn7 contract: trigger is deferred)", got)
+	}
+	if postCommit == nil {
+		t.Fatal("postCommit is nil for a structural event — should be a non-nil closure")
+	}
+	postCommit()
 	if got := triggerCount.Load(); got != 1 {
-		t.Errorf("triggerCount = %d, want 1 (structural event must fire trigger exactly once)", got)
+		t.Errorf("triggerCount after postCommit = %d, want 1 (structural event must fire trigger exactly once)", got)
 	}
 }
 
@@ -611,10 +623,16 @@ func TestWriteEvent_NonStructuralEvent_NoSyncTrigger(t *testing.T) {
 		SessionID: "ses_test",
 		Body:      types.MessageBody{Format: "markdown", Content: "hello"},
 	}
-	if err := st.WriteEvent(context.Background(), createEvt); err != nil {
+	createPost, err := st.WriteEvent(context.Background(), createEvt)
+	if err != nil {
 		t.Fatalf("WriteEvent (message.create): %v", err)
 	}
-	// message.create IS structural — reset counter
+	// thrum-bsn7: message.create IS structural — invoke postCommit to
+	// stay faithful to the production call shape, then reset the counter
+	// before the negative-case message.receipt write below.
+	if createPost != nil {
+		createPost()
+	}
 	triggerCount.Store(0)
 
 	// Now write message.receipt — non-structural, must NOT fire trigger
@@ -626,8 +644,15 @@ func TestWriteEvent_NonStructuralEvent_NoSyncTrigger(t *testing.T) {
 		SessionID:   "ses_reader",
 		ReceiptType: "read",
 	}
-	if err := st.WriteEvent(context.Background(), receiptEvt); err != nil {
+	receiptPost, err := st.WriteEvent(context.Background(), receiptEvt)
+	if err != nil {
 		t.Fatalf("WriteEvent (message.receipt): %v", err)
+	}
+	// Defensive: receipt is non-structural so postCommit MUST be nil.
+	// Invoking it (or not) is a no-op semantically — the test asserts
+	// triggerCount stays zero below — but guard the invariant directly.
+	if receiptPost != nil {
+		t.Errorf("postCommit for message.receipt = non-nil, want nil (non-structural events must not return a trigger closure)")
 	}
 
 	if got := triggerCount.Load(); got != 0 {
@@ -660,7 +685,7 @@ func TestWriteEvent_NoTriggerSet_DoesNotPanic(t *testing.T) {
 		Role:      "tester",
 		Module:    "test",
 	}
-	if err := st.WriteEvent(context.Background(), evt); err != nil {
+	if _, err := st.WriteEvent(context.Background(), evt); err != nil {
 		t.Fatalf("WriteEvent with nil sync trigger: %v", err)
 	}
 }

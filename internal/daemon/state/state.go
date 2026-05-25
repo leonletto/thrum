@@ -233,16 +233,27 @@ func (s *State) Close() error {
 // Automatically generates and adds event_id (ULID) and version fields.
 // The context is used for SQLite operations, ensuring the server's per-request
 // timeout propagates to database queries.
-func (s *State) WriteEvent(ctx context.Context, event any) error {
+//
+// Returns a postCommit closure (nil if non-structural or no sync trigger
+// is wired) that the caller MUST invoke to fire the snapshot walker +
+// compactor + sync. Callers that hold an external lock (e.g. state.Lock())
+// during WriteEvent MUST release that lock BEFORE invoking postCommit —
+// the walker+compactor can run for tens of seconds and would otherwise
+// starve every other goroutine waiting on the lock (thrum-bsn7).
+//
+// Callers that hold no external lock can invoke postCommit() inline
+// immediately after the error check — semantically identical to the
+// pre-bsn7 inline-trigger behavior.
+func (s *State) WriteEvent(ctx context.Context, event any) (postCommit func(), err error) {
 	// Marshal event to map so we can add fields
-	eventBytes, err := json.Marshal(event)
-	if err != nil {
-		return fmt.Errorf("marshal event: %w", err)
+	eventBytes, mErr := json.Marshal(event)
+	if mErr != nil {
+		return nil, fmt.Errorf("marshal event: %w", mErr)
 	}
 
 	var eventMap map[string]any
-	if err := json.Unmarshal(eventBytes, &eventMap); err != nil {
-		return fmt.Errorf("unmarshal to map: %w", err)
+	if uErr := json.Unmarshal(eventBytes, &eventMap); uErr != nil {
+		return nil, fmt.Errorf("unmarshal to map: %w", uErr)
 	}
 
 	// Generate and add event_id if not present or empty
@@ -272,7 +283,7 @@ func (s *State) WriteEvent(ctx context.Context, event any) error {
 	// The synced events.jsonl is gone from the write path; what peers
 	// see is materialized into state/, messages-v2/, receipts/ by the
 	// snapshot walker (internal/sync/snapshot.Walker) when a
-	// structural event fires triggerSyncOnWrite below.
+	// structural event fires the returned postCommit closure below.
 	writer := s.eventsWriter
 
 	// Assign next sequence number
@@ -280,14 +291,14 @@ func (s *State) WriteEvent(ctx context.Context, event any) error {
 	eventMap["sequence"] = seq
 
 	// Append enriched event to JSONL (source of truth)
-	if err := writer.Append(eventMap); err != nil {
-		return fmt.Errorf("append to JSONL: %w", err)
+	if aErr := writer.Append(eventMap); aErr != nil {
+		return nil, fmt.Errorf("append to JSONL: %w", aErr)
 	}
 
 	// Marshal enriched event for projector
-	eventJSON, err := json.Marshal(eventMap)
-	if err != nil {
-		return fmt.Errorf("marshal enriched event: %w", err)
+	eventJSON, jErr := json.Marshal(eventMap)
+	if jErr != nil {
+		return nil, fmt.Errorf("marshal enriched event: %w", jErr)
 	}
 
 	// Insert into events table for sequence-based queries
@@ -295,36 +306,39 @@ func (s *State) WriteEvent(ctx context.Context, event any) error {
 	evtType, _ := eventMap["type"].(string)
 	evtTimestamp, _ := eventMap["timestamp"].(string)
 	evtOrigin, _ := eventMap["origin_daemon"].(string)
-	_, err = s.db.ExecContext(ctx,
+	if _, iErr := s.db.ExecContext(ctx,
 		`INSERT OR IGNORE INTO events (event_id, sequence, type, timestamp, origin_daemon, event_json) VALUES (?, ?, ?, ?, ?, ?)`,
 		evtID, seq, evtType, evtTimestamp, evtOrigin, string(eventJSON),
-	)
-	if err != nil {
-		return fmt.Errorf("insert into events table: %w", err)
+	); iErr != nil {
+		return nil, fmt.Errorf("insert into events table: %w", iErr)
 	}
 
 	// Apply to projector (update SQLite)
-	if err := s.projector.Apply(ctx, eventJSON); err != nil {
-		return fmt.Errorf("apply to projector: %w", err)
-	}
-
-	// Fire the structural-event trigger AFTER projection completes so
-	// the snapshot walker sees the latest projected state. Non-
-	// structural events return without triggering sync — they're
-	// folded into the wire stream at the next structural walk.
-	if s.triggerSyncOnWrite != nil && isStructuralEvent(evtType) {
-		s.triggerSyncOnWrite(ctx)
+	if pErr := s.projector.Apply(ctx, eventJSON); pErr != nil {
+		return nil, fmt.Errorf("apply to projector: %w", pErr)
 	}
 
 	// Notify sync hook (e.g., to broadcast sync.notify to peers).
 	// Passes the enriched event JSON so downstream consumers (e.g.
 	// the permission reply interceptor) can inspect refs/reply_to
-	// without re-marshaling.
+	// without re-marshaling. Fires inline because it does not block
+	// on walker/compactor — it just notifies peer connections.
 	if s.onEventWrite != nil {
 		s.onEventWrite(s.daemonID, seq, eventJSON)
 	}
 
-	return nil
+	// Build the deferred sync trigger for structural events. The caller
+	// is responsible for invoking this AFTER releasing any external
+	// lock (state.Lock()). thrum-bsn7 broke the synchronous-under-lock
+	// pattern so walker(30s) + compactor(60s) ceilings no longer starve
+	// concurrent goroutines waiting on the same lock. Non-structural
+	// events return nil — they're folded into the wire stream at the
+	// next structural-driven walk.
+	if s.triggerSyncOnWrite != nil && isStructuralEvent(evtType) {
+		trigger := s.triggerSyncOnWrite
+		return func() { trigger(ctx) }, nil
+	}
+	return nil, nil
 }
 
 // DB returns the safedb wrapper that enforces context-aware queries at compile time.

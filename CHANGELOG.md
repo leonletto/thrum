@@ -120,6 +120,32 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **Daemon lock-contention under register/message burst (thrum-bsn7)** —
+  the structural-event sync trigger (snapshot walker, 30s ceiling; compactor,
+  60s ceiling) used to run synchronously inside `state.WriteEvent` while the
+  caller still held `state.Lock()`. Under a burst of `agent.register` or
+  `message.create` RPCs, goroutine A would hold the lock for the full
+  walker+compactor wall-clock, while goroutines B..N blocked at
+  `h.state.Lock()` and watched their 10s RPC ctx expire. When B finally
+  acquired the lock, its first under-lock SELECT (`getAgentByID` at the top
+  of `HandleRegister`, `check for existing agent by id`) returned
+  `context.DeadlineExceeded` immediately. This was the same root-cause
+  family as thrum-kdyf but on every under-lock SELECT, not just
+  `ensureActiveSession`'s "check active session" path — kdyf's narrow fix
+  released the lock around the resurrect SELECT only and left the broader
+  pattern exposed. The fix structurally decouples the sync trigger from the
+  caller's lock hold: `state.WriteEvent` now returns
+  `(postCommit func(), err error)`; callers MUST invoke `postCommit` AFTER
+  releasing any external `state.Lock()` hold. Walker invocations serialize at
+  `walker.mu` (already in place; defense in depth), so concurrent triggers
+  no longer starve each other on the state lock. 22 production WriteEvent
+  call sites updated; new regression test
+  `TestHandleRegister_BurstRegister_NoLockContention` proves the fix by
+  injecting a slow trigger stub and asserting 8 concurrent registers
+  complete in ~walker_time (concurrent path) rather than 8 × walker_time
+  (serialized path). Inbound peer events via `sync_apply.go` continue to
+  fire local walker/compactor as before (lock-free at that layer; behavior
+  preserved exactly).
 - **Schema v37 + v38: memory-tables back-port + `events.timestamp` index
   (thrum-7ojv)** — two-part schema bump on release/v0.10.6. v38 adds
   `CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)`

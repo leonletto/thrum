@@ -572,7 +572,7 @@ func TestMessageGet(t *testing.T) {
 			MessageID: msgID,
 			Reason:    "test delete",
 		}
-		if err := st.WriteEvent(context.Background(), deleteEvent); err != nil {
+		if _, err := st.WriteEvent(context.Background(), deleteEvent); err != nil {
 			t.Fatalf("failed to delete message: %v", err)
 		}
 

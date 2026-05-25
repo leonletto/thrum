@@ -80,7 +80,7 @@ func (d *testDaemon) writeEvent(t *testing.T, agentID string, idx int) {
 		Role:      "tester",
 		Module:    "test",
 	}
-	if err := d.state.WriteEvent(context.Background(), evt); err != nil {
+	if _, err := d.state.WriteEvent(context.Background(), evt); err != nil {
 		t.Fatalf("write event %d: %v", idx, err)
 	}
 }

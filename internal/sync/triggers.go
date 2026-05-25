@@ -113,14 +113,16 @@ func (t *Triggers) SyncOnWrite(ctx context.Context) {
 		return
 	}
 	if t.walker != nil {
-		// Detach from caller ctx (s7is.6): SyncOnWrite is invoked from
-		// inside state.WriteEvent while state.Lock() is held. The caller
-		// ctx is typically an RPC context with a ~10s deadline. If the
-		// walker is canceled mid-fire by that deadline expiring, the
-		// next walker call still has work to do AND the failure
-		// surfaces as sync.walker_failed (cosmetic-but-noisy). Use
-		// Background so the walker completes regardless of caller
-		// timeouts.
+		// Detach from caller ctx (s7is.6): SyncOnWrite is invoked via the
+		// postCommit closure returned by state.WriteEvent (thrum-bsn7);
+		// the caller has ALREADY released state.Lock() before invoking it,
+		// so walker execution no longer blocks other goroutines on the
+		// state lock. The caller ctx is still typically an RPC context
+		// with a ~10s deadline. If the walker were canceled mid-fire by
+		// that deadline expiring, the next walker call still has work to
+		// do AND the failure surfaces as sync.walker_failed (cosmetic-
+		// but-noisy). Use Background so the walker completes regardless
+		// of caller timeouts.
 		//
 		// Cap with syncWalkerTimeout (s7is.7): an unbounded walker
 		// could lock the daemon forever on a pathological SQLite hang.
@@ -145,18 +147,18 @@ func (t *Triggers) SyncOnWrite(ctx context.Context) {
 		// Detach from caller ctx (thrum-roz1, same cancel shape as
 		// walker s7is.7; slog fields intentionally extended for
 		// daemon-log greppability per coord review):
-		// SyncOnWrite is invoked from inside state.WriteEvent while
-		// state.Lock() is held. If the compactor used the caller's ctx
-		// (typically a ~10s RPC deadline) and the events-table DELETE
-		// took longer than that, the compactor would error with
-		// "context deadline exceeded" AND burn the deadline for any
-		// concurrent / subsequent op in that RPC — notably the next
-		// agent.register's ensureActiveSession SELECT, which then
-		// fails with "check active session: context deadline exceeded"
-		// and surfaces to the user as "daemon may be unresponsive —
-		// try thrum daemon restart". The cascade had 99 occurrences
-		// across 8+ agents pre-fix. Using Background + a generous
-		// ceiling breaks the coupling at the root.
+		// SyncOnWrite is invoked via the postCommit closure returned by
+		// state.WriteEvent (thrum-bsn7); the caller has ALREADY released
+		// state.Lock() before invoking it, so compactor execution no
+		// longer starves concurrent goroutines on the state lock.
+		// However, the caller ctx is still a ~10s RPC deadline; if the
+		// compactor used it and the events-table DELETE took longer
+		// than that, the compactor would error with "context deadline
+		// exceeded" AND surface as sync.compactor_failed (the original
+		// roz1 cascade root). Using Background + a generous ceiling
+		// breaks the ctx coupling; bsn7 broke the lock coupling.
+		// Together they fully decouple the snapshot maintenance path
+		// from the caller's RPC.
 		compactStart := time.Now()
 		compactCtx, cancel := context.WithTimeout(context.Background(), syncCompactorTimeout)
 		err := t.compact(compactCtx)

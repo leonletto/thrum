@@ -157,9 +157,15 @@ func (h *SessionHandler) HandleStart(ctx context.Context, params json.RawMessage
 		AgentID:   req.AgentID,
 	}
 
-	// Write event to JSONL and SQLite
-	if err := h.state.WriteEvent(ctx, event); err != nil {
+	// Write event to JSONL and SQLite. session.start is non-structural
+	// so postCommit is always nil; thrum-bsn7 signature change kept
+	// uniform across handlers.
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	if err != nil {
 		return nil, fmt.Errorf("write session.start event: %w", err)
+	}
+	if postCommit != nil {
+		postCommit()
 	}
 
 	// Store initial scopes
@@ -268,9 +274,14 @@ func (h *SessionHandler) HandleEnd(ctx context.Context, params json.RawMessage) 
 		Reason:    reason,
 	}
 
-	// Write event to JSONL and SQLite
-	if err := h.state.WriteEvent(ctx, event); err != nil {
+	// Write event to JSONL and SQLite. session.end is non-structural;
+	// postCommit always nil. thrum-bsn7 signature uniform.
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	if err != nil {
 		return nil, fmt.Errorf("write session.end event: %w", err)
+	}
+	if postCommit != nil {
+		postCommit()
 	}
 
 	// Sync work contexts for this agent
@@ -530,9 +541,14 @@ func (h *SessionHandler) recoverOrphanedSessions(ctx context.Context, agentID st
 			Reason:    "crash_recovered",
 		}
 
-		// Write event to JSONL and SQLite
-		if err := h.state.WriteEvent(ctx, event); err != nil {
+		// Write event to JSONL and SQLite. agent.session.end is
+		// non-structural; postCommit always nil. thrum-bsn7 signature.
+		postCommit, err := h.state.WriteEvent(ctx, event)
+		if err != nil {
 			return fmt.Errorf("write crash recovery event for session %s: %w", sessionID, err)
+		}
+		if postCommit != nil {
+			postCommit()
 		}
 	}
 
@@ -889,8 +905,13 @@ func (h *SessionHandler) syncWorkContexts(ctx context.Context, agentID string) e
 		WorkContexts: filtered,
 	}
 
-	if err := h.state.WriteEvent(context.Background(), event); err != nil {
+	// agent.update is non-structural; postCommit always nil. thrum-bsn7.
+	postCommit, err := h.state.WriteEvent(context.Background(), event)
+	if err != nil {
 		return fmt.Errorf("write agent.update event: %w", err)
+	}
+	if postCommit != nil {
+		postCommit()
 	}
 
 	return nil

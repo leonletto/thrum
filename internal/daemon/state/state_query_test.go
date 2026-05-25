@@ -42,7 +42,7 @@ func registerAgentWithSession(t *testing.T, st *State, agentID, role string) {
 		Role:      role,
 		Module:    "test",
 	}
-	if err := st.WriteEvent(ctx, reg); err != nil {
+	if _, err := st.WriteEvent(ctx, reg); err != nil {
 		t.Fatalf("write agent.register for %s: %v", agentID, err)
 	}
 
@@ -52,7 +52,7 @@ func registerAgentWithSession(t *testing.T, st *State, agentID, role string) {
 		SessionID: "ses_" + agentID,
 		AgentID:   agentID,
 	}
-	if err := st.WriteEvent(ctx, start); err != nil {
+	if _, err := st.WriteEvent(ctx, start); err != nil {
 		t.Fatalf("write agent.session.start for %s: %v", agentID, err)
 	}
 }
@@ -67,7 +67,7 @@ func endAgentSession(t *testing.T, st *State, agentID string) {
 		SessionID: "ses_" + agentID,
 		Reason:    "test",
 	}
-	if err := st.WriteEvent(context.Background(), end); err != nil {
+	if _, err := st.WriteEvent(context.Background(), end); err != nil {
 		t.Fatalf("write agent.session.end for %s: %v", agentID, err)
 	}
 }
