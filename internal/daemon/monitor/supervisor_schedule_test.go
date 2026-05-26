@@ -115,6 +115,82 @@ func TestSupervisor_ScheduledModeFiresOnTick(t *testing.T) {
 		"scheduled monitor must remain in running status after per-tick exits")
 }
 
+// TestSupervisor_ImpossibleScheduleMarksDead: a schedule that parses but
+// can never fire (e.g. "0 0 31 2 *" — Feb 31) must NOT spin the runLoop;
+// the supervisor should detect schedule.Next returning the zero time and
+// MarkDead with a dedicated notice.
+func TestSupervisor_ImpossibleScheduleMarksDead(t *testing.T) {
+	store, _ := newTestStore(t)
+	delivery, captured := newCapturingDelivery()
+	sup := NewMonitorSupervisor(store, delivery)
+	// Hijack the wait so any non-zero next-time would fire immediately;
+	// the test still passes because the zero-time guard short-circuits
+	// before reaching the wait.
+	sup.scheduledTickWait = func(_ context.Context, _ time.Time) {}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	supDone := make(chan struct{})
+	go func() {
+		sup.Start(ctx)
+		close(supDone)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-supDone:
+		case <-time.After(5 * time.Second):
+			t.Log("supervisor did not shut down within 5s")
+		}
+	})
+
+	spec := makeSpec("impossible-sched")
+	spec.Argv = []string{"sh", "-c", "echo hi"}
+	spec.Schedule = "0 0 31 2 *" // Feb 31 — never matches
+
+	id, err := sup.Add(ctx, spec)
+	require.NoError(t, err)
+
+	// Wait for the monitor row to flip to dead.
+	deadline := time.After(3 * time.Second)
+	for {
+		job, gerr := store.GetByID(ctx, id)
+		require.NoError(t, gerr)
+		if job.Status == StatusDead {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("monitor never reached dead status; last status = %s", job.Status)
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+
+	// A dedicated notice about the impossible schedule must have fired.
+	deadline2 := time.After(2 * time.Second)
+	for {
+		captured.mu.Lock()
+		var match bool
+		for _, body := range captured.bodies {
+			if strings.Contains(body, "no valid fire time") {
+				match = true
+				break
+			}
+		}
+		captured.mu.Unlock()
+		if match {
+			return
+		}
+		select {
+		case <-deadline2:
+			t.Fatalf("no 'no valid fire time' notice in delivered bodies: %v", captured.bodies)
+		case <-captured.got:
+			continue
+		}
+	}
+}
+
 // TestSupervisor_ContinuousChildExitRestarts: a continuous monitor whose
 // child exits should be auto-restarted by the runLoop. We start a child
 // that prints once + exits, observe at least one restart, then cancel.

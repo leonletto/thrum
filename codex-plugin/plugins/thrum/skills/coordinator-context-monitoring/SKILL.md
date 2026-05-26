@@ -218,20 +218,24 @@ a restart:
 #### Re-register the monitor
 
 If `thrum monitor list` doesn't show `context-monitoring`, register it from
-the main repo:
+the main repo. The script path must be absolute (the daemon runs the
+command from a clean env, not the coordinator's shell), so resolve it
+from the repo root first:
 
 ```bash
+SCRIPT="$(git -C /path/to/thrum/main-repo rev-parse --show-toplevel)/scripts/error-and-context-agent-sweep.sh"
 thrum monitor add \
   --name context-monitoring \
   --schedule "7,27,47 * * * *" \
   --match '^ALERT:' \
   --to @coordinator_main \
-  -- bash /Users/leon/dev/opensource/thrum/scripts/error-and-context-agent-sweep.sh --no-nudge --out /tmp/agent-sweep.txt
+  -- bash "$SCRIPT" --no-nudge --out /tmp/agent-sweep.txt
 ```
 
-Adjust the absolute path to the script for your checkout. The monitor will
-fire one-shot per scheduled tick; in between ticks the child does not run,
-so there's no continuous CPU cost from the sweep.
+(Or substitute the literal absolute path if you don't have a shell handy
+in the daemon's environment.) The monitor fires one-shot per scheduled
+tick; in between ticks the child does not run, so there's no continuous
+CPU cost from the sweep.
 
 ### What to do post-restart
 

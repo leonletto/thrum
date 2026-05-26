@@ -638,6 +638,24 @@ func (s *MonitorSupervisor) runLoop(
 				return
 			}
 			next := schedule.Next(time.Now())
+			// schedule.Next returns the zero time when no match exists
+			// within its 5-year search window. This happens for cron
+			// expressions that parse syntactically but can never fire
+			// (e.g. "0 0 31 2 *" — Feb 31). Without this guard, the
+			// scheduled-wait below would return immediately (negative
+			// time.Until clamps to zero) and the loop would spin firing
+			// the child until ctx is cancelled — pegging a goroutine
+			// and spamming the child. Mark the monitor dead with a
+			// dedicated notice so the operator sees what went wrong.
+			if next.IsZero() {
+				content := fmt.Sprintf(
+					"[monitor:%s] schedule %q has no valid fire time within 5 years — marking dead. Fix the schedule and run: thrum monitor restart %s",
+					jobName, job.Schedule, jobID,
+				)
+				_ = s.delivery.Deliver(context.Background(), jobName, jobTarget, content)
+				_ = s.store.MarkDead(context.Background(), jobID, -1, time.Now())
+				return
+			}
 			s.scheduledTickWait(ctx, next)
 			if ctx.Err() != nil || handle.stoppedByUser.Load() {
 				return
@@ -667,6 +685,14 @@ func (s *MonitorSupervisor) runLoop(
 			return
 		}
 
+		// Refresh exit metadata so operators polling monitor.show see
+		// last_exit_code / last_exit_at update between restarts — useful
+		// for soak observers watching an auto-restarting monitor's
+		// recent history.
+		if lastExit.fired {
+			_ = s.store.RecordExit(context.Background(), jobID, lastExit.code, time.Now())
+		}
+
 		// Reset backoff + restart-window on a healthy long run.
 		runDuration := time.Since(runStart)
 		if runDuration >= tun.BackoffResetAfter {
@@ -687,8 +713,8 @@ func (s *MonitorSupervisor) runLoop(
 
 		if len(restartTimes) > tun.MaxRestartsPerWindow {
 			content := fmt.Sprintf(
-				"[monitor:%s] exceeded restart budget (%d restarts in %s) — marking dead. Last exit code %d (pid %d) after %s.\nstdout (last 500 bytes): %s\nrestart: thrum monitor restart %s",
-				jobName, len(restartTimes), tun.RestartBudgetWindow,
+				"[monitor:%s] exceeded restart budget (%d exits in %s; limit %d) — marking dead. Last exit code %d (pid %d) after %s.\nstdout (last 500 bytes): %s\nrestart: thrum monitor restart %s",
+				jobName, len(restartTimes), tun.RestartBudgetWindow, tun.MaxRestartsPerWindow,
 				lastExit.code, lastExit.pid, lastExit.duration.Round(time.Second),
 				lastExit.tail, jobID,
 			)
