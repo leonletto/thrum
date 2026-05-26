@@ -2223,7 +2223,7 @@ Examples:
 	}
 
 	// thrum monitor add -- COMMAND ARGS...
-	var addName, addMatch, addTo, addCwd string
+	var addName, addMatch, addTo, addCwd, addSchedule string
 	var addDebounce time.Duration
 	var addEnv []string
 
@@ -2276,6 +2276,7 @@ The command and its arguments must be separated from monitor flags with '--':
 				Cwd:             cwd,
 				Env:             env,
 				DebounceSeconds: int(addDebounce.Seconds()),
+				Schedule:        addSchedule,
 			}
 
 			client, err := getClient()
@@ -2298,6 +2299,8 @@ The command and its arguments must be separated from monitor flags with '--':
 	addCmd.Flags().StringVar(&addCwd, "cwd", "", "Working directory for the command (default: current directory)")
 	addCmd.Flags().DurationVar(&addDebounce, "debounce", 60*time.Second, "Leading-edge debounce window (minimum 30s)")
 	addCmd.Flags().StringArrayVar(&addEnv, "env", nil, "Environment variable in KEY=VALUE form (repeatable)")
+	addCmd.Flags().StringVar(&addSchedule, "schedule", "",
+		`Standard 5-field cron expression (e.g. "*/5 * * * *" or "0 9 * * 1-5"). When set, runs the command one-shot per scheduled tick. When omitted, runs continuously with exponential-backoff auto-restart on exit.`)
 	_ = addCmd.MarkFlagRequired("name")
 	_ = addCmd.MarkFlagRequired("match")
 	_ = addCmd.MarkFlagRequired("to")

@@ -21,6 +21,11 @@ const (
 )
 
 // MonitorJob is the persisted specification and runtime state of a monitor.
+//
+// Schedule is a 5-field cron expression. When non-empty, the supervisor runs
+// the child one-shot per scheduled tick (no auto-restart between ticks). When
+// empty, the supervisor runs the child continuously and auto-restarts on
+// exit with exponential backoff (capped by a budget — see runLoop).
 type MonitorJob struct {
 	ID              string
 	Name            string
@@ -30,6 +35,7 @@ type MonitorJob struct {
 	Cwd             string
 	Env             map[string]string
 	DebounceSeconds int
+	Schedule        string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	Status          Status
@@ -65,14 +71,15 @@ func (s *MonitorStore) Insert(ctx context.Context, job *MonitorJob) error {
 		INSERT INTO monitors (
 			id, name, argv, match_pattern, target, cwd, env,
 			debounce_seconds, created_at, updated_at, status,
-			last_exit_code, last_exit_at, pid
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)
+			last_exit_code, last_exit_at, pid, schedule
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?)
 	`,
 		job.ID, job.Name, string(argvJSON), job.MatchPattern, job.Target,
 		job.Cwd, string(envJSON), job.DebounceSeconds,
 		job.CreatedAt.UTC().Format(time.RFC3339),
 		job.UpdatedAt.UTC().Format(time.RFC3339),
 		string(job.Status),
+		job.Schedule,
 	)
 	if err != nil {
 		return fmt.Errorf("insert monitor: %w", err)
@@ -110,12 +117,12 @@ func (s *MonitorStore) Update(ctx context.Context, job *MonitorJob) error {
 		UPDATE monitors SET
 			name = ?, argv = ?, match_pattern = ?, target = ?, cwd = ?, env = ?,
 			debounce_seconds = ?, updated_at = ?, status = ?,
-			last_exit_code = ?, last_exit_at = ?, pid = ?
+			last_exit_code = ?, last_exit_at = ?, pid = ?, schedule = ?
 		WHERE id = ?
 	`,
 		job.Name, string(argvJSON), job.MatchPattern, job.Target, job.Cwd, string(envJSON),
 		job.DebounceSeconds, job.UpdatedAt.UTC().Format(time.RFC3339), string(job.Status),
-		lastExitCode, lastExitAt, pid,
+		lastExitCode, lastExitAt, pid, job.Schedule,
 		job.ID,
 	)
 	if err != nil {
@@ -167,6 +174,24 @@ func (s *MonitorStore) MarkStopped(ctx context.Context, id string) error {
 	return nil
 }
 
+// RecordExit updates a monitor's last_exit_code / last_exit_at WITHOUT
+// changing its status. Used by scheduled-mode runs (one-shot per tick) and
+// continuous-mode auto-restart between budget-checked iterations: the
+// monitor remains healthy ("running"); only the exit metadata is refreshed
+// so operators can see when the last fire / restart happened.
+func (s *MonitorStore) RecordExit(ctx context.Context, id string, exitCode int, at time.Time) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE monitors
+		SET last_exit_code = ?, last_exit_at = ?, updated_at = ?, pid = NULL
+		WHERE id = ?
+	`, exitCode, at.UTC().Format(time.RFC3339),
+		time.Now().UTC().Format(time.RFC3339), id)
+	if err != nil {
+		return fmt.Errorf("record exit: %w", err)
+	}
+	return nil
+}
+
 // MarkDead updates a monitor to status=dead and records exit metadata.
 func (s *MonitorStore) MarkDead(ctx context.Context, id string, exitCode int, at time.Time) error {
 	_, err := s.db.ExecContext(ctx, `
@@ -184,7 +209,7 @@ func (s *MonitorStore) MarkDead(ctx context.Context, id string, exitCode int, at
 const selectBase = `
 	SELECT id, name, argv, match_pattern, target, cwd, env,
 		debounce_seconds, created_at, updated_at, status,
-		last_exit_code, last_exit_at, pid
+		last_exit_code, last_exit_at, pid, schedule
 	FROM monitors `
 
 func (s *MonitorStore) scanOne(ctx context.Context, where string, args ...any) (*MonitorJob, error) {
@@ -234,10 +259,12 @@ func scanJob(s scanner) (*MonitorJob, error) {
 	var lastExitAt sql.NullString
 	var pid sql.NullInt64
 
+	var schedule sql.NullString
+
 	err := s.Scan(
 		&job.ID, &job.Name, &argvJSON, &job.MatchPattern, &job.Target, &job.Cwd, &envJSON,
 		&job.DebounceSeconds, &createdAt, &updatedAt, &status,
-		&lastExitCode, &lastExitAt, &pid,
+		&lastExitCode, &lastExitAt, &pid, &schedule,
 	)
 	if err != nil {
 		return nil, err
@@ -279,6 +306,9 @@ func scanJob(s scanner) (*MonitorJob, error) {
 	if pid.Valid {
 		v := int(pid.Int64)
 		job.PID = &v
+	}
+	if schedule.Valid {
+		job.Schedule = schedule.String
 	}
 
 	return &job, nil

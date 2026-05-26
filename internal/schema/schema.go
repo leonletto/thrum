@@ -48,10 +48,16 @@ import (
 //     ceiling (sync/triggers.go:syncCompactorTimeout) can drop to 30s
 //     symmetric with the walker (s7is.7) once this index is in place across
 //     both branches.
+//   - v39: ALTER TABLE monitors ADD COLUMN schedule TEXT (thrum-puhr.9).
+//     Empty string / NULL means continuous mode; a non-empty 5-field cron
+//     expression switches the runner to scheduled mode (one-shot per fire,
+//     no auto-restart of the child between scheduled ticks). Idempotent —
+//     re-running the migration on a DB that already has the column is a
+//     no-op via columnSet check.
 //
 // v29 is a deliberate gap (reserved for MB-1.S6 on the substrate plan);
 // runMigrations handles all skipped/no-op versions cleanly.
-const CurrentVersion = 38
+const CurrentVersion = 39
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -404,7 +410,8 @@ func createTables(tx *sql.Tx) error {
 			status            TEXT NOT NULL,       -- "running" | "dead" | "stopped"
 			last_exit_code    INTEGER,
 			last_exit_at      TEXT,
-			pid               INTEGER
+			pid               INTEGER,
+			schedule          TEXT NOT NULL DEFAULT ''  -- 5-field cron expression; empty means continuous mode (v39)
 		)`,
 
 		// Permission nudges table (for permission-prompt detection — v21).
@@ -1931,6 +1938,30 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 				`CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)`,
 			); err != nil {
 				return fmt.Errorf("migration 37→38: %w", err)
+			}
+		}
+	}
+
+	// Migration from version 38 to 39: Add schedule column to monitors
+	// (thrum-puhr.9). NULL/empty = continuous mode; cron expression =
+	// scheduled mode (one-shot per fire). Idempotent: skip if column
+	// already present so re-runs are safe.
+	if startVersion < 39 && endVersion >= 39 {
+		hasMonitors, hasErr := tableExists(tx, "monitors")
+		if hasErr != nil {
+			return fmt.Errorf("migration 38→39: check monitors table: %w", hasErr)
+		}
+		if hasMonitors {
+			cols, colErr := columnSet(tx, "monitors")
+			if colErr != nil {
+				return fmt.Errorf("migration 38→39: read monitors columns: %w", colErr)
+			}
+			if !cols["schedule"] {
+				if _, err := tx.Exec(
+					`ALTER TABLE monitors ADD COLUMN schedule TEXT NOT NULL DEFAULT ''`,
+				); err != nil {
+					return fmt.Errorf("migration 38→39: %w", err)
+				}
 			}
 		}
 	}
