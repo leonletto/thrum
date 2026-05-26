@@ -28,7 +28,24 @@
 #   bash scripts/error-and-context-agent-sweep.sh                # default: 15 lines, all roles
 #   bash scripts/error-and-context-agent-sweep.sh --lines 25     # custom line count
 #   bash scripts/error-and-context-agent-sweep.sh --role implementer  # filter by role
-#   bash scripts/error-and-context-agent-sweep.sh --out /tmp/sweep.txt # write to file
+#   bash scripts/error-and-context-agent-sweep.sh --out /tmp/sweep.txt # write report to file
+#   bash scripts/error-and-context-agent-sweep.sh --no-nudge     # skip API-error continue nudges
+#
+# Always emits at most one "ALERT:" line to stdout when any agent is flagged.
+# The ALERT line is the consolidated signal a `thrum monitor` registration
+# matches against (--match '^ALERT:'). When --out is given, the full
+# per-agent report is written to that file; stdout carries the ALERT line
+# (and nothing else) plus any final exit-status text. When --out is omitted,
+# both the full report AND the ALERT line go to stdout. Silent when clean:
+# no ALERT line is emitted when no agent crosses a threshold.
+#
+# State file (consecutive-sweep STUCK detection):
+#   $THRUM_CONTEXT_SWEEP_STATE (override) OR
+#   ${XDG_STATE_HOME:-$HOME/.local/state}/thrum/context-sweep-state.json
+# Tracks the set of agents in api-error state from the previous sweep so
+# agents in api-error on 2 consecutive sweeps are flagged STUCK in the
+# ALERT line. The state file is created on first run; missing parent dirs
+# are created on demand. Never lives inside the repo.
 #
 # Exits 0 even on per-agent capture errors (continues sweeping). Exits non-zero
 # only if `thrum team --json` itself fails.
@@ -40,6 +57,7 @@ ROLE_FILTER=""   # empty = no filter
 OUT=""           # empty = stdout
 SHOW_ALL=0       # 0 = only emit flagged agents (default); 1 = emit all
 CTX_THRESHOLD=50 # int %; agents at-or-above this are flagged
+NUDGE=1          # 1 = auto-nudge api-error panes (default); --no-nudge sets 0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -48,6 +66,7 @@ while [[ $# -gt 0 ]]; do
         --out)   OUT="$2"; shift 2 ;;
         --all)   SHOW_ALL=1; shift ;;
         --ctx-threshold) CTX_THRESHOLD="$2"; shift 2 ;;
+        --no-nudge) NUDGE=0; shift ;;
         -h|--help)
             sed -n '2,/^$/p' "$0" | sed 's/^# \?//'
             exit 0
@@ -56,9 +75,28 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Pipe to file if --out, else stdout
+# Decide where the per-agent report goes. When --out is given, the report
+# goes to the file and stdout is reserved for the ALERT line. When --out is
+# absent the report goes to stdout, prefixed by the ALERT line.
+REPORT_DEST="/dev/stdout"
 if [[ -n "$OUT" ]]; then
-    exec > "$OUT"
+    REPORT_DEST="$OUT"
+    : > "$REPORT_DEST"  # truncate
+fi
+
+# Resolve the state file path. Override is supported for tests + the
+# daemon-driven monitor use-case (single canonical location across sweeps).
+STATE_FILE="${THRUM_CONTEXT_SWEEP_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/thrum/context-sweep-state.json}"
+mkdir -p "$(dirname "$STATE_FILE")" 2>/dev/null || true
+
+# Load the previous sweep's api-error agent set into a lookup string
+# |agent_a|agent_b| for fast substring membership tests. Tolerant of a
+# missing/corrupt state file.
+prev_api_set="|"
+if [[ -f "$STATE_FILE" ]]; then
+    while IFS= read -r a; do
+        [[ -n "$a" ]] && prev_api_set+="$a|"
+    done < <(jq -r '.api_error_agents[]? // empty' "$STATE_FILE" 2>/dev/null || true)
 fi
 
 now_epoch=$(date -u +%s)
@@ -122,9 +160,13 @@ for f in "${identity_files[@]}"; do
 done
 
 if [[ ${#agent_lines[@]} -eq 0 ]]; then
-    echo "# error-and-context-agent-sweep report (no alive tmux agents matched)"
-    echo "# generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    [[ -n "$ROLE_FILTER" ]] && echo "# role filter: $ROLE_FILTER"
+    {
+        echo "# error-and-context-agent-sweep report (no alive tmux agents matched)"
+        echo "# generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        [[ -n "$ROLE_FILTER" ]] && echo "# role filter: $ROLE_FILTER"
+    } > "$REPORT_DEST"
+    # Reset state file: no agents observed → empty api-error set.
+    printf '%s\n' '{"api_error_agents":[],"timestamp":"'"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"'"}' > "$STATE_FILE" 2>/dev/null || true
     exit 0
 fi
 
@@ -137,6 +179,13 @@ ATTENTION_BUF=$(mktemp)
 ALL_BUF=$(mktemp)
 ATTENTION_COUNT=0
 auto_nudges=()
+# Per-agent flag bookkeeping for the consolidated ALERT line.
+alert_segments=()
+flagged_count=0
+stuck_count=0
+tier3_count=0  # ctx >= 85%
+tier2_count=0  # 70% <= ctx < 85%
+cur_api_agents=()
 trap 'rm -f "$ATTENTION_BUF" "$ALL_BUF"' EXIT
 
 for line in "${agent_lines[@]}"; do
@@ -260,8 +309,11 @@ for line in "${agent_lines[@]}"; do
     # Always append to the all-buffer
     printf '%b' "$agent_section" >> "$ALL_BUF"
 
-    # Evaluate whether this agent needs attention
+    # Evaluate whether this agent needs attention + classify for ALERT line.
     needs_attention=0
+    ctx_int=""
+    tier=""    # "tier3" (>=85%), "tier2" (70-84%), or empty
+    reason_parts=()  # joined into the ALERT segment after the % marker
 
     # ctx_used >= threshold? Format is "X.X% (...)" — match the leading percent.
     if [[ "$ctx_used" =~ ^([0-9]+)\.([0-9]+)% ]]; then
@@ -269,23 +321,34 @@ for line in "${agent_lines[@]}"; do
         if [[ "$ctx_int" -ge "$CTX_THRESHOLD" ]]; then
             needs_attention=1
         fi
+        if [[ "$ctx_int" -ge 85 ]]; then
+            tier="tier3"
+        elif [[ "$ctx_int" -ge 70 ]]; then
+            tier="tier2"
+        fi
     elif [[ "$ctx_used" == "(capture failed)" ]]; then
         # Capture failure is a real concern — flag it
         needs_attention=1
+        reason_parts+=("capture-fail")
     fi
     # ctx_used == "(n/a)" is NOT a flag — Codex/Cursor runtimes have no transcript
 
     # api_errors present?
+    has_api_err=0
     if [[ "$api_errors" != "(none)" && "$api_errors" != "(capture failed)" ]]; then
         needs_attention=1
+        has_api_err=1
+        reason_parts+=("api-err")
+        cur_api_agents+=("$agent_id")
         # Auto-nudge: API errors (rate limits, transient server-side issues) are
         # deterministically recoverable by typing "continue" into the affected
         # pane — Claude Code retries the previous tool call from the same session
         # state. The thrum tmux send wrapper's queue stalls on fully-silent panes
         # (filed as thrum-7yhs), so we bypass via raw tmux send-keys here. Only
         # fires when this specific agent's pane contains an api_errors match, so
-        # no cross-agent carry-over.
-        if [[ -n "$tmux_session" && "$tmux_session" != "(none)" ]]; then
+        # no cross-agent carry-over. --no-nudge disables this entirely for
+        # daemon-driven runs where the operator's tmux context isn't available.
+        if [[ "$NUDGE" -eq 1 && -n "$tmux_session" && "$tmux_session" != "(none)" ]]; then
             tmux_target="${tmux_session%%:*}:0.0"
             tmux send-keys -t "$tmux_target" "continue" Enter 2>/dev/null && \
                 auto_nudges+=("$agent_id @ $tmux_target") || \
@@ -293,30 +356,78 @@ for line in "${agent_lines[@]}"; do
         fi
     fi
 
+    # STUCK detection: api-error this sweep AND last sweep.
+    is_stuck=0
+    if [[ "$has_api_err" -eq 1 && "$prev_api_set" == *"|$agent_id|"* ]]; then
+        is_stuck=1
+        reason_parts+=("STUCK")
+    fi
+
     if [[ "$needs_attention" -eq 1 ]]; then
         printf '%b' "$agent_section" >> "$ATTENTION_BUF"
         ATTENTION_COUNT=$((ATTENTION_COUNT + 1))
+        flagged_count=$((flagged_count + 1))
+        [[ "$is_stuck" -eq 1 ]] && stuck_count=$((stuck_count + 1))
+        case "$tier" in
+            tier3) tier3_count=$((tier3_count + 1)) ;;
+            tier2) tier2_count=$((tier2_count + 1)) ;;
+        esac
+        # Build per-agent ALERT segment: name(pct,reason,...).
+        pct_label="?"
+        [[ -n "$ctx_int" ]] && pct_label="${ctx_int}%"
+        joined="$pct_label"
+        for r in "${reason_parts[@]}"; do
+            joined+=",$r"
+        done
+        alert_segments+=("${agent_id}(${joined})")
     fi
 done
 
-# Header
-echo "# error-and-context-agent-sweep report"
-echo "# generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-echo "# lines per pane: $LINES"
-[[ -n "$ROLE_FILTER" ]] && echo "# role filter: $ROLE_FILTER"
-echo "# alive agents: ${#agent_lines[@]}; flagged: $ATTENTION_COUNT (ctx>=${CTX_THRESHOLD}% or api_errors or capture-fail)"
-if [[ ${#auto_nudges[@]} -gt 0 ]]; then
-    echo "# auto-nudged ${#auto_nudges[@]} agent(s) on api_errors with 'continue':"
-    for n in "${auto_nudges[@]}"; do echo "#   - $n"; done
+# Persist current sweep's api-error set for next-sweep STUCK detection.
+# Use jq to build a JSON array; tolerate missing parent dir / write failure
+# (state-file persistence is best-effort — STUCK detection degrades to
+# "always false" if writes fail, but the script still works).
+{
+    if [[ ${#cur_api_agents[@]} -eq 0 ]]; then
+        printf '%s\n' '{"api_error_agents":[],"timestamp":"'"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"'"}'
+    else
+        printf '%s\n' "${cur_api_agents[@]}" | jq -R . | jq -s --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" '{api_error_agents: ., timestamp: $ts}'
+    fi
+} > "$STATE_FILE" 2>/dev/null || true
+
+# Consolidated ALERT line — always goes to STDOUT (separate from the
+# per-agent report, which goes to REPORT_DEST). The thrum monitor
+# registration matches against this single line via --match '^ALERT:'.
+# Silent when clean: no ALERT line if zero agents were flagged.
+if [[ "$flagged_count" -gt 0 ]]; then
+    alert_body=$(IFS='; '; echo "${alert_segments[*]}")
+    echo "ALERT: flagged=$flagged_count stuck=$stuck_count tier3=$tier3_count tier2=$tier2_count — $alert_body"
 fi
 
+# Header → report file (or stdout if no --out)
+{
+    echo "# error-and-context-agent-sweep report"
+    echo "# generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    echo "# lines per pane: $LINES"
+    [[ -n "$ROLE_FILTER" ]] && echo "# role filter: $ROLE_FILTER"
+    echo "# alive agents: ${#agent_lines[@]}; flagged: $ATTENTION_COUNT (ctx>=${CTX_THRESHOLD}% or api_errors or capture-fail); stuck: $stuck_count; tier3(>=85%): $tier3_count; tier2(70-84%): $tier2_count"
+    if [[ ${#auto_nudges[@]} -gt 0 ]]; then
+        echo "# auto-nudged ${#auto_nudges[@]} agent(s) on api_errors with 'continue':"
+        for n in "${auto_nudges[@]}"; do echo "#   - $n"; done
+    elif [[ "$NUDGE" -eq 0 ]]; then
+        echo "# auto-nudge disabled (--no-nudge)"
+    fi
+} >> "$REPORT_DEST"
+
 # Emit body: --all forces full emit; otherwise only flagged agents
-if [[ "$SHOW_ALL" -eq 1 ]]; then
-    echo
-    cat "$ALL_BUF"
-elif [[ "$ATTENTION_COUNT" -eq 0 ]]; then
-    echo "# all clear — no agents need attention. Run with --all to see full fleet."
-else
-    echo
-    cat "$ATTENTION_BUF"
-fi
+{
+    if [[ "$SHOW_ALL" -eq 1 ]]; then
+        echo
+        cat "$ALL_BUF"
+    elif [[ "$ATTENTION_COUNT" -eq 0 ]]; then
+        echo "# all clear — no agents need attention. Run with --all to see full fleet."
+    else
+        echo
+        cat "$ATTENTION_BUF"
+    fi
+} >> "$REPORT_DEST"

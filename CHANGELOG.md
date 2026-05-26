@@ -31,6 +31,42 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Added
 
+- **`thrum monitor` cron scheduling + continuous-mode auto-restart
+  (thrum-puhr.9)** — `thrum monitor add` accepts a new `--schedule` flag
+  with standard 5-field cron expressions (e.g. `"*/5 * * * *"`,
+  `"7,27,47 * * * *"`, `"0 9-17 * * 1-5"`). Scheduled monitors run their
+  child one-shot per tick and never auto-restart between fires; continuous
+  monitors (no schedule) gain exponential-backoff auto-restart on child
+  exit (1s → 60s, doubled per failure, capped). A successful run of >= 10s
+  resets the backoff sequence. If the child exits more than 10 times
+  within a 5-minute window, the monitor is marked dead and an "exceeded
+  restart budget" notice is delivered to the monitor's target. Replaces
+  the previous "exit → MarkDead immediately" behavior for continuous
+  monitors with the more resilient retry + budget-cap loop.
+- **Schema v39 — `monitors.schedule` column** (thrum-puhr.9). Idempotent
+  migration adds a `TEXT NOT NULL DEFAULT ''` column to existing v38
+  databases. Empty schedule preserves continuous-mode semantics; any
+  populated schedule routes the runner into scheduled mode. Cross-binary
+  note: v39 lands on release/v0.10.6 first; thrum-agents will need a
+  parallel dead-end-DDL backport to keep co-residence safe.
+- **`coordinator-context-monitoring` sweep migrated to `thrum monitor`
+  (thrum-ubl5)** — the keepalive sweep moves off CronCreate to a
+  daemon-side `thrum monitor` registration (`context-monitoring`,
+  schedule `"7,27,47 * * * *"`, `--match '^ALERT:'`). The sweep script
+  (`scripts/error-and-context-agent-sweep.sh`) gained `--no-nudge` (used
+  by daemon-driven runs where the operator's tmux context isn't
+  available) and emits one consolidated `ALERT:` line per sweep when any
+  agent is flagged, formatted as
+  `ALERT: flagged=N stuck=S tier3=T tier2=U — name(ctx%,reason,classifier); …`.
+  Silent when the fleet is clean (no message fires). Consecutive-sweep
+  STUCK detection is backed by a state file at
+  `$XDG_STATE_HOME/thrum/context-sweep-state.json` (outside the repo).
+  The full per-agent report still lands at `/tmp/agent-sweep.txt` for
+  on-demand drill-down. Migrating to `thrum monitor` removes the
+  per-session re-add chore from the coordinator's post-prime checklist
+  for this monitor specifically — see updated SKILL + memory note for
+  guidance on OTHER CronCreate jobs (which still need per-session
+  re-init until they too are migrated).
 - **Sync re-architecture (thrum-s6os)** — the cross-machine wire stream now
   derives from per-agent + per-bridge-group state files rather than from a
   synced event journal. Daemon-local truth (heartbeats, session boundaries,
