@@ -38,6 +38,11 @@ type monitorStartParams struct {
 	Cwd             string            `json:"cwd"`
 	Env             map[string]string `json:"env"`
 	DebounceSeconds int               `json:"debounce_seconds"`
+	// Schedule is an optional 5-field cron expression. When set, the
+	// monitor's child is run one-shot per scheduled tick; when empty
+	// (default), the monitor runs the child continuously with
+	// exponential-backoff auto-restart (thrum-puhr.9).
+	Schedule string `json:"schedule,omitempty"`
 }
 
 // monitorStartResponse is returned on success.
@@ -72,6 +77,9 @@ type monitorJobView struct {
 	// PID of the running child (nil if stopped/dead). Added for R2.5 so
 	// CLI list/show can render a pid column per design doc §'thrum monitor list'.
 	PID *int `json:"pid,omitempty"`
+	// Schedule is the 5-field cron expression for scheduled-mode
+	// monitors. Empty for continuous monitors (thrum-puhr.9).
+	Schedule string `json:"schedule,omitempty"`
 }
 
 // redactEnv returns a new map with the same keys as src but all values replaced
@@ -102,6 +110,7 @@ func jobToView(job *monitor.MonitorJob) monitorJobView {
 		CreatedAt:       job.CreatedAt,
 		UpdatedAt:       job.UpdatedAt,
 		PID:             job.PID,
+		Schedule:        job.Schedule,
 	}
 }
 
@@ -121,6 +130,8 @@ func translateMonitorError(err error) error {
 		return fmt.Errorf("debounce must be at least %d seconds", monitor.MinDebounceSeconds)
 	case errors.Is(err, monitor.ErrInvalidRegex):
 		return fmt.Errorf("invalid match pattern: %v", unwrapMessage(err))
+	case errors.Is(err, monitor.ErrInvalidSchedule):
+		return fmt.Errorf("invalid schedule: %v", unwrapMessage(err))
 	case errors.Is(err, monitor.ErrNotFound):
 		return fmt.Errorf("monitor not found")
 	default:
@@ -229,6 +240,7 @@ func (h *MonitorHandler) HandleStart(ctx context.Context, params json.RawMessage
 		Cwd:             req.Cwd,
 		Env:             req.Env,
 		DebounceSeconds: req.DebounceSeconds,
+		Schedule:        req.Schedule,
 	})
 	if err != nil {
 		return nil, translateMonitorError(err)

@@ -903,11 +903,11 @@ func TestSchema_FreshInstall_HasMonitorsTable(t *testing.T) {
 		t.Errorf("monitors table should exist on fresh install, got count=%d", count)
 	}
 
-	// Expected columns
+	// Expected columns (schedule added in v39 — thrum-puhr.9).
 	expected := []string{
 		"id", "name", "argv", "match_pattern", "target", "cwd", "env",
 		"debounce_seconds", "created_at", "updated_at", "status",
-		"last_exit_code", "last_exit_at", "pid",
+		"last_exit_code", "last_exit_at", "pid", "schedule",
 	}
 	for _, col := range expected {
 		var n int
@@ -1051,9 +1051,9 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	}
 }
 
-func TestSchema_V38_CurrentVersion(t *testing.T) {
-	if schema.CurrentVersion != 38 {
-		t.Errorf("CurrentVersion = %d, want 38 (v36 base + v37 reserved placeholder for thrum-agents memory-tables alignment + v38 events.timestamp index per thrum-7ojv)", schema.CurrentVersion)
+func TestSchema_V39_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 39 {
+		t.Errorf("CurrentVersion = %d, want 39 (v36 base + v37 memory-tables back-port + v38 events.timestamp index + v39 monitors.schedule column per thrum-puhr.9)", schema.CurrentVersion)
 	}
 }
 
@@ -2199,8 +2199,8 @@ func TestSchema_V36_to_V38_FreshUpgrade(t *testing.T) {
 		t.Fatalf("Migrate v36→v38: %v", err)
 	}
 
-	if got := schemaVersion(t, db); got != 38 {
-		t.Errorf("post-migrate schema_version = %d, want 38", got)
+	if got := schemaVersion(t, db); got != schema.CurrentVersion {
+		t.Errorf("post-migrate schema_version = %d, want CurrentVersion", got)
 	}
 	if !indexExists(t, db, "idx_events_timestamp") {
 		t.Error("v38 migration did not create idx_events_timestamp index")
@@ -2247,8 +2247,8 @@ func TestSchema_V37_to_V38_CrossBinary(t *testing.T) {
 		t.Fatalf("Migrate v37→v38 (cross-binary path): %v", err)
 	}
 
-	if got := schemaVersion(t, db); got != 38 {
-		t.Errorf("post-migrate schema_version = %d, want 38", got)
+	if got := schemaVersion(t, db); got != schema.CurrentVersion {
+		t.Errorf("post-migrate schema_version = %d, want CurrentVersion", got)
 	}
 	if !indexExists(t, db, "idx_events_timestamp") {
 		t.Error("v38 migration did not create idx_events_timestamp index on v37 starting state")
@@ -2351,8 +2351,8 @@ func TestSchema_V36_to_V38_CreatesMemoryTables(t *testing.T) {
 	}
 
 	// Schema stamped at v38.
-	if got := schemaVersion(t, db); got != 38 {
-		t.Errorf("post-migrate schema_version = %d, want 38", got)
+	if got := schemaVersion(t, db); got != schema.CurrentVersion {
+		t.Errorf("post-migrate schema_version = %d, want CurrentVersion", got)
 	}
 }
 
@@ -2375,8 +2375,8 @@ func TestSchema_V38_Idempotent(t *testing.T) {
 	}
 
 	// Sanity: fresh install already at v38 with the index in place.
-	if got := schemaVersion(t, db); got != 38 {
-		t.Fatalf("fresh schema_version = %d, want 38", got)
+	if got := schemaVersion(t, db); got != schema.CurrentVersion {
+		t.Fatalf("fresh schema_version = %d, want CurrentVersion", got)
 	}
 	if !indexExists(t, db, "idx_events_timestamp") {
 		t.Fatal("fresh install missing idx_events_timestamp (createIndexes path)")
@@ -2391,10 +2391,95 @@ func TestSchema_V38_Idempotent(t *testing.T) {
 	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("Migrate v37→v38 with index already present: %v (CREATE INDEX IF NOT EXISTS must be idempotent)", err)
 	}
-	if got := schemaVersion(t, db); got != 38 {
-		t.Errorf("post-migrate schema_version = %d, want 38", got)
+	if got := schemaVersion(t, db); got != schema.CurrentVersion {
+		t.Errorf("post-migrate schema_version = %d, want CurrentVersion", got)
 	}
 	if !indexExists(t, db, "idx_events_timestamp") {
 		t.Error("idx_events_timestamp missing after idempotent re-run")
+	}
+}
+
+// TestSchema_V38_to_V39_AddsMonitorSchedule — thrum-puhr.9. Asserts the v39
+// migration adds the schedule column to an existing v38 monitors table.
+// Rewinds a fresh DB to v38, drops the schedule column (via table rebuild
+// since SQLite ALTER TABLE DROP COLUMN exists but we keep the test minimal
+// by starting from an explicit v38-shape table), then runs Migrate and
+// verifies the column landed.
+func TestSchema_V38_to_V39_AddsMonitorSchedule(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "v38-to-v39.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+
+	// Rebuild monitors as the v38-shape table (without schedule), then
+	// stamp the version back to v38 so Migrate runs only the v39 step.
+	rebuild := []string{
+		`DROP TABLE monitors`,
+		`CREATE TABLE monitors (
+			id                TEXT PRIMARY KEY,
+			name              TEXT NOT NULL UNIQUE,
+			argv              TEXT NOT NULL,
+			match_pattern     TEXT NOT NULL,
+			target            TEXT NOT NULL,
+			cwd               TEXT NOT NULL,
+			env               TEXT NOT NULL,
+			debounce_seconds  INTEGER NOT NULL,
+			created_at        TEXT NOT NULL,
+			updated_at        TEXT NOT NULL,
+			status            TEXT NOT NULL,
+			last_exit_code    INTEGER,
+			last_exit_at      TEXT,
+			pid               INTEGER
+		)`,
+		`UPDATE schema_version SET version = 38`,
+	}
+	for _, s := range rebuild {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatalf("rebuild v38 monitors: %v: %s", err, s)
+		}
+	}
+
+	if got := schemaVersion(t, db); got != 38 {
+		t.Fatalf("pre-migrate schema_version = %d, want 38", got)
+	}
+
+	// Sanity: column doesn't exist yet.
+	var n int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM pragma_table_info('monitors') WHERE name='schedule'`,
+	).Scan(&n); err != nil {
+		t.Fatalf("pre-migrate column check: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("pre-migrate schedule column already present (n=%d)", n)
+	}
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v38→v39: %v", err)
+	}
+
+	if got := schemaVersion(t, db); got != schema.CurrentVersion {
+		t.Errorf("post-migrate schema_version = %d, want CurrentVersion", got)
+	}
+
+	// Schedule column must now exist.
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM pragma_table_info('monitors') WHERE name='schedule'`,
+	).Scan(&n); err != nil {
+		t.Fatalf("post-migrate column check: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("post-migrate schedule column missing (n=%d, want 1)", n)
+	}
+
+	// Re-running Migrate must be idempotent — column-already-present path.
+	if err := schema.Migrate(db); err != nil {
+		t.Errorf("re-run Migrate at v39 must be a no-op: %v", err)
 	}
 }

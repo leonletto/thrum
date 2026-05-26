@@ -20,6 +20,9 @@ type MonitorStartRequest struct {
 	Cwd             string            `json:"cwd"`
 	Env             map[string]string `json:"env"`
 	DebounceSeconds int               `json:"debounce_seconds"`
+	// Schedule is an optional 5-field cron expression. Empty means
+	// continuous mode with auto-restart (thrum-puhr.9).
+	Schedule string `json:"schedule,omitempty"`
 }
 
 // MonitorStartResult is the response from monitor.start.
@@ -43,6 +46,7 @@ type MonitorJobView struct {
 	CreatedAt       time.Time         `json:"created_at"`
 	UpdatedAt       time.Time         `json:"updated_at"`
 	PID             *int              `json:"pid,omitempty"` // nil if stopped/dead
+	Schedule        string            `json:"schedule,omitempty"`
 }
 
 // ----- CLI helpers -----
@@ -77,8 +81,8 @@ func MonitorList(client *Client, includeAll bool, out io.Writer) error {
 		return nil
 	}
 
-	_, _ = fmt.Fprintf(out, "%-28s %-20s %-10s %-20s %-10s %s\n",
-		"ID", "NAME", "STATUS", "TARGET", "UPTIME", "PID")
+	_, _ = fmt.Fprintf(out, "%-28s %-20s %-10s %-20s %-10s %-8s %s\n",
+		"ID", "NAME", "STATUS", "TARGET", "UPTIME", "PID", "SCHEDULE")
 	for _, j := range jobs {
 		uptime := "-"
 		if j.Status == "running" && !j.CreatedAt.IsZero() {
@@ -88,8 +92,12 @@ func MonitorList(client *Client, includeAll bool, out io.Writer) error {
 		if j.PID != nil {
 			pidStr = fmt.Sprintf("%d", *j.PID)
 		}
-		_, _ = fmt.Fprintf(out, "%-28s %-20s %-10s %-20s %-10s %s\n",
-			j.ID, j.Name, j.Status, j.Target, uptime, pidStr)
+		sched := j.Schedule
+		if sched == "" {
+			sched = "-"
+		}
+		_, _ = fmt.Fprintf(out, "%-28s %-20s %-10s %-20s %-10s %-8s %s\n",
+			j.ID, j.Name, j.Status, j.Target, uptime, pidStr, sched)
 	}
 	return nil
 }
@@ -150,6 +158,9 @@ func MonitorShow(client *Client, identifier string, out io.Writer) error {
 	_, _ = fmt.Fprintf(out, "Target:   %s\n", job.Target)
 	_, _ = fmt.Fprintf(out, "Cwd:      %s\n", job.Cwd)
 	_, _ = fmt.Fprintf(out, "Debounce: %s\n", time.Duration(job.DebounceSeconds)*time.Second)
+	if job.Schedule != "" {
+		_, _ = fmt.Fprintf(out, "Schedule: %s\n", job.Schedule)
+	}
 	_, _ = fmt.Fprintf(out, "Argv:     %s\n", strings.Join(job.Argv, " "))
 	_, _ = fmt.Fprintf(out, "Created:  %s\n", job.CreatedAt)
 	_, _ = fmt.Fprintf(out, "Updated:  %s\n", job.UpdatedAt)

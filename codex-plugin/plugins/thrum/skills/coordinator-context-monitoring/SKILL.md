@@ -1,17 +1,10 @@
 ---
 name: coordinator-context-monitoring
-description:
-  "Use when managing live implementer/brainstormer agents during a long
-  coordination session, at epic merge gates, after a busy dispatch hour, or
-  whenever you suspect an agent is approaching context limits. Prevents
-  97%-context silent blow-ups by running a sweep + pre-emptive restart before
-  the agent degrades. Safe to wire into a recurring cron that INVOKES this skill
-  — the skill applies tier-ladder judgment, only firing autonomous restarts at
-  the >85% tier. What's forbidden is a cron/script that fires restarts
-  unconditionally without going through this skill's tier ladder."
+description: "Use when managing live implementer/brainstormer agents during a long coordination session, at epic merge gates, after a busy dispatch hour, or whenever you suspect an agent is approaching context limits. Prevents 97%-context silent blow-ups by running a sweep + pre-emptive restart before the agent degrades. Safe to wire into a recurring cron that INVOKES this skill — the skill applies tier-ladder judgment, only firing autonomous restarts at the >85% tier. What's forbidden is a cron/script that fires restarts unconditionally without going through this skill's tier ladder."
 # source: claude-plugin/skills/coordinator-context-monitoring/SKILL.md
 # generated-by: scripts/sync-skills.sh
 ---
+
 
 ## Coordinator: Context Monitoring and Pre-emptive Restart
 
@@ -19,23 +12,56 @@ description:
 
 Trigger this pattern at each of:
 
+- Receipt of an `ALERT: flagged=…` message from the `context-monitoring`
+  thrum monitor (the canonical scheduled sweep, fires every ~20 min)
 - Epic merge gates (after merging a sub-epic — E6.4, E6.5, etc.)
 - After dispatching 3+ tasks in quick succession
 - After any agent has been running for 60+ minutes without a restart
-- When a keepalive cron fires AND inbox has activity from a long-running agent
 - When you observe slow or degraded responses from an implementer
 - Manually whenever the session feels "intense" (lots of cycles in a short
   window)
 
-A recurring cron MAY invoke this skill — the skill itself applies tier-ladder
-judgment, so the >85% autonomous-restart tier fires conditionally, not on every
-sweep. What's forbidden is a script or cron that bypasses this skill and fires
-`thrum tmux restart --force` unconditionally (that violates
-`feedback_restart_discipline` — burn the runway, don't restart on schedule).
+The skill applies tier-ladder judgment, so the >85% autonomous-restart tier
+fires conditionally on actual ctx %, not on every sweep. What's forbidden is
+a script that bypasses this skill and fires `thrum tmux restart --force`
+unconditionally (that violates `feedback_restart_discipline` — burn the
+runway, don't restart on schedule).
 
-Per the cron-triggers-skills pattern, the cron prompt should be a one-line
-"Invoke the coordinator-context-monitoring skill" — never a re-implementation of
-the tier ladder below. That keeps the discipline single-sourced.
+### How the scheduled sweep works (v0.10.6+ — thrum monitor)
+
+The sweep runs as a daemon-managed `thrum monitor` job named
+`context-monitoring`, registered with a 5-field cron schedule
+(e.g. `"7,27,47 * * * *"` — every 20 min at :07/:27/:47). The job invokes
+`scripts/error-and-context-agent-sweep.sh --no-nudge --out
+/tmp/agent-sweep.txt`. The script emits a single consolidated `ALERT:` line
+to stdout when ANY agent crosses a threshold (ctx >= 50% OR api-error OR
+capture-fail); when the fleet is clean, the script is silent so no message
+fires. The monitor's `--match '^ALERT:'` filter routes the ALERT line as a
+message to `@coordinator_main`, which triggers this skill.
+
+Format of the ALERT line:
+
+```text
+ALERT: flagged=N stuck=S tier3=T tier2=U — agent_a(92%,api-err,STUCK); agent_b(88%); …
+```
+
+- `flagged` — total agents needing attention
+- `stuck` — api-errored on TWO consecutive sweeps (state file tracks this
+  across runs)
+- `tier3` — count with ctx >= 85% (force-restart candidates)
+- `tier2` — count with 70-84% ctx (tmux-send nudge candidates)
+- Per-agent segment: `name(ctx%,reason-if-any,classifier)` joined by `;`
+
+The full per-agent report stays at `/tmp/agent-sweep.txt` (overwritten each
+sweep) for on-demand drill-down — read it AFTER receiving an ALERT to see
+which specific panes are at risk.
+
+The previous keepalive-cron pattern (CronCreate `5fdb627b`) is deprecated
+in favor of this scheduled monitor. The bookkeeping responsibility moves
+out of the coordinator's per-session re-add chore and into the daemon's
+durable monitors table (survives daemon restart, no per-session re-init
+needed for this monitor — though OTHER CronCreate jobs may still require it
+per `feedback_cron_reinit_each_session`).
 
 ### Step 1 — Run the sweep
 
@@ -166,22 +192,50 @@ surface to operator BEFORE the next sweep so the auto-nudge can be held. Once
 `continue` fires, the agent resumes its previous tool call immediately — there's
 no recovery window.
 
-### Cron-fire safety checks
+### Pre-restart safety checks
 
-If this skill is triggered from a keepalive cron, add these guards BEFORE
-running the sweep:
+Whether triggered by the scheduled `context-monitoring` thrum monitor or by
+the coordinator manually invoking the skill, run these guards BEFORE firing
+a restart:
 
 1. **Verify the daemon is reachable**:
    `thrum team --json | jq '.members | length'` — if 0 or error, daemon is down;
    skip the sweep, surface to operator.
-2. **Check if any agent is mid-commit** (active tool call): look for
+2. **Confirm the monitor is alive**: `thrum monitor list` should show
+   `context-monitoring` in `running` status with a non-empty `SCHEDULE`
+   column. If absent or dead, the scheduled ALERTs aren't firing and the
+   skill must be invoked manually from a recurring cron until the monitor
+   is restored. (See "Re-register the monitor" below.)
+3. **Check if any agent is mid-commit** (active tool call): look for
    `Running bash` or active spinner in the sweep pane lines — if so, defer
    restart for that agent until the tool completes.
-3. **Never force-restart an agent whose pane shows a Git merge conflict or
+4. **Never force-restart an agent whose pane shows a Git merge conflict or
    active rebase** — that corrupts the worktree. Surface to operator instead.
-4. **Cooldown**: do not restart the same agent twice within 30 minutes. If an
+5. **Cooldown**: do not restart the same agent twice within 30 minutes. If an
    agent crosses threshold again that fast, something's wrong with their
    workload — surface to operator rather than restart-loop.
+
+#### Re-register the monitor
+
+If `thrum monitor list` doesn't show `context-monitoring`, register it from
+the main repo. The script path must be absolute (the daemon runs the
+command from a clean env, not the coordinator's shell), so resolve it
+from the repo root first:
+
+```bash
+SCRIPT="$(git -C /path/to/thrum/main-repo rev-parse --show-toplevel)/scripts/error-and-context-agent-sweep.sh"
+thrum monitor add \
+  --name context-monitoring \
+  --schedule "7,27,47 * * * *" \
+  --match '^ALERT:' \
+  --to @coordinator_main \
+  -- bash "$SCRIPT" --no-nudge --out /tmp/agent-sweep.txt
+```
+
+(Or substitute the literal absolute path if you don't have a shell handy
+in the daemon's environment.) The monitor fires one-shot per scheduled
+tick; in between ticks the child does not run, so there's no continuous
+CPU cost from the sweep.
 
 ### What to do post-restart
 
