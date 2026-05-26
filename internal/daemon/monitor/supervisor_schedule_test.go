@@ -224,17 +224,30 @@ func TestSupervisor_ContinuousChildExitRestarts(t *testing.T) {
 	id, err := sup.Add(ctx, spec)
 	require.NoError(t, err)
 
-	// Poll the store's last_exit_at to confirm restarts are happening.
-	// The runLoop calls RecordExit... actually no, only schedule mode
-	// records exits; continuous-mode restarts silently. So we instead
-	// confirm the monitor is still running (not dead) after a window in
-	// which a non-restarting runner would have MarkDead'd on first exit.
+	// Give the runLoop time for a few restart cycles. With initialBackoff
+	// at 10ms + child exit-clean in ~10-30ms, we expect at least several
+	// restart iterations in 300ms — each writes RecordExit so last_exit_at
+	// should become non-nil. Status must STAY running (we're under budget
+	// because backoffResetAfter is set to 24h above, but the budget is
+	// the default 10/5min and we never breach it in 300ms).
 	time.Sleep(300 * time.Millisecond)
 
 	job, err := store.GetByID(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, StatusRunning, job.Status,
 		"continuous monitor must auto-restart, not MarkDead, on each child exit")
+	// Each restart-cycle call RecordExit, so last_exit_at + last_exit_code
+	// must be populated after at least one exit. This guards against a
+	// silent regression where the continuous-mode RecordExit call goes
+	// away (the prior version of this test had a stale comment claiming
+	// continuous mode "records exits silently" — the production code
+	// now intentionally does call RecordExit between restarts so
+	// monitor.show reflects auto-restart history).
+	require.NotNil(t, job.LastExitAt,
+		"last_exit_at must be populated after continuous-mode restarts (RecordExit wired)")
+	require.NotNil(t, job.LastExitCode,
+		"last_exit_code must be populated after continuous-mode restarts")
+	assert.Equal(t, 0, *job.LastExitCode, "child exited cleanly with code 0")
 }
 
 // TestSupervisor_RestartBudgetExhaustionMarksDead: when child exits faster

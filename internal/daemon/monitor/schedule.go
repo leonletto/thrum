@@ -92,6 +92,16 @@ func ParseSchedule(expr string) (*Schedule, error) {
 // are restricted (neither is "*"), a tick fires if EITHER matches (OR). When
 // only one is restricted, that one alone gates the day. When both are "*"
 // every day is allowed.
+//
+// DST limitation (rc.5): the hour-advance step doesn't model DST
+// transitions. For a schedule targeting an hour skipped by spring-forward
+// (e.g. "30 2 * * *" in a US/Eastern locale on the day clocks jump
+// 02:00→03:00), Next() returns the next 03:00 boundary it can match
+// instead of falling through to the next day. Conversely, a fall-back
+// double-hour will fire twice. Deployments running on UTC are unaffected
+// (which is the thrum default). For non-UTC deployments where DST
+// correctness is load-bearing, file a follow-up to switch the in-tree
+// parser for a DST-aware library (e.g. robfig/cron/v3).
 func (s *Schedule) Next(from time.Time) time.Time {
 	// Start from the next minute boundary.
 	t := from.Add(time.Minute).Truncate(time.Minute)

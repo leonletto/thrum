@@ -648,6 +648,12 @@ func (s *MonitorSupervisor) runLoop(
 			// and spamming the child. Mark the monitor dead with a
 			// dedicated notice so the operator sees what went wrong.
 			if next.IsZero() {
+				// Re-check stoppedByUser before MarkDead so a Stop() racing
+				// with this branch doesn't overwrite the row from stopped →
+				// dead. Same TOCTOU guard the budget-exhaustion branch uses.
+				if handle.stoppedByUser.Load() {
+					return
+				}
 				content := fmt.Sprintf(
 					"[monitor:%s] schedule %q has no valid fire time within 5 years — marking dead. Fix the schedule and run: thrum monitor restart %s",
 					jobName, job.Schedule, jobID,
@@ -712,14 +718,37 @@ func (s *MonitorSupervisor) runLoop(
 		restartTimes = append(trimmed, now)
 
 		if len(restartTimes) > tun.MaxRestartsPerWindow {
-			content := fmt.Sprintf(
-				"[monitor:%s] exceeded restart budget (%d exits in %s; limit %d) — marking dead. Last exit code %d (pid %d) after %s.\nstdout (last 500 bytes): %s\nrestart: thrum monitor restart %s",
-				jobName, len(restartTimes), tun.RestartBudgetWindow, tun.MaxRestartsPerWindow,
-				lastExit.code, lastExit.pid, lastExit.duration.Round(time.Second),
-				lastExit.tail, jobID,
-			)
+			// Re-check stoppedByUser before MarkDead — a Stop() racing
+			// concurrently with the budget check would otherwise have its
+			// MarkStopped row overwritten by MarkDead, leaving operators
+			// looking at "dead" for a monitor they cleanly stopped.
+			if handle.stoppedByUser.Load() {
+				return
+			}
+			// If the budget was exhausted entirely by NewRunner build
+			// errors (lastExit.fired stays false for the whole window),
+			// the "exit code N (pid P) after Ds" body would show 0/0/0s
+			// and confuse the operator. Emit a distinct notice.
+			var content string
+			if lastExit.fired {
+				content = fmt.Sprintf(
+					"[monitor:%s] exceeded restart budget (%d exits in %s; limit %d) — marking dead. Last exit code %d (pid %d) after %s.\nstdout (last 500 bytes): %s\nrestart: thrum monitor restart %s",
+					jobName, len(restartTimes), tun.RestartBudgetWindow, tun.MaxRestartsPerWindow,
+					lastExit.code, lastExit.pid, lastExit.duration.Round(time.Second),
+					lastExit.tail, jobID,
+				)
+			} else {
+				content = fmt.Sprintf(
+					"[monitor:%s] exceeded restart budget (%d failed launches in %s; limit %d) — marking dead. The child process never started; check argv, cwd, and env. Inspect with: thrum monitor show %s",
+					jobName, len(restartTimes), tun.RestartBudgetWindow, tun.MaxRestartsPerWindow, jobID,
+				)
+			}
 			_ = s.delivery.Deliver(context.Background(), jobName, jobTarget, content)
-			_ = s.store.MarkDead(context.Background(), jobID, lastExit.code, time.Now())
+			exitCode := lastExit.code
+			if !lastExit.fired {
+				exitCode = -1
+			}
+			_ = s.store.MarkDead(context.Background(), jobID, exitCode, time.Now())
 			return
 		}
 

@@ -165,8 +165,15 @@ if [[ ${#agent_lines[@]} -eq 0 ]]; then
         echo "# generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
         [[ -n "$ROLE_FILTER" ]] && echo "# role filter: $ROLE_FILTER"
     } > "$REPORT_DEST"
-    # Reset state file: no agents observed → empty api-error set.
-    printf '%s\n' '{"api_error_agents":[],"timestamp":"'"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"'"}' > "$STATE_FILE" 2>/dev/null || true
+    # Reset state file: no agents observed → empty api-error set. Atomic
+    # write via tmp + mv so an interrupted run doesn't zero next-sweep
+    # STUCK detection.
+    reset_tmp=$(mktemp "${STATE_FILE}.tmp.XXXXXX" 2>/dev/null) || reset_tmp=""
+    if [[ -n "$reset_tmp" ]]; then
+        printf '%s\n' '{"api_error_agents":[],"timestamp":"'"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"'"}' > "$reset_tmp" 2>/dev/null \
+            && mv "$reset_tmp" "$STATE_FILE" 2>/dev/null \
+            || rm -f "$reset_tmp" 2>/dev/null
+    fi
     exit 0
 fi
 
@@ -384,16 +391,24 @@ for line in "${agent_lines[@]}"; do
 done
 
 # Persist current sweep's api-error set for next-sweep STUCK detection.
-# Use jq to build a JSON array; tolerate missing parent dir / write failure
-# (state-file persistence is best-effort — STUCK detection degrades to
-# "always false" if writes fail, but the script still works).
-{
-    if [[ ${#cur_api_agents[@]} -eq 0 ]]; then
-        printf '%s\n' '{"api_error_agents":[],"timestamp":"'"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"'"}'
-    else
-        printf '%s\n' "${cur_api_agents[@]}" | jq -R . | jq -s --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" '{api_error_agents: ., timestamp: $ts}'
-    fi
-} > "$STATE_FILE" 2>/dev/null || true
+# Atomic write: build into a tmp file in the same directory, then mv into
+# place. Single-writer (the daemon's monitor) makes torn-write practically
+# impossible, but a mid-write SIGKILL/disk-full would otherwise leave the
+# state file blank and zero the next sweep's STUCK history. Tolerant of
+# write failure (state persistence is best-effort — STUCK detection
+# degrades to "always false" if persistence fails, but the script still
+# works).
+state_tmp=""
+state_tmp=$(mktemp "${STATE_FILE}.tmp.XXXXXX" 2>/dev/null) || state_tmp=""
+if [[ -n "$state_tmp" ]]; then
+    {
+        if [[ ${#cur_api_agents[@]} -eq 0 ]]; then
+            printf '%s\n' '{"api_error_agents":[],"timestamp":"'"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"'"}'
+        else
+            printf '%s\n' "${cur_api_agents[@]}" | jq -R . | jq -s --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" '{api_error_agents: ., timestamp: $ts}'
+        fi
+    } > "$state_tmp" 2>/dev/null && mv "$state_tmp" "$STATE_FILE" 2>/dev/null || rm -f "$state_tmp" 2>/dev/null
+fi
 
 # Consolidated ALERT line — always goes to STDOUT (separate from the
 # per-agent report, which goes to REPORT_DEST). The thrum monitor
