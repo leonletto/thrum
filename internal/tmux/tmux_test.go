@@ -1,9 +1,71 @@
 package tmux
 
 import (
+	"os/exec"
 	"slices"
 	"testing"
 )
+
+// TestHasSession_KillSession_LiteralMatch — thrum-z63b regression.
+// tmux's `-t target-session` defaults to PREFIX MATCH: a bare
+// `-t foo` matches an existing `foo-bar` session. Pre-fix this made
+// HasSession("foo") return true (causing a false "session-exists" hint
+// from the CLI pre-check) and KillSession("foo") destroy `foo-bar` —
+// the actual z63b cascade where `thrum tmux create substrate-ui --force`
+// destroyed `substrate-ui-research`. The fix is the '=' literal-match
+// prefix on -t in both helpers; this test pins that prefix matching no
+// longer leaks across adjacent session names.
+//
+// Session naming: "thrum-z63b-prefix" (the lookup target, which never
+// exists) and "thrum-z63b-prefix-extra" (the alive collateral, which
+// must survive). The shared "thrum-z63b-prefix" is the prefix tmux
+// would erroneously match without the fix.
+//
+// Lives in the unit-test file (not tests/integration/) with a tmux
+// skip-guard because the integration build is currently broken on an
+// unrelated WriteEvent signature mismatch; the unit-package can still
+// run live-tmux assertions via skip-if-unavailable.
+func TestHasSession_KillSession_LiteralMatch(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux not available")
+	}
+
+	const (
+		lookupName = "thrum-z63b-prefix"
+		collateral = "thrum-z63b-prefix-extra"
+	)
+
+	// Cleanup any leftovers from a prior run BEFORE we test.
+	_ = KillSession(lookupName)
+	_ = KillSession(collateral)
+
+	// Create only the collateral — the lookup target never exists.
+	if err := CreateSession(collateral, t.TempDir()); err != nil {
+		t.Fatalf("CreateSession collateral: %v", err)
+	}
+	t.Cleanup(func() { _ = KillSession(collateral) })
+
+	// HasSession(lookupName) must be false even though `collateral`
+	// starts with `lookupName`. Pre-fix this returned true via tmux's
+	// prefix match.
+	if HasSession(lookupName) {
+		t.Errorf("HasSession(%q) returned true, but only %q exists — prefix-match leak (thrum-z63b)", lookupName, collateral)
+	}
+
+	// KillSession(lookupName) must NOT destroy the collateral. Pre-fix
+	// this destroyed collateral as the only prefix match. The kill is
+	// expected to error (no such session); that's the correct outcome
+	// — KillSession returns a wrapped error in that case.
+	_ = KillSession(lookupName) // expected to fail; ignore err
+	if !HasSession(collateral) {
+		t.Errorf("KillSession(%q) destroyed %q — prefix-match leak (thrum-z63b)", lookupName, collateral)
+	}
+
+	// Sanity: literal-match on the collateral works.
+	if !HasSession(collateral) {
+		t.Errorf("HasSession(%q) returned false on the alive session — literal-match regression", collateral)
+	}
+}
 
 // TestBuildCreateSessionArgs_ScrubsThrumVars pins thrum-t8mj: long-running
 // tmux servers retain stale THRUM_* environ that propagates to new sessions.

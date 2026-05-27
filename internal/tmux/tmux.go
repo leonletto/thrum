@@ -35,8 +35,16 @@ func ParseTarget(target string) (session, window, pane string) {
 }
 
 // HasSession checks whether a tmux session exists.
+//
+// Uses the '=' literal-match prefix on -t to defeat tmux's default
+// prefix-match semantics on target-session: a bare `-t substrate-ui`
+// matches an existing `substrate-ui-research` session (since the latter
+// has the former as a prefix), which previously caused HandleCreate to
+// report a false "session-exists" warning AND subsequently destroy the
+// wrong session when --force was added (thrum-z63b). The '=' prefix
+// forces exact match.
 func HasSession(name string) bool {
-	return safecmd.TmuxRun(context.Background(), "has-session", "-t", name) == nil
+	return safecmd.TmuxRun(context.Background(), "has-session", "-t", "="+name) == nil
 }
 
 // CreateSession creates a new detached tmux session with a clean environment.
@@ -225,8 +233,15 @@ func SetSessionTitle(session, title string) error {
 }
 
 // KillSession destroys a tmux session.
+//
+// Uses the '=' literal-match prefix on -t to defeat tmux's default
+// prefix-match semantics. Without this, `kill-session -t substrate-ui`
+// destroys an unrelated `substrate-ui-research` session as the only
+// prefix match — the destructive half of the thrum-z63b cascade. The
+// '=' prefix forces exact match so callers get either the named target
+// or a clean "session not found" error.
 func KillSession(name string) error {
-	_, err := safecmd.Tmux(context.Background(), "kill-session", "-t", name)
+	_, err := safecmd.Tmux(context.Background(), "kill-session", "-t", "="+name)
 	if err != nil {
 		return fmt.Errorf("tmux kill-session failed: %w", err)
 	}
