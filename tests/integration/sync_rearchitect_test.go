@@ -383,8 +383,12 @@ func writeAgentRegister(t *testing.T, st *state.State, agentID string) {
 		Module:    "test",
 		Name:      agentID,
 	}
-	if err := st.WriteEvent(context.Background(), evt); err != nil {
+	postCommit, err := st.WriteEvent(context.Background(), evt)
+	if err != nil {
 		t.Fatalf("WriteEvent agent.register: %v", err)
+	}
+	if postCommit != nil {
+		postCommit()
 	}
 }
 
@@ -405,8 +409,12 @@ func writeMessageCreate(t *testing.T, st *state.State, agentID, msgID string) st
 			Content: "hello world",
 		},
 	}
-	if err := st.WriteEvent(context.Background(), evt); err != nil {
+	postCommit, err := st.WriteEvent(context.Background(), evt)
+	if err != nil {
 		t.Fatalf("WriteEvent message.create: %v", err)
+	}
+	if postCommit != nil {
+		postCommit()
 	}
 	return msgID
 }
@@ -421,8 +429,15 @@ func writeMessageReceipt(t *testing.T, st *state.State, agentID, msgID string) {
 		MessageID:   msgID,
 		ReceiptType: "seen",
 	}
-	if err := st.WriteEvent(context.Background(), evt); err != nil {
+	postCommit, err := st.WriteEvent(context.Background(), evt)
+	if err != nil {
 		t.Fatalf("WriteEvent message.receipt: %v", err)
+	}
+	// message.receipt is non-structural so postCommit will be nil;
+	// nil-check kept for uniformity with the structural-event helpers
+	// above (bsn7 contract).
+	if postCommit != nil {
+		postCommit()
 	}
 }
 
