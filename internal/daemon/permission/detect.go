@@ -130,22 +130,60 @@ func IsTrustGate(runtime, paneContent string) bool {
 	return false
 }
 
+// selectionPromptRE matches the runtime-agnostic shape of an ACTIVE
+// interactive selection menu: the "❯" (U+276F) selection cursor on a
+// numbered option line ("❯ 1.", "❯ 2)"). This is the same structural
+// marker the claude.tool_confirmation pattern uses for its Variant-B
+// anchor (detect via patterns.go), lifted here as a standalone signal so
+// it fires for ANY numbered selection dialog — not just the permission
+// prompts whose question text lives in the Pattern library.
+//
+// The motivating case is Claude Code's AskUserQuestion dialog (thrum-7phu):
+// a multi-question selection UI rendered with the same "❯ <n>." cursor.
+// DetectPaneState misses it because the per-runtime patterns anchor on a
+// specific question phrase ("Do you want to proceed?"), and AskUserQuestion
+// carries an arbitrary caller-supplied question. Typing a message-arrival
+// nudge into such a dialog presses Enter on whatever option the cursor sits
+// on, silently auto-answering a human decision.
+//
+// Requiring the digit after the cursor keeps this off shell prompts: a
+// pure/starship "❯ " prompt has no numbered option following the arrow, so
+// "❯ ls" / "❯ " never match. The anchor is scoped to the bottom
+// paneBottomMatchLines (the active region) like every other detector here.
+var selectionPromptRE = regexp.MustCompile(`(?m)^[\s│┃]*❯\s+\d+[.)]\s`)
+
+// IsSelectionPrompt reports whether the captured pane shows an active
+// numbered selection menu (AskUserQuestion-style dialog, or any prompt
+// where the "❯" cursor sits on a numbered option and Enter selects it).
+// Empty content returns false. Scoped to the bottom paneBottomMatchLines.
+func IsSelectionPrompt(paneContent string) bool {
+	if paneContent == "" {
+		return false
+	}
+	return selectionPromptRE.MatchString(bottomLines(paneContent, paneBottomMatchLines))
+}
+
 // IsPaneSafeToType returns true when automated keystroke injection
 // into the captured pane is safe — i.e. there is no detected
-// permission prompt and no trust gate. Combines DetectPaneState (the
-// per-runtime supervisor-routed prompt detector) with IsTrustGate (the
-// runtime-agnostic / lightly-runtime-tagged trust dialog detector).
+// permission prompt, no trust gate, and no active selection menu.
+// Combines DetectPaneState (the per-runtime supervisor-routed prompt
+// detector), IsTrustGate (the runtime-agnostic trust dialog detector),
+// and IsSelectionPrompt (the runtime-agnostic numbered-menu detector,
+// thrum-7phu).
 //
-// This is the single chokepoint the four keystroke-injection sites
-// should consult before SendKeys. Returning false MUST cause the caller
-// to skip the inject AND log a structured info-level message that
-// names the site, so operators can correlate "no banner / no prime"
+// This is the single chokepoint the keystroke-injection sites should
+// consult before SendKeys. Returning false MUST cause the caller to skip
+// the inject AND log a structured info-level message that names the site,
+// so operators can correlate "no banner / no prime / deferred nudge"
 // outcomes with the safety gate that suppressed them.
 func IsPaneSafeToType(runtime, paneContent string) bool {
 	if DetectPaneState(runtime, paneContent) != "" {
 		return false
 	}
 	if IsTrustGate(runtime, paneContent) {
+		return false
+	}
+	if IsSelectionPrompt(paneContent) {
 		return false
 	}
 	return true

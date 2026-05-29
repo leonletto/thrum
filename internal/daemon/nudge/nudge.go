@@ -27,9 +27,25 @@ import (
 	"strings"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/permission"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
 )
+
+// Keystroke / pane seams. Production points at the real tmux helpers; tests
+// substitute fakes (mirrors internal/tmux/nudge.go's nudgeSendKeys pattern).
+// capturePaneLines is the tail size DispatchTmux reads to decide safe-to-type —
+// 30 matches the permission SessionPoller's CaptureLines so both see the same
+// active region.
+const capturePaneLines = 30
+
+var (
+	hasSessionFn  = ttmux.HasSession
+	capturePaneFn = ttmux.CapturePane
+)
+
+// realNudge is the production keystroke-injection target for nudgeFn (deferred.go).
+func realNudge(target, sender string) error { return ttmux.Nudge(target, sender) }
 
 // DispatchTmux fires asynchronous tmux nudges for every recipient in the
 // list. Each recipient is resolved to a tmux pane via the on-disk
@@ -75,7 +91,7 @@ func DispatchTmux(thrumDir string, recipients []string, senderName string) {
 			continue
 		}
 		go func(name string) {
-			target := ResolveTarget(thrumDir, name)
+			target, runtime := resolveTargetAndRuntime(thrumDir, name)
 			if target == "" {
 				slog.Info("[nudge] nudge.DispatchTmux no-target",
 					"sender", senderName,
@@ -84,7 +100,7 @@ func DispatchTmux(thrumDir string, recipients []string, senderName string) {
 				return
 			}
 			session, _, _ := ttmux.ParseTarget(target)
-			if !ttmux.HasSession(session) {
+			if !hasSessionFn(session) {
 				slog.Info("[nudge] nudge.DispatchTmux dead-session",
 					"sender", senderName,
 					"recipient", name,
@@ -93,13 +109,26 @@ func DispatchTmux(thrumDir string, recipients []string, senderName string) {
 				)
 				return
 			}
+			// thrum-7phu: never type into a pane showing an interactive
+			// selection dialog (permission modal, trust gate, or an
+			// AskUserQuestion menu) — the text + Enter would auto-answer a
+			// human decision. Defer the poke; the permission poller's
+			// HandleCheckPane re-delivers it via RedeliverIfSafe once the
+			// pane clears. On a capture error we fall through and nudge
+			// (preserve prior behavior — capture failures are rare and the
+			// alternative risks never notifying).
+			if content, err := capturePaneFn(target, capturePaneLines); err == nil &&
+				!permission.IsPaneSafeToType(runtime, content) {
+				DeferNudge(session, target, senderName)
+				return
+			}
 			slog.Info("[nudge] nudge.DispatchTmux fire",
 				"sender", senderName,
 				"recipient", name,
 				"target", target,
 				"session", session,
 			)
-			_ = ttmux.Nudge(target, senderName)
+			_ = nudgeFn(target, senderName)
 		}(recipientName)
 	}
 }
@@ -112,9 +141,21 @@ func DispatchTmux(thrumDir string, recipients []string, senderName string) {
 // .thrum/identities/<agentName>.json in each, so an agent registered
 // in any worktree on this machine is resolvable.
 func ResolveTarget(thrumDir, agentName string) string {
+	target, _ := resolveTargetAndRuntime(thrumDir, agentName)
+	return target
+}
+
+// resolveTargetAndRuntime is ResolveTarget plus the agent's runtime (claude,
+// codex, …) from the same identity file, so the caller can consult
+// permission.IsPaneSafeToType without a second scan (thrum-7phu). Returns
+// ("", "") when no identity with a tmux session is found. The first identity
+// file carrying a non-empty TmuxSession wins, and its Runtime is returned
+// alongside (may be "" for a pre-quickstart/legacy identity — callers treat an
+// empty runtime as "generic detection only", matching DetectPaneState).
+func resolveTargetAndRuntime(thrumDir, agentName string) (target, runtime string) {
 	// Check main repo identity dir first.
-	if target := readTmuxFromIdentity(filepath.Join(thrumDir, "identities"), agentName); target != "" {
-		return target
+	if t, rt := readTmuxAndRuntime(filepath.Join(thrumDir, "identities"), agentName); t != "" {
+		return t, rt
 	}
 
 	// Fall through to worktree identity dirs.
@@ -124,11 +165,11 @@ func ResolveTarget(thrumDir, agentName string) string {
 			continue // already checked
 		}
 		idDir := filepath.Join(wtPath, ".thrum", "identities")
-		if target := readTmuxFromIdentity(idDir, agentName); target != "" {
-			return target
+		if t, rt := readTmuxAndRuntime(idDir, agentName); t != "" {
+			return t, rt
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // HasLocalIdentity reports whether the named agent has an identity
@@ -195,22 +236,26 @@ func identityPath(dir, agentName string) string {
 	return ""
 }
 
-// readTmuxFromIdentity loads <identitiesDir>/<agentName>.json and
-// returns the TmuxSession field, or "" on any error (including
-// file-not-found, which is the common case when an agent isn't
-// registered in this particular worktree).
-func readTmuxFromIdentity(identitiesDir, agentName string) string {
+// readTmuxAndRuntime loads <identitiesDir>/<agentName>.json and returns the
+// TmuxSession + Runtime fields, or ("", "") on any error (including
+// file-not-found, the common case when an agent isn't registered in this
+// particular worktree). Runtime is only meaningful when TmuxSession is non-empty.
+func readTmuxAndRuntime(identitiesDir, agentName string) (target, runtime string) {
 	p := identityPath(identitiesDir, agentName)
 	if p == "" {
-		return ""
+		return "", ""
 	}
 	data, err := os.ReadFile(p) // #nosec G304 -- path is .thrum/identities/<name>.json
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	var idFile config.IdentityFile
 	if err := json.Unmarshal(data, &idFile); err != nil {
-		return ""
+		return "", ""
 	}
-	return idFile.TmuxSession
+	rt := idFile.Runtime
+	if rt == "" {
+		rt = idFile.PreferredRuntime // mirror config.Load's fallback
+	}
+	return idFile.TmuxSession, rt
 }

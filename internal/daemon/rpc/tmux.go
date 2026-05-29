@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/nudge"
 	"github.com/leonletto/thrum/internal/daemon/permission"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
@@ -835,9 +836,17 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 	if paneState == "idle" {
 		if idFile != nil && idFile.AgentStatus == "working" {
 			paneState = "working_but_idle"
-			target := resolveNudgeTarget(h.thrumDir, agentName)
-			if target != "" {
-				_ = ttmux.Nudge(target, "daemon")
+			// thrum-7phu: the status-recovery nudge types text + Enter just like
+			// the message-arrival path, so it carries the same hazard — firing it
+			// into an active selection dialog (AskUserQuestion / permission /
+			// trust) would auto-answer a human decision. Gate on the same
+			// safe-to-type chokepoint. Empty content (no capture) is treated as
+			// safe, preserving prior behavior when the pane state is unknown.
+			if permission.IsPaneSafeToType(idFile.Runtime, req.Content) {
+				target := resolveNudgeTarget(h.thrumDir, agentName)
+				if target != "" {
+					_ = ttmux.Nudge(target, "daemon")
+				}
 			}
 		}
 	}
@@ -856,6 +865,17 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 		if err := h.permission.OnRecovery(ctx, req.Session, agentName); err != nil {
 			log.Printf("[tmux] check-pane: OnRecovery failed: %v", err)
 		}
+	}
+
+	// thrum-7phu: re-deliver any message-arrival nudge deferred while this
+	// pane was showing an interactive selection dialog. RedeliverIfSafe is
+	// self-gating — it re-checks pane safety (permission prompt / trust gate /
+	// AskUserQuestion menu) against the freshly captured content and only
+	// fires when the pane is genuinely safe to type into, so it's correct to
+	// call on every poll regardless of paneState. No-op when nothing is
+	// deferred for this session.
+	if idFile != nil {
+		nudge.RedeliverIfSafe(req.Session, idFile.Runtime, req.Content)
 	}
 
 	return &CheckPaneResponse{
