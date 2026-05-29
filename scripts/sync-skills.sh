@@ -296,6 +296,42 @@ EOF
   echo "  adapted skill ${skill_name}"
 }
 
+# ─── Markdown formatting (sync↔fmt-md idempotency) ───────────────────────────
+
+format_generated_markdown() {
+  # Run prettier over a generated markdown tree so sync output is byte-identical
+  # to what `make fmt-md` produces. Only the codex path GENERATES new prose (the
+  # heredoc preambles below); without this pass the static heredoc wrap diverges
+  # from prettier's --prose-wrap reflow, so every sync→fmt-md cycle re-drifts the
+  # codex SKILL.md files (thrum-pp6n). Flags MUST stay in lockstep with the
+  # Makefile `fmt-md` target.
+  local target_dir="$1"
+
+  if ! command -v prettier >/dev/null 2>&1; then
+    echo "  WARNING: prettier not found — generated codex markdown will NOT match" >&2
+    echo "  'make fmt-md' and will drift on the next format pass. Install with:" >&2
+    echo "    npm install -g prettier" >&2
+    return 0
+  fi
+
+  # Run from REPO_ROOT with a repo-relative glob so --ignore-path .prettierignore
+  # resolves identically to the Makefile fmt-md target. Suppress prettier's
+  # stdout (the noisy formatted-file list) but let stderr surface — a real
+  # prettier error (parse failure, unwritable file) must not be swallowed into a
+  # false-green "formatted" line.
+  local rel_glob="${target_dir#"${REPO_ROOT}/"}/**/*.md"
+  if (
+    cd "${REPO_ROOT}" &&
+      prettier --write "${rel_glob}" \
+        --prose-wrap always --ignore-path .prettierignore >/dev/null
+  ); then
+    echo "  formatted generated markdown (prettier --prose-wrap always)"
+  else
+    echo "  WARNING: prettier exited non-zero — generated codex markdown may not" >&2
+    echo "  match 'make fmt-md'; inspect the prettier error above." >&2
+  fi
+}
+
 # ─── Codex target ───────────────────────────────────────────────────────────
 
 sync_codex() {
@@ -378,6 +414,10 @@ sync_codex() {
       echo "  skip: ${skill_name} (no source at ${src})" >&2
     fi
   done
+
+  # Normalize generated prose to prettier's canonical wrap so the committed
+  # codex output stays idempotent against `make fmt-md` (thrum-pp6n).
+  format_generated_markdown "${CODEX_SKILLS}"
 
   echo "  codex sync complete"
 }
