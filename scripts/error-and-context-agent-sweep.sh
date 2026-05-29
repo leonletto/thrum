@@ -50,8 +50,6 @@
 # Exits 0 even on per-agent capture errors (continues sweeping). Exits non-zero
 # only if `thrum team --json` itself fails.
 
-set -euo pipefail
-
 # Bash 4+ required: the script uses `mapfile`, which was added in bash 4.0.
 # macOS ships bash 3.2 at /bin/bash; the shebang `#!/usr/bin/env bash`
 # respects PATH so a homebrew bash 5 takes precedence when installed, but
@@ -59,11 +57,17 @@ set -euo pipefail
 # or with /opt/homebrew not in PATH would otherwise get a noisy
 # 'mapfile: command not found' mid-execution. Fail fast with a clean
 # operator-facing message instead. (thrum-roeq sidebar.)
+#
+# This guard runs BEFORE `set -euo pipefail` so a bash 3 operator sees the
+# clean message even if some future edit between the set line and here ever
+# introduces a transient error on bash 3.
 if [[ ${BASH_VERSINFO[0]:-0} -lt 4 ]]; then
     printf 'error-and-context-agent-sweep.sh: requires bash 4 or newer (mapfile builtin); detected bash %s\n' "${BASH_VERSION:-unknown}" >&2
     printf '  fix: rerun with `/opt/homebrew/bin/bash %s` (macOS homebrew) or install a newer bash on PATH.\n' "$0" >&2
     exit 2
 fi
+
+set -euo pipefail
 
 LINES=10
 ROLE_FILTER=""   # empty = no filter
@@ -284,18 +288,32 @@ for line in "${agent_lines[@]}"; do
             # sortable, so plain bash string comparison gives the right
             # order without any jq date arithmetic.
             #
-            # head -50 bounds the scan per file; in observed Claude
+            # Assumption: all observed Claude JSONL timestamps use the
+            # 'Z' UTC suffix (e.g. 2026-05-29T05:13:00.000Z). The lexical
+            # comparison stays correct as long as that format is uniform.
+            # If a future Claude version emits mixed offset forms (e.g.
+            # `+00:00`), the comparison would silently miscompare; that
+            # scenario is not observed today.
+            #
+            # head -100 bounds the scan per file; in observed Claude
             # JSONLs the first timestamped record (typically an
-            # `attachment` event) lands within the first ~5 lines.
-            # Files whose head contains no timestamped record are
-            # skipped (corrupt / never-started session — treat as
-            # not-eligible).
+            # `attachment` event) lands within the first ~5 lines, but
+            # the bound gives headroom for sessions with large
+            # last-prompt preamble blocks (resume-context reads stage
+            # extra attachment/permission-mode records up front). Files
+            # whose head contains no timestamped record are skipped
+            # (corrupt / never-started session — treat as not-eligible).
+            #
+            # nullglob restore: save the prior shopt state so a future
+            # caller that sources this script (none today) doesn't get
+            # nullglob unconditionally disabled after the block.
+            if shopt -q nullglob; then _roeq_restore_ng=1; else _roeq_restore_ng=0; fi
             shopt -s nullglob
             newest_birth=""
             newest_file=""
             for jsonl_candidate in "$transcript_dir"/*.jsonl; do
                 [[ -f "$jsonl_candidate" ]] || continue
-                birth_ts=$(head -50 "$jsonl_candidate" 2>/dev/null \
+                birth_ts=$(head -100 "$jsonl_candidate" 2>/dev/null \
                     | jq -r 'select(.timestamp) | .timestamp' 2>/dev/null \
                     | head -1)
                 [[ -z "$birth_ts" ]] && continue
@@ -304,7 +322,8 @@ for line in "${agent_lines[@]}"; do
                     newest_file="$jsonl_candidate"
                 fi
             done
-            shopt -u nullglob
+            (( _roeq_restore_ng == 0 )) && shopt -u nullglob
+            unset _roeq_restore_ng
             transcript="$newest_file"
         fi
     fi

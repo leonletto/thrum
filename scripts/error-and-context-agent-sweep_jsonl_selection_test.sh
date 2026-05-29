@@ -110,7 +110,7 @@ touch -t 202605290530 "$FRESH_JSONL"  # older mtime than STALE (05:30 today)
 
 # Sanity probe: confirm ls -t order matches the trap (STALE first).
 ls_first=$(ls -t "$TRANSCRIPT_DIR"/*.jsonl | head -1)
-if [[ "$(basename "$ls_first")" != "stale-session.jsonl" ]]; then
+if [[ "$(basename "$ls_first")" != "$(basename "$STALE_JSONL")" ]]; then
     echo "FAIL: setup error — STALE should be the ls -t winner (mtime newest);"
     echo "      ls -t picked: $(basename "$ls_first")"
     exit 1
