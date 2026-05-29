@@ -127,5 +127,5 @@ thrum reply <MSG_ID> "Received. Starting <scope>. ETA <rough>."
 thrum agent set-status working
 ```
 
-The companion `set-status idle` call lives in `researcher-answering-queries` for the
-response/DONE side.
+The companion `set-status idle` call lives in `researcher-answering-queries` for
+the response/DONE side.

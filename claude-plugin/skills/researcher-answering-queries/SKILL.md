@@ -93,4 +93,5 @@ thrum send "Research <task-id>: <finding>. Evidence: <file:line refs>." --to @<r
 thrum agent set-status idle
 ```
 
-The local-write path is identical to the implementer side (`cmd/thrum/agent.go:671-690`).
+The local-write path is identical to the implementer side
+(`cmd/thrum/agent.go:671-690`).

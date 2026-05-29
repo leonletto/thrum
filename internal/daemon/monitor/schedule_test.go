@@ -33,19 +33,19 @@ func TestParseSchedule_Valid(t *testing.T) {
 func TestParseSchedule_Invalid(t *testing.T) {
 	cases := []string{
 		"",
-		"* * * *",                 // 4 fields
-		"* * * * * *",             // 6 fields
-		"60 * * * *",              // minute > 59
-		"* 24 * * *",              // hour > 23
-		"* * 0 * *",               // day < 1
-		"* * 32 * *",              // day > 31
-		"* * * 0 *",               // month < 1
-		"* * * 13 *",              // month > 12
-		"* * * * 8",               // dow > 7
-		"abc * * * *",             // non-numeric
-		"5-2 * * * *",             // inverted range
-		"*/0 * * * *",             // zero step
-		"5/3 * * * *",             // step without lhs (we require range or *)
+		"* * * *",     // 4 fields
+		"* * * * * *", // 6 fields
+		"60 * * * *",  // minute > 59
+		"* 24 * * *",  // hour > 23
+		"* * 0 * *",   // day < 1
+		"* * 32 * *",  // day > 31
+		"* * * 0 *",   // month < 1
+		"* * * 13 *",  // month > 12
+		"* * * * 8",   // dow > 7
+		"abc * * * *", // non-numeric
+		"5-2 * * * *", // inverted range
+		"*/0 * * * *", // zero step
+		"5/3 * * * *", // step without lhs (we require range or *)
 	}
 	for _, expr := range cases {
 		t.Run(expr, func(t *testing.T) {

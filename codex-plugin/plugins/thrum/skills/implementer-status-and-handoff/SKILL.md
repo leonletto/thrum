@@ -128,12 +128,12 @@ If you accumulate a new rule mid-session (the user corrects you), capture it via
 
 ### Pattern D self-write — set `agent_status=idle` on DONE handoff (thrum-9neg)
 
-When reporting DONE to the coordinator, write `agent_status="idle"` to your local
-identity file. This closes the `working→idle` transition opened by the ACK template's
-`set-status working` (sibling skill `implementer-receiving-dispatch`). The sweep
-script reads this field to distinguish "agent finished cleanly" from "agent stuck
-claiming to work" — see `coordinator-context-monitoring` SKILL.md for the tier-ladder
-consumption.
+When reporting DONE to the coordinator, write `agent_status="idle"` to your
+local identity file. This closes the `working→idle` transition opened by the ACK
+template's `set-status working` (sibling skill
+`implementer-receiving-dispatch`). The sweep script reads this field to
+distinguish "agent finished cleanly" from "agent stuck claiming to work" — see
+`coordinator-context-monitoring` SKILL.md for the tier-ladder consumption.
 
 ```bash
 # Step 1: Report DONE to coordinator
@@ -143,4 +143,5 @@ thrum send "DONE: <task-id>. <one-line summary>. Commits: <SHA1>, <SHA2>." --to 
 thrum agent set-status idle
 ```
 
-The local-write path is identical to the ACK side (`cmd/thrum/agent.go:671-690`).
+The local-write path is identical to the ACK side
+(`cmd/thrum/agent.go:671-690`).

@@ -107,11 +107,11 @@ If you accumulate a new rule mid-session (the user corrects you), capture it via
 
 ### Pattern D self-write — set `agent_status=working` on dispatch ACK (thrum-9neg)
 
-Immediately after sending the dispatch ACK, write `agent_status="working"` to your
-local identity file. This is the Pattern D self-write that makes `agent_status` carry
-signal across the fleet — the sweep script + coordinator-context-monitoring skill use
-it to flag agents that go tmux-quiet despite claiming `working` (STUCK-WORKING
-classification per thrum-9neg L5).
+Immediately after sending the dispatch ACK, write `agent_status="working"` to
+your local identity file. This is the Pattern D self-write that makes
+`agent_status` carry signal across the fleet — the sweep script +
+coordinator-context-monitoring skill use it to flag agents that go tmux-quiet
+despite claiming `working` (STUCK-WORKING classification per thrum-9neg L5).
 
 ```bash
 # Step 1: ACK the dispatch within 2 minutes
@@ -121,7 +121,7 @@ thrum reply <MSG_ID> "Received. Starting <scope>. ETA <rough>."
 thrum agent set-status working
 ```
 
-The local-write path at `cmd/thrum/agent.go:671-690` updates your own identity file
-only — coord overrides remote agents via `--agent <name>` per L1. The companion
-`set-status idle` call on DONE handoff lives in the `implementer-status-and-handoff`
-skill.
+The local-write path at `cmd/thrum/agent.go:671-690` updates your own identity
+file only — coord overrides remote agents via `--agent <name>` per L1. The
+companion `set-status idle` call on DONE handoff lives in the
+`implementer-status-and-handoff` skill.

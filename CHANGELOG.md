@@ -31,85 +31,80 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Added
 
-- **Agent-status Pattern D wiring + STUCK-WORKING sweep detection
-  (thrum-9neg)** — implementer and researcher skill templates now set
-  `agent_status=working` on dispatch ACK and `agent_status=idle` on DONE
-  / response, written via `thrum agent set-status` from the agent's own
-  pane (Pattern D self-writes). The `agent.set-status` RPC validator and
-  the CLI `thrum agent set-status` allowlist gain `stuck` as a fourth
-  valid state alongside `working|idle|blocked`, aligning the operator
-  surface with what `permission.markAgentStuck` already writes
-  programmatically. The error-and-context sweep script
-  (`scripts/error-and-context-agent-sweep.sh`) gains `--silence-threshold-min`
-  (override; default 10min), reads `intent` from the identity file,
-  computes tmux silence age via `#{window_activity}`, and surfaces a
-  composite `stuck_working` axis in both the consolidated `ALERT:` line
-  and the per-agent section. A new fixture-driven smoke test
-  (`scripts/error-and-context-agent-sweep_stuck_working_test.sh`) pins
-  the ALERT axis + header format. The `coordinator-context-monitoring`
-  SKILL.md gains a composite tier table that documents the
-  `stuck` × `stuck_working` × `tier` decision space the new
-  instrumentation surfaces. Backported from thrum-agents tip 2d7291bcbd
-  via 16 cherry-picks (14 clean + 2 translated: `cmd/thrum/agent.go` →
-  `cmd/thrum/main.go:3344` since the cmd/thrum decomposition arc landed
-  on thrum-agents only, and the new `HandleSetAgentStatus` tests
-  translated to the `json.RawMessage` handler shape since the typed-
-  handler signature hasn't been backported).
-- **Restore `--json` / `--report-only` / `THRUM_SWEEP_IDENTITY_GLOBS`
-  to the error-and-context sweep script (thrum-l9e6 expand-scope)** —
-  three sweep-script features were lost when the puhr.9/ubl5 monitor
-  work cherry-picked from thrum-agents to release/v0.10.6 (coord
-  "decision A"); thrum-l9e6 restores them so the daemon api-error
-  auto-remediation handler (thrum-sdzk) keeps its single-sourced
-  detection seam and the integration test fixtures keep their pivot
-  point. `--json` emits one JSONL object per flagged agent and
-  suppresses both the ALERT line and the human text report; the JSON
+- **Agent-status Pattern D wiring + STUCK-WORKING sweep detection (thrum-9neg)**
+  — implementer and researcher skill templates now set `agent_status=working` on
+  dispatch ACK and `agent_status=idle` on DONE / response, written via
+  `thrum agent set-status` from the agent's own pane (Pattern D self-writes).
+  The `agent.set-status` RPC validator and the CLI `thrum agent set-status`
+  allowlist gain `stuck` as a fourth valid state alongside
+  `working|idle|blocked`, aligning the operator surface with what
+  `permission.markAgentStuck` already writes programmatically. The
+  error-and-context sweep script (`scripts/error-and-context-agent-sweep.sh`)
+  gains `--silence-threshold-min` (override; default 10min), reads `intent` from
+  the identity file, computes tmux silence age via `#{window_activity}`, and
+  surfaces a composite `stuck_working` axis in both the consolidated `ALERT:`
+  line and the per-agent section. A new fixture-driven smoke test
+  (`scripts/error-and-context-agent-sweep_stuck_working_test.sh`) pins the ALERT
+  axis + header format. The `coordinator-context-monitoring` SKILL.md gains a
+  composite tier table that documents the `stuck` × `stuck_working` × `tier`
+  decision space the new instrumentation surfaces. Backported from thrum-agents
+  tip 2d7291bcbd via 16 cherry-picks (14 clean + 2 translated:
+  `cmd/thrum/agent.go` → `cmd/thrum/main.go:3344` since the cmd/thrum
+  decomposition arc landed on thrum-agents only, and the new
+  `HandleSetAgentStatus` tests translated to the `json.RawMessage` handler shape
+  since the typed- handler signature hasn't been backported).
+- **Restore `--json` / `--report-only` / `THRUM_SWEEP_IDENTITY_GLOBS` to the
+  error-and-context sweep script (thrum-l9e6 expand-scope)** — three
+  sweep-script features were lost when the puhr.9/ubl5 monitor work
+  cherry-picked from thrum-agents to release/v0.10.6 (coord "decision A");
+  thrum-l9e6 restores them so the daemon api-error auto-remediation handler
+  (thrum-sdzk) keeps its single-sourced detection seam and the integration test
+  fixtures keep their pivot point. `--json` emits one JSONL object per flagged
+  agent and suppresses both the ALERT line and the human text report; the JSON
   carries the original `agent_id` / `tmux_target` / `api_errors` /
   `flagged_reason` (canonical single token: `api_error` > `capture_failed`
-  > `ctx` > `stuck_working`) plus additive `is_stuck` / `stuck_working`
-  / `tier` axes. `--report-only` is an alias for `--no-nudge`.
-  `THRUM_SWEEP_IDENTITY_GLOBS` overrides the hardcoded identity glob list
-  with a space-separated env var (intentional word-split for pathname
-  expansion). Two integration tests previously stuck on `t.Skip`
-  (`TestErrorContextSweep_JSONMode` and
-  `TestErrorContextSweep_NoNudge_SuppressesSendKeys`) land NON-skipped
-  and pass on release/v0.10.6.
+  > `ctx` > `stuck_working`) plus additive `is_stuck` / `stuck_working` / `tier`
+  > axes. `--report-only` is an alias for `--no-nudge`.
+  > `THRUM_SWEEP_IDENTITY_GLOBS` overrides the hardcoded identity glob list with
+  > a space-separated env var (intentional word-split for pathname expansion).
+  > Two integration tests previously stuck on `t.Skip`
+  > (`TestErrorContextSweep_JSONMode` and
+  > `TestErrorContextSweep_NoNudge_SuppressesSendKeys`) land NON-skipped and
+  > pass on release/v0.10.6.
 - **`thrum monitor` cron scheduling + continuous-mode auto-restart
-  (thrum-puhr.9)** — `thrum monitor add` accepts a new `--schedule` flag
-  with standard 5-field cron expressions (e.g. `"*/5 * * * *"`,
-  `"7,27,47 * * * *"`, `"0 9-17 * * 1-5"`). Scheduled monitors run their
-  child one-shot per tick and never auto-restart between fires; continuous
-  monitors (no schedule) gain exponential-backoff auto-restart on child
-  exit (1s → 60s, doubled per failure, capped). A successful run of >= 10s
-  resets the backoff sequence. If the child exits more than 10 times
-  within a 5-minute window, the monitor is marked dead and an "exceeded
-  restart budget" notice is delivered to the monitor's target. Replaces
-  the previous "exit → MarkDead immediately" behavior for continuous
+  (thrum-puhr.9)** — `thrum monitor add` accepts a new `--schedule` flag with
+  standard 5-field cron expressions (e.g. `"*/5 * * * *"`, `"7,27,47 * * * *"`,
+  `"0 9-17 * * 1-5"`). Scheduled monitors run their child one-shot per tick and
+  never auto-restart between fires; continuous monitors (no schedule) gain
+  exponential-backoff auto-restart on child exit (1s → 60s, doubled per failure,
+  capped). A successful run of >= 10s resets the backoff sequence. If the child
+  exits more than 10 times within a 5-minute window, the monitor is marked dead
+  and an "exceeded restart budget" notice is delivered to the monitor's target.
+  Replaces the previous "exit → MarkDead immediately" behavior for continuous
   monitors with the more resilient retry + budget-cap loop.
 - **Schema v39 — `monitors.schedule` column** (thrum-puhr.9). Idempotent
-  migration adds a `TEXT NOT NULL DEFAULT ''` column to existing v38
-  databases. Empty schedule preserves continuous-mode semantics; any
-  populated schedule routes the runner into scheduled mode. Cross-binary
-  note: v39 lands on release/v0.10.6 first; thrum-agents will need a
-  parallel dead-end-DDL backport to keep co-residence safe.
+  migration adds a `TEXT NOT NULL DEFAULT ''` column to existing v38 databases.
+  Empty schedule preserves continuous-mode semantics; any populated schedule
+  routes the runner into scheduled mode. Cross-binary note: v39 lands on
+  release/v0.10.6 first; thrum-agents will need a parallel dead-end-DDL backport
+  to keep co-residence safe.
 - **`coordinator-context-monitoring` sweep migrated to `thrum monitor`
-  (thrum-ubl5)** — the keepalive sweep moves off CronCreate to a
-  daemon-side `thrum monitor` registration (`context-monitoring`,
-  schedule `"7,27,47 * * * *"`, `--match '^ALERT:'`). The sweep script
-  (`scripts/error-and-context-agent-sweep.sh`) gained `--no-nudge` (used
-  by daemon-driven runs where the operator's tmux context isn't
-  available) and emits one consolidated `ALERT:` line per sweep when any
-  agent is flagged, formatted as
+  (thrum-ubl5)** — the keepalive sweep moves off CronCreate to a daemon-side
+  `thrum monitor` registration (`context-monitoring`, schedule
+  `"7,27,47 * * * *"`, `--match '^ALERT:'`). The sweep script
+  (`scripts/error-and-context-agent-sweep.sh`) gained `--no-nudge` (used by
+  daemon-driven runs where the operator's tmux context isn't available) and
+  emits one consolidated `ALERT:` line per sweep when any agent is flagged,
+  formatted as
   `ALERT: flagged=N stuck=S tier3=T tier2=U — name(ctx%,reason,classifier); …`.
-  Silent when the fleet is clean (no message fires). Consecutive-sweep
-  STUCK detection is backed by a state file at
-  `$XDG_STATE_HOME/thrum/context-sweep-state.json` (outside the repo).
-  The full per-agent report still lands at `/tmp/agent-sweep.txt` for
-  on-demand drill-down. Migrating to `thrum monitor` removes the
-  per-session re-add chore from the coordinator's post-prime checklist
-  for this monitor specifically — see updated SKILL + memory note for
-  guidance on OTHER CronCreate jobs (which still need per-session
-  re-init until they too are migrated).
+  Silent when the fleet is clean (no message fires). Consecutive-sweep STUCK
+  detection is backed by a state file at
+  `$XDG_STATE_HOME/thrum/context-sweep-state.json` (outside the repo). The full
+  per-agent report still lands at `/tmp/agent-sweep.txt` for on-demand
+  drill-down. Migrating to `thrum monitor` removes the per-session re-add chore
+  from the coordinator's post-prime checklist for this monitor specifically —
+  see updated SKILL + memory note for guidance on OTHER CronCreate jobs (which
+  still need per-session re-init until they too are migrated).
 - **Sync re-architecture (thrum-s6os)** — the cross-machine wire stream now
   derives from per-agent + per-bridge-group state files rather than from a
   synced event journal. Daemon-local truth (heartbeats, session boundaries,
@@ -199,106 +194,103 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
-- **`thrum tmux create --force` can destroy an unrelated session via
-  tmux prefix-match (thrum-z63b)** — tmux's `-t target-session` flag
-  defaults to PREFIX MATCH: a bare `-t substrate-ui` matches a live
-  `substrate-ui-research` session because the latter has the former as
-  a prefix. Live cascade observed 2026-05-27: `thrum tmux create
-  substrate-ui --cwd ~/.thrum/worktrees/thrum/substrate-ui ... --force`
-  destroyed `substrate-ui-research`, killing the researcher's pane.
-  The CLI pre-hint (`TmuxSessionExists`) reported the false
-  "session-exists" warning first; the operator added `--force`, and the
-  daemon's `HandleCreate` then ran `tmux kill-session -t substrate-ui`
-  which matched and destroyed the unrelated session as the only prefix
-  hit. Fix is the `=` literal-match prefix on the `-t` argument in
-  `internal/tmux/tmux.go`'s `HasSession` and `KillSession`. tmux has
-  supported `=name` exact match since 2.0 (2014). Regression test
-  `TestHasSession_KillSession_LiteralMatch` pins both helpers against
-  a `thrum-z63b-prefix-extra` session, asserting `HasSession("thrum-z63b-prefix")`
+- **`thrum tmux create --force` can destroy an unrelated session via tmux
+  prefix-match (thrum-z63b)** — tmux's `-t target-session` flag defaults to
+  PREFIX MATCH: a bare `-t substrate-ui` matches a live `substrate-ui-research`
+  session because the latter has the former as a prefix. Live cascade observed
+  2026-05-27:
+  `thrum tmux create substrate-ui --cwd ~/.thrum/worktrees/thrum/substrate-ui ... --force`
+  destroyed `substrate-ui-research`, killing the researcher's pane. The CLI
+  pre-hint (`TmuxSessionExists`) reported the false "session-exists" warning
+  first; the operator added `--force`, and the daemon's `HandleCreate` then ran
+  `tmux kill-session -t substrate-ui` which matched and destroyed the unrelated
+  session as the only prefix hit. Fix is the `=` literal-match prefix on the
+  `-t` argument in `internal/tmux/tmux.go`'s `HasSession` and `KillSession`.
+  tmux has supported `=name` exact match since 2.0 (2014). Regression test
+  `TestHasSession_KillSession_LiteralMatch` pins both helpers against a
+  `thrum-z63b-prefix-extra` session, asserting `HasSession("thrum-z63b-prefix")`
   is false and `KillSession("thrum-z63b-prefix")` does not destroy the
-  collateral. A defense-in-depth audit ticket (thrum-zfn0, P3) tracks
-  applying the same `=` prefix to the ten other `internal/tmux/tmux.go`
-  functions that pass session-name targets to tmux without literal-
-  match guard (RenameWindow, SetSessionTitle, SetMonitorSilence,
-  IsSilent, GetUserOption, SetUserOption, LastActivity, SendKeys,
-  SendSpecialKey, CapturePane). Forward-ported to thrum-agents.
-- **Integration test build break from bsn7 `WriteEvent` signature
-  drift (thrum-mkyp)** — `tests/integration/sync_rearchitect_test.go`'s
-  three test helpers (`writeAgentRegister`, `writeMessageCreate`,
-  `writeMessageReceipt`) referenced the old single-return
-  `state.WriteEvent` signature. thrum-bsn7 (commit ec061348ef) changed
-  it to `(postCommit func(), err error)` as part of the broader
-  state.Lock contention fix; production callers were updated but this
-  test file was missed, blocking `go test -tags integration
-  ./tests/integration/`. Fix adapts each helper to capture
-  `postCommit`, fatal on error, and invoke `postCommit()` if non-nil so
-  the structural-event sync trigger fires correctly via the bsn7
-  contract. All 8 sync_rearchitect tests pass clean. Forward-port to
-  thrum-agents intentionally deferred — bsn7 itself has not been
-  forward-ported to thrum-agents (the signature is still single-return
-  there), so the mkyp bug does not exist on thrum-agents and the fix
-  cannot apply. When bsn7 forward-ports, the same mkyp-shaped fix will
-  need to land there at that time.
-- **Cache peercred CWD per PID — eliminates N-1 lsof shell-outs per RPC
-  sequence on Darwin (thrum-xir.45)** — every unix-socket RPC's pre-handler
-  ran `peercred.Resolve`, which on Darwin shells out to `/usr/sbin/lsof -p
-  PID -Fn -d cwd` to resolve the connecting PID's CWD. Measured cost on a
-  current macOS host: ~30ms baseline, spiking to ~300ms under fork
-  contention. Under sustained release-test-gate load (108 scenarios
-  back-to-back), per-RPC pre-handler latency creeps from ~55ms baseline into
-  the 1-2s range and the CLI socket-read deadline fires, surfacing as
-  `tmux.create: i/o timeout` in scenarios 69-75 and 80 of the v0.10.6 rc.3
-  gate (Cluster A, 9 scenarios). Fix is a short-TTL per-PID cache in front
-  of `processCWDFn`: first lookup for a PID misses and calls the underlying
+  collateral. A defense-in-depth audit ticket (thrum-zfn0, P3) tracks applying
+  the same `=` prefix to the ten other `internal/tmux/tmux.go` functions that
+  pass session-name targets to tmux without literal- match guard (RenameWindow,
+  SetSessionTitle, SetMonitorSilence, IsSilent, GetUserOption, SetUserOption,
+  LastActivity, SendKeys, SendSpecialKey, CapturePane). Forward-ported to
+  thrum-agents.
+- **Integration test build break from bsn7 `WriteEvent` signature drift
+  (thrum-mkyp)** — `tests/integration/sync_rearchitect_test.go`'s three test
+  helpers (`writeAgentRegister`, `writeMessageCreate`, `writeMessageReceipt`)
+  referenced the old single-return `state.WriteEvent` signature. thrum-bsn7
+  (commit ec061348ef) changed it to `(postCommit func(), err error)` as part of
+  the broader state.Lock contention fix; production callers were updated but
+  this test file was missed, blocking
+  `go test -tags integration ./tests/integration/`. Fix adapts each helper to
+  capture `postCommit`, fatal on error, and invoke `postCommit()` if non-nil so
+  the structural-event sync trigger fires correctly via the bsn7 contract. All 8
+  sync_rearchitect tests pass clean. Forward-port to thrum-agents intentionally
+  deferred — bsn7 itself has not been forward-ported to thrum-agents (the
+  signature is still single-return there), so the mkyp bug does not exist on
+  thrum-agents and the fix cannot apply. When bsn7 forward-ports, the same
+  mkyp-shaped fix will need to land there at that time.
+- **Cache peercred CWD per PID — eliminates N-1 lsof shell-outs per RPC sequence
+  on Darwin (thrum-xir.45)** — every unix-socket RPC's pre-handler ran
+  `peercred.Resolve`, which on Darwin shells out to
+  `/usr/sbin/lsof -p PID -Fn -d cwd` to resolve the connecting PID's CWD.
+  Measured cost on a current macOS host: ~30ms baseline, spiking to ~300ms under
+  fork contention. Under sustained release-test-gate load (108 scenarios
+  back-to-back), per-RPC pre-handler latency creeps from ~55ms baseline into the
+  1-2s range and the CLI socket-read deadline fires, surfacing as
+  `tmux.create: i/o timeout` in scenarios 69-75 and 80 of the v0.10.6 rc.3 gate
+  (Cluster A, 9 scenarios). Fix is a short-TTL per-PID cache in front of
+  `processCWDFn`: first lookup for a PID misses and calls the underlying
   resolver (~30ms), caches the (cwd, err) result with a 5s TTL; subsequent
   lookups within the TTL return the cached value with no subprocess fork.
-  Measured impact via `profile.rpc.dispatch` on the same gate-stressed
-  daemon: `pre_handler_ms = 55-60` on every RPC pre-fix; `pre_handler_ms =
-  55-60 on the first RPC + 1-2 on subsequent` post-fix (~50x reduction on
-  the dominant pre-handler cost when a connection issues 2+ RPCs, which is
-  the CLI's typical refresh + action pattern). Cluster A clears at the
-  gate-harness level: 9 affected scenarios pass after the fix. The cache
-  lock is never held across the subprocess call. Negative results (errors)
-  are cached for the same TTL to bound repeated-shell-out cost; a sharper
-  policy distinguishing transient vs permanent errors is tracked in
-  xir.52. `golang.org/x/sync/singleflight` to collapse concurrent-miss
-  stampedes is tracked in xir.51, and replacing the underlying `lsof`
-  shell-out with libproc `proc_pidinfo` is tracked in xir.48.
-- **`FindClaudeAncestor` returns the topmost matching runtime ancestor, not
-  the first one walking up; `pid_mismatch` remediation surfaces the `thrum
-  quickstart --name` recovery path (thrum-xir.40)** — observed during the rc.4
-  cut: an in-flight impl agent's `thrum` CLI calls began failing every RPC
+  Measured impact via `profile.rpc.dispatch` on the same gate-stressed daemon:
+  `pre_handler_ms = 55-60` on every RPC pre-fix;
+  `pre_handler_ms = 55-60 on the first RPC + 1-2 on subsequent` post-fix (~50x
+  reduction on the dominant pre-handler cost when a connection issues 2+ RPCs,
+  which is the CLI's typical refresh + action pattern). Cluster A clears at the
+  gate-harness level: 9 affected scenarios pass after the fix. The cache lock is
+  never held across the subprocess call. Negative results (errors) are cached
+  for the same TTL to bound repeated-shell-out cost; a sharper policy
+  distinguishing transient vs permanent errors is tracked in xir.52.
+  `golang.org/x/sync/singleflight` to collapse concurrent-miss stampedes is
+  tracked in xir.51, and replacing the underlying `lsof` shell-out with libproc
+  `proc_pidinfo` is tracked in xir.48.
+- **`FindClaudeAncestor` returns the topmost matching runtime ancestor, not the
+  first one walking up; `pid_mismatch` remediation surfaces the
+  `thrum quickstart --name` recovery path (thrum-xir.40)** — observed during the
+  rc.4 cut: an in-flight impl agent's `thrum` CLI calls began failing every RPC
   with `identity guard "cross_worktree" fired: pid_mismatch`. Root cause: the
   SessionStart hook spawns transient claude-sdk subprocesses (e.g. for
-  episodic-memory) that also identify as "claude" in `ps -o comm=`. The
-  pre-fix `FindClaudeAncestor` returned on the FIRST claude-named ancestor
-  walking up from `os.Getppid()`, so `quickstart` bound `agent_pid` to the
-  short-lived helper subprocess. Later RPCs from the long-lived Claude
-  session main couldn't reach the helper PID through their own ancestor chain
-  (different process-tree branch), the guard refused every call, and the only
-  hint surfaced ("run `thrum prime` to re-claim") was itself blocked by the
-  same guard — no discoverable recovery path. Fix walks the chain all the
-  way to PID 1 and returns the TOPMOST claude-named ancestor; the long-lived
-  session main is always the highest claude-named process, so binding to it
-  is stable across hook-subprocess lifecycles. Public `FindClaudeAncestor`
-  delegates to a new testable `findAncestorTopmost(ctx, startPID, nameFn,
-  parentFn)` helper; three new regression tests cover the bug chain (caller
-  → bash → claude-sdk-helper(200) → claude main(100) must return 100), the
-  zero-return no-match contract, and an off-by-one guard for single-runtime
-  chains. The `pid_mismatch` remediation message is also extended to mention
+  episodic-memory) that also identify as "claude" in `ps -o comm=`. The pre-fix
+  `FindClaudeAncestor` returned on the FIRST claude-named ancestor walking up
+  from `os.Getppid()`, so `quickstart` bound `agent_pid` to the short-lived
+  helper subprocess. Later RPCs from the long-lived Claude session main couldn't
+  reach the helper PID through their own ancestor chain (different process-tree
+  branch), the guard refused every call, and the only hint surfaced ("run
+  `thrum prime` to re-claim") was itself blocked by the same guard — no
+  discoverable recovery path. Fix walks the chain all the way to PID 1 and
+  returns the TOPMOST claude-named ancestor; the long-lived session main is
+  always the highest claude-named process, so binding to it is stable across
+  hook-subprocess lifecycles. Public `FindClaudeAncestor` delegates to a new
+  testable `findAncestorTopmost(ctx, startPID, nameFn, parentFn)` helper; three
+  new regression tests cover the bug chain (caller → bash →
+  claude-sdk-helper(200) → claude main(100) must return 100), the zero-return
+  no-match contract, and an off-by-one guard for single-runtime chains. The
+  `pid_mismatch` remediation message is also extended to mention
   `thrum quickstart --name <agent>` as the stale-PID recovery path, with the
-  expected-agent name interpolated when available. Operator-script
-  passthrough (Leon's hard constraint on this work) is preserved: `thrum
-  tmux` and `thrum worktree` commands run without a runtime in their ancestor
-  chain still hit the "no runtime ancestor → passthrough" path at guard Rule
-  Step 2/4 unchanged. G5 enforcement was independently verified
+  expected-agent name interpolated when available. Operator-script passthrough
+  (Leon's hard constraint on this work) is preserved: `thrum tmux` and
+  `thrum worktree` commands run without a runtime in their ancestor chain still
+  hit the "no runtime ancestor → passthrough" path at guard Rule Step 2/4
+  unchanged. G5 enforcement was independently verified
   vindication-not-regression: after the fix, G5 correctly distinguishes
   "Bash-tool spawn from Claude main" (closest runtime == topmost runtime ==
   agent_pid → passes) from "run from sub-agent helper" (closest runtime !=
-  agent_pid → denies, which is exactly G5's intended purpose). Discovered
-  by @impl_v0106 trying to deliver a DONE report mid-session; recovery in
-  that case required `thrum quickstart --role implementer --module v0106-rc1
-  --name impl_v0106`.
+  agent_pid → denies, which is exactly G5's intended purpose). Discovered by
+  @impl_v0106 trying to deliver a DONE report mid-session; recovery in that case
+  required
+  `thrum quickstart --role implementer --module v0106-rc1 --name impl_v0106`.
 - **applySessionStart now `INSERT OR IGNORE` — peer-replicated
   `agent.session.start` no longer aborts sync batches (thrum-9jcb.3)** — third
   soak-mined finding from the same debug-log window that surfaced thrum-10j0 and

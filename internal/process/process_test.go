@@ -167,7 +167,7 @@ func TestMatchRuntimeName_BasenameAndFullPath(t *testing.T) {
 //	100 (claude main) → 1
 //
 // topmost=true  → (100, "claude")  -- the stable binding target
-// topmost=false → (200, "claude")  -- the immediate runtime context
+// topmost=false → (200, "claude")  -- the immediate runtime context.
 func TestFindAncestor_TopmostVsClosest(t *testing.T) {
 	parents := map[int]int{
 		300: 200,
