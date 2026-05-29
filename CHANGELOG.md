@@ -194,6 +194,20 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **Killed agents could not be restarted via `thrum tmux start` — boot
+  reconcile resurrected a dead runtime's PID (thrum-mnhp, regression from
+  thrum-qxr3)** — qxr3 (shipped in rc.5) made boot reconcile write the
+  identity-file `AgentPID` back to `agents.agent_pid` unconditionally. A killed
+  agent's identity file keeps a stale NON-ZERO dead PID (nothing zeroes it on
+  death), so reconcile resurrected that dead PID; the DeadAgentSweeper
+  (`WHERE agent_pid > 0`) then immediately ended the reconcile-created session,
+  evicted the worktree from the peercred match registry, and the worktree
+  became un-restartable — `thrum tmux start` resolved as an anonymous caller
+  and `tmux.create` was rejected. Fix: reconcile writes `0` (the
+  sweeper-skipped, restartable sentinel) when the identity-file PID is non-zero
+  but dead (`!process.IsRunning`); a live PID is still written through
+  unchanged, preserving qxr3's live-agent fix. Daemon-logic only — **no schema
+  change**. Forward-ported to thrum-agents.
 - **`thrum prime` stalled ~10s when run by a live agent (thrum-5988
   mitigation)** — prime computes a cosmetic active-agent count via the
   `agent.listContext` RPC, whose daemon handler takes the global `state.Lock`.
