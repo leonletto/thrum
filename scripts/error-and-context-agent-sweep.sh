@@ -305,6 +305,47 @@ for line in "${agent_lines[@]}"; do
         api_errors="(capture failed)"
     fi
 
+    # STUCK-WORKING flag computation (thrum-9neg L5). Three conditions per dispatch:
+    #   (a) agent_status = "working" (agent claims to be mid-work)
+    #   (b) tmux silence > SILENCE_THRESHOLD_MIN (pane has produced no output)
+    #   (c) JSONL transcript's last assistant message has stop_reason = tool_use
+    #       (state="working" in our derived vocabulary) AND last_msg > threshold
+    #
+    # Condition (c) tightens "no recent JSONL tool calls" to "JSONL says agent IS
+    # mid-tool-call but no progress" — distinguishes a hung tool from a clean
+    # end_turn that just hasn't been reflected in agent_status yet (a status-drift,
+    # not a stuck; surfaced separately in a future signal).
+    #
+    # Edge case: state="(no assistant msg)" (fresh agent, no transcript output yet)
+    # falls through neither the JSONL branch (state != "working") nor the non-Claude
+    # branch (last_msg_ago != "(n/a)"); stuck_working stays 0. Correct by design —
+    # an agent with no tool calls yet cannot be stuck mid-tool-call.
+    #
+    # Warm-hold exemption per L4: if intent starts with `warm-hold:`, skip the
+    # classification entirely. Intent is read in the per-agent jq pass (E2.5).
+    #
+    # last_msg_ago format produced earlier in this loop: "<N>m ago" OR "(n/a)" for
+    # non-Claude runtimes (no transcript). For non-Claude, tmux silence alone is
+    # the signal — no way to distinguish tool-use vs end-turn without a transcript.
+    #
+    # Note: This block only SETS the stuck_working flag; needs_attention + reason_parts
+    # integration happens in E2.8 (peer of is_stuck check at line 367+, AFTER the
+    # needs_attention=0 reset at line 320). Setting needs_attention here would be
+    # wiped by line 320.
+    stuck_working=0
+    if [[ "$status" == "working" && "$silence_sec" -gt "$silence_threshold_sec" \
+          && ! "$intent" =~ ^warm-hold: ]]; then
+        if [[ "$state" == "working" && "$last_msg_ago" =~ ^([0-9]+)m ]]; then
+            last_msg_min="${BASH_REMATCH[1]}"
+            if [[ "$last_msg_min" -gt "$SILENCE_THRESHOLD_MIN" ]]; then
+                stuck_working=1
+            fi
+        elif [[ "$last_msg_ago" == "(n/a)" ]]; then
+            # Non-Claude runtime (no transcript). Tmux silence alone is the signal.
+            stuck_working=1
+        fi
+    fi
+
     # Build this agent's full section into a temp variable
     agent_section=""
     agent_section+="===== @$agent_id · $role${module:+/$module} =====\n"
