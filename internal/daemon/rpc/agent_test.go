@@ -3313,3 +3313,132 @@ func TestHandleRegister_AnonymousCallerBootstrapStillAllowed(t *testing.T) {
 		t.Fatalf("Status = %q, want registered", regResp.Status)
 	}
 }
+
+// TestHandleSetAgentStatus_AcceptsStuck verifies that the validator allowlist
+// promotion lands cleanly — agent.set-status RPC accepts "stuck" as a valid
+// status value and writes it through to the identity file. Prior to thrum-9neg
+// the validator rejected "stuck" even though permission.markAgentStuck writes
+// it programmatically, leaving the CLI/RPC surface inconsistent with reality.
+//
+// Translated for release/v0.10.6: thrum-agents' typed-handler signature
+// (HandleSetAgentStatus(ctx, SetAgentStatusRequest) (*SetAgentStatusResponse, error))
+// has not been backported; release/v0.10.6 still has the json.RawMessage
+// shape with a map[string]string response. The assertion intent is preserved
+// (validator accepts stuck + identity file reflects the write).
+func TestHandleSetAgentStatus_AcceptsStuck(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	agentName := "researcher_stuck_test"
+	idFile := &config.IdentityFile{
+		Agent: config.AgentConfig{
+			Kind: "agent",
+			Name: agentName,
+			Role: "researcher",
+		},
+		AgentPID:    0, // pre-prime; bypasses G4 dead-PID guard
+		AgentStatus: "idle",
+	}
+	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
+		t.Fatalf("save identity: %v", err)
+	}
+
+	st, err := state.NewState(thrumDir, thrumDir, "r_stuck_test", "")
+	if err != nil {
+		t.Fatalf("new state: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	h := NewAgentHandler(st)
+
+	// Validator must accept "stuck" — this is the load-bearing assertion.
+	reqJSON, err := json.Marshal(map[string]string{
+		"agent":  agentName,
+		"status": "stuck",
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	resp, err := h.HandleSetAgentStatus(context.Background(), json.RawMessage(reqJSON))
+	if err != nil {
+		t.Fatalf("HandleSetAgentStatus rejected stuck: %v (expected validator allowlist to accept it post-thrum-9neg E2.2)", err)
+	}
+	respMap, ok := resp.(map[string]string)
+	if !ok {
+		t.Fatalf("expected map[string]string response, got %T", resp)
+	}
+	if respMap["status"] != "stuck" {
+		t.Errorf("response status = %q, want stuck", respMap["status"])
+	}
+
+	// Identity file must reflect the write.
+	idPath := filepath.Join(thrumDir, "identities", agentName+".json")
+	data, err := os.ReadFile(idPath)
+	if err != nil {
+		t.Fatalf("read identity after write: %v", err)
+	}
+	var got config.IdentityFile
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("parse identity: %v", err)
+	}
+	if got.AgentStatus != "stuck" {
+		t.Errorf("identity file AgentStatus = %q, want stuck", got.AgentStatus)
+	}
+	if got.AgentStatusUpdatedAt.IsZero() {
+		t.Error("identity file AgentStatusUpdatedAt is zero — should have been touched by the write")
+	}
+}
+
+// TestHandleSetAgentStatus_RejectsUnknownStatus verifies the validator still
+// rejects values outside the 4-state allowlist. Regression check that the
+// stuck promotion didn't loosen the validator into a passthrough.
+//
+// Translated for release/v0.10.6 (same handler-signature reason as
+// TestHandleSetAgentStatus_AcceptsStuck above).
+func TestHandleSetAgentStatus_RejectsUnknownStatus(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	agentName := "researcher_unknown_test"
+	idFile := &config.IdentityFile{
+		Agent: config.AgentConfig{
+			Kind: "agent",
+			Name: agentName,
+			Role: "researcher",
+		},
+		AgentPID:    0,
+		AgentStatus: "idle",
+	}
+	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
+		t.Fatalf("save identity: %v", err)
+	}
+
+	st, err := state.NewState(thrumDir, thrumDir, "r_unknown_test", "")
+	if err != nil {
+		t.Fatalf("new state: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	h := NewAgentHandler(st)
+
+	reqJSON, err := json.Marshal(map[string]string{
+		"agent":  agentName,
+		"status": "paused", // not in the 4-state allowlist
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	_, err = h.HandleSetAgentStatus(context.Background(), json.RawMessage(reqJSON))
+	if err == nil {
+		t.Fatal("expected validator to reject 'paused'; got nil error")
+	}
+	if !strings.Contains(err.Error(), "must be working, idle, blocked, or stuck") {
+		t.Errorf("error message = %q; expected to mention the 4-state allowlist", err.Error())
+	}
+}
