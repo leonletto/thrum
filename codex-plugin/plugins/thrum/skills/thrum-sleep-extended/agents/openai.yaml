@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thrum Sleep Extended"
+  short_description: "Park this agent for operator-initiated wake with a comprehensive 16-section snapshot (does NOT signal coordinator) then thrum-tmux-kills own session. Use for designer/architect-grade work where wake may be cold and must recover wire contracts + capability matrix + design rationale."
+  default_prompt: "Run the thrum sleep-extended workflow and summarize the result."
