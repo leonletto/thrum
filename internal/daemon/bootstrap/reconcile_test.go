@@ -552,26 +552,30 @@ func TestReconcile_WritesIdentityFilePIDBackToAgentsTable(t *testing.T) {
 		}
 	})
 
-	// Scenario 4 (sub-finding from Phase-3 review): identity file has a
-	// non-zero PID pointing at a process that doesn't exist. The fix
-	// writes the dead PID back unconditionally — this scenario pins
-	// that reconcile DOES NOT crash, errors, or silently degrade when
-	// the identity file's AgentPID is a number that no longer maps to
-	// a running process. The downstream sweeper will still end this
-	// agent's session at its next tick (correct: identity file claims
-	// a runtime PID that's actually dead, so the agent IS dead — this
-	// is the pre-thrum-1nkt.6 steady-state behavior).
-	t.Run("identity_file_pid_nonzero_dead_writes_through_cleanly", func(t *testing.T) {
+	// Scenario 4 (thrum-mnhp): identity file has a non-zero PID pointing
+	// at a process that doesn't exist (a KILLED agent — nothing zeroes the
+	// identity-file PID on death). Reconcile must RESET it to 0, NOT write
+	// the corpse through: a dead non-zero agent_pid makes the DeadAgentSweeper
+	// (`WHERE agent_pid > 0`) cull the reconcile-created session, evict the
+	// worktree from the peercred match registry, and render the agent
+	// un-restartable (`thrum tmux start` resolves anonymous → tmux.create
+	// rejected). Writing 0 (the sweeper-skipped, restartable sentinel) keeps
+	// the session alive so the worktree stays bindable. This corrects the
+	// original qxr3 behavior, which wrote the dead PID through unconditionally.
+	t.Run("identity_file_pid_nonzero_dead_resets_to_zero", func(t *testing.T) {
 		dirA := t.TempDir()
 		thrumDir := filepath.Join(dirA, ".thrum")
 		if err := os.MkdirAll(thrumDir, 0o750); err != nil {
 			t.Fatal(err)
 		}
-		// PID 999999 is unlikely to exist on any test system. We do not
-		// assert here on whether the sweeper would later kill the
-		// session — that's the sweeper's responsibility and is
-		// covered by dead_agent_sweeper_test.go. We only assert that
-		// reconcile writes the value through cleanly and does not error.
+		// thrum-mnhp: a killed agent's identity file keeps a stale
+		// NON-ZERO dead PID. Reconcile must RESET it to 0 (not write the
+		// corpse through), because agent_pid=0 is the sentinel the
+		// dead-agent sweeper skips — writing a dead non-zero PID through
+		// makes the sweeper cull the reconcile-created session and renders
+		// the worktree un-restartable (anonymous tmux.create). PID 999999
+		// is unlikely to exist on any test system (process.IsRunning →
+		// false), so reconcile should zero it.
 		deadPID := 999999
 		writeIdentity(t, filepath.Join(thrumDir, "identities"), config.IdentityFile{
 			Version: 5, RepoID: "test",
@@ -606,8 +610,8 @@ func TestReconcile_WritesIdentityFilePIDBackToAgentsTable(t *testing.T) {
 			`SELECT agent_pid FROM agents WHERE agent_id='agent_zombie'`).Scan(&got); err != nil {
 			t.Fatal(err)
 		}
-		if got != deadPID {
-			t.Errorf("agents.agent_pid = %d, want %d (identity-file truth passes through unconditionally)", got, deadPID)
+		if got != 0 {
+			t.Errorf("agents.agent_pid = %d, want 0 (thrum-mnhp: a dead non-zero identity PID must be reset to 0 so the agent stays restartable, not written through as %d)", got, deadPID)
 		}
 	})
 
