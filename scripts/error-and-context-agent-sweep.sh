@@ -115,12 +115,20 @@ now_epoch=$(date -u +%s)
 #   - tmux list-sessions for alive set; identity's tmux_session is "<name>:W.P"
 #     so we strip the suffix and check inclusion
 
-# Globs: main repo + ~/.thrum/worktrees/thrum/* (extend if your layout differs)
+# Globs: main repo + ~/.thrum/worktrees/thrum/* (extend if your layout differs).
+# THRUM_SWEEP_IDENTITY_GLOBS overrides for tests (space-separated globs); the
+# unquoted expansion is intentional so the globs are pathname-expanded.
 shopt -s nullglob
-identity_files=(
-    /Users/leon/dev/opensource/thrum/.thrum/identities/*.json
-    /Users/leon/.thrum/worktrees/thrum/*/.thrum/identities/*.json
-)
+if [[ -n "${THRUM_SWEEP_IDENTITY_GLOBS:-}" ]]; then
+    # Intentional word-split + glob expansion of the space-separated override.
+    # shellcheck disable=SC2206
+    identity_files=( ${THRUM_SWEEP_IDENTITY_GLOBS} )
+else
+    identity_files=(
+        /Users/leon/dev/opensource/thrum/.thrum/identities/*.json
+        /Users/leon/.thrum/worktrees/thrum/*/.thrum/identities/*.json
+    )
+fi
 shopt -u nullglob
 
 # Build alive-set string for fast membership check (|name1|name2|...|)
