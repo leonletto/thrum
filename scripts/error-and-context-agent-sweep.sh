@@ -142,7 +142,8 @@ for f in "${identity_files[@]}"; do
         tmux_session: (.tmux_session // ""),
         worktree: (.worktree // ""),
         last_seen: (.updated_at // ""),
-        status: (.agent_status // "")
+        status: (.agent_status // ""),
+        intent: (.intent // "")
     }' "$f" 2>/dev/null) || continue
     [[ -z "$raw" || "$raw" == "null" ]] && continue
 
@@ -205,6 +206,7 @@ for line in "${agent_lines[@]}"; do
     worktree=$(jq -r '.worktree // ""' <<<"$line")
     last_seen=$(jq -r '.last_seen' <<<"$line")
     status=$(jq -r '.status' <<<"$line")
+    intent=$(jq -r '.intent // ""' <<<"$line")
 
     # Compute "Xm ago" if last_seen parses; fall back to raw on failure
     last_seen_epoch=$(date -u -j -f "%Y-%m-%dT%H:%M:%S" "${last_seen%%.*}" +%s 2>/dev/null || echo 0)
