@@ -217,6 +217,14 @@ for line in "${agent_lines[@]}"; do
         last_seen_display="$last_seen"
     fi
 
+    # Tmux silence age via native window_activity (per feedback_byte_equality_pane_detection #1).
+    # Compares to now_epoch; subsecond op, no diffing. Stripped to bare session name
+    # because window_activity is keyed by tmux session, not the :W.P target form.
+    tmux_session_only="${tmux_session%%:*}"
+    last_activity=$(tmux display-message -p -t "$tmux_session_only" '#{window_activity}' 2>/dev/null || echo 0)
+    silence_sec=$((now_epoch - last_activity))
+    silence_threshold_sec=$((SILENCE_THRESHOLD_MIN * 60))
+
     # Capture pane FIRST so we can extract api_errors and fallback ctx footer.
     # Capture-pane: -p print to stdout, -t target, -S -<N> start N lines from end.
     pane_capture_ok=1
