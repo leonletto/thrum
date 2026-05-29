@@ -79,3 +79,20 @@ user can decide whether to graduate or remove the override.
 
 If you accumulate a new rule mid-session (the user corrects you), capture it via
 `bd remember --key researcher-rule-<slug> "<rule + Why + How to apply>"`.
+
+### Pattern D self-write — set `agent_status=idle` on response/DONE (thrum-9neg)
+
+When reporting a research finding back to the requester (or closing a DONE on a
+research task), write `agent_status="idle"` to your local identity file. This
+closes the `working→idle` transition opened by the ACK protocol in the sibling
+skill `researcher-investigating`.
+
+```bash
+# Step 1: Report finding back to requester
+thrum send "Research <task-id>: <finding>. Evidence: <file:line refs>." --to @<requester>
+
+# Step 2: Mark yourself idle (writes local identity file directly)
+thrum agent set-status idle
+```
+
+The local-write path is identical to the implementer side (`cmd/thrum/agent.go:671-690`).
