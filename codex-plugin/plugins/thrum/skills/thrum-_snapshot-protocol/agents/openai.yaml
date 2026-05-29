@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thrum _snapshot Protocol"
+  short_description: "Shared snapshot-composition protocol consumed by /thrum:restart, /thrum:restart-extended, /thrum:sleep, /thrum:sleep-extended. Not user-invocable directly."
+  default_prompt: "Run the thrum _snapshot-protocol workflow and summarize the result."
