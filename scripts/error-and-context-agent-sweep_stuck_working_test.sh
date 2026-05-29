@@ -1,22 +1,29 @@
 #!/usr/bin/env bash
-# Fixture-driven smoke test for the STUCK-WORKING sweep classification (thrum-9neg E2.9).
+# Smoke test for the STUCK-WORKING sweep classification (thrum-9neg E2.9).
 #
-# Builds a temporary identity-file fixture set + invokes the sweep with the
-# --silence-threshold-min override. Asserts:
-#   (a) An agent in agent_status="working" with stale last_seen + a tmux session
-#       absent from `tmux list-sessions` is correctly NOT flagged (the sweep's
-#       tmux-alive filter at line 151 drops it before STUCK-WORKING evaluation).
-#       This is the baseline — STUCK-WORKING requires a live pane.
-#   (b) The --silence-threshold-min flag is accepted and propagates to the
-#       SILENCE_THRESHOLD_MIN variable (verified via the report header).
-#   (c) The ALERT line shape includes the new `stuck_working=N` axis when ANY
-#       agent is flagged.
-#   (d) A warm-hold intent prefix ("warm-hold: ...") on an otherwise-stuck-working
-#       agent causes the classification to be skipped.
+# Executable assertions:
+#   (1) The --silence-threshold-min flag is accepted by the sweep's flag parser
+#       (sweep exits 0 with the flag set).
+#   (2) The sweep's report header carries the new `stuck_working` axis.
+#   (3) Any ALERT line emitted includes the `stuck_working=N` field.
+#
+# Structural-only references (NOT asserted at runtime — see note below):
+#   - The fixtures `impl_stuck_test` (status=working, stale last_seen, fake tmux
+#     session) and `impl_warmhold_test` (same shape + `intent: warm-hold: ...`)
+#     are created on disk so this file documents the shapes the sweep is meant
+#     to classify and exempt. The sweep's identity-file glob is hardcoded to
+#     production paths (sweep script lines 117-121), so fixtures placed under
+#     $FIXTURE_DIR are not picked up. Verifying full fixture-driven
+#     classification + warm-hold exemption requires either (i) parameterizing
+#     the sweep's identity-glob (out of scope for thrum-9neg E2.9) or
+#     (ii) live tmux + real identity files (manual / release-test territory).
+#   - Classification correctness for the validator side is exercised by the
+#     E2.3 Go test against HandleSetAgentStatus. The sweep's multi-condition
+#     stuck_working logic relies on manual runs + future release-test additions.
 #
 # This test does NOT spin up real tmux sessions (would require teardown plumbing
 # the script doesn't have); it verifies the sweep code paths that don't depend on
-# live tmux. Full integration with live tmux is left to manual / release-test runs.
+# live tmux. Full integration is left to manual / release-test runs.
 
 set -euo pipefail
 
