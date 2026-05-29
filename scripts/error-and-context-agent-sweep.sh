@@ -59,6 +59,7 @@ SHOW_ALL=0       # 0 = only emit flagged agents (default); 1 = emit all
 CTX_THRESHOLD=50 # int %; agents at-or-above this are flagged
 NUDGE=1          # 1 = auto-nudge api-error panes (default); --no-nudge sets 0
 SILENCE_THRESHOLD_MIN=10  # min; thrum-9neg L5; --silence-threshold-min overrides
+JSON_MODE=0      # 1 = emit one JSON object per flagged agent (JSONL), suppress text report
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -69,6 +70,7 @@ while [[ $# -gt 0 ]]; do
         --ctx-threshold) CTX_THRESHOLD="$2"; shift 2 ;;
         --no-nudge|--report-only) NUDGE=0; shift ;;
         --silence-threshold-min) SILENCE_THRESHOLD_MIN="$2"; shift 2 ;;
+        --json)  JSON_MODE=1; shift ;;
         -h|--help)
             sed -n '2,/^$/p' "$0" | sed 's/^# \?//'
             exit 0
@@ -171,11 +173,15 @@ for f in "${identity_files[@]}"; do
 done
 
 if [[ ${#agent_lines[@]} -eq 0 ]]; then
-    {
-        echo "# error-and-context-agent-sweep report (no alive tmux agents matched)"
-        echo "# generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-        [[ -n "$ROLE_FILTER" ]] && echo "# role filter: $ROLE_FILTER"
-    } > "$REPORT_DEST"
+    # JSON mode: no agents → empty JSONL output (the consumer treats it as
+    # "no signals"). Skip the human-text header but still reset state file.
+    if [[ "$JSON_MODE" -eq 0 ]]; then
+        {
+            echo "# error-and-context-agent-sweep report (no alive tmux agents matched)"
+            echo "# generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            [[ -n "$ROLE_FILTER" ]] && echo "# role filter: $ROLE_FILTER"
+        } > "$REPORT_DEST"
+    fi
     # Reset state file: no agents observed → empty api-error set. Atomic
     # write via tmp + mv so an interrupted run doesn't zero next-sweep
     # STUCK detection.
@@ -197,6 +203,7 @@ ATTENTION_BUF=$(mktemp)
 ALL_BUF=$(mktemp)
 ATTENTION_COUNT=0
 auto_nudges=()
+JSON_BUF=""   # accumulates one JSON object per flagged agent (--json mode)
 # Per-agent flag bookkeeping for the consolidated ALERT line.
 alert_segments=()
 flagged_count=0
@@ -459,6 +466,33 @@ for line in "${agent_lines[@]}"; do
             joined+=",$r"
         done
         alert_segments+=("${agent_id}(${joined})")
+
+        # --json: emit one structured record per flagged agent (jq does the
+        # escaping). Consumed by the daemon api-error auto-remediation handler
+        # (thrum-sdzk) — the single-sourced detection seam. Carries the new
+        # post-9neg axes (is_stuck, stuck_working, tier) as additive fields so
+        # downstream consumers can act on the same dimensions the ALERT line
+        # exposes; the four pre-removal fields (agent_id, tmux_target,
+        # api_errors, flagged_reason) keep their prior shape.
+        if [[ "$JSON_MODE" -eq 1 ]]; then
+            flag_reason=$(IFS=','; echo "${reason_parts[*]}")
+            json_obj=$(jq -nc \
+                --arg agent_id "$agent_id" \
+                --arg role "$role" \
+                --arg module "$module" \
+                --arg tmux_session "$tmux_session" \
+                --arg tmux_target "${tmux_session%%:*}:0.0" \
+                --arg worktree "$worktree" \
+                --arg ctx_used "$ctx_used" \
+                --arg state "$state" \
+                --arg api_errors "$api_errors" \
+                --arg flagged_reason "$flag_reason" \
+                --argjson is_stuck "$is_stuck" \
+                --argjson stuck_working "$stuck_working" \
+                --arg tier "$tier" \
+                '{agent_id:$agent_id,role:$role,module:$module,tmux_session:$tmux_session,tmux_target:$tmux_target,worktree:$worktree,ctx_used:$ctx_used,state:$state,api_errors:$api_errors,flagged_reason:$flagged_reason,is_stuck:$is_stuck,stuck_working:$stuck_working,tier:$tier}')
+            JSON_BUF+="$json_obj"$'\n'
+        fi
     fi
 done
 
@@ -480,6 +514,16 @@ if [[ -n "$state_tmp" ]]; then
             printf '%s\n' "${cur_api_agents[@]}" | jq -R . | jq -s --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" '{api_error_agents: ., timestamp: $ts}'
         fi
     } > "$state_tmp" 2>/dev/null && mv "$state_tmp" "$STATE_FILE" 2>/dev/null || rm -f "$state_tmp" 2>/dev/null
+fi
+
+# --json: emit the accumulated JSONL and skip BOTH the ALERT line and the
+# human text report entirely. The detection-seam consumer (daemon api-error
+# auto-remediation, thrum-sdzk) parses the JSONL and constructs its own
+# higher-level signal — the ALERT line and per-agent text are noise in
+# that flow.
+if [[ "$JSON_MODE" -eq 1 ]]; then
+    printf '%s' "$JSON_BUF"
+    exit 0
 fi
 
 # Consolidated ALERT line — always goes to STDOUT (separate from the
