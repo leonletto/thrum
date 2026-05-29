@@ -18,37 +18,38 @@ machine-readable history lives in
 
 ## v0.10.6 — In Soak (RC)
 
-**v0.10.6-rc.5** was tagged 2026-05-29 and is the current pre-release. rc.5 is a
-fleet-operations polish pass on top of rc.4's reliability stack. The headline
-fix: `thrum prime` no longer stalls ~10s when run by a live agent (thrum-5988).
-prime computes a cosmetic active-agent count over an RPC whose daemon handler
-takes the global `state.Lock`; under fleet load the snapshot walker holds that
-lock for seconds, so the call blocked on the 10s client deadline and silently
-blanked the daemon-health section. The fix runs that probe on a dedicated
-1.5s-deadline connection and omits the count on timeout instead of stalling the
-briefing (measured ~10.4s → ~1.9s). Two fleet-monitoring sweep corrections: it
-stops reporting >100% ctx for Opus 4.8 agents (thrum-4pd1 — the 1M-context
-denominator now matches the whole `claude-opus-4-*` family, not just 4.7, fixing
-a 5× inflation), and it selects an agent's transcript by session-birth timestamp
-rather than mtime so a resume-context read can't surface a stale ctx%
-(thrum-roeq). Boot reconcile now writes the identity-file AgentPID back to the
-agents table before the active-session check, so the registry reflects live
-runtime PIDs after a daemon restart (thrum-qxr3 — restored 10 → 23 worktrees in
-the field repro). A tmux safety fix stops `thrum tmux create --force` from
-destroying an unrelated session via prefix-match (thrum-z63b — now uses literal
-`=` match). rc.5 also lands the operator-surface work prepped for this RC:
-agent-status Pattern D self-writes (thrum-9neg — agents set `working`/`idle` on
-dispatch/DONE, plus a STUCK-WORKING sweep axis), `thrum monitor --schedule` with
-cron expressions and continuous-mode auto-restart (thrum-puhr.9), and the
-restored `--json` / `--report-only` / `THRUM_SWEEP_IDENTITY_GLOBS` sweep
-features (thrum-l9e6). rc.4's reliability stack carries forward: the `team.list`
-/ dead-agent self-heal rework (thrum-1nkt — pool ceiling 10 → 100, background
-dead-agent sweeping, `agent.lookup` RPC), the 4MB JSONL-compactor scanner buffer
-(thrum-10j0), the 1MB message-body write cap (thrum-mhwt), `INSERT OR IGNORE` on
+**v0.10.6-rc.6** was tagged 2026-05-29 and is the current pre-release. rc.6 is a
+single-fix RC — one P1 regression caught during the rc.5 soak. Boot reconcile
+was resurrecting a killed agent's stale dead PID (thrum-mnhp, a regression from
+rc.5's thrum-qxr3): qxr3 made reconcile write the identity-file `AgentPID` back
+unconditionally, but a killed agent's identity file keeps a stale non-zero dead
+PID, so reconcile revived it — the dead-agent sweeper then immediately ended the
+reconcile-created session and evicted the worktree, leaving killed agents
+un-restartable via `thrum tmux start`. The fix zeroes a dead PID on reconcile
+while still writing through live PIDs, so killed agents restart cleanly again.
+No schema change.
+
+rc.5's fleet-operations polish carries forward: the `thrum prime` ~10s-stall fix
+(thrum-5988 — the cosmetic active-agent probe moved to a dedicated 1.5s-deadline
+connection, ~10.4s → ~1.9s, with the daemon-health section restored), two
+fleet-monitoring sweep ctx% corrections (thrum-4pd1 — the Opus 4.8 1M-window
+denominator now matches the whole `claude-opus-4-*` family, fixing a 5×
+inflation; thrum-roeq — transcript selection by session-birth timestamp rather
+than mtime, so a resume-context read can't surface a stale ctx%), boot reconcile
+writing live AgentPIDs back to the registry (thrum-qxr3, now with the mnhp
+dead-PID guard), the `thrum tmux create --force` prefix-match guard
+(thrum-z63b), and the operator surface — agent-status Pattern D self-writes
+(thrum-9neg), `thrum monitor --schedule` with continuous-mode auto-restart
+(thrum-puhr.9), and the restored `--json` / `--report-only` /
+`THRUM_SWEEP_IDENTITY_GLOBS` sweep features (thrum-l9e6). rc.4's reliability
+stack also carries forward: the `team.list` / dead-agent self-heal rework
+(thrum-1nkt — pool ceiling 10 → 100, background dead-agent sweeping,
+`agent.lookup` RPC), the 4MB JSONL-compactor scanner buffer (thrum-10j0), the
+1MB message-body write cap (thrum-mhwt), `INSERT OR IGNORE` on
 `applySessionStart` (thrum-9jcb.3), the identity-guard PID-ancestor split
 (thrum-xir.40) and cached peercred CWD lookup (thrum-xir.45), and
 `thrum worktree teardown` cascade-deleting the bound agent identity
-(thrum-wk7d). See the [Beta Channel](beta-channel.md) page for the full rc.5
+(thrum-wk7d). See the [Beta Channel](beta-channel.md) page for the full rc.6
 callout + install commands.
 
 v0.10.6's headline is a **sync re-architecture** (thrum-s6os): the cross-machine

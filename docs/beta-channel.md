@@ -25,29 +25,28 @@ they're parameterized over `VERSION` and the release branch.
 ## Stable-track current pre-release
 
 > **Current stable-track pre-release:
-> [`v0.10.6-rc.5`](https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.5)**
-> (tagged 2026-05-29, in soak). **rc.5 is a fleet-operations polish pass** on
-> top of rc.4's reliability stack. The headline fix: `thrum prime` no longer
-> stalls ~10s when run by a live agent (thrum-5988) — the cosmetic active-agent
-> probe now runs on a dedicated 1.5s-deadline connection and omits the count on
-> timeout instead of blocking the whole briefing behind the snapshot walker's
-> `state.Lock` (measured ~10.4s → ~1.9s, with the daemon-health section
-> restored). The fleet-monitoring sweep gets two corrections: it stops
-> reporting >100% ctx for Opus 4.8 agents (thrum-4pd1 — the 1M-context
-> denominator now matches the whole `claude-opus-4-*` family, not just 4.7,
-> fixing a 5× inflation), and it picks an agent's transcript by session-birth
-> timestamp rather than mtime so a resume-context read can't surface a stale
-> ctx% (thrum-roeq). Boot reconcile now writes the identity-file AgentPID back
-> to the agents table before the active-session check, so the registry reflects
-> live runtime PIDs after a daemon restart (thrum-qxr3 — restored 10 → 23
-> worktrees in the field repro). A tmux safety fix stops
-> `thrum tmux create --force` from destroying an unrelated session via
-> prefix-match (thrum-z63b — now uses literal `=` match). rc.5 also lands the
-> operator-surface work prepped for this RC: agent-status Pattern D self-writes
-> (thrum-9neg — agents set `working`/`idle` on dispatch/DONE, plus a
-> STUCK-WORKING sweep axis), `thrum monitor --schedule` with cron expressions
-> and continuous-mode auto-restart (thrum-puhr.9), and the restored `--json` /
-> `--report-only` / `THRUM_SWEEP_IDENTITY_GLOBS` sweep features (thrum-l9e6).
+> [`v0.10.6-rc.6`](https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.6)**
+> (tagged 2026-05-29, in soak). **rc.6 is a single-fix RC** — one P1 regression
+> caught during the rc.5 soak. Boot reconcile was resurrecting a killed agent's
+> stale dead PID (thrum-mnhp, a regression from rc.5's thrum-qxr3): qxr3 made
+> reconcile write the identity-file `AgentPID` back unconditionally, but a
+> killed agent's identity file keeps a stale non-zero dead PID, so reconcile
+> revived it — the dead-agent sweeper then immediately ended the
+> reconcile-created session and evicted the worktree, leaving killed agents
+> **un-restartable via `thrum tmux start`**. The fix zeroes a dead PID on
+> reconcile while still writing through live PIDs, so killed agents restart
+> cleanly again. No schema change.
+>
+> rc.5's fleet-operations polish carries forward: the `thrum prime` ~10s-stall
+> fix (thrum-5988 — active-agent probe moved to a dedicated 1.5s-deadline
+> connection, ~10.4s → ~1.9s), two sweep ctx% corrections (thrum-4pd1 Opus 4.8
+> 1M-window denominator, thrum-roeq session-birth transcript selection), boot
+> reconcile writing live AgentPIDs back to the registry (thrum-qxr3, now with
+> the mnhp dead-PID guard), the `thrum tmux create --force` prefix-match guard
+> (thrum-z63b), and the operator surface — agent-status Pattern D self-writes
+> (thrum-9neg), `thrum monitor --schedule` with continuous auto-restart
+> (thrum-puhr.9), and the restored `--json` / `--report-only` /
+> `THRUM_SWEEP_IDENTITY_GLOBS` sweep features (thrum-l9e6).
 >
 > rc.4's reliability stack carries forward: the `team.list` / dead-agent
 > self-heal rework (thrum-1nkt — pool ceiling 10 → 100, single-flight self-heal
@@ -77,13 +76,13 @@ they're parameterized over `VERSION` and the release branch.
 > Full notes: [What's New](whats-new.md) and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-### Quick install for `v0.10.6-rc.5`
+### Quick install for `v0.10.6-rc.6`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.5 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.6 sh
 
 # Codex plugin (matches release/v0.10.6)
 THRUM_INSTALL_REF=release/v0.10.6 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.6/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
