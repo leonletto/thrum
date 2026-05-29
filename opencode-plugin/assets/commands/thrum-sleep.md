@@ -32,8 +32,8 @@ mkdir -p "${REPO}/.thrum/restart"
 # Tier 1 pre-check: tmux session must exist BEFORE writing snapshot:
 SESSION=$(thrum whoami --field tmux_session)
 if [ -z "$SESSION" ]; then
-  echo "ERROR: /thrum:sleep requires a tmux-managed agent session (tmux_session field is empty)."
-  echo "Use /thrum:restart for non-tmux sessions."
+  echo "ERROR: the sleep command requires a tmux-managed agent session (tmux_session field is empty)."
+  echo "Use the restart command for non-tmux sessions."
   exit 1
 fi
 ```

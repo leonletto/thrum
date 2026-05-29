@@ -14,12 +14,12 @@ commands or needs broader coordination judgment.
 
 ## Sleep — Extended (16-section snapshot)
 
-Compose a comprehensive 16-section prose continuation, write it directly to your restart file, then end session cleanly and kill own tmux session. The agent goes to sleep until the operator wakes it later. Same termination semantics as `/thrum:sleep`; the only difference is snapshot grade.
+Compose a comprehensive 16-section prose continuation, write it directly to your restart file, then end session cleanly and kill own tmux session. The agent goes to sleep until the operator wakes it later. Same termination semantics as `$thrum-sleep`; the only difference is snapshot grade.
 
 ### When to use extended vs standard
 
-- **Use `/thrum:sleep` (standard)** for routine park-and-resume where future-you can reconstruct from project state + a compact 11-section snapshot.
-- **Use `/thrum:sleep-extended` (this variant)** for designer/architect-grade work: parking a complex brainstorm with multiple Leon-decided forks, parking a fanout implementation (≥3 call sites or ≥2 epics), or any sleep where the next wake may be a fresh restart and must recover wire-contract precision without re-reading the source files.
+- **Use `$thrum-sleep` (standard)** for routine park-and-resume where future-you can reconstruct from project state + a compact 11-section snapshot.
+- **Use `$thrum-sleep-extended` (this variant)** for designer/architect-grade work: parking a complex brainstorm with multiple Leon-decided forks, parking a fanout implementation (≥3 call sites or ≥2 epics), or any sleep where the next wake may be a fresh restart and must recover wire-contract precision without re-reading the source files.
 
 ### Steps
 
@@ -35,8 +35,8 @@ mkdir -p "${REPO}/.thrum/restart"
 # Tier 1 pre-check: tmux session must exist BEFORE writing snapshot:
 SESSION=$(thrum whoami --field tmux_session)
 if [ -z "$SESSION" ]; then
-  echo "ERROR: /thrum:sleep-extended requires a tmux-managed agent session (tmux_session field is empty)."
-  echo "Use /thrum:restart-extended for non-tmux sessions."
+  echo "ERROR: the sleep-extended command requires a tmux-managed agent session (tmux_session field is empty)."
+  echo "Use the restart-extended command for non-tmux sessions."
   exit 1
 fi
 ```

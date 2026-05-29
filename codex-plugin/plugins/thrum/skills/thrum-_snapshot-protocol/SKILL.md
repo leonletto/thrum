@@ -1,6 +1,6 @@
 ---
 name: thrum-_snapshot-protocol
-description: Shared snapshot-composition protocol consumed by /thrum:restart, /thrum:restart-extended, /thrum:sleep, /thrum:sleep-extended. Not user-invocable directly.
+description: Shared snapshot-composition protocol consumed by $thrum-restart, $thrum-restart-extended, $thrum-sleep, $thrum-sleep-extended. Not user-invocable directly.
 # source: claude-plugin/commands/_snapshot-protocol.md
 # generated-by: scripts/sync-skills.sh
 ---
@@ -14,7 +14,7 @@ commands or needs broader coordination judgment.
 
 ## Snapshot Composition Protocol (shared partial)
 
-Used by: `/thrum:restart`, `/thrum:restart-extended`, `/thrum:sleep`, `/thrum:sleep-extended`.
+Used by: `$thrum-restart`, `$thrum-restart-extended`, `$thrum-sleep`, `$thrum-sleep-extended`.
 
 This is the canonical source-of-truth for snapshot composition discipline. The four sibling commands compose: read this partial → variant-specific terminal action. Do NOT invoke this file directly; it has no terminal action.
 
@@ -60,8 +60,8 @@ Write for a competent stranger in your role — someone who has the runtime brie
 
 The variant skill that invoked this partial tells you which structure to use:
 
-- **`/thrum:restart` and `/thrum:sleep`** → use the STANDARD 11-section structure below.
-- **`/thrum:restart-extended` and `/thrum:sleep-extended`** → use the EXTENDED 16-section structure below.
+- **`$thrum-restart` and `$thrum-sleep`** → use the STANDARD 11-section structure below.
+- **`$thrum-restart-extended` and `$thrum-sleep-extended`** → use the EXTENDED 16-section structure below.
 
 The standard structure is the working compact format. The extended structure is fundamentally different: a comprehensive technical reference (wire contracts, capability matrix, anticipated Q&A, design rationale) appropriate for designer/architect-grade handoffs where the next session may be cold and must recover the full design grammar from this artifact alone.
 
@@ -110,7 +110,7 @@ Numbered `§1.` through `§16.`. The §-prefix is intentional — extended snaps
 
 - **§1 Header.** Top of file. Author (agent_id), date, restart reason (1-line trigger), one-sentence mandate to restart-you ("read this in full, then [N specific actions]"), context-% at write time. Read-first prominence.
 - **§2 Identity.** `agent_id` / worktree absolute path / branch / role / coordinator name / cut-point commit SHA for any line cites that follow. Mechanical; lets a totally cold restart-you orient before reading any prose.
-- **§3 Big picture.** REQUIRED FIRST PROSE. 1–3 sentences summarizing what the session accomplished. Specific: artifacts, decisions, cycles closed. Becomes the session-archive log entry. Write this BEFORE anything else (composing §3 forces you to identify what was load-bearing, which shapes what you write below). **Sleep variant:** for `/thrum:sleep` and `/thrum:sleep-extended`, §3 frames as "where work stands at park time" rather than "what shipped" — the agent is parking, not completing. Composition discipline (1–3 sentences, specific, load-bearing-first) is identical.
+- **§3 Big picture.** REQUIRED FIRST PROSE. 1–3 sentences summarizing what the session accomplished. Specific: artifacts, decisions, cycles closed. Becomes the session-archive log entry. Write this BEFORE anything else (composing §3 forces you to identify what was load-bearing, which shapes what you write below). **Sleep variant:** for `$thrum-sleep` and `$thrum-sleep-extended`, §3 frames as "where work stands at park time" rather than "what shipped" — the agent is parking, not completing. Composition discipline (1–3 sentences, specific, load-bearing-first) is identical.
 - **§4 Mission state.** Where this work sits in its pipeline. Not the pipeline DAG itself (that's §11) — the narrative status.
 - **§5 Locked design decisions.** Each LOCK gets a line: decision + Leon's wording (when applicable) + rationale.
 - **§6 Open L-questions.** Numbered Q-list with researcher recommendations. OR "NONE: all locked per <evidence>" with the evidence cited.
@@ -137,4 +137,4 @@ ${REPO}/.thrum/restart/${AGENT}.md
 
 `thrum prime` will auto-inject this file at next session start (whether wake comes from `thrum tmux restart` or `thrum tmux create`). No bash heredoc or `cat <<EOF` redirection is needed — write the file directly.
 
-After writing, return control to your variant skill (`/thrum:restart`, `/thrum:restart-extended`, `/thrum:sleep`, or `/thrum:sleep-extended`) for the terminal action.
+After writing, return control to your variant skill (`$thrum-restart`, `$thrum-restart-extended`, `$thrum-sleep`, or `$thrum-sleep-extended`) for the terminal action.

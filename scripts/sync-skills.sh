@@ -186,6 +186,13 @@ commands or needs broader coordination judgment.
 $(cat "${body_file}")
 EOF
 
+  # Rewrite claude-specific /thrum:foo skill-invocation syntax to codex's
+  # $thrum-foo flat-skill form — same treatment the skill→codex path applies
+  # at adapt_codex_skill. Without this, command-derived codex skills that
+  # reference sibling commands in prose leak raw /thrum: strings (the
+  # established convention is zero /thrum: in codex output).
+  replace_claude_skill_syntax "${skill_dir}/SKILL.md"
+
   write_openai_metadata \
     "${skill_dir}" \
     "Thrum ${command_title}" \

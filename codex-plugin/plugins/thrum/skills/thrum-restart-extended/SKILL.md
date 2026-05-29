@@ -1,6 +1,6 @@
 ---
 name: thrum-restart-extended
-description: Save a comprehensive 16-section restart snapshot and prepare for session restart. Use for designer/architect-grade handoffs needing wire contracts, capability matrix, anticipated Q&A, and design rationale that the standard /thrum:restart compact format cannot carry.
+description: Save a comprehensive 16-section restart snapshot and prepare for session restart. Use for designer/architect-grade handoffs needing wire contracts, capability matrix, anticipated Q&A, and design rationale that the standard $thrum-restart compact format cannot carry.
 # source: claude-plugin/commands/restart-extended.md
 # generated-by: scripts/sync-skills.sh
 ---
@@ -18,8 +18,8 @@ Compose a comprehensive 16-section prose continuation, write it directly to your
 
 ### When to use extended vs standard
 
-- **Use `/thrum:restart` (standard)** for routine context-exhaustion or rate-limit restarts where the work is well-trafficked and future-you can reconstruct from project state + recent inbox + a compact 11-section snapshot.
-- **Use `/thrum:restart-extended` (this variant)** for designer/architect-grade handoffs: locking a complex brainstorm with multiple Leon-decided forks, handing off a fanout implementation (≥3 call sites or ≥2 epics), or any session where the next session may be a fresh restart and must recover wire-contract precision without re-reading the source files.
+- **Use `$thrum-restart` (standard)** for routine context-exhaustion or rate-limit restarts where the work is well-trafficked and future-you can reconstruct from project state + recent inbox + a compact 11-section snapshot.
+- **Use `$thrum-restart-extended` (this variant)** for designer/architect-grade handoffs: locking a complex brainstorm with multiple Leon-decided forks, handing off a fanout implementation (≥3 call sites or ≥2 epics), or any session where the next session may be a fresh restart and must recover wire-contract precision without re-reading the source files.
 
 ### Steps
 
@@ -85,4 +85,4 @@ Then wait up to 5 minutes for the coordinator to restart you. Do not exit on you
 
 ### After Restart: Session Archive
 
-After restart, your snapshot moves to `.thrum/agents/<your-agent-id>/sessions/` and stays there as a persistent log entry. Same mechanism as standard restart — see `/thrum:restart` for archive browsing commands.
+After restart, your snapshot moves to `.thrum/agents/<your-agent-id>/sessions/` and stays there as a persistent log entry. Same mechanism as standard restart — see `$thrum-restart` for archive browsing commands.

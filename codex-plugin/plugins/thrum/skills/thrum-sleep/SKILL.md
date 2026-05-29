@@ -14,7 +14,7 @@ commands or needs broader coordination judgment.
 
 ## Sleep — Park Until Operator Wake
 
-Compose a standard 11-section prose continuation, write it directly to your restart file, then end session cleanly and kill own tmux session. The agent goes to sleep until the operator wakes it later via `thrum tmux create <session-name>`. Unlike `/thrum:restart`, sleep does NOT signal the coordinator and does NOT wait for an external mover — it terminates its own tmux session.
+Compose a standard 11-section prose continuation, write it directly to your restart file, then end session cleanly and kill own tmux session. The agent goes to sleep until the operator wakes it later via `thrum tmux create <session-name>`. Unlike `$thrum-restart`, sleep does NOT signal the coordinator and does NOT wait for an external mover — it terminates its own tmux session.
 
 ### When to Use
 
@@ -22,7 +22,7 @@ Compose a standard 11-section prose continuation, write it directly to your rest
 - The operator wants to free a tmux session slot but resume this agent's work later.
 - You (the agent) decide independently that further progress requires the operator's attention later, not the coordinator's now.
 
-For routine context-exhaustion / rate-limit restarts where the coordinator should bring you back in-place, use `/thrum:restart` instead.
+For routine context-exhaustion / rate-limit restarts where the coordinator should bring you back in-place, use `$thrum-restart` instead.
 
 ### Steps
 
@@ -38,8 +38,8 @@ mkdir -p "${REPO}/.thrum/restart"
 # Tier 1 pre-check: tmux session must exist BEFORE writing snapshot:
 SESSION=$(thrum whoami --field tmux_session)
 if [ -z "$SESSION" ]; then
-  echo "ERROR: /thrum:sleep requires a tmux-managed agent session (tmux_session field is empty)."
-  echo "Use /thrum:restart for non-tmux sessions."
+  echo "ERROR: the sleep command requires a tmux-managed agent session (tmux_session field is empty)."
+  echo "Use the restart command for non-tmux sessions."
   exit 1
 fi
 ```
@@ -56,7 +56,7 @@ ${REPO}/claude-plugin/commands/_snapshot-protocol.md
 
 Apply its Step 2 (compose your continuation) per the structure guidance.
 
-**Use the STANDARD 11-section structure.** For comprehensive designer/architect-grade snapshots, use `/thrum:sleep-extended` instead.
+**Use the STANDARD 11-section structure.** For comprehensive designer/architect-grade snapshots, use `$thrum-sleep-extended` instead.
 
 **Note on §1 framing:** For sleep snapshots, the Big Picture section frames as "where work stands at park time" rather than "what shipped" — the agent is parking, not completing. Composition discipline (1–3 sentences, specific, load-bearing-first) is identical to restart.
 
