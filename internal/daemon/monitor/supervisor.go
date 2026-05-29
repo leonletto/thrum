@@ -538,7 +538,7 @@ func (s *MonitorSupervisor) launch(job *MonitorJob) error {
 	if baseCtx == nil {
 		baseCtx = context.Background()
 	}
-	runnerCtx, cancel := context.WithCancel(baseCtx)
+	runnerCtx, cancel := context.WithCancel(baseCtx) //nosec G118 -- cancel stored on handle.cancel L546; called in three paths: shutdown loop L237, Stop L376, Restart L442. gosec can't follow cross-scope handoff.
 	done := make(chan struct{})
 
 	handle := &runnerHandle{
