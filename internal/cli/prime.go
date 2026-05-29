@@ -70,6 +70,12 @@ type WorkContextInfo struct {
 	Error            string   `json:"error,omitempty"`
 }
 
+// primeActiveCountTimeout bounds the best-effort active-agent count probe (see
+// the listContext call in ContextPrime). Short by design: the count is cosmetic
+// and the underlying RPC can block on the daemon's state.Lock under fleet load
+// (thrum-5988), so prime degrades the count rather than stalling the briefing.
+const primeActiveCountTimeout = 1500 * time.Millisecond
+
 // ContextPrime gathers comprehensive session context from the daemon and git.
 // It gracefully handles missing sections (e.g., no session, no daemon, not a git repo).
 // CallerAgentID is optional — when provided, it ensures identity resolution uses the
@@ -131,16 +137,29 @@ func ContextPrime(client *Client, callerAgentID ...string) *PrimeContext {
 			Total: len(agents.Agents),
 			List:  agents.Agents,
 		}
-		// Count active by checking for sessions via listContext
-		contexts, ctxErr := AgentListContext(client, "", "", "")
-		if ctxErr == nil {
-			activeSet := make(map[string]bool)
-			for _, c := range contexts.Contexts {
-				if c.SessionID != "" {
-					activeSet[c.AgentID] = true
+		// Count active by checking for sessions via listContext. This is
+		// best-effort enrichment, not load-bearing for the briefing, so it
+		// runs on a DEDICATED short-lived connection with a tight deadline:
+		//   - The daemon's HandleListContext takes the global state.Lock,
+		//     which the snapshot/sync walker can hold for seconds under fleet
+		//     load (thrum-5988); a tight deadline keeps prime fast (≈1.5s
+		//     worst case) instead of stalling the full 10s default.
+		//   - Isolating it on its own connection means a slow/late response
+		//     can't desync the primary connection's later RPCs (the daemon
+		//     health section previously came back blank for exactly this
+		//     reason). On any failure the active count is simply omitted.
+		if probe, derr := NewClient(client.SocketPath()); derr == nil {
+			contexts, ctxErr := AgentListContextWithTimeout(probe, "", "", "", primeActiveCountTimeout)
+			if ctxErr == nil {
+				activeSet := make(map[string]bool)
+				for _, c := range contexts.Contexts {
+					if c.SessionID != "" {
+						activeSet[c.AgentID] = true
+					}
 				}
+				info.Active = len(activeSet)
 			}
-			info.Active = len(activeSet)
+			_ = probe.Close()
 		}
 		ctx.Agents = info
 	}

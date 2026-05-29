@@ -510,6 +510,27 @@ func AgentListContext(client *Client, agentID, branch, file string) (*ListContex
 	return &result, nil
 }
 
+// AgentListContextWithTimeout is AgentListContext with a caller-supplied
+// deadline instead of the 10s default. Used by `thrum prime` for the
+// best-effort active-agent count: the daemon's HandleListContext acquires the
+// global state.Lock, which the snapshot/sync walker can hold for seconds under
+// fleet load (thrum-5988), so a tight deadline keeps prime fast and degrades
+// the count rather than blocking the whole briefing.
+func AgentListContextWithTimeout(client *Client, agentID, branch, file string, timeout time.Duration) (*ListContextResponse, error) {
+	req := ListContextRequest{
+		AgentID: agentID,
+		Branch:  branch,
+		File:    file,
+	}
+
+	var result ListContextResponse
+	if err := client.CallWithTimeout("agent.listContext", req, &result, timeout); err != nil {
+		return nil, fmt.Errorf("agent.listContext RPC failed: %w", err)
+	}
+
+	return &result, nil
+}
+
 // FormatContextList formats a list of work contexts for display.
 func FormatContextList(result *ListContextResponse) string {
 	if len(result.Contexts) == 0 {

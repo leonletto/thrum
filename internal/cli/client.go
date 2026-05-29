@@ -34,6 +34,14 @@ func NewClient(socketPath string) (*Client, error) {
 	return client, nil
 }
 
+// SocketPath returns the Unix socket path this client is connected to. Callers
+// use it to dial an additional short-lived connection for best-effort RPCs that
+// must not share (and therefore must not risk desyncing) the primary
+// connection's request/response stream.
+func (c *Client) SocketPath() string {
+	return c.socketPath
+}
+
 // defaultCallTimeout is the maximum time a CLI→daemon RPC call can take.
 // Prevents CLI commands from hanging forever when the daemon is unresponsive.
 const defaultCallTimeout = 10 * time.Second
