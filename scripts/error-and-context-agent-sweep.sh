@@ -58,6 +58,7 @@ OUT=""           # empty = stdout
 SHOW_ALL=0       # 0 = only emit flagged agents (default); 1 = emit all
 CTX_THRESHOLD=50 # int %; agents at-or-above this are flagged
 NUDGE=1          # 1 = auto-nudge api-error panes (default); --no-nudge sets 0
+SILENCE_THRESHOLD_MIN=10  # min; thrum-9neg L5; --silence-threshold-min overrides
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -67,6 +68,7 @@ while [[ $# -gt 0 ]]; do
         --all)   SHOW_ALL=1; shift ;;
         --ctx-threshold) CTX_THRESHOLD="$2"; shift 2 ;;
         --no-nudge) NUDGE=0; shift ;;
+        --silence-threshold-min) SILENCE_THRESHOLD_MIN="$2"; shift 2 ;;
         -h|--help)
             sed -n '2,/^$/p' "$0" | sed 's/^# \?//'
             exit 0
@@ -140,7 +142,8 @@ for f in "${identity_files[@]}"; do
         tmux_session: (.tmux_session // ""),
         worktree: (.worktree // ""),
         last_seen: (.updated_at // ""),
-        status: (.agent_status // "")
+        status: (.agent_status // ""),
+        intent: (.intent // "")
     }' "$f" 2>/dev/null) || continue
     [[ -z "$raw" || "$raw" == "null" ]] && continue
 
@@ -190,6 +193,7 @@ auto_nudges=()
 alert_segments=()
 flagged_count=0
 stuck_count=0
+stuck_working_count=0
 tier3_count=0  # ctx >= 85%
 tier2_count=0  # 70% <= ctx < 85%
 cur_api_agents=()
@@ -203,6 +207,7 @@ for line in "${agent_lines[@]}"; do
     worktree=$(jq -r '.worktree // ""' <<<"$line")
     last_seen=$(jq -r '.last_seen' <<<"$line")
     status=$(jq -r '.status' <<<"$line")
+    intent=$(jq -r '.intent // ""' <<<"$line")
 
     # Compute "Xm ago" if last_seen parses; fall back to raw on failure
     last_seen_epoch=$(date -u -j -f "%Y-%m-%dT%H:%M:%S" "${last_seen%%.*}" +%s 2>/dev/null || echo 0)
@@ -212,6 +217,14 @@ for line in "${agent_lines[@]}"; do
     else
         last_seen_display="$last_seen"
     fi
+
+    # Tmux silence age via native window_activity (per feedback_byte_equality_pane_detection #1).
+    # Compares to now_epoch; subsecond op, no diffing. Stripped to bare session name
+    # because window_activity is keyed by tmux session, not the :W.P target form.
+    tmux_session_only="${tmux_session%%:*}"
+    last_activity=$(tmux display-message -p -t "$tmux_session_only" '#{window_activity}' 2>/dev/null || echo 0)
+    silence_sec=$((now_epoch - last_activity))
+    silence_threshold_sec=$((SILENCE_THRESHOLD_MIN * 60))
 
     # Capture pane FIRST so we can extract api_errors and fallback ctx footer.
     # Capture-pane: -p print to stdout, -t target, -S -<N> start N lines from end.
@@ -293,6 +306,47 @@ for line in "${agent_lines[@]}"; do
         api_errors="(capture failed)"
     fi
 
+    # STUCK-WORKING flag computation (thrum-9neg L5). Three conditions per dispatch:
+    #   (a) agent_status = "working" (agent claims to be mid-work)
+    #   (b) tmux silence > SILENCE_THRESHOLD_MIN (pane has produced no output)
+    #   (c) JSONL transcript's last assistant message has stop_reason = tool_use
+    #       (state="working" in our derived vocabulary) AND last_msg > threshold
+    #
+    # Condition (c) tightens "no recent JSONL tool calls" to "JSONL says agent IS
+    # mid-tool-call but no progress" — distinguishes a hung tool from a clean
+    # end_turn that just hasn't been reflected in agent_status yet (a status-drift,
+    # not a stuck; surfaced separately in a future signal).
+    #
+    # Edge case: state="(no assistant msg)" (fresh agent, no transcript output yet)
+    # falls through neither the JSONL branch (state != "working") nor the non-Claude
+    # branch (last_msg_ago != "(n/a)"); stuck_working stays 0. Correct by design —
+    # an agent with no tool calls yet cannot be stuck mid-tool-call.
+    #
+    # Warm-hold exemption per L4: if intent starts with `warm-hold:`, skip the
+    # classification entirely. Intent is read in the per-agent jq pass (E2.5).
+    #
+    # last_msg_ago format produced earlier in this loop: "<N>m ago" OR "(n/a)" for
+    # non-Claude runtimes (no transcript). For non-Claude, tmux silence alone is
+    # the signal — no way to distinguish tool-use vs end-turn without a transcript.
+    #
+    # Note: This block only SETS the stuck_working flag; needs_attention + reason_parts
+    # integration happens in E2.8 (peer of is_stuck check at line 367+, AFTER the
+    # needs_attention=0 reset at line 320). Setting needs_attention here would be
+    # wiped by line 320.
+    stuck_working=0
+    if [[ "$status" == "working" && "$silence_sec" -gt "$silence_threshold_sec" \
+          && ! "$intent" =~ ^warm-hold: ]]; then
+        if [[ "$state" == "working" && "$last_msg_ago" =~ ^([0-9]+)m ]]; then
+            last_msg_min="${BASH_REMATCH[1]}"
+            if [[ "$last_msg_min" -gt "$SILENCE_THRESHOLD_MIN" ]]; then
+                stuck_working=1
+            fi
+        elif [[ "$last_msg_ago" == "(n/a)" ]]; then
+            # Non-Claude runtime (no transcript). Tmux silence alone is the signal.
+            stuck_working=1
+        fi
+    fi
+
     # Build this agent's full section into a temp variable
     agent_section=""
     agent_section+="===== @$agent_id · $role${module:+/$module} =====\n"
@@ -300,6 +354,9 @@ for line in "${agent_lines[@]}"; do
     agent_section+="worktree:   $worktree\n"
     agent_section+="last_seen:  $last_seen_display\n"
     agent_section+="status:     $status\n"
+    agent_section+="intent:     $intent\n"
+    agent_section+="silence:    ${silence_sec}s (threshold ${silence_threshold_sec}s)\n"
+    agent_section+="stuck_working: $stuck_working\n"
     agent_section+="ctx_used:   $ctx_used\n"
     agent_section+="state:      $state\n"
     agent_section+="last_msg:   $last_msg_ago\n"
@@ -370,11 +427,18 @@ for line in "${agent_lines[@]}"; do
         reason_parts+=("STUCK")
     fi
 
+    # stuck-working contributes its own reason segment (independent of api-err STUCK).
+    if [[ "$stuck_working" -eq 1 ]]; then
+        reason_parts+=("stuck-working")
+        needs_attention=1
+    fi
+
     if [[ "$needs_attention" -eq 1 ]]; then
         printf '%b' "$agent_section" >> "$ATTENTION_BUF"
         ATTENTION_COUNT=$((ATTENTION_COUNT + 1))
         flagged_count=$((flagged_count + 1))
         [[ "$is_stuck" -eq 1 ]] && stuck_count=$((stuck_count + 1))
+        [[ "$stuck_working" -eq 1 ]] && stuck_working_count=$((stuck_working_count + 1))
         case "$tier" in
             tier3) tier3_count=$((tier3_count + 1)) ;;
             tier2) tier2_count=$((tier2_count + 1)) ;;
@@ -416,7 +480,7 @@ fi
 # Silent when clean: no ALERT line if zero agents were flagged.
 if [[ "$flagged_count" -gt 0 ]]; then
     alert_body=$(IFS='; '; echo "${alert_segments[*]}")
-    echo "ALERT: flagged=$flagged_count stuck=$stuck_count tier3=$tier3_count tier2=$tier2_count — $alert_body"
+    echo "ALERT: flagged=$flagged_count stuck=$stuck_count stuck_working=$stuck_working_count tier3=$tier3_count tier2=$tier2_count — $alert_body"
 fi
 
 # Header → report file (or stdout if no --out)
@@ -425,7 +489,7 @@ fi
     echo "# generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
     echo "# lines per pane: $LINES"
     [[ -n "$ROLE_FILTER" ]] && echo "# role filter: $ROLE_FILTER"
-    echo "# alive agents: ${#agent_lines[@]}; flagged: $ATTENTION_COUNT (ctx>=${CTX_THRESHOLD}% or api_errors or capture-fail); stuck: $stuck_count; tier3(>=85%): $tier3_count; tier2(70-84%): $tier2_count"
+    echo "# alive agents: ${#agent_lines[@]}; flagged: $ATTENTION_COUNT (ctx>=${CTX_THRESHOLD}% or api_errors or capture-fail or stuck-working); stuck: $stuck_count; stuck_working: $stuck_working_count; tier3(>=85%): $tier3_count; tier2(70-84%): $tier2_count"
     if [[ ${#auto_nudges[@]} -gt 0 ]]; then
         echo "# auto-nudged ${#auto_nudges[@]} agent(s) on api_errors with 'continue':"
         for n in "${auto_nudges[@]}"; do echo "#   - $n"; done

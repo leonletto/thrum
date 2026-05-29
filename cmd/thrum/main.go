@@ -3344,11 +3344,11 @@ func worktreeListJSON(repoPath string) error {
 func agentSetStatusCmd() *cobra.Command {
 	var targetAgent string
 	cmd := &cobra.Command{
-		Use:   "set-status <working|idle|blocked>",
+		Use:   "set-status <working|idle|blocked|stuck>",
 		Short: "Set agent operational status",
 		Long: `Set the operational status for an agent.
 
-Valid statuses: working, idle, blocked.
+Valid statuses: working, idle, blocked, stuck.
 
 Without --agent, updates the local agent's identity file directly.
 With --agent, sends a daemon RPC to update a remote agent's status.
@@ -3359,8 +3359,8 @@ Examples:
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			status := args[0]
-			if status != "working" && status != "idle" && status != "blocked" {
-				return fmt.Errorf("invalid status %q: must be working, idle, or blocked", status)
+			if status != "working" && status != "idle" && status != "blocked" && status != "stuck" {
+				return fmt.Errorf("invalid status %q: must be working, idle, blocked, or stuck", status)
 			}
 			if targetAgent != "" {
 				return setRemoteAgentStatus(targetAgent, status)
