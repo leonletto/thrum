@@ -47,12 +47,15 @@ message to `@coordinator_main`, which triggers this skill.
 Format of the ALERT line:
 
 ```text
-ALERT: flagged=N stuck=S tier3=T tier2=U — agent_a(92%,api-err,STUCK); agent_b(88%); …
+ALERT: flagged=N stuck=S stuck_working=W tier3=T tier2=U — agent_a(92%,api-err,STUCK,stuck-working); agent_b(88%); …
 ```
 
 - `flagged` — total agents needing attention
 - `stuck` — api-errored on TWO consecutive sweeps (state file tracks this
   across runs)
+- `stuck_working` — agent_status=working AND tmux quiet > threshold AND no
+  recent JSONL tool calls (thrum-9neg L5; threshold tunable via the sweep
+  script's --silence-threshold-min flag, default 10 min)
 - `tier3` — count with ctx >= 85% (force-restart candidates)
 - `tier2` — count with 70-84% ctx (tmux-send nudge candidates)
 - Per-agent segment: `name(ctx%,reason-if-any,classifier)` joined by `;`
@@ -82,13 +85,38 @@ Claude Code status bar footer, normalizing UTF-8 non-breaking spaces
 
 ## Step 2 — Threshold logic
 
-| ctx_used  | Action                                                                         |
-| --------- | ------------------------------------------------------------------------------ |
-| < 50%     | No action — agent has runway                                                   |
-| 50% – 70% | Directed inbox restart request (polite, agent writes snapshot)                 |
-| 70% – 85% | Tmux-send nudge directly into their pane (bypasses inbox; more forceful)       |
-| > 85%     | Force-restart immediately without waiting for response                         |
-| `(n/a)`   | Pane capture failed OR runtime has no Ctx footer — check tmux session manually |
+| ctx_tier | stuck_working | Action                                                                                                                                                       |
+| -------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| < 50%    | N             | No action — agent has runway                                                                                                                                 |
+| < 50%    | Y             | Tmux-send "are you stuck? `/continue` if waiting" nudge; if not recovered in next sweep, surface to operator                                                 |
+| 50-70%   | N             | Directed inbox restart request (polite, agent writes snapshot)                                                                                               |
+| 50-70%   | Y             | Tmux-send nudge; defer the tier-1 directed restart request until the next sweep confirms the pane is active again AND ctx is still in this band              |
+| 70-85%   | N             | Tmux-send `/thrum:restart` (bypasses inbox; more forceful)                                                                                                   |
+| 70-85%   | Y             | Surface to operator immediately (degraded + stuck → human-eyes-needed)                                                                                       |
+| > 85%    | any           | Force-restart immediately without waiting for response                                                                                                       |
+| `(n/a)`  | any           | Pane capture failed OR runtime has no Ctx footer — check tmux session manually                                                                               |
+
+
+**Warm-hold exemption (per thrum-9neg L4):** if the agent's `intent` field starts with `^warm-hold:`, skip nudge + restart for all tiers below >85%. The >85% bracket still fires regardless. Agents (or coord on their behalf) set this via `thrum agent set-intent "warm-hold: <reason>"`.
+
+## Step 2.5 — Stuck-working axis (thrum-9neg)
+
+`stuck_working` is **orthogonal** to `ctx_tier`. They can compound. Treat the table above as a composite lookup: the action depends on the *cell*, not on either axis alone.
+
+`stuck_working` measures "is this agent currently unable to make progress?" while `ctx_tier` measures "how soon will this agent degrade if left alone?" An agent can be:
+
+- ctx-fine but stuck-working (waiting on a hung tool call) → nudge to unstick
+- ctx-degraded but not stuck-working (working normally but burning context) → restart cleanly
+- both → composite action per the table; high-degradation cases skip the nudge step since the agent likely can't recover from the nudge alone
+
+The sweep's STUCK-WORKING classification (sweep script's per-agent `stuck_working` line + ALERT-line `stuck_working=N` axis) fires when:
+
+1. `agent_status = "working"` (the agent claims to be mid-work; set by the Pattern D self-write in role skills), AND
+2. tmux silence > `SILENCE_THRESHOLD_MIN` minutes (default 10; tunable via `--silence-threshold-min N`), AND
+3. JSONL transcript's last assistant message has `stop_reason = tool_use` AND was emitted more than `SILENCE_THRESHOLD_MIN` minutes ago (Claude runtime only; non-Claude runtimes use tmux silence alone)
+4. `intent` does NOT start with `^warm-hold:` (warm-hold exemption)
+
+The classification is sweep-side only — it does NOT write to identity files. The identity-file `agent_status="stuck"` semantic stays reserved for `permission.markAgentStuck` writes (permission-cadence give-up).
 
 **Reliability ladder rationale:** the inbox → tmux-send → force-restart
 progression goes from polite to forceful. Inbox messages can fail (delivery
