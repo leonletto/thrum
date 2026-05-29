@@ -193,6 +193,7 @@ auto_nudges=()
 alert_segments=()
 flagged_count=0
 stuck_count=0
+stuck_working_count=0
 tier3_count=0  # ctx >= 85%
 tier2_count=0  # 70% <= ctx < 85%
 cur_api_agents=()
@@ -353,6 +354,9 @@ for line in "${agent_lines[@]}"; do
     agent_section+="worktree:   $worktree\n"
     agent_section+="last_seen:  $last_seen_display\n"
     agent_section+="status:     $status\n"
+    agent_section+="intent:     $intent\n"
+    agent_section+="silence:    ${silence_sec}s (threshold ${silence_threshold_sec}s)\n"
+    agent_section+="stuck_working: $stuck_working\n"
     agent_section+="ctx_used:   $ctx_used\n"
     agent_section+="state:      $state\n"
     agent_section+="last_msg:   $last_msg_ago\n"
@@ -423,11 +427,18 @@ for line in "${agent_lines[@]}"; do
         reason_parts+=("STUCK")
     fi
 
+    # stuck-working contributes its own reason segment (independent of api-err STUCK).
+    if [[ "$stuck_working" -eq 1 ]]; then
+        reason_parts+=("stuck-working")
+        needs_attention=1
+    fi
+
     if [[ "$needs_attention" -eq 1 ]]; then
         printf '%b' "$agent_section" >> "$ATTENTION_BUF"
         ATTENTION_COUNT=$((ATTENTION_COUNT + 1))
         flagged_count=$((flagged_count + 1))
         [[ "$is_stuck" -eq 1 ]] && stuck_count=$((stuck_count + 1))
+        [[ "$stuck_working" -eq 1 ]] && stuck_working_count=$((stuck_working_count + 1))
         case "$tier" in
             tier3) tier3_count=$((tier3_count + 1)) ;;
             tier2) tier2_count=$((tier2_count + 1)) ;;
@@ -469,7 +480,7 @@ fi
 # Silent when clean: no ALERT line if zero agents were flagged.
 if [[ "$flagged_count" -gt 0 ]]; then
     alert_body=$(IFS='; '; echo "${alert_segments[*]}")
-    echo "ALERT: flagged=$flagged_count stuck=$stuck_count tier3=$tier3_count tier2=$tier2_count — $alert_body"
+    echo "ALERT: flagged=$flagged_count stuck=$stuck_count stuck_working=$stuck_working_count tier3=$tier3_count tier2=$tier2_count — $alert_body"
 fi
 
 # Header → report file (or stdout if no --out)
@@ -478,7 +489,7 @@ fi
     echo "# generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
     echo "# lines per pane: $LINES"
     [[ -n "$ROLE_FILTER" ]] && echo "# role filter: $ROLE_FILTER"
-    echo "# alive agents: ${#agent_lines[@]}; flagged: $ATTENTION_COUNT (ctx>=${CTX_THRESHOLD}% or api_errors or capture-fail); stuck: $stuck_count; tier3(>=85%): $tier3_count; tier2(70-84%): $tier2_count"
+    echo "# alive agents: ${#agent_lines[@]}; flagged: $ATTENTION_COUNT (ctx>=${CTX_THRESHOLD}% or api_errors or capture-fail or stuck-working); stuck: $stuck_count; stuck_working: $stuck_working_count; tier3(>=85%): $tier3_count; tier2(70-84%): $tier2_count"
     if [[ ${#auto_nudges[@]} -gt 0 ]]; then
         echo "# auto-nudged ${#auto_nudges[@]} agent(s) on api_errors with 'continue':"
         for n in "${auto_nudges[@]}"; do echo "#   - $n"; done
