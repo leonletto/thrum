@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thrum Sleep"
+  short_description: "Park this agent for operator-initiated wake. Saves a standard 11-section snapshot (does NOT signal coordinator) then thrum-tmux-kills own session. Use when the operator is shutting down (e.g. computer restart) and the agent should resume from snapshot on next boot."
+  default_prompt: "Run the thrum sleep workflow and summarize the result."
