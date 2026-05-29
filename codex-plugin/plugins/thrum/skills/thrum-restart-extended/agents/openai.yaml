@@ -1,4 +1,4 @@
 interface:
   display_name: "Thrum Restart Extended"
-  short_description: "Save a comprehensive 16-section restart snapshot and prepare for session restart. Use for designer/architect-grade handoffs needing wire contracts, capability matrix, anticipated Q&A, and design rationale that the standard /thrum:restart compact format cannot carry."
+  short_description: "Save a comprehensive 16-section restart snapshot and prepare for session restart. Use for designer/architect-grade handoffs needing wire contracts, capability matrix, anticipated Q&A, and design rationale that the standard $thrum-restart compact format cannot carry."
   default_prompt: "Run the thrum restart-extended workflow and summarize the result."

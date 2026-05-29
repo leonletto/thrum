@@ -93,7 +93,7 @@ Tmux pane terminates → runtime process exits → no further activity until ope
 
 ### How wake works
 
-The operator brings you back later by running `thrum tmux create <session-name>` (or analogous). On runtime start, `thrum prime` auto-injects the snapshot at `.thrum/restart/<your-agent-id>.md` — same mechanism used by restart. Resume from §16 / §9 immediate-next-actions.
+The operator brings you back later by running `thrum tmux create <session-name>` (or analogous). On runtime start, `thrum prime` auto-injects the snapshot at `.thrum/restart/<your-agent-id>.md` — same mechanism used by restart. Resume from §9 (Numbered resume plan).
 
 The snapshot file moves to `.thrum/agents/<your-agent-id>/sessions/` archive on wake (same as restart). Worst-case fallback: previous Claude session may be resumable via Claude Code's native session-continuation mechanism.
 

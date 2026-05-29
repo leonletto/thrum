@@ -142,6 +142,14 @@ write_openai_metadata() {
   local short_description="$3"
   local default_prompt="$4"
 
+  # Rewrite claude-specific /thrum:foo invocation syntax to codex's $thrum-foo
+  # flat-skill form in the short_description, matching the SKILL.md body
+  # treatment from replace_claude_skill_syntax. Both codex generators
+  # (generate_codex_command_skill + adapt_codex_skill) pass the raw frontmatter
+  # description here, so without this the openai.yaml metadata leaks raw
+  # /thrum: strings the SKILL.md body no longer carries.
+  short_description="$(printf '%s' "${short_description}" | sed 's|/thrum:\([a-z][a-z0-9-]*\)|$thrum-\1|g')"
+
   mkdir -p "${skill_dir}/agents"
   cat > "${skill_dir}/agents/openai.yaml" <<EOF
 interface:
@@ -169,7 +177,27 @@ generate_codex_command_skill() {
   body_file="$(mktemp)"
   strip_frontmatter "${command_file}" | normalize_headings > "${body_file}"
 
-  cat > "${skill_dir}/SKILL.md" <<EOF
+  # Underscore-prefixed command files are shared partials, not user-invocable
+  # workflows. Emit a partial-appropriate preamble so the generated codex skill
+  # body does not contradict its own "Not user-invocable directly" description.
+  if [[ "${command_name}" == _* ]]; then
+    cat > "${skill_dir}/SKILL.md" <<EOF
+---
+name: ${skill_name}
+description: ${description}
+# source: claude-plugin/commands/${command_name}.md
+# generated-by: scripts/sync-skills.sh
+---
+
+# Thrum ${command_title}
+
+This is a shared partial, not a user-invocable skill. Sibling Thrum skills
+consume it as a protocol reference; do not invoke it directly.
+
+$(cat "${body_file}")
+EOF
+  else
+    cat > "${skill_dir}/SKILL.md" <<EOF
 ---
 name: ${skill_name}
 description: ${description}
@@ -185,6 +213,7 @@ commands or needs broader coordination judgment.
 
 $(cat "${body_file}")
 EOF
+  fi
 
   # Rewrite claude-specific /thrum:foo skill-invocation syntax to codex's
   # $thrum-foo flat-skill form — same treatment the skill→codex path applies

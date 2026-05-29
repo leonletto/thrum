@@ -7,9 +7,8 @@ description: Shared snapshot-composition protocol consumed by $thrum-restart, $t
 
 # Thrum _snapshot Protocol
 
-Use this skill when the user explicitly wants the `_snapshot-protocol` Thrum
-workflow. Prefer the umbrella `thrum` skill when the request spans multiple
-commands or needs broader coordination judgment.
+This is a shared partial, not a user-invocable skill. Sibling Thrum skills
+consume it as a protocol reference; do not invoke it directly.
 
 
 ## Snapshot Composition Protocol (shared partial)
