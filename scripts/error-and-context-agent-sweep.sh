@@ -352,10 +352,21 @@ for line in "${agent_lines[@]}"; do
         ' 2>/dev/null || echo "")
         if [[ -n "$jsonl_state" ]]; then
             IFS=$'\t' read -r used_tokens model stop_reason ts api_text <<<"$jsonl_state"
-            # Window detection by model (1M for Opus 4.7 1m-context fleet default;
-            # 200k otherwise — conservative for unknown models).
+            # Window detection by model (1M for the Opus 4 1m-context fleet
+            # default; 200k otherwise — conservative for unknown models).
+            #
+            # The glob matches the whole claude-opus-4-* family (4.7, 4.8, and
+            # future 4.x point releases, including the [1m] suffix forms the
+            # JSONL records as `claude-opus-4-8` / `claude-opus-4-8[1m]`).
+            # Matching the family — not an exact version — is the fix for
+            # thrum-4pd1: a hardcoded `claude-opus-4-7*` match silently dropped
+            # newer Opus 4.8 agents to the 200k default, dividing their 1M-window
+            # token counts by 200k and inflating ctx_used by exactly 5x
+            # (1M/200k). The usage field shape is identical across 4.7 and 4.8
+            # (input_tokens + cache_creation_input_tokens +
+            # cache_read_input_tokens) — the denominator was the only bug.
             case "$model" in
-                claude-opus-4-7*) window=1000000 ;;
+                claude-opus-4-*) window=1000000 ;;
                 *) window=200000 ;;
             esac
             if [[ -n "$used_tokens" && "$used_tokens" != "0" ]]; then
