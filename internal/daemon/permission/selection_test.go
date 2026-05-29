@@ -79,14 +79,48 @@ func TestIsSelectionPrompt_PlainProseIsNotASelection(t *testing.T) {
 	}
 }
 
-func TestIsSelectionPrompt_ScrolledUpMenuIgnored(t *testing.T) {
-	// A resolved menu that has scrolled above the active bottom region must
-	// not keep matching (mirrors the bottomLines scoping the other detectors
-	// use). Pad with >paneBottomMatchLines lines of post-answer output.
-	pane := "❯ 1. old option\n   2. other\n" +
-		strings.Repeat("post-answer output line\n", paneBottomMatchLines+3)
-	if IsSelectionPrompt(pane) {
-		t.Error("IsSelectionPrompt matched a scrolled-up menu; want false (bottomLines scoping)")
+// realAskUserQuestionCapture is a verbatim tmux capture of a live Claude Code
+// (v2.1.156) AskUserQuestion dialog, taken 2026-05-29 while validating
+// thrum-7phu. It is the load-bearing regression fixture: the "❯ 1." cursor sits
+// ~10 lines ABOVE the footer and the pane tail is blank-padded, so an earlier
+// bottomLines(15)-scoped matcher returned a FALSE NEGATIVE here — the exact bug
+// this fixture guards against. If Claude's dialog rendering ever drifts, this is
+// the first thing to re-capture from a live pane.
+const realAskUserQuestionCapture = ` ☐ Color
+
+Which is your favorite color?
+
+❯ 1. Red
+     Warm, bold, and energetic.
+  2. Green
+     Natural, calm, and balanced.
+  3. Blue
+     Cool, serene, and classic.
+  4. Type something.
+────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
+`
+
+func TestIsSelectionPrompt_RealAskUserQuestionCapture(t *testing.T) {
+	if !IsSelectionPrompt(realAskUserQuestionCapture) {
+		t.Error("IsSelectionPrompt = false on a REAL live AskUserQuestion capture; want true")
+	}
+	if IsPaneSafeToType("claude", realAskUserQuestionCapture) {
+		t.Error("IsPaneSafeToType = true on a REAL AskUserQuestion capture; want false")
+	}
+}
+
+func TestIsSelectionPrompt_CursorHighInTallDialog(t *testing.T) {
+	// The cursor on the FIRST option of a tall dialog must match even when many
+	// option/description/footer lines AND trailing blank padding sit below it —
+	// matches the real-capture geometry (full-content match, not bottomLines).
+	pane := "❯ 1. Red\n   2. Green\n   3. Blue\n   4. Type something\n" +
+		"────\n  5. Chat about this\n\nEnter to select\n" +
+		strings.Repeat("\n", 20) // tmux blank-padded tail
+	if !IsSelectionPrompt(pane) {
+		t.Error("IsSelectionPrompt = false when cursor sits well above a blank-padded tail; want true")
 	}
 }
 

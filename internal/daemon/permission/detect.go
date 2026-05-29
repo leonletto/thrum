@@ -148,19 +148,32 @@ func IsTrustGate(runtime, paneContent string) bool {
 //
 // Requiring the digit after the cursor keeps this off shell prompts: a
 // pure/starship "❯ " prompt has no numbered option following the arrow, so
-// "❯ ls" / "❯ " never match. The anchor is scoped to the bottom
-// paneBottomMatchLines (the active region) like every other detector here.
+// "❯ ls" / "❯ " never match.
 var selectionPromptRE = regexp.MustCompile(`(?m)^[\s│┃]*❯\s+\d+[.)]\s`)
 
 // IsSelectionPrompt reports whether the captured pane shows an active
 // numbered selection menu (AskUserQuestion-style dialog, or any prompt
 // where the "❯" cursor sits on a numbered option and Enter selects it).
-// Empty content returns false. Scoped to the bottom paneBottomMatchLines.
+// Empty content returns false.
+//
+// Deliberately matches the FULL captured content, NOT bottomLines — same
+// reason as IsTrustGate. A live capture of a Claude Code AskUserQuestion
+// dialog (validated 2026-05-29, thrum-7phu) renders the "❯ 1." cursor near
+// the TOP of a tall multi-option dialog (header + N options with one-line
+// descriptions + footer + "Type something" / "Chat about this" rows), with
+// the active cursor sitting ~25 lines above the bottom and tmux padding the
+// tail with blanks. Scoping to the bottom paneBottomMatchLines window cut the
+// cursor line out and returned a false negative. The "❯ <digit>." cursor is
+// ephemeral — the TUI only draws it while a menu is actively displayed and
+// removes it once answered — so a full-content match carries no scroll-up
+// spam risk (unlike the permission-prompt QUESTION text the bottomLines
+// window guards against in thrum-k4wf). Callers pass a bounded capture
+// (~30 lines), so "full content" is itself bounded.
 func IsSelectionPrompt(paneContent string) bool {
 	if paneContent == "" {
 		return false
 	}
-	return selectionPromptRE.MatchString(bottomLines(paneContent, paneBottomMatchLines))
+	return selectionPromptRE.MatchString(paneContent)
 }
 
 // IsPaneSafeToType returns true when automated keystroke injection
