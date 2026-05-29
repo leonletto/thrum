@@ -67,7 +67,7 @@ while [[ $# -gt 0 ]]; do
         --out)   OUT="$2"; shift 2 ;;
         --all)   SHOW_ALL=1; shift ;;
         --ctx-threshold) CTX_THRESHOLD="$2"; shift 2 ;;
-        --no-nudge) NUDGE=0; shift ;;
+        --no-nudge|--report-only) NUDGE=0; shift ;;
         --silence-threshold-min) SILENCE_THRESHOLD_MIN="$2"; shift 2 ;;
         -h|--help)
             sed -n '2,/^$/p' "$0" | sed 's/^# \?//'
