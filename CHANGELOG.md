@@ -194,6 +194,43 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **`thrum prime` stalled ~10s when run by a live agent (thrum-5988
+  mitigation)** — prime computes a cosmetic active-agent count via the
+  `agent.listContext` RPC, whose daemon handler takes the global `state.Lock`.
+  Under fleet load the snapshot/sync walker holds that lock for seconds, so the
+  call blocked on the client's 10s default RPC deadline and degraded silently;
+  because all of prime's RPCs shared one connection, the late response also
+  desynced the stream and blanked the daemon-health section. Fix (client-side
+  only) runs the active-count probe on a dedicated short-lived connection with a
+  1.5s deadline, omitting the count on timeout instead of stalling the briefing.
+  Measured: prime drops from ~10.4s to ~1.9s and the daemon-health section
+  populates again. The underlying walker `state.Lock` hold time is tracked
+  separately as thrum-5988 (P1). Forward-ported to thrum-agents.
+- **Sweep reported >100% ctx for Opus 4.8 agents (thrum-4pd1)** — the
+  fleet-monitoring sweep (`scripts/error-and-context-agent-sweep.sh`) keys its
+  context-window denominator off the model string: the Opus 4 1m-context fleet
+  uses a 1M window, everything else a conservative 200k. The model `case`
+  matched only `claude-opus-4-7*` for the 1M window, so newer `claude-opus-4-8`
+  agents fell through to the 200k default — dividing their 1M-window token
+  counts by 200k and inflating reported ctx% by exactly 5x (observed 216%/43%,
+  117%/23%). The usage field shape is identical across 4.7 and 4.8; only the
+  denominator was wrong. Fix matches the `claude-opus-4-*` family (covers 4.7,
+  4.8, future 4.x and `[1m]` suffix forms) while keeping the 200k default for
+  non-opus/unknown models. New integration test pins the computed percentage for
+  each shape. Forward-ported to thrum-agents.
+- **Boot reconcile didn't write identity-file AgentPID back to the agents table
+  (thrum-qxr3)** — the daemon boot reconcile now writes the identity file's
+  AgentPID back to `agents.agent_pid` before the `hasActiveSessionRef` check, so
+  the in-DB registry reflects the live runtime PID after a daemon restart
+  (registry restored 10 → 23 worktrees in the field repro). Forward-ported to
+  thrum-agents.
+- **Sweep picked a stale JSONL transcript by mtime, surfacing wrong ctx%
+  (thrum-roeq)** — the sweep selected an agent's transcript via `ls -t` (mtime),
+  which a resume-context read on an older session can bump ahead of the live
+  session, surfacing stale ctx% (substrate_ui reported 81% vs 18% actual). Fix
+  selects the JSONL whose first timestamped event (session birth time, which
+  never moves backward) is most recent, using lexical ISO-8601 comparison.
+  Forward-ported to thrum-agents.
 - **`thrum tmux create --force` can destroy an unrelated session via tmux
   prefix-match (thrum-z63b)** — tmux's `-t target-session` flag defaults to
   PREFIX MATCH: a bare `-t substrate-ui` matches a live `substrate-ui-research`
