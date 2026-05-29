@@ -1410,10 +1410,10 @@ Set an agent's operational status. The daemon locates the agent's identity file
 
 **Request:**
 
-| Parameter | Type   | Required | Description                           |
-| --------- | ------ | -------- | ------------------------------------- |
-| `agent`   | string | yes      | Agent name                            |
-| `status`  | string | yes      | `"working"`, `"idle"`, or `"blocked"` |
+| Parameter | Type   | Required | Description                                      |
+| --------- | ------ | -------- | ------------------------------------------------ |
+| `agent`   | string | yes      | Agent name                                       |
+| `status`  | string | yes      | `"working"`, `"idle"`, `"blocked"`, or `"stuck"` |
 
 **Response:**
 
@@ -1424,8 +1424,8 @@ Set an agent's operational status. The daemon locates the agent's identity file
 
 **Errors:**
 
-- `invalid status "<value>": must be working, idle, or blocked`: Invalid status
-  value
+- `invalid status "<value>": must be working, idle, blocked, or stuck`: Invalid
+  status value
 
 ## Tmux Methods (v0.7.1)
 

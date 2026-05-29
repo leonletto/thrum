@@ -1006,14 +1006,17 @@ identity file directly. With `--agent`, sends an RPC to the daemon to update a
 remote agent's identity file (including across worktrees).
 
 ```text
-thrum agent set-status <working|idle|blocked> [flags]
+thrum agent set-status <working|idle|blocked|stuck> [flags]
 ```
 
 | Flag      | Description                                    | Default |
 | --------- | ---------------------------------------------- | ------- |
 | `--agent` | Target agent name (uses daemon RPC for update) |         |
 
-Valid values: `working`, `idle`, `blocked`.
+Valid values: `working`, `idle`, `blocked`, `stuck`. The fourth value, `stuck`,
+is set programmatically by `permission.markAgentStuck` when a permission prompt
+has been waiting too long; the CLI/RPC validator allowlist accepts it for parity
+so operator writes don't disagree with the daemon's own writes (thrum-9neg).
 
 The daemon uses `agent_status` for auto-nudge detection — if a tmux agent's pane
 has been silent but its status is `"working"`, the daemon fires a nudge on the
@@ -2659,6 +2662,15 @@ Start a monitor job. (`add` is a retained alias.)
 | `--debounce` | Leading-edge debounce window (minimum 30s)            | `60s`   |          |
 | `--env`      | Environment variable in `KEY=VALUE` form (repeatable) |         |          |
 | `--cwd`      | Working directory for the command                     | `.`     |          |
+| `--schedule` | Cron expression (5-field) — routes to scheduled mode  | —       |          |
+
+`--schedule` accepts a standard 5-field cron expression (e.g. `"*/5 * * * *"`,
+`"7,27,47 * * * *"`, `"0 9-17 * * 1-5"`). With `--schedule`, the child runs as a
+one-shot per tick (scheduled mode) and is not auto-restarted between fires.
+Without `--schedule`, the monitor is continuous: the daemon auto-restarts the
+child on unexpected exit with exponential backoff (1s → 60s, ≤10 fails in 5min
+marks the monitor dead). See [Monitor Jobs](monitor-jobs.md) for the full
+behavior model. (thrum-puhr.9, v0.10.6)
 
 Debounce is leading-edge: the first matching line triggers a message
 immediately, then the monitor goes quiet for the debounce window before it can
