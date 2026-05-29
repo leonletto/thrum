@@ -52,6 +52,19 @@
 
 set -euo pipefail
 
+# Bash 4+ required: the script uses `mapfile`, which was added in bash 4.0.
+# macOS ships bash 3.2 at /bin/bash; the shebang `#!/usr/bin/env bash`
+# respects PATH so a homebrew bash 5 takes precedence when installed, but
+# operators running the script via `/bin/bash error-and-context-agent-sweep.sh`
+# or with /opt/homebrew not in PATH would otherwise get a noisy
+# 'mapfile: command not found' mid-execution. Fail fast with a clean
+# operator-facing message instead. (thrum-roeq sidebar.)
+if [[ ${BASH_VERSINFO[0]:-0} -lt 4 ]]; then
+    printf 'error-and-context-agent-sweep.sh: requires bash 4 or newer (mapfile builtin); detected bash %s\n' "${BASH_VERSION:-unknown}" >&2
+    printf '  fix: rerun with `/opt/homebrew/bin/bash %s` (macOS homebrew) or install a newer bash on PATH.\n' "$0" >&2
+    exit 2
+fi
+
 LINES=10
 ROLE_FILTER=""   # empty = no filter
 OUT=""           # empty = stdout
@@ -257,7 +270,42 @@ for line in "${agent_lines[@]}"; do
     if [[ -n "$worktree" ]]; then
         transcript_dir="$HOME/.claude/projects/$(echo "$worktree" | sed 's|[./]|-|g')"
         if [[ -d "$transcript_dir" ]]; then
-            transcript=$(ls -t "$transcript_dir"/*.jsonl 2>/dev/null | head -1 || true)
+            # Pick the JSONL whose first timestamped event is most recent.
+            # Robust against mtime drift: a quiet new session can have an
+            # OLDER mtime than a stale old session that got touched (e.g.
+            # when Claude Code opens an older JSONL for resume-context
+            # reading), and the prior `ls -t … | head -1` then picked
+            # the stale session, surfacing stale ctx% in the sweep
+            # (thrum-roeq — observed substrate_ui at 81% reported vs 18%
+            # actual on 2026-05-29). The session's FIRST timestamped event
+            # is the session's birth time, which never moves backward and
+            # uniquely identifies the newest session even when mtime
+            # ordering disagrees. ISO-8601 timestamps are lexically
+            # sortable, so plain bash string comparison gives the right
+            # order without any jq date arithmetic.
+            #
+            # head -50 bounds the scan per file; in observed Claude
+            # JSONLs the first timestamped record (typically an
+            # `attachment` event) lands within the first ~5 lines.
+            # Files whose head contains no timestamped record are
+            # skipped (corrupt / never-started session — treat as
+            # not-eligible).
+            shopt -s nullglob
+            newest_birth=""
+            newest_file=""
+            for jsonl_candidate in "$transcript_dir"/*.jsonl; do
+                [[ -f "$jsonl_candidate" ]] || continue
+                birth_ts=$(head -50 "$jsonl_candidate" 2>/dev/null \
+                    | jq -r 'select(.timestamp) | .timestamp' 2>/dev/null \
+                    | head -1)
+                [[ -z "$birth_ts" ]] && continue
+                if [[ -z "$newest_birth" || "$birth_ts" > "$newest_birth" ]]; then
+                    newest_birth="$birth_ts"
+                    newest_file="$jsonl_candidate"
+                fi
+            done
+            shopt -u nullglob
+            transcript="$newest_file"
         fi
     fi
 
