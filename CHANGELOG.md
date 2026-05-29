@@ -31,6 +31,49 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Added
 
+- **Agent-status Pattern D wiring + STUCK-WORKING sweep detection
+  (thrum-9neg)** — implementer and researcher skill templates now set
+  `agent_status=working` on dispatch ACK and `agent_status=idle` on DONE
+  / response, written via `thrum agent set-status` from the agent's own
+  pane (Pattern D self-writes). The `agent.set-status` RPC validator and
+  the CLI `thrum agent set-status` allowlist gain `stuck` as a fourth
+  valid state alongside `working|idle|blocked`, aligning the operator
+  surface with what `permission.markAgentStuck` already writes
+  programmatically. The error-and-context sweep script
+  (`scripts/error-and-context-agent-sweep.sh`) gains `--silence-threshold-min`
+  (override; default 10min), reads `intent` from the identity file,
+  computes tmux silence age via `#{window_activity}`, and surfaces a
+  composite `stuck_working` axis in both the consolidated `ALERT:` line
+  and the per-agent section. A new fixture-driven smoke test
+  (`scripts/error-and-context-agent-sweep_stuck_working_test.sh`) pins
+  the ALERT axis + header format. The `coordinator-context-monitoring`
+  SKILL.md gains a composite tier table that documents the
+  `stuck` × `stuck_working` × `tier` decision space the new
+  instrumentation surfaces. Backported from thrum-agents tip 2d7291bcbd
+  via 16 cherry-picks (14 clean + 2 translated: `cmd/thrum/agent.go` →
+  `cmd/thrum/main.go:3344` since the cmd/thrum decomposition arc landed
+  on thrum-agents only, and the new `HandleSetAgentStatus` tests
+  translated to the `json.RawMessage` handler shape since the typed-
+  handler signature hasn't been backported).
+- **Restore `--json` / `--report-only` / `THRUM_SWEEP_IDENTITY_GLOBS`
+  to the error-and-context sweep script (thrum-l9e6 expand-scope)** —
+  three sweep-script features were lost when the puhr.9/ubl5 monitor
+  work cherry-picked from thrum-agents to release/v0.10.6 (coord
+  "decision A"); thrum-l9e6 restores them so the daemon api-error
+  auto-remediation handler (thrum-sdzk) keeps its single-sourced
+  detection seam and the integration test fixtures keep their pivot
+  point. `--json` emits one JSONL object per flagged agent and
+  suppresses both the ALERT line and the human text report; the JSON
+  carries the original `agent_id` / `tmux_target` / `api_errors` /
+  `flagged_reason` (canonical single token: `api_error` > `capture_failed`
+  > `ctx` > `stuck_working`) plus additive `is_stuck` / `stuck_working`
+  / `tier` axes. `--report-only` is an alias for `--no-nudge`.
+  `THRUM_SWEEP_IDENTITY_GLOBS` overrides the hardcoded identity glob list
+  with a space-separated env var (intentional word-split for pathname
+  expansion). Two integration tests previously stuck on `t.Skip`
+  (`TestErrorContextSweep_JSONMode` and
+  `TestErrorContextSweep_NoNudge_SuppressesSendKeys`) land NON-skipped
+  and pass on release/v0.10.6.
 - **`thrum monitor` cron scheduling + continuous-mode auto-restart
   (thrum-puhr.9)** — `thrum monitor add` accepts a new `--schedule` flag
   with standard 5-field cron expressions (e.g. `"*/5 * * * *"`,
@@ -156,6 +199,46 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **`thrum tmux create --force` can destroy an unrelated session via
+  tmux prefix-match (thrum-z63b)** — tmux's `-t target-session` flag
+  defaults to PREFIX MATCH: a bare `-t substrate-ui` matches a live
+  `substrate-ui-research` session because the latter has the former as
+  a prefix. Live cascade observed 2026-05-27: `thrum tmux create
+  substrate-ui --cwd ~/.thrum/worktrees/thrum/substrate-ui ... --force`
+  destroyed `substrate-ui-research`, killing the researcher's pane.
+  The CLI pre-hint (`TmuxSessionExists`) reported the false
+  "session-exists" warning first; the operator added `--force`, and the
+  daemon's `HandleCreate` then ran `tmux kill-session -t substrate-ui`
+  which matched and destroyed the unrelated session as the only prefix
+  hit. Fix is the `=` literal-match prefix on the `-t` argument in
+  `internal/tmux/tmux.go`'s `HasSession` and `KillSession`. tmux has
+  supported `=name` exact match since 2.0 (2014). Regression test
+  `TestHasSession_KillSession_LiteralMatch` pins both helpers against
+  a `thrum-z63b-prefix-extra` session, asserting `HasSession("thrum-z63b-prefix")`
+  is false and `KillSession("thrum-z63b-prefix")` does not destroy the
+  collateral. A defense-in-depth audit ticket (thrum-zfn0, P3) tracks
+  applying the same `=` prefix to the ten other `internal/tmux/tmux.go`
+  functions that pass session-name targets to tmux without literal-
+  match guard (RenameWindow, SetSessionTitle, SetMonitorSilence,
+  IsSilent, GetUserOption, SetUserOption, LastActivity, SendKeys,
+  SendSpecialKey, CapturePane). Forward-ported to thrum-agents.
+- **Integration test build break from bsn7 `WriteEvent` signature
+  drift (thrum-mkyp)** — `tests/integration/sync_rearchitect_test.go`'s
+  three test helpers (`writeAgentRegister`, `writeMessageCreate`,
+  `writeMessageReceipt`) referenced the old single-return
+  `state.WriteEvent` signature. thrum-bsn7 (commit ec061348ef) changed
+  it to `(postCommit func(), err error)` as part of the broader
+  state.Lock contention fix; production callers were updated but this
+  test file was missed, blocking `go test -tags integration
+  ./tests/integration/`. Fix adapts each helper to capture
+  `postCommit`, fatal on error, and invoke `postCommit()` if non-nil so
+  the structural-event sync trigger fires correctly via the bsn7
+  contract. All 8 sync_rearchitect tests pass clean. Forward-port to
+  thrum-agents intentionally deferred — bsn7 itself has not been
+  forward-ported to thrum-agents (the signature is still single-return
+  there), so the mkyp bug does not exist on thrum-agents and the fix
+  cannot apply. When bsn7 forward-ports, the same mkyp-shaped fix will
+  need to land there at that time.
 - **Cache peercred CWD per PID — eliminates N-1 lsof shell-outs per RPC
   sequence on Darwin (thrum-xir.45)** — every unix-socket RPC's pre-handler
   ran `peercred.Resolve`, which on Darwin shells out to `/usr/sbin/lsof -p
