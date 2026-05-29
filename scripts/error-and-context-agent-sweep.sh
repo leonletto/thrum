@@ -475,7 +475,25 @@ for line in "${agent_lines[@]}"; do
         # exposes; the four pre-removal fields (agent_id, tmux_target,
         # api_errors, flagged_reason) keep their prior shape.
         if [[ "$JSON_MODE" -eq 1 ]]; then
-            flag_reason=$(IFS=','; echo "${reason_parts[*]}")
+            # Canonical SINGLE-VALUE flag_reason for the JSON consumer.
+            # Priority matches pre-removal taxonomy so the auto-remediation
+            # handler (thrum-sdzk) keeps acting on `api_error` exactly as
+            # before: api_error wins, then capture_failed, then ctx; the
+            # new stuck_working axis is the last fallback so the JSON
+            # always carries a single, actionable reason. The full reason
+            # set is still surfaced via is_stuck + stuck_working + tier as
+            # additive structured fields, so consumers that want the
+            # multi-axis view can read those.
+            flag_reason=""
+            if [[ "$has_api_err" -eq 1 ]]; then
+                flag_reason="api_error"
+            elif [[ "$ctx_used" == "(capture failed)" ]]; then
+                flag_reason="capture_failed"
+            elif [[ -n "$ctx_int" && "$ctx_int" -ge "$CTX_THRESHOLD" ]]; then
+                flag_reason="ctx"
+            elif [[ "$stuck_working" -eq 1 ]]; then
+                flag_reason="stuck_working"
+            fi
             json_obj=$(jq -nc \
                 --arg agent_id "$agent_id" \
                 --arg role "$role" \
