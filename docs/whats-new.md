@@ -7,29 +7,38 @@ machine-readable history lives in
 
 ## v0.10.6 — In Soak (RC)
 
-**v0.10.6-rc.4** was tagged 2026-05-25 and is the current pre-release. rc.4
-finishes the burst-latency story rc.3 started. rc.3 detached `state.Lock` from
-the long-running sync trigger; rc.4 follows with a six-commit stack on
-`team.list` and the dead-agent self-heal path (thrum-1nkt) — pool ceiling raised
-from 10 to 100, single-flight on the self-heal, the heal moved off the send hot
-path behind a dedicated `agent.lookup` RPC, `postCommit` async-wrapped at
-structural-event call sites, inbound peer-event walker coalesced to one fire per
-batch, and dead-agent sweeping pushed into a background sweeper so `team.list`
-is pure-read. Two more P1 reliability fixes: a 4MB scanner buffer for the JSONL
-compactor (thrum-10j0) that stops a silent wedge on oversized messages, and a
-1MB cap on message body at write (thrum-mhwt, configurable) that returns a typed
-`-32602` RPC error instead of letting an oversized write poison the log. Sync
-correctness: `applySessionStart` now uses `INSERT OR IGNORE` (thrum-9jcb.3) so
-peer-replicated sessions stop aborting sync batches on UNIQUE constraint
-collisions. Identity-guard gains a PID-ancestor split (thrum-xir.40 — closest vs
-topmost helpers) and the peercred CWD lookup is now cached (thrum-xir.45),
-measured at ~50× speedup on the RPC pre-handler under sustained load. CLI:
-`thrum worktree teardown` cascade-deletes the bound agent identity (thrum-wk7d,
-`--keep-agent` opts out) so a tear-down doesn't leave a stranded identity
-behind. Carry-forwards from rc.3: kdyf session-resurrect, bsn7 broader
-lock-contention, 7ojv events-timestamp index, pqcg worktree-create base flag.
-See the [Beta Channel](beta-channel.md) page for the full rc.4 callout + install
-commands.
+**v0.10.6-rc.5** was tagged 2026-05-29 and is the current pre-release. rc.5 is a
+fleet-operations polish pass on top of rc.4's reliability stack. The headline
+fix: `thrum prime` no longer stalls ~10s when run by a live agent (thrum-5988).
+prime computes a cosmetic active-agent count over an RPC whose daemon handler
+takes the global `state.Lock`; under fleet load the snapshot walker holds that
+lock for seconds, so the call blocked on the 10s client deadline and silently
+blanked the daemon-health section. The fix runs that probe on a dedicated
+1.5s-deadline connection and omits the count on timeout instead of stalling the
+briefing (measured ~10.4s → ~1.9s). Two fleet-monitoring sweep corrections: it
+stops reporting >100% ctx for Opus 4.8 agents (thrum-4pd1 — the 1M-context
+denominator now matches the whole `claude-opus-4-*` family, not just 4.7, fixing
+a 5× inflation), and it selects an agent's transcript by session-birth timestamp
+rather than mtime so a resume-context read can't surface a stale ctx%
+(thrum-roeq). Boot reconcile now writes the identity-file AgentPID back to the
+agents table before the active-session check, so the registry reflects live
+runtime PIDs after a daemon restart (thrum-qxr3 — restored 10 → 23 worktrees in
+the field repro). A tmux safety fix stops `thrum tmux create --force` from
+destroying an unrelated session via prefix-match (thrum-z63b — now uses literal
+`=` match). rc.5 also lands the operator-surface work prepped for this RC:
+agent-status Pattern D self-writes (thrum-9neg — agents set `working`/`idle` on
+dispatch/DONE, plus a STUCK-WORKING sweep axis), `thrum monitor --schedule` with
+cron expressions and continuous-mode auto-restart (thrum-puhr.9), and the
+restored `--json` / `--report-only` / `THRUM_SWEEP_IDENTITY_GLOBS` sweep
+features (thrum-l9e6). rc.4's reliability stack carries forward: the `team.list`
+/ dead-agent self-heal rework (thrum-1nkt — pool ceiling 10 → 100, background
+dead-agent sweeping, `agent.lookup` RPC), the 4MB JSONL-compactor scanner buffer
+(thrum-10j0), the 1MB message-body write cap (thrum-mhwt), `INSERT OR IGNORE` on
+`applySessionStart` (thrum-9jcb.3), the identity-guard PID-ancestor split
+(thrum-xir.40) and cached peercred CWD lookup (thrum-xir.45), and
+`thrum worktree teardown` cascade-deleting the bound agent identity
+(thrum-wk7d). See the [Beta Channel](beta-channel.md) page for the full rc.5
+callout + install commands.
 
 v0.10.6's headline is a **sync re-architecture** (thrum-s6os): the cross-machine
 wire stream now derives from per-agent and per-bridge-group state files rather
