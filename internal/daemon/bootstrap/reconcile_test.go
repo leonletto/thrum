@@ -402,3 +402,273 @@ func TestReconcile_TransactionRollbackOnRefInsertFailure(t *testing.T) {
 		t.Fatalf("orphan session row left after rollback: count=%d", n)
 	}
 }
+
+// TestReconcile_WritesIdentityFilePIDBackToAgentsTable pins the peercred
+// registry desync regression fix: bootstrap.Reconcile MUST write the
+// identity file's AgentPID back to the agents table BEFORE deciding
+// whether to create a session. Without this, an agents row with a stale
+// dead PID would survive into the dead-agent sweeper's first pass, which
+// then ends the freshly-reconcile-created session and evicts the
+// worktree from the peercred match registry. Live regression observed
+// 2026-05-29: @researcher_bsn7_forward_port (agents.agent_pid=27118,
+// long-dead; identity file AgentPID=0) could not run any binding-
+// required RPC because peercred resolved to ErrAnonymous.
+//
+// Scenarios pinned:
+//
+//  1. Identity file AgentPID=0, agents row has stale dead PID → after
+//     reconcile, agents.agent_pid==0. The dead-agent sweeper's
+//     `WHERE a.agent_pid > 0` filter then skips the agent so the new
+//     session survives.
+//  2. Identity file AgentPID points at a live process, agents row has
+//     stale dead PID → after reconcile, agents.agent_pid matches the
+//     identity file. (Tested with the test runner's own PID as
+//     guaranteed-live.)
+//  3. New-agent-pre-seeded (no agents row exists at reconcile time) →
+//     UPDATE with zero rows affected is a no-op; reconcile does not
+//     error out. Future agent.register inserts the row normally.
+//  4. Existing active session_ref path also reconciles agent_pid (so
+//     the surviving session isn't subject to the same drift the
+//     fresh-session path closes).
+func TestReconcile_WritesIdentityFilePIDBackToAgentsTable(t *testing.T) {
+	// Scenario 1: stale dead PID gets reset to identity-file 0.
+	t.Run("identity_file_pid_zero_resets_db", func(t *testing.T) {
+		dirA := t.TempDir()
+		thrumDir := filepath.Join(dirA, ".thrum")
+		if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		writeIdentity(t, filepath.Join(thrumDir, "identities"), config.IdentityFile{
+			Version: 5, RepoID: "test",
+			Agent:     config.AgentConfig{Kind: "agent", Name: "agent_stale", Role: "tester"},
+			Worktree:  dirA,
+			AgentPID:  0, // identity file says no live runtime
+			UpdatedAt: time.Now().UTC(),
+		})
+		st := newTestState(t, thrumDir)
+
+		// Pre-seed agents row with a stale dead PID — mirrors what was
+		// observed live: agents.agent_pid points at a process that no
+		// longer exists.
+		if _, err := st.DB().ExecContext(context.Background(),
+			`INSERT INTO agents(agent_id, kind, role, module, agent_pid, registered_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+			"agent_stale", "agent", "tester", "test", 99999, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := Reconcile(context.Background(), Deps{
+			State: st, ThrumDir: thrumDir, Now: time.Now,
+			NewSessionID: func() string { return "ses_STALE_FIX" },
+			TmuxAlive:    func(string) bool { return false },
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var got int
+		if err := st.DB().QueryRowContext(context.Background(),
+			`SELECT agent_pid FROM agents WHERE agent_id='agent_stale'`).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got != 0 {
+			t.Errorf("agents.agent_pid = %d, want 0 (identity file truth)", got)
+		}
+	})
+
+	// Scenario 2: identity-file PID gets written back to DB.
+	t.Run("identity_file_pid_alive_writes_to_db", func(t *testing.T) {
+		dirA := t.TempDir()
+		thrumDir := filepath.Join(dirA, ".thrum")
+		if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		livePID := os.Getpid() // guaranteed alive: the test runner itself
+		writeIdentity(t, filepath.Join(thrumDir, "identities"), config.IdentityFile{
+			Version: 5, RepoID: "test",
+			Agent:     config.AgentConfig{Kind: "agent", Name: "agent_live", Role: "tester"},
+			Worktree:  dirA,
+			AgentPID:  livePID,
+			UpdatedAt: time.Now().UTC(),
+		})
+		st := newTestState(t, thrumDir)
+
+		if _, err := st.DB().ExecContext(context.Background(),
+			`INSERT INTO agents(agent_id, kind, role, module, agent_pid, registered_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+			"agent_live", "agent", "tester", "test", 88888, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := Reconcile(context.Background(), Deps{
+			State: st, ThrumDir: thrumDir, Now: time.Now,
+			NewSessionID: func() string { return "ses_LIVE_FIX" },
+			TmuxAlive:    func(string) bool { return false },
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var got int
+		if err := st.DB().QueryRowContext(context.Background(),
+			`SELECT agent_pid FROM agents WHERE agent_id='agent_live'`).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got != livePID {
+			t.Errorf("agents.agent_pid = %d, want %d (identity file's live PID)", got, livePID)
+		}
+	})
+
+	// Scenario 3: no pre-existing agents row → UPDATE is a no-op, no error.
+	t.Run("missing_agents_row_is_no_op", func(t *testing.T) {
+		dirA := t.TempDir()
+		thrumDir := filepath.Join(dirA, ".thrum")
+		if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		writeIdentity(t, filepath.Join(thrumDir, "identities"), config.IdentityFile{
+			Version: 5, RepoID: "test",
+			Agent:     config.AgentConfig{Kind: "agent", Name: "agent_new", Role: "tester"},
+			Worktree:  dirA,
+			AgentPID:  0,
+			UpdatedAt: time.Now().UTC(),
+		})
+		st := newTestState(t, thrumDir)
+
+		stats, err := Reconcile(context.Background(), Deps{
+			State: st, ThrumDir: thrumDir, Now: time.Now,
+			NewSessionID: func() string { return "ses_NEW_PATH" },
+			TmuxAlive:    func(string) bool { return false },
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stats.Errors != 0 {
+			t.Errorf("reconcile errored on missing-agents-row path: stats=%+v", stats)
+		}
+		// Session was still created (the no-active-session_ref path).
+		if stats.SessionsCreated != 1 {
+			t.Errorf("expected SessionsCreated=1, got %d", stats.SessionsCreated)
+		}
+	})
+
+	// Scenario 4 (sub-finding from Phase-3 review): identity file has a
+	// non-zero PID pointing at a process that doesn't exist. The fix
+	// writes the dead PID back unconditionally — this scenario pins
+	// that reconcile DOES NOT crash, errors, or silently degrade when
+	// the identity file's AgentPID is a number that no longer maps to
+	// a running process. The downstream sweeper will still end this
+	// agent's session at its next tick (correct: identity file claims
+	// a runtime PID that's actually dead, so the agent IS dead — this
+	// is the pre-thrum-1nkt.6 steady-state behavior).
+	t.Run("identity_file_pid_nonzero_dead_writes_through_cleanly", func(t *testing.T) {
+		dirA := t.TempDir()
+		thrumDir := filepath.Join(dirA, ".thrum")
+		if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		// PID 999999 is unlikely to exist on any test system. We do not
+		// assert here on whether the sweeper would later kill the
+		// session — that's the sweeper's responsibility and is
+		// covered by dead_agent_sweeper_test.go. We only assert that
+		// reconcile writes the value through cleanly and does not error.
+		deadPID := 999999
+		writeIdentity(t, filepath.Join(thrumDir, "identities"), config.IdentityFile{
+			Version: 5, RepoID: "test",
+			Agent:     config.AgentConfig{Kind: "agent", Name: "agent_zombie", Role: "tester"},
+			Worktree:  dirA,
+			AgentPID:  deadPID,
+			UpdatedAt: time.Now().UTC(),
+		})
+		st := newTestState(t, thrumDir)
+
+		if _, err := st.DB().ExecContext(context.Background(),
+			`INSERT INTO agents(agent_id, kind, role, module, agent_pid, registered_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+			"agent_zombie", "agent", "tester", "test", 11111, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			t.Fatal(err)
+		}
+
+		stats, err := Reconcile(context.Background(), Deps{
+			State: st, ThrumDir: thrumDir, Now: time.Now,
+			NewSessionID: func() string { return "ses_ZOMBIE" },
+			TmuxAlive:    func(string) bool { return false },
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stats.Errors != 0 {
+			t.Errorf("reconcile errored on dead-pid-passthrough path: stats=%+v", stats)
+		}
+
+		var got int
+		if err := st.DB().QueryRowContext(context.Background(),
+			`SELECT agent_pid FROM agents WHERE agent_id='agent_zombie'`).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got != deadPID {
+			t.Errorf("agents.agent_pid = %d, want %d (identity-file truth passes through unconditionally)", got, deadPID)
+		}
+	})
+
+	// Scenario 5: existing active session_ref → agent_pid still gets
+	// reconciled (otherwise the surviving session is subject to the same
+	// drift the fresh-session path closes).
+	t.Run("active_session_path_also_reconciles_pid", func(t *testing.T) {
+		dirA := t.TempDir()
+		thrumDir := filepath.Join(dirA, ".thrum")
+		if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		writeIdentity(t, filepath.Join(thrumDir, "identities"), config.IdentityFile{
+			Version: 5, RepoID: "test",
+			Agent:     config.AgentConfig{Kind: "agent", Name: "agent_active", Role: "tester"},
+			Worktree:  dirA,
+			AgentPID:  0,
+			UpdatedAt: time.Now().UTC(),
+		})
+		st := newTestState(t, thrumDir)
+
+		// Pre-populate active session+ref AND stale agents row with
+		// dead PID — the scenario where the existing-session branch
+		// of reconcile would historically have not touched agent_pid.
+		pre := time.Now().UTC().Format(time.RFC3339Nano)
+		if _, err := st.DB().ExecContext(context.Background(),
+			`INSERT INTO agents(agent_id, kind, role, module, agent_pid, registered_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+			"agent_active", "agent", "tester", "test", 77777, pre); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.DB().ExecContext(context.Background(),
+			`INSERT INTO sessions(session_id, agent_id, started_at, last_seen_at) VALUES (?, ?, ?, ?)`,
+			"ses_ACTIVE_PRE", "agent_active", pre, pre); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.DB().ExecContext(context.Background(),
+			`INSERT INTO session_refs(session_id, ref_type, ref_value, added_at) VALUES (?, 'worktree', ?, ?)`,
+			"ses_ACTIVE_PRE", dirA, pre); err != nil {
+			t.Fatal(err)
+		}
+
+		stats, err := Reconcile(context.Background(), Deps{
+			State: st, ThrumDir: thrumDir, Now: time.Now,
+			NewSessionID: func() string { return "ses_NEVER_USED" },
+			TmuxAlive:    func(string) bool { return false },
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stats.SessionsCreated != 0 {
+			t.Errorf("reconcile created session despite active session_ref: stats=%+v", stats)
+		}
+
+		var got int
+		if err := st.DB().QueryRowContext(context.Background(),
+			`SELECT agent_pid FROM agents WHERE agent_id='agent_active'`).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got != 0 {
+			t.Errorf("agents.agent_pid = %d, want 0 (existing-active-session path must still reconcile pid)", got)
+		}
+	})
+}

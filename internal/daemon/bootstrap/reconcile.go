@@ -141,12 +141,47 @@ func Reconcile(ctx context.Context, deps Deps) (Stats, error) {
 					}
 				}()
 
+				// thrum-qxr3 (peercred registry desync regression): reconcile
+				// agents.agent_pid to the identity-file truth BEFORE deciding
+				// whether to create the session. The agents table's
+				// agent_pid is the dead-agent sweeper's input
+				// (internal/daemon/dead_agent_sweeper.go: `WHERE
+				// a.agent_pid > 0`). If the DB has a stale dead PID from a
+				// long-gone runtime but the identity file on disk reports
+				// AgentPID=0 (no live runtime registered) or a different
+				// PID, the sweeper would otherwise immediately end the
+				// fresh reconcile-created session, evicting the worktree
+				// from the peercred match registry and breaking all
+				// binding-required RPCs from that worktree. Writing the
+				// identity-file truth back establishes the correct
+				// invariant: agents.agent_pid reflects what disk says.
+				// When identity file has AgentPID=0, the sweeper's
+				// `a.agent_pid > 0` filter skips the agent → session
+				// survives → registry includes the worktree → peercred
+				// resolution succeeds. The cosmetic side-effect (agents
+				// with truly-dead runtimes linger in `thrum team` output
+				// until explicitly deleted) was the pre-thrum-1nkt.6
+				// behavior, and is the safer trade-off vs. evicting
+				// alive worktrees from authentication.
+				if _, err := tx.ExecContext(ctx,
+					`UPDATE agents SET agent_pid = ? WHERE agent_id = ?`,
+					idFile.AgentPID, idFile.Agent.Name); err != nil {
+					return err
+				}
+
 				has, err := hasActiveSessionRef(ctx, tx, idFile.Agent.Name, idFile.Worktree)
 				if err != nil {
 					return err
 				}
 				if has {
-					return nil // no-op, already active
+					// Existing active session_ref; commit the agent_pid
+					// reconciliation and move on. (Without committing here,
+					// the deferred Rollback discards the agent_pid update.)
+					if err := tx.Commit(); err != nil {
+						return err
+					}
+					committed = true
+					return nil
 				}
 
 				sessionID := deps.NewSessionID()
