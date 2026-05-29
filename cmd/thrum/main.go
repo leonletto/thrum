@@ -4538,6 +4538,22 @@ Examples:
 					if err := guard.WritePID(idPath, runtimePID); err != nil {
 						fmt.Fprintf(os.Stderr, "thrum: prime WritePID failed: %v\n", err)
 					}
+				} else if runtimePID == 0 && storedPID > 0 && !process.IsRunning(storedPID) {
+					// thrum-5oui defense-in-depth: prime ran with no live
+					// runtime ancestor (a bare shell, not inside the agent's
+					// runtime) AND the identity file's stored PID is confirmed
+					// dead. Reset it to 0 — the "no live runtime / restartable"
+					// sentinel. Without this, a killed agent's identity file
+					// keeps its dead PID, boot reconcile (thrum-mnhp) writes
+					// that 0 to the DB only at the NEXT restart, and the
+					// dead-agent sweeper keeps the worktree out of the peercred
+					// registry meanwhile. Zeroing on-disk here makes prime — the
+					// recovery the error message points at — actually honest for
+					// a dead agent. (A LIVE stored PID is never zeroed: the
+					// !IsRunning guard only fires for a confirmed-dead one.)
+					if err := guard.WritePID(idPath, 0); err != nil {
+						fmt.Fprintf(os.Stderr, "thrum: prime dead-PID reset failed: %v\n", err)
+					}
 				}
 			}
 

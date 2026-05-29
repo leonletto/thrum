@@ -100,6 +100,35 @@ func TestDeadAgentSweeper_Sweep_EmitsSessionEnd(t *testing.T) {
 	}
 }
 
+// TestDeadAgentSweeper_Sweep_ClearsDeadAgentPID is the thrum-5oui
+// defense-in-depth guard: when the sweeper ends a dead local agent's session,
+// it must also reset agents.agent_pid to 0 (the restartable sentinel), so the
+// dead PID doesn't linger in the projection until the next boot reconcile.
+func TestDeadAgentSweeper_Sweep_ClearsDeadAgentPID(t *testing.T) {
+	st := createTestStateForSync(t)
+	agentID, _ := registerDeadAgentFixture(t, st)
+
+	var pidBefore int
+	if err := st.RawDB().QueryRow(
+		"SELECT agent_pid FROM agents WHERE agent_id = ?", agentID).Scan(&pidBefore); err != nil {
+		t.Fatalf("read agent_pid before: %v", err)
+	}
+	if pidBefore <= 0 {
+		t.Fatalf("fixture should seed a dead non-zero agent_pid, got %d", pidBefore)
+	}
+
+	NewDeadAgentSweeper(st, "").Sweep(context.Background())
+
+	var pidAfter int
+	if err := st.RawDB().QueryRow(
+		"SELECT agent_pid FROM agents WHERE agent_id = ?", agentID).Scan(&pidAfter); err != nil {
+		t.Fatalf("read agent_pid after: %v", err)
+	}
+	if pidAfter != 0 {
+		t.Errorf("agents.agent_pid = %d after sweep, want 0 (thrum-5oui: sweeper must zero a dead agent's PID so its worktree stays restartable, not leave %d to linger)", pidAfter, pidBefore)
+	}
+}
+
 // TestDeadAgentSweeper_Sweep_SkipsLiveFilePID ports the thrum-pxz.14
 // Fix B contract to the .6 sweeper: when the DB reports a dead PID
 // but the identity file reports a live PID for the same agent, the

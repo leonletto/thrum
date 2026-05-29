@@ -147,6 +147,38 @@ var anonymousAllowedMethods = map[string]bool{
 	"agent.register":    true,
 	"session.start":     true,
 	"session.setIntent": true,
+	// Bootstrap (thrum-5oui — DO NOT REMOVE without re-reading the safety
+	// invariant below): `thrum tmux start` is the agent-restart entry point.
+	// On ONE connection it calls tmux.create (no_agent=true) THEN tmux.launch:
+	//   - tmux.create with no_agent=true creates a BARE tmux session — no agent
+	//     row, no identity binding, no THRUM_* env (see HandleCreate's
+	//     `if !req.NoAgent` guards, internal/daemon/rpc/tmux.go).
+	//   - tmux.launch sends a FIXED, name-validated runtime-launch command
+	//     (runtimeToLaunchCmd + isValidRuntimeName, no arbitrary keystrokes —
+	//     unlike tmux.send, which stays gated) into that session.
+	// The launched runtime then self-registers live via quickstart →
+	// agent.register (whose cross-worktree guard is the actual identity
+	// authority). BOTH must be anonymous-allowed: a no_agent create writes no
+	// session_ref, so the caller is STILL anonymous on the very next RPC
+	// (identity is re-resolved per-RPC) — if tmux.launch were gated, the
+	// bootstrap would create a bare session but never launch the runtime.
+	// Without this pair, an UNBOUND caller (a fresh worktree, or an agent whose
+	// session ended — sweeper-culled, idle, or killed) can never restart,
+	// because binding requires an active session that only this bootstrap can
+	// create. That chicken-and-egg is the whole agent-restart failure class
+	// (thrum-5oui; routes qxr3/mnhp were prior members).
+	//
+	// SAFETY INVARIANT: tmux.create and tmux.launch are registered ONLY on the
+	// local unix socket (cmd/thrum/main.go server.RegisterHandler), NEVER on
+	// wsRegistry / the peer/tsnet transport. Allowing them anonymously
+	// therefore widens only the 0600 owner-only socket — same boundary as
+	// agent.register/session.start above. TestRestartClass_TmuxCreateNotOnWebSocket
+	// and TestRestartClass_TmuxLaunchNotOnWebSocket (internal/daemon/rpc/
+	// sec8_trust_boundary_test.go) pin this; if either gains a wsRegistry/peer
+	// registration, that test MUST fail (anonymous create/launch over the
+	// network would be a real hole).
+	"tmux.create": true,
+	"tmux.launch": true,
 }
 
 // Start starts the server and begins accepting connections.

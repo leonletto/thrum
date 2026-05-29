@@ -102,8 +102,37 @@ func (sw *DeadAgentSweeper) Sweep(ctx context.Context) {
 				d.AgentID, d.SessionID, emitErr)
 			continue
 		}
+		// thrum-5oui defense-in-depth (DO NOT REMOVE): also clear the dead PID
+		// from the agents projection. Ending the session alone leaves
+		// agents.agent_pid at the now-dead value, which (a) keeps the agent as
+		// this sweeper's own input (`WHERE a.agent_pid > 0`) — harmless now
+		// that the session is ended, but it also (b) means boot reconcile
+		// (thrum-mnhp) is the ONLY thing that ever zeroes it, leaving a stale
+		// dead PID in `thrum team` and the agents table until the next daemon
+		// restart. agent_pid=0 is the canonical "no live runtime / restartable"
+		// sentinel; resetting it here keeps the projection honest the moment
+		// the runtime is confirmed dead. Candidates are already filtered to
+		// LOCAL agents (collectDeadAgents skips origin_daemon != localDaemonID),
+		// so process-liveness — and therefore this reset — is meaningful.
+		sw.clearDeadAgentPID(ctx, d.AgentID)
 		log.Printf("dead_agent_sweeper: marked dead agent offline: agent=%s pid=%d",
 			d.AgentID, d.AgentPID)
+	}
+}
+
+// clearDeadAgentPID resets a confirmed-dead local agent's agents.agent_pid to
+// 0 (the sweeper-skipped, restartable sentinel). Direct local-projection write
+// — agent_pid is per-host runtime state, not a cross-machine-synced event
+// (mirrors the bootstrap reconcile write in thrum-qxr3/mnhp). Best-effort:
+// a failure here only means the stale PID lingers until the next reconcile,
+// so it logs and moves on rather than failing the sweep.
+func (sw *DeadAgentSweeper) clearDeadAgentPID(ctx context.Context, agentID string) {
+	sw.state.Lock()
+	defer sw.state.Unlock()
+	if _, err := sw.state.DB().ExecContext(ctx,
+		`UPDATE agents SET agent_pid = 0 WHERE agent_id = ?`, agentID); err != nil {
+		log.Printf("dead_agent_sweeper: clear agent_pid failed (stale PID lingers until next reconcile): agent=%s err=%v",
+			agentID, err)
 	}
 }
 
