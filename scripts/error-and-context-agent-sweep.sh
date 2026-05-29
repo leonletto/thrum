@@ -58,6 +58,7 @@ OUT=""           # empty = stdout
 SHOW_ALL=0       # 0 = only emit flagged agents (default); 1 = emit all
 CTX_THRESHOLD=50 # int %; agents at-or-above this are flagged
 NUDGE=1          # 1 = auto-nudge api-error panes (default); --no-nudge sets 0
+SILENCE_THRESHOLD_MIN=10  # min; thrum-9neg L5; --silence-threshold-min overrides
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -67,6 +68,7 @@ while [[ $# -gt 0 ]]; do
         --all)   SHOW_ALL=1; shift ;;
         --ctx-threshold) CTX_THRESHOLD="$2"; shift 2 ;;
         --no-nudge) NUDGE=0; shift ;;
+        --silence-threshold-min) SILENCE_THRESHOLD_MIN="$2"; shift 2 ;;
         -h|--help)
             sed -n '2,/^$/p' "$0" | sed 's/^# \?//'
             exit 0
