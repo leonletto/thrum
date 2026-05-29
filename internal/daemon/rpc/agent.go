@@ -1601,8 +1601,8 @@ func (h *AgentHandler) HandleSetAgentStatus(ctx context.Context, params json.Raw
 	if req.Agent == "" {
 		return nil, errors.New("agent name is required")
 	}
-	if req.Status != "working" && req.Status != "idle" && req.Status != "blocked" {
-		return nil, fmt.Errorf("invalid status %q: must be working, idle, or blocked", req.Status)
+	if req.Status != "working" && req.Status != "idle" && req.Status != "blocked" && req.Status != "stuck" {
+		return nil, fmt.Errorf("invalid status %q: must be working, idle, blocked, or stuck", req.Status)
 	}
 
 	// Search identity dirs across worktrees for the target agent
