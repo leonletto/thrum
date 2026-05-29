@@ -142,6 +142,32 @@ func TestRedeliverIfSafe_ReDefersOnSendError(t *testing.T) {
 	}
 }
 
+func TestRedeliverIfSafe_FailureDoesNotClobberNewerArrival(t *testing.T) {
+	// thrum-7phu IMPORTANT race guard: while RedeliverIfSafe is sending (after
+	// takeDeferred removed the entry), a concurrent DispatchTmux may defer a
+	// NEWER poke for the same session. If that send then fails, the failure
+	// re-defer must NOT overwrite the newer sender.
+	resetDeferredState(t)
+	DeferNudge("sess", "sess:0.0", "@old")
+	// nudgeFn simulates the race: a newer arrival lands mid-send, then the send fails.
+	nudgeFn = func(_, _ string) error {
+		DeferNudge("sess", "sess:0.0", "@newer")
+		return errTest
+	}
+	if RedeliverIfSafe("sess", "claude", safePane) {
+		t.Error("RedeliverIfSafe reported success despite send error; want false")
+	}
+	// The newer arrival must survive — verify by delivering on a clean pane.
+	rec := &nudgeRecorder{}
+	nudgeFn = rec.fn
+	if !RedeliverIfSafe("sess", "claude", safePane) {
+		t.Fatal("second RedeliverIfSafe = false; want true (newer arrival should deliver)")
+	}
+	if got := rec.last()[1]; got != "@newer" {
+		t.Errorf("delivered sender = %q; want @newer (failure re-defer clobbered the newer arrival)", got)
+	}
+}
+
 func TestDeferNudge_CollapsesPerSession(t *testing.T) {
 	resetDeferredState(t)
 	rec := &nudgeRecorder{}

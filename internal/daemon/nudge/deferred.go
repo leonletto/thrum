@@ -61,6 +61,20 @@ func HasDeferred(session string) bool {
 	return ok
 }
 
+// redeferIfAbsent re-inserts d for session ONLY if nothing is queued there now.
+// Used by the RedeliverIfSafe failure path: between takeDeferred and a failed
+// send, a concurrent DispatchTmux may have deferred a newer arrival (a different
+// sender). Re-inserting unconditionally would clobber that newer entry's sender
+// name (thrum-7phu IMPORTANT review finding — cosmetic, the message is always
+// safe via the spool, but the displayed sender should reflect the latest poke).
+func redeferIfAbsent(session string, d deferredNudge) {
+	deferredMu.Lock()
+	if _, exists := deferredByS[session]; !exists {
+		deferredByS[session] = d
+	}
+	deferredMu.Unlock()
+}
+
 // takeDeferred atomically removes and returns the pending poke for session.
 func takeDeferred(session string) (deferredNudge, bool) {
 	deferredMu.Lock()
@@ -94,8 +108,9 @@ func RedeliverIfSafe(session, runtime, paneContent string) bool {
 		return false
 	}
 	if err := nudgeFn(d.target, d.sender); err != nil {
-		// Re-defer on transient failure so the next safe poll retries.
-		DeferNudge(session, d.target, d.sender)
+		// Re-defer on transient failure so the next safe poll retries — but
+		// don't clobber a newer arrival that raced in while we were sending.
+		redeferIfAbsent(session, d)
 		slog.Warn("[nudge] deferred re-delivery failed; will retry next poll",
 			"session", session, "target", d.target, "err", err)
 		return false

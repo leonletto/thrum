@@ -149,7 +149,19 @@ func IsTrustGate(runtime, paneContent string) bool {
 // Requiring the digit after the cursor keeps this off shell prompts: a
 // pure/starship "❯ " prompt has no numbered option following the arrow, so
 // "❯ ls" / "❯ " never match.
-var selectionPromptRE = regexp.MustCompile(`(?m)^[\s│┃]*❯\s+\d+[.)]\s`)
+//
+// NOTE on ANSI (thrum-7phu MINOR-3): unlike DisambiguateClaudeDeny these REs do
+// NOT strip ANSI CSI sequences. They don't need to — every caller capture goes
+// through tmux capture-pane -p WITHOUT -e (CapturePane in internal/tmux + the
+// permission SessionPoller), which already strips escape sequences. A future
+// caller that captures with -e would need a stripANSI pass here for parity.
+var selectionCursorRE = regexp.MustCompile(`(?m)^[\s│┃]*❯\s+\d+[.)]\s`)
+
+// selectionOptionRE matches a numbered option line with or without the cursor
+// ("❯ 1.", "  2.", "3)"). Used to require a real MENU (>=2 options) rather than
+// a lone "❯ 1." that could appear in printed text — the false-positive-deferral
+// guard (thrum-7phu post-review fold).
+var selectionOptionRE = regexp.MustCompile(`(?m)^[\s│┃]*(?:❯\s+)?\d+[.)]\s`)
 
 // IsSelectionPrompt reports whether the captured pane shows an active
 // numbered selection menu (AskUserQuestion-style dialog, or any prompt
@@ -169,11 +181,23 @@ var selectionPromptRE = regexp.MustCompile(`(?m)^[\s│┃]*❯\s+\d+[.)]\s`)
 // spam risk (unlike the permission-prompt QUESTION text the bottomLines
 // window guards against in thrum-k4wf). Callers pass a bounded capture
 // (~30 lines), so "full content" is itself bounded.
+//
+// False-positive guard (thrum-7phu post-review fold): a match requires BOTH the
+// "❯ <n>." cursor AND at least two numbered option lines — i.e. a real menu
+// shape. A lone "❯ 1." appearing in printed text / a code snippet therefore
+// can't trigger a perpetual defer. Real AskUserQuestion dialogs always render
+// >=2 options (plus the "Type something" / "Chat about this" rows), so this
+// never false-negatives a genuine dialog. Even if a false positive ever slipped
+// through, the worst case is a DELAYED pane-poke, never a lost message — the
+// spool envelope + check-inbox hook deliver the message independently.
 func IsSelectionPrompt(paneContent string) bool {
 	if paneContent == "" {
 		return false
 	}
-	return selectionPromptRE.MatchString(paneContent)
+	if !selectionCursorRE.MatchString(paneContent) {
+		return false
+	}
+	return len(selectionOptionRE.FindAllStringIndex(paneContent, -1)) >= 2
 }
 
 // IsPaneSafeToType returns true when automated keystroke injection

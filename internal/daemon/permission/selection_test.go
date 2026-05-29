@@ -124,6 +124,33 @@ func TestIsSelectionPrompt_CursorHighInTallDialog(t *testing.T) {
 	}
 }
 
+func TestIsSelectionPrompt_LonePrintedCursorLineIsNotAMenu(t *testing.T) {
+	// thrum-7phu false-positive guard: a single "❯ 1." line appearing in
+	// printed text / a code snippet (no second numbered option) must NOT be
+	// taken for an active menu — otherwise a nudge would defer forever against
+	// inert content. A real menu always has >=2 options.
+	for _, pane := range []string{
+		"Here is the menu format:\n❯ 1. the selected one\nand that's the cursor glyph.\n",
+		"❯ 1. only one option, no sibling\nsome trailing prose\n",
+	} {
+		if IsSelectionPrompt(pane) {
+			t.Errorf("IsSelectionPrompt(%q) = true; want false (lone cursor line, not a >=2-option menu)", pane)
+		}
+	}
+}
+
+func TestIsSelectionPrompt_FullContentNotBottomScoped(t *testing.T) {
+	// Regression guard documenting the deliberate full-content match (thrum-7phu):
+	// do NOT re-introduce bottomLines() scoping here. A real AskUserQuestion
+	// renders the cursor near the TOP of a tall dialog with a blank-padded tail,
+	// so a bottom-window match drops the cursor line. This pane places the menu
+	// far above >paneBottomMatchLines blank lines; it MUST still match.
+	pane := "❯ 1. Red\n  2. Green\n  3. Blue\n" + strings.Repeat("\n", paneBottomMatchLines+10)
+	if !IsSelectionPrompt(pane) {
+		t.Error("IsSelectionPrompt = false for a menu above a blank-padded tail; want true (must not bottom-scope)")
+	}
+}
+
 func TestIsPaneSafeToType_SelectionPromptBlocks(t *testing.T) {
 	if IsPaneSafeToType("claude", askUserQuestionPane) {
 		t.Error("IsPaneSafeToType = true on an AskUserQuestion dialog; want false")
