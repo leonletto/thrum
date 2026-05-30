@@ -1066,7 +1066,13 @@ func (h *AgentHandler) HandleListContext(ctx context.Context, params json.RawMes
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	h.state.Lock()
+	// thrum-5988: read-only handler — take the READ lock so concurrent reads
+	// (prime's cosmetic active-count, the TUI poll, other listContext callers)
+	// run in parallel instead of serializing behind one write-lock holder. The
+	// critical section below only runs a SELECT + row scan; nothing under the
+	// lock mutates State or the DB. Holding the write Lock() here caused a
+	// fleet-wide priority inversion on busy daemons (the observed prime stall).
+	h.state.RLock()
 
 	// Build query with filters — only return contexts for active (non-ended) sessions
 	query := `SELECT wc.session_id, wc.agent_id, wc.branch, wc.worktree_path,
@@ -1101,7 +1107,7 @@ func (h *AgentHandler) HandleListContext(ctx context.Context, params json.RawMes
 
 	rows, err := h.state.DB().QueryContext(ctx, query, args...)
 	if err != nil {
-		h.state.Unlock()
+		h.state.RUnlock()
 		return nil, fmt.Errorf("query work contexts: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
@@ -1129,7 +1135,7 @@ func (h *AgentHandler) HandleListContext(ctx context.Context, params json.RawMes
 			&intentUpdatedAt,
 		)
 		if err != nil {
-			h.state.Unlock()
+			h.state.RUnlock()
 			return nil, fmt.Errorf("scan row: %w", err)
 		}
 
@@ -1194,11 +1200,11 @@ func (h *AgentHandler) HandleListContext(ctx context.Context, params json.RawMes
 	}
 
 	if err := rows.Err(); err != nil {
-		h.state.Unlock()
+		h.state.RUnlock()
 		return nil, fmt.Errorf("iterate rows: %w", err)
 	}
 
-	h.state.Unlock()
+	h.state.RUnlock()
 
 	// Live git extraction: re-extract from worktree paths so callers see
 	// current uncommitted_files / changed_files instead of stale heartbeat data.
