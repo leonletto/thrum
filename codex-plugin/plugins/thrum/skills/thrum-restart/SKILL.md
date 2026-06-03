@@ -16,11 +16,13 @@ needs broader coordination judgment.
 ## Session Restart
 
 Compose a prose continuation, write it directly to your restart file, then
-orchestrate the handoff.
+orchestrate the handoff. The standard restart uses the compact 11-section
+structure; for designer/architect-grade handoffs with wire contracts +
+capability matrix + design rationale, use `$thrum-restart-extended` instead.
 
 ### Steps
 
-#### 1. Resolve your identity and repo root
+#### 1. Resolve identity and repo root (run BEFORE reading the partial)
 
 ```bash
 REPO=$(git rev-parse --show-toplevel) || { echo "ERROR: not in a git worktree"; exit 1; }
@@ -29,110 +31,29 @@ AGENT=$(thrum whoami --field agent_id) || { echo "ERROR: agent not registered"; 
 mkdir -p "${REPO}/.thrum/restart"
 ```
 
-#### 2. Compose your continuation
+(This duplicates Step 1 of the shared partial verbatim — necessary because the
+partial's path depends on `$REPO`, so identity must resolve first. The Read tool
+requires an absolute path.)
 
-Your context is high and we want to restart without losing the decisions we've
-made. Write a rich continuation that future-you will read as the first action
-after restart.
+#### 2. Read the shared snapshot-composition partial
 
-#### §1 Big picture — REQUIRED FIRST SECTION (write this BEFORE anything else)
-
-Every restart snapshot MUST begin with a section using this exact heading:
-
-```markdown
-## 1. Big picture — what shipped this session
-```
-
-Followed by 1-3 sentences (a single paragraph or up to 3 short ones) summarizing
-what the session accomplished. Be specific: name the artifacts, the decisions,
-the cycles closed. Examples:
-
-> Locked the session-archive spec v2 with §1 Big picture requirement, five
-> Q-Spec approvals, and Q-Spec-5 deferred to impl-time. Hand-off pending
-> coordinator final review.
->
-> Investigated rc.9 inbox-race against impl_inbox_race's hypothesis: confirmed
-> the lock-substrate fence is the right fix. Filed thrum-XXX with 4 BLOCKING
-> evidence points.
->
-> Closed B-B1 E6.0 brainstormer-third pass. 2 BLOCKING + 5 IMPORTANT + 10 MINOR.
-> All three load-bearing traps PASSed. Standing by for E6.1 next batch.
-
-This section becomes YOUR OWN log entry, visible in `thrum agent sessions list`
-alongside the archives of every other session you've ever restarted from.
-Future-you (and other agents inspecting your history) skim §1 to decide which
-sessions are worth re-reading. Write it first — before the Resume Plan, before
-file paths, before patterns — because composing the §1 summary forces you to
-identify what was actually load-bearing about this session, and that priority
-shapes everything else you write below it.
-
-After the §1 block:
-
-CRITICAL DISCIPLINE — compose from your own working context only. To preserve
-the remaining runway:
-
-- Do NOT dispatch sub-agents (Agent, Explore, etc.)
-- Do NOT re-read files you've already read this session
-- Do NOT spawn web fetches or external lookups
-- Do NOT run lengthy investigations (git log spelunking, codebase searches,
-  multi-file grep walks)
-
-Each of those costs context you don't have to spend, and the cost compounds — a
-sub-agent that returns 6K tokens of summary doesn't just cost the dispatch, it
-pollutes the dying session further. If a fact isn't already in your working
-context, label it "unknown" or "verify post-restart" rather than fetching it
-now. Trust your in-context state.
-
-Write for a competent stranger in your role — someone who has the runtime
-briefing (`thrum prime`, role preamble, project state) but none of this
-session's conversation context. Refer to the previous session in third person.
-
-Use these numbered sections (write each as prose or table — your call — but the
-numbered structure itself should be present):
-
-1. **Big picture** — what shipped this session (REQUIRED FIRST, written above
-   per the §1 mandate).
-2. **Where every artifact stands** — branches, specs, plans, in-flight PRs,
-   partially-landed work. Concrete tips / paths / commit SHAs.
-3. **Players + contributions** — who's working on what, who's standing down,
-   what each agent's latest state is.
-4. **Decisions made this session** — with the context that drove each. Just
-   listing the decision loses the reasoning future-you needs to judge edge
-   cases.
-5. **Questions awaiting repo owner input** — anything queued for the project
-   owner's call before work can proceed. Name the question concretely.
-6. **Outstanding work you owe** — commitments still open on your side (pushes,
-   merges, dispatches, doc-patches).
-7. **Patterns that worked / burned us** — short reflective section: what to keep
-   doing, what to stop. Two sub-sections is enough.
-8. **File paths future-you will reopen** — concrete paths the next session will
-   need. Group by purpose (in-flight / queued / reference).
-9. **Numbered resume plan** — concrete first-N-steps the next session should
-   take, in order. Step 1 must be actionable from a cold start.
-10. **Honest unknowns — verify post-restart, do NOT fabricate** — list facts you
-    suspect changed during the session OR were never confirmed in the first
-    place. Future-you must NOT carry these forward as truth until they're
-    verified (e.g., "whether @impl_X has progressed past Task N", "exact branch
-    tip — listed as ~SHA but multiple FF merges may have happened during the
-    snapshot write", "whether the keepalive cron survived restart").
-11. **End-of-continuation note** — one short paragraph reflecting on the session
-    itself. What was the dominant pattern this session, what pattern proved
-    load-bearing, what's a known fragility going into the next one.
-
-Skip a section only when it genuinely doesn't apply — an honest "N/A: no
-decisions this session" beats fabrication. The numbered structure itself should
-always be present so future-you can scan for what's covered and what isn't.
-
-#### 3. Write the continuation directly to your restart file
-
-Use your Write tool to save the composed continuation to:
+Read the partial at the absolute path:
 
 ```text
-${REPO}/.thrum/restart/${AGENT}.md
+${REPO}/claude-plugin/commands/_snapshot-protocol.md
 ```
 
-`thrum prime` will auto-inject this file at next session start. No bash heredoc
-or `cat <<EOF` redirection is needed — write the file directly.
+It carries the CRITICAL DISCIPLINE block, the standard 11-section structure, and
+(for `$thrum-restart-extended`) the extended 16-section structure. Apply its
+Step 2 (compose your continuation) per the structure guidance.
+
+**Use the STANDARD 11-section structure.** Do NOT use the extended 16-section
+structure — that lives in `$thrum-restart-extended`.
+
+#### 3. Write the continuation
+
+Per Step 3 of the partial, use the Write tool to save your composed continuation
+to `${REPO}/.thrum/restart/${AGENT}.md`.
 
 #### 4. Check session type and your role
 
@@ -179,3 +100,32 @@ instructions below.
 - You've hit rate limits and need to wait
 - Your session feels stuck or unproductive
 - The operator or coordinator has asked you to restart
+- For designer-grade handoffs needing wire contracts + capability matrix +
+  design rationale: use `$thrum-restart-extended` instead
+
+### After Restart: Session Archive
+
+After restart, your snapshot doesn't disappear — it moves to
+`.thrum/agents/<your-agent-id>/sessions/` and stays there as a persistent log
+entry. Browse the archive with:
+
+```bash
+thrum agent sessions list                    # default: this agent
+thrum agent sessions list --verbose          # full §1 bodies inline
+thrum agent sessions list --json             # NDJSON for scripts
+thrum agent sessions list --all              # every agent, grouped
+```
+
+Permissions are user-only (`0600` for each snapshot file, `0700` for the
+sessions folder). Operators on multi-user machines must copy explicitly to share
+archives with another account.
+
+Worktree-resident ephemeral agents archive into the worktree's own
+`.thrum/agents/<id>/sessions/` — so the archive vanishes when the worktree is
+removed. **By design.** If an ephemeral agent's history matters across the
+worktree teardown, export those snapshots manually before `git worktree remove`.
+
+The next session's `thrum prime` output includes a "Past Sessions" discovery
+hint summarizing the most recent archive's §1 — so future-you gets a one-line
+reminder of last session's headline without re-reading the full snapshot. That
+hint is why §1 above is required.

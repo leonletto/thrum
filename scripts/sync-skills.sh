@@ -142,6 +142,14 @@ write_openai_metadata() {
   local short_description="$3"
   local default_prompt="$4"
 
+  # Rewrite claude-specific /thrum:foo invocation syntax to codex's $thrum-foo
+  # flat-skill form in the short_description, matching the SKILL.md body
+  # treatment from replace_claude_skill_syntax. Both codex generators
+  # (generate_codex_command_skill + adapt_codex_skill) pass the raw frontmatter
+  # description here, so without this the openai.yaml metadata leaks raw
+  # /thrum: strings the SKILL.md body no longer carries.
+  short_description="$(printf '%s' "${short_description}" | sed 's|/thrum:\([a-z][a-z0-9-]*\)|$thrum-\1|g')"
+
   mkdir -p "${skill_dir}/agents"
   cat > "${skill_dir}/agents/openai.yaml" <<EOF
 interface:
@@ -169,7 +177,27 @@ generate_codex_command_skill() {
   body_file="$(mktemp)"
   strip_frontmatter "${command_file}" | normalize_headings > "${body_file}"
 
-  cat > "${skill_dir}/SKILL.md" <<EOF
+  # Underscore-prefixed command files are shared partials, not user-invocable
+  # workflows. Emit a partial-appropriate preamble so the generated codex skill
+  # body does not contradict its own "Not user-invocable directly" description.
+  if [[ "${command_name}" == _* ]]; then
+    cat > "${skill_dir}/SKILL.md" <<EOF
+---
+name: ${skill_name}
+description: ${description}
+# source: claude-plugin/commands/${command_name}.md
+# generated-by: scripts/sync-skills.sh
+---
+
+# Thrum ${command_title}
+
+This is a shared partial, not a user-invocable skill. Sibling Thrum skills
+consume it as a protocol reference; do not invoke it directly.
+
+$(cat "${body_file}")
+EOF
+  else
+    cat > "${skill_dir}/SKILL.md" <<EOF
 ---
 name: ${skill_name}
 description: ${description}
@@ -185,6 +213,14 @@ commands or needs broader coordination judgment.
 
 $(cat "${body_file}")
 EOF
+  fi
+
+  # Rewrite claude-specific /thrum:foo skill-invocation syntax to codex's
+  # $thrum-foo flat-skill form — same treatment the skill→codex path applies
+  # at adapt_codex_skill. Without this, command-derived codex skills that
+  # reference sibling commands in prose leak raw /thrum: strings (the
+  # established convention is zero /thrum: in codex output).
+  replace_claude_skill_syntax "${skill_dir}/SKILL.md"
 
   write_openai_metadata \
     "${skill_dir}" \
@@ -258,6 +294,42 @@ EOF
     "${default_prompt}"
 
   echo "  adapted skill ${skill_name}"
+}
+
+# ─── Markdown formatting (sync↔fmt-md idempotency) ───────────────────────────
+
+format_generated_markdown() {
+  # Run prettier over a generated markdown tree so sync output is byte-identical
+  # to what `make fmt-md` produces. Only the codex path GENERATES new prose (the
+  # heredoc preambles below); without this pass the static heredoc wrap diverges
+  # from prettier's --prose-wrap reflow, so every sync→fmt-md cycle re-drifts the
+  # codex SKILL.md files (thrum-pp6n). Flags MUST stay in lockstep with the
+  # Makefile `fmt-md` target.
+  local target_dir="$1"
+
+  if ! command -v prettier >/dev/null 2>&1; then
+    echo "  WARNING: prettier not found — generated codex markdown will NOT match" >&2
+    echo "  'make fmt-md' and will drift on the next format pass. Install with:" >&2
+    echo "    npm install -g prettier" >&2
+    return 0
+  fi
+
+  # Run from REPO_ROOT with a repo-relative glob so --ignore-path .prettierignore
+  # resolves identically to the Makefile fmt-md target. Suppress prettier's
+  # stdout (the noisy formatted-file list) but let stderr surface — a real
+  # prettier error (parse failure, unwritable file) must not be swallowed into a
+  # false-green "formatted" line.
+  local rel_glob="${target_dir#"${REPO_ROOT}/"}/**/*.md"
+  if (
+    cd "${REPO_ROOT}" &&
+      prettier --write "${rel_glob}" \
+        --prose-wrap always --ignore-path .prettierignore >/dev/null
+  ); then
+    echo "  formatted generated markdown (prettier --prose-wrap always)"
+  else
+    echo "  WARNING: prettier exited non-zero — generated codex markdown may not" >&2
+    echo "  match 'make fmt-md'; inspect the prettier error above." >&2
+  fi
 }
 
 # ─── Codex target ───────────────────────────────────────────────────────────
@@ -342,6 +414,10 @@ sync_codex() {
       echo "  skip: ${skill_name} (no source at ${src})" >&2
     fi
   done
+
+  # Normalize generated prose to prettier's canonical wrap so the committed
+  # codex output stays idempotent against `make fmt-md` (thrum-pp6n).
+  format_generated_markdown "${CODEX_SKILLS}"
 
   echo "  codex sync complete"
 }
