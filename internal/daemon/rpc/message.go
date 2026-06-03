@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -514,7 +515,7 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 
 	if req.ActingAs != "" {
 		// Validate impersonation request
-		if err := h.validateImpersonation(callerID, req.ActingAs); err != nil {
+		if err := h.validateImpersonation(ctx, callerID, req.ActingAs); err != nil {
 			return nil, err
 		}
 
@@ -980,9 +981,21 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	// layer debounces so the extra resolve work is not amplified into
 	// DB churn.
 	//
-	// resolveAgentOnly returns "" on failure, which naturally skips the
-	// touch for anonymous callers — no extra gate needed.
-	currentAgentID := h.resolveAgentOnly(ctx, req.CallerAgentID)
+	// resolveAgentOnly returns ("", nil) for anonymous/unresolved callers
+	// (touch is skipped — no extra gate needed) and a non-nil *guard.Error ONLY
+	// for an identity_mismatch forgery, which is refused below (thrum-tgqx E2).
+	// Note: an anonymous peercred caller and a transient non-guard I/O failure
+	// both yield ("", nil), so currentAgentID can be "" for a peercred caller —
+	// the bare read then proceeds, but the for_agent/for_agent_role attestation
+	// block below still fires (it gates on peercredRan, not currentAgentID) and
+	// fails closed for any anonymous caller supplying those impersonation fields.
+	currentAgentID, guardErr := h.resolveAgentOnly(ctx, req.CallerAgentID)
+	if guardErr != nil {
+		// thrum-tgqx E2: identity-guard ownership violation. Refuse and expose
+		// NO data rather than falling through to the untrusted caller-supplied
+		// for_agent / for_agent_role filter (the original fail-open leak).
+		return nil, guardErr
+	}
 
 	// Safe with the RLock held — TouchAgentLastSeen acquires touchMu
 	// (independent of state.mu) and writes directly via the DB()
@@ -990,6 +1003,44 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	// acquire state.mu, revisit this call site.
 	if currentAgentID != "" {
 		_ = h.state.TouchAgentLastSeen(ctx, currentAgentID)
+	}
+
+	// thrum-tgqx E2 — for_agent attestation. When peercred ran (a kernel-
+	// verified local caller over the unix socket), a request scoped to a
+	// DIFFERENT agent or a non-matching role must be refused: otherwise a
+	// trusted-but-curious agent could read another agent's/role's inbox via
+	// the caller-supplied for_agent / for_agent_role fields. The gate is
+	// peercredRan ALONE (not currentAgentID != ""): a genuinely-anonymous
+	// peercred caller (currentAgentID == "") that supplies for_agent /
+	// for_agent_role must ALSO be refused — validateImpersonation rejects the
+	// empty (non-user:) caller, and the empty-agent role lookup fails closed —
+	// otherwise the B1 bare-read relaxation in resolveAgentOnly would reopen the
+	// leak for anonymous impersonation requests. peercredRan is FALSE for
+	// WebSocket + cross-host peer callers (web-UI user:-impersonation and
+	// token-authed peers) — they skip attestation and keep working
+	// (validateImpersonation gates the legitimate user: impersonation path).
+	if _, peercredRan := peercred.FromContext(ctx); peercredRan {
+		if req.ForAgent != "" && req.ForAgent != currentAgentID {
+			// validateImpersonation refuses any non-user: caller (an agent can
+			// only request its own inbox); user: impersonators are permitted.
+			if err := h.validateImpersonation(ctx, currentAgentID, req.ForAgent); err != nil {
+				return nil, fmt.Errorf("identity guard: caller %q may not request for_agent %q: %w", currentAgentID, req.ForAgent, err)
+			}
+		}
+		if req.ForAgentRole != "" {
+			// The caller's own role must match the requested role group. A
+			// mismatch, an unknown caller, OR a DB error all refuse fail-closed
+			// — the scan error is checked explicitly (not discarded) so the
+			// fail-closed intent is legible and a future refactor can't turn a
+			// swallowed error into a bypass.
+			var callerRole string
+			roleErr := h.state.DB().QueryRowContext(ctx,
+				`SELECT role FROM agents WHERE agent_id = ?`, currentAgentID).Scan(&callerRole)
+			if roleErr != nil || callerRole != req.ForAgentRole {
+				return nil, fmt.Errorf("identity guard: caller %q (role %q) may not request for_agent_role %q",
+					currentAgentID, callerRole, req.ForAgentRole)
+			}
+		}
 	}
 
 	// Determine which identity to use for the is_read correlated subquery.
@@ -1382,7 +1433,12 @@ func (h *MessageHandler) HandleOutbox(ctx context.Context, params json.RawMessag
 		page = 1
 	}
 
-	authorID := h.resolveAgentOnly(ctx, req.CallerAgentID)
+	authorID, guardErr := h.resolveAgentOnly(ctx, req.CallerAgentID)
+	if guardErr != nil {
+		// thrum-tgqx E2: propagate identity-guard ownership violation rather
+		// than absorbing it to an empty string and falling through.
+		return nil, guardErr
+	}
 	if authorID == "" {
 		return nil, fmt.Errorf("caller_agent_id is required")
 	}
@@ -2322,16 +2378,28 @@ func (h *MessageHandler) resolveAgentAndSession(ctx context.Context, callerAgent
 	return agentID, sessionID, nil
 }
 
-// resolveAgentOnly resolves the caller's agent ID without requiring an active
-// session.  Used by HandleList for unread count and is_read computation where
-// only the agent identity matters, not the session.
+// resolveAgentOnly resolves the caller's authenticated agent identity for
+// read-path handlers. It returns ("", nil) for callers with no usable identity
+// — peercred didn't run (WebSocket / cross-host peer), a benign pre-quickstart
+// bare call, OR a genuinely-anonymous local caller (peercred ran but resolved
+// to no agent, or G3 strict with an empty caller). It returns a non-nil
+// *guard.Error ONLY for an identity_mismatch: a caller that CLAIMED an agent
+// identity (CallerAgentID) which the kernel-verified peercred identity
+// contradicts — the forgery case. Callers MUST refuse the request when err !=
+// nil rather than falling through to the untrusted caller-supplied filter
+// fields — that fall-through was the thrum-tgqx fail-open: a stale/mismatched
+// identity slipped through and exposed another worktree's data.
 //
-// Unlike resolveAgentAndSession this helper is called from read-only handlers
-// and returns an empty string on anonymous/unknown identity (caller treats
-// empty as "no filter" and returns unfiltered results). DaemonResolve errors
-// are absorbed into empty-string fallthrough — read-only handlers never fail
-// the RPC on identity concerns; they simply drop the per-caller filter.
-func (h *MessageHandler) resolveAgentOnly(ctx context.Context, callerAgentID string) string {
+// Anonymous guard reasons (anonymous_mutating_rpc, no_caller_agent_id) are
+// deliberately NOT propagated (thrum-tgqx E2, B1): the read methods are in
+// server.go anonymousAllowedMethods, so a bare anonymous read must succeed.
+// Anonymous callers that supply for_agent/for_agent_role are still refused by
+// the HandleList attestation block (which gates on peercredRan, not on a
+// resolved identity), so relaxing the bare-read case leaks no data. A wrapped
+// non-guard error (config-load, process-walk I/O) likewise preserves the
+// historical empty-string fallthrough so transient internal failures don't
+// refuse legitimate callers.
+func (h *MessageHandler) resolveAgentOnly(ctx context.Context, callerAgentID string) (string, error) {
 	resolved, peercredRan := peercred.FromContext(ctx)
 	req := guard.DaemonResolveRequest{
 		CallerAgentID: callerAgentID,
@@ -2347,9 +2415,30 @@ func (h *MessageHandler) resolveAgentOnly(ctx context.Context, callerAgentID str
 	req.IsAgentInWorktree = h.sharedWorktreeChecker()
 	caller, err := guard.DaemonResolve(ctx, loadDaemonGuardConfig(h.state.RepoPath()), req, slog.Default())
 	if err != nil {
-		return ""
+		// Reason-discriminate (thrum-tgqx E2, B1 fix). Only an identity_mismatch
+		// is a forgery — the caller CLAIMED an agent identity (CallerAgentID set)
+		// that contradicts the kernel-verified peercred identity. That MUST be
+		// refused; falling through to the caller-supplied for_agent filter is the
+		// fail-open leak.
+		//
+		// The other guard reasons describe a genuinely-anonymous caller who made
+		// no contradictory claim: anonymous_mutating_rpc (peercred ran but
+		// resolved to no agent) and no_caller_agent_id (G3 strict, empty caller).
+		// Returning the *guard.Error for those over-closes designed anonymous
+		// bootstrap bare-reads — message.list/outbox/get/listContext are in
+		// server.go anonymousAllowedMethods. Return ("", nil) so the bare read
+		// proceeds; the HandleList for_agent/for_agent_role attestation still
+		// fails closed for any anonymous caller that DOES supply those
+		// impersonation fields, so no data leaks.
+		var ge *guard.Error
+		if errors.As(err, &ge) && ge.Reason == "identity_mismatch" {
+			return "", ge
+		}
+		// Anonymous guard reason OR non-guard wrapped I/O failure — preserve the
+		// fail-open empty-string fallthrough.
+		return "", nil
 	}
-	return caller.AgentID
+	return caller.AgentID, nil
 }
 
 // sharedWorktreeChecker returns a closure that DaemonResolve uses to
@@ -2377,8 +2466,20 @@ func identitiesDirFor(repoPath string) string {
 	return filepath.Join(repoPath, ".thrum", "identities")
 }
 
-// validateImpersonation validates that the caller is authorized to impersonate the target identity.
-func (h *MessageHandler) validateImpersonation(callerID, targetID string) error {
+// validateImpersonation reports whether callerID may act as / request data for
+// targetID. Only "user:"-prefixed callers (web-UI impersonation) may stand in
+// for an agent; an agent caller may never impersonate another identity.
+//
+// Concurrency (thrum-tgqx, Task 5): this helper is LOCK-FREE by design. It is
+// invoked both from HandleSend's acting_as path (which holds no state lock) AND
+// from HandleList's for_agent attestation (which already holds state.RLock).
+// Acquiring state.RLock here would recursively read-lock and can deadlock
+// against a queued writer between the two RLocks (Go sync.RWMutex semantics) —
+// the same reason IsAgentInWorktree (state_query.go) takes no lock. The agents
+// existence check is a plain DB read; the DB layer serializes it independently
+// of state.mu, so no lock is required. ctx is the request context (Task 5) so a
+// cancelled RPC cancels the query rather than using context.Background().
+func (h *MessageHandler) validateImpersonation(ctx context.Context, callerID, targetID string) error {
 	// Check if caller is a user
 	if !strings.HasPrefix(callerID, "user:") {
 		return fmt.Errorf("only users can impersonate agents (caller: %s)", callerID)
@@ -2391,13 +2492,11 @@ func (h *MessageHandler) validateImpersonation(callerID, targetID string) error 
 		return fmt.Errorf("users can only impersonate agents, not other users (target: %s)", targetID)
 	}
 
-	// Check if target agent exists
-	h.state.RLock()
-	defer h.state.RUnlock()
-
+	// Check if target agent exists. No state lock — see the concurrency note
+	// above; the DB read is independently serialized.
 	var exists bool
 	query := `SELECT EXISTS(SELECT 1 FROM agents WHERE agent_id = ?)`
-	err := h.state.DB().QueryRowContext(context.Background(), query, targetID).Scan(&exists)
+	err := h.state.DB().QueryRowContext(ctx, query, targetID).Scan(&exists)
 	if err != nil {
 		return fmt.Errorf("check agent exists: %w", err)
 	}
@@ -3020,7 +3119,11 @@ func (h *MessageHandler) HandleDeleteByAgent(ctx context.Context, params json.Ra
 	}
 
 	// sec.8: resolve caller and enforce self-only deletion.
-	callerID := h.resolveAgentOnly(ctx, req.CallerAgentID)
+	callerID, guardErr := h.resolveAgentOnly(ctx, req.CallerAgentID)
+	if guardErr != nil {
+		// thrum-tgqx E2: propagate identity-guard ownership violation.
+		return nil, guardErr
+	}
 	if callerID == "" {
 		return nil, fmt.Errorf("cannot resolve caller identity for deleteByAgent")
 	}
