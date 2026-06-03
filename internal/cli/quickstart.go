@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,6 +73,62 @@ func resolveQuickstartAgentPID(ctx context.Context, noAgentPID bool) int {
 	// long-lived session main and is the stable PID to bind to.
 	pid, _ := process.FindTopmostRuntimeAncestor(ctx)
 	return pid
+}
+
+// quickstartPIDDecision enumerates the thrum-ipbl agent_pid outcomes for the
+// direct (non tmux-create) quickstart path.
+type quickstartPIDDecision int
+
+const (
+	// qpWriteRuntimePID: the caller has a live runtime ancestor — write that
+	// PID. This is both normal registration and the pid-drift recovery (the
+	// /login case where the new runtime PID must replace the dead old one).
+	qpWriteRuntimePID quickstartPIDDecision = iota
+	// qpProtectLiveOwner: bare shell, but a live agent runtime already owns this
+	// worktree — leave the file untouched. NEVER write the shell/terminal PID
+	// over a live owner (the accidental-CD case).
+	qpProtectLiveOwner
+	// qpFreeSlot: bare shell, stored agent_pid is dead/absent — write 0 so the
+	// identity is freely claimable (guard.Rule treats agent_pid==0 as no-owner).
+	qpFreeSlot
+)
+
+// decideQuickstartPID implements Leon's PID-aware, owner-protecting matrix for
+// the identity file's agent_pid (thrum-ipbl). runtimePID is
+// resolveQuickstartAgentPID's result: >0 when a live runtime ancestor was
+// detected, 0 for a bare shell. storedAliveRuntime reports whether the file's
+// existing agent_pid is a live agent runtime — corroborated (IsRunning AND
+// IsRuntimeProcess, the same check register-conflict detection uses) to avoid a
+// PID-recycling false-protect.
+func decideQuickstartPID(runtimePID, storedPID int, storedAliveRuntime bool) quickstartPIDDecision {
+	switch {
+	case runtimePID > 0:
+		return qpWriteRuntimePID
+	case storedPID > 0 && storedAliveRuntime:
+		return qpProtectLiveOwner
+	default:
+		return qpFreeSlot
+	}
+}
+
+// applyQuickstartAgentPID writes the identity file's agent_pid per
+// decideQuickstartPID, routing real writes through guard.WritePID (the sole
+// atomic PID-write primitive, shared with prime). isRunning/isRuntime are
+// injected so the three matrix cases pin deterministically in tests.
+func applyQuickstartAgentPID(idPath string, runtimePID, storedPID int, isRunning, isRuntime func(int) bool) error {
+	storedAliveRuntime := storedPID > 0 && isRunning(storedPID) && isRuntime(storedPID)
+	switch decideQuickstartPID(runtimePID, storedPID, storedAliveRuntime) {
+	case qpWriteRuntimePID:
+		return guard.WritePID(idPath, runtimePID)
+	case qpProtectLiveOwner:
+		// Dotted first token so cli.SlogHintHandler derives a specific hint
+		// code (quickstart.live-owner-protected) for --json callers instead of
+		// the generic runtime.warn fallback.
+		slog.Warn(fmt.Sprintf("quickstart.live-owner-protected: a live agent owns this worktree (pid %d); refusing to overwrite its agent_pid", storedPID))
+		return nil
+	default: // qpFreeSlot
+		return guard.WritePID(idPath, 0)
+	}
 }
 
 // QuickstartResult contains the combined result of quickstart steps.
@@ -246,7 +303,7 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 	if repoPath == "" {
 		repoPath = "."
 	}
-	if idFile, _, err := config.LoadIdentityWithPath(repoPath); err == nil {
+	if idFile, idPath, err := config.LoadIdentityWithPath(repoPath); err == nil {
 		thrumDir := filepath.Join(repoPath, ".thrum")
 		changed := false
 
@@ -320,6 +377,37 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 		// idempotent doubles. Both are now removed — ajmd took out the
 		// refresh site; dw06 takes out this one. The daemon-side path
 		// retains a narrower, self-rename-only enforcement.
+
+		// thrum-ipbl: write agent_pid to the identity file. quickstart never
+		// did historically — only `thrum prime` calls guard.WritePID (refactor
+		// 475494c9f4 moved the PID-write into prime-only; Step 2.5 + Step 2.6's
+		// RefreshLocalIdentity leave agent_pid untouched), so `quickstart
+		// --force` could not recover a pid-drift state: a stale dead PID kept
+		// firing client-side guard.Rule pid_mismatch. Apply Leon's PID-aware,
+		// owner-protecting matrix HERE (before Step 2.6) so RefreshLocalIdentity
+		// then re-registers the corrected PID to the daemon, keeping the file
+		// and the DB consistent. idFile.AgentPID is still the original on-disk
+		// PID at this point (Step 2.5 above does not touch it). The noAgentPID /
+		// tmux-create inline path is exempt — it intentionally persists 0 and
+		// relies on first-prime to reclaim the live PID.
+		//
+		// DB consistency: the qpWriteRuntimePID and qpFreeSlot writes are
+		// mirrored to the daemon by Step 2.6's RefreshLocalIdentity (it
+		// re-registers the file's current agent_pid). For the qpFreeSlot
+		// (bare-shell dead-owner) case the daemon DB only reflects unbound 0
+		// when --force was passed (Step 1's AgentRegister forwarded
+		// agentPID=0 through the daemon's force branch); on a non-force bare
+		// quickstart the DB keeps its prior value until the next force/prime
+		// reconciles it. The documented recovery is `quickstart --force`, so
+		// the consistent path is the supported one.
+		if !opts.NoAgentPID {
+			if perr := applyQuickstartAgentPID(idPath, agentPID, idFile.AgentPID,
+				process.IsRunning,
+				func(pid int) bool { return process.IsRuntimeProcess(context.Background(), pid, "") },
+			); perr != nil {
+				slog.Warn(fmt.Sprintf("quickstart.agent-pid-write-failed: %v", perr))
+			}
+		}
 	}
 
 	// Step 2.6: Refresh drift-prone fields from live process/tmux/git state.
