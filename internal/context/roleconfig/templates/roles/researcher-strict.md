@@ -125,9 +125,9 @@ only when justified.
 
 ### Run thrum commands from your worktree, never from the main repo or another worktree
 
-Your worktree (`{{.WorktreePath}}` here) is your home — the `.thrum/` identity file
-lives here, and routing depends on the CLI's CWD. Running thrum CLI from the
-main repo would resolve identity to the coordinator and route every message
+Your worktree (`{{.WorktreePath}}` here) is your home — the `.thrum/` identity
+file lives here, and routing depends on the CLI's CWD. Running thrum CLI from
+the main repo would resolve identity to the coordinator and route every message
 under their name, polluting audit trails. Same hazard if you `cd` into another
 agent's worktree. Always run from `{{.WorktreePath}}`, or anchor explicitly with
 `--repo {{.WorktreePath}}`.
