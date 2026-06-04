@@ -233,37 +233,48 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG.md</a>.</p>
 <h2>v0.10.6 — In Soak (RC)</h2>
-<p><strong>v0.10.6-rc.6</strong> was tagged 2026-05-29 and is the current pre-release. rc.6 is a
-single-fix RC — one P1 regression caught during the rc.5 soak. Boot reconcile
-was resurrecting a killed agent&#39;s stale dead PID (thrum-mnhp, a regression from
-rc.5&#39;s thrum-qxr3): qxr3 made reconcile write the identity-file <code>AgentPID</code> back
-unconditionally, but a killed agent&#39;s identity file keeps a stale non-zero dead
-PID, so reconcile revived it — the dead-agent sweeper then immediately ended the
-reconcile-created session and evicted the worktree, leaving killed agents
-un-restartable via <code>thrum tmux start</code>. The fix zeroes a dead PID on reconcile
-while still writing through live PIDs, so killed agents restart cleanly again. No
-schema change.</p>
-<p>rc.5&#39;s fleet-operations polish carries forward: the <code>thrum prime</code> ~10s-stall fix
-(thrum-5988 — the cosmetic active-agent probe moved to a dedicated 1.5s-deadline
-connection, ~10.4s → ~1.9s, with the daemon-health section restored), two
-fleet-monitoring sweep ctx% corrections (thrum-4pd1 — the Opus 4.8 1M-window
-denominator now matches the whole <code>claude-opus-4-*</code> family, fixing a 5×
-inflation; thrum-roeq — transcript selection by session-birth timestamp rather
-than mtime, so a resume-context read can&#39;t surface a stale ctx%), boot reconcile
-writing live AgentPIDs back to the registry (thrum-qxr3, now with the mnhp
-dead-PID guard), the <code>thrum tmux create --force</code> prefix-match guard (thrum-z63b),
-and the operator surface — agent-status Pattern D self-writes (thrum-9neg),
-<code>thrum monitor --schedule</code> with continuous-mode auto-restart (thrum-puhr.9), and
-the restored <code>--json</code> / <code>--report-only</code> / <code>THRUM_SWEEP_IDENTITY_GLOBS</code> sweep
-features (thrum-l9e6). rc.4&#39;s reliability stack also carries forward: the
-<code>team.list</code> / dead-agent self-heal rework (thrum-1nkt — pool ceiling 10 → 100,
-background dead-agent sweeping, <code>agent.lookup</code> RPC), the 4MB JSONL-compactor
-scanner buffer (thrum-10j0), the 1MB message-body write cap (thrum-mhwt),
-<code>INSERT OR IGNORE</code> on <code>applySessionStart</code> (thrum-9jcb.3), the identity-guard
-PID-ancestor split (thrum-xir.40) and cached peercred CWD lookup (thrum-xir.45),
-and <code>thrum worktree teardown</code> cascade-deleting the bound agent identity
-(thrum-wk7d). See the <a href="beta-channel.html">Beta Channel</a> page for the full rc.6
-callout + install commands.</p>
+<p><strong>v0.10.6-rc.7</strong> was tagged 2026-06-04 and is the current pre-release. rc.7
+closes the agent-restart failure class and relands the snapshot/sleep skill
+family. Several independent bugs could each leave an agent un-restartable. A
+caller was bound only while its worktree had an active session ref, so any agent
+whose session ended couldn&#39;t bootstrap a restart — <code>thrum tmux start</code>&#39;s
+<code>tmux.create</code> + <code>tmux.launch</code> were rejected as anonymous; both now sit in the
+daemon&#39;s anonymous-allowlist (unix-socket only, never on the WebSocket/peer
+transport, pinned by a structural guard scanning all of <code>cmd/thrum</code>)
+(thrum-5oui). <code>thrum quickstart</code> now refreshes <code>agent_pid</code> in the identity file
+with a PID-aware, owner-protecting policy, so pid-drift recovery after a runtime
+restart (e.g. <code>/login</code>) stops failing every guarded call with <code>pid_mismatch</code>
+(thrum-ipbl). <code>thrum tmux restart</code> no longer returns a false-negative
+i/o-timeout on a successful restart — the client call uses a 90s deadline
+instead of the 10s default, covering the graceful-restart + kill/create/launch
+sequence (thrum-6yt7). rc.6&#39;s boot-reconcile dead-PID resurrection fix
+(thrum-mnhp) is folded in. And the <code>thrum prime</code> stall gets its daemon-side
+root-cause fix: <code>HandleListContext</code> now takes a read lock instead of the global
+write lock, so reads run in parallel under fleet load (thrum-5988, complementing
+rc.5&#39;s client-side mitigation).</p>
+<p>New this RC: a snapshot/sleep restart skill family (thrum-rwhg) —
+<code>/thrum:restart-extended</code>, <code>/thrum:sleep</code>, and <code>/thrum:sleep-extended</code>, plus a
+shared <code>_snapshot-protocol</code> partial that the slimmed <code>/thrum:restart</code> now
+consumes. The <code>-extended</code> variants add a 16-section designer/architect-grade
+handoff structure; the <code>sleep</code> variants park an agent for operator-initiated
+wake. Identity-guard also closes a fail-open on the message-read path
+(thrum-tgqx), and restart snapshots now anchor to the agent&#39;s worktree rather
+than the shell CWD.</p>
+<p>Earlier v0.10.6 RCs carry forward — rc.6/rc.5 fleet-operations work: the
+<code>thrum prime</code> ~10s-stall client mitigation (thrum-5988), two sweep ctx%
+corrections (thrum-4pd1 Opus 4.8 1M-window denominator, thrum-roeq session-birth
+transcript selection), boot reconcile writing live AgentPIDs back to the
+registry (thrum-qxr3), the <code>thrum tmux create --force</code> prefix-match guard
+(thrum-z63b), agent-status Pattern D self-writes (thrum-9neg),
+<code>thrum monitor --schedule</code> with continuous auto-restart (thrum-puhr.9), and the
+restored <code>--json</code> / <code>--report-only</code> / <code>THRUM_SWEEP_IDENTITY_GLOBS</code> sweep features
+(thrum-l9e6); plus rc.4&#39;s <code>team.list</code> / dead-agent self-heal rework (thrum-1nkt),
+the 4MB JSONL-compactor scanner buffer (thrum-10j0), the 1MB message-body write
+cap (thrum-mhwt), <code>INSERT OR IGNORE</code> on <code>applySessionStart</code> (thrum-9jcb.3), the
+identity-guard PID-ancestor split (thrum-xir.40) and cached peercred CWD lookup
+(thrum-xir.45), and <code>thrum worktree teardown</code> cascade-deleting the bound agent
+identity (thrum-wk7d). See the <a href="beta-channel.html">Beta Channel</a> page for the full
+rc.7 callout + install commands.</p>
 <p>v0.10.6&#39;s headline is a <strong>sync re-architecture</strong> (thrum-s6os): the cross-machine
 wire stream now derives from per-agent and per-bridge-group state files rather
 than from a synced event journal. The 60-second polling ticker is gone — sync is
