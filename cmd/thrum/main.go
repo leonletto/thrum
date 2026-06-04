@@ -9244,6 +9244,18 @@ func restartSnapshotSubcmds() []*cobra.Command {
 	return []*cobra.Command{saveCmd, restoreCmd, checkCmd}
 }
 
+// tmuxRestartCallTimeout bounds the client socket deadline for `thrum tmux
+// restart` (thrum-6yt7). The default 10s call timeout is too short: HandleRestart
+// is synchronous and a graceful restart waits for the agent's snapshot up to
+// Restart.graceful_timeout (configurable; default 30s, observed up to ~45s) THEN
+// runs kill + create + launch + shell-ready probe (~10-20s on a slow host). With
+// the 10s deadline the client read times out on a restart that actually
+// SUCCEEDS — the false-negative i/o-timeout error. 90s comfortably covers the
+// default + typical-configured graceful window plus the launch sequence with
+// margin. (If graceful_timeout is configured far higher, revisit or derive this
+// from config.)
+const tmuxRestartCallTimeout = 90 * time.Second
+
 func tmuxCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "tmux",
@@ -9671,7 +9683,10 @@ Without arguments, shows a numbered list of alive sessions to choose from.`,
 				req["runtime"] = rt
 			}
 			var result cli.TmuxRestartResponse
-			if err := client.Call("tmux.restart", req, &result); err != nil {
+			// thrum-6yt7: use CallWithTimeout (not the 10s default Call) — a
+			// synchronous graceful restart routinely exceeds 10s and would
+			// otherwise return a false-negative i/o-timeout on a successful op.
+			if err := client.CallWithTimeout("tmux.restart", req, &result, tmuxRestartCallTimeout); err != nil {
 				return err
 			}
 
