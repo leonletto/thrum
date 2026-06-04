@@ -212,6 +212,29 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **Inbound nudges could land mid-keystroke and fragment a human's typing
+  (thrum-nlel / thrum-3i2s)** — the message-nudge dispatcher typed text+Enter
+  into a recipient pane with no typing/activity gate, so a nudge arriving while
+  someone was composing split their input. A chrome-quiet gate now composes with
+  the thrum-7phu dialog-defer gate: a rendered spinner fires immediately (the
+  agent owns the turn), otherwise the nudge waits until the input chrome is
+  quiet (window-activity silence or a stable bottom region), deadline-capped so
+  a continuously-busy pane still gets notified. No fire-path can trip
+  mid-keystroke. Tunable via the new `daemon.nudge` config block
+  (`chrome_quiet_seconds`, `dispatch_deadline_seconds`).
+- **Nudges auto-answered interactive selection dialogs (thrum-7phu)** — a
+  message nudge delivered while a recipient pane was showing an interactive
+  selection prompt typed Enter into the dialog, silently choosing an option.
+  Nudges are now deferred to a redelivery queue while a selection dialog (>=2
+  options) is up and redelivered once the pane is safe to type into.
+- **Daemon start-wait reported a false timeout during large-DB cross-version
+  upgrades (thrum-vh2c)** — when an older binary was replaced by a newer one
+  whose first boot ran a schema migration over a large database, the start-wait
+  loop hit its deadline before the migration finished and printed a spurious
+  "daemon failed to start" error even though startup was healthy and ongoing.
+  The wait path now surfaces live migration progress (current schema version →
+  target) instead of timing out blind, so the on-disk upgrade path on the 0.10.6
+  line no longer looks like a failure while it is actually working.
 - **Agents that lost their session became un-restartable (thrum-5oui)** — a
   caller was bound only while its worktree had an active session ref, so any
   agent whose session ended could not bootstrap a restart: `thrum tmux start`'s
