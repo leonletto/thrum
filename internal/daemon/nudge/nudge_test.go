@@ -2,6 +2,7 @@ package nudge_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -113,9 +114,9 @@ func TestResolveTarget_MalformedJSON(t *testing.T) {
 func TestDispatchTmux_NoOpOnEmptyInputs(t *testing.T) {
 	// Should not panic, should not block. The function spawns goroutines
 	// per recipient — with zero recipients it spawns nothing.
-	nudge.DispatchTmux("", []string{"alice"}, "bob")
-	nudge.DispatchTmux("/tmp/some/dir", nil, "bob")
-	nudge.DispatchTmux("/tmp/some/dir", []string{}, "bob")
+	nudge.DispatchTmux(context.Background(), "", []string{"alice"}, "bob")
+	nudge.DispatchTmux(context.Background(), "/tmp/some/dir", nil, "bob")
+	nudge.DispatchTmux(context.Background(), "/tmp/some/dir", []string{}, "bob")
 }
 
 // TestDispatchTmux_SkipsUnresolvableRecipients ensures a recipient with
@@ -130,7 +131,7 @@ func TestDispatchTmux_SkipsUnresolvableRecipients(t *testing.T) {
 	// spawn goroutines, find no targets, and complete silently. We can't
 	// directly assert "no nudge fired" without injecting a mock ttmux,
 	// but the test passes if no panic / no goroutine leak.
-	nudge.DispatchTmux(thrumDir, []string{"ghost1", "ghost2"}, "alice")
+	nudge.DispatchTmux(context.Background(), thrumDir, []string{"ghost1", "ghost2"}, "alice")
 	// No assertion needed — completing without panic is the test.
 }
 
@@ -168,7 +169,7 @@ func TestDispatchTmux_SkipsSelfEcho(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	nudge.DispatchTmux(thrumDir, []string{"alice", "bob"}, "alice")
+	nudge.DispatchTmux(context.Background(), thrumDir, []string{"alice", "bob"}, "alice")
 
 	// Drain background goroutines spawned for non-self recipients.
 	// The bob goroutine will fall through to ResolveTarget (returns "")
@@ -203,7 +204,7 @@ func TestDispatchTmux_SkipsSelfEcho_AllSelfRecipients(t *testing.T) {
 
 	// All three recipients equal the sender — every iteration must take
 	// the guard branch.
-	nudge.DispatchTmux(thrumDir, []string{"alice", "alice", "alice"}, "alice")
+	nudge.DispatchTmux(context.Background(), thrumDir, []string{"alice", "alice", "alice"}, "alice")
 
 	out := logBuf.String()
 	require.Equal(t, 3, strings.Count(out, "tmux.skip self"),
@@ -233,7 +234,7 @@ func TestDispatchTmux_EmptySenderName_TriggersGuard(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	// senderName="" and one recipient also "". Equality holds, guard fires.
-	nudge.DispatchTmux(thrumDir, []string{""}, "")
+	nudge.DispatchTmux(context.Background(), thrumDir, []string{""}, "")
 
 	out := logBuf.String()
 	require.Contains(t, out, "tmux.skip self",

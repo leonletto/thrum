@@ -1,9 +1,11 @@
 package nudge
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"testing"
 	"time"
@@ -29,10 +31,23 @@ func resetDeferredState(t *testing.T) {
 	origNudge := nudgeFn
 	origCapture := capturePaneFn
 	origHasSession := hasSessionFn
+	origLastActivity := lastActivityFn
+	origSleep := sleepFn
+	origSpinner := spinnerReFn
+	// Default chrome-quiet seams to "instantly quiet" so tests that exercise
+	// the safe-delivery path fire immediately via the idle fast-path instead of
+	// polling for the real 10s quiet window. Tests that need typing/spinner
+	// behavior override these explicitly (see quiet_gate_test.go).
+	lastActivityFn = func(string) (time.Time, error) { return timeNowFn().Add(-time.Hour), nil }
+	sleepFn = func(context.Context, time.Duration) bool { return true }
+	spinnerReFn = func(string) *regexp.Regexp { return nil }
 	t.Cleanup(func() {
 		nudgeFn = origNudge
 		capturePaneFn = origCapture
 		hasSessionFn = origHasSession
+		lastActivityFn = origLastActivity
+		sleepFn = origSleep
+		spinnerReFn = origSpinner
 		deferredMu.Lock()
 		deferredByS = map[string]deferredNudge{}
 		deferredMu.Unlock()
@@ -195,7 +210,7 @@ func TestDispatchTmux_DefersWhenDialogUp(t *testing.T) {
 	hasSessionFn = func(string) bool { return true }
 	capturePaneFn = func(string, int) (string, error) { return dialogPane, nil }
 
-	DispatchTmux(thrumDir, []string{"agt"}, "@sender")
+	DispatchTmux(context.Background(), thrumDir, []string{"agt"}, "@sender")
 
 	waitFor(t, func() bool { return HasDeferred("agt") })
 	if rec.count() != 0 {
@@ -211,7 +226,7 @@ func TestDispatchTmux_DeliversWhenSafe(t *testing.T) {
 	hasSessionFn = func(string) bool { return true }
 	capturePaneFn = func(string, int) (string, error) { return safePane, nil }
 
-	DispatchTmux(thrumDir, []string{"agt"}, "@sender")
+	DispatchTmux(context.Background(), thrumDir, []string{"agt"}, "@sender")
 
 	waitFor(t, func() bool { return rec.count() == 1 })
 	if HasDeferred("agt") {

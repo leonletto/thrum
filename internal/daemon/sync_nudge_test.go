@@ -140,7 +140,7 @@ func TestNudgeDispatch_GuardSkipsNonMessageEvents(t *testing.T) {
 		if err := json.Unmarshal(event, &evt); err != nil {
 			return
 		}
-		nudge.DispatchTmux(tmpDir, evt.Recipients, evt.AgentID)
+		nudge.DispatchTmux(context.Background(), tmpDir, evt.Recipients, evt.AgentID)
 		mu.Lock()
 		defer mu.Unlock()
 		nudgeDispatches++

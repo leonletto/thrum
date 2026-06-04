@@ -18,6 +18,7 @@ type ThrumConfig struct {
 	Telegram      TelegramConfig      `json:"telegram"`
 	Peers         PeersConfig         `json:"peers"`
 	Restart       RestartConfig       `json:"restart"`
+	Nudge         NudgeConfig         `json:"nudge,omitzero"` // omitzero: drop block when all fields default
 	Worktrees     WorktreesConfig     `json:"worktrees,omitempty"`
 	Orchestration OrchestrationConfig `json:"orchestration,omitempty"`
 
@@ -312,6 +313,42 @@ func (r RestartConfig) SilenceWatchdog() (seconds int, enabled bool) {
 		return 30, true
 	}
 	return r.SilenceWatchdogSeconds, true
+}
+
+// NudgeConfig tunes the inbound-message nudge dispatcher's chrome-quiet gate
+// (thrum-nlel / thrum-3i2s): the daemon waits until a recipient's input chrome
+// is quiet (no human typing) before injecting a nudge, so a nudge never lands
+// mid-keystroke. The gate is spinner-permissive — an agent actively generating
+// (spinner rendered) is fine to nudge; only active typing in the bottom input
+// chrome defers.
+type NudgeConfig struct {
+	// ChromeQuietSeconds is how long the input chrome must be quiet (no typing
+	// activity) before a deferred nudge fires. 0 = default (10s). Negative =
+	// gate disabled (nudges fire immediately, pre-nlel behavior).
+	ChromeQuietSeconds int `json:"chrome_quiet_seconds,omitempty"`
+	// DispatchDeadlineSeconds caps how long a nudge waits for quiet before
+	// firing anyway (so a continuously-busy pane still gets notified). 0 =
+	// default (60s). Negative = gate disabled.
+	DispatchDeadlineSeconds int `json:"dispatch_deadline_seconds,omitempty"`
+}
+
+// SilenceGate returns (chromeQuietSec, deadlineSec, enabled). A negative value
+// in EITHER field disables the gate (nudges fire immediately). Otherwise zero
+// fields take defaults: 10s chrome-quiet, 60s dispatch deadline. Mirrors the
+// negative-disables / zero-defaults shape of RestartConfig.SilenceWatchdog.
+func (n NudgeConfig) SilenceGate() (chromeQuietSec, deadlineSec int, enabled bool) {
+	if n.ChromeQuietSeconds < 0 || n.DispatchDeadlineSeconds < 0 {
+		return 0, 0, false
+	}
+	sil := n.ChromeQuietSeconds
+	if sil == 0 {
+		sil = 10
+	}
+	dl := n.DispatchDeadlineSeconds
+	if dl == 0 {
+		dl = 60
+	}
+	return sil, dl, true
 }
 
 // LoadThrumConfig reads .thrum/config.json from the given thrum directory.

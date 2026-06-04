@@ -911,3 +911,28 @@ func TestDaemonConfig_MaxMessageBodyBytesEffective(t *testing.T) {
 		})
 	}
 }
+
+func TestNudgeConfig_SilenceGate(t *testing.T) {
+	cases := []struct {
+		name        string
+		cfg         config.NudgeConfig
+		wantSil     int
+		wantDl      int
+		wantEnabled bool
+	}{
+		{"zero-uses-defaults", config.NudgeConfig{}, 10, 60, true},
+		{"explicit-values", config.NudgeConfig{ChromeQuietSeconds: 5, DispatchDeadlineSeconds: 30}, 5, 30, true},
+		{"negative-silence-disables", config.NudgeConfig{ChromeQuietSeconds: -1}, 0, 0, false},
+		{"negative-deadline-disables", config.NudgeConfig{DispatchDeadlineSeconds: -1}, 0, 0, false},
+		{"silence-set-deadline-default", config.NudgeConfig{ChromeQuietSeconds: 8}, 8, 60, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sil, dl, enabled := tc.cfg.SilenceGate()
+			if sil != tc.wantSil || dl != tc.wantDl || enabled != tc.wantEnabled {
+				t.Fatalf("SilenceGate() = (%d, %d, %v), want (%d, %d, %v)",
+					sil, dl, enabled, tc.wantSil, tc.wantDl, tc.wantEnabled)
+			}
+		})
+	}
+}

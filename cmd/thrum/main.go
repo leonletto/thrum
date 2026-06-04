@@ -6354,7 +6354,11 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			"session_id", evt.SessionID,
 			"thrum_dir", thrumDir,
 		)
-		nudge.DispatchTmux(thrumDir, evt.Recipients, evt.AgentID)
+		// context.Background(): the SetOnEventWrite hook has no ctx in its
+		// signature; DispatchTmux's goroutines are fire-and-forget and bounded
+		// by the chrome-quiet dispatch deadline, and die with the process on
+		// shutdown. (Matches this hook's existing context.Background() usage.)
+		nudge.DispatchTmux(context.Background(), thrumDir, evt.Recipients, evt.AgentID)
 
 		// hook-inbox-delivery: write a spool file for every LOCAL recipient.
 		// "Local" means the recipient has an identity file reachable from

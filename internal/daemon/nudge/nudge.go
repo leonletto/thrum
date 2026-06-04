@@ -27,7 +27,6 @@ import (
 	"strings"
 
 	"github.com/leonletto/thrum/internal/config"
-	"github.com/leonletto/thrum/internal/daemon/permission"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
 )
@@ -63,7 +62,7 @@ func realNudge(target, sender string) error { return ttmux.Nudge(target, sender)
 // and returns immediately. Failures are intentionally swallowed because
 // nudges are advisory — losing one is acceptable, blocking the event
 // pipeline on a slow tmux is not.
-func DispatchTmux(thrumDir string, recipients []string, senderName string) {
+func DispatchTmux(ctx context.Context, thrumDir string, recipients []string, senderName string) {
 	if thrumDir == "" || len(recipients) == 0 {
 		slog.Info("[nudge] nudge.DispatchTmux skip empty",
 			"sender", senderName,
@@ -109,26 +108,30 @@ func DispatchTmux(thrumDir string, recipients []string, senderName string) {
 				)
 				return
 			}
-			// thrum-7phu: never type into a pane showing an interactive
-			// selection dialog (permission modal, trust gate, or an
-			// AskUserQuestion menu) — the text + Enter would auto-answer a
-			// human decision. Defer the poke; the permission poller's
-			// HandleCheckPane re-delivers it via RedeliverIfSafe once the
-			// pane clears. On a capture error we fall through and nudge
-			// (preserve prior behavior — capture failures are rare and the
-			// alternative risks never notifying).
-			if content, err := capturePaneFn(target, capturePaneLines); err == nil &&
-				!permission.IsPaneSafeToType(runtime, content) {
+			// Chrome-quiet gate (thrum-nlel / thrum-3i2s) composed with the
+			// thrum-7phu dialog gate: poll until the input chrome is quiet
+			// (no human typing), spinner-permissive. The gate also owns the
+			// 7phu dialog check (re-checked every poll) — a dialog defers to
+			// the RedeliverIfSafe queue; a daemon-shutdown ctx drops the poke
+			// (the spool still carries the message). See quiet_gate.go.
+			switch paneQuietForNudge(ctx, thrumDir, target, runtime) {
+			case nudgeDefer:
 				DeferNudge(session, target, senderName)
 				return
+			case nudgeDrop:
+				slog.Info("[nudge] nudge.DispatchTmux dropped (ctx cancelled during chrome-quiet wait)",
+					"sender", senderName, "recipient", name, "target", target, "session", session,
+				)
+				return
+			case nudgeFire:
+				slog.Info("[nudge] nudge.DispatchTmux fire",
+					"sender", senderName,
+					"recipient", name,
+					"target", target,
+					"session", session,
+				)
+				_ = nudgeFn(target, senderName)
 			}
-			slog.Info("[nudge] nudge.DispatchTmux fire",
-				"sender", senderName,
-				"recipient", name,
-				"target", target,
-				"session", session,
-			)
-			_ = nudgeFn(target, senderName)
 		}(recipientName)
 	}
 }
