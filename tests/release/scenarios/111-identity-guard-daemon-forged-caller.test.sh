@@ -21,16 +21,33 @@
 #   2. response leaks no message rows
 #   3. positive sanity: legitimate CLI caller still works
 #
-# NOTE (first-time-green): not yet walked to green on the harness. The exact
-# refusal behavior of a raw-socket caller (peercred sees the python3 PID, which
-# is unregistered) needs empirical confirmation via run-subset.sh 111 — if the
-# anonymous path yields an empty result instead of an error, assertion 1 should
-# be relaxed to "no message rows" (assertion 2 already covers the no-leak
-# invariant, which is the security-critical property).
+# WALKED TO GREEN (rc.7, 2026-06-03): empirically confirmed via run-subset 111.
+# The raw-socket caller forges the REGISTERED test_fixture id; peercred sees the
+# python3 PID (unregistered), so resolveAgentOnly propagates the *guard.Error and
+# HandleList refuses — assertion 1 (forged-caller-gets-rpc-error) holds as the
+# hard refusal, not just the relaxed no-rows shape. Two wiring fixes were needed:
+# (a) ephemeral_daemon_start is now sourced via helpers/all.sh; (b) the fixture
+# register + legit-caller use the canonical cd+unset-THRUM_HOME pattern
+# (_thrum_in_fixture, mirroring assert-daemon.sh::_thrum_as) instead of
+# tmux-exec, which can't see the ephemeral fixture's .thrum/. The quickstart
+# call dropped a non-existent --non-interactive flag (release-line quickstart
+# has no such flag); --name/--role/--module are sufficient and non-blocking.
 
 SID="111-identity-guard-daemon-forged-caller"
-TE="$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec"
 SUB_FIXTURE="$(mktemp -d "/tmp/ig2-${RUNID}.XXXXXX")"
+
+# Canonical ephemeral-fixture call pattern (mirrors assert-daemon.sh::_thrum_as):
+# cd into FIXTURE_REPO so identity-file lookup finds the fixture's .thrum/, and
+# unset THRUM_HOME/THRUM_AGENT_ID/THRUM_INTENT so the harness's own env doesn't
+# leak the wrong identity. tmux-exec is the WRONG surface here — it routes
+# through the shared pool pane whose identity resolution can't see the ephemeral
+# fixture's .thrum/, yielding "no identity files found".
+_thrum_in_fixture() {
+  local agent="$1"; shift
+  ( cd "$FIXTURE_REPO" \
+    && env -u THRUM_HOME -u THRUM_AGENT_ID -u THRUM_INTENT THRUM_NAME="$agent" \
+       thrum --repo "$FIXTURE_REPO" "$@" )
+}
 
 _run_scenario_111() {
 
@@ -42,9 +59,11 @@ _run_scenario_111() {
   trap 'ephemeral_daemon_stop; rm -rf "$SUB_FIXTURE"' RETURN
 
   # Register an agent in the fixture so there is a real identity to forge.
-  "$TE" exec --cwd "$FIXTURE_REPO" --clean -- \
-    env THRUM_NAME=test_fixture thrum quickstart \
-    --name test_fixture --role implementer --module all --non-interactive \
+  # Must SUCCEED — an unregistered name falls to the anonymous path and would
+  # make assertion 1 pass for the wrong reason (empty inbox, not a forgery
+  # refusal). The legit-caller assertion below confirms the identity landed.
+  _thrum_in_fixture test_fixture quickstart \
+    --name test_fixture --role implementer --module all \
     >/dev/null 2>&1 || true
 
   local SOCK="$FIXTURE_REPO/.thrum/var/thrum.sock"
@@ -106,9 +125,7 @@ PYEOF
   # Assertion 3: positive sanity — legitimate CLI caller still works.
   local legit_out legit_rc
   legit_out="$(mktemp -t kafm-IG2-legit.XXXXXX)"
-  "$TE" exec --cwd "$FIXTURE_REPO" --clean -- \
-    env THRUM_NAME=test_fixture thrum inbox \
-    > "$legit_out" 2>&1
+  _thrum_in_fixture test_fixture inbox > "$legit_out" 2>&1
   legit_rc=$?
   if [ "$legit_rc" -eq 0 ]; then
     emit_pass "$SID" "legit-caller-still-works"
