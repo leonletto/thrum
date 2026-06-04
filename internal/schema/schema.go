@@ -898,6 +898,20 @@ Recovery options:
 			dbPath, dbPath, dbPath)
 	}
 
+	// Arm the migration-progress reporter (thrum-vh2c) BEFORE the slow backup so
+	// the waiting CLI (`thrum daemon start/restart`) can show a spinner and
+	// extend its start-wait while the migration is observably progressing,
+	// instead of false-timing-out on a long cross-version migration of a large
+	// DB. The reporter writes a heartbeating status file next to the DB; the CLI
+	// tails it. Best-effort + nil-safe: a write failure returns a nil reporter
+	// and migration proceeds exactly as before. The status file lives in the
+	// var dir (same dir as the DB). Skipped for in-memory test DBs (dbFile == "").
+	var reporter *migrationReporter
+	if dbFile != "" {
+		reporter = startMigrationReporter(filepath.Dir(dbFile), currentVersion, CurrentVersion)
+	}
+	defer reporter.Done() // nil-safe; removes the status file on every return path
+
 	// Back up the DB file + WAL/SHM sidecars before any migration runs so the
 	// operator can revert cleanly by renaming the backup back. Each migration
 	// event gets its own timestamped, lexically-sortable snapshot (UTC), so
@@ -927,6 +941,7 @@ Recovery options:
 		// evidence to distinguish "daemon didn't pick up the new binary"
 		// from "migration silently failed".
 		log.Printf("[schema] migrating DB from v%d to v%d", currentVersion, CurrentVersion)
+		reporter.setPhase(MigrationPhaseMigrating) // nil-safe
 		if err := runMigrations(db, currentVersion, CurrentVersion); err != nil {
 			return fmt.Errorf("run migrations: %w", err)
 		}

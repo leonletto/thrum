@@ -72,6 +72,12 @@ func NewState(thrumDir string, syncDir string, repoID string, daemonID string) (
 		return nil, fmt.Errorf("create var directory: %w", err)
 	}
 
+	// thrum-vh2c: clear any stale migration-progress file left by a previously
+	// crashed boot, so the waiting CLI never tails a frozen heartbeat from a
+	// dead process. If a migration actually runs below, schema.Migrate
+	// re-creates this file with a live heartbeat.
+	schema.ClearStaleMigrationStatus(varDir)
+
 	// Open SQLite database with schema initialization
 	dbPath := filepath.Join(thrumDir, "var", "messages.db")
 	db, err := schema.OpenDB(dbPath)
