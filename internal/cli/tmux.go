@@ -63,10 +63,25 @@ type TmuxCaptureResponse struct {
 
 // RPC call functions
 
+// tmuxCreateLaunchCallTimeout bounds the client socket deadline for
+// `thrum tmux create` and `thrum tmux launch` (thrum-6yt7 sibling fix). The
+// default 10s call timeout is too short: HandleCreate is synchronous (worktree
+// create + agent register + tmux session spawn) and HandleLaunch boots the
+// runtime + waits for the shell-ready probe. Under fleet load on the target
+// daemon both routinely exceed 10s, so the bare client.Call read times out on
+// an op that actually SUCCEEDED — the same false-negative i/o-timeout 6yt7 fixed
+// for tmux.restart (observed on the full release-test gate: 26/69/70-75 chain).
+// 90s mirrors tmuxRestartCallTimeout and comfortably covers create+launch under
+// load with margin; a genuinely hung daemon still surfaces at 90s.
+const tmuxCreateLaunchCallTimeout = 90 * time.Second
+
 // TmuxCreate calls the tmux.create RPC to create a new managed session.
 func TmuxCreate(client *Client, opts TmuxCreateOptions) (*TmuxCreateResponse, error) {
 	var result TmuxCreateResponse
-	if err := client.Call("tmux.create", opts, &result); err != nil {
+	// thrum-6yt7 sibling: CallWithTimeout (not the 10s default Call) — a
+	// synchronous create under load exceeds 10s and would otherwise return a
+	// false-negative i/o-timeout on a successful op.
+	if err := client.CallWithTimeout("tmux.create", opts, &result, tmuxCreateLaunchCallTimeout); err != nil {
 		return nil, fmt.Errorf("tmux.create: %w", err)
 	}
 	return &result, nil
@@ -76,7 +91,10 @@ func TmuxCreate(client *Client, opts TmuxCreateOptions) (*TmuxCreateResponse, er
 func TmuxLaunch(client *Client, opts TmuxLaunchOptions) (*TmuxLaunchResponse, error) {
 	req := map[string]string{"name": opts.Name, "runtime": opts.Runtime}
 	var result TmuxLaunchResponse
-	if err := client.Call("tmux.launch", req, &result); err != nil {
+	// thrum-6yt7 sibling: CallWithTimeout (not the 10s default Call) — launch
+	// boots the runtime + waits for the shell-ready probe, which exceeds 10s
+	// under load and would otherwise false-negative on a successful launch.
+	if err := client.CallWithTimeout("tmux.launch", req, &result, tmuxCreateLaunchCallTimeout); err != nil {
 		return nil, fmt.Errorf("tmux.launch: %w", err)
 	}
 	return &result, nil
