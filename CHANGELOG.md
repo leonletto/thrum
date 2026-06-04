@@ -31,6 +31,13 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Added
 
+- **Snapshot/sleep restart skill family — `/thrum:restart-extended`,
+  `/thrum:sleep`, `/thrum:sleep-extended`, plus a shared `_snapshot-protocol`
+  partial (thrum-rwhg)** — `/thrum:restart` is slimmed to consume the shared
+  snapshot-composition protocol; the `-extended` variants add the 16-section
+  designer/architect-grade handoff structure, and the `sleep` variants park an
+  agent for operator-initiated wake. Re-landed onto the release line and
+  regenerated for the codex/cursor/opencode runtimes via `sync-skills.sh`.
 - **Agent-status Pattern D wiring + STUCK-WORKING sweep detection (thrum-9neg)**
   — implementer and researcher skill templates now set `agent_status=working` on
   dispatch ACK and `agent_status=idle` on DONE / response, written via
@@ -191,9 +198,46 @@ visibility into v0.10.6 authors until they upgrade.
   fires after the RPC ack, so the side-effect is automatically suppressed.
   Companion to the thrum-tgqx.1 fail-closed pattern; reuses the existing
   `resolveCallerWorktreeFn` test seam and `IsAgentInWorktree` predicate.
+- **Close the identity-guard fail-open on the message read path (thrum-tgqx
+  E2)** — read-only RPC handlers (`message.list` / `outbox` / `deleteByAgent`)
+  absorbed every `DaemonResolve` error to an empty caller and fell through to the
+  untrusted caller-supplied `for_agent` filter, exposing another worktree's inbox
+  despite the cross-worktree guard firing. `resolveAgentOnly` now
+  reason-discriminates — it propagates the guard error (refusing the RPC) ONLY
+  for an `identity_mismatch` forgery, while genuinely-anonymous callers still get
+  the designed `anonymousAllowedMethods` bare read. `HandleList` additionally
+  attests caller-supplied `for_agent` / `for_agent_role` against the
+  kernel-verified peercred identity (gating on `peercredRan` alone), so an
+  anonymous caller can no longer read a victim's inbox via those fields.
 
 ### Fixed
 
+- **Agents that lost their session became un-restartable (thrum-5oui)** — a
+  caller was bound only while its worktree had an active session ref, so any
+  agent whose session ended could not bootstrap a restart: `thrum tmux start`'s
+  `tmux.create` + `tmux.launch` were rejected as anonymous. Both are now in the
+  daemon's anonymous-allowlist (unix-socket-only — never on the WebSocket/peer
+  transport, pinned by a structural guard that scans all of `cmd/thrum`), closing
+  the agent-restart failure class.
+- **`agent.listContext` (and so `thrum prime`) stalled under fleet load
+  (thrum-5988)** — `HandleListContext` is read-only but took the global write
+  `Lock()`, serializing every concurrent reader behind structural writers (the
+  ~10s prime stall on a busy daemon). It now takes `RLock()` so reads run in
+  parallel.
+- **`thrum quickstart` did not refresh `agent_pid` in the identity file —
+  pid-drift recovery broken (thrum-ipbl)** — only `thrum prime` wrote the PID, so
+  after a runtime restart (e.g. `/login`) the file kept the dead PID and every
+  guarded CLI call failed `pid_mismatch`. quickstart now writes the PID with a
+  PID-aware, owner-protecting policy: a live runtime ancestor writes its PID; a
+  bare shell never clobbers a live owner and frees a dead slot to 0.
+- **`thrum tmux restart` returned a false-negative i/o-timeout on a successful
+  restart (thrum-6yt7)** — the client used the 10s default call deadline while a
+  synchronous graceful restart can take up to `graceful_timeout` (30s default)
+  plus the kill/create/launch sequence. The restart client call now uses a 90s
+  deadline.
+- **Codex skill generation drifted on every `make fmt-md` (thrum-pp6n)** —
+  `sync-skills.sh` now runs the same prettier pass over the generated codex tree,
+  so generation is idempotent against `make fmt-md`.
 - **Killed agents could not be restarted via `thrum tmux start` — boot reconcile
   resurrected a dead runtime's PID (thrum-mnhp, regression from thrum-qxr3)** —
   qxr3 (shipped in rc.5) made boot reconcile write the identity-file `AgentPID`

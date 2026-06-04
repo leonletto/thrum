@@ -119,6 +119,14 @@ rate limits, or it's stuck. It runs the `/thrum:restart` skill, which:
 The agent doesn't kill itself. It lets the coordinator (or operator) orchestrate
 the restart.
 
+**Variants.** `/thrum:restart-extended` saves a deeper 16-section
+designer/architect-grade snapshot (wire contracts, capability matrix, design
+rationale) for handoffs that need more than the standard 11-section structure.
+`/thrum:sleep` and `/thrum:sleep-extended` are the operator-shutdown path: they
+save a snapshot and then kill the agent's own tmux session _without_ signaling
+the coordinator — use them when the operator is shutting down (e.g. a machine
+restart) and the agent should resume from its snapshot on next boot.
+
 #### Resume Plan
 
 The `/thrum:restart` skill appends a structured `## Resume Plan` block to the
