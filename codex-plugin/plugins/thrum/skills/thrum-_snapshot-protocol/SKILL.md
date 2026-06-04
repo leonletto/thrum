@@ -22,10 +22,16 @@ This is the canonical source-of-truth for snapshot composition discipline. The
 four sibling commands compose: read this partial → variant-specific terminal
 action. Do NOT invoke this file directly; it has no terminal action.
 
-### Step 1 — Resolve identity and repo root
+### Step 1 — Resolve identity and your worktree
 
 ```bash
-REPO=$(git rev-parse --show-toplevel) || { echo "ERROR: not in a git worktree"; exit 1; }
+# $REPO must be YOUR worktree — the directory `thrum prime` reads the restart
+# snapshot back from. Resolve it from the daemon's authoritative identity, NOT
+# `git rev-parse` (which keys off the current shell CWD and would write to the
+# wrong .thrum/restart/ if a bash step left your worktree). Fall back to git
+# only if whoami can't answer.
+REPO=$(thrum whoami --field worktree 2>/dev/null)
+[ -n "$REPO" ] || REPO=$(git rev-parse --show-toplevel) || { echo "ERROR: cannot resolve your worktree"; exit 1; }
 AGENT=$(thrum whoami --field agent_id) || { echo "ERROR: agent not registered"; exit 1; }
 [ -n "$AGENT" ] || { echo "ERROR: empty agent_id"; exit 1; }
 mkdir -p "${REPO}/.thrum/restart"
