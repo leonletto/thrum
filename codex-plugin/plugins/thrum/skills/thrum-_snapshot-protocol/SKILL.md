@@ -47,11 +47,11 @@ decisions, the cycles closed. Examples:
 > Locked the session-archive spec v2 with §1 Big picture requirement, five
 > Q-Spec approvals, and Q-Spec-5 deferred to impl-time. Hand-off pending
 > coordinator final review.
-
+>
 > Investigated rc.9 inbox-race against impl_inbox_race's hypothesis: confirmed
 > the lock-substrate fence is the right fix. Filed thrum-XXX with 4 BLOCKING
 > evidence points.
-
+>
 > Closed B-B1 E6.0 brainstormer-third pass. 2 BLOCKING + 5 IMPORTANT + 10 MINOR.
 > All three load-bearing traps PASSed. Standing by for E6.1 next batch.
 
@@ -141,7 +141,7 @@ use a visually distinct convention from standard to signal grade difference.
 Each section names a concern; write as prose, a table, or omit with an explicit
 "N/A: <reason>" rather than skipping silently.
 
-```
+```text
 §1.  Header block — author / date / restart reason / restart-you mandate / context-percent at write time
 §2.  Identity — agent_id / worktree path / branch / role / coordinator name / cut-point commit SHA
 §3.  Big picture — what shipped this session  [REQUIRED FIRST PROSE — mirrors standard §1]
