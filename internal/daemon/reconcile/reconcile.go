@@ -22,6 +22,17 @@ type Manager struct {
 	local    DialerIdentity
 	logger   *log.Logger
 
+	// localAddrFn, when set, supplies the dialer-advertised address at DIAL
+	// time instead of the static local.Address captured at construction
+	// (thrum-hix5). The tsnet-reachable address is set ASYNC when the tsnet
+	// listener starts, so it is unknown when this Manager is built; resolving
+	// it lazily avoids advertising a stale/empty/loopback address (the
+	// ":"+wsPort bug that corrupted a peer entry to ":51953"). A nil fn keeps
+	// the legacy static-Address behavior (used by tests). When set, its return
+	// is authoritative — "" is the safe "no reachable address yet, don't
+	// update my record" signal (repair.go only overwrites when address != "").
+	localAddrFn func() string
+
 	// locks serializes concurrent reconciles for the SAME peer.
 	// Different peers run in parallel. Keyed by peer name. Entries
 	// are never deleted; the map footprint is bounded by the number
@@ -61,6 +72,17 @@ func NewManager(r *daemon.PeerRegistry, d DialFunc, local DialerIdentity) *Manag
 // capturing reconcile diagnostics without polluting stderr.
 func (m *Manager) WithLogger(l *log.Logger) *Manager {
 	m.logger = l
+	return m
+}
+
+// WithLocalAddrFn sets the lazy dialer-address resolver (thrum-hix5). The fn is
+// called at each dial to supply the address advertised in peer.repair, so the
+// daemon's tsnet-reachable address (set ASYNC at tsnet start, unknown at
+// construction) is reflected instead of a stale construction-time value. Wire
+// it with the same getter the manual-repair/advertise paths use
+// (daemon_run.go getTsLocalAddr). Returns the Manager for chaining.
+func (m *Manager) WithLocalAddrFn(fn func() string) *Manager {
+	m.localAddrFn = fn
 	return m
 }
 
@@ -131,7 +153,18 @@ func (m *Manager) ReconcileOne(ctx context.Context, peerName string) (Result, er
 		return res, nil
 	}
 
-	resp, err := m.dial(ctx, p.Address, p.Token, m.local)
+	// thrum-hix5: resolve the dialer-advertised address at DIAL time. The
+	// tsnet-reachable address is unknown when this Manager was constructed
+	// (tsnet starts async), so a static local.Address would advertise a
+	// stale/wrong value to the responder. When a getter is wired, its return is
+	// authoritative — including "" (tsnet not up yet), which repair.go treats
+	// as "don't update my record" rather than corrupting it.
+	local := m.local
+	if m.localAddrFn != nil {
+		local.Address = m.localAddrFn()
+	}
+
+	resp, err := m.dial(ctx, p.Address, p.Token, local)
 	res.Category = CategorizeErr(err)
 	res.Err = err
 

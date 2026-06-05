@@ -54,6 +54,91 @@ func TestReconcileOne_SuccessUpdatesDaemonIDAndClearsStatus(t *testing.T) {
 	}
 }
 
+// TestReconcileOne_ResolvesLocalAddrLazilyAtDialTime is the thrum-hix5
+// regression. The tsnet-reachable address is set ASYNC at tsnet start — it is
+// unknown when the reconcile Manager is constructed. The dialer-advertised
+// address (sent in peer.repair so the responder refreshes its record of us)
+// MUST therefore be resolved from the live getter at DIAL time, not captured by
+// value at construction. Otherwise we advertise a stale/wrong address (the
+// ":"+wsPort loopback bug that corrupted a peer entry to ":51953").
+func TestReconcileOne_ResolvesLocalAddrLazilyAtDialTime(t *testing.T) {
+	r := mkRegistry(t)
+	if err := r.AddPeer(&daemon.PeerInfo{
+		Name: "a", DaemonID: "01D", Address: "x:1", Token: "t", Transport: "network",
+	}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	var gotAddr string
+	fake := func(ctx context.Context, addr, tok string, local DialerIdentity) (RepairResponse, error) {
+		gotAddr = local.Address
+		return RepairResponse{DaemonID: "01D", Name: "a"}, nil
+	}
+	// Static Address empty at construction (tsnet not up); the getter returns
+	// the live tsnet addr that only becomes known AFTER construction.
+	tsAddr := ""
+	mgr := NewManager(r, fake, DialerIdentity{DaemonID: "self", Address: ""}).
+		WithLocalAddrFn(func() string { return tsAddr })
+	// Mutate tsAddr AFTER building the Manager: if the getter were evaluated at
+	// construction (not lazily at dial), gotAddr would be "" — the regression.
+	tsAddr = "100.64.0.7:9177" // tsnet came up after the Manager was built
+	if _, err := mgr.ReconcileOne(context.Background(), "a"); err != nil {
+		t.Fatalf("ReconcileOne: %v", err)
+	}
+	if gotAddr != "100.64.0.7:9177" {
+		t.Errorf("dialer advertised %q, want the lazily-resolved tsnet addr 100.64.0.7:9177", gotAddr)
+	}
+}
+
+// TestReconcileOne_LocalAddrFnEmpty_AdvertisesEmpty confirms that when the
+// getter returns "" (tsnet not up yet), the dialer advertises EMPTY rather than
+// any stale/wrong value. repair.go only overwrites the responder's stored
+// address when the advertised address != "", so empty is the safe "don't touch
+// my record" signal — never a wrong loopback addr.
+func TestReconcileOne_LocalAddrFnEmpty_AdvertisesEmpty(t *testing.T) {
+	r := mkRegistry(t)
+	if err := r.AddPeer(&daemon.PeerInfo{
+		Name: "a", DaemonID: "01D", Address: "x:1", Token: "t", Transport: "network",
+	}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	var gotAddr string
+	fake := func(ctx context.Context, addr, tok string, local DialerIdentity) (RepairResponse, error) {
+		gotAddr = local.Address
+		return RepairResponse{DaemonID: "01D", Name: "a"}, nil
+	}
+	mgr := NewManager(r, fake, DialerIdentity{DaemonID: "self", Address: ""}).
+		WithLocalAddrFn(func() string { return "" })
+	if _, err := mgr.ReconcileOne(context.Background(), "a"); err != nil {
+		t.Fatalf("ReconcileOne: %v", err)
+	}
+	if gotAddr != "" {
+		t.Errorf("dialer advertised %q, want empty when the tsnet addr is unknown", gotAddr)
+	}
+}
+
+// TestReconcileOne_NoLocalAddrFn_UsesStaticAddr pins the legacy/no-getter path:
+// without WithLocalAddrFn the static DialerIdentity.Address is used as-is.
+func TestReconcileOne_NoLocalAddrFn_UsesStaticAddr(t *testing.T) {
+	r := mkRegistry(t)
+	if err := r.AddPeer(&daemon.PeerInfo{
+		Name: "a", DaemonID: "01D", Address: "x:1", Token: "t", Transport: "network",
+	}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	var gotAddr string
+	fake := func(ctx context.Context, addr, tok string, local DialerIdentity) (RepairResponse, error) {
+		gotAddr = local.Address
+		return RepairResponse{DaemonID: "01D", Name: "a"}, nil
+	}
+	mgr := NewManager(r, fake, DialerIdentity{DaemonID: "self", Address: "static:9999"})
+	if _, err := mgr.ReconcileOne(context.Background(), "a"); err != nil {
+		t.Fatalf("ReconcileOne: %v", err)
+	}
+	if gotAddr != "static:9999" {
+		t.Errorf("dialer advertised %q, want the static addr static:9999 when no getter is set", gotAddr)
+	}
+}
+
 func TestReconcileOne_SameDaemonID_ClearsDriftFlag(t *testing.T) {
 	r := mkRegistry(t)
 	if err := r.AddPeer(&daemon.PeerInfo{

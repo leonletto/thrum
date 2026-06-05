@@ -7646,18 +7646,31 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	if peerManager != nil && peerRegistry != nil {
 		localIdent := st.Identity()
 		// I7 review finding: Address was previously empty here, so the
-		// peer.repair request sent an empty address field and the
-		// listener could not update its cached view of us. Supply the
-		// WS port (same format peers store as PeerInfo.Address).
+		// peer.repair request sent an empty address field and the listener
+		// could not update its cached view of us.
+		//
+		// thrum-hix5: the I7 fix supplied ":"+wsPort (the LOCAL loopback ws
+		// port), which is WRONG for a cross-host tsnet peer — it advertised
+		// e.g. ":51953" and the responder stored that loopback addr, breaking
+		// its sync/repair toward us. The correct value is the tsnet-reachable
+		// address, but that is set ASYNC when the tsnet listener starts and is
+		// unknown HERE. So leave Address empty and resolve it lazily at dial
+		// time via WithLocalAddrFn(getTsLocalAddr) below — the same getter the
+		// manual-repair + advertise paths use. Empty-until-tsnet-up is safe:
+		// repair.go only overwrites the responder's record when address != "",
+		// so an empty advertise leaves the responder's existing (working) entry
+		// untouched. This is strictly safer than the old ":"+wsPort, which had
+		// an EMPTY HOST and so corrupted EVERY remote peer's stored address into
+		// an unconnectable ":<port>" (the hix5 symptom).
 		localDialer := reconcile.DialerIdentity{
 			DaemonID:     peerRegistry.LocalDaemonID(),
-			Address:      ":" + wsPort,
 			RepoName:     localIdent.RepoName,
 			Hostname:     localIdent.Hostname,
 			RepoPath:     localIdent.RepoPath,
 			GitOriginURL: localIdent.GitOriginURL,
 		}
-		reconcileMgr = reconcile.NewManager(peerRegistry, reconcile.WSDial, localDialer)
+		reconcileMgr = reconcile.NewManager(peerRegistry, reconcile.WSDial, localDialer).
+			WithLocalAddrFn(getTsLocalAddr) // thrum-hix5: advertise the tsnet addr (resolved at dial time), not ":"+wsPort
 		peerManager.SetReconcileManager(reconcileMgr)
 	}
 
