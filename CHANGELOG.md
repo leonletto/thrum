@@ -212,6 +212,16 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **Auto-reconcile advertised a loopback ws port, corrupting peers' stored
+  address (thrum-hix5)** — the auto-reconcile Manager built its peer.repair
+  dialer identity with the daemon's local loopback ws port (`:<port>`,
+  host-stripped). When it dialed a peer, the responder stored that as our
+  address, corrupting the peer's record into an unconnectable `:<port>` and
+  breaking that peer's periodic sync + repair toward us (observed stalling
+  cross-host direct sync for hours). The advertised address is now resolved
+  lazily at dial time from the daemon's tsnet-reachable address (empty until the
+  tsnet listener is up, which the responder safely ignores rather than storing a
+  wrong value).
 - **Inbound nudges could land mid-keystroke and fragment a human's typing
   (thrum-nlel / thrum-3i2s)** — the message-nudge dispatcher typed text+Enter
   into a recipient pane with no typing/activity gate, so a nudge arriving while
