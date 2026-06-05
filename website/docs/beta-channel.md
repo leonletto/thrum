@@ -47,39 +47,36 @@ they're parameterized over `VERSION` and the release branch.
 ## Stable-track current pre-release
 
 > **Current stable-track pre-release:
-> [`v0.10.6-rc.7`](https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.7)**
-> (tagged 2026-06-04, in soak). **rc.7 closes the agent-restart failure class**
-> and relands the snapshot/sleep skill family. Several independent bugs could
-> each leave an agent un-restartable. A caller was bound only while its worktree
-> had an active session ref, so any agent whose session ended couldn't bootstrap
-> a restart — `thrum tmux start`'s `tmux.create` + `tmux.launch` were rejected
-> as anonymous; both now sit in the daemon's anonymous-allowlist (unix-socket
-> only, never on the WebSocket/peer transport, pinned by a structural guard
-> scanning all of `cmd/thrum`) (thrum-5oui). `thrum quickstart` now refreshes
-> `agent_pid` in the identity file with a PID-aware, owner-protecting policy, so
-> pid-drift recovery after a runtime restart (e.g. `/login`) stops failing every
-> guarded call with `pid_mismatch` (thrum-ipbl). `thrum tmux restart` no longer
-> returns a false-negative i/o-timeout on a successful restart — the client call
-> uses a 90s deadline instead of the 10s default, covering the
-> graceful-restart + kill/create/launch sequence (thrum-6yt7). And rc.6's
-> boot-reconcile dead-PID resurrection fix (thrum-mnhp) is folded in. The
-> `thrum prime` stall also gets its daemon-side root-cause fix:
-> `HandleListContext` now takes a read lock instead of the global write lock, so
-> reads run in parallel under fleet load (thrum-5988, complementing rc.5's
-> client-side mitigation).
+> [`v0.10.6-rc.8`](https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.8)**
+> (tagged 2026-06-04, in soak). **rc.8 hardens the message-nudge subsystem** so
+> inbound nudges never corrupt a recipient's terminal. Three fixes: a nudge that
+> arrived while someone was composing used to type into the pane mid-keystroke
+> and fragment their input — a **chrome-quiet gate** now holds the nudge until
+> the input chrome is quiet (window-activity silence or a stable bottom region),
+> deadline-capped so a continuously-busy pane still gets notified, and composing
+> with the dialog-defer gate means no fire-path can trip mid-keystroke
+> (thrum-nlel / thrum-3i2s; tunable via the new `daemon.nudge` config block —
+> `chrome_quiet_seconds`, `dispatch_deadline_seconds`). A nudge delivered while
+> a pane showed an interactive selection prompt used to type Enter and silently
+> choose an option — nudges are now **deferred to a redelivery queue** while a
+> selection dialog (≥2 options) is up and redelivered once the pane is safe to
+> type into (thrum-7phu). And the daemon start-wait no longer reports a false
+> timeout during large-DB cross-version upgrades: the wait path now **surfaces
+> live migration progress** (current schema version → target) instead of timing
+> out blind while a first-boot migration is still healthily running
+> (thrum-vh2c).
 >
-> New this RC: a **snapshot/sleep restart skill family** (thrum-rwhg) —
-> `/thrum:restart-extended`, `/thrum:sleep`, and `/thrum:sleep-extended`, plus a
-> shared `_snapshot-protocol` partial that the slimmed `/thrum:restart` now
-> consumes. The `-extended` variants add a 16-section designer/architect-grade
-> handoff structure; the `sleep` variants park an agent for operator-initiated
-> wake. Identity-guard also closes a fail-open on the message-read path
-> (thrum-tgqx), and restart snapshots now anchor to the agent's worktree rather
-> than the shell CWD.
+> rc.7's agent-restart reliability carries forward: the un-restartable-agent
+> class is closed (thrum-5oui anonymous-allowlist for `tmux.create`/`launch`,
+> thrum-ipbl `quickstart` PID refresh for pid-drift recovery, thrum-6yt7 90s
+> restart deadline, plus rc.6's thrum-mnhp dead-PID guard), the `thrum prime`
+> daemon-side `RLock` root-cause fix (thrum-5988), the snapshot/sleep skill
+> family (thrum-rwhg — `/thrum:restart-extended`, `/thrum:sleep`,
+> `/thrum:sleep-extended`), and the identity-guard message-read fail-open close
+> (thrum-tgqx).
 >
-> Earlier v0.10.6 RCs carry forward — rc.6/rc.5 fleet-operations work: the
-> `thrum prime` ~10s-stall client mitigation (thrum-5988), two sweep ctx%
-> corrections (thrum-4pd1 Opus 4.8 1M-window denominator, thrum-roeq
+> Earlier v0.10.6 RCs carry forward — rc.6/rc.5 fleet-operations work: two sweep
+> ctx% corrections (thrum-4pd1 Opus 4.8 1M-window denominator, thrum-roeq
 > session-birth transcript selection), boot reconcile writing live AgentPIDs
 > back to the registry (thrum-qxr3), the `thrum tmux create --force`
 > prefix-match guard (thrum-z63b), agent-status Pattern D self-writes
@@ -107,13 +104,13 @@ they're parameterized over `VERSION` and the release branch.
 > Full notes: [What's New](whats-new.md) and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-### Quick install for `v0.10.6-rc.7`
+### Quick install for `v0.10.6-rc.8`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.7 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.8 sh
 
 # Codex plugin (matches release/v0.10.6)
 THRUM_INSTALL_REF=release/v0.10.6 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.6/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
