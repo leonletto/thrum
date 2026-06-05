@@ -7,30 +7,27 @@ machine-readable history lives in
 
 ## v0.10.6 — In Soak (RC)
 
-**v0.10.6-rc.8** was tagged 2026-06-04 and is the current pre-release. rc.8
-hardens the message-nudge subsystem so inbound nudges never corrupt a
-recipient's terminal. Three fixes. A nudge that arrived while someone was
-composing used to type into the pane mid-keystroke and fragment their input — a
-chrome-quiet gate now holds the nudge until the input chrome is quiet
-(window-activity silence or a stable bottom region), deadline-capped so a
-continuously-busy pane still gets notified, and composing with the dialog-defer
-gate means no fire-path can trip mid-keystroke (thrum-nlel / thrum-3i2s; tunable
-via the new `daemon.nudge` config block — `chrome_quiet_seconds`,
-`dispatch_deadline_seconds`). A nudge delivered while a pane showed an
-interactive selection prompt used to type Enter and silently choose an option —
-nudges are now deferred to a redelivery queue while a selection dialog (≥2
-options) is up and redelivered once the pane is safe to type into (thrum-7phu).
-And the daemon start-wait no longer reports a false timeout during large-DB
-cross-version upgrades: the wait path now surfaces live migration progress
-(current schema version → target) instead of timing out blind while a first-boot
-migration is still healthily running (thrum-vh2c).
+**v0.10.6-rc.9** was tagged 2026-06-05 and is the current pre-release. rc.9 is a
+single-fix RC — a cross-host sync correctness bug. The daemon's auto-reconcile
+Manager built its `peer.repair` dialer identity from the local loopback ws port
+(`:<port>`, host-stripped); when it dialed a peer, the responder stored that as
+our address, corrupting the peer's record into an unconnectable `:<port>` and
+breaking that peer's periodic sync + repair toward us (observed stalling
+cross-host direct sync for hours). The advertised address is now resolved lazily
+at dial time from the daemon's tsnet-reachable address — empty until the tsnet
+listener is up, which the responder safely ignores rather than storing a wrong
+value (thrum-hix5). Daemon/sync fix; no schema change.
 
-rc.7's agent-restart reliability carries forward: the un-restartable-agent class
-is closed (thrum-5oui anonymous-allowlist for `tmux.create`/`launch`, thrum-ipbl
-`quickstart` PID refresh for pid-drift recovery, thrum-6yt7 90s restart
-deadline, plus rc.6's thrum-mnhp dead-PID guard), the `thrum prime` daemon-side
-`RLock` root-cause fix (thrum-5988), the snapshot/sleep skill family (thrum-rwhg
-— `/thrum:restart-extended`, `/thrum:sleep`, `/thrum:sleep-extended`), and the
+rc.8's message-nudge hardening carries forward: the chrome-quiet gate so inbound
+nudges never land mid-keystroke (thrum-nlel / thrum-3i2s, tunable via the
+`daemon.nudge` config block), nudges deferred to a redelivery queue while an
+interactive selection dialog is up (thrum-7phu), and the daemon start-wait
+surfacing live migration progress instead of a false timeout on large-DB
+upgrades (thrum-vh2c). rc.7's agent-restart reliability also carries forward:
+the un-restartable-agent class closed (thrum-5oui, thrum-ipbl, thrum-6yt7, plus
+rc.6's thrum-mnhp dead-PID guard), the `thrum prime` daemon-side `RLock`
+root-cause fix (thrum-5988), the snapshot/sleep skill family (thrum-rwhg —
+`/thrum:restart-extended`, `/thrum:sleep`, `/thrum:sleep-extended`), and the
 identity-guard message-read fail-open close (thrum-tgqx).
 
 Earlier v0.10.6 RCs carry forward — rc.6/rc.5 fleet-operations work: two sweep
@@ -46,7 +43,7 @@ message-body write cap (thrum-mhwt), `INSERT OR IGNORE` on `applySessionStart`
 (thrum-9jcb.3), the identity-guard PID-ancestor split (thrum-xir.40) and cached
 peercred CWD lookup (thrum-xir.45), and `thrum worktree teardown`
 cascade-deleting the bound agent identity (thrum-wk7d). See the
-[Beta Channel](beta-channel.md) page for the full rc.8 callout + install
+[Beta Channel](beta-channel.md) page for the full rc.9 callout + install
 commands.
 
 v0.10.6's headline is a **sync re-architecture** (thrum-s6os): the cross-machine

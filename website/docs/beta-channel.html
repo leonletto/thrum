@@ -250,44 +250,42 @@ they&#39;re parameterized over <code>VERSION</code> and the release branch.</p>
 <h2>Stable-track current pre-release</h2>
 <blockquote>
 <p><strong>Current stable-track pre-release:
-<a href="https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.8"><code>v0.10.6-rc.8</code></a></strong>
-(tagged 2026-06-04, in soak). <strong>rc.8 hardens the message-nudge subsystem</strong> so
-inbound nudges never corrupt a recipient&#39;s terminal. Three fixes: a nudge that
-arrived while someone was composing used to type into the pane mid-keystroke
-and fragment their input — a <strong>chrome-quiet gate</strong> now holds the nudge until
-the input chrome is quiet (window-activity silence or a stable bottom region),
-deadline-capped so a continuously-busy pane still gets notified, and composing
-with the dialog-defer gate means no fire-path can trip mid-keystroke
-(thrum-nlel / thrum-3i2s; tunable via the new <code>daemon.nudge</code> config block —
-<code>chrome_quiet_seconds</code>, <code>dispatch_deadline_seconds</code>). A nudge delivered while a
-pane showed an interactive selection prompt used to type Enter and silently
-choose an option — nudges are now <strong>deferred to a redelivery queue</strong> while a
-selection dialog (≥2 options) is up and redelivered once the pane is safe to
-type into (thrum-7phu). And the daemon start-wait no longer reports a false
-timeout during large-DB cross-version upgrades: the wait path now <strong>surfaces
-live migration progress</strong> (current schema version → target) instead of timing
-out blind while a first-boot migration is still healthily running (thrum-vh2c).</p>
-<p>rc.7&#39;s agent-restart reliability carries forward: the un-restartable-agent
-class is closed (thrum-5oui anonymous-allowlist for <code>tmux.create</code>/<code>launch</code>,
-thrum-ipbl <code>quickstart</code> PID refresh for pid-drift recovery, thrum-6yt7 90s
-restart deadline, plus rc.6&#39;s thrum-mnhp dead-PID guard), the <code>thrum prime</code>
-daemon-side <code>RLock</code> root-cause fix (thrum-5988), the snapshot/sleep skill
-family (thrum-rwhg — <code>/thrum:restart-extended</code>, <code>/thrum:sleep</code>,
-<code>/thrum:sleep-extended</code>), and the identity-guard message-read fail-open close
-(thrum-tgqx).</p>
+<a href="https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.9"><code>v0.10.6-rc.9</code></a></strong>
+(tagged 2026-06-05, in soak). <strong>rc.9 is a single-fix RC</strong> — a cross-host sync
+correctness bug. The daemon&#39;s auto-reconcile Manager built its <code>peer.repair</code>
+dialer identity from the local loopback ws port (<code>:&lt;port&gt;</code>, host-stripped); when
+it dialed a peer, the responder stored that as our address, corrupting the
+peer&#39;s record into an unconnectable <code>:&lt;port&gt;</code> and breaking that peer&#39;s periodic
+sync + repair toward us (observed stalling cross-host direct sync for hours).
+The advertised address is now resolved lazily at dial time from the daemon&#39;s
+tsnet-reachable address — empty until the tsnet listener is up, which the
+responder safely ignores rather than storing a wrong value (thrum-hix5).
+Daemon/sync fix; no schema change.</p>
+<p>rc.8&#39;s message-nudge hardening carries forward: the chrome-quiet gate so
+inbound nudges never land mid-keystroke (thrum-nlel / thrum-3i2s, tunable via
+the <code>daemon.nudge</code> config block), nudges deferred to a redelivery queue while
+an interactive selection dialog is up (thrum-7phu), and the daemon start-wait
+surfacing live migration progress instead of a false timeout on large-DB
+upgrades (thrum-vh2c). rc.7&#39;s agent-restart reliability also carries forward:
+the un-restartable-agent class closed (thrum-5oui, thrum-ipbl, thrum-6yt7, plus
+rc.6&#39;s thrum-mnhp dead-PID guard), the <code>thrum prime</code> daemon-side <code>RLock</code>
+root-cause fix (thrum-5988), the snapshot/sleep skill family (thrum-rwhg —
+<code>/thrum:restart-extended</code>, <code>/thrum:sleep</code>, <code>/thrum:sleep-extended</code>), and the
+identity-guard message-read fail-open close (thrum-tgqx).</p>
 <p>Earlier v0.10.6 RCs carry forward — rc.6/rc.5 fleet-operations work: two sweep
 ctx% corrections (thrum-4pd1 Opus 4.8 1M-window denominator, thrum-roeq
-session-birth transcript selection), boot reconcile writing live AgentPIDs back
-to the registry (thrum-qxr3), the <code>thrum tmux create --force</code> prefix-match
-guard (thrum-z63b), agent-status Pattern D self-writes (thrum-9neg),
-<code>thrum monitor --schedule</code> with continuous auto-restart (thrum-puhr.9), and the
-restored <code>--json</code> / <code>--report-only</code> / <code>THRUM_SWEEP_IDENTITY_GLOBS</code> sweep
-features (thrum-l9e6); plus rc.4&#39;s <code>team.list</code> / dead-agent self-heal rework
-(thrum-1nkt), the 4MB JSONL-compactor scanner buffer (thrum-10j0), the 1MB
-message-body write cap (thrum-mhwt), <code>INSERT OR IGNORE</code> on <code>applySessionStart</code>
-(thrum-9jcb.3), the identity-guard PID-ancestor split (thrum-xir.40) and cached
-peercred CWD lookup (thrum-xir.45), and <code>thrum worktree teardown</code>
-cascade-deleting the bound agent identity (thrum-wk7d).</p>
+session-birth transcript selection), boot reconcile writing live AgentPIDs
+back to the registry (thrum-qxr3), the <code>thrum tmux create --force</code>
+prefix-match guard (thrum-z63b), agent-status Pattern D self-writes
+(thrum-9neg), <code>thrum monitor --schedule</code> with continuous auto-restart
+(thrum-puhr.9), and the restored <code>--json</code> / <code>--report-only</code> /
+<code>THRUM_SWEEP_IDENTITY_GLOBS</code> sweep features (thrum-l9e6); plus rc.4&#39;s
+<code>team.list</code> / dead-agent self-heal rework (thrum-1nkt), the 4MB
+JSONL-compactor scanner buffer (thrum-10j0), the 1MB message-body write cap
+(thrum-mhwt), <code>INSERT OR IGNORE</code> on <code>applySessionStart</code> (thrum-9jcb.3), the
+identity-guard PID-ancestor split (thrum-xir.40) and cached peercred CWD
+lookup (thrum-xir.45), and <code>thrum worktree teardown</code> cascade-deleting the
+bound agent identity (thrum-wk7d).</p>
 <p>The v0.10.6 story still leads with the <strong>sync re-architecture</strong> (thrum-s6os):
 the cross-machine wire stream is event-triggered rather than 60-second-polled,
 idle daemons produce zero commits on <code>a-sync</code>, and busy clusters stop
@@ -302,10 +300,10 @@ skill-review-loop improvements (<code>verify-against-source</code>, Phase 0 revi
 Full notes: <a href="whats-new.html">What&#39;s New</a> and the
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG <code>[Unreleased]</code> section</a>.</p>
 </blockquote>
-<h3>Quick install for <code>v0.10.6-rc.8</code></h3>
+<h3>Quick install for <code>v0.10.6-rc.9</code></h3>
 <p>Binary and Codex plugin (run in your shell):</p>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Binary</span>
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.8 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.9 sh
 
 <span class="hljs-comment"># Codex plugin (matches release/v0.10.6)</span>
 THRUM_INSTALL_REF=release/v0.10.6 bash &lt;(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.6/codex-plugin/plugins/thrum/scripts/install-plugin.sh)</code></pre>
