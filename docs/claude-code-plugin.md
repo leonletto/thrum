@@ -189,9 +189,8 @@ read-and-rationalized-away). Two surfaces, the same directive.
 
 Whether the banner fires is keyed off a `HasSessionStartHook` field on the
 runtime preset — Claude Code and Cursor are the only `true` entries today. For
-runtimes without a SessionStart hook (codex, opencode, auggie, kiro-cli, gemini,
-shell), the launch flow falls back to the historical post-launch `/thrum:prime`
-send.
+runtimes without a SessionStart hook (codex, opencode, kiro-cli, gemini, shell),
+the launch flow falls back to the historical post-launch `/thrum:prime` send.
 
 ### PreCompact
 

@@ -122,7 +122,7 @@ coordination, run `thrum single-agent-mode false`. See
 ### 2. Install the Thrum Skill
 
 Install the thrum skill so your agent knows how to use thrum for coordination.
-This works with Claude Code, Cursor, Codex, Gemini, Augment, and Amp:
+This works with Claude Code, Cursor, Codex, Gemini, and Amp:
 
 ```bash
 thrum init --skills

@@ -241,7 +241,6 @@ Cursor&#39;s headless mode</li>
 <li><strong>Kiro</strong> — <code>kiro-cli</code>, runtime preset only in v0.9.0; no dedicated plugin yet.
 Manual <code>thrum prime</code> required after restart.</li>
 <li><strong>Gemini</strong> — <code>gemini</code>, Google&#39;s CLI agent</li>
-<li><strong>Auggie</strong> — <code>auggie</code></li>
 <li><strong>Amp</strong> — <code>amp</code></li>
 <li><strong>Shell</strong> — plain bash, for human operators who want to be part of the team</li>
 </ul>
@@ -322,7 +321,7 @@ worktree.</p>
 <p>When Thrum needs to find the agent process in a tmux pane, it walks the process
 tree from the pane&#39;s shell upward, looking for any of the nine known runtime
 binaries:</p>
-<pre><code class="language-text hljs">claude  opencode  aider  codex  cursor-agent  agent  gemini  auggie  amp  kiro-cli</code></pre>
+<pre><code class="language-text hljs">claude  opencode  aider  codex  cursor-agent  agent  gemini  amp  kiro-cli</code></pre>
 <p><code>cursor-agent</code> and <code>agent</code> both map to the <code>cursor</code> runtime name. <code>agent</code> is the
 preferred binary name as of v0.9.0; <code>cursor-agent</code> is the legacy name, still
 detected for backward compatibility. If another runtime ever claims the <code>agent</code>

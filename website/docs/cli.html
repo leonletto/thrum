@@ -809,7 +809,7 @@ Skill installed to .claude/skills/thrum/
   references/CLI_REFERENCE.md
   references/LISTENER_PATTERN.md
   references/MESSAGING.md</code></pre>
-<p>Supported agents: Claude Code, Cursor, Codex, Gemini, Augment, Amp. If the thrum
+<p>Supported agents: Claude Code, Cursor, Codex, Gemini, Amp. If the thrum
 Claude plugin is already installed, <code>--skills</code> skips the install (use <code>--force</code>
 to override). If no agent-specific directory is found, falls back to
 <code>.agents/skills/thrum/</code> (the cross-agent standard path).</p>
@@ -838,7 +838,7 @@ Thrum Configuration
 
 Runtime
   Primary:     claude (config.json)
-  Detected:    claude, augment
+  Detected:    claude
 
 Daemon
   Local-only:    true (config.json)
@@ -892,7 +892,7 @@ The plugin already provides messaging instructions via its SessionStart hook,
 slash commands, and skills — adding the same content to <code>CLAUDE.md</code> would
 duplicate what the plugin injects. The CLAUDE.md block is the minimal-messaging
 path for Claude Code without the plugin, for other runtimes (Codex, Cursor,
-opencode, kiro, auggie), or for environments where plugin install isn&#39;t
+opencode, kiro), or for environments where plugin install isn&#39;t
 available.</p>
 <p>Without <code>--apply</code>, the command writes nothing — it just prints the template so
 you can pipe it elsewhere or inspect it. Errors that block the apply (existing
@@ -993,7 +993,7 @@ thrum quickstart --name AGENT_NAME --role ROLE --module MODULE [flags]</code></p
 </tr>
 <tr>
 <td><code>--runtime</code></td>
-<td>Runtime preset (<code>claude</code>, <code>codex</code>, <code>cursor</code>, <code>gemini</code>, <code>opencode</code>, <code>auggie</code>, <code>cli-only</code>)</td>
+<td>Runtime preset (<code>claude</code>, <code>codex</code>, <code>cursor</code>, <code>gemini</code>, <code>opencode</code>, <code>cli-only</code>)</td>
 <td></td>
 </tr>
 <tr>
@@ -2421,7 +2421,7 @@ name, the launch command, how to detect the runtime from an existing process
 tree, and pane-state pattern matching for permission-prompt detection. The
 built-in presets ship with Thrum; user-defined presets live at
 <code>~/.thrum/runtimes.json</code>.</p>
-<p>Supported built-ins in v0.9.0: <code>claude</code>, <code>codex</code>, <code>cursor</code>, <code>gemini</code>, <code>auggie</code>,
+<p>Supported built-ins in v0.9.0: <code>claude</code>, <code>codex</code>, <code>cursor</code>, <code>gemini</code>,
 <code>kiro-cli</code>, <code>opencode</code>, <code>cli-only</code>.</p>
 <h3>thrum runtime list</h3>
 <p>List all runtime presets (built-in + user-defined) with their detection status
@@ -2449,7 +2449,6 @@ codex        codex        yes
 cursor       cursor       no
 opencode     opencode     yes
 kiro-cli     kiro-cli     no
-auggie       auggie       no
 gemini       gemini       no
 cli-only     (none)       n/a</code></pre>
 <h3>thrum runtime show</h3>
@@ -2815,7 +2814,7 @@ quickstart runs, any old identity files in the session&#39;s worktree are cleane
 </tr>
 <tr>
 <td><code>--runtime</code></td>
-<td>Runtime preset: <code>claude</code>, <code>codex</code>, <code>cursor</code>, <code>gemini</code>, <code>auggie</code></td>
+<td>Runtime preset: <code>claude</code>, <code>codex</code>, <code>cursor</code>, <code>gemini</code></td>
 <td></td>
 </tr>
 <tr>
@@ -3110,7 +3109,7 @@ the main worktree into a &quot;feature&quot; worktree.</p>
 </tr>
 <tr>
 <td><code>--runtime</code></td>
-<td>Runtime preset: <code>claude</code>, <code>codex</code>, <code>cursor</code>, <code>gemini</code>, <code>opencode</code>, <code>auggie</code></td>
+<td>Runtime preset: <code>claude</code>, <code>codex</code>, <code>cursor</code>, <code>gemini</code>, <code>opencode</code></td>
 <td></td>
 </tr>
 </tbody></table>

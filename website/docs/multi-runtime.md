@@ -24,7 +24,6 @@ of these:
 - **Kiro** — `kiro-cli`, runtime preset only in v0.9.0; no dedicated plugin yet.
   Manual `thrum prime` required after restart.
 - **Gemini** — `gemini`, Google's CLI agent
-- **Auggie** — `auggie`
 - **Amp** — `amp`
 - **Shell** — plain bash, for human operators who want to be part of the team
 
@@ -135,7 +134,7 @@ tree from the pane's shell upward, looking for any of the nine known runtime
 binaries:
 
 ```text
-claude  opencode  aider  codex  cursor-agent  agent  gemini  auggie  amp  kiro-cli
+claude  opencode  aider  codex  cursor-agent  agent  gemini  amp  kiro-cli
 ```
 
 `cursor-agent` and `agent` both map to the `cursor` runtime name. `agent` is the

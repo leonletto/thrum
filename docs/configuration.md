@@ -562,7 +562,6 @@ During `thrum init`, Thrum can generate configuration files for various AI
 coding runtimes:
 
 - **Claude Code** - CLAUDE.md and .claude/agents/
-- **Augment** - .augment/ directory
 - **Cursor** - .cursorrules
 - **Codex** - codex.yaml
 - **Gemini** - .gemini/
@@ -584,7 +583,7 @@ Thrum Configuration
 
 Runtime
   Primary:     claude (from config.json)
-  Detected:    claude, augment
+  Detected:    claude
 
 Daemon
   Local-only:    true (config.json)

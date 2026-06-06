@@ -238,9 +238,9 @@ Skill installed to .claude/skills/thrum/
   references/MESSAGING.md
 ```
 
-Supported agents: Claude Code, Cursor, Codex, Gemini, Augment, Amp. If the thrum
-Claude plugin is already installed, `--skills` skips the install (use `--force`
-to override). If no agent-specific directory is found, falls back to
+Supported agents: Claude Code, Cursor, Codex, Gemini, Amp. If the thrum Claude
+plugin is already installed, `--skills` skips the install (use `--force` to
+override). If no agent-specific directory is found, falls back to
 `.agents/skills/thrum/` (the cross-agent standard path).
 
 ### thrum config show
@@ -265,7 +265,7 @@ Thrum Configuration
 
 Runtime
   Primary:     claude (config.json)
-  Detected:    claude, augment
+  Detected:    claude
 
 Daemon
   Local-only:    true (config.json)
@@ -326,8 +326,7 @@ The plugin already provides messaging instructions via its SessionStart hook,
 slash commands, and skills — adding the same content to `CLAUDE.md` would
 duplicate what the plugin injects. The CLAUDE.md block is the minimal-messaging
 path for Claude Code without the plugin, for other runtimes (Codex, Cursor,
-opencode, kiro, auggie), or for environments where plugin install isn't
-available.
+opencode, kiro), or for environments where plugin install isn't available.
 
 Without `--apply`, the command writes nothing — it just prints the template so
 you can pipe it elsewhere or inspect it. Errors that block the apply (existing
@@ -404,7 +403,7 @@ thrum quickstart --name AGENT_NAME --role ROLE --module MODULE [flags]
 | `--name`          | Human-readable agent name (optional, defaults to `role_hash`)                                                                               |         |
 | `--display`       | Display name for the agent                                                                                                                  |         |
 | `--intent`        | Initial work intent                                                                                                                         |         |
-| `--runtime`       | Runtime preset (`claude`, `codex`, `cursor`, `gemini`, `opencode`, `auggie`, `cli-only`)                                                    |         |
+| `--runtime`       | Runtime preset (`claude`, `codex`, `cursor`, `gemini`, `opencode`, `cli-only`)                                                              |         |
 | `--preamble-file` | Path to custom preamble file                                                                                                                |         |
 | `--dry-run`       | Preview without writing                                                                                                                     | `false` |
 | `--no-init`       | Skip config file generation                                                                                                                 | `false` |
@@ -1845,7 +1844,7 @@ tree, and pane-state pattern matching for permission-prompt detection. The
 built-in presets ship with Thrum; user-defined presets live at
 `~/.thrum/runtimes.json`.
 
-Supported built-ins in v0.9.0: `claude`, `codex`, `cursor`, `gemini`, `auggie`,
+Supported built-ins in v0.9.0: `claude`, `codex`, `cursor`, `gemini`,
 `kiro-cli`, `opencode`, `cli-only`.
 
 ### thrum runtime list
@@ -1871,7 +1870,6 @@ codex        codex        yes
 cursor       cursor       no
 opencode     opencode     yes
 kiro-cli     kiro-cli     no
-auggie       auggie       no
 gemini       gemini       no
 cli-only     (none)       n/a
 ```
@@ -2215,16 +2213,16 @@ quickstart runs, any old identity files in the session's worktree are cleaned up
 thrum tmux create <name> --cwd <path> --name <agent-name> --role <role> --module <module> [flags]
 ```
 
-| Flag         | Description                                                     | Default |
-| ------------ | --------------------------------------------------------------- | ------- |
-| `--cwd`      | Working directory for the session                               |         |
-| `--name`     | Agent name (required unless `--no-agent`)                       |         |
-| `--role`     | Agent role (required unless `--no-agent`)                       |         |
-| `--module`   | Agent module (required unless `--no-agent`)                     |         |
-| `--intent`   | Initial work intent description                                 |         |
-| `--runtime`  | Runtime preset: `claude`, `codex`, `cursor`, `gemini`, `auggie` |         |
-| `--no-agent` | Skip agent registration (create session only)                   | `false` |
-| `--force`    | Overwrite existing runtime config files                         | `false` |
+| Flag         | Description                                           | Default |
+| ------------ | ----------------------------------------------------- | ------- |
+| `--cwd`      | Working directory for the session                     |         |
+| `--name`     | Agent name (required unless `--no-agent`)             |         |
+| `--role`     | Agent role (required unless `--no-agent`)             |         |
+| `--module`   | Agent module (required unless `--no-agent`)           |         |
+| `--intent`   | Initial work intent description                       |         |
+| `--runtime`  | Runtime preset: `claude`, `codex`, `cursor`, `gemini` |         |
+| `--no-agent` | Skip agent registration (create session only)         | `false` |
+| `--force`    | Overwrite existing runtime config files               | `false` |
 
 Without `--no-agent`, the command errors if `--name`, `--role`, and `--module`
 are all missing.
@@ -2523,16 +2521,16 @@ the main worktree into a "feature" worktree.
 thrum worktree create <name> [flags]
 ```
 
-| Flag             | Description                                                                 | Default             |
-| ---------------- | --------------------------------------------------------------------------- | ------------------- |
-| `--branch`, `-b` | Branch name                                                                 | `feature/<name>`    |
-| `--base`         | Base ref for the new branch (any existing branch or commit SHA)             | current HEAD of cwd |
-| `--detach`       | Create detached HEAD worktree                                               | `false`             |
-| `--name`         | Agent name (triggers quickstart when combined with role+module)             |                     |
-| `--role`         | Agent role                                                                  |                     |
-| `--module`       | Agent module                                                                |                     |
-| `--intent`       | Initial work intent description                                             |                     |
-| `--runtime`      | Runtime preset: `claude`, `codex`, `cursor`, `gemini`, `opencode`, `auggie` |                     |
+| Flag             | Description                                                       | Default             |
+| ---------------- | ----------------------------------------------------------------- | ------------------- |
+| `--branch`, `-b` | Branch name                                                       | `feature/<name>`    |
+| `--base`         | Base ref for the new branch (any existing branch or commit SHA)   | current HEAD of cwd |
+| `--detach`       | Create detached HEAD worktree                                     | `false`             |
+| `--name`         | Agent name (triggers quickstart when combined with role+module)   |                     |
+| `--role`         | Agent role                                                        |                     |
+| `--module`       | Agent module                                                      |                     |
+| `--intent`       | Initial work intent description                                   |                     |
+| `--runtime`      | Runtime preset: `claude`, `codex`, `cursor`, `gemini`, `opencode` |                     |
 
 The `--base` flag (added in v0.10.6) controls which existing ref the new branch
 is cut from. Default is the current HEAD of the cwd where
@@ -2937,6 +2935,8 @@ name (e.g., `furiosa.json` or `implementer_35HV62T9B9.json`).
   "updated_at": "2026-02-03T10:00:00Z"
 }
 ```
+
+---
 
 _The section below covers storage internals. You don't need it for normal use._
 

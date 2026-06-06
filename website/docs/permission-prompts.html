@@ -319,7 +319,7 @@ that&#39;s still actively running (false-stable).</p>
 key is the canonical runtime name from the agent identity file.</p>
 <hr>
 <h2>Supported Runtimes</h2>
-<p>The pattern library covers six runtimes. Each has one or more patterns with an
+<p>The pattern library covers five runtimes. Each has one or more patterns with an
 <code>approve_key</code> and an optional <code>deny_key</code>:</p>
 <table>
 <thead>
@@ -359,18 +359,6 @@ key is the canonical runtime name from the agent identity file.</p>
 <td><code>shell requires approval</code></td>
 <td><code>Enter</code> (Yes, single permission)</td>
 <td><code>Escape</code></td>
-</tr>
-<tr>
-<td><code>auggie</code></td>
-<td><code>Always index this workspace</code> indexing consent</td>
-<td><code>3</code> (Session-only)</td>
-<td><code>Escape</code></td>
-</tr>
-<tr>
-<td><code>auggie</code></td>
-<td><code>| Tool Approval Required |</code> per-tool approval</td>
-<td><code>A</code> (Allow)</td>
-<td><code>D</code> (Deny)</td>
 </tr>
 </tbody></table>
 <p><strong>Per-shape deny key for claude.</strong> The <code>claude.tool_confirmation</code> pattern
@@ -416,10 +404,7 @@ the same keystroke without re-inspecting the pane.</p>
 <p>The CI guard <code>TestApproveKeyNeverForeverAllow</code> enforces a safety invariant: no
 runtime&#39;s <code>approve_key</code> can ever map to a &quot;don&#39;t ask again&quot;, &quot;add to allowlist&quot;,
 or &quot;auto-run everything&quot; option. A supervisor&#39;s approval must always grant
-single-invocation permission only. For auggie specifically, <code>approve_key = &quot;3&quot;</code>
-because the default-highlighted option on the indexing consent prompt is
-<code>[1] &quot;Always index this workspace&quot;</code> — a forever-allow that writes to
-<code>~/.augment/settings.json</code>. Sending <code>Enter</code> there would be a safety bug.</p>
+single-invocation permission only.</p>
 <hr>
 <h2>Configuration</h2>
 <p>Two new keys in <code>.thrum/config.json</code> control the feature:</p>
@@ -638,7 +623,7 @@ means permission nudges won&#39;t have a sender identity and will fail silently.
 <p><code>TestApproveKeyNeverForeverAllow</code> is a CI test in
 <code>internal/daemon/permission/patterns_test.go</code> that iterates every pattern in the
 library and asserts that the <code>ApproveKey</code> is not any of the known forever-allow
-tokens (<code>2</code>, <code>Tab</code>, <code>Enter</code> for auggie&#39;s indexing prompt, etc.).</p>
+tokens (<code>2</code>, <code>Tab</code>, etc.).</p>
 <p>This prevents a class of bug where approving a permission prompt from Thrum
 would actually grant the agent permanent or session-wide permission for an
 action class — broader than the human consented to. If you&#39;re adding a new

@@ -11,6 +11,8 @@ for how people actually run agent teams. The daemon handles delivery directly,
 agents don't need to manage their own listeners, and the whole setup is simpler
 to understand and operate.
 
+---
+
 ## Prerequisites
 
 **tmux** must be installed:
@@ -37,6 +39,8 @@ trackpad, click to select panes, resize by dragging. You won't notice you're in
 tmux.
 
 The Thrum daemon must be running (`thrum daemon start`).
+
+---
 
 ## How It Works
 
@@ -88,6 +92,8 @@ Claude Code agents have a belt-and-suspenders safety net: the existing
 `UserPromptSubmit` hook still checks for unread messages at every tool boundary.
 If a nudge somehow gets missed, the hook catches it. Other runtimes rely solely
 on the tmux nudge — which is fine, because the nudge is the reliable path.
+
+---
 
 ## Session Lifecycle
 
@@ -241,6 +247,8 @@ in the worktree are cleaned up. Each worktree has exactly one identity.
 The agent is now running, receiving messages instantly, and you can monitor it
 with `thrum team` or `thrum tmux status`.
 
+---
+
 ## Session States
 
 The daemon determines agent state from two checks: does the tmux session exist,
@@ -275,6 +283,8 @@ States are always queried live — no caching, nothing to get stale.
 When the process dies (crash, compaction, manual kill), the daemon notices and
 can restart it with a snapshot of what it was doing. See
 [Session Restart](session-restart.md) for the snapshot flow.
+
+---
 
 ## Permission Delegation
 
@@ -325,6 +335,8 @@ G4 guard gates the write: if the CWD doesn't resolve to a known worktree, the
 bind is refused. `team.list` self-heals dead sessions on every call, so stale
 bindings clear automatically without manual cleanup.
 
+---
+
 ## Mixed-Runtime Teams
 
 The tmux nudge mechanism is plain text into a pane. Any CLI-based AI tool that
@@ -358,6 +370,8 @@ output. The nudge mechanism is identical regardless of runtime.
 > **Note:** Only Claude Code has the `UserPromptSubmit` hook as a fallback
 > safety net. Other runtimes rely solely on the tmux nudge for notification.
 > This is fine — the nudge is the primary and reliable delivery path.
+
+---
 
 ## Command Queue Dispatch
 
@@ -437,6 +451,8 @@ Per-command settings (no global config needed):
 See [CLI Reference](cli.md#thrum-tmux-queue) for full flag details and
 [RPC API](rpc-api.md#tmuxqueue) for the underlying RPC methods.
 
+---
+
 ## Auto-Nudge
 
 The daemon watches for a status mismatch: if an agent's `agent_status` is
@@ -446,6 +462,8 @@ without producing output — and wakes them up.
 
 Set agent status with `thrum agent set-status working|idle|blocked`. See
 [CLI Reference](cli.md#thrum-agent-set-status).
+
+---
 
 ## Remote Transparency
 
@@ -458,15 +476,19 @@ You don't need to think about this. If you have two machines paired via
 `thrum peer`, messages route to the right daemon, and the right daemon nudges
 the right tmux pane. It just works.
 
+---
+
 ## Running different runtimes
 
 Tmux sessions work with any supported runtime — Claude Code, Codex, Cursor
-(`agent`), Aider, Gemini, Open Code, Auggie, or Amp. Set the runtime with
-`--runtime` on `thrum tmux launch`, or set `preferred_runtime` in the identity
-file so every launch in that worktree uses the runtime you picked.
+(`agent`), Aider, Gemini, Open Code, or Amp. Set the runtime with `--runtime` on
+`thrum tmux launch`, or set `preferred_runtime` in the identity file so every
+launch in that worktree uses the runtime you picked.
 
 For the full runtime resolution order, setup flags, and known limitations, see
 [Multi-Runtime Support](multi-runtime.md).
+
+---
 
 ## Migration from Listeners
 
@@ -486,6 +508,8 @@ No flag day required. Some agents can run in tmux-mode while others use legacy
 listeners. The daemon nudges tmux agents and ignores legacy agents (who still
 use their own listeners).
 
+---
+
 ## What's Eliminated
 
 | Before                               | After                              |
@@ -498,6 +522,8 @@ use their own listeners).
 | "Forgot to launch listener"          | Impossible — no listener to forget |
 | Token burn on idle agents            | Zero — daemon does the work        |
 | Permission prompt stalls             | Surfaced to coordinator            |
+
+---
 
 ## Next Steps
 

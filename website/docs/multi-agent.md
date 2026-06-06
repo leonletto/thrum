@@ -81,7 +81,6 @@ a specific platform.
 | `codex`  | OpenAI Codex    | Yes | No    | `AGENTS.md`                 |
 | `cursor` | Cursor          | Yes | No    | `.cursorrules`              |
 | `gemini` | Google Gemini   | Yes | No    | `~/.gemini/instructions.md` |
-| `auggie` | Augment         | No  | No    | `CLAUDE.md`                 |
 | `amp`    | Sourcegraph Amp | No  | No    | `CLAUDE.md`                 |
 
 ### CLI Commands
@@ -109,7 +108,6 @@ Thrum uses 3-tier detection to identify which AI platform is running:
 | `.codex/`               | `codex`          |
 | `.cursorrules`          | `cursor`         |
 | `.cursor/rules/`        | `cursor`         |
-| `.augment/`             | `auggie`         |
 | `.gemini/`              | `gemini`         |
 
 **Tier 2 — Environment variables:**
@@ -119,7 +117,6 @@ Thrum uses 3-tier detection to identify which AI platform is running:
 | `CLAUDE_SESSION_ID` | `claude`         |
 | `CURSOR_SESSION`    | `cursor`         |
 | `GEMINI_CLI`        | `gemini`         |
-| `AUGMENT_AGENT`     | `auggie`         |
 
 **Tier 3 — Binary verification** (falls back to PATH scan):
 

@@ -111,18 +111,16 @@ key is the canonical runtime name from the agent identity file.
 
 ## Supported Runtimes
 
-The pattern library covers six runtimes. Each has one or more patterns with an
+The pattern library covers five runtimes. Each has one or more patterns with an
 `approve_key` and an optional `deny_key`:
 
-| Runtime    | Pattern                                          | Approve key                      | Deny key (runtime default) |
-| ---------- | ------------------------------------------------ | -------------------------------- | -------------------------- |
-| `claude`   | `Do you want to proceed?` tool confirmation      | `1` (Yes, once)                  | per-shape — see below      |
-| `codex`    | `Would you like to run the following command?`   | `1` (Yes, proceed)               | `3` (No)                   |
-| `cursor`   | `Not in allowlist:`                              | `y` (Run once)                   | `Escape`                   |
-| `opencode` | `△ Permission required`                          | `Enter` (Allow once, default)    | `End,Enter` (Reject)       |
-| `kiro-cli` | `shell requires approval`                        | `Enter` (Yes, single permission) | `Escape`                   |
-| `auggie`   | `Always index this workspace` indexing consent   | `3` (Session-only)               | `Escape`                   |
-| `auggie`   | `\| Tool Approval Required \|` per-tool approval | `A` (Allow)                      | `D` (Deny)                 |
+| Runtime    | Pattern                                        | Approve key                      | Deny key (runtime default) |
+| ---------- | ---------------------------------------------- | -------------------------------- | -------------------------- |
+| `claude`   | `Do you want to proceed?` tool confirmation    | `1` (Yes, once)                  | per-shape — see below      |
+| `codex`    | `Would you like to run the following command?` | `1` (Yes, proceed)               | `3` (No)                   |
+| `cursor`   | `Not in allowlist:`                            | `y` (Run once)                   | `Escape`                   |
+| `opencode` | `△ Permission required`                        | `Enter` (Allow once, default)    | `End,Enter` (Reject)       |
+| `kiro-cli` | `shell requires approval`                      | `Enter` (Yes, single permission) | `Escape`                   |
 
 **Per-shape deny key for claude.** The `claude.tool_confirmation` pattern
 matches three observable prompt shapes under one regex anchor, and each shape
@@ -147,10 +145,7 @@ the same keystroke without re-inspecting the pane.
 The CI guard `TestApproveKeyNeverForeverAllow` enforces a safety invariant: no
 runtime's `approve_key` can ever map to a "don't ask again", "add to allowlist",
 or "auto-run everything" option. A supervisor's approval must always grant
-single-invocation permission only. For auggie specifically, `approve_key = "3"`
-because the default-highlighted option on the indexing consent prompt is
-`[1] "Always index this workspace"` — a forever-allow that writes to
-`~/.augment/settings.json`. Sending `Enter` there would be a safety bug.
+single-invocation permission only.
 
 ---
 
@@ -406,7 +401,7 @@ means permission nudges won't have a sender identity and will fail silently.
 `TestApproveKeyNeverForeverAllow` is a CI test in
 `internal/daemon/permission/patterns_test.go` that iterates every pattern in the
 library and asserts that the `ApproveKey` is not any of the known forever-allow
-tokens (`2`, `Tab`, `Enter` for auggie's indexing prompt, etc.).
+tokens (`2`, `Tab`, etc.).
 
 This prevents a class of bug where approving a permission prompt from Thrum
 would actually grant the agent permanent or session-wide permission for an

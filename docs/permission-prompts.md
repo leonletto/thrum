@@ -11,6 +11,8 @@ session, here are the commands to approve or deny. You reply `y` or `n` from
 wherever you are — CLI, web UI, or Telegram on your phone — and Thrum replays
 the correct keystroke directly into the pane.
 
+---
+
 ## How Detection Works
 
 ### Why we replaced the alert-silence hook
@@ -67,6 +69,8 @@ daemon restarted still routes correctly. Before this, the mapping lived in an
 in-memory LRU cache and a restart between sending the nudge and receiving the
 reply silently broke the routing.
 
+---
+
 ## Volatile-Line Catalog
 
 Before hashing, the poller strips runtime-specific lines that change every few
@@ -91,20 +95,20 @@ To add stripping for a new runtime, add patterns to
 `internal/daemon/permission/poller.go` in the `volatileLinePatterns` map. The
 key is the canonical runtime name from the agent identity file.
 
+---
+
 ## Supported Runtimes
 
-The pattern library covers six runtimes. Each has one or more patterns with an
+The pattern library covers five runtimes. Each has one or more patterns with an
 `approve_key` and an optional `deny_key`:
 
-| Runtime    | Pattern                                          | Approve key                      | Deny key (runtime default) |
-| ---------- | ------------------------------------------------ | -------------------------------- | -------------------------- |
-| `claude`   | `Do you want to proceed?` tool confirmation      | `1` (Yes, once)                  | per-shape — see below      |
-| `codex`    | `Would you like to run the following command?`   | `1` (Yes, proceed)               | `3` (No)                   |
-| `cursor`   | `Not in allowlist:`                              | `y` (Run once)                   | `Escape`                   |
-| `opencode` | `△ Permission required`                          | `Enter` (Allow once, default)    | `End,Enter` (Reject)       |
-| `kiro-cli` | `shell requires approval`                        | `Enter` (Yes, single permission) | `Escape`                   |
-| `auggie`   | `Always index this workspace` indexing consent   | `3` (Session-only)               | `Escape`                   |
-| `auggie`   | `\| Tool Approval Required \|` per-tool approval | `A` (Allow)                      | `D` (Deny)                 |
+| Runtime    | Pattern                                        | Approve key                      | Deny key (runtime default) |
+| ---------- | ---------------------------------------------- | -------------------------------- | -------------------------- |
+| `claude`   | `Do you want to proceed?` tool confirmation    | `1` (Yes, once)                  | per-shape — see below      |
+| `codex`    | `Would you like to run the following command?` | `1` (Yes, proceed)               | `3` (No)                   |
+| `cursor`   | `Not in allowlist:`                            | `y` (Run once)                   | `Escape`                   |
+| `opencode` | `△ Permission required`                        | `Enter` (Allow once, default)    | `End,Enter` (Reject)       |
+| `kiro-cli` | `shell requires approval`                      | `Enter` (Yes, single permission) | `Escape`                   |
 
 **Per-shape deny key for claude.** The `claude.tool_confirmation` pattern
 matches three observable prompt shapes under one regex anchor, and each shape
@@ -129,10 +133,9 @@ the same keystroke without re-inspecting the pane.
 The CI guard `TestApproveKeyNeverForeverAllow` enforces a safety invariant: no
 runtime's `approve_key` can ever map to a "don't ask again", "add to allowlist",
 or "auto-run everything" option. A supervisor's approval must always grant
-single-invocation permission only. For auggie specifically, `approve_key = "3"`
-because the default-highlighted option on the indexing consent prompt is
-`[1] "Always index this workspace"` — a forever-allow that writes to
-`~/.augment/settings.json`. Sending `Enter` there would be a safety bug.
+single-invocation permission only.
+
+---
 
 ## Configuration
 
@@ -170,6 +173,8 @@ thrum team --system
 
 Reserved agents show with the `⊙` glyph in compact output. Regular agents use
 `●` (active) or `○` (offline).
+
+---
 
 ## What a Nudge Looks Like
 
@@ -218,6 +223,8 @@ detected:
 After 6 reminders with no supervisor response, the scheduler marks the agent
 `stuck` (see below) and stops sending.
 
+---
+
 ## Stuck State
 
 When the 6-nudge cadence runs out, the agent's identity file gets
@@ -231,6 +238,8 @@ healthy state — any state that isn't a recognized permission prompt —
 If you manually resolve the prompt in the pane (by attaching to the session and
 pressing a key yourself), the next poll cycle will see the changed pane content
 and trigger recovery automatically. You don't need to do anything else.
+
+---
 
 ## Replying to a Nudge
 
@@ -287,6 +296,8 @@ You can reply to any message in the reminder thread, not just the first nudge.
 The `TryResolve` thread-ID fallback walks reminder messages back to their root
 nudge row, so replying to Reminder #4 works the same as replying to Reminder #1.
 
+---
+
 ## Surviving Daemon Restart
 
 Two tables keep in-flight approvals alive across a daemon restart:
@@ -304,6 +315,8 @@ falls back to it on a cache miss.
 
 Together, these two tables mean a daemon restart mid-flow is invisible to the
 supervisor. They reply `y`, the keystroke fires, the agent unblocks.
+
+---
 
 ## Cross-Repo Workflow via Telegram
 
@@ -326,6 +339,8 @@ phone:
 
 This works automatically when the Telegram bridge user is listed in
 `permission_supervisors`. No additional routing config is needed.
+
+---
 
 ## Observability
 
@@ -367,18 +382,22 @@ between agent crash and reminder cadence.
 the `⊙` glyph. If it's missing, the daemon didn't register it at boot, which
 means permission nudges won't have a sender identity and will fail silently.
 
+---
+
 ## Safety Invariant
 
 `TestApproveKeyNeverForeverAllow` is a CI test in
 `internal/daemon/permission/patterns_test.go` that iterates every pattern in the
 library and asserts that the `ApproveKey` is not any of the known forever-allow
-tokens (`2`, `Tab`, `Enter` for auggie's indexing prompt, etc.).
+tokens (`2`, `Tab`, etc.).
 
 This prevents a class of bug where approving a permission prompt from Thrum
 would actually grant the agent permanent or session-wide permission for an
 action class — broader than the human consented to. If you're adding a new
 runtime pattern and the CI guard rejects your `ApproveKey`, the fix is to change
 the key to the single-invocation option, not to relax the test.
+
+---
 
 ## Trust-Gate Detection
 
@@ -389,6 +408,8 @@ banner delivery, prime nudge, watchdog nudge — is skipped so the user can answ
 the trust prompt manually without interference. Normal permission-prompt
 detection and the supervisor notify flow are unchanged; this only affects the
 injection paths that fire during session startup.
+
+---
 
 ## See Also
 

@@ -176,9 +176,9 @@ other frameworks) typically **don't receive plugin context**. They can run `bd`
 commands via Bash, but they don't know the correct syntax unless you tell them.
 
 If you use Beads for task tracking, add the block below to your project's
-`CLAUDE.md` (for Claude Code / Auggie) or `AGENTS.md` (for other agent
-frameworks). This prevents sub-agents from guessing wrong commands like
-`bd start` or `bd progress`.
+`CLAUDE.md` (for Claude Code) or `AGENTS.md` (for other agent frameworks). This
+prevents sub-agents from guessing wrong commands like `bd start` or
+`bd progress`.
 
 ### Recommended Block for CLAUDE.md / AGENTS.md
 
