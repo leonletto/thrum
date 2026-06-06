@@ -7597,6 +7597,19 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	var tsnetStarted bool
 	var tsListenerCleanup func()
 
+	// Dedicated cancellable context for the tsnet HTTP serve loop (thrum-oqao).
+	// Previously the serve loop was handed the daemon-wide ctx, so ServeHTTP's
+	// shutdown goroutine (which waits on ctx.Done -> srv.Shutdown) was dead code.
+	// Deriving a cancellable ctx here lets the shutdown hook cancel it to signal
+	// the serve loop. NOTE: this is a best-effort, non-guaranteed drain — the
+	// hook reaches server.Close() before srv.Shutdown necessarily runs, so any
+	// in-flight handshakes are killed rather than gracefully drained. That is the
+	// intended tradeoff: prioritize FAST node release (closing the overlap
+	// window) over draining. Kept separate from the daemon-wide ctx so cancelling
+	// it does not tear down other subsystems.
+	tsServeCtx, tsServeCancel := context.WithCancel(ctx)
+	defer tsServeCancel()
+
 	// startTsnet starts the tsnet listener on the given port. Safe to call
 	// concurrently — subsequent calls are no-ops after the first success.
 	startTsnet := func(port int) error {
@@ -7674,7 +7687,7 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		// The SyncRegistry implements websocket.HandlerRegistry via GetHandler.
 		// NewServer with empty addr + nil uiFS registers the WS handler at "/".
 		tsWSServer := websocket.NewServer("", syncRegistry, nil, tsWSOpts...)
-		go tsListener.ServeHTTP(ctx, tsWSServer.HTTPHandler())
+		go tsListener.ServeHTTP(tsServeCtx, tsWSServer.HTTPHandler())
 
 		// Start periodic sync with Tailscale-optimized intervals
 		if syncManager != nil {
@@ -7712,6 +7725,11 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		tsnetStarted = true
 		return nil
 	}
+	// Safety net for non-graceful exit (panic / early return before lifecycle's
+	// graceful shutdown runs). The graceful path releases the tsnet node via the
+	// lifecycle hook below, BEFORE the PID file is removed (thrum-oqao);
+	// TsnetListener.Close() is idempotent so this deferred call is a harmless
+	// no-op when the hook already ran.
 	defer func() {
 		if tsListenerCleanup != nil {
 			tsListenerCleanup()
@@ -7757,6 +7775,26 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 
 	// Set lock file for SIGKILL resilience
 	lifecycle.SetLockFile(lockFile)
+
+	// Register the inbound tsnet peer-RPC node release into graceful shutdown
+	// (thrum-oqao). This runs BEFORE the PID file is removed, so a restart's
+	// new process never re-binds the same tsnet state dir while the old node is
+	// still registered on the control plane. The hook signals the serve ctx
+	// (best-effort drain — in-flight handshakes are killed, not drained, to keep
+	// node release fast), then closes the listener + releases the tsnet node
+	// (idempotent). tsListenerCleanup is assigned lazily by startTsnet
+	// under tsnetMu, so read it under the same lock; a nil cleanup (tsnet never
+	// started) makes the hook a no-op.
+	lifecycle.SetTsnetShutdown(func(_ context.Context) error {
+		tsServeCancel()
+		tsnetMu.Lock()
+		cleanup := tsListenerCleanup
+		tsnetMu.Unlock()
+		if cleanup != nil {
+			cleanup()
+		}
+		return nil
+	})
 
 	// Start scheduled backup if configured
 	if thrumCfg.Backup.Schedule != "" {

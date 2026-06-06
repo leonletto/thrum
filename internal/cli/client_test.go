@@ -19,9 +19,18 @@ type mockDaemon struct {
 func newMockDaemon(t *testing.T) (*mockDaemon, string) {
 	t.Helper()
 
-	// Create temp directory for socket
-	tmpDir := t.TempDir()
-	socketPath := filepath.Join(tmpDir, "test.sock")
+	// Create temp directory for socket. Use a short MkdirTemp base rather than
+	// t.TempDir(): on macOS, t.TempDir() embeds the (possibly long) test name in
+	// the path, and unix socket paths are capped at 104 bytes (sun_path) — a
+	// long test name like TestAgentListContextWithTimeout_HonorsDeadline pushed
+	// the socket path over that limit and bind() failed with EINVAL. A short
+	// base keeps every caller well under the cap regardless of test name.
+	tmpDir, err := os.MkdirTemp("", "td")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+	socketPath := filepath.Join(tmpDir, "t.sock")
 
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {

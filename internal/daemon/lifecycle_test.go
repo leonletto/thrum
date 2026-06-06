@@ -85,6 +85,151 @@ func TestLifecycleRun(t *testing.T) {
 	}
 }
 
+// TestLifecycleShutdown_ReleasesTsnetBeforePIDRemoval is the regression guard
+// for thrum-oqao: after a daemon restart the inbound tsnet peer-RPC listener
+// (:9177) flapped because the tsnet node was NOT released before the daemon
+// reported itself stopped. DaemonStop treats a missing PID file as "stopped",
+// so the restart's new process re-bound the same tsnet state dir while the old
+// node was still registered — two netstacks, one node key, control-plane
+// split-brain. The fix sequences the tsnet node release INTO graceful shutdown
+// BEFORE RemovePIDFile. This test asserts that invariant hermetically (no
+// tailnet needed): when the registered tsnet-shutdown hook runs, the PID file
+// must still exist.
+func TestLifecycleShutdown_ReleasesTsnetBeforePIDRemoval(t *testing.T) {
+	// Short base dir: macOS caps unix socket paths at 104 bytes and this test's
+	// long name would push a t.TempDir()-based socket path over the limit.
+	tmpDir, err := os.MkdirTemp("", "lc")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+	socketPath := filepath.Join(tmpDir, "t.sock")
+	pidPath := filepath.Join(tmpDir, "t.pid")
+
+	server := NewServer(socketPath)
+	lifecycle := NewLifecycle(server, pidPath, nil, "")
+
+	var (
+		hookRan          atomic.Bool
+		pidExistedAtHook atomic.Bool
+	)
+	lifecycle.SetTsnetShutdown(func(_ context.Context) error {
+		hookRan.Store(true)
+		// The fixed invariant: the PID file must STILL EXIST at node-release
+		// time, i.e. the tsnet node is released BEFORE RemovePIDFile so the
+		// "stopped" signal truthfully means the node is gone.
+		if _, err := os.Stat(pidPath); err == nil {
+			pidExistedAtHook.Store(true)
+		}
+		return nil
+	})
+
+	ctx := context.Background()
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- lifecycle.Run(ctx)
+	}()
+
+	waitForSocketReady(t, socketPath)
+
+	// Safety net only for an early t.Fatal before the body shuts down cleanly.
+	// runReturned lets it skip the wait on the happy path (errCh already drained)
+	// so the cleanup exits immediately instead of burning the 3s timeout.
+	var runReturned atomic.Bool
+	t.Cleanup(func() {
+		if runReturned.Load() {
+			return
+		}
+		lifecycle.Shutdown()
+		select {
+		case <-errCh:
+		case <-time.After(3 * time.Second):
+			if pidInfo, err := ReadPIDFileJSON(pidPath); err == nil && process.IsRunning(pidInfo.PID) {
+				if proc, err := os.FindProcess(pidInfo.PID); err == nil {
+					_ = proc.Kill()
+				}
+			}
+		}
+	})
+
+	if _, err := os.Stat(pidPath); err != nil {
+		t.Fatalf("PID file missing while running: %v", err)
+	}
+
+	lifecycle.Shutdown()
+
+	select {
+	case err := <-errCh:
+		runReturned.Store(true)
+		if err != nil {
+			t.Fatalf("lifecycle.Run() failed: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("shutdown timed out")
+	}
+
+	if !hookRan.Load() {
+		t.Fatal("tsnet shutdown hook was never invoked during graceful shutdown")
+	}
+	if !pidExistedAtHook.Load() {
+		t.Fatal("tsnet node was released AFTER PID file removal (ordering bug) — restart overlap can recur")
+	}
+	if _, err := os.Stat(pidPath); !os.IsNotExist(err) {
+		t.Fatal("PID file was not removed after shutdown")
+	}
+}
+
+// TestLifecycleShutdown_TsnetReleaseTimeoutDoesNotWedge guards thrum-oqao
+// guardrail 4: a stuck tsnet node-release must not wedge the daemon stop
+// forever. With a hook that never returns, shutdown must still fall through
+// (after the bounded timeout) and complete — PID file removed, Run() returns.
+func TestLifecycleShutdown_TsnetReleaseTimeoutDoesNotWedge(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "lc")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+	socketPath := filepath.Join(tmpDir, "t.sock")
+	pidPath := filepath.Join(tmpDir, "t.pid")
+
+	// Shrink the release budget so the fall-through path is exercised fast.
+	prev := tsnetShutdownTimeout
+	tsnetShutdownTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { tsnetShutdownTimeout = prev })
+
+	server := NewServer(socketPath)
+	lifecycle := NewLifecycle(server, pidPath, nil, "")
+
+	blocked := make(chan struct{})
+	t.Cleanup(func() { close(blocked) }) // unblock the leaked hook goroutine at test end
+	lifecycle.SetTsnetShutdown(func(_ context.Context) error {
+		<-blocked // never returns within the shutdown window
+		return nil
+	})
+
+	ctx := context.Background()
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- lifecycle.Run(ctx)
+	}()
+	waitForSocketReady(t, socketPath)
+
+	lifecycle.Shutdown()
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("lifecycle.Run() failed: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("shutdown wedged on a stuck tsnet release — fall-through timeout did not fire")
+	}
+
+	if _, err := os.Stat(pidPath); !os.IsNotExist(err) {
+		t.Fatal("PID file was not removed after shutdown despite stuck tsnet release")
+	}
+}
+
 func TestLifecycleSignalHandling(t *testing.T) {
 	tmpDir := t.TempDir()
 	socketPath := filepath.Join(tmpDir, "test.sock")

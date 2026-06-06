@@ -2,10 +2,12 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
@@ -15,8 +17,10 @@ import (
 
 // TsnetListener wraps a tsnet server and its listener for sync connections.
 type TsnetListener struct {
-	server   *tsnet.Server
-	listener net.Listener
+	server    *tsnet.Server
+	listener  net.Listener
+	closeOnce sync.Once
+	closeErr  error
 }
 
 // NewTsnetServer creates a tsnet server and listener from the given config.
@@ -128,15 +132,23 @@ func (t *TsnetListener) ServeHTTP(ctx context.Context, handler http.Handler) {
 	_ = srv.Serve(t.listener)
 }
 
-// Close stops the tsnet server and listener.
+// Close stops the tsnet server and listener. It is idempotent (thrum-oqao):
+// graceful shutdown releases the node via the lifecycle hook before PID removal,
+// while runDaemon's deferred cleanup remains a safety net for non-graceful exit
+// paths. sync.Once guarantees the second call is a harmless no-op so the tsnet
+// node is never double-closed.
 func (t *TsnetListener) Close() error {
-	lnErr := t.listener.Close()
-	srvErr := t.server.Close()
-	if lnErr != nil {
-		return fmt.Errorf("close listener: %w", lnErr)
-	}
-	if srvErr != nil {
-		return fmt.Errorf("close server: %w", srvErr)
-	}
-	return nil
+	t.closeOnce.Do(func() {
+		lnErr := t.listener.Close()
+		srvErr := t.server.Close()
+		if lnErr != nil {
+			lnErr = fmt.Errorf("close listener: %w", lnErr)
+		}
+		if srvErr != nil {
+			srvErr = fmt.Errorf("close server: %w", srvErr)
+		}
+		// Join so neither error is silently dropped when both fail.
+		t.closeErr = errors.Join(lnErr, srvErr)
+	})
+	return t.closeErr
 }
