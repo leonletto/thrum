@@ -140,7 +140,7 @@ New in v0.9.1:
   use this path ONLY when not running the Claude Code Thrum plugin —
   the plugin already injects messaging instructions, so combining the two
   duplicates content. The CLAUDE.md block is the alternative for other
-  runtimes (codex, cursor, opencode, kiro, auggie) and for Claude Code
+  runtimes (codex, cursor, opencode, kiro) and for Claude Code
   without the plugin.
 
 New in v0.10.5:
@@ -301,7 +301,7 @@ All commands accept these flags:
 
 ### Setup & Orientation
 
-  thrum init [--force] [--stealth] [--runtime claude|codex|cursor|gemini|opencode|auggie|cli-only|all] [--dry-run] [--skills] [--agent-name NAME] [--agent-role ROLE] [--agent-module MODULE]
+  thrum init [--force] [--stealth] [--runtime claude|codex|cursor|gemini|opencode|cli-only|all] [--dry-run] [--skills] [--agent-name NAME] [--agent-role ROLE] [--agent-module MODULE]
     Initialize Thrum in the current repository. Optionally generate runtime-specific configs.
     --skills installs just the thrum skill without full runtime configuration.
     Populates the `identity` block in config.json (daemon_id generated once via Bootstrap; idempotent).
@@ -322,11 +322,11 @@ All commands accept these flags:
     Use this ONLY when NOT running the Claude Code Thrum plugin — the plugin already
     injects messaging instructions via SessionStart hook + skills + slash commands.
     The CLAUDE.md path is for Claude Code without the plugin, or other runtimes (codex,
-    cursor, opencode, kiro, auggie). Use one or the other, not both.
+    cursor, opencode, kiro). Use one or the other, not both.
 
   thrum quickstart --name <agent-name> --role ROLE --module MODULE [--display NAME] [--intent TEXT] [--runtime PRESET] [--dry-run] [--force] [--no-init] [--preamble-file PATH]
     Register agent, start session, generate runtime config, and set intent in one step.
-    Runtime presets: claude, codex, cursor, gemini, opencode, auggie, cli-only.
+    Runtime presets: claude, codex, cursor, gemini, opencode, cli-only.
     --runtime writes `preferred_runtime` to the identity file (used by `thrum tmux launch`).
     G1a guard: refuses self-rename (caller already owns an identity in this worktree); --force bypasses.
     G1b guard: refuses name collision with a live foreign PID; --force bypasses.
@@ -518,7 +518,7 @@ All commands accept these flags:
 ### Runtime Presets
 
   thrum runtime list
-    List all runtime presets (claude, codex, cursor, gemini, auggie, amp, kiro-cli, cli-only).
+    List all runtime presets (claude, codex, cursor, gemini, amp, kiro-cli, cli-only).
 
   thrum runtime show <name>
     Show details for a runtime preset.
@@ -552,7 +552,7 @@ All commands accept these flags:
 
   thrum tmux launch <name> [--runtime PRESET]
     Start an AI tool inside an existing tmux session. Default runtime: claude.
-    PRESET: claude, opencode, codex, cursor, kiro-cli, auggie, shell, etc.
+    PRESET: claude, opencode, codex, cursor, kiro-cli, shell, etc.
 
   thrum tmux status
     Show all tmux-managed sessions with agent info, state, runtime, and branch.
@@ -898,7 +898,7 @@ All commands accept these flags:
 
   {
     "runtime": {
-      "primary": "claude"                   // claude | codex | cursor | gemini | opencode | auggie | cli-only
+      "primary": "claude"                   // claude | codex | cursor | gemini | opencode | cli-only
     },
     "daemon": {
       "local_only": true,                    // disable remote git sync

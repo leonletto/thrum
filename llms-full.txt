@@ -24,7 +24,7 @@ New in v0.8.0:
   config block.
 - Multi-runtime tmux — `ClaudePID` renamed to `AgentPID` (schema v17).
   `PreferredRuntime` field on identity file (v5). `--runtime` flag on
-  `thrum quickstart`. OpenCode, Codex, Cursor, Gemini, Auggie all launch via
+  `thrum quickstart`. OpenCode, Codex, Cursor, Gemini all launch via
   tmux alongside Claude.
 - Agent status (`thrum agent set-status working|idle|blocked`) — auto-nudge
   detection when working status mismatches silent pane.
@@ -124,8 +124,7 @@ New in v0.10.5:
   (`scripts/thrum-startup.sh`, `scripts/thrum-check-inbox.sh`,
   `scripts/thrum-polling.sh`, `.codex/hooks/session-start`) from
   user-customized configs (`.claude/settings.json`, `AGENTS.md`,
-  `.gemini/instructions.md`, `.cursorrules`, `opencode.json`,
-  `.augment/settings.json`, `.augment/rules/thrum.md`). Daemon-managed
+  `.gemini/instructions.md`, `.cursorrules`, `opencode.json`). Daemon-managed
   scripts overwrite on init so long-running agent worktrees stop drifting
   from the embedded template; user configs preserve on init as before.
   Pass `--force` to overwrite user configs too if needed. Fixes the silent
@@ -193,7 +192,7 @@ New in v0.9.1:
   is, the 5 essential commands (whoami, team, inbox, send, reply), and a
   pointer to the full docs. Designed as the standalone messaging-instruction
   path for environments without the Claude Code Thrum plugin (other
-  runtimes: codex, cursor, opencode, kiro, auggie; or Claude Code where
+  runtimes: codex, cursor, opencode, kiro; or Claude Code where
   the plugin isn't installed). Plugin users should NOT also run this — it
   would duplicate messaging instructions the plugin already provides via
   SessionStart hook + skills + slash commands. Use one approach or the
@@ -385,7 +384,7 @@ All commands accept:
   Flags:    --force              Force reinitialization / overwrite existing files
             --stealth            Write exclusions to .git/info/exclude instead of .gitignore
             --runtime STRING     Generate runtime-specific configs
-                                 (claude|codex|cursor|gemini|opencode|auggie|cli-only|all)
+                                 (claude|codex|cursor|gemini|opencode|cli-only|all)
             --dry-run            Preview changes without writing files
             --skills             v0.8.0: install just the thrum skill, no full runtime config
             --agent-name STRING  Agent name for templates (default: default_agent)
@@ -411,7 +410,7 @@ All commands accept:
             --module STRING       Agent module (or THRUM_MODULE env var)
             --display STRING      Display name for the agent
             --intent STRING       Initial work intent
-            --runtime STRING      Runtime preset (claude, codex, cursor, gemini, opencode, auggie, cli-only)
+            --runtime STRING      Runtime preset (claude, codex, cursor, gemini, opencode, cli-only)
                                   v0.8.0: writes `preferred_runtime` to the identity file,
                                   used by `thrum tmux launch` at session start.
             --dry-run             Preview changes without writing files or registering
@@ -797,7 +796,7 @@ All commands accept:
                  docs at https://leonletto.github.io/thrum.
 
   When to use:   Claude Code WITHOUT the Thrum plugin, or other runtimes
-                 (codex, cursor, opencode, kiro, auggie) that don't have a
+                 (codex, cursor, opencode, kiro) that don't have a
                  first-class plugin. The CLAUDE.md block is the standalone
                  messaging path.
 
@@ -869,7 +868,7 @@ All commands accept:
 ### thrum runtime list
 
   Usage:    thrum runtime list
-  Action:   Lists all available runtime presets (claude, codex, cursor, gemini, auggie, amp, cli-only).
+  Action:   Lists all available runtime presets (claude, codex, cursor, gemini, amp, cli-only).
 
 ### thrum runtime show
 
@@ -921,7 +920,7 @@ All commands accept:
   thrum tmux quickstart <name> --cwd <path> --name <agent-name> --role ROLE --module MODULE [...]
     Alias for `thrum tmux create` (v0.9.0).
 
-  thrum tmux launch <name> [--runtime claude|codex|cursor|gemini|opencode|auggie|shell]
+  thrum tmux launch <name> [--runtime claude|codex|cursor|gemini|opencode|shell]
     Start AI tool inside tmux session. Default: reads from config.json/identity file.
     v0.8.0: opens to all runtimes (multi-runtime tmux support).
     v0.8.2: hard-errors if no agent identity is registered in the target
@@ -1687,7 +1686,7 @@ Unknown event types are silently ignored (forward compatibility).
 
   {
     "runtime": {
-      "primary": "claude"                   // claude | codex | cursor | gemini | opencode | auggie | cli-only
+      "primary": "claude"                   // claude | codex | cursor | gemini | opencode | cli-only
     },
     "daemon": {
       "local_only": true,                    // disable remote git sync
