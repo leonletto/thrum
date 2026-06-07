@@ -495,8 +495,26 @@ spawn_sub_fixture_claude() {
   tmux send-keys -t "$tmux_name" "$launch_cmd"
   sleep 0.5
   tmux send-keys -t "$tmux_name" Enter
-  # Trust dialog renders once shell-claude handshake completes.
-  wait_for_pane_idle "$tmux_name" 30
+  # Trust dialog renders once the shell→claude handshake completes. Confirm it
+  # by CONTENT before sending Enter — a blind Enter after wait_for_pane_idle
+  # races the render: under load (many panes booting) claude can take well over
+  # 30s to paint "Quick safety check", so the Enter lands on an empty prompt and
+  # the dialog later renders unanswered, leaving claude stuck at trust so it
+  # never writes JSONL (the sub-fixture's SessionStart attachment never appears
+  # and downstream assertions ERROR with "no project dir"). Mirror clear_trust's
+  # content-confirm loop. claude 2.1.x dialog text: "Quick safety check: Is this
+  # a project you created or one you trust?" with "1. Yes, I trust this folder".
+  local waited=0
+  while [ "$waited" -lt 45 ]; do
+    if tmux capture-pane -t "$tmux_name" -p 2>/dev/null \
+        | grep -qiE "quick safety check|trust this folder|1\. Yes"; then
+      break
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  # Best-effort Enter even on timeout: if the folder was already trusted no
+  # dialog renders and the Enter is a harmless no-op on the empty prompt.
   tmux send-keys -t "$tmux_name" Enter
 }
 

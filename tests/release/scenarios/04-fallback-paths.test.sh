@@ -34,6 +34,44 @@
 
 SID="04-fallback-paths"
 
+# Harness-side SessionStart-attachment check. claude 2.1.x sub-fixture panes
+# can be mid-autonomous-turn when a `!`-probe lands (e.g. 4B's no-agent pane
+# reacting to the nudge), so the keystrokes queue and the check command's
+# bash-stdout entry never appears — the thrum-rbp6 keystroke race at the
+# sub-fixture layer. check-context-value.sh reads the SessionStart attachment
+# straight from the JSONL, so run it FROM THE HARNESS against the sub-case cwd
+# instead of driving the pane. kick_session_then_wait has already flushed the
+# attachment to disk by the time these run. Echoes the VERIFIED/FAILED line.
+_ss_check() {
+  # Wait for the sub-pane's SessionStart attachment to flush before reading.
+  # claude writes ZERO JSONL until first input; kick_session_then_wait
+  # provides it, but boot can lag under load — poll the project dir so a slow
+  # boot doesn't read as "no project dir". If it genuinely never boots, the
+  # check still surfaces the real failure.
+  wait_for_session_start "$1" 45 >/dev/null 2>&1 || true
+  ( cd "$1" && "$THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh" "$2" "$3" SessionStart:startup )
+}
+
+# assert the attachment CONTAINS <needle> (expects VERIFIED).
+_assert_ss_present() {
+  local cwd="$1" sid="$2" name="$3" tag="$4" needle="$5" loc="$6" out
+  out="$(_ss_check "$cwd" "$tag" "$needle" 2>/dev/null)"
+  case "$out" in
+    VERIFIED*) emit_pass "$sid" "$name" ;;
+    *) emit_fail "$sid" "$name" "VERIFIED $tag (SessionStart attachment contains \"$needle\")" "${out:-<no result>}" "$loc" ;;
+  esac
+}
+
+# assert the attachment does NOT contain <needle> (expects FAILED = absent).
+_assert_ss_absent() {
+  local cwd="$1" sid="$2" name="$3" tag="$4" needle="$5" loc="$6" out
+  out="$(_ss_check "$cwd" "$tag" "$needle" 2>/dev/null)"
+  case "$out" in
+    FAILED*) emit_pass "$sid" "$name" ;;
+    *) emit_fail "$sid" "$name" "FAILED $tag (SessionStart attachment must NOT contain \"$needle\")" "${out:-<no result>}" "$loc" ;;
+  esac
+}
+
 mkdir -p "$BASE/fallback-4a" "$BASE/fallback-4b" "$BASE/fallback-4c"
 
 # 4B and 4C both need `thrum init` to succeed, which requires a git-anchored
@@ -95,8 +133,7 @@ run_4a_no_thrum_binary() {
 
   # Negative assertion: the briefing header MUST NOT appear in this pane's
   # SessionStart attachment.
-  send_command "$tmux_name" "! cd \"$cwd\" && $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh 4A_no_briefing \"# Thrum Session Briefing\" SessionStart:startup"
-  assert_jsonl "$tmux_name" "$cwd" "$SID" "4A-no-briefing" "FAILED 4A_no_briefing" \
+  _assert_ss_absent "$cwd" "$SID" "4A-no-briefing" "4A_no_briefing" "# Thrum Session Briefing" \
     "scenarios/${SID}.test.sh:$LINENO"
 
   tmux kill-session -t "$tmux_name" 2>/dev/null || true
@@ -111,12 +148,10 @@ run_4b_no_agent_registered() {
 
   # Hook detects thrum present + whoami empty (no identities under the
   # local .thrum) → emits historical nudge.
-  send_command "$tmux_name" "! cd \"$cwd\" && $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh 4B_nudge \"Run /thrum:prime to load\" SessionStart:startup"
-  assert_jsonl "$tmux_name" "$cwd" "$SID" "4B-nudge-present" "VERIFIED 4B_nudge" \
+  _assert_ss_present "$cwd" "$SID" "4B-nudge-present" "4B_nudge" "Run /thrum:prime to load" \
     "scenarios/${SID}.test.sh:$LINENO"
 
-  send_command "$tmux_name" "! cd \"$cwd\" && $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh 4B_no_briefing \"# Thrum Session Briefing\" SessionStart:startup"
-  assert_jsonl "$tmux_name" "$cwd" "$SID" "4B-briefing-absent" "FAILED 4B_no_briefing" \
+  _assert_ss_absent "$cwd" "$SID" "4B-briefing-absent" "4B_no_briefing" "# Thrum Session Briefing" \
     "scenarios/${SID}.test.sh:$LINENO"
 
   tmux kill-session -t "$tmux_name" 2>/dev/null || true
@@ -144,12 +179,10 @@ run_4c_daemon_down() {
   # the degraded "Thrum not initialized" prime output. Assert against
   # what actually lands. When br6t is fixed, swap to "Auto-injection
   # failed" + "daemon may be unreachable".
-  send_command "$tmux_name" "! cd \"$cwd\" && $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh 4C_envelope \"# Thrum Session Briefing (auto-loaded)\" SessionStart:startup"
-  assert_jsonl "$tmux_name" "$cwd" "$SID" "4C-envelope-present" "VERIFIED 4C_envelope" \
+  _assert_ss_present "$cwd" "$SID" "4C-envelope-present" "4C_envelope" "# Thrum Session Briefing (auto-loaded)" \
     "scenarios/${SID}.test.sh:$LINENO"
 
-  send_command "$tmux_name" "! cd \"$cwd\" && $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh 4C_degraded \"Thrum not initialized\" SessionStart:startup"
-  assert_jsonl "$tmux_name" "$cwd" "$SID" "4C-degraded-prime-output" "VERIFIED 4C_degraded" \
+  _assert_ss_present "$cwd" "$SID" "4C-degraded-prime-output" "4C_degraded" "Thrum not initialized" \
     "scenarios/${SID}.test.sh:$LINENO"
 
   tmux kill-session -t "$tmux_name" 2>/dev/null || true
