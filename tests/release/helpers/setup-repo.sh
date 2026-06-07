@@ -253,27 +253,26 @@ run_setup() {
   # wait_for_session_start polls for).
   clear_trust "$IMPL_SESSION"
 
-  # Wait for the impl session to actually start in claude (SessionStart hook
-  # firing means claude booted and processed /thrum:prime).
-  wait_for_session_start "$IMPL_WT" 60 \
-    || { echo "ERROR: impl SessionStart did not appear within 60s" >&2; return 1; }
-
-  # Verify impl identity from inside the pane.
+  # Verify the impl session started AND carries the right identity via the
+  # SessionStart hook attachment in claude's JSONL — the authoritative,
+  # pane-independent surface. This subsumes a bare wait_for_session_start
+  # (presence) by also asserting the rendered briefing names test_implementer.
   #
-  # Same retry-with-bounded-resend as the coord probe (thrum-vjqn). The impl
-  # path is less prone to the missed-keystroke race because line above
-  # already confirmed SessionStart fired, but a saturated box can still
-  # delay the bash-prefix mode toggle past wait_for_pane_idle's 10s gate.
-  # Retry is benign on the happy path (first attempt succeeds in <10s).
-  attempt=1
-  while [ "$attempt" -le 3 ]; do
-    if send_bash_and_wait "$IMPL_SESSION" "$IMPL_WT" "thrum whoami --json" "test_implementer" 30; then
-      break
-    fi
-    attempt=$((attempt + 1))
-  done
-  if [ "$attempt" -gt 3 ]; then
-    echo "ERROR: impl whoami did not return expected bash-stdout entry across 3 attempts (90s total)" >&2
+  # We deliberately do NOT use a `! thrum whoami --json` keystroke probe here
+  # (as the coord path does). On claude 2.1.x the implementer, once the daemon
+  # auto-primes it, autonomously runs `thrum wait --timeout 300s` to listen for
+  # coordinator dispatch — correct implementer behavior, verified emergent (the
+  # implementer role template does not instruct it; claude 2.1.x is simply more
+  # proactive). That blocks the pane in a long-running Bash tool, so a `!`-bash
+  # probe queues behind the wait and never lands its bash-stdout entry inside
+  # the probe window (confirmed: 3/3 gate aborts pre-fix, with the queued probe
+  # text stranded behind a live `thrum wait` in the impl pane). Interrupting the
+  # wait with ESC doesn't help — claude immediately re-issues `thrum wait`. The
+  # SessionStart attachment already carries `"agent_id": "test_implementer"` and
+  # needs no free pane. The coord path keeps its keystroke probe: the
+  # coordinator role does not proactively wait, so its pane stays idle.
+  if ! wait_for_attachment "$IMPL_WT" "SessionStart" "test_implementer" 90 >/dev/null; then
+    echo "ERROR: impl SessionStart attachment did not carry identity test_implementer within 90s" >&2
     return 1
   fi
 
