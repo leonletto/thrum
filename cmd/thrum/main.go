@@ -4565,17 +4565,36 @@ Examples:
 				if cfg, err := config.LoadThrumConfig(thrumDir); err == nil {
 					result.SingleAgentMode = cfg.Daemon.SingleAgentMode
 				}
-				// Wire SavedSessionContext
+				// Resolve the agent name for local-file lookups (saved session
+				// context + restart snapshot). Prefer the daemon-resolved identity,
+				// but fall back to the on-disk identity file when the daemon hasn't
+				// bound the agent yet. This races immediately after a self-restart
+				// relaunch: the new runtime PID isn't re-bound at the instant the
+				// SessionStart hook runs `thrum prime`, so AgentWhoami returns
+				// nothing and result.Identity is transiently nil — even though the
+				// identity file AND the restart snapshot are present locally. Without
+				// the fallback the SessionStart prime silently drops the restart
+				// snapshot, so the agent's own Resume Plan never auto-loads on
+				// self-restart (release scenario 80). Saved context and a restart
+				// snapshot are LOCAL state; consuming them must not require the daemon.
+				localAgentName := ""
 				if result.Identity != nil {
-					ctxPath := filepath.Join(thrumDir, "context", result.Identity.AgentID+".md")
+					localAgentName = result.Identity.AgentID
+				} else if idFile, _, err := config.LoadIdentityWithPath(result.RepoPath); err == nil && idFile != nil {
+					localAgentName = idFile.Agent.Name
+				}
+
+				// Wire SavedSessionContext
+				if localAgentName != "" {
+					ctxPath := filepath.Join(thrumDir, "context", localAgentName+".md")
 					if data, err := os.ReadFile(ctxPath); err == nil { // #nosec G304 -- internal context file
 						result.SavedSessionContext = string(data)
 					}
 				}
 
 				// Wire RestartSnapshot (consumed on read)
-				if result.Identity != nil {
-					if snapshot, err := restart.ConsumeInPrime(thrumDir, result.Identity.AgentID); err == nil {
+				if localAgentName != "" {
+					if snapshot, err := restart.ConsumeInPrime(thrumDir, localAgentName); err == nil {
 						result.RestartSnapshot = snapshot
 					}
 				}
