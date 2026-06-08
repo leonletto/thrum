@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/daemon/eventlog"
@@ -150,5 +151,58 @@ func TestPullResponse_FilteredFlag(t *testing.T) {
 	}
 	if without.Filtered {
 		t.Fatal("Filtered must default to false when the key is absent")
+	}
+}
+
+// TestPullAllEvents_FilteredMultiWindow_DoesNotStopOnEmpty (D13 part 2): an
+// empty-but-filtered window (a window where the directed filter dropped every
+// event) is NORMAL, not end-of-stream. PullAllEvents must keep pulling while
+// more_available, traversing all windows to the final scan-watermark instead of
+// halting at the empty middle window.
+func TestPullAllEvents_FilteredMultiWindow_DoesNotStopOnEmpty(t *testing.T) {
+	reg := NewSyncRegistry()
+
+	type window struct {
+		events []eventlog.Event
+		next   int64
+		more   bool
+		filt   bool
+	}
+	windows := []window{
+		{events: []eventlog.Event{{EventID: "m2", Sequence: 2, Type: "message.create", Timestamp: "2026-02-11T10:00:00Z", OriginDaemon: "d_test", EventJSON: json.RawMessage(`{"type":"message.create"}`)}}, next: 2, more: true, filt: true},
+		{events: nil, next: 80, more: true, filt: true},
+		{events: []eventlog.Event{{EventID: "m90", Sequence: 90, Type: "message.create", Timestamp: "2026-02-11T10:01:00Z", OriginDaemon: "d_test", EventJSON: json.RawMessage(`{"type":"message.create"}`)}}, next: 90, more: false, filt: true},
+	}
+	var calls int64
+	_ = reg.Register("sync.pull", func(_ context.Context, _ json.RawMessage) (any, error) {
+		i := int(atomic.AddInt64(&calls, 1) - 1)
+		if i >= len(windows) {
+			return map[string]any{"events": nil, "next_sequence": int64(0), "more_available": false}, nil
+		}
+		w := windows[i]
+		return map[string]any{
+			"events":         w.events,
+			"next_sequence":  w.next,
+			"more_available": w.more,
+			"filtered":       w.filt,
+		}, nil
+	})
+
+	addr, _ := newTestWSServer(t, reg)
+
+	c := NewSyncClient()
+	var lastSeq int64
+	err := c.PullAllEvents(addr, 0, "", func(_ []eventlog.Event, nextSeq int64, _ bool) error {
+		lastSeq = nextSeq // stand-in for ApplyAndCheckpoint
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("PullAllEvents: %v", err)
+	}
+	if lastSeq != 90 {
+		t.Fatalf("pull must traverse all 3 windows to seq 90, stopped at %d", lastSeq)
+	}
+	if got := atomic.LoadInt64(&calls); got != 3 {
+		t.Fatalf("must not stop at the empty w2; served %d windows", got)
 	}
 }

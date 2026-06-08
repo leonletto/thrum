@@ -111,7 +111,15 @@ func (a *SyncApplier) loadPurgeCutoff(ctx context.Context) *string {
 // The checkpoint is derived from the actual events received, not the peer's claimed
 // next_sequence, to prevent checkpoint manipulation attacks where a malicious peer
 // skips events by sending an inflated next_sequence value.
-func (a *SyncApplier) ApplyAndCheckpoint(ctx context.Context, peerID string, events []eventlog.Event, peerNextSeq int64) (applied, skipped int, err error) {
+//
+// D13 (directed-inbound back-port): when filtered is true the peer is serving a
+// directed/filtered stream — it legitimately skips sequences the puller never
+// sees, so the anti-lying-peer cap is bypassed (the checkpoint follows the peer's
+// scan-watermark). The cap, and the requirement that the checkpoint only advance
+// over events actually received, remain fully in force for normal (non-filtered)
+// peers — a lying peer can NOT over-advance our cursor. filtered must only ever
+// be set from PullResponse.Filtered, which a normal peer never sets.
+func (a *SyncApplier) ApplyAndCheckpoint(ctx context.Context, peerID string, events []eventlog.Event, peerNextSeq int64, filtered bool) (applied, skipped int, err error) {
 	// Get current checkpoint to validate monotonic progress
 	currentSeq, err := a.GetCheckpoint(peerID)
 	if err != nil {
@@ -123,9 +131,11 @@ func (a *SyncApplier) ApplyAndCheckpoint(ctx context.Context, peerID string, eve
 		return 0, 0, fmt.Errorf("checkpoint regression: peer sent next_seq=%d but current is %d", peerNextSeq, currentSeq)
 	}
 
-	// Derive safe checkpoint from actual events rather than trusting peer's claim
+	// Derive safe checkpoint from actual events rather than trusting peer's claim.
+	// D13 part 1: the cap applies ONLY to non-filtered (normal) peers. A filtered
+	// peer's scan-watermark legitimately exceeds the max sequence we received.
 	safeNextSeq := peerNextSeq
-	if len(events) > 0 {
+	if !filtered && len(events) > 0 {
 		maxEventSeq := events[0].Sequence
 		for _, evt := range events[1:] {
 			if evt.Sequence > maxEventSeq {
@@ -143,8 +153,11 @@ func (a *SyncApplier) ApplyAndCheckpoint(ctx context.Context, peerID string, eve
 		return applied, skipped, err
 	}
 
-	// Update checkpoint with safe sequence
-	if applied > 0 || skipped > 0 {
+	// Update checkpoint with safe sequence.
+	// D13 part 3: a filtered all-empty window (every event dropped by the peer's
+	// filter) must still advance the checkpoint past it, else the cursor freezes
+	// at the last kept message and re-pulls the same window forever.
+	if applied > 0 || skipped > 0 || (filtered && peerNextSeq > currentSeq) {
 		if err := checkpoint.UpdateCheckpoint(ctx, a.state.DB(), peerID, safeNextSeq, time.Now().Unix()); err != nil {
 			return applied, skipped, fmt.Errorf("update checkpoint: %w", err)
 		}
