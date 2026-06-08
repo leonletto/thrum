@@ -73,6 +73,16 @@ send_slash_command() {
   # Settle the pane first — same gating as send_command, so callers
   # don't need a separate wait_for_pane_idle.
   wait_for_pane_idle "$pane" 10
+  # Clear any leftover input BEFORE the `/`. Under claude 2.1.x full-gate
+  # load a prior scenario can leave the shared COORD pane in `!` bash-prefix
+  # mode (or with partial text); sending `/` then appends to it, producing
+  # `! /thrum:prime` which claude runs as a shell path ("no such file or
+  # directory: /thrum:prime") instead of registering the slash command.
+  # Ctrl-U kills the input line, dropping any stray `!`/text so the `/`
+  # always lands at column 0 of an empty normal-mode prompt. Harmless when
+  # the line is already empty. (Root cause of the moving scenario-54 flake.)
+  tmux send-keys -t "$pane" C-u
+  sleep 0.3
   tmux send-keys -t "$pane" "/"
   sleep 0.5
   tmux send-keys -t "$pane" "$body"
@@ -148,12 +158,42 @@ wait_for_bash_stdout_contains() {
 # Use this instead of inlining `tmux send-keys ... Enter` + a verbose
 # wait_for_jsonl_match jq filter — too easy to typo the filter and break
 # silently. Default timeout: 60s.
+#
+# Bounded retry-resend (6th arg, default 3 attempts) hardens against the
+# claude 2.1.x pane-probe load failure: under a busy COORD pane, the `!`
+# keystrokes can queue behind the pane's render and the command never
+# executes (thrum-rbp6 Class A keystroke race), so the marker never lands
+# and the first wait times out. On attempts 2+ we resend — but FIRST do a
+# short pre-resend grace re-check (SAME floor_ts) to catch a slow first
+# execution that finally landed after the prior wait timed out. Returning
+# on that re-check is what makes resend safe for non-idempotent ops
+# (thrum send/reply): we only resend when the marker is genuinely absent,
+# which means the command did not execute. floor_ts is captured ONCE
+# before the loop so a stale prior-scenario entry can never short-circuit
+# any attempt. Pass attempts=1 to opt out (no caller currently needs to —
+# every send_bash_and_wait caller waits for a marker to APPEAR, including
+# rejection tests that gate on an error-message substring).
 send_bash_and_wait() {
-  local pane="$1" repo="$2" cmd="$3" expected="$4" timeout="${5:-60}"
+  local pane="$1" repo="$2" cmd="$3" expected="$4" timeout="${5:-60}" attempts="${6:-3}"
   local floor_ts
   floor_ts="$(date -u +%Y-%m-%dT%H:%M:%S)"
-  send_command "$pane" "! $cmd"
-  wait_for_bash_stdout_contains "$repo" "$expected" "$timeout" "$floor_ts" >/dev/null
+  local attempt=1
+  while [ "$attempt" -le "$attempts" ]; do
+    if [ "$attempt" -gt 1 ]; then
+      # Pre-resend grace: a slow first execution may have landed after the
+      # previous attempt's wait timed out. Re-poll briefly before resending
+      # so we never double-fire a non-idempotent op.
+      if wait_for_bash_stdout_contains "$repo" "$expected" 2 "$floor_ts" >/dev/null; then
+        return 0
+      fi
+    fi
+    send_command "$pane" "! $cmd"
+    if wait_for_bash_stdout_contains "$repo" "$expected" "$timeout" "$floor_ts" >/dev/null; then
+      return 0
+    fi
+    attempt=$((attempt + 1))
+  done
+  return 1
 }
 
 # wait_for_pane_idle <pane> [max-seconds]
