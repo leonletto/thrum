@@ -131,3 +131,24 @@ func TestSyncClient_ConnectionRefused(t *testing.T) {
 		t.Error("expected error for connection refused")
 	}
 }
+
+// TestPullResponse_FilteredFlag verifies the client can read the additive
+// `filtered` flag a 0.11 hub sets on a directed/filtered sync.pull response
+// (D10/I-1). The key is omitempty: absent in a normal peer's body → false.
+func TestPullResponse_FilteredFlag(t *testing.T) {
+	var withFlag PullResponse
+	if err := json.Unmarshal([]byte(`{"events":[],"next_sequence":5,"more_available":true,"filtered":true}`), &withFlag); err != nil {
+		t.Fatalf("unmarshal with filtered:true: %v", err)
+	}
+	if !withFlag.Filtered {
+		t.Fatal("Filtered must be true when body carries filtered:true")
+	}
+
+	var without PullResponse
+	if err := json.Unmarshal([]byte(`{"events":[],"next_sequence":5,"more_available":true}`), &without); err != nil {
+		t.Fatalf("unmarshal without filtered key: %v", err)
+	}
+	if without.Filtered {
+		t.Fatal("Filtered must default to false when the key is absent")
+	}
+}

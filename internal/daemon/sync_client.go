@@ -18,6 +18,11 @@ type PullResponse struct {
 	Events        []eventlog.Event `json:"events"`
 	NextSequence  int64            `json:"next_sequence"`
 	MoreAvailable bool             `json:"more_available"`
+	// Filtered is set by a 0.11 hub serving a directed/filtered inbound stream.
+	// It is JSON-additive (omitempty): a normal (non-filtering) peer never sets
+	// it, so it reads false. The D13 cursor-honesty patch (A2) only engages when
+	// this is true. The client reads it; 0.10.6 never sets it when serving.
+	Filtered bool `json:"filtered,omitempty"`
 }
 
 // SyncClient connects to a peer daemon via WebSocket and pulls events.
