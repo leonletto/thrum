@@ -936,3 +936,105 @@ func TestNudgeConfig_SilenceGate(t *testing.T) {
 		})
 	}
 }
+
+// ── A3 / B4+B5 back-port: SyncConfig, validateSync, migrateLegacySync ─────────
+
+// syncHasMechanism returns true when cfg.Daemon.Sync.Mechanisms contains an
+// entry with the given mechanism name (any scope).
+func syncHasMechanism(cfg config.ThrumConfig, mech string) bool {
+	for _, m := range cfg.Daemon.Sync.Mechanisms {
+		if m.Mechanism == mech {
+			return true
+		}
+	}
+	return false
+}
+
+// syncHasMechanismScope returns true when cfg contains an entry matching both
+// mechanism and scope.
+func syncHasMechanismScope(cfg config.ThrumConfig, mech, scope string) bool {
+	for _, m := range cfg.Daemon.Sync.Mechanisms {
+		if m.Mechanism == mech && m.Scope == scope {
+			return true
+		}
+	}
+	return false
+}
+
+func TestValidateSync(t *testing.T) {
+	cases := []struct {
+		name    string
+		mechs   []config.SyncMechanism
+		wantErr string
+	}{
+		{"a-sync directed rejected", []config.SyncMechanism{{Mechanism: "a-sync", Scope: "directed"}}, "only valid for peer/email"},
+		{"unknown mechanism directed rejected", []config.SyncMechanism{{Mechanism: "carrier-pigeon", Scope: "directed"}}, "only valid for peer/email"},
+		{"directed alongside full rejected", []config.SyncMechanism{{Mechanism: "a-sync", Scope: "full"}, {Mechanism: "peer", Scope: "directed"}}, "directed cannot coexist"},
+		{"peer directed ok", []config.SyncMechanism{{Mechanism: "peer", Scope: "directed"}}, ""},
+		{"email directed ok", []config.SyncMechanism{{Mechanism: "email", Scope: "directed"}}, ""},
+		{"a-sync full ok", []config.SyncMechanism{{Mechanism: "a-sync", Scope: "full"}}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := config.ValidateSync(config.SyncConfig{Enabled: true, Mechanisms: tc.mechs})
+			if tc.wantErr == "" && err != nil {
+				t.Fatalf("want ok, got %v", err)
+			}
+			if tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)) {
+				t.Fatalf("want err %q, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestMigrateLegacySync(t *testing.T) {
+	// legacy local_only=true gated only a-sync → a-sync removed, peer kept implicitly
+	got := config.MigrateLegacySync(config.ThrumConfig{Daemon: config.DaemonConfig{LocalOnly: true}})
+	if syncHasMechanism(got, "a-sync") {
+		t.Fatal("local_only=true must map to a-sync OFF")
+	}
+	if !got.Daemon.Sync.Enabled {
+		t.Fatal("local_only=true must NOT blanket-disable sync")
+	}
+	// legacy false (today's real default) → a-sync full present
+	got = config.MigrateLegacySync(config.ThrumConfig{Daemon: config.DaemonConfig{LocalOnly: false}})
+	if !syncHasMechanismScope(got, "a-sync", "full") {
+		t.Fatal("local_only=false must map to a-sync(full)")
+	}
+}
+
+func TestApplyDefaults_FreshInstallIsASyncFull(t *testing.T) {
+	cfg := config.ThrumConfig{} // no sync stanza, no legacy bool set
+	config.ApplyDefaultsForTest(&cfg)
+	if !syncHasMechanismScope(cfg, "a-sync", "full") || !cfg.Daemon.Sync.Enabled {
+		t.Fatalf("fresh default must be sync:on a-sync(full), got %+v", cfg.Daemon.Sync)
+	}
+}
+
+func TestValidateSync_DisabledSkipsValidation(t *testing.T) {
+	// A disabled sync with bad mechanisms must be accepted (enabled=false short-circuits)
+	err := config.ValidateSync(config.SyncConfig{
+		Enabled:    false,
+		Mechanisms: []config.SyncMechanism{{Mechanism: "a-sync", Scope: "directed"}},
+	})
+	if err != nil {
+		t.Fatalf("disabled sync must bypass validation, got %v", err)
+	}
+}
+
+func TestLoadThrumConfig_RejectsBadSyncCombo(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	// a-sync + directed is invalid (a-sync is full-only)
+	data := `{"daemon":{"sync":{"enabled":true,"mechanisms":[{"mechanism":"a-sync","scope":"directed"}]}}}`
+	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := config.LoadThrumConfig(tmpDir)
+	if err == nil {
+		t.Fatal("expected error for a-sync+directed combo, got nil")
+	}
+	if !strings.Contains(err.Error(), "only valid for peer/email") {
+		t.Fatalf("expected 'only valid for peer/email' in error, got %v", err)
+	}
+}
