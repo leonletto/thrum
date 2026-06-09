@@ -191,9 +191,12 @@ var filterableMechanisms = map[string]struct{}{"peer": {}, "email": {}}
 //  1. scope=directed is valid ONLY for filterable mechanisms (peer, email).
 //  2. directed cannot coexist with any full-delivery mechanism.
 //
-// A disabled SyncConfig (Enabled==false) passes without checking mechanisms.
-func ValidateSync(c SyncConfig) error {
-	if !c.Enabled {
+// A nil or disabled SyncConfig (Enabled==false) passes without checking
+// mechanisms. nil means the sync stanza was absent (pre-default); the loader
+// allocates the D9 default via MigrateLegacySync before validation in the
+// normal path, so a nil here is the defensive pre-default case.
+func ValidateSync(c *SyncConfig) error {
+	if c == nil || !c.Enabled {
 		return nil
 	}
 	hasFull := false
@@ -209,7 +212,7 @@ func ValidateSync(c SyncConfig) error {
 			hasFull = true
 		}
 	}
-	// Rule 3: directed cannot coexist with any full-delivery mechanism.
+	// Rule 2: directed cannot coexist with any full-delivery mechanism.
 	for _, m := range c.Mechanisms {
 		if m.Scope == "directed" && hasFull {
 			return fmt.Errorf("invalid sync config: directed cannot coexist with a full-delivery mechanism (flood would leak)")
@@ -222,16 +225,21 @@ func ValidateSync(c SyncConfig) error {
 // the A+B model, behavior-preserving. local_only gated ONLY a-sync historically,
 // so local_only=true → a-sync off (sync still enabled for peer/email);
 // local_only=false → a-sync(full).
-// If a sync stanza is already present (Enabled true or mechanisms set), it wins
-// and no migration is applied.
+// A non-nil Sync pointer means the stanza was explicitly present in the JSON
+// (json.Unmarshal allocates it) — it wins verbatim and no migration is applied,
+// so an operator's deliberate sync:{enabled:false} is preserved. A nil Sync
+// means the stanza was absent (legacy or fresh install) → allocate the D9
+// default. This nil/non-nil distinction replaces the old raw-JSON
+// syncStanzaPresent probe (the pointer makes absent-vs-explicit type-native).
 func MigrateLegacySync(cfg ThrumConfig) ThrumConfig {
-	if len(cfg.Daemon.Sync.Mechanisms) > 0 || cfg.Daemon.Sync.Enabled {
-		return cfg // explicit new-model config present; do not migrate
+	if cfg.Daemon.Sync != nil {
+		return cfg // explicit stanza present; preserve it verbatim
 	}
-	cfg.Daemon.Sync.Enabled = true
+	s := &SyncConfig{Enabled: true}
 	if !cfg.Daemon.LocalOnly {
-		cfg.Daemon.Sync.Mechanisms = []SyncMechanism{{Mechanism: "a-sync", Scope: "full"}}
+		s.Mechanisms = []SyncMechanism{{Mechanism: "a-sync", Scope: "full"}}
 	}
+	cfg.Daemon.Sync = s
 	return cfg
 }
 
@@ -239,9 +247,9 @@ func MigrateLegacySync(cfg ThrumConfig) ThrumConfig {
 // Note: sync_interval was removed in v0.10.6 (thrum-s6os); the field is
 // silently ignored when present in legacy config files (spec §7.2).
 type DaemonConfig struct {
-	LocalOnly                 bool       `json:"local_only,omitempty"`
-	Sync                      SyncConfig `json:"sync,omitempty"`
-	WSPort                    string     `json:"ws_port,omitempty"`   // "auto" or specific port number
+	LocalOnly                 bool        `json:"local_only,omitempty"`
+	Sync                      *SyncConfig `json:"sync,omitempty"` // nil = absent stanza (migrate to D9 default); non-nil = explicit (preserved). Pointer makes omitempty genuinely omit + absent-vs-explicit type-native.
+	WSPort                    string      `json:"ws_port,omitempty"` // "auto" or specific port number
 	PeerPort                  string     `json:"peer_port,omitempty"` // "auto" or specific port number for peer connections
 	SingleAgentMode           bool       `json:"single_agent_mode,omitempty"`
 	LogLevel                  string     `json:"log_level,omitempty"`                    // "debug", "info", "warn", "error"; default "info"
@@ -458,36 +466,22 @@ func LoadThrumConfig(thrumDir string) (*ThrumConfig, error) {
 		cfg.Peers = DefaultPeersConfig()
 	}
 
-	// D7/D9: detect whether the daemon.sync stanza is explicitly present in
-	// the JSON. A stanza with only enabled:false is distinguishable from an
-	// absent stanza only at the raw JSON level — json.Unmarshal leaves
-	// cfg.Daemon.Sync at its zero-value (Enabled=false, Mechanisms=nil) in
-	// both cases. Only migrate (MigrateLegacySync) when the stanza is absent.
-	syncStanzaPresent := false
-	if daemonRaw, ok := raw["daemon"]; ok {
-		var daemonMap map[string]json.RawMessage
-		if err := json.Unmarshal(daemonRaw, &daemonMap); err == nil {
-			_, syncStanzaPresent = daemonMap["sync"]
-		}
-	}
-
-	applyDefaultsWithSyncPresent(&cfg, syncStanzaPresent)
+	// D7/D9: sync defaulting + migration happens in applyDefaults via
+	// MigrateLegacySync. With Sync as a *SyncConfig, json.Unmarshal leaves the
+	// pointer nil for an absent stanza and allocates it for a present one (even
+	// enabled:false) — so migration acts only on nil and an explicit stanza is
+	// preserved verbatim. No raw-JSON probe needed (the pointer is type-native).
+	applyDefaults(&cfg)
 	if err := ValidateSync(cfg.Daemon.Sync); err != nil {
 		return nil, err
 	}
 	return &cfg, nil
 }
 
-// applyDefaults fills in sensible defaults for zero-value fields.
-// Called when the sync stanza is absent from the raw JSON (legacy or fresh install).
+// applyDefaults fills in sensible defaults for zero-value fields, including the
+// D7/D9 sync default via MigrateLegacySync (which allocates the default ONLY
+// when cfg.Daemon.Sync is nil — i.e. the stanza was absent from the JSON).
 func applyDefaults(cfg *ThrumConfig) {
-	applyDefaultsWithSyncPresent(cfg, false)
-}
-
-// applyDefaultsWithSyncPresent fills in sensible defaults. syncStanzaPresent
-// must be true when the caller has detected a "sync" key in the raw daemon JSON —
-// in that case migration is skipped and the explicit value wins.
-func applyDefaultsWithSyncPresent(cfg *ThrumConfig, syncStanzaPresent bool) {
 	if cfg.Daemon.WSPort == "" {
 		cfg.Daemon.WSPort = DefaultWSPort
 	}
@@ -519,14 +513,11 @@ func applyDefaultsWithSyncPresent(cfg *ThrumConfig, syncStanzaPresent bool) {
 	if cfg.Daemon.PeerPort == "" {
 		cfg.Daemon.PeerPort = "auto"
 	}
-	// D7/D9: fresh-install default = sync on, a-sync full.
-	// MigrateLegacySync handles configs that only have LocalOnly set.
-	// When a sync stanza was explicitly present in the JSON, skip migration
-	// and honour the operator's explicit setting (including enabled:false).
-	if !syncStanzaPresent {
-		migrated := MigrateLegacySync(*cfg)
-		cfg.Daemon.Sync = migrated.Daemon.Sync
-	}
+	// D7/D9: fresh-install default = sync on, a-sync full. MigrateLegacySync
+	// allocates the default ONLY when cfg.Daemon.Sync is nil (absent stanza);
+	// an explicit stanza (non-nil pointer, including enabled:false) is preserved.
+	migrated := MigrateLegacySync(*cfg)
+	cfg.Daemon.Sync = migrated.Daemon.Sync
 }
 
 // ApplyDefaultsForTest exposes applyDefaults for white-box testing of the

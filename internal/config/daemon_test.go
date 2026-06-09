@@ -942,6 +942,9 @@ func TestNudgeConfig_SilenceGate(t *testing.T) {
 // syncHasMechanism returns true when cfg.Daemon.Sync.Mechanisms contains an
 // entry with the given mechanism name (any scope).
 func syncHasMechanism(cfg config.ThrumConfig, mech string) bool {
+	if cfg.Daemon.Sync == nil {
+		return false
+	}
 	for _, m := range cfg.Daemon.Sync.Mechanisms {
 		if m.Mechanism == mech {
 			return true
@@ -953,6 +956,9 @@ func syncHasMechanism(cfg config.ThrumConfig, mech string) bool {
 // syncHasMechanismScope returns true when cfg contains an entry matching both
 // mechanism and scope.
 func syncHasMechanismScope(cfg config.ThrumConfig, mech, scope string) bool {
+	if cfg.Daemon.Sync == nil {
+		return false
+	}
 	for _, m := range cfg.Daemon.Sync.Mechanisms {
 		if m.Mechanism == mech && m.Scope == scope {
 			return true
@@ -976,7 +982,7 @@ func TestValidateSync(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := config.ValidateSync(config.SyncConfig{Enabled: true, Mechanisms: tc.mechs})
+			err := config.ValidateSync(&config.SyncConfig{Enabled: true, Mechanisms: tc.mechs})
 			if tc.wantErr == "" && err != nil {
 				t.Fatalf("want ok, got %v", err)
 			}
@@ -1013,12 +1019,16 @@ func TestApplyDefaults_FreshInstallIsASyncFull(t *testing.T) {
 
 func TestValidateSync_DisabledSkipsValidation(t *testing.T) {
 	// A disabled sync with bad mechanisms must be accepted (enabled=false short-circuits)
-	err := config.ValidateSync(config.SyncConfig{
+	err := config.ValidateSync(&config.SyncConfig{
 		Enabled:    false,
 		Mechanisms: []config.SyncMechanism{{Mechanism: "a-sync", Scope: "directed"}},
 	})
 	if err != nil {
 		t.Fatalf("disabled sync must bypass validation, got %v", err)
+	}
+	// nil (absent stanza, pre-default) must also pass validation.
+	if err := config.ValidateSync(nil); err != nil {
+		t.Fatalf("nil sync must bypass validation, got %v", err)
 	}
 }
 
@@ -1041,10 +1051,9 @@ func TestLoadThrumConfig_RejectsBadSyncCombo(t *testing.T) {
 
 // TestLoadThrumConfig_ExplicitSyncDisabledIsPreserved guards the D7/D9
 // no-silent-flip invariant: an explicitly present sync stanza with
-// enabled:false must NOT be migrated back to enabled:true. This exercises the
-// raw-JSON stanza-presence detection in LoadThrumConfig — without it,
-// MigrateLegacySync (which can't distinguish an explicit enabled:false from an
-// absent stanza, both zero-value) would silently re-enable sync.
+// enabled:false must NOT be migrated back to enabled:true. With Sync as a
+// *SyncConfig, a present stanza makes the pointer non-nil so MigrateLegacySync
+// preserves it; an absent stanza leaves it nil so migration applies the default.
 func TestLoadThrumConfig_ExplicitSyncDisabledIsPreserved(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
@@ -1056,7 +1065,62 @@ func TestLoadThrumConfig_ExplicitSyncDisabledIsPreserved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if cfg.Daemon.Sync.Enabled {
+	if cfg.Daemon.Sync == nil || cfg.Daemon.Sync.Enabled {
 		t.Fatal("explicit sync.enabled=false must be preserved, not migrated back to enabled:true")
+	}
+}
+
+// TestLoadThrumConfig_FreshInstallSyncOnViaLoad is BLOCKING regression #1: a
+// freshly-inited node (config.json with NO sync stanza) must load with sync ON
+// and a-sync(full) — the fresh-init pairing fix. The nil pointer (absent stanza)
+// triggers MigrateLegacySync to allocate the D9 default.
+func TestLoadThrumConfig_FreshInstallSyncOnViaLoad(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	// A fresh init writes daemon settings but no sync stanza.
+	if err := os.WriteFile(configPath, []byte(`{"daemon":{"ws_port":"auto"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Daemon.Sync == nil || !cfg.Daemon.Sync.Enabled {
+		t.Fatalf("fresh install must load with sync enabled, got %+v", cfg.Daemon.Sync)
+	}
+	if !syncHasMechanismScope(*cfg, "a-sync", "full") {
+		t.Fatalf("fresh install must default to a-sync(full), got %+v", cfg.Daemon.Sync)
+	}
+}
+
+// TestSaveThrumConfig_HandEditedDisableSurvivesUnrelatedSave is BLOCKING
+// regression #2 (no-flip across save): a hand-edited sync:{enabled:false} must
+// survive an unrelated SaveThrumConfig + reload, NOT flip back on. With the
+// pointer this holds because the explicit &{false} marshals back as a present
+// stanza (omitempty only omits nil), so reload sees it non-nil and preserves it.
+func TestSaveThrumConfig_HandEditedDisableSurvivesUnrelatedSave(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"daemon":{"sync":{"enabled":false}}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Daemon.Sync == nil || cfg.Daemon.Sync.Enabled {
+		t.Fatalf("precondition: explicit disable must load as disabled, got %+v", cfg.Daemon.Sync)
+	}
+	// Make an unrelated change and save (simulates any unrelated command).
+	cfg.Daemon.LogLevel = "debug"
+	if err := config.SaveThrumConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	reloaded, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if reloaded.Daemon.Sync == nil || reloaded.Daemon.Sync.Enabled {
+		t.Fatalf("hand-edited sync.enabled=false must survive an unrelated save (no silent flip), got %+v", reloaded.Daemon.Sync)
 	}
 }

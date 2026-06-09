@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/leonletto/thrum/internal/config"
 )
 
 // writeTestThrumConfig writes a minimal .thrum/config.json containing the
@@ -48,5 +50,37 @@ func TestGuardLocalOnlyPairing_DefaultsAllow(t *testing.T) {
 	dir := writeTestThrumConfig(t, `{}`)
 	if err := guardLocalOnlyPairing(dir); err != nil {
 		t.Fatalf("default config (sync enabled) must allow pairing, got %v", err)
+	}
+}
+
+// TestGuardLocalOnlyPairing_FreshInitAllowsAfterSaveReload is the BLOCKING
+// end-to-end regression: a freshly-constructed config (Sync nil, as init builds
+// it) persisted via SaveThrumConfig must reload with sync ON so the guard ALLOWS
+// pairing. Pre-fix, the zero-value Sync struct was marshaled as
+// sync:{enabled:false} (omitempty is a no-op on a value struct), reload skipped
+// migration, and the guard refused — fresh nodes could not pair. The *SyncConfig
+// pointer makes the nil omit the stanza on save, so reload migrates to the
+// D9 default (enabled:true, a-sync full).
+func TestGuardLocalOnlyPairing_FreshInitAllowsAfterSaveReload(t *testing.T) {
+	dir := t.TempDir()
+	thrumDir := filepath.Join(dir, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	// As a fresh init constructs it: daemon settings, no explicit sync stanza.
+	fresh := &config.ThrumConfig{Daemon: config.DaemonConfig{WSPort: "auto"}}
+	if err := config.SaveThrumConfig(thrumDir, fresh); err != nil {
+		t.Fatalf("save fresh config: %v", err)
+	}
+	if err := guardLocalOnlyPairing(thrumDir); err != nil {
+		t.Fatalf("fresh-init node must allow pairing after save+reload, got %v", err)
+	}
+	// And confirm the reloaded config is genuinely sync-on a-sync(full).
+	reloaded, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if reloaded.Daemon.Sync == nil || !reloaded.Daemon.Sync.Enabled {
+		t.Fatalf("fresh-init reload must be sync-enabled, got %+v", reloaded.Daemon.Sync)
 	}
 }
