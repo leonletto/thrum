@@ -135,6 +135,34 @@ func (s *Syncer) commitChanges(ctx context.Context, message string) error {
 	return nil
 }
 
+// publicSyncHosts is the denylist of known public code-hosting domains.
+// a-sync MUST NOT push to these — doing so would expose private message
+// history to the world (D11 / thrum-43qi).
+var publicSyncHosts = []string{
+	"github.com",
+	"gitlab.com",
+}
+
+// classifyPushRemote inspects the remote URL and returns an error if it
+// resolves to a known public code host. A dedicated/private sync remote
+// returns nil (allowed). NEVER returns nil for a public origin — the refusal
+// must be loud and visible, not a silent skip (D11).
+func classifyPushRemote(remoteURL string) error {
+	lower := strings.ToLower(strings.TrimSpace(remoteURL))
+	for _, host := range publicSyncHosts {
+		// Match HTTPS and SSH forms:
+		//   https://github.com/...
+		//   git@github.com:...
+		//   ssh://git@github.com/...
+		if strings.Contains(lower, host) {
+			return fmt.Errorf("a-sync push refused: remote URL %q points to a public code host (%s) — "+
+				"a-sync must use a dedicated private sync remote, not a public origin (D11/thrum-43qi). "+
+				"Set a private remote or disable a-sync in daemon.sync.mechanisms.", remoteURL, host)
+		}
+	}
+	return nil
+}
+
 // push pushes the a-sync branch to origin.
 func (s *Syncer) push(ctx context.Context) error {
 	if s.localOnly {
@@ -151,6 +179,15 @@ func (s *Syncer) push(ctx context.Context) error {
 	if remotes == "" {
 		// No remote configured - can't push
 		return nil //nolint:nilerr // local-only mode is valid
+	}
+
+	// D11: classify the origin remote URL before pushing.
+	// Refuse loudly if it resolves to a public code host (thrum-43qi).
+	originURL, urlErr := safecmd.Git(ctx, s.syncDir, "remote", "get-url", "origin")
+	if urlErr == nil {
+		if classErr := classifyPushRemote(strings.TrimSpace(string(originURL))); classErr != nil {
+			return classErr
+		}
 	}
 
 	// Push to origin a-sync (network operation — use GitLong for 10s timeout)

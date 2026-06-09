@@ -533,6 +533,47 @@ func TestSyncer_CommitAndPush_LocalOnly_CommitsButDoesNotPush(t *testing.T) {
 	}
 }
 
+// TestPush_RefusesPublicOrigin verifies that classifyPushRemote refuses known
+// public code hosts (D11 / thrum-43qi) and allows a dedicated private sync remote.
+func TestPush_RefusesPublicOrigin(t *testing.T) {
+	if err := classifyPushRemote("https://github.com/leonletto/thrum.git"); err == nil {
+		t.Fatal("a-sync must refuse pushing to a public code origin (D11/thrum-43qi)")
+	}
+	if err := classifyPushRemote("git@private-sync-host.internal:thrum-sync.git"); err != nil {
+		t.Fatalf("a dedicated private sync remote must be allowed, got %v", err)
+	}
+}
+
+// TestClassifyPushRemote_PublicHosts verifies the full denylist.
+func TestClassifyPushRemote_PublicHosts(t *testing.T) {
+	publicURLs := []string{
+		"https://github.com/leonletto/thrum.git",
+		"git@github.com:leonletto/thrum.git",
+		"https://gitlab.com/someuser/repo.git",
+		"git@gitlab.com:someuser/repo.git",
+	}
+	for _, url := range publicURLs {
+		if err := classifyPushRemote(url); err == nil {
+			t.Errorf("expected classifyPushRemote(%q) to refuse, got nil", url)
+		}
+	}
+}
+
+// TestClassifyPushRemote_PrivateHosts verifies that non-public remotes are allowed.
+func TestClassifyPushRemote_PrivateHosts(t *testing.T) {
+	privateURLs := []string{
+		"git@private-sync-host.internal:thrum-sync.git",
+		"ssh://git@10.0.0.5/thrum-sync.git",
+		"file:///tmp/bare-sync-repo",
+		"git@company.internal:group/thrum.git",
+	}
+	for _, url := range privateURLs {
+		if err := classifyPushRemote(url); err != nil {
+			t.Errorf("classifyPushRemote(%q) must allow private remote, got %v", url, err)
+		}
+	}
+}
+
 func TestNewSyncer_LocalOnly(t *testing.T) {
 	s := NewSyncer("/test/repo", "/test/repo/.git/thrum-sync/a-sync", true)
 	if !s.localOnly {
