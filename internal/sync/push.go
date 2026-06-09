@@ -183,11 +183,16 @@ func (s *Syncer) push(ctx context.Context) error {
 
 	// D11: classify the origin remote URL before pushing.
 	// Refuse loudly if it resolves to a public code host (thrum-43qi).
+	// Fail CLOSED: if origin's URL cannot be read we cannot verify it is a
+	// private sync remote, and D11 must never let an unverified origin through
+	// (a transient read failure on a public origin would otherwise leak). A
+	// genuinely absent origin is already handled by the no-remote check above.
 	originURL, urlErr := safecmd.Git(ctx, s.syncDir, "remote", "get-url", "origin")
-	if urlErr == nil {
-		if classErr := classifyPushRemote(strings.TrimSpace(string(originURL))); classErr != nil {
-			return classErr
-		}
+	if urlErr != nil {
+		return fmt.Errorf("a-sync push refused: cannot read origin URL to verify it is a private sync remote (D11/thrum-43qi): %w", urlErr)
+	}
+	if classErr := classifyPushRemote(strings.TrimSpace(string(originURL))); classErr != nil {
+		return classErr
 	}
 
 	// Push to origin a-sync (network operation — use GitLong for 10s timeout)

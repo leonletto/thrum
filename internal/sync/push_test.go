@@ -253,6 +253,32 @@ func TestSyncer_Push_WithRemote(t *testing.T) {
 	}
 }
 
+// TestSyncer_Push_RefusesWhenOriginUnreadable verifies D11 fails CLOSED: when a
+// remote exists (so the no-remote no-op does not apply) but origin's URL cannot
+// be read, push refuses rather than proceeding unverified — a transient lookup
+// failure on a public origin must never silently leak (thrum-43qi).
+func TestSyncer_Push_RefusesWhenOriginUnreadable(t *testing.T) {
+	repoPath := setupMergeTestRepo(t)
+	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
+
+	// A remote exists but is NOT named "origin": the no-remote check passes,
+	// yet `git remote get-url origin` fails.
+	cmd := exec.Command("git", "remote", "add", "upstream", t.TempDir()) //nolint:gosec // G204 test uses controlled paths
+	cmd.Dir = repoPath
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to add non-origin remote: %v", err)
+	}
+
+	s := NewSyncer(repoPath, syncDir, false)
+	err := s.push(context.Background())
+	if err == nil {
+		t.Fatal("push must fail closed when origin URL is unreadable (D11)")
+	}
+	if !strings.Contains(err.Error(), "cannot read origin URL") {
+		t.Fatalf("expected D11 fail-closed error, got %v", err)
+	}
+}
+
 func TestIsPushRejected(t *testing.T) {
 	tests := []struct {
 		name     string
