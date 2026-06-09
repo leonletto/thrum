@@ -1038,3 +1038,25 @@ func TestLoadThrumConfig_RejectsBadSyncCombo(t *testing.T) {
 		t.Fatalf("expected 'only valid for peer/email' in error, got %v", err)
 	}
 }
+
+// TestLoadThrumConfig_ExplicitSyncDisabledIsPreserved guards the D7/D9
+// no-silent-flip invariant: an explicitly present sync stanza with
+// enabled:false must NOT be migrated back to enabled:true. This exercises the
+// raw-JSON stanza-presence detection in LoadThrumConfig — without it,
+// MigrateLegacySync (which can't distinguish an explicit enabled:false from an
+// absent stanza, both zero-value) would silently re-enable sync.
+func TestLoadThrumConfig_ExplicitSyncDisabledIsPreserved(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	data := `{"daemon":{"sync":{"enabled":false}}}`
+	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Daemon.Sync.Enabled {
+		t.Fatal("explicit sync.enabled=false must be preserved, not migrated back to enabled:true")
+	}
+}
