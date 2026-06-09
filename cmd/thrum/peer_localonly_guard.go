@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -31,7 +32,11 @@ func guardLocalOnlyPairing(thrumDir string) error {
 
 	cfg, err := config.LoadThrumConfig(thrumDir)
 	if err != nil {
-		// Config exists but can't be loaded → allow (don't block on config errors)
+		// Config exists but can't be loaded → allow (don't block pairing on a
+		// config-load error), but WARN so the operator knows the guard did not
+		// fire for the intended reason (it could not verify sync state). MINOR-6.
+		fmt.Fprintf(os.Stderr, "warning: peer pairing guard could not load %s (%v); proceeding without the sync-enabled check\n",
+			filepath.Join(thrumDir, "config.json"), err)
 		return nil
 	}
 
