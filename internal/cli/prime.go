@@ -33,6 +33,32 @@ type PrimeContext struct {
 	SavedSessionContext string           `json:"saved_session_context,omitempty"`
 }
 
+// LocalAgentName resolves the agent name for LOCAL-state prime consumes —
+// saved session context, restart snapshot, and the role preamble. It prefers
+// the daemon-resolved identity, but falls back to the on-disk identity file
+// when the daemon hasn't bound the agent yet.
+//
+// This races immediately after a raw self-restart relaunch (thrum-t6qx): the
+// new runtime PID isn't re-bound at the instant the SessionStart hook runs
+// `thrum prime`, so agent.whoami returns nothing and ctx.Identity is
+// transiently nil — even though the identity file AND the local state are
+// present on disk. Local-state consume must not depend on the daemon being
+// bound. Steady-state is unchanged (Identity is used when present, no disk
+// I/O); only the racing-relaunch path gains the fallback. Returns "" when
+// neither source yields a name.
+func (ctx *PrimeContext) LocalAgentName() string {
+	if ctx == nil {
+		return ""
+	}
+	if ctx.Identity != nil && ctx.Identity.AgentID != "" {
+		return ctx.Identity.AgentID
+	}
+	if idFile, _, err := config.LoadIdentityWithPath(ctx.RepoPath); err == nil && idFile != nil {
+		return idFile.Agent.Name
+	}
+	return ""
+}
+
 // PrimeSyncInfo contains sync health for prime output.
 type PrimeSyncInfo struct {
 	DaemonStatus string `json:"daemon_status"`
@@ -367,10 +393,13 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 		}
 	}
 
-	// Section 2: Preamble (role instructions)
-	if ctx.RepoPath != "" && ctx.Identity != nil {
+	// Section 2: Preamble (role instructions). The preamble is LOCAL state;
+	// resolve the agent name from the daemon identity OR the on-disk identity
+	// fallback (thrum-t6qx) so a restarted-during-race agent doesn't lose its
+	// entire role discipline when ctx.Identity is transiently nil.
+	if preambleAgent := ctx.LocalAgentName(); ctx.RepoPath != "" && preambleAgent != "" {
 		thrumDir := filepath.Join(ctx.RepoPath, ".thrum")
-		agentName := ctx.Identity.AgentID
+		agentName := preambleAgent
 		preamble, err := agentcontext.LoadPreamble(thrumDir, agentName)
 		if err == nil && len(preamble) > 0 {
 			out.WriteString("\n# Agent Instructions\n\n")
