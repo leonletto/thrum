@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"context"
 	"net/url"
 	"strings"
 )
@@ -142,4 +143,77 @@ func classifyVisibility(out []byte, err error) Visibility {
 // classifyVisibility). Keep classifyVisibility unexported for in-package tests.
 func ClassifyVisibility(out []byte, err error) Visibility {
 	return classifyVisibility(out, err)
+}
+
+// Prober runs the anonymous visibility probe for a derived probe URL and
+// returns the classified visibility. Production wraps safecmd.GitProbeAnonymous
+// + classifyVisibility; tests inject a fake.
+type Prober func(ctx context.Context, probeURL string) Visibility
+
+// GateInput carries everything the gate needs without importing config/state.
+type GateInput struct {
+	OriginURL        string     // origin remote URL (any form)
+	CachedVisibility Visibility // last persisted visibility ("" if none)
+	CachedRemote     string     // canonical remote the cache was for
+	Override         string     // PublicExposureOverride (canonical form), "" if unset
+}
+
+// GateResult is the decision the boot path acts on.
+type GateResult struct {
+	Visibility            Visibility // to persist as DetectedVisibility
+	CanonicalRemote       string     // to persist as DetectedRemote
+	LocalOnly             bool       // a-sync push/fetch held off this session
+	Reason                string     // distinct status reason when LocalOnly
+	TransitionedToExposed bool       // fire the warning when true
+}
+
+// ResolveExposureGate is the pure gate decision (brainstorm §4). It always runs
+// the prober (so a cached "undetectable" auto-heals when the network returns);
+// the cache is consulted only to resolve a fresh undetectable result and to
+// detect a transition INTO the exposed state for warning purposes.
+func ResolveExposureGate(ctx context.Context, in GateInput, probe Prober) GateResult {
+	canon := canonicalRemoteIdentity(in.OriginURL)
+	res := GateResult{CanonicalRemote: canon}
+
+	probeURL, ok := deriveProbeURL(in.OriginURL)
+	if !ok {
+		// Local-path/file remote: no network host ⇒ private/allowed.
+		res.Visibility = VisPrivate
+		return res
+	}
+
+	v := probe(ctx, probeURL)
+	if v == VisUndetectable {
+		// Auto-heal: trust a DETERMINATE cache for the same remote; else fail closed.
+		if in.CachedRemote == canon && (in.CachedVisibility == VisPublic || in.CachedVisibility == VisPrivate) {
+			v = in.CachedVisibility
+		} else {
+			res.Visibility = VisUndetectable
+			res.LocalOnly = true
+			res.Reason = "a-sync disabled: repo visibility undetectable (offline?), no cached result"
+			return res
+		}
+	}
+	res.Visibility = v
+
+	switch v {
+	case VisPrivate:
+		return res // allowed
+	case VisPublic:
+		if in.Override != "" && in.Override == canon {
+			return res // user knowingly accepts exposure
+		}
+		res.LocalOnly = true
+		res.Reason = "a-sync disabled: public repo detected, no exposure override"
+		// Transition into exposed only when the prior determinate cache was NOT
+		// already public (avoid re-warning every boot of a steadily-public repo).
+		if in.CachedVisibility != VisPublic {
+			res.TransitionedToExposed = true
+		}
+		return res
+	default:
+		res.LocalOnly = true
+		res.Reason = "a-sync disabled: repo visibility undetectable"
+		return res
+	}
 }

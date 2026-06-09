@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"context"
 	"errors"
 	"testing"
 )
@@ -81,5 +82,64 @@ func errIf(b bool) error {
 func TestClassifyVisibility_ExportedWrapper(t *testing.T) {
 	if ClassifyVisibility([]byte("<sha>\trefs/heads/x\n"), nil) != VisPublic {
 		t.Fatal("exported wrapper must delegate to classifyVisibility")
+	}
+}
+
+func TestResolveExposureGate(t *testing.T) {
+	const remote = "https://github.com/owner/repo.git"
+	canon := "github.com/owner/repo"
+	probe := func(v Visibility) Prober {
+		return func(_ context.Context, _ string) Visibility { return v }
+	}
+
+	// private → allowed, no warn
+	r := ResolveExposureGate(context.Background(), GateInput{OriginURL: remote}, probe(VisPrivate))
+	if r.LocalOnly || r.TransitionedToExposed || r.Visibility != VisPrivate {
+		t.Fatalf("private: %+v", r)
+	}
+
+	// public, no override → off + warn-on-first-discovery (cache was private)
+	r = ResolveExposureGate(context.Background(),
+		GateInput{OriginURL: remote, CachedVisibility: VisPrivate, CachedRemote: canon},
+		probe(VisPublic))
+	if !r.LocalOnly || !r.TransitionedToExposed || r.Reason == "" {
+		t.Fatalf("public flip: %+v", r)
+	}
+
+	// public + matching override → allowed, no warn
+	r = ResolveExposureGate(context.Background(),
+		GateInput{OriginURL: remote, Override: canon}, probe(VisPublic))
+	if r.LocalOnly || r.TransitionedToExposed {
+		t.Fatalf("public+override: %+v", r)
+	}
+
+	// public + STALE override (different repo) → off
+	r = ResolveExposureGate(context.Background(),
+		GateInput{OriginURL: remote, Override: "github.com/other/repo"}, probe(VisPublic))
+	if !r.LocalOnly {
+		t.Fatalf("stale override should stay off: %+v", r)
+	}
+
+	// undetectable + determinate cache(private) → trust cache (allowed)
+	r = ResolveExposureGate(context.Background(),
+		GateInput{OriginURL: remote, CachedVisibility: VisPrivate, CachedRemote: canon},
+		probe(VisUndetectable))
+	if r.LocalOnly {
+		t.Fatalf("undetectable+private-cache should trust cache: %+v", r)
+	}
+
+	// undetectable + no cache → fail-closed (off)
+	r = ResolveExposureGate(context.Background(),
+		GateInput{OriginURL: remote}, probe(VisUndetectable))
+	if !r.LocalOnly {
+		t.Fatalf("undetectable+no-cache should fail closed: %+v", r)
+	}
+
+	// steady public (cache already public) → off but NO transition warn
+	r = ResolveExposureGate(context.Background(),
+		GateInput{OriginURL: remote, CachedVisibility: VisPublic, CachedRemote: canon},
+		probe(VisPublic))
+	if !r.LocalOnly || r.TransitionedToExposed {
+		t.Fatalf("steady public should be off without re-warn: %+v", r)
 	}
 }
