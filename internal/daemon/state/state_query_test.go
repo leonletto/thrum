@@ -161,6 +161,27 @@ func TestListActiveAgentsByRole_ExcludesEndedSessions(t *testing.T) {
 	}
 }
 
+func TestListAllActiveAgentIDs(t *testing.T) {
+	st := newTestState(t)
+	registerAgentWithSession(t, st, "agent_a", "implementer")
+	registerAgentWithSession(t, st, "agent_b", "coordinator")
+	got := st.ListAllActiveAgentIDs(context.Background())
+	if len(got) != 2 {
+		t.Fatalf("want 2 active agents, got %v", got)
+	}
+}
+
+func TestListAllActiveAgentIDs_ExcludesEndedSessions(t *testing.T) {
+	st := newTestState(t)
+	registerAgentWithSession(t, st, "agent_a", "implementer")
+	registerAgentWithSession(t, st, "agent_b", "coordinator")
+	endAgentSession(t, st, "agent_b")
+	got := st.ListAllActiveAgentIDs(context.Background())
+	if len(got) != 1 || got[0] != "agent_a" {
+		t.Fatalf("want only [agent_a] active, got %v", got)
+	}
+}
+
 // insertSessionRef directly inserts a session_ref row for an existing
 // session. Used by the thrum-0pos worktree-lookup tests; the regular
 // event-projection path does not materialise session_refs for the
