@@ -1283,6 +1283,10 @@ func inboxCmd() *cobra.Command {
 By default, inbox auto-filters to show messages addressed to you (via --to)
 plus broadcasts and general messages. Use --all to see all messages.
 
+Messages are shown newest-first, so --limit N returns the N most recent. Use
+--chronological (alias --oldest) to read oldest-first with replies clustered
+under their parent.
+
 The daemon must be running and you must have an active session.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			scope, _ := cmd.Flags().GetString("scope")
@@ -1292,6 +1296,13 @@ The daemon must be running and you must have an active session.`,
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 			page, _ := cmd.Flags().GetInt("page")
 			fromAgent, _ := cmd.Flags().GetString("from")
+			// thrum-3vl0: default is newest-first; --chronological (alias
+			// --oldest) opts into the oldest-first, reply-clustered view for
+			// reading a thread in order.
+			chronological, _ := cmd.Flags().GetBool("chronological")
+			if oldest, _ := cmd.Flags().GetBool("oldest"); oldest {
+				chronological = true
+			}
 
 			// --limit is an alias for --page-size
 			if cmd.Flags().Changed("limit") {
@@ -1321,6 +1332,7 @@ The daemon must be running and you must have an active session.`,
 				CallerAgentID:     agentID,
 				CallerMentionRole: agentRole,
 				AuthorID:          fromAgent,
+				Chronological:     chronological,
 			}
 
 			// Auto-filter: when identity is resolved and --all is not set,
@@ -1410,6 +1422,11 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().Int("limit", 0, "Alias for --page-size")
 	cmd.Flags().Int("page", 1, "Page number")
 	cmd.Flags().String("from", "", "Filter inbox to messages from a specific agent (use @agent_name or agent_name)")
+	// thrum-3vl0: inbox defaults to newest-first. --chronological (alias
+	// --oldest) switches to the oldest-first, reply-clustered view for reading
+	// a thread in order.
+	cmd.Flags().Bool("chronological", false, "Oldest-first, reply-clustered order (default is newest-first)")
+	cmd.Flags().Bool("oldest", false, "Alias for --chronological (oldest-first)")
 
 	return cmd
 }

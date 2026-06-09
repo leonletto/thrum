@@ -20,6 +20,7 @@ type InboxOptions struct {
 	ForAgent          string // Auto-filter: agent name (messages mentioning this name + broadcasts)
 	ForAgentRole      string // Auto-filter: agent role (messages mentioning this role + broadcasts)
 	AuthorID          string // Filter messages by author (--from); daemon-side filter (author_id)
+	Chronological     bool   // Oldest-first, reply-clustered view (--chronological/--oldest); default is newest-first (thrum-3vl0)
 }
 
 // Message represents a message from the inbox.
@@ -95,6 +96,12 @@ func Inbox(client *Client, opts InboxOptions) (*InboxResult, error) {
 
 	if opts.AuthorID != "" {
 		params["author_id"] = opts.AuthorID
+	}
+
+	// thrum-3vl0: opt into the oldest-first, reply-clustered view. Default
+	// (false) leaves sort_order unset so the daemon returns newest-first.
+	if opts.Chronological {
+		params["chronological"] = true
 	}
 
 	if opts.PageSize > 0 {

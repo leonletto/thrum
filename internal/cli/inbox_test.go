@@ -252,6 +252,68 @@ func TestInbox_FromPassesAuthorID(t *testing.T) {
 	}
 }
 
+// captureInboxParams runs Inbox against a mock daemon and returns the params
+// the daemon received. (thrum-3vl0 / thrum-4yjc helper.)
+func captureInboxParams(t *testing.T, opts InboxOptions) map[string]any {
+	t.Helper()
+	daemon, socketPath := newMockDaemon(t)
+	defer daemon.stop()
+
+	var receivedParams map[string]any
+	daemon.start(t, func(conn net.Conn) {
+		defer func() { _ = conn.Close() }()
+		decoder := json.NewDecoder(conn)
+		encoder := json.NewEncoder(conn)
+		var request map[string]any
+		if err := decoder.Decode(&request); err != nil {
+			return
+		}
+		receivedParams, _ = request["params"].(map[string]any)
+		_ = encoder.Encode(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      request["id"],
+			"result": map[string]any{
+				"messages": []map[string]any{}, "total": 0, "unread": 0,
+				"page": 1, "page_size": 10, "total_pages": 0,
+			},
+		})
+	})
+	<-daemon.Ready()
+
+	client, err := NewClient(socketPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+	if _, err := Inbox(client, opts); err != nil {
+		t.Fatalf("Inbox: %v", err)
+	}
+	return receivedParams
+}
+
+// TestInbox_ChronoParam verifies --chronological/--oldest reaches
+// the daemon as chronological=true (opt-in to oldest-first, reply-clustered).
+func TestInbox_ChronoParam(t *testing.T) {
+	params := captureInboxParams(t, InboxOptions{CallerAgentID: "alice", ForAgent: "alice", Chronological: true})
+	got, ok := params["chronological"].(bool)
+	if !ok || !got {
+		t.Fatalf("expected chronological=true in params, got %v", params["chronological"])
+	}
+}
+
+// TestInbox_DefaultNoChrono verifies the default omits the param, so
+// the daemon applies its newest-first default (thrum-3vl0). It must also leave
+// sort_order unset so the daemon's "desc" default takes effect.
+func TestInbox_DefaultNoChrono(t *testing.T) {
+	params := captureInboxParams(t, InboxOptions{CallerAgentID: "alice", ForAgent: "alice"})
+	if _, present := params["chronological"]; present {
+		t.Fatalf("expected chronological absent by default, got %v", params["chronological"])
+	}
+	if _, present := params["sort_order"]; present {
+		t.Fatalf("default inbox must not pin sort_order (lets daemon default to newest-first), got %v", params["sort_order"])
+	}
+}
+
 // TestInbox_NoFromOmitsAuthorID verifies the author_id param is not sent
 // when AuthorID is empty — keeps existing inbox calls unchanged.
 func TestInbox_NoFromOmitsAuthorID(t *testing.T) {
