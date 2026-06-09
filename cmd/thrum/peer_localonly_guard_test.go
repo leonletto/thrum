@@ -24,7 +24,6 @@ func writeTestThrumConfig(t *testing.T, jsonContent string) string {
 	return thrumDir
 }
 
-
 func TestGuardLocalOnlyPairing_RefusesWhenSyncOff(t *testing.T) {
 	// sync disabled ⇒ refuse
 	dir := writeTestThrumConfig(t, `{"daemon":{"sync":{"enabled":false}}}`)
