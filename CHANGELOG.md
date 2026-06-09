@@ -31,6 +31,27 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Added
 
+- **Directed-inbound 0.10.6 back-port (thrum-h4s4)** — a lean 0.10.6 node can now
+  consume a *directed/filtered* inbound stream served by a 0.11 hub (it carries
+  zero filter logic; the hub does all filtering). Specifically:
+  - **Sync config decomposition (D7/I-5)** — the overloaded `daemon.local_only`
+    bool is supplemented by a structured `daemon.sync` stanza
+    (`{enabled, mechanisms:[{mechanism, scope}]}`) with startup validity checks
+    (invalid combos — e.g. `scope:directed` on a non-`peer`/`email` mechanism, or
+    `directed` alongside a full-delivery mechanism — are rejected at load, never
+    silently coerced) and a behavior-preserving migration. `sync` is a pointer so
+    an **absent** stanza migrates to the D9 default (sync on, a-sync full) while an
+    **explicit** stanza (including `enabled:false`) is preserved across saves
+    (no silent flip). Fixes a fresh-init pairing failure where a zero-value stanza
+    was persisted as `enabled:false`.
+  - **`filtered` response flag + D13 cursor-honesty patch (D10)** — the sync.pull
+    client reads an additive per-response `filtered` flag; when set, the checkpoint
+    follows the hub's scan-watermark (cap-bypass), an empty-but-filtered window
+    keeps pulling, and a terminal all-filtered window still advances the cursor.
+    For normal/untrusted peers the anti-over-advance cap is unchanged — a lying
+    peer cannot advance your checkpoint past events it actually sent.
+  - **Peer pairing guard (I-3/D10)** — `thrum peer add` / `peer join` refuse when
+    sync is disabled, preventing a misleading silent half-connect.
 - **Snapshot/sleep restart skill family — `/thrum:restart-extended`,
   `/thrum:sleep`, `/thrum:sleep-extended`, plus a shared `_snapshot-protocol`
   partial (thrum-rwhg)** — `/thrum:restart` is slimmed to consume the shared
@@ -189,6 +210,18 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Security
 
+- **D11 — a-sync refuses to push to a public code-host origin (thrum-43qi)** —
+  closes the exposure half of thrum-43qi: a-sync (whole-file git push) is now
+  refused when `origin` resolves to a public code host (github.com, gitlab.com,
+  bitbucket.org, codeberg.org, dev.azure.com, sr.ht), so private message history
+  is never pushed to a public repo. Applied at BOTH push sites (`internal/sync/
+  push.go` and the `branch.go` tracking-push). Host matching parses the remote
+  URL host (https / ssh / scp forms) and matches on host boundaries — never a
+  substring — so a private GitHub Enterprise host (e.g. `github.company.com`) is
+  not falsely refused, and rooted-FQDN forms (`github.com.`) cannot slip the
+  check. Fails closed (refuses) when the origin URL cannot be read. A node that
+  intends Tailscale-only sync sets `daemon.local_only:true` (or omits a-sync from
+  `daemon.sync.mechanisms`); peer/Tailscale sync is unaffected.
 - **Reject anonymous cross-worktree agent re-bind in `HandleRegister`
   (thrum-l9e1)** — closes a P1 gap where an anonymous registration from worktree
   B could silently re-bind to an agent identity claimed by worktree A,
