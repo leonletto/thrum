@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -203,3 +204,56 @@ func GitConfig(ctx context.Context, dir, key string) (string, error) {
 	}
 	return strings.TrimSpace(string(out)), nil
 }
+
+// buildProbeEnv constructs the environment for an ANONYMOUS git probe from a
+// fixed ALLOWLIST — never os.Environ() — so no inherited credential, token, or
+// config-injection variable (SSH agent, askpass, netrc via HOME, credential
+// helper, GIT_HTTP_EXTRAHEADER bearer token, GIT_CONFIG_* injection) can
+// authenticate the probe and make a PRIVATE repo answer like a public one.
+// The denylist approach was caught incomplete twice in review; an allowlist is
+// structurally complete. A clean empty HOME removes ~/.netrc and ~/.gitconfig
+// (which carry credential.helper and url.insteadOf rewrites).
+func buildProbeEnv() []string {
+	env := []string{
+		"PATH=" + os.Getenv("PATH"),
+		"HOME=" + probeEmptyHome(),
+		// Explicit disable flags (belt-and-suspenders on top of the allowlist).
+		"GIT_TERMINAL_PROMPT=0",
+		"GIT_CONFIG_NOSYSTEM=1",
+		"GIT_ASKPASS=",
+		"SSH_ASKPASS=",
+		"SSH_AUTH_SOCK=",
+		"GIT_HTTP_EXTRAHEADER=",
+		"GIT_SSH_COMMAND=",
+	}
+	// Carry TLS/cert operational vars ONLY if already set, so HTTPS verification
+	// still works in minimal/container environments. These are not auth-bearing.
+	for _, k := range []string{"SSL_CERT_FILE", "SSL_CERT_DIR", "CURL_CA_BUNDLE", "SystemRoot"} {
+		if v, ok := os.LookupEnv(k); ok {
+			env = append(env, k+"="+v)
+		}
+	}
+	return env
+}
+
+// probeEmptyHome returns a process-stable empty directory to use as HOME for
+// the probe, so git finds no ~/.netrc or ~/.gitconfig. os.MkdirTemp is created
+// once and reused; on failure we fall back to os.TempDir() (still not the real
+// HOME). The temp dir is intentionally process-lived and never cleaned up — it
+// stays empty (git never writes to it), so the leak is a single empty directory.
+func probeEmptyHome() string {
+	probeHomeOnce.Do(func() {
+		d, err := os.MkdirTemp("", "thrum-probe-home-")
+		if err != nil {
+			probeHomeDir = os.TempDir()
+			return
+		}
+		probeHomeDir = d
+	})
+	return probeHomeDir
+}
+
+var (
+	probeHomeOnce sync.Once
+	probeHomeDir  string
+)
