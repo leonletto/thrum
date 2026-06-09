@@ -2,8 +2,11 @@ package safecmd
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -87,4 +90,40 @@ func chdir(t *testing.T, dir string) func() {
 		t.Fatalf("chdir %s: %v", dir, err)
 	}
 	return func() { _ = os.Chdir(prev) }
+}
+
+// TestGitProbeAnonymous_IgnoresLocalCredentialHelper proves a per-repo
+// credential.helper in the daemon's surrounding repo does NOT authenticate the
+// probe. git only consults a credential helper after a 401, so we point the
+// probe at a server that always 401s, plant a local credential.helper that
+// writes a sentinel (and would hand over creds) if invoked, and assert the
+// sentinel is never written. Two defences make this hold: GitProbeAnonymous
+// runs from a neutral cwd (the local config is never read) AND passes
+// `-c credential.helper=` (which resets the helper list to empty).
+func TestGitProbeAnonymous_IgnoresLocalCredentialHelper(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("WWW-Authenticate", `Basic realm="git"`)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	sentinel := filepath.Join(t.TempDir(), "helper-fired")
+	// A repo whose LOCAL credential.helper writes the sentinel if git ever
+	// invokes it. The `!`-prefix runs the value as a shell command.
+	evil := t.TempDir()
+	mustGit(t, evil, "init")
+	mustGit(t, evil, "config", "credential.helper",
+		"!f() { touch "+sentinel+"; echo username=x; echo password=y; }; f")
+
+	restore := chdir(t, evil)
+	defer restore()
+
+	// The probe is EXPECTED to fail (server 401s and the probe carries no
+	// credentials) — that is the correct "not anonymously readable" outcome.
+	// What matters is HOW it fails: the local credential.helper must not fire.
+	_, _ = GitProbeAnonymous(context.Background(), srv.URL)
+
+	if _, err := os.Stat(sentinel); err == nil {
+		t.Fatal("local credential.helper fired — probe was not isolated from the surrounding repo's config")
+	}
 }
