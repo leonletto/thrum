@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -135,30 +136,79 @@ func (s *Syncer) commitChanges(ctx context.Context, message string) error {
 	return nil
 }
 
-// publicSyncHosts is the denylist of known public code-hosting domains.
-// a-sync MUST NOT push to these — doing so would expose private message
-// history to the world (D11 / thrum-43qi).
+// publicSyncHosts is the denylist of known public code-hosting domains. a-sync
+// MUST NOT push to these — doing so would expose private message history to the
+// world (D11 / thrum-43qi). Matching is host-boundary (exact host or a subdomain
+// suffix), never substring, so a private GitHub Enterprise host such as
+// github.company.com is NOT falsely refused. git.sr.ht is listed explicitly even
+// though the "sr.ht" suffix rule already covers it (defense-in-depth / clarity).
 var publicSyncHosts = []string{
 	"github.com",
 	"gitlab.com",
+	"bitbucket.org",
+	"codeberg.org",
+	"dev.azure.com",
+	"sr.ht",
+	"git.sr.ht",
 }
 
-// classifyPushRemote inspects the remote URL and returns an error if it
-// resolves to a known public code host. A dedicated/private sync remote
-// returns nil (allowed). NEVER returns nil for a public origin — the refusal
-// must be loud and visible, not a silent skip (D11).
-func classifyPushRemote(remoteURL string) error {
-	lower := strings.ToLower(strings.TrimSpace(remoteURL))
-	for _, host := range publicSyncHosts {
-		// Match HTTPS and SSH forms:
-		//   https://github.com/...
-		//   git@github.com:...
-		//   ssh://git@github.com/...
-		if strings.Contains(lower, host) {
-			return fmt.Errorf("a-sync push refused: remote URL %q points to a public code host (%s) — "+
-				"a-sync must use a dedicated private sync remote, not a public origin (D11/thrum-43qi). "+
-				"Set a private remote or disable a-sync in daemon.sync.mechanisms.", remoteURL, host)
+// extractRemoteHost parses a git remote URL and returns its lowercased host.
+// Handles the three forms git emits:
+//
+//	https://github.com/owner/repo.git          → github.com
+//	ssh://git@github.com/owner/repo.git        → github.com
+//	git@github.com:owner/repo.git  (scp-like)  → github.com
+//
+// Returns "" when there is no network host (e.g. a local-path or file remote),
+// which classifyPushRemote treats as private/allowed.
+func extractRemoteHost(remoteURL string) string {
+	u := strings.TrimSpace(remoteURL)
+	if u == "" {
+		return ""
+	}
+	if !strings.Contains(u, "://") {
+		// scp-like (or a bare local path). Strip an optional user@ prefix, then
+		// the host is everything before the first ':' (path separator).
+		if at := strings.LastIndex(u, "@"); at != -1 {
+			u = u[at+1:]
 		}
+		if colon := strings.Index(u, ":"); colon != -1 {
+			return strings.ToLower(u[:colon])
+		}
+		return "" // no ':' → a local path, not a host
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(parsed.Hostname())
+}
+
+// hostIsPublic reports whether host is, or is a subdomain of, a denylisted
+// public code host — matching on host boundaries (host == d || endswith "."+d),
+// never a substring. Returns the matched denylist entry for the error message.
+func hostIsPublic(host string) (string, bool) {
+	for _, d := range publicSyncHosts {
+		if host == d || strings.HasSuffix(host, "."+d) {
+			return d, true
+		}
+	}
+	return "", false
+}
+
+// classifyPushRemote inspects the remote URL and returns an error if it resolves
+// to a known public code host. A dedicated/private sync remote (or a local-path
+// remote) returns nil (allowed). NEVER returns nil for a public origin — the
+// refusal must be loud and visible, not a silent skip (D11).
+func classifyPushRemote(remoteURL string) error {
+	host := extractRemoteHost(remoteURL)
+	if host == "" {
+		return nil // no network host (local-path/file remote) — private, allowed
+	}
+	if matched, public := hostIsPublic(host); public {
+		return fmt.Errorf("a-sync push refused: remote URL %q resolves to a public code host (%s) — "+
+			"a-sync must use a dedicated private sync remote, not a public origin (D11/thrum-43qi). "+
+			"Set a private remote or disable a-sync in daemon.sync.mechanisms.", remoteURL, matched)
 	}
 	return nil
 }
