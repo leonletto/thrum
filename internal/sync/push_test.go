@@ -253,6 +253,32 @@ func TestSyncer_Push_WithRemote(t *testing.T) {
 	}
 }
 
+// TestSyncer_Push_RefusesWhenOriginUnreadable verifies D11 fails CLOSED: when a
+// remote exists (so the no-remote no-op does not apply) but origin's URL cannot
+// be read, push refuses rather than proceeding unverified — a transient lookup
+// failure on a public origin must never silently leak (thrum-43qi).
+func TestSyncer_Push_RefusesWhenOriginUnreadable(t *testing.T) {
+	repoPath := setupMergeTestRepo(t)
+	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
+
+	// A remote exists but is NOT named "origin": the no-remote check passes,
+	// yet `git remote get-url origin` fails.
+	cmd := exec.Command("git", "remote", "add", "upstream", t.TempDir()) //nolint:gosec // G204 test uses controlled paths
+	cmd.Dir = repoPath
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to add non-origin remote: %v", err)
+	}
+
+	s := NewSyncer(repoPath, syncDir, false)
+	err := s.push(context.Background())
+	if err == nil {
+		t.Fatal("push must fail closed when origin URL is unreadable (D11)")
+	}
+	if !strings.Contains(err.Error(), "cannot read origin URL") {
+		t.Fatalf("expected D11 fail-closed error, got %v", err)
+	}
+}
+
 func TestIsPushRejected(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -530,6 +556,69 @@ func TestSyncer_CommitAndPush_LocalOnly_CommitsButDoesNotPush(t *testing.T) {
 	}
 	if strings.Contains(string(output), SyncBranchName) {
 		t.Error("a-sync should NOT have been pushed to remote in local-only mode")
+	}
+}
+
+// TestPush_RefusesPublicOrigin verifies that classifyPushRemote refuses known
+// public code hosts (D11 / thrum-43qi) and allows a dedicated private sync remote.
+func TestPush_RefusesPublicOrigin(t *testing.T) {
+	if err := classifyPushRemote("https://github.com/leonletto/thrum.git"); err == nil {
+		t.Fatal("a-sync must refuse pushing to a public code origin (D11/thrum-43qi)")
+	}
+	if err := classifyPushRemote("git@private-sync-host.internal:thrum-sync.git"); err != nil {
+		t.Fatalf("a dedicated private sync remote must be allowed, got %v", err)
+	}
+}
+
+// TestClassifyPushRemote_PublicHosts verifies the full expanded denylist
+// (D11 acceptance): every known public code host is REFUSED in both HTTPS and
+// SSH (scp-like) forms, plus a subdomain of a public host (gist.github.com) to
+// prove the host-boundary suffix rule.
+func TestClassifyPushRemote_PublicHosts(t *testing.T) {
+	publicURLs := []string{
+		"https://github.com/leonletto/thrum.git",
+		"git@github.com:leonletto/thrum.git",
+		"https://gitlab.com/someuser/repo.git",
+		"git@gitlab.com:someuser/repo.git",
+		"https://bitbucket.org/someuser/repo.git",
+		"git@bitbucket.org:someuser/repo.git",
+		"https://codeberg.org/someuser/repo.git",
+		"git@codeberg.org:someuser/repo.git",
+		"https://dev.azure.com/org/project/_git/repo",
+		"git@ssh.dev.azure.com:v3/org/project/repo",
+		"https://git.sr.ht/~user/repo",
+		"git@git.sr.ht:~user/repo",
+		"https://sr.ht/~user/repo",
+		"https://gist.github.com/user/abc.git", // subdomain of a public host
+		"https://github.com./o/r.git",          // trailing-dot FQDN (rooted) must not slip
+		"git@github.com.:o/r.git",              // trailing-dot FQDN via scp form
+	}
+	for _, u := range publicURLs {
+		if err := classifyPushRemote(u); err == nil {
+			t.Errorf("expected classifyPushRemote(%q) to REFUSE (public host), got nil", u)
+		}
+	}
+}
+
+// TestClassifyPushRemote_PrivateHosts verifies non-public remotes are ALLOWED,
+// including the critical host-boundary case: a private GitHub Enterprise host
+// (github.company.com) must NOT be falsely refused by a substring match on
+// "github.com" (D11 acceptance criterion #1).
+func TestClassifyPushRemote_PrivateHosts(t *testing.T) {
+	privateURLs := []string{
+		"git@private-sync-host.internal:thrum-sync.git",
+		"ssh://git@10.0.0.5/thrum-sync.git",
+		"file:///tmp/bare-sync-repo",
+		"/tmp/bare-sync-repo", // bare local path
+		"git@company.internal:group/thrum.git",
+		"https://github.company.com/team/thrum.git", // private GHE — must NOT false-positive on github.com
+		"git@github.company.com:team/thrum.git",
+		"https://mygithub.com/team/thrum.git", // lookalike, not github.com
+	}
+	for _, u := range privateURLs {
+		if err := classifyPushRemote(u); err != nil {
+			t.Errorf("classifyPushRemote(%q) must ALLOW private remote, got %v", u, err)
+		}
 	}
 }
 

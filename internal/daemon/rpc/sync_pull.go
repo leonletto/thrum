@@ -23,6 +23,10 @@ type SyncPullResponse struct {
 	Events        []eventlog.Event `json:"events"`
 	NextSequence  int64            `json:"next_sequence"`
 	MoreAvailable bool             `json:"more_available"`
+	// Filtered mirrors PullResponse.Filtered for wire symmetry. A 0.10.6 daemon
+	// serving sync.pull never sets it (no server-side directed filter on the
+	// release line — that is 0.11-only); it exists so the contract matches.
+	Filtered bool `json:"filtered,omitempty"`
 }
 
 // EventQuerier is the interface for querying events by sequence.

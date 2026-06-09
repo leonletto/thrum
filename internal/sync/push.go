@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -135,6 +136,91 @@ func (s *Syncer) commitChanges(ctx context.Context, message string) error {
 	return nil
 }
 
+// publicSyncHosts is the denylist of known public code-hosting domains. a-sync
+// MUST NOT push to these — doing so would expose private message history to the
+// world (D11 / thrum-43qi). Matching is host-boundary (exact host or a subdomain
+// suffix), never substring, so a private GitHub Enterprise host such as
+// github.company.com is NOT falsely refused. git.sr.ht is listed explicitly even
+// though the "sr.ht" suffix rule already covers it (defense-in-depth / clarity).
+var publicSyncHosts = []string{
+	"github.com",
+	"gitlab.com",
+	"bitbucket.org",
+	"codeberg.org",
+	"dev.azure.com",
+	"sr.ht",
+	"git.sr.ht",
+}
+
+// extractRemoteHost parses a git remote URL and returns its lowercased host.
+// Handles the three forms git emits:
+//
+//	https://github.com/owner/repo.git          → github.com
+//	ssh://git@github.com/owner/repo.git        → github.com
+//	git@github.com:owner/repo.git  (scp-like)  → github.com
+//
+// Returns "" when there is no network host (e.g. a local-path or file remote),
+// which classifyPushRemote treats as private/allowed.
+func extractRemoteHost(remoteURL string) string {
+	u := strings.TrimSpace(remoteURL)
+	if u == "" {
+		return ""
+	}
+	if !strings.Contains(u, "://") {
+		// scp-like (or a bare local path). Strip an optional user@ prefix, then
+		// the host is everything before the first ':' (path separator).
+		if at := strings.LastIndex(u, "@"); at != -1 {
+			u = u[at+1:]
+		}
+		if colon := strings.Index(u, ":"); colon != -1 {
+			return strings.ToLower(u[:colon])
+		}
+		return "" // no ':' → a local path, not a host
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(parsed.Hostname())
+}
+
+// hostIsPublic reports whether host is, or is a subdomain of, a denylisted
+// public code host — matching on host boundaries (host == d || endswith "."+d),
+// never a substring. Returns the matched denylist entry for the error message.
+//
+// A trailing dot is stripped first: "github.com." is the equivalent fully-
+// qualified (rooted) form of "github.com" and url.Hostname() / the scp parse
+// both preserve it, so without this trim "github.com." and
+// "git@github.com.:o/r.git" would slip the denylist and reach the public push
+// (D11 bypass). Trimming here — the single consumer point both the url and scp
+// branches of extractRemoteHost feed into — closes it for every form at once.
+func hostIsPublic(host string) (string, bool) {
+	host = strings.TrimRight(host, ".")
+	for _, d := range publicSyncHosts {
+		if host == d || strings.HasSuffix(host, "."+d) {
+			return d, true
+		}
+	}
+	return "", false
+}
+
+// classifyPushRemote inspects the remote URL and returns an error if it resolves
+// to a known public code host. A dedicated/private sync remote (or a local-path
+// remote) returns nil (allowed). NEVER returns nil for a public origin — the
+// refusal must be loud and visible, not a silent skip (D11).
+func classifyPushRemote(remoteURL string) error {
+	host := extractRemoteHost(remoteURL)
+	if host == "" {
+		return nil // no network host (local-path/file remote) — private, allowed
+	}
+	if matched, public := hostIsPublic(host); public {
+		return fmt.Errorf("a-sync push refused: remote URL %q resolves to a public code host (%s) — "+
+			"a-sync must use a dedicated private sync remote, not a public origin (D11/thrum-43qi). "+
+			"Set a private remote or disable a-sync in daemon.sync.mechanisms.", remoteURL, matched)
+	}
+	return nil
+}
+
 // push pushes the a-sync branch to origin.
 func (s *Syncer) push(ctx context.Context) error {
 	if s.localOnly {
@@ -151,6 +237,20 @@ func (s *Syncer) push(ctx context.Context) error {
 	if remotes == "" {
 		// No remote configured - can't push
 		return nil //nolint:nilerr // local-only mode is valid
+	}
+
+	// D11: classify the origin remote URL before pushing.
+	// Refuse loudly if it resolves to a public code host (thrum-43qi).
+	// Fail CLOSED: if origin's URL cannot be read we cannot verify it is a
+	// private sync remote, and D11 must never let an unverified origin through
+	// (a transient read failure on a public origin would otherwise leak). A
+	// genuinely absent origin is already handled by the no-remote check above.
+	originURL, urlErr := safecmd.Git(ctx, s.syncDir, "remote", "get-url", "origin")
+	if urlErr != nil {
+		return fmt.Errorf("a-sync push refused: cannot read origin URL to verify it is a private sync remote (D11/thrum-43qi): %w", urlErr)
+	}
+	if classErr := classifyPushRemote(strings.TrimSpace(string(originURL))); classErr != nil {
+		return classErr
 	}
 
 	// Push to origin a-sync (network operation — use GitLong for 10s timeout)

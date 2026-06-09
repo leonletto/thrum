@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -164,18 +165,97 @@ type RuntimeConfig struct {
 	Primary string `json:"primary,omitempty"` // "claude", "auggie", "cursor", etc.
 }
 
+// SyncMechanism describes one transport+scope entry in the sync mechanisms
+// array (D7). Mechanism is one of "a-sync", "peer", "email"; Scope is one
+// of "full" or "directed".
+type SyncMechanism struct {
+	Mechanism string `json:"mechanism"` // a-sync | peer | email
+	Scope     string `json:"scope"`     // full | directed
+}
+
+// SyncConfig is the decomposed replacement for the overloaded LocalOnly bool
+// (D7). Enabled is the master on/off switch; Mechanisms lists the active
+// transports and their delivery scope. LocalOnly is retained for one release
+// cycle for migration — see MigrateLegacySync.
+type SyncConfig struct {
+	Enabled    bool            `json:"enabled"`
+	Mechanisms []SyncMechanism `json:"mechanisms"`
+}
+
+// filterableMechanisms is the allowlist for scope=directed (D7 Rule 1).
+// a-sync is full-only: whole-file merge can't filter per-recipient.
+var filterableMechanisms = map[string]struct{}{"peer": {}, "email": {}}
+
+// ValidateSync rejects invalid sync configuration combos (D7 / I-5).
+// Rules (NEVER silently coerce — M3):
+//  1. scope=directed is valid ONLY for filterable mechanisms (peer, email).
+//  2. directed cannot coexist with any full-delivery mechanism.
+//
+// A nil or disabled SyncConfig (Enabled==false) passes without checking
+// mechanisms. nil means the sync stanza was absent (pre-default); the loader
+// allocates the D9 default via MigrateLegacySync before validation in the
+// normal path, so a nil here is the defensive pre-default case.
+func ValidateSync(c *SyncConfig) error {
+	if c == nil || !c.Enabled {
+		return nil
+	}
+	hasFull := false
+	for _, m := range c.Mechanisms {
+		// Rule 1 (allowlist): directed is valid ONLY for filterable mechanisms.
+		// This subsumes "a-sync is full-only" — a-sync is simply not filterable.
+		if m.Scope == "directed" {
+			if _, ok := filterableMechanisms[m.Mechanism]; !ok {
+				return fmt.Errorf("invalid sync config: scope=directed is only valid for peer/email mechanisms, not %q (a-sync is full-only — whole-file merge can't filter per-recipient)", m.Mechanism)
+			}
+		}
+		if m.Scope == "full" {
+			hasFull = true
+		}
+	}
+	// Rule 2: directed cannot coexist with any full-delivery mechanism.
+	for _, m := range c.Mechanisms {
+		if m.Scope == "directed" && hasFull {
+			return fmt.Errorf("invalid sync config: directed cannot coexist with a full-delivery mechanism (flood would leak)")
+		}
+	}
+	return nil
+}
+
+// MigrateLegacySync maps a pre-D7 config (LocalOnly bool, no sync stanza) to
+// the A+B model, behavior-preserving. local_only gated ONLY a-sync historically,
+// so local_only=true → a-sync off (sync still enabled for peer/email);
+// local_only=false → a-sync(full).
+// A non-nil Sync pointer means the stanza was explicitly present in the JSON
+// (json.Unmarshal allocates it) — it wins verbatim and no migration is applied,
+// so an operator's deliberate sync:{enabled:false} is preserved. A nil Sync
+// means the stanza was absent (legacy or fresh install) → allocate the D9
+// default. This nil/non-nil distinction replaces the old raw-JSON
+// syncStanzaPresent probe (the pointer makes absent-vs-explicit type-native).
+func MigrateLegacySync(cfg ThrumConfig) ThrumConfig {
+	if cfg.Daemon.Sync != nil {
+		return cfg // explicit stanza present; preserve it verbatim
+	}
+	s := &SyncConfig{Enabled: true}
+	if !cfg.Daemon.LocalOnly {
+		s.Mechanisms = []SyncMechanism{{Mechanism: "a-sync", Scope: "full"}}
+	}
+	cfg.Daemon.Sync = s
+	return cfg
+}
+
 // DaemonConfig holds daemon-specific settings.
 // Note: sync_interval was removed in v0.10.6 (thrum-s6os); the field is
 // silently ignored when present in legacy config files (spec §7.2).
 type DaemonConfig struct {
-	LocalOnly                 bool   `json:"local_only,omitempty"`
-	WSPort                    string `json:"ws_port,omitempty"`   // "auto" or specific port number
-	PeerPort                  string `json:"peer_port,omitempty"` // "auto" or specific port number for peer connections
-	SingleAgentMode           bool   `json:"single_agent_mode,omitempty"`
-	LogLevel                  string `json:"log_level,omitempty"`                    // "debug", "info", "warn", "error"; default "info"
-	EventsRetentionDays       int    `json:"events_retention_days,omitempty"`        // retention window for .thrum/events.jsonl + SQLite events table (default 2)
-	CompactionSizeThresholdMB int    `json:"compaction_size_threshold_mb,omitempty"` // per-file size threshold above which compaction rewrites the file (default 10)
-	MaxMessageBodyBytes       int    `json:"max_message_body_bytes,omitempty"`       // hard cap on a single message.create body.content size at write (default 1 MB; thrum-mhwt). 0 = use default. Negative = disable cap (operator override). Applies to LOCAL writes only: message.send and message.edit RPCs are gated; peer-synced events arriving via sync_apply.go are NOT (they were already committed on the originating peer and the projector applies them unconditionally — a peer with a higher cap can still land oversized bodies in our local DB).
+	LocalOnly                 bool        `json:"local_only,omitempty"`
+	Sync                      *SyncConfig `json:"sync,omitempty"` // nil = absent stanza (migrate to D9 default); non-nil = explicit (preserved). Pointer makes omitempty genuinely omit + absent-vs-explicit type-native.
+	WSPort                    string      `json:"ws_port,omitempty"` // "auto" or specific port number
+	PeerPort                  string     `json:"peer_port,omitempty"` // "auto" or specific port number for peer connections
+	SingleAgentMode           bool       `json:"single_agent_mode,omitempty"`
+	LogLevel                  string     `json:"log_level,omitempty"`                    // "debug", "info", "warn", "error"; default "info"
+	EventsRetentionDays       int        `json:"events_retention_days,omitempty"`        // retention window for .thrum/events.jsonl + SQLite events table (default 2)
+	CompactionSizeThresholdMB int        `json:"compaction_size_threshold_mb,omitempty"` // per-file size threshold above which compaction rewrites the file (default 10)
+	MaxMessageBodyBytes       int        `json:"max_message_body_bytes,omitempty"`       // hard cap on a single message.create body.content size at write (default 1 MB; thrum-mhwt). 0 = use default. Negative = disable cap (operator override). Applies to LOCAL writes only: message.send and message.edit RPCs are gated; peer-synced events arriving via sync_apply.go are NOT (they were already committed on the originating peer and the projector applies them unconditionally — a peer with a higher cap can still land oversized bodies in our local DB).
 }
 
 // DefaultMaxMessageBodyBytes bounds a single message body at 1 MB. Above
@@ -386,13 +466,21 @@ func LoadThrumConfig(thrumDir string) (*ThrumConfig, error) {
 		cfg.Peers = DefaultPeersConfig()
 	}
 
+	// D7/D9: sync defaulting + migration happens in applyDefaults via
+	// MigrateLegacySync. With Sync as a *SyncConfig, json.Unmarshal leaves the
+	// pointer nil for an absent stanza and allocates it for a present one (even
+	// enabled:false) — so migration acts only on nil and an explicit stanza is
+	// preserved verbatim. No raw-JSON probe needed (the pointer is type-native).
 	applyDefaults(&cfg)
+	if err := ValidateSync(cfg.Daemon.Sync); err != nil {
+		return nil, err
+	}
 	return &cfg, nil
 }
 
-// applyDefaults fills in sensible defaults for zero-value fields.
-// Note: LocalOnly defaults to true (local-first). Users must explicitly
-// set local_only=false in config.json to enable remote git sync.
+// applyDefaults fills in sensible defaults for zero-value fields, including the
+// D7/D9 sync default via MigrateLegacySync (which allocates the default ONLY
+// when cfg.Daemon.Sync is nil — i.e. the stanza was absent from the JSON).
 func applyDefaults(cfg *ThrumConfig) {
 	if cfg.Daemon.WSPort == "" {
 		cfg.Daemon.WSPort = DefaultWSPort
@@ -425,6 +513,18 @@ func applyDefaults(cfg *ThrumConfig) {
 	if cfg.Daemon.PeerPort == "" {
 		cfg.Daemon.PeerPort = "auto"
 	}
+	// D7/D9: fresh-install default = sync on, a-sync full. MigrateLegacySync
+	// allocates the default ONLY when cfg.Daemon.Sync is nil (absent stanza);
+	// an explicit stanza (non-nil pointer, including enabled:false) is preserved.
+	migrated := MigrateLegacySync(*cfg)
+	cfg.Daemon.Sync = migrated.Daemon.Sync
+}
+
+// ApplyDefaultsForTest exposes applyDefaults for white-box testing of the
+// fresh-install default logic (A3/B5 back-port). Production code uses
+// LoadThrumConfig which calls applyDefaults internally.
+func ApplyDefaultsForTest(cfg *ThrumConfig) {
+	applyDefaults(cfg)
 }
 
 // ValidatePermissionSupervisors checks whether the configured supervisor

@@ -57,8 +57,8 @@ func (m *DaemonSyncManager) SyncFromPeer(ctx context.Context, peerAddr string, p
 	totalApplied := 0
 	totalSkipped := 0
 
-	err = m.client.PullAllEvents(peerAddr, afterSeq, token, func(events []eventlog.Event, nextSeq int64) error {
-		a, s, applyErr := m.applier.ApplyAndCheckpoint(ctx, peerDaemonID, events, nextSeq)
+	err = m.client.PullAllEvents(peerAddr, afterSeq, token, func(events []eventlog.Event, nextSeq int64, filtered bool) error {
+		a, s, applyErr := m.applier.ApplyAndCheckpoint(ctx, peerDaemonID, events, nextSeq, filtered)
 		totalApplied += a
 		totalSkipped += s
 		return applyErr

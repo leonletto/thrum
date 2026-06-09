@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/checkpoint"
 	"github.com/leonletto/thrum/internal/daemon/eventlog"
@@ -160,7 +161,7 @@ func TestSyncApplier_ApplyAndCheckpoint(t *testing.T) {
 		},
 	}
 
-	applied, _, err := applier.ApplyAndCheckpoint(context.Background(), "d_peer", events, 200)
+	applied, _, err := applier.ApplyAndCheckpoint(context.Background(), "d_peer", events, 200, false)
 	if err != nil {
 		t.Fatalf("ApplyAndCheckpoint: %v", err)
 	}
@@ -192,6 +193,89 @@ func TestSyncApplier_GetCheckpoint(t *testing.T) {
 	}
 	if seq != 0 {
 		t.Errorf("expected 0 for unknown peer, got %d", seq)
+	}
+}
+
+// validRegisterEvent builds an apply-able agent.register event at the given
+// sequence (mirrors the known-good shape used elsewhere in this file).
+func validRegisterEvent(id string, seq int64) eventlog.Event {
+	return eventlog.Event{
+		EventID:      id,
+		Sequence:     seq,
+		Type:         "agent.register",
+		Timestamp:    "2026-02-11T10:00:00Z",
+		OriginDaemon: "d_peer",
+		EventJSON: json.RawMessage(fmt.Sprintf(
+			`{"type":"agent.register","timestamp":"2026-02-11T10:00:00Z","event_id":%q,"origin_daemon":"d_peer","agent_id":%q,"kind":"agent","role":"tester","module":"test","v":1}`,
+			id, id)),
+	}
+}
+
+// TestApplyAndCheckpoint_Filtered_BypassesCap (D13 part 1): for a filtered peer
+// the checkpoint advances to the peer's scan-watermark (peerNextSeq), NOT the
+// max sequence actually received — the anti-lying-peer cap is bypassed because a
+// filtered stream legitimately skips sequences the puller never sees.
+func TestApplyAndCheckpoint_Filtered_BypassesCap(t *testing.T) {
+	st := createTestStateForSync(t)
+	a := NewSyncApplier(st)
+
+	events := []eventlog.Event{validRegisterEvent("evt_F2", 2)}
+	if _, _, err := a.ApplyAndCheckpoint(context.Background(), "peerX", events, 100 /*peerNextSeq*/, true /*filtered*/); err != nil {
+		t.Fatalf("ApplyAndCheckpoint: %v", err)
+	}
+	got, err := a.GetCheckpoint("peerX")
+	if err != nil {
+		t.Fatalf("GetCheckpoint: %v", err)
+	}
+	if got != 100 {
+		t.Fatalf("filtered: checkpoint must advance to scan-watermark 100, got %d", got)
+	}
+}
+
+// TestApplyAndCheckpoint_NotFiltered_KeepsCap: a normal (non-filtered) peer MUST
+// keep the cap at maxEventSeq — the security invariant a lying peer can't bypass.
+func TestApplyAndCheckpoint_NotFiltered_KeepsCap(t *testing.T) {
+	st := createTestStateForSync(t)
+	a := NewSyncApplier(st)
+
+	events := []eventlog.Event{validRegisterEvent("evt_N2", 2)}
+	if _, _, err := a.ApplyAndCheckpoint(context.Background(), "peerY", events, 100, false /*not filtered*/); err != nil {
+		t.Fatalf("ApplyAndCheckpoint: %v", err)
+	}
+	got, err := a.GetCheckpoint("peerY")
+	if err != nil {
+		t.Fatalf("GetCheckpoint: %v", err)
+	}
+	if got != 2 {
+		t.Fatalf("normal peer: cap must hold at maxEventSeq=2, got %d", got)
+	}
+}
+
+// TestApplyAndCheckpoint_Filtered_EmptyWindow_AdvancesCheckpoint (D13 part 3): a
+// terminal all-filtered window (zero events) must still advance the checkpoint to
+// the scan-watermark, else the cursor freezes at the last kept message.
+func TestApplyAndCheckpoint_Filtered_EmptyWindow_AdvancesCheckpoint(t *testing.T) {
+	st := createTestStateForSync(t)
+	a := NewSyncApplier(st)
+
+	// Seed the checkpoint at 10.
+	if err := checkpoint.UpdateCheckpoint(context.Background(), st.DB(), "peerZ", 10, time.Now().Unix()); err != nil {
+		t.Fatalf("seed checkpoint: %v", err)
+	}
+
+	applied, skipped, err := a.ApplyAndCheckpoint(context.Background(), "peerZ", nil, 60, true)
+	if err != nil {
+		t.Fatalf("ApplyAndCheckpoint: %v", err)
+	}
+	if applied != 0 || skipped != 0 {
+		t.Fatalf("want 0/0, got %d/%d", applied, skipped)
+	}
+	got, err := a.GetCheckpoint("peerZ")
+	if err != nil {
+		t.Fatalf("GetCheckpoint: %v", err)
+	}
+	if got != 60 {
+		t.Fatalf("filtered empty window must still advance checkpoint to 60, got %d", got)
 	}
 }
 
