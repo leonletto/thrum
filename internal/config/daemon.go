@@ -458,7 +458,20 @@ func LoadThrumConfig(thrumDir string) (*ThrumConfig, error) {
 		cfg.Peers = DefaultPeersConfig()
 	}
 
-	applyDefaults(&cfg)
+	// D7/D9: detect whether the daemon.sync stanza is explicitly present in
+	// the JSON. A stanza with only enabled:false is distinguishable from an
+	// absent stanza only at the raw JSON level — json.Unmarshal leaves
+	// cfg.Daemon.Sync at its zero-value (Enabled=false, Mechanisms=nil) in
+	// both cases. Only migrate (MigrateLegacySync) when the stanza is absent.
+	syncStanzaPresent := false
+	if daemonRaw, ok := raw["daemon"]; ok {
+		var daemonMap map[string]json.RawMessage
+		if err := json.Unmarshal(daemonRaw, &daemonMap); err == nil {
+			_, syncStanzaPresent = daemonMap["sync"]
+		}
+	}
+
+	applyDefaultsWithSyncPresent(&cfg, syncStanzaPresent)
 	if err := ValidateSync(cfg.Daemon.Sync); err != nil {
 		return nil, err
 	}
@@ -466,9 +479,15 @@ func LoadThrumConfig(thrumDir string) (*ThrumConfig, error) {
 }
 
 // applyDefaults fills in sensible defaults for zero-value fields.
-// Fresh-install default for sync: {enabled:true, mechanisms:[{a-sync, full}]}.
-// Legacy configs with only local_only set are migrated via MigrateLegacySync.
+// Called when the sync stanza is absent from the raw JSON (legacy or fresh install).
 func applyDefaults(cfg *ThrumConfig) {
+	applyDefaultsWithSyncPresent(cfg, false)
+}
+
+// applyDefaultsWithSyncPresent fills in sensible defaults. syncStanzaPresent
+// must be true when the caller has detected a "sync" key in the raw daemon JSON —
+// in that case migration is skipped and the explicit value wins.
+func applyDefaultsWithSyncPresent(cfg *ThrumConfig, syncStanzaPresent bool) {
 	if cfg.Daemon.WSPort == "" {
 		cfg.Daemon.WSPort = DefaultWSPort
 	}
@@ -502,9 +521,12 @@ func applyDefaults(cfg *ThrumConfig) {
 	}
 	// D7/D9: fresh-install default = sync on, a-sync full.
 	// MigrateLegacySync handles configs that only have LocalOnly set.
-	// An explicit sync stanza (Enabled or Mechanisms set) wins over migration.
-	migrated := MigrateLegacySync(*cfg)
-	cfg.Daemon.Sync = migrated.Daemon.Sync
+	// When a sync stanza was explicitly present in the JSON, skip migration
+	// and honour the operator's explicit setting (including enabled:false).
+	if !syncStanzaPresent {
+		migrated := MigrateLegacySync(*cfg)
+		cfg.Daemon.Sync = migrated.Daemon.Sync
+	}
 }
 
 // ApplyDefaultsForTest exposes applyDefaults for white-box testing of the

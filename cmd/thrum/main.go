@@ -1873,6 +1873,9 @@ Blocks until a peer connects or the session times out (5 minutes).
 --type is required. Run 'thrum peer add' with no flags to see the full
 list of transports and a one-line "when to use" for each.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := guardLocalOnlyPairing(filepath.Join(flagRepo, ".thrum")); err != nil {
+				return err
+			}
 			peerType, parseErr := cli.ParsePeerType(addType)
 			if parseErr != nil {
 				if errors.Is(parseErr, cli.ErrPeerTypeMissing) {
@@ -1999,6 +2002,9 @@ Peercode input methods (for --type tailscale|local|network):
 stored secrets in peers.json to re-handshake without minting a new token.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := guardLocalOnlyPairing(filepath.Join(flagRepo, ".thrum")); err != nil {
+				return err
+			}
 			peerType, parseErr := cli.ParsePeerType(joinType)
 			if parseErr != nil {
 				if errors.Is(parseErr, cli.ErrPeerTypeMissing) {
