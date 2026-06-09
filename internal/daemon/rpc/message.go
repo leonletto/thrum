@@ -1412,6 +1412,20 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		hiddenQuery += " AND m.message_id NOT IN (SELECT md3.message_id FROM message_deliveries md3 WHERE md3.recipient_agent_id = ? AND md3.read_at IS NOT NULL)"
 		hiddenArgs = append(hiddenArgs, currentAgentID)
 
+		// thrum-vr0i: only count mail the agent is a genuine recipient of (has a
+		// delivery row for). With no mention/scope/ref filter the superset above
+		// is otherwise unbounded — it counts EVERY unread message in the daemon
+		// minus the agent's for-agent-visible set, because forAgentClause is
+		// intentionally omitted here. A message join-visible via identity
+		// (role/scope/legacy-broadcast) but with NO delivery row was never
+		// delivered to this agent per event.Recipients semantics, so counting it
+		// as "N additional unread outside filter" is misleading AND never
+		// converges (read --all cannot clear a row that does not exist).
+		// Restricting the superset to delivery-backed messages makes the advisory
+		// count honest and bounded.
+		hiddenQuery += " AND EXISTS (SELECT 1 FROM message_deliveries md_hb WHERE md_hb.message_id = m.message_id AND md_hb.recipient_agent_id = ?)"
+		hiddenArgs = append(hiddenArgs, currentAgentID)
+
 		var totalUnreadWithoutForAgent int
 		_ = h.state.DB().QueryRowContext(ctx, hiddenQuery, hiddenArgs...).Scan(&totalUnreadWithoutForAgent)
 		// Subtraction guard: under SQLite's snapshot semantics within a
