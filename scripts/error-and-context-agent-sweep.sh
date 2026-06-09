@@ -120,6 +120,20 @@ if [[ -f "$STATE_FILE" ]]; then
     done < <(jq -r '.api_error_agents[]? // empty' "$STATE_FILE" 2>/dev/null || true)
 fi
 
+# thrum-9zag: per-agent context-% hysteresis. Load each agent's last-fired
+# fire-point level (x10 int) from the same state file, so a context-% nudge
+# re-fires only when the agent crosses its NEXT fire-point — not every sweep
+# at the same band. ctx_fired_new is rebuilt during the per-agent loop and
+# persisted at the end. SCOPE: context-% nudges ONLY (api-err / stuck-working
+# / capture-fail stay fully actionable every sweep).
+declare -A ctx_fired_prev=()
+declare -A ctx_fired_new=()
+if [[ -f "$STATE_FILE" ]]; then
+    while IFS=$'\t' read -r ck cv; do
+        [[ -n "$ck" ]] && ctx_fired_prev["$ck"]="$cv"
+    done < <(jq -r '.ctx_fired_levels // {} | to_entries[]? | "\(.key)\t\(.value)"' "$STATE_FILE" 2>/dev/null || true)
+fi
+
 now_epoch=$(date -u +%s)
 
 # Build the agent list from identity files + tmux list-sessions directly,
@@ -204,7 +218,7 @@ if [[ ${#agent_lines[@]} -eq 0 ]]; then
     # STUCK detection.
     reset_tmp=$(mktemp "${STATE_FILE}.tmp.XXXXXX" 2>/dev/null) || reset_tmp=""
     if [[ -n "$reset_tmp" ]]; then
-        printf '%s\n' '{"api_error_agents":[],"timestamp":"'"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"'"}' > "$reset_tmp" 2>/dev/null \
+        printf '%s\n' '{"api_error_agents":[],"ctx_fired_levels":{},"timestamp":"'"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"'"}' > "$reset_tmp" 2>/dev/null \
             && mv "$reset_tmp" "$STATE_FILE" 2>/dev/null \
             || rm -f "$reset_tmp" 2>/dev/null
     fi
@@ -475,13 +489,60 @@ for line in "${agent_lines[@]}"; do
     # ctx_used >= threshold? Format is "X.X% (...)" — match the leading percent.
     if [[ "$ctx_used" =~ ^([0-9]+)\.([0-9]+)% ]]; then
         ctx_int="${BASH_REMATCH[1]}"
-        if [[ "$ctx_int" -ge "$CTX_THRESHOLD" ]]; then
-            needs_attention=1
-        fi
+        ctx_dec="${BASH_REMATCH[2]}"
+        # Scale to tenths (int) so the half-point fire-points (77.5, 92.5) are
+        # exact without float math: 53.0% -> 530, 77.5% -> 775.
+        ctx_x10=$(( ctx_int * 10 + ${ctx_dec:0:1} ))
         if [[ "$ctx_int" -ge 85 ]]; then
             tier="tier3"
         elif [[ "$ctx_int" -ge 70 ]]; then
             tier="tier2"
+        fi
+        # thrum-9zag: per-agent hysteresis applies ONLY to the text/ALERT path
+        # (the coordinator nudge that re-fired every sweep = the noise). The
+        # --json detection path (api-error auto-remediation, thrum-sdzk) keeps
+        # its original ctx>=threshold gate AND does not advance the hysteresis
+        # state — otherwise a silent --json sweep sharing the default state file
+        # would eat a coordinator ALERT's fire-point (both daemon sweeps share
+        # one state file). The state-write carries ctx_fired_prev forward
+        # unchanged in --json mode (see the persist block below).
+        if [[ "$JSON_MODE" -eq 1 ]]; then
+            if [[ "$ctx_int" -ge "$CTX_THRESHOLD" ]]; then
+                needs_attention=1
+            fi
+        else
+            # Fire-points (x10): 500 600 700 775 850 925 (= thresholds 50/70/85 +
+            # halfway-to-next). A context-% nudge fires only when the agent
+            # crosses its NEXT fire-point upward; tier3 (>=85%) ALWAYS fires
+            # (force-restart urgency, never held); a new agent fires fresh
+            # (stored 0); re-arm when ctx drops below 50% (the agent is omitted
+            # from the persisted map, so the next climb fires fresh). "Suppress
+            # at emission": a held ctx-only agent never sets needs_attention, so
+            # it produces no ALERT segment.
+            ctx_fires=0
+            if [[ "$ctx_x10" -lt 500 ]]; then
+                : # below the 50% floor: not a ctx flag; omit from ctx_fired_new => re-arm
+            else
+                cur_level=0
+                for fp in 500 600 700 775 850 925; do
+                    [[ "$ctx_x10" -ge "$fp" ]] && cur_level="$fp"
+                done
+                stored_level="${ctx_fired_prev[$agent_id]:-0}"
+                if [[ "$ctx_x10" -ge 850 ]]; then
+                    ctx_fires=1                   # tier3 always fires
+                elif [[ "$cur_level" -gt "$stored_level" ]]; then
+                    ctx_fires=1                   # crossed a new fire-point upward
+                fi
+                # Persist the high-water fire level (held agents keep their prior).
+                if [[ "$ctx_fires" -eq 1 && "$cur_level" -gt "$stored_level" ]]; then
+                    ctx_fired_new["$agent_id"]="$cur_level"
+                else
+                    ctx_fired_new["$agent_id"]="$stored_level"
+                fi
+                if [[ "$ctx_int" -ge "$CTX_THRESHOLD" && "$ctx_fires" -eq 1 ]]; then
+                    needs_attention=1
+                fi
+            fi
         fi
     elif [[ "$ctx_used" == "(capture failed)" ]]; then
         # Capture failure is a real concern — flag it
@@ -600,16 +661,45 @@ done
 # write failure (state persistence is best-effort — STUCK detection
 # degrades to "always false" if persistence fails, but the script still
 # works).
+# Build the api-error array + the thrum-9zag ctx_fired_levels map as JSON, then
+# combine into one state object. Both axes share this single state file.
+api_json="[]"
+if [[ ${#cur_api_agents[@]} -gt 0 ]]; then
+    api_json=$(printf '%s\n' "${cur_api_agents[@]}" | jq -R . | jq -s '.' 2>/dev/null || echo '[]')
+fi
+# In --json mode hysteresis is not applied, so carry the previous ctx levels
+# forward UNCHANGED (a --json sweep must not advance/clear the coordinator
+# sweep's fire-point state — both share the default state file). In text mode,
+# persist the freshly-computed ctx_fired_new. Avoid namerefs (bash 4.3+) for
+# portability: build the key list from whichever map applies, then read values
+# back from the same map by branching on JSON_MODE.
+ctx_levels_json="{}"
+ctx_keys=()
+if [[ "$JSON_MODE" -eq 1 ]]; then
+    ctx_keys=("${!ctx_fired_prev[@]}")
+else
+    ctx_keys=("${!ctx_fired_new[@]}")
+fi
+if [[ ${#ctx_keys[@]} -gt 0 ]]; then
+    ctx_levels_json=$(
+        for k in "${ctx_keys[@]}"; do
+            if [[ "$JSON_MODE" -eq 1 ]]; then
+                printf '%s\t%s\n' "$k" "${ctx_fired_prev[$k]}"
+            else
+                printf '%s\t%s\n' "$k" "${ctx_fired_new[$k]}"
+            fi
+        done | jq -R 'split("\t") | {(.[0]): (.[1] | tonumber)}' | jq -s 'add // {}' 2>/dev/null || echo '{}'
+    )
+fi
 state_tmp=""
 state_tmp=$(mktemp "${STATE_FILE}.tmp.XXXXXX" 2>/dev/null) || state_tmp=""
 if [[ -n "$state_tmp" ]]; then
-    {
-        if [[ ${#cur_api_agents[@]} -eq 0 ]]; then
-            printf '%s\n' '{"api_error_agents":[],"timestamp":"'"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"'"}'
-        else
-            printf '%s\n' "${cur_api_agents[@]}" | jq -R . | jq -s --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" '{api_error_agents: ., timestamp: $ts}'
-        fi
-    } > "$state_tmp" 2>/dev/null && mv "$state_tmp" "$STATE_FILE" 2>/dev/null || rm -f "$state_tmp" 2>/dev/null
+    jq -nc \
+        --argjson api "$api_json" \
+        --argjson ctx "$ctx_levels_json" \
+        --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+        '{api_error_agents: $api, ctx_fired_levels: $ctx, timestamp: $ts}' \
+        > "$state_tmp" 2>/dev/null && mv "$state_tmp" "$STATE_FILE" 2>/dev/null || rm -f "$state_tmp" 2>/dev/null
 fi
 
 # --json: emit the accumulated JSONL and skip BOTH the ALERT line and the
