@@ -1124,3 +1124,24 @@ func TestSaveThrumConfig_HandEditedDisableSurvivesUnrelatedSave(t *testing.T) {
 		t.Fatalf("hand-edited sync.enabled=false must survive an unrelated save (no silent flip), got %+v", reloaded.Daemon.Sync)
 	}
 }
+
+func TestSyncConfig_ExposureFields_RoundTrip(t *testing.T) {
+	in := config.SyncConfig{
+		Enabled:                true,
+		DetectedVisibility:     "private",
+		DetectedRemote:         "github.com/owner/repo",
+		PublicExposureOverride: "github.com/owner/repo",
+	}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out config.SyncConfig
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.DetectedVisibility != "private" || out.DetectedRemote != "github.com/owner/repo" ||
+		out.PublicExposureOverride != "github.com/owner/repo" {
+		t.Fatalf("round-trip mismatch: %+v", out)
+	}
+}
