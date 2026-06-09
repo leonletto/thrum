@@ -198,6 +198,40 @@ func Init(opts InitOptions) error {
 		return retErr
 	}
 
+	// 5b. thrum-44mt: probe the a-sync visibility baseline once at init (the
+	// first of two probe points; the daemon boot gate is the second). No
+	// warning here — init only records the baseline so the boot gate can later
+	// detect a transition INTO the exposed state. Best-effort: a probe failure
+	// (or no origin) leaves the baseline unset and the daemon boot re-probes.
+	var detectedVis, detectedRemote string
+	if originURL, oerr := safecmd.Git(stdcontext.Background(), opts.RepoPath, "remote", "get-url", "origin"); oerr == nil {
+		gate := sync.ResolveExposureGate(stdcontext.Background(), sync.GateInput{
+			OriginURL: strings.TrimSpace(string(originURL)),
+		}, func(c stdcontext.Context, probeURL string) sync.Visibility {
+			out, perr := safecmd.GitProbeAnonymous(c, probeURL)
+			return sync.ClassifyVisibility(out, perr)
+		})
+		detectedVis = string(gate.Visibility)
+		detectedRemote = gate.CanonicalRemote
+	}
+	// applyDetectedVisibility stamps the probed baseline onto the SyncConfig
+	// about to be persisted. When the stanza is absent it is materialised via
+	// MigrateLegacySync FIRST so the load-time default (incl. the a-sync
+	// mechanism when not local-only) is preserved — an explicit empty stanza
+	// would otherwise suppress that mechanism (MigrateLegacySync preserves any
+	// non-nil stanza verbatim).
+	applyDetectedVisibility := func(cfg *config.ThrumConfig) {
+		if detectedVis == "" {
+			return
+		}
+		if cfg.Daemon.Sync == nil {
+			migrated := config.MigrateLegacySync(*cfg)
+			cfg.Daemon.Sync = migrated.Daemon.Sync
+		}
+		cfg.Daemon.Sync.DetectedVisibility = detectedVis
+		cfg.Daemon.Sync.DetectedRemote = detectedRemote
+	}
+
 	// 6. Write default config.json (local-only by default — user must opt in to
 	// remote sync). The reconciliation result may flip LocalOnly to false when
 	// an existing origin/a-sync is detected.
@@ -213,6 +247,7 @@ func Init(opts InitOptions) error {
 				WSPort:    config.DefaultWSPort,
 			},
 		}
+		applyDetectedVisibility(cfg)
 		if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
 			retErr = fmt.Errorf("failed to write config.json: %w", err)
 			return retErr
@@ -225,6 +260,7 @@ func Init(opts InitOptions) error {
 			return retErr
 		}
 		existing.Daemon.LocalOnly = *recon.LocalOnlyOverride
+		applyDetectedVisibility(existing)
 		if err := config.SaveThrumConfig(thrumDir, existing); err != nil {
 			retErr = fmt.Errorf("save config with override: %w", err)
 			return retErr
