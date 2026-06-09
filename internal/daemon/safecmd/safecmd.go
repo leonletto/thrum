@@ -257,3 +257,29 @@ var (
 	probeHomeOnce sync.Once
 	probeHomeDir  string
 )
+
+// GitProbeAnonymous runs `git ls-remote <probeURL>` with the hermetic
+// allowlist env from buildProbeEnv(). The env allowlist (empty HOME, no system
+// gitconfig) is the PRIMARY and complete defence — with an empty HOME git finds
+// no ~/.gitconfig, so credential.helper and url.insteadOf rewrites simply do
+// not exist to be applied. The inline `-c credential.helper=` is a harmless
+// belt-and-suspenders clear. (The plan's `-c url.<probeURL>.insteadOf=` was
+// REMOVED: an empty insteadOf value is an empty match-prefix that matches EVERY
+// URL and prepends the base, mangling the probe URL — it set a catch-all
+// rewrite rather than clearing one. The empty-HOME env already neutralises all
+// insteadOf rules structurally.) GitProbeAnonymous is DISTINCT from Git/GitLong,
+// which inherit the full environment (and would authenticate the probe). A
+// 5-second timeout bounds boot latency (brainstorm §5: ≤5s). Returns the raw
+// ls-remote output and the command error verbatim so the caller can classify by
+// reachability.
+func GitProbeAnonymous(ctx context.Context, probeURL string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	args := []string{
+		"-c", "credential.helper=",
+		"ls-remote", probeURL,
+	}
+	cmd := exec.CommandContext(ctx, "git", args...) // #nosec G204 -- probeURL is a derived https URL; args are fixed git subcommands
+	cmd.Env = buildProbeEnv()
+	return cmd.CombinedOutput()
+}
