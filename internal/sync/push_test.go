@@ -590,6 +590,8 @@ func TestClassifyPushRemote_PublicHosts(t *testing.T) {
 		"git@git.sr.ht:~user/repo",
 		"https://sr.ht/~user/repo",
 		"https://gist.github.com/user/abc.git", // subdomain of a public host
+		"https://github.com./o/r.git",          // trailing-dot FQDN (rooted) must not slip
+		"git@github.com.:o/r.git",              // trailing-dot FQDN via scp form
 	}
 	for _, u := range publicURLs {
 		if err := classifyPushRemote(u); err == nil {

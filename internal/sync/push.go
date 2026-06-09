@@ -187,7 +187,15 @@ func extractRemoteHost(remoteURL string) string {
 // hostIsPublic reports whether host is, or is a subdomain of, a denylisted
 // public code host — matching on host boundaries (host == d || endswith "."+d),
 // never a substring. Returns the matched denylist entry for the error message.
+//
+// A trailing dot is stripped first: "github.com." is the equivalent fully-
+// qualified (rooted) form of "github.com" and url.Hostname() / the scp parse
+// both preserve it, so without this trim "github.com." and
+// "git@github.com.:o/r.git" would slip the denylist and reach the public push
+// (D11 bypass). Trimming here — the single consumer point both the url and scp
+// branches of extractRemoteHost feed into — closes it for every form at once.
 func hostIsPublic(host string) (string, bool) {
+	host = strings.TrimRight(host, ".")
 	for _, d := range publicSyncHosts {
 		if host == d || strings.HasSuffix(host, "."+d) {
 			return d, true
