@@ -30,11 +30,21 @@ thrum send <message> --to @name --ref type:value
 thrum send <message> --to @name --mention @role
 thrum send <message> --to @name --format plain
 thrum send <message> --to @name --structured '{"key":"value"}'
+thrum send --to @name --stdin <<'EOF'                # Shell-safe body (heredoc)
+thrum send --to @name --body-file ./body.md          # Shell-safe body (file)
+generator | thrum send --to @name -                  # '-' is a --stdin alias
 ```
 
 A recipient flag is REQUIRED — `thrum send 'msg'` with no `--to` or
 `--broadcast` is a hard error (thrum-t698). `--to` and `--broadcast` are
 mutually exclusive.
+
+Shell-safe bodies (thrum-d3fp): backticks, `$(...)`, `$VAR`, and quotes in a
+double-quoted message are interpreted by the shell BEFORE thrum runs, silently
+corrupting content. Read the body from stdin (`--stdin`, or pass the message as
+`-`) or a file (`--body-file`) with a QUOTED heredoc (`<<'EOF'`) to disable all
+shell interpretation. The three body sources are mutually exclusive. A single
+trailing newline is stripped from stdin/file bodies.
 
 Flags:
 
@@ -46,6 +56,8 @@ Flags:
 --scope strings       Add scope (repeatable, format: type:value)
 --format string       Message format: markdown, plain, json (default "markdown")
 --structured string   Structured payload (JSON)
+--stdin               Read the message body from stdin (or pass MESSAGE as '-')
+--body-file string    Read the message body from a file (mutex with --stdin)
 ```
 
 ### reply
@@ -53,12 +65,20 @@ Flags:
 ```bash
 thrum reply <msg-id> <response>
 thrum reply <msg-id> <response> --format plain
+thrum reply <msg-id> --stdin <<'EOF'                 # Shell-safe body (heredoc)
+thrum reply <msg-id> --body-file ./body.md           # Shell-safe body (file)
 ```
+
+Shell-safe bodies (thrum-d3fp): like `send`, `reply` accepts `--stdin` (or the
+response argument as `-`) and `--body-file` so backtick/`$(...)`/quote-bearing
+text survives the shell. Use a QUOTED heredoc (`<<'EOF'`).
 
 Flags:
 
 ```text
---format string   Message format: markdown, plain, json (default "markdown")
+--format string     Message format: markdown, plain, json (default "markdown")
+--stdin             Read the reply body from stdin (or pass the response as '-')
+--body-file string  Read the reply body from a file (mutex with --stdin)
 ```
 
 ### inbox
@@ -127,6 +147,7 @@ from now" (skip ahead). Note: `--timeout` requires a Go duration unit — use
 ```bash
 thrum message get <msg-id>                     # Get full message details
 thrum message edit <msg-id> <new-text>         # Full replacement (author only)
+thrum message edit <msg-id> --stdin <<'EOF'    # Shell-safe replacement (heredoc)
 thrum message delete <msg-id> --force          # Delete (--force required)
 thrum message read <msg-id> [<msg-id>...]      # Mark as read
 thrum message read --all                       # Mark all as read
@@ -135,6 +156,10 @@ thrum message read --all                       # Mark all as read
 Subcommand flags:
 
 ```text
+# message edit  (shell-safe bodies, thrum-d3fp)
+--stdin             Read the new text from stdin (or pass TEXT as '-')
+--body-file string  Read the new text from a file (mutex with --stdin)
+
 # message delete
 --force   Confirm deletion (required)
 
