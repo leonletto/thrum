@@ -1071,9 +1071,87 @@ is idempotent: running it twice produces byte-identical file content.`,
 	return cmd
 }
 
+// addBodyInputFlags registers the shell-safe message-body input flags shared by
+// `send`, `reply`, and `message edit` (thrum-d3fp / thrum-afo4). --stdin and
+// --body-file are mutually exclusive; a positional MESSAGE of "-" is also a
+// stdin alias (handled in resolveMessageBody). These let callers pass a QUOTED
+// heredoc (<<'EOF') so the shell performs no interpretation — safe for
+// backticks, $(...), $VAR, and embedded quotes that would otherwise be mangled
+// before thrum ever runs.
+func addBodyInputFlags(cmd *cobra.Command) {
+	cmd.Flags().Bool("stdin", false, "Read the message body from stdin (or pass the body argument as '-'); use a quoted heredoc <<'EOF' for shell-safe bodies")
+	cmd.Flags().String("body-file", "", "Read the message body from a file (shell-safe; avoids shell quoting/substitution)")
+	cmd.MarkFlagsMutuallyExclusive("stdin", "body-file")
+}
+
+// resolveMessageBody resolves a message body from exactly one of three
+// mutually-exclusive sources: a positional argument, --stdin (also triggered by
+// passing the positional as "-"), or --body-file <path> (thrum-d3fp).
+//
+// hasPositional reports whether the body positional was supplied; positional
+// holds its value. Exactly one source must be present, else an actionable error
+// is returned. A single trailing newline (CRLF-aware) is stripped from stdin
+// and file bodies — heredocs and editors append one — while positional bodies
+// pass through verbatim.
+func resolveMessageBody(cmd *cobra.Command, positional string, hasPositional bool) (string, error) {
+	useStdin, _ := cmd.Flags().GetBool("stdin")
+	bodyFile, _ := cmd.Flags().GetString("body-file")
+
+	// A positional of "-" is an alias for --stdin.
+	if hasPositional && positional == "-" {
+		useStdin = true
+		hasPositional = false
+	}
+
+	sources := 0
+	if hasPositional {
+		sources++
+	}
+	if useStdin {
+		sources++
+	}
+	if bodyFile != "" {
+		sources++
+	}
+	switch {
+	case sources == 0:
+		return "", fmt.Errorf("no message body: pass a positional argument, --stdin (or pass the body as '-'), or --body-file <path>")
+	case sources > 1:
+		return "", fmt.Errorf("message body is ambiguous: use exactly one of a positional argument, --stdin / '-', or --body-file")
+	}
+
+	switch {
+	case useStdin:
+		data, err := io.ReadAll(cmd.InOrStdin())
+		if err != nil {
+			return "", fmt.Errorf("read message body from stdin: %w", err)
+		}
+		return trimOneTrailingNewline(string(data)), nil
+	case bodyFile != "":
+		// #nosec G304 — user-specified body file via CLI flag; the CLI is a
+		// user-trusted boundary and the user controls the path.
+		data, err := os.ReadFile(bodyFile)
+		if err != nil {
+			return "", fmt.Errorf("read message body from %s: %w", bodyFile, err)
+		}
+		return trimOneTrailingNewline(string(data)), nil
+	default:
+		return positional, nil
+	}
+}
+
+// trimOneTrailingNewline removes a single trailing newline (handling CRLF) so a
+// heredoc- or editor-supplied body doesn't carry its terminating newline into
+// the message. Additional trailing blank lines are preserved.
+func trimOneTrailingNewline(s string) string {
+	s = strings.TrimSuffix(s, "\n")
+	s = strings.TrimSuffix(s, "\r")
+	return s
+}
+
 func sendCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "send MESSAGE",
+		Use:   "send [MESSAGE]",
 		Short: "Send a message",
 		Long: `Send a message to the Thrum messaging system.
 
@@ -1088,8 +1166,20 @@ Invoking 'thrum send' with no recipient flag is a hard error. The previous
 default — silent broadcast to every team agent — was a footgun (the wider
 the team, the easier to flood mid-cycle). Use --to @<agent_name> for the
 common case, or --broadcast when an explicit team-wide announcement is
-intended.`,
-		Args: cobra.ExactArgs(1),
+intended.
+
+Shell-safe bodies (thrum-d3fp): backticks, $(...), $VAR, and quotes in a
+double-quoted MESSAGE are interpreted by your shell BEFORE thrum runs, which
+silently corrupts content. To send such text safely, read the body from stdin
+or a file using a QUOTED heredoc:
+
+  thrum send --to @agent --stdin <<'EOF'
+  literal text with backticks and $(do not run me)
+  EOF
+
+  thrum send --to @agent --body-file ./body.md
+  some-generator | thrum send --to @agent -        # '-' is a stdin alias`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			scopes, _ := cmd.Flags().GetStringSlice("scope")
 			refs, _ := cmd.Flags().GetStringSlice("ref")
@@ -1121,8 +1211,20 @@ intended.`,
 				to = "@everyone"
 			}
 
+			// Resolve the body from positional MESSAGE, --stdin/'-', or
+			// --body-file (thrum-d3fp). Done after the cheap recipient check
+			// so a missing-recipient error fails fast without consuming stdin.
+			positional := ""
+			if len(args) > 0 {
+				positional = args[0]
+			}
+			content, err := resolveMessageBody(cmd, positional, len(args) > 0)
+			if err != nil {
+				return err
+			}
+
 			opts := cli.SendOptions{
-				Content:       args[0],
+				Content:       content,
 				Scopes:        scopes,
 				Refs:          refs,
 				Mentions:      mentions,
@@ -1208,6 +1310,7 @@ intended.`,
 	cmd.Flags().String("to", "", "Recipient (@agent_name or @everyone)")
 	cmd.Flags().Bool("broadcast", false, "Fan out to the entire team (mutually exclusive with --to)")
 	cmd.MarkFlagsMutuallyExclusive("to", "broadcast")
+	addBodyInputFlags(cmd)
 
 	return cmd
 }
@@ -3740,7 +3843,7 @@ Examples:
 
 func replyCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "reply MSG_ID TEXT",
+		Use:   "reply MSG_ID [TEXT]",
 		Short: "Reply to a message with same audience",
 		Long: `Reply to a message, copying the parent message's audience (mentions/scopes).
 
@@ -3749,10 +3852,34 @@ to the same recipients as the parent message.
 
 Examples:
   thrum reply msg_01HXE... "Good idea, let's do that"
-  thrum reply msg_01HXE... "Acknowledged" --format plain`,
-		Args: cobra.ExactArgs(2),
+  thrum reply msg_01HXE... "Acknowledged" --format plain
+
+Shell-safe bodies (thrum-d3fp): backticks, $(...), $VAR, and quotes in a
+double-quoted TEXT are interpreted by your shell BEFORE thrum runs. To reply
+with such text safely, read the body from stdin or a file via a QUOTED heredoc:
+
+  thrum reply msg_01HXE... --stdin <<'EOF'
+  literal text with backticks and $(do not run me)
+  EOF
+
+  thrum reply msg_01HXE... --body-file ./body.md
+  some-generator | thrum reply msg_01HXE... -        # '-' is a stdin alias`,
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, _ := cmd.Flags().GetString("format")
+
+			// Resolve the body from positional TEXT, --stdin/'-', or
+			// --body-file (thrum-d3fp). MSG_ID is args[0]; TEXT (when present)
+			// is args[1]. Resolved before getClient so a missing-body error
+			// fails fast without a daemon round-trip.
+			replyText := ""
+			if len(args) > 1 {
+				replyText = args[1]
+			}
+			content, err := resolveMessageBody(cmd, replyText, len(args) > 1)
+			if err != nil {
+				return err
+			}
 
 			client, err := getClient()
 			if err != nil {
@@ -3767,7 +3894,7 @@ Examples:
 
 			opts := cli.ReplyOptions{
 				MessageID:     args[0],
-				Content:       args[1],
+				Content:       content,
 				Format:        format,
 				CallerAgentID: agentID,
 			}
@@ -3792,6 +3919,7 @@ Examples:
 	}
 
 	cmd.Flags().String("format", "markdown", "Message format (markdown, plain, json)")
+	addBodyInputFlags(cmd)
 
 	return cmd
 }
@@ -3839,16 +3967,39 @@ func messageCmd() *cobra.Command {
 	cmd.AddCommand(getCmd)
 
 	editCmd := &cobra.Command{
-		Use:   "edit MSG_ID TEXT",
+		Use:   "edit MSG_ID [TEXT]",
 		Short: "Edit a message (full replacement)",
 		Long: `Edit a message by replacing its content entirely.
 
 Only the message author can edit their own messages.
 
 Examples:
-  thrum message edit msg_01HXE... "Updated text here"`,
-		Args: cobra.ExactArgs(2),
+  thrum message edit msg_01HXE... "Updated text here"
+
+Shell-safe bodies (thrum-d3fp): backticks, $(...), $VAR, and quotes in a
+double-quoted TEXT are interpreted by your shell BEFORE thrum runs. To replace
+content with such text safely, read the body from stdin or a file:
+
+  thrum message edit msg_01HXE... --stdin <<'EOF'
+  literal text with backticks and $(do not run me)
+  EOF
+
+  thrum message edit msg_01HXE... --body-file ./body.md`,
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Resolve the new content from positional TEXT, --stdin/'-', or
+			// --body-file (thrum-d3fp). MSG_ID is args[0]; TEXT (when present)
+			// is args[1]. Resolved first so a bad body source fails fast,
+			// before identity resolution or any daemon round-trip.
+			editText := ""
+			if len(args) > 1 {
+				editText = args[1]
+			}
+			content, err := resolveMessageBody(cmd, editText, len(args) > 1)
+			if err != nil {
+				return err
+			}
+
 			agentID, err := resolveLocalAgentID()
 			if err != nil {
 				return fmt.Errorf("failed to resolve agent identity: %w", err)
@@ -3860,7 +4011,7 @@ Examples:
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.MessageEdit(client, args[0], args[1], agentID)
+			result, err := cli.MessageEdit(client, args[0], content, agentID)
 			if err != nil {
 				return err
 			}
@@ -3874,6 +4025,7 @@ Examples:
 			return nil
 		},
 	}
+	addBodyInputFlags(editCmd)
 	cmd.AddCommand(editCmd)
 
 	deleteCmd := &cobra.Command{
