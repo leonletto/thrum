@@ -97,6 +97,13 @@ func (h *SyncStatusHandler) Handle(ctx context.Context, params json.RawMessage) 
 	return response, nil
 }
 
+// DeriveSyncState is the exported wrapper over getSyncState so callers outside
+// this package (cmd/thrum's health SyncStatusProvider) map a SyncStatus to its
+// state string through the SAME logic — no second copy of the state vocabulary.
+func DeriveSyncState(status sync.SyncStatus) string {
+	return getSyncState(status)
+}
+
 // getSyncState derives the sync state from the status.
 func getSyncState(status sync.SyncStatus) string {
 	if status.LocalOnly {

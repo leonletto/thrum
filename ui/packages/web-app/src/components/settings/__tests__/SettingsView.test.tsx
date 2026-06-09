@@ -67,6 +67,30 @@ describe('SettingsView', () => {
       expect(screen.getByText('synced')).toBeInTheDocument();
     });
 
+    it('shows the a-sync exposure reason when gated off', () => {
+      vi.mocked(sharedLogic.useHealth).mockReturnValue({
+        data: {
+          status: 'ok',
+          version: '1.2.3',
+          uptime_ms: 9252000,
+          repo_id: 'abc123def456',
+          sync_state: 'local-only',
+          local_only: true,
+          local_only_reason: 'a-sync disabled: public repo detected, no exposure override',
+        },
+        isLoading: false,
+        error: null,
+      } as any);
+
+      render(<SettingsView />);
+      expect(screen.getByText(/public repo detected/i)).toBeInTheDocument();
+    });
+
+    it('does not show an exposure reason when not gated off', () => {
+      render(<SettingsView />);
+      expect(screen.queryByText(/public repo detected/i)).not.toBeInTheDocument();
+    });
+
     it('shows loading skeleton when isLoading is true', () => {
       vi.mocked(sharedLogic.useHealth).mockReturnValue({
         data: undefined,

@@ -6358,6 +6358,16 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			InitAt:       ident.InitAt,
 		}
 	})
+	// thrum-44mt: surface the real sync state (incl. the exposure-gate
+	// local-only reason) in the health response, so the UI can show an
+	// a-sync-disabled-by-exposure state instead of a hardcoded "synced".
+	healthHandler.SetSyncStatusProvider(func() (string, bool, string) {
+		if syncLoop == nil {
+			return "synced", false, ""
+		}
+		s := syncLoop.GetStatus()
+		return rpc.DeriveSyncState(s), s.LocalOnly, s.LocalOnlyReason
+	})
 
 	// Agent management
 	agentHandler := rpc.NewAgentHandler(st)
