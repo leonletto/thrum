@@ -381,6 +381,11 @@ for line in "${agent_lines[@]}"; do
             # cache_read_input_tokens) — the denominator was the only bug.
             case "$model" in
                 claude-opus-4-*) window=1000000 ;;
+                # claude-fable-5 is a 1M-window model; the 200k default inflated
+                # ctx_used 5x (false flags at 57-97%). Port of thrum-agents
+                # c37b22acac. Durable fix (prefer the runtime 'Ctx Used:' footer
+                # over this hardcoded map) tracked under h7np/5wbe.8-9.
+                claude-fable-5*) window=1000000 ;;
                 *) window=200000 ;;
             esac
             if [[ -n "$used_tokens" && "$used_tokens" != "0" ]]; then
