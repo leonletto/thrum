@@ -542,6 +542,18 @@ func (p *Projector) applyMessageReceipt(ctx context.Context, data json.RawMessag
 				WHERE ms_lb.message_id = ?
 				  AND ms_lb.scope_type IN ('group', 'broadcast')
 			)
+		) OR EXISTS (
+			-- thrum-b6qw authored-self (port of tcqw): the agent's own sent
+			-- messages belong in their inbox. Marking one read creates a
+			-- read-stamped self-delivery row so the self-authored
+			-- no-delivery-row phantom-unread class converges — the class the
+			-- legacy-broadcast arm above does NOT cover, since an authored
+			-- message is typically targeted (carries a mention/scope). Matches
+			-- both the bare agent_id and the "user:"-prefixed form (a message is
+			-- authored by an agent_id; user inboxes mark via the "user:" id).
+			SELECT 1 FROM messages m_self
+			WHERE m_self.message_id = ?
+			  AND m_self.agent_id IN (?, 'user:' || ?)
 		)
 	`,
 		event.MessageID, event.AgentID, event.Timestamp,
@@ -549,6 +561,7 @@ func (p *Projector) applyMessageReceipt(ctx context.Context, data json.RawMessag
 		event.MessageID,
 		event.MessageID, event.AgentID, event.AgentID,
 		event.MessageID, event.MessageID,
+		event.MessageID, event.AgentID, event.AgentID, // authored-self arm
 	)
 	if err != nil {
 		return fmt.Errorf("ensure message delivery: %w", err)
