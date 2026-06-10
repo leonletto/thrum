@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -202,4 +203,100 @@ func GitConfig(ctx context.Context, dir, key string) (string, error) {
 		return "", fmt.Errorf("git config --get %s in %s: %w", key, dir, err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// buildProbeEnv constructs the environment for an ANONYMOUS git probe from a
+// fixed ALLOWLIST — never os.Environ() — so no inherited credential, token, or
+// config-injection variable (SSH agent, askpass, netrc via HOME, credential
+// helper, GIT_HTTP_EXTRAHEADER bearer token, GIT_CONFIG_* injection) can
+// authenticate the probe and make a PRIVATE repo answer like a public one.
+// The denylist approach was caught incomplete twice in review; an allowlist is
+// structurally complete. A clean empty HOME removes ~/.netrc and ~/.gitconfig
+// (which carry credential.helper and url.insteadOf rewrites).
+//
+// Config-layer coverage: empty HOME + GIT_CONFIG_NOSYSTEM=1 kill the GLOBAL and
+// SYSTEM gitconfig. The remaining layer is the LOCAL .git/config of whatever
+// repo the probe's cwd sits in — a per-repo url.insteadOf or credential.helper
+// there could still rewrite/authenticate the probe. GitProbeAnonymous closes
+// that by running from a neutral non-repo dir; GIT_CEILING_DIRECTORIES below
+// stops git's upward repo discovery at that neutral dir as belt-and-suspenders.
+func buildProbeEnv() []string {
+	home := probeEmptyHome()
+	env := []string{
+		"PATH=" + os.Getenv("PATH"),
+		"HOME=" + home,
+		// Explicit disable flags (belt-and-suspenders on top of the allowlist).
+		"GIT_TERMINAL_PROMPT=0",
+		"GIT_CONFIG_NOSYSTEM=1",
+		// Stop git from discovering (and reading the LOCAL config of) any repo
+		// at/above the neutral probe cwd. Absolute path required.
+		"GIT_CEILING_DIRECTORIES=" + home,
+		"GIT_ASKPASS=",
+		"SSH_ASKPASS=",
+		"SSH_AUTH_SOCK=",
+		"GIT_HTTP_EXTRAHEADER=",
+		"GIT_SSH_COMMAND=",
+	}
+	// Carry TLS/cert operational vars ONLY if already set, so HTTPS verification
+	// still works in minimal/container environments. These are not auth-bearing.
+	for _, k := range []string{"SSL_CERT_FILE", "SSL_CERT_DIR", "CURL_CA_BUNDLE", "SystemRoot"} {
+		if v, ok := os.LookupEnv(k); ok {
+			env = append(env, k+"="+v)
+		}
+	}
+	return env
+}
+
+// probeEmptyHome returns a process-stable empty directory to use as HOME for
+// the probe, so git finds no ~/.netrc or ~/.gitconfig. os.MkdirTemp is created
+// once and reused; on failure we fall back to os.TempDir() (still not the real
+// HOME). The temp dir is intentionally process-lived and never cleaned up — it
+// stays empty (git never writes to it), so the leak is a single empty directory.
+func probeEmptyHome() string {
+	probeHomeOnce.Do(func() {
+		d, err := os.MkdirTemp("", "thrum-probe-home-")
+		if err != nil {
+			probeHomeDir = os.TempDir()
+			return
+		}
+		probeHomeDir = d
+	})
+	return probeHomeDir
+}
+
+var (
+	probeHomeOnce sync.Once
+	probeHomeDir  string
+)
+
+// GitProbeAnonymous runs `git ls-remote <probeURL>` with the hermetic
+// allowlist env from buildProbeEnv(). The env allowlist (empty HOME, no system
+// gitconfig) is the PRIMARY and complete defence — with an empty HOME git finds
+// no ~/.gitconfig, so credential.helper and url.insteadOf rewrites simply do
+// not exist to be applied. The inline `-c credential.helper=` is a harmless
+// belt-and-suspenders clear. (The plan's `-c url.<probeURL>.insteadOf=` was
+// REMOVED: an empty insteadOf value is an empty match-prefix that matches EVERY
+// URL and prepends the base, mangling the probe URL — it set a catch-all
+// rewrite rather than clearing one. The empty-HOME env already neutralises all
+// insteadOf rules structurally.) GitProbeAnonymous is DISTINCT from Git/GitLong,
+// which inherit the full environment (and would authenticate the probe). A
+// 5-second timeout bounds boot latency (brainstorm §5: ≤5s). Returns the raw
+// ls-remote output and the command error verbatim so the caller can classify by
+// reachability.
+func GitProbeAnonymous(ctx context.Context, probeURL string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	args := []string{
+		"-c", "credential.helper=",
+		"ls-remote", probeURL,
+	}
+	cmd := exec.CommandContext(ctx, "git", args...) // #nosec G204 -- probeURL is a derived https URL; args are fixed git subcommands
+	cmd.Env = buildProbeEnv()
+	// Run from a neutral, non-repo directory so git discovers no surrounding
+	// repository and therefore reads no LOCAL .git/config (a per-repo
+	// url.insteadOf or credential.helper there would otherwise rewrite or
+	// authenticate the probe). probeEmptyHome() is process-stable, empty, and
+	// never a git repo. Paired with GIT_CEILING_DIRECTORIES in buildProbeEnv.
+	cmd.Dir = probeEmptyHome()
+	return cmd.CombinedOutput()
 }

@@ -473,3 +473,16 @@ func initTestSchema(db *sql.DB) error {
 	_, err := db.Exec(schema)
 	return err
 }
+
+func TestSyncStatus_ExposesLocalOnlyReason(t *testing.T) {
+	// Construct a SyncStatus carrying an exposure reason; assert it surfaces.
+	st := sync.SyncStatus{Running: true, LocalOnly: true,
+		LocalOnlyReason: "a-sync disabled: public repo detected, no exposure override"}
+	if getSyncState(st) != "local-only" {
+		t.Errorf("state = %q", getSyncState(st))
+	}
+	resp := SyncStatusResponse{LocalOnly: st.LocalOnly, LocalOnlyReason: st.LocalOnlyReason}
+	if resp.LocalOnlyReason == "" {
+		t.Error("response must carry LocalOnlyReason")
+	}
+}

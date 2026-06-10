@@ -28,21 +28,25 @@ type EventIngester interface {
 
 // SyncLoop manages the event-triggered sync cycle.
 type SyncLoop struct {
-	syncer       *Syncer
-	projector    *projection.Projector
-	ingester     EventIngester // optional; when set, updateProjection routes through it
-	repoPath     string
-	syncDir      string // Path to sync worktree (.git/thrum-sync/a-sync)
-	thrumDir     string // Path to .thrum/ directory (used for lock path)
-	localOnly    bool   // when true, skip all remote git operations
-	stopCh       chan struct{}
-	stoppedCh    chan struct{}
-	notifyCh     chan []string // Channel to notify of new event IDs
-	manualSyncCh chan struct{} // Channel to trigger manual sync
-	mu           sync.Mutex
-	running      bool
-	lastSyncAt   time.Time
-	lastError    error
+	syncer    *Syncer
+	projector *projection.Projector
+	ingester  EventIngester // optional; when set, updateProjection routes through it
+	repoPath  string
+	syncDir   string // Path to sync worktree (.git/thrum-sync/a-sync)
+	thrumDir  string // Path to .thrum/ directory (used for lock path)
+	localOnly bool   // when true, skip all remote git operations
+	// localOnlyReason records WHY remote sync is held off (e.g. the exposure
+	// gate), for honest status reporting. Set once before Start() via
+	// SetLocalOnlyReason; never mutated after, so it is read under the same lock.
+	localOnlyReason string
+	stopCh          chan struct{}
+	stoppedCh       chan struct{}
+	notifyCh        chan []string // Channel to notify of new event IDs
+	manualSyncCh    chan struct{} // Channel to trigger manual sync
+	mu              sync.Mutex
+	running         bool
+	lastSyncAt      time.Time
+	lastError       error
 	// walkerCounts provides per-walk row counts for the sync.commit telemetry
 	// event. Set via SetCommitCountsProvider from bootstrap; nil is safe (emits
 	// zeros for the count fields). The provider returns (stateFiles, msgRows, rcptRows).
@@ -168,15 +172,20 @@ func (l *SyncLoop) IsLocalOnly() bool {
 	return l.localOnly
 }
 
+// SetLocalOnlyReason records WHY remote sync is disabled (e.g. exposure gate),
+// for status reporting. Call before Start(); not safe to call concurrently.
+func (l *SyncLoop) SetLocalOnlyReason(reason string) { l.localOnlyReason = reason }
+
 // GetStatus returns the current sync status.
 func (l *SyncLoop) GetStatus() SyncStatus {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	status := SyncStatus{
-		Running:    l.running,
-		LocalOnly:  l.localOnly,
-		LastSyncAt: l.lastSyncAt,
+		Running:         l.running,
+		LocalOnly:       l.localOnly,
+		LocalOnlyReason: l.localOnlyReason,
+		LastSyncAt:      l.lastSyncAt,
 	}
 
 	if l.lastError != nil {
@@ -188,10 +197,11 @@ func (l *SyncLoop) GetStatus() SyncStatus {
 
 // SyncStatus contains the current status of the sync loop.
 type SyncStatus struct {
-	Running    bool      `json:"running"`
-	LocalOnly  bool      `json:"local_only"`
-	LastSyncAt time.Time `json:"last_sync_at"`
-	LastError  string    `json:"last_error,omitempty"`
+	Running         bool      `json:"running"`
+	LocalOnly       bool      `json:"local_only"`
+	LocalOnlyReason string    `json:"local_only_reason,omitempty"`
+	LastSyncAt      time.Time `json:"last_sync_at"`
+	LastError       string    `json:"last_error,omitempty"`
 }
 
 // run is the main loop that runs in a goroutine.

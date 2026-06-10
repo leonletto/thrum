@@ -87,6 +87,13 @@ export function SettingsView() {
                 <span className="text-muted-foreground">Sync State</span>
                 <span className="text-[var(--accent-color)]">{health.sync_state}</span>
               </div>
+              {health.local_only && health.local_only_reason ? (
+                <div className="flex justify-end">
+                  <span className="text-xs text-[rgb(var(--destructive))]">
+                    {health.local_only_reason}
+                  </span>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </section>

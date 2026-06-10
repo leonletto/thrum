@@ -1013,3 +1013,28 @@ func TestRemoteTrackingSyncSHA_RemoteTrackingRefPresent(t *testing.T) {
 		t.Errorf("SHA mismatch: want %q got %q", wantSHA, sha)
 	}
 }
+
+// mustGit runs a git command in dir and fails the test on error.
+func mustGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v in %s: %v\n%s", args, dir, err, out)
+	}
+}
+
+// TestEnsureSyncBranch_NoDenylistRefusal asserts EnsureSyncBranch no longer
+// refuses based on the deleted D11 host denylist and that the tracking push
+// path remains reachable. A local bare remote keeps it network/denylist-free —
+// exposure gating now happens at daemon boot (ResolveExposureGate), not here.
+func TestEnsureSyncBranch_NoDenylistRefusal(t *testing.T) {
+	repo := setupTestRepoWithCommit(t)
+	bare := t.TempDir()
+	mustGit(t, bare, "init", "--bare")
+	mustGit(t, repo, "remote", "add", "origin", bare)
+	b := NewBranchManager(repo, false)
+	if err := b.EnsureSyncBranch(context.Background()); err != nil {
+		t.Fatalf("EnsureSyncBranch should not refuse: %v", err)
+	}
+}

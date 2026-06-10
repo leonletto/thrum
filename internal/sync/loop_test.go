@@ -782,3 +782,16 @@ func TestSyncLoop_DoSync_EmitsSyncCommit(t *testing.T) {
 		}
 	}
 }
+
+func TestSyncLoop_SetLocalOnlyReason_SurfacesInStatus(t *testing.T) {
+	l := NewSyncLoop(nil, nil, t.TempDir(), t.TempDir(), t.TempDir(), true)
+	const reason = "a-sync disabled: public repo detected, no exposure override"
+	l.SetLocalOnlyReason(reason)
+	st := l.GetStatus()
+	if !st.LocalOnly {
+		t.Fatal("expected LocalOnly true")
+	}
+	if st.LocalOnlyReason != reason {
+		t.Fatalf("LocalOnlyReason = %q, want %q", st.LocalOnlyReason, reason)
+	}
+}

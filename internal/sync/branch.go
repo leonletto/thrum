@@ -85,22 +85,12 @@ func (b *BranchManager) EnsureSyncBranch(ctx context.Context) error {
 
 	remoteExists := strings.TrimSpace(string(output)) != ""
 	if !remoteExists {
-		// D11 (thrum-43qi): classify the origin URL before the tracking push,
-		// same fail-closed guard as Syncer.push(). a-sync must never push to a
-		// public code host. get-url is a local read (no network), so this does
-		// not regress offline tolerance; a public or unreadable origin is a HARD
-		// refusal — we'd rather fail than leak private history.
-		originURL, urlErr := safecmd.Git(ctx, b.repoPath, "remote", "get-url", remote)
-		if urlErr != nil {
-			return fmt.Errorf("a-sync tracking push refused: cannot read %s URL to verify it is a private sync remote (D11/thrum-43qi): %w", remote, urlErr)
-		}
-		if classErr := classifyPushRemote(strings.TrimSpace(string(originURL))); classErr != nil {
-			return classErr
-		}
-		// Push branch to remote to establish tracking
+		// Push branch to remote to establish tracking. Exposure gating happens
+		// at daemon boot (ResolveExposureGate → localOnly); when sync is held
+		// off, b.localOnly is true and we returned earlier at the localOnly
+		// check, so reaching here means the gate already allowed sync.
 		if _, err := safecmd.GitLong(ctx, b.repoPath, "push", "-u", remote, SyncBranchName); err != nil {
-			// Push failed, but don't fail the operation
-			// User might be offline or remote might not accept pushes yet
+			// Push failed (offline / remote not ready) — do not fail the op.
 			return nil //nolint:nilerr // intentionally ignore error for offline support
 		}
 	}

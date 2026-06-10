@@ -197,6 +197,8 @@ export const HealthResponseSchema = z.object({
   version: z.string(),
   repo_id: z.string(),
   sync_state: z.string(),
+  local_only: z.boolean().optional(),
+  local_only_reason: z.string().optional(),
 });
 
 export type HealthResponse = z.infer<typeof HealthResponseSchema>;

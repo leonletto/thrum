@@ -12,10 +12,11 @@ type SyncForceRequest struct{}
 
 // SyncForceResponse represents the response from a force sync.
 type SyncForceResponse struct {
-	Triggered  bool   `json:"triggered"`    // Whether sync was triggered
-	LastSyncAt string `json:"last_sync_at"` // ISO 8601 timestamp of last sync
-	SyncState  string `json:"sync_state"`   // "running", "idle"
-	LocalOnly  bool   `json:"local_only"`   // Whether running in local-only mode
+	Triggered       bool   `json:"triggered"`    // Whether sync was triggered
+	LastSyncAt      string `json:"last_sync_at"` // ISO 8601 timestamp of last sync
+	SyncState       string `json:"sync_state"`   // "running", "idle", "local-only"
+	LocalOnly       bool   `json:"local_only"`   // Whether running in local-only mode
+	LocalOnlyReason string `json:"local_only_reason,omitempty"`
 }
 
 // SyncStatusRequest represents a request for sync status.
@@ -23,11 +24,12 @@ type SyncStatusRequest struct{}
 
 // SyncStatusResponse represents the current sync status.
 type SyncStatusResponse struct {
-	Running    bool   `json:"running"`      // Whether sync loop is running
-	LastSyncAt string `json:"last_sync_at"` // ISO 8601 timestamp of last sync
-	LastError  string `json:"last_error,omitempty"`
-	SyncState  string `json:"sync_state"` // "running", "idle", "error"
-	LocalOnly  bool   `json:"local_only"` // Whether running in local-only mode
+	Running         bool   `json:"running"`      // Whether sync loop is running
+	LastSyncAt      string `json:"last_sync_at"` // ISO 8601 timestamp of last sync
+	LastError       string `json:"last_error,omitempty"`
+	SyncState       string `json:"sync_state"` // "running", "idle", "error", "local-only"
+	LocalOnly       bool   `json:"local_only"` // Whether running in local-only mode
+	LocalOnlyReason string `json:"local_only_reason,omitempty"`
 }
 
 // SyncForceHandler handles forced sync requests.
@@ -51,9 +53,10 @@ func (h *SyncForceHandler) Handle(ctx context.Context, params json.RawMessage) (
 	status := h.syncLoop.GetStatus()
 
 	response := SyncForceResponse{
-		Triggered: true,
-		SyncState: getSyncState(status),
-		LocalOnly: status.LocalOnly,
+		Triggered:       true,
+		SyncState:       getSyncState(status),
+		LocalOnly:       status.LocalOnly,
+		LocalOnlyReason: status.LocalOnlyReason,
 	}
 
 	if !status.LastSyncAt.IsZero() {
@@ -80,10 +83,11 @@ func (h *SyncStatusHandler) Handle(ctx context.Context, params json.RawMessage) 
 	status := h.syncLoop.GetStatus()
 
 	response := SyncStatusResponse{
-		Running:   status.Running,
-		LastError: status.LastError,
-		SyncState: getSyncState(status),
-		LocalOnly: status.LocalOnly,
+		Running:         status.Running,
+		LastError:       status.LastError,
+		SyncState:       getSyncState(status),
+		LocalOnly:       status.LocalOnly,
+		LocalOnlyReason: status.LocalOnlyReason,
 	}
 
 	if !status.LastSyncAt.IsZero() {
@@ -93,8 +97,18 @@ func (h *SyncStatusHandler) Handle(ctx context.Context, params json.RawMessage) 
 	return response, nil
 }
 
+// DeriveSyncState is the exported wrapper over getSyncState so callers outside
+// this package (cmd/thrum's health SyncStatusProvider) map a SyncStatus to its
+// state string through the SAME logic — no second copy of the state vocabulary.
+func DeriveSyncState(status sync.SyncStatus) string {
+	return getSyncState(status)
+}
+
 // getSyncState derives the sync state from the status.
 func getSyncState(status sync.SyncStatus) string {
+	if status.LocalOnly {
+		return "local-only"
+	}
 	if !status.Running {
 		return "stopped"
 	}

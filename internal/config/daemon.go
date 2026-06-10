@@ -180,6 +180,13 @@ type SyncMechanism struct {
 type SyncConfig struct {
 	Enabled    bool            `json:"enabled"`
 	Mechanisms []SyncMechanism `json:"mechanisms"`
+	// Exposure guard (thrum-44mt). DetectedVisibility/DetectedRemote are
+	// daemon-written at init + each boot; PublicExposureOverride is user-set and
+	// bound to the specific public remote (must equal the canonical
+	// DetectedRemote for a-sync to push to a public repo).
+	DetectedVisibility     string `json:"detected_visibility,omitempty"`
+	DetectedRemote         string `json:"detected_remote,omitempty"`
+	PublicExposureOverride string `json:"public_exposure_override,omitempty"`
 }
 
 // filterableMechanisms is the allowlist for scope=directed (D7 Rule 1).

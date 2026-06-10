@@ -5908,6 +5908,117 @@ func resolveLocalMentionRole() (string, error) {
 	return cfg.Agent.Role, nil
 }
 
+// emitExposureWarning warns the owner + all live agents that a-sync history is
+// now exposed, and hands the user the exact override string to paste. Reuses
+// permission.SendSupervisorMessage (authored by the supervisor pseudo-agent;
+// writes a message.create event under state.Lock).
+func emitExposureWarning(ctx context.Context, permPkg *permission.Permission, st *state.State, cfg *config.ThrumConfig, canonRemote string) {
+	body := fmt.Sprintf(
+		"⚠️ a-sync exposure: your sync repo flipped to PUBLICLY READABLE (%s). "+
+			"All message history pushed there is exposed to anyone who can read it; a-sync push is now DISABLED. "+
+			"If unintended: delete the `a-sync` branch on the remote. "+
+			"To knowingly sync to this public repo, set `daemon.sync.public_exposure_override` to exactly: %s",
+		canonRemote, canonRemote)
+	for _, rcpt := range exposureWarningRecipients(ctx, permPkg, st, cfg) {
+		if _, werr := permPkg.SendSupervisorMessage(ctx, rcpt, body, ""); werr != nil {
+			slog.Warn("a-sync.exposure.warn_failed", "recipient", rcpt, "err", werr)
+		}
+	}
+}
+
+// exposureWarningRecipients = owner (configured permission supervisors, incl.
+// any user: identity) + all live agents on this daemon. De-duplicated.
+func exposureWarningRecipients(ctx context.Context, permPkg *permission.Permission, st *state.State, cfg *config.ThrumConfig) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	add := func(id string) {
+		id = strings.TrimPrefix(strings.TrimSpace(id), "@")
+		if id == "" {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	if supers, err := permPkg.ResolveSupervisors(ctx, cfg.PermissionSupervisors); err == nil {
+		for _, s := range supers {
+			add(s)
+		}
+	}
+	for _, a := range st.ListAllActiveAgentIDs(ctx) {
+		add(a)
+	}
+	return out
+}
+
+// exposureGateDeps carries the injectable dependencies for resolveBootExposureGate
+// so the boot-time assembly (originURL → probe → classify → gate → persist →
+// warn) is unit-testable without a live daemon or network (thrum-44mt review #1 —
+// the structural substitute for the deferred T11 Step-5 live smoke).
+type exposureGateDeps struct {
+	originURL  string                          // origin remote URL (already read; any form)
+	prober     thrumSync.Prober                // anonymous visibility probe
+	saveConfig func(*config.ThrumConfig) error // persist detected visibility
+	warn       func(canonRemote string)        // emit the exposure warning (transition only)
+}
+
+// exposureGateOutcome is the resolved boot decision the caller applies to the
+// session (localOnly + the distinct status reason).
+type exposureGateOutcome struct {
+	LocalOnly bool
+	Reason    string
+}
+
+// resolveBootExposureGate runs the a-sync exposure gate once at boot: it derives
+// the gate decision from cfg's cached visibility/remote/override + a fresh probe,
+// stamps the detected visibility back onto cfg (persisting via deps.saveConfig),
+// and on a transition INTO the exposed state fires deps.warn. Returns the
+// resolved localOnly + reason.
+//
+// The caller invokes this ONLY inside the syncDir-exists block and ONLY when
+// remote sync isn't already disabled, so peer/email-only and explicit --local
+// users are never probed. Extracted from runDaemon so the assembly is unit-
+// testable without a daemon bounce.
+func resolveBootExposureGate(ctx context.Context, cfg *config.ThrumConfig, deps exposureGateDeps) exposureGateOutcome {
+	if cfg.Daemon.Sync == nil {
+		// First boot w/o init: materialise the stanza via MigrateLegacySync so
+		// the load-time default (incl. the a-sync mechanism when not local-only)
+		// is preserved (thrum-44mt review #2). A bare &SyncConfig{Enabled:true}
+		// would be kept verbatim by MigrateLegacySync at the next load and
+		// SUPPRESS the a-sync mechanism — the same shape fixed in init.go.
+		migrated := config.MigrateLegacySync(*cfg)
+		cfg.Daemon.Sync = migrated.Daemon.Sync
+	}
+	gate := thrumSync.ResolveExposureGate(ctx, thrumSync.GateInput{
+		OriginURL:        strings.TrimSpace(deps.originURL),
+		CachedVisibility: thrumSync.Visibility(cfg.Daemon.Sync.DetectedVisibility),
+		CachedRemote:     cfg.Daemon.Sync.DetectedRemote,
+		Override:         cfg.Daemon.Sync.PublicExposureOverride,
+	}, deps.prober)
+
+	cfg.Daemon.Sync.DetectedVisibility = string(gate.Visibility)
+	cfg.Daemon.Sync.DetectedRemote = gate.CanonicalRemote
+	if deps.saveConfig != nil {
+		if serr := deps.saveConfig(cfg); serr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to persist detected visibility: %v\n", serr)
+		}
+	}
+
+	var out exposureGateOutcome
+	if gate.LocalOnly {
+		out.LocalOnly = true
+		out.Reason = gate.Reason
+		fmt.Fprintf(os.Stderr, "  Mode:        %s\n", gate.Reason)
+		slog.Warn("a-sync.exposure", "reason", gate.Reason, "remote", gate.CanonicalRemote, "visibility", gate.Visibility)
+	}
+	if gate.TransitionedToExposed && deps.warn != nil {
+		deps.warn(gate.CanonicalRemote)
+	}
+	return out
+}
+
 // runDaemon runs the daemon server in the foreground.
 func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// Profile instrumentation gate (thrum-bpq5 substrate). Reads
@@ -6111,6 +6222,32 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	var syncLoop *thrumSync.SyncLoop
 	var pendingPool *syncPending.Pool // thrum-s6os: nil when syncDir is absent
 	if _, err := os.Stat(syncDir); err == nil {
+		// thrum-44mt: resolve the a-sync exposure gate once at boot. syncDir
+		// existing ⇒ a-sync is a configured mechanism (peer/email-only users
+		// never reach here, so we never probe for them). The gate derives this
+		// session's effective localOnly (immutable until restart), persists the
+		// detected visibility, and signals a transition into the exposed state.
+		// Assembly logic lives in resolveBootExposureGate (unit-tested with
+		// injected deps); this block only supplies the live deps + applies the
+		// outcome.
+		var exposureReason string
+		if !localOnly { // an explicit --local / THRUM_LOCAL already disabled remote sync
+			originURL, _ := safecmd.Git(ctx, absPath, "remote", "get-url", "origin")
+			outcome := resolveBootExposureGate(ctx, thrumCfg, exposureGateDeps{
+				originURL: string(originURL),
+				prober: func(c context.Context, probeURL string) thrumSync.Visibility {
+					out, perr := safecmd.GitProbeAnonymous(c, probeURL)
+					return thrumSync.ClassifyVisibility(out, perr)
+				},
+				saveConfig: func(c *config.ThrumConfig) error { return config.SaveThrumConfig(thrumDir, c) },
+				warn:       func(canonRemote string) { emitExposureWarning(ctx, permPkg, st, thrumCfg, canonRemote) },
+			})
+			if outcome.LocalOnly {
+				localOnly = true
+			}
+			exposureReason = outcome.Reason
+		}
+
 		syncer := thrumSync.NewSyncer(absPath, syncDir, localOnly)
 		syncLoop = thrumSync.NewSyncLoop(syncer, st.Projector(), absPath, syncDir, thrumDir, localOnly)
 		// Route synced events through State.IngestSyncedEvent so the
@@ -6118,6 +6255,9 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		// writes. Without this, replies arriving via sync from a peer
 		// repo never reach the permission reply interceptor.
 		syncLoop.SetIngester(st)
+		if exposureReason != "" {
+			syncLoop.SetLocalOnlyReason(exposureReason)
+		}
 
 		// thrum-s6os v0.10.6 — wire the structural-event sync path.
 		// Order is load-bearing:
@@ -6268,6 +6408,16 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			GitOriginURL: ident.GitOriginURL,
 			InitAt:       ident.InitAt,
 		}
+	})
+	// thrum-44mt: surface the real sync state (incl. the exposure-gate
+	// local-only reason) in the health response, so the UI can show an
+	// a-sync-disabled-by-exposure state instead of a hardcoded "synced".
+	healthHandler.SetSyncStatusProvider(func() (string, bool, string) {
+		if syncLoop == nil {
+			return "synced", false, ""
+		}
+		s := syncLoop.GetStatus()
+		return rpc.DeriveSyncState(s), s.LocalOnly, s.LocalOnlyReason
 	})
 
 	// Agent management
