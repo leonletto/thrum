@@ -531,6 +531,23 @@ func (s *State) GetEventsSince(ctx context.Context, afterSeq int64, limit int) (
 // peer-replicated broadcasts that would otherwise fan out to this
 // daemon's local Telegram bridge.
 func (s *State) IngestSyncedEvent(ctx context.Context, event []byte) error {
+	// thrum-lv9x Path-A dedup: the a-sync git ingest had NO dedup at all, so an
+	// event already pulled via the RPC path (which records it in the events
+	// table) was re-applied on every git merge — aborting on the
+	// messages.message_id UNIQUE collision (pre-lv9x) and re-firing the notify
+	// hook per replay (storm fuel). Skip silently when the events table already
+	// holds the event_id. Partial by design: pure-Path-A events never enter the
+	// events table, so their replays are absorbed by the projector's idempotent
+	// writes instead (the lv9x OR-IGNORE message insert closed the last gap).
+	var probe struct {
+		EventID string `json:"event_id"`
+	}
+	if err := json.Unmarshal(event, &probe); err == nil && probe.EventID != "" {
+		if exists, err := eventlog.HasEvent(ctx, s.db, probe.EventID); err == nil && exists {
+			return nil
+		}
+	}
+
 	// Apply to projector — same work the previous direct call did.
 	if err := s.projector.Apply(ctx, event); err != nil {
 		return fmt.Errorf("apply synced event: %w", err)

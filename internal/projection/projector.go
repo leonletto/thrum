@@ -267,9 +267,16 @@ func (p *Projector) applyMessageCreate(ctx context.Context, data json.RawMessage
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Insert message
-	_, err = tx.Exec(`
-		INSERT INTO messages (
+	// Insert message. OR IGNORE + the rows-affected dup-no-op below make this
+	// idempotent (thrum-lv9x): cross-host-relayed history carries the same
+	// message_id under DIFFERENT event_ids (the i057-class dup — 0.11 prevents
+	// the mint via rpcrouter, absent on this line, and the dups are already in
+	// shared history), so a plain INSERT aborted the whole sync-apply batch
+	// with a messages.message_id UNIQUE error, permanently pinning the inbound
+	// checkpoint and feeding the notify-retry storm. Every other projector
+	// write is already idempotent (upsert / OR IGNORE); this was the last one.
+	res, err := tx.Exec(`
+		INSERT OR IGNORE INTO messages (
 			message_id, thread_id, agent_id, session_id, created_at,
 			body_format, body_content, body_structured, authored_by, disclosed,
 			pending_route_resolution
@@ -289,6 +296,14 @@ func (p *Projector) applyMessageCreate(ctx context.Context, data json.RawMessage
 	)
 	if err != nil {
 		return fmt.Errorf("insert message: %w", err)
+	}
+	if n, raErr := res.RowsAffected(); raErr == nil && n == 0 {
+		// Duplicate message_id: first write wins, this create is a no-op.
+		// Skip scopes/refs/deliveries/self-row AND the post-commit pending-pool
+		// registration — the apply that landed the row already did all of it.
+		// Returning nil (not an error) is the load-bearing part: the sync apply
+		// batch continues and the checkpoint advances past the dup.
+		return tx.Commit()
 	}
 
 	// Insert scopes
