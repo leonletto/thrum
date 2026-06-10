@@ -328,6 +328,16 @@ func initTestSchema(db *sql.DB) error {
 		ref_value TEXT NOT NULL,
 		FOREIGN KEY (message_id) REFERENCES messages(message_id)
 	);
+
+	CREATE TABLE IF NOT EXISTS message_deliveries (
+		message_id          TEXT NOT NULL,
+		recipient_agent_id  TEXT NOT NULL,
+		delivered_at        TEXT NOT NULL,
+		seen_at             TEXT,
+		read_at             TEXT,
+		PRIMARY KEY (message_id, recipient_agent_id),
+		FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE
+	);
 	`
 
 	_, err := db.Exec(schema)
