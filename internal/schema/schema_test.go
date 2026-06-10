@@ -1051,9 +1051,14 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	}
 }
 
-func TestSchema_V39_CurrentVersion(t *testing.T) {
-	if schema.CurrentVersion != 39 {
-		t.Errorf("CurrentVersion = %d, want 39 (v36 base + v37 memory-tables back-port + v38 events.timestamp index + v39 monitors.schedule column per thrum-puhr.9)", schema.CurrentVersion)
+func TestSchema_V40_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 40 {
+		t.Errorf("CurrentVersion = %d, want 40 (v36 base + v37 memory-tables back-port + v38 events.timestamp index + v39 monitors.schedule column + v40 read-state unification marker per thrum-b6qw)", schema.CurrentVersion)
+	}
+	// The read-state crossing constant must equal the marker version — the
+	// state.NewState gate compares the pre-migration version against it.
+	if schema.SchemaVersionReadState != 40 {
+		t.Errorf("SchemaVersionReadState = %d, want 40", schema.SchemaVersionReadState)
 	}
 }
 

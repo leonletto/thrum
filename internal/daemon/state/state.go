@@ -85,6 +85,15 @@ func NewState(thrumDir string, syncDir string, repoID string, daemonID string) (
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
+	// Capture the pre-migration schema version (0 for a fresh/uninitialized
+	// DB — the error path is deliberately folded into 0). Gates the one-time
+	// v40 read-state backfill below: only an EXISTING DB crossing v39→v40 has
+	// historical stuck unread to clear; a fresh DB starts clean at v40.
+	oldVersion := 0
+	if v, verr := schema.GetSchemaVersion(db); verr == nil {
+		oldVersion = v
+	}
+
 	// Initialize or migrate schema
 	if err := schema.Migrate(db); err != nil {
 		_ = db.Close()
@@ -175,6 +184,20 @@ func NewState(thrumDir string, syncDir string, repoID string, daemonID string) (
 		syncDir:      syncDir,
 	}
 	s.sequence.Store(maxSeq)
+
+	// thrum-b6qw (port of tcqw): one-time read-state backfill at the v39→v40
+	// crossing. Gated on oldVersion (captured pre-Migrate at the top of this
+	// func) so it runs exactly once — after a successful Migrate the on-disk
+	// version is CurrentVersion (>= SchemaVersionReadState), so the next boot
+	// reads oldVersion=40 and the gate is false. Idempotent + best-effort: a
+	// failure logs but does not block startup (the backfill is historical
+	// cleanup, not a correctness precondition). Runs after identity resolution
+	// so daemon_identity carries the hostname LocalDaemonIDs anchors on.
+	if oldVersion > 0 && oldVersion < schema.SchemaVersionReadState {
+		if err := BackfillReadState(context.Background(), safeDB, daemonID); err != nil {
+			slog.Warn("read-state v40 backfill failed (non-fatal)", "error", err)
+		}
+	}
 
 	return s, nil
 }
