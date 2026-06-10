@@ -493,7 +493,9 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 			SELECT md.message_id FROM message_deliveries md
 			WHERE md.recipient_agent_id = ? AND md.read_at IS NOT NULL
 		)`
-		unreadArgs := append(args, m.AgentID)
+		// Fresh slice: append(args, ...) would share args' backing array when
+		// capacity allows — safe today (args rebuilt per-iteration) but fragile.
+		unreadArgs := append(append([]any{}, args...), m.AgentID)
 		_ = h.state.DB().QueryRowContext(ctx, unreadQuery, unreadArgs...).Scan(&members[i].InboxUnread)
 	}
 

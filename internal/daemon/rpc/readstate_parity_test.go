@@ -52,13 +52,14 @@ func TestBackfillPredicate_ParityWithInboxPredicate(t *testing.T) {
 	// Visible:
 	//   m-mention     — direct mention ref to the agent           (Part 1)
 	//   m-rolemention — mention ref to the agent's role           (Part 1, role value)
-	//   m-group       — scoped to a group the agent belongs to    (Part 2)
+	//   m-group       — scoped to a group the agent belongs to    (Part 2, agent member)
+	//   m-wildrole    — scoped to a group with a role:'*' member  (Part 2, wildcard-role sub-arm)
 	//   m-legacy      — no targeting whatsoever                   (Part 3)
 	//   m-bcast       — broadcast scope + delivery row for agent  (Part 4)
 	// Not visible:
 	//   m-other       — mention ref to a different agent only
 	//   m-othergroup  — scoped to a group the agent is NOT in
-	for _, id := range []string{"m-mention", "m-rolemention", "m-group", "m-legacy", "m-bcast", "m-other", "m-othergroup"} {
+	for _, id := range []string{"m-mention", "m-rolemention", "m-group", "m-wildrole", "m-legacy", "m-bcast", "m-other", "m-othergroup"} {
 		parityInsertMessage(t, db, id)
 	}
 	parityExec(t, db, `INSERT INTO message_refs (message_id, ref_type, ref_value) VALUES ('m-mention', 'mention', ?)`, agentID)
@@ -66,6 +67,13 @@ func TestBackfillPredicate_ParityWithInboxPredicate(t *testing.T) {
 	parityExec(t, db, `INSERT INTO groups (group_id, name, created_at, created_by) VALUES ('g1', 'reviewers-club', 't', 'x')`)
 	parityExec(t, db, `INSERT INTO group_members (group_id, member_type, member_value, added_at) VALUES ('g1', 'agent', ?, 't')`, agentID)
 	parityExec(t, db, `INSERT INTO message_scopes (message_id, scope_type, scope_value) VALUES ('m-group', 'group', 'reviewers-club')`)
+	// Wildcard-role group (gm.member_value='*'): matches because the test agent
+	// has a non-empty role — exercises the roleCondition wildcard sub-arm
+	// present in BOTH predicates (a transcription error there would otherwise
+	// slip past the parity pin).
+	parityExec(t, db, `INSERT INTO groups (group_id, name, created_at, created_by) VALUES ('g3', 'all-roles', 't', 'x')`)
+	parityExec(t, db, `INSERT INTO group_members (group_id, member_type, member_value, added_at) VALUES ('g3', 'role', '*', 't')`)
+	parityExec(t, db, `INSERT INTO message_scopes (message_id, scope_type, scope_value) VALUES ('m-wildrole', 'group', 'all-roles')`)
 	parityExec(t, db, `INSERT INTO message_scopes (message_id, scope_type, scope_value) VALUES ('m-bcast', 'broadcast', 'everyone')`)
 	parityExec(t, db, `INSERT INTO message_deliveries (message_id, recipient_agent_id, delivered_at) VALUES ('m-bcast', ?, 't')`, agentID)
 	parityExec(t, db, `INSERT INTO message_refs (message_id, ref_type, ref_value) VALUES ('m-other', 'mention', 'agent:someone:ELSE')`)
@@ -74,7 +82,7 @@ func TestBackfillPredicate_ParityWithInboxPredicate(t *testing.T) {
 	parityExec(t, db, `INSERT INTO message_scopes (message_id, scope_type, scope_value) VALUES ('m-othergroup', 'group', 'other-club')`)
 
 	fixture := map[string]bool{
-		"m-mention": true, "m-rolemention": true, "m-group": true,
+		"m-mention": true, "m-rolemention": true, "m-group": true, "m-wildrole": true,
 		"m-legacy": true, "m-bcast": true, "m-other": true, "m-othergroup": true,
 	}
 
@@ -123,7 +131,7 @@ func TestBackfillPredicate_ParityWithInboxPredicate(t *testing.T) {
 	}
 
 	// The two axes must agree exactly — and against the expected truth.
-	want := []string{"m-bcast", "m-group", "m-legacy", "m-mention", "m-rolemention"}
+	want := []string{"m-bcast", "m-group", "m-legacy", "m-mention", "m-rolemention", "m-wildrole"}
 	if got := sortedKeys(rpcVisible); fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("rpc predicate visible set = %v, want %v", got, want)
 	}

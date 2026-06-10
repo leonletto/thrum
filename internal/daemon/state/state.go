@@ -197,6 +197,12 @@ func NewState(thrumDir string, syncDir string, repoID string, daemonID string) (
 		if err := BackfillReadState(context.Background(), safeDB, daemonID); err != nil {
 			slog.Warn("read-state v40 backfill failed (non-fatal)", "error", err)
 		}
+	} else if oldVersion >= schema.SchemaVersionReadState {
+		// Operator breadcrumb for the documented crash window: if a prior boot
+		// committed v40 but crashed before the backfill transaction, this skip
+		// is the only signal — the backfill is idempotent and can be
+		// re-triggered manually if stuck unread persists.
+		slog.Debug("read-state v40 backfill skipped (crossing already recorded)", "schema_version", oldVersion)
 	}
 
 	return s, nil

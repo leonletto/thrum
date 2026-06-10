@@ -86,15 +86,23 @@ func sendMessage(t *testing.T, handler *MessageHandler, content string, mentions
 	return resp.(*SendResponse).MessageID
 }
 
-// listInbox returns message IDs visible to the given agent.
+// listInbox returns the message IDs an agent RECEIVES — modeling the production
+// CLI `thrum inbox`, which always sets exclude_self=true (internal/cli/inbox.go).
+// These group tests assert routing (who receives a group/broadcast message), so
+// the received-only lens is the correct one. thrum-b6qw: the author now holds a
+// read-stamped self-delivery row (Option C), which would otherwise make their
+// own broadcast match the Part-4 broadcast-delivery arm; exclude_self strips it
+// exactly as the CLI does.
 func listInbox(t *testing.T, handler *MessageHandler, agentID, agentRole string) []string {
 	t.Helper()
 	req := ListMessagesRequest{
-		ForAgent:     agentID,
-		ForAgentRole: agentRole,
-		PageSize:     100,
-		SortBy:       "created_at",
-		SortOrder:    "asc",
+		ForAgent:      agentID,
+		ForAgentRole:  agentRole,
+		ExcludeSelf:   true,
+		CallerAgentID: agentID,
+		PageSize:      100,
+		SortBy:        "created_at",
+		SortOrder:     "asc",
 	}
 	params, _ := json.Marshal(req)
 	resp, err := handler.HandleList(context.Background(), params)

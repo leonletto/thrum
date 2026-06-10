@@ -142,6 +142,11 @@ func backfillForAgentClause(forAgentValues []string, forAgent, forAgentRole stri
 // Pass 1 MUST precede Pass 2: Pass 1 stamps every existing local unread delivery
 // row read; Pass 2's NOT EXISTS then only CREATEs rows for messages that still
 // have no delivery row for the agent.
+//
+// Source-coverage note: the e23c3a4a0c rescope also pointed thrum-agents'
+// rpc queryLocalCoordinator at the shared hostname-anchored scope. That
+// function does not exist on this release line, so that portion of the rescope
+// is N/A here — not missed.
 func BackfillReadState(ctx context.Context, db *safedb.DB, daemonID string) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 

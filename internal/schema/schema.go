@@ -279,7 +279,10 @@ func createTables(tx *sql.Tx) error {
 			UNIQUE(session_id, scope_type, scope_value, mention_role)
 		)`,
 
-		// Message reads table (per-session read tracking, local-only, no git sync)
+		// Message reads table (per-session read tracking, local-only, no git sync).
+		// DEPRECATED (thrum-tcqw/b6qw): read-truth unified on
+		// message_deliveries.read_at; table retained for back-compat, no live
+		// readers/writers as of v40 (cascade-deletes only).
 		`CREATE TABLE IF NOT EXISTS message_reads (
 			message_id TEXT NOT NULL,
 			session_id TEXT NOT NULL,
@@ -991,7 +994,10 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 
 	// Migration from version 4 to 5: Add message read tracking
 	if startVersion < 5 && endVersion >= 5 {
-		// Create message_reads table
+		// Create message_reads table.
+		// DEPRECATED (thrum-tcqw/b6qw): read-truth unified on
+		// message_deliveries.read_at; table retained for back-compat, no live
+		// readers/writers as of v40 (cascade-deletes only).
 		_, err = tx.Exec(`
 			CREATE TABLE IF NOT EXISTS message_reads (
 				message_id TEXT NOT NULL,

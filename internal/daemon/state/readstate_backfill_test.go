@@ -59,6 +59,11 @@ func assertUnread(t *testing.T, db *sql.DB, msgID, agent string) {
 // TestBackfillReadState_LocalOnly proves the v40 backfill clears local stuck
 // unread (both the no-delivery-row class and existing unread rows) while leaving
 // synced peer-agent rows untouched (the edhn leak-guard, made structural).
+//
+// This test deliberately seeds NO daemon_identity row: LocalDaemonIDs cannot
+// resolve a hostname and falls back to {daemonID} only — exercising the
+// degraded scope path. The hostname-anchored derivation path is covered by
+// TestBackfillReadState_StaleLocalDaemonID below.
 func TestBackfillReadState_LocalOnly(t *testing.T) {
 	db := newStateTestDB(t)
 	const localDaemon = "daemon-A"

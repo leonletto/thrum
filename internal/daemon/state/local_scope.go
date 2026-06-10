@@ -24,7 +24,7 @@ import (
 // LEAK-GUARD (thrum-edhn): the hostname match is STRICT (= the local hostname).
 // It MUST NOT union blank-hostname rows — foreign peer daemon ids also appear on
 // blank-hostname rows in the synced agents table (e.g. synced peer user rows),
-// so including hostname='' would pull peer daemon ids into the local set and
+// so including hostname=” would pull peer daemon ids into the local set and
 // stamp peer read-state. Foreign daemon ids never appear with THIS host's
 // hostname, so strict matching excludes them. (DB-validated on the source line:
 // leon-letto's d_ees9pkfgax8p is anchored to hostname=leonsmacm1pro by 21
@@ -77,7 +77,7 @@ func LocalDaemonIDs(ctx context.Context, db *safedb.DB, daemonID string) ([]stri
 // agents local to this daemon: origin_daemon in the local-id set, OR the legacy
 // empty/NULL origin_daemon (pre-v22 rows and the column default). Returns the
 // clause and the bind args (the local ids, in order). When localIDs is empty it
-// still matches the legacy ''/NULL rows.
+// still matches the legacy ”/NULL rows.
 //
 // Pair with LocalDaemonIDs: callers derive the set once, then splice this clause
 // into their own query with the returned args at the matching placeholder slot.
