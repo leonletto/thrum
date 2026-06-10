@@ -31,6 +31,66 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Added
 
+- **Inbox defaults to newest-first (thrum-4yjc back-port)** — `thrum inbox` now
+  lists newest messages first so recent mail is never buried under backlog;
+  the reply-clustered chronological view is opt-in via `--chronological` /
+  `--oldest`. Explicit `sort_order` callers (wait/MCP) are unaffected.
+- **Shell-safe message bodies (thrum-d3fp back-port)** — `thrum send`, `reply`,
+  and `message edit` accept `--stdin` / `--body-file <path>` / `-` so bodies
+  bypass shell interpolation (backticks, `${...}`, `$(...)` arrive verbatim).
+  Plugin docs (send/reply commands, CLI_REFERENCE, MESSAGING) updated across
+  claude/codex/cursor/opencode with the heredoc guidance.
+
+### Fixed
+
+- **Read-state unification + v40 backfill (tcqw/u4j1 back-port, thrum-b6qw)** —
+  read-truth is unified on `message_deliveries.read_at`; the `message_reads`
+  writer is retired (table kept for back-compat, no DDL). The projector's
+  receipt gate gains an authored-self arm and authors get a read-stamped
+  self-delivery row at send. A one-time **schema v39→v40 marker** runs a
+  data-only backfill at the crossing that clears historically-stuck unread
+  (the no-delivery-row "phantom unread" / backstop nudge-storm class), scoped
+  by a strict-hostname leak-guard so peer read-state is never touched.
+  ⚠ Binaries supporting ≤v39 cannot open a migrated DB.
+- **tsnet node released before PID removal on shutdown (oqao back-port,
+  thrum-w8is)** — daemon restart no longer leaves the old tsnet node registered
+  while the new process re-binds the same state dir (two netstacks sharing one
+  node key → inbound `:9177` RST/EOF flap masked by pull-sync). Bounded (6s)
+  node release now runs inside graceful shutdown before the PID file is
+  removed; `TsnetListener.Close` is idempotent; `daemon stop` wait 10s→15s.
+- **Peer bridge self-heals after daemon restart (thrum-to7p back-port)** —
+  `WSClient.notifyCh` now closes on connection death so the peer relay's
+  reconnect loop can't block forever on a dead bridge.
+- **`hidden_by_filter` counts only delivery-backed unread (vr0i back-port,
+  thrum-eeio)** — the inbox hidden-count no longer inflates with invisible
+  no-delivery-row messages, so `thrum message read --all` converges.
+- **Role preamble survives the self-restart race (thrum-4ye2 back-port)** —
+  `thrum prime` falls back to the on-disk identity when the daemon hasn't
+  re-registered the agent yet, so the role preamble is never dropped.
+- **Context-sweep hysteresis + 1M-window models (thrum-gqq3 back-port +
+  fable-5 fix)** — per-agent context-% alerts fire only on crossing the next
+  fire-point instead of every sweep cycle, and `claude-fable-5` maps to its
+  real 1M context window (was hitting the 200k default and false-flagging
+  healthy agents at 5× inflated usage).
+
+### Security
+
+- **a-sync exposure guard now gates on repository VISIBILITY (thrum-44mt,
+  replaces the rc.10 host-denylist)** — the rc.10 D11 host-denylist refused
+  a-sync to all github.com/gitlab.com remotes regardless of repo visibility,
+  breaking private-repo users (rc.10 was pulled for this). The guard now
+  probes the origin with an anonymous, credential-stripped `git ls-remote`
+  (hermetic allowlist env, neutral cwd + `GIT_CEILING_DIRECTORIES`) and
+  refuses pushing message history only to a **publicly-readable** repo;
+  classification is fail-safe (only exit-0-with-refs ⇒ public; 404/401/403/
+  auth-denied ⇒ private) and an explicit remote-bound exact-match override
+  (`public_exposure_override`) allows intentional public-repo sync. The gate
+  resolves once at boot (session-immutable), surfaces its reason in
+  `sync status` + the health endpoint/Settings UI, and warns active agents
+  on the transition into exposed.
+
+### Added (rc.10)
+
 - **Directed-inbound 0.10.6 back-port (thrum-h4s4)** — a lean 0.10.6 node can now
   consume a *directed/filtered* inbound stream served by a 0.11 hub (it carries
   zero filter logic; the hub does all filtering). Specifically:
