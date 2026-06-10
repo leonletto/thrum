@@ -43,6 +43,19 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **Duplicate message_id in relayed history no longer stalls inbound sync
+  (thrum-lv9x)** — durable-lane snapshot rows (`messages-v2` LWW upsert, which
+  writes no events-table record) collided with the original event arriving
+  later via sync: the projector's plain `INSERT INTO messages` aborted the
+  whole batch without advancing the checkpoint, and the notify-driven re-pull
+  retried it forever — observed in production as a permanently pinned peer
+  checkpoint and a 65-167/sec cross-host `sync.notify` storm
+  (retry-amplification). `message.create` apply is now idempotent
+  (`INSERT OR IGNORE` + dup-no-op that still commits the event record, so the
+  batch advances past the duplicate and is never re-pulled), and the a-sync
+  git ingest path gains an event-id dedup pre-check. Live-verified on a
+  two-node mesh: 104 climbing apply-failures → 0 at deploy, sub-second apply,
+  checkpoint converged to the primary's max seq.
 - **Read-state unification + v40 backfill (tcqw/u4j1 back-port, thrum-b6qw)** —
   read-truth is unified on `message_deliveries.read_at`; the `message_reads`
   writer is retired (table kept for back-compat, no DDL). The projector's
