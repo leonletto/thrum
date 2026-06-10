@@ -340,6 +340,26 @@ func (p *Projector) applyMessageCreate(ctx context.Context, data json.RawMessage
 		}
 	}
 
+	// thrum-b6qw (port of tcqw Option C): always create a read-stamped
+	// self-delivery row for the author, even when they are not in their own
+	// Recipients (the broadcast/legacy case — HandleSend strips self from
+	// broadcast recipients, so the in-loop self-mention branch above never
+	// fires for those). The author has already "seen" their own send, so it
+	// must never count as unread; the row drops out of --unread without a
+	// markRead round-trip. Idempotent via OR IGNORE: a no-op when the loop
+	// already inserted the author's row (author-in-Recipients). This stops the
+	// self-authored no-delivery-row class from accumulating going forward;
+	// T2 (receipt gate arm) + the v40 backfill clear the historical rows.
+	if event.AgentID != "" {
+		if _, err = tx.Exec(`
+			INSERT OR IGNORE INTO message_deliveries (
+				message_id, recipient_agent_id, delivered_at, seen_at, read_at
+			) VALUES (?, ?, ?, ?, ?)
+		`, event.MessageID, event.AgentID, event.Timestamp, event.Timestamp, event.Timestamp); err != nil {
+			return fmt.Errorf("insert author self-delivery: %w", err)
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return err
 	}
