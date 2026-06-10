@@ -127,6 +127,15 @@ type ListMessagesRequest struct {
 	// Sorting
 	SortBy    string `json:"sort_by,omitempty"`    // "created_at", "updated_at"
 	SortOrder string `json:"sort_order,omitempty"` // "asc", "desc"
+
+	// Chronological opts into the oldest-first, reply-clustered inbox view
+	// (replies grouped under their parent, chronological within each cluster) —
+	// for reading a thread in order. Default (false) is newest-first
+	// (thrum-3vl0 / thrum-4yjc): the inbox shows the most recent messages first
+	// so a recent message is never buried under backlog and `--limit N` returns
+	// the newest N. Only meaningful in inbox mode (ForAgent/ForAgentRole set);
+	// ignored when an explicit SortOrder is given.
+	Chronological bool `json:"chronological,omitempty"`
 }
 
 // ListMessagesResponse represents the response from message.list RPC.
@@ -1189,12 +1198,20 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	query += createdAfterClause
 	args = append(args, createdAfterArgs...)
 
-	// Add sorting — cluster replies with parents when using inbox (for_agent) mode,
-	// but respect explicit sort_order when provided (e.g., wait uses desc for newest-first)
-	if (req.ForAgent != "" || req.ForAgentRole != "") && req.SortOrder == "" {
-		// Inbox mode: group replies under their parent, then chronological within each cluster
+	// Add sorting (thrum-3vl0 / thrum-4yjc). Inbox mode (for_agent/for_agent_role
+	// set) with NO explicit sort_order now defaults to NEWEST-FIRST so a recent
+	// message is never buried under backlog and `--limit N` returns the newest N
+	// — the common reading order for an inbox. The reply-clustered, oldest-first
+	// view (replies grouped under their parent, chronological within each cluster
+	// — for reading a thread in order) is now opt-in via Chronological (CLI:
+	// --chronological / --oldest). An explicit sort_order still wins over both
+	// (e.g. wait/MCP pass desc/asc directly), so those callers are unaffected;
+	// the newest-first default falls through to the shared sortBy/sortOrder path
+	// below (sortOrder defaults to "desc").
+	switch {
+	case (req.ForAgent != "" || req.ForAgentRole != "") && req.SortOrder == "" && req.Chronological:
 		query += " ORDER BY COALESCE(reply_ref.ref_value, m.message_id) ASC, m.created_at ASC"
-	} else {
+	default:
 		query += fmt.Sprintf(" ORDER BY m.%s %s", sortBy, sortOrder)
 	}
 
@@ -1393,6 +1410,20 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		hiddenQuery += createdAfterClause
 		hiddenArgs = append(hiddenArgs, createdAfterArgs...)
 		hiddenQuery += " AND m.message_id NOT IN (SELECT md3.message_id FROM message_deliveries md3 WHERE md3.recipient_agent_id = ? AND md3.read_at IS NOT NULL)"
+		hiddenArgs = append(hiddenArgs, currentAgentID)
+
+		// thrum-vr0i: only count mail the agent is a genuine recipient of (has a
+		// delivery row for). With no mention/scope/ref filter the superset above
+		// is otherwise unbounded — it counts EVERY unread message in the daemon
+		// minus the agent's for-agent-visible set, because forAgentClause is
+		// intentionally omitted here. A message join-visible via identity
+		// (role/scope/legacy-broadcast) but with NO delivery row was never
+		// delivered to this agent per event.Recipients semantics, so counting it
+		// as "N additional unread outside filter" is misleading AND never
+		// converges (read --all cannot clear a row that does not exist).
+		// Restricting the superset to delivery-backed messages makes the advisory
+		// count honest and bounded.
+		hiddenQuery += " AND EXISTS (SELECT 1 FROM message_deliveries md_hb WHERE md_hb.message_id = m.message_id AND md_hb.recipient_agent_id = ?)"
 		hiddenArgs = append(hiddenArgs, currentAgentID)
 
 		var totalUnreadWithoutForAgent int

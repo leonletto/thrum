@@ -7,7 +7,82 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/leonletto/thrum/internal/config"
 )
+
+// TestFormatPrimeContext_Preamble_NilIdentityFallsBackToOnDisk is the thrum-t6qx
+// 3rd-site guard (backport via thrum-4ye2). The role preamble (agent
+// instructions / role discipline) is LOCAL state consumed during prime, but
+// FormatPrimeContext gated it on the daemon-resolved ctx.Identity. After a raw
+// self-restart relaunch the daemon has not re-bound the new PID (whoami nil →
+// Identity nil), so the agent would lose its entire role discipline despite the
+// identity + preamble being on disk. The consume must fall back to the on-disk
+// identity.
+func TestFormatPrimeContext_Preamble_NilIdentityFallsBackToOnDisk(t *testing.T) {
+	t.Setenv("THRUM_NAME", "alpha")
+	repo := t.TempDir()
+	thrumDir := filepath.Join(repo, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "context"), 0o700); err != nil {
+		t.Fatalf("mkdir context: %v", err)
+	}
+	if err := config.SaveIdentityFile(thrumDir, &config.IdentityFile{
+		Version: 5, RepoID: "r",
+		Agent:    config.AgentConfig{Name: "alpha", Role: "implementer", Module: "test"},
+		Worktree: thrumDir, UpdatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("save identity: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(thrumDir, "context", "alpha_preamble.md"),
+		[]byte("ROLE DISCIPLINE BODY"), 0o600); err != nil {
+		t.Fatalf("write preamble: %v", err)
+	}
+
+	// Daemon-race: nil Identity, but the on-disk identity + preamble are present.
+	out := FormatPrimeContext(&PrimeContext{Identity: nil, RepoPath: repo})
+	if !strings.Contains(out, "# Agent Instructions") || !strings.Contains(out, "ROLE DISCIPLINE BODY") {
+		t.Errorf("preamble must load via on-disk identity fallback when Identity is nil; got:\n%s", out)
+	}
+}
+
+// TestPrimeContext_LocalAgentName covers the thrum-t6qx resolution ladder:
+// daemon identity wins, on-disk identity is the fallback, "" when neither.
+func TestPrimeContext_LocalAgentName(t *testing.T) {
+	t.Run("daemon identity wins", func(t *testing.T) {
+		got := (&PrimeContext{Identity: &WhoamiResult{AgentID: "from_daemon"}, RepoPath: t.TempDir()}).LocalAgentName()
+		if got != "from_daemon" {
+			t.Errorf("got %q, want from_daemon", got)
+		}
+	})
+	t.Run("on-disk fallback when Identity nil", func(t *testing.T) {
+		t.Setenv("THRUM_NAME", "from_disk")
+		repo := t.TempDir()
+		thrumDir := filepath.Join(repo, ".thrum")
+		if err := os.MkdirAll(thrumDir, 0o700); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := config.SaveIdentityFile(thrumDir, &config.IdentityFile{
+			Version: 5, RepoID: "r",
+			Agent:    config.AgentConfig{Name: "from_disk", Role: "implementer", Module: "test"},
+			Worktree: thrumDir, UpdatedAt: time.Now().UTC(),
+		}); err != nil {
+			t.Fatalf("save identity: %v", err)
+		}
+		if got := (&PrimeContext{Identity: nil, RepoPath: repo}).LocalAgentName(); got != "from_disk" {
+			t.Errorf("got %q, want from_disk", got)
+		}
+	})
+	t.Run("empty when neither available", func(t *testing.T) {
+		if got := (&PrimeContext{Identity: nil, RepoPath: t.TempDir()}).LocalAgentName(); got != "" {
+			t.Errorf("got %q, want empty", got)
+		}
+		var nilCtx *PrimeContext
+		if nilCtx.LocalAgentName() != "" {
+			t.Error("nil receiver must resolve to empty")
+		}
+	})
+}
 
 func TestPrimeContext_JSONStructure(t *testing.T) {
 	ctx := &PrimeContext{

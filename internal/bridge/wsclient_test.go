@@ -205,6 +205,48 @@ func TestWSClient_RPCError(t *testing.T) {
 	}
 }
 
+// TestWSClient_NotificationsCloseOnConnDeath is the regression for the
+// zombie-bridge P0 (thrum-to7p): when the remote conn dies (e.g. a peer daemon
+// restarts), the WSClient's notification channel MUST close so consumers
+// ranging Notifications() (Bridge.runInbound) unblock and detect the death —
+// otherwise the bridge never tears down and never reconnects. Before the fix
+// the readLoop closed c.done but NOT c.notifyCh, so runInbound blocked forever.
+func TestWSClient_NotificationsCloseOnConnDeath(t *testing.T) {
+	t.Parallel()
+	// Server upgrades then closes the conn shortly after (simulates the peer
+	// daemon restarting out from under the dialer).
+	srv := newTestWSServer(t, func(conn *websocket.Conn) {
+		time.Sleep(50 * time.Millisecond)
+		_ = conn.Close()
+	})
+
+	url := "ws" + strings.TrimPrefix(srv.URL, "http")
+	client := bridge.NewWSClient(url)
+	if err := client.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect() = %v", err)
+	}
+	defer client.Close()
+
+	// The notify channel must close (receive returns ok=false) once the remote
+	// drops the conn — not block forever.
+	select {
+	case _, ok := <-client.Notifications():
+		if ok {
+			// A stray notification is fine; keep draining until close.
+			select {
+			case _, ok2 := <-client.Notifications():
+				if ok2 {
+					t.Fatal("notify channel delivered values but never closed on conn death")
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("notify channel did not close after conn death (zombie-bridge regression)")
+			}
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("notify channel did not close after conn death (zombie-bridge regression)")
+	}
+}
+
 func TestWSClient_CloseIdempotent(t *testing.T) {
 	t.Parallel()
 	srv := newTestWSServer(t, func(conn *websocket.Conn) {
