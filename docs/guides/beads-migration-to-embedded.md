@@ -50,6 +50,8 @@ Two recovery paths:
 Pick your path in [Step 3](#step-3-choose-your-recovery-path-a-or-b) after
 inventorying what you have.
 
+---
+
 ### ⚠ STOP — Read this first if bd has already been upgraded machine-wide
 
 **If `bd version` already prints 1.0.0 or higher, DO NOT run any `bd` commands
@@ -118,6 +120,8 @@ backend.
 If bd has NOT been upgraded yet (still v0.62.x), you can follow the guide top to
 bottom normally — `bd dolt stop`, `bd export`, etc. will all work because bd
 still understands server mode at that point.
+
+---
 
 ### Why migrate
 
@@ -221,6 +225,8 @@ pointing at deleted or trashed paths that can be killed outright.
 Orphan processes for already-deleted repos (e.g. cwd inside `~/.Trash/dolt` or a
 path that `ls` says doesn't exist) are safe to kill immediately — they're
 holding nothing useful.
+
+---
 
 ### Step 1: Stop any running bd / dolt server
 
@@ -956,6 +962,8 @@ EOF
 `.git/info/exclude` (per-clone, untracked) is better than `.gitignore` for
 temporary entries — otherwise the `.gitignore` entry lingers in history forever.
 
+---
+
 ### Troubleshooting
 
 #### `bd doctor` says "No dolt database found" but one exists
@@ -1229,6 +1237,8 @@ cp "$PROJECT/.beads/backup/"*.jsonl "$BACKUP_DEST/" 2>/dev/null || true
 `bd export` writes a single JSONL containing all issues (and memories,
 dependencies, comments, labels, etc.) in a format that's human-readable and
 greppable — which is usually what these backup scripts actually want.
+
+---
 
 ### References
 

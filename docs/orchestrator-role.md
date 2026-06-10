@@ -13,6 +13,8 @@ The `thrum:orchestrate` Claude Code skill is the implementation of this
 playbook. It guides the orchestrator through each phase — from accepting the
 handoff to delivering the final merge report.
 
+---
+
 ## When to Use It
 
 You've got a plan. Beads has the epics. The implementation prompt exists with
@@ -33,6 +35,8 @@ The orchestrator is a **pre-configured, human-launched agent** — you set it up
 in its own tmux session ahead of time. The coordinator doesn't launch it. You
 do. That's intentional. See [Tmux-Managed Sessions](tmux-sessions.md) for how to
 get it running.
+
+---
 
 ## Autonomy Levels
 
@@ -55,6 +59,8 @@ when you trust the plan and want to come back to a finished report.
 The default is `end_only`. You can change that in config, or just answer
 differently when the orchestrator asks. It negotiates per-run, not once
 globally.
+
+---
 
 ## Handoff: Giving the Orchestrator a Plan
 
@@ -97,6 +103,8 @@ The coordinator sends the plan to the orchestrator via Thrum messaging:
 ```bash
 thrum send "Plan ready at dev-docs/plans/2026-04-09-my-feature.md" --to @orchestrator_main
 ```
+
+---
 
 ## Execution Lifecycle
 
@@ -179,6 +187,8 @@ All epics complete. The orchestrator:
 You approve → it merges to the merge target, pushes, and asks if you want
 worktrees cleaned up. Then it sets itself to `idle`.
 
+---
+
 ## Review Gates
 
 Review gates are `## Review Gate:` headings in the implementation prompt. The
@@ -209,6 +219,8 @@ before proceeding. At `end_only`, it continues automatically if review passes.
 The orchestrator validates that `## Review Gate:` headings exist during Phase 1.
 A prompt without gates won't run — the orchestrator bounces it back.
 
+---
+
 ## Implementer Status Vocabulary
 
 Implementers use a four-value status vocabulary when reporting back to the
@@ -231,6 +243,8 @@ coordinator has responded.
 **BLOCKED** requires the implementer to name the blocker (for example: "waiting
 on team-fix sec.8 to land"). The orchestrator surfaces this to you and pauses
 that workstream rather than letting the agent spin.
+
+---
 
 ## Two-Stage Review
 
@@ -255,6 +269,8 @@ disappears into the conversation history.
 The orchestrator follows this discipline when dispatching code review sub-agents
 at each review gate. If you're running reviews manually, it applies equally.
 
+---
+
 ## Escalation
 
 The orchestrator stops and messages you when it hits something it can't resolve:
@@ -278,6 +294,8 @@ decision you need to make. Not "there was a problem." Something you can act on.
 
 If you don't respond at a review gate, the orchestrator waits and sends a
 reminder after a configured timeout. It doesn't proceed without your answer.
+
+---
 
 ## Configuration
 
@@ -325,6 +343,8 @@ It's the context file the orchestrator loads at startup via `thrum prime`. You
 don't need to edit it. If you register an orchestrator agent with
 `thrum quickstart --role orchestrator`, the right template loads automatically.
 
+---
+
 ## Commands
 
 **Register an orchestrator agent:**
@@ -359,6 +379,8 @@ thrum team           # registered agents with roles and statuses
 See [CLI Reference](cli.md) for the full command reference, including
 `thrum tmux` subcommands for session lifecycle management.
 
+---
+
 ## Limitations
 
 **The orchestrator doesn't create epics or tasks.** That's the coordinator's
@@ -378,6 +400,8 @@ on the merge target.
 **The orchestrator doesn't create the merge target branch.** If `merge_target`
 is set to a branch that doesn't exist, the merge will fail. Confirm the branch
 exists before handing off a plan.
+
+---
 
 ## Next Steps
 

@@ -550,6 +550,8 @@ These flags are available on all commands:
 | `--role`    | Agent role (or `THRUM_ROLE` env var)          |
 | `--module`  | Agent module (or `THRUM_MODULE` env var)      |
 
+---
+
 _The sections below cover storage internals. You don't need these for normal
 use._
 

@@ -25,29 +25,71 @@ they're parameterized over `VERSION` and the release branch.
 ## Stable-track current pre-release
 
 > **Current stable-track pre-release:
-> [`v0.10.6-rc.9`](https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.9)**
-> (tagged 2026-06-05, in soak). **rc.9 is a single-fix RC** — a cross-host sync
-> correctness bug. The daemon's auto-reconcile Manager built its `peer.repair`
-> dialer identity from the local loopback ws port (`:<port>`, host-stripped);
-> when it dialed a peer, the responder stored that as our address, corrupting
-> the peer's record into an unconnectable `:<port>` and breaking that peer's
-> periodic sync + repair toward us (observed stalling cross-host direct sync for
-> hours). The advertised address is now resolved lazily at dial time from the
-> daemon's tsnet-reachable address — empty until the tsnet listener is up, which
-> the responder safely ignores rather than storing a wrong value (thrum-hix5).
-> Daemon/sync fix; no schema change.
+> [`v0.10.6-rc.11`](https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.11)**
+> (tagged 2026-06-09, in soak). rc.11 supersedes rc.10, which was pulled during
+> soak — rc.10's a-sync host-denylist refused sync to **all** github.com /
+> gitlab.com remotes regardless of repo visibility, breaking private-repo users.
+> rc.11 carries rc.10's directed-inbound work forward plus ten new back-ports.
+> The headliners:
 >
-> rc.8's message-nudge hardening carries forward: the chrome-quiet gate so
-> inbound nudges never land mid-keystroke (thrum-nlel / thrum-3i2s, tunable via
-> the `daemon.nudge` config block), nudges deferred to a redelivery queue while
-> an interactive selection dialog is up (thrum-7phu), and the daemon start-wait
-> surfacing live migration progress instead of a false timeout on large-DB
-> upgrades (thrum-vh2c). rc.7's agent-restart reliability also carries forward:
-> the un-restartable-agent class closed (thrum-5oui, thrum-ipbl, thrum-6yt7,
-> plus rc.6's thrum-mnhp dead-PID guard), the `thrum prime` daemon-side `RLock`
-> root-cause fix (thrum-5988), the snapshot/sleep skill family (thrum-rwhg —
-> `/thrum:restart-extended`, `/thrum:sleep`, `/thrum:sleep-extended`), and the
-> identity-guard message-read fail-open close (thrum-tgqx).
+> - **a-sync exposure guard now gates on repository visibility** (thrum-44mt,
+>   replaces the rc.10 host-denylist). The daemon probes `origin` with an
+>   anonymous, credential-stripped `git ls-remote` and refuses pushing message
+>   history only to a **publicly readable** repo. Classification is fail-safe
+>   (only exit-0-with-refs counts as public; 404/401/403/auth-denied means
+>   private), and an explicit remote-bound exact-match override
+>   (`daemon.sync.public_exposure_override`) allows intentional public-repo
+>   sync. The gate resolves once at boot, surfaces its reason in `sync status`
+>   and the health endpoint / Settings UI, and warns active agents when the repo
+>   transitions into exposed.
+> - **Read-state unification + one-time v40 backfill** (thrum-b6qw) — read truth
+>   is unified on `message_deliveries.read_at`, and a one-time schema v39→v40
+>   marker runs a data-only backfill that clears historically-stuck unread (the
+>   "phantom unread" / backstop nudge-storm class). ⚠ **The v40 migration is
+>   one-way:** binaries supporting ≤v39 cannot reopen a migrated DB. Take a
+>   `.thrum/` backup before upgrading if you may need to roll back.
+> - **tsnet node released before PID removal on shutdown** (thrum-w8is) — daemon
+>   restart no longer leaves the old tsnet node registered while the new process
+>   re-binds the same state dir, fixing the post-restart cross-host inbound flap
+>   (`:9177` RST/EOF masked by pull-sync).
+> - **Inbox defaults to newest-first** (thrum-4yjc) — recent mail is never
+>   buried under backlog; the reply-clustered chronological view is opt-in via
+>   `--chronological` / `--oldest`.
+> - **Shell-safe message bodies** (thrum-d3fp) — `thrum send`, `reply`, and
+>   `message edit` accept `--stdin` / `--body-file <path>` / `-` so bodies
+>   bypass shell interpolation (backticks, `${...}`, `$(...)` arrive verbatim).
+>
+> Also in rc.11: the peer bridge self-heals after daemon restart (thrum-to7p),
+> the inbox hidden-count only counts delivery-backed unread so
+> `thrum message read --all` converges (thrum-eeio), the role preamble survives
+> the self-restart race (thrum-4ye2), and context-sweep alerts gain hysteresis
+> plus a correct 1M-token window for `claude-fable-5` (thrum-gqq3).
+>
+> The rc.10 **directed-inbound back-port** (thrum-h4s4) lands with rc.11: a lean
+> 0.10.6 node can consume a directed/filtered inbound stream served by a 0.11
+> hub (the hub does all filtering). It brings a structured `daemon.sync` config
+> stanza (`{enabled, mechanisms:[{mechanism, scope}]}`) with startup validity
+> checks to supplement the overloaded `daemon.local_only` bool, the additive
+> `filtered` sync-pull response flag with checkpoint cursor-honesty, and a
+> pairing guard so `thrum peer add` / `peer join` refuse when sync is disabled
+> instead of silently half-connecting.
+>
+> rc.9's cross-host sync fix carries forward: the auto-reconcile Manager no
+> longer advertises a loopback `:<port>` dialer identity that corrupted peers'
+> stored address and stalled cross-host sync for hours — the advertised address
+> now resolves lazily at dial time from the daemon's tsnet-reachable address
+> (thrum-hix5). rc.8's message-nudge hardening also carries: the chrome-quiet
+> gate so inbound nudges never land mid-keystroke (thrum-nlel / thrum-3i2s,
+> tunable via the `daemon.nudge` config block), nudges deferred to a redelivery
+> queue while an interactive selection dialog is up (thrum-7phu), and the daemon
+> start-wait surfacing live migration progress instead of a false timeout on
+> large-DB upgrades (thrum-vh2c). rc.7's agent-restart reliability also carries
+> forward: the un-restartable-agent class closed (thrum-5oui, thrum-ipbl,
+> thrum-6yt7, plus rc.6's thrum-mnhp dead-PID guard), the `thrum prime`
+> daemon-side `RLock` root-cause fix (thrum-5988), the snapshot/sleep skill
+> family (thrum-rwhg — `/thrum:restart-extended`, `/thrum:sleep`,
+> `/thrum:sleep-extended`), and the identity-guard message-read fail-open close
+> (thrum-tgqx).
 >
 > Earlier v0.10.6 RCs carry forward — rc.6/rc.5 fleet-operations work: two sweep
 > ctx% corrections (thrum-4pd1 Opus 4.8 1M-window denominator, thrum-roeq
@@ -76,15 +118,15 @@ they're parameterized over `VERSION` and the release branch.
 > (`events_retention_days`, `compaction_size_threshold_mb`), and
 > skill-review-loop improvements (`verify-against-source`, Phase 0 review gate).
 > Full notes: [What's New](whats-new.md) and the
-> [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
+> [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/release/v0.10.6/CHANGELOG.md).
 
-### Quick install for `v0.10.6-rc.9`
+### Quick install for `v0.10.6-rc.11`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.9 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.11 sh
 
 # Codex plugin (matches release/v0.10.6)
 THRUM_INSTALL_REF=release/v0.10.6 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.6/codex-plugin/plugins/thrum/scripts/install-plugin.sh)

@@ -24,6 +24,8 @@ Phase B (v0.9.0) wires hints to three commands: `thrum send`,
 All other commands still use the legacy `LegacyHint()` flat-map (random tips,
 not codes), until they're retrofitted in a later phase.
 
+---
+
 ### Suppression
 
 Three ways to silence hints:
@@ -46,6 +48,8 @@ export THRUM_NO_HINTS=1
 `--quiet` and `--json` are per-call flags. `THRUM_NO_HINTS` is an environment
 variable — useful in CI, scripts, or agent sessions where you never want hint
 noise.
+
+---
 
 ### Shape B: text trailer (default)
 
@@ -77,6 +81,8 @@ A few things to notice:
 
 When a `warn` hint blocks execution, the command exits non-zero and only the
 blocking hints appear. The success line never prints because nothing succeeded.
+
+---
 
 ### Shape C: JSON output
 
@@ -139,6 +145,8 @@ Each hint object has:
 Each option object has `label` (short identifier), `cmd` (exact command string),
 and optionally `note` (parenthetical caveat).
 
+---
+
 ### Hint code catalog (Phase B — pilot commands)
 
 All 8 codes are stable. They won't be renamed once published; new codes get
@@ -157,6 +165,8 @@ added to the catalog in later phases.
 
 Severity column uses `warn` and `info` as they appear in the actual output.
 `n/a` in AllowForce means the hint is informational and never blocks execution.
+
+---
 
 ### AllowForce semantics
 
@@ -185,6 +195,8 @@ answer is to fix the input, not to force through.
 **`info` hints:** Never block, regardless of `AllowForce`. They're post-action
 observations. The field isn't applicable to them.
 
+---
+
 ### Pre-action blocking
 
 Here's the execution sequence for a command with wired hint sources:
@@ -212,6 +224,8 @@ aborted (pass --force to override recoverable conditions)
 The distinction matters if you're parsing exit messages in a script. Both exit
 non-zero.
 
+---
+
 ### Phase roadmap
 
 **Phase B (shipped in v0.9.0):** `thrum send`, `thrum tmux create`,
@@ -227,6 +241,8 @@ tooling.
 - Phase E: docs and `llms.txt` updates to cover the expanded catalog.
 
 The hint code namespace is append-only. Codes published in Phase B won't change.
+
+---
 
 ### See Also
 

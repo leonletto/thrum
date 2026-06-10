@@ -233,23 +233,60 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG.md</a>.</p>
 <h2>v0.10.6 — In Soak (RC)</h2>
-<p><strong>v0.10.6-rc.9</strong> was tagged 2026-06-05 and is the current pre-release. rc.9 is a
-single-fix RC — a cross-host sync correctness bug. The daemon&#39;s auto-reconcile
-Manager built its <code>peer.repair</code> dialer identity from the local loopback ws port
-(<code>:&lt;port&gt;</code>, host-stripped); when it dialed a peer, the responder stored that as
-our address, corrupting the peer&#39;s record into an unconnectable <code>:&lt;port&gt;</code> and
-breaking that peer&#39;s periodic sync + repair toward us (observed stalling
-cross-host direct sync for hours). The advertised address is now resolved lazily
-at dial time from the daemon&#39;s tsnet-reachable address — empty until the tsnet
-listener is up, which the responder safely ignores rather than storing a wrong
-value (thrum-hix5). Daemon/sync fix; no schema change.</p>
-<p>rc.8&#39;s message-nudge hardening carries forward: the chrome-quiet gate so inbound
-nudges never land mid-keystroke (thrum-nlel / thrum-3i2s, tunable via the
+<p><strong>v0.10.6-rc.11</strong> was tagged 2026-06-09 and is the current pre-release. It
+supersedes rc.10, which was pulled during soak — rc.10&#39;s a-sync host-denylist
+refused sync to all github.com / gitlab.com remotes regardless of repo
+visibility, breaking private-repo users. rc.11 carries rc.10&#39;s directed-inbound
+work forward plus ten new back-ports. The headliners:</p>
+<ul>
+<li><strong>a-sync exposure guard now gates on repository visibility</strong> (thrum-44mt,
+replaces the rc.10 host-denylist). The daemon probes <code>origin</code> with an
+anonymous, credential-stripped <code>git ls-remote</code> and refuses pushing message
+history only to a <strong>publicly readable</strong> repo — private repos on github.com /
+gitlab.com sync normally again. Classification is fail-safe (only
+exit-0-with-refs counts as public), and the explicit exact-match override
+<code>daemon.sync.public_exposure_override</code> allows intentional public-repo sync.
+The gate resolves once at boot, surfaces its reason in <code>sync status</code> and the
+Settings UI, and warns active agents when the repo transitions into exposed.</li>
+<li><strong>Read-state unification + one-time v40 backfill</strong> (thrum-b6qw). Read truth
+is unified on <code>message_deliveries.read_at</code>, and a one-time schema v39→v40
+marker runs a data-only backfill that clears historically-stuck unread — the
+&quot;phantom unread&quot; / backstop nudge-storm class. ⚠ <strong>Upgrade note: the v40
+migration is one-way.</strong> Binaries supporting ≤v39 cannot reopen a migrated
+DB; take a <code>.thrum/</code> backup before upgrading if you may need to roll back.</li>
+<li><strong>tsnet node released before PID removal on shutdown</strong> (thrum-w8is) — daemon
+restart no longer leaves the old tsnet node registered while the new process
+re-binds the same state dir, fixing the post-restart cross-host inbound flap.</li>
+<li><strong>Inbox defaults to newest-first</strong> (thrum-4yjc) — recent mail is never buried
+under backlog; <code>--chronological</code> / <code>--oldest</code> opt back into the
+reply-clustered chronological view.</li>
+<li><strong>Shell-safe message bodies</strong> (thrum-d3fp) — <code>thrum send</code>, <code>reply</code>, and
+<code>message edit</code> accept <code>--stdin</code> / <code>--body-file &lt;path&gt;</code> / <code>-</code> so bodies bypass
+shell interpolation (backticks, <code>${...}</code>, <code>$(...)</code> arrive verbatim).</li>
+</ul>
+<p>Also in rc.11: the peer bridge self-heals after daemon restart (thrum-to7p),
+the inbox hidden-count only counts delivery-backed unread so
+<code>thrum message read --all</code> converges (thrum-eeio), the role preamble survives
+the self-restart race (thrum-4ye2), and context-sweep alerts gain hysteresis
+plus a correct 1M-token window for <code>claude-fable-5</code> (thrum-gqq3).</p>
+<p>The rc.10 <strong>directed-inbound back-port</strong> (thrum-h4s4) lands with rc.11: a lean
+0.10.6 node can consume a directed/filtered inbound stream served by a 0.11 hub
+(the hub does all filtering). It brings a structured <code>daemon.sync</code> config
+stanza (<code>{enabled, mechanisms:[{mechanism, scope}]}</code>) with startup validity
+checks to supplement the overloaded <code>daemon.local_only</code> bool, the additive
+<code>filtered</code> sync-pull response flag with checkpoint cursor-honesty, and a
+pairing guard so <code>thrum peer add</code> / <code>peer join</code> refuse when sync is disabled
+instead of silently half-connecting.</p>
+<p>rc.9&#39;s cross-host sync fix carries forward — the auto-reconcile Manager no
+longer advertises a loopback <code>:&lt;port&gt;</code> dialer identity that corrupted peers&#39;
+stored address and stalled cross-host sync for hours (thrum-hix5). rc.8&#39;s
+message-nudge hardening also carries: the chrome-quiet gate so inbound nudges
+never land mid-keystroke (thrum-nlel / thrum-3i2s, tunable via the
 <code>daemon.nudge</code> config block), nudges deferred to a redelivery queue while an
 interactive selection dialog is up (thrum-7phu), and the daemon start-wait
 surfacing live migration progress instead of a false timeout on large-DB
-upgrades (thrum-vh2c). rc.7&#39;s agent-restart reliability also carries forward: the
-un-restartable-agent class closed (thrum-5oui, thrum-ipbl, thrum-6yt7, plus
+upgrades (thrum-vh2c). rc.7&#39;s agent-restart reliability also carries forward:
+the un-restartable-agent class closed (thrum-5oui, thrum-ipbl, thrum-6yt7, plus
 rc.6&#39;s thrum-mnhp dead-PID guard), the <code>thrum prime</code> daemon-side <code>RLock</code>
 root-cause fix (thrum-5988), the snapshot/sleep skill family (thrum-rwhg —
 <code>/thrum:restart-extended</code>, <code>/thrum:sleep</code>, <code>/thrum:sleep-extended</code>), and the
@@ -267,7 +304,7 @@ message-body write cap (thrum-mhwt), <code>INSERT OR IGNORE</code> on <code>appl
 (thrum-9jcb.3), the identity-guard PID-ancestor split (thrum-xir.40) and cached
 peercred CWD lookup (thrum-xir.45), and <code>thrum worktree teardown</code>
 cascade-deleting the bound agent identity (thrum-wk7d). See the
-<a href="beta-channel.html">Beta Channel</a> page for the full rc.9 callout + install
+<a href="beta-channel.html">Beta Channel</a> page for the full rc.11 callout + install
 commands.</p>
 <p>v0.10.6&#39;s headline is a <strong>sync re-architecture</strong> (thrum-s6os): the cross-machine
 wire stream now derives from per-agent and per-bridge-group state files rather

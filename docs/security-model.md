@@ -29,6 +29,8 @@ v0.9.0 replaces that with a three-layer trust stack:
 
 The client cannot influence layers 2 or 3. They run entirely server-side.
 
+---
+
 ### How the daemon resolves your identity
 
 When you run a thrum CLI command, here's what happens server-side from the
@@ -90,6 +92,8 @@ daemon falls back to legacy behavior (client-asserted `caller_agent_id`). Tests
 also skip the resolver. Both paths keep working as before; the new enforcement
 only activates when the resolver is wired in.
 
+---
+
 ### Anonymous caller policy (sec.3)
 
 A caller without a resolved identity is "anonymous." This covers the normal case
@@ -131,6 +135,8 @@ you see it when peercred introspection failed (which would be a v0.9.0 bug,
 fixed in v0.9.1), grep the daemon log for `step=pid failed` or `step=cwd failed`
 to confirm.
 
+---
+
 ### Forged caller_agent_id rejected
 
 The `caller_agent_id` field in request payloads still exists for backward
@@ -171,6 +177,8 @@ Cross-worktree impersonation — a claim from `/path/to/repo-A` asserting an
 identity registered in `/path/to/repo-B` — still hits the strict deny. The
 fallback only covers the shared-worktree case, which is legitimate.
 
+---
+
 ### WebSocket origin restriction (sec.1)
 
 The daemon's WebSocket server (used by the web UI and browser clients) now
@@ -192,6 +200,8 @@ If you're developing a custom client that connects to the daemon over WebSocket
 from a non-localhost origin, it won't work anymore. Use the unix socket instead,
 or proxy through localhost.
 
+---
+
 ### Author-only message operations (sec.4)
 
 `message.delete` (soft-delete) now resolves the caller's identity and checks
@@ -202,6 +212,8 @@ with it.
 
 If you're calling `message.delete` on a message you didn't author, you'll get an
 error like `"only message author can delete"`. There's no override.
+
+---
 
 ### Bulk hard-delete restrictions (sec.8)
 
@@ -219,6 +231,8 @@ re-registration on WebSocket.
 Both operations being callable by any local process was the worst pre-v0.9.0
 exposure: one command could wipe another agent's entire message history with no
 audit trail and no identity requirement.
+
+---
 
 ### Bootstrap exception
 
@@ -240,6 +254,8 @@ one — resolve normally via the per-RPC re-resolution at `server.go:373`.
 The `0600` socket permission is the only access control on these three calls.
 Only the owning user can reach them.
 
+---
+
 ### Breaking changes from v0.8.x
 
 These behaviors changed in v0.9.0. If you have scripts or tooling that relied on
@@ -259,6 +275,8 @@ the old behavior, they'll need updating.
 - **WebSocket from non-localhost origin: HTTP 403.** Previously `CheckOrigin`
   returned `true` for everything. Now foreign origins are blocked at the upgrade
   handshake.
+
+---
 
 ### Identity guards vs. the security model
 

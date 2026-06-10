@@ -162,9 +162,11 @@ When messages are received:
 
 ```text
 MESSAGES_RECEIVED
+---
 FROM: [sender]
 CONTENT: [message content]
 TIMESTAMP: [timestamp]
+---
 ```
 
 When timeout occurs with no messages:

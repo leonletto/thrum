@@ -7,19 +7,57 @@ machine-readable history lives in
 
 ## v0.10.6 — In Soak (RC)
 
-**v0.10.6-rc.9** was tagged 2026-06-05 and is the current pre-release. rc.9 is a
-single-fix RC — a cross-host sync correctness bug. The daemon's auto-reconcile
-Manager built its `peer.repair` dialer identity from the local loopback ws port
-(`:<port>`, host-stripped); when it dialed a peer, the responder stored that as
-our address, corrupting the peer's record into an unconnectable `:<port>` and
-breaking that peer's periodic sync + repair toward us (observed stalling
-cross-host direct sync for hours). The advertised address is now resolved lazily
-at dial time from the daemon's tsnet-reachable address — empty until the tsnet
-listener is up, which the responder safely ignores rather than storing a wrong
-value (thrum-hix5). Daemon/sync fix; no schema change.
+**v0.10.6-rc.11** was tagged 2026-06-09 and is the current pre-release. It
+supersedes rc.10, which was pulled during soak — rc.10's a-sync host-denylist
+refused sync to all github.com / gitlab.com remotes regardless of repo
+visibility, breaking private-repo users. rc.11 carries rc.10's directed-inbound
+work forward plus ten new back-ports. The headliners:
 
-rc.8's message-nudge hardening carries forward: the chrome-quiet gate so inbound
-nudges never land mid-keystroke (thrum-nlel / thrum-3i2s, tunable via the
+- **a-sync exposure guard now gates on repository visibility** (thrum-44mt,
+  replaces the rc.10 host-denylist). The daemon probes `origin` with an
+  anonymous, credential-stripped `git ls-remote` and refuses pushing message
+  history only to a **publicly readable** repo — private repos on github.com /
+  gitlab.com sync normally again. Classification is fail-safe (only
+  exit-0-with-refs counts as public), and the explicit exact-match override
+  `daemon.sync.public_exposure_override` allows intentional public-repo sync.
+  The gate resolves once at boot, surfaces its reason in `sync status` and the
+  Settings UI, and warns active agents when the repo transitions into exposed.
+- **Read-state unification + one-time v40 backfill** (thrum-b6qw). Read truth is
+  unified on `message_deliveries.read_at`, and a one-time schema v39→v40 marker
+  runs a data-only backfill that clears historically-stuck unread — the "phantom
+  unread" / backstop nudge-storm class. ⚠ **Upgrade note: the v40 migration is
+  one-way.** Binaries supporting ≤v39 cannot reopen a migrated DB; take a
+  `.thrum/` backup before upgrading if you may need to roll back.
+- **tsnet node released before PID removal on shutdown** (thrum-w8is) — daemon
+  restart no longer leaves the old tsnet node registered while the new process
+  re-binds the same state dir, fixing the post-restart cross-host inbound flap.
+- **Inbox defaults to newest-first** (thrum-4yjc) — recent mail is never buried
+  under backlog; `--chronological` / `--oldest` opt back into the
+  reply-clustered chronological view.
+- **Shell-safe message bodies** (thrum-d3fp) — `thrum send`, `reply`, and
+  `message edit` accept `--stdin` / `--body-file <path>` / `-` so bodies bypass
+  shell interpolation (backticks, `${...}`, `$(...)` arrive verbatim).
+
+Also in rc.11: the peer bridge self-heals after daemon restart (thrum-to7p), the
+inbox hidden-count only counts delivery-backed unread so
+`thrum message read --all` converges (thrum-eeio), the role preamble survives
+the self-restart race (thrum-4ye2), and context-sweep alerts gain hysteresis
+plus a correct 1M-token window for `claude-fable-5` (thrum-gqq3).
+
+The rc.10 **directed-inbound back-port** (thrum-h4s4) lands with rc.11: a lean
+0.10.6 node can consume a directed/filtered inbound stream served by a 0.11 hub
+(the hub does all filtering). It brings a structured `daemon.sync` config stanza
+(`{enabled, mechanisms:[{mechanism, scope}]}`) with startup validity checks to
+supplement the overloaded `daemon.local_only` bool, the additive `filtered`
+sync-pull response flag with checkpoint cursor-honesty, and a pairing guard so
+`thrum peer add` / `peer join` refuse when sync is disabled instead of silently
+half-connecting.
+
+rc.9's cross-host sync fix carries forward — the auto-reconcile Manager no
+longer advertises a loopback `:<port>` dialer identity that corrupted peers'
+stored address and stalled cross-host sync for hours (thrum-hix5). rc.8's
+message-nudge hardening also carries: the chrome-quiet gate so inbound nudges
+never land mid-keystroke (thrum-nlel / thrum-3i2s, tunable via the
 `daemon.nudge` config block), nudges deferred to a redelivery queue while an
 interactive selection dialog is up (thrum-7phu), and the daemon start-wait
 surfacing live migration progress instead of a false timeout on large-DB
@@ -43,7 +81,7 @@ message-body write cap (thrum-mhwt), `INSERT OR IGNORE` on `applySessionStart`
 (thrum-9jcb.3), the identity-guard PID-ancestor split (thrum-xir.40) and cached
 peercred CWD lookup (thrum-xir.45), and `thrum worktree teardown`
 cascade-deleting the bound agent identity (thrum-wk7d). See the
-[Beta Channel](beta-channel.md) page for the full rc.9 callout + install
+[Beta Channel](beta-channel.md) page for the full rc.11 callout + install
 commands.
 
 v0.10.6's headline is a **sync re-architecture** (thrum-s6os): the cross-machine

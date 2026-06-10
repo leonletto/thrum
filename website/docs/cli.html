@@ -809,9 +809,9 @@ Skill installed to .claude/skills/thrum/
   references/CLI_REFERENCE.md
   references/LISTENER_PATTERN.md
   references/MESSAGING.md</code></pre>
-<p>Supported agents: Claude Code, Cursor, Codex, Gemini, Amp. If the thrum
-Claude plugin is already installed, <code>--skills</code> skips the install (use <code>--force</code>
-to override). If no agent-specific directory is found, falls back to
+<p>Supported agents: Claude Code, Cursor, Codex, Gemini, Amp. If the thrum Claude
+plugin is already installed, <code>--skills</code> skips the install (use <code>--force</code> to
+override). If no agent-specific directory is found, falls back to
 <code>.agents/skills/thrum/</code> (the cross-agent standard path).</p>
 <h3>thrum config show</h3>
 <p>Show effective configuration resolved from all sources. Displays each value and
@@ -892,8 +892,7 @@ The plugin already provides messaging instructions via its SessionStart hook,
 slash commands, and skills — adding the same content to <code>CLAUDE.md</code> would
 duplicate what the plugin injects. The CLAUDE.md block is the minimal-messaging
 path for Claude Code without the plugin, for other runtimes (Codex, Cursor,
-opencode, kiro), or for environments where plugin install isn&#39;t
-available.</p>
+opencode, kiro), or for environments where plugin install isn&#39;t available.</p>
 <p>Without <code>--apply</code>, the command writes nothing — it just prints the template so
 you can pipe it elsewhere or inspect it. Errors that block the apply (existing
 block without <code>--force</code>, IO failures) go to stderr; exit code is non-zero.</p>

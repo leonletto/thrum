@@ -11,6 +11,8 @@ If you've never seen identity guards before, start with the
 for the conceptual model. This page is purely operational — cause and fix for
 each error, nothing more.
 
+---
+
 ### `cross_worktree` — pid_mismatch
 
 #### Error
@@ -53,6 +55,8 @@ If you're running a script that `cd`s between worktrees mid-session, set
 ```bash
 export THRUM_HOME=/path/to/your/repo
 ```
+
+---
 
 ### `unauthenticated_rpc` — identity_mismatch (peercred path)
 
@@ -97,6 +101,8 @@ worktree, the daemon trusts the claim and skips the mismatch. You won't see this
 error in that case. It only fires when peercred puts you in worktree A and the
 claimed agent lives in worktree B — that's still forgery.
 
+---
+
 ### `unauthenticated_rpc` — identity_mismatch (ancestor-chain path)
 
 #### Error
@@ -128,6 +134,8 @@ a session and then issued a thrum command without re-priming.
 trust from the previous section does NOT apply to the ancestor-chain path — it
 only fires when peercred CWD didn't match a registered worktree at all, so
 there's no worktree to check the claim against.
+
+---
 
 ### `unauthenticated_rpc` — anonymous_mutating_rpc
 
@@ -196,6 +204,8 @@ Three things can surface:
   Run `thrum agent list --json` and compare the `worktree` field to your
   `pwd -P` output.
 
+---
+
 ### `unauthenticated_rpc` — no_caller_agent_id
 
 #### Error
@@ -223,6 +233,8 @@ Peercred isn't available on these transports, so G3 falls back to trusting the
 
 2. If you're a client developer sending RPCs over WebSocket, include a non-empty
    `CallerAgentID` in every mutating RPC frame.
+
+---
 
 ### `non_git_bootstrap` — not_a_git_repo
 
@@ -263,6 +275,8 @@ wherever you happened to be. Now it fails loudly.
 
    This is rare and usually a mistake. Prefer using a git-anchored directory.
 
+---
+
 ### `daemon_writer_liveness` — subject_pid_dead
 
 #### Error
@@ -302,6 +316,8 @@ mv .thrum/identities/<agentname>.json .thrum/identities/<agentname>.json.deleted
 Then run `thrum quickstart` again to register fresh. The `.deleted` file is left
 on disk but ignored by all guard scans.
 
+---
+
 ### `prime_ownership` — caller_not_topmost_runtime
 
 #### Error
@@ -339,6 +355,8 @@ thrum prime --force
 
 Use `--force` only when you're sure the sub-agent is intentionally taking over
 the session, not just checking context mid-task.
+
+---
 
 ### `quickstart_self_rename` — caller_already_owns_identity
 
@@ -385,6 +403,8 @@ If you want to keep the existing identity and just re-prime, run:
 thrum prime
 ```
 
+---
+
 ### `quickstart_name_collision` — name_held_by_live_foreign_pid
 
 #### Error
@@ -429,6 +449,8 @@ thrum quickstart --force --name nux --role <role> --module <module>
 `--force` renames the existing file to `.deleted` and takes the name. If the
 other process was still alive and recovers after this, it'll get a
 `cross_worktree` error on its next RPC — it will need to re-register.
+
+---
 
 ## Guard mode downgrade (incident diagnosis)
 
@@ -489,6 +511,8 @@ because it's kernel-verified to belong to the same worktree. This is narrower
 than a mode downgrade — it applies only when `state.IsAgentInWorktree` confirms
 the claim.
 
+---
+
 ## auto_reclaim: dead_pid_auto_reclaim (informational)
 
 Not an error. When `thrum quickstart` or the cross_worktree check encounters a
@@ -511,6 +535,8 @@ independently from the main `cross_worktree` check. Setting it to `off` disables
 auto-reclaim, which means dead-PID mismatches always fall through to the
 `cross_worktree` strict/warn handling instead of self-healing. Leave it at
 `strict` (the default) unless you have a specific reason not to.
+
+---
 
 ## See also
 

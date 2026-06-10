@@ -123,6 +123,8 @@ thrum inbox --unread
 You should see the message. Have the agent reply and verify it appears in
 Telegram.
 
+---
+
 ### @Mention Routing
 
 Messages in the group are routed based on @mentions:
@@ -138,6 +140,8 @@ either @mention it or have no @mention at all. Messages that @mention a human
 (not the bot) are left alone — the person gets a normal Telegram notification
 and the agent doesn't need to see it.
 
+---
+
 ### Security
 
 The same security model from the DM bridge applies to groups:
@@ -149,6 +153,8 @@ The same security model from the DM bridge applies to groups:
 - **Bot blocking.** Messages from other bots are dropped by default (see
   [Multi-Bot Groups](#multi-bot-groups) below for the exception).
 - **Rate limiting.** Per-user rate limits apply in groups the same as DMs.
+
+---
 
 ### Configuration Reference
 
@@ -172,6 +178,8 @@ config:
 | `prefix` | string | Local prefix — the proxy registers as `{prefix}:{name}`  |
 | `bot`    | string | Target bot's @username for @mention routing              |
 
+---
+
 ### Web UI
 
 The web UI's Settings → Telegram panel has a **Groups** section where you can:
@@ -182,6 +190,8 @@ The web UI's Settings → Telegram panel has a **Groups** section where you can:
 - See group connection status
 
 All changes take effect on daemon restart.
+
+---
 
 ### Multi-Bot Groups
 
@@ -278,6 +288,8 @@ proxy agent shows in `thrum team` as:
 ```text
 ● @falcon:coordinator_main [remote] (falcon-backend)
 ```
+
+---
 
 ### Troubleshooting
 

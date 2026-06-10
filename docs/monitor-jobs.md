@@ -15,6 +15,8 @@ You'd use this for things like:
 The daemon owns the process lifecycle. You start a monitor, it runs until you
 stop it, and it survives daemon restarts from its saved spec.
 
+---
+
 ## Quick Start
 
 Say you want to alert `@impl_api` whenever your dev server logs an error:
@@ -48,6 +50,8 @@ Stop it when you're done:
 ```bash
 thrum monitor stop m_01
 ```
+
+---
 
 ## Commands
 
@@ -99,6 +103,8 @@ thrum monitor start \
   -- go test ./... -v
 ```
 
+---
+
 ### `thrum monitor list`
 
 List monitor jobs.
@@ -116,6 +122,8 @@ m_01  dev-errors   running  4m32s     91234   (?i)(error|exception|panic)
 m_02  build-watch  stopped  —         —       ^(FAIL|PASS|error)
 ```
 
+---
+
 ### `thrum monitor show`
 
 Full detail on a single monitor.
@@ -126,6 +134,8 @@ thrum monitor show <id>
 
 Shows the full command, env vars (redacted — values are `[redacted]`), match
 count, recent matches, debounce config, and PID.
+
+---
 
 ### `thrum monitor stop`
 
@@ -139,6 +149,8 @@ Sends SIGTERM. Waits 5 seconds for the process to exit. If it's still running,
 sends SIGKILL. Removes the monitor from persistence — it won't respawn on daemon
 restart.
 
+---
+
 ### `thrum monitor logs`
 
 View captured output from a monitor's process.
@@ -151,6 +163,8 @@ Shows the last N bytes of combined stdout+stderr from the child process. Useful
 for diagnosing why a monitor isn't matching what you expect, or seeing what the
 process was doing before it exited.
 
+---
+
 ### `thrum monitor restart`
 
 Restart a stopped or dead monitor.
@@ -161,6 +175,8 @@ thrum monitor restart <id>
 
 Respawns the child process from the saved spec. The monitor must already exist
 (use `add` for new ones). The daemon resets match counts and uptime.
+
+---
 
 ## How Matches Are Delivered
 
@@ -193,6 +209,8 @@ them or use them in threads. They're delivery-only notifications.
 The recipient sees them in their inbox like any other message. The
 `@monitor:<name>` prefix makes them easy to identify.
 
+---
+
 ## Lifecycle
 
 ### Persistence
@@ -222,6 +240,8 @@ On daemon restart:
 1. The daemon loads all monitor specs from the `monitors` table.
 2. It respawns each monitor's child process.
 3. Match counts and uptime reset — the process is new.
+
+---
 
 ## Constraints
 
@@ -255,6 +275,8 @@ If you need shell features, pass your command to `sh -c`:
 ```bash
 -- sh -c "make build 2>&1 | grep -E 'error|warning'"
 ```
+
+---
 
 ## Cross-References
 

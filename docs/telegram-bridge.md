@@ -110,6 +110,8 @@ schema v24) as a durable fallback. If the cache misses on reply, the daemon
 reads the SQLite row and routing continues as normal. Daemon restarts during an
 in-flight approval flow no longer silently fail.
 
+---
+
 ### Setup
 
 #### 1. Create a Telegram Bot

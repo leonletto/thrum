@@ -175,6 +175,8 @@ structured context (decisions, next steps, work-in-progress) before saving,
 whereas running the command manually with arbitrary input can overwrite
 accumulated session state.
 
+---
+
 ### thrum context show
 
 Display the saved context for the current agent.
@@ -231,6 +233,8 @@ Raw (`--raw`, shows file boundaries):
 - Implementing JWT token refresh
 ```
 
+---
+
 ### thrum context clear
 
 Remove the context file for the current agent.
@@ -254,6 +258,8 @@ thrum context clear --agent furiosa
 ```
 
 Note: Idempotent - running clear when no context exists is a no-op.
+
+---
 
 ### thrum context sync
 
@@ -290,6 +296,8 @@ thrum context sync --agent furiosa
 - No-op when no remote is configured (local-only mode)
 - Respects the `--local` daemon flag
 - Manual only - context is never synced automatically
+
+---
 
 ### thrum context preamble
 
@@ -328,6 +336,8 @@ module, worktree path) to produce a role-specific preamble. If no role template
 is found, the default thrum quick-reference preamble is used as a fallback. See
 [Role-Based Preamble Templates](role-templates.md) for details.
 
+---
+
 ## The /thrum:update-project Skill
 
 The `/thrum:update-project` skill is a Claude Code plugin slash command defined
@@ -360,6 +370,8 @@ Agent: [Spawns sub-agent to gather git/task state and update project_state.md]
 The skill reduces the friction of updating project state and ensures consistent
 formatting by combining your narrative with automatically gathered repo and task
 state.
+
+---
 
 ## Use Cases and Patterns
 
@@ -416,6 +428,8 @@ Inbox: 3 unread (12 total)
 Sync: ✓ synced
 ```
 
+---
+
 ## RPC API
 
 Context operations are available via the daemon's RPC API:
@@ -448,6 +462,8 @@ Context operations are available via the daemon's RPC API:
   }
 }
 ```
+
+---
 
 ### context.show
 
@@ -486,6 +502,8 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
 }
 ```
 
+---
+
 ### context.preamble.show
 
 **Request:**
@@ -514,6 +532,8 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
   }
 }
 ```
+
+---
 
 ### context.preamble.save
 
@@ -544,6 +564,8 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
 }
 ```
 
+---
+
 ### context.clear
 
 **Request:**
@@ -571,6 +593,8 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
   }
 }
 ```
+
+---
 
 ## Implementation Notes
 
@@ -608,6 +632,8 @@ Context sync is manual-only to avoid noise and respect agent autonomy:
 **Rationale:** Context is volatile and session-specific. Auto-syncing would
 create unnecessary churn. Manual sync gives agents control over when and what to
 share.
+
+---
 
 ## Best Practices
 
@@ -658,6 +684,8 @@ state. Install the thrum Claude Code plugin and use it regularly.
 
 Only sync context that is useful to other agents or future sessions on different
 machines. Local notes and WIP context can stay local.
+
+---
 
 ## Next Steps
 
