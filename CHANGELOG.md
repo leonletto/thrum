@@ -43,6 +43,17 @@ visibility into v0.10.6 authors until they upgrade.
 
 ### Fixed
 
+- **Backstop nudges only locally-resident recipients (thrum-wo2z)** — the
+  daemon backstop's 15-minute ticker scanned unread deliveries without a
+  residency filter; agent registrations synced from remote daemons pass the
+  alive-window check, so local sessions were woken every 15 minutes for other
+  agents' mail (and spool envelopes accumulated unbounded for remote agents —
+  one host had 107). The scan now applies an identity-file-based residency
+  predicate (the same notion of "local" the inbox uses), with a
+  defense-in-depth guard at the dispatcher covering both the tmux nudge and
+  the spool write. Resident-recipient behavior is unchanged. Deploy note:
+  spool envelopes accumulated pre-fix are not removed automatically — a
+  one-time cleanup of non-resident dirs under `.thrum/spool/` is recommended.
 - **Duplicate message_id in relayed history no longer stalls inbound sync
   (thrum-lv9x)** — durable-lane snapshot rows (`messages-v2` LWW upsert, which
   writes no events-table record) collided with the original event arriving
