@@ -171,3 +171,31 @@ func TestResolveBootExposureGate_UndetectableTrustsDeterminateCache(t *testing.T
 		t.Fatalf("undetectable + determinate private cache ⇒ auto-heal ON, got %+v", out)
 	}
 }
+
+// Review #2 (MINOR): a nil Sync stanza on a non-local-only daemon must be
+// materialised via MigrateLegacySync so the default a-sync mechanism is
+// preserved — a bare config.SyncConfig{Enabled:true} (no Mechanisms) would be
+// kept verbatim by MigrateLegacySync at load and SUPPRESS a-sync (the same
+// suppression shape fixed in init.go; a T13 forward-port footgun).
+func TestResolveBootExposureGate_NilSyncPreservesAsyncMechanism(t *testing.T) {
+	calls := 0
+	cfg := &config.ThrumConfig{Daemon: config.DaemonConfig{LocalOnly: false}} // Sync == nil
+	resolveBootExposureGate(context.Background(), cfg, exposureGateDeps{
+		originURL:  expRemote,
+		prober:     proberReturning(thrumSync.VisPrivate, &calls),
+		saveConfig: func(*config.ThrumConfig) error { return nil },
+		warn:       func(string) {},
+	})
+	if cfg.Daemon.Sync == nil {
+		t.Fatal("nil Sync must be materialised")
+	}
+	hasAsync := false
+	for _, m := range cfg.Daemon.Sync.Mechanisms {
+		if m.Mechanism == "a-sync" {
+			hasAsync = true
+		}
+	}
+	if !hasAsync {
+		t.Fatalf("nil-Sync materialisation must preserve the a-sync mechanism (MigrateLegacySync), got %+v", cfg.Daemon.Sync)
+	}
+}

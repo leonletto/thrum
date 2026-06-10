@@ -5983,7 +5983,13 @@ type exposureGateOutcome struct {
 // testable without a daemon bounce.
 func resolveBootExposureGate(ctx context.Context, cfg *config.ThrumConfig, deps exposureGateDeps) exposureGateOutcome {
 	if cfg.Daemon.Sync == nil {
-		cfg.Daemon.Sync = &config.SyncConfig{Enabled: true} // first boot w/o init: establish the stanza
+		// First boot w/o init: materialise the stanza via MigrateLegacySync so
+		// the load-time default (incl. the a-sync mechanism when not local-only)
+		// is preserved (thrum-44mt review #2). A bare &SyncConfig{Enabled:true}
+		// would be kept verbatim by MigrateLegacySync at the next load and
+		// SUPPRESS the a-sync mechanism — the same shape fixed in init.go.
+		migrated := config.MigrateLegacySync(*cfg)
+		cfg.Daemon.Sync = migrated.Daemon.Sync
 	}
 	gate := thrumSync.ResolveExposureGate(ctx, thrumSync.GateInput{
 		OriginURL:        strings.TrimSpace(deps.originURL),
