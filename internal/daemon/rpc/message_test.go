@@ -1542,7 +1542,7 @@ func TestMessageMarkRead(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected *SessionStartResponse, got %T", sessionResp)
 	}
-	sessionID := sessionStartResp.SessionID
+	_ = sessionStartResp.SessionID // thrum-b6qw: read-state is per-agent now (message_deliveries), not per-session
 
 	// Create message handler
 	handler := NewMessageHandler(st)
@@ -1588,15 +1588,18 @@ func TestMessageMarkRead(t *testing.T) {
 			t.Errorf("expected marked_count 1, got %d", markReadResp.MarkedCount)
 		}
 
-		// Verify read record was created in database
+		// Verify a read-stamped delivery row was created for the caller.
+		// thrum-b6qw: read-truth is message_deliveries.read_at (message_reads
+		// retired); marking an authored-self legacy-broadcast read creates+stamps
+		// the caller's delivery row via the gate.
 		var count int
-		query := `SELECT COUNT(*) FROM message_reads WHERE message_id = ? AND session_id = ? AND agent_id = ?`
-		err = st.RawDB().QueryRow(query, messageIDs[0], sessionID, agentID).Scan(&count)
+		query := `SELECT COUNT(*) FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ? AND read_at IS NOT NULL`
+		err = st.RawDB().QueryRow(query, messageIDs[0], agentID).Scan(&count)
 		if err != nil {
-			t.Fatalf("failed to query message_reads: %v", err)
+			t.Fatalf("failed to query message_deliveries: %v", err)
 		}
 		if count != 1 {
-			t.Errorf("expected 1 read record, found %d", count)
+			t.Errorf("expected 1 read delivery row, found %d", count)
 		}
 	})
 
@@ -1620,16 +1623,19 @@ func TestMessageMarkRead(t *testing.T) {
 			t.Errorf("expected marked_count 2, got %d", markReadResp.MarkedCount)
 		}
 
-		// Verify all messages have read records
+		// Verify all messages have a read-stamped delivery row for the caller.
+		// thrum-b6qw: read-truth is message_deliveries.read_at (message_reads
+		// retired). messageIDs are authored-self legacy-broadcasts, so marking
+		// read creates+stamps the caller's row via the gate.
 		for _, msgID := range []string{messageIDs[1], messageIDs[2]} {
 			var exists bool
-			query := `SELECT EXISTS(SELECT 1 FROM message_reads WHERE message_id = ?)`
-			err = st.RawDB().QueryRow(query, msgID).Scan(&exists)
+			query := `SELECT EXISTS(SELECT 1 FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ? AND read_at IS NOT NULL)`
+			err = st.RawDB().QueryRow(query, msgID, agentID).Scan(&exists)
 			if err != nil {
-				t.Fatalf("failed to check read record for %s: %v", msgID, err)
+				t.Fatalf("failed to check read delivery row for %s: %v", msgID, err)
 			}
 			if !exists {
-				t.Errorf("expected read record for message %s", msgID)
+				t.Errorf("expected read delivery row for message %s", msgID)
 			}
 		}
 	})
@@ -1655,15 +1661,18 @@ func TestMessageMarkRead(t *testing.T) {
 			t.Errorf("expected marked_count 1, got %d", markReadResp.MarkedCount)
 		}
 
-		// Verify still only 1 record (not duplicated)
+		// Verify still only 1 delivery row for the caller (not duplicated).
+		// thrum-b6qw: read-truth is per (message, agent) in message_deliveries
+		// (message_reads retired); there is exactly one (message, agent) row
+		// regardless of re-marking.
 		var count int
-		query := `SELECT COUNT(*) FROM message_reads WHERE message_id = ? AND session_id = ?`
-		err = st.RawDB().QueryRow(query, messageIDs[0], sessionID).Scan(&count)
+		query := `SELECT COUNT(*) FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ?`
+		err = st.RawDB().QueryRow(query, messageIDs[0], agentID).Scan(&count)
 		if err != nil {
-			t.Fatalf("failed to query message_reads: %v", err)
+			t.Fatalf("failed to query message_deliveries: %v", err)
 		}
 		if count != 1 {
-			t.Errorf("expected 1 read record after re-marking, found %d", count)
+			t.Errorf("expected 1 read delivery row after re-marking, found %d", count)
 		}
 	})
 
@@ -1727,15 +1736,20 @@ func TestMessageMarkRead(t *testing.T) {
 			t.Errorf("expected other agent %s, got %s", agentID, otherAgents[0])
 		}
 
-		// Verify 2 read records exist (one per session)
+		// Verify 2 read delivery rows exist (author self + collaborator).
+		// thrum-b6qw: read-truth is per (message, agent) in
+		// message_deliveries.read_at; message_reads retired. messageIDs[0] is
+		// an authored-self legacy-broadcast: agentID holds a read self-row
+		// (self-delivery at send + re-marks) and agent2 created its own via the
+		// legacy-broadcast gate arm on marking read.
 		var count int
-		query := `SELECT COUNT(*) FROM message_reads WHERE message_id = ?`
+		query := `SELECT COUNT(*) FROM message_deliveries WHERE message_id = ? AND read_at IS NOT NULL`
 		err = st.RawDB().QueryRow(query, messageIDs[0]).Scan(&count)
 		if err != nil {
-			t.Fatalf("failed to count read records: %v", err)
+			t.Fatalf("failed to count read delivery rows: %v", err)
 		}
 		if count != 2 {
-			t.Errorf("expected 2 read records (one per session), found %d", count)
+			t.Errorf("expected 2 read delivery rows (author self + collaborator), found %d", count)
 		}
 
 		// Switch back to original agent
@@ -1781,7 +1795,11 @@ func TestMessageMarkRead(t *testing.T) {
 		}
 	})
 
-	t.Run("same agent, multiple sessions - both create separate read records", func(t *testing.T) {
+	t.Run("same agent, multiple sessions - single per-agent read row", func(t *testing.T) {
+		// thrum-b6qw: read-state is no longer session-scoped (message_reads
+		// retired) — read-truth is per (message, agent) in
+		// message_deliveries, so marking read from any session yields exactly
+		// ONE read row for the agent, not one per session.
 		// Start a second session for the same agent
 		sessionReq3 := SessionStartRequest{
 			AgentID: agentID,
@@ -1795,7 +1813,7 @@ func TestMessageMarkRead(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected *SessionStartResponse, got %T", sessionResp3)
 		}
-		session3ID := sessionStartResp3.SessionID
+		_ = sessionStartResp3.SessionID // read-state is per-agent now, not per-session
 
 		// Create a new message
 		sendReq := SendRequest{Content: "Multi-session test", CallerAgentID: agentID}
@@ -1831,15 +1849,18 @@ func TestMessageMarkRead(t *testing.T) {
 			t.Errorf("expected marked_count 1, got %d", markReadResp.MarkedCount)
 		}
 
-		// Verify read record exists for session3
+		// Verify exactly ONE read-stamped delivery row for the agent (not
+		// per-session). thrum-b6qw: read-truth is per (message, agent) in
+		// message_deliveries.read_at; message_reads is retired and no longer
+		// written.
 		var count int
-		query := `SELECT COUNT(*) FROM message_reads WHERE message_id = ? AND session_id = ?`
-		err = st.RawDB().QueryRow(query, newMsgID, session3ID).Scan(&count)
+		query := `SELECT COUNT(*) FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ? AND read_at IS NOT NULL`
+		err = st.RawDB().QueryRow(query, newMsgID, agentID).Scan(&count)
 		if err != nil {
-			t.Fatalf("failed to query message_reads: %v", err)
+			t.Fatalf("failed to query message_deliveries: %v", err)
 		}
 		if count != 1 {
-			t.Errorf("expected 1 read record for session3, found %d", count)
+			t.Errorf("expected 1 read delivery row for agent, found %d", count)
 		}
 	})
 }
@@ -2143,11 +2164,18 @@ func TestInboxGroupMembership(t *testing.T) {
 	})
 
 	t.Run("non_member_does_not_see_group_messages", func(t *testing.T) {
-		// Sender is not in @reviewers, should NOT see that message when filtering for_agent
+		// Sender is not in @reviewers, should NOT see that message when filtering
+		// for_agent. ExcludeSelf mirrors the production CLI inbox
+		// (internal/cli/inbox.go always sets exclude_self=true) — thrum-b6qw: the
+		// author now holds a read-stamped self-delivery row (Option C), which
+		// would otherwise make their own @everyone broadcast match the Part-4
+		// broadcast-delivery arm.
 		listReq, _ := json.Marshal(ListMessagesRequest{
-			ForAgent:     senderID,
-			ForAgentRole: "coordinator",
-			PageSize:     50,
+			ForAgent:      senderID,
+			ForAgentRole:  "coordinator",
+			ExcludeSelf:   true,
+			CallerAgentID: senderID,
+			PageSize:      50,
 		})
 		resp, err := msgHandler.HandleList(context.Background(), listReq)
 		if err != nil {
@@ -2169,8 +2197,9 @@ func TestInboxGroupMembership(t *testing.T) {
 		if foundReview {
 			t.Error("coordinator should NOT see message to @reviewers (not a member)")
 		}
-		// Coordinator is the sender of the @everyone broadcast — excluded from
-		// message_deliveries. Sender does not see own broadcast in inbox.
+		// Coordinator is the sender of the @everyone broadcast — stripped by
+		// exclude_self (the author's self-delivery row exists for read-state
+		// bookkeeping, but the CLI inbox never shows own messages).
 		if foundEveryone {
 			t.Error("coordinator (sender) should NOT see own @everyone broadcast in inbox")
 		}

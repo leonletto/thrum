@@ -462,14 +462,16 @@ func TestSendToStrictTo_ImplicitBroadcastBlocked(t *testing.T) {
 		t.Errorf("expected 0 delivery records for bystander, got %d (implicit broadcast bug)", bystanderDeliveries)
 	}
 
-	// Confirm total deliveries == 1 (target only)
+	// Confirm total recipient deliveries == 1 (target only). The sender's own
+	// read-stamped self-delivery row (thrum-b6qw Option C) is excluded — it is
+	// My-Inbox bookkeeping, not an implicit-broadcast leak.
 	var totalDeliveries int
 	_ = st.RawDB().QueryRow(
-		`SELECT COUNT(*) FROM message_deliveries WHERE message_id = ?`,
-		sendResp.MessageID,
+		`SELECT COUNT(*) FROM message_deliveries WHERE message_id = ? AND recipient_agent_id != ?`,
+		sendResp.MessageID, senderID,
 	).Scan(&totalDeliveries)
 	if totalDeliveries != 1 {
-		t.Errorf("expected exactly 1 total delivery record, got %d", totalDeliveries)
+		t.Errorf("expected exactly 1 total recipient delivery record, got %d", totalDeliveries)
 	}
 }
 

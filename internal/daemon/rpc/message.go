@@ -2302,10 +2302,17 @@ func (h *MessageHandler) loadRecipientsForMessages(ctx context.Context, messageI
 		args = append(args, messageID)
 	}
 
-	query := `SELECT message_id, recipient_agent_id, delivered_at, seen_at, read_at
-		FROM message_deliveries
-		WHERE message_id IN (` + strings.Join(placeholders, ",") + `)
-		ORDER BY message_id, recipient_agent_id`
+	// thrum-b6qw: exclude the author's own read-stamped self-delivery row
+	// (recipient_agent_id = the message author). That row is internal My-Inbox
+	// read-state bookkeeping (Option C, created at send), NOT a send target — the
+	// outbox/get "recipients" view means who the message was sent TO. Excluding
+	// it keeps ReadCount = recipients-who-read, not recipients+self.
+	query := `SELECT md.message_id, md.recipient_agent_id, md.delivered_at, md.seen_at, md.read_at
+		FROM message_deliveries md
+		JOIN messages m ON m.message_id = md.message_id
+		WHERE md.message_id IN (` + strings.Join(placeholders, ",") + `)
+		  AND md.recipient_agent_id != m.agent_id
+		ORDER BY md.message_id, md.recipient_agent_id`
 	rows, err := h.state.DB().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -2659,16 +2666,13 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 			alsoReadBy[messageID] = otherAgents
 		}
 
-		// Insert or update read record
-		_, err = tx.Exec(`
-			INSERT INTO message_reads (message_id, session_id, agent_id, read_at)
-			VALUES (?, ?, ?, ?)
-			ON CONFLICT (message_id, session_id)
-			DO UPDATE SET read_at = excluded.read_at, agent_id = excluded.agent_id
-		`, messageID, sessionID, agentID, now)
-		if err != nil {
-			return nil, fmt.Errorf("insert message_read: %w", err)
-		}
+		// thrum-b6qw (port of tcqw): the message_reads writer is retired.
+		// Read-state is now recorded solely on message_deliveries.read_at via
+		// the message.receipt event emitted below (projector.applyMessageReceipt
+		// creates+stamps the row through the qb62 gate, covering delivery-backed,
+		// legacy-broadcast, and authored-self classes). The message_reads table
+		// is kept for back-compat (cascade-deletes untouched) but no longer
+		// written; team.go's unread query reads message_deliveries.read_at.
 
 		receiptEvents = append(receiptEvents, types.MessageReceiptEvent{
 			Type:        "message.receipt",

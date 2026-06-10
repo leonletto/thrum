@@ -54,10 +54,27 @@ import (
 //     no auto-restart of the child between scheduled ticks). Idempotent —
 //     re-running the migration on a DB that already has the column is a
 //     no-op via columnSet check.
+//   - v40: read-state unification marker (thrum-b6qw, backport of thrum-tcqw).
+//     NO DDL — runMigrations has no v40 block; the version stamp alone marks
+//     the crossing. state.NewState detects the v39→v40 crossing (pre-Migrate
+//     version < SchemaVersionReadState) and runs the one-time, data-only
+//     BackfillReadState: Pass 1 stamps existing local unread delivery rows
+//     read; Pass 2 creates read-stamped rows for the inbox-visible
+//     no-delivery-row class (legacy broadcasts). Local-only + leak-guarded
+//     (hostname-anchored LocalDaemonIDs — thrum-edhn); peer-agent rows are
+//     never touched. Collapses thrum-agents' v42(buggy)+v43(corrective) pair
+//     into ONE clean marker running the already-fixed hostname-anchored
+//     backfill.
 //
 // v29 is a deliberate gap (reserved for MB-1.S6 on the substrate plan);
 // runMigrations handles all skipped/no-op versions cleanly.
-const CurrentVersion = 39
+const CurrentVersion = 40
+
+// SchemaVersionReadState is the read-state unification crossing (thrum-b6qw,
+// backport of thrum-tcqw): at the first boot where the pre-migration version is
+// below this and the post-migration version is at/above it, state.NewState runs
+// the one-time BackfillReadState. Data-only; no DDL is attached to this version.
+const SchemaVersionReadState = 40
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -262,7 +279,10 @@ func createTables(tx *sql.Tx) error {
 			UNIQUE(session_id, scope_type, scope_value, mention_role)
 		)`,
 
-		// Message reads table (per-session read tracking, local-only, no git sync)
+		// Message reads table (per-session read tracking, local-only, no git sync).
+		// DEPRECATED (thrum-tcqw/b6qw): read-truth unified on
+		// message_deliveries.read_at; table retained for back-compat, no live
+		// readers/writers as of v40 (cascade-deletes only).
 		`CREATE TABLE IF NOT EXISTS message_reads (
 			message_id TEXT NOT NULL,
 			session_id TEXT NOT NULL,
@@ -974,7 +994,10 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 
 	// Migration from version 4 to 5: Add message read tracking
 	if startVersion < 5 && endVersion >= 5 {
-		// Create message_reads table
+		// Create message_reads table.
+		// DEPRECATED (thrum-tcqw/b6qw): read-truth unified on
+		// message_deliveries.read_at; table retained for back-compat, no live
+		// readers/writers as of v40 (cascade-deletes only).
 		_, err = tx.Exec(`
 			CREATE TABLE IF NOT EXISTS message_reads (
 				message_id TEXT NOT NULL,
