@@ -30,6 +30,82 @@ func lv9xMessageCreateEvent(eventID string, seq int64, messageID, content string
 	}
 }
 
+// TestApplyAndCheckpoint_DurableLaneRow_EventCommitsAndAdvances is the
+// CANONICAL lv9x collision (thrum-5pan forensics — fleet-wide, no minter):
+// the duplicate-carrying event is the message's ORIGINAL (and only) create
+// event; the messages row was already upserted by the DURABLE LANE
+// (messages-v2 snapshot lines, LWW by message_id) which writes NO events-table
+// record. Pre-fix: HasEvent=false (no record) → projector plain-INSERT
+// collides → the event record never sticks → HasEvent stays false FOREVER →
+// eternal re-pull/abort. Post-fix, applying the original event over a
+// durable-lane-seeded row must do all three:
+//  1. COMMIT the events-table record (HasEvent flips true) — the regression
+//     lock: a rollback that discards the event record is THE eternal-loop
+//     driver; any future refactor that wraps the events insert and projector
+//     apply in one tx and rolls back on dup re-arms the storm.
+//  2. No-op the messages insert — the durable-lane row is the LWW-delivered
+//     version, so dropping the event's body content is CORRECT, not data loss.
+//  3. Advance the checkpoint past the event.
+func TestApplyAndCheckpoint_DurableLaneRow_EventCommitsAndAdvances(t *testing.T) {
+	st := createTestStateForSync(t)
+	applier := NewSyncApplier(st)
+	ctx := context.Background()
+
+	// Seed the durable-lane outcome directly: messages row present (LWW
+	// content), NO events-table record for it.
+	if _, err := st.RawDB().Exec(`INSERT INTO messages (message_id, agent_id, session_id, created_at, body_format, body_content)
+		VALUES ('msg_LV9X_DL', 'remote_author', 'ses_r', '2026-06-10T08:00:00Z', 'markdown', 'durable-lane LWW content')`); err != nil {
+		t.Fatalf("seed durable-lane row: %v", err)
+	}
+
+	// The message's ORIGINAL create event arrives via the event lane.
+	ev := lv9xMessageCreateEvent("evt_LV9X_DL1", 300, "msg_LV9X_DL", "event-lane content")
+	applied, skipped, err := applier.ApplyAndCheckpoint(ctx, "d_remote", []eventlog.Event{ev}, 301, false)
+	if err != nil {
+		t.Fatalf("original event over a durable-lane row must apply cleanly (the canonical lv9x stall): %v", err)
+	}
+	if applied != 1 || skipped != 0 {
+		t.Errorf("applied=%d skipped=%d, want applied=1 (the event itself is new)", applied, skipped)
+	}
+
+	// 1. The events-table record COMMITTED — HasEvent is now true, so the
+	// next pull skips instead of re-colliding (kills the eternal loop).
+	var hasEvent int
+	if err := st.RawDB().QueryRow(`SELECT COUNT(*) FROM events WHERE event_id = 'evt_LV9X_DL1'`).Scan(&hasEvent); err != nil {
+		t.Fatalf("query events: %v", err)
+	}
+	if hasEvent != 1 {
+		t.Errorf("events record = %d rows, want 1 — the dup-no-op must COMMIT the event record, not lose it to a rollback (eternal-loop regression lock)", hasEvent)
+	}
+
+	// 2. The messages insert no-op'd: durable-lane LWW content pinned.
+	var content string
+	if err := st.RawDB().QueryRow(`SELECT body_content FROM messages WHERE message_id = 'msg_LV9X_DL'`).Scan(&content); err != nil {
+		t.Fatalf("query message: %v", err)
+	}
+	if content != "durable-lane LWW content" {
+		t.Errorf("content = %q, want the durable-lane LWW version pinned (dropping the event body is correct — the lane already delivered latest)", content)
+	}
+
+	// 3. Checkpoint advanced past the event.
+	seq, err := applier.GetCheckpoint("d_remote")
+	if err != nil {
+		t.Fatalf("get checkpoint: %v", err)
+	}
+	if seq != 300 {
+		t.Errorf("checkpoint = %d, want 300 (advanced past the formerly-pinning event)", seq)
+	}
+
+	// And the loop is dead: a re-pull of the same event is a pure skip.
+	applied, skipped, err = applier.ApplyAndCheckpoint(ctx, "d_remote", []eventlog.Event{ev}, 301, false)
+	if err != nil {
+		t.Fatalf("re-pull: %v", err)
+	}
+	if applied != 0 || skipped != 1 {
+		t.Errorf("re-pull applied=%d skipped=%d, want 0/1 (HasEvent now catches it)", applied, skipped)
+	}
+}
+
 // TestApplyAndCheckpoint_DupMessageMidBatch_AdvancesPastIt is the stall
 // regression: [msgA, dup-of-msgA under a new event_id, msgB] must apply
 // without error, msgB must land, and the checkpoint must advance to the
