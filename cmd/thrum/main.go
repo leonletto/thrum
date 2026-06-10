@@ -5953,6 +5953,66 @@ func exposureWarningRecipients(ctx context.Context, permPkg *permission.Permissi
 	return out
 }
 
+// exposureGateDeps carries the injectable dependencies for resolveBootExposureGate
+// so the boot-time assembly (originURL → probe → classify → gate → persist →
+// warn) is unit-testable without a live daemon or network (thrum-44mt review #1 —
+// the structural substitute for the deferred T11 Step-5 live smoke).
+type exposureGateDeps struct {
+	originURL  string                          // origin remote URL (already read; any form)
+	prober     thrumSync.Prober                // anonymous visibility probe
+	saveConfig func(*config.ThrumConfig) error // persist detected visibility
+	warn       func(canonRemote string)        // emit the exposure warning (transition only)
+}
+
+// exposureGateOutcome is the resolved boot decision the caller applies to the
+// session (localOnly + the distinct status reason).
+type exposureGateOutcome struct {
+	LocalOnly bool
+	Reason    string
+}
+
+// resolveBootExposureGate runs the a-sync exposure gate once at boot: it derives
+// the gate decision from cfg's cached visibility/remote/override + a fresh probe,
+// stamps the detected visibility back onto cfg (persisting via deps.saveConfig),
+// and on a transition INTO the exposed state fires deps.warn. Returns the
+// resolved localOnly + reason.
+//
+// The caller invokes this ONLY inside the syncDir-exists block and ONLY when
+// remote sync isn't already disabled, so peer/email-only and explicit --local
+// users are never probed. Extracted from runDaemon so the assembly is unit-
+// testable without a daemon bounce.
+func resolveBootExposureGate(ctx context.Context, cfg *config.ThrumConfig, deps exposureGateDeps) exposureGateOutcome {
+	if cfg.Daemon.Sync == nil {
+		cfg.Daemon.Sync = &config.SyncConfig{Enabled: true} // first boot w/o init: establish the stanza
+	}
+	gate := thrumSync.ResolveExposureGate(ctx, thrumSync.GateInput{
+		OriginURL:        strings.TrimSpace(deps.originURL),
+		CachedVisibility: thrumSync.Visibility(cfg.Daemon.Sync.DetectedVisibility),
+		CachedRemote:     cfg.Daemon.Sync.DetectedRemote,
+		Override:         cfg.Daemon.Sync.PublicExposureOverride,
+	}, deps.prober)
+
+	cfg.Daemon.Sync.DetectedVisibility = string(gate.Visibility)
+	cfg.Daemon.Sync.DetectedRemote = gate.CanonicalRemote
+	if deps.saveConfig != nil {
+		if serr := deps.saveConfig(cfg); serr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to persist detected visibility: %v\n", serr)
+		}
+	}
+
+	var out exposureGateOutcome
+	if gate.LocalOnly {
+		out.LocalOnly = true
+		out.Reason = gate.Reason
+		fmt.Fprintf(os.Stderr, "  Mode:        %s\n", gate.Reason)
+		slog.Warn("a-sync.exposure", "reason", gate.Reason, "remote", gate.CanonicalRemote, "visibility", gate.Visibility)
+	}
+	if gate.TransitionedToExposed && deps.warn != nil {
+		deps.warn(gate.CanonicalRemote)
+	}
+	return out
+}
+
 // runDaemon runs the daemon server in the foreground.
 func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// Profile instrumentation gate (thrum-bpq5 substrate). Reads
@@ -6161,37 +6221,25 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		// never reach here, so we never probe for them). The gate derives this
 		// session's effective localOnly (immutable until restart), persists the
 		// detected visibility, and signals a transition into the exposed state.
-		var exposureReason, exposureRemote string
-		var exposureTransitioned bool
+		// Assembly logic lives in resolveBootExposureGate (unit-tested with
+		// injected deps); this block only supplies the live deps + applies the
+		// outcome.
+		var exposureReason string
 		if !localOnly { // an explicit --local / THRUM_LOCAL already disabled remote sync
-			if thrumCfg.Daemon.Sync == nil {
-				thrumCfg.Daemon.Sync = &config.SyncConfig{Enabled: true} // first boot w/o init: establish the stanza
-			}
 			originURL, _ := safecmd.Git(ctx, absPath, "remote", "get-url", "origin")
-			prober := func(c context.Context, probeURL string) thrumSync.Visibility {
-				out, perr := safecmd.GitProbeAnonymous(c, probeURL)
-				return thrumSync.ClassifyVisibility(out, perr)
-			}
-			gate := thrumSync.ResolveExposureGate(ctx, thrumSync.GateInput{
-				OriginURL:        strings.TrimSpace(string(originURL)),
-				CachedVisibility: thrumSync.Visibility(thrumCfg.Daemon.Sync.DetectedVisibility),
-				CachedRemote:     thrumCfg.Daemon.Sync.DetectedRemote,
-				Override:         thrumCfg.Daemon.Sync.PublicExposureOverride,
-			}, prober)
-
-			thrumCfg.Daemon.Sync.DetectedVisibility = string(gate.Visibility)
-			thrumCfg.Daemon.Sync.DetectedRemote = gate.CanonicalRemote
-			if serr := config.SaveThrumConfig(thrumDir, thrumCfg); serr != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to persist detected visibility: %v\n", serr)
-			}
-			if gate.LocalOnly {
+			outcome := resolveBootExposureGate(ctx, thrumCfg, exposureGateDeps{
+				originURL: string(originURL),
+				prober: func(c context.Context, probeURL string) thrumSync.Visibility {
+					out, perr := safecmd.GitProbeAnonymous(c, probeURL)
+					return thrumSync.ClassifyVisibility(out, perr)
+				},
+				saveConfig: func(c *config.ThrumConfig) error { return config.SaveThrumConfig(thrumDir, c) },
+				warn:       func(canonRemote string) { emitExposureWarning(ctx, permPkg, st, thrumCfg, canonRemote) },
+			})
+			if outcome.LocalOnly {
 				localOnly = true
-				exposureReason = gate.Reason
-				fmt.Fprintf(os.Stderr, "  Mode:        %s\n", gate.Reason)
-				slog.Warn("a-sync.exposure", "reason", gate.Reason, "remote", gate.CanonicalRemote, "visibility", gate.Visibility)
 			}
-			exposureTransitioned = gate.TransitionedToExposed
-			exposureRemote = gate.CanonicalRemote
+			exposureReason = outcome.Reason
 		}
 
 		syncer := thrumSync.NewSyncer(absPath, syncDir, localOnly)
@@ -6203,9 +6251,6 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		syncLoop.SetIngester(st)
 		if exposureReason != "" {
 			syncLoop.SetLocalOnlyReason(exposureReason)
-		}
-		if exposureTransitioned {
-			emitExposureWarning(ctx, permPkg, st, thrumCfg, exposureRemote)
 		}
 
 		// thrum-s6os v0.10.6 — wire the structural-event sync path.
