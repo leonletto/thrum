@@ -56,6 +56,16 @@ type Backstop struct {
 	AgeCutoff time.Duration    // typical: 15 * time.Minute
 	Interval  time.Duration    // typical: 15 * time.Minute
 	Now       func() time.Time // injected for tests; Run defaults to time.Now
+	// IsResident is the recipient-residency predicate (thrum-wo2z): the agents
+	// table includes SYNCED REMOTE registrations (sync replicates them and
+	// refreshes last_seen_at), so the scan's alive-window does NOT imply the
+	// recipient lives on this daemon. Without this filter, a delivery for a
+	// remote-resident recipient synced into the local DB wakes a local session
+	// every tick forever (the leonair 15-minute phantom-wake metronome). The
+	// daemon wires it to nudge.HasLocalIdentity — identity-file-based, the
+	// same residency notion the inbox side resolves from. nil = legacy
+	// allow-all (existing constructors/tests unchanged).
+	IsResident func(agentID string) bool
 }
 
 // Run blocks on ctx and ticks at Backstop.Interval. Returns when ctx is done.
@@ -118,6 +128,13 @@ func (b *Backstop) Tick(ctx context.Context) error {
 	}
 
 	for _, bl := range backlogs {
+		// thrum-wo2z: skip recipients not resident on this daemon — their
+		// unread state is genuinely theirs, on their own box; nudging a local
+		// session for it is the phantom-wake defect.
+		if b.IsResident != nil && !b.IsResident(bl.agentID) {
+			slog.Debug("[backstop] skip non-resident recipient", "agent", bl.agentID, "unread", bl.count)
+			continue
+		}
 		if err := b.Dispatch.Dispatch(ctx, bl.agentID, bl.count); err != nil {
 			slog.Warn("[backstop] dispatch failed", "agent", bl.agentID, "err", err)
 			// continue — one bad nudge shouldn't stop the rest

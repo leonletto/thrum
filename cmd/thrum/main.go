@@ -7872,6 +7872,13 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		Dispatch:  newBackstopDispatcher(thrumDir),
 		AgeCutoff: 15 * time.Minute,
 		Interval:  15 * time.Minute,
+		// thrum-wo2z: residency predicate — the agents table includes synced
+		// remote registrations, so the scan must skip recipients with no local
+		// identity file (else every synced-in unread delivery for a remote
+		// agent wakes a local session each tick, forever).
+		IsResident: func(agentID string) bool {
+			return nudge.HasLocalIdentity(thrumDir, agentID)
+		},
 	}
 	go bs.Run(ctx)
 
