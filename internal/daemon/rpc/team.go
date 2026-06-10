@@ -485,8 +485,14 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 		}
 		_ = h.state.DB().QueryRowContext(ctx, mentionQuery, args...).Scan(&members[i].InboxTotal)
 
-		// Unread: same filter, minus messages already read
-		unreadQuery := mentionQuery + " AND m.message_id NOT IN (SELECT message_id FROM message_reads WHERE agent_id = ?)"
+		// Unread: same filter, minus messages already read. thrum-b6qw (port of
+		// tcqw): read-truth unified on message_deliveries.read_at; message_reads
+		// retired (this was its last live reader). A message is read for the
+		// agent when it holds a delivery row with read_at set.
+		unreadQuery := mentionQuery + ` AND m.message_id NOT IN (
+			SELECT md.message_id FROM message_deliveries md
+			WHERE md.recipient_agent_id = ? AND md.read_at IS NOT NULL
+		)`
 		unreadArgs := append(args, m.AgentID)
 		_ = h.state.DB().QueryRowContext(ctx, unreadQuery, unreadArgs...).Scan(&members[i].InboxUnread)
 	}

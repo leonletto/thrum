@@ -88,15 +88,18 @@ func TestHandleSendSnapshotsRecipients(t *testing.T) {
 		t.Fatalf("expected recipients %s and %s, got %#v", implAPI, implUI, got)
 	}
 
+	// Count recipient delivery rows only. The sender's own read-stamped
+	// self-delivery row (thrum-b6qw Option C) is excluded — it is My-Inbox
+	// bookkeeping, not a recipient snapshot.
 	var count int
 	if err := st.RawDB().QueryRow(
-		`SELECT COUNT(*) FROM message_deliveries WHERE message_id = ?`,
-		sendResp.MessageID,
+		`SELECT COUNT(*) FROM message_deliveries WHERE message_id = ? AND recipient_agent_id != ?`,
+		sendResp.MessageID, senderID,
 	).Scan(&count); err != nil {
 		t.Fatalf("count message deliveries: %v", err)
 	}
 	if count != 2 {
-		t.Fatalf("expected 2 delivery rows, got %d", count)
+		t.Fatalf("expected 2 recipient delivery rows, got %d", count)
 	}
 }
 

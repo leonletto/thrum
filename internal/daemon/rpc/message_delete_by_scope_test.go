@@ -178,7 +178,10 @@ func TestMessageDeleteByScope(t *testing.T) {
 		}
 		msgID := sendResponse.MessageID
 
-		// Mark it as read to populate message_reads
+		// Mark it as read to populate read-state. thrum-b6qw: read-truth lives in
+		// message_deliveries.read_at now (message_reads retired) — markRead routes
+		// through the receipt/qb62 gate, and the author already has a self-delivery
+		// row from send (Option C).
 		markReadReq := MarkReadRequest{
 			MessageIDs:    []string{msgID},
 			CallerAgentID: agentID,
@@ -202,12 +205,12 @@ func TestMessageDeleteByScope(t *testing.T) {
 
 		var readCount int
 		if err := st.RawDB().QueryRow(
-			"SELECT COUNT(*) FROM message_reads WHERE message_id = ?", msgID,
+			"SELECT COUNT(*) FROM message_deliveries WHERE message_id = ?", msgID,
 		).Scan(&readCount); err != nil {
-			t.Fatalf("query reads: %v", err)
+			t.Fatalf("query deliveries: %v", err)
 		}
 		if readCount == 0 {
-			t.Error("expected reads to exist before deletion")
+			t.Error("expected delivery rows to exist before deletion")
 		}
 
 		// Delete by scope
@@ -229,7 +232,7 @@ func TestMessageDeleteByScope(t *testing.T) {
 		}
 
 		// Verify all related records are gone
-		for _, table := range []string{"message_refs", "message_reads", "message_scopes", "messages"} {
+		for _, table := range []string{"message_refs", "message_deliveries", "message_scopes", "messages"} {
 			var cnt int
 			if err := st.RawDB().QueryRow(
 				"SELECT COUNT(*) FROM "+table+" WHERE message_id = ?", msgID,
