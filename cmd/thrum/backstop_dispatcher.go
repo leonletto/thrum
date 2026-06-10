@@ -41,6 +41,17 @@ func newBackstopDispatcher(thrumDir string) backstop.Dispatcher {
 }
 
 func (d *backstopDispatcher) Dispatch(ctx context.Context, agentID string, unreadCount int) error {
+	// thrum-wo2z defense-in-depth (mirrors the 0.11 dispatch-layer guard): a
+	// non-resident recipient gets NEITHER the tmux nudge NOR the spool
+	// envelope. The primary residency filter lives in backstop.Tick; this
+	// guard keeps the dispatcher safe standalone — without it, spool files
+	// for remote agents accumulate forever (the janitor preserves backstop-
+	// entries, and a remote agent never reads a local spool).
+	if !nudge.HasLocalIdentity(d.thrumDir, agentID) {
+		slog.Info("[backstop] skip non-local agent", "agent", agentID, "unread_count", unreadCount)
+		return nil
+	}
+
 	// Fire tmux nudge for the agent. nudge.DispatchTmux is fire-and-forget
 	// and silently no-ops if the agent has no live tmux session, which is
 	// the right behavior here — the spool write below covers the dead-pane
