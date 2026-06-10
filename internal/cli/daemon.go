@@ -149,8 +149,13 @@ func DaemonStop(repoPath string) error {
 		return fmt.Errorf("failed to send SIGTERM to process %d: %w", pidInfo.PID, err)
 	}
 
-	// Wait for daemon to stop (with timeout)
-	timeout := time.After(10 * time.Second)
+	// Wait for daemon to stop (with timeout). Graceful shutdown now releases the
+	// inbound tsnet peer-RPC node before removing the PID file (thrum-oqao),
+	// bounded by daemon.tsnetShutdownTimeout (6s). Allow generous headroom over
+	// that bound plus the WS/socket teardown so a clean-but-slower stop is not
+	// misreported as a hang (and a restart's new process only binds after the
+	// old node is truly released).
+	timeout := time.After(15 * time.Second)
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 

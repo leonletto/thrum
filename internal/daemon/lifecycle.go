@@ -18,18 +18,30 @@ type WebSocketServer interface {
 	Port() int
 }
 
+// tsnetShutdownTimeout bounds how long graceful shutdown waits for the inbound
+// tsnet peer-RPC node to be released. The release must complete before the PID
+// file is removed (thrum-oqao), but it must not be able to wedge the stop
+// forever — if the node-release blocks past this budget, shutdown falls through
+// and proceeds (logged). tsnet.Server.Close() normally completes in well under
+// a second; this is generous headroom that still leaves margin under the
+// caller's stop-wait timeout (see internal/cli/daemon.go DaemonStop). A var (not
+// const) so tests can shrink it to exercise the fall-through path quickly.
+var tsnetShutdownTimeout = 6 * time.Second
+
 // Lifecycle manages the daemon lifecycle including signal handling and shutdown.
 type Lifecycle struct {
-	server       *Server
-	wsServer     WebSocketServer
-	pidFile      string
-	wsPortFile   string
-	repoPath     string    // Repository path this daemon serves
-	socketPath   string    // Unix socket path
-	lockFile     string    // Lock file path for flock
-	lock         *FileLock // File lock held for lifetime of daemon
-	shutdownCh   chan struct{}
-	shutdownOnce sync.Once
+	server        *Server
+	wsServer      WebSocketServer
+	pidFile       string
+	wsPortFile    string
+	repoPath      string    // Repository path this daemon serves
+	socketPath    string    // Unix socket path
+	lockFile      string    // Lock file path for flock
+	lock          *FileLock // File lock held for lifetime of daemon
+	shutdownCh    chan struct{}
+	shutdownOnce  sync.Once
+	preShutdownMu sync.Mutex                  // guards tsnetShutdown against a shutdown/Set race
+	tsnetShutdown func(context.Context) error // releases the inbound tsnet node; called before PID removal
 }
 
 // NewLifecycle creates a new lifecycle manager.
@@ -55,6 +67,18 @@ func (l *Lifecycle) SetRepoInfo(repoPath, socketPath string) {
 // This should be called before Run().
 func (l *Lifecycle) SetLockFile(lockFile string) {
 	l.lockFile = lockFile
+}
+
+// SetTsnetShutdown registers the inbound tsnet peer-RPC node release hook
+// (thrum-oqao). Graceful shutdown invokes it BEFORE removing the PID file so a
+// restart's new process cannot re-bind the same tsnet state dir while the old
+// node is still registered. The tsnet listener starts lazily (boot or
+// peer.join), so this may be called after Run() has begun — access is mutex
+// guarded. Safe to leave unset (no-op) when tsnet sync is disabled.
+func (l *Lifecycle) SetTsnetShutdown(fn func(context.Context) error) {
+	l.preShutdownMu.Lock()
+	l.tsnetShutdown = fn
+	l.preShutdownMu.Unlock()
 }
 
 // Run starts the server and handles signals until shutdown.
@@ -210,6 +234,16 @@ func (l *Lifecycle) shutdown() error {
 		// Continue with cleanup even if stop fails
 	}
 
+	// Step 5b (thrum-oqao): release the inbound tsnet peer-RPC node BEFORE
+	// removing the PID file. DaemonStop treats a missing PID file as "stopped",
+	// so if the tsnet node is still bound here, a restart's freshly-exec'd
+	// process re-binds the same tsnet state dir while the old node is still
+	// registered on the control plane — the two netstacks share one node key,
+	// and inbound peer-RPC (:9177) flaps (RST/EOF) until the overlap clears.
+	// Closing the node here, and blocking until it is released, makes the
+	// PID-file-gone signal truthfully mean "node released".
+	l.releaseTsnetNode()
+
 	// Step 6: Remove PID file
 	if err := RemovePIDFile(l.pidFile); err != nil {
 		fmt.Fprintf(os.Stderr, "Error removing PID file: %v\n", err)
@@ -227,6 +261,35 @@ func (l *Lifecycle) shutdown() error {
 
 	fmt.Fprintln(os.Stderr, "Graceful shutdown complete")
 	return nil
+}
+
+// releaseTsnetNode invokes the registered tsnet-node release hook (thrum-oqao)
+// and blocks until it completes, bounded by tsnetShutdownTimeout. The hook is
+// run in a goroutine so a stuck node-release cannot wedge the daemon stop
+// forever — on timeout we log and fall through, letting shutdown proceed. A
+// nil hook (tsnet sync disabled) is a no-op.
+func (l *Lifecycle) releaseTsnetNode() {
+	l.preShutdownMu.Lock()
+	hook := l.tsnetShutdown
+	l.preShutdownMu.Unlock()
+	if hook == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), tsnetShutdownTimeout)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() { done <- hook(ctx) }()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error releasing tsnet peer node: %v\n", err)
+		}
+	case <-ctx.Done():
+		fmt.Fprintf(os.Stderr, "Timed out releasing tsnet peer node after %s; proceeding with shutdown\n", tsnetShutdownTimeout)
+	}
 }
 
 // Shutdown triggers a graceful shutdown (can be called programmatically).
