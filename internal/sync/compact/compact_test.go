@@ -869,3 +869,174 @@ func TestCompactor_CompactReceiptStateFile_BelowThresholdSkips(t *testing.T) {
 		t.Errorf("file mtime changed (should not have been rewritten)")
 	}
 }
+
+// TestCompactor_CompactAll_ConcurrentNoRaceNoLoss is the load-bearing
+// regression test for thrum-35tn. CompactAll is invoked unguarded from every
+// sync-trigger AND daemon startup, so under a notify storm two CompactAll runs
+// execute concurrently and collide on the FIXED temp paths:
+//   - events.jsonl.filter.tmp  (jsonl.RemoveBeforeTimestamp — events journal)
+//   - <agentID>.jsonl.compact.tmp (compactJSONLByKey — messages-v2 / receipts)
+//
+// The collision is what produced the fleet-wide symptom: 86 sync.compactor_failed
+// / 0 successes with "rename temp file: no such file or directory" (ENOENT — the
+// loser renames after the winner already moved the shared temp away), so the
+// journal NEVER compacts and grows unbounded. The messages-v2 / receipts path
+// has no flock at all, so it collides the most readily; the events path is only
+// partly serialized by its source-fd flock (which is structurally wrong for a
+// rename-swap — see thrum-35tn).
+//
+// This launches N goroutines that all call CompactAll concurrently on the same
+// set of files and asserts:
+//  1. ZERO rename errors returned from any CompactAll (the 86/0 symptom).
+//  2. ZERO lost events — every output file equals the EXACT correct compaction
+//     of ALL its input: events journal = exact retention set, messages-v2 /
+//     receipts = exact last-wins dedup. No dropped, duplicated, or corrupted
+//     rows. This is the load-bearing assertion: a fix that only stops ENOENT but
+//     clobbers content is NOT acceptable.
+//
+// Run with -race.
+func TestCompactor_CompactAll_ConcurrentNoRaceNoLoss(t *testing.T) {
+	dir := t.TempDir()
+	thrumDir := filepath.Join(dir, ".thrum")
+	syncDir := filepath.Join(dir, "sync")
+	if err := os.MkdirAll(thrumDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().UTC()
+	retentionDays := 2
+	agentID := "agt_conc01"
+
+	// --- events.jsonl: half old (trimmed), half recent (kept). ---
+	const events = 4000
+	var jsonlRows []map[string]string
+	var timestamps []time.Time
+	keptEventIDs := make(map[string]bool)
+	for i := 0; i < events; i++ {
+		id := fmt.Sprintf("evt_%05d", i)
+		var ts time.Time
+		if i%2 == 0 {
+			ts = now.Add(-3 * 24 * time.Hour).Add(time.Duration(i) * time.Millisecond)
+		} else {
+			ts = now.Add(-1 * time.Hour).Add(time.Duration(i) * time.Millisecond)
+			keptEventIDs[id] = true
+		}
+		timestamps = append(timestamps, ts)
+		jsonlRows = append(jsonlRows, map[string]string{"event_id": id, "timestamp": ts.Format(time.RFC3339Nano)})
+	}
+	journalPath := filepath.Join(thrumDir, "events.jsonl")
+	writeJSONLFile(t, journalPath, jsonlRows)
+
+	db := openTestDB(t)
+	seedEventsTable(t, db, timestamps)
+
+	// --- messages-v2/<agent>.jsonl: each message_id appears twice; the
+	// SECOND ("latest") must win. Correct dedup = uniqueMsgs rows. ---
+	const uniqueMsgs = 3000
+	var msgRows []map[string]string
+	for i := 0; i < uniqueMsgs; i++ {
+		id := fmt.Sprintf("msg_%05d", i)
+		msgRows = append(msgRows, map[string]string{"message_id": id, "body": "first"})
+	}
+	for i := 0; i < uniqueMsgs; i++ {
+		id := fmt.Sprintf("msg_%05d", i)
+		msgRows = append(msgRows, map[string]string{"message_id": id, "body": "latest"})
+	}
+	msgFile := filepath.Join(syncDir, "messages-v2", agentID+".jsonl")
+	writeJSONLFile(t, msgFile, msgRows)
+
+	// --- receipts/<agent>.jsonl: each (message_id, agent_id) twice; latest wins. ---
+	const uniqueReceipts = 3000
+	var recRows []map[string]string
+	for i := 0; i < uniqueReceipts; i++ {
+		id := fmt.Sprintf("msg_%05d", i)
+		recRows = append(recRows, map[string]string{"message_id": id, "agent_id": agentID, "read_at": "first"})
+	}
+	for i := 0; i < uniqueReceipts; i++ {
+		id := fmt.Sprintf("msg_%05d", i)
+		recRows = append(recRows, map[string]string{"message_id": id, "agent_id": agentID, "read_at": "latest"})
+	}
+	recFile := filepath.Join(syncDir, "receipts", agentID+".jsonl")
+	writeJSONLFile(t, recFile, recRows)
+
+	c := compact.New(thrumDir, syncDir, retentionDays, 0)
+
+	// N concurrent CompactAll invocations, released simultaneously.
+	const goroutines = 32
+	errs := make([]error, goroutines)
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	wg.Add(goroutines)
+	for g := 0; g < goroutines; g++ {
+		go func(idx int) {
+			defer wg.Done()
+			<-start
+			errs[idx] = c.CompactAll(context.Background(), db)
+		}(g)
+	}
+	close(start)
+	wg.Wait()
+
+	// Assertion 1: ZERO rename errors (the 86/0 fleet symptom).
+	for idx, err := range errs {
+		if err != nil {
+			t.Errorf("CompactAll goroutine %d returned error: %v", idx, err)
+		}
+	}
+
+	// Assertion 2a: events journal == EXACT retention set (no lost/dup/leaked).
+	eventRows := readJSONLRows(t, journalPath)
+	gotEvents := make(map[string]int)
+	for _, r := range eventRows {
+		gotEvents[r["event_id"]]++
+	}
+	for id := range keptEventIDs {
+		if gotEvents[id] != 1 {
+			t.Errorf("events: kept id %s appears %d times, want 1 (event loss/dup)", id, gotEvents[id])
+		}
+	}
+	for id, n := range gotEvents {
+		if !keptEventIDs[id] {
+			t.Errorf("events: id %s (n=%d) should have been trimmed", id, n)
+		}
+	}
+	if len(eventRows) != len(keptEventIDs) {
+		t.Errorf("events journal has %d rows, want exactly %d", len(eventRows), len(keptEventIDs))
+	}
+
+	// Assertion 2b: messages-v2 == EXACT last-wins dedup (every id once, "latest").
+	msgRowsOut := readJSONLRows(t, msgFile)
+	gotMsgs := make(map[string]int)
+	for _, r := range msgRowsOut {
+		gotMsgs[r["message_id"]]++
+		if r["body"] != "latest" {
+			t.Errorf("messages: id %s has stale body %q, want \"latest\" (lost the last-wins row)", r["message_id"], r["body"])
+		}
+	}
+	if len(msgRowsOut) != uniqueMsgs {
+		t.Errorf("messages-v2 has %d rows, want exactly %d (event loss/corruption)", len(msgRowsOut), uniqueMsgs)
+	}
+	for id, n := range gotMsgs {
+		if n != 1 {
+			t.Errorf("messages: id %s appears %d times, want 1", id, n)
+		}
+	}
+
+	// Assertion 2c: receipts == EXACT last-wins dedup.
+	recRowsOut := readJSONLRows(t, recFile)
+	gotRec := make(map[string]int)
+	for _, r := range recRowsOut {
+		gotRec[r["message_id"]]++
+		if r["read_at"] != "latest" {
+			t.Errorf("receipts: id %s has stale read_at %q, want \"latest\"", r["message_id"], r["read_at"])
+		}
+	}
+	if len(recRowsOut) != uniqueReceipts {
+		t.Errorf("receipts has %d rows, want exactly %d (event loss/corruption)", len(recRowsOut), uniqueReceipts)
+	}
+	for id, n := range gotRec {
+		if n != 1 {
+			t.Errorf("receipts: id %s appears %d times, want 1", id, n)
+		}
+	}
+}
