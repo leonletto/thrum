@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/safedb"
@@ -40,6 +41,23 @@ type Compactor struct {
 	syncDir            string
 	retentionDays      int   // from daemon.events_retention_days; default 2
 	sizeThresholdBytes int64 // 10 MB by default
+
+	// thrum-35tn: single-flight guard. CompactAll is invoked unguarded from
+	// EVERY sync-trigger (Triggers.SyncOnWrite) AND daemon startup off ONE
+	// shared *Compactor, so a notify storm fires overlapping CompactAll runs.
+	// Two concurrent runs collide on the FIXED temp paths
+	// (events.jsonl.filter.tmp via jsonl.RemoveBeforeTimestamp;
+	// <agentID>.jsonl.compact.tmp via compactJSONLByKey) → rename ENOENT (the
+	// loser renames after the winner already moved the shared temp away — the
+	// 86/0 fleet failures) and, with interleaved appends, stale-inode clobber
+	// that can DROP events. The source-fd flock in writer.go cannot serialize
+	// this: it is per-inode, and compaction's rename SWAPS the inode, so two
+	// runs can hold locks on different inodes at once; compactJSONLByKey has no
+	// flock at all. Serializing at this one orchestrator makes the whole
+	// read-filter-rename atomic w.r.t. other compactions and covers all three
+	// file types in one place.
+	gateMu   sync.Mutex
+	inFlight bool
 }
 
 // New constructs a Compactor.
@@ -173,6 +191,32 @@ func (c *Compactor) CompactReceiptStateFile(ctx context.Context, agentID string)
 // messages-v2/*.jsonl files, then all receipts/*.jsonl files.
 // Idempotent; safe to call repeatedly.
 func (c *Compactor) CompactAll(ctx context.Context, db *safedb.DB) error {
+	// thrum-35tn: single-flight skip. If a compaction is already running, skip
+	// this invocation rather than racing it on the shared temp paths. Compaction
+	// is idempotent maintenance that re-runs at the next sync-trigger, so
+	// skipping is safe AND bounds the work during a storm (we don't queue N full
+	// journal scans behind each other — that queueing is part of what melts the
+	// box). The daemon-startup pass runs uncontended, so it never skips. Skip is
+	// preferred over a blocking mutex precisely because trailing compactions add
+	// no value: the next trigger compacts current state anyway.
+	c.gateMu.Lock()
+	if c.inFlight {
+		c.gateMu.Unlock()
+		slog.Debug("compaction.skipped_inflight")
+		return nil
+	}
+	c.inFlight = true
+	c.gateMu.Unlock()
+	// Panic-safe clear (mirrors internal/daemon pullGate): CompactAll does
+	// SQLite + file I/O, so a panic must NOT leave inFlight latched — that would
+	// wedge compaction for the daemon's lifetime (every subsequent call skipped
+	// forever). defer clears it on both normal return and panic unwind.
+	defer func() {
+		c.gateMu.Lock()
+		c.inFlight = false
+		c.gateMu.Unlock()
+	}()
+
 	// thrum-bpq5 substrate: per-phase compactor timing.
 	// Gated by THRUM_PROFILE; zero cost when off.
 	defer profile.Time("compactor.total")()
