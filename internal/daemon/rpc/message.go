@@ -24,6 +24,7 @@ import (
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/profile"
+	"github.com/leonletto/thrum/internal/recipientgate"
 	"github.com/leonletto/thrum/internal/subscriptions"
 	"github.com/leonletto/thrum/internal/types"
 )
@@ -246,6 +247,14 @@ type MarkReadResponse struct {
 	// IDs already read, or parse failures (conservative fall-through).
 	// Drives the CLI's "N new messages arrived" hint after read --all.
 	SkippedCount int `json:"skipped_count,omitempty"`
+	// MarkableRemaining (thrum-1846) is the number of messages the caller
+	// can still LEGITIMATELY mark read — caller is a recipient per the
+	// recipientgate predicate AND read_at is not yet set — after this
+	// operation completes. It deliberately excludes other agents'
+	// filter-visible mail, which the caller can never mark. The CLI uses it
+	// to decide whether to print "run again to mark more"; when it reaches 0
+	// the suggestion is dropped, closing the read --all retry-storm trap.
+	MarkableRemaining int `json:"markable_remaining,omitempty"`
 }
 
 // ArchiveRequest represents the request for message.archive RPC.
@@ -2640,6 +2649,41 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 			// policy on the request side.
 		}
 
+		// thrum-1846: gate receipt EMISSION on recipient legitimacy +
+		// read-state idempotency. Previously this loop appended a
+		// message.receipt event for EVERY supplied ID that existed and
+		// passed the watermark — and WriteEvent broadcasts each event to
+		// every mesh peer. `thrum message read --all` lists filter-visible
+		// mail (which includes messages addressed to OTHER agents), so the
+		// unguarded loop fabricated cross-agent receipts and re-emitted
+		// identical ones on every retry pass — the receipt-storm trap. The
+		// projector's qb62 gate only stopped the DURABLE ROW; the event was
+		// still broadcast. We now predict the projector's two outcomes here
+		// and skip emission entirely when it would be a no-op:
+		//
+		//   legit       — caller is a legitimate recipient per the shared
+		//                 recipientgate predicate (the SAME text the
+		//                 projector INSERT-gate uses).
+		//   alreadyRead — the caller already holds a read-stamped delivery
+		//                 row, so re-marking would emit a duplicate receipt
+		//                 the projector would COALESCE into a no-op.
+		var legit, alreadyRead bool
+		legitArgs := append(recipientgate.Args(agentID), agentID, messageID)
+		if err := tx.QueryRow(
+			`SELECT `+recipientgate.Predicate+`,
+			        EXISTS(SELECT 1 FROM message_deliveries md
+			               WHERE md.message_id = m.message_id
+			                 AND md.recipient_agent_id = ?
+			                 AND md.read_at IS NOT NULL)
+			 FROM messages m WHERE m.message_id = ?`,
+			legitArgs...,
+		).Scan(&legit, &alreadyRead); err != nil {
+			return nil, fmt.Errorf("check receipt legitimacy: %w", err)
+		}
+		if !legit || alreadyRead {
+			continue
+		}
+
 		// Track affected thread
 		if msgThreadID.Valid && msgThreadID.String != "" {
 			affectedThreads[msgThreadID.String] = true
@@ -2685,6 +2729,32 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 		markedCount++
 	}
 
+	// thrum-1846: count the caller's remaining MARKABLE unread — messages
+	// the caller is a legitimate recipient of (shared recipientgate
+	// predicate) that carry no read-stamped delivery row yet. This is the
+	// honest "remaining" figure the CLI needs to decide whether to print
+	// "run again to mark more". The old CLI computed remaining from the
+	// inbox's viewer-visible Unread count, which includes other agents'
+	// mail the caller can never mark — so it never reached 0 and invited an
+	// infinite retry loop. The count runs in the same transaction snapshot
+	// as the loop above, so the messages we just queued for marking still
+	// appear unread here (their receipts project after commit); we subtract
+	// markedCount to exclude them. Watermark-skipped late arrivals stay in
+	// the count — they ARE markable on the next pass.
+	var markableUnread int
+	countArgs := append(recipientgate.Args(agentID), agentID)
+	if err := tx.QueryRow(
+		`SELECT COUNT(*) FROM messages m
+		 WHERE `+recipientgate.Predicate+`
+		   AND m.message_id NOT IN (
+		     SELECT md.message_id FROM message_deliveries md
+		     WHERE md.recipient_agent_id = ? AND md.read_at IS NOT NULL)`,
+		countArgs...,
+	).Scan(&markableUnread); err != nil {
+		return nil, fmt.Errorf("count markable remaining: %w", err)
+	}
+	markableRemaining := max(markableUnread-markedCount, 0)
+
 	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit transaction: %w", err)
@@ -2714,8 +2784,9 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 
 	// Build response
 	resp := &MarkReadResponse{
-		MarkedCount:  markedCount,
-		SkippedCount: skippedCount,
+		MarkedCount:       markedCount,
+		SkippedCount:      skippedCount,
+		MarkableRemaining: markableRemaining,
 	}
 	if len(alsoReadBy) > 0 {
 		resp.AlsoReadBy = alsoReadBy

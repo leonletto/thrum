@@ -1547,13 +1547,28 @@ func TestMessageMarkRead(t *testing.T) {
 	// Create message handler
 	handler := NewMessageHandler(st)
 
-	// Create some test messages
+	// thrum-1846: the markable fixtures must be mail the CALLER has NOT yet
+	// read. An agent's OWN sent message is read-stamped on its self-delivery
+	// row at send time (thrum-b6qw Option C), so a self-authored message is
+	// already-read for its author — marking it is now correctly a no-op (the
+	// receipt-emission idempotency gate). The OLD fixture sent self-authored
+	// messages and relied on the pre-fix bug that re-emitted a fresh receipt
+	// for already-read mail (MarkedCount=1 per pass — exactly defect 2). We
+	// now send genuinely-unread mail from a SEPARATE sender as untargeted
+	// legacy-broadcasts, so the reader is a legitimate recipient (legacy-
+	// broadcast gate arm) AND the message starts unread for the reader.
+	senderID := registerAndStartAgent(t, st, "sender_main", "sender")
+
+	// Five unread legacy-broadcast messages: msg 0..2 drive the single/batch/
+	// idempotent/collaboration subtests; msg 3..4 are fresh mail for the
+	// skip-non-existent subtest (which must mark messages the reader has not
+	// already read, or the idempotency gate makes it a no-op).
 	var messageIDs []string
-	for i := 0; i < 3; i++ {
+	for i := range 5 {
 		req := SendRequest{
 			Content:       fmt.Sprintf("Test message %d", i+1),
 			Format:        "markdown",
-			CallerAgentID: agentID,
+			CallerAgentID: senderID,
 		}
 		params, _ := json.Marshal(req)
 		resp, err := handler.HandleSend(context.Background(), params)
@@ -1640,8 +1655,11 @@ func TestMessageMarkRead(t *testing.T) {
 		}
 	})
 
-	t.Run("idempotent - marking already-read message updates timestamp", func(t *testing.T) {
-		// Mark message again
+	t.Run("idempotent - re-marking an already-read message is a no-op", func(t *testing.T) {
+		// thrum-1846 defect 2: re-marking a message the caller has already
+		// read must NOT emit a fresh receipt — it is a no-op (MarkedCount 0),
+		// not a re-emission. messageIDs[0] was read by this agent in the
+		// "mark single" subtest above.
 		req := MarkReadRequest{
 			MessageIDs:    []string{messageIDs[0]},
 			CallerAgentID: agentID,
@@ -1657,8 +1675,8 @@ func TestMessageMarkRead(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected *MarkReadResponse, got %T", resp)
 		}
-		if markReadResp.MarkedCount != 1 {
-			t.Errorf("expected marked_count 1, got %d", markReadResp.MarkedCount)
+		if markReadResp.MarkedCount != 0 {
+			t.Errorf("expected marked_count 0 for an already-read message, got %d", markReadResp.MarkedCount)
 		}
 
 		// Verify still only 1 delivery row for the caller (not duplicated).
@@ -1721,7 +1739,11 @@ func TestMessageMarkRead(t *testing.T) {
 			t.Errorf("expected marked_count 1, got %d", markReadResp.MarkedCount)
 		}
 
-		// Verify also_read_by contains first agent
+		// Verify also_read_by reports the reader (agentID) who read msg0 in the
+		// "mark single" subtest. thrum-1846: msg0 is now a legacy-broadcast
+		// from a SEPARATE sender, so the sender's own read-stamped self-row
+		// (thrum-b6qw Option C) also legitimately appears here — assert
+		// membership of the reader rather than exact-set equality.
 		if markReadResp.AlsoReadBy == nil {
 			t.Fatal("expected also_read_by field, got nil")
 		}
@@ -1729,27 +1751,29 @@ func TestMessageMarkRead(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected also_read_by entry for message %s", messageIDs[0])
 		}
-		if len(otherAgents) != 1 {
-			t.Fatalf("expected 1 other agent, got %d", len(otherAgents))
+		foundReader := false
+		for _, a := range otherAgents {
+			if a == agentID {
+				foundReader = true
+			}
 		}
-		if otherAgents[0] != agentID {
-			t.Errorf("expected other agent %s, got %s", agentID, otherAgents[0])
+		if !foundReader {
+			t.Errorf("expected also_read_by to include reader %s, got %v", agentID, otherAgents)
 		}
 
-		// Verify 2 read delivery rows exist (author self + collaborator).
-		// thrum-b6qw: read-truth is per (message, agent) in
-		// message_deliveries.read_at; message_reads retired. messageIDs[0] is
-		// an authored-self legacy-broadcast: agentID holds a read self-row
-		// (self-delivery at send + re-marks) and agent2 created its own via the
-		// legacy-broadcast gate arm on marking read.
+		// Verify 3 read delivery rows exist: sender self-row (read-stamped at
+		// send), reader, and collaborator. thrum-b6qw: read-truth is per
+		// (message, agent) in message_deliveries.read_at; message_reads
+		// retired. msg0 is a legacy-broadcast, so reader and agent2 each
+		// created their own read row via the legacy-broadcast gate arm.
 		var count int
 		query := `SELECT COUNT(*) FROM message_deliveries WHERE message_id = ? AND read_at IS NOT NULL`
 		err = st.RawDB().QueryRow(query, messageIDs[0]).Scan(&count)
 		if err != nil {
 			t.Fatalf("failed to count read delivery rows: %v", err)
 		}
-		if count != 2 {
-			t.Errorf("expected 2 read delivery rows (author self + collaborator), found %d", count)
+		if count != 3 {
+			t.Errorf("expected 3 read delivery rows (sender self + reader + collaborator), found %d", count)
 		}
 
 		// Switch back to original agent
@@ -1758,8 +1782,11 @@ func TestMessageMarkRead(t *testing.T) {
 	})
 
 	t.Run("skip non-existent message IDs", func(t *testing.T) {
+		// thrum-1846: use the fresh, still-unread msg 3 and 4 — msg 1 and 2
+		// were already marked read in the batch subtest, and re-marking
+		// already-read mail is now a no-op (it would not count).
 		req := MarkReadRequest{
-			MessageIDs:    []string{messageIDs[1], "msg_NONEXISTENT", messageIDs[2]},
+			MessageIDs:    []string{messageIDs[3], "msg_NONEXISTENT", messageIDs[4]},
 			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
@@ -1815,8 +1842,10 @@ func TestMessageMarkRead(t *testing.T) {
 		}
 		_ = sessionStartResp3.SessionID // read-state is per-agent now, not per-session
 
-		// Create a new message
-		sendReq := SendRequest{Content: "Multi-session test", CallerAgentID: agentID}
+		// Create a new message FROM the sender (thrum-1846: must be unread by
+		// the reader — a self-authored message is read-stamped at send and
+		// would mark as a no-op).
+		sendReq := SendRequest{Content: "Multi-session test", CallerAgentID: senderID}
 		sendParams, _ := json.Marshal(sendReq)
 		sendResp, err := handler.HandleSend(context.Background(), sendParams)
 		if err != nil {

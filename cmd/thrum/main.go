@@ -4138,7 +4138,15 @@ Examples:
 					return err
 				}
 
-				remaining := inboxResult.Unread - result.MarkedCount
+				// thrum-1846: use the daemon's MarkableRemaining — the count
+				// of messages THIS caller can still legitimately mark (caller
+				// is a recipient, not yet read). The previous
+				// `inboxResult.Unread - MarkedCount` counted viewer-visible
+				// mail addressed to OTHER agents, which the caller can never
+				// mark, so it never reached 0 and the "run again" hint invited
+				// an infinite retry loop — each pass re-broadcasting receipt
+				// volume (the receipt-storm trap).
+				remaining := result.MarkableRemaining
 				if flagJSON {
 					return cli.EmitJSON(result)
 				}
