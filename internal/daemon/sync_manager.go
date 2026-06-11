@@ -25,6 +25,11 @@ type DaemonSyncManager struct {
 	// process — every caller passes this daemon's own id).
 	notifyOnce sync.Once
 	notify     *notifyCoalescer
+
+	// thrum-w78a: per-peer single-flight gate over pulls (see pull_gate.go).
+	// Covers BOTH pull entry points — the sync.notify handler pool and the
+	// periodic scheduler — because both bottom out in SyncFromPeer.
+	pulls *pullGate
 }
 
 // NewDaemonSyncManager creates a new sync manager with a pre-created PeerRegistry.
@@ -34,11 +39,37 @@ func NewDaemonSyncManager(st *state.State, peers *PeerRegistry) *DaemonSyncManag
 		peers:   peers,
 		client:  NewSyncClient(),
 		applier: NewSyncApplier(st),
+		pulls:   newPullGate(),
 	}
 }
 
 // SyncFromPeer pulls events from a specific peer and applies them.
+//
+// thrum-w78a: gated per-peer single-flight. When a pull for this peer is
+// already running, the call is absorbed into that flight's trailing re-pull
+// and returns (0, 0, nil) immediately — N concurrent notify-triggered
+// requests collapse to one in-flight pull plus exactly one trailing re-pull.
+// The absorbed return is indistinguishable from "nothing new" to both
+// callers (the notify handler and the scheduler just log counts).
+//
+// Note: an absorbed call's ctx is dropped — the trailing re-pull runs under
+// the original holder's ctx, not the absorbed caller's. Intentional: every
+// caller passes context.Background() today (no per-call deadline to honor),
+// and the holder's flight is the one doing the real work.
 func (m *DaemonSyncManager) SyncFromPeer(ctx context.Context, peerAddr string, peerDaemonID string) (applied, skipped int, err error) {
+	ran := m.pulls.Do(peerDaemonID, func() {
+		applied, skipped, err = m.syncFromPeerLocked(ctx, peerAddr, peerDaemonID)
+	})
+	if !ran {
+		log.Printf("sync: pull for %s already in flight — absorbed into trailing re-pull", peerDaemonID)
+		return 0, 0, nil
+	}
+	return applied, skipped, err
+}
+
+// syncFromPeerLocked is the pre-w78a SyncFromPeer body; called only under the
+// pull gate's per-peer flight.
+func (m *DaemonSyncManager) syncFromPeerLocked(ctx context.Context, peerAddr string, peerDaemonID string) (applied, skipped int, err error) {
 	// Look up peer token for authentication
 	token := m.getPeerToken(peerDaemonID)
 
