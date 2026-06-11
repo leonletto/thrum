@@ -25,21 +25,41 @@ var (
 	denyReplyRe    = regexp.MustCompile(`^(n|no|deny|d)$`)
 )
 
+// ReplyToRef returns the value of evt's reply_to ref, or "" when the event
+// carries none. It is the relevance predicate for the permission-intercept
+// path (thrum-4zqe): an event with no reply_to ref is irrelevant here, so the
+// SetOnEventWrite hook in cmd/thrum/main.go calls this BEFORE spawning the
+// intercept goroutine — non-reply events (the vast majority of any synced
+// batch) spawn zero goroutines instead of one that immediately no-ops.
+//
+// Single source of truth: AfterMessageCreate uses the same predicate for its
+// early-return, so the hook pre-filter and the dispatcher can never disagree on
+// what counts as "relevant". The check is intentionally origin-agnostic — a
+// reply that synced in from a peer daemon is still relevant, because cross-repo
+// reply delivery depends on the owning daemon firing AfterMessageCreate for
+// peer-origin replies (see the hook comment in main.go and TryResolve's
+// per-daemon pending_nudges semantics).
+func ReplyToRef(evt types.MessageCreateEvent) string {
+	for _, ref := range evt.Refs {
+		if ref.Type == "reply_to" {
+			return ref.Value
+		}
+	}
+	return ""
+}
+
 // AfterMessageCreate is the event-write hook entry point. It fires on
 // every message.create event write — local RPC, sync ingest, or
 // cross-repo bridge inbound — which is what gives us cross-repo
 // reply delivery for free via the same dispatch path.
 //
 // Events without a reply_to ref are no-ops (the message still lands
-// in the normal delivery path; we just don't care about it here).
+// in the normal delivery path; we just don't care about it here). The
+// SetOnEventWrite hook already gates on ReplyToRef before dispatching, so in
+// production this only runs for reply events; the guard here is kept as
+// defense-in-depth for any other caller.
 func (p *Permission) AfterMessageCreate(ctx context.Context, evt types.MessageCreateEvent) {
-	replyTo := ""
-	for _, ref := range evt.Refs {
-		if ref.Type == "reply_to" {
-			replyTo = ref.Value
-			break
-		}
-	}
+	replyTo := ReplyToRef(evt)
 	if replyTo == "" {
 		return
 	}
