@@ -25,9 +25,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/leonletto/thrum/internal/config"
-	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
 )
 
@@ -37,6 +37,17 @@ import (
 // 30 matches the permission SessionPoller's CaptureLines so both see the same
 // active region.
 const capturePaneLines = 30
+
+// dispatchPoolSize bounds how many recipient nudges DispatchTmux processes
+// concurrently. Before thrum-yz0a the dispatch spawned one goroutine PER
+// recipient with no cap, so a broadcast with N recipients forked N concurrent
+// goroutines — each spawning tmux subprocesses (has-session + capture-pane
+// quiet-gate polls). Under a message burst that fan-out became fork-bomb
+// adjacent. A small fixed pool caps the concurrent tmux-subprocess load
+// regardless of recipient count or burst depth; nudges are advisory, so the
+// modest serialisation a full pool introduces is an acceptable trade for
+// bounded process-table pressure.
+const dispatchPoolSize = 8
 
 var (
 	hasSessionFn  = ttmux.HasSession
@@ -71,16 +82,23 @@ func DispatchTmux(ctx context.Context, thrumDir string, recipients []string, sen
 		)
 		return
 	}
+
+	// thrum-1zfk: never nudge the sender's own pane. HandleSend now
+	// intentionally KEEPS the author in the recipients list (see HandleSend's
+	// recipientSet loop in rpc/message.go: "Keep author in recipientSet on
+	// explicit agent or role mention that resolves to author") so the projector
+	// can stamp read_at on the self-delivery row. That invariant change (commit
+	// c6b2072e04, 2026-05-16) broke the unguarded assumption here. Mirror the
+	// spool-dispatcher guard in cmd/thrum/main.go's SetOnEventWrite closure so
+	// the tmux-nudge path is symmetric defense-in-depth.
+	//
+	// The self-skip filter runs SYNCHRONOUSLY in the caller's goroutine so its
+	// 'tmux.skip self' log is observable the instant DispatchTmux returns (the
+	// thrum-1zfk regression tests assert this without waiting on background
+	// goroutines). Only the surviving recipients are handed to the bounded
+	// async pool below.
+	work := make([]string, 0, len(recipients))
 	for _, recipientName := range recipients {
-		// thrum-1zfk: never nudge the sender's own pane. HandleSend now
-		// intentionally KEEPS the author in the recipients list (see
-		// HandleSend's recipientSet loop in rpc/message.go: "Keep author
-		// in recipientSet on explicit agent or role mention that resolves
-		// to author") so the projector can stamp read_at on the
-		// self-delivery row. That invariant change (commit c6b2072e04,
-		// 2026-05-16) broke the unguarded assumption here. Mirror the
-		// spool-dispatcher guard in cmd/thrum/main.go's SetOnEventWrite
-		// closure so the tmux-nudge path is symmetric defense-in-depth.
 		if recipientName == senderName {
 			slog.Info("[nudge] tmux.skip self",
 				"site", "nudge.DispatchTmux",
@@ -89,50 +107,82 @@ func DispatchTmux(ctx context.Context, thrumDir string, recipients []string, sen
 			)
 			continue
 		}
-		go func(name string) {
-			target, runtime := resolveTargetAndRuntime(thrumDir, name)
-			if target == "" {
-				slog.Info("[nudge] nudge.DispatchTmux no-target",
-					"sender", senderName,
-					"recipient", name,
-				)
-				return
-			}
-			session, _, _ := ttmux.ParseTarget(target)
-			if !hasSessionFn(session) {
-				slog.Info("[nudge] nudge.DispatchTmux dead-session",
-					"sender", senderName,
-					"recipient", name,
-					"target", target,
-					"session", session,
-				)
-				return
-			}
-			// Chrome-quiet gate (thrum-nlel / thrum-3i2s) composed with the
-			// thrum-7phu dialog gate: poll until the input chrome is quiet
-			// (no human typing), spinner-permissive. The gate also owns the
-			// 7phu dialog check (re-checked every poll) — a dialog defers to
-			// the RedeliverIfSafe queue; a daemon-shutdown ctx drops the poke
-			// (the spool still carries the message). See quiet_gate.go.
-			switch paneQuietForNudge(ctx, thrumDir, target, runtime) {
-			case nudgeDefer:
-				DeferNudge(session, target, senderName)
-				return
-			case nudgeDrop:
-				slog.Info("[nudge] nudge.DispatchTmux dropped (ctx cancelled during chrome-quiet wait)",
-					"sender", senderName, "recipient", name, "target", target, "session", session,
-				)
-				return
-			case nudgeFire:
-				slog.Info("[nudge] nudge.DispatchTmux fire",
-					"sender", senderName,
-					"recipient", name,
-					"target", target,
-					"session", session,
-				)
-				_ = nudgeFn(target, senderName)
-			}
-		}(recipientName)
+		work = append(work, recipientName)
+	}
+	if len(work) == 0 {
+		return
+	}
+
+	// thrum-yz0a: bounded recipient fan-out. Previously this spawned one
+	// goroutine PER recipient with no cap — a broadcast with N recipients forked
+	// N concurrent goroutines, each spawning tmux subprocesses (has-session +
+	// capture-pane quiet-gate polls). Under a message burst that fan-out became
+	// fork-bomb adjacent. A single dispatcher goroutine now feeds the recipients
+	// through a bounded semaphore so at most dispatchPoolSize nudges run
+	// concurrently. DispatchTmux stays fire-and-forget: it returns immediately
+	// after launching the dispatcher (the semaphore send blocks the dispatcher,
+	// never the caller).
+	go func() {
+		sem := make(chan struct{}, dispatchPoolSize)
+		var wg sync.WaitGroup
+		for _, name := range work {
+			sem <- struct{}{}
+			wg.Add(1)
+			go func(name string) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				dispatchOne(ctx, thrumDir, name, senderName)
+			}(name)
+		}
+		wg.Wait()
+	}()
+}
+
+// dispatchOne resolves a single recipient's pane and fires (or defers/drops)
+// its nudge. Extracted from DispatchTmux's per-recipient loop so the bounded
+// pool has a single unit of work to run (thrum-yz0a).
+func dispatchOne(ctx context.Context, thrumDir, name, senderName string) {
+	target, runtime := resolveTargetAndRuntime(thrumDir, name)
+	if target == "" {
+		slog.Info("[nudge] nudge.DispatchTmux no-target",
+			"sender", senderName,
+			"recipient", name,
+		)
+		return
+	}
+	session, _, _ := ttmux.ParseTarget(target)
+	if !hasSessionFn(session) {
+		slog.Info("[nudge] nudge.DispatchTmux dead-session",
+			"sender", senderName,
+			"recipient", name,
+			"target", target,
+			"session", session,
+		)
+		return
+	}
+	// Chrome-quiet gate (thrum-nlel / thrum-3i2s) composed with the thrum-7phu
+	// dialog gate: poll until the input chrome is quiet (no human typing),
+	// spinner-permissive. The gate also owns the 7phu dialog check (re-checked
+	// every poll) — a dialog defers to the RedeliverIfSafe queue; a
+	// daemon-shutdown ctx drops the poke (the spool still carries the message).
+	// See quiet_gate.go.
+	switch paneQuietForNudge(ctx, thrumDir, target, runtime) {
+	case nudgeDefer:
+		DeferNudge(session, target, senderName)
+		return
+	case nudgeDrop:
+		slog.Info("[nudge] nudge.DispatchTmux dropped (ctx cancelled during chrome-quiet wait)",
+			"sender", senderName, "recipient", name, "target", target, "session", session,
+		)
+		return
+	case nudgeFire:
+		slog.Info("[nudge] nudge.DispatchTmux fire",
+			"sender", senderName,
+			"recipient", name,
+			"target", target,
+			"session", session,
+		)
+		_ = nudgeFn(target, senderName)
 	}
 }
 
@@ -163,7 +213,7 @@ func resolveTargetAndRuntime(thrumDir, agentName string) (target, runtime string
 
 	// Fall through to worktree identity dirs.
 	repoDir := filepath.Dir(thrumDir)
-	for _, wtPath := range safecmd.WorktreePaths(context.Background(), repoDir) {
+	for _, wtPath := range cachedWorktreePaths(repoDir) {
 		if wtPath == repoDir {
 			continue // already checked
 		}
@@ -184,7 +234,7 @@ func HasLocalIdentity(thrumDir, agentName string) bool {
 		return true
 	}
 	repoDir := filepath.Dir(thrumDir)
-	for _, wtPath := range safecmd.WorktreePaths(context.Background(), repoDir) {
+	for _, wtPath := range cachedWorktreePaths(repoDir) {
 		if wtPath == repoDir {
 			continue
 		}
@@ -214,7 +264,7 @@ func LocalAgentNames(thrumDir string) []string {
 	}
 	scan(filepath.Join(thrumDir, "identities"))
 	repoDir := filepath.Dir(thrumDir)
-	for _, wtPath := range safecmd.WorktreePaths(context.Background(), repoDir) {
+	for _, wtPath := range cachedWorktreePaths(repoDir) {
 		if wtPath == repoDir {
 			continue
 		}

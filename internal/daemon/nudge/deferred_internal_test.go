@@ -200,8 +200,9 @@ func TestDeferNudge_CollapsesPerSession(t *testing.T) {
 
 // TestDispatchTmux_DefersWhenDialogUp / _DeliversWhenSafe exercise the
 // end-to-end seam: identity-file resolution → pane capture → safe-to-type
-// decision → defer or nudge. DispatchTmux is fire-and-forget (goroutine per
-// recipient), so we poll for the observable outcome with a bounded timeout.
+// decision → defer or nudge. DispatchTmux is fire-and-forget (a bounded pool of
+// recipient workers, thrum-yz0a), so we poll for the observable outcome with a
+// bounded timeout.
 func TestDispatchTmux_DefersWhenDialogUp(t *testing.T) {
 	resetDeferredState(t)
 	thrumDir := writeIdentityFixture(t, "agt", "agt:0.0", "claude")
