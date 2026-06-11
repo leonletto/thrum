@@ -157,6 +157,22 @@ func TestConcurrent_InboxUnderLoad(t *testing.T) {
 	var wg sync.WaitGroup
 	var errors atomic.Int64
 
+	// thrum-79jo: capture the first few error STRINGS, not just the count —
+	// the bare counter made every gate failure undiagnosable (failed 2× on
+	// 2026-06-10 with "3 errors" / "18 errors" and zero content; counts
+	// tracked host load). The samples distinguish client-side timeouts
+	// (dial/deadline under load) from real daemon errors.
+	var errMu sync.Mutex
+	var errSamples []string
+	recordErr := func(label string, err error) {
+		errors.Add(1)
+		errMu.Lock()
+		if len(errSamples) < 5 {
+			errSamples = append(errSamples, label+": "+err.Error())
+		}
+		errMu.Unlock()
+	}
+
 	// Writer goroutine sending messages
 	wg.Add(1)
 	go func() {
@@ -168,7 +184,7 @@ func TestConcurrent_InboxUnderLoad(t *testing.T) {
 				"format":          "markdown",
 			})
 			if err != nil {
-				errors.Add(1)
+				recordErr(fmt.Sprintf("send[%d]", i), err)
 			}
 		}
 	}()
@@ -179,13 +195,13 @@ func TestConcurrent_InboxUnderLoad(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			agentID := fixtureAgentName(idx + 1) // readers use agents 1-5
-			for range 100 {
+			for j := range 100 {
 				_, err := rpcCallRaw(socketPath, "message.list", map[string]any{
 					"caller_agent_id": agentID,
 					"page_size":       100,
 				})
 				if err != nil {
-					errors.Add(1)
+					recordErr(fmt.Sprintf("list[reader=%d,iter=%d]", idx, j), err)
 				}
 			}
 		}(i)
@@ -193,7 +209,12 @@ func TestConcurrent_InboxUnderLoad(t *testing.T) {
 
 	wg.Wait()
 	if errors.Load() > 0 {
-		t.Errorf("got %d errors during concurrent inbox+send", errors.Load())
+		errMu.Lock()
+		for _, s := range errSamples {
+			t.Logf("error sample: %s", s)
+		}
+		errMu.Unlock()
+		t.Errorf("got %d errors during concurrent inbox+send (first %d sampled above)", errors.Load(), len(errSamples))
 	}
 }
 
