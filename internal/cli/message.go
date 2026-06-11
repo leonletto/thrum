@@ -186,6 +186,13 @@ type MarkReadResponse struct {
 	MarkedCount  int                 `json:"marked_count"`
 	AlsoReadBy   map[string][]string `json:"also_read_by,omitempty"`
 	SkippedCount int                 `json:"skipped_count,omitempty"` // IDs refused by marked_before watermark; drives the read --all late-arrival warning
+	// MarkableRemaining (thrum-1846) is how many messages the caller can
+	// still legitimately mark read after this call — caller-recipient and
+	// not yet read. The read --all path uses it for the "run again to mark
+	// more" hint; it deliberately excludes other agents' filter-visible mail
+	// (which the caller can never mark), so it reaches 0 and the retry loop
+	// terminates instead of storming.
+	MarkableRemaining int `json:"markable_remaining,omitempty"`
 }
 
 // MessageMarkRead marks messages as read. When markedBefore is non-empty,

@@ -13,6 +13,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/jsonl"
+	"github.com/leonletto/thrum/internal/recipientgate"
 	"github.com/leonletto/thrum/internal/sync/pending"
 	"github.com/leonletto/thrum/internal/types"
 )
@@ -536,67 +537,21 @@ func (p *Projector) applyMessageReceipt(ctx context.Context, data json.RawMessag
 	// read_at as usual. If no row exists and the agent is not a legitimate
 	// recipient, no row is created and the UPDATE below is also a no-op —
 	// the receipt event is still stored in JSONL + events for auditability.
+	//
+	// thrum-1846: the legitimacy predicate now lives in internal/recipientgate
+	// (correlated to alias `m`), shared verbatim with HandleMarkRead's
+	// receipt-EMISSION gate so the two can never drift. The OR-arm logic is
+	// byte-equivalent to the original inline qb62 gate; only the message-id
+	// binding moved from a literal `?` to the correlated `m.message_id`, which
+	// is why the INSERT now selects from `messages m WHERE m.message_id = ?`
+	// (the existence check above guarantees exactly that one row matches).
+	insertArgs := append([]any{event.AgentID, event.Timestamp, event.MessageID}, recipientgate.Args(event.AgentID)...)
 	_, err = tx.Exec(`
 		INSERT OR IGNORE INTO message_deliveries (message_id, recipient_agent_id, delivered_at)
-		SELECT ?, ?, ?
-		WHERE EXISTS (
-			SELECT 1 FROM message_refs mr
-			WHERE mr.message_id = ?
-			  AND mr.ref_type = 'mention'
-			  AND (
-			    mr.ref_value = ?
-			    OR mr.ref_value = (SELECT role FROM agents WHERE agent_id = ? LIMIT 1)
-			  )
-		) OR EXISTS (
-			SELECT 1 FROM message_scopes ms
-			WHERE ms.message_id = ?
-			  AND ms.scope_type = 'broadcast'
-		) OR EXISTS (
-			SELECT 1 FROM message_scopes ms
-			JOIN groups g ON g.name = ms.scope_value
-			JOIN group_members gm ON g.group_id = gm.group_id
-			WHERE ms.message_id = ?
-			  AND ms.scope_type = 'group'
-			  AND (
-			    (gm.member_type = 'agent' AND gm.member_value = ?)
-			    OR (gm.member_type = 'role' AND gm.member_value = (SELECT role FROM agents WHERE agent_id = ? LIMIT 1))
-			  )
-		) OR (
-			-- Legacy-broadcast: the message has no targeting whatsoever
-			-- (no mention refs, no broadcast/group scopes). Any agent can
-			-- mark it read. Mirrors the legacy-broadcast branch in
-			-- buildForAgentClause (message.go) so inbox visibility and
-			-- delivery-gate semantics stay aligned.
-			NOT EXISTS (
-				SELECT 1 FROM message_refs mr_lb
-				WHERE mr_lb.message_id = ?
-				  AND mr_lb.ref_type IN ('mention', 'group', 'broadcast')
-			)
-			AND NOT EXISTS (
-				SELECT 1 FROM message_scopes ms_lb
-				WHERE ms_lb.message_id = ?
-				  AND ms_lb.scope_type IN ('group', 'broadcast')
-			)
-		) OR EXISTS (
-			-- thrum-b6qw authored-self (port of tcqw): the agent's own sent
-			-- messages belong in their inbox. Marking one read creates a
-			-- read-stamped self-delivery row so the self-authored
-			-- no-delivery-row phantom-unread class converges — the class the
-			-- legacy-broadcast arm above does NOT cover, since an authored
-			-- message is typically targeted (carries a mention/scope). Matches
-			-- both the bare agent_id and the "user:"-prefixed form (a message is
-			-- authored by an agent_id; user inboxes mark via the "user:" id).
-			SELECT 1 FROM messages m_self
-			WHERE m_self.message_id = ?
-			  AND m_self.agent_id IN (?, 'user:' || ?)
-		)
-	`,
-		event.MessageID, event.AgentID, event.Timestamp,
-		event.MessageID, event.AgentID, event.AgentID,
-		event.MessageID,
-		event.MessageID, event.AgentID, event.AgentID,
-		event.MessageID, event.MessageID,
-		event.MessageID, event.AgentID, event.AgentID, // authored-self arm
+		SELECT m.message_id, ?, ?
+		FROM messages m
+		WHERE m.message_id = ? AND `+recipientgate.Predicate,
+		insertArgs...,
 	)
 	if err != nil {
 		return fmt.Errorf("ensure message delivery: %w", err)
