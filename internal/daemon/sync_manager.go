@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/checkpoint"
@@ -17,6 +18,13 @@ type DaemonSyncManager struct {
 	peers   *PeerRegistry
 	client  *SyncClient
 	applier *SyncApplier
+
+	// thrum-oc74: per-process notify coalescer bounding the sync.notify
+	// fan-out under event bursts (see notify_coalescer.go). Lazily built on
+	// the first BroadcastNotify, capturing the local daemonID (constant per
+	// process — every caller passes this daemon's own id).
+	notifyOnce sync.Once
+	notify     *notifyCoalescer
 }
 
 // NewDaemonSyncManager creates a new sync manager with a pre-created PeerRegistry.
@@ -203,6 +211,25 @@ func (m *DaemonSyncManager) SyncFromPeerByID(daemonID string) {
 // Each peer's stored token is included for authentication.
 // This is fire-and-forget — failures are logged but don't block.
 func (m *DaemonSyncManager) BroadcastNotify(daemonID string, latestSeq int64, eventCount int) {
+	// thrum-oc74: route through the coalescer — the onEventWrite hook calls
+	// this once per applied event, which under a burst fanned out
+	// O(events × peers) sync.notify RPCs (the common amplifier in the
+	// 2026-06-10 storms). The coalescer leading-edge-fires when idle (quiet
+	// single event = zero added latency) and absorbs the burst into one
+	// trailing flush per window. Safe to coalesce payloads: the receiver uses
+	// latest_seq/event_count for logging only and triggers its pull keyed on
+	// daemonID alone (rpc/sync_notify.go Handle).
+	m.notifyOnce.Do(func() {
+		m.notify = newNotifyCoalescer(notifyCoalesceWindow, func(seq int64, n int) {
+			m.fanOutNotify(daemonID, seq, n)
+		})
+	})
+	m.notify.Offer(latestSeq, eventCount)
+}
+
+// fanOutNotify is the pre-coalescer BroadcastNotify body: one fire-and-forget
+// sync.notify per peer. Called only by the coalescer's flush.
+func (m *DaemonSyncManager) fanOutNotify(daemonID string, latestSeq int64, eventCount int) {
 	peers := m.peers.ListPeers()
 	for _, peer := range peers {
 		go func(p *PeerInfo) {
