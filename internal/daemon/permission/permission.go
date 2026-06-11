@@ -47,6 +47,31 @@ type Permission struct {
 	// TryResolve's pre-send check for why this seam exists
 	// (thrum-rfy3: race-safe defense-in-depth beyond the atomic claim).
 	paneCapture func(target string, lines int) (string, error)
+
+	// localIdentityCheck reports whether an agent has a LOCAL identity
+	// file (thrum-x3fnh, the wo2z SOURCE-2 audience-locality facet). Wired
+	// at daemon boot to nudge.HasLocalIdentity via SetLocalIdentityChecker
+	// — the nudge package imports permission, so the dependency is
+	// inverted through this seam (the same pattern wo2z's backstop
+	// IsResident and saj4's VisibleUnread use). Nil = allow all
+	// (construction-time default; unit tests that don't exercise locality).
+	localIdentityCheck func(agentName string) bool
+}
+
+// SetLocalIdentityChecker wires the locality predicate used to keep
+// supervisor fan-out on this daemon's own agents (thrum-x3fnh). Production
+// wiring (runDaemon, right after permission.New):
+//
+//	permPkg.SetLocalIdentityChecker(func(name string) bool {
+//	    return nudge.HasLocalIdentity(thrumDir, name)
+//	})
+//
+// The nudge package imports permission, so the dependency is inverted
+// through this seam. Install before the scheduler starts firing; not safe
+// for concurrent mutation afterwards (same contract as the other injected
+// seams).
+func (p *Permission) SetLocalIdentityChecker(fn func(agentName string) bool) {
+	p.localIdentityCheck = fn
 }
 
 // New builds a Permission. The state argument may be nil for unit tests

@@ -128,7 +128,9 @@ func (p *Permission) firstDetect(
 	// theoretical consistency gap where a mid-resolution config reload
 	// could make the logged entries differ from the resolved ones.
 	configuredEntries := p.loadSupervisorEntries()
-	supers, err := p.ResolveSupervisors(ctx, configuredEntries)
+	// thrum-x3fnh: exclude the modal owner from its own relay audience — it
+	// can't read its inbox while modal-blocked, so the relay is useless to it.
+	supers, err := p.ResolveSupervisorsExcluding(ctx, configuredEntries, agentName)
 	if err != nil {
 		slog.Error("[permission] resolve supervisors failed", "err", err)
 	}
@@ -247,7 +249,9 @@ func (p *Permission) fireReminder(
 	// still advance the reminder with whatever recipients we got back
 	// (typically none in the error case). A transient state DB hiccup
 	// should not silently stall the cadence.
-	supers, err := p.ResolveSupervisors(ctx, p.loadSupervisorEntries())
+	// thrum-x3fnh: same owner-exclusion as firstDetect — the modal owner
+	// (row.AgentName) must not be relayed its own blocked-pane reminder.
+	supers, err := p.ResolveSupervisorsExcluding(ctx, p.loadSupervisorEntries(), row.AgentName)
 	if err != nil {
 		slog.Error("[permission] resolve supervisors failed", "err", err)
 	}

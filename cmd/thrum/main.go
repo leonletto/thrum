@@ -6212,6 +6212,14 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// tmux check-pane dispatch (Task 7.1) is wired into the
 	// TmuxHandler via SetPermission further below.
 	permPkg := permission.New(st, st.RawDB(), supervisorID, projectName, thrumDir)
+	// thrum-x3fnh: keep supervisor permission/tool_confirmation fan-out on
+	// THIS daemon's own agents. The agents table holds synced remote agents,
+	// so without this the supervisor relayed every modal to every coordinator
+	// fleet-wide (the all-night cross-host fanout storm). Same HasLocalIdentity
+	// seam as the wo2z backstop IsResident wiring below.
+	permPkg.SetLocalIdentityChecker(func(name string) bool {
+		return nudge.HasLocalIdentity(thrumDir, name)
+	})
 
 	// Log the count of non-expired pending nudges for operator
 	// visibility. No in-memory rehydration is needed — OnDetection
