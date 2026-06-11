@@ -6650,14 +6650,25 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		// structurally: pending_nudges is per-daemon SQLite state that
 		// does not replicate, so a peer daemon's AfterMessageCreate
 		// call finds no matching row and silently no-ops.
-		go func(evt types.MessageCreateEvent) {
-			defer func() {
-				if r := recover(); r != nil {
-					slog.Error("[permission] intercept panic", "panic", r)
-				}
-			}()
-			permPkg.AfterMessageCreate(context.Background(), evt)
-		}(evt)
+		// thrum-4zqe: only spawn the intercept goroutine for events that are
+		// actually relevant (carry a reply_to ref). AfterMessageCreate no-ops on
+		// everything else, so without this gate a synced batch of N non-reply
+		// events forked N goroutines just to return immediately — the per-event
+		// amplifier on the apply path. permission.ReplyToRef is the SAME
+		// predicate AfterMessageCreate uses for its early-return (single source
+		// of truth, behavior-identical). Deliberately NOT origin-filtered: a
+		// peer-synced reply MUST still dispatch, per the cross-repo rationale
+		// documented above.
+		if permission.ReplyToRef(evt) != "" {
+			go func(evt types.MessageCreateEvent) {
+				defer func() {
+					if r := recover(); r != nil {
+						slog.Error("[permission] intercept panic", "panic", r)
+					}
+				}()
+				permPkg.AfterMessageCreate(context.Background(), evt)
+			}(evt)
+		}
 
 		// thrum-48kt.1: broadcast notification.message to connected
 		// WebSocket clients (including OutboundRelay → Telegram). Moved
