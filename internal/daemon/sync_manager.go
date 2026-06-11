@@ -43,6 +43,11 @@ func NewDaemonSyncManager(st *state.State, peers *PeerRegistry) *DaemonSyncManag
 // requests collapse to one in-flight pull plus exactly one trailing re-pull.
 // The absorbed return is indistinguishable from "nothing new" to both
 // callers (the notify handler and the scheduler just log counts).
+//
+// Note: an absorbed call's ctx is dropped — the trailing re-pull runs under
+// the original holder's ctx, not the absorbed caller's. Intentional: every
+// caller passes context.Background() today (no per-call deadline to honor),
+// and the holder's flight is the one doing the real work.
 func (m *DaemonSyncManager) SyncFromPeer(ctx context.Context, peerAddr string, peerDaemonID string) (applied, skipped int, err error) {
 	ran := m.pulls.Do(peerDaemonID, func() {
 		applied, skipped, err = m.syncFromPeerLocked(ctx, peerAddr, peerDaemonID)

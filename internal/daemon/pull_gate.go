@@ -55,6 +55,25 @@ func (g *pullGate) Do(key string, pull func()) bool {
 	st.inFlight = true
 	g.mu.Unlock()
 
+	// thrum-w78a panic safety: pull() does SQLite/network/file I/O, so a
+	// panic must NOT leave inFlight latched — that would silently wedge the
+	// peer (every subsequent SyncFromPeer absorbed forever) the moment a
+	// recover() lands on the notify-pool worker. Mirrors x/sync/singleflight's
+	// defer: on panic, re-acquire the lock, clear the flight, then re-panic so
+	// the crash/stack still surfaces. The sentinel distinguishes the panic
+	// unwind from normal completion (which clears inFlight itself, under lock).
+	cleanedUp := false
+	defer func() {
+		if cleanedUp {
+			return
+		}
+		g.mu.Lock()
+		st.inFlight = false
+		st.rerun = false
+		g.mu.Unlock()
+		// Not a normal return → an in-flight panic is unwinding; let it.
+	}()
+
 	for {
 		pull()
 		g.mu.Lock()
@@ -64,6 +83,7 @@ func (g *pullGate) Do(key string, pull func()) bool {
 			continue
 		}
 		st.inFlight = false
+		cleanedUp = true
 		g.mu.Unlock()
 		return true
 	}

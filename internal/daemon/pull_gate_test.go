@@ -99,6 +99,33 @@ func TestPullGate_DifferentKeys_Parallel(t *testing.T) {
 	}
 }
 
+// TestPullGate_PanicUnlatchesGate is the review-CRITICAL regression: pull()
+// touches SQLite/network/file I/O; a panic must NOT leave inFlight latched
+// (which would wedge the peer — every later request absorbed forever — the
+// moment a recover() lands on the notify-pool worker). The panic must still
+// propagate (crash/stack surfaces); the gate must be re-armed after.
+func TestPullGate_PanicUnlatchesGate(t *testing.T) {
+	g := newPullGate()
+
+	func() {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Fatal("expected the pull panic to propagate through Do, not be swallowed")
+			}
+		}()
+		g.Do("peerX", func() { panic("boom in pull") })
+	}()
+
+	// The gate must NOT be latched: a second Do for the same peer runs.
+	ran := false
+	if got := g.Do("peerX", func() { ran = true }); !got {
+		t.Fatal("second Do returned absorbed=false — gate stayed latched after the panic (the wedge)")
+	}
+	if !ran {
+		t.Fatal("second pull never executed — peer silently wedged by the prior panic")
+	}
+}
+
 // TestPullGate_ReArmsAcrossCycles pins the lifecycle: after a flight (and its
 // trailing rerun) completes, the next request takes a fresh flight and runs
 // immediately — the gate must not stay latched.
