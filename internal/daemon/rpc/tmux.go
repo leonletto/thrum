@@ -1773,6 +1773,27 @@ func (h *TmuxHandler) ReconcilePoller(ctx context.Context) int {
 // findIdentityForSession searches all worktree identity dirs for an agent
 // associated with the given tmux session name.
 func (h *TmuxHandler) findIdentityForSession(ctx context.Context, sessionName string) (string, *config.IdentityFile, string) {
+	// thrum-0a9x Pass 0: the session's registered cwd via the in-memory
+	// sessionCwds map — no git subprocess. The git-backed scan below
+	// (AllIdentityDirs → safecmd.WorktreePaths → `git worktree list`, 5s
+	// timeout) SILENTLY truncates to the main repo on any git error,
+	// including timeouts under host load — which made restart fail
+	// "no identity file found for session" for an identity that existed on
+	// disk all along (release scenario 69, 2× under full-gate load). This
+	// mirrors writeTmuxToIdentity's Pass 0: the sole identity in the
+	// session's registered cwd is the session's agent by construction.
+	if cwd, ok := h.sessionCwd(sessionName); ok {
+		if idPath, ok := soleIdentityFile(cwd); ok {
+			if data, err := os.ReadFile(idPath); err == nil { // #nosec G304 -- idPath is .thrum/identities/<name>.json under our own sessionCwd map
+				var idFile config.IdentityFile
+				if err := json.Unmarshal(data, &idFile); err == nil {
+					agentName := strings.TrimSuffix(filepath.Base(idPath), ".json")
+					return agentName, &idFile, filepath.Dir(idPath)
+				}
+			}
+		}
+	}
+
 	for _, idDir := range AllIdentityDirs(ctx, h.thrumDir) {
 		entries, _ := os.ReadDir(idDir)
 		for _, entry := range entries {
