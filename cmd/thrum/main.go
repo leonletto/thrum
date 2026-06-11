@@ -7879,6 +7879,14 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		IsResident: func(agentID string) bool {
 			return nudge.HasLocalIdentity(thrumDir, agentID)
 		},
+		// thrum-saj4: visibility predicate — the raw message_deliveries scan
+		// counts unread rows the recipient can't SEE (a delivery row for a
+		// message the inbox's for-agent filter hides, e.g. group-scoped to a
+		// group the agent isn't in — the storm-relay feeders). Wire to
+		// rpc.CountInboxVisibleUnread, the SAME live count the inbox listing
+		// produces, so the backstop nudges only for visible unread and can
+		// never drift from the inbox view.
+		VisibleUnread: messageHandler.CountInboxVisibleUnread,
 	}
 	go bs.Run(ctx)
 
