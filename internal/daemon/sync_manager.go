@@ -30,6 +30,13 @@ type DaemonSyncManager struct {
 	// Covers BOTH pull entry points — the sync.notify handler pool and the
 	// periodic scheduler — because both bottom out in SyncFromPeer.
 	pulls *pullGate
+
+	// thrum-aop6: per-peer dial backoff + quarantine (see dial_gate.go). Guards
+	// the two storm dial paths — fanOutNotify (notify send) and SyncFromPeer
+	// (pull) — so a dead/flapping peer is backed off and quarantined instead of
+	// hammered into a connection-reset/EOF storm. Sits IN FRONT of pulls (claim
+	// before pulls.Do).
+	dials *dialGate
 }
 
 // NewDaemonSyncManager creates a new sync manager with a pre-created PeerRegistry.
@@ -40,6 +47,7 @@ func NewDaemonSyncManager(st *state.State, peers *PeerRegistry) *DaemonSyncManag
 		client:  NewSyncClient(),
 		applier: NewSyncApplier(st),
 		pulls:   newPullGate(),
+		dials:   newDialGate(),
 	}
 }
 
@@ -57,13 +65,27 @@ func NewDaemonSyncManager(st *state.State, peers *PeerRegistry) *DaemonSyncManag
 // caller passes context.Background() today (no per-call deadline to honor),
 // and the holder's flight is the one doing the real work.
 func (m *DaemonSyncManager) SyncFromPeer(ctx context.Context, peerAddr string, peerDaemonID string) (applied, skipped int, err error) {
+	// thrum-aop6: skip dialing a backed-off / quarantined peer. claim sits in
+	// FRONT of the pull gate so an unreachable peer never even takes a flight
+	// slot. The skip is indistinguishable from "nothing new" to callers.
+	if !m.dials.claim(peerDaemonID) {
+		return 0, 0, nil
+	}
 	ran := m.pulls.Do(peerDaemonID, func() {
 		applied, skipped, err = m.syncFromPeerLocked(ctx, peerAddr, peerDaemonID)
 	})
 	if !ran {
+		// Absorbed into a concurrent flight's trailing re-pull — that holder
+		// records the dial outcome; we must not double-count. (Only healthy
+		// peers reach here: a peer with failure state is single-admitted by
+		// claim's reservation, so its pull always runs.)
 		log.Printf("sync: pull for %s already in flight — absorbed into trailing re-pull", peerDaemonID)
 		return 0, 0, nil
 	}
+	// thrum-aop6: record reachability. Only errDialFailed-tagged (connect)
+	// errors count toward backoff/quarantine; a reachable peer with an apply
+	// error resets to healthy.
+	recordDialOutcome(m.dials, peerDaemonID, err)
 	return applied, skipped, err
 }
 
@@ -263,9 +285,19 @@ func (m *DaemonSyncManager) BroadcastNotify(daemonID string, latestSeq int64, ev
 func (m *DaemonSyncManager) fanOutNotify(daemonID string, latestSeq int64, eventCount int) {
 	peers := m.peers.ListPeers()
 	for _, peer := range peers {
+		// thrum-aop6: don't dial a backed-off / quarantined peer. This is the
+		// primary storm path — fire-and-forget notify fan-out with no backoff
+		// was what hammered leondev:9177 into thousands of resets.
+		if !m.dials.claim(peer.DaemonID) {
+			continue
+		}
 		go func(p *PeerInfo) {
 			addr := p.Addr()
-			if err := m.client.SendNotify(addr, daemonID, latestSeq, eventCount, p.Token); err != nil {
+			err := m.client.SendNotify(addr, daemonID, latestSeq, eventCount, p.Token)
+			// Record reachability: errDialFailed (connect) -> backoff/quarantine;
+			// a reached peer (even on a post-connect RPC error) resets to healthy.
+			recordDialOutcome(m.dials, p.DaemonID, err)
+			if err != nil {
 				log.Printf("sync.notify: failed to notify %s at %s: %v", p.DaemonID, addr, err)
 			}
 		}(peer)

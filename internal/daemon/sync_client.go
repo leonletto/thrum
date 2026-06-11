@@ -46,7 +46,9 @@ func (c *SyncClient) wsCall(ctx context.Context, wsURL string, method string, pa
 	defer cancel()
 
 	if err := client.Connect(dialCtx); err != nil {
-		return nil, fmt.Errorf("connect to %s: %w", wsURL, err)
+		// thrum-aop6: tag connect failures so the dialGate counts only genuine
+		// reachability failures toward backoff/quarantine (not post-connect errors).
+		return nil, fmt.Errorf("connect to %s: %w: %w", wsURL, errDialFailed, err)
 	}
 	defer func() { _ = client.Close() }()
 
@@ -112,7 +114,8 @@ func (c *SyncClient) PullAllEvents(peerAddr string, afterSeq int64, token string
 	dialCtx, dialCancel := context.WithTimeout(ctx, c.timeout)
 	if err := client.Connect(dialCtx); err != nil {
 		dialCancel()
-		return fmt.Errorf("connect to %s: %w", peerAddr, err)
+		// thrum-aop6: tag connect failures for the dialGate (see errDialFailed).
+		return fmt.Errorf("connect to %s: %w: %w", peerAddr, errDialFailed, err)
 	}
 	dialCancel()
 	defer func() { _ = client.Close() }()
