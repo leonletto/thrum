@@ -5431,8 +5431,15 @@ func fetchTeam(cmd *cobra.Command) (*cli.TeamListResponse, error) {
 
 // emitFilteredTeam renders a filtered member set, honoring --json and printing a
 // clean "no agents on <kind> <value>" message when the filter matched nothing.
-func emitFilteredTeam(resp *cli.TeamListResponse, members []cli.TeamMember, kind, value string) error {
-	filtered := &cli.TeamListResponse{Members: members, SharedMessages: resp.SharedMessages}
+//
+// shared_messages (broadcast totals + per-group counts) is deliberately dropped
+// from filtered/local views: it is a team-GLOBAL aggregate, not a property of
+// any agent subset. Carrying it on a filtered response invites a script (or a
+// human reading the table footer) to misread the team-wide numbers as scoped to
+// the filter — equally misleading whether the filtered set is empty or not. The
+// unfiltered `thrum team` is the only view that surfaces the shared block.
+func emitFilteredTeam(members []cli.TeamMember, kind, value string) error {
+	filtered := &cli.TeamListResponse{Members: members}
 	if flagJSON {
 		return cli.EmitJSON(filtered)
 	}
@@ -5489,9 +5496,9 @@ Examples:
 
 			switch {
 			case daemonSet:
-				return emitFilteredTeam(result, cli.FilterByDaemon(result.Members, daemonID), "daemon", daemonID)
+				return emitFilteredTeam(cli.FilterByDaemon(result.Members, daemonID), "daemon", daemonID)
 			case hostSet:
-				return emitFilteredTeam(result, cli.FilterByHost(result.Members, hostname), "host", hostname)
+				return emitFilteredTeam(cli.FilterByHost(result.Members, hostname), "host", hostname)
 			}
 
 			if flagJSON {
@@ -5539,7 +5546,7 @@ daemon id the same way 'thrum daemon status' does. Honors --json.`,
 			if err != nil {
 				return err
 			}
-			return emitFilteredTeam(result, cli.FilterByDaemon(result.Members, selfDaemon), "daemon", selfDaemon)
+			return emitFilteredTeam(cli.FilterByDaemon(result.Members, selfDaemon), "daemon", selfDaemon)
 		},
 	}
 	cmd.Flags().Bool("all", false, "Include offline agents")

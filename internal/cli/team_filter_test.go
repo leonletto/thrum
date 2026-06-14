@@ -157,3 +157,34 @@ func TestFormatDaemonAggregates_Empty(t *testing.T) {
 		t.Errorf("empty: want 'No agents', got %q", out)
 	}
 }
+
+func TestNoAgentsForFilter(t *testing.T) {
+	cases := []struct {
+		name      string
+		kind      string
+		value     string
+		wantParts []string
+	}{
+		{"daemon", "daemon", "d_01ABC", []string{"No agents on", "daemon", "d_01ABC"}},
+		{"host", "host", "macbook", []string{"No agents on", "host", "macbook"}},
+		// Empty value renders as the unknown bucket label so the legacy/unknown
+		// no-match reads cleanly rather than as an empty-quoted blank.
+		{"empty-daemon", "daemon", "", []string{"No agents on", "daemon", UnknownDaemonBucket}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := NoAgentsForFilter(tc.kind, tc.value)
+			if got == "" {
+				t.Fatal("message must not be empty (no-match is not an error/empty crash)")
+			}
+			for _, part := range tc.wantParts {
+				if !strings.Contains(got, part) {
+					t.Errorf("message %q missing %q", got, part)
+				}
+			}
+			if !strings.HasSuffix(got, "\n") {
+				t.Errorf("message should end with newline, got %q", got)
+			}
+		})
+	}
+}

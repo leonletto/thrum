@@ -63,9 +63,10 @@ type DaemonAggregate struct {
 // daemon (thrum-l2kxw). Members with an empty origin_daemon bucket under
 // UnknownDaemonBucket so the counts always sum to len(members) — no row is
 // silently dropped. The hostname shown is the first non-empty hostname seen
-// for that daemon (members of one daemon share a host); the unknown bucket's
-// hostname stays empty. Rows are sorted by daemon_id for stable output, with
-// the unknown bucket last.
+// for that daemon (members of one daemon share a host); this applies to the
+// unknown bucket too — a member with no origin_daemon but a recorded hostname
+// surfaces that hostname on the unknown row. Rows are sorted by daemon_id for
+// stable output, with the unknown bucket last.
 func AggregateByDaemon(members []TeamMember) []DaemonAggregate {
 	type acc struct {
 		hostname string
