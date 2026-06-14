@@ -133,6 +133,40 @@ func TestScheduler_G23nb_ReminderFiresOnCaptureError_FailOpen(t *testing.T) {
 	}
 }
 
+// TestScheduler_G23nb_BlankCaptureKeepsLadder_FailOpen pins the empty-content
+// safety edge: a blank/whitespace-only capture (no error) must NOT be read as
+// "modal cleared" — DetectPaneState("",...) returns "" which would otherwise
+// trip the cancel branch and drop a live modal. The fail-open guard keeps the
+// ladder and fires the reminder.
+func TestScheduler_G23nb_BlankCaptureKeepsLadder_FailOpen(t *testing.T) {
+	p, clock := newSchedulerFixture(t)
+	ctx := context.Background()
+
+	p.SetPaneCaptureForTest(func(_ string, _ int) (string, error) { return modalMatchesContent, nil })
+	row := firstDetectAt(t, p, ctx)
+
+	// Blank capture (whitespace only), no error.
+	p.SetPaneCaptureForTest(func(_ string, _ int) (string, error) { return "   \n\n", nil })
+	advanceToFirstReminder(p, clock, row)
+
+	before := countThreadMessages(t, p, row.MessageID)
+	if err := p.OnDetection(ctx, "cursor-test", "cursor", "cursor-test:0.0",
+		"researcher_cursor", testPattern(), "pane A"); err != nil {
+		t.Fatalf("reminder detect: %v", err)
+	}
+
+	got, _ := p.store.LookupPendingNudgeBySession(ctx, "cursor-test")
+	if got == nil {
+		t.Fatal("blank capture must KEEP the row (fail-open), not cancel like a cleared modal")
+	}
+	if got.NudgeCount != 2 {
+		t.Errorf("blank capture: NudgeCount = %d, want 2 (reminder fired)", got.NudgeCount)
+	}
+	if after := countThreadMessages(t, p, row.MessageID); after != before+1 {
+		t.Errorf("blank capture: expected one reminder send, thread messages went %d -> %d", before, after)
+	}
+}
+
 func TestScheduler_G23nb_ReminderSkipsSendWhenAllRead(t *testing.T) {
 	p, clock := newSchedulerFixture(t)
 	ctx := context.Background()
@@ -186,6 +220,59 @@ func TestScheduler_G23nb_ReminderFiresWhenUnread(t *testing.T) {
 	}
 	if after := countThreadMessages(t, p, row.MessageID); after != before+1 {
 		t.Errorf("unread: expected one reminder send, thread messages went %d -> %d", before, after)
+	}
+}
+
+// TestScheduler_G23nb_AllReadStillEscalatesToGiveUp is the end-to-end guard
+// that the read-state SKIP cannot suppress give-up escalation: a truly
+// abandoned modal (recipient read every nudge but never acted) must still march
+// the cadence to maxNudgeCount and mark the agent stuck. Each slot is consumed
+// silently (no send), yet NudgeCount advances, so the final OnDetection hits the
+// give-up branch.
+func TestScheduler_G23nb_AllReadStillEscalatesToGiveUp(t *testing.T) {
+	p, clock := newSchedulerFixture(t)
+	ctx := context.Background()
+
+	// Modal stays up the whole time, so cancellation #1 never fires and every
+	// slot falls through to the read-state check.
+	p.SetPaneCaptureForTest(func(_ string, _ int) (string, error) { return modalMatchesContent, nil })
+	row := firstDetectAt(t, p, ctx)
+
+	// Recipient reads the original nudge and never acts. No reminder is ever
+	// sent (every slot skips), so no new deliveries appear — this single read
+	// keeps the audience "all read" for the whole ladder.
+	markDeliveryRead(t, p, row.MessageID, "coordinator_main")
+
+	first := row.FirstDetected
+	for i, off := range reminderSchedule {
+		*clock = first.Add(off)
+		p.SetClock(func() time.Time { return *clock })
+		if err := p.OnDetection(ctx, "cursor-test", "cursor", "cursor-test:0.0",
+			"researcher_cursor", testPattern(), "pane A"); err != nil {
+			t.Fatalf("slot %d detect: %v", i, err)
+		}
+		got, _ := p.store.LookupPendingNudgeBySession(ctx, "cursor-test")
+		if got == nil || got.NudgeCount != i+2 {
+			t.Fatalf("slot %d: expected silent advance to NudgeCount=%d, got %+v", i, i+2, got)
+		}
+	}
+
+	// No reminder was ever sent across the whole all-read ladder.
+	if n := countThreadMessages(t, p, row.MessageID); n != 1 {
+		t.Errorf("all-read ladder should send no reminders; thread has %d messages, want 1 (firstDetect only)", n)
+	}
+
+	// NudgeCount is now maxNudgeCount — the next detection must give up and mark
+	// the agent stuck, proving escalation survives the all-read skip.
+	*clock = first.Add(8 * time.Hour)
+	p.SetClock(func() time.Time { return *clock })
+	if err := p.OnDetection(ctx, "cursor-test", "cursor", "cursor-test:0.0",
+		"researcher_cursor", testPattern(), "pane A"); err != nil {
+		t.Fatalf("give-up detect: %v", err)
+	}
+	reloaded := readIdentityFile(t, p.thrumDir, "researcher_cursor")
+	if reloaded.AgentStatus != "stuck" {
+		t.Errorf("AgentStatus = %q, want stuck — all-read skip must not suppress give-up escalation", reloaded.AgentStatus)
 	}
 }
 

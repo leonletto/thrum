@@ -173,6 +173,9 @@ func (s *Store) DeleteAndReturnPendingNudge(ctx context.Context, msgID string) (
 // total > 0 guard keeps an orphan/no-delivery thread from reading as
 // "all read".
 func (s *Store) CountUnreadThreadDeliveries(ctx context.Context, rootMsgID, senderID string) (unread, total int, err error) {
+	// Column order: COUNT(*) -> total, SUM(read_at IS NULL) -> unread. Scanned
+	// in that order below; the named returns are (unread, total), so the return
+	// statement reverses them — keep the Scan order matching the SELECT.
 	row := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*),
 		       SUM(CASE WHEN d.read_at IS NULL THEN 1 ELSE 0 END)
