@@ -273,6 +273,14 @@ func TestScheduler_ReminderCadence(t *testing.T) {
 	p, clock := newSchedulerFixture(t)
 	ctx := context.Background()
 
+	// thrum-g23nb: fireReminder now does a fresh pane recheck. Stub a capture
+	// that still matches the modal so reminders fire deterministically instead
+	// of depending on a real tmux pane (and the recipient delivery stays unread,
+	// so the read-state skip does not engage here).
+	p.SetPaneCaptureForTest(func(_ string, _ int) (string, error) {
+		return "Not in allowlist: test\n", nil
+	})
+
 	if err := p.OnDetection(ctx, "cursor-test", "cursor", "cursor-test:0.0",
 		"researcher_cursor", testPattern(), "pane A"); err != nil {
 		t.Fatalf("first detect: %v", err)

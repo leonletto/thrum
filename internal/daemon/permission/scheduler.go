@@ -13,6 +13,7 @@ import (
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/process"
+	"github.com/leonletto/thrum/internal/tmux"
 )
 
 // reminderSchedule encodes the exponential backoff for reminders
@@ -228,9 +229,51 @@ func (p *Permission) firstDetect(
 	return p.store.InsertPendingNudge(ctx, row)
 }
 
+// modalCleared reports whether a FRESH pane capture proves the permission
+// modal is gone — the signal to cancel the reminder ladder (thrum-g23nb). It
+// deliberately FAILS OPEN: a capture or parse failure returns false ("not
+// proven cleared") so a transient tmux hiccup keeps the ladder alive rather
+// than silently abandoning a possibly-live approval path. Noise beats
+// destroying a pending approval.
+//
+// This inverts paneStillMatches' fail-CLOSED policy (reply.go): there an
+// unconfirmed pane must NOT receive an approve/deny keystroke, so the unknown
+// case returns false ("don't act"). Here the unknown case must PRESERVE the
+// nudge, so it also returns false ("not cleared") — same literal, opposite
+// intent. The two intentionally do not share a helper, keeping the live
+// approve/deny path frozen.
+func (p *Permission) modalCleared(row *NudgeRow, runtime string) bool {
+	capture := p.paneCapture
+	if capture == nil {
+		capture = tmux.CapturePane
+	}
+	content, err := capture(row.TmuxTarget, paneRecheckLines)
+	if err != nil {
+		slog.Warn("[permission] reminder pane recheck failed — keeping ladder (fail-open)",
+			"target", row.TmuxTarget, "message_id", row.MessageID, "err", err)
+		return false
+	}
+	if DetectPaneState(runtime, content) == "permission:"+row.PatternKey {
+		return false
+	}
+	return true
+}
+
 // fireReminder advances the row by one reminder slot, persists the
 // update, and re-sends the nudge body (with the new reminder counter)
-// to every live supervisor.
+// to every live supervisor — unless one of two thrum-g23nb cancellation
+// conditions short-circuits it:
+//
+//  1. Pane recheck: a fresh capture proves the modal is gone (the agent
+//     approved/dismissed out-of-band, before the upstream check-pane poll
+//     caught up). Treat it like OnRecovery — claim the row + clear stuck —
+//     and stop the ladder. Fail-open on an unreadable pane (see modalCleared).
+//  2. Read-state: every non-author recipient has already READ the nudge.
+//     Consume the slot SILENTLY — advance the cadence so give-up still
+//     escalates a truly-abandoned modal, but skip the send so we stop nudging
+//     an audience that has seen it (thrum-ycqj: nudge fired with 0 unread).
+//     The row is KEPT regardless — deleting would sever the thrum-reply
+//     approval path.
 func (p *Permission) fireReminder(
 	ctx context.Context,
 	row *NudgeRow,
@@ -238,11 +281,31 @@ func (p *Permission) fireReminder(
 	paneHash [32]byte,
 	now time.Time,
 ) error {
+	// Cancellation #1 — modal cleared on a fresh recheck.
+	if p.modalCleared(row, runtime) {
+		slog.Info("[permission] reminder cancelled — modal cleared on recheck",
+			"session", row.Session, "message_id", row.MessageID)
+		return p.OnRecovery(ctx, row.Session, row.AgentName)
+	}
+
 	row.NudgeCount++
 	row.LastNudgeAt = now
 	row.LastPaneHash = paneHash
 	if err := p.store.UpdatePendingNudge(ctx, row); err != nil {
 		return err
+	}
+
+	// Cancellation #2 — audience already read the nudge. Checked AFTER the
+	// slot advance so the cadence still marches toward give-up; only the send
+	// is skipped. A read-state query failure falls through and fires (the
+	// existing noisy-but-safe behavior).
+	if unread, total, err := p.store.CountUnreadThreadDeliveries(ctx, row.MessageID, p.supervisorID); err != nil {
+		slog.Warn("[permission] reminder read-state check failed — sending anyway",
+			"message_id", row.MessageID, "err", err)
+	} else if total > 0 && unread == 0 {
+		slog.Info("[permission] reminder slot consumed silently — all recipients read the nudge (row kept)",
+			"message_id", row.MessageID, "total_recipients", total, "nudge_count", row.NudgeCount)
+		return nil
 	}
 
 	// Match firstDetect's error handling exactly: log the error but
