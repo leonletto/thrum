@@ -80,7 +80,11 @@ const (
 // daemon/system status reporters belong in Class B since none filter
 // by caller identity.
 var diagnosticBannerLeaves = map[string]bool{
-	"thrum team":            true,
+	// `thrum team` itself is no longer a leaf (it gained the local/daemons
+	// subcommands); its diagnostic-banner annotation is set directly on the
+	// command in teamCmd(). The two subviews below ARE leaves and tag here.
+	"thrum team local":      true,
+	"thrum team daemons":    true,
 	"thrum agent list":      true,
 	"thrum version":         true,
 	"thrum daemon logs":     true,
