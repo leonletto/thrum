@@ -5407,6 +5407,50 @@ Examples:
 	}
 }
 
+// fetchTeam calls team.list with the standard --all/--system flags read off cmd.
+func fetchTeam(cmd *cobra.Command) (*cli.TeamListResponse, error) {
+	client, err := getClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to daemon: %w", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	includeAll, _ := cmd.Flags().GetBool("all")
+	includeSystem, _ := cmd.Flags().GetBool("system")
+	req := cli.TeamListRequest{
+		IncludeOffline: includeAll,
+		IncludeSystem:  includeSystem,
+	}
+
+	var result cli.TeamListResponse
+	if err := client.Call("team.list", req, &result); err != nil {
+		return nil, fmt.Errorf("team.list RPC failed: %w", err)
+	}
+	return &result, nil
+}
+
+// emitFilteredTeam renders a filtered member set, honoring --json and printing a
+// clean "no agents on <kind> <value>" message when the filter matched nothing.
+//
+// shared_messages (broadcast totals + per-group counts) is deliberately dropped
+// from filtered/local views: it is a team-GLOBAL aggregate, not a property of
+// any agent subset. Carrying it on a filtered response invites a script (or a
+// human reading the table footer) to misread the team-wide numbers as scoped to
+// the filter — equally misleading whether the filtered set is empty or not. The
+// unfiltered `thrum team` is the only view that surfaces the shared block.
+func emitFilteredTeam(members []cli.TeamMember, kind, value string) error {
+	filtered := &cli.TeamListResponse{Members: members}
+	if flagJSON {
+		return cli.EmitJSON(filtered)
+	}
+	if len(members) == 0 {
+		fmt.Print(cli.NoAgentsForFilter(kind, value))
+		return nil
+	}
+	fmt.Print(cli.FormatTeam(filtered))
+	return nil
+}
+
 func teamCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "team",
@@ -5416,41 +5460,128 @@ func teamCmd() *cobra.Command {
 Displays session info, work context, inbox counts, branch status,
 and per-file change details for all agents with active sessions.
 
+Filter by the daemon that owns each agent or by host, or use the
+'local' / 'daemons' subviews. Every form honors --json.
+
 Examples:
   thrum team
   thrum team --all
   thrum team --system
-  thrum team --json`,
+  thrum team --json
+  thrum team --daemon <daemon-id>   # agents owned by one daemon
+  thrum team --host <hostname>      # agents on one host
+  thrum team local                  # agents on THIS repo's daemon
+  thrum team daemons                # one row per daemon: id, host, count`,
+		// Adding the local/daemons subcommands turns `team` into a non-leaf,
+		// so tagGuardCategories (which walks leaves only) no longer tags it.
+		// `thrum team` with no args still runs RunE + getClient, so set its
+		// cross-worktree response class explicitly to preserve the prior
+		// diagnostic-banner behavior instead of defaulting to abort.
+		Annotations: map[string]string{
+			crossWorktreeResponseKey: CrossWorktreeResponseDiagnosticBanner,
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := getClient()
+			daemonID, _ := cmd.Flags().GetString("daemon")
+			hostname, _ := cmd.Flags().GetString("host")
+			daemonSet := cmd.Flags().Changed("daemon")
+			hostSet := cmd.Flags().Changed("host")
+			if daemonSet && hostSet {
+				return fmt.Errorf("thrum team: --daemon and --host are mutually exclusive")
+			}
+
+			result, err := fetchTeam(cmd)
 			if err != nil {
-				return fmt.Errorf("failed to connect to daemon: %w", err)
-			}
-			defer func() { _ = client.Close() }()
-
-			includeAll, _ := cmd.Flags().GetBool("all")
-			includeSystem, _ := cmd.Flags().GetBool("system")
-			req := cli.TeamListRequest{
-				IncludeOffline: includeAll,
-				IncludeSystem:  includeSystem,
+				return err
 			}
 
-			var result cli.TeamListResponse
-			if err := client.Call("team.list", req, &result); err != nil {
-				return fmt.Errorf("team.list RPC failed: %w", err)
+			switch {
+			case daemonSet:
+				return emitFilteredTeam(cli.FilterByDaemon(result.Members, daemonID), "daemon", daemonID)
+			case hostSet:
+				return emitFilteredTeam(cli.FilterByHost(result.Members, hostname), "host", hostname)
 			}
 
 			if flagJSON {
 				return cli.EmitJSON(result)
 			}
-			fmt.Print(cli.FormatTeam(&result))
+			fmt.Print(cli.FormatTeam(result))
 			return nil
 		},
 	}
 
 	cmd.Flags().Bool("all", false, "Include offline agents")
 	cmd.Flags().Bool("system", false, "Include reserved pseudo-agents (@supervisor_*, etc.)")
+	cmd.Flags().String("daemon", "", "Only show agents whose origin_daemon matches this daemon id")
+	cmd.Flags().String("host", "", "Only show agents on this hostname")
 
+	cmd.AddCommand(teamLocalCmd())
+	cmd.AddCommand(teamDaemonsCmd())
+
+	return cmd
+}
+
+// teamLocalCmd is sugar for `thrum team --daemon <self>`: agents owned by THIS
+// repo's daemon. Self daemon id is resolved the same way `thrum daemon status`
+// does — via cli.DaemonStatus(flagRepo).Identity.DaemonID.
+func teamLocalCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "local",
+		Short: "Show agents on this repo's daemon",
+		Long: `Show only the agents owned by THIS repo's daemon.
+
+Equivalent to 'thrum team --daemon <self-daemon-id>', resolving the local
+daemon id the same way 'thrum daemon status' does. Honors --json.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			status, err := cli.DaemonStatus(flagRepo)
+			if err != nil {
+				return fmt.Errorf("failed to resolve local daemon: %w", err)
+			}
+			if status.Identity == nil || status.Identity.DaemonID == "" {
+				return fmt.Errorf("local daemon id unavailable (is the daemon initialized for this repo?)")
+			}
+			selfDaemon := status.Identity.DaemonID
+
+			result, err := fetchTeam(cmd)
+			if err != nil {
+				return err
+			}
+			return emitFilteredTeam(cli.FilterByDaemon(result.Members, selfDaemon), "daemon", selfDaemon)
+		},
+	}
+	cmd.Flags().Bool("all", false, "Include offline agents")
+	cmd.Flags().Bool("system", false, "Include reserved pseudo-agents (@supervisor_*, etc.)")
+	return cmd
+}
+
+// teamDaemonsCmd aggregates the team by origin_daemon: one row per distinct
+// daemon with {daemon_id, hostname, agent_count}. Members with no origin_daemon
+// bucket under "unknown" so the counts always sum to the member total.
+func teamDaemonsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "daemons",
+		Short: "Aggregate agents by daemon",
+		Long: `Group agents by the daemon that owns them.
+
+One row per distinct origin_daemon with its hostname and agent count.
+Agents with no recorded origin_daemon bucket under "unknown"; counts
+always sum to the total. Honors --json.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			result, err := fetchTeam(cmd)
+			if err != nil {
+				return err
+			}
+			rows := cli.AggregateByDaemon(result.Members)
+			if flagJSON {
+				return cli.EmitJSON(rows)
+			}
+			fmt.Print(cli.FormatDaemonAggregates(rows))
+			return nil
+		},
+	}
+	cmd.Flags().Bool("all", false, "Include offline agents")
+	cmd.Flags().Bool("system", false, "Include reserved pseudo-agents (@supervisor_*, etc.)")
 	return cmd
 }
 
