@@ -154,6 +154,44 @@ func (s *Store) DeleteAndReturnPendingNudge(ctx context.Context, msgID string) (
 	return scanSingleRow(row)
 }
 
+// CountUnreadThreadDeliveries reports supervisor-audience read-state across the
+// whole nudge thread rooted at rootMsgID — the firstDetect message plus every
+// reminder threaded under it (messages.thread_id = rootMsgID). total is the
+// number of audience deliveries; unread is how many have
+// message_deliveries.read_at IS NULL.
+//
+// senderID (the supervisor pseudo-agent that AUTHORS the nudges, e.g.
+// "supervisor_thrum") is excluded: every supervisor send writes a self-delivery
+// to the sender that the projector auto-marks read, which is an artifact of the
+// fan-out, not audience read-state. The modal owner is never a recipient (it is
+// excluded from the supervisor set on both send paths), so no owner exclusion
+// is needed here.
+//
+// Used by fireReminder (thrum-g23nb): total > 0 && unread == 0 means every real
+// supervisor recipient has already read the nudge, so the reminder slot can be
+// consumed silently instead of re-blasting an audience that has seen it. The
+// total > 0 guard keeps an orphan/no-delivery thread from reading as
+// "all read".
+func (s *Store) CountUnreadThreadDeliveries(ctx context.Context, rootMsgID, senderID string) (unread, total int, err error) {
+	// Column order: COUNT(*) -> total, SUM(read_at IS NULL) -> unread. Scanned
+	// in that order below; the named returns are (unread, total), so the return
+	// statement reverses them — keep the Scan order matching the SELECT.
+	row := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*),
+		       SUM(CASE WHEN d.read_at IS NULL THEN 1 ELSE 0 END)
+		  FROM message_deliveries d
+		  JOIN messages m ON d.message_id = m.message_id
+		 WHERE (m.message_id = ? OR m.thread_id = ?)
+		   AND d.recipient_agent_id != ?`,
+		rootMsgID, rootMsgID, senderID)
+	// SUM over zero matching rows yields SQL NULL — NullInt64 absorbs it.
+	var totalN, unreadN sql.NullInt64
+	if err := row.Scan(&totalN, &unreadN); err != nil {
+		return 0, 0, fmt.Errorf("count unread thread deliveries: %w", err)
+	}
+	return int(unreadN.Int64), int(totalN.Int64), nil
+}
+
 // LookupMostRecentPendingNudgeByRecipient returns the non-expired
 // pending nudge most recently delivered to the given recipient (by
 // agent_id, e.g. "user:leon-letto"), or (nil, nil) if none match.
