@@ -149,6 +149,17 @@ func TestInitDB_Indexes(t *testing.T) {
 			t.Fatalf("Query index %s failed: %v", index, err)
 		}
 	}
+
+	// v47 forward-port (thrum-399av): idx_messages_time was replaced by
+	// idx_messages_time_id and must NOT exist on a fresh v51 DB. Guards against
+	// the dropped index silently reappearing in createIndexes.
+	var stale string
+	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_messages_time'").Scan(&stale)
+	if err == nil {
+		t.Error("idx_messages_time should NOT exist on a fresh v51 DB (replaced by idx_messages_time_id)")
+	} else if err != sql.ErrNoRows {
+		t.Fatalf("Query idx_messages_time failed: %v", err)
+	}
 }
 
 func TestInitDB_Idempotent(t *testing.T) {

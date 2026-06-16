@@ -926,7 +926,13 @@ func createIndexes(tx *sql.Tx) error {
 		"CREATE INDEX IF NOT EXISTS idx_memory_embed_status ON memory_embeddings(embed_status)",
 
 		// v45–v50 dead-end forward-port (thrum-399av): indexes for the new
-		// tables/columns above. Storage only — no release-line consumer.
+		// tables/columns above, mirrored here from the vNN runMigrations blocks
+		// for fresh-init parity. InitDB runs createTables/createIndexes and
+		// stamps the version WITHOUT running migrations, so every index a
+		// migration creates must ALSO be created here or a fresh v51 DB would
+		// drift from a v40→v51 migrated one. thrum-agents creates some of these
+		// only in its v48/v50 blocks (its init path differs) — the divergence
+		// is intentional; do not "fix" it back. Storage only, no consumer here.
 		"CREATE INDEX IF NOT EXISTS idx_alert_deliveries_expires ON alert_deliveries(recipient_agent_id, expires_at)",      // v45
 		"CREATE INDEX IF NOT EXISTS idx_deliveries_recipient_via ON message_deliveries(recipient_agent_id, addressed_via)", // v48
 		"CREATE INDEX IF NOT EXISTS idx_tg_queue_next ON telegram_outbound_queue(next_retry_at, status)",                   // v49

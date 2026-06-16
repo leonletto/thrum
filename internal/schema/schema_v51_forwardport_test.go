@@ -77,6 +77,21 @@ var (
 		"node", "node_label", "edge", "node_comment", "graph_blocked",
 		"memory_satellite",
 	}
+	// Every index a v41–v51 migration creates must also appear on a fresh DB —
+	// asserting presence here is what makes fresh-init/migration drift on ANY
+	// index actually fail the test.
+	v51NewIndexes = []string{
+		"idx_messages_time_id",         // v47 (replaces idx_messages_time)
+		"idx_messages_visibility",      // v47
+		"idx_alert_deliveries_expires", // v45
+		"idx_deliveries_recipient_via", // v48
+		"idx_tg_queue_next",            // v49
+		"idx_node_ready",               // v50
+		"idx_node_kind",                // v50
+		"idx_edge_to",                  // v50
+		"idx_node_label_label",         // v50
+		"idx_node_comment_node",        // v50
+	}
 )
 
 func assertV51Surface(t *testing.T, db *sql.DB) {
@@ -93,11 +108,14 @@ func assertV51Surface(t *testing.T, db *sql.DB) {
 			t.Errorf("missing table %s on v51 schema", tbl)
 		}
 	}
-	// v47 index swap: the composite keyset index is present; the old
-	// single-column index is gone.
-	if !hasIndex(t, db, "idx_messages_time_id") {
-		t.Error("missing idx_messages_time_id on v51 schema")
+	// Every new index is present (covers the v47 keyset index plus the v45/v48/
+	// v49/v50 additions — drift on any one fails here).
+	for _, idx := range v51NewIndexes {
+		if !hasIndex(t, db, idx) {
+			t.Errorf("missing index %s on v51 schema", idx)
+		}
 	}
+	// v47 swap: the old single-column index is gone.
 	if hasIndex(t, db, "idx_messages_time") {
 		t.Error("idx_messages_time should be dropped on v51 schema")
 	}
