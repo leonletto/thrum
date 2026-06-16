@@ -40,9 +40,28 @@ visibility into v0.10.6 authors until they upgrade.
   bypass shell interpolation (backticks, `${...}`, `$(...)` arrive verbatim).
   Plugin docs (send/reply commands, CLI_REFERENCE, MESSAGING) updated across
   claude/codex/cursor/opencode with the heredoc guidance.
+- **`thrum team` daemon/host filters + `local`/`daemons` subviews
+  (thrum-l2kxw)** — `thrum team --daemon <id>` and `--host <name>` filter the
+  roster to a single daemon or host; `thrum team local` is sugar for the current
+  daemon; `thrum team daemons` groups agents by origin daemon (daemon_id,
+  hostname, agent_count, with an `unknown` bucket for unattributed agents). Pure
+  CLI presentation over the existing `team.list` payload — no schema/RPC/daemon
+  change — and all four views honor `--json`. `shared_messages` is omitted from
+  filtered views since it's a team-global aggregate that would mislead on a
+  subset.
 
 ### Fixed
 
+- **Permission reminder ladder cancels when the modal clears + skips when all
+  supervisors have read (thrum-g23nb)** — `fireReminder` now re-captures the
+  pane on each fire and, if the approval modal has cleared, runs recovery and
+  stops the ladder instead of nagging about an already-resolved prompt; it also
+  skips the reminder send (while still advancing cadence, so give-up escalation
+  is preserved) when every real supervisor recipient has already read the
+  thread. Fails open on pane-capture error (keeps the ladder) so a flaky capture
+  never silently drops a live reminder. Release-line-native — no
+  fingerprint-engine dependency. New `Store.CountUnreadThreadDeliveries`
+  excludes supervisor self-delivery.
 - **Backstop nudges only locally-resident recipients (thrum-wo2z)** — the
   daemon backstop's 15-minute ticker scanned unread deliveries without a
   residency filter; agent registrations synced from remote daemons pass the
