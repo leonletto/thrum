@@ -233,11 +233,40 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG.md</a>.</p>
 <h2>v0.10.6 — In Soak (RC)</h2>
-<p><strong>v0.10.6-rc.11</strong> was tagged 2026-06-09 and is the current pre-release. It
-supersedes rc.10, which was pulled during soak — rc.10&#39;s a-sync host-denylist
-refused sync to all github.com / gitlab.com remotes regardless of repo
-visibility, breaking private-repo users. rc.11 carries rc.10&#39;s directed-inbound
-work forward plus ten new back-ports. The headliners:</p>
+<p><strong>v0.10.6-rc.13</strong> was tagged 2026-06-15 and is the current pre-release. It adds
+two release-line features on top of the rc.11/rc.12 cross-host sync-storm fix
+batch:</p>
+<ul>
+<li><strong><code>thrum team</code> daemon/host filters + <code>local</code> / <code>daemons</code> subviews</strong>
+(thrum-l2kxw) — <code>thrum team --daemon &lt;id&gt;</code> and <code>--host &lt;name&gt;</code> narrow the
+roster to a single daemon or host; <code>thrum team local</code> is sugar for the current
+daemon, and <code>thrum team daemons</code> groups agents by origin daemon (daemon_id,
+hostname, agent count, with an <code>unknown</code> bucket for unattributed agents). It&#39;s
+pure CLI presentation over the existing <code>team.list</code> payload — no schema, RPC,
+or daemon change — and all four views honor <code>--json</code>.</li>
+<li><strong>Permission reminder ladder cancels when the modal clears</strong> (thrum-g23nb) —
+the reminder ladder re-captures the pane on each fire and, if the approval
+modal has already cleared, runs recovery and stops instead of nagging about a
+resolved prompt. It also skips the send (while still advancing cadence, so
+give-up escalation is preserved) once every supervisor recipient has read the
+thread, and fails open on a pane-capture error so a flaky capture never drops a
+live reminder.</li>
+</ul>
+<p>rc.12 was the <strong>cross-host sync-storm fix batch</strong> — two storms observed in
+production on busy multi-host meshes. A duplicate <code>message_id</code> in relayed history
+no longer stalls inbound sync (thrum-lv9x): a durable-lane snapshot row colliding
+with the same event arriving later via sync used to abort the projector&#39;s whole
+batch without advancing the checkpoint, and the notify-driven re-pull retried it
+forever (a pinned peer checkpoint and a 65–167/sec <code>sync.notify</code> storm).
+<code>message.create</code> apply is now idempotent (<code>INSERT OR IGNORE</code> + a dup-no-op that
+still commits the event record) with an event-id dedup pre-check on the a-sync
+ingest path. And the daemon backstop now nudges only locally-resident recipients
+(thrum-wo2z): its 15-minute ticker previously scanned unread deliveries with no
+residency filter, waking local sessions every 15 minutes for remote agents&#39; mail
+and accumulating spool envelopes unbounded (one host hit 107). ⚠ <strong>Deploy note:</strong>
+spool envelopes accumulated before this fix are not removed automatically — a
+one-time cleanup of non-resident dirs under <code>.thrum/spool/</code> is recommended.</p>
+<p><strong>rc.11 carries forward</strong>, with its headliners:</p>
 <ul>
 <li><strong>a-sync exposure guard now gates on repository visibility</strong> (thrum-44mt,
 replaces the rc.10 host-denylist). The daemon probes <code>origin</code> with an
@@ -248,12 +277,12 @@ exit-0-with-refs counts as public), and the explicit exact-match override
 <code>daemon.sync.public_exposure_override</code> allows intentional public-repo sync.
 The gate resolves once at boot, surfaces its reason in <code>sync status</code> and the
 Settings UI, and warns active agents when the repo transitions into exposed.</li>
-<li><strong>Read-state unification + one-time v40 backfill</strong> (thrum-b6qw). Read truth
-is unified on <code>message_deliveries.read_at</code>, and a one-time schema v39→v40
-marker runs a data-only backfill that clears historically-stuck unread — the
-&quot;phantom unread&quot; / backstop nudge-storm class. ⚠ <strong>Upgrade note: the v40
-migration is one-way.</strong> Binaries supporting ≤v39 cannot reopen a migrated
-DB; take a <code>.thrum/</code> backup before upgrading if you may need to roll back.</li>
+<li><strong>Read-state unification + one-time v40 backfill</strong> (thrum-b6qw). Read truth is
+unified on <code>message_deliveries.read_at</code>, and a one-time schema v39→v40 marker
+runs a data-only backfill that clears historically-stuck unread — the &quot;phantom
+unread&quot; / backstop nudge-storm class. ⚠ <strong>Upgrade note: the v40 migration is
+one-way.</strong> Binaries supporting ≤v39 cannot reopen a migrated DB; take a
+<code>.thrum/</code> backup before upgrading if you may need to roll back.</li>
 <li><strong>tsnet node released before PID removal on shutdown</strong> (thrum-w8is) — daemon
 restart no longer leaves the old tsnet node registered while the new process
 re-binds the same state dir, fixing the post-restart cross-host inbound flap.</li>
@@ -264,19 +293,19 @@ reply-clustered chronological view.</li>
 <code>message edit</code> accept <code>--stdin</code> / <code>--body-file &lt;path&gt;</code> / <code>-</code> so bodies bypass
 shell interpolation (backticks, <code>${...}</code>, <code>$(...)</code> arrive verbatim).</li>
 </ul>
-<p>Also in rc.11: the peer bridge self-heals after daemon restart (thrum-to7p),
-the inbox hidden-count only counts delivery-backed unread so
+<p>Also in rc.11: the peer bridge self-heals after daemon restart (thrum-to7p), the
+inbox hidden-count only counts delivery-backed unread so
 <code>thrum message read --all</code> converges (thrum-eeio), the role preamble survives
 the self-restart race (thrum-4ye2), and context-sweep alerts gain hysteresis
 plus a correct 1M-token window for <code>claude-fable-5</code> (thrum-gqq3).</p>
 <p>The rc.10 <strong>directed-inbound back-port</strong> (thrum-h4s4) lands with rc.11: a lean
 0.10.6 node can consume a directed/filtered inbound stream served by a 0.11 hub
-(the hub does all filtering). It brings a structured <code>daemon.sync</code> config
-stanza (<code>{enabled, mechanisms:[{mechanism, scope}]}</code>) with startup validity
-checks to supplement the overloaded <code>daemon.local_only</code> bool, the additive
-<code>filtered</code> sync-pull response flag with checkpoint cursor-honesty, and a
-pairing guard so <code>thrum peer add</code> / <code>peer join</code> refuse when sync is disabled
-instead of silently half-connecting.</p>
+(the hub does all filtering). It brings a structured <code>daemon.sync</code> config stanza
+(<code>{enabled, mechanisms:[{mechanism, scope}]}</code>) with startup validity checks to
+supplement the overloaded <code>daemon.local_only</code> bool, the additive <code>filtered</code>
+sync-pull response flag with checkpoint cursor-honesty, and a pairing guard so
+<code>thrum peer add</code> / <code>peer join</code> refuse when sync is disabled instead of silently
+half-connecting.</p>
 <p>rc.9&#39;s cross-host sync fix carries forward — the auto-reconcile Manager no
 longer advertises a loopback <code>:&lt;port&gt;</code> dialer identity that corrupted peers&#39;
 stored address and stalled cross-host sync for hours (thrum-hix5). rc.8&#39;s
@@ -304,7 +333,7 @@ message-body write cap (thrum-mhwt), <code>INSERT OR IGNORE</code> on <code>appl
 (thrum-9jcb.3), the identity-guard PID-ancestor split (thrum-xir.40) and cached
 peercred CWD lookup (thrum-xir.45), and <code>thrum worktree teardown</code>
 cascade-deleting the bound agent identity (thrum-wk7d). See the
-<a href="beta-channel.html">Beta Channel</a> page for the full rc.11 callout + install
+<a href="beta-channel.html">Beta Channel</a> page for the full rc.13 callout + install
 commands.</p>
 <p>v0.10.6&#39;s headline is a <strong>sync re-architecture</strong> (thrum-s6os): the cross-machine
 wire stream now derives from per-agent and per-bridge-group state files rather

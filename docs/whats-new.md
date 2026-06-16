@@ -7,11 +7,42 @@ machine-readable history lives in
 
 ## v0.10.6 — In Soak (RC)
 
-**v0.10.6-rc.11** was tagged 2026-06-09 and is the current pre-release. It
-supersedes rc.10, which was pulled during soak — rc.10's a-sync host-denylist
-refused sync to all github.com / gitlab.com remotes regardless of repo
-visibility, breaking private-repo users. rc.11 carries rc.10's directed-inbound
-work forward plus ten new back-ports. The headliners:
+**v0.10.6-rc.13** was tagged 2026-06-15 and is the current pre-release. It adds
+two release-line features on top of the rc.11/rc.12 cross-host sync-storm fix
+batch:
+
+- **`thrum team` daemon/host filters + `local` / `daemons` subviews**
+  (thrum-l2kxw) — `thrum team --daemon <id>` and `--host <name>` narrow the
+  roster to a single daemon or host; `thrum team local` is sugar for the current
+  daemon, and `thrum team daemons` groups agents by origin daemon (daemon_id,
+  hostname, agent count, with an `unknown` bucket for unattributed agents). It's
+  pure CLI presentation over the existing `team.list` payload — no schema, RPC,
+  or daemon change — and all four views honor `--json`.
+- **Permission reminder ladder cancels when the modal clears** (thrum-g23nb) —
+  the reminder ladder re-captures the pane on each fire and, if the approval
+  modal has already cleared, runs recovery and stops instead of nagging about a
+  resolved prompt. It also skips the send (while still advancing cadence, so
+  give-up escalation is preserved) once every supervisor recipient has read the
+  thread, and fails open on a pane-capture error so a flaky capture never drops
+  a live reminder.
+
+rc.12 was the **cross-host sync-storm fix batch** — two storms observed in
+production on busy multi-host meshes. A duplicate `message_id` in relayed
+history no longer stalls inbound sync (thrum-lv9x): a durable-lane snapshot row
+colliding with the same event arriving later via sync used to abort the
+projector's whole batch without advancing the checkpoint, and the notify-driven
+re-pull retried it forever (a pinned peer checkpoint and a 65–167/sec
+`sync.notify` storm). `message.create` apply is now idempotent
+(`INSERT OR IGNORE` + a dup-no-op that still commits the event record) with an
+event-id dedup pre-check on the a-sync ingest path. And the daemon backstop now
+nudges only locally-resident recipients (thrum-wo2z): its 15-minute ticker
+previously scanned unread deliveries with no residency filter, waking local
+sessions every 15 minutes for remote agents' mail and accumulating spool
+envelopes unbounded (one host hit 107). ⚠ **Deploy note:** spool envelopes
+accumulated before this fix are not removed automatically — a one-time cleanup
+of non-resident dirs under `.thrum/spool/` is recommended.
+
+**rc.11 carries forward**, with its headliners:
 
 - **a-sync exposure guard now gates on repository visibility** (thrum-44mt,
   replaces the rc.10 host-denylist). The daemon probes `origin` with an
@@ -81,7 +112,7 @@ message-body write cap (thrum-mhwt), `INSERT OR IGNORE` on `applySessionStart`
 (thrum-9jcb.3), the identity-guard PID-ancestor split (thrum-xir.40) and cached
 peercred CWD lookup (thrum-xir.45), and `thrum worktree teardown`
 cascade-deleting the bound agent identity (thrum-wk7d). See the
-[Beta Channel](beta-channel.md) page for the full rc.11 callout + install
+[Beta Channel](beta-channel.md) page for the full rc.13 callout + install
 commands.
 
 v0.10.6's headline is a **sync re-architecture** (thrum-s6os): the cross-machine

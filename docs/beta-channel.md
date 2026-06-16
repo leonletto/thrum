@@ -25,12 +25,49 @@ they're parameterized over `VERSION` and the release branch.
 ## Stable-track current pre-release
 
 > **Current stable-track pre-release:
-> [`v0.10.6-rc.11`](https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.11)**
-> (tagged 2026-06-09, in soak). rc.11 supersedes rc.10, which was pulled during
-> soak — rc.10's a-sync host-denylist refused sync to **all** github.com /
-> gitlab.com remotes regardless of repo visibility, breaking private-repo users.
-> rc.11 carries rc.10's directed-inbound work forward plus ten new back-ports.
-> The headliners:
+> [`v0.10.6-rc.13`](https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.13)**
+> (tagged 2026-06-15, in soak). rc.13 adds two release-line features on top of
+> the rc.11/rc.12 cross-host sync-storm fix batch:
+>
+> - **`thrum team` daemon/host filters + `local` / `daemons` subviews**
+>   (thrum-l2kxw) — `thrum team --daemon <id>` and `--host <name>` filter the
+>   roster to a single daemon or host; `thrum team local` is sugar for the
+>   current daemon; `thrum team daemons` groups agents by origin daemon
+>   (daemon_id, hostname, agent count, with an `unknown` bucket for unattributed
+>   agents). Pure CLI presentation over the existing `team.list` payload — no
+>   schema, RPC, or daemon change — and all four views honor `--json`.
+>   `shared_messages` is omitted from filtered views since that team-global
+>   aggregate would mislead on a subset.
+> - **Permission reminder ladder cancels when the modal clears** (thrum-g23nb) —
+>   `fireReminder` re-captures the pane on each fire and, if the approval modal
+>   has already cleared, runs recovery and stops the ladder instead of nagging
+>   about a resolved prompt. It also skips the reminder send (while still
+>   advancing cadence, so give-up escalation is preserved) once every real
+>   supervisor recipient has read the thread, and fails open on a pane-capture
+>   error so a flaky capture never silently drops a live reminder.
+>
+> rc.12 was the **cross-host sync-storm fix batch** — two production-observed
+> storms on busy multi-host meshes:
+>
+> - **Duplicate `message_id` in relayed history no longer stalls inbound sync**
+>   (thrum-lv9x) — a durable-lane snapshot row colliding with the same event
+>   arriving later via sync aborted the projector's whole batch without
+>   advancing the checkpoint, and the notify-driven re-pull retried it forever
+>   (observed as a pinned peer checkpoint and a 65–167/sec `sync.notify` storm).
+>   `message.create` apply is now idempotent (`INSERT OR IGNORE` + a dup-no-op
+>   that still commits the event record so the batch advances), with an event-id
+>   dedup pre-check on the a-sync git ingest path. Live-verified two-node: 104
+>   climbing apply-failures → 0, checkpoint converged.
+> - **Backstop nudges only locally-resident recipients** (thrum-wo2z) — the
+>   daemon backstop's 15-minute ticker scanned unread deliveries with no
+>   residency filter, so local sessions were woken every 15 minutes for remote
+>   agents' mail (and spool envelopes accumulated unbounded — one host hit 107).
+>   The scan now applies an identity-file residency predicate with a
+>   defense-in-depth guard at the dispatcher. ⚠ **Deploy note:** spool envelopes
+>   accumulated before the fix are not removed automatically — a one-time
+>   cleanup of non-resident dirs under `.thrum/spool/` is recommended.
+>
+> **rc.11 carries forward**, with its headliners:
 >
 > - **a-sync exposure guard now gates on repository visibility** (thrum-44mt,
 >   replaces the rc.10 host-denylist). The daemon probes `origin` with an
@@ -120,13 +157,13 @@ they're parameterized over `VERSION` and the release branch.
 > Full notes: [What's New](whats-new.md) and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/release/v0.10.6/CHANGELOG.md).
 
-### Quick install for `v0.10.6-rc.11`
+### Quick install for `v0.10.6-rc.13`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.11 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.13 sh
 
 # Codex plugin (matches release/v0.10.6)
 THRUM_INSTALL_REF=release/v0.10.6 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.6/codex-plugin/plugins/thrum/scripts/install-plugin.sh)

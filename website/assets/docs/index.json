@@ -162,7 +162,7 @@
       "plugin",
       "substrate"
     ],
-    "lastUpdated": "2026-06-09"
+    "lastUpdated": "2026-06-15"
   },
   {
     "path": "identity.html",
@@ -669,7 +669,7 @@
       "migration",
       "version"
     ],
-    "lastUpdated": "2026-06-09"
+    "lastUpdated": "2026-06-15"
   },
   {
     "path": "quickstart.html",
