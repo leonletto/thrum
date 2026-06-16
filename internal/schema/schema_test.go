@@ -124,7 +124,9 @@ func TestInitDB_Indexes(t *testing.T) {
 	// Verify indexes exist
 	indexes := []string{
 		"idx_messages_thread",
-		"idx_messages_time",
+		// v47 forward-port (thrum-399av): idx_messages_time was replaced by the
+		// idx_messages_time_id composite keyset index on fresh DBs.
+		"idx_messages_time_id",
 		"idx_messages_agent",
 		"idx_messages_session",
 		"idx_messages_not_deleted",
@@ -146,6 +148,17 @@ func TestInitDB_Indexes(t *testing.T) {
 		} else if err != nil {
 			t.Fatalf("Query index %s failed: %v", index, err)
 		}
+	}
+
+	// v47 forward-port (thrum-399av): idx_messages_time was replaced by
+	// idx_messages_time_id and must NOT exist on a fresh v51 DB. Guards against
+	// the dropped index silently reappearing in createIndexes.
+	var stale string
+	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_messages_time'").Scan(&stale)
+	if err == nil {
+		t.Error("idx_messages_time should NOT exist on a fresh v51 DB (replaced by idx_messages_time_id)")
+	} else if err != sql.ErrNoRows {
+		t.Fatalf("Query idx_messages_time failed: %v", err)
 	}
 }
 
@@ -1051,14 +1064,16 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	}
 }
 
-func TestSchema_V40_CurrentVersion(t *testing.T) {
-	if schema.CurrentVersion != 40 {
-		t.Errorf("CurrentVersion = %d, want 40 (v36 base + v37 memory-tables back-port + v38 events.timestamp index + v39 monitors.schedule column + v40 read-state unification marker per thrum-b6qw)", schema.CurrentVersion)
+func TestSchema_V51_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 51 {
+		t.Errorf("CurrentVersion = %d, want 51 (v40 read-state marker + v41–v51 dead-end DDL forward-port from thrum-agents per thrum-399av)", schema.CurrentVersion)
 	}
-	// The read-state crossing constant must equal the marker version — the
-	// state.NewState gate compares the pre-migration version against it.
+	// The read-state crossing constant stays at the v40 marker version — the
+	// state.NewState gate compares the pre-migration version against it, and the
+	// v40 backfill must NOT re-fire on a v40→v51 upgrade. Forward-porting the
+	// schema does not move the read-state boundary.
 	if schema.SchemaVersionReadState != 40 {
-		t.Errorf("SchemaVersionReadState = %d, want 40", schema.SchemaVersionReadState)
+		t.Errorf("SchemaVersionReadState = %d, want 40 (unchanged by the v51 forward-port)", schema.SchemaVersionReadState)
 	}
 }
 

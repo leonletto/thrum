@@ -58,14 +58,18 @@ func TestStateInit_v39_to_v40_BackfillsOnce(t *testing.T) {
 	}
 	defer func() { _ = st.Close() }()
 
-	if v, err := schema.GetSchemaVersion(st.RawDB()); err != nil || v != schema.SchemaVersionReadState {
-		t.Fatalf("schema version after crossing = %d (err %v), want %d", v, err, schema.SchemaVersionReadState)
+	// Migrate always advances to CurrentVersion (51 after the thrum-399av
+	// forward-port); the read-state backfill still crosses at v40 (the gate is
+	// oldVersion < SchemaVersionReadState), which is what this test exercises.
+	if v, err := schema.GetSchemaVersion(st.RawDB()); err != nil || v != schema.CurrentVersion {
+		t.Fatalf("schema version after crossing = %d (err %v), want %d", v, err, schema.CurrentVersion)
 	}
 	assertReadStamped(t, st.RawDB(), "m-legacy", "user:leon-letto") // backfill ran
 	assertUnread(t, st.RawDB(), "m-peer", "peer_coord")             // leak-guard held
 	_ = st.Close()
 
-	// Re-construct: oldVersion is now 40, so the gate is false — a clean no-op.
+	// Re-construct: oldVersion is now CurrentVersion (>= SchemaVersionReadState),
+	// so the gate is false — a clean no-op.
 	st2, err := NewState(thrumDir, syncDir, "r_v40test", localDaemon)
 	if err != nil {
 		t.Fatalf("NewState (idempotent re-open): %v", err)

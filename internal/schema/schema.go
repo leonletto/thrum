@@ -68,7 +68,25 @@ import (
 //
 // v29 is a deliberate gap (reserved for MB-1.S6 on the substrate plan);
 // runMigrations handles all skipped/no-op versions cleanly.
-const CurrentVersion = 40
+//
+//   - v41–v51: dead-end DDL forward-port from thrum-agents (thrum-399av),
+//     same pattern as the v25–v36 (37e1c8682) and v37 (10bd90bf8) forward-ports.
+//     Goal: a v0.10.6 binary OPENS + does basic ops on a v51 (0.11-schema) DB
+//     without the one-way-migration brick — schema-on-disk parity, NOT feature
+//     availability. None of the new tables/columns have consumer code on the
+//     release line. The 8 real migrations are v41 (agents.agent_pid_start_time),
+//     v44 (permission_nudges.prompt_fingerprint), v45 (alert_deliveries),
+//     v47 (messages.visibility_class/retarget_fill_order + index swap;
+//     backfill STUBBED — internal/visibility absent here, column default
+//     'targeted' carries it), v48 (agents.phase / messages.priority /
+//     message_deliveries.addressed_via; backfill STUBBED, safe defaults),
+//     v49 (telegram_outbound_queue), v50 (graph substrate tables),
+//     v51 (memory_satellite). v42/v43/v46 are no-op version markers: v42/v43
+//     were the read-state backfill pair already collapsed into v40 here, and
+//     v46 was the post-rebuild read-state corrective — none have a runMigrations
+//     block, and the release line never references SchemaVersionReadStatePost-
+//     Rebuild, so no state.NewState change is needed.
+const CurrentVersion = 51
 
 // SchemaVersionReadState is the read-state unification crossing (thrum-b6qw,
 // backport of thrum-tcqw): at the first boot where the pre-migration version is
@@ -203,7 +221,11 @@ func createTables(tx *sql.Tx) error {
 			delete_reason TEXT,
 			authored_by  TEXT,
 			disclosed    INTEGER DEFAULT 0,
-			pending_route_resolution INTEGER NOT NULL DEFAULT 0
+			pending_route_resolution INTEGER NOT NULL DEFAULT 0,
+			-- v47/v48 forward-port (thrum-399av): dead-end columns, no release-line reader.
+			visibility_class TEXT NOT NULL DEFAULT 'targeted',
+			retarget_fill_order TEXT,
+			priority TEXT NOT NULL DEFAULT ''
 		)`,
 
 		// Message scopes table
@@ -255,7 +277,10 @@ func createTables(tx *sql.Tx) error {
 			auto_respawn_enabled     INTEGER NOT NULL DEFAULT 0,
 			auto_respawn_disabled_at INTEGER,
 			state_md_parse_failed_at INTEGER,
-			last_pane_alive_at       INTEGER
+			last_pane_alive_at       INTEGER,
+			-- v41/v48 forward-port (thrum-399av): dead-end columns, no release-line reader.
+			agent_pid_start_time     TEXT NOT NULL DEFAULT '',
+			phase                    TEXT NOT NULL DEFAULT 'active'
 		)`,
 
 		// Sessions table
@@ -299,6 +324,8 @@ func createTables(tx *sql.Tx) error {
 			delivered_at        TEXT NOT NULL,
 			seen_at             TEXT,
 			read_at             TEXT,
+			-- v48 forward-port (thrum-399av): dead-end column, no release-line reader.
+			addressed_via       TEXT NOT NULL DEFAULT 'unattributed',
 			PRIMARY KEY (message_id, recipient_agent_id),
 			FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE
 		)`,
@@ -450,7 +477,9 @@ func createTables(tx *sql.Tx) error {
 			last_nudge_at    TIMESTAMP NOT NULL,
 			nudge_count      INTEGER NOT NULL,
 			last_pane_hash   BLOB NOT NULL,
-			expires_at       TIMESTAMP NOT NULL
+			expires_at       TIMESTAMP NOT NULL,
+			-- v44 forward-port (thrum-399av): dead-end column, no release-line reader.
+			prompt_fingerprint TEXT NOT NULL DEFAULT ''
 		)`,
 
 		// Daemon identity table (v23). Single-row mirror of the identity block
@@ -675,6 +704,96 @@ func createTables(tx *sql.Tx) error {
 			last_error  TEXT,
 			PRIMARY KEY (memory_id, zoom_level)
 		)`,
+
+		// v41–v51 dead-end forward-port (thrum-399av). The tables below have no
+		// consumer code on the release line; they exist so a fresh v0.10.6 DB
+		// stamps the full v51 surface and a v51 DB opens without bricking.
+
+		// alert_deliveries (v45): per-recipient alert dedup window.
+		`CREATE TABLE IF NOT EXISTS alert_deliveries (
+			recipient_agent_id       TEXT NOT NULL,
+			dedup_key                TEXT NOT NULL,
+			suppressed_by_message_id TEXT NOT NULL,
+			expires_at               TEXT NOT NULL,
+			created_at               TEXT NOT NULL,
+			PRIMARY KEY (recipient_agent_id, dedup_key)
+		)`,
+
+		// telegram_outbound_queue (v49): Lane-B outbound retry queue.
+		`CREATE TABLE IF NOT EXISTS telegram_outbound_queue (
+			id               INTEGER PRIMARY KEY AUTOINCREMENT,
+			chat_id          INTEGER NOT NULL,
+			content          TEXT    NOT NULL,
+			reply_to_tele_id INTEGER,
+			thrum_msg_id     TEXT    NOT NULL,
+			attempt_count    INTEGER NOT NULL DEFAULT 0,
+			next_retry_at    INTEGER NOT NULL,
+			last_error       TEXT,
+			status           TEXT    NOT NULL,
+			enqueued_at      INTEGER NOT NULL,
+			updated_at       INTEGER NOT NULL
+		)`,
+
+		// Graph substrate (v50): node/edge/label/comment/blocked.
+		`CREATE TABLE IF NOT EXISTS node (
+			id               TEXT PRIMARY KEY,
+			kind             TEXT NOT NULL,
+			title            TEXT NOT NULL,
+			status           TEXT NOT NULL DEFAULT 'open',
+			raw_status       TEXT NOT NULL DEFAULT 'open',
+			priority         INTEGER,
+			effective_labels TEXT NOT NULL DEFAULT '[]',
+			metadata         TEXT,
+			owner            TEXT,
+			is_blocked       INTEGER NOT NULL DEFAULT 0,
+			created_at       TEXT NOT NULL,
+			updated_at       TEXT NOT NULL,
+			created_by       TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS node_label (
+			node_id  TEXT NOT NULL,
+			label    TEXT NOT NULL,
+			PRIMARY KEY (node_id, label),
+			FOREIGN KEY (node_id) REFERENCES node(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS edge (
+			from_id    TEXT NOT NULL,
+			type       TEXT NOT NULL,
+			to_id      TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			created_by TEXT NOT NULL,
+			metadata   TEXT,
+			PRIMARY KEY (from_id, type, to_id),
+			FOREIGN KEY (from_id) REFERENCES node(id) ON DELETE CASCADE,
+			FOREIGN KEY (to_id) REFERENCES node(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS node_comment (
+			comment_id TEXT PRIMARY KEY,
+			node_id    TEXT NOT NULL,
+			author     TEXT NOT NULL,
+			body       TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY (node_id) REFERENCES node(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS graph_blocked (
+			node_id     TEXT PRIMARY KEY,
+			blocked_by  TEXT NOT NULL DEFAULT '[]',
+			computed_at TEXT NOT NULL
+		)`,
+
+		// memory_satellite (v51): graph canary memory payload.
+		`CREATE TABLE IF NOT EXISTS memory_satellite (
+			node_id           TEXT PRIMARY KEY REFERENCES node(id) ON DELETE CASCADE,
+			body_oneline      TEXT NOT NULL DEFAULT '',
+			body_short        TEXT,
+			body_full         TEXT,
+			scope             TEXT NOT NULL DEFAULT 'project',
+			source_session_id TEXT,
+			agent_id          TEXT NOT NULL DEFAULT '',
+			kind              TEXT NOT NULL DEFAULT '',
+			subkind           TEXT NOT NULL DEFAULT '',
+			last_edited_by    TEXT NOT NULL DEFAULT ''
+		)`,
 	}
 
 	for _, sql := range tables {
@@ -691,7 +810,13 @@ func createIndexes(tx *sql.Tx) error {
 	indexes := []string{
 		// Message indexes
 		"CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_id)",
-		"CREATE INDEX IF NOT EXISTS idx_messages_time ON messages(created_at)",
+		// v47 forward-port (thrum-399av): the composite keyset index replaces the
+		// old single-column idx_messages_time (the v47 migration DROPs the latter).
+		// Fresh DBs must match migrated DBs exactly; app SQL never names the index,
+		// and (created_at, message_id) covers (created_at) as a prefix, so the
+		// swap is transparent to release-line queries.
+		"CREATE INDEX IF NOT EXISTS idx_messages_time_id ON messages(created_at, message_id)",
+		"CREATE INDEX IF NOT EXISTS idx_messages_visibility ON messages(visibility_class, created_at) WHERE visibility_class != 'targeted'",
 		"CREATE INDEX IF NOT EXISTS idx_messages_agent ON messages(agent_id)",
 		"CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id)",
 		"CREATE INDEX IF NOT EXISTS idx_messages_not_deleted ON messages(deleted) WHERE deleted = 0",
@@ -799,6 +924,23 @@ func createIndexes(tx *sql.Tx) error {
 		// the "next batch to embed" query the background worker runs on
 		// thrum-agents. Storage only on release line.
 		"CREATE INDEX IF NOT EXISTS idx_memory_embed_status ON memory_embeddings(embed_status)",
+
+		// v45–v50 dead-end forward-port (thrum-399av): indexes for the new
+		// tables/columns above, mirrored here from the vNN runMigrations blocks
+		// for fresh-init parity. InitDB runs createTables/createIndexes and
+		// stamps the version WITHOUT running migrations, so every index a
+		// migration creates must ALSO be created here or a fresh v51 DB would
+		// drift from a v40→v51 migrated one. thrum-agents creates some of these
+		// only in its v48/v50 blocks (its init path differs) — the divergence
+		// is intentional; do not "fix" it back. Storage only, no consumer here.
+		"CREATE INDEX IF NOT EXISTS idx_alert_deliveries_expires ON alert_deliveries(recipient_agent_id, expires_at)",      // v45
+		"CREATE INDEX IF NOT EXISTS idx_deliveries_recipient_via ON message_deliveries(recipient_agent_id, addressed_via)", // v48
+		"CREATE INDEX IF NOT EXISTS idx_tg_queue_next ON telegram_outbound_queue(next_retry_at, status)",                   // v49
+		"CREATE INDEX IF NOT EXISTS idx_node_ready ON node(kind, status, is_blocked)",                                      // v50
+		"CREATE INDEX IF NOT EXISTS idx_node_kind ON node(kind, status)",                                                   // v50
+		"CREATE INDEX IF NOT EXISTS idx_edge_to ON edge(to_id, type)",                                                      // v50
+		"CREATE INDEX IF NOT EXISTS idx_node_label_label ON node_label(label, node_id)",                                    // v50
+		"CREATE INDEX IF NOT EXISTS idx_node_comment_node ON node_comment(node_id, created_at)",                            // v50
 	}
 
 	for _, sql := range indexes {
@@ -2001,6 +2143,284 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 					return fmt.Errorf("migration 38→39: %w", err)
 				}
 			}
+		}
+	}
+
+	// ---------------------------------------------------------------------
+	// v41–v51 dead-end DDL forward-port from thrum-agents (thrum-399av).
+	// Strictly additive: ALTER ADD COLUMN (columnSet-guarded) + CREATE TABLE/
+	// INDEX IF NOT EXISTS. No release-line code reads any new column/table.
+	// v42/v43/v46 are no-op version markers with NO block (v42/v43 = read-state
+	// backfill pair already collapsed into the v40 marker here; v46 = the
+	// post-rebuild corrective the release line never wired). The two
+	// feature-population backfills (v47 visibility_class, v48 addressed_via) are
+	// STUBBED to no-ops: their source SQL lives in internal/visibility /
+	// AddressedViaBackfillSQL (absent / out-of-scope here) and the column
+	// defaults ('targeted' / 'unattributed') keep every row valid. Goal is
+	// schema-on-disk parity, not feature behavior.
+	// ---------------------------------------------------------------------
+
+	// v41 (thrum-j9gh): agents.agent_pid_start_time — PID-reuse liveness guard.
+	if startVersion < 41 && endVersion >= 41 {
+		hasAgents, hasErr := tableExists(tx, "agents")
+		if hasErr != nil {
+			return fmt.Errorf("migration 40→41: check agents table: %w", hasErr)
+		}
+		if hasAgents {
+			cols, colErr := columnSet(tx, "agents")
+			if colErr != nil {
+				return fmt.Errorf("migration 40→41: read agents columns: %w", colErr)
+			}
+			if !cols["agent_pid_start_time"] {
+				if _, err := tx.Exec(
+					`ALTER TABLE agents ADD COLUMN agent_pid_start_time TEXT NOT NULL DEFAULT ''`,
+				); err != nil {
+					return fmt.Errorf("migration 40→41: %w", err)
+				}
+			}
+		}
+	}
+
+	// v44 (thrum-8zmu.2): permission_nudges.prompt_fingerprint.
+	if startVersion < 44 && endVersion >= 44 {
+		hasPN, hasErr := tableExists(tx, "permission_nudges")
+		if hasErr != nil {
+			return fmt.Errorf("migration 43→44: check permission_nudges table: %w", hasErr)
+		}
+		if hasPN {
+			cols, colErr := columnSet(tx, "permission_nudges")
+			if colErr != nil {
+				return fmt.Errorf("migration 43→44: read permission_nudges columns: %w", colErr)
+			}
+			if !cols["prompt_fingerprint"] {
+				if _, err := tx.Exec(
+					`ALTER TABLE permission_nudges ADD COLUMN prompt_fingerprint TEXT NOT NULL DEFAULT ''`,
+				); err != nil {
+					return fmt.Errorf("migration 43→44: %w", err)
+				}
+			}
+		}
+	}
+
+	// v45 (thrum-thdr.4): alert_deliveries dedup table + index.
+	if startVersion < 45 && endVersion >= 45 {
+		hasAD, hasErr := tableExists(tx, "alert_deliveries")
+		if hasErr != nil {
+			return fmt.Errorf("migration 44→45: check alert_deliveries table: %w", hasErr)
+		}
+		if !hasAD {
+			if _, err := tx.Exec(`CREATE TABLE IF NOT EXISTS alert_deliveries (
+				recipient_agent_id       TEXT NOT NULL,
+				dedup_key                TEXT NOT NULL,
+				suppressed_by_message_id TEXT NOT NULL,
+				expires_at               TEXT NOT NULL,
+				created_at               TEXT NOT NULL,
+				PRIMARY KEY (recipient_agent_id, dedup_key)
+			)`); err != nil {
+				return fmt.Errorf("migration 44→45: create alert_deliveries: %w", err)
+			}
+			if _, err := tx.Exec(
+				`CREATE INDEX IF NOT EXISTS idx_alert_deliveries_expires ON alert_deliveries(recipient_agent_id, expires_at)`,
+			); err != nil {
+				return fmt.Errorf("migration 44→45: create idx_alert_deliveries_expires: %w", err)
+			}
+		}
+	}
+
+	// v47 (thrum-01wy.6): messages.visibility_class + retarget_fill_order, plus
+	// the idx_messages_time -> idx_messages_time_id keyset swap and the partial
+	// visibility index. The visibility backfill (visibility.StampDeliveryRefsSQL
+	// + UpdateClassSQL on thrum-agents) is STUBBED here: the internal/visibility
+	// package is absent on the release line and the 'targeted' column default
+	// keeps every pre-existing row valid for a binary that never reads the column.
+	if startVersion < 47 && endVersion >= 47 {
+		hasMessages, hasErr := tableExists(tx, "messages")
+		if hasErr != nil {
+			return fmt.Errorf("migration 46→47: check messages table: %w", hasErr)
+		}
+		if hasMessages {
+			cols, colErr := columnSet(tx, "messages")
+			if colErr != nil {
+				return fmt.Errorf("migration 46→47: read messages columns: %w", colErr)
+			}
+			if !cols["visibility_class"] {
+				if _, err := tx.Exec(`ALTER TABLE messages ADD COLUMN visibility_class TEXT NOT NULL DEFAULT 'targeted'`); err != nil {
+					return fmt.Errorf("migration 46→47: add visibility_class: %w", err)
+				}
+			}
+			if !cols["retarget_fill_order"] {
+				if _, err := tx.Exec(`ALTER TABLE messages ADD COLUMN retarget_fill_order TEXT`); err != nil {
+					return fmt.Errorf("migration 46→47: add retarget_fill_order: %w", err)
+				}
+			}
+			// Backfill STUBBED (see block header) — defaults carry it.
+			if _, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_messages_visibility ON messages(visibility_class, created_at) WHERE visibility_class != 'targeted'`); err != nil {
+				return fmt.Errorf("migration 46→47: create idx_messages_visibility: %w", err)
+			}
+			if _, err := tx.Exec(`DROP INDEX IF EXISTS idx_messages_time`); err != nil {
+				return fmt.Errorf("migration 46→47: drop idx_messages_time: %w", err)
+			}
+			if _, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_messages_time_id ON messages(created_at, message_id)`); err != nil {
+				return fmt.Errorf("migration 46→47: create idx_messages_time_id: %w", err)
+			}
+		}
+	}
+
+	// v48 (thrum-qkgn3/momim): agents.phase, messages.priority,
+	// message_deliveries.addressed_via + idx_deliveries_recipient_via. The
+	// addressed_via evidence backfill (AddressedViaBackfillSQL on thrum-agents)
+	// is STUBBED — the 'unattributed' default keeps rows valid for a binary that
+	// never reads the column.
+	if startVersion < 48 && endVersion >= 48 {
+		hasAgents, aErr := tableExists(tx, "agents")
+		if aErr != nil {
+			return fmt.Errorf("migration 47→48: check agents table: %w", aErr)
+		}
+		if hasAgents {
+			aCols, err2 := columnSet(tx, "agents")
+			if err2 != nil {
+				return fmt.Errorf("migration 47→48: read agents columns: %w", err2)
+			}
+			if !aCols["phase"] {
+				if _, err := tx.Exec(`ALTER TABLE agents ADD COLUMN phase TEXT NOT NULL DEFAULT 'active'`); err != nil {
+					return fmt.Errorf("migration 47→48: add agents.phase: %w", err)
+				}
+			}
+		}
+		hasMessages, mErr := tableExists(tx, "messages")
+		if mErr != nil {
+			return fmt.Errorf("migration 47→48: check messages table: %w", mErr)
+		}
+		if hasMessages {
+			mCols, err2 := columnSet(tx, "messages")
+			if err2 != nil {
+				return fmt.Errorf("migration 47→48: read messages columns: %w", err2)
+			}
+			if !mCols["priority"] {
+				if _, err := tx.Exec(`ALTER TABLE messages ADD COLUMN priority TEXT NOT NULL DEFAULT ''`); err != nil {
+					return fmt.Errorf("migration 47→48: add messages.priority: %w", err)
+				}
+			}
+		}
+		hasDeliveries, dErr := tableExists(tx, "message_deliveries")
+		if dErr != nil {
+			return fmt.Errorf("migration 47→48: check message_deliveries table: %w", dErr)
+		}
+		if hasDeliveries {
+			dCols, err2 := columnSet(tx, "message_deliveries")
+			if err2 != nil {
+				return fmt.Errorf("migration 47→48: read message_deliveries columns: %w", err2)
+			}
+			if !dCols["addressed_via"] {
+				if _, err := tx.Exec(`ALTER TABLE message_deliveries ADD COLUMN addressed_via TEXT NOT NULL DEFAULT 'unattributed'`); err != nil {
+					return fmt.Errorf("migration 47→48: add addressed_via: %w", err)
+				}
+			}
+			// Backfill STUBBED (see block header).
+			if _, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_deliveries_recipient_via ON message_deliveries(recipient_agent_id, addressed_via)`); err != nil {
+				return fmt.Errorf("migration 47→48: create idx_deliveries_recipient_via: %w", err)
+			}
+		}
+	}
+
+	// v49 (Lane-B B.1): telegram_outbound_queue + index.
+	if startVersion < 49 && endVersion >= 49 {
+		if _, err := tx.Exec(`CREATE TABLE IF NOT EXISTS telegram_outbound_queue (
+			id               INTEGER PRIMARY KEY AUTOINCREMENT,
+			chat_id          INTEGER NOT NULL,
+			content          TEXT    NOT NULL,
+			reply_to_tele_id INTEGER,
+			thrum_msg_id     TEXT    NOT NULL,
+			attempt_count    INTEGER NOT NULL DEFAULT 0,
+			next_retry_at    INTEGER NOT NULL,
+			last_error       TEXT,
+			status           TEXT    NOT NULL,
+			enqueued_at      INTEGER NOT NULL,
+			updated_at       INTEGER NOT NULL
+		)`); err != nil {
+			return fmt.Errorf("migration 48→49: create telegram_outbound_queue: %w", err)
+		}
+		if _, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_tg_queue_next ON telegram_outbound_queue(next_retry_at, status)`); err != nil {
+			return fmt.Errorf("migration 48→49: idx_tg_queue_next: %w", err)
+		}
+	}
+
+	// v50 (Epic C): graph substrate tables + 5 indexes. Dead-end without graph/.
+	if startVersion < 50 && endVersion >= 50 {
+		stmts := []string{
+			`CREATE TABLE IF NOT EXISTS node (
+				id               TEXT PRIMARY KEY,
+				kind             TEXT NOT NULL,
+				title            TEXT NOT NULL,
+				status           TEXT NOT NULL DEFAULT 'open',
+				raw_status       TEXT NOT NULL DEFAULT 'open',
+				priority         INTEGER,
+				effective_labels TEXT NOT NULL DEFAULT '[]',
+				metadata         TEXT,
+				owner            TEXT,
+				is_blocked       INTEGER NOT NULL DEFAULT 0,
+				created_at       TEXT NOT NULL,
+				updated_at       TEXT NOT NULL,
+				created_by       TEXT NOT NULL
+			)`,
+			`CREATE TABLE IF NOT EXISTS node_label (
+				node_id  TEXT NOT NULL,
+				label    TEXT NOT NULL,
+				PRIMARY KEY (node_id, label),
+				FOREIGN KEY (node_id) REFERENCES node(id) ON DELETE CASCADE
+			)`,
+			`CREATE TABLE IF NOT EXISTS edge (
+				from_id    TEXT NOT NULL,
+				type       TEXT NOT NULL,
+				to_id      TEXT NOT NULL,
+				created_at TEXT NOT NULL,
+				created_by TEXT NOT NULL,
+				metadata   TEXT,
+				PRIMARY KEY (from_id, type, to_id),
+				FOREIGN KEY (from_id) REFERENCES node(id) ON DELETE CASCADE,
+				FOREIGN KEY (to_id) REFERENCES node(id) ON DELETE CASCADE
+			)`,
+			`CREATE TABLE IF NOT EXISTS node_comment (
+				comment_id TEXT PRIMARY KEY,
+				node_id    TEXT NOT NULL,
+				author     TEXT NOT NULL,
+				body       TEXT NOT NULL,
+				created_at TEXT NOT NULL,
+				FOREIGN KEY (node_id) REFERENCES node(id) ON DELETE CASCADE
+			)`,
+			`CREATE TABLE IF NOT EXISTS graph_blocked (
+				node_id     TEXT PRIMARY KEY,
+				blocked_by  TEXT NOT NULL DEFAULT '[]',
+				computed_at TEXT NOT NULL
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_node_ready ON node(kind, status, is_blocked)`,
+			`CREATE INDEX IF NOT EXISTS idx_node_kind ON node(kind, status)`,
+			`CREATE INDEX IF NOT EXISTS idx_edge_to ON edge(to_id, type)`,
+			`CREATE INDEX IF NOT EXISTS idx_node_label_label ON node_label(label, node_id)`,
+			`CREATE INDEX IF NOT EXISTS idx_node_comment_node ON node_comment(node_id, created_at)`,
+		}
+		for _, stmt := range stmts {
+			if _, err := tx.Exec(stmt); err != nil {
+				return fmt.Errorf("migration 49→50: %w", err)
+			}
+		}
+	}
+
+	// v51 (graph canary): memory_satellite. Dead-end without graph/.
+	if startVersion < 51 && endVersion >= 51 {
+		if _, err := tx.Exec(`CREATE TABLE IF NOT EXISTS memory_satellite (
+			node_id           TEXT PRIMARY KEY REFERENCES node(id) ON DELETE CASCADE,
+			body_oneline      TEXT NOT NULL DEFAULT '',
+			body_short        TEXT,
+			body_full         TEXT,
+			scope             TEXT NOT NULL DEFAULT 'project',
+			source_session_id TEXT,
+			agent_id          TEXT NOT NULL DEFAULT '',
+			kind              TEXT NOT NULL DEFAULT '',
+			subkind           TEXT NOT NULL DEFAULT '',
+			last_edited_by    TEXT NOT NULL DEFAULT ''
+		)`); err != nil {
+			return fmt.Errorf("migration 50→51: create memory_satellite: %w", err)
 		}
 	}
 
