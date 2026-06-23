@@ -1,6 +1,6 @@
 {
   "name": "thrum",
-  "version": "0.10.6-rc.14",
+  "version": "0.10.6",
   "description": "Git-backed messaging for AI agent coordination across sessions, worktrees, and machines. Coordinator/implementer/researcher role discipline, persistent inbox, multi-runtime parity.",
   "author": {
     "name": "Leon Letto",
