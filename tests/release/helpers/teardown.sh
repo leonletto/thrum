@@ -8,14 +8,28 @@ run_teardown() {
     return 0
   fi
 
-  thrum tmux kill coord 2>/dev/null || true
-  thrum tmux kill impl 2>/dev/null || true
+  thrum tmux kill test-repo 2>/dev/null || true
+  thrum tmux kill test-repo-worktree 2>/dev/null || true
+  # Raw-tmux backstops: the daemon tracks these (it launched into them), but a
+  # bare kill-session catches any case where daemon tracking is incomplete
+  # (e.g. the coord session is created by a raw `tmux new-session`, not
+  # `thrum tmux create`). Mirrors the kafm6 raw-kill precedent below.
+  tmux kill-session -t test-repo 2>/dev/null || true
+  tmux kill-session -t test-repo-worktree 2>/dev/null || true
   # Defensive cleanup for the kafm.10 queue-test fixture. Scenario 49
   # tears it down explicitly on the happy path; this catches partial
   # failures (e.g. scenario 45 created the session but 46-49 errored
   # out before reaching scenario 49's cleanup).
   thrum tmux kill bare-queue 2>/dev/null || true
   thrum tmux kill queue-test 2>/dev/null || true
+  # Bare kill-session catches the case where the daemon's session-tracking is
+  # INCOMPLETE — daemon thinks the session is gone but the tmux server still
+  # holds it. That orphan is exactly what collides with scenario 45's
+  # `thrum tmux create queue-test` on the next gate, cascading 45-49. Mirrors
+  # the test-repo raw-kill above. (impl_v011_deploy 0.11 cross-line assist;
+  # the bare kill is the part people miss — thrum-63rim class.)
+  tmux kill-session -t bare-queue 2>/dev/null || true
+  tmux kill-session -t queue-test 2>/dev/null || true
   # Defensive cleanup for the kafm.8 multi-runtime fixtures. Scenario
   # 68 tears down rt-scratch (worktree + sessions) on the happy path;
   # scenarios 67 and 69 tear down their own per-scenario worktrees.

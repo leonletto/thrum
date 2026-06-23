@@ -498,11 +498,17 @@ func (h *TmuxHandler) sendSystemMessage(ctx context.Context, recipient, body str
 		Recipients: []string{recipient},
 	}
 
+	// thrum-bsn7: release state.Lock() before invoking the message.create
+	// postCommit. Walker+compactor under the lock starves concurrent
+	// message.create / agent.register handlers.
 	h.state.Lock()
-	if err := h.state.WriteEvent(ctx, event); err != nil {
-		slog.Error("[queue] write @system message failed", "err", err)
-	}
+	postCommit, err := h.state.WriteEvent(ctx, event)
 	h.state.Unlock()
+	if err != nil {
+		slog.Error("[queue] write @system message failed", "err", err)
+		return
+	}
+	h.state.GoPostCommit(postCommit)
 }
 
 // handleCommandTimeout is invoked by the per-command timer when the configured

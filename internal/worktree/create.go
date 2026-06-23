@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -201,10 +202,43 @@ func Create(ctx context.Context, opts CreateOpts) (*CreateResult, error) {
 		}
 	}
 
-	// git worktree add -b <branch> <path> <baseBranch>
-	if out, err := safecmd.Git(ctx, opts.RepoPath,
-		"worktree", "add", "-b", branch, path, baseBranch); err != nil {
-		return nil, fmt.Errorf("git worktree add: %s: %w", out, err)
+	// Detect whether <branch> already exists in the repo. If it does,
+	// attach it with `git worktree add <path> <branch>` (no -b, no
+	// baseBranch); otherwise create it with `git worktree add -b
+	// <branch> <path> <baseBranch>`. The attach path lets
+	// `thrum worktree create --branch <existing>` recreate an agent's
+	// worktree against a pre-existing branch without losing history
+	// (thrum-suyb).
+	//
+	// Defaults branchCreated=false so the cleanup closure below
+	// never deletes a pre-existing branch even if a future refactor
+	// inserts an early-return between this declaration and the
+	// switch (safe-by-default).
+	branchCreated := false
+	revParseOut, revParseErr := safecmd.Git(ctx, opts.RepoPath,
+		"rev-parse", "--verify", "--quiet",
+		"refs/heads/"+branch)
+	switch {
+	case revParseErr == nil:
+		// Branch exists — attach.
+		if out, err := safecmd.Git(ctx, opts.RepoPath,
+			"worktree", "add", path, branch); err != nil {
+			return nil, fmt.Errorf("git worktree add (attach existing branch): %s: %w", out, err)
+		}
+	case isRefNotFoundError(revParseErr):
+		// Branch does not exist — create off baseBranch.
+		branchCreated = true
+		if out, err := safecmd.Git(ctx, opts.RepoPath,
+			"worktree", "add", "-b", branch, path, baseBranch); err != nil {
+			return nil, fmt.Errorf("git worktree add: %s: %w", out, err)
+		}
+	default:
+		// git itself failed (binary missing, repo corrupt, permission
+		// error, etc.). Surface the real error instead of falling
+		// through to a misleading "branch already exists" or similar
+		// from the create path.
+		return nil, fmt.Errorf("git rev-parse for branch existence: %s: %w",
+			revParseOut, revParseErr)
 	}
 
 	if testInjectAfterAdd != nil {
@@ -218,11 +252,17 @@ func Create(ctx context.Context, opts CreateOpts) (*CreateResult, error) {
 			errors.Is(origErr, context.DeadlineExceeded) {
 			return origErr
 		}
-		// Best-effort: remove worktree + delete branch.
+		// Best-effort: remove the worktree. Delete the branch ONLY
+		// if we created it — destroying a pre-existing branch that
+		// the caller attached would silently lose their history
+		// (thrum-suyb).
 		_, removeErr := safecmd.Git(context.Background(), opts.RepoPath,
 			"worktree", "remove", "--force", path)
-		_, branchErr := safecmd.Git(context.Background(), opts.RepoPath,
-			"branch", "-D", branch)
+		var branchErr error
+		if branchCreated {
+			_, branchErr = safecmd.Git(context.Background(), opts.RepoPath,
+				"branch", "-D", branch)
+		}
 		if removeErr != nil || branchErr != nil {
 			return fmt.Errorf("%w (residue: worktree=%s branch=%s remove_err=%v branch_err=%v)",
 				origErr, path, branch, removeErr, branchErr)
@@ -247,6 +287,21 @@ func Create(ctx context.Context, opts CreateOpts) (*CreateResult, error) {
 		slog.String("branch", branch),
 		slog.Bool("reused", false))
 	return &CreateResult{Path: path, Branch: branch, Reused: false}, nil
+}
+
+// isRefNotFoundError reports whether err — as returned by
+// safecmd.Git wrapping `git rev-parse --verify --quiet ...` — is
+// the "ref does not exist" case (exit status 1), as opposed to any
+// other non-zero exit (128 for "not a git repository", 127 for
+// binary missing, etc.). thrum-suyb uses this to distinguish
+// "branch absent → safe to create" from "git failed → surface the
+// real error" in the attach-vs-create branch.
+func isRefNotFoundError(err error) bool {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return false
+	}
+	return exitErr.ExitCode() == 1
 }
 
 // persistentReuseCheck returns (true, nil) when path already exists

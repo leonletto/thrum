@@ -34,9 +34,18 @@
 SID="25-mcp-waiter-broadcast"
 MARKER="kafm2-25-broadcast-${RUNID}"
 
-# Settle IMPL pane (claude may be auto-processing scenario 24's
-# leftover messages).
+# Settle BOTH panes BEFORE firing wait. Critical ordering: previously
+# COORD was settled BETWEEN firing wait and broadcasting, but
+# wait_for_pane_idle can take up to 60s if COORD's claude is rendering
+# a long response from a prior scenario (e.g. scen 24's autonomous
+# inbox handling can leave COORD busy for 30+s). When that gap ate
+# into the wait's 12s --timeout budget, the broadcast fired AFTER the
+# wait had already timed out — observed in v0.10.6 RC1 gate where
+# IMPL pane shows `NO_MESSAGES_TIMEOUT` followed by the broadcast
+# arrival nudge. Settling both panes up-front decouples the wait's
+# timer from COORD's rendering state.
 wait_for_pane_idle "$IMPL_PANE" 60
+wait_for_pane_idle "$COORD_PANE" 60
 
 # Pre-clear IMPL's unread queue out-of-pane so `thrum wait`'s only
 # viable trigger is OUR broadcast. Without this, a slowly-delivered
@@ -62,10 +71,16 @@ send_command "$IMPL_PANE" "! thrum wait --timeout 12s --json"
 # broadcast can land before the subscriber is registered.
 sleep 2
 
-# Settle COORD pane separately.
-wait_for_pane_idle "$COORD_PANE" 60
-
-# Step 3: broadcast from COORD.
+# Step 3: broadcast from COORD immediately. COORD was already settled
+# above, so this send fires within ~2-3s of the wait subscription,
+# well inside the 12s --timeout window.
+#
+# Capture floor_ts BEFORE the broadcast so the downstream JSONL match
+# at line 130 (sub-assertion 2) scopes its window to "this broadcast's
+# delivery" only — defends against stale entries with the same RUNID
+# from a prior subset rerun. Per tests/release/CLAUDE.md lesson 2.
+local broadcast_floor_ts
+broadcast_floor_ts="$(date -u +%Y-%m-%dT%H:%M:%S)"
 send_command "$COORD_PANE" "! thrum send 'Broadcast for waiter (${MARKER})' --to @everyone"
 
 # Step 4: poll IMPL's JSONL for `thrum wait`'s success-shape output.
@@ -98,45 +113,29 @@ fi
 # with OUR marker. Defends against a "wait unblocked on some
 # unrelated message" false positive.
 #
-# Drive the inbox check OUT OF PANE via tmux-exec — same rationale
-# as scenarios 22/23/24: claude on IMPL is in autonomous-handling
-# mode after receiving the broadcast nudge, and a `!`-bash query
-# during that flurry races the keystroke-time bash-mode gate. The
-# daemon's inbox state is authoritative; reading it via tmux-exec
-# is deterministic regardless of what claude is doing.
-# Write JSON to a host-accessible file inside the inner pane to
-# sidestep tmux-exec's 80-col capture-pane wrap mangling JSON
-# (see scenarios 22/23/24 rationale).
-out_file="$(mktemp -t kafm2-25.XXXXXX).json"
-_check_impl_inbox_for_broadcast() {
-  "$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$IMPL_REPO" --clean -- \
-    bash -c "env THRUM_NAME=test_implementer thrum inbox --json > '${out_file}' 2>/dev/null" \
-    >/dev/null 2>&1 || true
-  if [ -s "$out_file" ]; then
-    jq -r --arg m "$MARKER" \
-      '[.messages[] | select(.body.content | contains($m))] | length' \
-      < "$out_file" 2>/dev/null
-  fi
-}
-
-elapsed=0
-broadcast_delivered=false
-while [ "$elapsed" -lt 30 ]; do
-  N=$(_check_impl_inbox_for_broadcast || echo 0)
-  if [ "${N:-0}" -ge 1 ]; then
-    broadcast_delivered=true
-    break
-  fi
-  sleep 2
-  elapsed=$((elapsed + 2))
-done
-
-if $broadcast_delivered; then
+# Pivoted from assert_inbox_contains (tmux-exec pool path) to
+# wait_for_jsonl_match against IMPL's claude JSONL — same pivot
+# scen 95 made for its main assertion. The tmux-exec pool path
+# hits the documented thrum-9sxc load-flake (see
+# tests/release/CLAUDE.md "thrum-9sxc" section): the daemon's
+# worktree.PaneTargetForIdentity refusal returns hints-only
+# responses with no .messages field, and assert_inbox_contains'
+# null-safe `.messages[]?` correctly returns 0 — but the polling
+# loop then times out even when delivery succeeded.
+#
+# The JSONL surface is deterministic: claude on IMPL autonomously
+# runs `thrum inbox --unread` in response to the inbound broadcast
+# nudge. Both the autonomous Bash tool_result entry's content and
+# the daemon's inbound nudge user-message ("New message from
+# @test_coordinator_main -- run `thrum inbox --unread` to read")
+# carry the marker, so the broad content-string filter matches
+# either witness.
+marker_filter='(.message.content // "") | tostring | contains("'"$MARKER"'")'
+if wait_for_jsonl_match "$IMPL_REPO" "$marker_filter" 60 "$broadcast_floor_ts" >/dev/null; then
   emit_pass "$SID" "broadcast-marker-in-inbox"
 else
   emit_fail "$SID" "broadcast-marker-in-inbox" \
-    "impl inbox contains ≥ 1 message matching broadcast marker '${MARKER}' (within 30s)" \
-    "(timeout or marker not delivered to impl inbox)" \
+    "IMPL JSONL entry containing broadcast marker '${MARKER}' within 60s" \
+    "(no matching JSONL entry — broadcast may not have routed, or IMPL claude didn't autorun inbox-read in time)" \
     "scenarios/${SID}.test.sh:$LINENO"
 fi
-rm -f "$out_file"

@@ -572,7 +572,7 @@ func TestMessageGet(t *testing.T) {
 			MessageID: msgID,
 			Reason:    "test delete",
 		}
-		if err := st.WriteEvent(context.Background(), deleteEvent); err != nil {
+		if _, err := st.WriteEvent(context.Background(), deleteEvent); err != nil {
 			t.Fatalf("failed to delete message: %v", err)
 		}
 
@@ -1542,18 +1542,33 @@ func TestMessageMarkRead(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected *SessionStartResponse, got %T", sessionResp)
 	}
-	sessionID := sessionStartResp.SessionID
+	_ = sessionStartResp.SessionID // thrum-b6qw: read-state is per-agent now (message_deliveries), not per-session
 
 	// Create message handler
 	handler := NewMessageHandler(st)
 
-	// Create some test messages
+	// thrum-1846: the markable fixtures must be mail the CALLER has NOT yet
+	// read. An agent's OWN sent message is read-stamped on its self-delivery
+	// row at send time (thrum-b6qw Option C), so a self-authored message is
+	// already-read for its author — marking it is now correctly a no-op (the
+	// receipt-emission idempotency gate). The OLD fixture sent self-authored
+	// messages and relied on the pre-fix bug that re-emitted a fresh receipt
+	// for already-read mail (MarkedCount=1 per pass — exactly defect 2). We
+	// now send genuinely-unread mail from a SEPARATE sender as untargeted
+	// legacy-broadcasts, so the reader is a legitimate recipient (legacy-
+	// broadcast gate arm) AND the message starts unread for the reader.
+	senderID := registerAndStartAgent(t, st, "sender_main", "sender")
+
+	// Five unread legacy-broadcast messages: msg 0..2 drive the single/batch/
+	// idempotent/collaboration subtests; msg 3..4 are fresh mail for the
+	// skip-non-existent subtest (which must mark messages the reader has not
+	// already read, or the idempotency gate makes it a no-op).
 	var messageIDs []string
-	for i := 0; i < 3; i++ {
+	for i := range 5 {
 		req := SendRequest{
 			Content:       fmt.Sprintf("Test message %d", i+1),
 			Format:        "markdown",
-			CallerAgentID: agentID,
+			CallerAgentID: senderID,
 		}
 		params, _ := json.Marshal(req)
 		resp, err := handler.HandleSend(context.Background(), params)
@@ -1588,15 +1603,18 @@ func TestMessageMarkRead(t *testing.T) {
 			t.Errorf("expected marked_count 1, got %d", markReadResp.MarkedCount)
 		}
 
-		// Verify read record was created in database
+		// Verify a read-stamped delivery row was created for the caller.
+		// thrum-b6qw: read-truth is message_deliveries.read_at (message_reads
+		// retired); marking an authored-self legacy-broadcast read creates+stamps
+		// the caller's delivery row via the gate.
 		var count int
-		query := `SELECT COUNT(*) FROM message_reads WHERE message_id = ? AND session_id = ? AND agent_id = ?`
-		err = st.RawDB().QueryRow(query, messageIDs[0], sessionID, agentID).Scan(&count)
+		query := `SELECT COUNT(*) FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ? AND read_at IS NOT NULL`
+		err = st.RawDB().QueryRow(query, messageIDs[0], agentID).Scan(&count)
 		if err != nil {
-			t.Fatalf("failed to query message_reads: %v", err)
+			t.Fatalf("failed to query message_deliveries: %v", err)
 		}
 		if count != 1 {
-			t.Errorf("expected 1 read record, found %d", count)
+			t.Errorf("expected 1 read delivery row, found %d", count)
 		}
 	})
 
@@ -1620,22 +1638,28 @@ func TestMessageMarkRead(t *testing.T) {
 			t.Errorf("expected marked_count 2, got %d", markReadResp.MarkedCount)
 		}
 
-		// Verify all messages have read records
+		// Verify all messages have a read-stamped delivery row for the caller.
+		// thrum-b6qw: read-truth is message_deliveries.read_at (message_reads
+		// retired). messageIDs are authored-self legacy-broadcasts, so marking
+		// read creates+stamps the caller's row via the gate.
 		for _, msgID := range []string{messageIDs[1], messageIDs[2]} {
 			var exists bool
-			query := `SELECT EXISTS(SELECT 1 FROM message_reads WHERE message_id = ?)`
-			err = st.RawDB().QueryRow(query, msgID).Scan(&exists)
+			query := `SELECT EXISTS(SELECT 1 FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ? AND read_at IS NOT NULL)`
+			err = st.RawDB().QueryRow(query, msgID, agentID).Scan(&exists)
 			if err != nil {
-				t.Fatalf("failed to check read record for %s: %v", msgID, err)
+				t.Fatalf("failed to check read delivery row for %s: %v", msgID, err)
 			}
 			if !exists {
-				t.Errorf("expected read record for message %s", msgID)
+				t.Errorf("expected read delivery row for message %s", msgID)
 			}
 		}
 	})
 
-	t.Run("idempotent - marking already-read message updates timestamp", func(t *testing.T) {
-		// Mark message again
+	t.Run("idempotent - re-marking an already-read message is a no-op", func(t *testing.T) {
+		// thrum-1846 defect 2: re-marking a message the caller has already
+		// read must NOT emit a fresh receipt — it is a no-op (MarkedCount 0),
+		// not a re-emission. messageIDs[0] was read by this agent in the
+		// "mark single" subtest above.
 		req := MarkReadRequest{
 			MessageIDs:    []string{messageIDs[0]},
 			CallerAgentID: agentID,
@@ -1651,19 +1675,22 @@ func TestMessageMarkRead(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected *MarkReadResponse, got %T", resp)
 		}
-		if markReadResp.MarkedCount != 1 {
-			t.Errorf("expected marked_count 1, got %d", markReadResp.MarkedCount)
+		if markReadResp.MarkedCount != 0 {
+			t.Errorf("expected marked_count 0 for an already-read message, got %d", markReadResp.MarkedCount)
 		}
 
-		// Verify still only 1 record (not duplicated)
+		// Verify still only 1 delivery row for the caller (not duplicated).
+		// thrum-b6qw: read-truth is per (message, agent) in message_deliveries
+		// (message_reads retired); there is exactly one (message, agent) row
+		// regardless of re-marking.
 		var count int
-		query := `SELECT COUNT(*) FROM message_reads WHERE message_id = ? AND session_id = ?`
-		err = st.RawDB().QueryRow(query, messageIDs[0], sessionID).Scan(&count)
+		query := `SELECT COUNT(*) FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ?`
+		err = st.RawDB().QueryRow(query, messageIDs[0], agentID).Scan(&count)
 		if err != nil {
-			t.Fatalf("failed to query message_reads: %v", err)
+			t.Fatalf("failed to query message_deliveries: %v", err)
 		}
 		if count != 1 {
-			t.Errorf("expected 1 read record after re-marking, found %d", count)
+			t.Errorf("expected 1 read delivery row after re-marking, found %d", count)
 		}
 	})
 
@@ -1712,7 +1739,11 @@ func TestMessageMarkRead(t *testing.T) {
 			t.Errorf("expected marked_count 1, got %d", markReadResp.MarkedCount)
 		}
 
-		// Verify also_read_by contains first agent
+		// Verify also_read_by reports the reader (agentID) who read msg0 in the
+		// "mark single" subtest. thrum-1846: msg0 is now a legacy-broadcast
+		// from a SEPARATE sender, so the sender's own read-stamped self-row
+		// (thrum-b6qw Option C) also legitimately appears here — assert
+		// membership of the reader rather than exact-set equality.
 		if markReadResp.AlsoReadBy == nil {
 			t.Fatal("expected also_read_by field, got nil")
 		}
@@ -1720,22 +1751,29 @@ func TestMessageMarkRead(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected also_read_by entry for message %s", messageIDs[0])
 		}
-		if len(otherAgents) != 1 {
-			t.Fatalf("expected 1 other agent, got %d", len(otherAgents))
+		foundReader := false
+		for _, a := range otherAgents {
+			if a == agentID {
+				foundReader = true
+			}
 		}
-		if otherAgents[0] != agentID {
-			t.Errorf("expected other agent %s, got %s", agentID, otherAgents[0])
+		if !foundReader {
+			t.Errorf("expected also_read_by to include reader %s, got %v", agentID, otherAgents)
 		}
 
-		// Verify 2 read records exist (one per session)
+		// Verify 3 read delivery rows exist: sender self-row (read-stamped at
+		// send), reader, and collaborator. thrum-b6qw: read-truth is per
+		// (message, agent) in message_deliveries.read_at; message_reads
+		// retired. msg0 is a legacy-broadcast, so reader and agent2 each
+		// created their own read row via the legacy-broadcast gate arm.
 		var count int
-		query := `SELECT COUNT(*) FROM message_reads WHERE message_id = ?`
+		query := `SELECT COUNT(*) FROM message_deliveries WHERE message_id = ? AND read_at IS NOT NULL`
 		err = st.RawDB().QueryRow(query, messageIDs[0]).Scan(&count)
 		if err != nil {
-			t.Fatalf("failed to count read records: %v", err)
+			t.Fatalf("failed to count read delivery rows: %v", err)
 		}
-		if count != 2 {
-			t.Errorf("expected 2 read records (one per session), found %d", count)
+		if count != 3 {
+			t.Errorf("expected 3 read delivery rows (sender self + reader + collaborator), found %d", count)
 		}
 
 		// Switch back to original agent
@@ -1744,8 +1782,11 @@ func TestMessageMarkRead(t *testing.T) {
 	})
 
 	t.Run("skip non-existent message IDs", func(t *testing.T) {
+		// thrum-1846: use the fresh, still-unread msg 3 and 4 — msg 1 and 2
+		// were already marked read in the batch subtest, and re-marking
+		// already-read mail is now a no-op (it would not count).
 		req := MarkReadRequest{
-			MessageIDs:    []string{messageIDs[1], "msg_NONEXISTENT", messageIDs[2]},
+			MessageIDs:    []string{messageIDs[3], "msg_NONEXISTENT", messageIDs[4]},
 			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
@@ -1781,7 +1822,11 @@ func TestMessageMarkRead(t *testing.T) {
 		}
 	})
 
-	t.Run("same agent, multiple sessions - both create separate read records", func(t *testing.T) {
+	t.Run("same agent, multiple sessions - single per-agent read row", func(t *testing.T) {
+		// thrum-b6qw: read-state is no longer session-scoped (message_reads
+		// retired) — read-truth is per (message, agent) in
+		// message_deliveries, so marking read from any session yields exactly
+		// ONE read row for the agent, not one per session.
 		// Start a second session for the same agent
 		sessionReq3 := SessionStartRequest{
 			AgentID: agentID,
@@ -1795,10 +1840,12 @@ func TestMessageMarkRead(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected *SessionStartResponse, got %T", sessionResp3)
 		}
-		session3ID := sessionStartResp3.SessionID
+		_ = sessionStartResp3.SessionID // read-state is per-agent now, not per-session
 
-		// Create a new message
-		sendReq := SendRequest{Content: "Multi-session test", CallerAgentID: agentID}
+		// Create a new message FROM the sender (thrum-1846: must be unread by
+		// the reader — a self-authored message is read-stamped at send and
+		// would mark as a no-op).
+		sendReq := SendRequest{Content: "Multi-session test", CallerAgentID: senderID}
 		sendParams, _ := json.Marshal(sendReq)
 		sendResp, err := handler.HandleSend(context.Background(), sendParams)
 		if err != nil {
@@ -1831,15 +1878,18 @@ func TestMessageMarkRead(t *testing.T) {
 			t.Errorf("expected marked_count 1, got %d", markReadResp.MarkedCount)
 		}
 
-		// Verify read record exists for session3
+		// Verify exactly ONE read-stamped delivery row for the agent (not
+		// per-session). thrum-b6qw: read-truth is per (message, agent) in
+		// message_deliveries.read_at; message_reads is retired and no longer
+		// written.
 		var count int
-		query := `SELECT COUNT(*) FROM message_reads WHERE message_id = ? AND session_id = ?`
-		err = st.RawDB().QueryRow(query, newMsgID, session3ID).Scan(&count)
+		query := `SELECT COUNT(*) FROM message_deliveries WHERE message_id = ? AND recipient_agent_id = ? AND read_at IS NOT NULL`
+		err = st.RawDB().QueryRow(query, newMsgID, agentID).Scan(&count)
 		if err != nil {
-			t.Fatalf("failed to query message_reads: %v", err)
+			t.Fatalf("failed to query message_deliveries: %v", err)
 		}
 		if count != 1 {
-			t.Errorf("expected 1 read record for session3, found %d", count)
+			t.Errorf("expected 1 read delivery row for agent, found %d", count)
 		}
 	})
 }
@@ -2143,11 +2193,18 @@ func TestInboxGroupMembership(t *testing.T) {
 	})
 
 	t.Run("non_member_does_not_see_group_messages", func(t *testing.T) {
-		// Sender is not in @reviewers, should NOT see that message when filtering for_agent
+		// Sender is not in @reviewers, should NOT see that message when filtering
+		// for_agent. ExcludeSelf mirrors the production CLI inbox
+		// (internal/cli/inbox.go always sets exclude_self=true) — thrum-b6qw: the
+		// author now holds a read-stamped self-delivery row (Option C), which
+		// would otherwise make their own @everyone broadcast match the Part-4
+		// broadcast-delivery arm.
 		listReq, _ := json.Marshal(ListMessagesRequest{
-			ForAgent:     senderID,
-			ForAgentRole: "coordinator",
-			PageSize:     50,
+			ForAgent:      senderID,
+			ForAgentRole:  "coordinator",
+			ExcludeSelf:   true,
+			CallerAgentID: senderID,
+			PageSize:      50,
 		})
 		resp, err := msgHandler.HandleList(context.Background(), listReq)
 		if err != nil {
@@ -2169,8 +2226,9 @@ func TestInboxGroupMembership(t *testing.T) {
 		if foundReview {
 			t.Error("coordinator should NOT see message to @reviewers (not a member)")
 		}
-		// Coordinator is the sender of the @everyone broadcast — excluded from
-		// message_deliveries. Sender does not see own broadcast in inbox.
+		// Coordinator is the sender of the @everyone broadcast — stripped by
+		// exclude_self (the author's self-delivery row exists for read-state
+		// bookkeeping, but the CLI inbox never shows own messages).
 		if foundEveryone {
 			t.Error("coordinator (sender) should NOT see own @everyone broadcast in inbox")
 		}
@@ -2420,7 +2478,7 @@ func TestQueryAgentsByRecipient_SupervisorFallback(t *testing.T) {
 		canonicalID = "supervisor_thrum_leon_letto"
 		legacyID    = "supervisor_thrum"
 	)
-	handler := NewMessageHandlerWithDispatcher(st, nil, thrumDir, canonicalID, legacyID)
+	handler := NewMessageHandlerWithDispatcher(st, nil, thrumDir, canonicalID, legacyID, 0)
 	ctx := context.Background()
 
 	// Positive: canonical supervisor recipient resolves via the
@@ -2512,4 +2570,118 @@ func TestIsSupervisorRecipient_EmptyLegacyOK(t *testing.T) {
 	if !isSupervisorRecipient(h, "supervisor_x_y") {
 		t.Fatal("canonical must still match with empty supervisorLegacy")
 	}
+}
+
+// TestHandleSend_MaxBodyBytes — thrum-mhwt regression. HandleSend
+// must refuse a request whose body.content exceeds h.maxBodyBytes,
+// accept one exactly at the limit, and impose no cap when
+// maxBodyBytes == 0 (test/default path).
+func TestHandleSend_MaxBodyBytes(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatalf("create .thrum dir: %v", err)
+	}
+	writeGuardOffConfig(t, tmpDir)
+
+	repoID := "r_MHWT_TEST"
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	t.Setenv("THRUM_ROLE", "coordinator")
+	t.Setenv("THRUM_MODULE", "core")
+
+	agentID := identity.GenerateAgentID(repoID, "coordinator", "core", "")
+	agentHandler := NewAgentHandler(st)
+	regParams, _ := json.Marshal(RegisterRequest{Role: "coordinator", Module: "core"})
+	if _, err := agentHandler.HandleRegister(context.Background(), regParams); err != nil {
+		t.Fatalf("register agent: %v", err)
+	}
+
+	sessionHandler := NewSessionHandler(st)
+	sessionParams, _ := json.Marshal(SessionStartRequest{AgentID: agentID})
+	if _, err := sessionHandler.HandleStart(context.Background(), sessionParams); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	// Use the standard constructor (NewMessageHandler) for success-path
+	// tests so the wired dispatcher is non-nil. Inject limits into the
+	// struct directly for the cap parameter — same field the
+	// WithDispatcher constructor would set.
+	t.Run("rejects_over_limit", func(t *testing.T) {
+		// Rejection path runs BEFORE the dispatcher is touched, so the
+		// nil-dispatcher constructor is safe here.
+		const limit = 100
+		handler := NewMessageHandlerWithDispatcher(st, nil, "", "", "", limit)
+		body := strings.Repeat("x", limit+1)
+		req, _ := json.Marshal(SendRequest{Content: body, CallerAgentID: agentID})
+		_, err := handler.HandleSend(context.Background(), req)
+		if err == nil {
+			t.Fatal("HandleSend with body > limit: got nil err, want size-cap rejection")
+		}
+		if !strings.Contains(err.Error(), "too large") {
+			t.Errorf("err = %q, want message mentioning size cap (containing \"too large\")", err)
+		}
+		// thrum-mhwt review finding #2: rejection must be a typed
+		// *RPCError with -32602 (Invalid Params) so the JSON-RPC
+		// surface is machine-parseable, not a generic -32000.
+		rpcErr, ok := err.(*RPCError)
+		if !ok {
+			t.Fatalf("HandleSend err = %T, want *RPCError", err)
+		}
+		if rpcErr.Code != -32602 {
+			t.Errorf("RPCError.Code = %d, want -32602 (Invalid Params)", rpcErr.Code)
+		}
+	})
+
+	t.Run("rejects_over_limit_via_HandleEdit", func(t *testing.T) {
+		// HandleEdit must enforce the same cap as HandleSend; without
+		// this an operator could send a small message and edit it to
+		// arbitrary size (review finding #1).
+		const limit = 100
+		handler := NewMessageHandlerWithDispatcher(st, nil, "", "", "", limit)
+		body := strings.Repeat("q", limit+1)
+		req, _ := json.Marshal(EditRequest{
+			MessageID:     "msg_does_not_exist_yet",
+			Content:       body,
+			CallerAgentID: agentID,
+		})
+		_, err := handler.HandleEdit(context.Background(), req)
+		if err == nil {
+			t.Fatal("HandleEdit with body > limit: got nil err, want size-cap rejection BEFORE the message-existence check")
+		}
+		if !strings.Contains(err.Error(), "too large") {
+			t.Errorf("err = %q, want size-cap error (containing \"too large\"); did the cap fire AFTER the message-existence check?", err)
+		}
+		rpcErr, ok := err.(*RPCError)
+		if !ok {
+			t.Fatalf("HandleEdit err = %T, want *RPCError", err)
+		}
+		if rpcErr.Code != -32602 {
+			t.Errorf("RPCError.Code = %d, want -32602 (Invalid Params)", rpcErr.Code)
+		}
+	})
+
+	t.Run("accepts_at_limit", func(t *testing.T) {
+		const limit = 200
+		handler := NewMessageHandler(st)
+		handler.maxBodyBytes = limit
+		body := strings.Repeat("y", limit)
+		req, _ := json.Marshal(SendRequest{Content: body, CallerAgentID: agentID})
+		if _, err := handler.HandleSend(context.Background(), req); err != nil {
+			t.Fatalf("HandleSend at exact limit: %v (must accept; cap is inclusive only of over-limit)", err)
+		}
+	})
+
+	t.Run("no_cap_when_zero", func(t *testing.T) {
+		handler := NewMessageHandler(st) // maxBodyBytes = 0 by default
+		body := strings.Repeat("z", 5*1024)
+		req, _ := json.Marshal(SendRequest{Content: body, CallerAgentID: agentID})
+		if _, err := handler.HandleSend(context.Background(), req); err != nil {
+			t.Fatalf("HandleSend with maxBodyBytes=0: %v (zero must disable the cap)", err)
+		}
+	})
 }

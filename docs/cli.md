@@ -269,7 +269,6 @@ Runtime
 
 Daemon
   Local-only:    true (config.json)
-  Sync interval: 60s (default)
   WS port:       auto (default)
   Status:        running (PID 7718)
 ```
@@ -376,8 +375,10 @@ See also: [Identity System](identity.md), [Session Restart](session-restart.md).
 ### thrum quickstart
 
 Register, start a session, and set an initial intent in one step. If the agent
-is already registered, it re-registers automatically. Supports agent naming via
-the `--name` flag or `THRUM_NAME` environment variable.
+is already registered, it re-registers automatically. The agent name can be
+supplied as a positional argument, via the `--name` flag, or via the
+`THRUM_NAME` environment variable. Precedence (highest → lowest): `--name` flag
+→ positional → `THRUM_NAME` → identity-file name fallback.
 
 **G1a guard (quickstart_self_rename):** If the caller's ancestor PID chain
 already owns an identity in this directory (i.e., this runtime has already
@@ -394,6 +395,7 @@ a live process in a different worktree, the registration is refused. Pass
 other process has exited), or choose a different name.
 
 ```text
+thrum quickstart [AGENT_NAME] --role ROLE --module MODULE [flags]
 thrum quickstart --name AGENT_NAME --role ROLE --module MODULE [flags]
 ```
 
@@ -413,17 +415,20 @@ Requires `--role` and `--module` (via flags or `THRUM_ROLE`/`THRUM_MODULE` env
 vars). The `--runtime` value is written to `preferred_runtime` in the identity
 file.
 
-The `THRUM_NAME` environment variable takes priority over the `--name` flag.
+Name resolution precedence (highest → lowest): `--name` flag, positional
+argument, `THRUM_NAME` env-var, identity-file name fallback. The lenient
+positional form follows the Unix `tool [name]` convention; the flag wins when
+both are supplied.
 
 Example:
 
 ```text
-$ thrum quickstart --name implementer_auth --role implementer --module auth --intent "Fixing token refresh"
-✓ Registered as @implementer (implementer_35HV62T9B9)
+$ thrum quickstart implementer_auth --role implementer --module auth --intent "Fixing token refresh"
+✓ Registered as @implementer (implementer_auth)
 ✓ Session started: ses_01HXF2A9...
 ✓ Intent set: Fixing token refresh
 
-# With a human-readable name
+# Equivalent with the explicit flag
 $ thrum quickstart --name furiosa --role implementer --module auth --intent "Fixing token refresh"
 ✓ Registered as @furiosa (furiosa)
 ✓ Session started: ses_01HXF2A9...
@@ -992,14 +997,17 @@ identity file directly. With `--agent`, sends an RPC to the daemon to update a
 remote agent's identity file (including across worktrees).
 
 ```text
-thrum agent set-status <working|idle|blocked> [flags]
+thrum agent set-status <working|idle|blocked|stuck> [flags]
 ```
 
 | Flag      | Description                                    | Default |
 | --------- | ---------------------------------------------- | ------- |
 | `--agent` | Target agent name (uses daemon RPC for update) |         |
 
-Valid values: `working`, `idle`, `blocked`.
+Valid values: `working`, `idle`, `blocked`, `stuck`. The fourth value, `stuck`,
+is set programmatically by `permission.markAgentStuck` when a permission prompt
+has been waiting too long; the CLI/RPC validator allowlist accepts it for parity
+so operator writes don't disagree with the daemon's own writes (thrum-9neg).
 
 The daemon uses `agent_status` for auto-nudge detection — if a tmux agent's pane
 has been silent but its status is `"working"`, the daemon fires a nudge on the
@@ -1511,7 +1519,7 @@ Example:
 ```text
 $ thrum daemon logs
 2026/04/09 21:15:03.000000 [daemon] started (v0.8.0)
-2026/04/09 21:15:03.100000 [sync] loop started (interval: 60s)
+2026/04/09 21:15:03.100000 [sync] loop started
 ...
 
 $ thrum daemon logs -f
@@ -1546,8 +1554,10 @@ Sync states: `stopped`, `idle`, `synced`, `error`.
 ### thrum sync force
 
 Trigger an immediate sync (non-blocking). Fetches new messages from the remote
-and pushes local messages. The default sync interval is 60 seconds. When
-local-only mode is active, displays "local-only (remote sync disabled)".
+and pushes local messages. Routine sync is event-triggered (as of v0.10.6 — no
+polling interval); `sync force` exists for the moments you want to confirm state
+immediately. When local-only mode is active, displays "local-only (remote sync
+disabled)".
 
 ```text
 thrum sync force
@@ -2516,19 +2526,31 @@ the main worktree into a "feature" worktree.
 thrum worktree create <name> [flags]
 ```
 
-| Flag             | Description                                                                 | Default          |
-| ---------------- | --------------------------------------------------------------------------- | ---------------- |
-| `--branch`, `-b` | Branch name                                                                 | `feature/<name>` |
-| `--detach`       | Create detached HEAD worktree                                               | `false`          |
-| `--name`         | Agent name (triggers quickstart when combined with role+module)             |                  |
-| `--role`         | Agent role                                                                  |                  |
-| `--module`       | Agent module                                                                |                  |
-| `--intent`       | Initial work intent description                                             |                  |
-| `--runtime`      | Runtime preset: `claude`, `codex`, `cursor`, `gemini`, `opencode`, `auggie` |                  |
-| `--detach`       | Create detached HEAD worktree                                               | `false`          |
+| Flag             | Description                                                                 | Default             |
+| ---------------- | --------------------------------------------------------------------------- | ------------------- |
+| `--branch`, `-b` | Branch name                                                                 | `feature/<name>`    |
+| `--base`         | Base ref for the new branch (any existing branch or commit SHA)             | current HEAD of cwd |
+| `--detach`       | Create detached HEAD worktree                                               | `false`             |
+| `--name`         | Agent name (triggers quickstart when combined with role+module)             |                     |
+| `--role`         | Agent role                                                                  |                     |
+| `--module`       | Agent module                                                                |                     |
+| `--intent`       | Initial work intent description                                             |                     |
+| `--runtime`      | Runtime preset: `claude`, `codex`, `cursor`, `gemini`, `opencode`, `auggie` |                     |
+
+The `--base` flag (added in v0.10.6) controls which existing ref the new branch
+is cut from. Default is the current HEAD of the cwd where
+`thrum worktree create` runs — so a worktree created from a `thrum-dev` checkout
+inherits the `thrum-dev` history, and one created from `release/v0.10.6`
+inherits that release-line history. Pre-fix the CLI silently defaulted to `main`
+regardless of cwd HEAD, which led to lost commits when operators ran the command
+from non-`main` branches. Users who want the pre-fix behavior can pass
+`--base main` explicitly. On detached HEAD or a non-git cwd the command warns
+and falls back to `main`; pass `--base <ref>` to silence the warning and choose
+explicitly.
 
 The worktree is created at `worktrees.base_path/<name>` (default:
-`~/.workspaces/<project>/<name>`). The name cannot contain `/`, `\`, or `..`.
+`~/.thrum/worktrees/<project>/<name>`). The name cannot contain `/`, `\`, or
+`..`.
 
 Hook scripts (`scripts/thrum-startup.sh`, `scripts/thrum-check-inbox.sh`) are
 copied from the main repo into the new worktree so SessionStart hooks fire
@@ -2538,7 +2560,7 @@ Example:
 
 ```text
 $ thrum worktree create api-feature
-Worktree created: ~/.workspaces/thrum/api-feature
+Worktree created: ~/.thrum/worktrees/thrum/api-feature
   Branch: feature/api-feature
   Thrum: .thrum/redirect → /path/to/main/.thrum
   Beads: .beads/redirect → /path/to/main/.beads
@@ -2631,6 +2653,15 @@ Start a monitor job. (`add` is a retained alias.)
 | `--debounce` | Leading-edge debounce window (minimum 30s)            | `60s`   |          |
 | `--env`      | Environment variable in `KEY=VALUE` form (repeatable) |         |          |
 | `--cwd`      | Working directory for the command                     | `.`     |          |
+| `--schedule` | Cron expression (5-field) — routes to scheduled mode  | —       |          |
+
+`--schedule` accepts a standard 5-field cron expression (e.g. `"*/5 * * * *"`,
+`"7,27,47 * * * *"`, `"0 9-17 * * 1-5"`). With `--schedule`, the child runs as a
+one-shot per tick (scheduled mode) and is not auto-restarted between fires.
+Without `--schedule`, the monitor is continuous: the daemon auto-restarts the
+child on unexpected exit with exponential backoff (1s → 60s, ≤10 fails in 5min
+marks the monitor dead). See [Monitor Jobs](monitor-jobs.md) for the full
+behavior model. (thrum-puhr.9, v0.10.6)
 
 Debounce is leading-edge: the first matching line triggers a message
 immediately, then the monitor goes quiet for the debounce window before it can

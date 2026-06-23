@@ -7,9 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,6 +18,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/jsonl"
+	"github.com/leonletto/thrum/internal/profile"
 	"github.com/leonletto/thrum/internal/projection"
 	"github.com/leonletto/thrum/internal/schema"
 	_ "modernc.org/sqlite"
@@ -36,24 +37,27 @@ type EventWriteHook func(daemonID string, sequence int64, event []byte)
 
 // State manages the daemon's persistent state (JSONL log and SQLite projection).
 type State struct {
-	eventsWriter   *jsonl.Writer            // Writer for events.jsonl (non-message events)
-	messageWriters map[string]*jsonl.Writer // Writers for messages/{agent}.jsonl (keyed by agent name)
-	writersMu      sync.Mutex               // Protects messageWriters map
-	db             *safedb.DB
-	projector      *projection.Projector
-	repoID         string
-	daemonID       string                                             // Unique identifier for this daemon instance (for sync origin tracking)
-	identity       identity.Identity                                  // Full identity block when Bootstrap ran (zero-value in test paths)
-	sequence       atomic.Int64                                       // Monotonically increasing event sequence counter
-	repoPath       string                                             // Path to the repository root
-	thrumDir       string                                             // Path to .thrum directory (runtime: var/, identities/)
-	syncDir        string                                             // Path to sync worktree (JSONL data on a-sync branch)
-	mu             sync.RWMutex                                       // Protects agent/session operations
-	onEventWrite   EventWriteHook                                     // Optional hook called after successful event write
-	signingKey     ed25519.PrivateKey                                 // Optional Ed25519 key for signing events
-	signEvent      func(event map[string]any, key ed25519.PrivateKey) // Injected signing function
-	touchMu        sync.Mutex                                         // Protects touchTimes (thrum-7nuj: agent last_seen debounce)
-	touchTimes     map[string]time.Time                               // Per-agent most-recent TouchAgentLastSeen timestamp
+	eventsWriter       *jsonl.Writer // Writer for .thrum/events.jsonl (local journal)
+	db                 *safedb.DB
+	projector          *projection.Projector
+	repoID             string
+	daemonID           string                                             // Unique identifier for this daemon instance (for sync origin tracking)
+	identity           identity.Identity                                  // Full identity block when Bootstrap ran (zero-value in test paths)
+	sequence           atomic.Int64                                       // Monotonically increasing event sequence counter
+	repoPath           string                                             // Path to the repository root
+	thrumDir           string                                             // Path to .thrum directory (runtime: var/, identities/)
+	syncDir            string                                             // Path to sync worktree (JSONL data on a-sync branch)
+	mu                 sync.RWMutex                                       // Protects agent/session operations
+	onEventWrite       EventWriteHook                                     // Optional hook called after successful event write
+	triggerSyncOnWrite func(context.Context)                              // Optional hook called after structural-event write to fire sync
+	signingKey         ed25519.PrivateKey                                 // Optional Ed25519 key for signing events
+	signEvent          func(event map[string]any, key ed25519.PrivateKey) // Injected signing function
+	touchMu            sync.Mutex                                         // Protects touchTimes (thrum-7nuj: agent last_seen debounce)
+	touchTimes         map[string]time.Time                               // Per-agent most-recent TouchAgentLastSeen timestamp
+	// postCommitWG tracks in-flight postCommit goroutines launched via
+	// GoPostCommit. Close() drains it on shutdown so the daemon does
+	// not exit mid-walker/compactor. thrum-1nkt.5.
+	postCommitWG sync.WaitGroup
 }
 
 // NewState creates a new state manager for the given .thrum directory.
@@ -68,11 +72,26 @@ func NewState(thrumDir string, syncDir string, repoID string, daemonID string) (
 		return nil, fmt.Errorf("create var directory: %w", err)
 	}
 
+	// thrum-vh2c: clear any stale migration-progress file left by a previously
+	// crashed boot, so the waiting CLI never tails a frozen heartbeat from a
+	// dead process. If a migration actually runs below, schema.Migrate
+	// re-creates this file with a live heartbeat.
+	schema.ClearStaleMigrationStatus(varDir)
+
 	// Open SQLite database with schema initialization
 	dbPath := filepath.Join(thrumDir, "var", "messages.db")
 	db, err := schema.OpenDB(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
+	}
+
+	// Capture the pre-migration schema version (0 for a fresh/uninitialized
+	// DB — the error path is deliberately folded into 0). Gates the one-time
+	// v40 read-state backfill below: only an EXISTING DB crossing v39→v40 has
+	// historical stuck unread to clear; a fresh DB starts clean at v40.
+	oldVersion := 0
+	if v, verr := schema.GetSchemaVersion(db); verr == nil {
+		oldVersion = v
 	}
 
 	// Initialize or migrate schema
@@ -95,20 +114,15 @@ func NewState(thrumDir string, syncDir string, repoID string, daemonID string) (
 		return nil, fmt.Errorf("backfill event_id: %w", err)
 	}
 
-	// Create events writer for events.jsonl (core non-message events)
-	eventsPath := filepath.Join(syncDir, "events.jsonl")
+	// Create events writer for .thrum/events.jsonl (local journal, not synced).
+	// As of v0.10.6 (thrum-s6os), all events are written locally; what peers
+	// see is materialized into state/, messages-v2/, receipts/ by the snapshot
+	// walker when a structural event fires triggerSyncOnWrite.
+	eventsPath := filepath.Join(thrumDir, "events.jsonl")
 	eventsWriter, err := jsonl.NewWriter(eventsPath)
 	if err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("create events writer: %w", err)
-	}
-
-	// Ensure messages directory exists for per-agent message files
-	messagesDir := filepath.Join(syncDir, "messages")
-	if err := os.MkdirAll(messagesDir, 0750); err != nil {
-		_ = eventsWriter.Close()
-		_ = db.Close()
-		return nil, fmt.Errorf("create messages directory: %w", err)
 	}
 
 	// Wrap raw DB in safedb to enforce context-aware queries at compile time
@@ -159,18 +173,37 @@ func NewState(thrumDir string, syncDir string, repoID string, daemonID string) (
 	}
 
 	s := &State{
-		eventsWriter:   eventsWriter,
-		messageWriters: make(map[string]*jsonl.Writer),
-		db:             safeDB,
-		projector:      projector,
-		repoID:         repoID,
-		daemonID:       daemonID,
-		identity:       ident,
-		repoPath:       repoPath,
-		thrumDir:       thrumDir,
-		syncDir:        syncDir,
+		eventsWriter: eventsWriter,
+		db:           safeDB,
+		projector:    projector,
+		repoID:       repoID,
+		daemonID:     daemonID,
+		identity:     ident,
+		repoPath:     repoPath,
+		thrumDir:     thrumDir,
+		syncDir:      syncDir,
 	}
 	s.sequence.Store(maxSeq)
+
+	// thrum-b6qw (port of tcqw): one-time read-state backfill at the v39→v40
+	// crossing. Gated on oldVersion (captured pre-Migrate at the top of this
+	// func) so it runs exactly once — after a successful Migrate the on-disk
+	// version is CurrentVersion (>= SchemaVersionReadState), so the next boot
+	// reads oldVersion=40 and the gate is false. Idempotent + best-effort: a
+	// failure logs but does not block startup (the backfill is historical
+	// cleanup, not a correctness precondition). Runs after identity resolution
+	// so daemon_identity carries the hostname LocalDaemonIDs anchors on.
+	if oldVersion > 0 && oldVersion < schema.SchemaVersionReadState {
+		if err := BackfillReadState(context.Background(), safeDB, daemonID); err != nil {
+			slog.Warn("read-state v40 backfill failed (non-fatal)", "error", err)
+		}
+	} else if oldVersion >= schema.SchemaVersionReadState {
+		// Operator breadcrumb for the documented crash window: if a prior boot
+		// committed v40 but crashed before the backfill transaction, this skip
+		// is the only signal — the backfill is idempotent and can be
+		// re-triggered manually if stuck unread persists.
+		slog.Debug("read-state v40 backfill skipped (crossing already recorded)", "schema_version", oldVersion)
+	}
 
 	return s, nil
 }
@@ -190,21 +223,53 @@ func (s *State) SetSigningKey(key ed25519.PrivateKey, signFunc func(event map[st
 	s.signEvent = signFunc
 }
 
-// Close closes the state manager and its resources.
+// SetSyncTrigger registers the hook called after a successful
+// structural-event write. Per spec §3.2, sync fires only on the
+// structural-event whitelist; the trigger function (provided by
+// internal/sync/triggers.SyncOnWrite at daemon bootstrap) drives
+// the snapshot walker and then loop.TriggerSync. The hook is
+// optional; tests that don't exercise sync may leave it nil.
+func (s *State) SetSyncTrigger(fn func(context.Context)) {
+	s.triggerSyncOnWrite = fn
+}
+
+// isStructuralEvent reports whether an event type triggers cross-
+// machine sync per spec §3.2 whitelist. Structural events drive
+// state-file writes via the snapshot walker; non-structural events
+// (edits, deletes, receipts, session boundaries, intents) remain
+// local-only and are folded into the wire stream at the NEXT
+// structural-driven walk. This deferred-folding semantic is what
+// makes the T2 invariant (100 receipts → 0 commits) work.
+//
+// One whitelist, one helper, one source of truth. If a new
+// structural event type is introduced, add it here; do NOT inline
+// the check at call sites.
+func isStructuralEvent(eventType string) bool {
+	switch eventType {
+	case "agent.register",
+		"group.create", "group.delete",
+		"group.member.add", "group.member.remove",
+		"message.create":
+		return true
+	}
+	return false
+}
+
+// Close closes the state manager and its resources. Drains in-flight
+// postCommit goroutines (launched via GoPostCommit) up to
+// postCommitDrainTimeout so walker+compactor work in flight at shutdown
+// gets a chance to complete before the DB closes underneath it.
+// thrum-1nkt.5.
 func (s *State) Close() error {
 	var errs []error
+
+	if !s.WaitPostCommit(postCommitDrainTimeout) {
+		errs = append(errs, fmt.Errorf("postCommit drain timed out after %s; in-flight walker/compactor work was abandoned", postCommitDrainTimeout))
+	}
 
 	if err := s.eventsWriter.Close(); err != nil {
 		errs = append(errs, fmt.Errorf("close events writer: %w", err))
 	}
-
-	s.writersMu.Lock()
-	for agentName, writer := range s.messageWriters {
-		if err := writer.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("close message writer for %s: %w", agentName, err))
-		}
-	}
-	s.writersMu.Unlock()
 
 	if err := s.db.Close(); err != nil {
 		errs = append(errs, fmt.Errorf("close database: %w", err))
@@ -213,21 +278,110 @@ func (s *State) Close() error {
 	return errors.Join(errs...)
 }
 
+// postCommitDrainTimeout bounds how long Close() waits for in-flight
+// GoPostCommit goroutines (walker + compactor fan-out) before giving
+// up. Sits at the walker's 30s + compactor's 60s sum so even the worst-
+// case structural-event sync window can complete cleanly on a graceful
+// shutdown. thrum-1nkt.5.
+const postCommitDrainTimeout = 90 * time.Second
+
+// GoPostCommit runs fn in a new goroutine while registering it with the
+// state's shutdown WaitGroup. nil fn is a no-op (matches the pre-1nkt.5
+// `if postCommit != nil` guard semantics so callers can pass the
+// WriteEvent return value directly without a nil check). thrum-1nkt.5.
+//
+// The pattern at the 21 structural-event call sites is:
+//
+//	postCommit, err := s.WriteEvent(ctx, event)
+//	s.Unlock()
+//	if err != nil { ... }
+//	s.GoPostCommit(postCommit)
+//
+// The goroutine runs the walker+compactor fan-out outside the caller's
+// RPC window, so the RPC returns as soon as the events table is
+// written. graceful Close() drains in-flight goroutines up to
+// postCommitDrainTimeout before tearing down the DB.
+func (s *State) GoPostCommit(fn func()) {
+	if fn == nil {
+		return
+	}
+	s.postCommitWG.Add(1)
+	go func() {
+		defer s.postCommitWG.Done()
+		fn()
+	}()
+}
+
+// WaitPostCommit blocks until all in-flight GoPostCommit goroutines
+// have completed, or timeout elapses. Returns true if the drain
+// completed cleanly, false if it timed out. Exposed for tests + Close;
+// production callers typically reach this via Close(). thrum-1nkt.5.
+func (s *State) WaitPostCommit(timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		s.postCommitWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
+}
+
 // WriteEvent writes an event to both JSONL and SQLite.
 // Automatically generates and adds event_id (ULID) and version fields.
 // The context is used for SQLite operations, ensuring the server's per-request
 // timeout propagates to database queries.
-func (s *State) WriteEvent(ctx context.Context, event any) error {
+//
+// Returns a postCommit closure (nil if non-structural or no sync trigger
+// is wired) that the caller MUST invoke to fire the snapshot walker +
+// compactor + sync. Callers that hold an external lock (e.g. state.Lock())
+// during WriteEvent MUST release that lock BEFORE invoking postCommit —
+// the walker+compactor can run for tens of seconds and would otherwise
+// starve every other goroutine waiting on the lock (thrum-bsn7).
+//
+// Callers that hold no external lock can invoke postCommit() inline
+// immediately after the error check — semantically identical to the
+// pre-bsn7 inline-trigger behavior.
+func (s *State) WriteEvent(ctx context.Context, event any) (postCommit func(), err error) {
+	// thrum-bpq5 substrate: per-phase WriteEvent timing. Gated by
+	// THRUM_PROFILE; zero cost when off.
+	weStart := time.Now()
+	var marshalMs, jsonlMs, eventsInsertMs, projectorMs int64
+	defer func() {
+		if !profile.Enabled() {
+			return
+		}
+		evtTypeRaw := ""
+		if event != nil {
+			// best-effort type extraction; cheap
+			if m, ok := event.(map[string]any); ok {
+				evtTypeRaw, _ = m["type"].(string)
+			}
+		}
+		slog.Info("profile.write_event.total",
+			"total_ms", time.Since(weStart).Milliseconds(),
+			"marshal_ms", marshalMs,
+			"jsonl_ms", jsonlMs,
+			"events_insert_ms", eventsInsertMs,
+			"projector_ms", projectorMs,
+			"event_type", evtTypeRaw,
+		)
+	}()
 	// Marshal event to map so we can add fields
-	eventBytes, err := json.Marshal(event)
-	if err != nil {
-		return fmt.Errorf("marshal event: %w", err)
+	marshalStart := time.Now()
+	eventBytes, mErr := json.Marshal(event)
+	if mErr != nil {
+		return nil, fmt.Errorf("marshal event: %w", mErr)
 	}
 
 	var eventMap map[string]any
-	if err := json.Unmarshal(eventBytes, &eventMap); err != nil {
-		return fmt.Errorf("unmarshal to map: %w", err)
+	if uErr := json.Unmarshal(eventBytes, &eventMap); uErr != nil {
+		return nil, fmt.Errorf("unmarshal to map: %w", uErr)
 	}
+	marshalMs = time.Since(marshalStart).Milliseconds()
 
 	// Generate and add event_id if not present or empty
 	eventID, _ := eventMap["event_id"].(string)
@@ -252,39 +406,28 @@ func (s *State) WriteEvent(ctx context.Context, event any) error {
 		s.signEvent(eventMap, s.signingKey)
 	}
 
-	// Route event to appropriate JSONL file based on type
-	eventType, _ := eventMap["type"].(string)
-	var writer *jsonl.Writer
-
-	switch {
-	case strings.HasPrefix(eventType, "message."):
-		// Message events go to per-agent message files
-		agentName, err := s.resolveAgentForMessage(ctx, eventMap)
-		if err != nil {
-			return fmt.Errorf("resolve agent for message event: %w", err)
-		}
-		writer, err = s.getOrCreateMessageWriter(agentName)
-		if err != nil {
-			return fmt.Errorf("get message writer: %w", err)
-		}
-	default:
-		// All other events go to events.jsonl
-		writer = s.eventsWriter
-	}
+	// All events go to the local journal as of v0.10.6 (thrum-s6os).
+	// The synced events.jsonl is gone from the write path; what peers
+	// see is materialized into state/, messages-v2/, receipts/ by the
+	// snapshot walker (internal/sync/snapshot.Walker) when a
+	// structural event fires the returned postCommit closure below.
+	writer := s.eventsWriter
 
 	// Assign next sequence number
 	seq := s.sequence.Add(1)
 	eventMap["sequence"] = seq
 
 	// Append enriched event to JSONL (source of truth)
-	if err := writer.Append(eventMap); err != nil {
-		return fmt.Errorf("append to JSONL: %w", err)
+	jsonlStart := time.Now()
+	if aErr := writer.Append(eventMap); aErr != nil {
+		return nil, fmt.Errorf("append to JSONL: %w", aErr)
 	}
+	jsonlMs = time.Since(jsonlStart).Milliseconds()
 
 	// Marshal enriched event for projector
-	eventJSON, err := json.Marshal(eventMap)
-	if err != nil {
-		return fmt.Errorf("marshal enriched event: %w", err)
+	eventJSON, jErr := json.Marshal(eventMap)
+	if jErr != nil {
+		return nil, fmt.Errorf("marshal enriched event: %w", jErr)
 	}
 
 	// Insert into events table for sequence-based queries
@@ -292,107 +435,43 @@ func (s *State) WriteEvent(ctx context.Context, event any) error {
 	evtType, _ := eventMap["type"].(string)
 	evtTimestamp, _ := eventMap["timestamp"].(string)
 	evtOrigin, _ := eventMap["origin_daemon"].(string)
-	_, err = s.db.ExecContext(ctx,
+	eventsInsertStart := time.Now()
+	if _, iErr := s.db.ExecContext(ctx,
 		`INSERT OR IGNORE INTO events (event_id, sequence, type, timestamp, origin_daemon, event_json) VALUES (?, ?, ?, ?, ?, ?)`,
 		evtID, seq, evtType, evtTimestamp, evtOrigin, string(eventJSON),
-	)
-	if err != nil {
-		return fmt.Errorf("insert into events table: %w", err)
+	); iErr != nil {
+		return nil, fmt.Errorf("insert into events table: %w", iErr)
 	}
+	eventsInsertMs = time.Since(eventsInsertStart).Milliseconds()
 
 	// Apply to projector (update SQLite)
-	if err := s.projector.Apply(ctx, eventJSON); err != nil {
-		return fmt.Errorf("apply to projector: %w", err)
+	projectorStart := time.Now()
+	if pErr := s.projector.Apply(ctx, eventJSON); pErr != nil {
+		return nil, fmt.Errorf("apply to projector: %w", pErr)
 	}
+	projectorMs = time.Since(projectorStart).Milliseconds()
 
 	// Notify sync hook (e.g., to broadcast sync.notify to peers).
 	// Passes the enriched event JSON so downstream consumers (e.g.
 	// the permission reply interceptor) can inspect refs/reply_to
-	// without re-marshaling.
+	// without re-marshaling. Fires inline because it does not block
+	// on walker/compactor — it just notifies peer connections.
 	if s.onEventWrite != nil {
 		s.onEventWrite(s.daemonID, seq, eventJSON)
 	}
 
-	return nil
-}
-
-// resolveAgentForMessage determines which agent file a message event should be routed to.
-// For message.create: extracts agent name from the event's agent_id field.
-// For message.edit/delete: looks up the original message's author from SQLite.
-func (s *State) resolveAgentForMessage(ctx context.Context, event map[string]any) (string, error) {
-	eventType, _ := event["type"].(string)
-
-	switch eventType {
-	case "message.create":
-		// For creates, agent_id is in the event
-		agentID, ok := event["agent_id"].(string)
-		if !ok || agentID == "" {
-			return "", fmt.Errorf("message.create event missing agent_id")
-		}
-		return agentIDToName(agentID), nil
-
-	case "message.edit", "message.delete", "message.receipt":
-		// For edits/deletes/receipts, look up the original author from SQLite.
-		// If the original message hasn't been synced yet (out-of-order delivery
-		// across peers), fall back to agent_id from the event or a generic name.
-		// This prevents a missing message from becoming a poison pill that blocks
-		// the entire sync apply loop.
-		messageID, ok := event["message_id"].(string)
-		if !ok || messageID == "" {
-			return "", fmt.Errorf("%s event missing message_id", eventType)
-		}
-
-		var agentID string
-		query := `SELECT agent_id FROM messages WHERE message_id = ?`
-		err := s.db.QueryRowContext(ctx, query, messageID).Scan(&agentID)
-		if err == nil {
-			return agentIDToName(agentID), nil
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return "", fmt.Errorf("lookup original author for %s: %w", messageID, err)
-		}
-
-		// Message not in local DB — graceful fallback.
-		// Use agent_id from the event if present (e.g. receipt events carry it),
-		// otherwise derive a name from the message_id so the event still gets
-		// routed to a per-agent JSONL file rather than being dropped.
-		if fallbackID, ok := event["agent_id"].(string); ok && fallbackID != "" {
-			return agentIDToName(fallbackID), nil
-		}
-		return "_unresolved", nil
-
-	default:
-		return "", fmt.Errorf("unexpected message event type: %s", eventType)
+	// Build the deferred sync trigger for structural events. The caller
+	// is responsible for invoking this AFTER releasing any external
+	// lock (state.Lock()). thrum-bsn7 broke the synchronous-under-lock
+	// pattern so walker(30s) + compactor(60s) ceilings no longer starve
+	// concurrent goroutines waiting on the same lock. Non-structural
+	// events return nil — they're folded into the wire stream at the
+	// next structural-driven walk.
+	if s.triggerSyncOnWrite != nil && isStructuralEvent(evtType) {
+		trigger := s.triggerSyncOnWrite
+		return func() { trigger(ctx) }, nil
 	}
-}
-
-// agentIDToName extracts the agent name from an agent ID.
-// Uses the centralized identity.AgentIDToName function for consistency.
-func agentIDToName(agentID string) string {
-	return identity.AgentIDToName(agentID)
-}
-
-// getOrCreateMessageWriter returns a JSONL writer for the given agent's message file.
-// Creates a new writer if one doesn't exist. Thread-safe.
-func (s *State) getOrCreateMessageWriter(agentName string) (*jsonl.Writer, error) {
-	s.writersMu.Lock()
-	defer s.writersMu.Unlock()
-
-	// Check if writer already exists
-	if writer, exists := s.messageWriters[agentName]; exists {
-		return writer, nil
-	}
-
-	// Create new writer for this agent
-	messagePath := filepath.Join(s.syncDir, "messages", agentName+".jsonl")
-	writer, err := jsonl.NewWriter(messagePath)
-	if err != nil {
-		return nil, fmt.Errorf("create message writer for %s: %w", agentName, err)
-	}
-
-	// Cache the writer
-	s.messageWriters[agentName] = writer
-	return writer, nil
+	return nil, nil
 }
 
 // DB returns the safedb wrapper that enforces context-aware queries at compile time.
@@ -452,6 +531,23 @@ func (s *State) GetEventsSince(ctx context.Context, afterSeq int64, limit int) (
 // peer-replicated broadcasts that would otherwise fan out to this
 // daemon's local Telegram bridge.
 func (s *State) IngestSyncedEvent(ctx context.Context, event []byte) error {
+	// thrum-lv9x Path-A dedup: the a-sync git ingest had NO dedup at all, so an
+	// event already pulled via the RPC path (which records it in the events
+	// table) was re-applied on every git merge — aborting on the
+	// messages.message_id UNIQUE collision (pre-lv9x) and re-firing the notify
+	// hook per replay (storm fuel). Skip silently when the events table already
+	// holds the event_id. Partial by design: pure-Path-A events never enter the
+	// events table, so their replays are absorbed by the projector's idempotent
+	// writes instead (the lv9x OR-IGNORE message insert closed the last gap).
+	var probe struct {
+		EventID string `json:"event_id"`
+	}
+	if err := json.Unmarshal(event, &probe); err == nil && probe.EventID != "" {
+		if exists, err := eventlog.HasEvent(ctx, s.db, probe.EventID); err == nil && exists {
+			return nil
+		}
+	}
+
 	// Apply to projector — same work the previous direct call did.
 	if err := s.projector.Apply(ctx, event); err != nil {
 		return fmt.Errorf("apply synced event: %w", err)

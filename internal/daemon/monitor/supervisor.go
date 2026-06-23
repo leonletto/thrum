@@ -61,10 +61,16 @@ var (
 	ErrNameTaken        = errors.New("monitor name already in use")
 	ErrDebounceTooShort = errors.New("debounce below 30s minimum")
 	ErrInvalidRegex     = errors.New("invalid match pattern")
+	ErrInvalidSchedule  = errors.New("invalid schedule")
 )
 
 // SubmitSpec is the value-object passed from an RPC handler to Add. It holds
 // the user-supplied monitor configuration before it is validated and persisted.
+//
+// Schedule is an optional 5-field cron expression. When set, the runner fires
+// the child one-shot per scheduled tick (no auto-restart between ticks); when
+// empty, the runner runs the child continuously with exponential-backoff
+// auto-restart (capped by a per-window budget).
 type SubmitSpec struct {
 	Name            string
 	Argv            []string
@@ -73,6 +79,54 @@ type SubmitSpec struct {
 	Cwd             string
 	Env             map[string]string
 	DebounceSeconds int
+	Schedule        string
+}
+
+// restartTunables groups the restart-budget + backoff knobs that govern
+// continuous-mode auto-restart behavior. Lives on the supervisor instance
+// (not as package-level vars) so multiple test supervisors can run
+// concurrently with their own settings under the race detector without
+// stomping on each other.
+//
+// Backoff schedule (clamped at MaxBackoff): InitialBackoff, doubled each
+// child exit, capped at MaxBackoff. A successful run of BackoffResetAfter
+// or longer resets both backoff and the restart-window history.
+type restartTunables struct {
+	MaxRestartsPerWindow int
+	RestartBudgetWindow  time.Duration
+	InitialBackoff       time.Duration
+	MaxBackoff           time.Duration
+	BackoffResetAfter    time.Duration
+}
+
+// defaultRestartTunables returns the production restart-budget settings:
+// 10 restarts in 5 minutes, 1s→60s exponential backoff, 10s healthy-run
+// resets the counter.
+func defaultRestartTunables() restartTunables {
+	return restartTunables{
+		MaxRestartsPerWindow: 10,
+		RestartBudgetWindow:  5 * time.Minute,
+		InitialBackoff:       time.Second,
+		MaxBackoff:           60 * time.Second,
+		BackoffResetAfter:    10 * time.Second,
+	}
+}
+
+// defaultScheduledTickWait is the production wait between scheduled fires:
+// sleep until `until`, respecting ctx cancellation. Each supervisor holds a
+// pointer to this function (or a test override) on its scheduledTickWait
+// field so tests can drive ticks deterministically without burning minutes.
+func defaultScheduledTickWait(ctx context.Context, until time.Time) {
+	wait := time.Until(until)
+	if wait < 0 {
+		wait = 0
+	}
+	t := time.NewTimer(wait)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+	case <-t.C:
+	}
 }
 
 // runnerHandle groups the per-runner context cancel function and a done channel
@@ -118,15 +172,29 @@ type MonitorSupervisor struct {
 	// moment the RPC handler returns because its derived child context
 	// dies with the request. Set exactly once by Start; read by launch().
 	baseCtx context.Context
+
+	// Restart + backoff knobs for continuous-mode auto-restart. Held per
+	// instance so multiple supervisors (in tests) don't race on shared
+	// package-level vars. Populated by NewMonitorSupervisor with production
+	// defaults; tests instantiate with custom values for fast coverage of
+	// budget-exhaustion paths.
+	tunables restartTunables
+
+	// scheduledTickWait is the function used by scheduled-mode runLoops to
+	// wait until the next cron tick. Default is defaultScheduledTickWait;
+	// tests override to drive ticks deterministically.
+	scheduledTickWait func(ctx context.Context, until time.Time)
 }
 
 // NewMonitorSupervisor constructs a supervisor backed by store and delivery.
 // The supervisor's runner map is empty until Start is called.
 func NewMonitorSupervisor(store *MonitorStore, delivery *Delivery) *MonitorSupervisor {
 	return &MonitorSupervisor{
-		store:    store,
-		delivery: delivery,
-		runners:  make(map[string]*runnerHandle),
+		store:             store,
+		delivery:          delivery,
+		runners:           make(map[string]*runnerHandle),
+		tunables:          defaultRestartTunables(),
+		scheduledTickWait: defaultScheduledTickWait,
 	}
 }
 
@@ -187,8 +255,8 @@ func (s *MonitorSupervisor) Start(ctx context.Context) {
 
 // Add validates spec, persists a new MonitorJob, launches its Runner goroutine,
 // and returns the assigned monitor ID.  Returns typed errors (ErrCapExceeded,
-// ErrDebounceTooShort, ErrInvalidRegex) that the RPC handler can translate to
-// user-friendly messages.
+// ErrDebounceTooShort, ErrInvalidRegex, ErrInvalidSchedule) that the RPC
+// handler can translate to user-friendly messages.
 func (s *MonitorSupervisor) Add(ctx context.Context, spec SubmitSpec) (string, error) {
 	// Validation
 	if spec.DebounceSeconds == 0 {
@@ -214,6 +282,11 @@ func (s *MonitorSupervisor) Add(ctx context.Context, spec SubmitSpec) (string, e
 	}
 	if spec.Env == nil {
 		spec.Env = make(map[string]string)
+	}
+	if spec.Schedule != "" {
+		if _, err := ParseSchedule(spec.Schedule); err != nil {
+			return "", fmt.Errorf("%w: %v", ErrInvalidSchedule, err)
+		}
 	}
 
 	// Cap check + slot reservation — must hold the lock across BOTH the
@@ -249,6 +322,7 @@ func (s *MonitorSupervisor) Add(ctx context.Context, spec SubmitSpec) (string, e
 		Cwd:             spec.Cwd,
 		Env:             spec.Env,
 		DebounceSeconds: spec.DebounceSeconds,
+		Schedule:        spec.Schedule,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 		Status:          StatusRunning,
@@ -449,6 +523,14 @@ func (s *MonitorSupervisor) launch(job *MonitorJob) error {
 		return fmt.Errorf("compile regex for %s: %w", job.Name, err)
 	}
 
+	var schedule *Schedule
+	if job.Schedule != "" {
+		schedule, err = ParseSchedule(job.Schedule)
+		if err != nil {
+			return fmt.Errorf("parse schedule for %s: %w", job.Name, err)
+		}
+	}
+
 	// Use the supervisor's long-lived base context as parent. See type doc.
 	s.mu.Lock()
 	baseCtx := s.baseCtx
@@ -456,75 +538,231 @@ func (s *MonitorSupervisor) launch(job *MonitorJob) error {
 	if baseCtx == nil {
 		baseCtx = context.Background()
 	}
-	runnerCtx, cancel := context.WithCancel(baseCtx)
+	runnerCtx, cancel := context.WithCancel(baseCtx) // #nosec G118 -- cancel stored on handle.cancel L546; called in three paths: shutdown loop L237, Stop L376, Restart L442. gosec can't follow cross-scope handoff.
 	done := make(chan struct{})
 
-	// Capture a stable copy of the ID for the closures below.
-	jobID := job.ID
-	jobTarget := job.Target
-
-	// The handle is allocated up front so the exitNotice closure can read
-	// stoppedByUser without needing another map lookup. The same handle
-	// object is installed in s.runners below.
 	handle := &runnerHandle{
 		job:    job,
 		cancel: cancel,
 		done:   done,
 	}
 
-	// onStart publishes the child PID into the handle so monitor.show /
-	// monitor.list can render it in real time (review finding R2.3).
-	onStart := func(pid int) {
-		handle.pid.Store(int64(pid))
-	}
+	s.mu.Lock()
+	s.runners[job.ID] = handle
+	s.mu.Unlock()
 
-	exitNotice := func(jobName string, exitCode, pid int, duration time.Duration, tail string) {
-		// Per design spec §Child exit, exit notices include the child PID so
-		// the operator can correlate with ps / system logs.
-		content := fmt.Sprintf(
-			"[monitor:%s] exited with code %d after %s (pid %d)\nrestart: thrum monitor restart %s\nstdout (last 500 bytes): %s",
-			jobName, exitCode, duration.Round(time.Second), pid, jobID, tail,
-		)
-		_ = s.delivery.Deliver(context.Background(), jobName, jobTarget, content)
-		// Skip MarkDead when Stop already wrote MarkStopped — overwriting
-		// stopped→dead would mis-record user-initiated stops as crashes.
-		// Stop sets stoppedByUser before cancel() and writes MarkStopped
-		// synchronously, so by the time this exitNotice fires the row is
-		// already in the correct state.
-		if !handle.stoppedByUser.Load() {
-			_ = s.store.MarkDead(context.Background(), jobID, exitCode, time.Now())
-		}
+	go s.runLoop(runnerCtx, handle, job, re, schedule)
+
+	return nil
+}
+
+// runLoop owns one monitor's per-handle goroutine. It dispatches one of two
+// child-lifecycle strategies based on whether the monitor has a schedule:
+//
+//   - scheduled (schedule != nil): wait for the next cron tick, run the
+//     child one-shot, record the exit (NOT MarkDead — the monitor is
+//     still healthy in scheduled mode), loop.
+//
+//   - continuous (schedule == nil): run the child; on exit, restart with
+//     exponential backoff capped at maxBackoff. A successful run of
+//     backoffResetAfter or longer resets both backoff and the
+//     restart-window history. If the child exits more than
+//     maxRestartsPerWindow times within restartBudgetWindow, MarkDead
+//     and deliver a single "exceeded restart budget" notice to the
+//     monitor's target.
+//
+// Cleanup on return: removes the handle from s.runners (idempotent —
+// Stop/Restart may have removed it already) and closes handle.done so
+// callers blocked on Stop/Restart unblock. Never calls MarkDead when
+// stoppedByUser is set (Stop already wrote MarkStopped synchronously).
+func (s *MonitorSupervisor) runLoop(
+	ctx context.Context,
+	handle *runnerHandle,
+	job *MonitorJob,
+	re *regexp.Regexp,
+	schedule *Schedule,
+) {
+	jobID := job.ID
+	jobName := job.Name
+	jobTarget := job.Target
+
+	defer close(handle.done)
+	defer func() {
 		s.mu.Lock()
 		delete(s.runners, jobID)
 		s.mu.Unlock()
-	}
-
-	deliver := func(jobName, content string) {
-		_ = s.delivery.Deliver(context.Background(), jobName, jobTarget, content)
-	}
-
-	// monitorJobAdapter implements RunnerJob so *MonitorJob can be passed to
-	// NewRunner without adding accessor methods to the job.go struct.
-	adapter := &monitorJobAdapter{job: job}
-
-	r, err := NewRunner(adapter, re, exitNotice, deliver, onStart)
-	if err != nil {
-		cancel()
-		return err
-	}
-
-	s.mu.Lock()
-	s.runners[jobID] = handle
-	s.mu.Unlock()
-
-	go func() {
-		defer close(done)
-		if runErr := r.Run(runnerCtx); runErr != nil {
-			log.Printf("monitor_supervisor: runner %s exited: %v", job.Name, runErr)
-		}
 	}()
 
-	return nil
+	// Per-run exit capture filled in by exitNotice. The runner calls
+	// exitNotice synchronously inside Run before returning, so the loop
+	// can read this after each Run() call without channel coordination.
+	var lastExit struct {
+		code     int
+		pid      int
+		duration time.Duration
+		tail     string
+		fired    bool
+	}
+	exitNotice := func(_ string, code, pid int, d time.Duration, tail string) {
+		lastExit.code = code
+		lastExit.pid = pid
+		lastExit.duration = d
+		lastExit.tail = tail
+		lastExit.fired = true
+	}
+	deliver := func(_, content string) {
+		_ = s.delivery.Deliver(context.Background(), jobName, jobTarget, content)
+	}
+	onStart := func(pid int) {
+		handle.pid.Store(int64(pid))
+	}
+	adapter := &monitorJobAdapter{job: job}
+
+	runOnce := func() {
+		lastExit.fired = false
+		r, err := NewRunner(adapter, re, exitNotice, deliver, onStart)
+		if err != nil {
+			log.Printf("monitor_supervisor: runner %s: build failed: %v", jobName, err)
+			return
+		}
+		if runErr := r.Run(ctx); runErr != nil {
+			log.Printf("monitor_supervisor: runner %s: run error: %v", jobName, runErr)
+		}
+		handle.pid.Store(0)
+	}
+
+	// ── Scheduled mode ───────────────────────────────────────────────
+	if schedule != nil {
+		for {
+			if ctx.Err() != nil || handle.stoppedByUser.Load() {
+				return
+			}
+			next := schedule.Next(time.Now())
+			// schedule.Next returns the zero time when no match exists
+			// within its 5-year search window. This happens for cron
+			// expressions that parse syntactically but can never fire
+			// (e.g. "0 0 31 2 *" — Feb 31). Without this guard, the
+			// scheduled-wait below would return immediately (negative
+			// time.Until clamps to zero) and the loop would spin firing
+			// the child until ctx is cancelled — pegging a goroutine
+			// and spamming the child. Mark the monitor dead with a
+			// dedicated notice so the operator sees what went wrong.
+			if next.IsZero() {
+				// Re-check stoppedByUser before MarkDead so a Stop() racing
+				// with this branch doesn't overwrite the row from stopped →
+				// dead. Same TOCTOU guard the budget-exhaustion branch uses.
+				if handle.stoppedByUser.Load() {
+					return
+				}
+				content := fmt.Sprintf(
+					"[monitor:%s] schedule %q has no valid fire time within 5 years — marking dead. Fix the schedule and run: thrum monitor restart %s",
+					jobName, job.Schedule, jobID,
+				)
+				_ = s.delivery.Deliver(context.Background(), jobName, jobTarget, content)
+				_ = s.store.MarkDead(context.Background(), jobID, -1, time.Now())
+				return
+			}
+			s.scheduledTickWait(ctx, next)
+			if ctx.Err() != nil || handle.stoppedByUser.Load() {
+				return
+			}
+			runOnce()
+			if lastExit.fired {
+				// Record the exit metadata so operators can see when the
+				// monitor last fired, but keep status=running — the
+				// monitor is healthy in scheduled mode; an exit is the
+				// expected end of one tick.
+				_ = s.store.RecordExit(context.Background(), jobID, lastExit.code, time.Now())
+			}
+		}
+	}
+
+	// ── Continuous mode with auto-restart + budget ───────────────────
+	tun := s.tunables
+	backoff := tun.InitialBackoff
+	var restartTimes []time.Time
+	for {
+		if ctx.Err() != nil || handle.stoppedByUser.Load() {
+			return
+		}
+		runStart := time.Now()
+		runOnce()
+		if ctx.Err() != nil || handle.stoppedByUser.Load() {
+			return
+		}
+
+		// Refresh exit metadata so operators polling monitor.show see
+		// last_exit_code / last_exit_at update between restarts — useful
+		// for soak observers watching an auto-restarting monitor's
+		// recent history.
+		if lastExit.fired {
+			_ = s.store.RecordExit(context.Background(), jobID, lastExit.code, time.Now())
+		}
+
+		// Reset backoff + restart-window on a healthy long run.
+		runDuration := time.Since(runStart)
+		if runDuration >= tun.BackoffResetAfter {
+			backoff = tun.InitialBackoff
+			restartTimes = nil
+		}
+
+		// Trim restart window history.
+		now := time.Now()
+		cutoff := now.Add(-tun.RestartBudgetWindow)
+		trimmed := restartTimes[:0]
+		for _, t := range restartTimes {
+			if t.After(cutoff) {
+				trimmed = append(trimmed, t)
+			}
+		}
+		restartTimes = append(trimmed, now)
+
+		if len(restartTimes) > tun.MaxRestartsPerWindow {
+			// Re-check stoppedByUser before MarkDead — a Stop() racing
+			// concurrently with the budget check would otherwise have its
+			// MarkStopped row overwritten by MarkDead, leaving operators
+			// looking at "dead" for a monitor they cleanly stopped.
+			if handle.stoppedByUser.Load() {
+				return
+			}
+			// If the budget was exhausted entirely by NewRunner build
+			// errors (lastExit.fired stays false for the whole window),
+			// the "exit code N (pid P) after Ds" body would show 0/0/0s
+			// and confuse the operator. Emit a distinct notice.
+			var content string
+			if lastExit.fired {
+				content = fmt.Sprintf(
+					"[monitor:%s] exceeded restart budget (%d exits in %s; limit %d) — marking dead. Last exit code %d (pid %d) after %s.\nstdout (last 500 bytes): %s\nrestart: thrum monitor restart %s",
+					jobName, len(restartTimes), tun.RestartBudgetWindow, tun.MaxRestartsPerWindow,
+					lastExit.code, lastExit.pid, lastExit.duration.Round(time.Second),
+					lastExit.tail, jobID,
+				)
+			} else {
+				content = fmt.Sprintf(
+					"[monitor:%s] exceeded restart budget (%d failed launches in %s; limit %d) — marking dead. The child process never started; check argv, cwd, and env. Inspect with: thrum monitor show %s",
+					jobName, len(restartTimes), tun.RestartBudgetWindow, tun.MaxRestartsPerWindow, jobID,
+				)
+			}
+			_ = s.delivery.Deliver(context.Background(), jobName, jobTarget, content)
+			exitCode := lastExit.code
+			if !lastExit.fired {
+				exitCode = -1
+			}
+			_ = s.store.MarkDead(context.Background(), jobID, exitCode, time.Now())
+			return
+		}
+
+		// Sleep backoff before retry.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		backoff *= 2
+		if backoff > tun.MaxBackoff {
+			backoff = tun.MaxBackoff
+		}
+	}
 }
 
 // monitorJobAdapter wraps *MonitorJob and implements the RunnerJob interface

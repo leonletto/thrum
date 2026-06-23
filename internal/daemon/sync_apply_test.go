@@ -3,9 +3,12 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/checkpoint"
 	"github.com/leonletto/thrum/internal/daemon/eventlog"
@@ -97,7 +100,7 @@ func TestSyncApplier_Deduplication(t *testing.T) {
 		Role:      "tester",
 		Module:    "test",
 	}
-	if err := st.WriteEvent(context.Background(), localEvent); err != nil {
+	if _, err := st.WriteEvent(context.Background(), localEvent); err != nil {
 		t.Fatalf("write local event: %v", err)
 	}
 
@@ -158,7 +161,7 @@ func TestSyncApplier_ApplyAndCheckpoint(t *testing.T) {
 		},
 	}
 
-	applied, _, err := applier.ApplyAndCheckpoint(context.Background(), "d_peer", events, 200)
+	applied, _, err := applier.ApplyAndCheckpoint(context.Background(), "d_peer", events, 200, false)
 	if err != nil {
 		t.Fatalf("ApplyAndCheckpoint: %v", err)
 	}
@@ -190,6 +193,89 @@ func TestSyncApplier_GetCheckpoint(t *testing.T) {
 	}
 	if seq != 0 {
 		t.Errorf("expected 0 for unknown peer, got %d", seq)
+	}
+}
+
+// validRegisterEvent builds an apply-able agent.register event at the given
+// sequence (mirrors the known-good shape used elsewhere in this file).
+func validRegisterEvent(id string, seq int64) eventlog.Event {
+	return eventlog.Event{
+		EventID:      id,
+		Sequence:     seq,
+		Type:         "agent.register",
+		Timestamp:    "2026-02-11T10:00:00Z",
+		OriginDaemon: "d_peer",
+		EventJSON: json.RawMessage(fmt.Sprintf(
+			`{"type":"agent.register","timestamp":"2026-02-11T10:00:00Z","event_id":%q,"origin_daemon":"d_peer","agent_id":%q,"kind":"agent","role":"tester","module":"test","v":1}`,
+			id, id)),
+	}
+}
+
+// TestApplyAndCheckpoint_Filtered_BypassesCap (D13 part 1): for a filtered peer
+// the checkpoint advances to the peer's scan-watermark (peerNextSeq), NOT the
+// max sequence actually received — the anti-lying-peer cap is bypassed because a
+// filtered stream legitimately skips sequences the puller never sees.
+func TestApplyAndCheckpoint_Filtered_BypassesCap(t *testing.T) {
+	st := createTestStateForSync(t)
+	a := NewSyncApplier(st)
+
+	events := []eventlog.Event{validRegisterEvent("evt_F2", 2)}
+	if _, _, err := a.ApplyAndCheckpoint(context.Background(), "peerX", events, 100 /*peerNextSeq*/, true /*filtered*/); err != nil {
+		t.Fatalf("ApplyAndCheckpoint: %v", err)
+	}
+	got, err := a.GetCheckpoint("peerX")
+	if err != nil {
+		t.Fatalf("GetCheckpoint: %v", err)
+	}
+	if got != 100 {
+		t.Fatalf("filtered: checkpoint must advance to scan-watermark 100, got %d", got)
+	}
+}
+
+// TestApplyAndCheckpoint_NotFiltered_KeepsCap: a normal (non-filtered) peer MUST
+// keep the cap at maxEventSeq — the security invariant a lying peer can't bypass.
+func TestApplyAndCheckpoint_NotFiltered_KeepsCap(t *testing.T) {
+	st := createTestStateForSync(t)
+	a := NewSyncApplier(st)
+
+	events := []eventlog.Event{validRegisterEvent("evt_N2", 2)}
+	if _, _, err := a.ApplyAndCheckpoint(context.Background(), "peerY", events, 100, false /*not filtered*/); err != nil {
+		t.Fatalf("ApplyAndCheckpoint: %v", err)
+	}
+	got, err := a.GetCheckpoint("peerY")
+	if err != nil {
+		t.Fatalf("GetCheckpoint: %v", err)
+	}
+	if got != 2 {
+		t.Fatalf("normal peer: cap must hold at maxEventSeq=2, got %d", got)
+	}
+}
+
+// TestApplyAndCheckpoint_Filtered_EmptyWindow_AdvancesCheckpoint (D13 part 3): a
+// terminal all-filtered window (zero events) must still advance the checkpoint to
+// the scan-watermark, else the cursor freezes at the last kept message.
+func TestApplyAndCheckpoint_Filtered_EmptyWindow_AdvancesCheckpoint(t *testing.T) {
+	st := createTestStateForSync(t)
+	a := NewSyncApplier(st)
+
+	// Seed the checkpoint at 10.
+	if err := checkpoint.UpdateCheckpoint(context.Background(), st.DB(), "peerZ", 10, time.Now().Unix()); err != nil {
+		t.Fatalf("seed checkpoint: %v", err)
+	}
+
+	applied, skipped, err := a.ApplyAndCheckpoint(context.Background(), "peerZ", nil, 60, true)
+	if err != nil {
+		t.Fatalf("ApplyAndCheckpoint: %v", err)
+	}
+	if applied != 0 || skipped != 0 {
+		t.Fatalf("want 0/0, got %d/%d", applied, skipped)
+	}
+	got, err := a.GetCheckpoint("peerZ")
+	if err != nil {
+		t.Fatalf("GetCheckpoint: %v", err)
+	}
+	if got != 60 {
+		t.Fatalf("filtered empty window must still advance checkpoint to 60, got %d", got)
 	}
 }
 
@@ -321,5 +407,100 @@ func TestSyncApply_PurgeExecutedPropagation(t *testing.T) {
 	}
 	if applied2 != 0 || skipped2 != 1 {
 		t.Errorf("expected 0 applied / 1 skipped, got %d / %d", applied2, skipped2)
+	}
+}
+
+// TestSyncApplier_ApplyRemoteEvents_CoalescesPostCommit — thrum-1nkt.2:
+// the per-event sync trigger now fires ONCE per ApplyRemoteEvents batch
+// instead of once per event in the batch. The walker is incremental so
+// the per-event fires were near-noop in their useful work, but each
+// still paid the walker.mu acquire + compactor cost; bpq5 measured this
+// at ~40ms per event under burst. Coalescing collapses N walks into 1.
+func TestSyncApplier_ApplyRemoteEvents_CoalescesPostCommit(t *testing.T) {
+	st := createTestStateForSync(t)
+	applier := NewSyncApplier(st)
+
+	var triggerCount atomic.Int32
+	st.SetSyncTrigger(func(ctx context.Context) {
+		triggerCount.Add(1)
+	})
+
+	const n = 5
+	events := make([]eventlog.Event, 0, n)
+	for i := range n {
+		eventID := fmt.Sprintf("evt_COALESCE_%03d", i)
+		agentID := fmt.Sprintf("coalesce_agent_%d", i)
+		events = append(events, eventlog.Event{
+			EventID:      eventID,
+			Sequence:     int64(200 + i),
+			Type:         "agent.register",
+			Timestamp:    fmt.Sprintf("2026-05-25T12:00:%02dZ", i),
+			OriginDaemon: "d_coalesce",
+			EventJSON: json.RawMessage(fmt.Sprintf(
+				`{"type":"agent.register","timestamp":"2026-05-25T12:00:%02dZ","event_id":%q,"origin_daemon":"d_coalesce","agent_id":%q,"kind":"agent","role":"tester","module":"coalesce","v":1}`,
+				i, eventID, agentID,
+			)),
+		})
+	}
+
+	applied, skipped, err := applier.ApplyRemoteEvents(context.Background(), events)
+	if err != nil {
+		t.Fatalf("ApplyRemoteEvents: %v", err)
+	}
+	if applied != n {
+		t.Fatalf("applied = %d, want %d", applied, n)
+	}
+	if skipped != 0 {
+		t.Errorf("skipped = %d, want 0", skipped)
+	}
+
+	if got := int(triggerCount.Load()); got != 1 {
+		t.Errorf("sync trigger fired %d times for a %d-event structural batch, want 1 (coalesce broken — every event still fires its own walker)",
+			got, n)
+	}
+}
+
+// TestSyncApplier_ApplyRemoteEvents_NoTriggerForEmptyOrNonStructural —
+// thrum-1nkt.2 corollary: the coalesced fire must not run when the
+// batch is empty OR when no event in the batch is structural.
+//
+// Depends on agent.session.start NOT being in
+// state.isStructuralEvent's whitelist. If a future change adds it (or
+// any of the event types this test sends) to the structural whitelist,
+// WriteEvent will start returning a non-nil postCommit and this test
+// will fire the trigger — pick a different non-structural event here.
+func TestSyncApplier_ApplyRemoteEvents_NoTriggerForEmptyOrNonStructural(t *testing.T) {
+	st := createTestStateForSync(t)
+	applier := NewSyncApplier(st)
+
+	var triggerCount atomic.Int32
+	st.SetSyncTrigger(func(ctx context.Context) {
+		triggerCount.Add(1)
+	})
+
+	// Empty batch: zero fires.
+	if _, _, err := applier.ApplyRemoteEvents(context.Background(), nil); err != nil {
+		t.Fatalf("empty batch ApplyRemoteEvents: %v", err)
+	}
+	if got := int(triggerCount.Load()); got != 0 {
+		t.Errorf("empty batch fired trigger %d times, want 0", got)
+	}
+
+	// Non-structural batch: still zero fires (every postCommit is nil).
+	events := []eventlog.Event{
+		{
+			EventID:      "evt_NONSTRUCT_001",
+			Sequence:     300,
+			Type:         "agent.session.start",
+			Timestamp:    "2026-05-25T13:00:00Z",
+			OriginDaemon: "d_nonstruct",
+			EventJSON:    json.RawMessage(`{"type":"agent.session.start","timestamp":"2026-05-25T13:00:00Z","event_id":"evt_NONSTRUCT_001","origin_daemon":"d_nonstruct","agent_id":"nonstruct_agent","session_id":"ses_nonstruct_001","v":1}`),
+		},
+	}
+	if _, _, err := applier.ApplyRemoteEvents(context.Background(), events); err != nil {
+		t.Fatalf("non-structural batch ApplyRemoteEvents: %v", err)
+	}
+	if got := int(triggerCount.Load()); got != 0 {
+		t.Errorf("non-structural batch fired trigger %d times, want 0", got)
 	}
 }

@@ -7,6 +7,14 @@ import (
 	"log"
 )
 
+// syncNotifyPoolSize bounds the number of concurrent peer-sync goroutines
+// kicked off by inbound sync.notify RPCs. bpq5's 8-concurrent send burst
+// observed 327 received / 257 DROPPED at the previous ceiling of 10 (busy
+// 2-peer cluster); 100 absorbs realistic multi-peer bursts. Peers do not
+// retry dropped notifications (BroadcastNotify in sync_manager.go is
+// fire-and-forget), so raising the ceiling does not amplify load.
+const syncNotifyPoolSize = 100
+
 // SyncNotifyRequest represents the params for a sync.notify RPC call.
 type SyncNotifyRequest struct {
 	Token      string `json:"token"`
@@ -31,7 +39,7 @@ type SyncNotifyHandler struct {
 func NewSyncNotifyHandler(triggerSync SyncTriggerFunc) *SyncNotifyHandler {
 	return &SyncNotifyHandler{
 		triggerSync: triggerSync,
-		sem:         make(chan struct{}, 10),
+		sem:         make(chan struct{}, syncNotifyPoolSize),
 	}
 }
 

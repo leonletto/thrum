@@ -29,8 +29,15 @@ assert_jsonl() {
   local filter
   filter=".type == \"user\" and (.message.content | type == \"string\") and (.message.content | (startswith(\"${stdout_prefix}\") or startswith(\"${stderr_prefix}\")))"
 
+  # 60s (not 30s) ceiling: under claude 2.1.x full-gate render load the
+  # `!`-bash command's <bash-stdout> entry can land later than 30s after the
+  # send even though the command DID execute (observed: scenario 03 had all
+  # three VERIFIED lines rendered in the fail snapshot, yet the middle 30s
+  # assert had already timed out). 60s matches the coord-pane idle ceiling
+  # the send-side scenarios already use, absorbing the slow-land without
+  # adding a resend.
   local match
-  if match=$(wait_for_jsonl_match "$repo" "$filter" 30); then
+  if match=$(wait_for_jsonl_match "$repo" "$filter" 60); then
     emit_pass "$sid" "$name"
     return 0
   fi

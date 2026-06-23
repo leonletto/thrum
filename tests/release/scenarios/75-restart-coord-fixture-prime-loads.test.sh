@@ -60,16 +60,35 @@ fi
 # Same precedent as scenario 02/03's longer settle window.
 wait_for_pane_idle "$KAFM6_S1_SESSION" 60
 
-# Assertion 1: loud-preamble needle in SessionStart attachment.
-send_command "$KAFM6_S1_SESSION" "! $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh kafm6_75_loud_preamble \"🛑 ACTION REQUIRED\" SessionStart:startup"
-assert_jsonl "$KAFM6_S1_SESSION" "$KAFM6_S1_WT" "$SID" "post-restart-loud-preamble" "VERIFIED kafm6_75_loud_preamble" \
-  "scenarios/${SID}.test.sh:$LINENO"
+# Assertions 1 & 2: read the post-restart SessionStart attachment directly
+# from the JSONL (harness-side) instead of driving the shared COORD pane with
+# two `!`-probes. Under full-gate load the coord pane is busy (claude 2.1.x
+# does more autonomous work between scenarios), so the SECOND probe
+# intermittently queued and timed out — a load-only cascade flake that passed
+# in isolation and in the restart chain. wait_for_attachment polls the
+# authoritative JSONL surface and is immune to pane-render contention. The
+# wait_for_jsonl_match above already confirmed the post-restart attachment
+# landed; both needles appear ONLY in the post-restart attachment, so no
+# floor_ts is needed.
+if wait_for_attachment "$KAFM6_S1_WT" "SessionStart" "🛑 ACTION REQUIRED" 60 >/dev/null; then
+  emit_pass "$SID" "post-restart-loud-preamble"
+else
+  emit_fail "$SID" "post-restart-loud-preamble" \
+    "post-restart SessionStart attachment containing the loud preamble" \
+    "(not found in JSONL within 60s)" \
+    "scenarios/${SID}.test.sh:$LINENO"
+fi
 
-# Assertion 2: Previous Session Context heading in SessionStart attachment.
-send_command "$KAFM6_S1_SESSION" "! $THRUM_RELEASE_REPO_ROOT/scripts/check-context-value.sh kafm6_75_previous_context \"# Previous Session Context\" SessionStart:startup"
-assert_jsonl "$KAFM6_S1_SESSION" "$KAFM6_S1_WT" "$SID" "post-restart-previous-context" "VERIFIED kafm6_75_previous_context" \
-  "scenarios/${SID}.test.sh:$LINENO"
+if wait_for_attachment "$KAFM6_S1_WT" "SessionStart" "# Previous Session Context" 60 >/dev/null; then
+  emit_pass "$SID" "post-restart-previous-context"
+else
+  emit_fail "$SID" "post-restart-previous-context" \
+    "post-restart SessionStart attachment containing \"# Previous Session Context\"" \
+    "(not found in JSONL within 60s)" \
+    "scenarios/${SID}.test.sh:$LINENO"
+fi
 
+return 0
 }  # _run_scenario_75
 
 _run_scenario_75

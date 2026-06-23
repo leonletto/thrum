@@ -20,14 +20,23 @@ run_setup() {
     return 1
   fi
 
+  # Fixture session names. The daemon names a tmux session after the
+  # worktree BASENAME, not any --name arg, so the session name MUST equal the
+  # fixture directory basename or send-keys/launch target an orphan ("can't
+  # find pane"). We use deterministic, collision-proof names that will never
+  # appear in a real repo (per Leon): the coord session is the main fixture
+  # repo basename "test-repo"; the impl session is the worktree basename
+  # "test-repo-worktree". COORD_PANE/IMPL_PANE export these for scenarios.
+  local COORD_SESSION="test-repo"
+  local IMPL_SESSION="test-repo-worktree"
+
   # A.preflight. Nuke leftover state from a prior crashed/killed run before
-  # starting. Without this, a SIGKILL'd run leaves coord/impl tmux sessions
-  # alive plus an ephemeral daemon, and the next `thrum tmux start --name
-  # coord` mixes with the stale session causing the whoami probe to fail
-  # against the wrong claude. Idempotent: harmless if there's nothing to
-  # clean.
-  tmux kill-session -t coord 2>/dev/null || true
-  tmux kill-session -t impl 2>/dev/null || true
+  # starting. Without this, a SIGKILL'd run leaves the fixture tmux sessions
+  # alive plus an ephemeral daemon, and the next launch mixes with the stale
+  # session causing the whoami probe to fail against the wrong claude.
+  # Idempotent: harmless if there's nothing to clean.
+  tmux kill-session -t "$COORD_SESSION" 2>/dev/null || true
+  tmux kill-session -t "$IMPL_SESSION" 2>/dev/null || true
   # shellcheck disable=SC2009
   ps -eo pid,command 2>/dev/null \
     | grep -E "thrum.*daemon.*\.thrum_release_tests" \
@@ -36,13 +45,62 @@ run_setup() {
     | xargs -r kill 2>/dev/null \
     || true
 
+  # Stale-dir reaper: each run creates ~/.thrum_release_tests/<RUNID>; killed
+  # runs leave these behind (the daemon kill above handles processes but not
+  # state dirs). Reap direct-child dirs older than 24h — safe for in-progress
+  # parallel runs (their RUNID dirs are fresh), and prevents long-term
+  # accumulation. Idempotent: harmless if the directory is missing or empty.
+  if [ -d "$HOME/.thrum_release_tests" ]; then
+    find "$HOME/.thrum_release_tests" -mindepth 1 -maxdepth 1 -type d -mtime +0 \
+      -exec rm -rf {} + 2>/dev/null || true
+  fi
+
+  # tmux-exec pool health probe: every scenario sub-fixture spawn routes
+  # through a persistent per-user pool pane (scripts/tmux-exec § "Pool-
+  # session lifecycle"). If a prior aborted run left it hung on an
+  # interactive prompt — observed: an early scenario's `thrum init` without
+  # --non-interactive hits the v0.9.3 wizard and stalls the pool, then
+  # every subsequent tmux-exec exec call times out at 120s — every
+  # downstream sub-fixture scenario in this run will also time out.
+  #
+  # Probe: send `echo MARKER` to the pool and look for MARKER on its own
+  # line in the pane within 5s. If a shell prompt is alive, echo runs and
+  # the OUTPUT appears as a standalone-line MARKER. If the pool is stuck
+  # on some prior interactive prompt, our keystrokes get echoed back as
+  # `echo MARKER` (typed-input display) but never execute, so MARKER never
+  # appears on its own line — anchored grep avoids the false-healthy from
+  # matching the typed input. On detected hang, kill the server; lazy
+  # recreate on the next tmux-exec invocation.
+  if env -u TMUX -u TMUX_PANE tmux -L tmux-exec has-session \
+       -t "tmux-exec-pool-${USER}" 2>/dev/null; then
+    local _probe_marker="POOL-HEALTH-$$-${RANDOM}"
+    env -u TMUX -u TMUX_PANE tmux -L tmux-exec send-keys \
+      -t "tmux-exec-pool-${USER}" "echo $_probe_marker" Enter 2>/dev/null || true
+    local _probe_waited=0
+    local _probe_ok=0
+    while [ "$_probe_waited" -lt 10 ]; do  # 10 * 0.5s = 5s budget
+      if env -u TMUX -u TMUX_PANE tmux -L tmux-exec capture-pane \
+           -t "tmux-exec-pool-${USER}" -p 2>/dev/null \
+           | grep -qE "^[[:space:]]*${_probe_marker}[[:space:]]*$"; then
+        _probe_ok=1
+        break
+      fi
+      sleep 0.5
+      _probe_waited=$((_probe_waited + 1))
+    done
+    if [ "$_probe_ok" -ne 1 ]; then
+      echo "preflight: tmux-exec pool 'tmux-exec-pool-${USER}' not responding to health probe within 5s — reaping (a prior run likely left it hung)" >&2
+      env -u TMUX -u TMUX_PANE tmux -L tmux-exec kill-server 2>/dev/null || true
+    fi
+  fi
+
   # A. Prep
   RUNID="$(date +%Y%m%dT%H%M%S)-$$"
   BASE="$HOME/.thrum_release_tests/$RUNID"
-  REPO="$BASE/repo"
+  REPO="$BASE/$COORD_SESSION"
   # WORKTREE_BASE is a SEPARATE root for the impl worktree, intentionally not
   # nested inside BASE. thrum worktree create auto-appends the repo's basename
-  # ("repo") to worktrees.base_path (cmd/thrum/main.go:2680-2683), which makes
+  # ("test-repo") to worktrees.base_path (cmd/thrum/main.go:2680-2683), which makes
   # base_path collide with $REPO if WORKTREE_BASE were under $BASE. Putting it
   # at a different parent path matches how the real dev coord uses
   # ~/.workspaces (separate from /Users/leon/dev/opensource/thrum).
@@ -72,6 +130,12 @@ run_setup() {
   "$TE" exec --cwd "$REPO" --clean -- thrum init --non-interactive --runtime claude \
     || { echo "ERROR: B/thrum init failed" >&2; return 1; }
 
+  # Pre-grant the Bash tool inside the coord fixture so the NL->tool_use
+  # scenarios (56/58/59/60/61) don't stall on per-tool prompts when their
+  # autonomous-claude runs `thrum send/reply/who-has/agent set-intent/team`.
+  # See helpers/fixture-perms.sh for shape + rationale.
+  write_fixture_perms "$REPO"
+
   "$TE" exec --cwd "$REPO" --clean -- thrum quickstart \
       --name test_coordinator_main \
       --role coordinator \
@@ -79,12 +143,25 @@ run_setup() {
       --intent "Release test coordinator" \
     || { echo "ERROR: B/thrum quickstart failed" >&2; return 1; }
 
-  # thrum tmux start creates the session, launches claude, then auto-attaches.
-  # The attach blocks until the tty closes; tmux-exec's --timeout bounds it.
-  # Session + runtime launch happen synchronously before the attach attempt.
-  : > /tmp/zh4p-tmux-start.log
-  "$TE" exec --cwd "$REPO" --clean --timeout 30 -- thrum tmux start --name coord \
-    > /tmp/zh4p-tmux-start.log 2>&1 || true
+  # Bring up the coord pane via the DETACHED decomposed sequence (mirrors
+  # behavioral _register_card_agents). The old `thrum tmux start --name coord`
+  # auto-ATTACHED; wrapped in `tmux-exec --timeout 30` the attach-client death
+  # at timeout cascaded and tore the session down before the trust dialog even
+  # rendered — auto-attach is fundamentally incompatible with non-interactive
+  # execution. NOTE: coord can't use `thrum tmux create` like impl does — $REPO
+  # is the MAIN fixture repo (a .git DIRECTORY, not a worktree), and create
+  # validates for a worktree (tmux.go) and rejects it. That's exactly why coord
+  # is quickstart-then-launch. So we create the host pane with a bare detached
+  # new-session, then let the daemon launch claude into it. env -u TMUX
+  # -u TMUX_PANE keeps the pane on the default server.
+  env -u TMUX -u TMUX_PANE tmux new-session -d -s "$COORD_SESSION" -c "$REPO" 2>/dev/null || true
+  "$TE" exec --cwd "$REPO" --clean -- thrum tmux launch "$COORD_SESSION" \
+    || { echo "ERROR: C/tmux launch $COORD_SESSION failed" >&2; return 1; }
+
+  # Clear the folder-trust dialog so the coord pane reaches an interactive
+  # prompt (otherwise the whoami probe below sends `!` keystrokes into the trust
+  # dialog and they're swallowed). The daemon auto-primes once the gate clears.
+  clear_trust "$COORD_SESSION"
 
   # Verify coord identity from inside the pane. send_bash_and_wait handles
   # the discrete-`!`, separate-Enter, and pane-idle gating; we just supply
@@ -94,7 +171,11 @@ run_setup() {
   # screen writes ZERO JSONL until it receives user input that starts a
   # session; polling for a SessionStart attachment before the first `!` send
   # would be a chicken-and-egg deadlock. This whoami send IS what kicks the
-  # session alive.
+  # session alive. (The coord pane keeps the keystroke probe — unlike the
+  # impl pane below: the coordinator role does not proactively run
+  # `thrum wait`, so its pane stays idle and the `!`-bash probe lands; the
+  # daemon also skips its post-launch prime-inject during the gate, so the
+  # SessionStart attachment is NOT a reliable identity surface here.)
   #
   # Retry-with-bounded-resend (thrum-vjqn): on saturated dev boxes (~60+
   # tmux sessions, long daemon uptime) claude's interactive-input handler
@@ -106,7 +187,7 @@ run_setup() {
   # finish booting. 3 attempts × 30s = 90s budget, generous but bounded.
   local attempt=1
   while [ "$attempt" -le 3 ]; do
-    if send_bash_and_wait coord "$REPO" "thrum whoami --json" "test_coordinator_main" 30; then
+    if send_bash_and_wait "$COORD_SESSION" "$REPO" "thrum whoami --json" "test_coordinator_main" 30; then
       break
     fi
     attempt=$((attempt + 1))
@@ -121,9 +202,9 @@ run_setup() {
   # populated base_path from the user's real config (~/.workspaces); without
   # this patch the new worktree would land there.
   #
-  # Note: thrum auto-appends the repo's basename ("repo") to base_path
-  # (cmd/thrum/main.go:2680), so the effective path is $WORKTREE_BASE/repo.
-  # The impl worktree therefore lands at $WORKTREE_BASE/repo/impl.
+  # Note: thrum auto-appends the repo's basename ("test-repo") to base_path
+  # (cmd/thrum/main.go:2680), so the effective path is $WORKTREE_BASE/test-repo.
+  # The impl worktree therefore lands at $WORKTREE_BASE/test-repo/test-repo-worktree.
   jq --arg bp "$WORKTREE_BASE/" \
     '.worktrees = {"base_path": $bp, "beads_enabled": false, "thrum_enabled": true}' \
     "$REPO/.thrum/config.json" > "$REPO/.thrum/config.json.tmp" \
@@ -131,13 +212,13 @@ run_setup() {
     || { echo "ERROR: C.1 worktrees config patch failed" >&2; return 1; }
 
   # The path thrum will actually create the impl worktree at, after auto-append.
-  local IMPL_WT="$WORKTREE_BASE/repo/impl"
+  local IMPL_WT="$WORKTREE_BASE/$COORD_SESSION/$IMPL_SESSION"
 
   # C.2 create the impl worktree FROM the coord pane (so the call runs with
   # coord's identity, mirroring real workflow). Plain send_command — we
   # don't need to wait for a specific bash-stdout substring here because
   # the wait below polls the filesystem for the worktree dir directly.
-  send_command coord "! thrum worktree create impl -b feature/release-test-impl"
+  send_command "$COORD_SESSION" "! thrum worktree create $IMPL_SESSION -b feature/release-test-impl"
   local elapsed=0
   while [ ! -d "$IMPL_WT" ] && [ "$elapsed" -lt 30 ]; do
     sleep 1
@@ -148,45 +229,54 @@ run_setup() {
     return 1
   fi
 
+  # Same pre-grant in the impl worktree so its autonomous-Bash invocations
+  # (e.g. card-01-style `thrum worktree create` / `thrum tmux launch` driven
+  # from the coord pane) don't stall on per-tool prompts.
+  write_fixture_perms "$IMPL_WT"
+
   # C.3 implementer's tmux session — $IMPL_WT IS a secondary worktree (just
   # created by C.2), so the not-a-worktree hint won't fire and `thrum tmux
   # create` accepts it. Inline quickstart (per spec § 4 lines 110-115) registers
   # the impl agent inside the new pane.
-  "$TE" exec --cwd "$REPO" --clean -- thrum tmux create impl \
+  "$TE" exec --cwd "$REPO" --clean -- thrum tmux create "$IMPL_SESSION" \
       --cwd "$IMPL_WT" \
       --name test_implementer \
       --role implementer \
       --module all \
       --intent "Release test implementer" \
-    || { echo "ERROR: C.3 tmux create impl failed" >&2; return 1; }
+    || { echo "ERROR: C.3 tmux create $IMPL_SESSION failed" >&2; return 1; }
 
   # thrum tmux create only registers the agent inline; claude isn't running
   # yet. Launch sends `claude` keystrokes (then /thrum:prime after 10s) via
   # the daemon's HandleLaunch goroutine.
-  "$TE" exec --cwd "$REPO" --clean -- thrum tmux launch impl \
-    || { echo "ERROR: C.3 tmux launch impl failed" >&2; return 1; }
+  "$TE" exec --cwd "$REPO" --clean -- thrum tmux launch "$IMPL_SESSION" \
+    || { echo "ERROR: C.3 tmux launch $IMPL_SESSION failed" >&2; return 1; }
 
-  # Wait for the impl session to actually start in claude (SessionStart hook
-  # firing means claude booted and processed /thrum:prime).
-  wait_for_session_start "$IMPL_WT" 60 \
-    || { echo "ERROR: impl SessionStart did not appear within 60s" >&2; return 1; }
+  # Same as coord: clear the impl pane's folder-trust dialog. The daemon
+  # auto-primes once the gate clears (which fires the SessionStart hook that
+  # wait_for_session_start polls for).
+  clear_trust "$IMPL_SESSION"
 
-  # Verify impl identity from inside the pane.
+  # Verify the impl session started AND carries the right identity via the
+  # SessionStart hook attachment in claude's JSONL — the authoritative,
+  # pane-independent surface. This subsumes a bare wait_for_session_start
+  # (presence) by also asserting the rendered briefing names test_implementer.
   #
-  # Same retry-with-bounded-resend as the coord probe (thrum-vjqn). The impl
-  # path is less prone to the missed-keystroke race because line above
-  # already confirmed SessionStart fired, but a saturated box can still
-  # delay the bash-prefix mode toggle past wait_for_pane_idle's 10s gate.
-  # Retry is benign on the happy path (first attempt succeeds in <10s).
-  attempt=1
-  while [ "$attempt" -le 3 ]; do
-    if send_bash_and_wait impl "$IMPL_WT" "thrum whoami --json" "test_implementer" 30; then
-      break
-    fi
-    attempt=$((attempt + 1))
-  done
-  if [ "$attempt" -gt 3 ]; then
-    echo "ERROR: impl whoami did not return expected bash-stdout entry across 3 attempts (90s total)" >&2
+  # We deliberately do NOT use a `! thrum whoami --json` keystroke probe here
+  # (as the coord path does). On claude 2.1.x the implementer, once the daemon
+  # auto-primes it, autonomously runs `thrum wait --timeout 300s` to listen for
+  # coordinator dispatch — correct implementer behavior, verified emergent (the
+  # implementer role template does not instruct it; claude 2.1.x is simply more
+  # proactive). That blocks the pane in a long-running Bash tool, so a `!`-bash
+  # probe queues behind the wait and never lands its bash-stdout entry inside
+  # the probe window (confirmed: 3/3 gate aborts pre-fix, with the queued probe
+  # text stranded behind a live `thrum wait` in the impl pane). Interrupting the
+  # wait with ESC doesn't help — claude immediately re-issues `thrum wait`. The
+  # SessionStart attachment already carries `"agent_id": "test_implementer"` and
+  # needs no free pane. The coord path keeps its keystroke probe: the
+  # coordinator role does not proactively wait, so its pane stays idle.
+  if ! wait_for_attachment "$IMPL_WT" "SessionStart" "test_implementer" 90 >/dev/null; then
+    echo "ERROR: impl SessionStart attachment did not carry identity test_implementer within 90s" >&2
     return 1
   fi
 
@@ -197,13 +287,20 @@ run_setup() {
   echo "WORKTREE_BASE=$WORKTREE_BASE"
   echo "IMPL_WT=$IMPL_WT"
   echo "tmux sessions:"
-  tmux list-sessions 2>&1 | grep -E "coord|impl" || true
+  tmux list-sessions 2>&1 | grep -E "$COORD_SESSION|$IMPL_SESSION" || true
 
   # Export per-scenario context
   export RUNID BASE WORKTREE_BASE REPO
-  export COORD_PANE=coord
-  export IMPL_PANE=impl
+  export COORD_PANE="$COORD_SESSION"
+  export IMPL_PANE="$IMPL_SESSION"
   export COORD_REPO="$REPO"
   export IMPL_REPO="$IMPL_WT"
+  # The basename of $REPO — `thrum worktree create` auto-appends it to
+  # worktrees.base_path (cmd/thrum/main.go:2680), so every scenario worktree
+  # lands at $WORKTREE_BASE/$COORD_BASENAME/<wt-name>. Exposed as a var so
+  # scenarios don't hardcode the literal "test-repo"/"repo" basename —
+  # historically that was "repo" pre-codification and is "test-repo" now;
+  # binding to a basename literal silently breaks any future rename.
+  export COORD_BASENAME="$COORD_SESSION"
   return 0
 }

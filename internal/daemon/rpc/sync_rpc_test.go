@@ -22,7 +22,7 @@ func TestSyncForceHandler_Handle(t *testing.T) {
 
 	syncer := sync.NewSyncer(tmpDir, syncDir, false)
 	projector := setupTestProjector(t, tmpDir)
-	loop := sync.NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, false)
+	loop := sync.NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), false)
 
 	ctx := context.Background()
 	if err := loop.Start(ctx); err != nil {
@@ -83,7 +83,7 @@ func TestSyncStatusHandler_Handle(t *testing.T) {
 
 	syncer := sync.NewSyncer(tmpDir, syncDir, false)
 	projector := setupTestProjector(t, tmpDir)
-	loop := sync.NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, false)
+	loop := sync.NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), false)
 
 	ctx := context.Background()
 	handler := NewSyncStatusHandler(loop)
@@ -147,7 +147,7 @@ func TestSyncForceHandler_LocalOnlyMode(t *testing.T) {
 	// Create syncer and loop with localOnly=true
 	syncer := sync.NewSyncer(tmpDir, syncDir, true)
 	projector := setupTestProjector(t, tmpDir)
-	loop := sync.NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, true)
+	loop := sync.NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), true)
 
 	ctx := context.Background()
 	if err := loop.Start(ctx); err != nil {
@@ -193,7 +193,7 @@ func TestSyncStatusHandler_LocalOnlyMode(t *testing.T) {
 	// Create syncer and loop with localOnly=true
 	syncer := sync.NewSyncer(tmpDir, syncDir, true)
 	projector := setupTestProjector(t, tmpDir)
-	loop := sync.NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, true)
+	loop := sync.NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), true)
 
 	ctx := context.Background()
 	handler := NewSyncStatusHandler(loop)
@@ -472,4 +472,17 @@ func initTestSchema(db *sql.DB) error {
 
 	_, err := db.Exec(schema)
 	return err
+}
+
+func TestSyncStatus_ExposesLocalOnlyReason(t *testing.T) {
+	// Construct a SyncStatus carrying an exposure reason; assert it surfaces.
+	st := sync.SyncStatus{Running: true, LocalOnly: true,
+		LocalOnlyReason: "a-sync disabled: public repo detected, no exposure override"}
+	if getSyncState(st) != "local-only" {
+		t.Errorf("state = %q", getSyncState(st))
+	}
+	resp := SyncStatusResponse{LocalOnly: st.LocalOnly, LocalOnlyReason: st.LocalOnlyReason}
+	if resp.LocalOnlyReason == "" {
+		t.Error("response must carry LocalOnlyReason")
+	}
 }

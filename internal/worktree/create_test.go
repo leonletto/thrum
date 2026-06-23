@@ -538,3 +538,165 @@ func TestCreate_CancelPostAddSkipsCleanup(t *testing.T) {
 		t.Errorf("branch absent: cleanup must be skipped on cancel; got empty branch list")
 	}
 }
+
+// TestCreate_AttachesExistingBranch — thrum-suyb. When BranchOverride
+// names a branch that already exists in the repo, Create must attach
+// it to the new worktree (no -b, no baseBranch) rather than erroring
+// with "branch already exists". Verifies the worktree's HEAD lands on
+// the pre-existing branch and that a unique commit on that branch is
+// preserved (history not silently rebased onto baseBranch).
+func TestCreate_AttachesExistingBranch(t *testing.T) {
+	repoPath, basePath := newTestRepo(t)
+	ctx := context.Background()
+
+	existing := "feature/preexisting"
+	runRepo := func(name string, args ...string) {
+		t.Helper()
+		cmd := exec.Command(name, args...)
+		cmd.Dir = repoPath
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%s %v: %v\n%s", name, args, err, out)
+		}
+	}
+
+	// Create the pre-existing branch with a distinguishing commit
+	// that does NOT live on main; later we'll assert the attached
+	// worktree sees it.
+	runRepo("git", "branch", existing)
+	runRepo("git", "switch", existing)
+	if err := os.WriteFile(filepath.Join(repoPath, "marker.txt"),
+		[]byte("preexisting-content\n"), 0600); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+	runRepo("git", "add", "marker.txt")
+	runRepo("git", "commit", "-m", "preexisting branch marker")
+	// Switch repo back to main so the worktree-add target branch is
+	// not already checked out in the main repo.
+	runRepo("git", "switch", "main")
+
+	result, err := Create(ctx, CreateOpts{
+		RepoPath:       repoPath,
+		BasePath:       basePath,
+		AgentName:      "docs_bot",
+		Persistent:     true,
+		BaseBranch:     "main",
+		BranchOverride: existing,
+	})
+	if err != nil {
+		t.Fatalf("Create with existing branch: %v", err)
+	}
+	if result.Reused {
+		t.Errorf("Reused: got true, want false (new path + existing branch is not reuse)")
+	}
+	if result.Branch != existing {
+		t.Errorf("Branch: got %q, want %q", result.Branch, existing)
+	}
+
+	// Worktree HEAD must be on the pre-existing branch.
+	headOut, err := exec.Command("git", "-C", result.Path,
+		"rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("git rev-parse HEAD in worktree: %v", err)
+	}
+	if got := strings.TrimSpace(string(headOut)); got != existing {
+		t.Errorf("worktree HEAD: got %q, want %q", got, existing)
+	}
+
+	// The pre-existing commit (marker.txt) must be visible — proves
+	// we attached the existing branch, not silently re-created it
+	// off baseBranch.
+	if _, statErr := os.Stat(filepath.Join(result.Path, "marker.txt")); statErr != nil {
+		t.Errorf("marker.txt in attached worktree: %v (history lost — attach used wrong base)",
+			statErr)
+	}
+}
+
+// TestCreate_RevParseFailureSurfaced — thrum-suyb safety. When the
+// rev-parse branch-existence probe fails for a reason OTHER than
+// "ref not found" (e.g. RepoPath is not a git repository → git
+// exits 128), Create must return the rev-parse error directly
+// instead of silently falling through to `git worktree add -b`
+// (which would emit a confusing secondary error). Pins the
+// isRefNotFoundError exit-code semantics.
+func TestCreate_RevParseFailureSurfaced(t *testing.T) {
+	// Use a fresh non-git tempdir as RepoPath. validateOpts does
+	// not check RepoPath, so Create gets through to the rev-parse
+	// probe, which then exits 128 ("not a git repository").
+	repoPath := t.TempDir()
+	basePath := t.TempDir()
+	ctx := context.Background()
+
+	_, err := Create(ctx, CreateOpts{
+		RepoPath: repoPath, BasePath: basePath,
+		AgentName: "x", JobID: "j", WakeTimestamp: 1,
+		Persistent: false, BaseBranch: "main",
+	})
+	if err == nil {
+		t.Fatal("Create against non-git RepoPath: got nil, want error")
+	}
+	if !strings.Contains(err.Error(), "rev-parse") {
+		t.Errorf("err = %q, want error mentioning rev-parse (not the fall-through worktree-add error)",
+			err)
+	}
+}
+
+// TestCreate_AttachedBranchSurvivesCleanup — thrum-suyb safety. When
+// Create attaches an existing branch and a subsequent step fails
+// (e.g. EnsureRedirects), cleanup must remove the new worktree dir
+// but MUST NOT delete the pre-existing branch (its history belongs
+// to the caller). Companion guard to TestCreate_BestEffortCleanupOnRedirectFailure,
+// which exercises the created-branch path where deletion IS expected.
+func TestCreate_AttachedBranchSurvivesCleanup(t *testing.T) {
+	repoPath, basePath := newTestRepo(t)
+	ctx := context.Background()
+
+	existing := "feature/keep-me"
+	runRepo := func(name string, args ...string) {
+		t.Helper()
+		cmd := exec.Command(name, args...)
+		cmd.Dir = repoPath
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%s %v: %v\n%s", name, args, err, out)
+		}
+	}
+	runRepo("git", "branch", existing)
+
+	expectedPath := filepath.Join(basePath, "docs_bot")
+
+	// Fail EnsureRedirects so the cleanup path runs.
+	testInjectAfterAdd = func(worktreePath string) {
+		thrumPath := filepath.Join(worktreePath, ".thrum")
+		if err := os.WriteFile(thrumPath, []byte("blocker"), 0600); err != nil {
+			t.Fatalf("inject blocker: %v", err)
+		}
+	}
+	t.Cleanup(func() { testInjectAfterAdd = nil })
+
+	_, err := Create(ctx, CreateOpts{
+		RepoPath:       repoPath,
+		BasePath:       basePath,
+		AgentName:      "docs_bot",
+		Persistent:     true,
+		BaseBranch:     "main",
+		BranchOverride: existing,
+	})
+	if err == nil {
+		t.Fatal("Create with failing EnsureRedirects: got nil, want error")
+	}
+
+	// Worktree dir must be gone (cleanup ran).
+	if _, statErr := os.Stat(expectedPath); !os.IsNotExist(statErr) {
+		t.Errorf("worktree path: got err=%v (still present), want IsNotExist", statErr)
+	}
+	// Pre-existing branch must still exist (cleanup must NOT have
+	// deleted it — that would lose the caller's history).
+	out, gerr := exec.Command("git", "-C", repoPath,
+		"branch", "--list", existing).CombinedOutput()
+	if gerr != nil {
+		t.Fatalf("git branch --list: %v\n%s", gerr, out)
+	}
+	if len(strings.TrimSpace(string(out))) == 0 {
+		t.Errorf("pre-existing branch %q deleted by cleanup — must be preserved (thrum-suyb)",
+			existing)
+	}
+}

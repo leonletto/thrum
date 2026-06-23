@@ -84,10 +84,15 @@ wait_for_pane_idle "$KAFM6_S2_SESSION" 10
 
 # Launch claude with identity pinned. unset CLAUDECODE matches the
 # markdown spec verbatim (avoids inheriting an outer claude marker).
-# --dangerously-skip-permissions mirrors run-level setup so the
-# trust dialog doesn't block the session.
+# Bare `claude` (no --dangerously-skip-permissions): per
+# helpers/fixture-perms.sh:17, bypass mode triggers a SECOND modal
+# whose default is "No, exit" — the defensive Enter below would kill
+# the session. The `! true` kick at the end uses bash-prefix mode
+# which BYPASSES claude's tool-permission system entirely (see
+# fixture-perms.sh:12-15), so no allowlist is needed for this
+# scenario.
 tmux send-keys -t "$KAFM6_S2_SESSION" \
-  "unset CLAUDECODE && THRUM_NAME=$KAFM6_S2_AGENT claude --model haiku --dangerously-skip-permissions"
+  "unset CLAUDECODE && THRUM_NAME=$KAFM6_S2_AGENT claude --model haiku"
 sleep 0.5
 tmux send-keys -t "$KAFM6_S2_SESSION" Enter
 

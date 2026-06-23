@@ -90,8 +90,8 @@ fi
 # Restart IMPL via the framework-supported restart path. Driver-side
 # thrum calls must wrap through tmux-exec to break the PID chain
 # (same rationale as scenario 02).
-"$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$REPO" --clean -- \
-  thrum tmux restart impl --force >/dev/null 2>&1 || true
+"$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$REPO" --clean --timeout 60 -- \
+  thrum tmux restart "$IMPL_PANE" --force >/dev/null 2>&1 || true
 
 # Wait for the NEW SessionStart attachment to land in IMPL JSONL.
 # Same race-condition guard as scenarios 02/03: 5s sleep before
@@ -131,6 +131,28 @@ fi
 # overlap with the auto-prime render.
 wait_for_pane_idle "$PANE" 60
 
+# Banner-race guard (thrum-6hqy.1): the daemon's HandleRestart
+# spawns a post-launch goroutine that, ~10s after launchCmd plus
+# waitForPaneReady time, sends the identity banner printf into the
+# pane via sendKeysAndSubmit (internal/daemon/rpc/tmux.go:2304-2336).
+# Without syncing on banner-emit completion, send_slash_command's
+# text->Enter gap can overlap the banner emit's keystrokes,
+# splicing the banner's `printf '%s\n' 'Agent: @...'` content INTO
+# the in-flight `/thrum:load-context` text — producing concatenated
+# input like `/thrum:load-contextprintf '%s\n' 'Agent: @...'` that
+# claude rejects as "Unknown command" (root cause of this scenario's
+# intermittent context-survives-restart-slash failures observed
+# across iterations on the v0.10.6 release-test harness).
+#
+# Tolerate timeout silently — if the banner truly never fires (e.g.
+# initial-launch sessionCwds skip, thrum-gdf8-class behavior on a
+# different pane), the downstream tool_use assertion will catch the
+# actual missing behavior with a clearer signal than a bare timeout
+# here. Brief settle after the sentinel lands so claude finishes
+# responding to the printf before we type into the same input.
+wait_for_banner_emit "$PANE" 45 || true
+wait_for_pane_idle "$PANE" 30
+
 # Capture an RFC3339 floor timestamp scoped to AFTER the auto-prime
 # settle so we only match the /thrum:load-context invocation, not
 # the post-restart auto-prime.
@@ -139,8 +161,22 @@ floor_ts="$(date -u +%Y-%m-%dT%H:%M:%S)"
 
 send_slash_command "$PANE" "/thrum:load-context"
 
-# Poll for the assistant tool_use Bash call to `thrum prime` whose
-# bash-stdout (delivered as the tool_result) contains the marker.
+# Poll for the assistant tool_use Bash call to a context-loading
+# command whose bash-stdout (delivered as the tool_result) contains
+# the marker. The /thrum:load-context skill body
+# (claude-plugin/commands/load-context.md) offers TWO commands as
+# of v0.10.6:
+#
+#   - `thrum prime` — full briefing (project state + session context)
+#   - `thrum context show --session` — session-only payload (the
+#     marker-bearing slice)
+#
+# Post-SessionStart-hook, claude routinely picks the session-only
+# command since the full briefing was already auto-injected by the
+# hook — a rational choice that the skill body explicitly enables.
+# Either tool_use satisfies the assertion's INTENT (slash command
+# routes to autonomous bash invocation of context restoration).
+#
 # We can't filter on the tool_result content from the assistant's
 # tool_use entry alone — instead, wait for the tool_use first to
 # confirm the slash command routed correctly, then poll a separate
@@ -152,11 +188,12 @@ local tool_filter='.type == "assistant"
         and (.message.content
              | map(select(.type == "tool_use"
                           and .name == "Bash"
-                          and (.input.command | tostring | startswith("thrum prime"))))
+                          and ((.input.command | tostring | startswith("thrum prime"))
+                               or (.input.command | tostring | startswith("thrum context show")))))
              | length > 0)'
 if ! wait_for_jsonl_match "$REPO" "$tool_filter" 90 >/dev/null; then
   emit_fail "$SID" "context-survives-restart-slash" \
-    'assistant tool_use Bash call with command starting "thrum prime" within 90s after /thrum:load-context' \
+    'assistant tool_use Bash call to thrum prime OR thrum context show within 90s after /thrum:load-context' \
     "(no matching JSONL entry)" \
     "scenarios/${SID}.test.sh:$LINENO"
   return 0

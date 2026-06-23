@@ -91,7 +91,11 @@ func (r *unixResolver) Resolve(conn net.Conn) (*ResolvedIdentity, error) {
 	// wrapped with ErrAnonymous) to route through server.go's legacy
 	// fallthrough. The fallthrough is still useful for transient races even
 	// though it's no longer the everyday path on macOS.
-	cwd, err := processCWDFn(pid)
+	// thrum-xir.45: cachedProcessCWD wraps processCWDFn with a short-TTL
+	// per-PID cache. The Darwin processCWD shells out to lsof (~30-300ms);
+	// without caching, every unix-socket RPC pays that cost. See
+	// cwd_cache.go for the cache rationale and TTL choice.
+	cwd, err := cachedProcessCWD(pid)
 	if err != nil {
 		slog.Warn("peercred.resolve step=cwd failed", "pid", pid, "err", err.Error())
 		return nil, fmt.Errorf("peercred: cannot read CWD for PID %d: %w", pid, err)
@@ -116,7 +120,17 @@ func (r *unixResolver) Resolve(conn net.Conn) (*ResolvedIdentity, error) {
 	// Step 5: Match with symlink canonicalization.
 	match, err := matchWorktree(gitRoot, agents)
 	if err != nil {
-		slog.Warn("peercred.resolve step=match: no registered worktree matched", "candidate_git_root", gitRoot, "registered_count", len(agents))
+		// thrum-wk7d (part 2): no-match logs at DEBUG instead of WARN.
+		// The caller (server.go handleConnection) decides whether to
+		// promote this to WARN based on whether the request method is
+		// in anonymousAllowedMethods. Every anonymous-allowed call
+		// (agent.register, session.start, session.setIntent, all the
+		// read-only RPCs) hits this path BY DESIGN during the
+		// bootstrap window before a binding exists; emitting WARN here
+		// floods the logs on routine operation. Real rejections (an
+		// anonymous caller hitting a non-allowlisted method) get a
+		// caller-side WARN in server.go where the method is known.
+		slog.Debug("peercred.resolve step=match: no registered worktree matched", "candidate_git_root", gitRoot, "registered_count", len(agents))
 		return nil, err // already wraps ErrAnonymous
 	}
 	slog.Debug("peercred.resolve step=match: matched", "agent_id", match.AgentID, "worktree", match.Worktree)

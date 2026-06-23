@@ -181,6 +181,32 @@ func TestHandleConnection_ResolvesPeercredPerRPC(t *testing.T) {
 // TestHandleConnection_AnonymousAllowlistStillWorks confirms that anonymous
 // callers (lister always empty) can still invoke allowlisted methods on the
 // same connection after peercred is enabled.
+// TestAnonymousAllowlist_IncludesTmuxCreateBootstrap pins the thrum-5oui
+// keystone: tmux.create (no_agent bootstrap) must be anonymous-allowed so an
+// unbound caller can restart an agent via `thrum tmux start`. The paired
+// safety invariant (tmux.create stays OFF the WS/peer transport) is enforced by
+// TestRestartClass_TmuxCreateNotOnWebSocket in internal/daemon/rpc.
+func TestAnonymousAllowlist_IncludesTmuxCreateBootstrap(t *testing.T) {
+	// `thrum tmux start` runs tmux.create THEN tmux.launch on one connection;
+	// a no_agent create writes no session_ref, so the caller is still anonymous
+	// for tmux.launch. BOTH must be allowlisted or the bootstrap half-completes
+	// (bare session, runtime never launched). thrum-5oui.
+	for _, m := range []string{"tmux.create", "tmux.launch"} {
+		if !anonymousAllowedMethods[m] {
+			t.Errorf("%s missing from anonymousAllowedMethods — `thrum tmux start` cannot bootstrap "+
+				"an unbound caller (the agent-restart failure class, thrum-5oui). "+
+				"If you removed it, re-read the server.go bootstrap comment first.", m)
+		}
+	}
+	// Guard the invariant the bootstrap relies on: the other bootstrap RPCs the
+	// runtime self-registers through must also stay anonymous-allowed.
+	for _, m := range []string{"agent.register", "session.start"} {
+		if !anonymousAllowedMethods[m] {
+			t.Errorf("%s missing from anonymousAllowedMethods — breaks the tmux bootstrap chain", m)
+		}
+	}
+}
+
 func TestHandleConnection_AnonymousAllowlistStillWorks(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "anonallow")
 	if err != nil {

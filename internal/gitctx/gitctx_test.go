@@ -298,12 +298,10 @@ func TestExtractWorkContext_Performance(t *testing.T) {
 		t.Fatalf("ExtractWorkContext failed: %v", err)
 	}
 
-	// Should complete in less than 500ms (generous upper bound for CI/slower systems)
-	if elapsed > 500*time.Millisecond {
-		t.Errorf("ExtractWorkContext took too long: %v (expected < 500ms)", elapsed)
-	}
-
-	t.Logf("ExtractWorkContext completed in %v", elapsed)
+	// Should complete in less than 500ms on an unloaded host; see
+	// assertWallClock (perf_guard_test.go) for the saturated-host skip
+	// semantics (thrum-1iwi).
+	assertWallClock(t, elapsed, 500*time.Millisecond)
 }
 
 func BenchmarkExtractWorkContext(b *testing.B) {
@@ -536,15 +534,15 @@ func TestExtractWorkContext_FileChanges_PerformanceTarget(t *testing.T) {
 		t.Fatalf("ExtractWorkContext failed: %v", err)
 	}
 
-	// Should complete in less than 500ms (target from requirements)
-	if elapsed > 500*time.Millisecond {
-		t.Errorf("ExtractWorkContext took too long: %v (expected < 500ms)", elapsed)
-	}
-
-	// Verify all files are tracked
+	// Verify all files are tracked. Functional assertions run BEFORE the
+	// wall-clock guard: assertWallClock may t.Skipf on a saturated host,
+	// which would otherwise mask a functional failure.
 	if len(ctx.FileChanges) != 10 {
 		t.Errorf("Expected 10 file changes, got %d", len(ctx.FileChanges))
 	}
 
-	t.Logf("ExtractWorkContext with FileChanges completed in %v", elapsed)
+	// Should complete in less than 500ms (target from requirements) on an
+	// unloaded host; see assertWallClock for the saturated-host skip
+	// semantics (thrum-1iwi).
+	assertWallClock(t, elapsed, 500*time.Millisecond)
 }

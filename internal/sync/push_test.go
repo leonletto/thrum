@@ -253,6 +253,11 @@ func TestSyncer_Push_WithRemote(t *testing.T) {
 	}
 }
 
+// TestSyncer_Push_RefusesWhenOriginUnreadable verifies D11 fails CLOSED: when a
+// remote exists (so the no-remote no-op does not apply) but origin's URL cannot
+// be read, push refuses rather than proceeding unverified — a transient lookup
+// failure on a public origin must never silently leak (thrum-43qi).
+
 func TestIsPushRejected(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -530,6 +535,17 @@ func TestSyncer_CommitAndPush_LocalOnly_CommitsButDoesNotPush(t *testing.T) {
 	}
 	if strings.Contains(string(output), SyncBranchName) {
 		t.Error("a-sync should NOT have been pushed to remote in local-only mode")
+	}
+}
+
+// TestExtractRemoteHost_Kept pins extractRemoteHost — the host-parsing helper
+// retained after the D11 denylist deletion (thrum-44mt.8). The denylist
+// (publicSyncHosts/hostIsPublic/classifyPushRemote) is gone; visibility is now
+// resolved by the boot-time exposure gate (ResolveExposureGate), not a per-push
+// host check.
+func TestExtractRemoteHost_Kept(t *testing.T) {
+	if got := extractRemoteHost("git@github.com:o/r.git"); got != "github.com" {
+		t.Fatalf("got %q", got)
 	}
 }
 

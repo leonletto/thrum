@@ -18,6 +18,11 @@ type PullResponse struct {
 	Events        []eventlog.Event `json:"events"`
 	NextSequence  int64            `json:"next_sequence"`
 	MoreAvailable bool             `json:"more_available"`
+	// Filtered is set by a 0.11 hub serving a directed/filtered inbound stream.
+	// It is JSON-additive (omitempty): a normal (non-filtering) peer never sets
+	// it, so it reads false. The D13 cursor-honesty patch (A2) only engages when
+	// this is true. The client reads it; 0.10.6 never sets it when serving.
+	Filtered bool `json:"filtered,omitempty"`
 }
 
 // SyncClient connects to a peer daemon via WebSocket and pulls events.
@@ -41,7 +46,9 @@ func (c *SyncClient) wsCall(ctx context.Context, wsURL string, method string, pa
 	defer cancel()
 
 	if err := client.Connect(dialCtx); err != nil {
-		return nil, fmt.Errorf("connect to %s: %w", wsURL, err)
+		// thrum-aop6: tag connect failures so the dialGate counts only genuine
+		// reachability failures toward backoff/quarantine (not post-connect errors).
+		return nil, fmt.Errorf("connect to %s: %w: %w", wsURL, errDialFailed, err)
 	}
 	defer func() { _ = client.Close() }()
 
@@ -97,7 +104,7 @@ func (c *SyncClient) PullEvents(peerAddr string, afterSeq int64, token string) (
 
 // PullAllEvents pulls all events from a peer in batches, continuing until no more are available.
 // Token is sent as an Authorization: Bearer header on the WebSocket handshake.
-func (c *SyncClient) PullAllEvents(peerAddr string, afterSeq int64, token string, onBatch func(events []eventlog.Event, nextSeq int64) error) error {
+func (c *SyncClient) PullAllEvents(peerAddr string, afterSeq int64, token string, onBatch func(events []eventlog.Event, nextSeq int64, filtered bool) error) error {
 	ctx := context.Background()
 	wsURL := syncWSURL(peerAddr)
 
@@ -107,7 +114,8 @@ func (c *SyncClient) PullAllEvents(peerAddr string, afterSeq int64, token string
 	dialCtx, dialCancel := context.WithTimeout(ctx, c.timeout)
 	if err := client.Connect(dialCtx); err != nil {
 		dialCancel()
-		return fmt.Errorf("connect to %s: %w", peerAddr, err)
+		// thrum-aop6: tag connect failures for the dialGate (see errDialFailed).
+		return fmt.Errorf("connect to %s: %w: %w", peerAddr, errDialFailed, err)
 	}
 	dialCancel()
 	defer func() { _ = client.Close() }()
@@ -133,10 +141,24 @@ func (c *SyncClient) PullAllEvents(peerAddr string, afterSeq int64, token string
 		}
 
 		if len(resp.Events) == 0 {
+			// D13 part 2: an empty-but-filtered window is normal (the peer's
+			// directed filter dropped every event in this range), NOT
+			// end-of-stream. Advance the checkpoint past it and keep pulling
+			// while more is available. A normal peer's empty window still ends
+			// the pull (the original behavior).
+			if resp.Filtered {
+				if err := onBatch(nil, resp.NextSequence, true); err != nil {
+					return fmt.Errorf("process batch: %w", err)
+				}
+				currentSeq = resp.NextSequence
+				if resp.MoreAvailable {
+					continue
+				}
+			}
 			return nil
 		}
 
-		if err := onBatch(resp.Events, resp.NextSequence); err != nil {
+		if err := onBatch(resp.Events, resp.NextSequence, resp.Filtered); err != nil {
 			return fmt.Errorf("process batch: %w", err)
 		}
 

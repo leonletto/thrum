@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 # tests/release/behavioral/run-behavioral.sh — entry-point runner.
+#
+# Invocation: safe from any context, including from inside a live agent pane.
+# Self-isolates via helpers/self-isolate.sh (default-server tmux re-exec with
+# TMUX/TMUX_PANE stripped) and propagates the inner exit code. Codex two-pass
+# is automatic: card 01 runs under claude, cards 02-05 under codex (filename
+# convention NN-codex-* -> codex). See tests/release/CLAUDE.md.
+#
+# Self-isolation plan: dev-docs/plans/2026-05-22-release-harness-self-isolation-plan.md
 set -euo pipefail
 
 RUNNER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,8 +16,22 @@ HELPERS_DIR="${REPO_ROOT}/tests/release/helpers"
 CARDS_DIR="${RUNNER_DIR}/cards"
 RESULTS_DIR_DEFAULT="${REPO_ROOT}/dev-docs/behavioral"
 
+# Self-isolating launcher (same mechanism as run.sh): if invoked from inside
+# an agent pane (claude/codex ancestor), re-exec into a detached default-
+# server tmux session so the harness runs with clean process ancestry.
+# Must fire BEFORE any further setup / CLI parsing side effects.
+# shellcheck disable=SC1091
+source "${HELPERS_DIR}/self-isolate.sh"
+thrum_release_self_isolate "${RUNNER_DIR}/run-behavioral.sh" "$@"
+
 # CLI defaults
 RUNTIME="claude"
+# RUNTIME_EXPLICIT: 0 = auto-select per card via filename convention
+# (NN-codex-* -> codex; else claude); 1 = user passed --runtime= override
+# which then applies uniformly to every card. The auto-select case is the
+# default so a single `bash run-behavioral.sh` invocation runs card 01 under
+# claude AND cards 02-05 under codex without flags (the "codex two-pass").
+RUNTIME_EXPLICIT=0
 declare -A PREAMBLES=()
 FILTER="*.yaml"
 NO_AUTO_DIAGNOSE=0
@@ -31,7 +53,7 @@ USAGE
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --runtime=*) RUNTIME="${1#--runtime=}"; shift ;;
+    --runtime=*) RUNTIME="${1#--runtime=}"; RUNTIME_EXPLICIT=1; shift ;;
     --preamble=*)
       val="${1#--preamble=}"
       role="${val%%:*}"
@@ -57,13 +79,37 @@ if [[ -n "$_main_repo" && -f "$_main_repo/.env" ]]; then
   set -a; source "$_main_repo/.env"; set +a
 fi
 
-# Preflight
-for tool in thrum tmux jq yq git "$RUNTIME"; do
+# Preflight. Note: the AI runtime (claude/codex) is intentionally NOT in this
+# list — runtime selection is per-card (see _card_runtime below) and each
+# card's required runtime is checked at its turn, with a clear skip+fail
+# message if the binary is absent. That way a partial install (e.g. claude
+# only, no codex) still runs the cards it CAN run instead of failing the
+# whole invocation.
+for tool in thrum tmux jq yq git; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "ERROR: required tool '$tool' not found in PATH" >&2
     exit 2
   fi
 done
+
+# _card_runtime <card-file>
+# Resolve the AI runtime a card should run under. If the user passed an
+# explicit --runtime= override on the command line, that wins (uniform across
+# every card). Otherwise auto-derive from the card filename: NN-codex-*
+# uses codex, anything else uses claude. The behavioral set ships as 01
+# (worktree-create-launch — runtime-agnostic, runs as claude) + 02-05
+# (codex-* — codex-specific hook tests).
+_card_runtime() {
+  local card="$1"
+  if [ "$RUNTIME_EXPLICIT" = "1" ]; then
+    printf '%s' "$RUNTIME"
+    return
+  fi
+  case "$(basename "$card")" in
+    *-codex-*) printf '%s' "codex" ;;
+    *)         printf '%s' "claude" ;;
+  esac
+}
 yq_v="$(yq --version 2>&1 | head -1)"
 if ! { grep -q 'mikefarah' <<<"$yq_v" && grep -q -E 'v?4\.' <<<"$yq_v"; }; then
   echo "ERROR: incompatible yq ('$yq_v'); need mikefarah/yq v4+" >&2
@@ -78,6 +124,13 @@ source "${HELPERS_DIR}/ephemeral-daemon.sh"
 source "${HELPERS_DIR}/render-preamble.sh"
 source "${HELPERS_DIR}/behavioral.sh"
 source "${HELPERS_DIR}/extract-tool-calls.sh"
+# fixture-perms.sh + drive.sh are pure function definitions; safe to source
+# here without dragging run.sh-specific state in. fixture-perms gives
+# write_fixture_perms (per-tool Bash allowlist for autonomous-tool-use cards);
+# drive.sh gives clear_trust (sends Enter to clear the folder-trust dialog on
+# daemon-launched panes — needed by behavioral's _register_card_agents).
+source "${HELPERS_DIR}/fixture-perms.sh"
+source "${HELPERS_DIR}/drive.sh"
 # runtime_version is defined in assert-tmux.sh (sourced transitively by
 # behavioral.sh).
 
@@ -162,6 +215,12 @@ fi
 _register_card_agents() {
   local card="$1"
   local agent_key role module session_name agent_name
+  # Pre-grant the Bash tool in the fixture repo so card 01's coord (and any
+  # other autonomous-tool-use card) doesn't stall on per-tool prompts when
+  # claude invokes `thrum worktree create` / `thrum tmux launch` / etc. via
+  # the Bash tool. Idempotent overwrite (cards share a single $FIXTURE_REPO
+  # but this is called per-card per the design-doc spec).
+  write_fixture_perms "$FIXTURE_REPO"
   while IFS= read -r agent_key; do
     [[ -z "$agent_key" || "$agent_key" == "null" ]] && continue
     role="$(yq -r ".agents.${agent_key}.role // \"\"" "$card")"
@@ -183,11 +242,25 @@ _register_card_agents() {
          thrum --repo "$FIXTURE_REPO" quickstart \
            --name "$agent_name" --role "$role" --module "$module" \
            --force >/dev/null 2>&1 ) || true
-    tmux new-session -d -s "$session_name" -c "$FIXTURE_REPO" 2>/dev/null || true
+    # Scrub TMUX/TMUX_PANE so the host pane lands on the DEFAULT tmux server,
+    # where the daemon's `thrum tmux launch` looks (safecmd.cleanTmuxEnv forces
+    # the daemon onto the default server). Without this, running the harness
+    # from inside a tmux-exec session inherits $TMUX and creates the fixture
+    # session on the tmux-exec socket — the daemon can't find it and claude
+    # never launches (bare-shell fixture). The default-server parent (pid 1)
+    # carries no claude ancestry, so there's no PID contamination.
+    env -u TMUX -u TMUX_PANE tmux new-session -d -s "$session_name" -c "$FIXTURE_REPO" 2>/dev/null || true
     ( cd "$FIXTURE_REPO" \
       && env -u THRUM_HOME -u THRUM_AGENT_ID -u THRUM_INTENT \
          thrum --repo "$FIXTURE_REPO" tmux launch "$session_name" \
            --runtime "$RUNTIME" >/dev/null 2>&1 ) || true
+    # Clear claude's folder-trust dialog so the daemon's runPostLaunchInject
+    # can auto-prime (it skips inject while the trust gate is up + does not
+    # retry). Same drive.sh primitive run.sh setup-repo.sh uses on coord/impl.
+    # Skip for non-claude runtimes (codex doesn't have this dialog).
+    if [[ "$RUNTIME" == "claude" ]]; then
+      clear_trust "$session_name"
+    fi
   done < <(yq -r '.agents | keys // [] | .[]' "$card")
 }
 
@@ -208,7 +281,18 @@ for card in "${cards[@]}"; do
   bash "${RUNNER_DIR}/validate-card.sh" "$card" || exit 2
   test_id="$(yq -r '.id' "$card")"
   out="${RUN_DIR}/${test_id}.jsonl"
-  echo "==> ${test_id}"
+  # Per-card runtime resolution + availability check. If the resolved
+  # runtime isn't on PATH, surface a clear fail-loud message and count it
+  # as a failure (rather than silently running under the wrong runtime —
+  # the Stop-hook-loop failure mode observed on codex cards run as claude).
+  RUNTIME="$(_card_runtime "$card")"
+  if ! command -v "$RUNTIME" >/dev/null 2>&1; then
+    echo "==> ${test_id}"
+    echo "    SKIP/FAIL: card requires --runtime=${RUNTIME}; '${RUNTIME}' not installed on PATH" >&2
+    total_fail=$((total_fail+1))
+    continue
+  fi
+  echo "==> ${test_id} (runtime: ${RUNTIME})"
   _register_card_agents "$card"
   if behavioral_run_card "$card" "$out"; then
     pass=1

@@ -95,6 +95,17 @@ func TestSyncNotifyHandler_MultiplePeers(t *testing.T) {
 	}
 }
 
+func TestSyncNotifyHandler_PoolSize(t *testing.T) {
+	handler := NewSyncNotifyHandler(func(string) {})
+
+	if got := cap(handler.sem); got != syncNotifyPoolSize {
+		t.Errorf("cap(handler.sem) = %d, want %d", got, syncNotifyPoolSize)
+	}
+	if syncNotifyPoolSize != 100 {
+		t.Errorf("syncNotifyPoolSize = %d, want 100 (bpq5 burst-absorption ceiling)", syncNotifyPoolSize)
+	}
+}
+
 func TestSyncNotifyHandler_TokenField(t *testing.T) {
 	var triggered atomic.Int32
 

@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -135,6 +136,40 @@ func (s *Syncer) commitChanges(ctx context.Context, message string) error {
 	return nil
 }
 
+// extractRemoteHost parses a git remote URL and returns its lowercased host.
+// Handles the three forms git emits:
+//
+//	https://github.com/owner/repo.git          → github.com
+//	ssh://git@github.com/owner/repo.git        → github.com
+//	git@github.com:owner/repo.git  (scp-like)  → github.com
+//
+// Returns "" when there is no network host (e.g. a local-path or file remote).
+// Retained after the D11 denylist deletion (thrum-44mt.8) as the shared
+// host-parsing helper; visibility is now resolved by the boot-time exposure
+// gate (ResolveExposureGate), not a per-push host classification.
+func extractRemoteHost(remoteURL string) string {
+	u := strings.TrimSpace(remoteURL)
+	if u == "" {
+		return ""
+	}
+	if !strings.Contains(u, "://") {
+		// scp-like (or a bare local path). Strip an optional user@ prefix, then
+		// the host is everything before the first ':' (path separator).
+		if at := strings.LastIndex(u, "@"); at != -1 {
+			u = u[at+1:]
+		}
+		if colon := strings.Index(u, ":"); colon != -1 {
+			return strings.ToLower(u[:colon])
+		}
+		return "" // no ':' → a local path, not a host
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(parsed.Hostname())
+}
+
 // push pushes the a-sync branch to origin.
 func (s *Syncer) push(ctx context.Context) error {
 	if s.localOnly {
@@ -153,6 +188,9 @@ func (s *Syncer) push(ctx context.Context) error {
 		return nil //nolint:nilerr // local-only mode is valid
 	}
 
+	// Exposure gating is resolved at daemon boot (ResolveExposureGate →
+	// localOnly). push() no longer probes per-push; localOnly already reflects
+	// the gate decision for this session.
 	// Push to origin a-sync (network operation — use GitLong for 10s timeout)
 	output, err = safecmd.GitLong(ctx, s.syncDir, "push", "origin", SyncBranchName)
 	if err != nil {

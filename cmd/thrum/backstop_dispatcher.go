@@ -40,12 +40,23 @@ func newBackstopDispatcher(thrumDir string) backstop.Dispatcher {
 	return &backstopDispatcher{thrumDir: thrumDir}
 }
 
-func (d *backstopDispatcher) Dispatch(_ context.Context, agentID string, unreadCount int) error {
+func (d *backstopDispatcher) Dispatch(ctx context.Context, agentID string, unreadCount int) error {
+	// thrum-wo2z defense-in-depth (mirrors the 0.11 dispatch-layer guard): a
+	// non-resident recipient gets NEITHER the tmux nudge NOR the spool
+	// envelope. The primary residency filter lives in backstop.Tick; this
+	// guard keeps the dispatcher safe standalone — without it, spool files
+	// for remote agents accumulate forever (the janitor preserves backstop-
+	// entries, and a remote agent never reads a local spool).
+	if !nudge.HasLocalIdentity(d.thrumDir, agentID) {
+		slog.Info("[backstop] skip non-local agent", "agent", agentID, "unread_count", unreadCount)
+		return nil
+	}
+
 	// Fire tmux nudge for the agent. nudge.DispatchTmux is fire-and-forget
 	// and silently no-ops if the agent has no live tmux session, which is
 	// the right behavior here — the spool write below covers the dead-pane
-	// case.
-	nudge.DispatchTmux(d.thrumDir, []string{agentID}, "thrum-backstop")
+	// case. ctx bounds the chrome-quiet poll goroutine against shutdown.
+	nudge.DispatchTmux(ctx, d.thrumDir, []string{agentID}, "thrum-backstop")
 
 	// Always also write a spool envelope so the next SessionStart hook
 	// will surface the reminder for an agent whose pane wasn't reachable.

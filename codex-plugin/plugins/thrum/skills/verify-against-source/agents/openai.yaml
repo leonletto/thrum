@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verify Against Source"
+  short_description: "Use when verifying that a prose artifact (brainstorm, design spec, plan, or implementation prompt) honors its input/source artifact(s) — the prose counterpart to verify-against-plan. Runs as the conformance axis of the planning-skill review loop. Outputs structured findings: missing scope, silent deviations from the source, scope creep, misunderstandings."
+  default_prompt: "Use when verifying a prose artifact (brainstorm, spec, plan) honors its source artifact."

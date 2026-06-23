@@ -560,6 +560,14 @@ func TestBranchManager_CreateSyncWorktree_SparseCheckout(t *testing.T) {
 	if !strings.Contains(content, "messages") {
 		t.Errorf("sparse-checkout missing messages pattern, got:\n%s", content)
 	}
+	// thrum-s6os E10: the v0.10.6 wire-stream skeleton must be in the
+	// sparse pattern set, otherwise the new state-not-events flow won't
+	// see writes to state/, messages-v2/, or receipts/.
+	for _, pat := range []string{"state/", "messages-v2/", "receipts/"} {
+		if !strings.Contains(content, pat) {
+			t.Errorf("sparse-checkout missing v0.10.6 pattern %q, got:\n%s", pat, content)
+		}
+	}
 }
 
 func TestBranchManager_CreateSyncWorktree_NoSparseCheckoutLeak(t *testing.T) {
@@ -1003,5 +1011,30 @@ func TestRemoteTrackingSyncSHA_RemoteTrackingRefPresent(t *testing.T) {
 	}
 	if sha != wantSHA {
 		t.Errorf("SHA mismatch: want %q got %q", wantSHA, sha)
+	}
+}
+
+// mustGit runs a git command in dir and fails the test on error.
+func mustGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v in %s: %v\n%s", args, dir, err, out)
+	}
+}
+
+// TestEnsureSyncBranch_NoDenylistRefusal asserts EnsureSyncBranch no longer
+// refuses based on the deleted D11 host denylist and that the tracking push
+// path remains reachable. A local bare remote keeps it network/denylist-free —
+// exposure gating now happens at daemon boot (ResolveExposureGate), not here.
+func TestEnsureSyncBranch_NoDenylistRefusal(t *testing.T) {
+	repo := setupTestRepoWithCommit(t)
+	bare := t.TempDir()
+	mustGit(t, bare, "init", "--bare")
+	mustGit(t, repo, "remote", "add", "origin", bare)
+	b := NewBranchManager(repo, false)
+	if err := b.EnsureSyncBranch(context.Background()); err != nil {
+		t.Fatalf("EnsureSyncBranch should not refuse: %v", err)
 	}
 }

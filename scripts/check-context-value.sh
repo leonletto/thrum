@@ -184,6 +184,19 @@ if [ -z "$BLOB" ]; then
   exit 1
 fi
 
+# Follow Claude Code's persisted-output spill. When a hook's plain stdout
+# exceeds the inline ~2KB cap, the attachment carries only a preview plus a
+# "Full output saved to: <path>" pointer (wrapped in <persisted-output>); the
+# full hook output — including the lower portion of a registered agent's prime
+# briefing — lives in that .txt file, NOT in any attachment field. Append every
+# referenced spill file so the needle search sees the full source, not the
+# truncated preview. (Without this, scen01 briefing-header false-negatives:
+# "# Thrum Session Briefing (auto-loaded)" lands below the 2KB cut while the
+# banner/directive above it pass. impl_v011_deploy 0.11 cross-line assist.)
+while IFS= read -r _spill; do
+  [ -n "$_spill" ] && [ -f "$_spill" ] && BLOB="${BLOB}"$'\n'"$(cat "$_spill" 2>/dev/null)"
+done < <(printf '%s' "$BLOB" | grep -oE 'Full output saved to: [^[:space:]]+' | sed 's/^Full output saved to: //' | sort -u)
+
 # -F: literal/fixed-string. -c: count. Use printf so embedded backslashes in
 # NEEDLE aren't interpreted by echo.
 HITS=$(printf '%s' "$BLOB" | grep -cF -- "$NEEDLE" 2>/dev/null || true)

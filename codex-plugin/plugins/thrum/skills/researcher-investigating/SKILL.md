@@ -111,3 +111,21 @@ user can decide whether to graduate or remove the override.
 
 If you accumulate a new rule mid-session (the user corrects you), capture it via
 `bd remember --key researcher-rule-<slug> "<rule + Why + How to apply>"`.
+
+### Pattern D self-write — set `agent_status=working` on dispatch ACK (thrum-9neg)
+
+Immediately after sending the dispatch ACK for a research request, write
+`agent_status="working"` to your local identity file. This is the same Pattern D
+self-write used by the implementer's dispatch-ACK protocol (sibling skill
+`implementer-receiving-dispatch`).
+
+```bash
+# Step 1: ACK within 2 minutes of receiving a research dispatch
+thrum reply <MSG_ID> "Received. Starting <scope>. ETA <rough>."
+
+# Step 2: Mark yourself working (writes local identity file directly)
+thrum agent set-status working
+```
+
+The companion `set-status idle` call lives in `researcher-answering-queries` for
+the response/DONE side.

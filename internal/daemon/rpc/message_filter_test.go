@@ -213,10 +213,15 @@ func TestMessageListUnreadFilter(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Send 3 messages
+	// Author the 3 messages from the ops agent (registered by setupFilterTest)
+	// addressed to the test agent, so they land as unread for it. thrum-b6qw: a
+	// self-authored message is pre-read on the author's own delivery row
+	// (Option C self-delivery at send), so the author must be a different agent
+	// for these messages to count as unread.
+	opsID := identity.GenerateAgentID("r_FILTER_TEST", "ops", "core", "")
 	var messageIDs []string
 	for i := 0; i < 3; i++ {
-		req := SendRequest{Content: "Unread test message"}
+		req := SendRequest{Content: "Unread test message", To: "@" + agentID, CallerAgentID: opsID}
 		params, _ := json.Marshal(req)
 
 		resp, err := handler.HandleSend(ctx, params)

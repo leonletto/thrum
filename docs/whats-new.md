@@ -5,12 +5,49 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 [CHANGELOG.md](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-## v0.10.5 — In Soak (RC)
+## v0.10.6 — In Soak (RC)
 
-v0.10.5 is currently a release candidate. The latest tag is `v0.10.5-rc.6`,
-which adds a `--from` filter to `thrum inbox`, a daemon-side backstop nudger
-that replaces the user-side cron pattern for stale-unread re-delivery, a
-`--delete-branch` flag for `thrum worktree teardown`, an expanded
+v0.10.6's headline is a **sync re-architecture** (thrum-s6os): the cross-machine
+wire stream now derives from per-agent and per-bridge-group state files rather
+than from a synced event journal. The 60-second polling ticker is gone — sync is
+event-triggered on a structural-event whitelist (`agent.register`, `group.*`,
+`message.create`). Idle daemons produce zero commits on `a-sync`, and busy
+multi-agent clusters stop accumulating heartbeat noise; the falcon-backend
+11K-commits-per-week stream becomes a trickle proportional to actual message
+volume.
+
+⚠ **Mixed-cluster upgrade warning.** v0.10.6 writes ONLY to the new
+`messages-v2/<id>.jsonl` path; v0.10.5 peers don't know about it and will
+silently miss messages authored by upgraded peers until they upgrade. v0.10.6
+peers retain a legacy-read fallback for v0.10.5-authored messages, so upgraded
+peers stay fully functional in mixed clusters — but the asymmetry means you
+should **upgrade every peer in one window** rather than running mixed long-term.
+
+Other notable v0.10.6 changes: pre-migration DB backups are now timestamped
+(`.pre-migration-v<N>-<UTC>.bak`) and a failed backup halts the migration so you
+can't end up without a recovery snapshot; an RC-tag plugin distribution scheme
+(per-RC `X.Y.Z-rc.N` suffix on `plugin.json` + `marketplace.json`) lets
+`/plugin update` upgrade Claude Code plugins cleanly through the rc pipeline
+with no uninstall/reinstall; two new daemon config keys
+(`events_retention_days`, `compaction_size_threshold_mb`) tune the local
+events-journal window and messages-v2 compaction; a schema forward-port to v36
+keeps a v0.10.6 binary openable on DBs touched by v0.11-substrate work
+(intentionally dead-end here — no consumer code reads them); and the skill
+review loop gained a `verify-against-source` prose-conformance reviewer plus a
+Phase 0 review gate in `project-setup`. The `daemon.sync_interval` config key
+and `DefaultSyncInterval = 60` constant are removed; legacy configs are silently
+ignored.
+
+See the [Beta Channel](beta-channel.md) guide for how to opt in. Stable
+promotion follows the standard 48-hour soak window once no P0/P1 bugs are open
+against the RC.
+
+## v0.10.5 — 2026-05-21
+
+v0.10.5 shipped to stable on 2026-05-21 after eight RCs. The latest tag was
+`v0.10.5-rc.6`, which adds a `--from` filter to `thrum inbox`, a daemon-side
+backstop nudger that replaces the user-side cron pattern for stale-unread
+re-delivery, a `--delete-branch` flag for `thrum worktree teardown`, an expanded
 downgrade-guard error with actionable recovery hints + a new "Multi-Binary
 Worktree Footgun" section in CLAUDE.md, a self-echo regression fix for the tmux
 nudge dispatcher (`thrum-1zfk`), and a schema forward-port to v32 so the binary

@@ -217,12 +217,17 @@ func (h *GroupHandler) HandleCreate(ctx context.Context, params json.RawMessage)
 		CreatedBy:   createdBy,
 	}
 
+	// thrum-bsn7: release state.Lock() BEFORE the structural-event sync
+	// trigger fires so walker(30s) + compactor(60s) ceilings don't starve
+	// concurrent registrations / message.creates / etc waiting on the
+	// same lock.
 	h.state.Lock()
-	defer h.state.Unlock()
-
-	if err := h.state.WriteEvent(ctx, event); err != nil {
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	h.state.Unlock()
+	if err != nil {
 		return nil, fmt.Errorf("write group.create event: %w", err)
 	}
+	h.state.GoPostCommit(postCommit)
 
 	return &GroupCreateResponse{
 		GroupID:   groupID,
@@ -273,8 +278,16 @@ func (h *GroupHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 		DeletedBy: deletedBy,
 	}
 
+	// thrum-bsn7 tracked-unlock pattern: must release state.Lock() BEFORE
+	// the structural-event sync trigger fires. Use a flag so the deferred
+	// cleanup is idempotent and every early-return path releases.
 	h.state.Lock()
-	defer h.state.Unlock()
+	stateLocked := true
+	defer func() {
+		if stateLocked {
+			h.state.Unlock()
+		}
+	}()
 
 	// If delete_messages is set, remove all messages scoped to this group.
 	if req.DeleteMessages {
@@ -320,9 +333,13 @@ func (h *GroupHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 		}
 	}
 
-	if err := h.state.WriteEvent(ctx, event); err != nil {
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	h.state.Unlock()
+	stateLocked = false
+	if err != nil {
 		return nil, fmt.Errorf("write group.delete event: %w", err)
 	}
+	h.state.GoPostCommit(postCommit)
 
 	return &GroupDeleteResponse{
 		Name:      req.Name,
@@ -419,12 +436,14 @@ func (h *GroupHandler) HandleMemberAdd(ctx context.Context, params json.RawMessa
 		AddedBy:     addedBy,
 	}
 
+	// thrum-bsn7: release state.Lock() before postCommit fires.
 	h.state.Lock()
-	defer h.state.Unlock()
-
-	if err := h.state.WriteEvent(ctx, event); err != nil {
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	h.state.Unlock()
+	if err != nil {
 		return nil, fmt.Errorf("write group.member.add event: %w", err)
 	}
+	h.state.GoPostCommit(postCommit)
 
 	return &GroupMemberAddResponse{
 		Group:       req.Group,
@@ -480,12 +499,14 @@ func (h *GroupHandler) HandleMemberRemove(ctx context.Context, params json.RawMe
 		RemovedBy:   removedBy,
 	}
 
+	// thrum-bsn7: release state.Lock() before postCommit fires.
 	h.state.Lock()
-	defer h.state.Unlock()
-
-	if err := h.state.WriteEvent(ctx, event); err != nil {
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	h.state.Unlock()
+	if err != nil {
 		return nil, fmt.Errorf("write group.member.remove event: %w", err)
 	}
+	h.state.GoPostCommit(postCommit)
 
 	return &GroupMemberRemoveResponse{
 		Group:       req.Group,

@@ -475,6 +475,15 @@ type RoleTemplateData struct {
 // fallback resolves filepath.Dir(thrumDir) to a sibling .thrum that may
 // not even exist). thrum-z9zl.
 func RenderRoleTemplate(thrumDir, agentName, role string) ([]byte, error) {
+	// Preserve the caller's original thrumDir for identity lookup. For a
+	// worktree agent, thrumDir is the worktree's local .thrum/ (which holds the
+	// agent's identity file); the redirect-follow below repoints the TEMPLATE
+	// path + RepoRoot resolution at the main repo, but the worktree agent's
+	// identity lives ONLY in the worktree. buildTemplateData does its own
+	// redirect-follow for RepoRoot, so passing the original thrumDir keeps
+	// RepoRoot pointed at the main repo while letting {{.WorktreePath}} and
+	// {{.Module}} populate from the worktree identity (was silently empty).
+	origThrumDir := thrumDir
 	if _, err := os.Stat(filepath.Join(thrumDir, "redirect")); err == nil {
 		if resolved, rerr := paths.ResolveThrumDir(filepath.Dir(thrumDir)); rerr == nil {
 			thrumDir = resolved
@@ -489,8 +498,11 @@ func RenderRoleTemplate(thrumDir, agentName, role string) ([]byte, error) {
 		return nil, fmt.Errorf("read role template: %w", err)
 	}
 
-	// Load identity data for template variables
-	data := buildTemplateData(thrumDir, agentName, role)
+	// Load identity data for template variables. Use the ORIGINAL thrumDir so a
+	// worktree agent's identity (which lives in the worktree, not the
+	// redirect-resolved main repo) is found and {{.WorktreePath}}/{{.Module}}
+	// populate. RepoRoot is still resolved to the main repo inside.
+	data := buildTemplateData(origThrumDir, agentName, role)
 
 	tmpl, err := template.New(role + ".md").Parse(string(tmplContent))
 	if err != nil {

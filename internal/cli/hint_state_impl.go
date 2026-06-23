@@ -26,53 +26,52 @@ func NewLiveStateAccessor(c *Client) *LiveStateAccessor {
 	return &LiveStateAccessor{Client: c}
 }
 
-// AgentByName looks up a registered agent by name via the team.list RPC.
+// AgentByName looks up a registered agent by name via the agent.lookup RPC.
 // Returns (nil, nil) when the agent is not registered (not an error — a
 // legitimate "no such agent" answer). Returns (nil, err) when the RPC fails.
 //
-// Uses team.list rather than agent.list because team.list includes
-// TmuxSession and TmuxState — both are required for send.recipient-stale's
-// "reprime" option to render an actionable command. Include offline agents
-// so stale recipients (the exact case this lookup exists to serve) are
-// discoverable.
+// Uses agent.lookup (thrum-1nkt.4) rather than team.list so the call is
+// single-row on the daemon side (one SQL SELECT + one identity file read)
+// instead of a full team-list build with per-agent mention-count fan-out
+// + a worktree-wide identity walk + Phase 2 dead-agent self-heal. Under
+// multi-concurrent `thrum send` burst the team.list amplification was a
+// dominant wall-clock contributor (bpq5 follow-up); agent.lookup removes
+// it entirely from the send hot path.
 //
-// NOTE: fetches the full team list on every call. Pilot-acceptable — hint
-// sources call this at most once per command invocation. Add a server-side
-// name filter if this becomes hot.
+// agent.lookup returns the same TeamMember type so the field mapping below
+// is unchanged from the previous team.list variant.
 func (s *LiveStateAccessor) AgentByName(name string) (*AgentSummary, error) {
 	if s == nil || s.Client == nil {
 		return nil, nil
 	}
-	req := TeamListRequest{IncludeOffline: true, IncludeSystem: false}
-	var resp TeamListResponse
-	if err := s.Client.Call("team.list", req, &resp); err != nil {
+	req := AgentLookupRequest{Name: name}
+	var resp AgentLookupResponse
+	if err := s.Client.Call("agent.lookup", req, &resp); err != nil {
 		return nil, err
 	}
-	for i := range resp.Members {
-		m := &resp.Members[i]
-		if m.AgentID == name {
-			alive := m.TmuxState == "alive"
-			return &AgentSummary{
-				AgentID:     m.AgentID,
-				Role:        m.Role,
-				Module:      m.Module,
-				Display:     m.Display,
-				Worktree:    m.WorktreePath,
-				Branch:      m.Branch,
-				Intent:      m.Intent,
-				SessionID:   m.SessionID,
-				UpdatedAt:   m.LastSeen,
-				Source:      "daemon",
-				Status:      m.Status,
-				Host:        m.Hostname,
-				PID:         m.AgentPID,
-				TmuxSession: m.TmuxSession,
-				TmuxAlive:   alive,
-				IsLocal:     m.IsLocal,
-			}, nil
-		}
+	if resp.Member == nil {
+		return nil, nil
 	}
-	return nil, nil
+	m := resp.Member
+	alive := m.TmuxState == "alive"
+	return &AgentSummary{
+		AgentID:     m.AgentID,
+		Role:        m.Role,
+		Module:      m.Module,
+		Display:     m.Display,
+		Worktree:    m.WorktreePath,
+		Branch:      m.Branch,
+		Intent:      m.Intent,
+		SessionID:   m.SessionID,
+		UpdatedAt:   m.LastSeen,
+		Source:      "daemon",
+		Status:      m.Status,
+		Host:        m.Hostname,
+		PID:         m.AgentPID,
+		TmuxSession: m.TmuxSession,
+		TmuxAlive:   alive,
+		IsLocal:     m.IsLocal,
+	}, nil
 }
 
 // TmuxSessionExists reports whether a tmux session by that name is live.

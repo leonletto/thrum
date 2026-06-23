@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
+	"github.com/leonletto/thrum/internal/profile"
 	"github.com/leonletto/thrum/internal/transport"
 )
 
@@ -145,6 +147,38 @@ var anonymousAllowedMethods = map[string]bool{
 	"agent.register":    true,
 	"session.start":     true,
 	"session.setIntent": true,
+	// Bootstrap (thrum-5oui — DO NOT REMOVE without re-reading the safety
+	// invariant below): `thrum tmux start` is the agent-restart entry point.
+	// On ONE connection it calls tmux.create (no_agent=true) THEN tmux.launch:
+	//   - tmux.create with no_agent=true creates a BARE tmux session — no agent
+	//     row, no identity binding, no THRUM_* env (see HandleCreate's
+	//     `if !req.NoAgent` guards, internal/daemon/rpc/tmux.go).
+	//   - tmux.launch sends a FIXED, name-validated runtime-launch command
+	//     (runtimeToLaunchCmd + isValidRuntimeName, no arbitrary keystrokes —
+	//     unlike tmux.send, which stays gated) into that session.
+	// The launched runtime then self-registers live via quickstart →
+	// agent.register (whose cross-worktree guard is the actual identity
+	// authority). BOTH must be anonymous-allowed: a no_agent create writes no
+	// session_ref, so the caller is STILL anonymous on the very next RPC
+	// (identity is re-resolved per-RPC) — if tmux.launch were gated, the
+	// bootstrap would create a bare session but never launch the runtime.
+	// Without this pair, an UNBOUND caller (a fresh worktree, or an agent whose
+	// session ended — sweeper-culled, idle, or killed) can never restart,
+	// because binding requires an active session that only this bootstrap can
+	// create. That chicken-and-egg is the whole agent-restart failure class
+	// (thrum-5oui; routes qxr3/mnhp were prior members).
+	//
+	// SAFETY INVARIANT: tmux.create and tmux.launch are registered ONLY on the
+	// local unix socket (cmd/thrum/main.go server.RegisterHandler), NEVER on
+	// wsRegistry / the peer/tsnet transport. Allowing them anonymously
+	// therefore widens only the 0600 owner-only socket — same boundary as
+	// agent.register/session.start above. TestRestartClass_TmuxCreateNotOnWebSocket
+	// and TestRestartClass_TmuxLaunchNotOnWebSocket (internal/daemon/rpc/
+	// sec8_trust_boundary_test.go) pin this; if either gains a wsRegistry/peer
+	// registration, that test MUST fail (anonymous create/launch over the
+	// network would be a real hole).
+	"tmux.create": true,
+	"tmux.launch": true,
 }
 
 // Start starts the server and begins accepting connections.
@@ -292,6 +326,9 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 		if err != nil {
 			return
 		}
+		// thrum-bpq5 substrate: arrival timestamp + per-phase RPC timing.
+		// Gated by THRUM_PROFILE.
+		rpcArrived := time.Now()
 
 		// Parse JSON-RPC request
 		var req jsonRPCRequest
@@ -408,6 +445,18 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 				// methods on the allowlist. Anything else is rejected here,
 				// before the handler runs.
 				if reqIdentity == nil && !anonymousAllowedMethods[req.Method] {
+					// thrum-wk7d (part 2): now that resolver_unix.go's
+					// no-match logs at DEBUG, this is the canonical
+					// daemon-side signal that an anonymous caller hit a
+					// non-allowlisted method. The structured error
+					// response below is the user-facing diagnostic; this
+					// WARN gives operators reading the daemon log a
+					// single line per actual rejection (rather than one
+					// per every anonymous-allowed call).
+					slog.Warn("anonymous caller rejected: method not in anonymous allowlist",
+						"method", req.Method,
+						"remote_addr", conn.RemoteAddr().String(),
+						"code", -32002)
 					reqCancel()
 					resp := jsonRPCResponse{
 						JSONRPC: "2.0",
@@ -433,8 +482,18 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 			// to legacy behavior to avoid wedging the daemon on transient DB errors.
 		}
 
+		handlerStart := time.Now()
+		preHandlerMs := handlerStart.Sub(rpcArrived).Milliseconds()
 		result, err := handler(ctxWithIdentity, reqParams)
 		reqCancel()
+		handlerMs := time.Since(handlerStart).Milliseconds()
+		if profile.Enabled() {
+			slog.Info("profile.rpc.dispatch",
+				"method", req.Method,
+				"pre_handler_ms", preHandlerMs,
+				"handler_ms", handlerMs,
+			)
+		}
 		if err != nil {
 			resp := jsonRPCResponse{
 				JSONRPC: "2.0",

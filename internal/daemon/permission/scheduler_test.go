@@ -58,7 +58,7 @@ func newSchedulerFixture(t *testing.T) (*Permission, *time.Time) {
 	// Register a live coordinator so ResolveSupervisors returns a real
 	// recipient via the default fallback ["coordinator"].
 	ctx := context.Background()
-	if err := st.WriteEvent(ctx, types.AgentRegisterEvent{
+	if _, err := st.WriteEvent(ctx, types.AgentRegisterEvent{
 		Type:      "agent.register",
 		Timestamp: "2026-04-14T00:00:00Z",
 		AgentID:   "coordinator_main",
@@ -68,7 +68,7 @@ func newSchedulerFixture(t *testing.T) (*Permission, *time.Time) {
 	}); err != nil {
 		t.Fatalf("agent.register: %v", err)
 	}
-	if err := st.WriteEvent(ctx, types.AgentSessionStartEvent{
+	if _, err := st.WriteEvent(ctx, types.AgentSessionStartEvent{
 		Type:      "agent.session.start",
 		Timestamp: "2026-04-14T00:00:01Z",
 		SessionID: "ses_coordinator_main",
@@ -172,7 +172,7 @@ func TestScheduler_FirstDetect_MultiSupervisor_SecondReplyResolves(t *testing.T)
 	// Register a second coordinator so ResolveSupervisors (default role
 	// "coordinator") returns two recipients and firstDetect's loop
 	// iterates twice.
-	if err := p.state.WriteEvent(ctx, types.AgentRegisterEvent{
+	if _, err := p.state.WriteEvent(ctx, types.AgentRegisterEvent{
 		Type:      "agent.register",
 		Timestamp: "2026-04-14T00:00:02Z",
 		AgentID:   "coordinator_secondary",
@@ -182,7 +182,7 @@ func TestScheduler_FirstDetect_MultiSupervisor_SecondReplyResolves(t *testing.T)
 	}); err != nil {
 		t.Fatalf("register second coordinator: %v", err)
 	}
-	if err := p.state.WriteEvent(ctx, types.AgentSessionStartEvent{
+	if _, err := p.state.WriteEvent(ctx, types.AgentSessionStartEvent{
 		Type:      "agent.session.start",
 		Timestamp: "2026-04-14T00:00:03Z",
 		SessionID: "ses_coordinator_secondary",
@@ -272,6 +272,14 @@ func TestScheduler_NoReminderBeforeCadence(t *testing.T) {
 func TestScheduler_ReminderCadence(t *testing.T) {
 	p, clock := newSchedulerFixture(t)
 	ctx := context.Background()
+
+	// thrum-g23nb: fireReminder now does a fresh pane recheck. Stub a capture
+	// that still matches the modal so reminders fire deterministically instead
+	// of depending on a real tmux pane (and the recipient delivery stays unread,
+	// so the read-state skip does not engage here).
+	p.SetPaneCaptureForTest(func(_ string, _ int) (string, error) {
+		return "Not in allowlist: test\n", nil
+	})
 
 	if err := p.OnDetection(ctx, "cursor-test", "cursor", "cursor-test:0.0",
 		"researcher_cursor", testPattern(), "pane A"); err != nil {

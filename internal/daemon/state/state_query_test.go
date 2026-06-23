@@ -42,7 +42,7 @@ func registerAgentWithSession(t *testing.T, st *State, agentID, role string) {
 		Role:      role,
 		Module:    "test",
 	}
-	if err := st.WriteEvent(ctx, reg); err != nil {
+	if _, err := st.WriteEvent(ctx, reg); err != nil {
 		t.Fatalf("write agent.register for %s: %v", agentID, err)
 	}
 
@@ -52,7 +52,7 @@ func registerAgentWithSession(t *testing.T, st *State, agentID, role string) {
 		SessionID: "ses_" + agentID,
 		AgentID:   agentID,
 	}
-	if err := st.WriteEvent(ctx, start); err != nil {
+	if _, err := st.WriteEvent(ctx, start); err != nil {
 		t.Fatalf("write agent.session.start for %s: %v", agentID, err)
 	}
 }
@@ -67,7 +67,7 @@ func endAgentSession(t *testing.T, st *State, agentID string) {
 		SessionID: "ses_" + agentID,
 		Reason:    "test",
 	}
-	if err := st.WriteEvent(context.Background(), end); err != nil {
+	if _, err := st.WriteEvent(context.Background(), end); err != nil {
 		t.Fatalf("write agent.session.end for %s: %v", agentID, err)
 	}
 }
@@ -158,6 +158,27 @@ func TestListActiveAgentsByRole_ExcludesEndedSessions(t *testing.T) {
 	}
 	if len(got) != 1 || got[0] != "coordinator_main" {
 		t.Errorf("expected [coordinator_main], got %v", got)
+	}
+}
+
+func TestListAllActiveAgentIDs(t *testing.T) {
+	st := newTestState(t)
+	registerAgentWithSession(t, st, "agent_a", "implementer")
+	registerAgentWithSession(t, st, "agent_b", "coordinator")
+	got := st.ListAllActiveAgentIDs(context.Background())
+	if len(got) != 2 {
+		t.Fatalf("want 2 active agents, got %v", got)
+	}
+}
+
+func TestListAllActiveAgentIDs_ExcludesEndedSessions(t *testing.T) {
+	st := newTestState(t)
+	registerAgentWithSession(t, st, "agent_a", "implementer")
+	registerAgentWithSession(t, st, "agent_b", "coordinator")
+	endAgentSession(t, st, "agent_b")
+	got := st.ListAllActiveAgentIDs(context.Background())
+	if len(got) != 1 || got[0] != "agent_a" {
+		t.Fatalf("want only [agent_a] active, got %v", got)
 	}
 }
 

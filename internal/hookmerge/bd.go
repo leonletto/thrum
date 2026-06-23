@@ -1,6 +1,7 @@
 package hookmerge
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -15,26 +16,52 @@ import (
 // alternating invocations of bd setup claude and thrum init.
 const CanonicalBdCommand = "bd prime --hook-json"
 
-// legacyBdCommandsAllEvents are the older bd command variants that thrum's
-// migration sweep removes from every hook event. Includes the canonical
-// `bd prime --hook-json` itself when removing from PreCompact — Claude
-// Code now fires SessionStart with source=compact after compaction, so the
-// PreCompact bd entry is no longer needed and is actively cleaned up.
-//
-// Map shape: event → []command. Empty event matches all events.
-var legacyBdCommands = []struct {
+// legacyBdCmd is one entry in the migration sweep: a bd command variant to
+// remove from a given hook event. An empty event matches all events.
+type legacyBdCmd struct {
 	event   string // "" matches all events
 	command string
-}{
-	// Remove the bare `bd prime` and stealth variants from any event —
-	// they're the pre-hook-json shape and never wanted post-migration.
-	{event: "", command: "bd prime"},
-	{event: "", command: "bd prime --stealth"},
-	// PreCompact-specific removals: the hook-json variants ARE valid on
-	// SessionStart, but should be cleaned up from PreCompact since
-	// SessionStart now also fires after compaction.
-	{event: "PreCompact", command: CanonicalBdCommand},
-	{event: "PreCompact", command: "bd prime --stealth --hook-json"},
+}
+
+// legacyBdCommandsFor returns the migration-sweep list appropriate for the
+// installed bd's --hook-json capability. The list never strips the command
+// InstallBdHook is about to (re-)add on SessionStart, so the canonical hook
+// survives the sweep and the operation stays idempotent.
+//
+// supportsHookJSON=true  → emit "bd prime --hook-json"; the bare "bd prime" is
+//
+//	the pre-hook-json legacy shape and is stripped from every event. (Byte-
+//	identical to the historical behavior.)
+//
+// supportsHookJSON=false → the installed bd rejects --hook-json, so emit bare
+//
+//	"bd prime": strip the broken "bd prime --hook-json" from every event (incl.
+//	SessionStart, replacing it with the working bare form), keep bare
+//	"bd prime" on SessionStart, and strip bare "bd prime" only from PreCompact
+//	(SessionStart now fires post-compaction).
+func legacyBdCommandsFor(supportsHookJSON bool) []legacyBdCmd {
+	if supportsHookJSON {
+		return []legacyBdCmd{
+			// Remove the bare `bd prime` and stealth variants from any event —
+			// they're the pre-hook-json shape and never wanted post-migration.
+			{event: "", command: "bd prime"},
+			{event: "", command: "bd prime --stealth"},
+			// PreCompact-specific removals: the hook-json variants ARE valid on
+			// SessionStart, but should be cleaned up from PreCompact since
+			// SessionStart now also fires after compaction.
+			{event: "PreCompact", command: CanonicalBdCommand},
+			{event: "PreCompact", command: "bd prime --stealth --hook-json"},
+		}
+	}
+	return []legacyBdCmd{
+		// Stale bd: bare "bd prime" is canonical, so it must survive on
+		// SessionStart. Strip the broken --hook-json forms everywhere, and
+		// strip bare "bd prime" only from PreCompact.
+		{event: "", command: "bd prime --stealth"},
+		{event: "", command: "bd prime --hook-json"},
+		{event: "", command: "bd prime --stealth --hook-json"},
+		{event: "PreCompact", command: "bd prime"},
+	}
 }
 
 // BdBinaryAvailable reports whether `bd --version` exits 0 — used by
@@ -52,6 +79,32 @@ var BdBinaryAvailable = func() bool {
 	// Fixed binary name + literal arg, no user input.
 	cmd := exec.CommandContext(ctx, "bd", "--version") //#nosec G204
 	return cmd.Run() == nil
+}
+
+// BdSupportsHookJSON reports whether the installed bd's `prime` subcommand
+// accepts the --hook-json flag. It parses `bd prime --help` output for the
+// flag string (no side effects) rather than invoking the flag — and detects
+// the FLAG specifically, not merely that bd exists (an old bd 1.0.4 exits 0 on
+// --help too; binary presence is BdBinaryAvailable's job). Returns false when
+// the binary is missing, broken, times out, or lacks the flag.
+//
+// Released bd 1.0.4 has no --hook-json; the flag exists only on unreleased bd
+// HEAD. This probe lets InstallBdHook prefer "bd prime --hook-json" whenever bd
+// supports it and fall back to bare "bd prime" otherwise.
+//
+// Exposed as a function-typed variable so tests can stub it without depending
+// on the host's bd version. Single-purpose by design so thrum-gxwk can later
+// generalize capability-probing without touching call sites.
+var BdSupportsHookJSON = func() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	// Fixed binary name + literal args, no user input.
+	cmd := exec.CommandContext(ctx, "bd", "prime", "--help") //#nosec G204
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	return bytes.Contains(out, []byte("--hook-json"))
 }
 
 // InstallBdHookOptions configures InstallBdHook. The zero value disables
@@ -153,9 +206,19 @@ func InstallBdHook(opts InstallBdHookOptions) (InstallBdResult, error) {
 		}
 	}
 
+	// Capability-aware command selection. Released bd 1.0.4 lacks --hook-json,
+	// so emit the bare form there; prefer "bd prime --hook-json" whenever bd
+	// supports it. The sweep list is derived from the same probe so it never
+	// strips the command we're about to add (preserves idempotency).
+	supportsHookJSON := BdSupportsHookJSON()
+	canonical := "bd prime"
+	if supportsHookJSON {
+		canonical = CanonicalBdCommand
+	}
+
 	// Migration sweep across events for every legacy variant.
 	result := InstallBdResult{}
-	for _, lr := range legacyBdCommands {
+	for _, lr := range legacyBdCommandsFor(supportsHookJSON) {
 		if lr.event != "" {
 			if RemoveHookCommand(projectSettings, lr.event, lr.command) {
 				result.LegacyRemoved++
@@ -178,7 +241,7 @@ func InstallBdHook(opts InstallBdHookOptions) (InstallBdResult, error) {
 	}
 
 	// Add canonical hook (idempotent).
-	if AddHookCommand(projectSettings, "SessionStart", CanonicalBdCommand) {
+	if AddHookCommand(projectSettings, "SessionStart", canonical) {
 		result.Added = true
 	}
 
@@ -192,8 +255,11 @@ func InstallBdHook(opts InstallBdHookOptions) (InstallBdResult, error) {
 		}
 	}
 
-	// Legacy settings.local.json migration: strip every bd command
-	// variant from every event in the legacy file. No-op if absent.
+	// Legacy settings.local.json migration: strip every bd command variant
+	// (incl. the canonical hook-json form) from every event in the legacy
+	// file, unconditionally — the local file is no longer thrum-managed, so
+	// the bd-capability probe above is intentionally NOT consulted here.
+	// No-op if absent.
 	if opts.LocalSettingsPath != "" {
 		migrated, err := migrateSettingsLocal(opts.LocalSettingsPath)
 		if err != nil {

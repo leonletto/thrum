@@ -72,23 +72,81 @@ func TestReconcile_PreservesBackstopEnvelopes(t *testing.T) {
 	dir := t.TempDir()
 	agentID := "carol"
 
-	env := Envelope{MsgID: "backstop-20260516T1534", From: "thrum-backstop", ReceivedAt: time.Now()}
-	if err := WriteSpool(dir, agentID, env); err != nil {
+	// A RECENT backstop envelope (within retention) must survive — and the
+	// janitor must NOT consult readState for it (the thrum-7b84.3 E3 invariant:
+	// readState reports StateMissing for backstop ids and would reap it). Stamp
+	// = now, so it is the live reminder.
+	stamp := time.Now().UTC().Format(backstopTimeLayout)
+	msgID := "backstop-" + stamp
+	if err := WriteSpool(dir, agentID, Envelope{MsgID: msgID, From: "thrum-backstop", ReceivedAt: time.Now()}); err != nil {
 		t.Fatalf("seed backstop envelope: %v", err)
 	}
 
-	// Reader would report StateMissing for a backstop msg_id since
-	// there's no underlying row in `messages`. If the janitor consults
-	// readState for this entry, the test fails — the skip must happen
-	// before readState is called.
-	fake := &fakeReadState{
-		missing: map[string]bool{"backstop-20260516T1534": true},
-	}
+	// If the janitor consults readState for this entry, the test fails — the
+	// skip must happen before readState is called.
+	fake := &fakeReadState{missing: map[string]bool{msgID: true}}
 	j := NewSpoolJanitor(dir, func() []string { return []string{agentID} }, fake.State)
 	j.Reconcile()
 
 	spoolDir := filepath.Join(dir, "spool", agentID)
-	if _, err := os.Stat(filepath.Join(spoolDir, "backstop-20260516T1534.json")); err != nil {
-		t.Fatalf("backstop envelope must survive reconcile: %v", err)
+	if _, err := os.Stat(filepath.Join(spoolDir, msgID+".json")); err != nil {
+		t.Fatalf("recent backstop envelope must survive reconcile: %v", err)
+	}
+}
+
+// TestReconcile_PrunesStaleBackstopEnvelopes is the thrum-ist8 fix: backstop
+// envelopes older than the retention window are pruned (they accumulated
+// unbounded — the dispatcher writes a fresh one each tick and the old
+// unconditional skip never reaped superseded ones), while the recent/live
+// reminder is kept.
+func TestReconcile_PrunesStaleBackstopEnvelopes(t *testing.T) {
+	dir := t.TempDir()
+	agentID := "dave"
+	now := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+
+	stale := "backstop-" + now.Add(-90*time.Minute).Format(backstopTimeLayout) // > 1h old
+	recent := "backstop-" + now.Add(-5*time.Minute).Format(backstopTimeLayout) // within 1h
+	for _, id := range []string{stale, recent} {
+		if err := WriteSpool(dir, agentID, Envelope{MsgID: id, From: "thrum-backstop", ReceivedAt: now}); err != nil {
+			t.Fatalf("seed %s: %v", id, err)
+		}
+	}
+
+	j := NewSpoolJanitor(dir, func() []string { return []string{agentID} }, (&fakeReadState{}).State)
+	j.SetNow(func() time.Time { return now })
+	j.Reconcile()
+
+	spoolDir := filepath.Join(dir, "spool", agentID)
+	if _, err := os.Stat(filepath.Join(spoolDir, stale+".json")); !os.IsNotExist(err) {
+		t.Errorf("stale backstop envelope should be pruned, stat err: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(spoolDir, recent+".json")); err != nil {
+		t.Errorf("recent backstop envelope must survive: %v", err)
+	}
+}
+
+// TestReconcile_PrunesMalformedStaleBackstop_ViaModTime pins the leak-proof
+// fallback: a backstop envelope whose embedded stamp can't be parsed (legacy/
+// malformed name) is aged by ModTime instead, so it can't leak forever.
+func TestReconcile_PrunesMalformedStaleBackstop_ViaModTime(t *testing.T) {
+	dir := t.TempDir()
+	agentID := "erin"
+	now := time.Now()
+
+	bad := "backstop-not-a-timestamp"
+	if err := WriteSpool(dir, agentID, Envelope{MsgID: bad, From: "thrum-backstop", ReceivedAt: now}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	spoolDir := filepath.Join(dir, "spool", agentID)
+	old := now.Add(-2 * time.Hour)
+	if err := os.Chtimes(filepath.Join(spoolDir, bad+".json"), old, old); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+
+	j := NewSpoolJanitor(dir, func() []string { return []string{agentID} }, (&fakeReadState{}).State)
+	j.Reconcile()
+
+	if _, err := os.Stat(filepath.Join(spoolDir, bad+".json")); !os.IsNotExist(err) {
+		t.Errorf("malformed stale backstop (old ModTime) should be pruned, stat err: %v", err)
 	}
 }

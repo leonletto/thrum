@@ -8,13 +8,15 @@ import (
 
 // HealthResponse represents the response from the health check RPC.
 type HealthResponse struct {
-	Status    string             `json:"status"`              // "ok" or "degraded"
-	Uptime    int64              `json:"uptime_ms"`           // Uptime in milliseconds
-	Version   string             `json:"version"`             // Daemon version
-	RepoID    string             `json:"repo_id"`             // Repository ID
-	SyncState string             `json:"sync_state"`          // "synced", "pending", "error"
-	Tailscale *TailscaleSyncInfo `json:"tailscale,omitempty"` // Tailscale sync info (nil if disabled)
-	Identity  *IdentityInfo      `json:"identity,omitempty"`  // Daemon identity fields
+	Status          string             `json:"status"`     // "ok" or "degraded"
+	Uptime          int64              `json:"uptime_ms"`  // Uptime in milliseconds
+	Version         string             `json:"version"`    // Daemon version
+	RepoID          string             `json:"repo_id"`    // Repository ID
+	SyncState       string             `json:"sync_state"` // "synced", "pending", "error", "local-only"
+	LocalOnly       bool               `json:"local_only"` // a-sync push/fetch held off this session
+	LocalOnlyReason string             `json:"local_only_reason,omitempty"`
+	Tailscale       *TailscaleSyncInfo `json:"tailscale,omitempty"` // Tailscale sync info (nil if disabled)
+	Identity        *IdentityInfo      `json:"identity,omitempty"`  // Daemon identity fields
 }
 
 // IdentityInfo carries the daemon's persistent identity metadata.
@@ -50,13 +52,20 @@ type TailscalePeer struct {
 // TailscaleSyncInfoProvider is called to get current Tailscale sync info.
 type TailscaleSyncInfoProvider func() *TailscaleSyncInfo
 
+// SyncStatusProvider returns the daemon's current sync state for the health
+// response: the derived state string, whether remote sync is held off, and the
+// reason (e.g. the a-sync exposure gate). Mirrors the TailscaleSyncInfoProvider
+// injection pattern so the rpc package never imports the sync loop directly.
+type SyncStatusProvider func() (state string, localOnly bool, localOnlyReason string)
+
 // HealthHandler creates a health check handler.
 type HealthHandler struct {
-	startTime        time.Time
-	version          string
-	repoID           string
-	tsInfoProvider   TailscaleSyncInfoProvider
-	identityProvider IdentityInfoProvider
+	startTime          time.Time
+	version            string
+	repoID             string
+	tsInfoProvider     TailscaleSyncInfoProvider
+	identityProvider   IdentityInfoProvider
+	syncStatusProvider SyncStatusProvider
 }
 
 // NewHealthHandler creates a new health check handler.
@@ -78,6 +87,12 @@ func (h *HealthHandler) SetIdentityProvider(provider IdentityInfoProvider) {
 	h.identityProvider = provider
 }
 
+// SetSyncStatusProvider sets a callback to provide the daemon's sync state
+// (including the exposure-gate local-only reason) for the health response.
+func (h *HealthHandler) SetSyncStatusProvider(provider SyncStatusProvider) {
+	h.syncStatusProvider = provider
+}
+
 // Handle handles the health check request.
 func (h *HealthHandler) Handle(ctx context.Context, params json.RawMessage) (any, error) {
 	// Calculate uptime
@@ -90,6 +105,14 @@ func (h *HealthHandler) Handle(ctx context.Context, params json.RawMessage) (any
 		Version:   h.version,
 		RepoID:    h.repoID,
 		SyncState: "synced",
+	}
+
+	// Override the hardcoded "synced" with the real sync state (incl. the
+	// exposure-gate local-only reason) when a provider is wired. Falling back to
+	// "synced" preserves the prior behavior when no provider is set.
+	if h.syncStatusProvider != nil {
+		st, lo, reason := h.syncStatusProvider()
+		response.SyncState, response.LocalOnly, response.LocalOnlyReason = st, lo, reason
 	}
 
 	// Add Tailscale sync info if available

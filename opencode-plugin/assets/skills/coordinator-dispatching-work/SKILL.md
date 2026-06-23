@@ -23,6 +23,16 @@ command yourself. If you've already started one wrong, kill the pane and
 re-launch via the daemon. If the pane doesn't exist yet, use
 `thrum tmux start <name>` (creates, launches, primes, attaches in one command).
 
+## Recycling an agent: destroy then teardown
+
+**Why:** The inverse of dispatch is removal, and it has the same "two-step
+ritual or things break silently" property as dispatch via tmux launch + thrum
+send. See `coordinator-managing-state-and-lifecycle` § "Destroy an agent before
+tearing down its worktree" for the canonical sequence (`thrum tmux kill` BEFORE
+`thrum worktree teardown`). The dispatching skill mentions it here so you find
+the cross-reference when planning a wave recycle, not just when reading the
+lifecycle skill end-to-end.
+
 ## Never spawn sub-agents into worktrees where Thrum agents are running
 
 **Why:** Sub-agents (Agent tool) and Thrum agents (`thrum send`) are different
@@ -95,6 +105,33 @@ explicitly: "When you spawn your own sub-agents, pass explicit `model:` —
 `haiku` for mechanical work (lint, tests, find/replace), `sonnet` for judgment
 work (review, complex implementation), `opus` only when justified. Default to
 sonnet over opus." Audit the dispatch prompt before sending.
+
+## The impl-prompt review stamp satisfies pre-dispatch review
+
+**Why:** When the planning-skill review loop runs, its final gate reviews the
+implementation prompt against the plan — which IS the pre-dispatch review.
+Re-running a pre-dispatch prose review on a prompt that already passed the loop
+double-reviews the same artifact and wastes a cycle.
+
+**How to apply:** At dispatch, grep the impl-prompt for the loop's verdict stamp
+(case-sensitive, literal):
+
+```bash
+grep -F 'THRUM-REVIEW: stage=prompt verdict=Ready:Yes' "$PROMPT_FILE" \
+  || grep -F 'THRUM-REVIEW: stage=prompt verdict=OVERRIDE' "$PROMPT_FILE"
+```
+
+- **Stamp present** → the pre-dispatch review is already satisfied; SKIP
+  re-running it and dispatch.
+- **Stamp absent** → fall through to the normal pre-dispatch dual review. Do NOT
+  block dispatch on the stamp — it is a shortcut that lets you skip a redundant
+  review, not a new hard requirement (pre-feature prompts and prompts from other
+  flows won't carry it).
+
+This is the prose side of the boundary; the post-DONE dual-review (which reviews
+the implementer's CODE, a different artifact) always runs separately. The prompt
+is never reviewed twice. (See `coordinator-running-review-cycles` for the
+post-DONE side.)
 
 ## Project-specific rules (already loaded)
 

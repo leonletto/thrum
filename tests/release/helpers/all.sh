@@ -11,8 +11,16 @@ source "$HELPERS_DIR/output.sh"
 # shellcheck disable=SC1091
 source "$HELPERS_DIR/drive.sh"
 # shellcheck disable=SC1091
+source "$HELPERS_DIR/fixture-perms.sh"
+# shellcheck disable=SC1091
 source "$HELPERS_DIR/assert.sh"
 # shellcheck disable=SC1091
 source "$HELPERS_DIR/setup-repo.sh"
 # shellcheck disable=SC1091
 source "$HELPERS_DIR/teardown.sh"
+# ephemeral_daemon_start/stop — self-contained sub-daemon for scenarios that
+# need an isolated daemon (e.g. 111 forged-caller). Behavioral cards source it
+# directly; run.sh/run-subset scenarios get it here. Self-contained (no other
+# helper deps), so order-insensitive.
+# shellcheck disable=SC1091
+source "$HELPERS_DIR/ephemeral-daemon.sh"

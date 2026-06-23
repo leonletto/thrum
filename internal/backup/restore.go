@@ -38,7 +38,15 @@ type RestoreResult struct {
 //  3. Copies JSONL files to sync worktree
 //  4. Imports local tables into SQLite
 //  5. Restores config files to .thrum/
-//  6. Removes messages.db so projector rebuilds on next daemon start
+//  6. Removes messages.db. NOTE (thrum-1gar): the "projector rebuilds on
+//     next daemon start" claim that previously lived here is FALSE — the
+//     daemon's NewState (internal/daemon/state/state.go) does NOT call
+//     Projector.Rebuild() on startup. The next daemon start comes up with
+//     a BLANK messages.db that only fills as NEW events arrive; historical
+//     message/agent/group state is not recovered by this restore path
+//     today. Use this flow only when blank messages.db at boot is
+//     acceptable. The event-sourcing rework that would close this gap is
+//     tracked in thrum-rtlt (v0.10.6-rc.2+ scope).
 func RunRestore(opts RestoreOptions) (*RestoreResult, error) {
 	if opts.BackupDir == "" {
 		return nil, fmt.Errorf("backup directory is required")
@@ -125,7 +133,10 @@ func RunRestore(opts RestoreOptions) (*RestoreResult, error) {
 		}
 	}
 
-	// 7. Remove messages.db so projector rebuilds on daemon start
+	// 7. Remove messages.db. NOTE (thrum-1gar): daemon NewState does NOT
+	// call Projector.Rebuild() on startup, so the next daemon start comes
+	// up with a BLANK messages.db. See RunRestore docstring above + thrum-rtlt
+	// for the event-sourcing rework.
 	if opts.DBPath != "" {
 		_ = os.Remove(opts.DBPath)
 		// Also remove WAL/SHM files

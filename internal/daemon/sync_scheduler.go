@@ -20,7 +20,18 @@ const TailscaleSyncInterval = 15 * time.Second
 const DefaultRecentSyncThreshold = 2 * time.Minute
 
 // TailscaleRecentSyncThreshold is the recent-sync threshold for Tailscale peers.
-const TailscaleRecentSyncThreshold = 10 * time.Second
+//
+// INVARIANT (thrum-823x): this MUST be >= TailscaleSyncInterval. The periodic
+// scheduler is a safety net for missed push notifications; the notify path does
+// the real-time syncing. If the threshold is shorter than the tick interval, a
+// peer freshly synced by a notify (or the previous tick) fails the
+// wasRecentlySynced check on the very next tick and gets redundantly re-pulled
+// EVERY interval (empty deltas, but pointless work amplified per-peer). Keeping
+// threshold >= interval means a peer synced within the last tick is skipped on
+// the next one. 20s (vs the 15s interval) gives boundary margin so a tick
+// landing slightly late still skips a just-synced peer. Pinned by
+// TestTailscaleSyncIntervals.
+const TailscaleRecentSyncThreshold = 20 * time.Second
 
 // PeriodicSyncScheduler runs background sync from all known peers as a safety net
 // for missed push notifications.

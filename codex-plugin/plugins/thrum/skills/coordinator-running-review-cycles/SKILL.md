@@ -108,6 +108,27 @@ those modes occurred (wire-level status codes, specific log assertions, expected
 state present); (3) documenting the upstream blocker in a tracking issue so the
 green-test check can be re-run when it clears.
 
+### Prose-pre vs code-post: what this review cycle covers
+
+**Why:** Once the planning-skill review loop ships, there are two distinct
+review surfaces and conflating them double-reviews one artifact. The planning
+loop reviews PROSE artifacts (brainstorm, plan, impl-prompt) BEFORE
+implementation; the review cycle in THIS skill reviews the implementer's CODE
+AFTER they report DONE. They target different artifacts and both are needed.
+
+**How to apply:**
+
+- The planning loop's prompt gate already reviewed the impl-prompt; its
+  `THRUM-REVIEW: stage=prompt verdict=Ready:Yes` stamp satisfies the
+  pre-dispatch review (see `coordinator-dispatching-work`). Do not re-review the
+  prompt here.
+- This skill's dual review (code-quality + spec-compliance, in parallel) runs on
+  the CODE the implementer produced — the diff on their branch. That always runs
+  at DONE regardless of any planning-loop stamps, because the code is a new
+  artifact the planning loop never saw.
+- Net: the prompt is reviewed once (in the planning loop, pre-dispatch); the
+  code is reviewed once (here, post-DONE). No artifact is reviewed twice.
+
 ### Project-specific rules (already loaded)
 
 Project-local rules under `bd memories coordinator-rule-` were loaded at session

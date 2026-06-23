@@ -188,6 +188,17 @@ func Rule(cc *CheckContext) error {
 			detected = name
 		}
 	}
+	// Remediation: pid_mismatch can fire for either a stale-but-on-disk
+	// identity PID (transient subprocess captured at registration time,
+	// see thrum-xir.40) OR a legitimate cross-worktree mistake. The
+	// quickstart hint covers the stale-PID recovery path that 'thrum
+	// prime' alone cannot when the identity file's PID is recorded but
+	// the binding is unreachable from the current caller's ancestor
+	// chain.
+	remediation := "cd to the correct worktree, OR run 'thrum prime' to re-claim, OR run 'thrum quickstart --name " + cc.ExpectedAgent + "' to re-bind if the identity PID is stale"
+	if cc.ExpectedAgent == "" {
+		remediation = "cd to the correct worktree, OR run 'thrum prime' to re-claim, OR run 'thrum quickstart --name <agent-name>' to re-bind if the identity PID is stale"
+	}
 	e := &Error{
 		Guard:         "cross_worktree",
 		Reason:        "pid_mismatch",
@@ -195,7 +206,7 @@ func Rule(cc *CheckContext) error {
 		ExpectedAgent: cc.ExpectedAgent,
 		DetectedAgent: detected,
 		ExpectedPID:   cc.IdentityAgentPID,
-		Remediation:   "cd to the correct worktree or run 'thrum prime' to re-claim",
+		Remediation:   remediation,
 	}
 	if cc.Mode == ModeWarn {
 		emitGuardFire(cc.warnLogger, cc.Mode, "allowed", e)

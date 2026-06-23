@@ -10,9 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
-	"github.com/leonletto/thrum/internal/schema"
 	"github.com/leonletto/thrum/internal/types"
 	"github.com/oklog/ulid/v2"
 )
@@ -70,22 +71,20 @@ func TestWriteEvent_GeneratesEventID(t *testing.T) {
 	}
 
 	// Write event
-	if err := state.WriteEvent(context.Background(), event); err != nil {
+	if _, err := state.WriteEvent(context.Background(), event); err != nil {
 		t.Fatalf("write event: %v", err)
 	}
 
-	// Read back from JSONL (message events go to per-agent files now)
-	jsonlPath := filepath.Join(thrumDir, "messages", "test_ABC123.jsonl")
-	data, err := os.ReadFile(jsonlPath) //nolint:gosec // G304 - test fixture path
+	// Read back from JSONL (all events go to the local journal as of v0.10.6)
+	jsonlPath := filepath.Join(thrumDir, "events.jsonl")
+	events, err := readJSONL(jsonlPath)
 	if err != nil {
 		t.Fatalf("read jsonl: %v", err)
 	}
-
-	// Parse the written event
-	var written map[string]any
-	if err := json.Unmarshal(data, &written); err != nil {
-		t.Fatalf("unmarshal event: %v", err)
+	if len(events) == 0 {
+		t.Fatal("expected at least 1 event in events.jsonl")
 	}
+	written := events[len(events)-1]
 
 	// Check event_id exists
 	eventID, ok := written["event_id"].(string)
@@ -151,35 +150,28 @@ func TestWriteEvent_UniqueEventIDs(t *testing.T) {
 			},
 		}
 
-		if err := state.WriteEvent(context.Background(), event); err != nil {
+		if _, err := state.WriteEvent(context.Background(), event); err != nil {
 			t.Fatalf("write event %d: %v", i, err)
 		}
 	}
 
 	// Read all lines after all writes complete to avoid race on "last line"
-	jsonlPath := filepath.Join(thrumDir, "messages", "test_ABC123.jsonl")
-	data, err := os.ReadFile(jsonlPath) //nolint:gosec // G304 - test fixture path
+	jsonlPath := filepath.Join(thrumDir, "events.jsonl")
+	lines, err := readJSONL(jsonlPath)
 	if err != nil {
 		t.Fatalf("read jsonl: %v", err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
 	if len(lines) != numEvents {
 		t.Fatalf("expected %d lines, got %d", numEvents, len(lines))
 	}
 
 	// Check all event IDs are unique
 	seen := make(map[string]bool)
-	for _, line := range lines {
-		var written map[string]any
-		if err := json.Unmarshal([]byte(line), &written); err != nil {
-			t.Errorf("unmarshal event: %v", err)
-			continue
-		}
-
+	for _, written := range lines {
 		eventID, ok := written["event_id"].(string)
 		if !ok || eventID == "" {
-			t.Errorf("missing event_id in line: %s", line)
+			t.Errorf("missing event_id in event: %v", written)
 			continue
 		}
 
@@ -222,22 +214,20 @@ func TestWriteEvent_PreservesExistingEventID(t *testing.T) {
 	}
 
 	// Write event
-	if err := state.WriteEvent(context.Background(), event); err != nil {
+	if _, err := state.WriteEvent(context.Background(), event); err != nil {
 		t.Fatalf("write event: %v", err)
 	}
 
-	// Read back from JSONL (message events go to per-agent files now)
-	jsonlPath := filepath.Join(thrumDir, "messages", "test_ABC123.jsonl")
-	data, err := os.ReadFile(jsonlPath) //nolint:gosec // G304 - test fixture path
+	// Read back from JSONL (all events go to the local journal as of v0.10.6)
+	jsonlPath := filepath.Join(thrumDir, "events.jsonl")
+	events, err := readJSONL(jsonlPath)
 	if err != nil {
 		t.Fatalf("read jsonl: %v", err)
 	}
-
-	// Parse the written event
-	var written map[string]any
-	if err := json.Unmarshal(data, &written); err != nil {
-		t.Fatalf("unmarshal event: %v", err)
+	if len(events) == 0 {
+		t.Fatal("expected at least 1 event in events.jsonl")
 	}
+	written := events[len(events)-1]
 
 	// Check event_id was preserved
 	eventID, ok := written["event_id"].(string)
@@ -247,193 +237,6 @@ func TestWriteEvent_PreservesExistingEventID(t *testing.T) {
 
 	if eventID != existingID {
 		t.Errorf("event_id should be preserved: expected %s, got %s", existingID, eventID)
-	}
-}
-
-func TestWriteEvent_Routing(t *testing.T) {
-	// Create temp directory for test
-	tmpDir := t.TempDir()
-	thrumDir := filepath.Join(tmpDir, ".thrum")
-	if err := os.MkdirAll(thrumDir, 0750); err != nil {
-		t.Fatalf("create thrum dir: %v", err)
-	}
-
-	// Create state
-	state, err := NewState(thrumDir, thrumDir, "r_TEST123456", "")
-	if err != nil {
-		t.Fatalf("create state: %v", err)
-	}
-	defer func() { _ = state.Close() }()
-
-	// Test 1: Non-message events go to events.jsonl
-	agentEvent := types.AgentRegisterEvent{
-		Type:      "agent.register",
-		Timestamp: "2024-01-01T12:00:00Z",
-		AgentID:   "agent:test:ABC123",
-		Kind:      "agent",
-		Role:      "tester",
-		Module:    "test",
-	}
-
-	if err := state.WriteEvent(context.Background(), agentEvent); err != nil {
-		t.Fatalf("write agent event: %v", err)
-	}
-
-	// Check events.jsonl was created and contains the event
-	eventsPath := filepath.Join(thrumDir, "events.jsonl")
-	eventsData, err := os.ReadFile(eventsPath) //nolint:gosec // G304 - test fixture path
-	if err != nil {
-		t.Fatalf("read events.jsonl: %v", err)
-	}
-
-	var writtenAgent map[string]any
-	if err := json.Unmarshal(eventsData, &writtenAgent); err != nil {
-		t.Fatalf("unmarshal agent event: %v", err)
-	}
-
-	if writtenAgent["type"] != "agent.register" {
-		t.Errorf("expected agent.register in events.jsonl, got %s", writtenAgent["type"])
-	}
-
-	// Test 2: Message events go to per-agent message files
-	messageEvent := types.MessageCreateEvent{
-		Type:      "message.create",
-		Timestamp: "2024-01-01T12:00:00Z",
-		MessageID: "msg_test123",
-		AgentID:   "agent:test:ABC123",
-		SessionID: "ses_test456",
-		Body: types.MessageBody{
-			Format:  "markdown",
-			Content: "Test message",
-		},
-	}
-
-	if err := state.WriteEvent(context.Background(), messageEvent); err != nil {
-		t.Fatalf("write message event: %v", err)
-	}
-
-	// Check messages/test_ABC123.jsonl was created
-	messagePath := filepath.Join(thrumDir, "messages", "test_ABC123.jsonl")
-	messageData, err := os.ReadFile(messagePath) //nolint:gosec // G304 - test fixture path
-	if err != nil {
-		t.Fatalf("read message file: %v", err)
-	}
-
-	var writtenMessage map[string]any
-	if err := json.Unmarshal(messageData, &writtenMessage); err != nil {
-		t.Fatalf("unmarshal message event: %v", err)
-	}
-
-	if writtenMessage["type"] != "message.create" {
-		t.Errorf("expected message.create in per-agent file, got %s", writtenMessage["type"])
-	}
-	if writtenMessage["message_id"] != "msg_test123" {
-		t.Errorf("expected msg_test123, got %s", writtenMessage["message_id"])
-	}
-
-	// Test 3: Message edit routes to original author's file
-	editEvent := types.MessageEditEvent{
-		Type:      "message.edit",
-		Timestamp: "2024-01-01T13:00:00Z",
-		MessageID: "msg_test123",
-		Body: types.MessageBody{
-			Format:  "markdown",
-			Content: "Updated message",
-		},
-	}
-
-	if err := state.WriteEvent(context.Background(), editEvent); err != nil {
-		t.Fatalf("write edit event: %v", err)
-	}
-
-	// Check the edit went to the same file as the original message
-	events, err := readJSONL(messagePath)
-	if err != nil {
-		t.Fatalf("read message file after edit: %v", err)
-	}
-
-	if len(events) != 2 {
-		t.Fatalf("expected 2 events in message file, got %d", len(events))
-	}
-
-	if events[0]["type"] != "message.create" {
-		t.Errorf("first event should be message.create, got %s", events[0]["type"])
-	}
-	if events[1]["type"] != "message.edit" {
-		t.Errorf("second event should be message.edit, got %s", events[1]["type"])
-	}
-
-	// Test 4: Message delete routes to original author's file
-	deleteEvent := types.MessageDeleteEvent{
-		Type:      "message.delete",
-		Timestamp: "2024-01-01T14:00:00Z",
-		MessageID: "msg_test123",
-		Reason:    "test delete",
-	}
-
-	if err := state.WriteEvent(context.Background(), deleteEvent); err != nil {
-		t.Fatalf("write delete event: %v", err)
-	}
-
-	// Check the delete went to the same file as the original message
-	events, err = readJSONL(messagePath)
-	if err != nil {
-		t.Fatalf("read message file after delete: %v", err)
-	}
-
-	if len(events) != 3 {
-		t.Fatalf("expected 3 events in message file, got %d", len(events))
-	}
-
-	if events[2]["type"] != "message.delete" {
-		t.Errorf("third event should be message.delete, got %s", events[2]["type"])
-	}
-	if events[2]["message_id"] != "msg_test123" {
-		t.Errorf("delete should reference msg_test123, got %s", events[2]["message_id"])
-	}
-}
-
-func TestAgentIDToName(t *testing.T) {
-	tests := []struct {
-		agentID string
-		want    string
-	}{
-		{"agent:coordinator:1B9K33T6RK", "coordinator_1B9K33T6RK"},
-		{"furiosa", "furiosa"},
-		{"implementer_35HV62T9B9", "implementer_35HV62T9B9"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.agentID, func(t *testing.T) {
-			got := agentIDToName(tt.agentID)
-			if got != tt.want {
-				t.Errorf("agentIDToName(%q) = %q, want %q", tt.agentID, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestAgentIDToName_ConsistentWithSchema(t *testing.T) {
-	// Verify agentIDToName produces identical results to schema.ExtractAgentName
-	// to prevent future drift between runtime routing and migration logic.
-	inputs := []string{
-		"agent:coordinator:1B9K33T6RK",
-		"agent:implementer:35HV62T9B9",
-		"agent:reviewer:XYZABC",
-		"furiosa",
-		"implementer_35HV62T9B9",
-		"agent:test:ABC123",
-	}
-
-	for _, agentID := range inputs {
-		t.Run(agentID, func(t *testing.T) {
-			stateResult := agentIDToName(agentID)
-			schemaResult := schema.ExtractAgentName(agentID)
-			if stateResult != schemaResult {
-				t.Errorf("agentIDToName(%q) = %q, but schema.ExtractAgentName(%q) = %q — these must match",
-					agentID, stateResult, agentID, schemaResult)
-			}
-		})
 	}
 }
 
@@ -556,7 +359,7 @@ func TestNewState_SeparateSyncDir(t *testing.T) {
 		t.Errorf("RepoPath() = %s, want %s", s.RepoPath(), tmpDir)
 	}
 
-	// Write an event — should go to syncDir/events.jsonl, not thrumDir
+	// Write an event — should go to thrumDir/events.jsonl (local journal) NOT syncDir
 	event := types.AgentRegisterEvent{
 		Type:      "agent.register",
 		Timestamp: "2024-01-01T12:00:00Z",
@@ -565,17 +368,22 @@ func TestNewState_SeparateSyncDir(t *testing.T) {
 		Role:      "tester",
 		Module:    "test",
 	}
-	if err := s.WriteEvent(context.Background(), event); err != nil {
+	if _, err := s.WriteEvent(context.Background(), event); err != nil {
 		t.Fatalf("write event: %v", err)
 	}
 
-	// Verify events.jsonl is in syncDir
-	eventsPath := filepath.Join(syncDir, "events.jsonl")
+	// Verify events.jsonl is in thrumDir (local journal, as of v0.10.6)
+	eventsPath := filepath.Join(thrumDir, "events.jsonl")
 	if _, err := os.Stat(eventsPath); os.IsNotExist(err) {
-		t.Error("events.jsonl should be in syncDir, not thrumDir")
+		t.Error("events.jsonl should be in thrumDir (local journal), not syncDir")
+	}
+	// Confirm events.jsonl is NOT in syncDir
+	syncEventsPath := filepath.Join(syncDir, "events.jsonl")
+	if _, err := os.Stat(syncEventsPath); err == nil {
+		t.Error("events.jsonl must NOT be written to syncDir; it is a local-only journal")
 	}
 
-	// Write a message event — should create per-agent file in syncDir/messages/
+	// Write a message event — should also go to thrumDir/events.jsonl (all events local)
 	msgEvent := types.MessageCreateEvent{
 		Type:      "message.create",
 		Timestamp: "2024-01-01T12:00:00Z",
@@ -584,38 +392,17 @@ func TestNewState_SeparateSyncDir(t *testing.T) {
 		SessionID: "ses_sep001",
 		Body:      types.MessageBody{Format: "markdown", Content: "separate sync dir"},
 	}
-	if err := s.WriteEvent(context.Background(), msgEvent); err != nil {
+	if _, err := s.WriteEvent(context.Background(), msgEvent); err != nil {
 		t.Fatalf("write message event: %v", err)
 	}
 
-	msgPath := filepath.Join(syncDir, "messages", "test_SEP123.jsonl")
-	if _, err := os.Stat(msgPath); os.IsNotExist(err) {
-		t.Error("message file should be in syncDir/messages/")
+	// Verify message event also lands in thrumDir/events.jsonl
+	events, err := readJSONL(eventsPath)
+	if err != nil {
+		t.Fatalf("read events.jsonl: %v", err)
 	}
-}
-
-func TestNewState_InvalidSyncDir(t *testing.T) {
-	tmpDir := t.TempDir()
-	thrumDir := filepath.Join(tmpDir, ".thrum")
-	if err := os.MkdirAll(thrumDir, 0750); err != nil {
-		t.Fatalf("create thrum dir: %v", err)
-	}
-
-	// Create a file where events.jsonl directory should be, to force writer creation failure
-	badSyncDir := filepath.Join(tmpDir, "bad-sync")
-	// Create the directory but put a file where "messages" dir would go
-	if err := os.MkdirAll(badSyncDir, 0750); err != nil {
-		t.Fatalf("create bad sync dir: %v", err)
-	}
-	// Create events.jsonl as a directory to cause issues
-	eventsDir := filepath.Join(badSyncDir, "events.jsonl")
-	if err := os.MkdirAll(eventsDir, 0750); err != nil {
-		t.Fatalf("create events dir: %v", err)
-	}
-
-	_, err := NewState(thrumDir, badSyncDir, "r_BADSYNC01", "")
-	if err == nil {
-		t.Error("Expected error when events.jsonl is a directory")
+	if len(events) < 2 {
+		t.Fatalf("expected at least 2 events in thrumDir/events.jsonl, got %d", len(events))
 	}
 }
 
@@ -636,102 +423,10 @@ func TestWriteEvent_MarshalError(t *testing.T) {
 	type BadEvent struct {
 		Ch chan int
 	}
-	err = s.WriteEvent(context.Background(), BadEvent{Ch: make(chan int)})
+	_, err = s.WriteEvent(context.Background(), BadEvent{Ch: make(chan int)})
 	if err == nil {
 		t.Error("Expected marshal error for channel type")
 	}
-}
-
-func TestResolveAgentForMessage_EdgeCases(t *testing.T) {
-	tmpDir := t.TempDir()
-	thrumDir := filepath.Join(tmpDir, ".thrum")
-	if err := os.MkdirAll(thrumDir, 0750); err != nil {
-		t.Fatalf("create thrum dir: %v", err)
-	}
-
-	s, err := NewState(thrumDir, thrumDir, "r_TEST123456", "")
-	if err != nil {
-		t.Fatalf("create state: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	t.Run("message_create_missing_agent_id", func(t *testing.T) {
-		event := map[string]any{
-			"type": "message.create",
-		}
-		_, err := s.resolveAgentForMessage(context.Background(), event)
-		if err == nil {
-			t.Error("Expected error for missing agent_id")
-		}
-	})
-
-	t.Run("message_edit_missing_message_id", func(t *testing.T) {
-		event := map[string]any{
-			"type": "message.edit",
-		}
-		_, err := s.resolveAgentForMessage(context.Background(), event)
-		if err == nil {
-			t.Error("Expected error for missing message_id")
-		}
-	})
-
-	t.Run("message_delete_nonexistent_message_falls_back", func(t *testing.T) {
-		// When the original message isn't in the local DB, resolveAgentForMessage
-		// should gracefully fall back to "_unresolved" instead of returning an error.
-		// This prevents a missing message from poisoning the sync apply loop.
-		event := map[string]any{
-			"type":       "message.delete",
-			"message_id": "msg_nonexistent",
-		}
-		name, err := s.resolveAgentForMessage(context.Background(), event)
-		if err != nil {
-			t.Fatalf("should not error for nonexistent message, got: %v", err)
-		}
-		if name != "_unresolved" {
-			t.Errorf("expected '_unresolved' fallback, got %q", name)
-		}
-	})
-
-	t.Run("message_receipt_nonexistent_uses_event_agent_id", func(t *testing.T) {
-		// Receipt events carry their own agent_id — use it as fallback when
-		// the referenced message doesn't exist locally.
-		event := map[string]any{
-			"type":       "message.receipt",
-			"message_id": "msg_nonexistent",
-			"agent_id":   "agent:reader:FALLBACK1",
-		}
-		name, err := s.resolveAgentForMessage(context.Background(), event)
-		if err != nil {
-			t.Fatalf("should not error for nonexistent message with agent_id fallback, got: %v", err)
-		}
-		if name != "reader_FALLBACK1" {
-			t.Errorf("expected 'reader_FALLBACK1' from fallback agent_id, got %q", name)
-		}
-	})
-
-	t.Run("unexpected_event_type", func(t *testing.T) {
-		event := map[string]any{
-			"type": "message.unknown",
-		}
-		_, err := s.resolveAgentForMessage(context.Background(), event)
-		if err == nil {
-			t.Error("Expected error for unexpected event type")
-		}
-	})
-
-	t.Run("message_create_valid", func(t *testing.T) {
-		event := map[string]any{
-			"type":     "message.create",
-			"agent_id": "agent:coordinator:XYZ789",
-		}
-		name, err := s.resolveAgentForMessage(context.Background(), event)
-		if err != nil {
-			t.Fatalf("Unexpected error: %v", err)
-		}
-		if name != "coordinator_XYZ789" {
-			t.Errorf("Expected 'coordinator_XYZ789', got '%s'", name)
-		}
-	})
 }
 
 func TestWriteEvent_NonMessageEvent(t *testing.T) {
@@ -755,7 +450,7 @@ func TestWriteEvent_NonMessageEvent(t *testing.T) {
 		AgentID:   "agent:test:ABC123",
 	}
 
-	if err := s.WriteEvent(context.Background(), event); err != nil {
+	if _, err := s.WriteEvent(context.Background(), event); err != nil {
 		t.Fatalf("write event: %v", err)
 	}
 
@@ -770,148 +465,6 @@ func TestWriteEvent_NonMessageEvent(t *testing.T) {
 	}
 	if events[0]["type"] != "session.start" {
 		t.Errorf("Expected session.start, got %s", events[0]["type"])
-	}
-}
-
-// TestWriteEvent_UnknownAuthorDoesNotBlock tests that message.edit, message.delete,
-// and message.receipt events for messages that don't exist locally do not block
-// the event apply path. This is the fix for the "poison pill" sync bug where a
-// missing message row would cause the sync loop to retry forever.
-func TestWriteEvent_UnknownAuthorDoesNotBlock(t *testing.T) {
-	tmpDir := t.TempDir()
-	thrumDir := filepath.Join(tmpDir, ".thrum")
-	if err := os.MkdirAll(thrumDir, 0750); err != nil {
-		t.Fatalf("create thrum dir: %v", err)
-	}
-
-	st, err := NewState(thrumDir, thrumDir, "r_TEST123456", "")
-	if err != nil {
-		t.Fatalf("create state: %v", err)
-	}
-	defer func() { _ = st.Close() }()
-
-	ctx := context.Background()
-
-	// (a) message.edit for a non-existent message should succeed
-	editEvent := types.MessageEditEvent{
-		Type:      "message.edit",
-		Timestamp: "2024-01-01T13:00:00Z",
-		MessageID: "msg_UNKNOWN_001",
-		Body: types.MessageBody{
-			Format:  "markdown",
-			Content: "Edited content for missing message",
-		},
-	}
-	if err := st.WriteEvent(ctx, editEvent); err != nil {
-		t.Fatalf("message.edit with unknown author should succeed, got: %v", err)
-	}
-
-	// (a) message.delete for a non-existent message should succeed
-	deleteEvent := types.MessageDeleteEvent{
-		Type:      "message.delete",
-		Timestamp: "2024-01-01T14:00:00Z",
-		MessageID: "msg_UNKNOWN_002",
-		Reason:    "cleanup",
-	}
-	if err := st.WriteEvent(ctx, deleteEvent); err != nil {
-		t.Fatalf("message.delete with unknown author should succeed, got: %v", err)
-	}
-
-	// (a) message.receipt for a non-existent message should succeed,
-	// and should use the receipt's own agent_id for JSONL routing
-	receiptEvent := types.MessageReceiptEvent{
-		Type:        "message.receipt",
-		Timestamp:   "2024-01-01T15:00:00Z",
-		MessageID:   "msg_UNKNOWN_003",
-		AgentID:     "agent:reader:XYZ789",
-		SessionID:   "ses_reader456",
-		ReceiptType: "read",
-	}
-	if err := st.WriteEvent(ctx, receiptEvent); err != nil {
-		t.Fatalf("message.receipt with unknown author should succeed, got: %v", err)
-	}
-
-	// (b) Verify sequences advanced — query events table for all 3 events
-	rows, err := st.RawDB().QueryContext(ctx, `SELECT event_id, type, sequence FROM events ORDER BY sequence`)
-	if err != nil {
-		t.Fatalf("query events: %v", err)
-	}
-	defer rows.Close()
-
-	var events []struct {
-		eventID  string
-		evtType  string
-		sequence int64
-	}
-	for rows.Next() {
-		var e struct {
-			eventID  string
-			evtType  string
-			sequence int64
-		}
-		if err := rows.Scan(&e.eventID, &e.evtType, &e.sequence); err != nil {
-			t.Fatalf("scan event: %v", err)
-		}
-		events = append(events, e)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("rows error: %v", err)
-	}
-
-	if len(events) != 3 {
-		t.Fatalf("expected 3 events in events table, got %d", len(events))
-	}
-	// Sequences should be monotonically increasing
-	for i := 1; i < len(events); i++ {
-		if events[i].sequence <= events[i-1].sequence {
-			t.Errorf("sequences not monotonically increasing: %d <= %d",
-				events[i].sequence, events[i-1].sequence)
-		}
-	}
-
-	// (c) The receipt event should have been routed to the receipt agent's JSONL file
-	// (using the fallback agent_id from the event)
-	receiptPath := filepath.Join(thrumDir, "messages", "reader_XYZ789.jsonl")
-	if _, err := os.Stat(receiptPath); err != nil {
-		t.Errorf("receipt event should be routed to agent's JSONL file, but %s not found: %v", receiptPath, err)
-	}
-
-	// The edit and delete events (no agent_id in event) should route to _unresolved.jsonl
-	unresolvedPath := filepath.Join(thrumDir, "messages", "_unresolved.jsonl")
-	if _, err := os.Stat(unresolvedPath); err != nil {
-		t.Errorf("edit/delete events with unknown author should route to _unresolved.jsonl, but not found: %v", err)
-	}
-
-	// (d) A later message.create for the same message should work fine —
-	// reconciliation just works because the message row carries the agent_id
-	createEvent := types.MessageCreateEvent{
-		Type:      "message.create",
-		Timestamp: "2024-01-01T12:00:00Z", // Earlier timestamp (out-of-order delivery)
-		MessageID: "msg_UNKNOWN_001",
-		AgentID:   "agent:writer:ABC123",
-		SessionID: "ses_writer789",
-		Body: types.MessageBody{
-			Format:  "markdown",
-			Content: "Original message arriving late",
-		},
-	}
-	if err := st.WriteEvent(ctx, createEvent); err != nil {
-		t.Fatalf("late message.create should succeed, got: %v", err)
-	}
-
-	// Verify the message is now queryable in the messages table
-	var msgContent string
-	err = st.RawDB().QueryRowContext(ctx,
-		`SELECT body_content FROM messages WHERE message_id = ?`, "msg_UNKNOWN_001",
-	).Scan(&msgContent)
-	if err != nil {
-		t.Fatalf("message should be queryable after late create: %v", err)
-	}
-	// The projector applied the edit event as a no-op (message didn't exist then),
-	// then the create inserted the original content. The content should be the
-	// original since the create is what actually inserts the row.
-	if msgContent != "Original message arriving late" {
-		t.Errorf("expected original content, got: %q", msgContent)
 	}
 }
 
@@ -988,5 +541,238 @@ func TestNewState_UsesCallerIDVerbatim(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("daemon_identity row count = %d, want 0", count)
+	}
+}
+
+// TestWriteEvent_StructuralEvent_FiresSyncTrigger pins E3.AC.2 (positive case):
+// agent.register is a structural event and must return a non-nil postCommit
+// closure that, when invoked, fires the trigger hook exactly once.
+//
+// thrum-bsn7 contract: the trigger no longer fires inline inside WriteEvent;
+// callers must invoke the returned postCommit closure after releasing any
+// external lock so walker+compactor cannot starve concurrent lock-holders.
+func TestWriteEvent_StructuralEvent_FiresSyncTrigger(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0750); err != nil {
+		t.Fatalf("create thrum dir: %v", err)
+	}
+
+	st, err := NewState(thrumDir, thrumDir, "r_TRIGGER_TEST", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	var triggerCount atomic.Int32
+	st.SetSyncTrigger(func(ctx context.Context) {
+		triggerCount.Add(1)
+	})
+
+	evt := types.AgentRegisterEvent{
+		Type:      "agent.register",
+		Timestamp: "2026-05-18T00:00:00Z",
+		AgentID:   "agent:test:TRIGGER01",
+		Kind:      "agent",
+		Role:      "tester",
+		Module:    "test",
+	}
+	postCommit, err := st.WriteEvent(context.Background(), evt)
+	if err != nil {
+		t.Fatalf("WriteEvent: %v", err)
+	}
+	// Trigger must NOT have fired inline (bsn7 contract — caller-driven).
+	if got := triggerCount.Load(); got != 0 {
+		t.Errorf("triggerCount before postCommit = %d, want 0 (bsn7 contract: trigger is deferred)", got)
+	}
+	if postCommit == nil {
+		t.Fatal("postCommit is nil for a structural event — should be a non-nil closure")
+	}
+	postCommit()
+	if got := triggerCount.Load(); got != 1 {
+		t.Errorf("triggerCount after postCommit = %d, want 1 (structural event must fire trigger exactly once)", got)
+	}
+}
+
+// TestWriteEvent_NonStructuralEvent_NoSyncTrigger pins E3.AC.2 (negative case /
+// T2 invariant): message.receipt is a non-structural event and must NOT invoke
+// the trigger hook. This is the core of the "100 receipts → 0 commits" invariant.
+func TestWriteEvent_NonStructuralEvent_NoSyncTrigger(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0750); err != nil {
+		t.Fatalf("create thrum dir: %v", err)
+	}
+
+	st, err := NewState(thrumDir, thrumDir, "r_TRIGGER_TEST", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	var triggerCount atomic.Int32
+	st.SetSyncTrigger(func(ctx context.Context) {
+		triggerCount.Add(1)
+	})
+
+	// First write a message.create so the message exists in the DB for the receipt
+	createEvt := types.MessageCreateEvent{
+		Type:      "message.create",
+		Timestamp: "2026-05-18T00:00:00Z",
+		MessageID: "msg_receipt_test",
+		AgentID:   "agent:test:SENDER",
+		SessionID: "ses_test",
+		Body:      types.MessageBody{Format: "markdown", Content: "hello"},
+	}
+	createPost, err := st.WriteEvent(context.Background(), createEvt)
+	if err != nil {
+		t.Fatalf("WriteEvent (message.create): %v", err)
+	}
+	// thrum-bsn7: message.create IS structural — invoke postCommit to
+	// stay faithful to the production call shape, then reset the counter
+	// before the negative-case message.receipt write below.
+	if createPost != nil {
+		createPost()
+	}
+	triggerCount.Store(0)
+
+	// Now write message.receipt — non-structural, must NOT fire trigger
+	receiptEvt := types.MessageReceiptEvent{
+		Type:        "message.receipt",
+		Timestamp:   "2026-05-18T00:01:00Z",
+		MessageID:   "msg_receipt_test",
+		AgentID:     "agent:test:READER",
+		SessionID:   "ses_reader",
+		ReceiptType: "read",
+	}
+	receiptPost, err := st.WriteEvent(context.Background(), receiptEvt)
+	if err != nil {
+		t.Fatalf("WriteEvent (message.receipt): %v", err)
+	}
+	// Defensive: receipt is non-structural so postCommit MUST be nil.
+	// Invoking it (or not) is a no-op semantically — the test asserts
+	// triggerCount stays zero below — but guard the invariant directly.
+	if receiptPost != nil {
+		t.Errorf("postCommit for message.receipt = non-nil, want nil (non-structural events must not return a trigger closure)")
+	}
+
+	if got := triggerCount.Load(); got != 0 {
+		t.Errorf("triggerCount = %d, want 0 (non-structural event must not fire trigger)", got)
+	}
+}
+
+// TestWriteEvent_NoTriggerSet_DoesNotPanic verifies that when SetSyncTrigger
+// was never called (the default for tests), structural events succeed without
+// panicking on the nil hook.
+func TestWriteEvent_NoTriggerSet_DoesNotPanic(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0750); err != nil {
+		t.Fatalf("create thrum dir: %v", err)
+	}
+
+	st, err := NewState(thrumDir, thrumDir, "r_TRIGGER_NIL", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	// No SetSyncTrigger call — trigger is nil. Must not panic on structural event.
+	evt := types.AgentRegisterEvent{
+		Type:      "agent.register",
+		Timestamp: "2026-05-18T00:00:00Z",
+		AgentID:   "agent:test:NILHOOK",
+		Kind:      "agent",
+		Role:      "tester",
+		Module:    "test",
+	}
+	if _, err := st.WriteEvent(context.Background(), evt); err != nil {
+		t.Fatalf("WriteEvent with nil sync trigger: %v", err)
+	}
+}
+
+// TestGoPostCommit_NilIsNoOp verifies the nil-fn fast path so callers
+// can pass WriteEvent's return value directly. thrum-1nkt.5.
+func TestGoPostCommit_NilIsNoOp(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	st, err := NewState(thrumDir, thrumDir, "r_GOPC_NIL", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	// Must not panic and must not increment the WaitGroup.
+	st.GoPostCommit(nil)
+	if !st.WaitPostCommit(50 * time.Millisecond) {
+		t.Error("WaitPostCommit timed out after GoPostCommit(nil); the no-op fast path must not register on the WaitGroup")
+	}
+}
+
+// TestGoPostCommit_DrainsOnWait verifies that WaitPostCommit blocks
+// until in-flight GoPostCommit goroutines complete. thrum-1nkt.5.
+func TestGoPostCommit_DrainsOnWait(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	st, err := NewState(thrumDir, thrumDir, "r_GOPC_DRAIN", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	const callers = 8
+	const work = 100 * time.Millisecond
+
+	var done atomic.Int32
+	for range callers {
+		st.GoPostCommit(func() {
+			time.Sleep(work)
+			done.Add(1)
+		})
+	}
+
+	// Short wait must time out because in-flight goroutines still sleep.
+	if st.WaitPostCommit(work / 4) {
+		t.Error("WaitPostCommit returned true with in-flight goroutines (timeout was too short to have drained); drain semantics broken")
+	}
+
+	// Generous wait must succeed and observe all callers complete.
+	if !st.WaitPostCommit(work * 4) {
+		t.Fatalf("WaitPostCommit timed out; expected %d goroutines to finish within budget", callers)
+	}
+	if got := int(done.Load()); got != callers {
+		t.Errorf("done = %d, want %d after drain", got, callers)
+	}
+}
+
+// TestStateClose_DrainsInflightPostCommits verifies Close()'s drain
+// path actually waits for in-flight GoPostCommit goroutines so the DB
+// and JSONL writer don't shut down underneath them. thrum-1nkt.5.
+func TestStateClose_DrainsInflightPostCommits(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	st, err := NewState(thrumDir, thrumDir, "r_GOPC_CLOSE", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+
+	work := 80 * time.Millisecond
+	var done atomic.Bool
+	st.GoPostCommit(func() {
+		time.Sleep(work)
+		done.Store(true)
+	})
+
+	start := time.Now()
+	if err := st.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	elapsed := time.Since(start)
+
+	if !done.Load() {
+		t.Errorf("Close returned before in-flight GoPostCommit goroutine completed (elapsed=%v); drain skipped", elapsed)
+	}
+	if elapsed < work/2 {
+		t.Errorf("Close elapsed = %v, want ≥ %v (must have waited for the in-flight goroutine)", elapsed, work/2)
 	}
 }

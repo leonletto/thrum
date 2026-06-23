@@ -29,7 +29,7 @@
  * shell state leaks in.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -242,6 +242,43 @@ export function tmuxKillServer(): void {
   // for inspection on failure (matches global-teardown's "preserve
   // artifacts" policy). It's auto-purged by the OS at next reboot.
   persistentTmpDir = null;
+}
+
+/**
+ * Reap tmux servers leaked by PRIOR e2e runs. Each run's socket is
+ * pid-keyed (`thrum-e2e-<pid>`), so a run that dies before teardown — a
+ * SIGKILL, a timeout, a throw — orphans its server, and its bash pane holds
+ * a pty against the macOS kern.tty.ptmx_max ceiling (default 511). The old
+ * preflight (`tmuxKillServer`) only targeted the CURRENT pid's socket, so it
+ * could never reap a different run — leaks accumulated indefinitely.
+ *
+ * This globs every `thrum-e2e-*` socket and kills each server per-socket.
+ * Safe alongside a live agent fleet: the fleet uses the `default` socket,
+ * which the glob never matches. Idempotent + self-healing — every run reaps
+ * all prior debris at startup.
+ */
+export function reapStaleE2EServers(): void {
+  const dir = process.env.TMUX_TMPDIR || `/tmp/tmux-${process.getuid?.() ?? ''}`;
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return; // no socket dir yet — nothing to reap
+  }
+  for (const name of names) {
+    if (!name.startsWith('thrum-e2e-')) continue;
+    const sock = join(dir, name);
+    try {
+      execFileSync('tmux', ['-L', name, 'kill-server'], { timeout: 10_000 });
+    } catch {
+      /* dead socket file (no live server) — fall through to unlink */
+    }
+    try {
+      unlinkSync(sock);
+    } catch {
+      /* best effort */
+    }
+  }
 }
 
 // --- Persistent session helpers (for Steps 7-9 Claude Code tests) ---

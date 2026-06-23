@@ -33,6 +33,32 @@ type PrimeContext struct {
 	SavedSessionContext string           `json:"saved_session_context,omitempty"`
 }
 
+// LocalAgentName resolves the agent name for LOCAL-state prime consumes —
+// saved session context, restart snapshot, and the role preamble. It prefers
+// the daemon-resolved identity, but falls back to the on-disk identity file
+// when the daemon hasn't bound the agent yet.
+//
+// This races immediately after a raw self-restart relaunch (thrum-t6qx): the
+// new runtime PID isn't re-bound at the instant the SessionStart hook runs
+// `thrum prime`, so agent.whoami returns nothing and ctx.Identity is
+// transiently nil — even though the identity file AND the local state are
+// present on disk. Local-state consume must not depend on the daemon being
+// bound. Steady-state is unchanged (Identity is used when present, no disk
+// I/O); only the racing-relaunch path gains the fallback. Returns "" when
+// neither source yields a name.
+func (ctx *PrimeContext) LocalAgentName() string {
+	if ctx == nil {
+		return ""
+	}
+	if ctx.Identity != nil && ctx.Identity.AgentID != "" {
+		return ctx.Identity.AgentID
+	}
+	if idFile, _, err := config.LoadIdentityWithPath(ctx.RepoPath); err == nil && idFile != nil {
+		return idFile.Agent.Name
+	}
+	return ""
+}
+
 // PrimeSyncInfo contains sync health for prime output.
 type PrimeSyncInfo struct {
 	DaemonStatus string `json:"daemon_status"`
@@ -69,6 +95,12 @@ type WorkContextInfo struct {
 	UnmergedCommits  int      `json:"unmerged_commits"`
 	Error            string   `json:"error,omitempty"`
 }
+
+// primeActiveCountTimeout bounds the best-effort active-agent count probe (see
+// the listContext call in ContextPrime). Short by design: the count is cosmetic
+// and the underlying RPC can block on the daemon's state.Lock under fleet load
+// (thrum-5988), so prime degrades the count rather than stalling the briefing.
+const primeActiveCountTimeout = 1500 * time.Millisecond
 
 // ContextPrime gathers comprehensive session context from the daemon and git.
 // It gracefully handles missing sections (e.g., no session, no daemon, not a git repo).
@@ -131,16 +163,29 @@ func ContextPrime(client *Client, callerAgentID ...string) *PrimeContext {
 			Total: len(agents.Agents),
 			List:  agents.Agents,
 		}
-		// Count active by checking for sessions via listContext
-		contexts, ctxErr := AgentListContext(client, "", "", "")
-		if ctxErr == nil {
-			activeSet := make(map[string]bool)
-			for _, c := range contexts.Contexts {
-				if c.SessionID != "" {
-					activeSet[c.AgentID] = true
+		// Count active by checking for sessions via listContext. This is
+		// best-effort enrichment, not load-bearing for the briefing, so it
+		// runs on a DEDICATED short-lived connection with a tight deadline:
+		//   - The daemon's HandleListContext takes the global state.Lock,
+		//     which the snapshot/sync walker can hold for seconds under fleet
+		//     load (thrum-5988); a tight deadline keeps prime fast (≈1.5s
+		//     worst case) instead of stalling the full 10s default.
+		//   - Isolating it on its own connection means a slow/late response
+		//     can't desync the primary connection's later RPCs (the daemon
+		//     health section previously came back blank for exactly this
+		//     reason). On any failure the active count is simply omitted.
+		if probe, derr := NewClient(client.SocketPath()); derr == nil {
+			contexts, ctxErr := AgentListContextWithTimeout(probe, "", "", "", primeActiveCountTimeout)
+			if ctxErr == nil {
+				activeSet := make(map[string]bool)
+				for _, c := range contexts.Contexts {
+					if c.SessionID != "" {
+						activeSet[c.AgentID] = true
+					}
 				}
+				info.Active = len(activeSet)
 			}
-			info.Active = len(activeSet)
+			_ = probe.Close()
 		}
 		ctx.Agents = info
 	}
@@ -348,10 +393,13 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 		}
 	}
 
-	// Section 2: Preamble (role instructions)
-	if ctx.RepoPath != "" && ctx.Identity != nil {
+	// Section 2: Preamble (role instructions). The preamble is LOCAL state;
+	// resolve the agent name from the daemon identity OR the on-disk identity
+	// fallback (thrum-t6qx) so a restarted-during-race agent doesn't lose its
+	// entire role discipline when ctx.Identity is transiently nil.
+	if preambleAgent := ctx.LocalAgentName(); ctx.RepoPath != "" && preambleAgent != "" {
 		thrumDir := filepath.Join(ctx.RepoPath, ".thrum")
-		agentName := ctx.Identity.AgentID
+		agentName := preambleAgent
 		preamble, err := agentcontext.LoadPreamble(thrumDir, agentName)
 		if err == nil && len(preamble) > 0 {
 			out.WriteString("\n# Agent Instructions\n\n")

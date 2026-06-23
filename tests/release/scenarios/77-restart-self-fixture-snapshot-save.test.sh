@@ -26,7 +26,7 @@ SID="77-restart-self-fixture-snapshot-save"
 KAFM6_S2_AGENT="kafm6_test_self"
 KAFM6_S2_SESSION="kafm6-self-restart-test"
 KAFM6_S2_WT_NAME="kafm6-self-restart-wt"
-KAFM6_S2_WT="$WORKTREE_BASE/repo/$KAFM6_S2_WT_NAME"
+KAFM6_S2_WT="$WORKTREE_BASE/$COORD_BASENAME/$KAFM6_S2_WT_NAME"
 KAFM6_S2_SAVE_REASON="kafm6-self-restart-${RUNID}"
 KAFM6_S2_SNAPSHOT_FILE="$KAFM6_S2_WT/.thrum/restart/$KAFM6_S2_AGENT.md"
 

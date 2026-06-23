@@ -140,7 +140,7 @@ func TestNudgeDispatch_GuardSkipsNonMessageEvents(t *testing.T) {
 		if err := json.Unmarshal(event, &evt); err != nil {
 			return
 		}
-		nudge.DispatchTmux(tmpDir, evt.Recipients, evt.AgentID)
+		nudge.DispatchTmux(context.Background(), tmpDir, evt.Recipients, evt.AgentID)
 		mu.Lock()
 		defer mu.Unlock()
 		nudgeDispatches++
@@ -156,7 +156,8 @@ func TestNudgeDispatch_GuardSkipsNonMessageEvents(t *testing.T) {
 		Role:      "researcher",
 		Module:    "test",
 	}
-	require.NoError(t, st.WriteEvent(context.Background(), regEvt))
+	_, regErr := st.WriteEvent(context.Background(), regEvt)
+	require.NoError(t, regErr)
 
 	mu.Lock()
 	require.Zero(t, nudgeDispatches, "agent.register must NOT trigger nudge dispatch")
@@ -172,7 +173,11 @@ func TestNudgeDispatch_GuardSkipsNonMessageEvents(t *testing.T) {
 		Body:       types.MessageBody{Format: "markdown", Content: "hi"},
 		Recipients: []string{"recipient"},
 	}
-	require.NoError(t, st.WriteEvent(context.Background(), msgEvt))
+	msgPost, msgErr := st.WriteEvent(context.Background(), msgEvt)
+	require.NoError(t, msgErr)
+	if msgPost != nil {
+		msgPost()
+	}
 
 	mu.Lock()
 	require.Equal(t, 1, nudgeDispatches, "message.create must trigger exactly one nudge dispatch")

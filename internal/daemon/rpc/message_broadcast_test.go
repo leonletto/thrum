@@ -296,7 +296,7 @@ func TestMessageHandler_HookDispatch_FiresBroadcastOncePerMessage(t *testing.T) 
 		Recipients: []string{"some_recipient"},
 	}
 	st.Lock()
-	if err := st.WriteEvent(context.Background(), directEvt); err != nil {
+	if _, err := st.WriteEvent(context.Background(), directEvt); err != nil {
 		st.Unlock()
 		t.Fatalf("WriteEvent: %v", err)
 	}
@@ -389,7 +389,7 @@ func TestMessageHandler_TwoDaemons_OnlyOriginBroadcasts(t *testing.T) {
 		Recipients: []string{"user:leon-letto"},
 	}
 	stA.Lock()
-	if err := stA.WriteEvent(context.Background(), evt); err != nil {
+	if _, err := stA.WriteEvent(context.Background(), evt); err != nil {
 		stA.Unlock()
 		t.Fatalf("daemon A WriteEvent: %v", err)
 	}

@@ -33,42 +33,62 @@
 SID="22-mcp-send-caller-id"
 MARKER="kafm2-22-callerid-${RUNID}"
 
-# Step 1: send from coord pane.
-send_command "$COORD_PANE" "! thrum send 'CallerID test (${MARKER})' --to @test_implementer"
+# Step 1: send from coord pane. Use send_bash_and_wait gated on
+# the "Message sent" bash-stdout. Reason: raw send_command returns
+# after typing keystrokes, with no guarantee that claude has
+# fully processed the Enter / rendered the daemon's response.
+# When the next scenario's send_command fires its `!` prefix
+# while this command's input handling is still mid-cycle in
+# claude's UI, the `!` can splice into the trailing position of
+# this command's body — producing `--to @test_implementer!`
+# which the daemon rejects as "unknown recipient" (thrum-rbp6
+# keystroke race; observed in v0.10.6 RC1 gates reltest-48589
+# and reltest-58187 corrupting scen 23's downstream send). The
+# send_bash_and_wait gate forces this command to fully complete
+# (success line landed in JSONL) before returning, closing the
+# transition-race window into scen 23.
+if ! send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
+    "thrum send 'CallerID test (${MARKER})' --to @test_implementer" \
+    "Message sent" 30; then
+  emit_fail "$SID" "agent-id-matches-sender" \
+    "thrum send completes with 'Message sent' confirmation within 30s" \
+    "(send command may have raced — see thrum-rbp6)" \
+    "scenarios/${SID}.test.sh:$LINENO"
+  return 0
+fi
 
 # Step 2: settle COORD before potentially using it in subsequent
 # scenarios — the send response render is short.
 wait_for_pane_idle "$COORD_PANE" 30
 
-# Step 3: poll IMPL's inbox via tmux-exec for the message's
-# agent_id. Write the raw JSON to a host-accessible file path
-# inside the tmux-exec invocation, then jq it from the host —
-# tmux-exec's `capture-pane` runs at the default 80-col width and
-# wraps long JSON strings with literal \n that breaks jq. The
-# tmux-exec→file→host-jq detour avoids the wrap. Brief poll
-# because daemon delivery is fast (<1s in fixture).
-out_file="$(mktemp -t kafm2-22.XXXXXX).json"
-_check_caller_id() {
-  "$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$IMPL_REPO" --clean -- \
-    bash -c "env THRUM_NAME=test_implementer thrum inbox --json > '${out_file}' 2>/dev/null" \
-    >/dev/null 2>&1 || true
-  if [ -s "$out_file" ]; then
-    jq -r --arg m "$MARKER" \
-      '[.messages[] | select(.body.content | contains($m))] | .[0].agent_id // ""' \
-      < "$out_file" 2>/dev/null
-  fi
-}
+# Step 3: poll IMPL's inbox until the marker arrives, then extract
+# the .agent_id field from the matching message and assert it
+# equals the sender's identity.
+#
+# Two-stage flow (since assert_inbox_contains is a presence
+# predicate that doesn't return fields): first gate on delivery
+# via the helper, then run a single jq pass to pull .agent_id
+# from the (now-known-present) message.
+if ! assert_inbox_contains test_implementer "$IMPL_REPO" "$MARKER" 30; then
+  emit_fail "$SID" "agent-id-matches-sender" \
+    "marker-message .agent_id equals 'test_coordinator_main'" \
+    "(marker '${MARKER}' never delivered to impl inbox within 30s)" \
+    "scenarios/${SID}.test.sh:$LINENO"
+  return 0
+fi
 
-elapsed=0
+# Marker is present — pull the field. Single read, no polling.
+out_file="$(mktemp -t kafm2-22.XXXXXX)"
+"$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$IMPL_REPO" --clean -- \
+  bash -c "env THRUM_NAME=test_implementer thrum inbox --json > '${out_file}' 2>/dev/null" \
+  >/dev/null 2>&1 || true
 agent_id=""
-while [ "$elapsed" -lt 30 ]; do
-  agent_id="$(_check_caller_id)"
-  if [ -n "$agent_id" ]; then
-    break
-  fi
-  sleep 2
-  elapsed=$((elapsed + 2))
-done
+if [ -s "$out_file" ]; then
+  agent_id="$(jq -r --arg m "$MARKER" \
+    '[.messages[]? | select(.body.content // "" | contains($m))] | .[0].agent_id // ""' \
+    < "$out_file" 2>/dev/null)"
+fi
+rm -f "$out_file"
 
 if [ "$agent_id" = "test_coordinator_main" ]; then
   emit_pass "$SID" "agent-id-matches-sender"
@@ -78,4 +98,3 @@ else
     "got: '${agent_id:-<empty>}'" \
     "scenarios/${SID}.test.sh:$LINENO"
 fi
-rm -f "$out_file"

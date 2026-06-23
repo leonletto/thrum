@@ -41,7 +41,7 @@ QUEUE_SESSION="queue-test"
 # defaults to feature/<name>; we set it explicitly so the scenario is
 # self-documenting.
 QUEUE_WT_NAME="queue-test"
-QUEUE_WT="$WORKTREE_BASE/repo/$QUEUE_WT_NAME"
+QUEUE_WT="$WORKTREE_BASE/$COORD_BASENAME/$QUEUE_WT_NAME"
 BARE_SESSION="bare-queue"
 
 TE="$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec"

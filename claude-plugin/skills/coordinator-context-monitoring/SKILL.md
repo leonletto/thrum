@@ -17,23 +17,59 @@ description:
 
 Trigger this pattern at each of:
 
+- Receipt of an `ALERT: flagged=…` message from the `context-monitoring` thrum
+  monitor (the canonical scheduled sweep, fires every ~20 min)
 - Epic merge gates (after merging a sub-epic — E6.4, E6.5, etc.)
 - After dispatching 3+ tasks in quick succession
 - After any agent has been running for 60+ minutes without a restart
-- When a keepalive cron fires AND inbox has activity from a long-running agent
 - When you observe slow or degraded responses from an implementer
 - Manually whenever the session feels "intense" (lots of cycles in a short
   window)
 
-A recurring cron MAY invoke this skill — the skill itself applies tier-ladder
-judgment, so the >85% autonomous-restart tier fires conditionally, not on every
-sweep. What's forbidden is a script or cron that bypasses this skill and fires
-`thrum tmux restart --force` unconditionally (that violates
-`feedback_restart_discipline` — burn the runway, don't restart on schedule).
+The skill applies tier-ladder judgment, so the >85% autonomous-restart tier
+fires conditionally on actual ctx %, not on every sweep. What's forbidden is a
+script that bypasses this skill and fires `thrum tmux restart --force`
+unconditionally (that violates `feedback_restart_discipline` — burn the runway,
+don't restart on schedule).
 
-Per the cron-triggers-skills pattern, the cron prompt should be a one-line
-"Invoke the coordinator-context-monitoring skill" — never a re-implementation of
-the tier ladder below. That keeps the discipline single-sourced.
+## How the scheduled sweep works (v0.10.6+ — thrum monitor)
+
+The sweep runs as a daemon-managed `thrum monitor` job named
+`context-monitoring`, registered with a 5-field cron schedule (e.g.
+`"7,27,47 * * * *"` — every 20 min at :07/:27/:47). The job invokes
+`scripts/error-and-context-agent-sweep.sh --no-nudge --out /tmp/agent-sweep.txt`.
+The script emits a single consolidated `ALERT:` line to stdout when ANY agent
+crosses a threshold (ctx >= 50% OR api-error OR capture-fail); when the fleet is
+clean, the script is silent so no message fires. The monitor's
+`--match '^ALERT:'` filter routes the ALERT line as a message to
+`@coordinator_main`, which triggers this skill.
+
+Format of the ALERT line:
+
+```text
+ALERT: flagged=N stuck=S stuck_working=W tier3=T tier2=U — agent_a(92%,api-err,STUCK,stuck-working); agent_b(88%); …
+```
+
+- `flagged` — total agents needing attention
+- `stuck` — api-errored on TWO consecutive sweeps (state file tracks this across
+  runs)
+- `stuck_working` — agent_status=working AND tmux quiet > threshold AND no
+  recent JSONL tool calls (thrum-9neg L5; threshold tunable via the sweep
+  script's --silence-threshold-min flag, default 10 min)
+- `tier3` — count with ctx >= 85% (force-restart candidates)
+- `tier2` — count with 70-84% ctx (tmux-send nudge candidates)
+- Per-agent segment: `name(ctx%,reason-if-any,classifier)` joined by `;`
+
+The full per-agent report stays at `/tmp/agent-sweep.txt` (overwritten each
+sweep) for on-demand drill-down — read it AFTER receiving an ALERT to see which
+specific panes are at risk.
+
+The previous keepalive-cron pattern (CronCreate `5fdb627b`) is deprecated in
+favor of this scheduled monitor. The bookkeeping responsibility moves out of the
+coordinator's per-session re-add chore and into the daemon's durable monitors
+table (survives daemon restart, no per-session re-init needed for this monitor —
+though OTHER CronCreate jobs may still require it per
+`feedback_cron_reinit_each_session`).
 
 ## Step 1 — Run the sweep
 
@@ -49,13 +85,53 @@ Claude Code status bar footer, normalizing UTF-8 non-breaking spaces
 
 ## Step 2 — Threshold logic
 
-| ctx_used  | Action                                                                         |
-| --------- | ------------------------------------------------------------------------------ |
-| < 50%     | No action — agent has runway                                                   |
-| 50% – 70% | Directed inbox restart request (polite, agent writes snapshot)                 |
-| 70% – 85% | Tmux-send nudge directly into their pane (bypasses inbox; more forceful)       |
-| > 85%     | Force-restart immediately without waiting for response                         |
-| `(n/a)`   | Pane capture failed OR runtime has no Ctx footer — check tmux session manually |
+| ctx_tier | stuck_working | Action                                                                                                                                          |
+| -------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| < 50%    | N             | No action — agent has runway                                                                                                                    |
+| < 50%    | Y             | Tmux-send "are you stuck? `/continue` if waiting" nudge; if not recovered in next sweep, surface to operator                                    |
+| 50-70%   | N             | Directed inbox restart request (polite, agent writes snapshot)                                                                                  |
+| 50-70%   | Y             | Tmux-send nudge; defer the tier-1 directed restart request until the next sweep confirms the pane is active again AND ctx is still in this band |
+| 70-85%   | N             | Tmux-send `/thrum:restart` (bypasses inbox; more forceful)                                                                                      |
+| 70-85%   | Y             | Surface to operator immediately (degraded + stuck → human-eyes-needed)                                                                          |
+| > 85%    | any           | Force-restart immediately without waiting for response                                                                                          |
+| `(n/a)`  | any           | Pane capture failed OR runtime has no Ctx footer — check tmux session manually                                                                  |
+
+**Warm-hold exemption (per thrum-9neg L4):** if the agent's `intent` field
+starts with `^warm-hold:`, skip nudge + restart for all tiers below >85%.
+The >85% bracket still fires regardless. Agents (or coord on their behalf) set
+this via `thrum agent set-intent "warm-hold: <reason>"`.
+
+## Step 2.5 — Stuck-working axis (thrum-9neg)
+
+`stuck_working` is **orthogonal** to `ctx_tier`. They can compound. Treat the
+table above as a composite lookup: the action depends on the _cell_, not on
+either axis alone.
+
+`stuck_working` measures "is this agent currently unable to make progress?"
+while `ctx_tier` measures "how soon will this agent degrade if left alone?" An
+agent can be:
+
+- ctx-fine but stuck-working (waiting on a hung tool call) → nudge to unstick
+- ctx-degraded but not stuck-working (working normally but burning context) →
+  restart cleanly
+- both → composite action per the table; high-degradation cases skip the nudge
+  step since the agent likely can't recover from the nudge alone
+
+The sweep's STUCK-WORKING classification (sweep script's per-agent
+`stuck_working` line + ALERT-line `stuck_working=N` axis) fires when:
+
+1. `agent_status = "working"` (the agent claims to be mid-work; set by the
+   Pattern D self-write in role skills), AND
+2. tmux silence > `SILENCE_THRESHOLD_MIN` minutes (default 10; tunable via
+   `--silence-threshold-min N`), AND
+3. JSONL transcript's last assistant message has `stop_reason = tool_use` AND
+   was emitted more than `SILENCE_THRESHOLD_MIN` minutes ago (Claude runtime
+   only; non-Claude runtimes use tmux silence alone)
+4. `intent` does NOT start with `^warm-hold:` (warm-hold exemption)
+
+The classification is sweep-side only — it does NOT write to identity files. The
+identity-file `agent_status="stuck"` semantic stays reserved for
+`permission.markAgentStuck` writes (permission-cadence give-up).
 
 **Reliability ladder rationale:** the inbox → tmux-send → force-restart
 progression goes from polite to forceful. Inbox messages can fail (delivery
@@ -164,22 +240,48 @@ surface to operator BEFORE the next sweep so the auto-nudge can be held. Once
 `continue` fires, the agent resumes its previous tool call immediately — there's
 no recovery window.
 
-## Cron-fire safety checks
+## Pre-restart safety checks
 
-If this skill is triggered from a keepalive cron, add these guards BEFORE
-running the sweep:
+Whether triggered by the scheduled `context-monitoring` thrum monitor or by the
+coordinator manually invoking the skill, run these guards BEFORE firing a
+restart:
 
 1. **Verify the daemon is reachable**:
    `thrum team --json | jq '.members | length'` — if 0 or error, daemon is down;
    skip the sweep, surface to operator.
-2. **Check if any agent is mid-commit** (active tool call): look for
+2. **Confirm the monitor is alive**: `thrum monitor list` should show
+   `context-monitoring` in `running` status with a non-empty `SCHEDULE` column.
+   If absent or dead, the scheduled ALERTs aren't firing and the skill must be
+   invoked manually from a recurring cron until the monitor is restored. (See
+   "Re-register the monitor" below.)
+3. **Check if any agent is mid-commit** (active tool call): look for
    `Running bash` or active spinner in the sweep pane lines — if so, defer
    restart for that agent until the tool completes.
-3. **Never force-restart an agent whose pane shows a Git merge conflict or
+4. **Never force-restart an agent whose pane shows a Git merge conflict or
    active rebase** — that corrupts the worktree. Surface to operator instead.
-4. **Cooldown**: do not restart the same agent twice within 30 minutes. If an
+5. **Cooldown**: do not restart the same agent twice within 30 minutes. If an
    agent crosses threshold again that fast, something's wrong with their
    workload — surface to operator rather than restart-loop.
+
+### Re-register the monitor
+
+If `thrum monitor list` doesn't show `context-monitoring`, register it from the
+main repo. The script path must be absolute (the daemon runs the command from a
+clean env, not the coordinator's shell), so resolve it from the repo root first:
+
+```bash
+SCRIPT="$(git -C /path/to/thrum/main-repo rev-parse --show-toplevel)/scripts/error-and-context-agent-sweep.sh"
+thrum monitor add \
+  --name context-monitoring \
+  --schedule "7,27,47 * * * *" \
+  --match '^ALERT:' \
+  --to @coordinator_main \
+  -- bash "$SCRIPT" --no-nudge --out /tmp/agent-sweep.txt
+```
+
+(Or substitute the literal absolute path if you don't have a shell handy in the
+daemon's environment.) The monitor fires one-shot per scheduled tick; in between
+ticks the child does not run, so there's no continuous CPU cost from the sweep.
 
 ## What to do post-restart
 

@@ -34,8 +34,8 @@ fi
 # the call is attributed to the parent and routed to the wrong daemon, and
 # `thrum tmux restart impl` becomes a no-op (no impl session known to that
 # daemon).
-"$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$REPO" --clean -- \
-  thrum tmux restart impl --force >/dev/null
+"$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$REPO" --clean --timeout 60 -- \
+  thrum tmux restart "$IMPL_PANE" --force >/dev/null
 
 # Step 3: wait for the NEW SessionStart attachment to appear in IMPL JSONL.
 #

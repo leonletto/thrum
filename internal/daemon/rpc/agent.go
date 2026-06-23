@@ -206,9 +206,18 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 	// Extract worktree name from repo path
 	worktree := h.getWorktreeName()
 
-	// Lock for conflict detection and registration
+	// Lock for conflict detection and registration. Tracked-unlock
+	// pattern (thrum-kdyf) lets us release the lock mid-function around
+	// the ensureActiveSession call (which under its post-kdyf contract
+	// must NOT be called under lock — see ensureActiveSession docstring)
+	// while still cleaning up on every return path including panics.
 	h.state.Lock()
-	defer h.state.Unlock()
+	stateLocked := true
+	defer func() {
+		if stateLocked {
+			h.state.Unlock()
+		}
+	}()
 
 	// Validate name≠role: these checks prevent addressing ambiguity.
 	// Skip during re-registration since the agent already exists.
@@ -266,6 +275,59 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		return nil, fmt.Errorf("check for existing agent by id: %w", err)
 	}
 
+	// thrum-l9e1: anonymous-caller cross-worktree binding check.
+	//
+	// agent.register is on the anonymousAllowedMethods allowlist
+	// (server.go:138-148) to enable the bootstrap chicken-and-egg for
+	// genuinely-new agents in genuinely-new worktrees. That allowance is
+	// bounded: an anonymous caller (peercred resolved → ErrAnonymous)
+	// attempting to RE-bind an EXISTING agent name to a SECOND worktree
+	// is not bootstrap — it is cross-worktree forgery via name
+	// collision. Fail closed here so the CLI's post-RPC SaveIdentityFile
+	// never writes a duplicate identity into the foreign worktree.
+	//
+	// Companion to thrum-tgqx.1's CLI-side fail-closed pattern: peercred's
+	// WARN at resolver_unix.go:119 already surfaces the candidate git
+	// root; this check recomputes it via ResolveCallerWorktree and verifies
+	// the existing agent is genuinely bound to it via IsAgentInWorktree
+	// (the thrum-0pos co-located-agent helper).
+	if existingAgent != nil {
+		// peercred.FromContext returns (nil, true) for the
+		// "ran but ErrAnonymous" case AND (nil, false) for the
+		// "peercred never ran" case (non-unix transports, test
+		// contexts that didn't inject WithIdentity). Both flow here;
+		// the inner pid > 0 guard backstops the (nil, false) case
+		// because ConnectingPIDFromContext returns (0, false) when no
+		// kernel PID was injected, leaving the check a no-op for
+		// those callers.
+		if resolved, _ := peercred.FromContext(ctx); resolved == nil {
+			if pid, ok := peercred.ConnectingPIDFromContext(ctx); ok && pid > 0 {
+				callerWorktree, resolveErr := resolveCallerWorktreeFn(pid)
+				if callerWorktree == "" {
+					// Fail-open on resolver failure (PID dead between accept
+					// and CWD inspection, or CWD outside any git root). Log
+					// the security-relevant skip so daemon logs surface it
+					// for forensic review — silent fail-open on a re-bind
+					// path would mask the protection-gap close.
+					slog.Warn("HandleRegister: anonymous-cross-worktree check skipped — caller worktree unresolved",
+						slog.String("agent_id", agentID),
+						slog.String("name", req.Name),
+						slog.Int("caller_pid", pid),
+						slog.Any("err", resolveErr))
+				} else if !h.state.IsAgentInWorktree(ctx, agentID, callerWorktree) {
+					name := agentIdentityName(req.Name, agentID)
+					return nil, fmt.Errorf("agent %q is already registered in a different worktree; "+
+						"this caller is in %q — to register a different agent here, choose a unique --name; "+
+						"to move the existing agent's binding, run 'thrum prime' from its registered "+
+						"worktree (or 'thrum worktree teardown' if abandoning it); "+
+						"to clear a stranded identity whose original worktree is no longer present, run "+
+						"'thrum agent delete %s --force'",
+						name, callerWorktree, name)
+				}
+			}
+		}
+	}
+
 	if existingAgent != nil {
 		// Same agent returning (agent_id matches by construction).
 		// PID self-heal: if the caller provides a PID that differs from
@@ -277,6 +339,7 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		// on every pre-existing agent whose DB PID predates the refresh
 		// feature (thrum-pxz.14 Fix A).
 		var resp *RegisterResponse
+		var postCommit func()
 		var regErr error
 		// thrum-ufv5.2: Force is a distinct trigger from ReRegister. --force on
 		// an existing agent must refresh the agents projection (role, module,
@@ -286,7 +349,7 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		// diverged (see SC-04 repro in the linked bug).
 		switch {
 		case req.AgentPID > 0 && existingAgent.AgentPID != req.AgentPID:
-			resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
+			resp, postCommit, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
 		case req.ReRegister, req.Force:
 			// ReRegister and Force are treated identically — both paths
 			// invoke registerAgent, which emits agent.register and lets
@@ -294,7 +357,7 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 			// quickstart-conflict-retry signal; Force is the user's
 			// explicit --force flag. Merged into one case because there's
 			// no state change that would differentiate them downstream.
-			resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
+			resp, postCommit, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
 		default:
 			// Same agent, same PID (or no PID provided) — no-op return.
 			resp = &RegisterResponse{
@@ -312,8 +375,25 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		// on error so the register RPC stays resilient. Failing
 		// register because resurrection failed would break every agent
 		// on every command, which is worse than the bug we are fixing.
-		// ensureActiveSession runs under the same write lock taken at
-		// the top of this method.
+		//
+		// thrum-kdyf: release the state lock before ensureActiveSession.
+		// Under its post-kdyf contract ensureActiveSession self-manages
+		// its locking — calling it under the caller's lock would
+		// deadlock its internal re-acquire. Re-acquire below if and
+		// only if persistResurrectWorktreeRef needs to run (rare path:
+		// a session was actually resumed).
+		h.state.Unlock()
+		stateLocked = false
+
+		// thrum-bsn7: invoke the deferred agent.register sync trigger
+		// AFTER releasing state.Lock(). The walker (30s ceiling) +
+		// compactor (60s ceiling) inside SyncOnWrite would otherwise
+		// starve every concurrent HandleRegister / message.create / etc
+		// blocked on the same lock — that was the kdyf failure class
+		// surfacing on every under-lock SELECT, not just
+		// ensureActiveSession's "check active session" path.
+		h.state.GoPostCommit(postCommit)
+
 		resumedID, resumeErr := h.ensureActiveSession(ctx, agentID, req.AgentPID)
 		if resumeErr != nil {
 			log.Printf("agent.register: session resurrect failed: agent=%s err=%v", agentID, resumeErr)
@@ -326,20 +406,43 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 			// worktree→agent match for mutating RPCs (the session
 			// exists but has no worktree ref). Persist a worktree ref
 			// here so peercred can resolve this agent on the next RPC.
+			//
+			// persistResurrectWorktreeRef's contract is preserved
+			// (must be called under lock) per kdyf ratification —
+			// only ensureActiveSession's contract was inverted. Re-
+			// acquire the state lock briefly for this single rare-path
+			// call; the deferred Unlock above handles release.
+			//
+			// Note: persistResurrectWorktreeRef's internal SQL calls
+			// still use the caller's ctx (possibly burned). Hardening
+			// that write path is bsn7 follow-up territory; this kdyf
+			// fix targets the common-path SELECT only.
+			h.state.Lock()
+			stateLocked = true
 			h.persistResurrectWorktreeRef(ctx, agentID, resumedID, req.AgentPID)
 			resp.SessionID = resumedID
 			resp.SessionResumed = true
 		}
+		// enforceWorktreeIdentity is lock-agnostic
+		// (state_query.go:75-79 — read-helpers don't require the lock)
+		// so it's safe to call here regardless of which branch above ran.
 		h.enforceWorktreeIdentity(ctx, agentIdentityName(req.Name, agentID))
 		return resp, nil
 	}
 
 	// Fresh agent — no existing row for this agent_id.
-	resp, err := h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered", req.AgentPID)
-	if err == nil {
-		h.enforceWorktreeIdentity(ctx, agentIdentityName(req.Name, agentID))
+	resp, postCommit, err := h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered", req.AgentPID)
+	if err != nil {
+		return resp, err
 	}
-	return resp, err
+	// thrum-bsn7: release state.Lock() BEFORE invoking the agent.register
+	// sync trigger. Walker+compactor under the lock starves concurrent
+	// HandleRegister/message.create on the same lock.
+	h.state.Unlock()
+	stateLocked = false
+	h.state.GoPostCommit(postCommit)
+	h.enforceWorktreeIdentity(ctx, agentIdentityName(req.Name, agentID))
+	return resp, nil
 }
 
 // agentIdentityName returns the string used as the per-worktree identity
@@ -653,8 +756,19 @@ func resolveHostname() string {
 	return strings.TrimSuffix(h, ".local")
 }
 
-// registerAgent writes an agent.register event and returns the response.
-func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, module, display, worktree, status string, agentPID int) (*RegisterResponse, error) {
+// registerAgent writes an agent.register event and returns the response
+// plus a deferred sync trigger (thrum-bsn7).
+//
+// CONTRACT (thrum-bsn7): callers MUST capture the returned postCommit
+// closure and invoke it AFTER releasing h.state.Lock() — the agent.register
+// event is on the structural-event whitelist, so postCommit will fire the
+// snapshot walker (30s ceiling) + compactor (60s ceiling). Invoking
+// postCommit while the lock is held would starve every concurrent
+// HandleRegister / message.create / group.* RPC waiting on the same lock
+// (kdyf failure class extended to all SELECTs inside HandleRegister, not
+// just ensureActiveSession). postCommit is nil if no sync trigger is wired
+// (e.g. test states that omit it).
+func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, module, display, worktree, status string, agentPID int) (*RegisterResponse, func(), error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	// Create agent.register event
@@ -672,9 +786,11 @@ func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, m
 		AgentPID:  agentPID,
 	}
 
-	// Write event to JSONL and SQLite
-	if err := h.state.WriteEvent(ctx, event); err != nil {
-		return nil, fmt.Errorf("write agent.register event: %w", err)
+	// Write event to JSONL and SQLite; capture the deferred sync trigger
+	// for the caller (HandleRegister) to fire post-Unlock.
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	if err != nil {
+		return nil, nil, fmt.Errorf("write agent.register event: %w", err)
 	}
 
 	// Auto role group creation removed — role-based filtering uses
@@ -683,7 +799,7 @@ func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, m
 	return &RegisterResponse{
 		AgentID: agentID,
 		Status:  status,
-	}, nil
+	}, postCommit, nil
 }
 
 // ensureActiveSession checks whether the agent has a row in sessions with
@@ -694,18 +810,38 @@ func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, m
 // Returns "" if pid is zero or dead (the team.list self-heal path owns
 // dead-PID cleanup; resurrect must not race against it).
 //
-// Must be called under h.state.Lock() held by the caller. This method
-// writes a JSONL event via h.state.WriteEvent and does not acquire the
-// state lock itself — acquiring a second write lock would deadlock.
+// Concurrency contract (thrum-kdyf, INVERSE of pre-fix): must NOT be
+// called with h.state.Lock() held. The function self-manages locking
+// via the double-check pattern: a fresh-ctx lock-free SELECT first
+// (common-path fast path); if a write is needed (rare path), it then
+// acquires h.state.Lock() internally, re-SELECTs under lock to catch
+// races, then writes the event. Calling under the caller's lock would
+// deadlock the internal Lock() acquisition (sync.Mutex isn't reentrant).
+//
+// Why fresh ctx for the SELECT (thrum-kdyf): the caller's RPC ctx may
+// already be expired by the time we get here — HandleRegister's
+// registerAgent step runs WriteEvent → triggerSyncOnWrite synchronously,
+// which can burn up to walker(30s) + compactor(60s) of wall time while
+// the caller's RPC has a default 10s deadline. Pre-fix, the SELECT then
+// failed immediately with ctx.Err(), surfacing as the misleading
+// "check active session: context deadline exceeded" prime-failure log
+// line. The fresh Background-derived ctx with 5s deadline gives the
+// SELECT enough headroom to succeed (sub-millisecond on the indexed
+// sessions table) without bleeding into the next RPC. The write path
+// keeps the caller's ctx so explicit user cancellation propagates.
 //
 // Cross-verification discipline (thrum-xir.18, mirroring thrum-pxz.14
 // Fix B): both the DB's active-session state and process.IsRunning(pid)
 // must agree the agent is alive before any state change is written.
 // A single-source decision is the pxz.14 anti-pattern.
 func (h *AgentHandler) ensureActiveSession(ctx context.Context, agentID string, pid int) (string, error) {
-	// Source of truth #1: DB active-session state.
+	// Step 1: lock-free SELECT under a fresh Background-derived ctx.
+	// Detached from caller's possibly-burned RPC ctx — see docstring.
+	selectCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	var existingID sql.NullString
-	err := h.state.DB().QueryRowContext(ctx,
+	err := h.state.DB().QueryRowContext(selectCtx,
 		`SELECT session_id FROM sessions
 		 WHERE agent_id = ? AND ended_at IS NULL
 		 ORDER BY started_at DESC LIMIT 1`,
@@ -719,13 +855,46 @@ func (h *AgentHandler) ensureActiveSession(ctx context.Context, agentID string, 
 		return "", nil
 	}
 
-	// Source of truth #2: live process check. Skip resurrect if PID is
-	// missing or dead — the self-heal path owns that case.
+	// Step 2: live process check. Skip resurrect if PID is missing or
+	// dead — the self-heal path owns that case.
 	if pid <= 0 || !process.IsRunning(pid) {
 		return "", nil
 	}
 
-	// Both sources agree: no active session and the caller's process is
+	// Step 3: write path. Acquire the state lock ourselves (caller is
+	// contractually NOT holding it), re-SELECT under the lock to catch
+	// concurrent resurrect races (another HandleRegister fired between
+	// our step-1 SELECT and our Lock acquisition), then write the event.
+	// thrum-bsn7 tracked-unlock: release state.Lock() BEFORE invoking
+	// the (always-nil here, since session.start is non-structural)
+	// postCommit so the contract is uniform across handlers.
+	h.state.Lock()
+	stateLocked := true
+	defer func() {
+		if stateLocked {
+			h.state.Unlock()
+		}
+	}()
+
+	// Re-SELECT under lock with fresh ctx (same rationale as step 1).
+	reSelectCtx, reSelectCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer reSelectCancel()
+
+	var raceID sql.NullString
+	if err := h.state.DB().QueryRowContext(reSelectCtx,
+		`SELECT session_id FROM sessions
+		 WHERE agent_id = ? AND ended_at IS NULL
+		 ORDER BY started_at DESC LIMIT 1`,
+		agentID,
+	).Scan(&raceID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("check active session (re-check): %w", err)
+	}
+	if raceID.Valid && raceID.String != "" {
+		// Concurrent resurrect won the race. Defer to it; no write here.
+		return "", nil
+	}
+
+	// Both checks agree: no active session and the caller's process is
 	// alive. Emit a minimal agent.session.start event. Deliberately omit
 	// scope/orphan-recovery handling that HandleStart performs — those
 	// belong to the explicit session.start RPC (used by quickstart), not
@@ -738,9 +907,20 @@ func (h *AgentHandler) ensureActiveSession(ctx context.Context, agentID string, 
 		SessionID: sessionID,
 		AgentID:   agentID,
 	}
-	if err := h.state.WriteEvent(ctx, event); err != nil {
+	// WriteEvent uses the caller's ctx so explicit user cancellation
+	// propagates. If the caller ctx is already expired here, the write
+	// fails with ctx.Err() — acceptable: the user sees a clear
+	// "write session.start event" error rather than the pre-fix
+	// misleading "check active session" one. The common-path SELECT
+	// fix above is the main kdyf win; the rare-path write hardening
+	// is bsn7 follow-up territory.
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	h.state.Unlock()
+	stateLocked = false
+	if err != nil {
 		return "", fmt.Errorf("write session.start event: %w", err)
 	}
+	h.state.GoPostCommit(postCommit)
 	return sessionID, nil
 }
 
@@ -886,7 +1066,13 @@ func (h *AgentHandler) HandleListContext(ctx context.Context, params json.RawMes
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	h.state.Lock()
+	// thrum-5988: read-only handler — take the READ lock so concurrent reads
+	// (prime's cosmetic active-count, the TUI poll, other listContext callers)
+	// run in parallel instead of serializing behind one write-lock holder. The
+	// critical section below only runs a SELECT + row scan; nothing under the
+	// lock mutates State or the DB. Holding the write Lock() here caused a
+	// fleet-wide priority inversion on busy daemons (the observed prime stall).
+	h.state.RLock()
 
 	// Build query with filters — only return contexts for active (non-ended) sessions
 	query := `SELECT wc.session_id, wc.agent_id, wc.branch, wc.worktree_path,
@@ -921,7 +1107,7 @@ func (h *AgentHandler) HandleListContext(ctx context.Context, params json.RawMes
 
 	rows, err := h.state.DB().QueryContext(ctx, query, args...)
 	if err != nil {
-		h.state.Unlock()
+		h.state.RUnlock()
 		return nil, fmt.Errorf("query work contexts: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
@@ -949,7 +1135,7 @@ func (h *AgentHandler) HandleListContext(ctx context.Context, params json.RawMes
 			&intentUpdatedAt,
 		)
 		if err != nil {
-			h.state.Unlock()
+			h.state.RUnlock()
 			return nil, fmt.Errorf("scan row: %w", err)
 		}
 
@@ -1014,11 +1200,11 @@ func (h *AgentHandler) HandleListContext(ctx context.Context, params json.RawMes
 	}
 
 	if err := rows.Err(); err != nil {
-		h.state.Unlock()
+		h.state.RUnlock()
 		return nil, fmt.Errorf("iterate rows: %w", err)
 	}
 
-	h.state.Unlock()
+	h.state.RUnlock()
 
 	// Live git extraction: re-extract from worktree paths so callers see
 	// current uncommitted_files / changed_files instead of stale heartbeat data.
@@ -1191,12 +1377,14 @@ func (h *AgentHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 		Method:    "manual",
 	}
 
-	// Write event to events.jsonl
-	if err := h.state.WriteEvent(ctx, event); err != nil {
-		h.state.Unlock()
+	// Write event to events.jsonl. agent.cleanup is non-structural;
+	// postCommit always nil. thrum-bsn7 signature uniform.
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	h.state.Unlock()
+	if err != nil {
 		return nil, fmt.Errorf("write agent.cleanup event: %w", err)
 	}
-	h.state.Unlock()
+	h.state.GoPostCommit(postCommit)
 
 	return &DeleteAgentResponse{
 		AgentID: agent.AgentID,
@@ -1419,8 +1607,8 @@ func (h *AgentHandler) HandleSetAgentStatus(ctx context.Context, params json.Raw
 	if req.Agent == "" {
 		return nil, errors.New("agent name is required")
 	}
-	if req.Status != "working" && req.Status != "idle" && req.Status != "blocked" {
-		return nil, fmt.Errorf("invalid status %q: must be working, idle, or blocked", req.Status)
+	if req.Status != "working" && req.Status != "idle" && req.Status != "blocked" && req.Status != "stuck" {
+		return nil, fmt.Errorf("invalid status %q: must be working, idle, blocked, or stuck", req.Status)
 	}
 
 	// Search identity dirs across worktrees for the target agent

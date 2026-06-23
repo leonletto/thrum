@@ -56,6 +56,28 @@ type Backstop struct {
 	AgeCutoff time.Duration    // typical: 15 * time.Minute
 	Interval  time.Duration    // typical: 15 * time.Minute
 	Now       func() time.Time // injected for tests; Run defaults to time.Now
+	// IsResident is the recipient-residency predicate (thrum-wo2z): the agents
+	// table includes SYNCED REMOTE registrations (sync replicates them and
+	// refreshes last_seen_at), so the scan's alive-window does NOT imply the
+	// recipient lives on this daemon. Without this filter, a delivery for a
+	// remote-resident recipient synced into the local DB wakes a local session
+	// every tick forever (the leonair 15-minute phantom-wake metronome). The
+	// daemon wires it to nudge.HasLocalIdentity — identity-file-based, the
+	// same residency notion the inbox side resolves from. nil = legacy
+	// allow-all (existing constructors/tests unchanged).
+	IsResident func(agentID string) bool
+	// VisibleUnread is the inbox-visibility predicate (thrum-saj4): the raw
+	// message_deliveries scan counts unread rows the recipient cannot SEE —
+	// a delivery row can exist for a message scoped/addressed such that the
+	// inbox's for-agent visibility filter (buildForAgentClause) hides it
+	// (storm-era supervisor-relay feeders). Nudging for invisible mail is the
+	// phantom-nudge residual wo2z's residency skip did not reach. The daemon
+	// wires this to rpc.CountInboxVisibleUnread — the SAME live count the
+	// inbox listing produces (share-live, not frozen: the backstop must agree
+	// with the inbox at all times). Returns the count the recipient would see
+	// in `thrum inbox --unread`; the backstop nudges only when it is > 0. nil
+	// = legacy allow-all (existing constructors/tests unchanged).
+	VisibleUnread func(ctx context.Context, agentID string) (int, error)
 }
 
 // Run blocks on ctx and ticks at Backstop.Interval. Returns when ctx is done.
@@ -118,7 +140,35 @@ func (b *Backstop) Tick(ctx context.Context) error {
 	}
 
 	for _, bl := range backlogs {
-		if err := b.Dispatch.Dispatch(ctx, bl.agentID, bl.count); err != nil {
+		// thrum-wo2z: skip recipients not resident on this daemon — their
+		// unread state is genuinely theirs, on their own box; nudging a local
+		// session for it is the phantom-wake defect. Residency first: it is the
+		// cheapest check (a filesystem stat) and prunes the synced-remote rows
+		// before the visibility query runs.
+		if b.IsResident != nil && !b.IsResident(bl.agentID) {
+			slog.Debug("[backstop] skip non-resident recipient", "agent", bl.agentID, "unread", bl.count)
+			continue
+		}
+		// thrum-saj4: the raw scan counted unread DELIVERY rows; nudge only for
+		// the subset the recipient can actually SEE in their inbox (the same
+		// for-agent visibility filter HandleList applies). A delivery row for a
+		// message hidden by that filter (e.g. scoped to a group the agent isn't
+		// in) must not wake them. dispatchCount = the visible count, so the
+		// nudge text reflects what they'll find.
+		dispatchCount := bl.count
+		if b.VisibleUnread != nil {
+			visible, err := b.VisibleUnread(ctx, bl.agentID)
+			if err != nil {
+				slog.Warn("[backstop] visible-unread check failed", "agent", bl.agentID, "err", err)
+				continue // fail closed: a count error must not resurrect the phantom nudge
+			}
+			if visible == 0 {
+				slog.Debug("[backstop] skip filter-hidden unread", "agent", bl.agentID, "raw_unread", bl.count)
+				continue
+			}
+			dispatchCount = visible
+		}
+		if err := b.Dispatch.Dispatch(ctx, bl.agentID, dispatchCount); err != nil {
 			slog.Warn("[backstop] dispatch failed", "agent", bl.agentID, "err", err)
 			// continue — one bad nudge shouldn't stop the rest
 		}

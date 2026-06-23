@@ -111,31 +111,14 @@ func DaemonStart(repoPath string, localOnly bool, force bool) error {
 		return fmt.Errorf("failed to release daemon process: %w", err)
 	}
 
-	// Wait for socket and ws.port to become available (indicates daemon is ready)
+	// Wait for socket and ws.port to become available (indicates daemon is ready).
+	// Migration-aware (thrum-vh2c): if the daemon is running a long schema
+	// migration during boot it reports heartbeating progress, and we show a
+	// spinner + extend the wait instead of false-timing-out. A hung daemon (no
+	// migration progress, or a frozen heartbeat) still times out within a
+	// bounded window.
 	wsPortPath := filepath.Join(thrumDir, "var", "ws.port")
-	timeout := time.After(10 * time.Second)
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
-	socketReady := false
-	for {
-		select {
-		case <-timeout:
-			return fmt.Errorf("timeout waiting for daemon to start")
-		case <-ticker.C:
-			if !socketReady {
-				if _, err := os.Stat(socketPath); err == nil {
-					socketReady = true
-				}
-			}
-			if socketReady {
-				// Also wait for ws.port file so the URL is available
-				if _, err := os.Stat(wsPortPath); err == nil {
-					return nil
-				}
-			}
-		}
-	}
+	return waitForDaemonReady(daemonStartWaitDefaults(socketPath, wsPortPath, varDir))
 }
 
 // DaemonStop stops the daemon gracefully.
@@ -166,8 +149,13 @@ func DaemonStop(repoPath string) error {
 		return fmt.Errorf("failed to send SIGTERM to process %d: %w", pidInfo.PID, err)
 	}
 
-	// Wait for daemon to stop (with timeout)
-	timeout := time.After(10 * time.Second)
+	// Wait for daemon to stop (with timeout). Graceful shutdown now releases the
+	// inbound tsnet peer-RPC node before removing the PID file (thrum-oqao),
+	// bounded by daemon.tsnetShutdownTimeout (6s). Allow generous headroom over
+	// that bound plus the WS/socket teardown so a clean-but-slower stop is not
+	// misreported as a hang (and a restart's new process only binds after the
+	// old node is truly released).
+	timeout := time.After(15 * time.Second)
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 

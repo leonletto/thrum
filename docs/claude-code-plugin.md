@@ -16,7 +16,7 @@ disclosure resource docs. It replaces the manual agent definition approach
 
 **What you get:**
 
-- **11 slash commands** — `/thrum:send`, `/thrum:inbox`, `/thrum:quickstart`,
+- **14 slash commands** — `/thrum:send`, `/thrum:inbox`, `/thrum:quickstart`,
   `/thrum:load-context`, `/thrum:restart`, and more
 - **Automatic context** — SessionStart, PreCompact, and PostCompact hooks keep
   your agent oriented across sessions and compaction
@@ -94,19 +94,22 @@ identity, team roster, unread messages, and daemon health.
 
 All commands live under the `/thrum:` namespace.
 
-| Command                 | Purpose                                                      |
-| ----------------------- | ------------------------------------------------------------ |
-| `/thrum:quickstart`     | Register agent and start session (interactive or with flags) |
-| `/thrum:send`           | Send direct or broadcast messages                            |
-| `/thrum:inbox`          | Check message inbox (all or unread only)                     |
-| `/thrum:reply`          | Reply to a message (inherits original audience)              |
-| `/thrum:wait`           | Block until a message arrives (background listener use)      |
-| `/thrum:team`           | Show active team members with roles and intents              |
-| `/thrum:overview`       | Combined status + team + inbox view                          |
-| `/thrum:prime`          | Load full session context (identity, team, inbox, git)       |
-| `/thrum:load-context`   | Restore saved agent work context after compaction            |
-| `/thrum:update-project` | Guided workflow to update durable project state              |
-| `/thrum:restart`        | Save conversation snapshot and prepare for session restart   |
+| Command                   | Purpose                                                                                   |
+| ------------------------- | ----------------------------------------------------------------------------------------- |
+| `/thrum:quickstart`       | Register agent and start session (interactive or with flags)                              |
+| `/thrum:send`             | Send direct or broadcast messages                                                         |
+| `/thrum:inbox`            | Check message inbox (all or unread only)                                                  |
+| `/thrum:reply`            | Reply to a message (inherits original audience)                                           |
+| `/thrum:wait`             | Block until a message arrives (background listener use)                                   |
+| `/thrum:team`             | Show active team members with roles and intents                                           |
+| `/thrum:overview`         | Combined status + team + inbox view                                                       |
+| `/thrum:prime`            | Load full session context (identity, team, inbox, git)                                    |
+| `/thrum:load-context`     | Restore saved agent work context after compaction                                         |
+| `/thrum:update-project`   | Guided workflow to update durable project state                                           |
+| `/thrum:restart`          | Save conversation snapshot and prepare for session restart                                |
+| `/thrum:restart-extended` | Restart with the 16-section designer/architect-grade snapshot                             |
+| `/thrum:sleep`            | Park the agent for operator-initiated wake (saves a snapshot, then kills its own session) |
+| `/thrum:sleep-extended`   | Sleep with the 16-section extended snapshot                                               |
 
 ### Common workflows
 
@@ -285,11 +288,11 @@ See the `LISTENER_PATTERN.md` resource for the full template.
 | Feature        | Plugin                                      | Manual (toolkit/agents/)              |
 | -------------- | ------------------------------------------- | ------------------------------------- |
 | Installation   | `claude plugin marketplace add` + `install` | Copy `.md` files to `.claude/agents/` |
-| Updates        | Re-install from source                      | Manual file replacement               |
+| Updates        | In-place via `/plugin marketplace update`   | Manual file replacement               |
 | Slash commands | 11 commands included                        | None                                  |
 | Hooks          | SessionStart + PreCompact + PostCompact     | Manual hook configuration             |
 | Resource docs  | 8 progressive disclosure docs               | Single monolithic agent file          |
-| Maintenance    | Versioned (v0.8.1)                          | Ad-hoc                                |
+| Maintenance    | Versioned (v0.10.6)                         | Ad-hoc                                |
 
 The manual agent definitions (`thrum-agent.md`, `message-listener.md`) still
 work and are available in `toolkit/agents/` for environments that don't support

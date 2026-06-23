@@ -25,6 +25,39 @@ emit_fail() {
   printf '       → file:     %s\n' "$loc"
   RT_COUNT_FAIL=$((RT_COUNT_FAIL + 1))
   RT_FAILURE_LINES+="${RT_FAILURE_LINES:+$'\n'}  [FAIL] $sid / $name"$'\n'"         $loc"
+  _capture_panes_on_fail "$sid" "$name"
+}
+
+# _capture_panes_on_fail <scenario-id> <assertion-name>
+# Best-effort tmux capture of the fixture panes ($COORD_PANE + $IMPL_PANE,
+# exported by setup-repo.sh) at the moment a fail emits. Snapshots land in
+# $THRUM_RELEASE_FAILURES_DIR/<scenario-id>--<assertion>--<pane>.snap so the
+# self-isolating launcher's post-run paths can find them. Defaults to
+# /tmp/thrum-release-failures when the env var is unset (direct run.sh
+# invocation without the launcher). Silent failure modes are intentional —
+# fail-time snapshotting must NEVER mask the original fail signal.
+_capture_panes_on_fail() {
+  local sid="$1" name="$2"
+  local dir="${THRUM_RELEASE_FAILURES_DIR:-/tmp/thrum-release-failures}"
+  command -v tmux >/dev/null 2>&1 || return 0
+  mkdir -p "$dir" 2>/dev/null || return 0
+  # Sanitize the assertion name into a filename-safe slug.
+  local fname
+  fname="$(printf '%s' "$name" | tr -c 'A-Za-z0-9._-' '_')"
+  local pane_var pane snapshotted=0
+  for pane_var in COORD_PANE IMPL_PANE; do
+    pane="${!pane_var:-}"
+    [ -z "$pane" ] && continue
+    # -S -200 grabs ~200 lines of scrollback context (enough to see the
+    # last prompt/turn that led to the fail). -J joins wrapped lines so
+    # long URLs/paths read sensibly post-mortem.
+    if tmux capture-pane -t "$pane" -p -S -200 -J \
+         > "$dir/${sid}--${fname}--${pane_var}.snap" 2>/dev/null; then
+      snapshotted=1
+    fi
+  done
+  [ "$snapshotted" -eq 1 ] && \
+    printf '       → snapshots: %s/%s--%s--{COORD,IMPL}_PANE.snap\n' "$dir" "$sid" "$fname"
 }
 
 emit_skip() {

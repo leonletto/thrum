@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/leonletto/thrum/internal/schema"
 )
@@ -123,7 +124,9 @@ func TestInitDB_Indexes(t *testing.T) {
 	// Verify indexes exist
 	indexes := []string{
 		"idx_messages_thread",
-		"idx_messages_time",
+		// v47 forward-port (thrum-399av): idx_messages_time was replaced by the
+		// idx_messages_time_id composite keyset index on fresh DBs.
+		"idx_messages_time_id",
 		"idx_messages_agent",
 		"idx_messages_session",
 		"idx_messages_not_deleted",
@@ -145,6 +148,17 @@ func TestInitDB_Indexes(t *testing.T) {
 		} else if err != nil {
 			t.Fatalf("Query index %s failed: %v", index, err)
 		}
+	}
+
+	// v47 forward-port (thrum-399av): idx_messages_time was replaced by
+	// idx_messages_time_id and must NOT exist on a fresh v51 DB. Guards against
+	// the dropped index silently reappearing in createIndexes.
+	var stale string
+	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_messages_time'").Scan(&stale)
+	if err == nil {
+		t.Error("idx_messages_time should NOT exist on a fresh v51 DB (replaced by idx_messages_time_id)")
+	} else if err != sql.ErrNoRows {
+		t.Fatalf("Query idx_messages_time failed: %v", err)
 	}
 }
 
@@ -902,11 +916,11 @@ func TestSchema_FreshInstall_HasMonitorsTable(t *testing.T) {
 		t.Errorf("monitors table should exist on fresh install, got count=%d", count)
 	}
 
-	// Expected columns
+	// Expected columns (schedule added in v39 — thrum-puhr.9).
 	expected := []string{
 		"id", "name", "argv", "match_pattern", "target", "cwd", "env",
 		"debounce_seconds", "created_at", "updated_at", "status",
-		"last_exit_code", "last_exit_at", "pid",
+		"last_exit_code", "last_exit_at", "pid", "schedule",
 	}
 	for _, col := range expected {
 		var n int
@@ -1050,9 +1064,413 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	}
 }
 
-func TestSchema_V32_CurrentVersion(t *testing.T) {
-	if schema.CurrentVersion != 32 {
-		t.Errorf("CurrentVersion = %d, want 32 (v25-v32 forward-ported from thrum-agents per rc.4)", schema.CurrentVersion)
+func TestSchema_V51_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 51 {
+		t.Errorf("CurrentVersion = %d, want 51 (v40 read-state marker + v41–v51 dead-end DDL forward-port from thrum-agents per thrum-399av)", schema.CurrentVersion)
+	}
+	// The read-state crossing constant stays at the v40 marker version — the
+	// state.NewState gate compares the pre-migration version against it, and the
+	// v40 backfill must NOT re-fire on a v40→v51 upgrade. Forward-porting the
+	// schema does not move the read-state boundary.
+	if schema.SchemaVersionReadState != 40 {
+		t.Errorf("SchemaVersionReadState = %d, want 40 (unchanged by the v51 forward-port)", schema.SchemaVersionReadState)
+	}
+}
+
+// TestSchema_V36_AgentAPIErrorRemediation pins the thrum-sdzk v36 table on
+// BOTH paths (canonical-ref §3.11 Guard-1): fresh install (createTables) and
+// upgrade (the v36 migration block). The shared DDL const makes drift
+// impossible, but this guards the wiring — that the const is actually
+// referenced in both places.
+func TestSchema_V36_AgentAPIErrorRemediation(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "v36.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+
+	tableExists := func() bool {
+		var n int
+		if qErr := db.QueryRow(
+			`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agent_api_error_remediation'`,
+		).Scan(&n); qErr != nil {
+			t.Fatalf("query table: %v", qErr)
+		}
+		return n == 1
+	}
+
+	// Fresh-install path.
+	if !tableExists() {
+		t.Fatal("fresh install missing agent_api_error_remediation table (createTables path)")
+	}
+
+	// Expected columns (NULL/DEFAULT shape lives in the shared const).
+	expected := map[string]bool{
+		"agent_name": false, "last_nudge_at": false, "consecutive_nudge_count": false,
+		"last_error": false, "escalation_sent": false, "updated_at": false,
+	}
+	rows, err := db.Query("PRAGMA table_info(agent_api_error_remediation)")
+	if err != nil {
+		t.Fatalf("PRAGMA: %v", err)
+	}
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, ctype string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		if _, ok := expected[name]; ok {
+			expected[name] = true
+		}
+	}
+	_ = rows.Close()
+	for col, seen := range expected {
+		if !seen {
+			t.Errorf("agent_api_error_remediation missing column %q", col)
+		}
+	}
+
+	// Migration-block path: drop the table, rewind to v35, migrate — the v36
+	// block must recreate it (proves the migration, not just createTables).
+	if _, err := db.Exec("DROP TABLE agent_api_error_remediation"); err != nil {
+		t.Fatalf("drop: %v", err)
+	}
+	if _, err := db.Exec("UPDATE schema_version SET version = 35"); err != nil {
+		t.Fatalf("rewind to v35: %v", err)
+	}
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v35→v36: %v", err)
+	}
+	if !tableExists() {
+		t.Fatal("v36 migration block did not recreate agent_api_error_remediation table")
+	}
+}
+
+// TestSchema_V35_EventKindCheck_FreshInstall pins the thrum-6qmf.17 v35
+// event_kind CHECK on the fresh-install path (createTables). A bogus
+// event_kind must be rejected — proving Guard-1 parity (fresh installs carry
+// the same constraint the v35 rebuild adds to upgraded DBs).
+func TestSchema_V35_EventKindCheck_FreshInstall(t *testing.T) {
+	db := setupTestDB(t) // fresh install at CurrentVersion via createTables
+	_, err := db.Exec(
+		`INSERT INTO agent_lifecycle_events (agent_name, event_kind, event_time) VALUES ('a', 'bogus_kind', 1)`)
+	if err == nil {
+		t.Fatal("fresh-install agent_lifecycle_events accepted a bogus event_kind; CHECK missing (Guard-1 parity broken)")
+	}
+	if !strings.Contains(strings.ToUpper(err.Error()), "CONSTRAINT") {
+		t.Errorf("expected a CHECK constraint error, got: %v", err)
+	}
+	// A valid kind still inserts.
+	if _, err := db.Exec(
+		`INSERT INTO agent_lifecycle_events (agent_name, event_kind, event_time) VALUES ('a', 'crash_detected', 1)`); err != nil {
+		t.Errorf("valid event_kind should insert: %v", err)
+	}
+}
+
+// TestSchema_V35_RebuildPreservesRows builds a pre-CHECK agent_lifecycle_events
+// (the original v27 shape, no event_kind CHECK) with rows covering all 7 kinds,
+// then migrates v34→36 and asserts the rebuild preserved every row + id and
+// that the CHECK is now live.
+func TestSchema_V35_RebuildPreservesRows(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "v35rebuild.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Hand-build the OLD (pre-CHECK) table + a v34 schema_version marker.
+	if _, err := db.Exec(`CREATE TABLE schema_version (version INTEGER NOT NULL, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("schema_version: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO schema_version (version) VALUES (34)`); err != nil {
+		t.Fatalf("seed v34: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE agent_lifecycle_events (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		agent_name TEXT NOT NULL,
+		event_kind TEXT NOT NULL,
+		event_time INTEGER NOT NULL,
+		detection_method TEXT,
+		reason TEXT,
+		details TEXT
+	)`); err != nil {
+		t.Fatalf("create old table: %v", err)
+	}
+
+	kinds := []string{
+		"respawn_fired", "respawn_skipped_loopguard", "crash_detected",
+		"state_md_parse_failed", "state_md_ack_cleared", "respawn_ack_cleared",
+		"reconcile_worktree_discrepancy",
+	}
+	for i, k := range kinds {
+		// Mix detection_method set vs NULL across rows.
+		if i%2 == 0 {
+			if _, err := db.Exec(
+				`INSERT INTO agent_lifecycle_events (agent_name, event_kind, event_time, detection_method) VALUES (?, ?, ?, 'health_check_tick')`,
+				"impl_"+k, k, 1000+i); err != nil {
+				t.Fatalf("seed row %s: %v", k, err)
+			}
+		} else {
+			if _, err := db.Exec(
+				`INSERT INTO agent_lifecycle_events (agent_name, event_kind, event_time) VALUES (?, ?, ?)`,
+				"impl_"+k, k, 1000+i); err != nil {
+				t.Fatalf("seed row %s: %v", k, err)
+			}
+		}
+	}
+
+	var preCount, preMaxID int
+	_ = db.QueryRow(`SELECT COUNT(*), COALESCE(MAX(id),0) FROM agent_lifecycle_events`).Scan(&preCount, &preMaxID)
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v34→36: %v", err)
+	}
+
+	var postCount, postMaxID int
+	if err := db.QueryRow(`SELECT COUNT(*), COALESCE(MAX(id),0) FROM agent_lifecycle_events`).Scan(&postCount, &postMaxID); err != nil {
+		t.Fatalf("post-migrate count: %v", err)
+	}
+	if postCount != preCount || postCount != len(kinds) {
+		t.Errorf("row count changed: pre=%d post=%d want=%d", preCount, postCount, len(kinds))
+	}
+	if postMaxID != preMaxID {
+		t.Errorf("MAX(id) not preserved: pre=%d post=%d", preMaxID, postMaxID)
+	}
+
+	// Sample a row intact (id 1 = first kind, detection_method set).
+	var agent, kind string
+	var dm sql.NullString
+	if err := db.QueryRow(`SELECT agent_name, event_kind, detection_method FROM agent_lifecycle_events WHERE id = 1`).Scan(&agent, &kind, &dm); err != nil {
+		t.Fatalf("sample row: %v", err)
+	}
+	if agent != "impl_respawn_fired" || kind != "respawn_fired" || !dm.Valid || dm.String != "health_check_tick" {
+		t.Errorf("row 1 not preserved intact: agent=%q kind=%q dm=%v", agent, kind, dm)
+	}
+
+	// The CHECK is now live on the rebuilt table.
+	if _, err := db.Exec(
+		`INSERT INTO agent_lifecycle_events (agent_name, event_kind, event_time) VALUES ('x', 'bogus_kind', 1)`); err == nil {
+		t.Error("post-migration bogus event_kind accepted; v35 rebuild did not add the CHECK")
+	}
+}
+
+// TestSchema_GapFill_V32_to_V36 is the end-to-end proof of the v0.10.6 dead-end
+// gap-fill: seed a bare v32 DB carrying only the tables the 33-36 blocks touch
+// (messages for v33, agent_lifecycle_events for the v35 rebuild), run Migrate,
+// and assert the DB reaches v36 with all four new schema shapes live — the
+// pending_route_resolution column, the memories table, the agent_lifecycle
+// event_kind CHECK, and the agent_api_error_remediation table.
+func TestSchema_GapFill_V32_to_V36(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "gapfill_v32_v36.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Bare v32 fixture: schema_version=32 + the pre-v33 shapes the migration
+	// blocks reference. messages WITHOUT pending_route_resolution (v33 adds it);
+	// agent_lifecycle_events in the pre-CHECK v27 shape (v35 rebuilds it).
+	if _, err := db.Exec(`CREATE TABLE schema_version (version INTEGER NOT NULL, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("schema_version: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO schema_version (version) VALUES (32)`); err != nil {
+		t.Fatalf("seed v32: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE messages (
+		message_id   TEXT PRIMARY KEY,
+		agent_id     TEXT NOT NULL,
+		session_id   TEXT NOT NULL,
+		created_at   TEXT NOT NULL,
+		body_format  TEXT NOT NULL,
+		body_content TEXT NOT NULL
+	)`); err != nil {
+		t.Fatalf("create messages: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE agent_lifecycle_events (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		agent_name TEXT NOT NULL,
+		event_kind TEXT NOT NULL,
+		event_time INTEGER NOT NULL,
+		detection_method TEXT,
+		reason TEXT,
+		details TEXT
+	)`); err != nil {
+		t.Fatalf("create agent_lifecycle_events: %v", err)
+	}
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v32→v36: %v", err)
+	}
+
+	v, err := schema.GetSchemaVersion(db)
+	if err != nil {
+		t.Fatalf("GetSchemaVersion: %v", err)
+	}
+	if v != schema.CurrentVersion {
+		t.Fatalf("schema_version after gap-fill migrate = %d; want %d (schema.CurrentVersion)", v, schema.CurrentVersion)
+	}
+
+	// v33: pending_route_resolution column present on messages.
+	var colN int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM pragma_table_info('messages') WHERE name='pending_route_resolution'`,
+	).Scan(&colN); err != nil {
+		t.Fatalf("query messages column: %v", err)
+	}
+	if colN != 1 {
+		t.Error("v33 did not add pending_route_resolution column to messages")
+	}
+
+	// v34: memories table present.
+	var memN int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='memories'`,
+	).Scan(&memN); err != nil {
+		t.Fatalf("query memories table: %v", err)
+	}
+	if memN != 1 {
+		t.Error("v34 did not create memories table")
+	}
+
+	// v35: event_kind CHECK live on the rebuilt agent_lifecycle_events.
+	if _, err := db.Exec(
+		`INSERT INTO agent_lifecycle_events (agent_name, event_kind, event_time) VALUES ('x', 'bogus_kind', 1)`); err == nil {
+		t.Error("v35 rebuild did not add the event_kind CHECK (bogus kind accepted)")
+	}
+
+	// v36: agent_api_error_remediation table present.
+	var remN int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agent_api_error_remediation'`,
+	).Scan(&remN); err != nil {
+		t.Fatalf("query remediation table: %v", err)
+	}
+	if remN != 1 {
+		t.Error("v36 did not create agent_api_error_remediation table")
+	}
+}
+
+// seedBareV32DB writes a minimal on-disk v32 fixture (schema_version=32 only)
+// at dbPath and returns the open handle. All v33-v36 blocks are
+// bare-fixture-tolerant, so Migrate reaches v36 from this seed.
+func seedBareV32DB(t *testing.T, dbPath string) *sql.DB {
+	t.Helper()
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE schema_version (version INTEGER NOT NULL, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("schema_version: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO schema_version (version) VALUES (32)`); err != nil {
+		t.Fatalf("seed v32: %v", err)
+	}
+	return db
+}
+
+// TestSchema_Migrate_BackupFailureHalts proves the RC1 hardening: when the
+// pre-migration backup cannot be written (here, a read-only DB directory), the
+// migration aborts — Migrate returns an error AND the on-disk schema version
+// is unchanged, so no partial migration ran. The DB is not rebuildable from
+// JSONL, so refusing to migrate without a recovery snapshot is the safe default.
+func TestSchema_Migrate_BackupFailureHalts(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "rodir")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	dbPath := filepath.Join(dir, "state.db")
+	db := seedBareV32DB(t, dbPath)
+	defer func() { _ = db.Close() }()
+
+	// Make the DB's directory unwritable so the backup WriteFile fails while
+	// the source DB stays readable. Restore perms before TempDir cleanup.
+	// Directory perms need the execute bit, so 0o500/0o700 are intentional here
+	// (gosec G302 targets file perms; this is a directory in a TempDir test).
+	if err := os.Chmod(dir, 0o500); err != nil { // #nosec G302 -- read-only dir for a backup-failure test
+		t.Fatalf("chmod ro: %v", err)
+	}
+	defer func() { _ = os.Chmod(dir, 0o700) }() // #nosec G302 -- restore dir perms for TempDir cleanup
+
+	err := schema.Migrate(db)
+	if err == nil {
+		t.Fatal("Migrate should have failed when the pre-migration backup could not be written")
+	}
+	if !strings.Contains(err.Error(), "pre-migration DB backup failed") {
+		t.Errorf("expected backup-failure halt error, got: %v", err)
+	}
+
+	// Schema version must be UNCHANGED — no partial migration.
+	v, gErr := schema.GetSchemaVersion(db)
+	if gErr != nil {
+		t.Fatalf("GetSchemaVersion: %v", gErr)
+	}
+	if v != 32 {
+		t.Errorf("schema version changed despite halted migration: got %d, want 32", v)
+	}
+}
+
+// TestSchema_Migrate_TimestampedBackups proves the RC1 hardening's timestamped,
+// always-fresh naming: each migration event writes a backup matching
+// .pre-migration-v<N>-<UTC>.bak, and two sequential migrations of fresh
+// fixtures produce two DISTINCT, lexically-ordered (== chronologically ordered)
+// backup files — never skipped by a stale backup-once snapshot.
+func TestSchema_Migrate_TimestampedBackups(t *testing.T) {
+	backupOf := func(dbPath string) string {
+		t.Helper()
+		matches, err := filepath.Glob(dbPath + ".pre-migration-v32-*.bak")
+		if err != nil {
+			t.Fatalf("glob: %v", err)
+		}
+		if len(matches) != 1 {
+			t.Fatalf("expected exactly 1 timestamped backup for %s, got %d: %v", dbPath, len(matches), matches)
+		}
+		return filepath.Base(matches[0])
+	}
+
+	// First fresh v32 fixture → migrate → one timestamped backup.
+	dbA := filepath.Join(t.TempDir(), "state.db")
+	dbaHandle := seedBareV32DB(t, dbA)
+	if err := schema.Migrate(dbaHandle); err != nil {
+		_ = dbaHandle.Close()
+		t.Fatalf("Migrate A: %v", err)
+	}
+	_ = dbaHandle.Close()
+	nameA := backupOf(dbA)
+
+	// Ensure the second migration lands in a strictly later UTC second so the
+	// timestamps (and thus the lexical order) differ deterministically.
+	time.Sleep(1100 * time.Millisecond)
+
+	// Second fresh v32 fixture (same db basename, different dir) → migrate.
+	dbB := filepath.Join(t.TempDir(), "state.db")
+	dbbHandle := seedBareV32DB(t, dbB)
+	if err := schema.Migrate(dbbHandle); err != nil {
+		_ = dbbHandle.Close()
+		t.Fatalf("Migrate B: %v", err)
+	}
+	_ = dbbHandle.Close()
+	nameB := backupOf(dbB)
+
+	// Pattern check: .pre-migration-v32-<UTC>.bak (UTC form 20060102T150405Z).
+	for _, n := range []string{nameA, nameB} {
+		if !strings.HasPrefix(n, "state.db.pre-migration-v32-") || !strings.HasSuffix(n, "Z.bak") {
+			t.Errorf("backup name %q does not match .pre-migration-v32-<UTC>.bak", n)
+		}
+	}
+	// Distinct + lexically ordered (timestamp form is lexically == chronologically sortable).
+	if nameA == nameB {
+		t.Errorf("two sequential migrations produced identical backup names: %q", nameA)
+	}
+	if nameA >= nameB {
+		t.Errorf("backup names not lexically (chronologically) ordered: A=%q B=%q", nameA, nameB)
 	}
 }
 
@@ -1087,18 +1505,18 @@ func TestSchema_ForwardPort_V25_to_V32_AllTablesPresent(t *testing.T) {
 	}
 
 	if err := schema.Migrate(db); err != nil {
-		t.Fatalf("Migrate v24→v32: %v", err)
+		t.Fatalf("Migrate v24→v36: %v", err)
 	}
 
 	v, err := schema.GetSchemaVersion(db)
 	if err != nil {
 		t.Fatalf("GetSchemaVersion: %v", err)
 	}
-	if v != 32 {
-		t.Errorf("schema_version after migrate = %d; want 32", v)
+	if v != schema.CurrentVersion {
+		t.Errorf("schema_version after migrate = %d; want %d (schema.CurrentVersion)", v, schema.CurrentVersion)
 	}
 
-	// All 7 new tables must be present.
+	// All forward-ported tables must be present (v25-v36).
 	for _, tbl := range []string{
 		"scheduler_job_state",
 		"scheduler_job_events",
@@ -1107,6 +1525,9 @@ func TestSchema_ForwardPort_V25_to_V32_AllTablesPresent(t *testing.T) {
 		"email_msg_seen",
 		"email_outbound_queue",
 		"email_peer_rate_state",
+		"memories",
+		"memory_scopes",
+		"agent_api_error_remediation",
 	} {
 		var name string
 		err := db.QueryRow(
@@ -1167,8 +1588,8 @@ func TestSchema_FreshInstall_HasForwardPortedTables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSchemaVersion: %v", err)
 	}
-	if v != 32 {
-		t.Errorf("fresh install schema_version = %d; want 32", v)
+	if v != schema.CurrentVersion {
+		t.Errorf("fresh install schema_version = %d; want %d (schema.CurrentVersion)", v, schema.CurrentVersion)
 	}
 	for _, tbl := range []string{
 		"scheduler_job_state",
@@ -1178,6 +1599,9 @@ func TestSchema_FreshInstall_HasForwardPortedTables(t *testing.T) {
 		"email_msg_seen",
 		"email_outbound_queue",
 		"email_peer_rate_state",
+		"memories",
+		"memory_scopes",
+		"agent_api_error_remediation",
 	} {
 		var name string
 		err := db.QueryRow(
@@ -1444,32 +1868,51 @@ func TestMigrate_DBBackupBeforeMigration(t *testing.T) {
 		t.Fatalf("Migrate() failed: %v", err)
 	}
 
-	// Verify backup file exists.
-	bakPath := dbPath + ".pre-migration-v21-bak"
-	bakBytes, err := os.ReadFile(bakPath)
-	if err != nil {
-		t.Fatalf("backup file not created: %v", err)
+	// Verify exactly one timestamped backup exists (RC1 hardening: the suffix
+	// is now .pre-migration-v<N>-<UTC>.bak, not the old fixed -bak form).
+	v21Backups := func() []string {
+		m, gErr := filepath.Glob(dbPath + ".pre-migration-v21-*.bak")
+		if gErr != nil {
+			t.Fatalf("glob: %v", gErr)
+		}
+		return m
+	}
+	first := v21Backups()
+	if len(first) != 1 {
+		t.Fatalf("expected exactly 1 timestamped backup after first Migrate, got %d: %v", len(first), first)
 	}
 
 	// Backup bytes must match the pre-migration snapshot.
+	bakBytes, err := os.ReadFile(first[0])
+	if err != nil {
+		t.Fatalf("read backup: %v", err)
+	}
 	if len(bakBytes) != len(preBytes) {
 		t.Fatalf("backup size mismatch: got %d bytes, want %d bytes", len(bakBytes), len(preBytes))
 	}
 
-	// Run Migrate again — backup must NOT be overwritten.
-	// (First, downgrade version again to force another migration pass.)
+	// Run Migrate again after re-downgrading — RC1 hardening makes each
+	// migration event ALWAYS-FRESH, so a SECOND, distinct timestamped backup
+	// must appear (the old backup-once/never-overwrite behavior is gone). Sleep
+	// past the UTC-second boundary so the second timestamp differs.
 	if _, err := db2.Exec("UPDATE schema_version SET version = ?", oldVersion); err != nil {
 		t.Fatalf("re-downgrade version: %v", err)
 	}
+	time.Sleep(1100 * time.Millisecond)
 	if err := schema.Migrate(db2); err != nil {
 		t.Fatalf("Migrate() second call failed: %v", err)
 	}
-	bakBytes2, err := os.ReadFile(bakPath)
-	if err != nil {
-		t.Fatalf("backup file disappeared: %v", err)
+	second := v21Backups()
+	if len(second) != 2 {
+		t.Fatalf("expected 2 distinct timestamped backups after second Migrate (always-fresh), got %d: %v", len(second), second)
 	}
-	if string(bakBytes2) != string(bakBytes) {
-		t.Fatalf("backup overwritten on second Migrate; want pre-migration bytes unchanged")
+	// The original snapshot must still be intact among them.
+	stillBytes, err := os.ReadFile(first[0])
+	if err != nil {
+		t.Fatalf("original backup disappeared: %v", err)
+	}
+	if string(stillBytes) != string(bakBytes) {
+		t.Fatalf("original pre-migration snapshot was clobbered; want bytes unchanged")
 	}
 }
 
@@ -1702,5 +2145,361 @@ func TestMigrate_V20_AgentWithoutRegisterEvent_KeepsEmptyOriginDaemon(t *testing
 	}
 	if origin != "" {
 		t.Errorf("legacy agent origin_daemon = %q after migration, want '' (no matching event)", origin)
+	}
+}
+
+// --- thrum-7ojv: v37 placeholder + v38 events.timestamp index ----------
+
+// indexExists returns true if the named index is present in sqlite_master.
+// Helper for the thrum-7ojv migration tests.
+func indexExists(t *testing.T, db *sql.DB, name string) bool {
+	t.Helper()
+	var n int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name = ?`, name,
+	).Scan(&n); err != nil {
+		t.Fatalf("query sqlite_master for index %q: %v", name, err)
+	}
+	return n == 1
+}
+
+// schemaVersion is a t.Fatalf-wrapping helper around
+// schema.GetSchemaVersion for the thrum-7ojv tests where the
+// 3-line err-handling pattern adds noise without value. Existing
+// schema tests use schema.GetSchemaVersion + explicit error handling
+// directly; either pattern is fine, this just centralises the wrap
+// for the 7ojv test trio.
+func schemaVersion(t *testing.T, db *sql.DB) int {
+	t.Helper()
+	v, err := schema.GetSchemaVersion(db)
+	if err != nil {
+		t.Fatalf("GetSchemaVersion: %v", err)
+	}
+	return v
+}
+
+// TestSchema_V36_to_V38_FreshUpgrade — thrum-7ojv. Fresh release-line
+// DB at v36 (a binary built before the 7ojv change shipped) gets
+// migrated forward by a new release-line binary: must run the v37
+// no-op placeholder and the v38 index creation, end at v38 with the
+// idx_events_timestamp index present.
+func TestSchema_V36_to_V38_FreshUpgrade(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "v36-to-v38.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+
+	// Rewind to v36 and DROP the index that createTables/createIndexes
+	// stamped at fresh-install time (the v36→v38 migration path is the
+	// load-bearing one being exercised; we need to prove the migration
+	// itself creates the index, not just that fresh-install does).
+	if _, err := db.Exec(`DROP INDEX IF EXISTS idx_events_timestamp`); err != nil {
+		t.Fatalf("drop pre-existing idx_events_timestamp: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE schema_version SET version = 36`); err != nil {
+		t.Fatalf("rewind to v36: %v", err)
+	}
+
+	// Sanity: pre-Migrate state.
+	if got := schemaVersion(t, db); got != 36 {
+		t.Fatalf("pre-migrate schema_version = %d, want 36", got)
+	}
+	if indexExists(t, db, "idx_events_timestamp") {
+		t.Fatal("pre-migrate idx_events_timestamp should not exist after the drop+rewind")
+	}
+
+	// Migrate: v36 → v38 (runs v37 no-op + v38 index).
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v36→v38: %v", err)
+	}
+
+	if got := schemaVersion(t, db); got != schema.CurrentVersion {
+		t.Errorf("post-migrate schema_version = %d, want CurrentVersion", got)
+	}
+	if !indexExists(t, db, "idx_events_timestamp") {
+		t.Error("v38 migration did not create idx_events_timestamp index")
+	}
+}
+
+// TestSchema_V37_to_V38_CrossBinary — thrum-7ojv. Critical cross-binary
+// case: a DB already at v37 from a thrum-agents binary (which stamps
+// v37 with the memory-tables migration — see CurrentVersion doc) gets
+// migrated forward by a release-line binary. The release line's v37
+// branch is a no-op (must not error or attempt to re-run thrum-agents
+// memory-tables DDL we don't have), then v38 creates the index. Ends
+// at v38 with the index present + the existing v37 schema_version row
+// not double-stamped or downgraded.
+func TestSchema_V37_to_V38_CrossBinary(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "v37-to-v38.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+
+	// Simulate the "DB previously stamped v37 by a thrum-agents binary"
+	// scenario. Drop the index that fresh-install added so we can prove
+	// the v38 migration creates it on this v37 path too.
+	if _, err := db.Exec(`DROP INDEX IF EXISTS idx_events_timestamp`); err != nil {
+		t.Fatalf("drop pre-existing idx_events_timestamp: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE schema_version SET version = 37`); err != nil {
+		t.Fatalf("rewind to v37: %v", err)
+	}
+
+	if got := schemaVersion(t, db); got != 37 {
+		t.Fatalf("pre-migrate schema_version = %d, want 37", got)
+	}
+
+	// Migrate: v37 → v38. The release-line binary must SKIP its v37
+	// no-op block (already at v37) and just run v38's index creation.
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v37→v38 (cross-binary path): %v", err)
+	}
+
+	if got := schemaVersion(t, db); got != schema.CurrentVersion {
+		t.Errorf("post-migrate schema_version = %d, want CurrentVersion", got)
+	}
+	if !indexExists(t, db, "idx_events_timestamp") {
+		t.Error("v38 migration did not create idx_events_timestamp index on v37 starting state")
+	}
+}
+
+// TestSchema_V36_to_V38_CreatesMemoryTables — thrum-7ojv (back-port
+// pattern). Asserts the v37 dummy-tables back-port actually creates
+// the 6 memory.* tables (memory_record / memory_tag / memory_edge /
+// memory_fts / memory_embeddings / memory_embed_queue) and their 10
+// indexes when migrating forward from v36. Without the back-port a
+// fresh rc.3 install would create a v38 DB with NO memory tables,
+// causing crash on every memory.* operation if a thrum-agents binary
+// later runs against the same DB.
+func TestSchema_V36_to_V38_CreatesMemoryTables(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "v36-memory-backport.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+
+	// Drop the memory tables and indexes that createTables/createIndexes
+	// stamped at fresh-install time, then rewind to v36 so the v37
+	// migration block is the load-bearing thing being exercised.
+	dropStmts := []string{
+		`DROP INDEX IF EXISTS idx_memory_kind`,
+		`DROP INDEX IF EXISTS idx_memory_agent`,
+		`DROP INDEX IF EXISTS idx_memory_created`,
+		`DROP INDEX IF EXISTS idx_memory_updated`,
+		`DROP INDEX IF EXISTS idx_memory_status`,
+		`DROP INDEX IF EXISTS idx_memory_scope`,
+		`DROP INDEX IF EXISTS idx_memory_tag_tag`,
+		`DROP INDEX IF EXISTS idx_memory_edge_to`,
+		`DROP INDEX IF EXISTS idx_memory_edge_kind`,
+		`DROP INDEX IF EXISTS idx_memory_embed_status`,
+		// Order matters for the table drops: drop children before parents
+		// (FK constraints). memory_fts has no FK so can drop standalone.
+		`DROP TABLE IF EXISTS memory_embed_queue`,
+		`DROP TABLE IF EXISTS memory_embeddings`,
+		`DROP TABLE IF EXISTS memory_tag`,
+		`DROP TABLE IF EXISTS memory_edge`,
+		`DROP TABLE IF EXISTS memory_fts`,
+		`DROP TABLE IF EXISTS memory_record`,
+	}
+	for _, s := range dropStmts {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatalf("drop pre-existing %s: %v", s, err)
+		}
+	}
+	if _, err := db.Exec(`UPDATE schema_version SET version = 36`); err != nil {
+		t.Fatalf("rewind to v36: %v", err)
+	}
+
+	// Migrate v36 → v38. The v37 block must create all 6 tables + 10
+	// indexes verbatim from thrum-agents; the v38 block adds the
+	// timestamp index.
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v36→v38: %v", err)
+	}
+
+	// All 6 memory tables present.
+	expectedTables := []string{
+		"memory_record", "memory_tag", "memory_edge",
+		"memory_fts", "memory_embeddings", "memory_embed_queue",
+	}
+	for _, tbl := range expectedTables {
+		var n int
+		if err := db.QueryRow(
+			`SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table','virtual table') AND name = ?`,
+			tbl,
+		).Scan(&n); err != nil {
+			t.Fatalf("query for table %q: %v", tbl, err)
+		}
+		if n != 1 {
+			t.Errorf("table %q missing after v37 back-port (got %d rows in sqlite_master, want 1)", tbl, n)
+		}
+	}
+
+	// All 10 memory indexes present.
+	expectedIndexes := []string{
+		"idx_memory_kind", "idx_memory_agent", "idx_memory_created",
+		"idx_memory_updated", "idx_memory_status", "idx_memory_scope",
+		"idx_memory_tag_tag", "idx_memory_edge_to", "idx_memory_edge_kind",
+		"idx_memory_embed_status",
+	}
+	for _, idx := range expectedIndexes {
+		if !indexExists(t, db, idx) {
+			t.Errorf("index %q missing after v37 back-port", idx)
+		}
+	}
+
+	// v38 index also present (post v37 → v38 migration).
+	if !indexExists(t, db, "idx_events_timestamp") {
+		t.Error("idx_events_timestamp missing after v37 → v38 path")
+	}
+
+	// Schema stamped at v38.
+	if got := schemaVersion(t, db); got != schema.CurrentVersion {
+		t.Errorf("post-migrate schema_version = %d, want CurrentVersion", got)
+	}
+}
+
+// TestSchema_V38_Idempotent — thrum-7ojv. CREATE INDEX IF NOT EXISTS
+// must be idempotent across repeated migration calls. Mirrors the
+// Multi-Binary Worktree Footgun scenario where a co-resident
+// thrum-agents binary adds its own v38 = idx_events_timestamp
+// migration in the future; both binaries running their v38 block
+// against the same DB must not error.
+func TestSchema_V38_Idempotent(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "v38-idempotent.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+
+	// Sanity: fresh install already at v38 with the index in place.
+	if got := schemaVersion(t, db); got != schema.CurrentVersion {
+		t.Fatalf("fresh schema_version = %d, want CurrentVersion", got)
+	}
+	if !indexExists(t, db, "idx_events_timestamp") {
+		t.Fatal("fresh install missing idx_events_timestamp (createIndexes path)")
+	}
+
+	// Rewind to v37 + re-run migrate so the v38 block fires AGAIN against
+	// an index that already exists. CREATE INDEX IF NOT EXISTS should
+	// no-op, not error.
+	if _, err := db.Exec(`UPDATE schema_version SET version = 37`); err != nil {
+		t.Fatalf("rewind to v37: %v", err)
+	}
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v37→v38 with index already present: %v (CREATE INDEX IF NOT EXISTS must be idempotent)", err)
+	}
+	if got := schemaVersion(t, db); got != schema.CurrentVersion {
+		t.Errorf("post-migrate schema_version = %d, want CurrentVersion", got)
+	}
+	if !indexExists(t, db, "idx_events_timestamp") {
+		t.Error("idx_events_timestamp missing after idempotent re-run")
+	}
+}
+
+// TestSchema_V38_to_V39_AddsMonitorSchedule — thrum-puhr.9. Asserts the v39
+// migration adds the schedule column to an existing v38 monitors table.
+// Rewinds a fresh DB to v38, drops the schedule column (via table rebuild
+// since SQLite ALTER TABLE DROP COLUMN exists but we keep the test minimal
+// by starting from an explicit v38-shape table), then runs Migrate and
+// verifies the column landed.
+func TestSchema_V38_to_V39_AddsMonitorSchedule(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "v38-to-v39.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+
+	// Rebuild monitors as the v38-shape table (without schedule), then
+	// stamp the version back to v38 so Migrate runs only the v39 step.
+	rebuild := []string{
+		`DROP TABLE monitors`,
+		`CREATE TABLE monitors (
+			id                TEXT PRIMARY KEY,
+			name              TEXT NOT NULL UNIQUE,
+			argv              TEXT NOT NULL,
+			match_pattern     TEXT NOT NULL,
+			target            TEXT NOT NULL,
+			cwd               TEXT NOT NULL,
+			env               TEXT NOT NULL,
+			debounce_seconds  INTEGER NOT NULL,
+			created_at        TEXT NOT NULL,
+			updated_at        TEXT NOT NULL,
+			status            TEXT NOT NULL,
+			last_exit_code    INTEGER,
+			last_exit_at      TEXT,
+			pid               INTEGER
+		)`,
+		`UPDATE schema_version SET version = 38`,
+	}
+	for _, s := range rebuild {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatalf("rebuild v38 monitors: %v: %s", err, s)
+		}
+	}
+
+	if got := schemaVersion(t, db); got != 38 {
+		t.Fatalf("pre-migrate schema_version = %d, want 38", got)
+	}
+
+	// Sanity: column doesn't exist yet.
+	var n int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM pragma_table_info('monitors') WHERE name='schedule'`,
+	).Scan(&n); err != nil {
+		t.Fatalf("pre-migrate column check: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("pre-migrate schedule column already present (n=%d)", n)
+	}
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate v38→v39: %v", err)
+	}
+
+	if got := schemaVersion(t, db); got != schema.CurrentVersion {
+		t.Errorf("post-migrate schema_version = %d, want CurrentVersion", got)
+	}
+
+	// Schedule column must now exist.
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM pragma_table_info('monitors') WHERE name='schedule'`,
+	).Scan(&n); err != nil {
+		t.Fatalf("post-migrate column check: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("post-migrate schedule column missing (n=%d, want 1)", n)
+	}
+
+	// Re-running Migrate must be idempotent — column-already-present path.
+	if err := schema.Migrate(db); err != nil {
+		t.Errorf("re-run Migrate at v39 must be a no-op: %v", err)
 	}
 }

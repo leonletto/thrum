@@ -1,11 +1,14 @@
 package peercred_test
 
 import (
+	"bytes"
 	"errors"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
@@ -326,4 +329,63 @@ func findGitRootForTest(t *testing.T, dir string) string {
 		t.Fatalf("findGitRootForTest: no .git found above %q (is test running inside a git repo?)", dir)
 	}
 	return root
+}
+
+// TestMatchWorktree_MissingPathIsDebugNotWarn — thrum-g1ux pin. When a
+// stored worktree path no longer exists on disk (post-teardown), the
+// EvalSymlinks call inside matchWorktree fails with os.IsNotExist. Pre-
+// fix this emitted slog.Warn for every resolution against the stale
+// path, drowning out real diagnostics in daemon.log. Post-fix the
+// IsNotExist case downgrades to slog.Debug; other EvalSymlinks failure
+// modes (permission errors etc) still emit WARN — that WARN branch is
+// not covered by this test (P3-scope gap noted in Phase-3 review; the
+// production code path is a trivial else-branch that a refactor would
+// have to actively remove).
+func TestMatchWorktree_MissingPathIsDebugNotWarn(t *testing.T) {
+	// Capture slog output at Debug level so we can see both Warn and
+	// Debug records.
+	var logBuf bytes.Buffer
+	captureHandler := slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	originalLogger := slog.Default()
+	slog.SetDefault(slog.New(captureHandler))
+	t.Cleanup(func() { slog.SetDefault(originalLogger) })
+
+	// Create + immediately remove a tempdir so the path is guaranteed
+	// to not exist on disk. This mirrors the post-teardown state of an
+	// agent's worktree.
+	tempWT := t.TempDir()
+	if err := os.RemoveAll(tempWT); err != nil {
+		t.Fatalf("RemoveAll(%q): %v", tempWT, err)
+	}
+
+	// Candidate is the test process's own CWD (resolvable) — but the
+	// stored agent path is the removed tempdir. matchWorktree iterates
+	// both; the stored path's EvalSymlinks fails with IsNotExist; the
+	// fallback canonWt=wt path won't match the candidate canon so
+	// ErrAnonymous is returned. This pins the no-WARN behavior.
+	selfCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	agents := []peercred.AgentWorktree{
+		{AgentID: "stale-agent", Worktree: tempWT},
+	}
+	got, matchErr := peercred.MatchWorktreeForTest(selfCWD, agents)
+	if !errors.Is(matchErr, peercred.ErrAnonymous) {
+		t.Errorf("MatchWorktreeForTest err = %v, want errors.Is ErrAnonymous true (deleted path must not match)", matchErr)
+	}
+	if got != nil {
+		t.Errorf("MatchWorktreeForTest got = %+v, want nil (deleted path must produce no match)", got)
+	}
+
+	logged := logBuf.String()
+	// The pre-fix WARN msg MUST NOT appear for the IsNotExist case.
+	if strings.Contains(logged, `"msg":"peercred.matchWorktree stored EvalSymlinks failed"`) {
+		t.Errorf("found pre-fix WARN log line for an IsNotExist case (should have been downgraded to Debug per thrum-g1ux); got: %s", logged)
+	}
+	// The post-fix Debug msg MUST appear so operators can still find
+	// the stale-path information at Debug level if they need it.
+	if !strings.Contains(logged, `"msg":"peercred.matchWorktree stored path missing on disk (torn-down worktree)"`) {
+		t.Errorf("expected post-fix Debug log line for the IsNotExist case (per thrum-g1ux); got: %s", logged)
+	}
 }

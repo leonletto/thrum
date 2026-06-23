@@ -49,7 +49,12 @@ type RefreshResult struct {
 
 // detectAncestor is a package-level var so tests can swap in fakes via
 // t.Cleanup. Production callers should go through RefreshLocalIdentity.
-var detectAncestor = process.FindClaudeAncestor
+//
+// thrum-xir.40: refresh writes the detected PID into the identity file
+// when drift is detected. Like quickstart, this is a BINDING-WRITE path,
+// so it uses the TOPMOST runtime ancestor — recording the long-lived
+// session main rather than a transient hook subprocess.
+var detectAncestor = process.FindTopmostRuntimeAncestor
 
 // RefreshLocalIdentity inspects live process, tmux, and git state and
 // reconciles the local identity file + daemon's agent record with reality.
@@ -117,10 +122,12 @@ func RefreshLocalIdentity(client *Client, repoPath string) (*RefreshResult, erro
 	// success, and the daemon's matching no-op branch is also silent.
 	// The only log emission is the live-conflict guard below.
 	if client != nil && idFile.AgentPID > 0 {
-		// idFile.AgentPID is already the most current PID by this point:
-		// if detectedPID drifted, Step 3 updated idFile.AgentPID in place,
-		// so reading it here unconditionally covers both drift and no-drift
-		// paths without branching.
+		// idFile.AgentPID is the on-disk value loaded at Step 2. Refactor
+		// 475494c9f4 moved the PID-write out of this path into prime-only, so
+		// refresh no longer mutates agent_pid here (the old "Step 3 updated it
+		// in place" no longer exists). We re-register the file's CURRENT
+		// agent_pid so the daemon DB tracks whatever the identity file holds —
+		// quickstart's thrum-ipbl write reconciles the file before this runs.
 		// Force intentionally not forwarded here: refresh re-registers only
 		// on PID drift, not on user intent. Explicit --force is a
 		// user-initiated trigger that lives on the quickstart/register

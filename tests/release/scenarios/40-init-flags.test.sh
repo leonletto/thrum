@@ -68,7 +68,7 @@ fi
 
 # A3: --stealth --runtime claude.
 stealth_out="$(mktemp -t kafm1-40-stealth.XXXXXX).txt"
-"$TE" exec --cwd "$SCRATCH" --clean -- thrum init --stealth --runtime claude \
+"$TE" exec --cwd "$SCRATCH" --clean -- thrum init --non-interactive --stealth --runtime claude \
   > "$stealth_out" 2>&1
 stealth_rc=$?
 if [ "$stealth_rc" -eq 0 ]; then
@@ -76,7 +76,7 @@ if [ "$stealth_rc" -eq 0 ]; then
 else
   got="$(tr '\n' ' ' < "$stealth_out" | head -c 240)"
   emit_fail "$SID" "stealth-init-success" \
-    "thrum init --stealth --runtime claude exits 0" \
+    "thrum init --non-interactive --stealth --runtime claude exits 0" \
     "rc=${stealth_rc}; output: ${got:-<empty>}" \
     "scenarios/${SID}.test.sh:$LINENO"
 fi

@@ -3,10 +3,14 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1342,7 +1346,7 @@ func TestNewMessageHandlerWithDispatcher(t *testing.T) {
 	}
 	defer func() { _ = s.Close() }()
 
-	handler := NewMessageHandlerWithDispatcher(s, nil, "", "", "")
+	handler := NewMessageHandlerWithDispatcher(s, nil, "", "", "", 0)
 	if handler == nil {
 		t.Fatal("Expected non-nil handler")
 	}
@@ -1689,8 +1693,10 @@ func TestEnsureActiveSession_AlreadyActive(t *testing.T) {
 	seedSessionRow(t, s, "ses_existing_active", agentID, "")
 
 	handler := NewAgentHandler(s)
-	s.Lock()
-	defer s.Unlock()
+	// thrum-kdyf: ensureActiveSession's contract was inverted —
+	// must NOT be called under state.Lock() (it self-manages locking
+	// internally for the write path). Holding the lock here would
+	// deadlock the internal re-acquire on the rare write branch.
 
 	eventsBefore := countSessionStartEvents(t, s)
 	rowsBefore := countActiveSessionRows(t, s, agentID)
@@ -1728,8 +1734,10 @@ func TestEnsureActiveSession_OfflineAgentLivePID(t *testing.T) {
 	seedSessionRow(t, s, "ses_old_ended", agentID, endedAt)
 
 	handler := NewAgentHandler(s)
-	s.Lock()
-	defer s.Unlock()
+	// thrum-kdyf: ensureActiveSession's contract was inverted —
+	// must NOT be called under state.Lock() (it self-manages locking
+	// internally for the write path). Holding the lock here would
+	// deadlock the internal re-acquire on the rare write branch.
 
 	eventsBefore := countSessionStartEvents(t, s)
 
@@ -1772,8 +1780,10 @@ func TestEnsureActiveSession_DeadPIDNoResurrect(t *testing.T) {
 	seedSessionRow(t, s, "ses_old_dead", agentID, endedAt)
 
 	handler := NewAgentHandler(s)
-	s.Lock()
-	defer s.Unlock()
+	// thrum-kdyf: ensureActiveSession's contract was inverted —
+	// must NOT be called under state.Lock() (it self-manages locking
+	// internally for the write path). Holding the lock here would
+	// deadlock the internal re-acquire on the rare write branch.
 
 	eventsBefore := countSessionStartEvents(t, s)
 	rowsBefore := countActiveSessionRows(t, s, agentID)
@@ -1812,8 +1822,10 @@ func TestEnsureActiveSession_ZeroPIDNoResurrect(t *testing.T) {
 	seedSessionRow(t, s, "ses_old_zero", agentID, endedAt)
 
 	handler := NewAgentHandler(s)
-	s.Lock()
-	defer s.Unlock()
+	// thrum-kdyf: ensureActiveSession's contract was inverted —
+	// must NOT be called under state.Lock() (it self-manages locking
+	// internally for the write path). Holding the lock here would
+	// deadlock the internal re-acquire on the rare write branch.
 
 	eventsBefore := countSessionStartEvents(t, s)
 	rowsBefore := countActiveSessionRows(t, s, agentID)
@@ -1830,6 +1842,411 @@ func TestEnsureActiveSession_ZeroPIDNoResurrect(t *testing.T) {
 	}
 	if n := countActiveSessionRows(t, s, agentID); n != rowsBefore {
 		t.Errorf("active session rows grew on zero-PID skip: before=%d after=%d", rowsBefore, n)
+	}
+}
+
+// --- thrum-kdyf: ctx-detach + double-check pattern tests ----------------
+
+// TestEnsureActiveSession_BurnedCallerCtx_StillSucceeds — thrum-kdyf
+// regression pin. Pre-fix, ensureActiveSession's SELECT used the caller's
+// RPC ctx. When that ctx was already expired (HandleRegister's
+// registerAgent → triggerSyncOnWrite synchronous walker+compactor burned
+// it), the SELECT returned ctx.Err() immediately even on the common-path
+// "session already exists" branch — surfacing as the misleading prime
+// failure "agent.register: session resurrect failed: check active session:
+// context deadline exceeded". Post-fix, the SELECT uses a fresh
+// Background-derived ctx, so a pre-cancelled caller ctx is irrelevant to
+// the read path.
+func TestEnsureActiveSession_BurnedCallerCtx_StillSucceeds(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_kdyf_burned_ctx", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	const agentID = "agt_kdyf_burned_ctx"
+	// Seed an existing ACTIVE session so the common-path SELECT branch
+	// fires. The whole bug was that this fast path failed when the
+	// caller ctx was already burned.
+	seedAgentRow(t, s, agentID, os.Getpid())
+	seedSessionRow(t, s, "ses_kdyf_active", agentID, "")
+
+	handler := NewAgentHandler(s)
+
+	// Caller ctx is ALREADY cancelled. Pre-fix this would have caused
+	// the SELECT to return ctx.Err() immediately. Post-fix the SELECT
+	// runs under its own Background-derived ctx and ignores the caller's
+	// state — the active-session check still completes correctly.
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	got, err := handler.ensureActiveSession(cancelledCtx, agentID, os.Getpid())
+	if err != nil {
+		t.Fatalf("ensureActiveSession with cancelled caller ctx: got error %v, want nil (SELECT must use its own ctx per thrum-kdyf)", err)
+	}
+	if got != "" {
+		t.Errorf("returned session_id = %q, want empty (session already active → idempotent no-op)", got)
+	}
+}
+
+// TestEnsureActiveSession_ConcurrentResurrects_OnlyOneWrites — thrum-kdyf
+// double-check pattern regression pin. With the contract change to
+// "must NOT be called under lock", concurrent ensureActiveSession calls
+// for the same agent could both observe "no active session" in their
+// step-1 lock-free SELECT and try to write. The step-3 re-SELECT under
+// the internal lock catches that race and the loser returns "" without
+// writing a duplicate session.start event.
+func TestEnsureActiveSession_ConcurrentResurrects_OnlyOneWrites(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_kdyf_race", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	const agentID = "agt_kdyf_race"
+	livePID := os.Getpid()
+	seedAgentRow(t, s, agentID, livePID)
+	endedAt := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339Nano)
+	seedSessionRow(t, s, "ses_race_ended", agentID, endedAt)
+
+	handler := NewAgentHandler(s)
+
+	eventsBefore := countSessionStartEvents(t, s)
+
+	// Fire N concurrent resurrects. Each lock-free SELECT will see no
+	// active session; all N will progress to step 3. The double-check
+	// pattern under the internal lock must serialize so exactly one
+	// writes the new session.start event; the rest return "".
+	const concurrency = 8
+	var (
+		wg            sync.WaitGroup
+		mu            sync.Mutex
+		winners       int
+		losers        int
+		nonNilSession []string
+	)
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sid, err := handler.ensureActiveSession(context.Background(), agentID, livePID)
+			if err != nil {
+				t.Errorf("ensureActiveSession returned error in concurrent goroutine: %v", err)
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if sid == "" {
+				losers++
+			} else {
+				winners++
+				nonNilSession = append(nonNilSession, sid)
+			}
+		}()
+	}
+	wg.Wait()
+
+	if winners != 1 {
+		t.Errorf("winner count = %d, want exactly 1 (double-check pattern must serialize writes per thrum-kdyf)", winners)
+		t.Logf("non-nil session_ids returned: %v", nonNilSession)
+	}
+	// Validate the winner's session_id shape: prevents a regression
+	// where every goroutine returns "" yet event count is still 1
+	// (e.g. via an orphan write from elsewhere) and weak assertion
+	// above passes for the wrong reason.
+	if winners == 1 {
+		got := nonNilSession[0]
+		if !strings.HasPrefix(got, "ses_") || len(got) < 6 {
+			t.Errorf("winner session_id = %q, want ses_-prefixed ULID (per identity.GenerateSessionID)", got)
+		}
+	}
+	if losers != concurrency-1 {
+		t.Errorf("loser count = %d, want %d (every loser returns empty session_id)", losers, concurrency-1)
+	}
+	if n := countSessionStartEvents(t, s); n != eventsBefore+1 {
+		t.Errorf("session.start events grew by %d, want +1 (exactly one write per thrum-kdyf double-check)", n-eventsBefore)
+	}
+	if n := countActiveSessionRows(t, s, agentID); n != 1 {
+		t.Errorf("active session rows = %d, want 1 (one resurrected session, no duplicates)", n)
+	}
+}
+
+// TestHandleRegister_ConcurrentRegisterBurst_NoDeadlock — thrum-kdyf
+// safety pin: HandleRegister now releases h.state.Lock() before
+// ensureActiveSession and re-acquires it for persistResurrectWorktreeRef.
+// Concurrent register bursts must not wedge or deadlock through this
+// release/re-acquire dance. Spawns N concurrent registers of the SAME
+// existing agent (so they all hit the resurrect re-Lock path), asserts
+// all complete + the state is consistent.
+func TestHandleRegister_ConcurrentRegisterBurst_NoDeadlock(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_kdyf_burst", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	livePID := os.Getpid()
+
+	// Step 1: register once so the agent exists in DB. The burst will
+	// hit the existingAgent != nil branch where the lock release/re-
+	// acquire dance happens.
+	t.Setenv("THRUM_ROLE", "implementer")
+	t.Setenv("THRUM_MODULE", "kdyf-burst")
+	handler := NewAgentHandler(s)
+
+	firstReq := json.RawMessage(`{"name":"kdyf_burst_target","role":"implementer","module":"kdyf-burst","agent_pid":` +
+		strconv.Itoa(livePID) + `}`)
+	if _, err := handler.HandleRegister(context.Background(), firstReq); err != nil {
+		t.Fatalf("first HandleRegister: %v", err)
+	}
+
+	// Step 2: end the session so subsequent registers hit the resurrect
+	// write path (rare-path Lock re-acquire). GenerateAgentID returns
+	// the bare name when name is non-empty (identity.go:86-89), so the
+	// agent_id is literally the requested name string, not a derived
+	// role+module+name composite.
+	const burstAgentID = "kdyf_burst_target"
+	_, _ = s.RawDB().Exec(
+		`UPDATE sessions SET ended_at = ? WHERE agent_id = ?`,
+		time.Now().UTC().Add(-1*time.Hour).Format(time.RFC3339Nano),
+		burstAgentID,
+	)
+
+	// Step 3: burst of N concurrent re-registers. Each request carries
+	// re_register: true so HandleRegister enters the `case req.ReRegister`
+	// branch and actually invokes registerAgent (not the same-PID no-op
+	// default branch which would skip ensureActiveSession entirely).
+	// Flow per goroutine: existingAgent != nil → registerAgent (under
+	// lock) → kdyf Unlock → ensureActiveSession (lock-free SELECT; rare-
+	// path internal Lock for the write since session was ended in step 2)
+	// → re-Lock for persistResurrectWorktreeRef.
+	const burst = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, burst)
+	deadline := time.After(30 * time.Second)
+	done := make(chan struct{})
+
+	go func() {
+		for i := 0; i < burst; i++ {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				req := json.RawMessage(`{"name":"kdyf_burst_target","role":"implementer","module":"kdyf-burst","agent_pid":` +
+					strconv.Itoa(livePID) + `,"re_register":true}`)
+				_, regErr := handler.HandleRegister(context.Background(), req)
+				if regErr != nil {
+					errs <- fmt.Errorf("burst goroutine %d: %w", idx, regErr)
+				}
+			}(i)
+		}
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// good — bursted to completion within deadline
+	case <-deadline:
+		t.Fatal("HandleRegister burst did not complete within 30s — likely deadlock or wedge in the lock release/re-acquire dance (thrum-kdyf)")
+	}
+
+	close(errs)
+	for e := range errs {
+		t.Error(e)
+	}
+}
+
+// TestHandleRegister_BurstRegister_NoLockContention — thrum-bsn7
+// regression: post-kdyf, narrow fix only released state.Lock() around the
+// ensureActiveSession SELECT. Every OTHER under-lock SELECT in
+// HandleRegister (notably getAgentByID at the top of the handler) was
+// still exposed to the lock-contention failure class: when goroutine A
+// holds state.Lock through registerAgent → WriteEvent → triggerSyncOnWrite
+// (walker 30s + compactor 60s ceilings), goroutines B..N block at
+// h.state.Lock() for the same wall-clock. Their 10s RPC ctx expires
+// while WAITING; when B finally gets the lock its first SELECT
+// (getAgentByID) immediately returns ctx.Err().
+//
+// The fix structurally decouples the structural-event sync trigger from
+// the caller's state.Lock() hold: WriteEvent now returns a postCommit
+// closure the caller invokes AFTER releasing the lock. Walker invocations
+// serialize at walker.mu (snapshot.go:126); each post-bsn7 state.Lock()
+// hold is sub-millisecond rather than up to 90s.
+//
+// Assertion shape (synthetic time-measurement, per coord guidance): inject
+// a stub sync trigger that Sleeps for `triggerDelay`; fire N concurrent
+// HandleRegisters; the total wall-clock elapsed must be CLOSE to
+// triggerDelay (concurrent, post-bsn7) NOT N×triggerDelay (serialized,
+// pre-bsn7). Pre-bsn7 a regression would inflate elapsed to N × delay
+// because each lock-holder blocks the next.
+func TestHandleRegister_BurstRegister_NoLockContention(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_bsn7_burst", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	// triggerDelay simulates the walker+compactor wall-clock. 200ms is
+	// short enough to keep the test fast yet long enough to clearly
+	// distinguish concurrent (≈200ms total) from serialized
+	// (≈burst×200ms total). The serializedCeiling intentionally sits
+	// well below burst×triggerDelay so pre-bsn7 regression fails
+	// loudly while leaving generous CI-jitter headroom for the
+	// post-bsn7 concurrent path.
+	const (
+		burst                  = 8
+		triggerDelay           = 200 * time.Millisecond
+		serializedCeiling      = 4 * triggerDelay // upper bound for post-bsn7 concurrent path
+		preFixWouldTakeAtLeast = time.Duration(burst) * triggerDelay
+	)
+
+	// triggerWg gates the post-handler triggerCount assertion. Post-
+	// thrum-1nkt.5, postCommit fires asynchronously (`go postCommit()`)
+	// so handlers return before the sync-trigger goroutine completes.
+	// Without this WaitGroup, the triggerCount.Load() below would race
+	// the async trigger goroutines and intermittently observe N-1 or
+	// fewer increments. We measure `elapsed` BEFORE triggerWg.Wait()
+	// so the post-bsn7 concurrent-handlers invariant is still asserted
+	// against handler return time only, not trigger wall-clock.
+	var triggerCount atomic.Int32
+	var triggerWg sync.WaitGroup
+	triggerWg.Add(burst)
+	s.SetSyncTrigger(func(ctx context.Context) {
+		defer triggerWg.Done()
+		triggerCount.Add(1)
+		time.Sleep(triggerDelay)
+	})
+
+	livePID := os.Getpid()
+	t.Setenv("THRUM_ROLE", "implementer")
+	t.Setenv("THRUM_MODULE", "bsn7-burst")
+	handler := NewAgentHandler(s)
+
+	// burst goroutines each register a DISTINCT fresh agent_id so they all
+	// land on the fresh-agent path (HandleRegister line ≈421). The
+	// fresh-agent path takes h.state.Lock(), runs registerAgent →
+	// WriteEvent, releases the lock, then invokes postCommit (the slow
+	// stub). Concurrent goroutines should serialize only at walker.mu
+	// (snapshot-level, not state.Lock) — and since each invocation calls
+	// the stub directly (no walker indirection here, just a slowed-down
+	// trigger closure), there's no serialization at all in this test
+	// shape, modeling the worst-case post-bsn7 fan-out.
+	var wg sync.WaitGroup
+	errs := make(chan error, burst)
+	start := time.Now()
+	for i := 0; i < burst; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			req := json.RawMessage(fmt.Sprintf(
+				`{"name":"bsn7_burst_agent_%d","role":"implementer","module":"bsn7-burst","agent_pid":%d}`,
+				idx, livePID,
+			))
+			if _, regErr := handler.HandleRegister(context.Background(), req); regErr != nil {
+				errs <- fmt.Errorf("burst goroutine %d: %w", idx, regErr)
+			}
+		}(i)
+	}
+	wg.Wait()
+	elapsed := time.Since(start)
+	close(errs)
+	for e := range errs {
+		t.Error(e)
+	}
+
+	// Wait for the async sync-trigger goroutines before reading
+	// triggerCount. Post-1nkt.5 these run after handlers return; pre-
+	// 1nkt.5 they ran sync inside the handler and were already complete.
+	triggerWg.Wait()
+
+	if got := int(triggerCount.Load()); got != burst {
+		t.Errorf("triggerCount = %d, want %d (every fresh-agent register emits an agent.register structural event)", got, burst)
+	}
+	if elapsed >= serializedCeiling {
+		t.Errorf("burst elapsed = %v, want < %v (pre-bsn7 regression would take ≥ %v because state.Lock serialization forces walker/compactor onto critical path)",
+			elapsed, serializedCeiling, preFixWouldTakeAtLeast)
+	}
+}
+
+// --- end thrum-kdyf section --------------------------------------------
+
+// TestHandleRegister_PostCommitFireAndForget — thrum-1nkt.5 regression.
+// Post-bsn7, postCommit ran sync after state.Lock release, so HandleRegister
+// still blocked for walker+compactor wall-clock (up to 90s in worst case).
+// thrum-1nkt.5 wraps postCommit in `go` at every structural-event call site
+// so callers return immediately. Assertion: with a slow sync-trigger stub
+// (~300ms), HandleRegister must return in well under triggerDelay and the
+// trigger must NOT have completed by the time the handler returns.
+func TestHandleRegister_PostCommitFireAndForget(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_1nkt5_async", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	const (
+		triggerDelay = 300 * time.Millisecond
+		// handlerCeiling is the maximum acceptable HandleRegister wall-
+		// clock. Anything sync-blocking on triggerDelay would take ≥
+		// triggerDelay. The ceiling sits well below to leave CI jitter
+		// headroom while still failing loudly on regression.
+		handlerCeiling = triggerDelay / 3
+	)
+
+	triggerDone := make(chan struct{}, 1)
+	s.SetSyncTrigger(func(ctx context.Context) {
+		time.Sleep(triggerDelay)
+		select {
+		case triggerDone <- struct{}{}:
+		default:
+		}
+	})
+
+	t.Setenv("THRUM_ROLE", "implementer")
+	t.Setenv("THRUM_MODULE", "1nkt5-async")
+	handler := NewAgentHandler(s)
+
+	req := json.RawMessage(fmt.Sprintf(
+		`{"name":"agent_1nkt5_async","role":"implementer","module":"1nkt5-async","agent_pid":%d}`,
+		os.Getpid(),
+	))
+
+	start := time.Now()
+	if _, regErr := handler.HandleRegister(context.Background(), req); regErr != nil {
+		t.Fatalf("HandleRegister: %v", regErr)
+	}
+	handlerElapsed := time.Since(start)
+
+	if handlerElapsed >= handlerCeiling {
+		t.Errorf("HandleRegister elapsed = %v, want < %v (postCommit must be async; ≥triggerDelay (%v) means we are still blocking on sync trigger)",
+			handlerElapsed, handlerCeiling, triggerDelay)
+	}
+
+	// Affirmatively prove the trigger had NOT completed by handler return.
+	select {
+	case <-triggerDone:
+		t.Errorf("sync trigger completed before HandleRegister returned (elapsed=%v); postCommit ran sync, not async",
+			handlerElapsed)
+	default:
+		// expected: trigger goroutine still sleeping
+	}
+
+	// Wait for the goroutine to finish so test teardown does not race
+	// with an in-flight trigger holding state references.
+	select {
+	case <-triggerDone:
+	case <-time.After(triggerDelay + 2*time.Second):
+		t.Error("async trigger never completed within timeout")
 	}
 }
 
@@ -2171,7 +2588,7 @@ func TestAgentRegister_CrossDaemonCoexistence(t *testing.T) {
 		Hostname:     "leonsmacm1pro",
 		AgentPID:     55765,
 	}
-	if err := s.WriteEvent(context.Background(), remoteEvent); err != nil {
+	if _, err := s.WriteEvent(context.Background(), remoteEvent); err != nil {
 		t.Fatalf("seed remote agent: %v", err)
 	}
 
@@ -2707,5 +3124,321 @@ func TestHandleRegister_PreservesCoLocatedAgents(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(idsDir, name+".json")); err != nil {
 			t.Errorf("%s.json must survive bootstrap register of different name: %v", name, err)
 		}
+	}
+}
+
+// TestHandleRegister_AnonymousCallerCannotRebindToDifferentWorktree —
+// thrum-l9e1 regression. agent.register is anonymous-allowed for the
+// bootstrap chicken-and-egg case (server.go:138-148: a genuinely-new
+// agent in a genuinely-new worktree has no prior session to peercred-
+// resolve against). That allowance must NOT extend to re-binding an
+// EXISTING agent name to a SECOND worktree from an anonymous caller —
+// that's cross-worktree forgery via name collision, observed in the
+// quickstart-in-foreign-worktree repro that coord triggered while
+// setting up a brainstorm worktree.
+//
+// Setup: existing agent bound to worktree A. Anonymous caller from
+// worktree B attempts to register the same name. Expectation: hard-bail
+// before any state change, error mentions both worktrees so the user
+// can self-recover.
+func TestHandleRegister_AnonymousCallerCannotRebindToDifferentWorktree(t *testing.T) {
+	worktreeA := t.TempDir()
+	worktreeB := t.TempDir()
+	if resolved, err := filepath.EvalSymlinks(worktreeA); err == nil {
+		worktreeA = resolved
+	}
+	if resolved, err := filepath.EvalSymlinks(worktreeB); err == nil {
+		worktreeB = resolved
+	}
+	// worktreeA needs a real .git so the peercred shared-worktree
+	// canonicalization in IsAgentInWorktree matches the session_ref
+	// path stored during the bootstrap register below.
+	if out, err := exec.Command("git", "-C", worktreeA, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init worktreeA: %v (%s)", err, out)
+	}
+	thrumDir := filepath.Join(worktreeA, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
+		t.Fatalf("mkdir identities: %v", err)
+	}
+
+	s, err := state.NewState(thrumDir, thrumDir, "repo_l9e1", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	handler := NewAgentHandler(s)
+
+	// Phase 1: register the original agent in worktreeA via the
+	// legitimate bootstrap path (peercred-resolved caller).
+	ctxA := peercred.WithIdentity(context.Background(), &peercred.ResolvedIdentity{
+		AgentID:  "coord_main",
+		Worktree: worktreeA,
+		PID:      os.Getpid(),
+	})
+	reqA, _ := json.Marshal(RegisterRequest{
+		Name:     "coord_main",
+		Role:     "coordinator",
+		Module:   "main",
+		AgentPID: os.Getpid(),
+	})
+	if _, err := handler.HandleRegister(ctxA, reqA); err != nil {
+		t.Fatalf("phase 1 (bootstrap register in worktreeA): %v", err)
+	}
+
+	// Seed a session_refs binding "coord_main → worktreeA" so
+	// IsAgentInWorktree's primary path matches. HandleRegister alone
+	// does not create a session for non-resurrect paths; in production
+	// the binding is written by session.start. Seeding directly keeps
+	// the test scoped to the l9e1 check rather than the full
+	// quickstart flow.
+	const sessionID = "ses_l9e1_phase1"
+	seedSessionRow(t, s, sessionID, "coord_main", "")
+	if _, err := s.RawDB().Exec(`
+		INSERT INTO session_refs (session_id, ref_type, ref_value, added_at)
+		VALUES (?, 'worktree', ?, ?)
+	`, sessionID, worktreeA, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatalf("seed session_ref binding for worktreeA: %v", err)
+	}
+	if !s.IsAgentInWorktree(context.Background(), "coord_main", worktreeA) {
+		t.Fatalf("phase 1 setup invariant violated: coord_main not bound to worktreeA")
+	}
+
+	// Phase 2: simulate an anonymous caller from worktreeB attempting
+	// to register the same agent name. Anonymous context — no
+	// peercred.WithIdentity. WithConnectingPID supplies the fake PID
+	// so the l9e1 check enters its resolveCallerWorktreeFn branch.
+	// Override resolveCallerWorktreeFn to return worktreeB without
+	// requiring a live /proc/<pid>/cwd backed by a real git root.
+	//
+	// resolveCallerWorktreeFn is a package-level var; this swap is
+	// race-safe only because tests in this package run sequentially.
+	// If anyone adds t.Parallel() to this test or the sibling
+	// TestHandleRegister_AnonymousCallerBootstrapStillAllowed, the
+	// shared swap needs to move behind a mutex or to a per-call seam.
+	const fakePID = 7777
+	prev := resolveCallerWorktreeFn
+	resolveCallerWorktreeFn = func(pid int) (string, error) {
+		if pid == fakePID {
+			return worktreeB, nil
+		}
+		return prev(pid)
+	}
+	t.Cleanup(func() { resolveCallerWorktreeFn = prev })
+
+	ctxB := peercred.WithConnectingPID(context.Background(), fakePID)
+	reqB, _ := json.Marshal(RegisterRequest{
+		Name:     "coord_main", // same name as the bound agent in worktreeA
+		Role:     "coordinator",
+		Module:   "main",
+		AgentPID: fakePID,
+	})
+	_, err = handler.HandleRegister(ctxB, reqB)
+	if err == nil {
+		t.Fatal("expected anonymous-cross-worktree-binding rejection, got nil error")
+	}
+	if !strings.Contains(err.Error(), "already registered in a different worktree") {
+		t.Errorf("error should mention cross-worktree rebind; got: %v", err)
+	}
+	if !strings.Contains(err.Error(), worktreeB) {
+		t.Errorf("error should mention caller worktree %q for remediation; got: %v", worktreeB, err)
+	}
+
+	// State invariant: coord_main is still bound to worktreeA only.
+	// (Verify nothing leaked into worktreeB by checking the negation.)
+	if s.IsAgentInWorktree(context.Background(), "coord_main", worktreeB) {
+		t.Errorf("coord_main must not be bound to worktreeB after rejected register")
+	}
+	if !s.IsAgentInWorktree(context.Background(), "coord_main", worktreeA) {
+		t.Errorf("coord_main binding to worktreeA must be preserved after rejected register")
+	}
+}
+
+// TestHandleRegister_AnonymousCallerBootstrapStillAllowed — thrum-l9e1
+// negative test: a genuinely-new agent name registered anonymously
+// must still succeed (the bootstrap allowance that the l9e1 check
+// MUST preserve). Sanity-pins that l9e1 only bites cross-worktree
+// re-bind, not first-time registration.
+func TestHandleRegister_AnonymousCallerBootstrapStillAllowed(t *testing.T) {
+	tmpDir := t.TempDir()
+	if resolved, err := filepath.EvalSymlinks(tmpDir); err == nil {
+		tmpDir = resolved
+	}
+	if out, err := exec.Command("git", "-C", tmpDir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v (%s)", err, out)
+	}
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
+		t.Fatalf("mkdir identities: %v", err)
+	}
+
+	s, err := state.NewState(thrumDir, thrumDir, "repo_l9e1_bootstrap", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	handler := NewAgentHandler(s)
+
+	// Anonymous caller (no peercred.WithIdentity). Connecting PID is
+	// set so the l9e1 check enters its resolveCallerWorktreeFn branch
+	// — but with no existingAgent, the check short-circuits BEFORE
+	// invoking resolveCallerWorktreeFn (the `if existingAgent != nil`
+	// guard at the top of the block). Override anyway to a value that
+	// would trigger rejection IF the check fired — proves bootstrap
+	// genuinely skips the check rather than coincidentally matching.
+	const fakePID = 8888
+	prev := resolveCallerWorktreeFn
+	resolveCallerWorktreeFn = func(pid int) (string, error) {
+		return "/some/other/worktree", nil
+	}
+	t.Cleanup(func() { resolveCallerWorktreeFn = prev })
+
+	ctx := peercred.WithConnectingPID(context.Background(), fakePID)
+	req, _ := json.Marshal(RegisterRequest{
+		Name:     "fresh_agent",
+		Role:     "implementer",
+		Module:   "new",
+		AgentPID: fakePID,
+	})
+	resp, err := handler.HandleRegister(ctx, req)
+	if err != nil {
+		t.Fatalf("bootstrap of fresh_agent must succeed for anonymous caller: %v", err)
+	}
+	regResp, ok := resp.(*RegisterResponse)
+	if !ok {
+		t.Fatalf("expected *RegisterResponse, got %T (%+v)", resp, resp)
+	}
+	if regResp.Status != "registered" {
+		t.Fatalf("Status = %q, want registered", regResp.Status)
+	}
+}
+
+// TestHandleSetAgentStatus_AcceptsStuck verifies that the validator allowlist
+// promotion lands cleanly — agent.set-status RPC accepts "stuck" as a valid
+// status value and writes it through to the identity file. Prior to thrum-9neg
+// the validator rejected "stuck" even though permission.markAgentStuck writes
+// it programmatically, leaving the CLI/RPC surface inconsistent with reality.
+//
+// Translated for release/v0.10.6: thrum-agents' typed-handler signature
+// (HandleSetAgentStatus(ctx, SetAgentStatusRequest) (*SetAgentStatusResponse, error))
+// has not been backported; release/v0.10.6 still has the json.RawMessage
+// shape with a map[string]string response. The assertion intent is preserved
+// (validator accepts stuck + identity file reflects the write).
+func TestHandleSetAgentStatus_AcceptsStuck(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	agentName := "researcher_stuck_test"
+	idFile := &config.IdentityFile{
+		Agent: config.AgentConfig{
+			Kind: "agent",
+			Name: agentName,
+			Role: "researcher",
+		},
+		AgentPID:    0, // pre-prime; bypasses G4 dead-PID guard
+		AgentStatus: "idle",
+	}
+	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
+		t.Fatalf("save identity: %v", err)
+	}
+
+	st, err := state.NewState(thrumDir, thrumDir, "r_stuck_test", "")
+	if err != nil {
+		t.Fatalf("new state: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	h := NewAgentHandler(st)
+
+	// Validator must accept "stuck" — this is the load-bearing assertion.
+	reqJSON, err := json.Marshal(map[string]string{
+		"agent":  agentName,
+		"status": "stuck",
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	resp, err := h.HandleSetAgentStatus(context.Background(), json.RawMessage(reqJSON))
+	if err != nil {
+		t.Fatalf("HandleSetAgentStatus rejected stuck: %v (expected validator allowlist to accept it post-thrum-9neg E2.2)", err)
+	}
+	respMap, ok := resp.(map[string]string)
+	if !ok {
+		t.Fatalf("expected map[string]string response, got %T", resp)
+	}
+	if respMap["status"] != "stuck" {
+		t.Errorf("response status = %q, want stuck", respMap["status"])
+	}
+
+	// Identity file must reflect the write.
+	idPath := filepath.Join(thrumDir, "identities", agentName+".json")
+	data, err := os.ReadFile(idPath)
+	if err != nil {
+		t.Fatalf("read identity after write: %v", err)
+	}
+	var got config.IdentityFile
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("parse identity: %v", err)
+	}
+	if got.AgentStatus != "stuck" {
+		t.Errorf("identity file AgentStatus = %q, want stuck", got.AgentStatus)
+	}
+	if got.AgentStatusUpdatedAt.IsZero() {
+		t.Error("identity file AgentStatusUpdatedAt is zero — should have been touched by the write")
+	}
+}
+
+// TestHandleSetAgentStatus_RejectsUnknownStatus verifies the validator still
+// rejects values outside the 4-state allowlist. Regression check that the
+// stuck promotion didn't loosen the validator into a passthrough.
+//
+// Translated for release/v0.10.6 (same handler-signature reason as
+// TestHandleSetAgentStatus_AcceptsStuck above).
+func TestHandleSetAgentStatus_RejectsUnknownStatus(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	agentName := "researcher_unknown_test"
+	idFile := &config.IdentityFile{
+		Agent: config.AgentConfig{
+			Kind: "agent",
+			Name: agentName,
+			Role: "researcher",
+		},
+		AgentPID:    0,
+		AgentStatus: "idle",
+	}
+	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
+		t.Fatalf("save identity: %v", err)
+	}
+
+	st, err := state.NewState(thrumDir, thrumDir, "r_unknown_test", "")
+	if err != nil {
+		t.Fatalf("new state: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	h := NewAgentHandler(st)
+
+	reqJSON, err := json.Marshal(map[string]string{
+		"agent":  agentName,
+		"status": "paused", // not in the 4-state allowlist
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	_, err = h.HandleSetAgentStatus(context.Background(), json.RawMessage(reqJSON))
+	if err == nil {
+		t.Fatal("expected validator to reject 'paused'; got nil error")
+	}
+	if !strings.Contains(err.Error(), "must be working, idle, blocked, or stuck") {
+		t.Errorf("error message = %q; expected to mention the 4-state allowlist", err.Error())
 	}
 }

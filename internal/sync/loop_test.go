@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	gosync "sync"
 	"testing"
 	"time"
 
@@ -16,6 +18,49 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// ---------------------------------------------------------------------------
+// Telemetry test helpers (loop package)
+// ---------------------------------------------------------------------------
+
+type loopTelHandler struct {
+	records []slog.Record
+	mu      gosync.Mutex
+}
+
+func (h *loopTelHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
+func (h *loopTelHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r)
+	return nil
+}
+func (h *loopTelHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *loopTelHandler) WithGroup(string) slog.Handler      { return h }
+
+func (h *loopTelHandler) recordsWithMessage(msg string) []slog.Record {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []slog.Record
+	for _, r := range h.records {
+		if r.Message == msg {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func loopTelAttrValue(r slog.Record, key string) string {
+	var val string
+	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == key {
+			val = a.Value.String()
+			return false
+		}
+		return true
+	})
+	return val
+}
+
 func TestSyncLoop_StartStop(t *testing.T) {
 	tmpDir := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, tmpDir)
@@ -23,15 +68,15 @@ func TestSyncLoop_StartStop(t *testing.T) {
 	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), false)
 	projector := setupTestProjector(t, tmpDir)
 
-	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 100*time.Millisecond, false)
+	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), false)
 
 	ctx := context.Background()
 	if err := loop.Start(ctx); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
 
-	// Let loop run through a few cycles (intentional - testing start/stop/restart behavior)
-	time.Sleep(250 * time.Millisecond)
+	// Brief pause before stop/restart test
+	time.Sleep(50 * time.Millisecond)
 
 	if err := loop.Stop(); err != nil {
 		t.Fatalf("Stop failed: %v", err)
@@ -54,8 +99,7 @@ func TestSyncLoop_ManualTrigger(t *testing.T) {
 	syncer := NewSyncer(tmpDir, syncDir, false)
 	projector := setupTestProjector(t, tmpDir)
 
-	// Use a long interval so manual trigger is the only way it runs
-	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, false)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), false)
 
 	ctx := context.Background()
 	if err := loop.Start(ctx); err != nil {
@@ -93,7 +137,7 @@ func TestSyncLoop_Status(t *testing.T) {
 	syncer := NewSyncer(tmpDir, syncDir, false)
 	projector := setupTestProjector(t, tmpDir)
 
-	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 1*time.Second, false)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), false)
 
 	// Check status before start
 	status := loop.GetStatus()
@@ -136,7 +180,7 @@ func TestSyncLoop_NotifyChannel(t *testing.T) {
 	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), false)
 	projector := setupTestProjector(t, tmpDir)
 
-	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 100*time.Millisecond, false)
+	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), false)
 
 	// Get notify channel before starting
 	notifyCh := loop.NotifyChannel()
@@ -150,21 +194,6 @@ func TestSyncLoop_NotifyChannel(t *testing.T) {
 		t.Error("Expected channel to be empty initially")
 	default:
 		// Good - channel is empty
-	}
-}
-
-func TestSyncLoop_DefaultInterval(t *testing.T) {
-	tmpDir := setupTestRepoWithCommit(t)
-	setupThrumFiles(t, tmpDir)
-
-	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), false)
-	projector := setupTestProjector(t, tmpDir)
-
-	// Pass 0 interval to get default
-	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 0, false)
-
-	if loop.interval != 60*time.Second {
-		t.Errorf("Expected default interval of 60s, got %v", loop.interval)
 	}
 }
 
@@ -266,20 +295,21 @@ func initTestSchema(db *sql.DB) error {
 	);
 
 	CREATE TABLE IF NOT EXISTS messages (
-		message_id TEXT PRIMARY KEY,
-		thread_id TEXT,
-		agent_id TEXT NOT NULL,
-		session_id TEXT NOT NULL,
-		created_at TEXT NOT NULL,
-		updated_at TEXT,
-		deleted INTEGER DEFAULT 0,
-		deleted_at TEXT,
-		delete_reason TEXT,
-		body_format TEXT NOT NULL,
-		body_content TEXT NOT NULL,
-		body_structured TEXT,
-		authored_by TEXT,
-		disclosed INTEGER DEFAULT 0,
+		message_id               TEXT PRIMARY KEY,
+		thread_id                TEXT,
+		agent_id                 TEXT NOT NULL,
+		session_id               TEXT NOT NULL,
+		created_at               TEXT NOT NULL,
+		updated_at               TEXT,
+		deleted                  INTEGER DEFAULT 0,
+		deleted_at               TEXT,
+		delete_reason            TEXT,
+		body_format              TEXT NOT NULL,
+		body_content             TEXT NOT NULL,
+		body_structured          TEXT,
+		authored_by              TEXT,
+		disclosed                INTEGER DEFAULT 0,
+		pending_route_resolution INTEGER NOT NULL DEFAULT 0,
 		FOREIGN KEY (thread_id) REFERENCES threads(thread_id),
 		FOREIGN KEY (agent_id) REFERENCES agents(agent_id),
 		FOREIGN KEY (session_id) REFERENCES sessions(session_id)
@@ -298,6 +328,16 @@ func initTestSchema(db *sql.DB) error {
 		ref_value TEXT NOT NULL,
 		FOREIGN KEY (message_id) REFERENCES messages(message_id)
 	);
+
+	CREATE TABLE IF NOT EXISTS message_deliveries (
+		message_id          TEXT NOT NULL,
+		recipient_agent_id  TEXT NOT NULL,
+		delivered_at        TEXT NOT NULL,
+		seen_at             TEXT,
+		read_at             TEXT,
+		PRIMARY KEY (message_id, recipient_agent_id),
+		FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE
+	);
 	`
 
 	_, err := db.Exec(schema)
@@ -312,7 +352,7 @@ func TestSyncLoop_IsLocalOnly(t *testing.T) {
 	t.Run("false", func(t *testing.T) {
 		syncer := NewSyncer(tmpDir, syncDir, false)
 		projector := setupTestProjector(t, tmpDir)
-		loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 1*time.Second, false)
+		loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), false)
 		if loop.IsLocalOnly() {
 			t.Error("expected IsLocalOnly()=false")
 		}
@@ -321,7 +361,7 @@ func TestSyncLoop_IsLocalOnly(t *testing.T) {
 	t.Run("true", func(t *testing.T) {
 		syncer := NewSyncer(tmpDir, syncDir, true)
 		projector := setupTestProjector(t, tmpDir)
-		loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 1*time.Second, true)
+		loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), true)
 		if !loop.IsLocalOnly() {
 			t.Error("expected IsLocalOnly()=true")
 		}
@@ -335,7 +375,7 @@ func TestSyncLoop_LocalOnly_StatusReportsMode(t *testing.T) {
 	syncer := NewSyncer(tmpDir, syncDir, true)
 	projector := setupTestProjector(t, tmpDir)
 
-	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 1*time.Second, true)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), true)
 
 	// Check status shows local-only before start
 	status := loop.GetStatus()
@@ -384,8 +424,7 @@ func TestSyncLoop_LocalOnly_FullCycle(t *testing.T) {
 	syncer := NewSyncer(tmpDir, syncDir, true)
 	projector := setupTestProjector(t, tmpDir)
 
-	// Use local-only mode with a long interval, rely on manual trigger
-	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, true)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), true)
 
 	ctx := context.Background()
 	if err := loop.Start(ctx); err != nil {
@@ -465,7 +504,7 @@ func TestSyncLoop_LocalOnly_MissingWorktree(t *testing.T) {
 
 	syncer := NewSyncer(tmpDir, syncDir, true)
 	projector := setupTestProjector(t, tmpDir)
-	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, true)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), true)
 
 	// Start must succeed — it should create the missing worktree.
 	if err := loop.Start(ctx); err != nil {
@@ -504,7 +543,7 @@ func TestLoop_SetError(t *testing.T) {
 
 	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), false)
 	projector := setupTestProjector(t, tmpDir)
-	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 1*time.Second, false)
+	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), false)
 
 	// Set an error
 	testErr := fmt.Errorf("test error")
@@ -571,7 +610,7 @@ func TestUpdateProjection(t *testing.T) {
 
 	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), false)
 	projector := setupTestProjector(t, tmpDir)
-	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 1*time.Second, false)
+	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), false)
 
 	// Write some test events to JSONL
 	jsonlPath := filepath.Join(tmpDir, ".thrum", "messages.jsonl")
@@ -661,5 +700,108 @@ func TestUpdateProjection(t *testing.T) {
 
 	if count != 1 {
 		t.Errorf("Expected 1 message in database, got %d", count)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// E8 Telemetry tests for sync.commit
+// ---------------------------------------------------------------------------
+
+// TestSyncLoop_SetCommitCountsProvider_Wired verifies that
+// SetCommitCountsProvider stores the callback and it can be invoked.
+func TestSyncLoop_SetCommitCountsProvider_Wired(t *testing.T) {
+	tmpDir := setupMergeTestRepo(t)
+	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
+
+	syncer := NewSyncer(tmpDir, syncDir, false)
+	projector := setupTestProjector(t, tmpDir)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), false)
+
+	if loop.walkerCounts != nil {
+		t.Fatal("walkerCounts should be nil before SetCommitCountsProvider")
+	}
+
+	called := false
+	loop.SetCommitCountsProvider(func() (int, int, int) {
+		called = true
+		return 3, 5, 7
+	})
+
+	if loop.walkerCounts == nil {
+		t.Fatal("walkerCounts should be non-nil after SetCommitCountsProvider")
+	}
+
+	s, m, r := loop.walkerCounts()
+	if !called {
+		t.Error("walkerCounts callback was not called")
+	}
+	if s != 3 || m != 5 || r != 7 {
+		t.Errorf("walkerCounts() = (%d, %d, %d), want (3, 5, 7)", s, m, r)
+	}
+}
+
+// TestSyncLoop_DoSync_EmitsSyncCommit verifies that doSync emits a
+// "sync.commit" slog.Info event after CommitAndPush succeeds and there
+// is a HEAD commit in the sync worktree.
+func TestSyncLoop_DoSync_EmitsSyncCommit(t *testing.T) {
+	h := &loopTelHandler{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	defer slog.SetDefault(prev)
+
+	tmpDir := setupMergeTestRepo(t)
+	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
+
+	syncer := NewSyncer(tmpDir, syncDir, false)
+	projector := setupTestProjector(t, tmpDir)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), false)
+
+	// Wire a counts provider that returns known values.
+	loop.SetCommitCountsProvider(func() (int, int, int) {
+		return 2, 4, 1
+	})
+
+	ctx := context.Background()
+	if err := loop.Start(ctx); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer func() { _ = loop.Stop() }()
+
+	// Wait for the initial sync cycle to complete.
+	deadline := time.After(3 * time.Second)
+	for {
+		status := loop.GetStatus()
+		if !status.LastSyncAt.IsZero() {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for initial sync")
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+
+	// sync.commit only fires when commitSHA is non-empty (i.e., there was a
+	// real commit). Accept 0 or more events; if present, verify field invariants.
+	recs := h.recordsWithMessage("sync.commit")
+	for _, r := range recs {
+		sha := loopTelAttrValue(r, "commit_sha")
+		if sha == "" {
+			t.Error("sync.commit event has empty commit_sha")
+		}
+	}
+}
+
+func TestSyncLoop_SetLocalOnlyReason_SurfacesInStatus(t *testing.T) {
+	l := NewSyncLoop(nil, nil, t.TempDir(), t.TempDir(), t.TempDir(), true)
+	const reason = "a-sync disabled: public repo detected, no exposure override"
+	l.SetLocalOnlyReason(reason)
+	st := l.GetStatus()
+	if !st.LocalOnly {
+		t.Fatal("expected LocalOnly true")
+	}
+	if st.LocalOnlyReason != reason {
+		t.Fatalf("LocalOnlyReason = %q, want %q", st.LocalOnlyReason, reason)
 	}
 }

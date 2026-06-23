@@ -88,10 +88,11 @@ gets passed to `exec`.
 
 **Optional flags:**
 
-| Flag                    | Default | Description                                                                                                                                                                                                          |
-| ----------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--debounce <duration>` | `60s`   | Debounce window. First match in a window delivers immediately. Subsequent matches in the same window are suppressed. When the window closes, a trailing summary is sent if any matches were suppressed. Minimum 30s. |
-| `--env KEY=VALUE`       | —       | Extra environment variable for the child process. Repeat for multiple.                                                                                                                                               |
+| Flag                    | Default | Description                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--debounce <duration>` | `60s`   | Debounce window. First match in a window delivers immediately. Subsequent matches in the same window are suppressed. When the window closes, a trailing summary is sent if any matches were suppressed. Minimum 30s.                                                                                                                               |
+| `--env KEY=VALUE`       | —       | Extra environment variable for the child process. Repeat for multiple.                                                                                                                                                                                                                                                                             |
+| `--schedule <expr>`     | —       | Standard 5-field cron expression (e.g. `"*/5 * * * *"`, `"7,27,47 * * * *"`, `"0 9-17 * * 1-5"`). Routes the monitor into **scheduled mode**: the child runs as a one-shot per tick and never auto-restarts between fires. Without `--schedule`, the monitor is **continuous** and runs the child as a long-lived process. (thrum-puhr.9, v0.10.6) |
 
 **Notes:**
 
@@ -242,7 +243,18 @@ sends an exit notification to the recipient agent. The message includes:
 - Last 500 bytes of captured output
 - A `thrum monitor restart <id>` hint
 
-The daemon does **not** auto-respawn. You decide whether to restart.
+**Continuous monitors** (no `--schedule`): the daemon auto-restarts the child on
+unexpected exit with exponential backoff (1s → 60s, doubled per failure, capped
+at 60s). A successful run of ≥10s resets the backoff sequence. If the child
+exits more than 10 times within a 5-minute window, the monitor is marked dead
+and an "exceeded restart budget" notice is delivered to the monitor's target.
+(thrum-puhr.9, v0.10.6 — replaces the prior "exit → MarkDead immediately"
+behavior; see the schema v39 `monitors.schedule` column.)
+
+**Scheduled monitors** (`--schedule <cron>`): the child runs one-shot per cron
+tick; it is not restarted between fires regardless of exit code. The backoff
+loop above does not apply. If a tick's run is still in flight when the next tick
+arrives, the new tick is skipped (one-at-a-time guarantee).
 
 ### Daemon Restart Behavior
 

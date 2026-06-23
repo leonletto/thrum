@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/nudge"
 	"github.com/leonletto/thrum/internal/daemon/permission"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
@@ -169,6 +170,42 @@ func (h *TmuxHandler) RestoreBinding(session, cwd string) {
 	defer h.sessionMu.Unlock()
 	h.sessionCwds[session] = cwd
 	h.cwdSessions[cwd] = session
+}
+
+// populateSessionCwdFromIdentity looks up the agent identity associated with
+// the given tmux session name and, if found, writes the (session, cwd)
+// binding to sessionCwds / cwdSessions via RestoreBinding. Idempotent: no-op
+// when sessionCwds[name] is already set (preserves HandleCreate's canonical
+// populate byte-for-byte for thrum-managed sessions).
+//
+// Used by HandleLaunch (and indirectly by HandleRestart via RestoreBinding
+// after its own cwd resolution) to defensively populate the binding for
+// externally-created tmux sessions — i.e., a raw `tmux new-session` followed
+// by `thrum tmux launch`, where HandleCreate's canonical populate site never
+// ran. Without this, runPostLaunchInject's emitIdentityBanner bails with
+// map_hit=false (no banner, no /thrum:prime, no SessionStart hook post-
+// restart loud preamble) for every session that wasn't created by
+// `thrum tmux create`.
+//
+// Returns true if a binding was populated by this call, false if the
+// binding already existed or the identity lookup found nothing.
+func (h *TmuxHandler) populateSessionCwdFromIdentity(ctx context.Context, name string) bool {
+	h.sessionMu.RLock()
+	_, hasCwd := h.sessionCwds[name]
+	h.sessionMu.RUnlock()
+	if hasCwd {
+		return false
+	}
+	agentName, idFile, _ := h.findIdentityForSession(ctx, name)
+	if agentName == "" || idFile == nil || idFile.Worktree == "" {
+		return false
+	}
+	cwd := resolveWorktreePath(ctx, filepath.Dir(h.thrumDir), idFile.Worktree)
+	if cwd == "" {
+		return false
+	}
+	h.RestoreBinding(name, cwd)
+	return true
 }
 
 // SetPoller installs the silence-hash poller that bypasses tmux's
@@ -407,6 +444,16 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 	if err != nil {
 		return nil, err
 	}
+
+	// Defensive sessionCwds populate for externally-created tmux sessions.
+	// HandleCreate is the only canonical populate site; sessions created via
+	// raw `tmux new-session` + `thrum tmux launch` (e.g. the release-harness
+	// coord pane, where $REPO is a .git dir that fails HandleCreate's
+	// worktree-validity guard) reach here with no map entry, and the
+	// post-launch inject's emitIdentityBanner then bails out with
+	// map_hit=false. No-op for thrum-managed sessions where HandleCreate
+	// already populated the binding.
+	h.populateSessionCwdFromIdentity(ctx, name)
 
 	runtime := req.Runtime
 	if runtime == "" {
@@ -789,9 +836,17 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 	if paneState == "idle" {
 		if idFile != nil && idFile.AgentStatus == "working" {
 			paneState = "working_but_idle"
-			target := resolveNudgeTarget(h.thrumDir, agentName)
-			if target != "" {
-				_ = ttmux.Nudge(target, "daemon")
+			// thrum-7phu: the status-recovery nudge types text + Enter just like
+			// the message-arrival path, so it carries the same hazard — firing it
+			// into an active selection dialog (AskUserQuestion / permission /
+			// trust) would auto-answer a human decision. Gate on the same
+			// safe-to-type chokepoint. Empty content (no capture) is treated as
+			// safe, preserving prior behavior when the pane state is unknown.
+			if permission.IsPaneSafeToType(idFile.Runtime, req.Content) {
+				target := resolveNudgeTarget(h.thrumDir, agentName)
+				if target != "" {
+					_ = ttmux.Nudge(target, "daemon")
+				}
 			}
 		}
 	}
@@ -810,6 +865,17 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 		if err := h.permission.OnRecovery(ctx, req.Session, agentName); err != nil {
 			log.Printf("[tmux] check-pane: OnRecovery failed: %v", err)
 		}
+	}
+
+	// thrum-7phu: re-deliver any message-arrival nudge deferred while this
+	// pane was showing an interactive selection dialog. RedeliverIfSafe is
+	// self-gating — it re-checks pane safety (permission prompt / trust gate /
+	// AskUserQuestion menu) against the freshly captured content and only
+	// fires when the pane is genuinely safe to type into, so it's correct to
+	// call on every poll regardless of paneState. No-op when nothing is
+	// deferred for this session.
+	if idFile != nil {
+		nudge.RedeliverIfSafe(req.Session, idFile.Runtime, req.Content)
 	}
 
 	return &CheckPaneResponse{
@@ -1128,6 +1194,13 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 	if cwd == "" {
 		return nil, fmt.Errorf("cannot resolve worktree %q to a path for %s", idFile.Worktree, agentName)
 	}
+
+	// Re-establish the (session, cwd) binding cleared earlier by HandleKill
+	// (tmux.go:494). Without this re-bind, the post-launch inject path's
+	// emitIdentityBanner lookup bails with map_hit=false on every restart of
+	// an externally-created session — same root cause as the HandleLaunch
+	// populate above, surfacing on the restart path.
+	h.RestoreBinding(name, cwd)
 
 	snapshotLines := 0
 	wtThrumDir := filepath.Dir(idDir) // identities/ parent is .thrum/
@@ -1700,6 +1773,27 @@ func (h *TmuxHandler) ReconcilePoller(ctx context.Context) int {
 // findIdentityForSession searches all worktree identity dirs for an agent
 // associated with the given tmux session name.
 func (h *TmuxHandler) findIdentityForSession(ctx context.Context, sessionName string) (string, *config.IdentityFile, string) {
+	// thrum-0a9x Pass 0: the session's registered cwd via the in-memory
+	// sessionCwds map — no git subprocess. The git-backed scan below
+	// (AllIdentityDirs → safecmd.WorktreePaths → `git worktree list`, 5s
+	// timeout) SILENTLY truncates to the main repo on any git error,
+	// including timeouts under host load — which made restart fail
+	// "no identity file found for session" for an identity that existed on
+	// disk all along (release scenario 69, 2× under full-gate load). This
+	// mirrors writeTmuxToIdentity's Pass 0: the sole identity in the
+	// session's registered cwd is the session's agent by construction.
+	if cwd, ok := h.sessionCwd(sessionName); ok {
+		if idPath, ok := soleIdentityFile(cwd); ok {
+			if data, err := os.ReadFile(idPath); err == nil { // #nosec G304 -- idPath is .thrum/identities/<name>.json under our own sessionCwd map
+				var idFile config.IdentityFile
+				if err := json.Unmarshal(data, &idFile); err == nil {
+					agentName := strings.TrimSuffix(filepath.Base(idPath), ".json")
+					return agentName, &idFile, filepath.Dir(idPath)
+				}
+			}
+		}
+	}
+
 	for _, idDir := range AllIdentityDirs(ctx, h.thrumDir) {
 		entries, _ := os.ReadDir(idDir)
 		for _, entry := range entries {

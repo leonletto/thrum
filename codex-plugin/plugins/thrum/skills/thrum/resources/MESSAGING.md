@@ -27,6 +27,50 @@
 - **Reply:** `thrum reply <msg-id>` — same audience as original
 - **Unknown recipient** — hard error; verify names with `thrum team`
 
+## Shell-Safe Message Bodies (backticks, `$(...)`, `$VAR`, quotes)
+
+**The trap:** a double-quoted body is processed by your shell _before_ thrum
+runs. Backticks and `$(...)` are command-substituted, `$VAR` is expanded, and
+the original text never reaches thrum — it cannot detect or repair the
+corruption. A real dispatch once lost a backticked word (`` `img` `` ran as a
+command → "command not found: img") and the recipient silently got mangled
+instructions. Single-quoting is only a stopgap — it breaks on apostrophes in
+prose.
+
+**The safe default:** read the body from stdin or a file instead of passing it
+as a quoted argument. A **quoted** heredoc (`<<'EOF'` — note the quotes around
+`EOF`) disables _all_ shell interpretation, so backticks, `$`, apostrophes, and
+quotes all pass through literally. Available on `send`, `reply`, and
+`message edit`:
+
+```bash
+# Preferred: quoted heredoc via --stdin (safe for backticks, $, apostrophes)
+thrum send --to @agent_name --stdin <<'EOF'
+Run `make build` then check $(git rev-parse HEAD). It's done.
+EOF
+
+# Reply the same way (no --to — recipient comes from the parent message)
+thrum reply msg_01HXE... --stdin <<'EOF'
+Done — see `internal/foo.go`. Cost was $(estimate).
+EOF
+
+# From a file
+thrum send --to @agent_name --body-file ./body.md
+
+# '-' as the body argument is a --stdin alias (good for pipes)
+some-generator | thrum send --to @agent_name -
+```
+
+Rules:
+
+- `--stdin` and `--body-file` are mutually exclusive, and neither may be
+  combined with a positional body (the command errors on ambiguity).
+- A single trailing newline (the one the heredoc adds) is stripped; additional
+  blank lines are preserved.
+- Plain bodies with no shell metacharacters can still be passed inline as before
+  — `thrum send "hello" --to @x`. Use stdin/file the moment a body contains
+  backticks, `$`, or mixed quotes.
+
 ## Permission-Prompt Routing
 
 Runtime permission prompts (e.g. "Allow this tool?") route to recipients listed

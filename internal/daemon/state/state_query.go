@@ -60,6 +60,33 @@ func (s *State) ListActiveAgentsByRole(ctx context.Context, role string) ([]stri
 	return out, nil
 }
 
+// ListAllActiveAgentIDs returns the agent IDs of every agent with at least one
+// non-ended session — used to fan an a-sync exposure warning to all live agents
+// on this daemon. Mirrors ListActiveAgentsByRole without the role filter.
+func (s *State) ListAllActiveAgentIDs(ctx context.Context) []string {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT a.agent_id
+		  FROM agents a
+		  JOIN sessions s ON s.agent_id = a.agent_id
+		 WHERE s.ended_at IS NULL`)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			continue
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil
+	}
+	return out
+}
+
 // ListAgentsInWorktree returns the agent IDs of every agent that has
 // ever had a session_ref mapping them to the given worktree path.
 // Ended sessions are included deliberately — an agent whose session
@@ -79,7 +106,7 @@ func (s *State) ListAgentsInWorktree(ctx context.Context, worktree string) []str
 	// enforceWorktreeIdentity hook (which runs under the outer write
 	// lock). Serialization against writers comes from the
 	// single-connection pool — NewState opens the DB with
-	// SetMaxOpenConns(1) (see internal/schema/db.go), so SQLite
+	// SetMaxOpenConns(1) (see internal/schema/schema.go), so SQLite
 	// operations are linearised by the pool regardless of Go-level
 	// locking.
 	rows, err := s.db.QueryContext(ctx, `

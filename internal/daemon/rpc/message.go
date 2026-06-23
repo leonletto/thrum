@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -22,6 +23,8 @@ import (
 	"github.com/leonletto/thrum/internal/groups"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/identity/guard"
+	"github.com/leonletto/thrum/internal/profile"
+	"github.com/leonletto/thrum/internal/recipientgate"
 	"github.com/leonletto/thrum/internal/subscriptions"
 	"github.com/leonletto/thrum/internal/types"
 )
@@ -125,6 +128,15 @@ type ListMessagesRequest struct {
 	// Sorting
 	SortBy    string `json:"sort_by,omitempty"`    // "created_at", "updated_at"
 	SortOrder string `json:"sort_order,omitempty"` // "asc", "desc"
+
+	// Chronological opts into the oldest-first, reply-clustered inbox view
+	// (replies grouped under their parent, chronological within each cluster) —
+	// for reading a thread in order. Default (false) is newest-first
+	// (thrum-3vl0 / thrum-4yjc): the inbox shows the most recent messages first
+	// so a recent message is never buried under backlog and `--limit N` returns
+	// the newest N. Only meaningful in inbox mode (ForAgent/ForAgentRole set);
+	// ignored when an explicit SortOrder is given.
+	Chronological bool `json:"chronological,omitempty"`
 }
 
 // ListMessagesResponse represents the response from message.list RPC.
@@ -235,6 +247,14 @@ type MarkReadResponse struct {
 	// IDs already read, or parse failures (conservative fall-through).
 	// Drives the CLI's "N new messages arrived" hint after read --all.
 	SkippedCount int `json:"skipped_count,omitempty"`
+	// MarkableRemaining (thrum-1846) is the number of messages the caller
+	// can still LEGITIMATELY mark read — caller is a recipient per the
+	// recipientgate predicate AND read_at is not yet set — after this
+	// operation completes. It deliberately excludes other agents'
+	// filter-visible mail, which the caller can never mark. The CLI uses it
+	// to decide whether to print "run again to mark more"; when it reaches 0
+	// the suggestion is dropped, closing the read --all retry-storm trap.
+	MarkableRemaining int `json:"markable_remaining,omitempty"`
 }
 
 // ArchiveRequest represents the request for message.archive RPC.
@@ -293,6 +313,11 @@ type MessageHandler struct {
 	thrumDir         string       // for tmux nudge resolution
 	supervisorID     string       // canonical virtual-supervisor ID, e.g. "supervisor_thrum_leon-letto"
 	supervisorLegacy string       // pre-upgrade form for receiver compat, e.g. "supervisor_thrum"
+	// maxBodyBytes caps message.create body.content at write. 0 means
+	// use config.DefaultMaxMessageBodyBytes; negative disables the
+	// cap. Wired from DaemonConfig.MaxMessageBodyBytesEffective() in
+	// main.go. thrum-mhwt.
+	maxBodyBytes int
 }
 
 // SetWSBroadcaster configures a broadcaster that will be called after every
@@ -382,7 +407,12 @@ func (h *MessageHandler) NotifyMessageCreate(evt types.MessageCreateEvent) {
 	bc.BroadcastAll(buildWSNotification(msgInfo))
 }
 
-// NewMessageHandler creates a new message handler.
+// NewMessageHandler creates a new message handler intended for test
+// fixtures that do not exercise the message body-size cap. The
+// resulting handler has maxBodyBytes = 0, which disables the cap
+// entirely. Production code paths construct the handler via
+// NewMessageHandlerWithDispatcher with the effective cap from
+// DaemonConfig.MaxMessageBodyBytesEffective. thrum-mhwt.
 func NewMessageHandler(state *state.State) *MessageHandler {
 	return &MessageHandler{
 		state:         state,
@@ -391,12 +421,33 @@ func NewMessageHandler(state *state.State) *MessageHandler {
 	}
 }
 
+// checkBodySize returns a typed RPC error with -32602 (Invalid Params)
+// when content exceeds h.maxBodyBytes, and nil otherwise. h.maxBodyBytes
+// == 0 disables the cap. Used by every write-side handler that accepts
+// caller-supplied message body content (HandleSend + HandleEdit) so the
+// rejection surface is uniform and machine-parseable. thrum-mhwt.
+func (h *MessageHandler) checkBodySize(content string) error {
+	if h.maxBodyBytes <= 0 || len(content) <= h.maxBodyBytes {
+		return nil
+	}
+	return &RPCError{
+		Code: -32602,
+		Message: fmt.Sprintf(
+			"message body too large: %d bytes exceeds the daemon limit of %d bytes (daemon.max_message_body_bytes). Reduce the body size or raise the config; for genuinely large payloads consider attachments instead of inline content",
+			len(content), h.maxBodyBytes),
+	}
+}
+
 // NewMessageHandlerWithDispatcher creates a new message handler with a custom dispatcher.
 // The dispatcher should have the client notifier configured for push notifications.
 // SupervisorID / supervisorLegacy are the canonical and pre-upgrade forms of the
 // virtual supervisor ID; both are consulted by isSupervisorRecipient on the
 // reply receiver path. Empty strings are safe (degrade to never-match).
-func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptions.Dispatcher, thrumDir, supervisorID, supervisorLegacy string) *MessageHandler {
+//
+// MaxBodyBytes caps the size of a single message.create body.content at
+// write (thrum-mhwt). 0 means "use config.DefaultMaxMessageBodyBytes
+// (1 MB)"; negative disables the cap (not recommended outside tests).
+func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptions.Dispatcher, thrumDir, supervisorID, supervisorLegacy string, maxBodyBytes int) *MessageHandler {
 	return &MessageHandler{
 		state:            state,
 		dispatcher:       dispatcher,
@@ -404,11 +455,30 @@ func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptio
 		thrumDir:         thrumDir,
 		supervisorID:     supervisorID,
 		supervisorLegacy: supervisorLegacy,
+		maxBodyBytes:     maxBodyBytes,
 	}
 }
 
 // HandleSend handles the message.send RPC method.
 func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage) (any, error) {
+	// thrum-bpq5 substrate: end-to-end HandleSend timing. Gated by
+	// THRUM_PROFILE; zero cost when off.
+	hsStart := time.Now()
+	var phaseResolveMs, phaseRecipientsMs, phaseWriteEventMs, phasePostCommitMs, phaseDispatchMs int64
+	defer func() {
+		if !profile.Enabled() {
+			return
+		}
+		slog.Info("profile.handle_send.total",
+			"total_ms", time.Since(hsStart).Milliseconds(),
+			"resolve_ms", phaseResolveMs,
+			"recipients_ms", phaseRecipientsMs,
+			"write_event_ms", phaseWriteEventMs,
+			"post_commit_ms", phasePostCommitMs,
+			"dispatch_ms", phaseDispatchMs,
+		)
+	}()
+
 	var req SendRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -430,9 +500,19 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("invalid format: %s (must be 'markdown', 'plain', or 'json')", format)
 	}
 
+	// thrum-mhwt: cap body.content size at write so a runaway operator
+	// or hot-loop client cannot inflate events.jsonl past the
+	// compactor's read ceiling. h.maxBodyBytes is the effective limit
+	// (set at construction from DaemonConfig.MaxMessageBodyBytesEffective);
+	// 0 disables the cap (test path).
+	if err := h.checkBodySize(req.Content); err != nil {
+		return nil, err
+	}
+
 	// Generate message ID
 	messageID := identity.GenerateMessageID()
 
+	resolveStart := time.Now()
 	// Resolve current agent and session
 	callerID, sessionID, err := h.resolveAgentAndSession(ctx, req.CallerAgentID)
 	if err != nil {
@@ -443,6 +523,8 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	// send.recipient-stale hint doesn't false-positive on actively
 	// coordinating agents. Debounced in the state layer.
 	_ = h.state.TouchAgentLastSeen(ctx, callerID)
+	phaseResolveMs = time.Since(resolveStart).Milliseconds()
+	recipientsStart := time.Now()
 
 	// Handle impersonation (users can impersonate agents)
 	agentID := callerID
@@ -451,7 +533,7 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 
 	if req.ActingAs != "" {
 		// Validate impersonation request
-		if err := h.validateImpersonation(callerID, req.ActingAs); err != nil {
+		if err := h.validateImpersonation(ctx, callerID, req.ActingAs); err != nil {
 			return nil, err
 		}
 
@@ -665,14 +747,32 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 		Disclosed:  disclosed,
 	}
 
-	// Write event to JSONL and SQLite
-	// Lock only for WriteEvent
+	phaseRecipientsMs = time.Since(recipientsStart).Milliseconds()
+
+	// Write event to JSONL and SQLite. Lock only for WriteEvent;
+	// thrum-bsn7: release state.Lock() BEFORE invoking postCommit so the
+	// structural-event walker+compactor (up to 90s wall-clock) cannot
+	// starve concurrent message.create / agent.register etc.
+	weStart := time.Now()
 	h.state.Lock()
-	if err := h.state.WriteEvent(ctx, event); err != nil {
-		h.state.Unlock()
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	h.state.Unlock()
+	phaseWriteEventMs = time.Since(weStart).Milliseconds()
+	if err != nil {
 		return nil, fmt.Errorf("write message.create event: %w", err)
 	}
-	h.state.Unlock()
+	// thrum-1nkt.5: postCommit now runs async via GoPostCommit, so this
+	// metric measures only the goroutine-launch latency (sub-millisecond)
+	// rather than the walker+compactor wall-clock it tracked pre-1nkt.5.
+	// Profile consumers reading near-zero values here should NOT interpret
+	// that as a fast walker — the caller no longer blocks on walker
+	// completion at all. Use the walker's own profile.* slog records
+	// (snapshot.go / compact.go) for actual walker timing.
+	pcStart := time.Now()
+	h.state.GoPostCommit(postCommit)
+	phasePostCommitMs = time.Since(pcStart).Milliseconds()
+	dispatchStart := time.Now()
+	defer func() { phaseDispatchMs = time.Since(dispatchStart).Milliseconds() }()
 
 	// No lock for dispatch and emit (WebSocket I/O)
 	preview := req.Content
@@ -899,9 +999,21 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	// layer debounces so the extra resolve work is not amplified into
 	// DB churn.
 	//
-	// resolveAgentOnly returns "" on failure, which naturally skips the
-	// touch for anonymous callers — no extra gate needed.
-	currentAgentID := h.resolveAgentOnly(ctx, req.CallerAgentID)
+	// resolveAgentOnly returns ("", nil) for anonymous/unresolved callers
+	// (touch is skipped — no extra gate needed) and a non-nil *guard.Error ONLY
+	// for an identity_mismatch forgery, which is refused below (thrum-tgqx E2).
+	// Note: an anonymous peercred caller and a transient non-guard I/O failure
+	// both yield ("", nil), so currentAgentID can be "" for a peercred caller —
+	// the bare read then proceeds, but the for_agent/for_agent_role attestation
+	// block below still fires (it gates on peercredRan, not currentAgentID) and
+	// fails closed for any anonymous caller supplying those impersonation fields.
+	currentAgentID, guardErr := h.resolveAgentOnly(ctx, req.CallerAgentID)
+	if guardErr != nil {
+		// thrum-tgqx E2: identity-guard ownership violation. Refuse and expose
+		// NO data rather than falling through to the untrusted caller-supplied
+		// for_agent / for_agent_role filter (the original fail-open leak).
+		return nil, guardErr
+	}
 
 	// Safe with the RLock held — TouchAgentLastSeen acquires touchMu
 	// (independent of state.mu) and writes directly via the DB()
@@ -909,6 +1021,44 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	// acquire state.mu, revisit this call site.
 	if currentAgentID != "" {
 		_ = h.state.TouchAgentLastSeen(ctx, currentAgentID)
+	}
+
+	// thrum-tgqx E2 — for_agent attestation. When peercred ran (a kernel-
+	// verified local caller over the unix socket), a request scoped to a
+	// DIFFERENT agent or a non-matching role must be refused: otherwise a
+	// trusted-but-curious agent could read another agent's/role's inbox via
+	// the caller-supplied for_agent / for_agent_role fields. The gate is
+	// peercredRan ALONE (not currentAgentID != ""): a genuinely-anonymous
+	// peercred caller (currentAgentID == "") that supplies for_agent /
+	// for_agent_role must ALSO be refused — validateImpersonation rejects the
+	// empty (non-user:) caller, and the empty-agent role lookup fails closed —
+	// otherwise the B1 bare-read relaxation in resolveAgentOnly would reopen the
+	// leak for anonymous impersonation requests. peercredRan is FALSE for
+	// WebSocket + cross-host peer callers (web-UI user:-impersonation and
+	// token-authed peers) — they skip attestation and keep working
+	// (validateImpersonation gates the legitimate user: impersonation path).
+	if _, peercredRan := peercred.FromContext(ctx); peercredRan {
+		if req.ForAgent != "" && req.ForAgent != currentAgentID {
+			// validateImpersonation refuses any non-user: caller (an agent can
+			// only request its own inbox); user: impersonators are permitted.
+			if err := h.validateImpersonation(ctx, currentAgentID, req.ForAgent); err != nil {
+				return nil, fmt.Errorf("identity guard: caller %q may not request for_agent %q: %w", currentAgentID, req.ForAgent, err)
+			}
+		}
+		if req.ForAgentRole != "" {
+			// The caller's own role must match the requested role group. A
+			// mismatch, an unknown caller, OR a DB error all refuse fail-closed
+			// — the scan error is checked explicitly (not discarded) so the
+			// fail-closed intent is legible and a future refactor can't turn a
+			// swallowed error into a bypass.
+			var callerRole string
+			roleErr := h.state.DB().QueryRowContext(ctx,
+				`SELECT role FROM agents WHERE agent_id = ?`, currentAgentID).Scan(&callerRole)
+			if roleErr != nil || callerRole != req.ForAgentRole {
+				return nil, fmt.Errorf("identity guard: caller %q (role %q) may not request for_agent_role %q",
+					currentAgentID, callerRole, req.ForAgentRole)
+			}
+		}
 	}
 
 	// Determine which identity to use for the is_read correlated subquery.
@@ -1057,12 +1207,20 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	query += createdAfterClause
 	args = append(args, createdAfterArgs...)
 
-	// Add sorting — cluster replies with parents when using inbox (for_agent) mode,
-	// but respect explicit sort_order when provided (e.g., wait uses desc for newest-first)
-	if (req.ForAgent != "" || req.ForAgentRole != "") && req.SortOrder == "" {
-		// Inbox mode: group replies under their parent, then chronological within each cluster
+	// Add sorting (thrum-3vl0 / thrum-4yjc). Inbox mode (for_agent/for_agent_role
+	// set) with NO explicit sort_order now defaults to NEWEST-FIRST so a recent
+	// message is never buried under backlog and `--limit N` returns the newest N
+	// — the common reading order for an inbox. The reply-clustered, oldest-first
+	// view (replies grouped under their parent, chronological within each cluster
+	// — for reading a thread in order) is now opt-in via Chronological (CLI:
+	// --chronological / --oldest). An explicit sort_order still wins over both
+	// (e.g. wait/MCP pass desc/asc directly), so those callers are unaffected;
+	// the newest-first default falls through to the shared sortBy/sortOrder path
+	// below (sortOrder defaults to "desc").
+	switch {
+	case (req.ForAgent != "" || req.ForAgentRole != "") && req.SortOrder == "" && req.Chronological:
 		query += " ORDER BY COALESCE(reply_ref.ref_value, m.message_id) ASC, m.created_at ASC"
-	} else {
+	default:
 		query += fmt.Sprintf(" ORDER BY m.%s %s", sortBy, sortOrder)
 	}
 
@@ -1263,6 +1421,20 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		hiddenQuery += " AND m.message_id NOT IN (SELECT md3.message_id FROM message_deliveries md3 WHERE md3.recipient_agent_id = ? AND md3.read_at IS NOT NULL)"
 		hiddenArgs = append(hiddenArgs, currentAgentID)
 
+		// thrum-vr0i: only count mail the agent is a genuine recipient of (has a
+		// delivery row for). With no mention/scope/ref filter the superset above
+		// is otherwise unbounded — it counts EVERY unread message in the daemon
+		// minus the agent's for-agent-visible set, because forAgentClause is
+		// intentionally omitted here. A message join-visible via identity
+		// (role/scope/legacy-broadcast) but with NO delivery row was never
+		// delivered to this agent per event.Recipients semantics, so counting it
+		// as "N additional unread outside filter" is misleading AND never
+		// converges (read --all cannot clear a row that does not exist).
+		// Restricting the superset to delivery-backed messages makes the advisory
+		// count honest and bounded.
+		hiddenQuery += " AND EXISTS (SELECT 1 FROM message_deliveries md_hb WHERE md_hb.message_id = m.message_id AND md_hb.recipient_agent_id = ?)"
+		hiddenArgs = append(hiddenArgs, currentAgentID)
+
 		var totalUnreadWithoutForAgent int
 		_ = h.state.DB().QueryRowContext(ctx, hiddenQuery, hiddenArgs...).Scan(&totalUnreadWithoutForAgent)
 		// Subtraction guard: under SQLite's snapshot semantics within a
@@ -1301,7 +1473,12 @@ func (h *MessageHandler) HandleOutbox(ctx context.Context, params json.RawMessag
 		page = 1
 	}
 
-	authorID := h.resolveAgentOnly(ctx, req.CallerAgentID)
+	authorID, guardErr := h.resolveAgentOnly(ctx, req.CallerAgentID)
+	if guardErr != nil {
+		// thrum-tgqx E2: propagate identity-guard ownership violation rather
+		// than absorbing it to an empty string and falling through.
+		return nil, guardErr
+	}
 	if authorID == "" {
 		return nil, fmt.Errorf("caller_agent_id is required")
 	}
@@ -1521,13 +1698,16 @@ func (h *MessageHandler) HandleDelete(ctx context.Context, params json.RawMessag
 		Reason:    req.Reason,
 	}
 
-	// Write event to JSONL and SQLite
+	// Write event to JSONL and SQLite.
+	// thrum-bsn7: release state.Lock() before invoking postCommit
+	// (no-op for non-structural events; pattern uniform across handlers).
 	h.state.Lock()
-	defer h.state.Unlock()
-
-	if err := h.state.WriteEvent(ctx, event); err != nil {
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	h.state.Unlock()
+	if err != nil {
 		return nil, fmt.Errorf("write message.delete event: %w", err)
 	}
+	h.state.GoPostCommit(postCommit)
 
 	return &DeleteMessageResponse{
 		MessageID: req.MessageID,
@@ -1550,6 +1730,14 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 	// At least one of content or structured must be provided
 	if req.Content == "" && req.Structured == nil {
 		return nil, fmt.Errorf("at least one of content or structured must be provided")
+	}
+
+	// thrum-mhwt: same cap as HandleSend. Without this, an operator
+	// could send a small message and then edit it to an arbitrary
+	// size, bypassing the write-side cap. Same error surface
+	// (-32602 RPCError) so machine consumers handle both alike.
+	if err := h.checkBodySize(req.Content); err != nil {
+		return nil, err
 	}
 
 	// Get current agent and session
@@ -1617,14 +1805,15 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 		},
 	}
 
-	// Write event to JSONL and SQLite
-	// Lock only for WriteEvent
+	// Write event to JSONL and SQLite. Lock only for WriteEvent;
+	// thrum-bsn7: release state.Lock() before invoking postCommit.
 	h.state.Lock()
-	if err := h.state.WriteEvent(ctx, event); err != nil {
-		h.state.Unlock()
+	postCommit, err := h.state.WriteEvent(ctx, event)
+	h.state.Unlock()
+	if err != nil {
 		return nil, fmt.Errorf("write message.edit event: %w", err)
 	}
-	h.state.Unlock()
+	h.state.GoPostCommit(postCommit)
 
 	// Query metadata and dispatch without lock (DB queries + WebSocket I/O)
 	preview := newContent
@@ -2122,10 +2311,17 @@ func (h *MessageHandler) loadRecipientsForMessages(ctx context.Context, messageI
 		args = append(args, messageID)
 	}
 
-	query := `SELECT message_id, recipient_agent_id, delivered_at, seen_at, read_at
-		FROM message_deliveries
-		WHERE message_id IN (` + strings.Join(placeholders, ",") + `)
-		ORDER BY message_id, recipient_agent_id`
+	// thrum-b6qw: exclude the author's own read-stamped self-delivery row
+	// (recipient_agent_id = the message author). That row is internal My-Inbox
+	// read-state bookkeeping (Option C, created at send), NOT a send target — the
+	// outbox/get "recipients" view means who the message was sent TO. Excluding
+	// it keeps ReadCount = recipients-who-read, not recipients+self.
+	query := `SELECT md.message_id, md.recipient_agent_id, md.delivered_at, md.seen_at, md.read_at
+		FROM message_deliveries md
+		JOIN messages m ON m.message_id = md.message_id
+		WHERE md.message_id IN (` + strings.Join(placeholders, ",") + `)
+		  AND md.recipient_agent_id != m.agent_id
+		ORDER BY md.message_id, md.recipient_agent_id`
 	rows, err := h.state.DB().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -2229,16 +2425,28 @@ func (h *MessageHandler) resolveAgentAndSession(ctx context.Context, callerAgent
 	return agentID, sessionID, nil
 }
 
-// resolveAgentOnly resolves the caller's agent ID without requiring an active
-// session.  Used by HandleList for unread count and is_read computation where
-// only the agent identity matters, not the session.
+// resolveAgentOnly resolves the caller's authenticated agent identity for
+// read-path handlers. It returns ("", nil) for callers with no usable identity
+// — peercred didn't run (WebSocket / cross-host peer), a benign pre-quickstart
+// bare call, OR a genuinely-anonymous local caller (peercred ran but resolved
+// to no agent, or G3 strict with an empty caller). It returns a non-nil
+// *guard.Error ONLY for an identity_mismatch: a caller that CLAIMED an agent
+// identity (CallerAgentID) which the kernel-verified peercred identity
+// contradicts — the forgery case. Callers MUST refuse the request when err !=
+// nil rather than falling through to the untrusted caller-supplied filter
+// fields — that fall-through was the thrum-tgqx fail-open: a stale/mismatched
+// identity slipped through and exposed another worktree's data.
 //
-// Unlike resolveAgentAndSession this helper is called from read-only handlers
-// and returns an empty string on anonymous/unknown identity (caller treats
-// empty as "no filter" and returns unfiltered results). DaemonResolve errors
-// are absorbed into empty-string fallthrough — read-only handlers never fail
-// the RPC on identity concerns; they simply drop the per-caller filter.
-func (h *MessageHandler) resolveAgentOnly(ctx context.Context, callerAgentID string) string {
+// Anonymous guard reasons (anonymous_mutating_rpc, no_caller_agent_id) are
+// deliberately NOT propagated (thrum-tgqx E2, B1): the read methods are in
+// server.go anonymousAllowedMethods, so a bare anonymous read must succeed.
+// Anonymous callers that supply for_agent/for_agent_role are still refused by
+// the HandleList attestation block (which gates on peercredRan, not on a
+// resolved identity), so relaxing the bare-read case leaks no data. A wrapped
+// non-guard error (config-load, process-walk I/O) likewise preserves the
+// historical empty-string fallthrough so transient internal failures don't
+// refuse legitimate callers.
+func (h *MessageHandler) resolveAgentOnly(ctx context.Context, callerAgentID string) (string, error) {
 	resolved, peercredRan := peercred.FromContext(ctx)
 	req := guard.DaemonResolveRequest{
 		CallerAgentID: callerAgentID,
@@ -2254,9 +2462,30 @@ func (h *MessageHandler) resolveAgentOnly(ctx context.Context, callerAgentID str
 	req.IsAgentInWorktree = h.sharedWorktreeChecker()
 	caller, err := guard.DaemonResolve(ctx, loadDaemonGuardConfig(h.state.RepoPath()), req, slog.Default())
 	if err != nil {
-		return ""
+		// Reason-discriminate (thrum-tgqx E2, B1 fix). Only an identity_mismatch
+		// is a forgery — the caller CLAIMED an agent identity (CallerAgentID set)
+		// that contradicts the kernel-verified peercred identity. That MUST be
+		// refused; falling through to the caller-supplied for_agent filter is the
+		// fail-open leak.
+		//
+		// The other guard reasons describe a genuinely-anonymous caller who made
+		// no contradictory claim: anonymous_mutating_rpc (peercred ran but
+		// resolved to no agent) and no_caller_agent_id (G3 strict, empty caller).
+		// Returning the *guard.Error for those over-closes designed anonymous
+		// bootstrap bare-reads — message.list/outbox/get/listContext are in
+		// server.go anonymousAllowedMethods. Return ("", nil) so the bare read
+		// proceeds; the HandleList for_agent/for_agent_role attestation still
+		// fails closed for any anonymous caller that DOES supply those
+		// impersonation fields, so no data leaks.
+		var ge *guard.Error
+		if errors.As(err, &ge) && ge.Reason == "identity_mismatch" {
+			return "", ge
+		}
+		// Anonymous guard reason OR non-guard wrapped I/O failure — preserve the
+		// fail-open empty-string fallthrough.
+		return "", nil
 	}
-	return caller.AgentID
+	return caller.AgentID, nil
 }
 
 // sharedWorktreeChecker returns a closure that DaemonResolve uses to
@@ -2284,8 +2513,20 @@ func identitiesDirFor(repoPath string) string {
 	return filepath.Join(repoPath, ".thrum", "identities")
 }
 
-// validateImpersonation validates that the caller is authorized to impersonate the target identity.
-func (h *MessageHandler) validateImpersonation(callerID, targetID string) error {
+// validateImpersonation reports whether callerID may act as / request data for
+// targetID. Only "user:"-prefixed callers (web-UI impersonation) may stand in
+// for an agent; an agent caller may never impersonate another identity.
+//
+// Concurrency (thrum-tgqx, Task 5): this helper is LOCK-FREE by design. It is
+// invoked both from HandleSend's acting_as path (which holds no state lock) AND
+// from HandleList's for_agent attestation (which already holds state.RLock).
+// Acquiring state.RLock here would recursively read-lock and can deadlock
+// against a queued writer between the two RLocks (Go sync.RWMutex semantics) —
+// the same reason IsAgentInWorktree (state_query.go) takes no lock. The agents
+// existence check is a plain DB read; the DB layer serializes it independently
+// of state.mu, so no lock is required. ctx is the request context (Task 5) so a
+// cancelled RPC cancels the query rather than using context.Background().
+func (h *MessageHandler) validateImpersonation(ctx context.Context, callerID, targetID string) error {
 	// Check if caller is a user
 	if !strings.HasPrefix(callerID, "user:") {
 		return fmt.Errorf("only users can impersonate agents (caller: %s)", callerID)
@@ -2298,13 +2539,11 @@ func (h *MessageHandler) validateImpersonation(callerID, targetID string) error 
 		return fmt.Errorf("users can only impersonate agents, not other users (target: %s)", targetID)
 	}
 
-	// Check if target agent exists
-	h.state.RLock()
-	defer h.state.RUnlock()
-
+	// Check if target agent exists. No state lock — see the concurrency note
+	// above; the DB read is independently serialized.
 	var exists bool
 	query := `SELECT EXISTS(SELECT 1 FROM agents WHERE agent_id = ?)`
-	err := h.state.DB().QueryRowContext(context.Background(), query, targetID).Scan(&exists)
+	err := h.state.DB().QueryRowContext(ctx, query, targetID).Scan(&exists)
 	if err != nil {
 		return fmt.Errorf("check agent exists: %w", err)
 	}
@@ -2410,6 +2649,41 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 			// policy on the request side.
 		}
 
+		// thrum-1846: gate receipt EMISSION on recipient legitimacy +
+		// read-state idempotency. Previously this loop appended a
+		// message.receipt event for EVERY supplied ID that existed and
+		// passed the watermark — and WriteEvent broadcasts each event to
+		// every mesh peer. `thrum message read --all` lists filter-visible
+		// mail (which includes messages addressed to OTHER agents), so the
+		// unguarded loop fabricated cross-agent receipts and re-emitted
+		// identical ones on every retry pass — the receipt-storm trap. The
+		// projector's qb62 gate only stopped the DURABLE ROW; the event was
+		// still broadcast. We now predict the projector's two outcomes here
+		// and skip emission entirely when it would be a no-op:
+		//
+		//   legit       — caller is a legitimate recipient per the shared
+		//                 recipientgate predicate (the SAME text the
+		//                 projector INSERT-gate uses).
+		//   alreadyRead — the caller already holds a read-stamped delivery
+		//                 row, so re-marking would emit a duplicate receipt
+		//                 the projector would COALESCE into a no-op.
+		var legit, alreadyRead bool
+		legitArgs := append(recipientgate.Args(agentID), agentID, messageID)
+		if err := tx.QueryRow(
+			`SELECT `+recipientgate.Predicate+`,
+			        EXISTS(SELECT 1 FROM message_deliveries md
+			               WHERE md.message_id = m.message_id
+			                 AND md.recipient_agent_id = ?
+			                 AND md.read_at IS NOT NULL)
+			 FROM messages m WHERE m.message_id = ?`,
+			legitArgs...,
+		).Scan(&legit, &alreadyRead); err != nil {
+			return nil, fmt.Errorf("check receipt legitimacy: %w", err)
+		}
+		if !legit || alreadyRead {
+			continue
+		}
+
 		// Track affected thread
 		if msgThreadID.Valid && msgThreadID.String != "" {
 			affectedThreads[msgThreadID.String] = true
@@ -2436,16 +2710,13 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 			alsoReadBy[messageID] = otherAgents
 		}
 
-		// Insert or update read record
-		_, err = tx.Exec(`
-			INSERT INTO message_reads (message_id, session_id, agent_id, read_at)
-			VALUES (?, ?, ?, ?)
-			ON CONFLICT (message_id, session_id)
-			DO UPDATE SET read_at = excluded.read_at, agent_id = excluded.agent_id
-		`, messageID, sessionID, agentID, now)
-		if err != nil {
-			return nil, fmt.Errorf("insert message_read: %w", err)
-		}
+		// thrum-b6qw (port of tcqw): the message_reads writer is retired.
+		// Read-state is now recorded solely on message_deliveries.read_at via
+		// the message.receipt event emitted below (projector.applyMessageReceipt
+		// creates+stamps the row through the qb62 gate, covering delivery-backed,
+		// legacy-broadcast, and authored-self classes). The message_reads table
+		// is kept for back-compat (cascade-deletes untouched) but no longer
+		// written; team.go's unread query reads message_deliveries.read_at.
 
 		receiptEvents = append(receiptEvents, types.MessageReceiptEvent{
 			Type:        "message.receipt",
@@ -2458,6 +2729,32 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 		markedCount++
 	}
 
+	// thrum-1846: count the caller's remaining MARKABLE unread — messages
+	// the caller is a legitimate recipient of (shared recipientgate
+	// predicate) that carry no read-stamped delivery row yet. This is the
+	// honest "remaining" figure the CLI needs to decide whether to print
+	// "run again to mark more". The old CLI computed remaining from the
+	// inbox's viewer-visible Unread count, which includes other agents'
+	// mail the caller can never mark — so it never reached 0 and invited an
+	// infinite retry loop. The count runs in the same transaction snapshot
+	// as the loop above, so the messages we just queued for marking still
+	// appear unread here (their receipts project after commit); we subtract
+	// markedCount to exclude them. Watermark-skipped late arrivals stay in
+	// the count — they ARE markable on the next pass.
+	var markableUnread int
+	countArgs := append(recipientgate.Args(agentID), agentID)
+	if err := tx.QueryRow(
+		`SELECT COUNT(*) FROM messages m
+		 WHERE `+recipientgate.Predicate+`
+		   AND m.message_id NOT IN (
+		     SELECT md.message_id FROM message_deliveries md
+		     WHERE md.recipient_agent_id = ? AND md.read_at IS NOT NULL)`,
+		countArgs...,
+	).Scan(&markableUnread); err != nil {
+		return nil, fmt.Errorf("count markable remaining: %w", err)
+	}
+	markableRemaining := max(markableUnread-markedCount, 0)
+
 	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit transaction: %w", err)
@@ -2467,10 +2764,14 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 	h.state.Unlock()
 
 	for _, event := range receiptEvents {
-		if err := h.state.WriteEvent(ctx, event); err != nil {
+		// thrum-bsn7: message.receipt is non-structural so postCommit is
+		// always nil here; pattern still uniform for clarity.
+		postCommit, err := h.state.WriteEvent(ctx, event)
+		if err != nil {
 			h.state.Lock()
 			return nil, fmt.Errorf("write message.receipt event: %w", err)
 		}
+		h.state.GoPostCommit(postCommit)
 	}
 
 	// Emit thread.updated for each affected thread
@@ -2483,8 +2784,9 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 
 	// Build response
 	resp := &MarkReadResponse{
-		MarkedCount:  markedCount,
-		SkippedCount: skippedCount,
+		MarkedCount:       markedCount,
+		SkippedCount:      skippedCount,
+		MarkableRemaining: markableRemaining,
 	}
 	if len(alsoReadBy) > 0 {
 		resp.AlsoReadBy = alsoReadBy
@@ -2923,7 +3225,11 @@ func (h *MessageHandler) HandleDeleteByAgent(ctx context.Context, params json.Ra
 	}
 
 	// sec.8: resolve caller and enforce self-only deletion.
-	callerID := h.resolveAgentOnly(ctx, req.CallerAgentID)
+	callerID, guardErr := h.resolveAgentOnly(ctx, req.CallerAgentID)
+	if guardErr != nil {
+		// thrum-tgqx E2: propagate identity-guard ownership violation.
+		return nil, guardErr
+	}
 	if callerID == "" {
 		return nil, fmt.Errorf("cannot resolve caller identity for deleteByAgent")
 	}

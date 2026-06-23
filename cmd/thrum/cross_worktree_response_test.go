@@ -12,6 +12,29 @@ import (
 	"github.com/leonletto/thrum/internal/identity/guard"
 )
 
+// TestTeamParentHasDiagnosticBanner guards the no-args `thrum team`
+// invocation: the command gained local/daemons subcommands so it is no
+// longer a leaf and tagGuardCategories (leaf-only) won't tag it. The
+// annotation is therefore set directly in teamCmd(); without it the
+// no-args parent would default to abort under a cross-worktree fire — a
+// regression from its prior diagnostic-banner behavior (thrum-l2kxw).
+func TestTeamParentHasDiagnosticBanner(t *testing.T) {
+	root := buildRootCmd()
+	var team *cobra.Command
+	for _, c := range root.Commands() {
+		if c.Name() == "team" {
+			team = c
+			break
+		}
+	}
+	if team == nil {
+		t.Fatal("cobra tree missing the team command")
+	}
+	if got := team.Annotations[crossWorktreeResponseKey]; got != CrossWorktreeResponseDiagnosticBanner {
+		t.Errorf("team parent cross_worktree_response = %q, want %q", got, CrossWorktreeResponseDiagnosticBanner)
+	}
+}
+
 // TestCrossWorktreeResponseFor covers the safe-default path:
 // nil cmd, missing annotation, all three valid annotations.
 func TestCrossWorktreeResponseFor(t *testing.T) {
@@ -394,7 +417,11 @@ func TestRealCobraLeaves_HaveExpectedClasses(t *testing.T) {
 		"thrum session start":  CrossWorktreeResponseAbort,
 
 		// Class B — DiagnosticBanner
-		"thrum team":           CrossWorktreeResponseDiagnosticBanner,
+		// `thrum team` itself is now a non-leaf (gained local/daemons
+		// subcommands); its banner annotation is set directly on the command
+		// in teamCmd() and asserted in TestTeamParentHasDiagnosticBanner.
+		"thrum team local":     CrossWorktreeResponseDiagnosticBanner,
+		"thrum team daemons":   CrossWorktreeResponseDiagnosticBanner,
 		"thrum agent list":     CrossWorktreeResponseDiagnosticBanner,
 		"thrum version":        CrossWorktreeResponseDiagnosticBanner,
 		"thrum daemon logs":    CrossWorktreeResponseDiagnosticBanner,

@@ -80,7 +80,7 @@ func (d *testDaemon) writeEvent(t *testing.T, agentID string, idx int) {
 		Role:      "tester",
 		Module:    "test",
 	}
-	if err := d.state.WriteEvent(context.Background(), evt); err != nil {
+	if _, err := d.state.WriteEvent(context.Background(), evt); err != nil {
 		t.Fatalf("write event %d: %v", idx, err)
 	}
 }
@@ -232,8 +232,8 @@ func TestPullSyncCheckpointing(t *testing.T) {
 
 	// First sync with checkpoint
 	var totalApplied int
-	err := client.PullAllEvents(daemonA.addr(), 0, "", func(events []eventlog.Event, nextSeq int64) error {
-		a, _, applyErr := applier.ApplyAndCheckpoint(context.Background(), peerID, events, nextSeq)
+	err := client.PullAllEvents(daemonA.addr(), 0, "", func(events []eventlog.Event, nextSeq int64, filtered bool) error {
+		a, _, applyErr := applier.ApplyAndCheckpoint(context.Background(), peerID, events, nextSeq, filtered)
 		totalApplied += a
 		return applyErr
 	})
@@ -261,8 +261,8 @@ func TestPullSyncCheckpointing(t *testing.T) {
 
 	// Second sync using checkpoint
 	totalApplied = 0
-	err = client.PullAllEvents(daemonA.addr(), firstCheckpointSeq, "", func(events []eventlog.Event, nextSeq int64) error {
-		a, _, applyErr := applier.ApplyAndCheckpoint(context.Background(), peerID, events, nextSeq)
+	err = client.PullAllEvents(daemonA.addr(), firstCheckpointSeq, "", func(events []eventlog.Event, nextSeq int64, filtered bool) error {
+		a, _, applyErr := applier.ApplyAndCheckpoint(context.Background(), peerID, events, nextSeq, filtered)
 		totalApplied += a
 		return applyErr
 	})
@@ -307,7 +307,7 @@ func TestPullSyncBatching(t *testing.T) {
 
 	batchCount := 0
 	totalApplied := 0
-	err := client.PullAllEvents(daemonA.addr(), 0, "", func(events []eventlog.Event, nextSeq int64) error {
+	err := client.PullAllEvents(daemonA.addr(), 0, "", func(events []eventlog.Event, nextSeq int64, _ bool) error {
 		batchCount++
 		a, _, applyErr := applier.ApplyRemoteEvents(context.Background(), events)
 		totalApplied += a

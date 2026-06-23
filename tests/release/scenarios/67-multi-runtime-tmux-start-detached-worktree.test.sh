@@ -30,7 +30,7 @@
 
 SID="67-multi-runtime-tmux-start-detached-worktree"
 START_WT_NAME="test-tmux-start"
-START_WT="$WORKTREE_BASE/repo/$START_WT_NAME"
+START_WT="$WORKTREE_BASE/$COORD_BASENAME/$START_WT_NAME"
 START_SESSION="tmux-start-test"
 TE="$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec"
 

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"time"
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/state"
@@ -104,17 +103,19 @@ func NewTeamHandler(state *state.State, thrumDir string, supervisorIdentity *con
 
 // HandleList handles the team.list RPC method.
 //
-// Three-phase lock discipline:
+// Two-phase lock discipline (post thrum-1nkt.6, team.list is pure-read):
 //
 //  1. Phase 1 acquires RLock, runs buildTeamListLocked (queries + enrichment),
 //     and collects dead agents (active members whose agent_pid is no longer
-//     running) into a local slice, then releases RLock.
-//  2. Phase 2 runs with NO lock held and emits session.end events for each
-//     dead agent via emitSessionEndForDeadAgent. Anti-pattern 1 forbids
-//     holding a read lock across event emission because WriteEvent needs
-//     its own write lock and nested RLock→Lock would deadlock.
-//  3. Phase 3 rewrites the in-memory response to mark dead agents as
-//     offline so the caller sees the self-healed state immediately.
+//     running) into a local slice, then releases RLock. The collection still
+//     happens here because Phase 2 below needs it for the in-memory rewrite.
+//  2. Phase 2 rewrites the in-memory response to mark dead agents as
+//     offline so the caller sees the same state the background sweeper
+//     (internal/daemon/dead_agent_sweeper.go) will write to the events
+//     table on its next tick. team.list itself does NOT emit
+//     session.end events — that responsibility moved to the periodic
+//     sweeper in thrum-1nkt.6 so this read RPC stays free of write
+//     workload and per-call walker+compactor fan-out.
 func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (any, error) {
 	var req TeamListRequest
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -145,9 +146,9 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 			continue
 		}
 
-		// Skip self-heal for cross-daemon agents. Their PID lives on a
-		// remote host, so a local IsRunning check is meaningless and
-		// would false-positive every synced agent into "offline".
+		// Skip cross-daemon agents. Their PID lives on a remote host,
+		// so a local IsRunning check is meaningless and would false-
+		// positive every synced agent into "offline" in this response.
 		// Authoritative liveness for remote agents comes from sync
 		// events, not local PID checks. See thrum-pxz.14.
 		if m.OriginDaemon != "" && m.OriginDaemon != localDaemonID {
@@ -156,16 +157,11 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 
 		// Cross-check identity file: if the file reports a live PID that
 		// differs from the DB's stored PID, the DB is stale but the agent
-		// is actually alive. Skip the self-heal — the next
-		// RefreshLocalIdentity call from that agent will reconcile the DB
-		// via the always-on Fix C path into agent.register Fix A. Without
-		// this guard, a fresh daemon (rebuilt from events) would emit
-		// false-positive session.end events against every pre-existing
-		// agent whose DB PID predates the refresh feature (thrum-pxz.14
-		// Fix B).
+		// is actually alive. Skip — the in-memory status stays "active"
+		// (matches the sweeper's own skip per thrum-pxz.14 Fix B).
 		if idFile, ok := identityMap[m.AgentID]; ok && idFile != nil {
 			if idFile.AgentPID > 0 && idFile.AgentPID != m.AgentPID && process.IsRunning(idFile.AgentPID) {
-				log.Printf("team.list: stale DB PID but identity file reports live PID — skipping self-heal: agent=%s db_pid=%d file_pid=%d",
+				log.Printf("team.list: stale DB PID but identity file reports live PID — skipping mark-offline: agent=%s db_pid=%d file_pid=%d",
 					m.AgentID, m.AgentPID, idFile.AgentPID)
 				continue
 			}
@@ -179,18 +175,9 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 	}
 	h.state.RUnlock()
 
-	// PHASE 2: emit session.end events without holding any lock.
-	for _, d := range deadAgents {
-		if emitErr := h.emitSessionEndForDeadAgent(ctx, d.SessionID); emitErr != nil {
-			log.Printf("team.list: failed to emit session.end: agent=%s session=%s err=%v",
-				d.AgentID, d.SessionID, emitErr)
-			continue
-		}
-		log.Printf("team.list: marking dead agent offline: agent=%s pid=%d",
-			d.AgentID, d.PID)
-	}
-
-	// PHASE 3: rewrite in-memory response so the caller sees status=offline.
+	// PHASE 2: rewrite in-memory response so the caller sees status=offline
+	// for dead agents now, instead of waiting on the sweeper's next tick to
+	// reflect through the projection.
 	if len(deadAgents) > 0 {
 		deadMap := make(map[string]bool, len(deadAgents))
 		for _, d := range deadAgents {
@@ -498,9 +485,17 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 		}
 		_ = h.state.DB().QueryRowContext(ctx, mentionQuery, args...).Scan(&members[i].InboxTotal)
 
-		// Unread: same filter, minus messages already read
-		unreadQuery := mentionQuery + " AND m.message_id NOT IN (SELECT message_id FROM message_reads WHERE agent_id = ?)"
-		unreadArgs := append(args, m.AgentID)
+		// Unread: same filter, minus messages already read. thrum-b6qw (port of
+		// tcqw): read-truth unified on message_deliveries.read_at; message_reads
+		// retired (this was its last live reader). A message is read for the
+		// agent when it holds a delivery row with read_at set.
+		unreadQuery := mentionQuery + ` AND m.message_id NOT IN (
+			SELECT md.message_id FROM message_deliveries md
+			WHERE md.recipient_agent_id = ? AND md.read_at IS NOT NULL
+		)`
+		// Fresh slice: append(args, ...) would share args' backing array when
+		// capacity allows — safe today (args rebuilt per-iteration) but fragile.
+		unreadArgs := append(append([]any{}, args...), m.AgentID)
 		_ = h.state.DB().QueryRowContext(ctx, unreadQuery, unreadArgs...).Scan(&members[i].InboxUnread)
 	}
 
@@ -535,33 +530,6 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 	}
 
 	return members, shared, identityMap, nil
-}
-
-// emitSessionEndForDeadAgent writes an agent.session.end event to the
-// daemon's event log and projector. The caller MUST NOT hold h.state's
-// RLock or Lock when calling — this function acquires the write lock
-// internally to coordinate with other event writers.
-//
-// Idempotence: applySessionEnd in the projector unconditionally updates
-// sessions.ended_at. Successive calls within the same team.list request
-// are prevented by Phase 1's collector check (Status == "active") — the
-// second team.list query sees the session as ended and does not re-queue
-// it. Duplicate emissions from concurrent callers are absorbed as a
-// no-op write (same session_id, same end_reason).
-func (h *TeamHandler) emitSessionEndForDeadAgent(ctx context.Context, sessionID string) error {
-	h.state.Lock()
-	defer h.state.Unlock()
-
-	event := types.AgentSessionEndEvent{
-		Type:      "agent.session.end",
-		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
-		SessionID: sessionID,
-		Reason:    "dead_pid",
-	}
-	if err := h.state.WriteEvent(ctx, event); err != nil {
-		return fmt.Errorf("write session.end event: %w", err)
-	}
-	return nil
 }
 
 // parseSessionName extracts the tmux session name portion from a

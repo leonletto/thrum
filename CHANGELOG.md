@@ -8,6 +8,923 @@ and this project adheres to
 
 ## [Unreleased]
 
+### ⚠ Mixed-Cluster Upgrade Warning (v0.10.6)
+
+**v0.10.6 changes the sync wire format.** The local projection journal
+(`.thrum/events.jsonl`, gitignored) is now split from the cross-machine wire
+stream, and the wire stream lives in new paths (`state/`, `messages-v2/`,
+`receipts/`) instead of the legacy `messages/` shards. The 60-second polling
+ticker is gone — sync is now purely event-triggered on the structural-event
+whitelist (`agent.register`, `group.*`, `message.create`).
+
+**v0.10.5 peers cannot read messages from upgraded v0.10.6 peers.** The new code
+writes ONLY to `messages-v2/<id>.jsonl`. Pre-v0.10.6 peers don't know about that
+path and will silently miss messages authored by upgraded peers until they
+upgrade themselves. This is the intentional D6 verdict (no double-write to
+legacy `messages/<id>.jsonl`).
+
+**Recommended upgrade flow:** upgrade all peers in the cluster in one window.
+The asymmetric-receive behavior is by design but surprising in mixed clusters:
+v0.10.6 peers continue to read messages FROM v0.10.5 peers via the legacy-read
+fallback (so upgraded peers stay fully functional), but v0.10.5 peers lose
+visibility into v0.10.6 authors until they upgrade.
+
+### Added
+
+- **Inbox defaults to newest-first (thrum-4yjc back-port)** — `thrum inbox` now
+  lists newest messages first so recent mail is never buried under backlog;
+  the reply-clustered chronological view is opt-in via `--chronological` /
+  `--oldest`. Explicit `sort_order` callers (wait/MCP) are unaffected.
+- **Shell-safe message bodies (thrum-d3fp back-port)** — `thrum send`, `reply`,
+  and `message edit` accept `--stdin` / `--body-file <path>` / `-` so bodies
+  bypass shell interpolation (backticks, `${...}`, `$(...)` arrive verbatim).
+  Plugin docs (send/reply commands, CLI_REFERENCE, MESSAGING) updated across
+  claude/codex/cursor/opencode with the heredoc guidance.
+- **`thrum team` daemon/host filters + `local`/`daemons` subviews
+  (thrum-l2kxw)** — `thrum team --daemon <id>` and `--host <name>` filter the
+  roster to a single daemon or host; `thrum team local` is sugar for the current
+  daemon; `thrum team daemons` groups agents by origin daemon (daemon_id,
+  hostname, agent_count, with an `unknown` bucket for unattributed agents). Pure
+  CLI presentation over the existing `team.list` payload — no schema/RPC/daemon
+  change — and all four views honor `--json`. `shared_messages` is omitted from
+  filtered views since it's a team-global aggregate that would mislead on a
+  subset.
+
+### Fixed
+
+- **Permission reminder ladder cancels when the modal clears + skips when all
+  supervisors have read (thrum-g23nb)** — `fireReminder` now re-captures the
+  pane on each fire and, if the approval modal has cleared, runs recovery and
+  stops the ladder instead of nagging about an already-resolved prompt; it also
+  skips the reminder send (while still advancing cadence, so give-up escalation
+  is preserved) when every real supervisor recipient has already read the
+  thread. Fails open on pane-capture error (keeps the ladder) so a flaky capture
+  never silently drops a live reminder. Release-line-native — no
+  fingerprint-engine dependency. New `Store.CountUnreadThreadDeliveries`
+  excludes supervisor self-delivery.
+- **Backstop nudges only locally-resident recipients (thrum-wo2z)** — the
+  daemon backstop's 15-minute ticker scanned unread deliveries without a
+  residency filter; agent registrations synced from remote daemons pass the
+  alive-window check, so local sessions were woken every 15 minutes for other
+  agents' mail (and spool envelopes accumulated unbounded for remote agents —
+  one host had 107). The scan now applies an identity-file-based residency
+  predicate (the same notion of "local" the inbox uses), with a
+  defense-in-depth guard at the dispatcher covering both the tmux nudge and
+  the spool write. Resident-recipient behavior is unchanged. Deploy note:
+  spool envelopes accumulated pre-fix are not removed automatically — a
+  one-time cleanup of non-resident dirs under `.thrum/spool/` is recommended.
+- **Duplicate message_id in relayed history no longer stalls inbound sync
+  (thrum-lv9x)** — durable-lane snapshot rows (`messages-v2` LWW upsert, which
+  writes no events-table record) collided with the original event arriving
+  later via sync: the projector's plain `INSERT INTO messages` aborted the
+  whole batch without advancing the checkpoint, and the notify-driven re-pull
+  retried it forever — observed in production as a permanently pinned peer
+  checkpoint and a 65-167/sec cross-host `sync.notify` storm
+  (retry-amplification). `message.create` apply is now idempotent
+  (`INSERT OR IGNORE` + dup-no-op that still commits the event record, so the
+  batch advances past the duplicate and is never re-pulled), and the a-sync
+  git ingest path gains an event-id dedup pre-check. Live-verified on a
+  two-node mesh: 104 climbing apply-failures → 0 at deploy, sub-second apply,
+  checkpoint converged to the primary's max seq.
+- **Read-state unification + v40 backfill (tcqw/u4j1 back-port, thrum-b6qw)** —
+  read-truth is unified on `message_deliveries.read_at`; the `message_reads`
+  writer is retired (table kept for back-compat, no DDL). The projector's
+  receipt gate gains an authored-self arm and authors get a read-stamped
+  self-delivery row at send. A one-time **schema v39→v40 marker** runs a
+  data-only backfill at the crossing that clears historically-stuck unread
+  (the no-delivery-row "phantom unread" / backstop nudge-storm class), scoped
+  by a strict-hostname leak-guard so peer read-state is never touched.
+  ⚠ Binaries supporting ≤v39 cannot open a migrated DB.
+- **tsnet node released before PID removal on shutdown (oqao back-port,
+  thrum-w8is)** — daemon restart no longer leaves the old tsnet node registered
+  while the new process re-binds the same state dir (two netstacks sharing one
+  node key → inbound `:9177` RST/EOF flap masked by pull-sync). Bounded (6s)
+  node release now runs inside graceful shutdown before the PID file is
+  removed; `TsnetListener.Close` is idempotent; `daemon stop` wait 10s→15s.
+- **Peer bridge self-heals after daemon restart (thrum-to7p back-port)** —
+  `WSClient.notifyCh` now closes on connection death so the peer relay's
+  reconnect loop can't block forever on a dead bridge.
+- **`hidden_by_filter` counts only delivery-backed unread (vr0i back-port,
+  thrum-eeio)** — the inbox hidden-count no longer inflates with invisible
+  no-delivery-row messages, so `thrum message read --all` converges.
+- **Role preamble survives the self-restart race (thrum-4ye2 back-port)** —
+  `thrum prime` falls back to the on-disk identity when the daemon hasn't
+  re-registered the agent yet, so the role preamble is never dropped.
+- **Context-sweep hysteresis + 1M-window models (thrum-gqq3 back-port +
+  fable-5 fix)** — per-agent context-% alerts fire only on crossing the next
+  fire-point instead of every sweep cycle, and `claude-fable-5` maps to its
+  real 1M context window (was hitting the 200k default and false-flagging
+  healthy agents at 5× inflated usage).
+
+### Security
+
+- **a-sync exposure guard now gates on repository VISIBILITY (thrum-44mt,
+  replaces the rc.10 host-denylist)** — the rc.10 D11 host-denylist refused
+  a-sync to all github.com/gitlab.com remotes regardless of repo visibility,
+  breaking private-repo users (rc.10 was pulled for this). The guard now
+  probes the origin with an anonymous, credential-stripped `git ls-remote`
+  (hermetic allowlist env, neutral cwd + `GIT_CEILING_DIRECTORIES`) and
+  refuses pushing message history only to a **publicly-readable** repo;
+  classification is fail-safe (only exit-0-with-refs ⇒ public; 404/401/403/
+  auth-denied ⇒ private) and an explicit remote-bound exact-match override
+  (`public_exposure_override`) allows intentional public-repo sync. The gate
+  resolves once at boot (session-immutable), surfaces its reason in
+  `sync status` + the health endpoint/Settings UI, and warns active agents
+  on the transition into exposed.
+
+### Added (rc.10)
+
+- **Directed-inbound 0.10.6 back-port (thrum-h4s4)** — a lean 0.10.6 node can now
+  consume a *directed/filtered* inbound stream served by a 0.11 hub (it carries
+  zero filter logic; the hub does all filtering). Specifically:
+  - **Sync config decomposition (D7/I-5)** — the overloaded `daemon.local_only`
+    bool is supplemented by a structured `daemon.sync` stanza
+    (`{enabled, mechanisms:[{mechanism, scope}]}`) with startup validity checks
+    (invalid combos — e.g. `scope:directed` on a non-`peer`/`email` mechanism, or
+    `directed` alongside a full-delivery mechanism — are rejected at load, never
+    silently coerced) and a behavior-preserving migration. `sync` is a pointer so
+    an **absent** stanza migrates to the D9 default (sync on, a-sync full) while an
+    **explicit** stanza (including `enabled:false`) is preserved across saves
+    (no silent flip). Fixes a fresh-init pairing failure where a zero-value stanza
+    was persisted as `enabled:false`.
+  - **`filtered` response flag + D13 cursor-honesty patch (D10)** — the sync.pull
+    client reads an additive per-response `filtered` flag; when set, the checkpoint
+    follows the hub's scan-watermark (cap-bypass), an empty-but-filtered window
+    keeps pulling, and a terminal all-filtered window still advances the cursor.
+    For normal/untrusted peers the anti-over-advance cap is unchanged — a lying
+    peer cannot advance your checkpoint past events it actually sent.
+  - **Peer pairing guard (I-3/D10)** — `thrum peer add` / `peer join` refuse when
+    sync is disabled, preventing a misleading silent half-connect.
+- **Snapshot/sleep restart skill family — `/thrum:restart-extended`,
+  `/thrum:sleep`, `/thrum:sleep-extended`, plus a shared `_snapshot-protocol`
+  partial (thrum-rwhg)** — `/thrum:restart` is slimmed to consume the shared
+  snapshot-composition protocol; the `-extended` variants add the 16-section
+  designer/architect-grade handoff structure, and the `sleep` variants park an
+  agent for operator-initiated wake. Re-landed onto the release line and
+  regenerated for the codex/cursor/opencode runtimes via `sync-skills.sh`.
+- **Agent-status Pattern D wiring + STUCK-WORKING sweep detection (thrum-9neg)**
+  — implementer and researcher skill templates now set `agent_status=working` on
+  dispatch ACK and `agent_status=idle` on DONE / response, written via
+  `thrum agent set-status` from the agent's own pane (Pattern D self-writes).
+  The `agent.set-status` RPC validator and the CLI `thrum agent set-status`
+  allowlist gain `stuck` as a fourth valid state alongside
+  `working|idle|blocked`, aligning the operator surface with what
+  `permission.markAgentStuck` already writes programmatically. The
+  error-and-context sweep script (`scripts/error-and-context-agent-sweep.sh`)
+  gains `--silence-threshold-min` (override; default 10min), reads `intent` from
+  the identity file, computes tmux silence age via `#{window_activity}`, and
+  surfaces a composite `stuck_working` axis in both the consolidated `ALERT:`
+  line and the per-agent section. A new fixture-driven smoke test
+  (`scripts/error-and-context-agent-sweep_stuck_working_test.sh`) pins the ALERT
+  axis + header format. The `coordinator-context-monitoring` SKILL.md gains a
+  composite tier table that documents the `stuck` × `stuck_working` × `tier`
+  decision space the new instrumentation surfaces. Backported from thrum-agents
+  tip 2d7291bcbd via 16 cherry-picks (14 clean + 2 translated:
+  `cmd/thrum/agent.go` → `cmd/thrum/main.go:3344` since the cmd/thrum
+  decomposition arc landed on thrum-agents only, and the new
+  `HandleSetAgentStatus` tests translated to the `json.RawMessage` handler shape
+  since the typed- handler signature hasn't been backported).
+- **Restore `--json` / `--report-only` / `THRUM_SWEEP_IDENTITY_GLOBS` to the
+  error-and-context sweep script (thrum-l9e6 expand-scope)** — three
+  sweep-script features were lost when the puhr.9/ubl5 monitor work
+  cherry-picked from thrum-agents to release/v0.10.6 (coord "decision A");
+  thrum-l9e6 restores them so the daemon api-error auto-remediation handler
+  (thrum-sdzk) keeps its single-sourced detection seam and the integration test
+  fixtures keep their pivot point. `--json` emits one JSONL object per flagged
+  agent and suppresses both the ALERT line and the human text report; the JSON
+  carries the original `agent_id` / `tmux_target` / `api_errors` /
+  `flagged_reason` (canonical single token: `api_error` > `capture_failed`
+  > `ctx` > `stuck_working`) plus additive `is_stuck` / `stuck_working` / `tier`
+  > axes. `--report-only` is an alias for `--no-nudge`.
+  > `THRUM_SWEEP_IDENTITY_GLOBS` overrides the hardcoded identity glob list with
+  > a space-separated env var (intentional word-split for pathname expansion).
+  > Two integration tests previously stuck on `t.Skip`
+  > (`TestErrorContextSweep_JSONMode` and
+  > `TestErrorContextSweep_NoNudge_SuppressesSendKeys`) land NON-skipped and
+  > pass on release/v0.10.6.
+- **`thrum monitor` cron scheduling + continuous-mode auto-restart
+  (thrum-puhr.9)** — `thrum monitor add` accepts a new `--schedule` flag with
+  standard 5-field cron expressions (e.g. `"*/5 * * * *"`, `"7,27,47 * * * *"`,
+  `"0 9-17 * * 1-5"`). Scheduled monitors run their child one-shot per tick and
+  never auto-restart between fires; continuous monitors (no schedule) gain
+  exponential-backoff auto-restart on child exit (1s → 60s, doubled per failure,
+  capped). A successful run of >= 10s resets the backoff sequence. If the child
+  exits more than 10 times within a 5-minute window, the monitor is marked dead
+  and an "exceeded restart budget" notice is delivered to the monitor's target.
+  Replaces the previous "exit → MarkDead immediately" behavior for continuous
+  monitors with the more resilient retry + budget-cap loop.
+- **Schema v39 — `monitors.schedule` column** (thrum-puhr.9). Idempotent
+  migration adds a `TEXT NOT NULL DEFAULT ''` column to existing v38 databases.
+  Empty schedule preserves continuous-mode semantics; any populated schedule
+  routes the runner into scheduled mode. Cross-binary note: v39 lands on
+  release/v0.10.6 first; thrum-agents will need a parallel dead-end-DDL backport
+  to keep co-residence safe.
+- **`coordinator-context-monitoring` sweep migrated to `thrum monitor`
+  (thrum-ubl5)** — the keepalive sweep moves off CronCreate to a daemon-side
+  `thrum monitor` registration (`context-monitoring`, schedule
+  `"7,27,47 * * * *"`, `--match '^ALERT:'`). The sweep script
+  (`scripts/error-and-context-agent-sweep.sh`) gained `--no-nudge` (used by
+  daemon-driven runs where the operator's tmux context isn't available) and
+  emits one consolidated `ALERT:` line per sweep when any agent is flagged,
+  formatted as
+  `ALERT: flagged=N stuck=S tier3=T tier2=U — name(ctx%,reason,classifier); …`.
+  Silent when the fleet is clean (no message fires). Consecutive-sweep STUCK
+  detection is backed by a state file at
+  `$XDG_STATE_HOME/thrum/context-sweep-state.json` (outside the repo). The full
+  per-agent report still lands at `/tmp/agent-sweep.txt` for on-demand
+  drill-down. Migrating to `thrum monitor` removes the per-session re-add chore
+  from the coordinator's post-prime checklist for this monitor specifically —
+  see updated SKILL + memory note for guidance on OTHER CronCreate jobs (which
+  still need per-session re-init until they too are migrated).
+- **Sync re-architecture (thrum-s6os)** — the cross-machine wire stream now
+  derives from per-agent + per-bridge-group state files rather than from a
+  synced event journal. Daemon-local truth (heartbeats, session boundaries,
+  work-context updates, message edits/deletes, receipts) is no longer
+  git-committed to peers. Idle daemons produce zero commits on `a-sync`; busy
+  multi-agent clusters stop accumulating heartbeat noise (the falcon-backend
+  11K-commits-per-week stream is now a trickle proportional to actual message
+  volume).
+- **New daemon config keys** — `daemon.events_retention_days` (default 2)
+  controls the rolling window for the local-only events journal + SQLite events
+  table; `daemon.compaction_size_threshold_mb` (default 10) controls the
+  per-file size threshold above which `messages-v2/` and `receipts/` files are
+  dedup-compacted at sync-trigger time.
+- **New diagnostics RPC `sync.pending_pool.list`** — returns the current
+  orphaned-message pool for inspection. Auto-resolves when missing state files
+  land via fetch+merge; the inbox UI renders an inline
+  `(pending — waiting for route resolution from peer)` placeholder while the
+  orphan is unresolved. The `messages.pending_route_resolution` column (already
+  present at schema v33 on this release line via the dead-end DDL gap-fill) is
+  now wired by the sync re-architecture: it flags pending-pool messages and
+  clears automatically when the referenced state file lands.
+- **Schema v33–v36 dead-end forward-port** — `CurrentVersion` bumped from 32 to
+  36 with four new migration blocks: `messages.pending_route_resolution` column
+  (v33), `memories` + `memory_scopes` tables and their six indexes (v34), the
+  `agent_lifecycle_events.event_kind` CHECK via an existence-guarded table
+  rebuild (v35), and the `agent_api_error_remediation` table (v36). The
+  tables/columns are intentionally dead-end on v0.10.6 — no consumer code reads
+  them. `createTables`/`createIndexes` carry full v36 parity so a fresh DB
+  created by a v0.10.6 binary stamps v36 with every table present. Goal: v0.10.6
+  binaries can open AND co-reside on a v36 DB previously touched by
+  v0.11-substrate work on multi-binary worktree machines, without a co-resident
+  v0.11 binary crashing on a missing table.
+- **`verify-against-source` prose-conformance reviewer skill** (FE.5
+  skill-review-loop). A reviewer pass that checks generated prose/specs against
+  their source material for conformance, complementing the existing code-review
+  and verify-against-plan passes.
+- **`project-setup` Phase 0 review gate + prompt stamping** (FE.5). The
+  project-setup skill now runs a review gate before coding begins and stamps the
+  generated implementer prompts, so plan→prompt translation errors are caught up
+  front.
+- **Review loop baked into `coordinator-running-brainstorm-cycles`** (FE.5),
+  with a no-double-review boundary added to the dispatch and review-cycle skills
+  so a single review pass isn't redundantly re-run across skill hand-offs.
+
+### Changed
+
+- **Pre-migration DB backups are now timestamped and always-fresh** — the backup
+  suffix is `.pre-migration-v<N>-<UTC>.bak` (UTC, lexically/chronologically
+  sortable), so each migration event keeps its own distinct, time-ordered
+  recovery snapshot instead of a single backup-once file. A backup failure now
+  HALTS the migration: a non-nil error (main DB or a present WAL/SHM sidecar)
+  aborts `Migrate()` so the daemon refuses to start until disk/permissions are
+  fixed — the DB is not rebuildable from JSONL, so migrating without a recovery
+  snapshot is unsafe. Absent sidecars remain a no-op.
+- **Plugin RC-tag distribution scheme** (PRE-RELEASE-STEPS §3a) — during the RC
+  cycle `claude-plugin/.claude-plugin/plugin.json` and
+  `.claude-plugin/marketplace.json` carry the `X.Y.Z-rc.N` prerelease suffix
+  (the other version files stay at the stable target). Because Claude Code's
+  plugin-install cache is keyed by the `version` field, the advancing suffix
+  lets `/plugin update` upgrade the plugin in place through the rc pipeline — no
+  uninstall/reinstall — mirroring the binary upgrade path.
+
+### Removed
+
+- `daemon.sync_interval` config key. The field is silently ignored if present in
+  pre-v0.10.6 configs (no deprecation warning emitted) — forward-compatible
+  silent drop per spec §7.2.
+- `config.DefaultSyncInterval = 60` constant.
+- The 60-second polling ticker in `internal/sync/loop.go`. There is no fallback
+  poll: sync is purely event-triggered. The single initial sync at daemon start
+  remains, for peer-events catch-up.
+- The per-agent `messages/<id>.jsonl` writer wiring from
+  `internal/daemon/state.NewState`. The legacy path remains readable
+  (read-fallback for mixed clusters) but is no longer written by v0.10.6 code.
+
+### Security
+
+- **D11 — a-sync refuses to push to a public code-host origin (thrum-43qi)** —
+  closes the exposure half of thrum-43qi: a-sync (whole-file git push) is now
+  refused when `origin` resolves to a public code host (github.com, gitlab.com,
+  bitbucket.org, codeberg.org, dev.azure.com, sr.ht), so private message history
+  is never pushed to a public repo. Applied at BOTH push sites (`internal/sync/
+  push.go` and the `branch.go` tracking-push). Host matching parses the remote
+  URL host (https / ssh / scp forms) and matches on host boundaries — never a
+  substring — so a private GitHub Enterprise host (e.g. `github.company.com`) is
+  not falsely refused, and rooted-FQDN forms (`github.com.`) cannot slip the
+  check. Fails closed (refuses) when the origin URL cannot be read. A node that
+  intends Tailscale-only sync sets `daemon.local_only:true` (or omits a-sync from
+  `daemon.sync.mechanisms`); peer/Tailscale sync is unaffected.
+- **Reject anonymous cross-worktree agent re-bind in `HandleRegister`
+  (thrum-l9e1)** — closes a P1 gap where an anonymous registration from worktree
+  B could silently re-bind to an agent identity claimed by worktree A,
+  overwriting the original identity file. The daemon now fail-closes the re-bind
+  when the caller's worktree disagrees with the existing agent's worktree and
+  the new request carries no prior identity; the CLI's `SaveIdentityFile` only
+  fires after the RPC ack, so the side-effect is automatically suppressed.
+  Companion to the thrum-tgqx.1 fail-closed pattern; reuses the existing
+  `resolveCallerWorktreeFn` test seam and `IsAgentInWorktree` predicate.
+- **Close the identity-guard fail-open on the message read path (thrum-tgqx
+  E2)** — read-only RPC handlers (`message.list` / `outbox` / `deleteByAgent`)
+  absorbed every `DaemonResolve` error to an empty caller and fell through to
+  the untrusted caller-supplied `for_agent` filter, exposing another worktree's
+  inbox despite the cross-worktree guard firing. `resolveAgentOnly` now
+  reason-discriminates — it propagates the guard error (refusing the RPC) ONLY
+  for an `identity_mismatch` forgery, while genuinely-anonymous callers still
+  get the designed `anonymousAllowedMethods` bare read. `HandleList`
+  additionally attests caller-supplied `for_agent` / `for_agent_role` against
+  the kernel-verified peercred identity (gating on `peercredRan` alone), so an
+  anonymous caller can no longer read a victim's inbox via those fields.
+
+### Fixed
+
+- **Auto-reconcile advertised a loopback ws port, corrupting peers' stored
+  address (thrum-hix5)** — the auto-reconcile Manager built its peer.repair
+  dialer identity with the daemon's local loopback ws port (`:<port>`,
+  host-stripped). When it dialed a peer, the responder stored that as our
+  address, corrupting the peer's record into an unconnectable `:<port>` and
+  breaking that peer's periodic sync + repair toward us (observed stalling
+  cross-host direct sync for hours). The advertised address is now resolved
+  lazily at dial time from the daemon's tsnet-reachable address (empty until the
+  tsnet listener is up, which the responder safely ignores rather than storing a
+  wrong value).
+- **Inbound nudges could land mid-keystroke and fragment a human's typing
+  (thrum-nlel / thrum-3i2s)** — the message-nudge dispatcher typed text+Enter
+  into a recipient pane with no typing/activity gate, so a nudge arriving while
+  someone was composing split their input. A chrome-quiet gate now composes with
+  the thrum-7phu dialog-defer gate: a rendered spinner fires immediately (the
+  agent owns the turn), otherwise the nudge waits until the input chrome is
+  quiet (window-activity silence or a stable bottom region), deadline-capped so
+  a continuously-busy pane still gets notified. No fire-path can trip
+  mid-keystroke. Tunable via the new `daemon.nudge` config block
+  (`chrome_quiet_seconds`, `dispatch_deadline_seconds`).
+- **Nudges auto-answered interactive selection dialogs (thrum-7phu)** — a
+  message nudge delivered while a recipient pane was showing an interactive
+  selection prompt typed Enter into the dialog, silently choosing an option.
+  Nudges are now deferred to a redelivery queue while a selection dialog (>=2
+  options) is up and redelivered once the pane is safe to type into.
+- **Daemon start-wait reported a false timeout during large-DB cross-version
+  upgrades (thrum-vh2c)** — when an older binary was replaced by a newer one
+  whose first boot ran a schema migration over a large database, the start-wait
+  loop hit its deadline before the migration finished and printed a spurious
+  "daemon failed to start" error even though startup was healthy and ongoing.
+  The wait path now surfaces live migration progress (current schema version →
+  target) instead of timing out blind, so the on-disk upgrade path on the 0.10.6
+  line no longer looks like a failure while it is actually working.
+- **Agents that lost their session became un-restartable (thrum-5oui)** — a
+  caller was bound only while its worktree had an active session ref, so any
+  agent whose session ended could not bootstrap a restart: `thrum tmux start`'s
+  `tmux.create` + `tmux.launch` were rejected as anonymous. Both are now in the
+  daemon's anonymous-allowlist (unix-socket-only — never on the WebSocket/peer
+  transport, pinned by a structural guard that scans all of `cmd/thrum`),
+  closing the agent-restart failure class.
+- **`agent.listContext` (and so `thrum prime`) stalled under fleet load
+  (thrum-5988)** — `HandleListContext` is read-only but took the global write
+  `Lock()`, serializing every concurrent reader behind structural writers (the
+  ~10s prime stall on a busy daemon). It now takes `RLock()` so reads run in
+  parallel.
+- **`thrum quickstart` did not refresh `agent_pid` in the identity file —
+  pid-drift recovery broken (thrum-ipbl)** — only `thrum prime` wrote the PID,
+  so after a runtime restart (e.g. `/login`) the file kept the dead PID and
+  every guarded CLI call failed `pid_mismatch`. quickstart now writes the PID
+  with a PID-aware, owner-protecting policy: a live runtime ancestor writes its
+  PID; a bare shell never clobbers a live owner and frees a dead slot to 0.
+- **`thrum tmux restart` returned a false-negative i/o-timeout on a successful
+  restart (thrum-6yt7)** — the client used the 10s default call deadline while a
+  synchronous graceful restart can take up to `graceful_timeout` (30s default)
+  plus the kill/create/launch sequence. The restart client call now uses a 90s
+  deadline.
+- **Codex skill generation drifted on every `make fmt-md` (thrum-pp6n)** —
+  `sync-skills.sh` now runs the same prettier pass over the generated codex
+  tree, so generation is idempotent against `make fmt-md`.
+- **Killed agents could not be restarted via `thrum tmux start` — boot reconcile
+  resurrected a dead runtime's PID (thrum-mnhp, regression from thrum-qxr3)** —
+  qxr3 (shipped in rc.5) made boot reconcile write the identity-file `AgentPID`
+  back to `agents.agent_pid` unconditionally. A killed agent's identity file
+  keeps a stale NON-ZERO dead PID (nothing zeroes it on death), so reconcile
+  resurrected that dead PID; the DeadAgentSweeper (`WHERE agent_pid > 0`) then
+  immediately ended the reconcile-created session, evicted the worktree from the
+  peercred match registry, and the worktree became un-restartable —
+  `thrum tmux start` resolved as an anonymous caller and `tmux.create` was
+  rejected. Fix: reconcile writes `0` (the sweeper-skipped, restartable
+  sentinel) when the identity-file PID is non-zero but dead
+  (`!process.IsRunning`); a live PID is still written through unchanged,
+  preserving qxr3's live-agent fix. Daemon-logic only — **no schema change**.
+  Forward-ported to thrum-agents.
+- **`thrum prime` stalled ~10s when run by a live agent (thrum-5988
+  mitigation)** — prime computes a cosmetic active-agent count via the
+  `agent.listContext` RPC, whose daemon handler takes the global `state.Lock`.
+  Under fleet load the snapshot/sync walker holds that lock for seconds, so the
+  call blocked on the client's 10s default RPC deadline and degraded silently;
+  because all of prime's RPCs shared one connection, the late response also
+  desynced the stream and blanked the daemon-health section. Fix (client-side
+  only) runs the active-count probe on a dedicated short-lived connection with a
+  1.5s deadline, omitting the count on timeout instead of stalling the briefing.
+  Measured: prime drops from ~10.4s to ~1.9s and the daemon-health section
+  populates again. The underlying walker `state.Lock` hold time is tracked
+  separately as thrum-5988 (P1). Forward-ported to thrum-agents.
+- **Sweep reported >100% ctx for Opus 4.8 agents (thrum-4pd1)** — the
+  fleet-monitoring sweep (`scripts/error-and-context-agent-sweep.sh`) keys its
+  context-window denominator off the model string: the Opus 4 1m-context fleet
+  uses a 1M window, everything else a conservative 200k. The model `case`
+  matched only `claude-opus-4-7*` for the 1M window, so newer `claude-opus-4-8`
+  agents fell through to the 200k default — dividing their 1M-window token
+  counts by 200k and inflating reported ctx% by exactly 5x (observed 216%/43%,
+  117%/23%). The usage field shape is identical across 4.7 and 4.8; only the
+  denominator was wrong. Fix matches the `claude-opus-4-*` family (covers 4.7,
+  4.8, future 4.x and `[1m]` suffix forms) while keeping the 200k default for
+  non-opus/unknown models. New integration test pins the computed percentage for
+  each shape. Forward-ported to thrum-agents.
+- **Boot reconcile didn't write identity-file AgentPID back to the agents table
+  (thrum-qxr3)** — the daemon boot reconcile now writes the identity file's
+  AgentPID back to `agents.agent_pid` before the `hasActiveSessionRef` check, so
+  the in-DB registry reflects the live runtime PID after a daemon restart
+  (registry restored 10 → 23 worktrees in the field repro). Forward-ported to
+  thrum-agents.
+- **Sweep picked a stale JSONL transcript by mtime, surfacing wrong ctx%
+  (thrum-roeq)** — the sweep selected an agent's transcript via `ls -t` (mtime),
+  which a resume-context read on an older session can bump ahead of the live
+  session, surfacing stale ctx% (substrate_ui reported 81% vs 18% actual). Fix
+  selects the JSONL whose first timestamped event (session birth time, which
+  never moves backward) is most recent, using lexical ISO-8601 comparison.
+  Forward-ported to thrum-agents.
+- **`thrum tmux create --force` can destroy an unrelated session via tmux
+  prefix-match (thrum-z63b)** — tmux's `-t target-session` flag defaults to
+  PREFIX MATCH: a bare `-t substrate-ui` matches a live `substrate-ui-research`
+  session because the latter has the former as a prefix. Live cascade observed
+  2026-05-27:
+  `thrum tmux create substrate-ui --cwd ~/.thrum/worktrees/thrum/substrate-ui ... --force`
+  destroyed `substrate-ui-research`, killing the researcher's pane. The CLI
+  pre-hint (`TmuxSessionExists`) reported the false "session-exists" warning
+  first; the operator added `--force`, and the daemon's `HandleCreate` then ran
+  `tmux kill-session -t substrate-ui` which matched and destroyed the unrelated
+  session as the only prefix hit. Fix is the `=` literal-match prefix on the
+  `-t` argument in `internal/tmux/tmux.go`'s `HasSession` and `KillSession`.
+  tmux has supported `=name` exact match since 2.0 (2014). Regression test
+  `TestHasSession_KillSession_LiteralMatch` pins both helpers against a
+  `thrum-z63b-prefix-extra` session, asserting `HasSession("thrum-z63b-prefix")`
+  is false and `KillSession("thrum-z63b-prefix")` does not destroy the
+  collateral. A defense-in-depth audit ticket (thrum-zfn0, P3) tracks applying
+  the same `=` prefix to the ten other `internal/tmux/tmux.go` functions that
+  pass session-name targets to tmux without literal- match guard (RenameWindow,
+  SetSessionTitle, SetMonitorSilence, IsSilent, GetUserOption, SetUserOption,
+  LastActivity, SendKeys, SendSpecialKey, CapturePane). Forward-ported to
+  thrum-agents.
+- **Integration test build break from bsn7 `WriteEvent` signature drift
+  (thrum-mkyp)** — `tests/integration/sync_rearchitect_test.go`'s three test
+  helpers (`writeAgentRegister`, `writeMessageCreate`, `writeMessageReceipt`)
+  referenced the old single-return `state.WriteEvent` signature. thrum-bsn7
+  (commit ec061348ef) changed it to `(postCommit func(), err error)` as part of
+  the broader state.Lock contention fix; production callers were updated but
+  this test file was missed, blocking
+  `go test -tags integration ./tests/integration/`. Fix adapts each helper to
+  capture `postCommit`, fatal on error, and invoke `postCommit()` if non-nil so
+  the structural-event sync trigger fires correctly via the bsn7 contract. All 8
+  sync_rearchitect tests pass clean. Forward-port to thrum-agents intentionally
+  deferred — bsn7 itself has not been forward-ported to thrum-agents (the
+  signature is still single-return there), so the mkyp bug does not exist on
+  thrum-agents and the fix cannot apply. When bsn7 forward-ports, the same
+  mkyp-shaped fix will need to land there at that time.
+- **Cache peercred CWD per PID — eliminates N-1 lsof shell-outs per RPC sequence
+  on Darwin (thrum-xir.45)** — every unix-socket RPC's pre-handler ran
+  `peercred.Resolve`, which on Darwin shells out to
+  `/usr/sbin/lsof -p PID -Fn -d cwd` to resolve the connecting PID's CWD.
+  Measured cost on a current macOS host: ~30ms baseline, spiking to ~300ms under
+  fork contention. Under sustained release-test-gate load (108 scenarios
+  back-to-back), per-RPC pre-handler latency creeps from ~55ms baseline into the
+  1-2s range and the CLI socket-read deadline fires, surfacing as
+  `tmux.create: i/o timeout` in scenarios 69-75 and 80 of the v0.10.6 rc.3 gate
+  (Cluster A, 9 scenarios). Fix is a short-TTL per-PID cache in front of
+  `processCWDFn`: first lookup for a PID misses and calls the underlying
+  resolver (~30ms), caches the (cwd, err) result with a 5s TTL; subsequent
+  lookups within the TTL return the cached value with no subprocess fork.
+  Measured impact via `profile.rpc.dispatch` on the same gate-stressed daemon:
+  `pre_handler_ms = 55-60` on every RPC pre-fix;
+  `pre_handler_ms = 55-60 on the first RPC + 1-2 on subsequent` post-fix (~50x
+  reduction on the dominant pre-handler cost when a connection issues 2+ RPCs,
+  which is the CLI's typical refresh + action pattern). Cluster A clears at the
+  gate-harness level: 9 affected scenarios pass after the fix. The cache lock is
+  never held across the subprocess call. Negative results (errors) are cached
+  for the same TTL to bound repeated-shell-out cost; a sharper policy
+  distinguishing transient vs permanent errors is tracked in xir.52.
+  `golang.org/x/sync/singleflight` to collapse concurrent-miss stampedes is
+  tracked in xir.51, and replacing the underlying `lsof` shell-out with libproc
+  `proc_pidinfo` is tracked in xir.48.
+- **`FindClaudeAncestor` returns the topmost matching runtime ancestor, not the
+  first one walking up; `pid_mismatch` remediation surfaces the
+  `thrum quickstart --name` recovery path (thrum-xir.40)** — observed during the
+  rc.4 cut: an in-flight impl agent's `thrum` CLI calls began failing every RPC
+  with `identity guard "cross_worktree" fired: pid_mismatch`. Root cause: the
+  SessionStart hook spawns transient claude-sdk subprocesses (e.g. for
+  episodic-memory) that also identify as "claude" in `ps -o comm=`. The pre-fix
+  `FindClaudeAncestor` returned on the FIRST claude-named ancestor walking up
+  from `os.Getppid()`, so `quickstart` bound `agent_pid` to the short-lived
+  helper subprocess. Later RPCs from the long-lived Claude session main couldn't
+  reach the helper PID through their own ancestor chain (different process-tree
+  branch), the guard refused every call, and the only hint surfaced ("run
+  `thrum prime` to re-claim") was itself blocked by the same guard — no
+  discoverable recovery path. Fix walks the chain all the way to PID 1 and
+  returns the TOPMOST claude-named ancestor; the long-lived session main is
+  always the highest claude-named process, so binding to it is stable across
+  hook-subprocess lifecycles. Public `FindClaudeAncestor` delegates to a new
+  testable `findAncestorTopmost(ctx, startPID, nameFn, parentFn)` helper; three
+  new regression tests cover the bug chain (caller → bash →
+  claude-sdk-helper(200) → claude main(100) must return 100), the zero-return
+  no-match contract, and an off-by-one guard for single-runtime chains. The
+  `pid_mismatch` remediation message is also extended to mention
+  `thrum quickstart --name <agent>` as the stale-PID recovery path, with the
+  expected-agent name interpolated when available. Operator-script passthrough
+  (Leon's hard constraint on this work) is preserved: `thrum tmux` and
+  `thrum worktree` commands run without a runtime in their ancestor chain still
+  hit the "no runtime ancestor → passthrough" path at guard Rule Step 2/4
+  unchanged. G5 enforcement was independently verified
+  vindication-not-regression: after the fix, G5 correctly distinguishes
+  "Bash-tool spawn from Claude main" (closest runtime == topmost runtime ==
+  agent_pid → passes) from "run from sub-agent helper" (closest runtime !=
+  agent_pid → denies, which is exactly G5's intended purpose). Discovered by
+  @impl_v0106 trying to deliver a DONE report mid-session; recovery in that case
+  required
+  `thrum quickstart --role implementer --module v0106-rc1 --name impl_v0106`.
+- **applySessionStart now `INSERT OR IGNORE` — peer-replicated
+  `agent.session.start` no longer aborts sync batches (thrum-9jcb.3)** — third
+  soak-mined finding from the same debug-log window that surfaced thrum-10j0 and
+  thrum-mhwt. Peer daemons replicate `agent.session.start` events for sessions
+  whose `session_id` may already exist locally (e.g. session-resurrect cases
+  where the same logical session is announced by more than one daemon during
+  sync catch-up). The projector at `internal/projection/projector.go`'s
+  `applySessionStart` used a bare `INSERT INTO sessions`, which hit the
+  `sessions.session_id` UNIQUE constraint on the second arrival. `sync_apply.go`
+  bails on the first projector error and returns the count-of-applied-so-far, so
+  the remainder of the batch was abandoned and the next `sync.notify` cycle had
+  to retry (eventually consistent via `HasEvent` dedup, but noisy at INFO level
+  — 9 occurrences observed in a 15-min debug-mode soak window — and structurally
+  risky if a legitimate later event in the same batch happens to land alongside
+  the duplicate). Fix is a one-line `INSERT OR IGNORE` at the projector. The
+  choice over `ON CONFLICT(session_id) DO UPDATE` is deliberate: `started_at` is
+  immutable for that session, and `last_seen_at` is touched independently by
+  other apply paths — a late-arriving peer copy of the start event could regress
+  freshness if it overwrote a newer local value. Audit of the sibling INSERT
+  projector handlers confirmed no other peer-replicable handler has the same
+  bug: `agents`, `groups`, `group_members`, `message_deliveries`,
+  `purge_metadata` already use `INSERT OR IGNORE` / `ON CONFLICT`, and
+  `agent_work_contexts` uses a delete-replace per-agent pattern;
+  `message.create` is safe by construction because `message_id` is
+  daemon-scoped. New regression
+  `TestProjector_ApplySessionStart_ DuplicateIsNoOp` applies the same event
+  twice through `Apply()` and asserts no error plus exactly one row in
+  `sessions`.
+- **Cap message body size at write — 1 MB default, configurable (thrum-mhwt)** —
+  preventative follow-up to thrum-10j0. The scanner-buffer bump lets the
+  compactor READ events.jsonl lines up to 4 MB but does nothing to stop a future
+  operator from WRITING one. `message.HandleSend` now refuses a `body.content`
+  larger than the configured cap with a clear, copy-pasteable error: "message
+  body too large: N bytes exceeds the daemon limit of M bytes
+  (daemon.max_message_body_bytes). Reduce the body size or raise the config; for
+  genuinely large payloads consider attachments instead of inline content." New
+  `daemon.max_message_body_bytes` config field (default 1 MB via
+  `DefaultMaxMessageBodyBytes`) plumbed through
+  `NewMessageHandlerWithDispatcher`. The 1 MB default sits above the largest
+  organic body observed in production (~167 KB coordinator multi-page response)
+  and below the events.jsonl scanner ceiling (4 MB), so the thrum-10j0 read-side
+  fix still covers any value the cap accepts. 0 in the handler field disables
+  the cap (test path); negative is documented but not actively used. Tests:
+  TestHandleSend_MaxBodyBytes covers reject-over-limit, accept-at- exact-limit,
+  and no-cap-when-zero; TestDaemonConfig_MaxMessageBodyBytesEffective covers the
+  config helper's zero/positive/negative paths.
+- **events.jsonl compactor wedged by oversized lines — scanner buffer raised to
+  4 MB (thrum-10j0)** — `internal/jsonl/writer.go`'s four scan sites (`Read`,
+  `RemoveByField`, `RemoveBeforeTimestamp`, `Reader.Stream`) all used
+  `bufio.NewScanner` with no buffer override. `bufio.Scanner`'s default
+  `MaxScanTokenSize` is 64 KB; a single events.jsonl line larger than that
+  (production observed a 177 KB coordinator multi-page message body) returned
+  `bufio.Scanner: token too long` and killed the scan. For the events.jsonl
+  compactor that meant every sync-trigger pass aborted before removing any
+  retention-aged events, and events.jsonl grew unbounded. New `newJSONLScanner`
+  package-level helper sizes the buffer to `maxScannerBufferSize = 4 MB`
+  (mirrors the precedent at `internal/sync/compact/compact.go`'s
+  `compactJSONLByKey`) and every scan site in the package uses it. New
+  regression `TestScannerHandlesLargeLines` writes a 200 KB-bodied event and
+  exercises all four call sites; pre-fix every sub-test would have failed with
+  token-too-long.
+- **`thrum worktree teardown` cascade-deletes the bound agent identity by
+  default (thrum-wk7d, part 3)** — **behavior change:**
+  `thrum worktree teardown <name>` previously removed the worktree's identity
+  files + the git worktree itself but LEFT the agent record in the daemon's
+  `agents` table. Re-creating a worktree of the same name (or registering the
+  same agent in a different worktree) would then hit `agent.register`'s "already
+  registered in a different worktree" rejection — the wedge that bit wave-4
+  dispatch earlier today and that the part-1 error-message update teaches
+  operators to recover from. Teardown now calls `agent.delete` via the daemon
+  RPC for each identity it removes, so a clean teardown leaves no stranded agent
+  state. Add `--keep-agent` to preserve the prior behavior when an operator
+  wants to retire the worktree but keep the agent record around (e.g. archival,
+  future re-attachment). Both branches surface their action in stdout/stderr so
+  the operator knows what landed. The daemon-unreachable case warns once with
+  the recovery command rather than failing the teardown — teardown should never
+  wedge because the daemon happens to be down.
+- **Quieter peercred no-match log path (thrum-wk7d, part 2)** —
+  `peercred.Resolve`'s step=match no-registered-worktree log was WARN and fired
+  on every anonymous-allowed RPC (`agent.register`, `session.start`,
+  `session.setIntent`, every read-only RPC on the anonymous allowlist) BY DESIGN
+  — those calls happen before the daemon has a binding for the caller. The WARN
+  noise read as an error in operator-facing logs but was routine operation.
+  Downgraded the resolver-side no-match log to DEBUG; added a single WARN at the
+  actual rejection site in `server.go` (when an anonymous caller hits a method
+  NOT on the anonymous allowlist) so the daemon log surfaces real failures
+  clearly while staying silent during normal bootstrap.
+- **`agent.register` error message names `thrum agent delete` as the
+  stranded-identity resolution (thrum-wk7d, part 1)** — when `HandleRegister`
+  refuses a registration because the agent_id is already bound to a different
+  worktree, the error suggested three resolution paths (pick a unique `--name`,
+  `thrum prime` from the registered worktree, or `thrum worktree teardown` if
+  abandoning). None addressed the stranded-identity scenario that wedged wave-4
+  dispatch earlier today: an agent identity that survives in the DB after its
+  original worktree was torn down (teardown does not cascade-delete the agent
+  identity). The error message now names `thrum agent delete <name> --force` as
+  the fourth path so operators no longer have to grep source to discover the
+  cleanup command. `--force` covers the common stranded-identity case where the
+  agent still has artifacts the CLI refuses to drop silently; on the rare case
+  where `--force` is unnecessary it is a no-op.
+- **Move dead-agent self-heal off the `team.list` hot path (thrum-1nkt.6)** —
+  `team.list` used to fire `agent.session.end` events inline for active agents
+  with dead PIDs, coupling a read RPC to write workload (plus walker+compactor
+  fan-out per call). New `DeadAgentSweeper`
+  (`internal/daemon/dead_agent_sweeper.go`) runs as a background goroutine on a
+  10-second ticker, detects dead-active agents with the same logic the old Phase
+  2 used (PID liveness + identity-file PID cross-check from thrum-pxz.14 +
+  local-origin guard), and emits `session.end` once per dead session.
+  `team.list` Phase 2 collapses to the in-memory mark-offline rewrite only — no
+  more inline writes, no more per-call walker, no more dependency on the
+  thrum-1nkt.3 single-flight gate. Operator UX is unchanged: the caller still
+  sees `status=offline` in the response immediately (Phase 1's dead-agent
+  collection runs unchanged, then Phase 2 rewrites the in-memory member list);
+  the persistent `agent.session.end` write lands within at most one sweeper
+  tick. New tests cover the basic emit, idempotent re-sweep, file-PID skip,
+  remote-origin skip, and the ticker lifecycle.
+  `TestTeamList_SingleFlightDeadAgentSelfHeal` was renamed to
+  `TestTeamList_DoesNotEmitSessionEndInline` and its event-count assertion
+  flipped from "exactly 1" (single-flight invariant) to "exactly 0" (pure-read
+  invariant).
+- **Async-wrap `postCommit` at structural-event call sites (thrum-1nkt.5)** —
+  thrum-bsn7 made `postCommit` caller-driven (caller releases `state.Lock`
+  before invoking it) so other goroutines no longer block at `state.Lock()`
+  while one holds it through walker+compactor. But the caller itself still ran
+  `postCommit()` synchronously, so its own RPC did not return until
+  walker+compactor completed — up to a 90s worst-case ceiling under edge
+  conditions, and a measurable wall-clock inflation on every register/send/group
+  operation in the common case. Concretely this surfaced as
+  `tmux.create.quickstart-timeout` failures when wave-4 dispatch tried to spawn
+  fresh implementers: the inline `agent.register` RPC blocked on its own
+  postCommit past the 5-second `waitForIdentityFile` budget. New
+  `state.GoPostCommit(fn)` helper wraps the invocation in a goroutine while
+  registering it on a package-level `sync.WaitGroup`, and `state.Close()` now
+  drains in- flight goroutines (up to a 90s budget matching the walker+compactor
+  worst-case ceiling) before tearing down the JSONL writer and DB. All 21
+  structural-event call sites switch from raw inline invocation to
+  `<receiver>.state.GoPostCommit(postCommit)`: `agent.go` (4), `message.go` (4),
+  `group.go` (4), `session.go` (4), `user.go`, `team.go`, `queue_rpc.go`,
+  `purge.go`, and `permission/send.go`. Each handler now returns as soon as
+  `WriteEvent` commits to the events table; walker+compactor fan-out runs async,
+  serializing harmlessly at the already-existing `walker.mu`. The inbound peer-
+  event path in `sync_apply.go` stays synchronous (no caller is blocked there).
+  New regression tests cover (a) the handler-returns-before- trigger invariant
+  via a slow sync-trigger stub (`TestHandleRegister_PostCommitFireAndForget`),
+  (b) the drain semantics (`TestGoPostCommit_DrainsOnWait`,
+  `TestStateClose_DrainsInflightPostCommits`), and (c) the nil-fn fast path
+  (`TestGoPostCommit_NilIsNoOp`). The existing
+  `TestHandleRegister_BurstRegister_NoLockContention` was adapted to wait for
+  now-async trigger goroutines before asserting trigger count.
+- **`thrum send` no longer fires a `team.list` RPC per send (thrum-1nkt.4)** —
+  every `thrum send` invocation ran a `team.list` RPC through the CLI hint
+  pipeline (`cli.Collect` → `sendHints` → `LiveStateAccessor.AgentByName`) to
+  answer a single-name question for the optional `send.recipient-stale` hint. On
+  the daemon this fanned out to N per-agent mention-count queries, a
+  worktree-wide identity-file walk, and Phase 2 dead-agent self-heal (the same
+  amplifier addressed in thrum-1nkt.3 — under burst, eight concurrent sends
+  meant eight concurrent `team.list` calls all racing through that path). New
+  `agent.lookup` RPC returns a single `TeamMember` via one SQL `SELECT`
+  - one identity-file read, with no per-agent mention fan-out and no Phase 2
+    self-heal. `AgentByName` now calls `agent.lookup`. Together with
+    thrum-1nkt.1 (pool-size raise) and thrum-1nkt.3 (single-flight self-heal),
+    the send hot path is no longer a `team.list` amplifier.
+- **Redundant `session.end` writes from concurrent `team.list` callers
+  (thrum-1nkt.3)** — `team.list` runs in three phases: Phase 1 reads active
+  members under RLock and collects dead-but-still-active agents; Phase 2 (no
+  lock) emits `session.end` for each; Phase 3 rewrites the in-memory response so
+  the caller sees the self-healed status. Under N-concurrent `team.list` (the
+  bpq5 8-send burst triggers 8 such calls through the hint pipeline) every
+  goroutine saw the same dead agents in its Phase 1 snapshot and independently
+  entered Phase 2, writing N redundant `session.end` events per dead session —
+  each one a `WriteEvent` + JSONL append + projection apply. The fix adds a
+  `sync.Map` on `TeamHandler` keyed by `session_id`; Phase 2 `LoadOrStore` gates
+  the emit, the first caller wins and losers short-circuit. Phase 3 still runs
+  for every caller, so short-circuited callers still observe the corrected
+  `status=offline` in their response. New regression test
+  `TestTeamList_SingleFlightDeadAgentSelfHeal` fires 8 concurrent calls against
+  a dead-PID fixture and asserts exactly one `session.end` event is written.
+- **Coalesce inbound peer-event walker — one fire per batch (thrum-1nkt.2)** —
+  `SyncApplier.ApplyRemoteEvents` previously invoked `postCommit` once per
+  applied event in its loop, firing a fresh walker+compactor pass for every
+  inbound structural peer event. The walker is incremental via `lastWalkAt` so
+  the subsequent walks were near-noops in their useful work, but each still paid
+  the `walker.mu` acquire + compactor scan (~40ms each at bpq5 measured rates).
+  At a burst rate of 369 `sync.notify` per minute with `event_count=1`, that was
+  369 walks per minute when 1 per batch sufficed. Now `applyEvent` returns the
+  `postCommit` closure instead of invoking it inline; the loop accumulates the
+  last non-nil closure and fires it once after the loop (or before an early
+  error return, so partial-batch events still propagate). The trigger captures
+  the batch-scoped ctx, so any non-nil closure from the loop is equivalent — the
+  "last" choice is arbitrary. New regression
+  `TestSyncApplier_ApplyRemoteEvents_CoalescesPostCommit` asserts a 5-event
+  structural batch fires the trigger exactly once;
+  `TestSyncApplier_ApplyRemoteEvents_NoTriggerForEmptyOrNonStructural` guards
+  the zero-fire path for empty and non-structural batches.
+- **Sync-notify goroutine pool saturation under multi-peer burst
+  (thrum-1nkt.1)** — `internal/daemon/rpc/sync_notify.go`'s bounded semaphore
+  capped concurrent peer-sync goroutines at 10. Under 8-concurrent `thrum send`
+  on a busy 2-peer cluster, 257 of 327 inbound `sync.notify` RPCs in an 8-second
+  window were dropped at the gate — every drop is a missed pull-sync opportunity
+  that delays event propagation across the cluster. The ceiling now lives at the
+  named constant `syncNotifyPoolSize = 100`. Safe to raise: peers do NOT retry
+  dropped notifications (`BroadcastNotify` in `sync_manager.go` is
+  fire-and-forget), so the higher ceiling does not amplify peer load. First fix
+  in the thrum-1nkt epic; remaining children address the team.list dead-agent
+  self-heal race and the defense-in-depth postCommit decoupling sites.
+- **Daemon lock-contention under register/message burst (thrum-bsn7)** — the
+  structural-event sync trigger (snapshot walker, 30s ceiling; compactor, 60s
+  ceiling) used to run synchronously inside `state.WriteEvent` while the caller
+  still held `state.Lock()`. Under a burst of `agent.register` or
+  `message.create` RPCs, goroutine A would hold the lock for the full
+  walker+compactor wall-clock, while goroutines B..N blocked at `h.state.Lock()`
+  and watched their 10s RPC ctx expire. When B finally acquired the lock, its
+  first under-lock SELECT (`getAgentByID` at the top of `HandleRegister`,
+  `check for existing agent by id`) returned `context.DeadlineExceeded`
+  immediately. This was the same root-cause family as thrum-kdyf but on every
+  under-lock SELECT, not just `ensureActiveSession`'s "check active session"
+  path — kdyf's narrow fix released the lock around the resurrect SELECT only
+  and left the broader pattern exposed. The fix structurally decouples the sync
+  trigger from the caller's lock hold: `state.WriteEvent` now returns
+  `(postCommit func(), err error)`; callers MUST invoke `postCommit` AFTER
+  releasing any external `state.Lock()` hold. Walker invocations serialize at
+  `walker.mu` (already in place; defense in depth), so concurrent triggers no
+  longer starve each other on the state lock. 22 production WriteEvent call
+  sites updated; new regression test
+  `TestHandleRegister_BurstRegister_NoLockContention` proves the fix by
+  injecting a slow trigger stub and asserting 8 concurrent registers complete in
+  ~walker_time (concurrent path) rather than 8 × walker_time (serialized path).
+  Inbound peer events via `sync_apply.go` continue to fire local
+  walker/compactor as before (lock-free at that layer; behavior preserved
+  exactly).
+- **Schema v37 + v38: memory-tables back-port + `events.timestamp` index
+  (thrum-7ojv)** — two-part schema bump on release/v0.10.6. v38 adds
+  `CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)` so the
+  compactor's `DELETE FROM events WHERE timestamp < ?` (which ran O(N) full
+  table scan because the `events` table had no `timestamp` index) becomes O(log
+  N) seek + sequential range. The unindexed DELETE was the dominant compactor
+  cost feeding the kdyf/roz1 lock-hold ceiling on busy daemons. Once the
+  matching index lands on thrum-agents, the post-roz1 60s `syncCompactorTimeout`
+  ceiling can drop back to the walker's 30s symmetric. v37 back-ports the
+  thrum-agents j7n5 Epic 0 memory-tables DDL (`memory_record`, `memory_tag`,
+  `memory_edge`, `memory_fts`, `memory_embeddings`, `memory_embed_queue` + 10
+  indexes) as dead-end DDL only — no release-line Go code touches these tables.
+  Per the canonical CLAUDE.md dead-end-DDL back-port pattern (same as the
+  v25–v36 substrate-table forward-ports). Without this back-port a fresh rc.3
+  install would create a v38 DB with NO memory tables; a subsequently-installed
+  thrum-agents / v0.11 binary on that DB would crash on every `memory.*`
+  operation. With the back-port, both branches stamp v37 with byte-identical DDL
+  — no asymmetry, no crash trap. `createTables`/`createIndexes` mirror both v37
+  tables and the v38 index for fresh-install parity. 5 schema tests pin the
+  contract: V38_CurrentVersion, V36→V38 fresh upgrade, V37→V38 cross-binary
+  upgrade, V36→V38 creates memory tables (proves the DDL actually fires), V38
+  idempotent. The v18→v22 ALTER-guard pattern (`tableExists`) is reused so
+  partial-schema test fixtures don't trip on the new v38 CREATE INDEX.
+- **`peercred.matchWorktree` stale-worktree log spam downgraded (thrum-g1ux)** —
+  post-`thrum worktree teardown` the agent's `session_refs` row persists
+  (teardown removes the worktree from disk but doesn't end the agent's
+  sessions), so the daemon's peercred resolver kept iterating the now-deleted
+  path and emitting `peercred.matchWorktree stored EvalSymlinks failed` WARN on
+  every resolution against the stale entry. The WARN spam drowned out real
+  diagnostics in `daemon.log`. Fix: `matchWorktree` now checks
+  `os.IsNotExist(err)` in the EvalSymlinks-failure branch and emits `slog.Debug`
+  for the torn-down case; other failure modes (permission errors, etc) keep the
+  WARN as legitimate diagnostics. Functional behavior unchanged — the
+  `canonWt = wt` fallback already produced correct no-match semantics for
+  deleted paths. Option B (daemon RPC + CLI `worktree teardown` wiring to
+  actually delete the stale `session_refs` rows at the source) is deferred to
+  v0.10.7 / v0.11 as the broader cleanup.
+- **`thrum worktree create` cuts new branch from cwd HEAD by default
+  (thrum-pqcg)** — previously the CLI silently defaulted to `main` as the base
+  ref regardless of the cwd's actual HEAD; a worktree created from a non-`main`
+  checkout (e.g. `thrum-dev`, `release/v0.10.6`) would silently lose all commits
+  unique to that branch. The `CreateOpts.BaseBranch` field was unset by the
+  cobra layer, so `internal/worktree.Create`'s `"main"` fallback always fired.
+  Fix: resolve cwd HEAD via `git symbolic-ref --quiet --short HEAD` and pass it
+  as `BaseBranch`. New `--base` flag lets operators override explicitly (e.g.
+  `--base main` for the pre-fix behavior, or any existing ref / commit SHA for
+  arbitrary bases). On detached HEAD or a non-git cwd the command emits a
+  `slog.Warn` and falls back to `main` so the substitution is no longer silent.
+  `--base` also honored by the `--detach` path
+  (`git worktree add --detach <path> <ref>`). New `cmd/thrum/worktree_base.go`
+  holds the resolver as a small testable helper; 4 new tests pin
+  explicit-flag-wins, cwd-HEAD-default, detached-HEAD-fallback, and
+  non-git-cwd-fallback semantics.
+- **`agent.register` session-resurrect SELECT decoupled from caller's
+  possibly-burned RPC context (thrum-kdyf)** — surfaced to the user as
+  `register failed: ... daemon may be unresponsive — try thrum daemon restart`
+  during fresh agent registrations under a wave-dispatch burst. Independent bug
+  downstream of roz1 (the roz1 compactor-cascade fix made it less common but
+  didn't fix it). Mechanism: HandleRegister holds `h.state.Lock()` through
+  `registerAgent → WriteEvent → triggerSyncOnWrite`, whose synchronous walker
+  (30s ceiling) + compactor (60s ceiling) can burn the entire 10s default RPC
+  deadline. By the time `ensureActiveSession`'s SELECT fired, the caller's ctx
+  was already expired and the SELECT returned `context deadline exceeded`
+  immediately — surfacing as the misleading "check active session" prime-failure
+  log line. Two-part fix on the surgical-scope path: (1) invert
+  `ensureActiveSession`'s contract from "must be called under lock" to "must NOT
+  be called under lock"; the function self-manages locking via a double-check
+  pattern (lock-free fresh-ctx SELECT first; if a write is needed, acquire
+  `state.Lock()` internally, re-SELECT under lock to catch concurrent-resurrect
+  races, then write the event). (2) restructure `HandleRegister`'s critical
+  section with a tracked-unlock pattern that releases the lock before calling
+  `ensureActiveSession` and re-acquires it briefly only when
+  `persistResurrectWorktreeRef` needs to run (its contract is preserved). The
+  SELECT now runs under
+  `context.WithTimeout(context.Background(), 5*time.Second)` — a fresh deadline
+  decoupled from the caller's possibly-burned ctx. Common-path registers
+  ("session already active → idempotent no-op") now succeed even when the caller
+  ctx has been burned upstream. The structural cleanup that would let
+  walker+compactor run without holding `state.Lock` at all is filed as
+  thrum-bsn7 for v0.10.7 / v0.11.
+- **Daemon compactor decoupled from caller RPC context (thrum-roz1)** — the
+  closure registered via `triggers.SetCompactor` previously ran under the
+  caller's RPC ctx (~10s deadline) when invoked from `state.WriteEvent` →
+  `triggers.SyncOnWrite`. On large events tables the events-journal
+  `DELETE FROM events WHERE timestamp < ?` (no timestamp index — see follow-up
+  thrum-7ojv) blew the deadline; the burned ctx then cascaded to the next
+  `agent.register`'s `ensureActiveSession` SELECT in the same RPC, surfacing to
+  the user as
+  `register failed: ... daemon may be unresponsive — try thrum daemon restart`
+  during prime. 99 occurrences across 8+ agents in pre-fix daemon.log. The
+  compactor now runs under a fresh
+  `context.WithTimeout(context.Background(), syncCompactorTimeout)` (60s
+  ceiling, generous because the events table lacks a timestamp index; thrum-7ojv
+  would let this drop to the walker's 30s). Mirrors the walker's s7is.7
+  cancel-shape pattern at the same file. Logs a structured
+  `sync.compactor_timeout` slog warn with `phase` / `elapsed_s` /
+  `duration_ceiling_s` / `guidance` fields for daemon-log greppability.
+  Compaction remains non-fatal: `TriggerSync` still fires on a compactor failure
+  (preserves existing `CompactorFailureDoesNotBlockSync` contract).
+- **`thrum worktree create --branch <existing>` attaches existing branches
+  instead of erroring (thrum-suyb)** — `internal/worktree.Create` previously
+  always invoked `git worktree add -b <branch> <path> <base>`, which fails with
+  `fatal: a branch named '<branch>' already exists` when the branch already
+  exists in the repo. The create path now probes branch existence via
+  `git rev-parse --verify --quiet refs/heads/<branch>` first: if the branch
+  exists it attaches with `git worktree add <path> <branch>` (no `-b`, no base),
+  otherwise it falls back to the original create-with-`-b` form. The best-effort
+  cleanup closure deletes the branch only when this `Create` invocation actually
+  created it, so an attached pre-existing branch is never destroyed on a
+  downstream failure. Unblocks teardown+recreate of an agent's worktree without
+  losing branch history, pair-coding sessions, and resuming work from a
+  stashed-and-archived branch.
+- **`thrum quickstart` accepts a positional `<name>` argument and corrects
+  env-var precedence (thrum-9dnh)** — `thrum quickstart researcher_memories` now
+  works (the positional is treated as `--name`); the flag/env precedence is
+  `--name` flag → positional → `THRUM_NAME` env-var → identity-file fallback.
+  Previously, `THRUM_NAME` could override a positional because the guard only
+  checked `Flags().Changed("name")` and not whether `name` was empty. Matches
+  the Unix `tool [name]` convention.
+- **Recovery docs corrected — real `messages.db` filename + honest "deletion
+  leaves a BLANK DB" framing (thrum-1gar)** — the database-recovery sections in
+  `CLAUDE.md`, `website/docs/architecture.md`, and `internal/backup/restore.go`
+  previously cited the wrong DB filename and implied a deleted SQLite store
+  would auto-rebuild from the JSONL event log. It does not — `NewState` never
+  calls `Projector.Rebuild()`, so a deleted DB comes back blank and only refills
+  from new events. Recovery option 3 now points at the timestamped pre-migration
+  backup the daemon creates at every migration
+  (`messages.db.pre-migration-vN-<UTC>.bak`), with a complete `cd` + `cp`
+  sequence so users in unrelated working directories don't hit a bare-filename
+  failure. See thrum-rtlt for the long-term event-sourcing rework that would
+  make true rebuild-from-history feasible.
+
+### Internal
+
+- **Re-sync codex/cursor/opencode skill copies to claude-plugin source of truth
+  (thrum-1arf)** — mechanical formatting catch-up only (YAML frontmatter
+  description fields unwrapped to single-line; prose paragraph wraps
+  normalized), no behavior change. Companion to the destroy-then- teardown
+  protocol skill update.
+
 ## [0.10.5] - 2026-05-21
 
 ### Added

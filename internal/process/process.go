@@ -147,23 +147,82 @@ var runtimeDisplayName = map[string]string{
 
 // FindClaudeAncestor walks the process tree from the current process
 // up to PID 1, looking for an ancestor matching a known AI coding runtime.
-// Returns the PID and runtime name, or (0, "") if not found.
+// Returns the PID and runtime name of the CLOSEST (first encountered)
+// matching ancestor, or (0, "") if not found.
+//
+// Use this for LOOKUP / IDENTIFICATION semantics — e.g. "what runtime am
+// I currently running inside, for the purposes of matching the caller's
+// chain against an identity file's recorded owner." Operator-script paths
+// (`thrum tmux`, `thrum worktree`) and identity-file disambiguation
+// (`internal/config`) rely on the closest match because the closest
+// claude-named process IS the caller's immediate runtime context.
+//
+// For BINDING-WRITE semantics — recording a PID into an identity file
+// that must remain valid across hook-subprocess lifecycles — use
+// FindTopmostRuntimeAncestor instead (thrum-xir.40).
 func FindClaudeAncestor(ctx context.Context) (int, string) {
-	pid := os.Getppid()
+	return findAncestor(ctx, os.Getppid(), processName, parentPID, false)
+}
+
+// FindTopmostRuntimeAncestor walks the process tree from the current
+// process up to PID 1, returning the TOPMOST (highest, last-encountered)
+// runtime ancestor on the chain. Returns (0, "") if no runtime ancestor
+// exists.
+//
+// Use this for BINDING-WRITE semantics — recording the PID into an
+// identity file. A runtime like Claude may spawn transient sub-process
+// helpers (e.g. the claude-sdk subprocess that runs SessionStart hooks
+// for episodic-memory and similar plugins) and those helpers also
+// identify as "claude" in `ps -o comm=`. Recording the FIRST match means
+// `quickstart` binds agent_pid to a short-lived helper; later
+// invocations from the long-lived runtime main fail ancestor walk-up
+// (their walks never reach the helper PID) and the identity guard
+// refuses every RPC with pid_mismatch. The long-lived session main is
+// always the highest claude-named process in the chain, so the topmost
+// match is the stable PID to bind to (thrum-xir.40).
+//
+// For LOOKUP / IDENTIFICATION semantics — e.g. resolving the caller's
+// immediate runtime context for matching against an identity file's
+// recorded owner — use FindClaudeAncestor instead.
+func FindTopmostRuntimeAncestor(ctx context.Context) (int, string) {
+	return findAncestor(ctx, os.Getppid(), processName, parentPID, true)
+}
+
+// findAncestor is the testable core of both FindClaudeAncestor and
+// FindTopmostRuntimeAncestor. It walks from startPID up to PID 1 via
+// parentFn, naming each via nameFn. When topmost is false the walk
+// returns on the first runtime match (closest). When topmost is true the
+// walk continues to PID 1 and returns the last match encountered.
+// Returns (0, "") if no runtime ancestor exists on the chain.
+func findAncestor(
+	ctx context.Context,
+	startPID int,
+	nameFn func(context.Context, int) string,
+	parentFn func(context.Context, int) int,
+	topmost bool,
+) (int, string) {
+	pid := startPID
+	matchPID := 0
+	matchRuntime := ""
 	for pid > 1 {
-		name := processName(ctx, pid)
+		name := nameFn(ctx, pid)
 		for _, rt := range knownRuntimes {
 			if matchRuntimeName(name, rt) {
 				displayName := rt
 				if mapped, ok := runtimeDisplayName[rt]; ok {
 					displayName = mapped
 				}
-				return pid, displayName
+				matchPID = pid
+				matchRuntime = displayName
+				break
 			}
 		}
-		pid = parentPID(ctx, pid)
+		if matchPID != 0 && !topmost {
+			return matchPID, matchRuntime
+		}
+		pid = parentFn(ctx, pid)
 	}
-	return 0, ""
+	return matchPID, matchRuntime
 }
 
 // processName returns the command name of a process via ps.

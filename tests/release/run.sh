@@ -1,11 +1,27 @@
 #!/usr/bin/env bash
 # tests/release/run.sh — release test framework entry point.
-# See dev-docs/specs/2026-04-26-release-test-framework-design.md
+#
+# Invocation: safe to run from any context, including from inside a live
+# claude/codex agent pane. The harness self-isolates via helpers/self-isolate.sh
+# (process-tree contamination detect + re-exec into a detached default-server
+# tmux session). Inner exit code propagates back. See tests/release/CLAUDE.md.
+#
+# Design spec: dev-docs/specs/2026-04-26-release-test-framework-design.md
+# Self-isolation plan: dev-docs/plans/2026-05-22-release-harness-self-isolation-plan.md
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HELPERS_DIR="$SCRIPT_DIR/helpers"
 SCENARIOS_DIR="$SCRIPT_DIR/scenarios"
+
+# Self-isolating launcher: if invoked from inside an agent pane (claude/codex
+# ancestor), re-exec into a detached default-server tmux session so the
+# harness runs with clean process ancestry. See helpers/self-isolate.sh.
+# Must fire BEFORE the tool-preflight (so the fail-loud diagnostic surfaces
+# on contamination) and before any fixture setup.
+# shellcheck disable=SC1091
+source "$HELPERS_DIR/self-isolate.sh"
+thrum_release_self_isolate "$SCRIPT_DIR/run.sh" "$@"
 
 # Preflight
 for tool in thrum tmux jq git claude expect; do

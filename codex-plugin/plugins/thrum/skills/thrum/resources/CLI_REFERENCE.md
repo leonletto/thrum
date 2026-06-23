@@ -30,11 +30,21 @@ thrum send <message> --to @name --ref type:value
 thrum send <message> --to @name --mention @role
 thrum send <message> --to @name --format plain
 thrum send <message> --to @name --structured '{"key":"value"}'
+thrum send --to @name --stdin <<'EOF'                # Shell-safe body (heredoc)
+thrum send --to @name --body-file ./body.md          # Shell-safe body (file)
+generator | thrum send --to @name -                  # '-' is a --stdin alias
 ```
 
 A recipient flag is REQUIRED — `thrum send 'msg'` with no `--to` or
 `--broadcast` is a hard error (thrum-t698). `--to` and `--broadcast` are
 mutually exclusive.
+
+Shell-safe bodies (thrum-d3fp): backticks, `$(...)`, `$VAR`, and quotes in a
+double-quoted message are interpreted by the shell BEFORE thrum runs, silently
+corrupting content. Read the body from stdin (`--stdin`, or pass the message as
+`-`) or a file (`--body-file`) with a QUOTED heredoc (`<<'EOF'`) to disable all
+shell interpretation. The three body sources are mutually exclusive. A single
+trailing newline is stripped from stdin/file bodies.
 
 Flags:
 
@@ -46,6 +56,8 @@ Flags:
 --scope strings       Add scope (repeatable, format: type:value)
 --format string       Message format: markdown, plain, json (default "markdown")
 --structured string   Structured payload (JSON)
+--stdin               Read the message body from stdin (or pass MESSAGE as '-')
+--body-file string    Read the message body from a file (mutex with --stdin)
 ```
 
 ### reply
@@ -53,12 +65,20 @@ Flags:
 ```bash
 thrum reply <msg-id> <response>
 thrum reply <msg-id> <response> --format plain
+thrum reply <msg-id> --stdin <<'EOF'                 # Shell-safe body (heredoc)
+thrum reply <msg-id> --body-file ./body.md           # Shell-safe body (file)
 ```
+
+Shell-safe bodies (thrum-d3fp): like `send`, `reply` accepts `--stdin` (or the
+response argument as `-`) and `--body-file` so backtick/`$(...)`/quote-bearing
+text survives the shell. Use a QUOTED heredoc (`<<'EOF'`).
 
 Flags:
 
 ```text
---format string   Message format: markdown, plain, json (default "markdown")
+--format string     Message format: markdown, plain, json (default "markdown")
+--stdin             Read the reply body from stdin (or pass the response as '-')
+--body-file string  Read the reply body from a file (mutex with --stdin)
 ```
 
 ### inbox
@@ -127,6 +147,7 @@ from now" (skip ahead). Note: `--timeout` requires a Go duration unit — use
 ```bash
 thrum message get <msg-id>                     # Get full message details
 thrum message edit <msg-id> <new-text>         # Full replacement (author only)
+thrum message edit <msg-id> --stdin <<'EOF'    # Shell-safe replacement (heredoc)
 thrum message delete <msg-id> --force          # Delete (--force required)
 thrum message read <msg-id> [<msg-id>...]      # Mark as read
 thrum message read --all                       # Mark all as read
@@ -135,6 +156,10 @@ thrum message read --all                       # Mark all as read
 Subcommand flags:
 
 ```text
+# message edit  (shell-safe bodies, thrum-d3fp)
+--stdin             Read the new text from stdin (or pass TEXT as '-')
+--body-file string  Read the new text from a file (mutex with --stdin)
+
 # message delete
 --force   Confirm deletion (required)
 
@@ -152,12 +177,16 @@ Bootstrap a full session in one command: detect runtime, generate config,
 register, start, set intent.
 
 ```bash
-thrum quickstart --name implementer_auth --role implementer --module auth
+thrum quickstart implementer_auth --role implementer --module auth
 thrum quickstart --name reviewer_auth --role reviewer --module auth --intent "Reviewing PR #42"
-thrum quickstart --name alice --role impl --module auth --runtime codex
-thrum quickstart --name planner_core --role planner_core --module core --no-init
-thrum quickstart --name tester_api --role tester --module api --dry-run
+thrum quickstart alice --role impl --module auth --runtime codex
+thrum quickstart planner_core --role planner_core --module core --no-init
+thrum quickstart tester_api --role tester --module api --dry-run
 ```
+
+Name can be passed as a positional argument or via `--name`; the flag wins when
+both are supplied. Precedence (highest → lowest): `--name` flag, positional,
+`THRUM_NAME` env-var, identity-file name fallback.
 
 Flags:
 
@@ -799,6 +828,7 @@ thrum config show --json
 ```bash
 thrum worktree create <name>                   # Create worktree with thrum/beads setup
 thrum worktree create <name> -b <branch>       # Specify branch name
+thrum worktree create <name> --base <ref>      # Override base ref (default: cwd HEAD)
 thrum worktree create <name> --detach          # Detached HEAD worktree
 thrum worktree create <name> \
   --name <agent> --role <role> --module <mod>  # Create worktree + register agent
@@ -812,6 +842,7 @@ thrum worktree list                                  # List worktrees with agent
 
 ```text
 --branch, -b string   Branch name (default: feature/<name>)
+--base string         Base ref for the new branch (default: current HEAD of cwd)
 --detach              Create detached HEAD worktree
 --name string         Agent name (triggers quickstart when combined with --role + --module)
 --role string         Agent role

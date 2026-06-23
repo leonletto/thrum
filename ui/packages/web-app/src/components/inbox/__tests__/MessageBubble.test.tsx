@@ -598,6 +598,47 @@ describe('MessageBubble', () => {
     });
   });
 
+  describe('Pending Route Resolution Placeholder', () => {
+    it('should render placeholder when pending_route_resolution is true', () => {
+      const message: Message = {
+        ...baseMessage,
+        pending_route_resolution: true,
+      };
+
+      render(<MessageBubble message={message} isOwn={false} />);
+
+      expect(
+        screen.getByText(/pending — waiting for route resolution from peer/i)
+      ).toBeInTheDocument();
+    });
+
+    it('should not render placeholder when pending_route_resolution is false', () => {
+      const message: Message = {
+        ...baseMessage,
+        pending_route_resolution: false,
+      };
+
+      render(<MessageBubble message={message} isOwn={false} />);
+
+      expect(
+        screen.queryByText(/pending — waiting for route resolution from peer/i)
+      ).not.toBeInTheDocument();
+    });
+
+    it('should not render placeholder when pending_route_resolution is undefined', () => {
+      const message: Message = {
+        ...baseMessage,
+        // pending_route_resolution intentionally omitted
+      };
+
+      render(<MessageBubble message={message} isOwn={false} />);
+
+      expect(
+        screen.queryByText(/pending — waiting for route resolution from peer/i)
+      ).not.toBeInTheDocument();
+    });
+  });
+
   describe('Mention Highlighting', () => {
     it('should highlight mentions in message content', () => {
       const message: Message = {

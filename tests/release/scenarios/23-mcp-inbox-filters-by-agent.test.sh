@@ -23,9 +23,27 @@
 SID="23-mcp-inbox-filters-by-agent"
 MARKER="kafm2-23-filter-${RUNID}"
 
-# Step 1: send from coord pane. Plain send_command — we don't gate
-# on response; the recipient-side assertions verify the routed shape.
-send_command "$COORD_PANE" "! thrum send 'For implementer only (${MARKER})' --to @test_implementer"
+# Step 1: send from coord pane. Use send_bash_and_wait (gates on
+# "Message sent" bash-stdout) instead of plain send_command. Reason:
+# under heavy gate load, send_command's pane-idle-gated typing can
+# race with a subsequent send_command's `!` prefix — the next `!`
+# keystroke splices into the trailing position of this command's
+# body BEFORE this command's Enter has fully submitted, producing a
+# corrupted `--to @test_implementer!` arg that the daemon rejects
+# as "unknown recipient" (root cause of v0.10.6 RC1 gate
+# reltest-48589 failure; see thrum-rbp6 for the underlying
+# send_command race). Gating on the actual send-confirmation
+# bash-stdout forces this command to fully complete before any
+# subsequent operation can interleave its keystrokes.
+if ! send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
+    "thrum send 'For implementer only (${MARKER})' --to @test_implementer" \
+    "Message sent" 30; then
+  emit_fail "$SID" "impl-inbox-delivered" \
+    "thrum send completes with 'Message sent' confirmation within 30s" \
+    "(send command may have raced — see thrum-rbp6)" \
+    "scenarios/${SID}.test.sh:$LINENO"
+  return 0
+fi
 
 # Step 2: settle COORD before its inbox query — claude may still be
 # rendering the send response.
@@ -49,46 +67,22 @@ else
 fi
 
 # Assertion 2: POSITIVE — impl's inbox should have ≥ 1 match.
-# Drive the impl-side check OUT OF PANE via tmux-exec rather than
-# `! thrum inbox` on the IMPL pane. Reason: the inbound nudge from
-# step 1 wakes claude on IMPL into autonomous-handling mode (read +
-# reply + mark-read), and that flurry of Bash tool calls keeps the
-# pane non-idle for 30-90s. send_bash_and_wait's keystroke-time
-# bash-mode gate races with that handling and intermittently misses
-# (observed flake: claude lands a Bash call mid-render and `!` gets
-# typed as a literal char). Out-of-pane tmux-exec sidesteps the
-# race entirely — the daemon's inbox state is the authoritative
-# truth, and reading it doesn't depend on the recipient pane being
-# idle. Polls in case of brief delivery latency.
-# Write raw JSON to a host-accessible file inside the tmux-exec
-# invocation, then jq it from the host. tmux-exec's capture-pane
-# runs at the default 80-col width and wraps long JSON strings
-# with literal \n that breaks jq parsing.
-out_file="$(mktemp -t kafm2-23.XXXXXX).json"
-_check_impl_inbox() {
-  "$THRUM_RELEASE_REPO_ROOT/scripts/tmux-exec" exec --cwd "$IMPL_REPO" --clean -- \
-    bash -c "env THRUM_NAME=test_implementer thrum inbox --json > '${out_file}' 2>/dev/null" \
-    >/dev/null 2>&1 || true
-  if [ -s "$out_file" ]; then
-    jq -r --arg m "$MARKER" \
-      '[.messages[] | select(.body.content | contains($m))] | length' \
-      < "$out_file" 2>/dev/null
-  fi
-}
-
-elapsed=0
-delivered=false
-while [ "$elapsed" -lt 30 ]; do
-  N=$(_check_impl_inbox || echo 0)
-  if [ "${N:-0}" -ge 1 ]; then
-    delivered=true
-    break
-  fi
-  sleep 2
-  elapsed=$((elapsed + 2))
-done
-
-if $delivered; then
+# Drive the impl-side check OUT OF PANE via assert_inbox_contains
+# rather than `! thrum inbox` on the IMPL pane. Reason: the inbound
+# nudge from step 1 wakes claude on IMPL into autonomous-handling
+# mode (read + reply + mark-read), and that flurry of Bash tool
+# calls keeps the pane non-idle for 30-90s. send_bash_and_wait's
+# keystroke-time bash-mode gate races with that handling and
+# intermittently misses (observed flake: claude lands a Bash call
+# mid-render and `!` gets typed as a literal char). Out-of-pane
+# tmux-exec sidesteps the race entirely — the daemon's inbox state
+# is the authoritative truth, and reading it doesn't depend on the
+# recipient pane being idle.
+#
+# assert_inbox_contains handles the mktemp/jq/poll boilerplate AND
+# the `.messages[]?` null-safety against hints-only daemon responses
+# that the inline version was vulnerable to.
+if assert_inbox_contains test_implementer "$IMPL_REPO" "$MARKER" 30; then
   emit_pass "$SID" "impl-inbox-delivered"
 else
   emit_fail "$SID" "impl-inbox-delivered" \
@@ -96,4 +90,3 @@ else
     "(timeout or marker not delivered to impl inbox)" \
     "scenarios/${SID}.test.sh:$LINENO"
 fi
-rm -f "$out_file"

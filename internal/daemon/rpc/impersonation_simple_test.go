@@ -52,7 +52,7 @@ func TestImpersonation_ValidateUserCanImpersonateAgent(t *testing.T) {
 
 	// Test: User can impersonate agent
 	userID := "user:testuser"
-	err = handler.validateImpersonation(userID, targetAgentID)
+	err = handler.validateImpersonation(context.Background(), userID, targetAgentID)
 	if err != nil {
 		t.Errorf("Expected no error for user impersonating agent, got: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestImpersonation_ValidateAgentCannotImpersonate(t *testing.T) {
 
 	// Test: Agent cannot impersonate another agent
 	callerAgentID := identity.GenerateAgentID(repoID, "caller", "test", "")
-	err = handler.validateImpersonation(callerAgentID, targetAgentID)
+	err = handler.validateImpersonation(context.Background(), callerAgentID, targetAgentID)
 	if err == nil {
 		t.Fatal("Expected error when agent tries to impersonate, got nil")
 	}
@@ -127,7 +127,7 @@ func TestImpersonation_ValidateUserCannotImpersonateUser(t *testing.T) {
 	// Test: User cannot impersonate another user
 	userID := "user:testuser"
 	targetUserID := "user:otheruser"
-	err = handler.validateImpersonation(userID, targetUserID)
+	err = handler.validateImpersonation(context.Background(), userID, targetUserID)
 	if err == nil {
 		t.Fatal("Expected error when user tries to impersonate another user, got nil")
 	}
@@ -157,7 +157,7 @@ func TestImpersonation_ValidateNonexistentAgent(t *testing.T) {
 	// Test: User cannot impersonate non-existent agent
 	userID := "user:testuser"
 	nonexistentAgentID := "agent:nonexistent:fake:FAKEHASH"
-	err = handler.validateImpersonation(userID, nonexistentAgentID)
+	err = handler.validateImpersonation(context.Background(), userID, nonexistentAgentID)
 	if err == nil {
 		t.Fatal("Expected error when impersonating non-existent agent, got nil")
 	}

@@ -19,10 +19,8 @@ func TestLoadThrumConfig_NoFile(t *testing.T) {
 	if cfg.Daemon.LocalOnly {
 		t.Error("expected LocalOnly=false when no config file exists")
 	}
-	// Defaults should be applied
-	if cfg.Daemon.SyncInterval != config.DefaultSyncInterval {
-		t.Errorf("expected SyncInterval=%d, got %d", config.DefaultSyncInterval, cfg.Daemon.SyncInterval)
-	}
+	// Defaults should be applied; retention/compaction defaults are
+	// exercised in T-config-2 / T-config-3.
 	if cfg.Daemon.WSPort != config.DefaultWSPort {
 		t.Errorf("expected WSPort=%q, got %q", config.DefaultWSPort, cfg.Daemon.WSPort)
 	}
@@ -77,10 +75,6 @@ func TestLoadThrumConfig_EmptyJSON(t *testing.T) {
 	if cfg.Daemon.LocalOnly {
 		t.Error("expected LocalOnly=false for empty config")
 	}
-	// Defaults should be applied
-	if cfg.Daemon.SyncInterval != config.DefaultSyncInterval {
-		t.Errorf("expected SyncInterval=%d, got %d", config.DefaultSyncInterval, cfg.Daemon.SyncInterval)
-	}
 	if cfg.Daemon.WSPort != config.DefaultWSPort {
 		t.Errorf("expected WSPort=%q, got %q", config.DefaultWSPort, cfg.Daemon.WSPort)
 	}
@@ -102,6 +96,8 @@ func TestLoadThrumConfig_InvalidJSON(t *testing.T) {
 func TestLoadThrumConfig_FullSchema(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
+	// sync_interval is silently ignored as of v0.10.6 (spec §7.2); verify
+	// the config still loads cleanly when legacy configs carry the key.
 	data := `{
 		"runtime": {"primary": "claude"},
 		"daemon": {
@@ -124,9 +120,6 @@ func TestLoadThrumConfig_FullSchema(t *testing.T) {
 	if !cfg.Daemon.LocalOnly {
 		t.Error("expected LocalOnly=true")
 	}
-	if cfg.Daemon.SyncInterval != 30 {
-		t.Errorf("expected SyncInterval=30, got %d", cfg.Daemon.SyncInterval)
-	}
 	if cfg.Daemon.WSPort != "9999" {
 		t.Errorf("expected WSPort=9999, got %q", cfg.Daemon.WSPort)
 	}
@@ -147,15 +140,98 @@ func TestLoadThrumConfig_BackwardsCompat(t *testing.T) {
 	if !cfg.Daemon.LocalOnly {
 		t.Error("expected LocalOnly=true")
 	}
-	// New fields should get defaults
-	if cfg.Daemon.SyncInterval != config.DefaultSyncInterval {
-		t.Errorf("expected default SyncInterval, got %d", cfg.Daemon.SyncInterval)
-	}
 	if cfg.Daemon.WSPort != config.DefaultWSPort {
 		t.Errorf("expected default WSPort, got %q", cfg.Daemon.WSPort)
 	}
 	if cfg.Runtime.Primary != "" {
 		t.Errorf("expected empty Runtime.Primary, got %q", cfg.Runtime.Primary)
+	}
+}
+
+// TestLoadThrumConfig_LegacySyncIntervalSilentlyIgnored covers T-config-1
+// from the thrum-s6os plan §11 E9 acceptance block. Pre-v0.10.6 user
+// configs frequently carry `daemon.sync_interval`; in v0.10.6 the field
+// is removed from DaemonConfig and the JSON key is silently dropped by
+// json.Unmarshal (unknown fields are ignored). Legacy configs must
+// continue to load without error (spec §7.2).
+func TestLoadThrumConfig_LegacySyncIntervalSilentlyIgnored(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	// 6000s would have been a meaningful (overly-long) interval pre-rearch
+	if err := os.WriteFile(configPath, []byte(`{"daemon":{"sync_interval":6000}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("legacy config with sync_interval should load without error, got: %v", err)
+	}
+	// The key is silently ignored; other defaults still apply.
+	if cfg.Daemon.WSPort != config.DefaultWSPort {
+		t.Errorf("expected default WSPort after legacy config load, got %q", cfg.Daemon.WSPort)
+	}
+}
+
+// TestLoadThrumConfig_EventsRetentionDaysDefault covers T-config-2.
+// Absent from JSON, the field must default to DefaultEventsRetentionDays (2).
+func TestLoadThrumConfig_EventsRetentionDaysDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Daemon.EventsRetentionDays != config.DefaultEventsRetentionDays {
+		t.Errorf("expected EventsRetentionDays=%d, got %d",
+			config.DefaultEventsRetentionDays, cfg.Daemon.EventsRetentionDays)
+	}
+}
+
+// TestLoadThrumConfig_EventsRetentionDays_UserValueOverridesDefault confirms
+// applyDefaults does not stomp a user-supplied value.
+func TestLoadThrumConfig_EventsRetentionDays_UserValueOverridesDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"daemon":{"events_retention_days":7}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Daemon.EventsRetentionDays != 7 {
+		t.Errorf("expected user-supplied EventsRetentionDays=7, got %d", cfg.Daemon.EventsRetentionDays)
+	}
+}
+
+// TestLoadThrumConfig_CompactionSizeThresholdMBDefault covers T-config-3.
+// Absent from JSON, the field must default to
+// DefaultCompactionSizeThresholdMB (10).
+func TestLoadThrumConfig_CompactionSizeThresholdMBDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Daemon.CompactionSizeThresholdMB != config.DefaultCompactionSizeThresholdMB {
+		t.Errorf("expected CompactionSizeThresholdMB=%d, got %d",
+			config.DefaultCompactionSizeThresholdMB, cfg.Daemon.CompactionSizeThresholdMB)
+	}
+}
+
+// TestLoadThrumConfig_CompactionSizeThresholdMB_UserValueOverridesDefault
+// confirms applyDefaults does not stomp a user-supplied value.
+func TestLoadThrumConfig_CompactionSizeThresholdMB_UserValueOverridesDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"daemon":{"compaction_size_threshold_mb":25}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Daemon.CompactionSizeThresholdMB != 25 {
+		t.Errorf("expected user-supplied CompactionSizeThresholdMB=25, got %d", cfg.Daemon.CompactionSizeThresholdMB)
 	}
 }
 
@@ -181,7 +257,7 @@ func TestSaveThrumConfig_WithRuntime(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := &config.ThrumConfig{
 		Runtime: config.RuntimeConfig{Primary: "claude"},
-		Daemon:  config.DaemonConfig{LocalOnly: true, SyncInterval: 30, WSPort: "9999"},
+		Daemon:  config.DaemonConfig{LocalOnly: true, WSPort: "9999"},
 	}
 
 	if err := config.SaveThrumConfig(tmpDir, cfg); err != nil {
@@ -194,9 +270,6 @@ func TestSaveThrumConfig_WithRuntime(t *testing.T) {
 	}
 	if loaded.Runtime.Primary != "claude" {
 		t.Errorf("expected Runtime.Primary=claude, got %q", loaded.Runtime.Primary)
-	}
-	if loaded.Daemon.SyncInterval != 30 {
-		t.Errorf("expected SyncInterval=30, got %d", loaded.Daemon.SyncInterval)
 	}
 	if loaded.Daemon.WSPort != "9999" {
 		t.Errorf("expected WSPort=9999, got %q", loaded.Daemon.WSPort)
@@ -813,5 +886,262 @@ func TestValidatePermissionSupervisors(t *testing.T) {
 					tt.entries, got, tt.wantOK)
 			}
 		})
+	}
+}
+
+// TestDaemonConfig_MaxMessageBodyBytesEffective — thrum-mhwt: 0 →
+// package default; positive → caller value; negative → caller value
+// (call-site interprets negative as "disabled" by gating on > 0).
+func TestDaemonConfig_MaxMessageBodyBytesEffective(t *testing.T) {
+	cases := []struct {
+		name string
+		in   int
+		want int
+	}{
+		{"zero_returns_default", 0, config.DefaultMaxMessageBodyBytes},
+		{"positive_returns_self", 2 * 1024 * 1024, 2 * 1024 * 1024},
+		{"negative_returns_self", -1, -1},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			d := config.DaemonConfig{MaxMessageBodyBytes: tt.in}
+			if got := d.MaxMessageBodyBytesEffective(); got != tt.want {
+				t.Errorf("MaxMessageBodyBytesEffective() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNudgeConfig_SilenceGate(t *testing.T) {
+	cases := []struct {
+		name        string
+		cfg         config.NudgeConfig
+		wantSil     int
+		wantDl      int
+		wantEnabled bool
+	}{
+		{"zero-uses-defaults", config.NudgeConfig{}, 10, 60, true},
+		{"explicit-values", config.NudgeConfig{ChromeQuietSeconds: 5, DispatchDeadlineSeconds: 30}, 5, 30, true},
+		{"negative-silence-disables", config.NudgeConfig{ChromeQuietSeconds: -1}, 0, 0, false},
+		{"negative-deadline-disables", config.NudgeConfig{DispatchDeadlineSeconds: -1}, 0, 0, false},
+		{"silence-set-deadline-default", config.NudgeConfig{ChromeQuietSeconds: 8}, 8, 60, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sil, dl, enabled := tc.cfg.SilenceGate()
+			if sil != tc.wantSil || dl != tc.wantDl || enabled != tc.wantEnabled {
+				t.Fatalf("SilenceGate() = (%d, %d, %v), want (%d, %d, %v)",
+					sil, dl, enabled, tc.wantSil, tc.wantDl, tc.wantEnabled)
+			}
+		})
+	}
+}
+
+// ── A3 / B4+B5 back-port: SyncConfig, validateSync, migrateLegacySync ─────────
+
+// syncHasMechanism returns true when cfg.Daemon.Sync.Mechanisms contains an
+// entry with the given mechanism name (any scope).
+func syncHasMechanism(cfg config.ThrumConfig, mech string) bool {
+	if cfg.Daemon.Sync == nil {
+		return false
+	}
+	for _, m := range cfg.Daemon.Sync.Mechanisms {
+		if m.Mechanism == mech {
+			return true
+		}
+	}
+	return false
+}
+
+// syncHasMechanismScope returns true when cfg contains an entry matching both
+// mechanism and scope.
+func syncHasMechanismScope(cfg config.ThrumConfig, mech, scope string) bool {
+	if cfg.Daemon.Sync == nil {
+		return false
+	}
+	for _, m := range cfg.Daemon.Sync.Mechanisms {
+		if m.Mechanism == mech && m.Scope == scope {
+			return true
+		}
+	}
+	return false
+}
+
+func TestValidateSync(t *testing.T) {
+	cases := []struct {
+		name    string
+		mechs   []config.SyncMechanism
+		wantErr string
+	}{
+		{"a-sync directed rejected", []config.SyncMechanism{{Mechanism: "a-sync", Scope: "directed"}}, "only valid for peer/email"},
+		{"unknown mechanism directed rejected", []config.SyncMechanism{{Mechanism: "carrier-pigeon", Scope: "directed"}}, "only valid for peer/email"},
+		{"directed alongside full rejected", []config.SyncMechanism{{Mechanism: "a-sync", Scope: "full"}, {Mechanism: "peer", Scope: "directed"}}, "directed cannot coexist"},
+		{"peer directed ok", []config.SyncMechanism{{Mechanism: "peer", Scope: "directed"}}, ""},
+		{"email directed ok", []config.SyncMechanism{{Mechanism: "email", Scope: "directed"}}, ""},
+		{"a-sync full ok", []config.SyncMechanism{{Mechanism: "a-sync", Scope: "full"}}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := config.ValidateSync(&config.SyncConfig{Enabled: true, Mechanisms: tc.mechs})
+			if tc.wantErr == "" && err != nil {
+				t.Fatalf("want ok, got %v", err)
+			}
+			if tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)) {
+				t.Fatalf("want err %q, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestMigrateLegacySync(t *testing.T) {
+	// legacy local_only=true gated only a-sync → a-sync removed, peer kept implicitly
+	got := config.MigrateLegacySync(config.ThrumConfig{Daemon: config.DaemonConfig{LocalOnly: true}})
+	if syncHasMechanism(got, "a-sync") {
+		t.Fatal("local_only=true must map to a-sync OFF")
+	}
+	if !got.Daemon.Sync.Enabled {
+		t.Fatal("local_only=true must NOT blanket-disable sync")
+	}
+	// legacy false (today's real default) → a-sync full present
+	got = config.MigrateLegacySync(config.ThrumConfig{Daemon: config.DaemonConfig{LocalOnly: false}})
+	if !syncHasMechanismScope(got, "a-sync", "full") {
+		t.Fatal("local_only=false must map to a-sync(full)")
+	}
+}
+
+func TestApplyDefaults_FreshInstallIsASyncFull(t *testing.T) {
+	cfg := config.ThrumConfig{} // no sync stanza, no legacy bool set
+	config.ApplyDefaultsForTest(&cfg)
+	if !syncHasMechanismScope(cfg, "a-sync", "full") || !cfg.Daemon.Sync.Enabled {
+		t.Fatalf("fresh default must be sync:on a-sync(full), got %+v", cfg.Daemon.Sync)
+	}
+}
+
+func TestValidateSync_DisabledSkipsValidation(t *testing.T) {
+	// A disabled sync with bad mechanisms must be accepted (enabled=false short-circuits)
+	err := config.ValidateSync(&config.SyncConfig{
+		Enabled:    false,
+		Mechanisms: []config.SyncMechanism{{Mechanism: "a-sync", Scope: "directed"}},
+	})
+	if err != nil {
+		t.Fatalf("disabled sync must bypass validation, got %v", err)
+	}
+	// nil (absent stanza, pre-default) must also pass validation.
+	if err := config.ValidateSync(nil); err != nil {
+		t.Fatalf("nil sync must bypass validation, got %v", err)
+	}
+}
+
+func TestLoadThrumConfig_RejectsBadSyncCombo(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	// a-sync + directed is invalid (a-sync is full-only)
+	data := `{"daemon":{"sync":{"enabled":true,"mechanisms":[{"mechanism":"a-sync","scope":"directed"}]}}}`
+	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := config.LoadThrumConfig(tmpDir)
+	if err == nil {
+		t.Fatal("expected error for a-sync+directed combo, got nil")
+	}
+	if !strings.Contains(err.Error(), "only valid for peer/email") {
+		t.Fatalf("expected 'only valid for peer/email' in error, got %v", err)
+	}
+}
+
+// TestLoadThrumConfig_ExplicitSyncDisabledIsPreserved guards the D7/D9
+// no-silent-flip invariant: an explicitly present sync stanza with
+// enabled:false must NOT be migrated back to enabled:true. With Sync as a
+// *SyncConfig, a present stanza makes the pointer non-nil so MigrateLegacySync
+// preserves it; an absent stanza leaves it nil so migration applies the default.
+func TestLoadThrumConfig_ExplicitSyncDisabledIsPreserved(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	data := `{"daemon":{"sync":{"enabled":false}}}`
+	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Daemon.Sync == nil || cfg.Daemon.Sync.Enabled {
+		t.Fatal("explicit sync.enabled=false must be preserved, not migrated back to enabled:true")
+	}
+}
+
+// TestLoadThrumConfig_FreshInstallSyncOnViaLoad is BLOCKING regression #1: a
+// freshly-inited node (config.json with NO sync stanza) must load with sync ON
+// and a-sync(full) — the fresh-init pairing fix. The nil pointer (absent stanza)
+// triggers MigrateLegacySync to allocate the D9 default.
+func TestLoadThrumConfig_FreshInstallSyncOnViaLoad(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	// A fresh init writes daemon settings but no sync stanza.
+	if err := os.WriteFile(configPath, []byte(`{"daemon":{"ws_port":"auto"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Daemon.Sync == nil || !cfg.Daemon.Sync.Enabled {
+		t.Fatalf("fresh install must load with sync enabled, got %+v", cfg.Daemon.Sync)
+	}
+	if !syncHasMechanismScope(*cfg, "a-sync", "full") {
+		t.Fatalf("fresh install must default to a-sync(full), got %+v", cfg.Daemon.Sync)
+	}
+}
+
+// TestSaveThrumConfig_HandEditedDisableSurvivesUnrelatedSave is BLOCKING
+// regression #2 (no-flip across save): a hand-edited sync:{enabled:false} must
+// survive an unrelated SaveThrumConfig + reload, NOT flip back on. With the
+// pointer this holds because the explicit &{false} marshals back as a present
+// stanza (omitempty only omits nil), so reload sees it non-nil and preserves it.
+func TestSaveThrumConfig_HandEditedDisableSurvivesUnrelatedSave(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"daemon":{"sync":{"enabled":false}}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Daemon.Sync == nil || cfg.Daemon.Sync.Enabled {
+		t.Fatalf("precondition: explicit disable must load as disabled, got %+v", cfg.Daemon.Sync)
+	}
+	// Make an unrelated change and save (simulates any unrelated command).
+	cfg.Daemon.LogLevel = "debug"
+	if err := config.SaveThrumConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	reloaded, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if reloaded.Daemon.Sync == nil || reloaded.Daemon.Sync.Enabled {
+		t.Fatalf("hand-edited sync.enabled=false must survive an unrelated save (no silent flip), got %+v", reloaded.Daemon.Sync)
+	}
+}
+
+func TestSyncConfig_ExposureFields_RoundTrip(t *testing.T) {
+	in := config.SyncConfig{
+		Enabled:                true,
+		DetectedVisibility:     "private",
+		DetectedRemote:         "github.com/owner/repo",
+		PublicExposureOverride: "github.com/owner/repo",
+	}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out config.SyncConfig
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.DetectedVisibility != "private" || out.DetectedRemote != "github.com/owner/repo" ||
+		out.PublicExposureOverride != "github.com/owner/repo" {
+		t.Fatalf("round-trip mismatch: %+v", out)
 	}
 }

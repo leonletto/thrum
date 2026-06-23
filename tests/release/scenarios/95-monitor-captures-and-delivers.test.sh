@@ -109,71 +109,81 @@ rm -f "$inbox_neg"
 # send pipeline.
 echo "ALERT: disk usage at 95% — ${ALERT_MARKER}" >> "$KAFM11_LOG_FILE"
 
-# Poll test_coordinator_main's inbox for the marker. Up to 60s in
-# 3s steps — gives the tail poll + daemon send a comfortable budget
-# without burning wallclock when delivery is fast.
-inbox_pos="$(mktemp -t kafm11-95-pos.XXXXXX).json"
-elapsed=0
-delivered=0
-delivered_agent_id=""
-while [ "$elapsed" -lt 60 ]; do
-  capture_thrum_json "$COORD_REPO" test_coordinator_main "$inbox_pos" \
-    inbox >/dev/null 2>&1 || true
-  if [ -s "$inbox_pos" ]; then
-    # Single jq pass: count matches AND grab the first match's
-    # caller agent_id. The agent_id contract for monitor-delivered
-    # messages is "monitor:<name>" per
-    # internal/daemon/monitor/delivery.go:57. We pin the prefix in
-    # a follow-up assertion to defend against a regression that
-    # routed the message but lost the monitor-as-caller stamp.
-    delivered=0; delivered_agent_id=""
-    read -r delivered delivered_agent_id < <(
-      jq -r --arg m "$ALERT_MARKER" '
-        [.messages[]? | select(.body.content // "" | contains($m))]
-        | [length, (.[0].agent_id // "")]
-        | @tsv' < "$inbox_pos" 2>/dev/null
-    ) || true
-    case "$delivered" in
-      ''|*[!0-9]*) delivered=0 ;;
-    esac
-    if [ "$delivered" -gt 0 ]; then
-      break
-    fi
-  fi
-  sleep 3
-  elapsed=$((elapsed + 3))
-done
+# Poll coord's claude JSONL for two independent witnesses of the
+# monitor-delivered message. Pivots away from the prior
+# `thrum inbox --json` via tmux-exec approach (which intermittently
+# returned hints-only responses under heavy gate load — the
+# daemon's RefreshLocalIdentity fails on the tmux-exec pool pane's
+# caller-identity, hints accumulate, the inbox RPC is never
+# reached, response has no .messages field). The JSONL surface is
+# both deterministic (encode_cwd locates the project dir; the
+# wait_for_jsonl_match helper handles file rotation via glob) AND
+# free of the load-flake mode the inbox-via-tmux-exec path hits.
+#
+# Two witnesses (one per original assertion):
+#
+#   1. matching-line-delivered-as-message: the ALERT marker
+#      appears in a user-message OR bash-stdout entry in COORD's
+#      JSONL. claude autonomously runs `thrum inbox --unread` in
+#      response to the inbound nudge (visible in the v0.10.6 RC1
+#      pane snapshot at /tmp/thrum-release-failures/reltest-8091/
+#      95-monitor-captures-and-delivers--*--COORD_PANE.snap as
+#      "Ran 2 shell commands"), so the bash-stdout output of
+#      that inbox dump contains the marker if delivery succeeded.
+#      Also matches user-message content (e.g. claude
+#      paraphrasing the alert in its response stream).
+#
+#   2. delivered-caller-id-monitor-prefixed: the daemon's
+#      inbound-message nudge to claude is formatted as
+#      "New message from @<sender> -- run `thrum inbox --unread`
+#      to read" (see internal/daemon/notifier or similar), and
+#      for monitor-delivered messages the sender is
+#      "monitor:<name>" per
+#      internal/daemon/monitor/delivery.go:57. This nudge lands
+#      as a user-message in claude's JSONL; the substring proves
+#      both that the message routed AND that its caller_id
+#      carries the monitor: prefix.
+expected_caller="monitor:${KAFM11_MON_NAME}"
 
-case "${delivered:-0}" in
-  ''|*[!0-9]*) delivered=0 ;;
-esac
-if [ "$delivered" -gt 0 ]; then
+# Marker witness: claude autonomously runs `thrum inbox --unread` in
+# response to the inbound nudge (visible in pane snapshots as "Ran 2
+# shell commands"). The full message body — including the
+# RUNID-anchored marker — lands in claude's JSONL via the Bash tool's
+# tool_result entry (under .message.content[].content for user-type
+# entries with tool_result blocks). Verified via direct JSONL
+# inspection of v0.10.6 RC1 gate reltest-20861 fixture: the marker
+# `kafm11-deliver-marker-<RUNID>` appears verbatim in the
+# tool_result content of claude's autonomous Bash call.
+#
+# Match shape: stringify the entire .message.content (which works
+# for both user-message tool_result arrays and assistant text
+# arrays) and check for substring. This is broader than
+# wait_for_bash_stdout_contains (which is `!`-prefix-specific and
+# does NOT match autonomous Bash tool_result entries — the prior
+# pivot to it was misaligned with claude's actual transcript shape
+# here).
+marker_filter='(.message.content // "") | tostring | contains("'"$ALERT_MARKER"'")'
+if wait_for_jsonl_match "$COORD_REPO" "$marker_filter" 60 >/dev/null; then
   emit_pass "$SID" "matching-line-delivered-as-message"
 else
   emit_fail "$SID" "matching-line-delivered-as-message" \
-    "≥1 inbox message containing '${ALERT_MARKER}' within 60s" \
-    "got: 0 (raw inbox: $(printf '%s' "$(cat "$inbox_pos" 2>/dev/null)" | tr '\n' ' ' | head -c 240))" \
+    "COORD JSONL entry containing '${ALERT_MARKER}' within 60s" \
+    "(no matching JSONL entry — monitor may not have delivered)" \
     "scenarios/${SID}.test.sh:$LINENO"
-  rm -f "$inbox_pos"
   return 0
 fi
 
-# Caller-id contract: monitor-delivered messages stamp
-# .agent_id = "monitor:<name>". Pinned separately from the delivery
-# count so a regression that routes the content but drops the
-# monitor-as-caller marker (e.g. a refactor that switched to the
-# generic system caller) is attributable.
-expected_caller="monitor:${KAFM11_MON_NAME}"
-if [ "$delivered_agent_id" = "$expected_caller" ]; then
+nudge_filter='.type == "user"
+        and (.message.content | type == "string")
+        and (.message.content | contains("New message from @'"$expected_caller"'"))'
+if wait_for_jsonl_match "$COORD_REPO" "$nudge_filter" 30 >/dev/null; then
   emit_pass "$SID" "delivered-caller-id-monitor-prefixed"
 else
   emit_fail "$SID" "delivered-caller-id-monitor-prefixed" \
-    "delivered message .agent_id == '${expected_caller}'" \
-    "got: '${delivered_agent_id}'" \
+    "COORD JSONL nudge containing 'New message from @${expected_caller}' within 30s" \
+    "(marker delivered but nudge text didn't carry the monitor: caller_id prefix)" \
     "scenarios/${SID}.test.sh:$LINENO"
 fi
-
-rm -f "$inbox_pos"
 
 # Drain inbox so subsequent scenarios see a clean coord state. The
 # scenario 28 read-all sub-assertion runs much earlier in the suite

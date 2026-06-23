@@ -90,10 +90,23 @@ func TestEnsureRedirects_SkipsBeadsWhenNotPresent(t *testing.T) {
 // canonical "bd prime --hook-json" SessionStart hook into the worktree's
 // .claude/settings.json. The hookmerge.BdBinaryAvailable function variable
 // is stubbed so the test does not depend on the CI host's binary set.
+//
+// thrum-yx8r: HOME is redirected to an isolated temp dir so the plugin guard
+// (DefaultGuardPaths reads ~/.claude/settings.json via os.UserHomeDir, which
+// honors $HOME on Unix) cannot see the host's real settings — on machines
+// with the beads marketplace plugin enabled, InstallBdHook correctly skipped
+// and this test failed (rc.11-rc.13 waiver). The home-guard skip outcome is
+// pinned by TestEnsureRedirects_SkipsBdHookWhenHomePluginGuardActive below.
 func TestEnsureRedirects_InstallsBdHookWhenAvailable(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	original := hookmerge.BdBinaryAvailable
 	hookmerge.BdBinaryAvailable = func() bool { return true }
 	t.Cleanup(func() { hookmerge.BdBinaryAvailable = original })
+	// Pin --hook-json support so the asserted canonical form is host-independent
+	// (released bd 1.0.4 lacks the flag and would emit bare `bd prime`).
+	origHookJSON := hookmerge.BdSupportsHookJSON
+	hookmerge.BdSupportsHookJSON = func() bool { return true }
+	t.Cleanup(func() { hookmerge.BdSupportsHookJSON = origHookJSON })
 
 	mainRepo := t.TempDir()
 	thrumDir := filepath.Join(mainRepo, ".thrum")
@@ -181,6 +194,66 @@ func TestEnsureRedirects_SkipsBdHookWhenMarketplacePluginActive(t *testing.T) {
 		if c.Command == hookmerge.CanonicalBdCommand {
 			t.Errorf("bd hook installed despite marketplace plugin guard: %+v", cmds)
 		}
+	}
+}
+
+// TestEnsureRedirects_SkipsBdHookWhenHomePluginGuardActive pins the
+// thrum-yx8r home-guard outcome: the beads marketplace plugin enabled in
+// ~/.claude/settings.json (the DefaultGuardPaths home entry) must skip the
+// bd hook install — while the thrum hooks still land. This is exactly the
+// host condition that made InstallsBdHookWhenAvailable fail on dogfood
+// machines; here it is the asserted behavior against a controlled fake HOME.
+func TestEnsureRedirects_SkipsBdHookWhenHomePluginGuardActive(t *testing.T) {
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	if err := os.MkdirAll(filepath.Join(fakeHome, ".claude"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fakeHome, ".claude", "settings.json"),
+		[]byte(`{"enabledPlugins":{"beads@beads-marketplace":true}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	original := hookmerge.BdBinaryAvailable
+	hookmerge.BdBinaryAvailable = func() bool { return true }
+	t.Cleanup(func() { hookmerge.BdBinaryAvailable = original })
+
+	mainRepo := t.TempDir()
+	thrumDir := filepath.Join(mainRepo, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	cfgJSON := `{"worktrees":{"base_path":"/tmp","beads_enabled":true,"thrum_enabled":true}}`
+	if err := os.WriteFile(filepath.Join(thrumDir, "config.json"), []byte(cfgJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	wt := t.TempDir()
+	if err := os.WriteFile(filepath.Join(wt, ".git"),
+		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EnsureRedirects(wt, mainRepo); err != nil {
+		t.Fatalf("EnsureRedirects: %v", err)
+	}
+
+	settings, err := hookmerge.Load(filepath.Join(wt, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatalf("Load worktree settings: %v", err)
+	}
+	cmds := hookmerge.ExtractCommands(settings)
+	foundThrum := false
+	for _, c := range cmds {
+		if c.Command == hookmerge.CanonicalBdCommand {
+			t.Errorf("bd hook installed despite home plugin guard (~/.claude/settings.json): %+v", cmds)
+		}
+		if strings.Contains(c.Command, "thrum-startup.sh") {
+			foundThrum = true
+		}
+	}
+	if !foundThrum {
+		t.Errorf("thrum hooks must still install when only the bd hook is guarded; got %+v", cmds)
 	}
 }
 

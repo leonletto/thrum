@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -215,5 +216,129 @@ func TestRunPostLaunchInject_NotReady_NoSendKeys(t *testing.T) {
 
 	if got := calls(); len(got) != 0 {
 		t.Errorf("expected zero send-keys when pane is in trust-gate state; got %d: %+v", len(got), got)
+	}
+}
+
+// --- populateSessionCwdFromIdentity tests ---
+//
+// Defensive sessionCwds populate for externally-created tmux sessions
+// (raw `tmux new-session` + `thrum tmux launch`, where HandleCreate's
+// canonical populate at tmux.go:352 never ran). Without this populate,
+// runPostLaunchInject's emitIdentityBanner bails out with map_hit=false
+// — no banner, no /thrum:prime, no SessionStart hook post-restart
+// loud preamble.
+
+// makePopulateHandler builds a TmuxHandler rooted at a fresh thrumDir =
+// $worktree/.thrum, mirroring the production layout where AllIdentityDirs
+// searches $thrumDir/identities relative to its parent. Returns the
+// handler + the worktree dir (= the absolute path resolveWorktreePath
+// will produce) + a cleanup. The optional `tmuxSession` in the identity
+// file is what findIdentityForSession matches against.
+func makePopulateHandler(t *testing.T, agentName, tmuxSession string) (*TmuxHandler, string) {
+	t.Helper()
+	worktree := t.TempDir()
+	thrumDir := filepath.Join(worktree, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if agentName != "" {
+		writeTestIdentityFile(t, worktree, agentName, 0, tmuxSession)
+	}
+	return NewTmuxHandler(thrumDir, nil), worktree
+}
+
+// TestPopulateSessionCwdFromIdentity_PopulatesWhenAbsent: the dominant
+// case — sessionCwds[name] is empty and a matching identity file exists.
+// The helper looks up the identity, resolves the worktree, and writes
+// the binding. Pins the fix for v0.10.6 RC1 scen 03 root cause.
+func TestPopulateSessionCwdFromIdentity_PopulatesWhenAbsent(t *testing.T) {
+	h, worktree := makePopulateHandler(t, "coord", "sess:0.0")
+
+	populated := h.populateSessionCwdFromIdentity(context.Background(), "sess")
+	if !populated {
+		t.Fatal("expected populated=true when sessionCwds is empty and identity is present")
+	}
+	h.sessionMu.RLock()
+	got, ok := h.sessionCwds["sess"]
+	h.sessionMu.RUnlock()
+	if !ok || got != worktree {
+		t.Fatalf("expected sessionCwds[sess]=%q after populate; got ok=%v val=%q", worktree, ok, got)
+	}
+	// cwdSessions side of the binding too — RestoreBinding writes both.
+	h.sessionMu.RLock()
+	gotSess, ok := h.cwdSessions[worktree]
+	h.sessionMu.RUnlock()
+	if !ok || gotSess != "sess" {
+		t.Fatalf("expected cwdSessions[%q]=sess after populate; got ok=%v val=%q", worktree, ok, gotSess)
+	}
+}
+
+// TestPopulateSessionCwdFromIdentity_NoOpWhenAlreadySet: HandleCreate
+// already populated the binding for thrum-managed sessions. The helper
+// MUST NOT overwrite — preserves the canonical populate byte-for-byte.
+func TestPopulateSessionCwdFromIdentity_NoOpWhenAlreadySet(t *testing.T) {
+	h, worktree := makePopulateHandler(t, "coord", "sess:0.0")
+	const preExistingCwd = "/some/other/preexisting/cwd"
+	h.sessionMu.Lock()
+	h.sessionCwds["sess"] = preExistingCwd
+	h.sessionMu.Unlock()
+
+	populated := h.populateSessionCwdFromIdentity(context.Background(), "sess")
+	if populated {
+		t.Fatal("expected populated=false when sessionCwds[sess] already set")
+	}
+	h.sessionMu.RLock()
+	got := h.sessionCwds["sess"]
+	h.sessionMu.RUnlock()
+	if got != preExistingCwd {
+		t.Fatalf("expected sessionCwds[sess] preserved at %q; got %q (helper overwrote!)", preExistingCwd, got)
+	}
+	// Should also not have established the unwanted worktree binding.
+	if _, exists := func() (string, bool) {
+		h.sessionMu.RLock()
+		defer h.sessionMu.RUnlock()
+		v, ok := h.cwdSessions[worktree]
+		return v, ok
+	}(); exists {
+		t.Errorf("helper should not have written cwdSessions[worktree] when it skipped the populate")
+	}
+}
+
+// TestPopulateSessionCwdFromIdentity_NoIdentityFound: no identity file
+// matches the session name. Helper returns false; map stays empty.
+// Outer safety net (emitIdentityBanner's skip-on-empty) is still the
+// final guard in this case.
+func TestPopulateSessionCwdFromIdentity_NoIdentityFound(t *testing.T) {
+	// No identity file at all.
+	h, _ := makePopulateHandler(t, "", "")
+
+	populated := h.populateSessionCwdFromIdentity(context.Background(), "sess")
+	if populated {
+		t.Fatal("expected populated=false when no identity file is present")
+	}
+	h.sessionMu.RLock()
+	_, ok := h.sessionCwds["sess"]
+	h.sessionMu.RUnlock()
+	if ok {
+		t.Error("expected sessionCwds[sess] to remain absent when no identity matched")
+	}
+}
+
+// TestPopulateSessionCwdFromIdentity_TmuxSessionMismatch: an identity
+// file exists but its TmuxSession field doesn't match the queried name.
+// findIdentityForSession returns nothing; the helper returns false.
+// Guards against accidental cross-pollution between adjacent agents.
+func TestPopulateSessionCwdFromIdentity_TmuxSessionMismatch(t *testing.T) {
+	h, _ := makePopulateHandler(t, "coord", "different-session:0.0")
+
+	populated := h.populateSessionCwdFromIdentity(context.Background(), "sess")
+	if populated {
+		t.Fatal("expected populated=false when identity's TmuxSession field doesn't match the queried name")
+	}
+	h.sessionMu.RLock()
+	_, ok := h.sessionCwds["sess"]
+	h.sessionMu.RUnlock()
+	if ok {
+		t.Error("expected sessionCwds[sess] to remain absent on TmuxSession mismatch")
 	}
 }

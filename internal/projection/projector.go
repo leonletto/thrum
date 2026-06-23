@@ -9,20 +9,90 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/jsonl"
+	"github.com/leonletto/thrum/internal/recipientgate"
+	"github.com/leonletto/thrum/internal/sync/pending"
 	"github.com/leonletto/thrum/internal/types"
 )
 
 // Projector replays JSONL events into SQLite.
 type Projector struct {
-	db *safedb.DB
+	db              *safedb.DB
+	syncDir         string           // set via SetPendingPool; empty disables pending-pool logic
+	pendingPool     *pending.Pool    // nil when sync is not configured
+	pendingResolver pending.Resolver // nil when sync is not configured
 }
 
 // NewProjector creates a new projector for the given database.
 func NewProjector(db *safedb.DB) *Projector {
 	return &Projector{db: db}
+}
+
+// SetPendingPool wires the pending-pool and the sync worktree directory into
+// the projector. Once set, applyMessageCreate checks whether referenced state
+// files are present on disk; missing references cause the message row to be
+// inserted with pending_route_resolution=1 and the message to be added to the
+// pool. Callers without sync (legacy code paths, tests that don't need
+// pending-pool behaviour) can safely omit this call — the projector nil-checks
+// both fields on every ingest.
+func (p *Projector) SetPendingPool(syncDir string, pool *pending.Pool) {
+	p.syncDir = syncDir
+	p.pendingPool = pool
+}
+
+// SetPendingResolver wires the Resolver implementation. Must be called after
+// SetPendingPool. The resolver is invoked by ResolveOnStateLand calls that are
+// triggered from applyAgentRegister and applyGroupCreate handlers.
+func (p *Projector) SetPendingResolver(resolver pending.Resolver) {
+	p.pendingResolver = resolver
+}
+
+// ProjectionResolver implements pending.Resolver by checking whether all
+// BlockedBy state files are now present on disk, then clearing
+// pending_route_resolution on the message row.
+type ProjectionResolver struct {
+	projector *Projector
+}
+
+// NewProjectionResolver returns a ProjectionResolver backed by p. The resolver
+// is constructed by the caller (typically cmd/thrum/main.go after SetPendingPool)
+// and passed back via SetPendingResolver, keeping the coupling as a value not a
+// circular reference.
+func NewProjectionResolver(p *Projector) *ProjectionResolver {
+	return &ProjectionResolver{projector: p}
+}
+
+// Resolve checks whether all msg.BlockedBy IDs are now present on disk as
+// state/agents/<id>.json or state/bridge-groups/<id>.json. If yes, it clears
+// pending_route_resolution on the messages row and returns (true, nil).
+// If any are still missing, it returns (false, nil) leaving the orphan in the
+// pool. A non-nil error alongside true is never returned per spec §5.4.
+func (r *ProjectionResolver) Resolve(ctx context.Context, msg pending.OrphanedMessage) (bool, error) {
+	p := r.projector
+	if p.syncDir == "" {
+		// No sync dir configured — resolve unconditionally to unblock pool.
+		return true, nil
+	}
+
+	// Check all BlockedBy IDs are now present on disk.
+	for _, id := range msg.BlockedBy {
+		if !stateFileExists(p.syncDir, id) {
+			return false, nil
+		}
+	}
+
+	// All prerequisites are satisfied — clear the pending flag.
+	_, err := p.db.ExecContext(ctx,
+		`UPDATE messages SET pending_route_resolution = 0 WHERE message_id = ?`,
+		msg.MessageID,
+	)
+	if err != nil {
+		return false, fmt.Errorf("projection resolver: clear pending flag for %s: %w", msg.MessageID, err)
+	}
+	return true, nil
 }
 
 // Apply applies a single event to the database.
@@ -164,18 +234,54 @@ func (p *Projector) applyMessageCreate(ctx context.Context, data json.RawMessage
 		return fmt.Errorf("unmarshal message.create: %w", err)
 	}
 
+	// Determine whether any referenced state files are missing on disk.
+	// This check is only active when SetPendingPool has been called (syncDir != "").
+	// When the projector is used without sync (tests, legacy paths), skip entirely.
+	pendingFlag := 0
+	var missingIDs []string
+	if p.syncDir != "" && p.pendingPool != nil {
+		// Collect all IDs that need state-file presence: author + recipients.
+		// We only check IDs that the message explicitly references; broadcast
+		// messages have no specific recipient files to check and are not flagged.
+		candidates := make([]string, 0, 1+len(event.Recipients))
+		candidates = append(candidates, event.AgentID)
+		candidates = append(candidates, event.Recipients...)
+		// Deduplicate
+		seen := make(map[string]bool, len(candidates))
+		for _, id := range candidates {
+			if id == "" || seen[id] {
+				continue
+			}
+			seen[id] = true
+			if !stateFileExists(p.syncDir, id) {
+				missingIDs = append(missingIDs, id)
+			}
+		}
+		if len(missingIDs) > 0 {
+			pendingFlag = 1
+		}
+	}
+
 	tx, err := p.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Insert message
-	_, err = tx.Exec(`
-		INSERT INTO messages (
+	// Insert message. OR IGNORE + the rows-affected dup-no-op below make this
+	// idempotent (thrum-lv9x): cross-host-relayed history carries the same
+	// message_id under DIFFERENT event_ids (the i057-class dup — 0.11 prevents
+	// the mint via rpcrouter, absent on this line, and the dups are already in
+	// shared history), so a plain INSERT aborted the whole sync-apply batch
+	// with a messages.message_id UNIQUE error, permanently pinning the inbound
+	// checkpoint and feeding the notify-retry storm. Every other projector
+	// write is already idempotent (upsert / OR IGNORE); this was the last one.
+	res, err := tx.Exec(`
+		INSERT OR IGNORE INTO messages (
 			message_id, thread_id, agent_id, session_id, created_at,
-			body_format, body_content, body_structured, authored_by, disclosed
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			body_format, body_content, body_structured, authored_by, disclosed,
+			pending_route_resolution
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		event.MessageID,
 		sqlNullString(event.ThreadID),
@@ -187,9 +293,18 @@ func (p *Projector) applyMessageCreate(ctx context.Context, data json.RawMessage
 		sqlNullString(event.Body.Structured),
 		sqlNullString(event.AuthoredBy),
 		boolToInt(event.Disclosed),
+		pendingFlag,
 	)
 	if err != nil {
 		return fmt.Errorf("insert message: %w", err)
+	}
+	if n, raErr := res.RowsAffected(); raErr == nil && n == 0 {
+		// Duplicate message_id: first write wins, this create is a no-op.
+		// Skip scopes/refs/deliveries/self-row AND the post-commit pending-pool
+		// registration — the apply that landed the row already did all of it.
+		// Returning nil (not an error) is the load-bearing part: the sync apply
+		// batch continues and the checkpoint advances past the dup.
+		return tx.Commit()
 	}
 
 	// Insert scopes
@@ -241,7 +356,45 @@ func (p *Projector) applyMessageCreate(ctx context.Context, data json.RawMessage
 		}
 	}
 
-	return tx.Commit()
+	// thrum-b6qw (port of tcqw Option C): always create a read-stamped
+	// self-delivery row for the author, even when they are not in their own
+	// Recipients (the broadcast/legacy case — HandleSend strips self from
+	// broadcast recipients, so the in-loop self-mention branch above never
+	// fires for those). The author has already "seen" their own send, so it
+	// must never count as unread; the row drops out of --unread without a
+	// markRead round-trip. Idempotent via OR IGNORE: a no-op when the loop
+	// already inserted the author's row (author-in-Recipients). This stops the
+	// self-authored no-delivery-row class from accumulating going forward;
+	// T2 (receipt gate arm) + the v40 backfill clear the historical rows.
+	if event.AgentID != "" {
+		if _, err = tx.Exec(`
+			INSERT OR IGNORE INTO message_deliveries (
+				message_id, recipient_agent_id, delivered_at, seen_at, read_at
+			) VALUES (?, ?, ?, ?, ?)
+		`, event.MessageID, event.AgentID, event.Timestamp, event.Timestamp, event.Timestamp); err != nil {
+			return fmt.Errorf("insert author self-delivery: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	// After successful commit: if the message referenced missing state files,
+	// register it with the pending pool so ResolveOnStateLand can retry once
+	// the missing files arrive. This is synchronous and safe on the
+	// event-ingest goroutine (per anti-pattern §7: no goroutine spawning).
+	if pendingFlag == 1 && p.pendingPool != nil {
+		p.pendingPool.Add(pending.OrphanedMessage{
+			MessageID:  event.MessageID,
+			AuthorID:   event.AgentID,
+			Recipients: event.Recipients,
+			BlockedBy:  missingIDs,
+			LandedAt:   time.Now().UTC(),
+		})
+	}
+
+	return nil
 }
 
 func (p *Projector) applyMessageEdit(ctx context.Context, data json.RawMessage) error {
@@ -384,54 +537,21 @@ func (p *Projector) applyMessageReceipt(ctx context.Context, data json.RawMessag
 	// read_at as usual. If no row exists and the agent is not a legitimate
 	// recipient, no row is created and the UPDATE below is also a no-op —
 	// the receipt event is still stored in JSONL + events for auditability.
+	//
+	// thrum-1846: the legitimacy predicate now lives in internal/recipientgate
+	// (correlated to alias `m`), shared verbatim with HandleMarkRead's
+	// receipt-EMISSION gate so the two can never drift. The OR-arm logic is
+	// byte-equivalent to the original inline qb62 gate; only the message-id
+	// binding moved from a literal `?` to the correlated `m.message_id`, which
+	// is why the INSERT now selects from `messages m WHERE m.message_id = ?`
+	// (the existence check above guarantees exactly that one row matches).
+	insertArgs := append([]any{event.AgentID, event.Timestamp, event.MessageID}, recipientgate.Args(event.AgentID)...)
 	_, err = tx.Exec(`
 		INSERT OR IGNORE INTO message_deliveries (message_id, recipient_agent_id, delivered_at)
-		SELECT ?, ?, ?
-		WHERE EXISTS (
-			SELECT 1 FROM message_refs mr
-			WHERE mr.message_id = ?
-			  AND mr.ref_type = 'mention'
-			  AND (
-			    mr.ref_value = ?
-			    OR mr.ref_value = (SELECT role FROM agents WHERE agent_id = ? LIMIT 1)
-			  )
-		) OR EXISTS (
-			SELECT 1 FROM message_scopes ms
-			WHERE ms.message_id = ?
-			  AND ms.scope_type = 'broadcast'
-		) OR EXISTS (
-			SELECT 1 FROM message_scopes ms
-			JOIN groups g ON g.name = ms.scope_value
-			JOIN group_members gm ON g.group_id = gm.group_id
-			WHERE ms.message_id = ?
-			  AND ms.scope_type = 'group'
-			  AND (
-			    (gm.member_type = 'agent' AND gm.member_value = ?)
-			    OR (gm.member_type = 'role' AND gm.member_value = (SELECT role FROM agents WHERE agent_id = ? LIMIT 1))
-			  )
-		) OR (
-			-- Legacy-broadcast: the message has no targeting whatsoever
-			-- (no mention refs, no broadcast/group scopes). Any agent can
-			-- mark it read. Mirrors the legacy-broadcast branch in
-			-- buildForAgentClause (message.go) so inbox visibility and
-			-- delivery-gate semantics stay aligned.
-			NOT EXISTS (
-				SELECT 1 FROM message_refs mr_lb
-				WHERE mr_lb.message_id = ?
-				  AND mr_lb.ref_type IN ('mention', 'group', 'broadcast')
-			)
-			AND NOT EXISTS (
-				SELECT 1 FROM message_scopes ms_lb
-				WHERE ms_lb.message_id = ?
-				  AND ms_lb.scope_type IN ('group', 'broadcast')
-			)
-		)
-	`,
-		event.MessageID, event.AgentID, event.Timestamp,
-		event.MessageID, event.AgentID, event.AgentID,
-		event.MessageID,
-		event.MessageID, event.AgentID, event.AgentID,
-		event.MessageID, event.MessageID,
+		SELECT m.message_id, ?, ?
+		FROM messages m
+		WHERE m.message_id = ? AND `+recipientgate.Predicate,
+		insertArgs...,
 	)
 	if err != nil {
 		return fmt.Errorf("ensure message delivery: %w", err)
@@ -521,6 +641,14 @@ func (p *Projector) applyAgentRegister(ctx context.Context, data json.RawMessage
 		return fmt.Errorf("insert agent: %w", err)
 	}
 
+	// When a new agent lands on disk its state/agents/<id>.json may already
+	// exist (written by the writer before the event arrived here), or the
+	// register event itself is the signal that the agent is now known. Either
+	// way, attempt to resolve any orphans blocked on this agent_id.
+	if p.pendingPool != nil && p.pendingResolver != nil {
+		p.pendingPool.ResolveOnStateLand(ctx, []string{event.AgentID}, p.pendingResolver)
+	}
+
 	return nil
 }
 
@@ -530,8 +658,16 @@ func (p *Projector) applySessionStart(ctx context.Context, data json.RawMessage)
 		return fmt.Errorf("unmarshal agent.session.start: %w", err)
 	}
 
+	// INSERT OR IGNORE: a peer-replicated agent.session.start for a session
+	// that already exists locally (same session_id arriving via sync after the
+	// originating daemon wrote it) is a no-op. session_id is by ULID
+	// construction unique to one logical session, and started_at is immutable
+	// for that session — there is nothing to update. We deliberately do NOT
+	// UPSERT last_seen_at from the event timestamp because other apply paths
+	// touch last_seen_at independently; a late-arriving peer copy of the start
+	// event could regress freshness if it overwrote a newer value.
 	_, err := p.db.ExecContext(ctx, `
-		INSERT INTO sessions (session_id, agent_id, started_at, last_seen_at)
+		INSERT OR IGNORE INTO sessions (session_id, agent_id, started_at, last_seen_at)
 		VALUES (?, ?, ?, ?)
 	`,
 		event.SessionID,
@@ -904,6 +1040,12 @@ func (p *Projector) applyGroupCreate(ctx context.Context, data json.RawMessage) 
 		return fmt.Errorf("insert group: %w", err)
 	}
 
+	// A new group landing may unblock orphans whose bridge-group state file
+	// is now present (or will arrive shortly). Attempt resolution synchronously.
+	if p.pendingPool != nil && p.pendingResolver != nil {
+		p.pendingPool.ResolveOnStateLand(ctx, []string{event.GroupID}, p.pendingResolver)
+	}
+
 	return nil
 }
 
@@ -997,6 +1139,22 @@ func (p *Projector) applyGroupDelete(ctx context.Context, data json.RawMessage) 
 	}
 
 	return nil
+}
+
+// stateFileExists reports whether a state file for the given ID is present on
+// disk in the sync worktree. It checks both state/agents/<id>.json and
+// state/bridge-groups/<id>.json so it handles both agent and bridge-group IDs
+// without requiring the caller to know which kind the ID refers to.
+func stateFileExists(syncDir, id string) bool {
+	agentPath := filepath.Join(syncDir, "state", "agents", id+".json")
+	if _, err := os.Stat(agentPath); err == nil {
+		return true
+	}
+	bgPath := filepath.Join(syncDir, "state", "bridge-groups", id+".json")
+	if _, err := os.Stat(bgPath); err == nil {
+		return true
+	}
+	return false
 }
 
 // sqlNullString returns a sql.NullString for optional string fields.

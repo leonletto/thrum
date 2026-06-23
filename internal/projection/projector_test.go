@@ -12,6 +12,7 @@ import (
 	"github.com/leonletto/thrum/internal/jsonl"
 	"github.com/leonletto/thrum/internal/projection"
 	"github.com/leonletto/thrum/internal/schema"
+	"github.com/leonletto/thrum/internal/sync/pending"
 	"github.com/leonletto/thrum/internal/types"
 )
 
@@ -372,6 +373,53 @@ func TestProjector_ApplySessionStart(t *testing.T) {
 	}
 	if startedAt != "2026-01-01T00:00:00Z" {
 		t.Errorf("Expected started_at '2026-01-01T00:00:00Z', got '%s'", startedAt)
+	}
+}
+
+// TestProjector_ApplySessionStart_DuplicateIsNoOp guards thrum-9jcb.3: peer
+// sync replicates agent.session.start events for sessions that may already
+// exist locally (same session_id arriving from a peer daemon after the
+// originating daemon wrote it). Before the INSERT OR IGNORE fix, the second
+// apply hit a UNIQUE constraint failure on sessions.session_id, aborting the
+// remainder of the sync batch and forcing a retry round-trip.
+func TestProjector_ApplySessionStart_DuplicateIsNoOp(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+
+	event := types.AgentSessionStartEvent{
+		Type:      "agent.session.start",
+		Timestamp: "2026-01-01T00:00:00Z",
+		SessionID: "ses_dup",
+		AgentID:   "agent:test:DUP",
+	}
+
+	data, _ := json.Marshal(event)
+	if err := p.Apply(context.Background(), data); err != nil {
+		t.Fatalf("first apply failed: %v", err)
+	}
+	if err := p.Apply(context.Background(), data); err != nil {
+		t.Fatalf("second apply failed (regression — should be a no-op, not a UNIQUE constraint error): %v", err)
+	}
+
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM sessions WHERE session_id = ?", "ses_dup").Scan(&count); err != nil {
+		t.Fatalf("count sessions: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected exactly 1 session row after duplicate apply, got %d", count)
+	}
+
+	var agentID, startedAt string
+	if err := db.QueryRow("SELECT agent_id, started_at FROM sessions WHERE session_id = ?", "ses_dup").Scan(&agentID, &startedAt); err != nil {
+		t.Fatalf("query session: %v", err)
+	}
+	if agentID != "agent:test:DUP" {
+		t.Errorf("expected agent_id 'agent:test:DUP', got '%s'", agentID)
+	}
+	if startedAt != "2026-01-01T00:00:00Z" {
+		t.Errorf("expected started_at '2026-01-01T00:00:00Z', got '%s'", startedAt)
 	}
 }
 
@@ -1180,5 +1228,274 @@ func TestProjector_ApplyMessageReceipt_NonGroupMemberDoesNotCreateRow(t *testing
 
 	if got := deliveryCount(t, db, "msg_grp_no", "carol"); got != 0 {
 		t.Fatalf("carol is not a group member — expected 0 rows, got %d", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// E11 / thrum-s6os.12: pending_route_resolution + pending pool integration
+// ---------------------------------------------------------------------------
+
+// setupSyncDir creates a minimal sync directory structure and returns its path.
+func setupSyncDir(t *testing.T) string {
+	t.Helper()
+	syncDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(syncDir, "state", "agents"), 0750); err != nil {
+		t.Fatalf("mkdir state/agents: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(syncDir, "state", "bridge-groups"), 0750); err != nil {
+		t.Fatalf("mkdir state/bridge-groups: %v", err)
+	}
+	return syncDir
+}
+
+// writeStateFile creates a stub state file for the given ID. It writes an
+// empty JSON object so os.Stat succeeds (content is not validated by
+// stateFileExists). The kind parameter is "agents" or "bridge-groups".
+func writeStateFile(t *testing.T, syncDir, kind, id string) {
+	t.Helper()
+	path := filepath.Join(syncDir, "state", kind, id+".json")
+	if err := os.WriteFile(path, []byte(`{}`), 0600); err != nil {
+		t.Fatalf("write state file %s: %v", path, err)
+	}
+}
+
+// TestProjector_MessageIngest_MissingBridgeGroup_AddsToPool verifies that
+// when a message.create event arrives referencing a bridge-group whose state
+// file does not exist in syncDir, the message row is inserted with
+// pending_route_resolution=1 AND the orphan is added to the pending pool.
+// This covers E7.AC.5 (pool-add side).
+func TestProjector_MessageIngest_MissingBridgeGroup_AddsToPool(t *testing.T) {
+	rawDB := setupTestDB(t)
+	defer func() { _ = rawDB.Close() }()
+	db := safedb.New(rawDB)
+
+	syncDir := setupSyncDir(t)
+	pool := pending.New()
+
+	p := projection.NewProjector(db)
+	p.SetPendingPool(syncDir, pool)
+	// No resolver needed for this test (we only test Add, not Resolve).
+
+	// Bridge-group ID that has NO state file on disk.
+	missingGroupID := "brg_missing_001"
+
+	event := types.MessageCreateEvent{
+		Type:       "message.create",
+		Timestamp:  "2026-05-18T10:00:00Z",
+		MessageID:  "msg_pending_001",
+		AgentID:    missingGroupID, // author is the missing bridge-group agent
+		SessionID:  "ses_p001",
+		Body:       types.MessageBody{Format: "text", Content: "hi"},
+		Recipients: []string{"alice"},
+	}
+	data, _ := json.Marshal(event)
+	if err := p.Apply(context.Background(), data); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	// Pool should hold one orphan.
+	if got := pool.Size(); got != 1 {
+		t.Errorf("pool.Size() = %d, want 1", got)
+	}
+
+	// The messages row must have pending_route_resolution=1.
+	var flag int
+	err := rawDB.QueryRow(`SELECT pending_route_resolution FROM messages WHERE message_id = ?`, "msg_pending_001").Scan(&flag)
+	if err != nil {
+		t.Fatalf("query pending flag: %v", err)
+	}
+	if flag != 1 {
+		t.Errorf("pending_route_resolution = %d, want 1", flag)
+	}
+}
+
+// TestProjectionResolver_Resolve_StateFileLands verifies that once the missing
+// state file is written to disk, ProjectionResolver.Resolve returns (true, nil)
+// and the messages row has pending_route_resolution cleared to 0.
+// This covers E7.AC.5 (resolve side).
+func TestProjectionResolver_Resolve_StateFileLands(t *testing.T) {
+	rawDB := setupTestDB(t)
+	defer func() { _ = rawDB.Close() }()
+	db := safedb.New(rawDB)
+
+	syncDir := setupSyncDir(t)
+	pool := pending.New()
+
+	p := projection.NewProjector(db)
+	p.SetPendingPool(syncDir, pool)
+	resolver := projection.NewProjectionResolver(p)
+	p.SetPendingResolver(resolver)
+
+	missingAgentID := "agent_missing_001"
+	// The recipient also needs a state file (or the orphan stays blocked by it
+	// too). We use the same agent as both author and sole recipient to keep the
+	// fixture simple — after the single state file lands, all BlockedBy entries
+	// are satisfied.
+	event := types.MessageCreateEvent{
+		Type:       "message.create",
+		Timestamp:  "2026-05-18T10:01:00Z",
+		MessageID:  "msg_resolve_001",
+		AgentID:    missingAgentID,
+		SessionID:  "ses_r001",
+		Body:       types.MessageBody{Format: "text", Content: "hello"},
+		Recipients: []string{missingAgentID}, // self-send; only one state file to satisfy
+	}
+	data, _ := json.Marshal(event)
+	if err := p.Apply(context.Background(), data); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	// Confirm the orphan is in the pool with pending_route_resolution=1.
+	if pool.Size() != 1 {
+		t.Fatalf("pool.Size() = %d, want 1 (pre-resolve)", pool.Size())
+	}
+
+	// Now write the missing state file to disk.
+	writeStateFile(t, syncDir, "agents", missingAgentID)
+
+	// Manually call Resolve (normally driven by ResolveOnStateLand).
+	orphans := pool.List()
+	if len(orphans) != 1 {
+		t.Fatalf("pool.List() returned %d orphans, want 1", len(orphans))
+	}
+	ok, err := resolver.Resolve(context.Background(), orphans[0])
+	if err != nil {
+		t.Fatalf("Resolve returned error: %v", err)
+	}
+	if !ok {
+		t.Fatalf("Resolve returned false — expected true after state file landed")
+	}
+
+	// pending_route_resolution must be 0 now.
+	var flag int
+	if err := rawDB.QueryRow(`SELECT pending_route_resolution FROM messages WHERE message_id = ?`, "msg_resolve_001").Scan(&flag); err != nil {
+		t.Fatalf("query pending flag: %v", err)
+	}
+	if flag != 0 {
+		t.Errorf("pending_route_resolution = %d after resolve, want 0", flag)
+	}
+}
+
+// TestProjector_AgentRegister_TriggersResolveOnStateLand verifies that
+// ingesting an agent.register event for an agent whose ID is in the pool's
+// BlockedBy list calls ResolveOnStateLand, which removes the orphan from the
+// pool (assuming the state file is also present on disk).
+// This covers the agent.register → pool.ResolveOnStateLand wiring.
+func TestProjector_AgentRegister_TriggersResolveOnStateLand(t *testing.T) {
+	rawDB := setupTestDB(t)
+	defer func() { _ = rawDB.Close() }()
+	db := safedb.New(rawDB)
+
+	syncDir := setupSyncDir(t)
+	pool := pending.New()
+
+	p := projection.NewProjector(db)
+	p.SetPendingPool(syncDir, pool)
+	resolver := projection.NewProjectionResolver(p)
+	p.SetPendingResolver(resolver)
+
+	blockedByAgent := "agent:coordinator:BLOCKED01"
+
+	// Pre-populate pool with an orphan blocked by blockedByAgent.
+	// We insert the message row directly (bypassing applyMessageCreate) so
+	// the test is not sensitive to state-file presence at message-ingest time.
+	_, err := rawDB.Exec(`
+		INSERT INTO messages (message_id, agent_id, session_id, created_at, body_format, body_content, pending_route_resolution)
+		VALUES ('msg_unblock_001', ?, 'ses_ub001', '2026-05-18T10:02:00Z', 'text', 'unblock me', 1)
+	`, blockedByAgent)
+	if err != nil {
+		t.Fatalf("insert orphan message: %v", err)
+	}
+	pool.Add(pending.OrphanedMessage{
+		MessageID:  "msg_unblock_001",
+		AuthorID:   blockedByAgent,
+		Recipients: []string{"dave"},
+		BlockedBy:  []string{blockedByAgent},
+	})
+	if pool.Size() != 1 {
+		t.Fatalf("pre-condition: pool.Size() = %d, want 1", pool.Size())
+	}
+
+	// Write the state file so the resolver's disk check passes.
+	writeStateFile(t, syncDir, "agents", blockedByAgent)
+
+	// Now ingest the agent.register event — this should trigger ResolveOnStateLand.
+	registerEvent := types.AgentRegisterEvent{
+		Type:      "agent.register",
+		Timestamp: "2026-05-18T10:02:30Z",
+		AgentID:   blockedByAgent,
+		Kind:      "agent",
+		Role:      "coordinator",
+		Module:    "main",
+	}
+	regData, _ := json.Marshal(registerEvent)
+	if err := p.Apply(context.Background(), regData); err != nil {
+		t.Fatalf("Apply agent.register: %v", err)
+	}
+
+	// The orphan should be resolved and removed from the pool.
+	if got := pool.Size(); got != 0 {
+		t.Errorf("pool.Size() = %d after agent.register, want 0", got)
+	}
+
+	// And pending_route_resolution must be 0.
+	var flag int
+	if err := rawDB.QueryRow(`SELECT pending_route_resolution FROM messages WHERE message_id = 'msg_unblock_001'`).Scan(&flag); err != nil {
+		t.Fatalf("query pending flag: %v", err)
+	}
+	if flag != 0 {
+		t.Errorf("pending_route_resolution = %d after resolve, want 0", flag)
+	}
+}
+
+// TestProjector_MessageIngest_AllStateFilesPresent_NoPending verifies that
+// when all referenced state files ARE present on disk, the message row is
+// inserted with pending_route_resolution=0 and the pool remains empty.
+func TestProjector_MessageIngest_AllStateFilesPresent_NoPending(t *testing.T) {
+	rawDB := setupTestDB(t)
+	defer func() { _ = rawDB.Close() }()
+	db := safedb.New(rawDB)
+
+	syncDir := setupSyncDir(t)
+	pool := pending.New()
+
+	p := projection.NewProjector(db)
+	p.SetPendingPool(syncDir, pool)
+	resolver := projection.NewProjectionResolver(p)
+	p.SetPendingResolver(resolver)
+
+	authorID := "agent:impl:PRESENT01"
+	recipientID := "agent:coord:PRESENT02"
+
+	// Write both state files so they are present on disk.
+	writeStateFile(t, syncDir, "agents", authorID)
+	writeStateFile(t, syncDir, "agents", recipientID)
+
+	event := types.MessageCreateEvent{
+		Type:       "message.create",
+		Timestamp:  "2026-05-18T10:03:00Z",
+		MessageID:  "msg_present_001",
+		AgentID:    authorID,
+		SessionID:  "ses_pr001",
+		Body:       types.MessageBody{Format: "text", Content: "all present"},
+		Recipients: []string{recipientID},
+	}
+	data, _ := json.Marshal(event)
+	if err := p.Apply(context.Background(), data); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	// Pool must be empty — no orphans.
+	if got := pool.Size(); got != 0 {
+		t.Errorf("pool.Size() = %d, want 0 (all state files present)", got)
+	}
+
+	// Flag must be 0.
+	var flag int
+	if err := rawDB.QueryRow(`SELECT pending_route_resolution FROM messages WHERE message_id = 'msg_present_001'`).Scan(&flag); err != nil {
+		t.Fatalf("query pending flag: %v", err)
+	}
+	if flag != 0 {
+		t.Errorf("pending_route_resolution = %d, want 0 (all state files present)", flag)
 	}
 }

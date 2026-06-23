@@ -122,3 +122,18 @@ func TestHealthHandlerJSON(t *testing.T) {
 		t.Error("sync_state field is empty")
 	}
 }
+
+func TestHealth_SurfacesExposureReason(t *testing.T) {
+	h := NewHealthHandler(time.Now(), "test", "repo")
+	h.SetSyncStatusProvider(func() (string, bool, string) {
+		return "local-only", true, "a-sync disabled: public repo detected, no exposure override"
+	})
+	out, err := h.Handle(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp := out.(HealthResponse)
+	if !resp.LocalOnly || resp.LocalOnlyReason == "" || resp.SyncState != "local-only" {
+		t.Fatalf("exposure state not surfaced: %+v", resp)
+	}
+}

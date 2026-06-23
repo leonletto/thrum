@@ -44,16 +44,23 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
+	"github.com/leonletto/thrum/internal/gitctx"
 	"github.com/leonletto/thrum/internal/hookmerge"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/identity/guard"
 	"github.com/leonletto/thrum/internal/netdetect"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/process"
+	"github.com/leonletto/thrum/internal/profile"
+	"github.com/leonletto/thrum/internal/projection"
 	"github.com/leonletto/thrum/internal/restart"
 	"github.com/leonletto/thrum/internal/runtime"
 	"github.com/leonletto/thrum/internal/subscriptions"
 	thrumSync "github.com/leonletto/thrum/internal/sync"
+	syncCompact "github.com/leonletto/thrum/internal/sync/compact"
+	syncPending "github.com/leonletto/thrum/internal/sync/pending"
+	syncSnapshot "github.com/leonletto/thrum/internal/sync/snapshot"
+	syncState "github.com/leonletto/thrum/internal/sync/state"
 	"github.com/leonletto/thrum/internal/timeparse"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
@@ -1064,9 +1071,87 @@ is idempotent: running it twice produces byte-identical file content.`,
 	return cmd
 }
 
+// addBodyInputFlags registers the shell-safe message-body input flags shared by
+// `send`, `reply`, and `message edit` (thrum-d3fp / thrum-afo4). --stdin and
+// --body-file are mutually exclusive; a positional MESSAGE of "-" is also a
+// stdin alias (handled in resolveMessageBody). These let callers pass a QUOTED
+// heredoc (<<'EOF') so the shell performs no interpretation — safe for
+// backticks, $(...), $VAR, and embedded quotes that would otherwise be mangled
+// before thrum ever runs.
+func addBodyInputFlags(cmd *cobra.Command) {
+	cmd.Flags().Bool("stdin", false, "Read the message body from stdin (or pass the body argument as '-'); use a quoted heredoc <<'EOF' for shell-safe bodies")
+	cmd.Flags().String("body-file", "", "Read the message body from a file (shell-safe; avoids shell quoting/substitution)")
+	cmd.MarkFlagsMutuallyExclusive("stdin", "body-file")
+}
+
+// resolveMessageBody resolves a message body from exactly one of three
+// mutually-exclusive sources: a positional argument, --stdin (also triggered by
+// passing the positional as "-"), or --body-file <path> (thrum-d3fp).
+//
+// hasPositional reports whether the body positional was supplied; positional
+// holds its value. Exactly one source must be present, else an actionable error
+// is returned. A single trailing newline (CRLF-aware) is stripped from stdin
+// and file bodies — heredocs and editors append one — while positional bodies
+// pass through verbatim.
+func resolveMessageBody(cmd *cobra.Command, positional string, hasPositional bool) (string, error) {
+	useStdin, _ := cmd.Flags().GetBool("stdin")
+	bodyFile, _ := cmd.Flags().GetString("body-file")
+
+	// A positional of "-" is an alias for --stdin.
+	if hasPositional && positional == "-" {
+		useStdin = true
+		hasPositional = false
+	}
+
+	sources := 0
+	if hasPositional {
+		sources++
+	}
+	if useStdin {
+		sources++
+	}
+	if bodyFile != "" {
+		sources++
+	}
+	switch {
+	case sources == 0:
+		return "", fmt.Errorf("no message body: pass a positional argument, --stdin (or pass the body as '-'), or --body-file <path>")
+	case sources > 1:
+		return "", fmt.Errorf("message body is ambiguous: use exactly one of a positional argument, --stdin / '-', or --body-file")
+	}
+
+	switch {
+	case useStdin:
+		data, err := io.ReadAll(cmd.InOrStdin())
+		if err != nil {
+			return "", fmt.Errorf("read message body from stdin: %w", err)
+		}
+		return trimOneTrailingNewline(string(data)), nil
+	case bodyFile != "":
+		// #nosec G304 — user-specified body file via CLI flag; the CLI is a
+		// user-trusted boundary and the user controls the path.
+		data, err := os.ReadFile(bodyFile)
+		if err != nil {
+			return "", fmt.Errorf("read message body from %s: %w", bodyFile, err)
+		}
+		return trimOneTrailingNewline(string(data)), nil
+	default:
+		return positional, nil
+	}
+}
+
+// trimOneTrailingNewline removes a single trailing newline (handling CRLF) so a
+// heredoc- or editor-supplied body doesn't carry its terminating newline into
+// the message. Additional trailing blank lines are preserved.
+func trimOneTrailingNewline(s string) string {
+	s = strings.TrimSuffix(s, "\n")
+	s = strings.TrimSuffix(s, "\r")
+	return s
+}
+
 func sendCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "send MESSAGE",
+		Use:   "send [MESSAGE]",
 		Short: "Send a message",
 		Long: `Send a message to the Thrum messaging system.
 
@@ -1081,8 +1166,20 @@ Invoking 'thrum send' with no recipient flag is a hard error. The previous
 default — silent broadcast to every team agent — was a footgun (the wider
 the team, the easier to flood mid-cycle). Use --to @<agent_name> for the
 common case, or --broadcast when an explicit team-wide announcement is
-intended.`,
-		Args: cobra.ExactArgs(1),
+intended.
+
+Shell-safe bodies (thrum-d3fp): backticks, $(...), $VAR, and quotes in a
+double-quoted MESSAGE are interpreted by your shell BEFORE thrum runs, which
+silently corrupts content. To send such text safely, read the body from stdin
+or a file using a QUOTED heredoc:
+
+  thrum send --to @agent --stdin <<'EOF'
+  literal text with backticks and $(do not run me)
+  EOF
+
+  thrum send --to @agent --body-file ./body.md
+  some-generator | thrum send --to @agent -        # '-' is a stdin alias`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			scopes, _ := cmd.Flags().GetStringSlice("scope")
 			refs, _ := cmd.Flags().GetStringSlice("ref")
@@ -1114,8 +1211,20 @@ intended.`,
 				to = "@everyone"
 			}
 
+			// Resolve the body from positional MESSAGE, --stdin/'-', or
+			// --body-file (thrum-d3fp). Done after the cheap recipient check
+			// so a missing-recipient error fails fast without consuming stdin.
+			positional := ""
+			if len(args) > 0 {
+				positional = args[0]
+			}
+			content, err := resolveMessageBody(cmd, positional, len(args) > 0)
+			if err != nil {
+				return err
+			}
+
 			opts := cli.SendOptions{
-				Content:       args[0],
+				Content:       content,
 				Scopes:        scopes,
 				Refs:          refs,
 				Mentions:      mentions,
@@ -1201,6 +1310,7 @@ intended.`,
 	cmd.Flags().String("to", "", "Recipient (@agent_name or @everyone)")
 	cmd.Flags().Bool("broadcast", false, "Fan out to the entire team (mutually exclusive with --to)")
 	cmd.MarkFlagsMutuallyExclusive("to", "broadcast")
+	addBodyInputFlags(cmd)
 
 	return cmd
 }
@@ -1276,6 +1386,10 @@ func inboxCmd() *cobra.Command {
 By default, inbox auto-filters to show messages addressed to you (via --to)
 plus broadcasts and general messages. Use --all to see all messages.
 
+Messages are shown newest-first, so --limit N returns the N most recent. Use
+--chronological (alias --oldest) to read oldest-first with replies clustered
+under their parent.
+
 The daemon must be running and you must have an active session.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			scope, _ := cmd.Flags().GetString("scope")
@@ -1285,6 +1399,13 @@ The daemon must be running and you must have an active session.`,
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 			page, _ := cmd.Flags().GetInt("page")
 			fromAgent, _ := cmd.Flags().GetString("from")
+			// thrum-3vl0: default is newest-first; --chronological (alias
+			// --oldest) opts into the oldest-first, reply-clustered view for
+			// reading a thread in order.
+			chronological, _ := cmd.Flags().GetBool("chronological")
+			if oldest, _ := cmd.Flags().GetBool("oldest"); oldest {
+				chronological = true
+			}
 
 			// --limit is an alias for --page-size
 			if cmd.Flags().Changed("limit") {
@@ -1314,6 +1435,7 @@ The daemon must be running and you must have an active session.`,
 				CallerAgentID:     agentID,
 				CallerMentionRole: agentRole,
 				AuthorID:          fromAgent,
+				Chronological:     chronological,
 			}
 
 			// Auto-filter: when identity is resolved and --all is not set,
@@ -1403,6 +1525,11 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().Int("limit", 0, "Alias for --page-size")
 	cmd.Flags().Int("page", 1, "Page number")
 	cmd.Flags().String("from", "", "Filter inbox to messages from a specific agent (use @agent_name or agent_name)")
+	// thrum-3vl0: inbox defaults to newest-first. --chronological (alias
+	// --oldest) switches to the oldest-first, reply-clustered view for reading
+	// a thread in order.
+	cmd.Flags().Bool("chronological", false, "Oldest-first, reply-clustered order (default is newest-first)")
+	cmd.Flags().Bool("oldest", false, "Alias for --chronological (oldest-first)")
 
 	return cmd
 }
@@ -1866,6 +1993,9 @@ Blocks until a peer connects or the session times out (5 minutes).
 --type is required. Run 'thrum peer add' with no flags to see the full
 list of transports and a one-line "when to use" for each.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := guardLocalOnlyPairing(filepath.Join(flagRepo, ".thrum")); err != nil {
+				return err
+			}
 			peerType, parseErr := cli.ParsePeerType(addType)
 			if parseErr != nil {
 				if errors.Is(parseErr, cli.ErrPeerTypeMissing) {
@@ -1992,6 +2122,9 @@ Peercode input methods (for --type tailscale|local|network):
 stored secrets in peers.json to re-handshake without minting a new token.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := guardLocalOnlyPairing(filepath.Join(flagRepo, ".thrum")); err != nil {
+				return err
+			}
 			peerType, parseErr := cli.ParsePeerType(joinType)
 			if parseErr != nil {
 				if errors.Is(parseErr, cli.ErrPeerTypeMissing) {
@@ -2216,7 +2349,7 @@ Examples:
 	}
 
 	// thrum monitor add -- COMMAND ARGS...
-	var addName, addMatch, addTo, addCwd string
+	var addName, addMatch, addTo, addCwd, addSchedule string
 	var addDebounce time.Duration
 	var addEnv []string
 
@@ -2269,6 +2402,7 @@ The command and its arguments must be separated from monitor flags with '--':
 				Cwd:             cwd,
 				Env:             env,
 				DebounceSeconds: int(addDebounce.Seconds()),
+				Schedule:        addSchedule,
 			}
 
 			client, err := getClient()
@@ -2291,6 +2425,8 @@ The command and its arguments must be separated from monitor flags with '--':
 	addCmd.Flags().StringVar(&addCwd, "cwd", "", "Working directory for the command (default: current directory)")
 	addCmd.Flags().DurationVar(&addDebounce, "debounce", 60*time.Second, "Leading-edge debounce window (minimum 30s)")
 	addCmd.Flags().StringArrayVar(&addEnv, "env", nil, "Environment variable in KEY=VALUE form (repeatable)")
+	addCmd.Flags().StringVar(&addSchedule, "schedule", "",
+		`Standard 5-field cron expression (e.g. "*/5 * * * *" or "0 9 * * 1-5"). When set, runs the command one-shot per scheduled tick. When omitted, runs continuously with exponential-backoff auto-restart on exit.`)
 	_ = addCmd.MarkFlagRequired("name")
 	_ = addCmd.MarkFlagRequired("match")
 	_ = addCmd.MarkFlagRequired("to")
@@ -2875,8 +3011,15 @@ func worktreeCreateCmd() *cobra.Command {
 			}
 			detach, _ := cmd.Flags().GetBool("detach")
 			branch, _ := cmd.Flags().GetString("branch")
+			baseFlag, _ := cmd.Flags().GetString("base")
 
 			repoPath := paths.EffectiveRepoPath(flagRepo)
+
+			// Default the new worktree's base ref to the repo's
+			// current HEAD instead of silently using "main". See
+			// resolveWorktreeBase for fallback semantics.
+			base := resolveWorktreeBase(cmd.Context(), repoPath, baseFlag)
+
 			thrumDir := filepath.Join(repoPath, ".thrum")
 			cfg, err := config.LoadThrumConfig(thrumDir)
 			if err != nil {
@@ -2913,8 +3056,14 @@ func worktreeCreateCmd() *cobra.Command {
 				// Cobra-only detach path: skip worktree.Create, run git
 				// worktree add --detach inline + EnsureRedirects. The
 				// headless API has no detach mode (B-B1 never needs it).
-				if out, err := safecmd.Git(cmd.Context(), repoPath,
-					"worktree", "add", "--detach", worktreePath); err != nil {
+				// --base also honored here: `git worktree add --detach
+				// <path> <ref>` creates a detached worktree pointing at
+				// <ref>'s commit. Without --base, git uses HEAD by
+				// default (which matches our base-resolution above; we
+				// pass it explicitly so --base + --detach is not a
+				// silent ignore).
+				detachArgs := []string{"worktree", "add", "--detach", worktreePath, base}
+				if out, err := safecmd.Git(cmd.Context(), repoPath, detachArgs...); err != nil {
 					return fmt.Errorf("git worktree add --detach: %s\n%s", err, out)
 				}
 				fmt.Printf("✓ Worktree created at %s (detached)\n", worktreePath)
@@ -2937,6 +3086,7 @@ func worktreeCreateCmd() *cobra.Command {
 					AgentName:      name,
 					Persistent:     true,
 					BranchOverride: branch,
+					BaseBranch:     base, // thrum-pqcg: cwd HEAD by default, --base override
 				})
 				if err != nil {
 					return fmt.Errorf("create worktree: %w", err)
@@ -3023,6 +3173,7 @@ func worktreeCreateCmd() *cobra.Command {
 	}
 	cmd.Flags().Bool("detach", false, "Create detached HEAD worktree")
 	cmd.Flags().StringP("branch", "b", "", "Branch name (default: feature/<name>)")
+	cmd.Flags().String("base", "", "Base ref for the new branch (default: current HEAD of cwd)")
 	cmd.Flags().String("name", "", "Agent name (triggers quickstart in tmux)")
 	cmd.Flags().String("role", "", "Agent role")
 	cmd.Flags().String("module", "", "Agent module")
@@ -3042,6 +3193,7 @@ func worktreeTeardownCmd() *cobra.Command {
 				return fmt.Errorf("invalid worktree name %q: must not contain /, \\, or parent references", name)
 			}
 			deleteBranchFlag, _ := cmd.Flags().GetBool("delete-branch")
+			keepAgentFlag, _ := cmd.Flags().GetBool("keep-agent")
 
 			repoPath := paths.EffectiveRepoPath(flagRepo)
 			thrumDir := filepath.Join(repoPath, ".thrum")
@@ -3065,7 +3217,22 @@ func worktreeTeardownCmd() *cobra.Command {
 				return fmt.Errorf("worktree not found: %s", worktreePath)
 			}
 
-			// Clean up identity files that reference this worktree
+			// Clean up identity files that reference this worktree.
+			// thrum-wk7d (part 3): capture each removed identity's
+			// agent name so the cascade-delete below can drop the
+			// matching DB record (the daemon's agents row that the
+			// identity file points to). Without the cascade, a
+			// teardown-and-recreate cycle leaves a stranded agent
+			// identity in the DB that blocks re-registration at any
+			// new worktree path — the exact wedge that bit wave-4
+			// dispatch.
+			//
+			// removedAgents captures ONLY identities whose os.Remove
+			// succeeded; entries that hit a permissions or stat error
+			// are reported via the warning above and intentionally
+			// excluded from the cascade so we never try to drop a DB
+			// record whose on-disk identity file is still around.
+			var removedAgents []string
 			identitiesDir := filepath.Join(worktreePath, ".thrum", "identities")
 			if entries, err := os.ReadDir(identitiesDir); err == nil {
 				for _, entry := range entries {
@@ -3076,15 +3243,44 @@ func worktreeTeardownCmd() *cobra.Command {
 							fmt.Fprintf(os.Stderr, "  Warning: failed to remove identity %s: %v\n", agentName, err)
 						} else {
 							fmt.Printf("  Removed identity: %s\n", agentName)
+							removedAgents = append(removedAgents, agentName)
 						}
 					}
 				}
 			}
 
-			// Kill associated tmux session if any (best-effort, ignore errors)
+			// Kill associated tmux session and cascade-delete the
+			// bound agent identities (unless --keep-agent was passed).
+			// Both are best-effort: a teardown should never fail
+			// because the daemon is unreachable or the agent was
+			// already deleted.
 			if client, err := getClient(); err == nil {
 				defer func() { _ = client.Close() }()
 				_ = cli.TmuxKill(client, name)
+
+				if !keepAgentFlag {
+					// cli.AgentDelete unconditionally drops every
+					// artifact (messages/sessions/refs/events/agent
+					// row + on-disk files); it has no active-agent
+					// guard that could silently skip a live agent.
+					// A "agent not found" error from a previously-
+					// cleaned-up record is benign — warn and continue.
+					for _, agentName := range removedAgents {
+						if _, derr := cli.AgentDelete(client, cli.AgentDeleteOptions{Name: agentName}); derr != nil {
+							fmt.Fprintf(os.Stderr,
+								"  Warning: failed to delete agent %s from daemon: %v (run 'thrum agent delete %s --force' if it persists)\n",
+								agentName, derr, agentName)
+						} else {
+							fmt.Printf("  Deleted agent record: %s\n", agentName)
+						}
+					}
+				} else if len(removedAgents) > 0 {
+					fmt.Printf("  --keep-agent: %d agent identity record(s) left in the daemon's database\n", len(removedAgents))
+				}
+			} else if !keepAgentFlag && len(removedAgents) > 0 {
+				fmt.Fprintf(os.Stderr,
+					"  Warning: daemon unreachable; %d agent identity record(s) NOT deleted (%s). Run 'thrum agent delete <name> --force' for each once the daemon is back up.\n",
+					len(removedAgents), strings.Join(removedAgents, ", "))
 			}
 
 			// Phase C: call headless primitive (spec §4.2 mapping table).
@@ -3130,6 +3326,8 @@ func worktreeTeardownCmd() *cobra.Command {
 	}
 	cmd.Flags().Bool("delete-branch", false,
 		"Delete the worktree's branch after removing the worktree (default: false; branch stays)")
+	cmd.Flags().Bool("keep-agent", false,
+		"Keep the bound agent identity in the daemon's DB after teardown (default: false — cascade-delete so the agent name is reusable in a new worktree without 'thrum agent delete --force' first)")
 	return cmd
 }
 
@@ -3272,11 +3470,11 @@ func worktreeListJSON(repoPath string) error {
 func agentSetStatusCmd() *cobra.Command {
 	var targetAgent string
 	cmd := &cobra.Command{
-		Use:   "set-status <working|idle|blocked>",
+		Use:   "set-status <working|idle|blocked|stuck>",
 		Short: "Set agent operational status",
 		Long: `Set the operational status for an agent.
 
-Valid statuses: working, idle, blocked.
+Valid statuses: working, idle, blocked, stuck.
 
 Without --agent, updates the local agent's identity file directly.
 With --agent, sends a daemon RPC to update a remote agent's status.
@@ -3287,8 +3485,8 @@ Examples:
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			status := args[0]
-			if status != "working" && status != "idle" && status != "blocked" {
-				return fmt.Errorf("invalid status %q: must be working, idle, or blocked", status)
+			if status != "working" && status != "idle" && status != "blocked" && status != "stuck" {
+				return fmt.Errorf("invalid status %q: must be working, idle, blocked, or stuck", status)
 			}
 			if targetAgent != "" {
 				return setRemoteAgentStatus(targetAgent, status)
@@ -3645,7 +3843,7 @@ Examples:
 
 func replyCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "reply MSG_ID TEXT",
+		Use:   "reply MSG_ID [TEXT]",
 		Short: "Reply to a message with same audience",
 		Long: `Reply to a message, copying the parent message's audience (mentions/scopes).
 
@@ -3654,10 +3852,34 @@ to the same recipients as the parent message.
 
 Examples:
   thrum reply msg_01HXE... "Good idea, let's do that"
-  thrum reply msg_01HXE... "Acknowledged" --format plain`,
-		Args: cobra.ExactArgs(2),
+  thrum reply msg_01HXE... "Acknowledged" --format plain
+
+Shell-safe bodies (thrum-d3fp): backticks, $(...), $VAR, and quotes in a
+double-quoted TEXT are interpreted by your shell BEFORE thrum runs. To reply
+with such text safely, read the body from stdin or a file via a QUOTED heredoc:
+
+  thrum reply msg_01HXE... --stdin <<'EOF'
+  literal text with backticks and $(do not run me)
+  EOF
+
+  thrum reply msg_01HXE... --body-file ./body.md
+  some-generator | thrum reply msg_01HXE... -        # '-' is a stdin alias`,
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, _ := cmd.Flags().GetString("format")
+
+			// Resolve the body from positional TEXT, --stdin/'-', or
+			// --body-file (thrum-d3fp). MSG_ID is args[0]; TEXT (when present)
+			// is args[1]. Resolved before getClient so a missing-body error
+			// fails fast without a daemon round-trip.
+			replyText := ""
+			if len(args) > 1 {
+				replyText = args[1]
+			}
+			content, err := resolveMessageBody(cmd, replyText, len(args) > 1)
+			if err != nil {
+				return err
+			}
 
 			client, err := getClient()
 			if err != nil {
@@ -3672,7 +3894,7 @@ Examples:
 
 			opts := cli.ReplyOptions{
 				MessageID:     args[0],
-				Content:       args[1],
+				Content:       content,
 				Format:        format,
 				CallerAgentID: agentID,
 			}
@@ -3697,6 +3919,7 @@ Examples:
 	}
 
 	cmd.Flags().String("format", "markdown", "Message format (markdown, plain, json)")
+	addBodyInputFlags(cmd)
 
 	return cmd
 }
@@ -3744,16 +3967,39 @@ func messageCmd() *cobra.Command {
 	cmd.AddCommand(getCmd)
 
 	editCmd := &cobra.Command{
-		Use:   "edit MSG_ID TEXT",
+		Use:   "edit MSG_ID [TEXT]",
 		Short: "Edit a message (full replacement)",
 		Long: `Edit a message by replacing its content entirely.
 
 Only the message author can edit their own messages.
 
 Examples:
-  thrum message edit msg_01HXE... "Updated text here"`,
-		Args: cobra.ExactArgs(2),
+  thrum message edit msg_01HXE... "Updated text here"
+
+Shell-safe bodies (thrum-d3fp): backticks, $(...), $VAR, and quotes in a
+double-quoted TEXT are interpreted by your shell BEFORE thrum runs. To replace
+content with such text safely, read the body from stdin or a file:
+
+  thrum message edit msg_01HXE... --stdin <<'EOF'
+  literal text with backticks and $(do not run me)
+  EOF
+
+  thrum message edit msg_01HXE... --body-file ./body.md`,
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Resolve the new content from positional TEXT, --stdin/'-', or
+			// --body-file (thrum-d3fp). MSG_ID is args[0]; TEXT (when present)
+			// is args[1]. Resolved first so a bad body source fails fast,
+			// before identity resolution or any daemon round-trip.
+			editText := ""
+			if len(args) > 1 {
+				editText = args[1]
+			}
+			content, err := resolveMessageBody(cmd, editText, len(args) > 1)
+			if err != nil {
+				return err
+			}
+
 			agentID, err := resolveLocalAgentID()
 			if err != nil {
 				return fmt.Errorf("failed to resolve agent identity: %w", err)
@@ -3765,7 +4011,7 @@ Examples:
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.MessageEdit(client, args[0], args[1], agentID)
+			result, err := cli.MessageEdit(client, args[0], content, agentID)
 			if err != nil {
 				return err
 			}
@@ -3779,6 +4025,7 @@ Examples:
 			return nil
 		},
 	}
+	addBodyInputFlags(editCmd)
 	cmd.AddCommand(editCmd)
 
 	deleteCmd := &cobra.Command{
@@ -3891,7 +4138,15 @@ Examples:
 					return err
 				}
 
-				remaining := inboxResult.Unread - result.MarkedCount
+				// thrum-1846: use the daemon's MarkableRemaining — the count
+				// of messages THIS caller can still legitimately mark (caller
+				// is a recipient, not yet read). The previous
+				// `inboxResult.Unread - MarkedCount` counted viewer-visible
+				// mail addressed to OTHER agents, which the caller can never
+				// mark, so it never reached 0 and the "run again" hint invited
+				// an infinite retry loop — each pass re-broadcasting receipt
+				// volume (the receipt-storm trap).
+				remaining := result.MarkableRemaining
 				if flagJSON {
 					return cli.EmitJSON(result)
 				}
@@ -4466,6 +4721,22 @@ Examples:
 					if err := guard.WritePID(idPath, runtimePID); err != nil {
 						fmt.Fprintf(os.Stderr, "thrum: prime WritePID failed: %v\n", err)
 					}
+				} else if runtimePID == 0 && storedPID > 0 && !process.IsRunning(storedPID) {
+					// thrum-5oui defense-in-depth: prime ran with no live
+					// runtime ancestor (a bare shell, not inside the agent's
+					// runtime) AND the identity file's stored PID is confirmed
+					// dead. Reset it to 0 — the "no live runtime / restartable"
+					// sentinel. Without this, a killed agent's identity file
+					// keeps its dead PID, boot reconcile (thrum-mnhp) writes
+					// that 0 to the DB only at the NEXT restart, and the
+					// dead-agent sweeper keeps the worktree out of the peercred
+					// registry meanwhile. Zeroing on-disk here makes prime — the
+					// recovery the error message points at — actually honest for
+					// a dead agent. (A LIVE stored PID is never zeroed: the
+					// !IsRunning guard only fires for a confirmed-dead one.)
+					if err := guard.WritePID(idPath, 0); err != nil {
+						fmt.Fprintf(os.Stderr, "thrum: prime dead-PID reset failed: %v\n", err)
+					}
 				}
 			}
 
@@ -4477,17 +4748,36 @@ Examples:
 				if cfg, err := config.LoadThrumConfig(thrumDir); err == nil {
 					result.SingleAgentMode = cfg.Daemon.SingleAgentMode
 				}
-				// Wire SavedSessionContext
+				// Resolve the agent name for local-file lookups (saved session
+				// context + restart snapshot). Prefer the daemon-resolved identity,
+				// but fall back to the on-disk identity file when the daemon hasn't
+				// bound the agent yet. This races immediately after a self-restart
+				// relaunch: the new runtime PID isn't re-bound at the instant the
+				// SessionStart hook runs `thrum prime`, so AgentWhoami returns
+				// nothing and result.Identity is transiently nil — even though the
+				// identity file AND the restart snapshot are present locally. Without
+				// the fallback the SessionStart prime silently drops the restart
+				// snapshot, so the agent's own Resume Plan never auto-loads on
+				// self-restart (release scenario 80). Saved context and a restart
+				// snapshot are LOCAL state; consuming them must not require the daemon.
+				localAgentName := ""
 				if result.Identity != nil {
-					ctxPath := filepath.Join(thrumDir, "context", result.Identity.AgentID+".md")
+					localAgentName = result.Identity.AgentID
+				} else if idFile, _, err := config.LoadIdentityWithPath(result.RepoPath); err == nil && idFile != nil {
+					localAgentName = idFile.Agent.Name
+				}
+
+				// Wire SavedSessionContext
+				if localAgentName != "" {
+					ctxPath := filepath.Join(thrumDir, "context", localAgentName+".md")
 					if data, err := os.ReadFile(ctxPath); err == nil { // #nosec G304 -- internal context file
 						result.SavedSessionContext = string(data)
 					}
 				}
 
 				// Wire RestartSnapshot (consumed on read)
-				if result.Identity != nil {
-					if snapshot, err := restart.ConsumeInPrime(thrumDir, result.Identity.AgentID); err == nil {
+				if localAgentName != "" {
+					if snapshot, err := restart.ConsumeInPrime(thrumDir, localAgentName); err == nil {
 						result.RestartSnapshot = snapshot
 					}
 				}
@@ -4761,7 +5051,7 @@ This will fetch new messages from the remote and push local messages.`,
 
 func quickstartCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "quickstart",
+		Use:   "quickstart [name]",
 		Short: "Register, start session, and set intent in one step",
 		Long: `Bootstrap an agent session with a single command.
 
@@ -4769,14 +5059,33 @@ Chains together: runtime detect → config generate → agent register →
 session start → set intent. If the agent is already registered, it
 re-registers automatically.
 
+Accepts the agent name as a positional argument OR as --name. The
+positional form mirrors the Unix tool [name] convention; --name takes
+precedence when both are supplied.
+
 Examples:
-  thrum quickstart --name implementer_auth --role implementer --module auth
+  thrum quickstart implementer_auth --role implementer --module auth
   thrum quickstart --name reviewer_auth --role reviewer --module auth --intent "Reviewing PR #42"
-  thrum quickstart --name alice --role impl --module auth --runtime codex
+  thrum quickstart alice --role impl --module auth --runtime codex
   thrum quickstart --name bob --role tester --module api --dry-run
-  thrum quickstart --name planner_core --role planner --module core --no-init`,
+  thrum quickstart planner_core --role planner --module core --no-init`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name, _ := cmd.Flags().GetString("name")
+			// thrum-9dnh: accept positional argument as --name when the
+			// flag is not set. Before this, cobra defaulted to
+			// ArbitraryArgs and silently discarded the positional —
+			// `thrum quickstart researcher_memories --role ...` ran but
+			// adopted the cwd's existing identity-file name instead of
+			// the user's intended one (the upstream footgun that
+			// triggered the thrum-l9e1 cross-worktree-rebind repro). The
+			// lenient form (positional → --name) matches the Unix
+			// `tool [name]` convention; strict NoArgs would reject the
+			// natural shape. See thrum-9dnh §4d for the lenient/strict
+			// tradeoff rationale.
+			if name == "" && len(args) > 0 {
+				name = args[0]
+			}
 			display, _ := cmd.Flags().GetString("display")
 			intent, _ := cmd.Flags().GetString("intent")
 			runtimeFlag, _ := cmd.Flags().GetString("runtime")
@@ -4791,8 +5100,13 @@ Examples:
 				return fmt.Errorf("unknown runtime %q; supported: %s", runtimeFlag, strings.Join(runtime.SupportedRuntimes(), ", "))
 			}
 
-			// THRUM_NAME env var sets a default name; explicit --name flag takes precedence.
-			if envName := os.Getenv("THRUM_NAME"); envName != "" && !cmd.Flags().Changed("name") {
+			// THRUM_NAME env var sets a default name; explicit --name flag
+			// AND a positional argument (per thrum-9dnh, user-typed positional
+			// outranks ambient env-var) both take precedence. The `name == ""`
+			// guard added here handles both override sources uniformly: after
+			// the positional → name fallback above, name is non-empty when
+			// either --name or the positional was supplied.
+			if envName := os.Getenv("THRUM_NAME"); envName != "" && name == "" && !cmd.Flags().Changed("name") {
 				name = envName
 			}
 
@@ -5093,6 +5407,50 @@ Examples:
 	}
 }
 
+// fetchTeam calls team.list with the standard --all/--system flags read off cmd.
+func fetchTeam(cmd *cobra.Command) (*cli.TeamListResponse, error) {
+	client, err := getClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to daemon: %w", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	includeAll, _ := cmd.Flags().GetBool("all")
+	includeSystem, _ := cmd.Flags().GetBool("system")
+	req := cli.TeamListRequest{
+		IncludeOffline: includeAll,
+		IncludeSystem:  includeSystem,
+	}
+
+	var result cli.TeamListResponse
+	if err := client.Call("team.list", req, &result); err != nil {
+		return nil, fmt.Errorf("team.list RPC failed: %w", err)
+	}
+	return &result, nil
+}
+
+// emitFilteredTeam renders a filtered member set, honoring --json and printing a
+// clean "no agents on <kind> <value>" message when the filter matched nothing.
+//
+// shared_messages (broadcast totals + per-group counts) is deliberately dropped
+// from filtered/local views: it is a team-GLOBAL aggregate, not a property of
+// any agent subset. Carrying it on a filtered response invites a script (or a
+// human reading the table footer) to misread the team-wide numbers as scoped to
+// the filter — equally misleading whether the filtered set is empty or not. The
+// unfiltered `thrum team` is the only view that surfaces the shared block.
+func emitFilteredTeam(members []cli.TeamMember, kind, value string) error {
+	filtered := &cli.TeamListResponse{Members: members}
+	if flagJSON {
+		return cli.EmitJSON(filtered)
+	}
+	if len(members) == 0 {
+		fmt.Print(cli.NoAgentsForFilter(kind, value))
+		return nil
+	}
+	fmt.Print(cli.FormatTeam(filtered))
+	return nil
+}
+
 func teamCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "team",
@@ -5102,41 +5460,128 @@ func teamCmd() *cobra.Command {
 Displays session info, work context, inbox counts, branch status,
 and per-file change details for all agents with active sessions.
 
+Filter by the daemon that owns each agent or by host, or use the
+'local' / 'daemons' subviews. Every form honors --json.
+
 Examples:
   thrum team
   thrum team --all
   thrum team --system
-  thrum team --json`,
+  thrum team --json
+  thrum team --daemon <daemon-id>   # agents owned by one daemon
+  thrum team --host <hostname>      # agents on one host
+  thrum team local                  # agents on THIS repo's daemon
+  thrum team daemons                # one row per daemon: id, host, count`,
+		// Adding the local/daemons subcommands turns `team` into a non-leaf,
+		// so tagGuardCategories (which walks leaves only) no longer tags it.
+		// `thrum team` with no args still runs RunE + getClient, so set its
+		// cross-worktree response class explicitly to preserve the prior
+		// diagnostic-banner behavior instead of defaulting to abort.
+		Annotations: map[string]string{
+			crossWorktreeResponseKey: CrossWorktreeResponseDiagnosticBanner,
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := getClient()
+			daemonID, _ := cmd.Flags().GetString("daemon")
+			hostname, _ := cmd.Flags().GetString("host")
+			daemonSet := cmd.Flags().Changed("daemon")
+			hostSet := cmd.Flags().Changed("host")
+			if daemonSet && hostSet {
+				return fmt.Errorf("thrum team: --daemon and --host are mutually exclusive")
+			}
+
+			result, err := fetchTeam(cmd)
 			if err != nil {
-				return fmt.Errorf("failed to connect to daemon: %w", err)
-			}
-			defer func() { _ = client.Close() }()
-
-			includeAll, _ := cmd.Flags().GetBool("all")
-			includeSystem, _ := cmd.Flags().GetBool("system")
-			req := cli.TeamListRequest{
-				IncludeOffline: includeAll,
-				IncludeSystem:  includeSystem,
+				return err
 			}
 
-			var result cli.TeamListResponse
-			if err := client.Call("team.list", req, &result); err != nil {
-				return fmt.Errorf("team.list RPC failed: %w", err)
+			switch {
+			case daemonSet:
+				return emitFilteredTeam(cli.FilterByDaemon(result.Members, daemonID), "daemon", daemonID)
+			case hostSet:
+				return emitFilteredTeam(cli.FilterByHost(result.Members, hostname), "host", hostname)
 			}
 
 			if flagJSON {
 				return cli.EmitJSON(result)
 			}
-			fmt.Print(cli.FormatTeam(&result))
+			fmt.Print(cli.FormatTeam(result))
 			return nil
 		},
 	}
 
 	cmd.Flags().Bool("all", false, "Include offline agents")
 	cmd.Flags().Bool("system", false, "Include reserved pseudo-agents (@supervisor_*, etc.)")
+	cmd.Flags().String("daemon", "", "Only show agents whose origin_daemon matches this daemon id")
+	cmd.Flags().String("host", "", "Only show agents on this hostname")
 
+	cmd.AddCommand(teamLocalCmd())
+	cmd.AddCommand(teamDaemonsCmd())
+
+	return cmd
+}
+
+// teamLocalCmd is sugar for `thrum team --daemon <self>`: agents owned by THIS
+// repo's daemon. Self daemon id is resolved the same way `thrum daemon status`
+// does — via cli.DaemonStatus(flagRepo).Identity.DaemonID.
+func teamLocalCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "local",
+		Short: "Show agents on this repo's daemon",
+		Long: `Show only the agents owned by THIS repo's daemon.
+
+Equivalent to 'thrum team --daemon <self-daemon-id>', resolving the local
+daemon id the same way 'thrum daemon status' does. Honors --json.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			status, err := cli.DaemonStatus(flagRepo)
+			if err != nil {
+				return fmt.Errorf("failed to resolve local daemon: %w", err)
+			}
+			if status.Identity == nil || status.Identity.DaemonID == "" {
+				return fmt.Errorf("local daemon id unavailable (is the daemon initialized for this repo?)")
+			}
+			selfDaemon := status.Identity.DaemonID
+
+			result, err := fetchTeam(cmd)
+			if err != nil {
+				return err
+			}
+			return emitFilteredTeam(cli.FilterByDaemon(result.Members, selfDaemon), "daemon", selfDaemon)
+		},
+	}
+	cmd.Flags().Bool("all", false, "Include offline agents")
+	cmd.Flags().Bool("system", false, "Include reserved pseudo-agents (@supervisor_*, etc.)")
+	return cmd
+}
+
+// teamDaemonsCmd aggregates the team by origin_daemon: one row per distinct
+// daemon with {daemon_id, hostname, agent_count}. Members with no origin_daemon
+// bucket under "unknown" so the counts always sum to the member total.
+func teamDaemonsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "daemons",
+		Short: "Aggregate agents by daemon",
+		Long: `Group agents by the daemon that owns them.
+
+One row per distinct origin_daemon with its hostname and agent count.
+Agents with no recorded origin_daemon bucket under "unknown"; counts
+always sum to the total. Honors --json.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			result, err := fetchTeam(cmd)
+			if err != nil {
+				return err
+			}
+			rows := cli.AggregateByDaemon(result.Members)
+			if flagJSON {
+				return cli.EmitJSON(rows)
+			}
+			fmt.Print(cli.FormatDaemonAggregates(rows))
+			return nil
+		},
+	}
+	cmd.Flags().Bool("all", false, "Include offline agents")
+	cmd.Flags().Bool("system", false, "Include reserved pseudo-agents (@supervisor_*, etc.)")
 	return cmd
 }
 
@@ -5602,8 +6047,124 @@ func resolveLocalMentionRole() (string, error) {
 	return cfg.Agent.Role, nil
 }
 
+// emitExposureWarning warns the owner + all live agents that a-sync history is
+// now exposed, and hands the user the exact override string to paste. Reuses
+// permission.SendSupervisorMessage (authored by the supervisor pseudo-agent;
+// writes a message.create event under state.Lock).
+func emitExposureWarning(ctx context.Context, permPkg *permission.Permission, st *state.State, cfg *config.ThrumConfig, canonRemote string) {
+	body := fmt.Sprintf(
+		"⚠️ a-sync exposure: your sync repo flipped to PUBLICLY READABLE (%s). "+
+			"All message history pushed there is exposed to anyone who can read it; a-sync push is now DISABLED. "+
+			"If unintended: delete the `a-sync` branch on the remote. "+
+			"To knowingly sync to this public repo, set `daemon.sync.public_exposure_override` to exactly: %s",
+		canonRemote, canonRemote)
+	for _, rcpt := range exposureWarningRecipients(ctx, permPkg, st, cfg) {
+		if _, werr := permPkg.SendSupervisorMessage(ctx, rcpt, body, ""); werr != nil {
+			slog.Warn("a-sync.exposure.warn_failed", "recipient", rcpt, "err", werr)
+		}
+	}
+}
+
+// exposureWarningRecipients = owner (configured permission supervisors, incl.
+// any user: identity) + all live agents on this daemon. De-duplicated.
+func exposureWarningRecipients(ctx context.Context, permPkg *permission.Permission, st *state.State, cfg *config.ThrumConfig) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	add := func(id string) {
+		id = strings.TrimPrefix(strings.TrimSpace(id), "@")
+		if id == "" {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	if supers, err := permPkg.ResolveSupervisors(ctx, cfg.PermissionSupervisors); err == nil {
+		for _, s := range supers {
+			add(s)
+		}
+	}
+	for _, a := range st.ListAllActiveAgentIDs(ctx) {
+		add(a)
+	}
+	return out
+}
+
+// exposureGateDeps carries the injectable dependencies for resolveBootExposureGate
+// so the boot-time assembly (originURL → probe → classify → gate → persist →
+// warn) is unit-testable without a live daemon or network (thrum-44mt review #1 —
+// the structural substitute for the deferred T11 Step-5 live smoke).
+type exposureGateDeps struct {
+	originURL  string                          // origin remote URL (already read; any form)
+	prober     thrumSync.Prober                // anonymous visibility probe
+	saveConfig func(*config.ThrumConfig) error // persist detected visibility
+	warn       func(canonRemote string)        // emit the exposure warning (transition only)
+}
+
+// exposureGateOutcome is the resolved boot decision the caller applies to the
+// session (localOnly + the distinct status reason).
+type exposureGateOutcome struct {
+	LocalOnly bool
+	Reason    string
+}
+
+// resolveBootExposureGate runs the a-sync exposure gate once at boot: it derives
+// the gate decision from cfg's cached visibility/remote/override + a fresh probe,
+// stamps the detected visibility back onto cfg (persisting via deps.saveConfig),
+// and on a transition INTO the exposed state fires deps.warn. Returns the
+// resolved localOnly + reason.
+//
+// The caller invokes this ONLY inside the syncDir-exists block and ONLY when
+// remote sync isn't already disabled, so peer/email-only and explicit --local
+// users are never probed. Extracted from runDaemon so the assembly is unit-
+// testable without a daemon bounce.
+func resolveBootExposureGate(ctx context.Context, cfg *config.ThrumConfig, deps exposureGateDeps) exposureGateOutcome {
+	if cfg.Daemon.Sync == nil {
+		// First boot w/o init: materialise the stanza via MigrateLegacySync so
+		// the load-time default (incl. the a-sync mechanism when not local-only)
+		// is preserved (thrum-44mt review #2). A bare &SyncConfig{Enabled:true}
+		// would be kept verbatim by MigrateLegacySync at the next load and
+		// SUPPRESS the a-sync mechanism — the same shape fixed in init.go.
+		migrated := config.MigrateLegacySync(*cfg)
+		cfg.Daemon.Sync = migrated.Daemon.Sync
+	}
+	gate := thrumSync.ResolveExposureGate(ctx, thrumSync.GateInput{
+		OriginURL:        strings.TrimSpace(deps.originURL),
+		CachedVisibility: thrumSync.Visibility(cfg.Daemon.Sync.DetectedVisibility),
+		CachedRemote:     cfg.Daemon.Sync.DetectedRemote,
+		Override:         cfg.Daemon.Sync.PublicExposureOverride,
+	}, deps.prober)
+
+	cfg.Daemon.Sync.DetectedVisibility = string(gate.Visibility)
+	cfg.Daemon.Sync.DetectedRemote = gate.CanonicalRemote
+	if deps.saveConfig != nil {
+		if serr := deps.saveConfig(cfg); serr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to persist detected visibility: %v\n", serr)
+		}
+	}
+
+	var out exposureGateOutcome
+	if gate.LocalOnly {
+		out.LocalOnly = true
+		out.Reason = gate.Reason
+		fmt.Fprintf(os.Stderr, "  Mode:        %s\n", gate.Reason)
+		slog.Warn("a-sync.exposure", "reason", gate.Reason, "remote", gate.CanonicalRemote, "visibility", gate.Visibility)
+	}
+	if gate.TransitionedToExposed && deps.warn != nil {
+		deps.warn(gate.CanonicalRemote)
+	}
+	return out
+}
+
 // runDaemon runs the daemon server in the foreground.
 func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
+	// Profile instrumentation gate (thrum-bpq5 substrate). Reads
+	// THRUM_PROFILE env at start; default off (no perf cost). Set to "1"
+	// before launching the daemon to surface per-phase slog timing.
+	profile.Init()
+
 	// Resolve to absolute path
 	absPath, err := filepath.Abs(repoPath)
 	if err != nil {
@@ -5712,15 +6273,14 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		fmt.Fprintf(os.Stderr, "Warning: sync worktree not found at %s (sync disabled)\n", syncDir)
 	}
 
-	// Load config.json (used for local-only, sync interval, WS port)
+	// Load config.json (used for local-only, WS port)
 	thrumCfg, cfgErr := config.LoadThrumConfig(thrumDir)
 	if cfgErr != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to read config.json: %v\n", cfgErr)
 		thrumCfg = &config.ThrumConfig{
 			Daemon: config.DaemonConfig{
-				SyncInterval: config.DefaultSyncInterval,
-				WSPort:       config.DefaultWSPort,
-				LogLevel:     config.DefaultLogLevel,
+				WSPort:   config.DefaultWSPort,
+				LogLevel: config.DefaultLogLevel,
 			},
 		}
 	}
@@ -5783,6 +6343,14 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	// tmux check-pane dispatch (Task 7.1) is wired into the
 	// TmuxHandler via SetPermission further below.
 	permPkg := permission.New(st, st.RawDB(), supervisorID, projectName, thrumDir)
+	// thrum-x3fnh: keep supervisor permission/tool_confirmation fan-out on
+	// THIS daemon's own agents. The agents table holds synced remote agents,
+	// so without this the supervisor relayed every modal to every coordinator
+	// fleet-wide (the all-night cross-host fanout storm). Same HasLocalIdentity
+	// seam as the wo2z backstop IsResident wiring below.
+	permPkg.SetLocalIdentityChecker(func(name string) bool {
+		return nudge.HasLocalIdentity(thrumDir, name)
+	})
 
 	// Log the count of non-expired pending nudges for operator
 	// visibility. No in-memory rehydration is needed — OnDetection
@@ -5796,25 +6364,153 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		log.Printf("daemon: permission found %d pending nudge(s) still in flight", len(rows))
 	}
 
-	// Resolve sync interval: env var > config.json > default
-	syncInterval := time.Duration(thrumCfg.Daemon.SyncInterval) * time.Second
-	if envInterval := os.Getenv("THRUM_SYNC_INTERVAL"); envInterval != "" {
-		if n, err := strconv.Atoi(envInterval); err == nil && n > 0 {
-			syncInterval = time.Duration(n) * time.Second
-		}
-	}
-
-	// Create sync loop for periodic git sync
+	// Create sync loop for event-triggered git sync
 	ctx := context.Background()
 	var syncLoop *thrumSync.SyncLoop
+	var pendingPool *syncPending.Pool // thrum-s6os: nil when syncDir is absent
 	if _, err := os.Stat(syncDir); err == nil {
+		// thrum-44mt: resolve the a-sync exposure gate once at boot. syncDir
+		// existing ⇒ a-sync is a configured mechanism (peer/email-only users
+		// never reach here, so we never probe for them). The gate derives this
+		// session's effective localOnly (immutable until restart), persists the
+		// detected visibility, and signals a transition into the exposed state.
+		// Assembly logic lives in resolveBootExposureGate (unit-tested with
+		// injected deps); this block only supplies the live deps + applies the
+		// outcome.
+		var exposureReason string
+		if !localOnly { // an explicit --local / THRUM_LOCAL already disabled remote sync
+			originURL, _ := safecmd.Git(ctx, absPath, "remote", "get-url", "origin")
+			outcome := resolveBootExposureGate(ctx, thrumCfg, exposureGateDeps{
+				originURL: string(originURL),
+				prober: func(c context.Context, probeURL string) thrumSync.Visibility {
+					out, perr := safecmd.GitProbeAnonymous(c, probeURL)
+					return thrumSync.ClassifyVisibility(out, perr)
+				},
+				saveConfig: func(c *config.ThrumConfig) error { return config.SaveThrumConfig(thrumDir, c) },
+				warn:       func(canonRemote string) { emitExposureWarning(ctx, permPkg, st, thrumCfg, canonRemote) },
+			})
+			if outcome.LocalOnly {
+				localOnly = true
+			}
+			exposureReason = outcome.Reason
+		}
+
 		syncer := thrumSync.NewSyncer(absPath, syncDir, localOnly)
-		syncLoop = thrumSync.NewSyncLoop(syncer, st.Projector(), absPath, syncDir, thrumDir, syncInterval, localOnly)
+		syncLoop = thrumSync.NewSyncLoop(syncer, st.Projector(), absPath, syncDir, thrumDir, localOnly)
 		// Route synced events through State.IngestSyncedEvent so the
 		// event-write hook fires on cross-repo ingest, not just local
 		// writes. Without this, replies arriving via sync from a peer
 		// repo never reach the permission reply interceptor.
 		syncLoop.SetIngester(st)
+		if exposureReason != "" {
+			syncLoop.SetLocalOnlyReason(exposureReason)
+		}
+
+		// thrum-s6os v0.10.6 — wire the structural-event sync path.
+		// Order is load-bearing:
+		//   1. Construct triggers + sync-state writer + snapshot
+		//      writers + walker.
+		//   2. Triggers.SetWalker so SyncOnWrite drives the walker.
+		//   3. State.SetSyncTrigger so WriteEvent fires SyncOnWrite on
+		//      a structural event (spec §3.2 whitelist).
+		//   4. CompactAll once before serving so the local journal +
+		//      messages-v2/receipts are within retention. Non-fatal:
+		//      a stale journal is recoverable; the rearchitect
+		//      should still come up.
+		// All wiring happens BEFORE syncLoop.Start() so there is no
+		// race window where WriteEvent fires but the trigger is
+		// unwired.
+		triggers := thrumSync.NewTriggers(syncLoop)
+
+		stateOwnerResolver := func(agentID string) (string, error) {
+			var od string
+			err := st.DB().QueryRowContext(context.Background(),
+				"SELECT origin_daemon FROM agents WHERE agent_id = ?", agentID).Scan(&od)
+			if errors.Is(err, sql.ErrNoRows) {
+				// Unknown agent → not owned by anyone yet; the writer
+				// treats this as not-owned-by-caller per its
+				// ("", nil) contract.
+				return "", nil
+			}
+			return od, err
+		}
+		stateBranchResolver := func(ctx context.Context, worktree string) string {
+			wc, err := gitctx.ExtractWorkContext(ctx, worktree)
+			if err != nil || wc == nil {
+				return ""
+			}
+			return wc.Branch
+		}
+		stateWriter := syncState.NewWriter(syncDir, st.DaemonID(), stateOwnerResolver, stateBranchResolver)
+		msgWriter := syncSnapshot.NewMessageStateWriter(syncDir, st.DaemonID())
+		recWriter := syncSnapshot.NewReceiptStateWriter(syncDir, st.DaemonID())
+		walker := syncSnapshot.NewWalker(st.DB(), stateWriter, msgWriter, recWriter, syncDir, st.DaemonID())
+
+		// Seed lastWalkAt from the current max event timestamp so the
+		// first post-restart structural-event trigger doesn't scan all
+		// history (s7is.6: cold-start invariant — Go's zero-value
+		// lastWalkAt caused the walker to scan ~11k events under the
+		// outer state.Lock(), wedging the daemon for >10s and expiring
+		// every concurrent RPC). Empty events table: leave at zero —
+		// there's nothing to walk anyway.
+		var maxTS sql.NullString
+		if err := st.DB().QueryRowContext(ctx, "SELECT MAX(timestamp) FROM events").Scan(&maxTS); err != nil {
+			log.Printf("sync: walker lastWalkAt seed query failed: %v (proceeding with zero value)", err)
+			slog.Warn("sync.walker_seed_query_failed", "err", err)
+		} else if maxTS.Valid {
+			if seedT, perr := time.Parse(time.RFC3339Nano, maxTS.String); perr == nil {
+				walker.SetLastWalkAt(seedT)
+			} else {
+				log.Printf("sync: walker lastWalkAt seed parse failed: %v (proceeding with zero value)", perr)
+				slog.Warn("sync.walker_seed_parse_failed", "err", perr, "raw", maxTS.String)
+			}
+		}
+
+		triggers.SetWalker(walker)
+		st.SetSyncTrigger(triggers.SyncOnWrite)
+
+		// Bootstrap-ingest legacy events.jsonl from the sync worktree into
+		// the local journal + SQLite on first daemon run after upgrade to
+		// v0.10.6. Idempotent via sentinel file (.thrum/legacy_ingested).
+		// Runs BEFORE CompactAll so legacy events are present before the
+		// retention cutoff scan (spec §4.6, plan Task 14 anti-pattern §3).
+		if rows, err := thrumSync.BootstrapIngestLegacyEvents(ctx, thrumDir, syncDir, st.DB()); err != nil {
+			log.Printf("sync: legacy events bootstrap-ingest failed: %v", err)
+			slog.Warn("sync.legacy_ingest_failed", "err", err)
+		} else if rows > 0 {
+			log.Printf("sync: bootstrap-ingested %d legacy events from sync worktree", rows)
+		}
+
+		compactor := syncCompact.New(thrumDir, syncDir,
+			thrumCfg.Daemon.EventsRetentionDays,
+			thrumCfg.Daemon.CompactionSizeThresholdMB)
+		if err := compactor.CompactAll(ctx, st.DB()); err != nil {
+			// Non-fatal — log + slog and proceed. A failed compaction
+			// at startup leaves the journal in its previous state,
+			// which is recoverable on the next sync-trigger.
+			log.Printf("sync: startup CompactAll failed: %v", err)
+			slog.Warn("compaction.startup_failed", "err", err)
+		}
+		// Per spec §5.3, CompactAll fires at sync-trigger time in
+		// addition to daemon startup. Wire the closure so
+		// Triggers.SyncOnWrite invokes compaction after the walker
+		// writes succeed and before TriggerSync — any rewrite of
+		// messages-v2/<id>.jsonl / receipts/<id>.jsonl folds into
+		// the same commit as the walker's appends.
+		triggers.SetCompactor(func(ctx context.Context) error {
+			return compactor.CompactAll(ctx, st.DB())
+		})
+
+		// Construct the orphan pool and wire it into the projector so
+		// applyMessageCreate can flag orphaned messages and register them
+		// with the pool (thrum-s6os E11 / Task 16). The resolver must be
+		// wired BEFORE syncLoop.Start so the catch-up sync on first boot
+		// sees the pool-integration path.
+		pendingPool = syncPending.New()
+		projResolver := projection.NewProjectionResolver(st.Projector())
+		st.Projector().SetPendingPool(syncDir, pendingPool)
+		st.Projector().SetPendingResolver(projResolver)
+
 		if err := syncLoop.Start(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to start sync loop: %v\n", err)
 		} else {
@@ -5860,6 +6556,16 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			InitAt:       ident.InitAt,
 		}
 	})
+	// thrum-44mt: surface the real sync state (incl. the exposure-gate
+	// local-only reason) in the health response, so the UI can show an
+	// a-sync-disabled-by-exposure state instead of a hardcoded "synced".
+	healthHandler.SetSyncStatusProvider(func() (string, bool, string) {
+		if syncLoop == nil {
+			return "synced", false, ""
+		}
+		s := syncLoop.GetStatus()
+		return rpc.DeriveSyncState(s), s.LocalOnly, s.LocalOnlyReason
+	})
 
 	// Agent management
 	agentHandler := rpc.NewAgentHandler(st)
@@ -5870,6 +6576,13 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	server.RegisterHandler("agent.delete", agentHandler.HandleDelete)
 	server.RegisterHandler("agent.cleanup", agentHandler.HandleCleanup)
 	server.RegisterHandler("agent.set-status", agentHandler.HandleSetAgentStatus)
+
+	// agent.lookup: single-agent variant of team.list (thrum-1nkt.4).
+	// CLI hint pipeline (`thrum send` recipient-stale check) uses this
+	// instead of team.list so the hot path does not amortize the full
+	// team-list build per send.
+	agentLookupHandler := rpc.NewAgentLookupHandler(st)
+	server.RegisterHandler("agent.lookup", agentLookupHandler.HandleLookup)
 
 	// Team management
 	teamHandler := rpc.NewTeamHandler(st, thrumDir, supervisorIdentity)
@@ -5903,7 +6616,7 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	server.RegisterHandler("group.members", groupHandler.HandleMembers)
 
 	// Message management
-	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, thrumDir, supervisorID, legacySupervisorID)
+	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, thrumDir, supervisorID, legacySupervisorID, thrumCfg.Daemon.MaxMessageBodyBytesEffective())
 	server.RegisterHandler("message.send", messageHandler.HandleSend)
 	server.RegisterHandler("message.get", messageHandler.HandleGet)
 	server.RegisterHandler("message.list", messageHandler.HandleList)
@@ -5945,6 +6658,22 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		syncStatusHandler = rpc.NewSyncStatusHandler(syncLoop)
 		server.RegisterHandler("sync.force", syncForceHandler.Handle)
 		server.RegisterHandler("sync.status", syncStatusHandler.Handle)
+	}
+
+	// thrum-s6os v0.10.6: pending-pool diagnostics surface.
+	// Read-only RPC; returns the current orphan list + count for
+	// CLI inspection. Authentication piggybacks on the daemon's
+	// existing per-connection identity resolver — no privileged
+	// caller required (spec §5.4 + plan Task 13 anti-pattern #2).
+	if pendingPool != nil {
+		pool := pendingPool
+		server.RegisterHandler("sync.pending_pool.list", func(_ context.Context, _ json.RawMessage) (any, error) {
+			orphans := pool.List()
+			return map[string]any{
+				"size":    len(orphans),
+				"orphans": orphans,
+			}, nil
+		})
 	}
 
 	// Tailscale peer sync management
@@ -6068,14 +6797,25 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		// structurally: pending_nudges is per-daemon SQLite state that
 		// does not replicate, so a peer daemon's AfterMessageCreate
 		// call finds no matching row and silently no-ops.
-		go func(evt types.MessageCreateEvent) {
-			defer func() {
-				if r := recover(); r != nil {
-					slog.Error("[permission] intercept panic", "panic", r)
-				}
-			}()
-			permPkg.AfterMessageCreate(context.Background(), evt)
-		}(evt)
+		// thrum-4zqe: only spawn the intercept goroutine for events that are
+		// actually relevant (carry a reply_to ref). AfterMessageCreate no-ops on
+		// everything else, so without this gate a synced batch of N non-reply
+		// events forked N goroutines just to return immediately — the per-event
+		// amplifier on the apply path. permission.ReplyToRef is the SAME
+		// predicate AfterMessageCreate uses for its early-return (single source
+		// of truth, behavior-identical). Deliberately NOT origin-filtered: a
+		// peer-synced reply MUST still dispatch, per the cross-repo rationale
+		// documented above.
+		if permission.ReplyToRef(evt) != "" {
+			go func(evt types.MessageCreateEvent) {
+				defer func() {
+					if r := recover(); r != nil {
+						slog.Error("[permission] intercept panic", "panic", r)
+					}
+				}()
+				permPkg.AfterMessageCreate(context.Background(), evt)
+			}(evt)
+		}
 
 		// thrum-48kt.1: broadcast notification.message to connected
 		// WebSocket clients (including OutboundRelay → Telegram). Moved
@@ -6116,7 +6856,11 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			"session_id", evt.SessionID,
 			"thrum_dir", thrumDir,
 		)
-		nudge.DispatchTmux(thrumDir, evt.Recipients, evt.AgentID)
+		// context.Background(): the SetOnEventWrite hook has no ctx in its
+		// signature; DispatchTmux's goroutines are fire-and-forget and bounded
+		// by the chrome-quiet dispatch deadline, and die with the process on
+		// shutdown. (Matches this hook's existing context.Background() usage.)
+		nudge.DispatchTmux(context.Background(), thrumDir, evt.Recipients, evt.AgentID)
 
 		// hook-inbox-delivery: write a spool file for every LOCAL recipient.
 		// "Local" means the recipient has an identity file reachable from
@@ -7011,6 +7755,19 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	var tsnetStarted bool
 	var tsListenerCleanup func()
 
+	// Dedicated cancellable context for the tsnet HTTP serve loop (thrum-oqao).
+	// Previously the serve loop was handed the daemon-wide ctx, so ServeHTTP's
+	// shutdown goroutine (which waits on ctx.Done -> srv.Shutdown) was dead code.
+	// Deriving a cancellable ctx here lets the shutdown hook cancel it to signal
+	// the serve loop. NOTE: this is a best-effort, non-guaranteed drain — the
+	// hook reaches server.Close() before srv.Shutdown necessarily runs, so any
+	// in-flight handshakes are killed rather than gracefully drained. That is the
+	// intended tradeoff: prioritize FAST node release (closing the overlap
+	// window) over draining. Kept separate from the daemon-wide ctx so cancelling
+	// it does not tear down other subsystems.
+	tsServeCtx, tsServeCancel := context.WithCancel(ctx)
+	defer tsServeCancel()
+
 	// startTsnet starts the tsnet listener on the given port. Safe to call
 	// concurrently — subsequent calls are no-ops after the first success.
 	startTsnet := func(port int) error {
@@ -7088,7 +7845,7 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		// The SyncRegistry implements websocket.HandlerRegistry via GetHandler.
 		// NewServer with empty addr + nil uiFS registers the WS handler at "/".
 		tsWSServer := websocket.NewServer("", syncRegistry, nil, tsWSOpts...)
-		go tsListener.ServeHTTP(ctx, tsWSServer.HTTPHandler())
+		go tsListener.ServeHTTP(tsServeCtx, tsWSServer.HTTPHandler())
 
 		// Start periodic sync with Tailscale-optimized intervals
 		if syncManager != nil {
@@ -7126,6 +7883,11 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		tsnetStarted = true
 		return nil
 	}
+	// Safety net for non-graceful exit (panic / early return before lifecycle's
+	// graceful shutdown runs). The graceful path releases the tsnet node via the
+	// lifecycle hook below, BEFORE the PID file is removed (thrum-oqao);
+	// TsnetListener.Close() is idempotent so this deferred call is a harmless
+	// no-op when the hook already ran.
 	defer func() {
 		if tsListenerCleanup != nil {
 			tsListenerCleanup()
@@ -7171,6 +7933,26 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 
 	// Set lock file for SIGKILL resilience
 	lifecycle.SetLockFile(lockFile)
+
+	// Register the inbound tsnet peer-RPC node release into graceful shutdown
+	// (thrum-oqao). This runs BEFORE the PID file is removed, so a restart's
+	// new process never re-binds the same tsnet state dir while the old node is
+	// still registered on the control plane. The hook signals the serve ctx
+	// (best-effort drain — in-flight handshakes are killed, not drained, to keep
+	// node release fast), then closes the listener + releases the tsnet node
+	// (idempotent). tsListenerCleanup is assigned lazily by startTsnet
+	// under tsnetMu, so read it under the same lock; a nil cleanup (tsnet never
+	// started) makes the hook a no-op.
+	lifecycle.SetTsnetShutdown(func(_ context.Context) error {
+		tsServeCancel()
+		tsnetMu.Lock()
+		cleanup := tsListenerCleanup
+		tsnetMu.Unlock()
+		if cleanup != nil {
+			cleanup()
+		}
+		return nil
+	})
 
 	// Start scheduled backup if configured
 	if thrumCfg.Backup.Schedule != "" {
@@ -7226,6 +8008,13 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	)
 	go spoolJanitor.Start(ctx)
 
+	// thrum-1nkt.6: background sweeper that emits agent.session.end for
+	// active agents whose PID is dead. Replaces the inline Phase 2
+	// self-heal that team.list HandleList used to perform on every
+	// request; team.list is now pure-read.
+	deadAgentSweeper := daemon.NewDeadAgentSweeper(st, thrumDir)
+	go deadAgentSweeper.Start(ctx)
+
 	// thrum-7b84.3 E3: backstop ticker. Every 15 minutes, scan
 	// message_deliveries for unread rows older than the AgeCutoff for
 	// alive agents, and re-fire the existing tmux nudge. Catches the
@@ -7241,6 +8030,21 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 		Dispatch:  newBackstopDispatcher(thrumDir),
 		AgeCutoff: 15 * time.Minute,
 		Interval:  15 * time.Minute,
+		// thrum-wo2z: residency predicate — the agents table includes synced
+		// remote registrations, so the scan must skip recipients with no local
+		// identity file (else every synced-in unread delivery for a remote
+		// agent wakes a local session each tick, forever).
+		IsResident: func(agentID string) bool {
+			return nudge.HasLocalIdentity(thrumDir, agentID)
+		},
+		// thrum-saj4: visibility predicate — the raw message_deliveries scan
+		// counts unread rows the recipient can't SEE (a delivery row for a
+		// message the inbox's for-agent filter hides, e.g. group-scoped to a
+		// group the agent isn't in — the storm-relay feeders). Wire to
+		// rpc.CountInboxVisibleUnread, the SAME live count the inbox listing
+		// produces, so the backstop nudges only for visible unread and can
+		// never drift from the inbox view.
+		VisibleUnread: messageHandler.CountInboxVisibleUnread,
 	}
 	go bs.Run(ctx)
 
@@ -7397,18 +8201,31 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	if peerManager != nil && peerRegistry != nil {
 		localIdent := st.Identity()
 		// I7 review finding: Address was previously empty here, so the
-		// peer.repair request sent an empty address field and the
-		// listener could not update its cached view of us. Supply the
-		// WS port (same format peers store as PeerInfo.Address).
+		// peer.repair request sent an empty address field and the listener
+		// could not update its cached view of us.
+		//
+		// thrum-hix5: the I7 fix supplied ":"+wsPort (the LOCAL loopback ws
+		// port), which is WRONG for a cross-host tsnet peer — it advertised
+		// e.g. ":51953" and the responder stored that loopback addr, breaking
+		// its sync/repair toward us. The correct value is the tsnet-reachable
+		// address, but that is set ASYNC when the tsnet listener starts and is
+		// unknown HERE. So leave Address empty and resolve it lazily at dial
+		// time via WithLocalAddrFn(getTsLocalAddr) below — the same getter the
+		// manual-repair + advertise paths use. Empty-until-tsnet-up is safe:
+		// repair.go only overwrites the responder's record when address != "",
+		// so an empty advertise leaves the responder's existing (working) entry
+		// untouched. This is strictly safer than the old ":"+wsPort, which had
+		// an EMPTY HOST and so corrupted EVERY remote peer's stored address into
+		// an unconnectable ":<port>" (the hix5 symptom).
 		localDialer := reconcile.DialerIdentity{
 			DaemonID:     peerRegistry.LocalDaemonID(),
-			Address:      ":" + wsPort,
 			RepoName:     localIdent.RepoName,
 			Hostname:     localIdent.Hostname,
 			RepoPath:     localIdent.RepoPath,
 			GitOriginURL: localIdent.GitOriginURL,
 		}
-		reconcileMgr = reconcile.NewManager(peerRegistry, reconcile.WSDial, localDialer)
+		reconcileMgr = reconcile.NewManager(peerRegistry, reconcile.WSDial, localDialer).
+			WithLocalAddrFn(getTsLocalAddr) // thrum-hix5: advertise the tsnet addr (resolved at dial time), not ":"+wsPort
 		peerManager.SetReconcileManager(reconcileMgr)
 	}
 
@@ -8999,6 +9816,18 @@ func restartSnapshotSubcmds() []*cobra.Command {
 	return []*cobra.Command{saveCmd, restoreCmd, checkCmd}
 }
 
+// tmuxRestartCallTimeout bounds the client socket deadline for `thrum tmux
+// restart` (thrum-6yt7). The default 10s call timeout is too short: HandleRestart
+// is synchronous and a graceful restart waits for the agent's snapshot up to
+// Restart.graceful_timeout (configurable; default 30s, observed up to ~45s) THEN
+// runs kill + create + launch + shell-ready probe (~10-20s on a slow host). With
+// the 10s deadline the client read times out on a restart that actually
+// SUCCEEDS — the false-negative i/o-timeout error. 90s comfortably covers the
+// default + typical-configured graceful window plus the launch sequence with
+// margin. (If graceful_timeout is configured far higher, revisit or derive this
+// from config.)
+const tmuxRestartCallTimeout = 90 * time.Second
+
 func tmuxCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "tmux",
@@ -9426,7 +10255,10 @@ Without arguments, shows a numbered list of alive sessions to choose from.`,
 				req["runtime"] = rt
 			}
 			var result cli.TmuxRestartResponse
-			if err := client.Call("tmux.restart", req, &result); err != nil {
+			// thrum-6yt7: use CallWithTimeout (not the 10s default Call) — a
+			// synchronous graceful restart routinely exceeds 10s and would
+			// otherwise return a false-negative i/o-timeout on a successful op.
+			if err := client.CallWithTimeout("tmux.restart", req, &result, tmuxRestartCallTimeout); err != nil {
 				return err
 			}
 

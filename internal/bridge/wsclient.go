@@ -275,6 +275,17 @@ func (c *WSClient) readLoop() {
 			}
 			c.mu.Unlock()
 		})
+		// Close the notify channel so consumers ranging Notifications()
+		// (Bridge.runInbound) unblock and observe the conn death — without
+		// this they block forever on a never-closed channel, so the bridge
+		// never tears down or reconnects after a peer daemon restarts (the
+		// zombie-bridge P0). Closed HERE, not inside Close()/closeOnce,
+		// because readLoop is the SOLE sender on notifyCh and runs exactly
+		// once: closing in this defer (after the read loop has exited) cannot
+		// race a send, whereas closing from Close() on another goroutine could
+		// (send-on-closed-channel panic). Close() instead tears down c.conn,
+		// which makes ReadMessage error and ends this loop, reaching this defer.
+		close(c.notifyCh)
 	}()
 
 	for {

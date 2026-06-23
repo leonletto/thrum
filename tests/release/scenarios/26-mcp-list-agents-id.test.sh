@@ -29,49 +29,44 @@ SID="26-mcp-list-agents-id"
 # Settle COORD pane in case prior scenarios left rendering active.
 wait_for_pane_idle "$COORD_PANE" 60
 
-# Assertion 1: zero agents with empty/null agent_id. Compose a
-# bash subshell that emits a RUNID-anchored marker on success.
-ZERO_EMPTY_QUERY="N=\$(thrum agent list --json | jq -r '.agents.agents | map(select(.agent_id == null or .agent_id == \"\")) | length'); if [ \"\$N\" = \"0\" ]; then echo VERIFIED_5_5_NONEMPTY_${RUNID}; else echo FAILED_5_5_EMPTY_\$N; fi"
+# Single read-only query covering all three assertions, with a bounded
+# retry-resend (thrum-vjqn pattern). Three separate `!`-probes gave three
+# independent race windows against the shared COORD pane; under full-gate load
+# (claude 2.1.x panes do more autonomous work, so the COORD pane is busier) one
+# probe's keystrokes intermittently queued and the wait timed out — a load-only
+# flake that passed in isolation. Collapsing to ONE idempotent query shrinks
+# the race to a single window, and resending on a missed keystroke recovers it.
+# `thrum agent list` is a global daemon read, so one snapshot answers all three.
+COMBINED_QUERY="OUT=\$(thrum agent list --json); E=\$(printf '%s' \"\$OUT\" | jq -r '.agents.agents | map(select(.agent_id == null or .agent_id == \"\")) | length'); C=\$(printf '%s' \"\$OUT\" | jq -r '[.agents.agents[] | select(.agent_id == \"test_coordinator_main\")] | length'); I=\$(printf '%s' \"\$OUT\" | jq -r '[.agents.agents[] | select(.agent_id == \"test_implementer\")] | length'); if [ \"\$E\" = \"0\" ] && [ \"\$C\" -ge 1 ] && [ \"\$I\" -ge 1 ]; then echo VERIFIED_5_5_ALL_${RUNID}; else echo \"FAILED_5_5 empty=\$E coord=\$C impl=\$I\"; fi"
 
-if send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
-    "$ZERO_EMPTY_QUERY" \
-    "VERIFIED_5_5_NONEMPTY_${RUNID}" 60; then
+_mcp_list_ok=0
+_mcp_attempt=1
+while [ "$_mcp_attempt" -le 3 ]; do
+  if send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
+      "$COMBINED_QUERY" \
+      "VERIFIED_5_5_ALL_${RUNID}" 30; then
+    _mcp_list_ok=1
+    break
+  fi
+  _mcp_attempt=$((_mcp_attempt + 1))
+done
+
+if [ "$_mcp_list_ok" = "1" ]; then
   emit_pass "$SID" "all-agents-have-id"
-else
-  emit_fail "$SID" "all-agents-have-id" \
-    "0 agents in agent list with empty/null agent_id" \
-    "(timeout, or 1+ agents missing agent_id)" \
-    "scenarios/${SID}.test.sh:$LINENO"
-fi
-
-# Assertions 2+3: both fixture identities present. Defensive
-# against the empty-list false-positive on assertion 1, and split
-# per-identity (not a single comma-joined substring) so a third
-# agent appearing in the registry between the two — e.g. a
-# `test_debug` that sorts between `test_coordinator_main` and
-# `test_implementer` — doesn't break the substring match. Each
-# identity gets its own pre/post jq-anchored emit on a dedicated
-# bash subshell.
-COORD_PRESENT_QUERY="N=\$(thrum agent list --json | jq -r '[.agents.agents[] | select(.agent_id == \"test_coordinator_main\")] | length'); if [ \"\$N\" -ge 1 ]; then echo VERIFIED_COORD_PRESENT_${RUNID}; else echo FAILED_COORD_MISSING; fi"
-if send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
-    "$COORD_PRESENT_QUERY" \
-    "VERIFIED_COORD_PRESENT_${RUNID}" 60; then
   emit_pass "$SID" "coord-identity-present"
-else
-  emit_fail "$SID" "coord-identity-present" \
-    "agent list contains entry with agent_id 'test_coordinator_main'" \
-    "(timeout or coord identity missing)" \
-    "scenarios/${SID}.test.sh:$LINENO"
-fi
-
-IMPL_PRESENT_QUERY="N=\$(thrum agent list --json | jq -r '[.agents.agents[] | select(.agent_id == \"test_implementer\")] | length'); if [ \"\$N\" -ge 1 ]; then echo VERIFIED_IMPL_PRESENT_${RUNID}; else echo FAILED_IMPL_MISSING; fi"
-if send_bash_and_wait "$COORD_PANE" "$COORD_REPO" \
-    "$IMPL_PRESENT_QUERY" \
-    "VERIFIED_IMPL_PRESENT_${RUNID}" 60; then
   emit_pass "$SID" "impl-identity-present"
 else
+  # One emit_fail per assertion name so the bucket attribution is unchanged.
+  emit_fail "$SID" "all-agents-have-id" \
+    "0 agents in agent list with empty/null agent_id" \
+    "(no VERIFIED marker after 3 attempts — pane busy or 1+ agents missing agent_id)" \
+    "scenarios/${SID}.test.sh:$LINENO"
+  emit_fail "$SID" "coord-identity-present" \
+    "agent list contains entry with agent_id 'test_coordinator_main'" \
+    "(no VERIFIED marker after 3 attempts)" \
+    "scenarios/${SID}.test.sh:$LINENO"
   emit_fail "$SID" "impl-identity-present" \
     "agent list contains entry with agent_id 'test_implementer'" \
-    "(timeout or impl identity missing)" \
+    "(no VERIFIED marker after 3 attempts)" \
     "scenarios/${SID}.test.sh:$LINENO"
 fi

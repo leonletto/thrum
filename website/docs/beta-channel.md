@@ -6,7 +6,7 @@ description:
 category: "guides"
 order: 50
 tags: ["beta", "pre-release", "rc", "install", "rollback", "soak", "plugin"]
-last_updated: "2026-05-15"
+last_updated: "2026-05-23"
 ---
 
 ## Thrum Beta Channel
@@ -17,35 +17,37 @@ hit `releases/latest`. This guide covers how to opt in, what to expect, and how
 to report what you find.
 
 > **Current pre-release:
-> [`v0.10.5-rc.4`](https://github.com/leonletto/thrum/releases/tag/v0.10.5-rc.4)**
-> (tagged 2026-05-15, in soak). Highlights: codex plugin first-class,
-> post-launch tmux silence watchdog, first-launch trust-gate detection,
-> self-echo nudge fix, cwd-anchored identity precedence. rc.9 closes the inbox
-> read-race silent-loss class: `message.markRead` now accepts an optional
-> `marked_before` RFC3339Nano watermark, and the CLI captures the listing
-> timestamp before display so messages arriving in the listing→mark gap don't
-> get silently marked read. Inbox listings also carry a `HiddenByFilter` count,
-> so the unread footer is honest when a for-agent filter is hiding more. All
-> wire-additive — pre-rc.9 clients see byte-identical RPC behavior. Full notes:
+> [`v0.10.6-rc.1`](https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.1)**
+> (in soak). Headline: the **sync re-architecture** (thrum-s6os) — the
+> cross-machine wire stream is now event-triggered rather than 60-second-polled,
+> idle daemons produce zero commits on `a-sync`, and busy clusters stop
+> accumulating heartbeat noise. ⚠ **Mixed-cluster warning:** v0.10.5 peers
+> cannot read messages from upgraded v0.10.6 peers (v0.10.6 writes only to the
+> new `messages-v2/` path); upgrade all peers in one window. Also new:
+> timestamped pre-migration DB backups (with a hard halt if backup fails), an
+> RC-tag plugin distribution scheme so `/plugin update` upgrades cleanly through
+> the rc pipeline, two new daemon config keys (`events_retention_days`,
+> `compaction_size_threshold_mb`), and skill-review-loop improvements
+> (`verify-against-source`, Phase 0 review gate). Full notes:
 > [What's New](whats-new.md) and the
 > [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-### Quick install for `v0.10.5-rc.4`
+### Quick install for `v0.10.6-rc.1`
 
 Binary and Codex plugin (run in your shell):
 
 ```bash
 # Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.5-rc.4 sh
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.1 sh
 
-# Codex plugin (matches release/v0.10.5)
-THRUM_INSTALL_REF=release/v0.10.5 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.5/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+# Codex plugin (matches release/v0.10.6)
+THRUM_INSTALL_REF=release/v0.10.6 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.6/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
 ```
 
 Claude Code plugin (run inside Claude):
 
 ```text
-/plugin marketplace add leonletto/thrum#release/v0.10.5
+/plugin marketplace add leonletto/thrum#release/v0.10.6
 /plugin install thrum@thrum
 /reload-plugins
 ```
@@ -275,10 +277,14 @@ bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/thrum-dev/co
 The installer is idempotent and re-stages the cache, so the previous branch
 state is overwritten in place. No remove step is needed for the Codex plugin.
 
-> **Note:** the Codex plugin currently tracks `thrum-dev` rather than a
-> versioned release tag. Once the plugin starts shipping versioned releases (the
-> way the Claude plugin does via `marketplace.json`), the revert command here
-> will gain a version pin similar to the Claude flow above.
+> **Note:** the Codex plugin's install and revert commands track Git branch refs
+> (`release/vX.Y.Z` for the RC channel, `thrum-dev` for the development branch),
+> not version tags. The plugin manifest at
+> `codex-plugin/plugins/thrum/.codex-plugin/plugin.json` does carry the
+> versioned `X.Y.Z-rc.N` string and Codex keys its plugin cache by that version,
+> so an rc.1 → rc.2 re-install populates a fresh cache directory cleanly. The
+> branch-ref install UX gives users a simple "always-latest" path on a given
+> release line, which is the deliberate design choice for Codex.
 
 ## Note for Homebrew users
 

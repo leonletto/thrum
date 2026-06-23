@@ -15,3 +15,6 @@ func IsRuntimeProcess(_ context.Context, _ int, _ string) bool { return false }
 
 // FindClaudeAncestor always returns (0, "") on non-Unix platforms.
 func FindClaudeAncestor(_ context.Context) (int, string) { return 0, "" }
+
+// FindTopmostRuntimeAncestor always returns (0, "") on non-Unix platforms.
+func FindTopmostRuntimeAncestor(_ context.Context) (int, string) { return 0, "" }

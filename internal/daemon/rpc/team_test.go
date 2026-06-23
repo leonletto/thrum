@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sync"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/config"
@@ -343,6 +345,133 @@ func TestTeamList_SelfHealSkipsLiveFilePID(t *testing.T) {
 	}
 	if endAfter != endBefore {
 		t.Errorf("session.end event count changed: before=%d after=%d (expected no new event)", endBefore, endAfter)
+	}
+}
+
+// TestTeamList_DoesNotEmitSessionEndInline verifies thrum-1nkt.6:
+// team.list is now pure-read. Even when concurrent callers observe the
+// same dead agent in Phase 1, NONE of them writes session.end (the
+// background DeadAgentSweeper owns that responsibility). Phase 2's
+// in-memory rewrite still marks the agent offline in every response so
+// callers see the corrected status immediately.
+//
+// This test supersedes thrum-1nkt.3's
+// TestTeamList_SingleFlightDeadAgentSelfHeal: the .3 gate is no longer
+// needed because team.list never writes. The assertion shape stays the
+// same shape (count events + count offline responses) — the expected
+// event count just drops from 1 to 0.
+func TestTeamList_DoesNotEmitSessionEndInline(t *testing.T) {
+	// Make the concurrency guarantee explicit on CI machines that clamp
+	// GOMAXPROCS — the contract under test (zero writes) must hold even
+	// when goroutines actually overlap.
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	syncDir := filepath.Join(thrumDir, "sync")
+	messagesDir := filepath.Join(syncDir, "messages")
+	if err := os.MkdirAll(messagesDir, 0o750); err != nil {
+		t.Fatalf("create messages dir: %v", err)
+	}
+
+	s, err := state.NewState(thrumDir, syncDir, "test_repo_singleflight", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	agentHandler := NewAgentHandler(s)
+	sessionHandler := NewSessionHandler(s)
+	teamHandler := NewTeamHandler(s, "", nil)
+
+	// Register one agent with a dead PID and start a session — same
+	// fixture pattern as TestTeamList_SelfHealSkipsLiveFilePID, minus
+	// the identity-file override that would skip the self-heal.
+	reg := RegisterRequest{
+		Role:     "implementer",
+		Module:   "burst",
+		AgentPID: 999999,
+	}
+	regJSON, _ := json.Marshal(reg)
+	regResp, err := agentHandler.HandleRegister(ctx, regJSON)
+	if err != nil {
+		t.Fatalf("register agent: %v", err)
+	}
+	agentID := regResp.(*RegisterResponse).AgentID
+
+	startReq := SessionStartRequest{AgentID: agentID}
+	startJSON, _ := json.Marshal(startReq)
+	if _, err := sessionHandler.HandleStart(ctx, startJSON); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	var endBefore int
+	if err := s.RawDB().QueryRow(
+		"SELECT COUNT(*) FROM events WHERE type = 'agent.session.end'",
+	).Scan(&endBefore); err != nil {
+		t.Fatalf("query session.end count before: %v", err)
+	}
+
+	const callers = 8
+	req := TeamListRequest{}
+	reqJSON, _ := json.Marshal(req)
+
+	var (
+		wg       sync.WaitGroup
+		startGun = make(chan struct{})
+		offline  = make(chan bool, callers)
+		errCh    = make(chan error, callers)
+	)
+	wg.Add(callers)
+	for range callers {
+		go func() {
+			defer wg.Done()
+			<-startGun
+			resp, err := teamHandler.HandleList(ctx, reqJSON)
+			if err != nil {
+				errCh <- err
+				return
+			}
+			for _, m := range resp.(*TeamListResponse).Members {
+				if m.AgentID == agentID {
+					offline <- m.Status == "offline"
+					return
+				}
+			}
+			t.Errorf("agent %s not found in concurrent HandleList response", agentID)
+			offline <- false
+		}()
+	}
+	close(startGun)
+	wg.Wait()
+	close(offline)
+	close(errCh)
+
+	for err := range errCh {
+		t.Errorf("concurrent HandleList: %v", err)
+	}
+
+	offlineCount := 0
+	for ok := range offline {
+		if ok {
+			offlineCount++
+		}
+	}
+	if offlineCount != callers {
+		t.Errorf("offline status seen by %d/%d concurrent callers, want %d (Phase 3 must mark dead agents offline in every response)",
+			offlineCount, callers, callers)
+	}
+
+	var endAfter int
+	if err := s.RawDB().QueryRow(
+		"SELECT COUNT(*) FROM events WHERE type = 'agent.session.end'",
+	).Scan(&endAfter); err != nil {
+		t.Fatalf("query session.end count after: %v", err)
+	}
+	if delta := endAfter - endBefore; delta != 0 {
+		t.Errorf("session.end events emitted by team.list under %d-concurrent burst: got %d, want 0 (post thrum-1nkt.6 team.list is pure-read — DeadAgentSweeper owns the writes)",
+			callers, delta)
 	}
 }
 
