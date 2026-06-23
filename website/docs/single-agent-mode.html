@@ -438,8 +438,7 @@ content into it. From then on, Thrum maintains it for you.</p>
 — you pair two Thrum daemons via Tailscale (<code>thrum peer add --type tailscale</code> on
 one machine, <code>thrum peer join --type tailscale</code> on the other), configure which
 agents should be visible across repos (<code>thrum peer configure</code>), and messages
-route between them automatically.
-No Telegram relay, no manual coordination.</p>
+route between them automatically. No Telegram relay, no manual coordination.</p>
 <p>The Telegram group approach turned out to have a real limitation — bots can&#39;t
 see other bots&#39; messages in groups, so agent-to-agent communication didn&#39;t work
 there. The peer system replaces that entirely for cross-repo agent coordination.</p>

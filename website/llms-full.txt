@@ -1941,7 +1941,7 @@ Unknown event types are silently ignored (forward compatibility).
     THRUM_LOCAL=1 thrum daemon start       Environment variable
     .thrum/config.json: { "daemon": { "local_only": true } }   Config file (auto-persisted)
 
-  Priority: CLI flag > env var > config file > hardcoded default false; thrum init writes local_only=true on a fresh install with no remote a-sync
+  Priority: CLI flag > env var > config file > default false (but `thrum init` writes true on a fresh no-remote install)
   Check status: thrum sync status (shows "Mode: local-only" or "Mode: normal")
 
   When enabled:

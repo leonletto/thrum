@@ -213,11 +213,11 @@ message store.
 │  └── Daemon process (shared)                                  │
 ├──────────────────────────────────────────────────────────────┤
 │                     Feature Worktrees                         │
-│  ~/.thrum/worktrees/repo/auth/                                     │
+│  ~/.thrum/worktrees/repo/auth/                               │
 │  ├── .thrum/redirect → /path/to/repo/.thrum/                 │
 │  └── Uses same daemon, same messages                          │
 │                                                               │
-│  ~/.thrum/worktrees/repo/sync/                                     │
+│  ~/.thrum/worktrees/repo/sync/                               │
 │  ├── .thrum/redirect → /path/to/repo/.thrum/                 │
 │  └── Uses same daemon, same messages                          │
 └──────────────────────────────────────────────────────────────┘

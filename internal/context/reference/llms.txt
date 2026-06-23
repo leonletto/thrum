@@ -917,7 +917,7 @@ All commands accept these flags:
   THRUM_LOCAL=1 thrum daemon start       # Via environment variable
 
   Persists in .thrum/config.json: { "daemon": { "local_only": true } }
-  Priority: CLI flag > env var > config file > hardcoded default false; thrum init writes local_only=true on a fresh install with no remote a-sync
+  Priority: CLI flag > env var > config file > default false (but `thrum init` writes true on a fresh no-remote install)
   Check status: thrum sync status (shows "Mode: local-only" or "Mode: normal")
 
 ## Configuration Reference (.thrum/config.json)
