@@ -17,6 +17,7 @@ curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/instal
 ### Homebrew
 
 ```bash
+# On Homebrew 6.0+ you may first need: brew trust leonletto/tap
 brew install leonletto/tap/thrum
 ```
 

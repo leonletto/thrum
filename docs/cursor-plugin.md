@@ -31,7 +31,7 @@ Before installing the plugin, you need Thrum installed and initialized:
 ```bash
 # Install thrum
 curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
-# Or: brew install leonletto/tap/thrum
+# Or: brew install leonletto/tap/thrum  (Homebrew 6.0+: run `brew trust leonletto/tap` first)
 # Or: git clone https://github.com/leonletto/thrum.git && cd thrum && make install
 
 # Initialize in your repository

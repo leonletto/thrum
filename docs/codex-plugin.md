@@ -173,7 +173,7 @@ cp -R codex-plugin/skills/thrum-* "$HOME/.agents/skills/"
 ### Thrum commands fail inside skill workflows
 
 - Check daemon status: `thrum daemon status`
-- Verify identity/session: `thrum whoami && thrum session start`
+- Verify identity/session: `thrum agent whoami && thrum session start`
 - Confirm repo initialization: `thrum overview`
 
 ## Codex Bundle vs Claude Plugin

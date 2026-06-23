@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -230,19 +230,19 @@
 <h2>MCP Server</h2>
 <blockquote>
 <p><strong>TL;DR:</strong> The MCP server lets AI agents use Thrum through native MCP tools
-instead of CLI shell-outs. Start with <code>thrum mcp serve</code>. It provides 4 core
-messaging tools — no polling, no wasted tokens.</p>
+instead of CLI shell-outs. Start with <code>thrum mcp serve</code>. It gives you 4 core
+messaging tools — no agent-side polling, no wasted tokens.</p>
 <p><strong>See also:</strong> <a href="daemon.html">Daemon Architecture</a> for the underlying daemon the
 MCP server connects to, <a href="identity.html">Identity</a> for agent identity resolution.</p>
 </blockquote>
 <h2>Overview</h2>
-<p>The MCP (Model Context Protocol) server enables Claude Code agents to send and
-receive messages using native MCP tools instead of shelling out to CLI commands.
-It runs as a long-lived child process (<code>thrum mcp serve</code>) communicating over
-stdio with JSON-RPC, and connects to the Thrum daemon via Unix socket for all
-message operations.</p>
-<p>The server provides 5 MCP tools: 4 for core messaging operations and 1
-deprecated broadcast tool.</p>
+<p>The MCP (Model Context Protocol) server lets Claude Code agents send and receive
+messages using native MCP tools instead of shelling out to CLI commands. It runs
+as a long-lived child process (<code>thrum mcp serve</code>) communicating over stdio with
+JSON-RPC, and connects to the Thrum daemon via Unix socket for all message
+operations.</p>
+<p>The server exposes 5 MCP tools: 4 for core messaging operations and 1 deprecated
+broadcast tool.</p>
 <p>The primary motivation is eliminating polling overhead. Without MCP, agents must
 periodically call <code>thrum inbox</code> (burning tokens and context). With MCP, a cheap
 background sub-agent blocks on <code>wait_for_message</code> and wakes the main agent
@@ -266,7 +266,7 @@ instantly when a message arrives.</p>
 <pre><code class="language-text hljs">internal/mcp/
   server.go    -- NewServer(), tool registration, Run(), InitWaiter()
   tools.go     -- send_message, check_messages, list_agents handlers
-  waiter.go    -- WebSocket client, notification routing, wait_for_message handler
+  waiter.go    -- polling loop (500ms over Unix socket), wait_for_message handler
   types.go     -- MCP-specific input/output structs
 
 cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
@@ -302,7 +302,7 @@ cancelled)</li>
 <li><strong>Per-call <code>cli.Client</code> creation</strong>: <code>cli.Client</code> is not concurrent-safe. Each
 tool handler creates a fresh Unix socket connection. This is cheap (local
 socket) and avoids concurrency issues.</li>
-<li><strong>Atomic WebSocket request IDs</strong>: The waiter uses <code>atomic.Int64</code> for
+<li><strong>Atomic JSON-RPC request IDs</strong>: The waiter uses <code>atomic.Int64</code> for
 incrementing JSON-RPC request IDs, ensuring uniqueness across concurrent
 calls.</li>
 <li><strong>Single-waiter enforcement</strong>: Only one <code>wait_for_message</code> can be active at a
@@ -562,17 +562,20 @@ listener sub-agents running on Haiku.</p>
 was active)</li>
 <li>If a queued message exists, pop it and return immediately</li>
 <li>If queue is empty, block on a channel with the specified timeout</li>
-<li>When a WebSocket <code>notification.message</code> arrives, the <code>readLoop</code> pushes it to
-the queue and closes the waiter channel</li>
+<li>The waiter polls <code>message.list</code> over the Unix socket every 500ms; when a new
+message addressed to this agent appears, it&#39;s pushed to the queue and the
+waiter channel closes</li>
 <li>Fetch the full message via <code>message.get</code> RPC</li>
 <li>Mark as read via <code>message.markRead</code> RPC (best-effort)</li>
 <li>Return the message</li>
 </ol>
 <p><strong>Concurrency:</strong> Only one <code>wait_for_message</code> can be active at a time. A second
 concurrent call returns an error.</p>
-<p><strong>Requires:</strong> WebSocket waiter initialized at startup. If the waiter failed to
-connect, this tool returns an error.</p>
-<p><strong>Daemon RPC:</strong> WebSocket notifications + <code>message.get</code> + <code>message.markRead</code></p>
+<p><strong>Requires:</strong> the polling waiter initialized via <code>InitWaiter</code> (no persistent
+WebSocket connection). If the waiter isn&#39;t initialized, this tool returns an
+error.</p>
+<p><strong>Daemon RPC:</strong> <code>message.list</code> (polled every 500ms over the Unix socket) +
+<code>message.get</code> + <code>message.markRead</code></p>
 <h3>list_agents</h3>
 <p>List all registered agents and their status.</p>
 <p><strong>Input:</strong></p>
@@ -690,8 +693,10 @@ agent IDs in tool calls.</p>
 disambiguation</li>
 </ol>
 <p><strong>Identity file:</strong> <code>.thrum/identities/{name}.json</code> contains name, role, module,
-and repo ID. The server generates a composite agent ID (<code>agent:{role}:{hash}</code>)
-using <code>identity.GenerateAgentID()</code>, consistent with daemon RPC handlers.</p>
+and repo ID. The server derives the agent ID via <code>identity.GenerateAgentID()</code>,
+consistent with the daemon RPC handlers. A named agent&#39;s ID is just its name
+(e.g. <code>furiosa</code>); an unnamed agent falls back to a <code>{role}_{hash}</code> form (e.g.
+<code>coordinator_1b9k33t6rk</code>).</p>
 <p><strong>Multi-agent worktrees:</strong> When multiple agents operate in the same worktree,
 each must have a distinct identity file. Use <code>THRUM_NAME</code> env var or
 <code>--agent-id</code> flag to select.</p>
@@ -775,7 +780,7 @@ mcp__thrum__wait_for_message(timeout=300)</code></pre>
 </tr>
 <tr>
 <td><code>internal/mcp/waiter.go</code></td>
-<td>WebSocket connection, readLoop, WaitForMessage, notification queue</td>
+<td>Polling loop (500ms ticker over the Unix socket), WaitForMessage, notification queue</td>
 </tr>
 <tr>
 <td><code>internal/mcp/types.go</code></td>
@@ -804,8 +809,7 @@ go <span class="hljs-built_in">test</span> -v ./internal/mcp/...</code></pre>
 <li>Identity resolution</li>
 <li>Tests passing (unit + sequential integration)</li>
 </ul>
-<p>WebSocket integration tests (requiring a running daemon WebSocket) are currently
-deferred.</p>
+<p>Live-daemon integration tests for the polling waiter are currently deferred.</p>
 <h2>Next Steps</h2>
 <ul>
 <li><a href="claude-code-plugin.html">Claude Code Plugin</a> — install the plugin to get slash
@@ -815,14 +819,13 @@ tools, including the message-listener pattern for async coordination</li>
 <li><a href="messaging.html">Messaging</a> — the full messaging model that these MCP tools
 wrap: scopes, mentions, groups, and threading</li>
 <li><a href="daemon.html">Daemon Architecture</a> — the daemon that the MCP server connects to
-via Unix socket and WebSocket</li>
+via Unix socket</li>
 </ul>
 <h3>Debugging</h3>
 <p>The MCP server logs warnings to stderr. Check for:</p>
 <ul>
-<li><code>Warning: WebSocket waiter not available</code> -- daemon WebSocket port not found
-or connection failed; <code>wait_for_message</code> will not work but other tools
-function normally</li>
+<li><code>Warning: waiter not available</code> -- the daemon Unix socket couldn&#39;t be reached;
+<code>wait_for_message</code> will not work but other tools function normally</li>
 <li><code>agent name not configured</code> / <code>agent role not configured</code> -- agent identity
 not registered; run <code>thrum quickstart</code> first</li>
 <li><code>Thrum daemon is not running</code> -- start the daemon with <code>thrum daemon start</code></li>
@@ -831,7 +834,6 @@ not registered; run <code>thrum quickstart</code> first</li>
 <ul>
 <li><strong>Runtime:</strong> Thrum daemon (<code>thrum daemon start</code>)</li>
 <li><strong>Go SDK:</strong> <code>github.com/modelcontextprotocol/go-sdk/mcp</code> (official MCP Go SDK)</li>
-<li><strong>WebSocket:</strong> <code>github.com/gorilla/websocket</code></li>
 <li><strong>Identity:</strong> Agent registered with <code>.thrum/identities/{name}.json</code></li>
 </ul>
 <h2>References</h2>

@@ -263,10 +263,10 @@ content into it. From then on, Thrum maintains it for you.
 ## What's Next
 
 One more thing that shipped in this release: v0.7.0 includes **peer transport**
-— you pair two Thrum daemons via Tailscale (`thrum peer add` on one machine,
-`thrum peer join` on the other), configure which agents should be visible across
-repos (`thrum peer configure`), and messages route between them automatically.
-No Telegram relay, no manual coordination.
+— you pair two Thrum daemons via Tailscale (`thrum peer add --type tailscale` on
+one machine, `thrum peer join --type tailscale` on the other), configure which
+agents should be visible across repos (`thrum peer configure`), and messages
+route between them automatically. No Telegram relay, no manual coordination.
 
 The Telegram group approach turned out to have a real limitation — bots can't
 see other bots' messages in groups, so agent-to-agent communication didn't work

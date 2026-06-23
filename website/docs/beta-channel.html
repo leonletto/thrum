@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark light">
   <title>Beta Channel — Thrum</title>
-  <meta name="description" content="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">
+  <meta name="description" content="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">
   <!-- Open Graph -->
   <meta property="og:type" content="article">
   <meta property="og:title" content="Beta Channel — Thrum">
-  <meta property="og:description" content="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">
+  <meta property="og:description" content="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">
   <meta property="og:url" content="https://thrum.team/docs/beta-channel.html">
   <meta property="og:site_name" content="Thrum">
   <meta property="og:image" content="https://thrum.team/img/social-card.png">
@@ -18,10 +18,10 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Beta Channel — Thrum">
-  <meta name="twitter:description" content="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">
+  <meta name="twitter:description" content="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">
   <meta name="twitter:image" content="https://thrum.team/img/social-card.png">
   <link rel="canonical" href="https://thrum.team/docs/beta-channel.html">
-  <script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Beta Channel","description":"How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable","url":"https://thrum.team/docs/beta-channel.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://thrum.team/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://thrum.team/docs/overview.html"}}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Beta Channel","description":"How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable","url":"https://thrum.team/docs/beta-channel.html","author":{"@type":"Person","name":"Leon Letto"},"publisher":{"@type":"Organization","name":"Thrum","url":"https://thrum.team/"},"isPartOf":{"@type":"TechArticle","name":"Thrum Documentation","url":"https://thrum.team/docs/overview.html"}}</script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
   <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/inter.woff2" crossorigin>
   <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/ibm-plex-mono-regular.woff2" crossorigin>
@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link active" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link active" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -232,175 +232,18 @@
 before being promoted to stable. Beta users help catch regressions before they
 hit <code>releases/latest</code>. This guide covers how to opt in, what to expect, and how
 to report what you find.</p>
-<h2>Choose a track</h2>
-<p>Thrum currently runs two parallel pre-release tracks. Pick one — they install
-the same binary, so you can only be on one track at a time.</p>
-<ul>
-<li><strong>Stable-track</strong> (<code>v0.10.x</code> cycle) — bug-fix and small-feature RCs against the
-current stable line. Recommended for production use; lower churn.</li>
-<li><strong>Substrate-track</strong> (<code>v0.11.x</code> cycle) — the
-<a href="substrate/overview.html">Personal Agent Substrate</a> work: unified scheduler,
-scheduled-agent lifecycle, skill library, email transport, reminders. Rapid
-iteration; expect breakage. Recommended only if you&#39;re actively helping shake
-the substrate out.</li>
-</ul>
-<p>The sections below cover the current pre-release on each track. Install
-mechanics (binary + plugins + rollback) are shared further down the page —
-they&#39;re parameterized over <code>VERSION</code> and the release branch.</p>
-<h2>Stable-track current pre-release</h2>
+<h2>Current pre-release</h2>
 <blockquote>
-<p><strong>Current stable-track pre-release:
-<a href="https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.13"><code>v0.10.6-rc.13</code></a></strong>
-(tagged 2026-06-15, in soak). rc.13 adds two release-line features on top of
-the rc.11/rc.12 cross-host sync-storm fix batch:</p>
-<ul>
-<li><strong><code>thrum team</code> daemon/host filters + <code>local</code> / <code>daemons</code> subviews</strong>
-(thrum-l2kxw) — <code>thrum team --daemon &lt;id&gt;</code> and <code>--host &lt;name&gt;</code> filter the
-roster to a single daemon or host; <code>thrum team local</code> is sugar for the
-current daemon; <code>thrum team daemons</code> groups agents by origin daemon
-(daemon_id, hostname, agent count, with an <code>unknown</code> bucket for unattributed
-agents). Pure CLI presentation over the existing <code>team.list</code> payload — no
-schema, RPC, or daemon change — and all four views honor <code>--json</code>.
-<code>shared_messages</code> is omitted from filtered views since that team-global
-aggregate would mislead on a subset.</li>
-<li><strong>Permission reminder ladder cancels when the modal clears</strong> (thrum-g23nb) —
-<code>fireReminder</code> re-captures the pane on each fire and, if the approval modal
-has already cleared, runs recovery and stops the ladder instead of nagging
-about a resolved prompt. It also skips the reminder send (while still
-advancing cadence, so give-up escalation is preserved) once every real
-supervisor recipient has read the thread, and fails open on a pane-capture
-error so a flaky capture never silently drops a live reminder.</li>
-</ul>
-<p>rc.12 was the <strong>cross-host sync-storm fix batch</strong> — two production-observed
-storms on busy multi-host meshes:</p>
-<ul>
-<li><strong>Duplicate <code>message_id</code> in relayed history no longer stalls inbound sync</strong>
-(thrum-lv9x) — a durable-lane snapshot row colliding with the same event
-arriving later via sync aborted the projector&#39;s whole batch without advancing
-the checkpoint, and the notify-driven re-pull retried it forever (observed as
-a pinned peer checkpoint and a 65–167/sec <code>sync.notify</code> storm).
-<code>message.create</code> apply is now idempotent (<code>INSERT OR IGNORE</code> + a dup-no-op
-that still commits the event record so the batch advances), with an event-id
-dedup pre-check on the a-sync git ingest path. Live-verified two-node:
-104 climbing apply-failures → 0, checkpoint converged.</li>
-<li><strong>Backstop nudges only locally-resident recipients</strong> (thrum-wo2z) — the
-daemon backstop&#39;s 15-minute ticker scanned unread deliveries with no
-residency filter, so local sessions were woken every 15 minutes for remote
-agents&#39; mail (and spool envelopes accumulated unbounded — one host hit 107).
-The scan now applies an identity-file residency predicate with a
-defense-in-depth guard at the dispatcher. ⚠ <strong>Deploy note:</strong> spool envelopes
-accumulated before the fix are not removed automatically — a one-time cleanup
-of non-resident dirs under <code>.thrum/spool/</code> is recommended.</li>
-</ul>
-<p><strong>rc.11 carries forward</strong>, with its headliners:</p>
-<ul>
-<li><strong>a-sync exposure guard now gates on repository visibility</strong> (thrum-44mt,
-replaces the rc.10 host-denylist). The daemon probes <code>origin</code> with an
-anonymous, credential-stripped <code>git ls-remote</code> and refuses pushing message
-history only to a <strong>publicly readable</strong> repo. Classification is fail-safe
-(only exit-0-with-refs counts as public; 404/401/403/auth-denied means
-private), and an explicit remote-bound exact-match override
-(<code>daemon.sync.public_exposure_override</code>) allows intentional public-repo
-sync. The gate resolves once at boot, surfaces its reason in <code>sync status</code>
-and the health endpoint / Settings UI, and warns active agents when the repo
-transitions into exposed.</li>
-<li><strong>Read-state unification + one-time v40 backfill</strong> (thrum-b6qw) — read truth
-is unified on <code>message_deliveries.read_at</code>, and a one-time schema v39→v40
-marker runs a data-only backfill that clears historically-stuck unread (the
-&quot;phantom unread&quot; / backstop nudge-storm class). ⚠ <strong>The v40 migration is
-one-way:</strong> binaries supporting ≤v39 cannot reopen a migrated DB. Take a
-<code>.thrum/</code> backup before upgrading if you may need to roll back.</li>
-<li><strong>tsnet node released before PID removal on shutdown</strong> (thrum-w8is) — daemon
-restart no longer leaves the old tsnet node registered while the new process
-re-binds the same state dir, fixing the post-restart cross-host inbound flap
-(<code>:9177</code> RST/EOF masked by pull-sync).</li>
-<li><strong>Inbox defaults to newest-first</strong> (thrum-4yjc) — recent mail is never
-buried under backlog; the reply-clustered chronological view is opt-in via
-<code>--chronological</code> / <code>--oldest</code>.</li>
-<li><strong>Shell-safe message bodies</strong> (thrum-d3fp) — <code>thrum send</code>, <code>reply</code>, and
-<code>message edit</code> accept <code>--stdin</code> / <code>--body-file &lt;path&gt;</code> / <code>-</code> so bodies
-bypass shell interpolation (backticks, <code>${...}</code>, <code>$(...)</code> arrive verbatim).</li>
-</ul>
-<p>Also in rc.11: the peer bridge self-heals after daemon restart (thrum-to7p),
-the inbox hidden-count only counts delivery-backed unread so
-<code>thrum message read --all</code> converges (thrum-eeio), the role preamble survives
-the self-restart race (thrum-4ye2), and context-sweep alerts gain hysteresis
-plus a correct 1M-token window for <code>claude-fable-5</code> (thrum-gqq3).</p>
-<p>The rc.10 <strong>directed-inbound back-port</strong> (thrum-h4s4) lands with rc.11: a lean
-0.10.6 node can consume a directed/filtered inbound stream served by a 0.11
-hub (the hub does all filtering). It brings a structured <code>daemon.sync</code> config
-stanza (<code>{enabled, mechanisms:[{mechanism, scope}]}</code>) with startup validity
-checks to supplement the overloaded <code>daemon.local_only</code> bool, the additive
-<code>filtered</code> sync-pull response flag with checkpoint cursor-honesty, and a
-pairing guard so <code>thrum peer add</code> / <code>peer join</code> refuse when sync is disabled
-instead of silently half-connecting.</p>
-<p>rc.9&#39;s cross-host sync fix carries forward: the auto-reconcile Manager no
-longer advertises a loopback <code>:&lt;port&gt;</code> dialer identity that corrupted peers&#39;
-stored address and stalled cross-host sync for hours — the advertised address
-now resolves lazily at dial time from the daemon&#39;s tsnet-reachable address
-(thrum-hix5). rc.8&#39;s message-nudge hardening also carries: the chrome-quiet
-gate so inbound nudges never land mid-keystroke (thrum-nlel / thrum-3i2s,
-tunable via the <code>daemon.nudge</code> config block), nudges deferred to a redelivery
-queue while an interactive selection dialog is up (thrum-7phu), and the daemon
-start-wait surfacing live migration progress instead of a false timeout on
-large-DB upgrades (thrum-vh2c). rc.7&#39;s agent-restart reliability also carries
-forward: the un-restartable-agent class closed (thrum-5oui, thrum-ipbl,
-thrum-6yt7, plus rc.6&#39;s thrum-mnhp dead-PID guard), the <code>thrum prime</code>
-daemon-side <code>RLock</code> root-cause fix (thrum-5988), the snapshot/sleep skill
-family (thrum-rwhg — <code>/thrum:restart-extended</code>, <code>/thrum:sleep</code>,
-<code>/thrum:sleep-extended</code>), and the identity-guard message-read fail-open close
-(thrum-tgqx).</p>
-<p>Earlier v0.10.6 RCs carry forward — rc.6/rc.5 fleet-operations work: two sweep
-ctx% corrections (thrum-4pd1 Opus 4.8 1M-window denominator, thrum-roeq
-session-birth transcript selection), boot reconcile writing live AgentPIDs
-back to the registry (thrum-qxr3), the <code>thrum tmux create --force</code>
-prefix-match guard (thrum-z63b), agent-status Pattern D self-writes
-(thrum-9neg), <code>thrum monitor --schedule</code> with continuous auto-restart
-(thrum-puhr.9), and the restored <code>--json</code> / <code>--report-only</code> /
-<code>THRUM_SWEEP_IDENTITY_GLOBS</code> sweep features (thrum-l9e6); plus rc.4&#39;s
-<code>team.list</code> / dead-agent self-heal rework (thrum-1nkt), the 4MB
-JSONL-compactor scanner buffer (thrum-10j0), the 1MB message-body write cap
-(thrum-mhwt), <code>INSERT OR IGNORE</code> on <code>applySessionStart</code> (thrum-9jcb.3), the
-identity-guard PID-ancestor split (thrum-xir.40) and cached peercred CWD
-lookup (thrum-xir.45), and <code>thrum worktree teardown</code> cascade-deleting the
-bound agent identity (thrum-wk7d).</p>
-<p>The v0.10.6 story still leads with the <strong>sync re-architecture</strong> (thrum-s6os):
-the cross-machine wire stream is event-triggered rather than 60-second-polled,
-idle daemons produce zero commits on <code>a-sync</code>, and busy clusters stop
-accumulating heartbeat noise. ⚠ <strong>Mixed-cluster warning:</strong> v0.10.5 peers
-cannot read messages from upgraded v0.10.6 peers (v0.10.6 writes only to the
-new <code>messages-v2/</code> path); upgrade all peers in one window. Other v0.10.6
-changes: timestamped pre-migration DB backups (with a hard halt if backup
-fails), an RC-tag plugin distribution scheme so <code>/plugin update</code> upgrades
-cleanly through the rc pipeline, two new daemon config keys
-(<code>events_retention_days</code>, <code>compaction_size_threshold_mb</code>), and
-skill-review-loop improvements (<code>verify-against-source</code>, Phase 0 review gate).
-Full notes: <a href="whats-new.html">What&#39;s New</a> and the
-<a href="https://github.com/leonletto/thrum/blob/release/v0.10.6/CHANGELOG.html">CHANGELOG <code>[Unreleased]</code> section</a>.</p>
+<p><strong>No current pre-release.</strong> v0.10.6 was promoted to stable on 2026-06-23 — see
+<a href="whats-new.html">What&#39;s New</a> for the highlights. The next pre-release will be
+tagged when the next release cycle opens; watch the
+<a href="https://github.com/leonletto/thrum/releases">GitHub releases</a> page for the
+next <code>vX.Y.Z-rc.1</code>.</p>
 </blockquote>
-<h3>Quick install for <code>v0.10.6-rc.13</code></h3>
-<p>Binary and Codex plugin (run in your shell):</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Binary</span>
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.13 sh
-
-<span class="hljs-comment"># Codex plugin (matches release/v0.10.6)</span>
-THRUM_INSTALL_REF=release/v0.10.6 bash &lt;(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.6/codex-plugin/plugins/thrum/scripts/install-plugin.sh)</code></pre>
-<p>Claude Code plugin (run inside Claude):</p>
-<pre><code class="language-text hljs">/plugin marketplace add leonletto/thrum#release/v0.10.6
-/plugin install thrum@thrum
-/reload-plugins</code></pre>
-<h2>Substrate-track current pre-release</h2>
-<blockquote>
-<p>No substrate-track pre-release yet. First will be <code>v0.11.0-rc.1</code>.</p>
-</blockquote>
-<p>When <code>v0.11.0-rc.1</code> publishes, this section will carry the substrate-track
-callout + Quick install block pinned to the <code>release/v0.11.0</code> branch. Watch the
-<a href="https://github.com/leonletto/thrum/releases">GitHub releases</a> page or the
-<a href="substrate/overview.html">Personal Agent Substrate</a> intro for the announcement.</p>
-<p>For refresh between rc.N bumps, switching tracks, switching back to stable, and
-the parameterized versions of these commands, see
-<a href="#how-to-install-the-matching-claude-code-and-codex-plugins">How to install the matching plugins</a>
-below.</p>
+<p>When an RC is in soak, this section carries its callout plus a Quick install
+block pinned to the matching <code>release/vX.Y.Z</code> branch. The install mechanics
+(binary + plugins + rollback) below are shared and parameterized over <code>VERSION</code>
+and the release branch.</p>
 <h2>What this is</h2>
 <p>When a new version is ready for soak, the coordinator cuts a <code>release/vX.Y.Z</code>
 branch and tags <code>vX.Y.Z-rc.1</code>. GoReleaser publishes that tag as a <strong>GitHub
@@ -430,7 +273,7 @@ script never sees it (it falls back to <code>latest</code>):</p>
 <p>To find the current RC tag, browse the
 <a href="https://github.com/leonletto/thrum/releases">GitHub releases page</a> and look for
 entries marked <strong>Pre-release</strong>. The RC pattern is <code>vX.Y.Z-rc.N</code> (e.g.
-<code>v0.11.0-rc.2</code>).</p>
+<code>v0.10.7-rc.2</code>).</p>
 <p>After installing, restart the daemon so it picks up the new binary:</p>
 <pre><code class="language-bash hljs">thrum daemon restart
 thrum version</code></pre>
@@ -511,20 +354,6 @@ If the bug is intermittent, note how often you&#39;ve seen it</li>
 <p>The <code>rc-feedback</code> label is what the coordinator filters on when triaging during
 soak — labelled issues block promotion at P0/P1; unlabelled bug reports may not
 be seen until after stable ships.</p>
-<h2>Switching between stable-track and substrate-track</h2>
-<p>To move between the two tracks, install the binary with the target track&#39;s
-<code>VERSION=</code> and refresh both plugins against the matching release branch.</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Example: substrate-track → stable-track (when stable-track has a pre-release;</span>
-<span class="hljs-comment"># otherwise just install the latest stable release without VERSION=)</span>
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
-thrum daemon restart
-<span class="hljs-comment"># Then refresh plugins against the release branch (see Claude Code + Codex</span>
-<span class="hljs-comment"># sections above) — currently the stable line is the v0.10.3 release.</span></code></pre>
-<p>The binary and plugins share the same install paths regardless of track, so the
-switch is &quot;install the other track&#39;s version&quot; rather than uninstall + reinstall.
-The plugin remove-and-re-add step in the &quot;Leaving the beta channel&quot; section
-below applies in the same way if Claude Code has cached the previous track&#39;s
-marketplace ref.</p>
 <h2>Leaving the beta channel</h2>
 <p>When you&#39;re done testing, revert the binary and any plugins you installed from
 the release branch back to their stable counterparts.</p>
@@ -566,6 +395,8 @@ an RC, run the curl command above; the install script writes to
 <code>~/.local/bin/thrum</code>, which takes precedence over the Homebrew binary on most
 <code>PATH</code> setups. To return to the Homebrew-managed binary, remove the local copy
 and run <code>brew upgrade thrum</code>.</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># On Homebrew 6.0+ you may first need: brew trust leonletto/tap</span>
+brew install leonletto/tap/thrum</code></pre>
 
       </div>
     </main>

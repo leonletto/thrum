@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -375,7 +375,7 @@ thrum tmux launch api-feature
 thrum send <span class="hljs-string">&quot;Your epic is thrum-abc. Run bd show thrum-abc and start working.&quot;</span> --to @impl_api</code></pre>
 <p>For an existing worktree (one that wasn&#39;t created with <code>thrum worktree create</code>),
 use <code>thrum tmux create</code> directly:</p>
-<pre><code class="language-bash hljs">thrum tmux create implementer-api --cwd ~/.workspaces/myproject/api-feature \
+<pre><code class="language-bash hljs">thrum tmux create implementer-api --cwd ~/.thrum/worktrees/myproject/api-feature \
   --name impl_api --role implementer --module api --intent <span class="hljs-string">&#x27;API refactor&#x27;</span>
 thrum tmux launch implementer-api</code></pre>
 <p>The old pattern (create first, then <code>thrum tmux send</code> to run quickstart) is

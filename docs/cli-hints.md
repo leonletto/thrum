@@ -232,7 +232,7 @@ non-zero.
 `thrum init`. Eight hint codes. Stable dotted slugs you can match in scripts and
 tooling.
 
-**Phases C–E (planned, tracked under `thrum-rqkf`):**
+**Phases C–E (planned):**
 
 - Phase C: retrofit the hint pipeline to remaining commands (currently on the
   legacy `LegacyHint()` flat-map).

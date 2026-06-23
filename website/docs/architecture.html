@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -254,7 +254,7 @@ server all go through it.</p>
 </tr>
 <tr>
 <td><strong>Sync Loop</strong></td>
-<td>Automatic Git fetch/merge/push (60s interval)</td>
+<td>Notify-driven Git fetch/merge/push (+ periodic safety-net)</td>
 <td>Cross-machine synchronization</td>
 </tr>
 <tr>
@@ -309,7 +309,7 @@ resolution.</li>
 │   └──────┬──────┘   └──────┬──────┘   └──────┬──────┘       │
 │          │                 │                  │              │
 │          │ Unix Socket     │ WebSocket        │ Unix Socket  │
-│          │ JSON-RPC 2.0    │ JSON-RPC 2.0     │ + WebSocket  │
+│          │ JSON-RPC 2.0    │ JSON-RPC 2.0     │ JSON-RPC 2.0 │
 │          │                 │                  │              │
 └──────────┼─────────────────┼──────────────────┼──────────────┘
            │                 │                  │
@@ -326,9 +326,8 @@ messages and agent activity. Served from the same port as WebSocket (default
 <p><strong>MCP Server</strong> (<code>thrum mcp serve</code>): Exposes Thrum functionality as native MCP
 tools over stdio, enabling LLM agents (e.g., Claude Code) to communicate
 directly through MCP protocol without CLI shell-outs. Connects to the daemon via
-Unix socket for RPC and WebSocket for real-time push notifications. Provides 4
-core messaging tools: <code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>, and
-<code>list_agents</code>.</p>
+Unix socket for RPC. It gives you 4 core messaging tools: <code>send_message</code>,
+<code>check_messages</code>, <code>wait_for_message</code>, and <code>list_agents</code>.</p>
 <h2>Key Features</h2>
 <h3>1. Persistent Messaging</h3>
 <p>Messages are stored in append-only JSONL logs on a dedicated <code>a-sync</code> orphan
@@ -358,7 +357,7 @@ and agent replacement.</p>
 checked out on the <code>a-sync</code> orphan branch. No branch switching needed — all git
 operations happen within the worktree:</p>
 <pre><code class="language-text hljs">┌─────────────────────────────────────────────────────────────┐
-│          Sync Loop (60s) in .git/thrum-sync/a-sync/          │
+│    Sync Loop (notify-driven) in .git/thrum-sync/a-sync/     │
 ├─────────────────────────────────────────────────────────────┤
 │  1. Acquire lock (.thrum/var/sync.lock)                     │
 │  2. Fetch remote in worktree                                 │
@@ -368,8 +367,8 @@ operations happen within the worktree:</p>
 │  6. Commit &amp; push local changes in worktree                  │
 │  7. Release lock                                             │
 └─────────────────────────────────────────────────────────────┘</code></pre>
-<p><strong>Why Git?</strong> Works offline (changes accumulate locally), leverages existing
-authentication (SSH keys, HTTPS), provides a natural audit trail, and needs no
+<p><strong>Why Git?</strong> Works offline (changes accumulate locally), uses your existing
+authentication (SSH keys, HTTPS), gives a natural audit trail, and needs no
 additional infrastructure.</p>
 <h3>3. Agent &amp; Session Management</h3>
 <p>Agents register with a human-readable name, role, and module:</p>
@@ -940,19 +939,19 @@ daemon_identity     # Local daemon identity cache (v23)
 telegram_msg_map    # Telegram ↔ Thrum message ID map (v24)
 schema_version      # Migration tracking</code></pre>
 <h3>Schema Version</h3>
-<p>Current version: <strong>36</strong></p>
+<p>Current version: <strong>51</strong></p>
 <blockquote>
-<p><strong>v0.10.6 note:</strong> migrations 25-36 are forward-ported from the v0.11 substrate
-work (<code>thrum-agents</code> + <code>feature/b-b1-impl</code> branches) so the v0.10.6 binary can
-open AND co-reside on DBs previously touched by a v0.11-substrate binary on
-multi-binary worktree machines. The new tables/columns (scheduler, agent
-lifecycle, reminders, email, memories, API-error remediation,
-<code>pending_route_resolution</code>) are intentionally <strong>dead-end on v0.10.6</strong> — no
-consumer code reads from them. <code>createTables</code>/<code>createIndexes</code> carry full v36
-parity, so a fresh DB created by a v0.10.6 binary stamps v36 with every table
-present (a co-resident v0.11 binary then runs no migration and must not crash
-on a missing table). v29 is a deliberate gap (reserved for substrate
-follow-ups); <code>runMigrations</code> handles gapped sequences naturally.</p>
+<p><strong>v0.10.6 note:</strong> migrations 25-51 are dead-end DDL forward-ported from a newer
+development line so the v0.10.6 binary can open AND co-reside on DBs previously
+touched by a newer-schema binary on multi-binary worktree machines. The new
+tables/columns (scheduler, agent lifecycle, reminders, email, memories, graph,
+API-error remediation, <code>pending_route_resolution</code>, and others) are
+intentionally <strong>dead-end on v0.10.6</strong> — no consumer code reads from them.
+<code>createTables</code>/<code>createIndexes</code> carry full v51 parity, so a fresh DB created by a
+v0.10.6 binary stamps v51 with every table present (a co-resident newer binary
+then runs no migration and must not crash on a missing table). v29 is a
+deliberate gap, and v42/v43/v46 are no-op version markers; <code>runMigrations</code>
+handles gapped sequences naturally.</p>
 </blockquote>
 <p>Key migrations:</p>
 <ul>
@@ -992,28 +991,46 @@ daemon&#39;s identity block, mirrored from <code>.thrum/config.json</code>)</li>
 <li>v23 -&gt; v24: <code>telegram_msg_map</code> table added (durable Telegram message ID ↔
 Thrum message ID mapping; survives daemon restart so in-flight permission
 approvals route correctly)</li>
-<li>v24 -&gt; v25: <code>scheduler_job_state</code> + <code>scheduler_job_events</code> tables added (v0.11
-substrate forward-port; dead-end on v0.10.5)</li>
+<li>v24 -&gt; v25: <code>scheduler_job_state</code> + <code>scheduler_job_events</code> tables added
+(forward-ported; dead-end on v0.10.x)</li>
 <li>v25 -&gt; v26: agents table extended with <code>mode</code>, <code>identity</code>, and 4 runtime
 columns (<code>auto_respawn_enabled</code>, <code>auto_respawn_disabled_at</code>,
-<code>state_md_parse_failed_at</code>, <code>last_pane_alive_at</code>) (v0.11 forward-port)</li>
-<li>v26 -&gt; v27: <code>agent_lifecycle_events</code> append-only journal (v0.11 forward-port)</li>
+<code>state_md_parse_failed_at</code>, <code>last_pane_alive_at</code>) (forward-ported)</li>
+<li>v26 -&gt; v27: <code>agent_lifecycle_events</code> append-only journal (forward-ported)</li>
 <li>v27 -&gt; v28: <code>reminders</code> polymorphic table (time-triggered + condition-
-triggered reminder substrate; v0.11 forward-port)</li>
-<li>v28 -&gt; v29: deliberate gap (reserved for substrate follow-ups)</li>
-<li>v29 -&gt; v30: <code>email_msg_seen</code> table (v0.11 D-B1 forward-port)</li>
-<li>v30 -&gt; v31: <code>email_outbound_queue</code> table (v0.11 D-B1 forward-port)</li>
+triggered reminder substrate; forward-ported)</li>
+<li>v28 -&gt; v29: deliberate gap (reserved for future migrations)</li>
+<li>v29 -&gt; v30: <code>email_msg_seen</code> table (forward-ported)</li>
+<li>v30 -&gt; v31: <code>email_outbound_queue</code> table (forward-ported)</li>
 <li>v31 -&gt; v32: <code>email_peer_rate_state</code> table with partial index on <code>paused_at</code>
-(v0.11 D-B1 forward-port)</li>
+(forward-ported)</li>
 <li>v32 -&gt; v33: <code>pending_route_resolution</code> column added to <code>messages</code> table
 (<code>thrum-s6os</code> sync re-architecture forward-port; dead-end on v0.10.6)</li>
-<li>v33 -&gt; v34: <code>memories</code> + <code>memory_scopes</code> tables and six indexes (E16 memory
-substrate forward-port; dead-end on v0.10.6)</li>
+<li>v33 -&gt; v34: <code>memories</code> + <code>memory_scopes</code> tables and six indexes
+(forward-ported; dead-end on v0.10.6)</li>
 <li>v34 -&gt; v35: <code>agent_lifecycle_events.event_kind</code> CHECK constraint added via an
-existence-guarded table rebuild (SQLite cannot <code>ALTER ... ADD CHECK</code>; v0.11
-forward-port; dead-end on v0.10.6)</li>
+existence-guarded table rebuild (SQLite cannot <code>ALTER ... ADD CHECK</code>;
+forward-ported; dead-end on v0.10.6)</li>
 <li>v35 -&gt; v36: <code>agent_api_error_remediation</code> table (per-agent API-error
-auto-remediation state; v0.11 forward-port; dead-end on v0.10.6)</li>
+auto-remediation state; forward-ported; dead-end on v0.10.6)</li>
+<li>v36 -&gt; v37: memory dummy tables (<code>memory_record</code>, <code>memory_tag</code>, <code>memory_edge</code>,
+<code>memory_fts</code>, <code>memory_embeddings</code>, <code>memory_embed_queue</code> + indexes) — DDL-only
+forward-port for co-residence with newer binaries; dead-end on v0.10.6</li>
+<li>v37 -&gt; v38: <code>idx_events_timestamp</code> index on <code>events(timestamp)</code> so the
+compactor&#39;s timestamp-range delete is a seek instead of a full scan</li>
+<li>v38 -&gt; v39: <code>schedule TEXT</code> column added to <code>monitors</code> (empty = continuous
+mode; a cron expression switches the runner to scheduled one-shot fires)</li>
+<li>v39 -&gt; v40: read-state unification marker (no DDL; the version stamp triggers a
+one-time, data-only read-state backfill that clears historically-stuck unread)</li>
+<li>v40 -&gt; v51: dead-end DDL forward-port for on-disk parity with a v51
+(newer-schema) database — schema-on-disk only, no feature availability. The
+real migrations are v41 (<code>agents.agent_pid_start_time</code>), v44
+(<code>permission_nudges.prompt_fingerprint</code>), v45 (<code>alert_deliveries</code>), v47
+(<code>messages.visibility_class</code>/<code>retarget_fill_order</code>), v48 (<code>agents.phase</code>,
+<code>messages.priority</code>, <code>message_deliveries.addressed_via</code>), v49
+(<code>telegram_outbound_queue</code>), v50 (graph substrate tables), and v51
+(<code>memory_satellite</code>). v42/v43/v46 are no-op version markers; all are dead-end
+on v0.10.6</li>
 </ul>
 <h3>Initialization</h3>
 <pre><code class="language-go hljs">db, _ := schema.OpenDB(<span class="hljs-string">&quot;thrum.db&quot;</span>)
@@ -1272,8 +1289,8 @@ code.</p>
 <p>Each Thrum worktree builds its own <code>bin/thrum</code>, and each build can support a
 different DB schema range. The shared daemon binary at <code>~/.local/bin/thrum</code> gets
 replaced by whichever worktree most recently ran <code>make install</code>. When a
-<code>make install</code> from a worktree on a newer-schema branch (e.g. <code>thrum-agents</code>
-substrate work) migrates the on-disk DB up, a later <code>make install</code> from a
+<code>make install</code> from a worktree on a newer-schema branch (e.g. a branch ahead of
+<code>release/v0.10.x</code>) migrates the on-disk DB up, a later <code>make install</code> from a
 worktree on an older-schema branch (e.g. <code>release/v0.10.x</code>) ships a binary that
 fails the Downgrade Guard above.</p>
 <p><strong>Why it happens:</strong> the DB lives under <code>&lt;repo-root&gt;/.thrum/var/messages.db</code> and
@@ -1368,7 +1385,7 @@ and appear in <code>thrum team</code>. Configure with <code>thrum peer configure
 RPC handlers, sync loop, and WebSocket server internals</li>
 <li><a href="sync.html">Sync Protocol</a> — how the <code>a-sync</code> orphan branch, JSONL dedup, and
 conflict-free merging work in detail</li>
-<li><a href="rpc-api.html">RPC API Reference</a> — all RPC methods (35+) that the CLI and Web
+<li><a href="rpc-api.html">RPC API Reference</a> — all RPC methods (40+) that the CLI and Web
 UI call into</li>
 <li><a href="development.html">Development Guide</a> — how to build, test, and extend Thrum</li>
 </ul>

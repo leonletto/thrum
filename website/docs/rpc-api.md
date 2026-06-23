@@ -103,7 +103,6 @@ semantics depend on the transport:
   `caller_agent_id`. Strict mode returns
   `unauthenticated_rpc/no_caller_agent_id` when it is absent. See
   [Troubleshooting Identity](troubleshooting-identity.md) for remediation steps.
-  (G3 note)
 
 **Anonymous callers** (callers whose CWD does not resolve to a registered agent
 worktree) may only invoke a hardcoded read-only allowlist of ~30 methods.
@@ -128,7 +127,7 @@ Health check and daemon status.
 | ------------------------- | ------- | ----------------------------------------------------------------- |
 | `status`                  | string  | `"ok"` or `"degraded"`                                            |
 | `uptime_ms`               | integer | Daemon uptime in milliseconds                                     |
-| `version`                 | string  | Daemon version (e.g., `"0.1.0"`)                                  |
+| `version`                 | string  | Daemon version (e.g., `"0.10.6"`)                                 |
 | `repo_id`                 | string  | Repository identifier                                             |
 | `sync_state`              | string  | `"synced"`, `"pending"`, or `"error"` (requires active sync loop) |
 | `identity`                | object  | Daemon identity fields (omitted when identity is not initialized) |

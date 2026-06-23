@@ -1,4 +1,4 @@
-# Thrum v0.10.5 -- Complete Agent Reference
+# Thrum v0.10.6 -- Complete Agent Reference
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -88,6 +88,35 @@ New in v0.8.2:
   hard-errors on `--no-agent` sessions; CLI_REFERENCE.md corrected to drop
   the old broken temp-session description.
 
+New in v0.10.6:
+- Sync re-architecture — cross-machine sync is notify-driven (real-time push)
+  instead of a fixed-interval poll. The old 60-second `sync_interval` poll was
+  removed (legacy `sync_interval` config keys are silently ignored); a periodic
+  safety-net still runs to catch missed notifications (5 minutes by default, 15
+  seconds when Tailscale peers are connected). Messages write to a new
+  `messages-v2/` path. Mixed-cluster note: a v0.10.5 peer can't read messages
+  from an upgraded v0.10.6 peer — upgrade every peer in the mesh together.
+- Schema forward-compatibility — a v0.10.6 binary opens and operates on a
+  database created by a newer-schema build without the one-way migration that
+  used to brick the older binary. DB-open compatibility only; the newer tables
+  are dead-end on v0.10.6 (no consumer code reads them).
+- Cross-host sync-storm fixes — a duplicate `message_id` in relayed history no
+  longer stalls inbound sync (`message.create` apply is idempotent), and the
+  daemon backstop only nudges locally-resident recipients (no more 15-minute
+  wakeups for other hosts' mail, no unbounded spool growth).
+- a-sync exposure guard — the daemon probes `origin` anonymously and refuses to
+  push message history to a publicly readable repo unless
+  `daemon.sync.public_exposure_override` is set to the exact remote.
+- Read-state unification — read truth is unified on `message_deliveries.read_at`
+  with a one-time backfill that clears historically-stuck "phantom unread."
+- Inbox defaults to newest-first — the reply-clustered chronological view is
+  opt-in via `--chronological` / `--oldest`.
+- Shell-safe message bodies — `thrum send`, `reply`, and `message edit` accept
+  `--stdin` / `--body-file <path>` / `-` so bodies with backticks or `$(...)`
+  arrive verbatim.
+- `thrum team` daemon/host filters — `--daemon <id>` and `--host <name>` narrow
+  the roster; `thrum team local` and `thrum team daemons` add per-daemon views.
+
 New in v0.10.5:
 - Daemon-side backstop nudger for stale-unread messages — the daemon polls
   for unread messages older than the nudge threshold and re-emits delivery
@@ -115,7 +144,7 @@ New in v0.10.5:
 - Headless `worktree.Create` / `worktree.Destroy` Go API
   (`internal/worktree`) — worktree lifecycle moves into a single shared
   package used by both the cobra commands and future programmatic callers
-  (the v0.11 substrate epics in particular). Behavior-equivalent to the
+  (newer development work in particular). Behavior-equivalent to the
   previous cobra-only path; opens the door to ephemeral-worktree flows.
   Cobra `thrum worktree create` / `teardown` are now thin shims over the
   shared package.
@@ -395,7 +424,7 @@ All commands accept:
             updates .gitignore (or .git/info/exclude with --stealth) to ignore .thrum/.
             Writes config.json with local_only: true and single_agent_mode: true by
             default. Also writes default `worktrees` (base_path inferred to
-            ~/.workspaces/<project>) and `orchestration` (merge_target: "main",
+            ~/.thrum/worktrees/<project>) and `orchestration` (merge_target: "main",
             default_autonomy: "end_only") config blocks. Optionally detects installed
             AI runtimes and generates runtime-specific config files.
   Errors:   Fails if .thrum/ exists (unless --force). Fails if not a git repo.
@@ -745,7 +774,7 @@ All commands accept:
     .beads/redirect (if worktrees.beads_enabled and .beads/ exists in main repo).
     Errors out if the resolved worktree path or worktrees.base_path is the
     repo root itself (repo-root guard, v0.8.2). Base path defaults to
-    ~/.workspaces/<project_name> when not configured.
+    ~/.thrum/worktrees/<project_name> when not configured.
 
   thrum worktree setup <name> [-b BRANCH] [--detach] [...]
     Alias for `thrum worktree create` (v0.9.0).
@@ -840,7 +869,7 @@ All commands accept:
 
 ### thrum peer join
 
-  Usage:    thrum peer join --type TYPE <address> [flags]
+  Usage:    thrum peer join --type TYPE <name:ip:port:code> [flags]
   Flags:    --type STRING   Transport type: tailscale | local | network | repair
                             MANDATORY in v0.9.0 (BREAKING: no longer defaults to tailscale)
   Action:   Connects to a remote daemon at the given address.
@@ -868,7 +897,7 @@ All commands accept:
 ### thrum runtime list
 
   Usage:    thrum runtime list
-  Action:   Lists all available runtime presets (claude, codex, cursor, gemini, amp, cli-only).
+  Action:   Lists all available runtime presets (claude, codex, cursor, gemini, amp, kiro-cli, cli-only).
 
 ### thrum runtime show
 
@@ -1547,12 +1576,12 @@ Unknown event types are silently ignored (forward compatibility).
   # Machine A
   thrum init && thrum daemon start
   thrum quickstart --name <agent-name> --role agent-a --module backend
-  thrum peer add           # Displays pairing code, e.g., 4821
+  thrum peer add --type tailscale   # Prints a peercode, e.g. my-laptop:100.x.y.z:9100:4821
 
   # Machine B (same Tailscale network)
   thrum init && thrum daemon start
   thrum quickstart --name <agent-name> --role agent-b --module frontend
-  thrum peer join 100.x.y.z  # Enter code 4821
+  thrum peer join --type tailscale my-laptop:100.x.y.z:9100:4821
   # Direct sync established, no Git remote needed
 
   thrum send "Ready for integration" --to @everyone
@@ -1701,7 +1730,7 @@ Unknown event types are silently ignored (forward compatibility).
       "pairing_code_length": 16              // length of generated pairing codes
     },
     "worktrees": {                           // v0.8.0: used by `thrum worktree create/teardown/list`
-      "base_path": "~/.workspaces/myproj",   // absolute path where new worktrees are created
+      "base_path": "~/.thrum/worktrees/myproj",   // absolute path where new worktrees are created
       "beads_enabled": true,                 // create .beads/redirect in new worktrees
       "thrum_enabled": true                  // create .thrum/redirect + identities/ in new worktrees
     },
@@ -1765,7 +1794,7 @@ Unknown event types are silently ignored (forward compatibility).
   Config key for worktree base directory: `worktrees.base_path` (NOT `worktree_dir`).
   If you set `worktrees.base_path`, `thrum worktree create <name>` places new
   worktrees at `<base_path>/<name>`. Otherwise it defaults to
-  `~/.workspaces/<project>/<name>`.
+  `~/.thrum/worktrees/<project>/<name>`.
 
 ### Environment Variables
 
@@ -1910,9 +1939,9 @@ Unknown event types are silently ignored (forward compatibility).
   Enable via:
     thrum daemon start --local             CLI flag (highest priority)
     THRUM_LOCAL=1 thrum daemon start       Environment variable
-    .thrum/config.json: { "local_only": true }   Config file (auto-persisted)
+    .thrum/config.json: { "daemon": { "local_only": true } }   Config file (auto-persisted)
 
-  Priority: CLI flag > env var > config file > default (false)
+  Priority: CLI flag > env var > config file > hardcoded default false; thrum init writes local_only=true on a fresh install with no remote a-sync
   Check status: thrum sync status (shows "Mode: local-only" or "Mode: normal")
 
   When enabled:

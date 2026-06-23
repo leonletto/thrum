@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -352,8 +352,8 @@ not modify the identity file on disk.</p>
 <p><code>THRUM_NAME</code> environment variable takes highest priority in identity resolution,
 overriding the <code>--agent-id</code> flag and identity file auto-selection. It is the
 primary way to select which identity file to load, especially in multi-agent
-worktrees. It is also used by external orchestrators (e.g., Gastown) to inject
-identity into agent processes.</p>
+worktrees. It is also used by external orchestrators to inject identity into
+agent processes.</p>
 <p>When <code>THRUM_NAME</code> is set and the corresponding identity file does not exist,
 loading <strong>fails</strong> rather than falling back to env vars. This ensures validation
 errors are not silently ignored.</p>
@@ -726,11 +726,11 @@ thrum tmux launch <span class="hljs-built_in">sync</span></code></pre>
 thrum quickstart --name coord_main --role coordinator --module all
 
 <span class="hljs-comment"># Auth worktree - auth implementer</span>
-<span class="hljs-built_in">cd</span> ~/.workspaces/myapp/auth
+<span class="hljs-built_in">cd</span> ~/.thrum/worktrees/myapp/auth
 thrum quickstart --name furiosa --role implementer --module auth
 
 <span class="hljs-comment"># Sync worktree - sync implementer</span>
-<span class="hljs-built_in">cd</span> ~/.workspaces/myapp/sync
+<span class="hljs-built_in">cd</span> ~/.thrum/worktrees/myapp/sync
 thrum quickstart --name nux --role implementer --module <span class="hljs-built_in">sync</span></code></pre>
 <p>Each worktree gets its own <code>.thrum/identities/</code> directory (or uses
 <code>.thrum/redirect</code> to share a common <code>.thrum/</code> directory).</p>

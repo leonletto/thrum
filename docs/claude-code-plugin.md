@@ -31,7 +31,7 @@ Before installing the plugin, you need Thrum installed and initialized:
 ```bash
 # Install thrum
 curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
-# Or: brew install leonletto/tap/thrum
+# Or: brew install leonletto/tap/thrum  (Homebrew 6.0+: run `brew trust leonletto/tap` first)
 # Or: git clone https://github.com/leonletto/thrum.git && cd thrum && make install
 
 # Initialize in your repository (v0.4.5+: init does full setup)
@@ -237,7 +237,7 @@ in your project's `.claude/settings.json`:
 }
 ```
 
-This provides 4 core messaging tools (`send_message`, `check_messages`,
+You get 4 core messaging tools (`send_message`, `check_messages`,
 `wait_for_message`, `list_agents`) plus `broadcast_message` (deprecated — use
 `send_message(to="@everyone")` instead). See [MCP Server](mcp-server.md) for the
 full API.
@@ -263,7 +263,7 @@ Task(
 )
 ```
 
-`--after -15s` means include messages sent up to 1 second ago (negative = "N
+`--after -15s` means include messages sent up to 15 seconds ago (negative = "N
 ago"; prevents stale replay on restart). The listener runs up to 30 cycles (~4
 hours of coverage), blocks on `thrum wait` (no polling), returns when messages
 arrive, and costs ~$0.00003/cycle on Haiku (~65% fewer tokens than the old

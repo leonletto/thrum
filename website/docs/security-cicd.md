@@ -49,11 +49,12 @@ Additional security scanning workflows are planned for a future release.
 
 The repository uses branch-based workflows:
 
-| Branch        | Purpose               | Deployment               |
-| ------------- | --------------------- | ------------------------ |
-| `main`        | Stable release branch | Production merges        |
-| `website-dev` | Documentation website | GitHub Pages auto-deploy |
-| `feature/*`   | Feature development   | CI checks on PR          |
+| Branch        | Purpose                       | Push / Deployment                          |
+| ------------- | ----------------------------- | ------------------------------------------ |
+| `main`        | Stable release branch         | Updated via release merges only            |
+| `thrum-dev`   | Active development branch     | Pushed to origin; no deploy                |
+| `website-dev` | Documentation website         | Push triggers GitHub Pages auto-deploy     |
+| `feature/*`   | Feature/fix work in worktrees | Local-only; reaches origin via `thrum-dev` |
 
 ## Local Development
 
@@ -86,7 +87,7 @@ cd website
 ## Tailscale Security
 
 For remote access and cross-machine synchronization, Thrum uses Tailscale as the
-primary security model. Tailscale provides end-to-end WireGuard encryption,
+primary security model. Tailscale gives you end-to-end WireGuard encryption,
 zero-trust networking, and automatic key rotation. See
 [Tailscale Security](tailscale-security.md) for detailed security model and
 threat analysis.

@@ -270,7 +270,7 @@ files: if the target agent's PID is no longer alive, the write is refused and an
 {
   "status": "ok",
   "uptime_ms": 12345,
-  "version": "1.0.0",
+  "version": "0.10.6",
   "repo_id": "abc123",
   "sync_state": "synced"
 }
@@ -340,12 +340,15 @@ callback returned `true` unconditionally. See
 
 **Location:** `internal/sync/loop.go`, `internal/daemon/rpc/sync_rpc.go`
 
-The sync loop runs as a goroutine within the daemon, periodically synchronizing
-JSONL data via Git.
+The sync loop runs within the daemon, synchronizing JSONL data via Git. As of
+v0.10.6, routine sync is notify-driven — a push wakes peers when something
+changes. The old fixed 60-second `sync_interval` poll was removed; legacy
+`sync_interval` config keys are silently ignored.
 
 **Key features:**
 
-- Default interval: 60 seconds (configurable via `--sync-interval` flag)
+- Notify-driven sync, with a periodic safety-net scheduler that catches missed
+  notifications (every 5 minutes; 15 seconds when Tailscale peers are connected)
 - Sync worktree at `.git/thrum-sync/a-sync/` (uses `git-common-dir` for nested
   worktree support)
 - File lock (`sync.lock`) prevents concurrent sync operations
@@ -446,7 +449,7 @@ THRUM_LOCAL=1 thrum daemon start
 The setting persists in `.thrum/config.json`:
 
 ```json
-{ "local_only": true }
+{ "daemon": { "local_only": true } }
 ```
 
 **Priority order:** CLI flag > environment variable > config file > default

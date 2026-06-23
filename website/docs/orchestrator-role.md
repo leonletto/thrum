@@ -364,9 +364,9 @@ thrum quickstart --role orchestrator --name orchestrator_main --module main
 ```
 
 Run this in the orchestrator's worktree (a detached HEAD worktree under
-`~/.workspaces/<project>/orchestrator/`). The orchestrator stays on detached
-HEAD — it never commits. All code work happens in the agent worktrees it
-creates.
+`~/.thrum/worktrees/<project>/orchestrator/`). The orchestrator stays on
+detached HEAD — it never commits. All code work happens in the agent worktrees
+it creates.
 
 **Set agent status:**
 

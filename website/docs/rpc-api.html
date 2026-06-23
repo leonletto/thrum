@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -336,8 +336,7 @@ See <a href="security-model.html">Security Model</a> for the full trust stack.</
 <li><strong>WebSocket:</strong> Peercred is not available. Mutating RPCs require a non-empty
 <code>caller_agent_id</code>. Strict mode returns
 <code>unauthenticated_rpc/no_caller_agent_id</code> when it is absent. See
-<a href="troubleshooting-identity.html">Troubleshooting Identity</a> for remediation steps.
-(G3 note)</li>
+<a href="troubleshooting-identity.html">Troubleshooting Identity</a> for remediation steps.</li>
 </ul>
 <p><strong>Anonymous callers</strong> (callers whose CWD does not resolve to a registered agent
 worktree) may only invoke a hardcoded read-only allowlist of ~30 methods.
@@ -385,7 +384,7 @@ Mutating RPCs are rejected at the dispatcher before the handler runs. See
 <tr>
 <td><code>version</code></td>
 <td>string</td>
-<td>Daemon version (e.g., <code>&quot;0.1.0&quot;</code>)</td>
+<td>Daemon version (e.g., <code>&quot;0.10.6&quot;</code>)</td>
 </tr>
 <tr>
 <td><code>repo_id</code></td>

@@ -213,11 +213,11 @@ message store.
 │  └── Daemon process (shared)                                  │
 ├──────────────────────────────────────────────────────────────┤
 │                     Feature Worktrees                         │
-│  ~/.workspaces/repo/auth/                                     │
+│  ~/.thrum/worktrees/repo/auth/                                     │
 │  ├── .thrum/redirect → /path/to/repo/.thrum/                 │
 │  └── Uses same daemon, same messages                          │
 │                                                               │
-│  ~/.workspaces/repo/sync/                                     │
+│  ~/.thrum/worktrees/repo/sync/                                     │
 │  ├── .thrum/redirect → /path/to/repo/.thrum/                 │
 │  └── Uses same daemon, same messages                          │
 └──────────────────────────────────────────────────────────────┘
@@ -250,7 +250,7 @@ thrum tmux launch auth
 ```
 
 The worktree path is `worktrees.base_path/<name>` (default
-`~/.workspaces/<repo>/<name>`). When you pass `--name`, `--role`, and
+`~/.thrum/worktrees/<repo>/<name>`). When you pass `--name`, `--role`, and
 `--module`, the command creates a real tmux session and registers the agent
 identity inside it, then prints the next-step `thrum tmux launch` command. The
 agent runtime is not started until you run `tmux launch`.
@@ -259,13 +259,10 @@ If you need to wire up an existing worktree manually:
 
 ```bash
 # Create the worktree
-git worktree add ~/.workspaces/repo/auth -b feature/auth
+git worktree add ~/.thrum/worktrees/repo/auth -b feature/auth
 
-# Set up thrum redirect (shares daemon with main repo)
-thrum setup --main-repo /path/to/repo
-
-# Or use the setup script
-scripts/setup-worktree-thrum.sh ~/.workspaces/repo/auth
+# Set up the thrum redirect (shares the daemon with the main repo)
+scripts/setup-worktree-thrum.sh ~/.thrum/worktrees/repo/auth
 ```
 
 ### Running Multiple Agents
@@ -292,12 +289,12 @@ cd /path/to/repo
 thrum quickstart --name coord_main --role coordinator --module main
 
 # Auth worktree: implementer
-cd ~/.workspaces/repo/auth
+cd ~/.thrum/worktrees/repo/auth
 export THRUM_NAME=furiosa
 thrum quickstart --name furiosa --role implementer --module auth
 
 # Sync worktree: another implementer
-cd ~/.workspaces/repo/sync
+cd ~/.thrum/worktrees/repo/sync
 export THRUM_NAME=nux
 thrum quickstart --name nux --role implementer --module sync
 ```
@@ -504,7 +501,7 @@ thrum agent list --context
 thrum send "Both features shipping in v0.4" --to @everyone
 
 # === Implementer (auth worktree) ===
-cd ~/.workspaces/repo/auth
+cd ~/.thrum/worktrees/repo/auth
 export THRUM_NAME=furiosa
 thrum inbox --unread
 thrum sent --to @coord_main

@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -273,7 +273,8 @@ blocks, no subagent sidechains. Just the conversation you&#39;d see in the termi
 <p>The pipeline:</p>
 <ol>
 <li>Find the agent&#39;s Claude PID from the identity file</li>
-<li>Locate the JSONL transcript via <code>~/.claude/sessions/&lt;pid&gt;.json</code></li>
+<li>Read <code>~/.claude/sessions/&lt;pid&gt;.json</code> for the session ID and cwd, then locate
+the JSONL transcript at <code>~/.claude/projects/&lt;encoded-cwd&gt;/&lt;session-id&gt;.jsonl</code></li>
 <li>Parse the JSONL and extract <code>user</code> + <code>assistant</code> text entries</li>
 <li>Skip <code>isSidechain: true</code> entries (subagent transcripts)</li>
 <li>Skip <code>tool_use</code>, <code>tool_result</code>, and <code>thinking</code> content blocks</li>

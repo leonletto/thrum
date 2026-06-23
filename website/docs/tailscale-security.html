@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -418,8 +418,8 @@ the pairing and sync flow.</p>
 thrum peer remove &lt;name&gt;
 
 <span class="hljs-comment"># Then pair again:</span>
-<span class="hljs-comment"># Machine A: thrum peer add</span>
-<span class="hljs-comment"># Machine B: thrum peer join &lt;address&gt;</span></code></pre>
+<span class="hljs-comment"># Machine A: thrum peer add --type tailscale   (prints a name:ip:port:code peercode)</span>
+<span class="hljs-comment"># Machine B: thrum peer join --type tailscale &lt;name:ip:port:code&gt;</span></code></pre>
 <h3>Pairing fails with &quot;no active pairing session&quot;</h3>
 <p>The pairing session on Machine A expired or was never started.</p>
 <p><strong>Fix</strong>: Run <code>thrum peer add</code> on Machine A first, then <code>thrum peer join</code> on

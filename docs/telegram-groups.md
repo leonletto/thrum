@@ -270,8 +270,6 @@ Proxy agents register a remote agent as a local stand-in. They show up in
 Sending to a proxy agent posts a message to the Telegram group with the target
 bot's @mention:
 
-<!-- TODO: verify proxy agent routing after groups removal -->
-
 ```bash
 thrum send "check the /users endpoint" --to @falcon:coordinator_main
 ```

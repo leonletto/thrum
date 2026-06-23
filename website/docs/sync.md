@@ -12,7 +12,7 @@ last_updated: "2026-02-10"
 ## Sync Protocol
 
 The sync protocol keeps message logs synchronized across repository clones using
-Git as the transport layer. This enables offline-first operation with eventual
+Git as the transport layer. This gives you offline-first operation with eventual
 consistency.
 
 ## Overview
@@ -191,9 +191,9 @@ if localEvent.ID == remoteEvent.ID {
 }
 ```
 
-The `event_id` (ULID) provides both uniqueness and lexicographic time-ordering.
-This avoids collisions between different event types that share the same entity
-ID (e.g., a `message.create` and `message.edit` for the same `message_id` are
+The `event_id` (ULID) is both unique and lexicographically time-ordered. This
+avoids collisions between different event types that share the same entity ID
+(e.g., a `message.create` and `message.edit` for the same `message_id` are
 distinct events with distinct `event_id` values).
 
 ### Sharded JSONL Files

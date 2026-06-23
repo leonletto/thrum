@@ -6,7 +6,7 @@ description:
 category: "overview"
 order: 2
 tags: ["release-notes", "changelog", "migration", "version"]
-last_updated: "2026-06-15"
+last_updated: "2026-06-23"
 ---
 
 ## What's New
@@ -16,150 +16,76 @@ breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 [CHANGELOG.md](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
 
-## v0.10.6 — In Soak (RC)
+## v0.10.6 — 2026-06-23
 
-**v0.10.6-rc.13** was tagged 2026-06-15 and is the current pre-release. It adds
-two release-line features on top of the rc.11/rc.12 cross-host sync-storm fix
-batch:
+[`v0.10.6`](https://github.com/leonletto/thrum/releases/tag/v0.10.6) was
+promoted to stable on 2026-06-23 after a long RC soak. It's a
+sync-and-reliability release: the cross-machine sync path got re-architected,
+the database schema was made forward-compatible with newer builds, and a batch
+of cross-host sync-storm fixes landed along the way.
 
-- **`thrum team` daemon/host filters + `local` / `daemons` subviews**
-  (thrum-l2kxw) — `thrum team --daemon <id>` and `--host <name>` narrow the
-  roster to a single daemon or host; `thrum team local` is sugar for the current
-  daemon, and `thrum team daemons` groups agents by origin daemon (daemon_id,
-  hostname, agent count, with an `unknown` bucket for unattributed agents). It's
-  pure CLI presentation over the existing `team.list` payload — no schema, RPC,
-  or daemon change — and all four views honor `--json`.
-- **Permission reminder ladder cancels when the modal clears** (thrum-g23nb) —
-  the reminder ladder re-captures the pane on each fire and, if the approval
-  modal has already cleared, runs recovery and stops instead of nagging about a
-  resolved prompt. It also skips the send (while still advancing cadence, so
-  give-up escalation is preserved) once every supervisor recipient has read the
-  thread, and fails open on a pane-capture error so a flaky capture never drops
-  a live reminder.
+The headline is the **sync re-architecture**. Cross-machine sync is now
+notify-driven — a daemon pushes a wake to its peers when something actually
+changes, instead of leaning on a fixed timer to go looking for work. The old
+fixed 60-second sync poll is gone (legacy `sync_interval` config keys are now
+ignored); a periodic check still runs in the background as a safety net for
+missed notifications. Idle daemons go quiet (no more steady drip of heartbeat
+commits on the `a-sync` branch), and busy clusters stop drowning in sync
+chatter. Messages now write to a new `messages-v2/` path. **Mixed-cluster
+heads-up:** a v0.10.5 peer can't read messages from an upgraded v0.10.6 peer,
+since v0.10.6 writes only to `messages-v2/` — upgrade every peer in the mesh in
+one window, not piecemeal.
 
-rc.12 was the **cross-host sync-storm fix batch** — two storms observed in
-production on busy multi-host meshes. A duplicate `message_id` in relayed
-history no longer stalls inbound sync (thrum-lv9x): a durable-lane snapshot row
-colliding with the same event arriving later via sync used to abort the
-projector's whole batch without advancing the checkpoint, and the notify-driven
-re-pull retried it forever (a pinned peer checkpoint and a 65–167/sec
-`sync.notify` storm). `message.create` apply is now idempotent
-(`INSERT OR IGNORE` + a dup-no-op that still commits the event record) with an
-event-id dedup pre-check on the a-sync ingest path. And the daemon backstop now
-nudges only locally-resident recipients (thrum-wo2z): its 15-minute ticker
-previously scanned unread deliveries with no residency filter, waking local
-sessions every 15 minutes for remote agents' mail and accumulating spool
-envelopes unbounded (one host hit 107). ⚠ **Deploy note:** spool envelopes
-accumulated before this fix are not removed automatically — a one-time cleanup
-of non-resident dirs under `.thrum/spool/` is recommended.
+**Schema forward-compatibility.** A v0.10.6 binary can now open and operate on a
+database created by a newer-schema build without the one-way migration that used
+to brick the older binary — the footgun where running two binaries against one
+shared worktree DB could leave the v0.10.6 binary unable to reopen it. The newer
+tables are dead-end on v0.10.6 (no code reads them); it's DB-open compatibility
+only, with no behavior change.
 
-**rc.11 carries forward**, with its headliners:
+**Cross-host sync-storm fixes.** Two storms seen in production on busy
+multi-host meshes got fixed. A duplicate `message_id` in relayed history no
+longer stalls inbound sync — `message.create` apply is idempotent now, so a
+collision is a no-op that still advances the batch instead of retrying forever.
+And the daemon backstop only nudges locally-resident recipients, so a host stops
+waking its local sessions every 15 minutes for other hosts' mail and stops
+accumulating spool envelopes without bound.
 
-- **a-sync exposure guard now gates on repository visibility** (thrum-44mt,
-  replaces the rc.10 host-denylist). The daemon probes `origin` with an
-  anonymous, credential-stripped `git ls-remote` and refuses pushing message
-  history only to a **publicly readable** repo — private repos on github.com /
-  gitlab.com sync normally again. Classification is fail-safe (only
-  exit-0-with-refs counts as public), and the explicit exact-match override
-  `daemon.sync.public_exposure_override` allows intentional public-repo sync.
-  The gate resolves once at boot, surfaces its reason in `sync status` and the
-  Settings UI, and warns active agents when the repo transitions into exposed.
-- **Read-state unification + one-time v40 backfill** (thrum-b6qw). Read truth is
-  unified on `message_deliveries.read_at`, and a one-time schema v39→v40 marker
-  runs a data-only backfill that clears historically-stuck unread — the "phantom
-  unread" / backstop nudge-storm class. ⚠ **Upgrade note: the v40 migration is
-  one-way.** Binaries supporting ≤v39 cannot reopen a migrated DB; take a
-  `.thrum/` backup before upgrading if you may need to roll back.
-- **tsnet node released before PID removal on shutdown** (thrum-w8is) — daemon
-  restart no longer leaves the old tsnet node registered while the new process
-  re-binds the same state dir, fixing the post-restart cross-host inbound flap.
-- **Inbox defaults to newest-first** (thrum-4yjc) — recent mail is never buried
-  under backlog; `--chronological` / `--oldest` opt back into the
-  reply-clustered chronological view.
-- **Shell-safe message bodies** (thrum-d3fp) — `thrum send`, `reply`, and
-  `message edit` accept `--stdin` / `--body-file <path>` / `-` so bodies bypass
-  shell interpolation (backticks, `${...}`, `$(...)` arrive verbatim).
+**Safer sync exposure.** The `a-sync` exposure guard now gates on repository
+visibility: the daemon probes `origin` anonymously and refuses to push message
+history to a publicly readable repo unless you explicitly override it.
+Read-state also got unified on a single source of truth, with a one-time
+backfill that clears historically-stuck "phantom unread."
 
-Also in rc.11: the peer bridge self-heals after daemon restart (thrum-to7p), the
-inbox hidden-count only counts delivery-backed unread so
-`thrum message read --all` converges (thrum-eeio), the role preamble survives
-the self-restart race (thrum-4ye2), and context-sweep alerts gain hysteresis
-plus a correct 1M-token window for `claude-fable-5` (thrum-gqq3).
+**Quality-of-life changes.** The inbox defaults to newest-first (chronological
+is opt-in via `--chronological` / `--oldest`); `thrum send`, `reply`, and
+`message edit` take `--stdin` / `--body-file` so bodies with backticks or
+`$(...)` arrive verbatim; `thrum team` gained `--daemon` / `--host` filters plus
+`local` and `daemons` subviews; and the permission-reminder ladder stops nagging
+once the approval modal has cleared. Under the hood: timestamped pre-migration
+DB backups, an RC-tag plugin distribution scheme so `/plugin update` upgrades
+cleanly, two new daemon config keys (`events_retention_days`,
+`compaction_size_threshold_mb`), and a round of agent-restart reliability fixes.
 
-The rc.10 **directed-inbound back-port** (thrum-h4s4) lands with rc.11: a lean
-0.10.6 node can consume a directed/filtered inbound stream served by a 0.11 hub
-(the hub does all filtering). It brings a structured `daemon.sync` config stanza
-(`{enabled, mechanisms:[{mechanism, scope}]}`) with startup validity checks to
-supplement the overloaded `daemon.local_only` bool, the additive `filtered`
-sync-pull response flag with checkpoint cursor-honesty, and a pairing guard so
-`thrum peer add` / `peer join` refuse when sync is disabled instead of silently
-half-connecting.
+### Upgrade Notes
 
-rc.9's cross-host sync fix carries forward — the auto-reconcile Manager no
-longer advertises a loopback `:<port>` dialer identity that corrupted peers'
-stored address and stalled cross-host sync for hours (thrum-hix5). rc.8's
-message-nudge hardening also carries: the chrome-quiet gate so inbound nudges
-never land mid-keystroke (thrum-nlel / thrum-3i2s, tunable via the
-`daemon.nudge` config block), nudges deferred to a redelivery queue while an
-interactive selection dialog is up (thrum-7phu), and the daemon start-wait
-surfacing live migration progress instead of a false timeout on large-DB
-upgrades (thrum-vh2c). rc.7's agent-restart reliability also carries forward:
-the un-restartable-agent class closed (thrum-5oui, thrum-ipbl, thrum-6yt7, plus
-rc.6's thrum-mnhp dead-PID guard), the `thrum prime` daemon-side `RLock`
-root-cause fix (thrum-5988), the snapshot/sleep skill family (thrum-rwhg —
-`/thrum:restart-extended`, `/thrum:sleep`, `/thrum:sleep-extended`), and the
-identity-guard message-read fail-open close (thrum-tgqx).
+- **Upgrade all peers in one window (mixed-cluster).** A v0.10.5 peer can't read
+  messages written by an upgraded v0.10.6 peer — v0.10.6 writes only to the new
+  `messages-v2/` path. Upgrade every peer in the mesh together rather than
+  piecemeal.
+- **Read-state migration is one-way.** The one-time read-state backfill can't be
+  reopened by a binary that predates it. Back up your `.thrum/` directory before
+  upgrading if you might need to roll back.
+- **One-time spool cleanup.** Spool envelopes that accumulated before the
+  backstop fix aren't removed automatically — you can safely delete non-resident
+  directories under `.thrum/spool/`.
+- **Public-repo sync.** If you intentionally sync message history over a
+  publicly readable repo, set `daemon.sync.public_exposure_override` to the
+  exact remote; otherwise the daemon refuses the push.
 
-Earlier v0.10.6 RCs carry forward — rc.6/rc.5 fleet-operations work: two sweep
-ctx% corrections (thrum-4pd1 Opus 4.8 1M-window denominator, thrum-roeq
-session-birth transcript selection), boot reconcile writing live AgentPIDs back
-to the registry (thrum-qxr3), the `thrum tmux create --force` prefix-match guard
-(thrum-z63b), agent-status Pattern D self-writes (thrum-9neg),
-`thrum monitor --schedule` with continuous auto-restart (thrum-puhr.9), and the
-restored `--json` / `--report-only` / `THRUM_SWEEP_IDENTITY_GLOBS` sweep
-features (thrum-l9e6); plus rc.4's `team.list` / dead-agent self-heal rework
-(thrum-1nkt), the 4MB JSONL-compactor scanner buffer (thrum-10j0), the 1MB
-message-body write cap (thrum-mhwt), `INSERT OR IGNORE` on `applySessionStart`
-(thrum-9jcb.3), the identity-guard PID-ancestor split (thrum-xir.40) and cached
-peercred CWD lookup (thrum-xir.45), and `thrum worktree teardown`
-cascade-deleting the bound agent identity (thrum-wk7d). See the
-[Beta Channel](beta-channel.md) page for the full rc.13 callout + install
-commands.
-
-v0.10.6's headline is a **sync re-architecture** (thrum-s6os): the cross-machine
-wire stream now derives from per-agent and per-bridge-group state files rather
-than from a synced event journal. The 60-second polling ticker is gone — sync is
-event-triggered on a structural-event whitelist (`agent.register`, `group.*`,
-`message.create`). Idle daemons produce zero commits on `a-sync`, and busy
-multi-agent clusters stop accumulating heartbeat noise; the falcon-backend
-11K-commits-per-week stream becomes a trickle proportional to actual message
-volume.
-
-⚠ **Mixed-cluster upgrade warning.** v0.10.6 writes ONLY to the new
-`messages-v2/<id>.jsonl` path; v0.10.5 peers don't know about it and will
-silently miss messages authored by upgraded peers until they upgrade. v0.10.6
-peers retain a legacy-read fallback for v0.10.5-authored messages, so upgraded
-peers stay fully functional in mixed clusters — but the asymmetry means you
-should **upgrade every peer in one window** rather than running mixed long-term.
-
-Other notable v0.10.6 changes: pre-migration DB backups are now timestamped
-(`.pre-migration-v<N>-<UTC>.bak`) and a failed backup halts the migration so you
-can't end up without a recovery snapshot; an RC-tag plugin distribution scheme
-(per-RC `X.Y.Z-rc.N` suffix on `plugin.json` + `marketplace.json`) lets
-`/plugin update` upgrade Claude Code plugins cleanly through the rc pipeline
-with no uninstall/reinstall; two new daemon config keys
-(`events_retention_days`, `compaction_size_threshold_mb`) tune the local
-events-journal window and messages-v2 compaction; a schema forward-port to v36
-keeps a v0.10.6 binary openable on DBs touched by v0.11-substrate work
-(intentionally dead-end here — no consumer code reads them); and the skill
-review loop gained a `verify-against-source` prose-conformance reviewer plus a
-Phase 0 review gate in `project-setup`. The `daemon.sync_interval` config key
-and `DefaultSyncInterval = 60` constant are removed; legacy configs are silently
-ignored.
-
-See the [Beta Channel](beta-channel.md) guide for how to opt in. Stable
-promotion follows the standard 48-hour soak window once no P0/P1 bugs are open
-against the RC.
+Full change list:
+[CHANGELOG v0.10.6](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
+See the [Beta Channel](beta-channel.md) page for install commands.
 
 ## v0.10.5 — 2026-05-21
 

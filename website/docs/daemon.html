@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -496,7 +496,7 @@ files: if the target agent&#39;s PID is no longer alive, the write is refused an
 <pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
   <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ok&quot;</span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;uptime_ms&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">12345</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;version&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;1.0.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;version&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;0.10.6&quot;</span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;repo_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;abc123&quot;</span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;sync_state&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;synced&quot;</span>
 <span class="hljs-punctuation">}</span></code></pre>
@@ -557,11 +557,14 @@ repo</li>
 </ul>
 <h3>7. Sync Loop Integration</h3>
 <p><strong>Location:</strong> <code>internal/sync/loop.go</code>, <code>internal/daemon/rpc/sync_rpc.go</code></p>
-<p>The sync loop runs as a goroutine within the daemon, periodically synchronizing
-JSONL data via Git.</p>
+<p>The sync loop runs within the daemon, synchronizing JSONL data via Git. As of
+v0.10.6, routine sync is notify-driven — a push wakes peers when something
+changes. The old fixed 60-second <code>sync_interval</code> poll was removed; legacy
+<code>sync_interval</code> config keys are silently ignored.</p>
 <p><strong>Key features:</strong></p>
 <ul>
-<li>Default interval: 60 seconds (configurable via <code>--sync-interval</code> flag)</li>
+<li>Notify-driven sync, with a periodic safety-net scheduler that catches missed
+notifications (every 5 minutes; 15 seconds when Tailscale peers are connected)</li>
 <li>Sync worktree at <code>.git/thrum-sync/a-sync/</code> (uses <code>git-common-dir</code> for nested
 worktree support)</li>
 <li>File lock (<code>sync.lock</code>) prevents concurrent sync operations</li>
@@ -679,7 +682,7 @@ thrum daemon start --<span class="hljs-built_in">local</span>
 <span class="hljs-comment"># Via environment variable</span>
 THRUM_LOCAL=1 thrum daemon start</code></pre>
 <p>The setting persists in <code>.thrum/config.json</code>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;local_only&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-punctuation">}</span></code></pre>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;daemon&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;local_only&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Priority order:</strong> CLI flag &gt; environment variable &gt; config file &gt; default
 (<code>true</code> via <code>thrum init</code>).</p>
 <h3>What changes in local-only mode</h3>

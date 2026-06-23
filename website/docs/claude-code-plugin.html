@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -255,7 +255,7 @@ worktrees, tmux sessions, and anti-patterns</li>
 <p>Before installing the plugin, you need Thrum installed and initialized:</p>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Install thrum</span>
 curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
-<span class="hljs-comment"># Or: brew install leonletto/tap/thrum</span>
+<span class="hljs-comment"># Or: brew install leonletto/tap/thrum  (Homebrew 6.0+: run `brew trust leonletto/tap` first)</span>
 <span class="hljs-comment"># Or: git clone https://github.com/leonletto/thrum.git &amp;&amp; cd thrum &amp;&amp; make install</span>
 
 <span class="hljs-comment"># Initialize in your repository (v0.4.5+: init does full setup)</span>
@@ -461,7 +461,7 @@ in your project&#39;s <code>.claude/settings.json</code>:</p>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span>
 <span class="hljs-punctuation">}</span></code></pre>
-<p>This provides 4 core messaging tools (<code>send_message</code>, <code>check_messages</code>,
+<p>You get 4 core messaging tools (<code>send_message</code>, <code>check_messages</code>,
 <code>wait_for_message</code>, <code>list_agents</code>) plus <code>broadcast_message</code> (deprecated — use
 <code>send_message(to=&quot;@everyone&quot;)</code> instead). See <a href="mcp-server.html">MCP Server</a> for the
 full API.</p>
@@ -480,7 +480,7 @@ Copy and run it to start background message monitoring:</p>
   prompt=&quot;Listen for Thrum messages.
     WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --timeout 8m --after -15s --json&quot;
 )</code></pre>
-<p><code>--after -15s</code> means include messages sent up to 1 second ago (negative = &quot;N
+<p><code>--after -15s</code> means include messages sent up to 15 seconds ago (negative = &quot;N
 ago&quot;; prevents stale replay on restart). The listener runs up to 30 cycles (<del>4
 hours of coverage), blocks on <code>thrum wait</code> (no polling), returns when messages
 arrive, and costs ~$0.00003/cycle on Haiku (</del>65% fewer tokens than the old

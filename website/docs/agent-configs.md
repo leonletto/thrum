@@ -12,7 +12,7 @@ last_updated: "2026-02-10"
 ## Agent Configurations
 
 > **Recommended:** Install the [Thrum plugin](claude-code-plugin.md) instead of
-> manual agent definitions. The plugin provides 10 slash commands, automatic
+> manual agent definitions. The plugin provides 11 slash commands, automatic
 > context hooks, and 8 resource docs — all in a single install.
 
 Claude Code agent definitions teach Claude how to use Thrum effectively. These
@@ -146,7 +146,7 @@ For the agent file format, see
 ## Next Steps
 
 - [Claude Code Plugin](claude-code-plugin.md) — the recommended approach:
-  install the plugin to get 10 slash commands and automatic hooks instead
+  install the plugin to get 11 slash commands and automatic hooks instead
 - [Codex Plugin](codex-plugin.md) — the Codex skill bundle for users who prefer
   skill-guided CLI workflows
 - [Agent Coordination](agent-coordination.md) — multi-agent messaging patterns

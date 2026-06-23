@@ -242,7 +242,7 @@ For an existing worktree (one that wasn't created with `thrum worktree create`),
 use `thrum tmux create` directly:
 
 ```bash
-thrum tmux create implementer-api --cwd ~/.workspaces/myproject/api-feature \
+thrum tmux create implementer-api --cwd ~/.thrum/worktrees/myproject/api-feature \
   --name impl_api --role implementer --module api --intent 'API refactor'
 thrum tmux launch implementer-api
 ```

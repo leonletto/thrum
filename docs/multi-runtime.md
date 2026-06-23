@@ -273,7 +273,7 @@ Use the orchestrator or manual re-briefing to restore context.
 
 **`FindClaudeAncestor()` keeps its name.** The internal function that detects
 runtimes is still named after Claude. The behavior is fully runtime-agnostic —
-it detects all eight known binaries — but the name is cosmetic legacy. A future
+it detects all nine known binaries — but the name is cosmetic legacy. A future
 cleanup will rename it. Don't rely on the function name as documentation.
 
 **Cursor's `agent` binary.** The process name `agent` maps to Cursor. If a

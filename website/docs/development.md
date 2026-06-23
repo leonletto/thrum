@@ -74,7 +74,7 @@ thrum/
 │   ├── identity/            # ID generation (ULID-based: repo, agent, session, message, event)
 │   │   └── guard/           # Cross-worktree identity guards, WritePID enforcement
 │   ├── jsonl/               # JSONL reader/writer with file locking
-│   ├── mcp/                 # MCP stdio server (4 tools, WebSocket waiter)
+│   ├── mcp/                 # MCP stdio server (5 tools: 4 active + 1 deprecated; polling waiter)
 │   ├── paths/               # Path resolution, .thrum/redirect, sync worktree path
 │   ├── projection/          # JSONL to SQLite event replay (projector)
 │   ├── schema/              # SQLite schema, DDL, and migrations (v24)
@@ -575,7 +575,7 @@ go test ./internal/daemon/state/... -v
 ```
 
 Use the `StartTestDaemon()` helper in `internal/daemon/testutil_test.go` for
-integration tests. It provides automatic `t.Cleanup()` with force-kill to
+integration tests. It gives you automatic `t.Cleanup()` with force-kill to
 prevent test orphan processes on timeout or panic.
 
 ### Debugging Daemon
@@ -662,16 +662,17 @@ thrum daemon start
 
 ## MCP Server Development
 
-The MCP server (`thrum mcp serve`) provides native MCP tools for Claude Code
-agents instead of shelling out to the CLI. It uses stdio transport (JSON-RPC
-over stdin/stdout).
+The MCP server (`thrum mcp serve`) gives Claude Code native MCP tools agents
+instead of shelling out to the CLI. It uses stdio transport (JSON-RPC over
+stdin/stdout).
 
 **Key files:**
 
 - `internal/mcp/server.go`: Server skeleton and tool registration
 - `internal/mcp/tools.go`: Tool handler implementations
 - `internal/mcp/types.go`: Request/response type definitions
-- `internal/mcp/waiter.go`: WebSocket-based blocking message waiter
+- `internal/mcp/waiter.go`: polling-based blocking message waiter (500ms over
+  the Unix socket)
 - `cmd/thrum/mcp.go`: `thrum mcp serve` Cobra command
 
 **MCP Tools (5 total: 4 active + 1 deprecated):**
@@ -730,8 +731,8 @@ one set of JSONL files.
 ### Setting Up a Worktree
 
 ```bash
-# Option 1: Use the thrum setup command
-thrum setup /path/to/worktree
+# Option 1: Use the thrum worktree setup command (creates worktree + redirect + registration)
+thrum worktree setup <name>
 
 # Option 2: Use the setup script
 ./scripts/setup-worktree-thrum.sh /path/to/worktree

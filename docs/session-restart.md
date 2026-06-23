@@ -60,7 +60,8 @@ blocks, no subagent sidechains. Just the conversation you'd see in the terminal.
 The pipeline:
 
 1. Find the agent's Claude PID from the identity file
-2. Locate the JSONL transcript via `~/.claude/sessions/<pid>.json`
+2. Read `~/.claude/sessions/<pid>.json` for the session ID and cwd, then locate
+   the JSONL transcript at `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`
 3. Parse the JSONL and extract `user` + `assistant` text entries
 4. Skip `isSidechain: true` entries (subagent transcripts)
 5. Skip `tool_use`, `tool_result`, and `thinking` content blocks

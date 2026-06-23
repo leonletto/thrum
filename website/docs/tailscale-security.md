@@ -182,8 +182,8 @@ The peer's token doesn't match. This can happen if:
 thrum peer remove <name>
 
 # Then pair again:
-# Machine A: thrum peer add
-# Machine B: thrum peer join <address>
+# Machine A: thrum peer add --type tailscale   (prints a name:ip:port:code peercode)
+# Machine B: thrum peer join --type tailscale <name:ip:port:code>
 ```
 
 ### Pairing fails with "no active pairing session"

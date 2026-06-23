@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -361,7 +361,7 @@ coordinator and stop</li>
 <li>The listener is read-only — it never sends messages</li>
 </ul>
 <h2>Beads Integration</h2>
-<p>Run Thrum and <a href="https://github.com/leonletto/thrum">Beads</a> together. Thrum
+<p>Run Thrum and <a href="https://github.com/steveyegge/beads">Beads</a> together. Thrum
 handles real-time messaging; Beads tracks the work. Neither tries to do the
 other&#39;s job:</p>
 <table>
@@ -402,7 +402,7 @@ thrum quickstart --name impl_auth --role implementer --module auth \
 bd ready
 
 <span class="hljs-comment"># 3. Claim in Beads</span>
-bd update bd-123 --status in_progress
+bd update bd-123 -s in_progress
 
 <span class="hljs-comment"># 4. Announce via Thrum (use agent name, not role)</span>
 thrum send <span class="hljs-string">&quot;Starting bd-123: JWT authentication&quot;</span> --to @coord_main
@@ -442,7 +442,7 @@ thrum <span class="hljs-built_in">sync</span> force</code></pre>
 </tr>
 <tr>
 <td>Status</td>
-<td><code>bd update --status</code></td>
+<td><code>bd update -s</code></td>
 <td>Send message with update</td>
 </tr>
 <tr>
@@ -483,7 +483,7 @@ thrum inbox --unread
 bd ready
 
 <span class="hljs-comment"># 4. Claim task (Beads)</span>
-bd update &lt;<span class="hljs-built_in">id</span>&gt; --status in_progress
+bd update &lt;<span class="hljs-built_in">id</span>&gt; -s in_progress
 
 <span class="hljs-comment"># 5. Announce start (Thrum) — use agent name from `thrum team`</span>
 thrum send <span class="hljs-string">&quot;Starting work on &lt;id&gt;: &lt;description&gt;&quot;</span> --to @&lt;coordinator-name&gt;

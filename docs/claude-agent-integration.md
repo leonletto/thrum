@@ -178,7 +178,6 @@ Copy both files into your project:
 
 ```bash
 mkdir -p .claude/agents
-cp docs/claude-agent-integration.md .  # For reference
 
 # Create the agent files (or copy from this doc)
 # .claude/agents/thrum-agent.md

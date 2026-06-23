@@ -340,7 +340,7 @@ All peer commands live under `thrum peer`. Full reference:
 
 > **Breaking change (v0.9.0):** `--type` is now **mandatory**. The previously
 > implicit `tailscale` default has been removed. Running `thrum peer add`
-> without `--type` prints a structured help block listing all four values and
+> without `--type` prints a structured help block listing all three values and
 > exits. Any script calling `thrum peer add` without a type flag must add
 > `--type tailscale` for equivalent behavior.
 

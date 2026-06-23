@@ -27,9 +27,9 @@ release was real work.
 On the v0.11 side, the parallelism was the point. The main entrypoint — which
 had bloated to an embarrassing size on a steady diet of "I'll clean that up
 later" — got torn down by more than half, its command families extracted into
-their own files. A SafeHandler migration ran across sixteen packages in parallel. Separate
-tracks for the pane watcher, the agent-lifecycle work, the context-restart
-engine, all moving at the same time.
+their own files. A SafeHandler migration ran across sixteen packages in
+parallel. Separate tracks for the pane watcher, the agent-lifecycle work, the
+context-restart engine, all moving at the same time.
 
 And somewhere in the middle of all that, one track was building the very
 substrate that let the others run. The tool holding up the work of improving the
@@ -70,9 +70,9 @@ the what's-new and beta-channel callouts, run the soak, fix what came back.
 
 It also handled the forward-merges — the unglamorous work that keeps a release
 branch and the development branch from drifting into two different codebases.
-Every fix that landed on the release line went into the development line the same
-day. Four merge cycles in four days, each one a small reconciliation nobody wants
-to do by hand.
+Every fix that landed on the release line went into the development line the
+same day. Four merge cycles in four days, each one a small reconciliation nobody
+wants to do by hand.
 
 I handed it the release and went back to watching the substrate work. That's the
 part that still catches me off guard when I think about it. The release was real
@@ -110,11 +110,12 @@ next section's story.
 ## What Held It Together
 
 What made 28 agents survivable was the cross-worktree guard from
-[the last post](shooting-yourself-in-both-feet.html). Each agent is pinned to its
-own worktree by process identity, and any command run from the wrong directory
-aborts instead of acting under the wrong name. At three agents, that's a nicety.
-At 28, it's the only reason the message log means anything — because every
-message is provably from who it says it's from, and the alternative fails closed.
+[the last post](shooting-yourself-in-both-feet.html). Each agent is pinned to
+its own worktree by process identity, and any command run from the wrong
+directory aborts instead of acting under the wrong name. At three agents, that's
+a nicety. At 28, it's the only reason the message log means anything — because
+every message is provably from who it says it's from, and the alternative fails
+closed.
 
 v0.10.5 extended that guard to fire uniformly across the full command surface.
 That plus the forward-merges kept the release line and development line as one

@@ -88,9 +88,9 @@ release was real work.</p>
 <p>On the v0.11 side, the parallelism was the point. The main entrypoint — which
 had bloated to an embarrassing size on a steady diet of &quot;I&#39;ll clean that up
 later&quot; — got torn down by more than half, its command families extracted into
-their own files. A SafeHandler migration ran across sixteen packages in parallel. Separate
-tracks for the pane watcher, the agent-lifecycle work, the context-restart
-engine, all moving at the same time.</p>
+their own files. A SafeHandler migration ran across sixteen packages in
+parallel. Separate tracks for the pane watcher, the agent-lifecycle work, the
+context-restart engine, all moving at the same time.</p>
 <p>And somewhere in the middle of all that, one track was building the very
 substrate that let the others run. The tool holding up the work of improving the
 tool.</p>
@@ -123,9 +123,9 @@ rc.8 over four days. Each bump meant the same loop: version the codebase, update
 the what&#39;s-new and beta-channel callouts, run the soak, fix what came back.</p>
 <p>It also handled the forward-merges — the unglamorous work that keeps a release
 branch and the development branch from drifting into two different codebases.
-Every fix that landed on the release line went into the development line the same
-day. Four merge cycles in four days, each one a small reconciliation nobody wants
-to do by hand.</p>
+Every fix that landed on the release line went into the development line the
+same day. Four merge cycles in four days, each one a small reconciliation nobody
+wants to do by hand.</p>
 <p>I handed it the release and went back to watching the substrate work. That&#39;s the
 part that still catches me off guard when I think about it. The release was real
 work. It ran as a background process.</p>
@@ -155,11 +155,12 @@ substrate work, and a uniform cross-worktree identity preflight — which is the
 next section&#39;s story.</p>
 <h2>What Held It Together</h2>
 <p>What made 28 agents survivable was the cross-worktree guard from
-<a href="shooting-yourself-in-both-feet.html">the last post</a>. Each agent is pinned to its
-own worktree by process identity, and any command run from the wrong directory
-aborts instead of acting under the wrong name. At three agents, that&#39;s a nicety.
-At 28, it&#39;s the only reason the message log means anything — because every
-message is provably from who it says it&#39;s from, and the alternative fails closed.</p>
+<a href="shooting-yourself-in-both-feet.html">the last post</a>. Each agent is pinned to
+its own worktree by process identity, and any command run from the wrong
+directory aborts instead of acting under the wrong name. At three agents, that&#39;s
+a nicety. At 28, it&#39;s the only reason the message log means anything — because
+every message is provably from who it says it&#39;s from, and the alternative fails
+closed.</p>
 <p>v0.10.5 extended that guard to fire uniformly across the full command surface.
 That plus the forward-merges kept the release line and development line as one
 codebase the whole time, so a fix never had to be written twice.</p>

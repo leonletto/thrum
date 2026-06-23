@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -236,7 +236,8 @@ checksum. If no release is available for your platform, it falls back to
 <code>go install</code> or builds from source.</p>
 <pre><code class="language-bash hljs">curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh</code></pre>
 <h3>Homebrew</h3>
-<pre><code class="language-bash hljs">brew install leonletto/tap/thrum</code></pre>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># On Homebrew 6.0+ you may first need: brew trust leonletto/tap</span>
+brew install leonletto/tap/thrum</code></pre>
 <h3>From Source</h3>
 <pre><code class="language-bash hljs">git <span class="hljs-built_in">clone</span> https://github.com/leonletto/thrum.git
 <span class="hljs-built_in">cd</span> thrum

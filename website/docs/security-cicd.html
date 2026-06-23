@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -259,23 +259,28 @@ index</li>
 <tr>
 <th>Branch</th>
 <th>Purpose</th>
-<th>Deployment</th>
+<th>Push / Deployment</th>
 </tr>
 </thead>
 <tbody><tr>
 <td><code>main</code></td>
 <td>Stable release branch</td>
-<td>Production merges</td>
+<td>Updated via release merges only</td>
+</tr>
+<tr>
+<td><code>thrum-dev</code></td>
+<td>Active development branch</td>
+<td>Pushed to origin; no deploy</td>
 </tr>
 <tr>
 <td><code>website-dev</code></td>
 <td>Documentation website</td>
-<td>GitHub Pages auto-deploy</td>
+<td>Push triggers GitHub Pages auto-deploy</td>
 </tr>
 <tr>
 <td><code>feature/*</code></td>
-<td>Feature development</td>
-<td>CI checks on PR</td>
+<td>Feature/fix work in worktrees</td>
+<td>Local-only; reaches origin via <code>thrum-dev</code></td>
 </tr>
 </tbody></table>
 <h2>Local Development</h2>
@@ -294,7 +299,7 @@ npm run serve
 ./scripts/sync-docs.sh --dry-run  <span class="hljs-comment"># preview changes</span></code></pre>
 <h2>Tailscale Security</h2>
 <p>For remote access and cross-machine synchronization, Thrum uses Tailscale as the
-primary security model. Tailscale provides end-to-end WireGuard encryption,
+primary security model. Tailscale gives you end-to-end WireGuard encryption,
 zero-trust networking, and automatic key rotation. See
 <a href="tailscale-security.html">Tailscale Security</a> for detailed security model and
 threat analysis.</p>

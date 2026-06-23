@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -286,18 +286,23 @@ alongside your system Tailscale.</p>
 for up to 5 minutes waiting for the other machine to connect — coordinate timing
 with the other operator.</p>
 <p><strong>On Machine A</strong> (the one you want to share with):</p>
-<pre><code class="language-bash hljs">thrum peer add
-<span class="hljs-comment"># Output: Waiting for connection... Pairing code: 7392</span>
+<pre><code class="language-bash hljs">thrum peer add --<span class="hljs-built_in">type</span> tailscale
+<span class="hljs-comment"># Output: Waiting for connection...</span>
+<span class="hljs-comment"># Peercode: my-laptop:100.x.y.z:9100:7392</span>
 <span class="hljs-comment"># (blocks up to 5 minutes)</span></code></pre>
 <p><strong>On Machine B</strong> (the one joining):</p>
-<pre><code class="language-bash hljs">thrum peer <span class="hljs-built_in">join</span> &lt;tailscale-ip&gt;:9100
-<span class="hljs-comment"># Prompts: Enter pairing code:</span>
-<span class="hljs-comment"># You type: 7392</span>
+<pre><code class="language-bash hljs">thrum peer <span class="hljs-built_in">join</span> --<span class="hljs-built_in">type</span> tailscale my-laptop:100.x.y.z:9100:7392
 <span class="hljs-comment"># Output: Paired with &quot;my-laptop&quot;. Syncing started.</span></code></pre>
-<p><strong>Important:</strong> Use the tsnet Tailscale IP address (e.g., <code>100.x.y.z:9100</code>), not
-the hostname. Regular DNS cannot resolve tsnet hostnames (the <code>-1</code> suffix
-variants). Find the IP with <code>tailscale status</code> — look for the entry with the
-<code>-1</code> suffix matching the other machine&#39;s <code>THRUM_TS_HOSTNAME</code>.</p>
+<p><code>--type</code> is required on both commands. <code>peer add</code> prints a single peercode — the
+<code>name:ip:port:code</code> string — that you copy verbatim to Machine B. You can also
+pipe it in
+(<code>echo &quot;my-laptop:100.x.y.z:9100:7392&quot; | thrum peer join --type tailscale</code>) or
+pass it with <code>--peercode</code>.</p>
+<p><strong>Important:</strong> the peercode embeds the tsnet Tailscale IP (e.g.,
+<code>100.x.y.z:9100</code>), not the hostname — regular DNS can&#39;t resolve tsnet hostnames
+(the <code>-1</code> suffix variants). <code>peer add --type tailscale</code> picks the tsnet address
+automatically; if you need to check it, <code>tailscale status</code> shows the entry with
+the <code>-1</code> suffix matching the other machine&#39;s <code>THRUM_TS_HOSTNAME</code>.</p>
 <p>Machine A will also show success:</p>
 <pre><code class="language-text hljs">Paired with &quot;office-server&quot; (100.64.2.10:9100). Syncing started.</code></pre>
 <p>Both machines now sync events automatically.</p>
@@ -492,11 +497,11 @@ your auth key.</p>
 <h2>CLI Commands</h2>
 <h3><code>thrum peer</code></h3>
 <p>Manage sync peers:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Start pairing on this machine (displays 4-digit code)</span>
-thrum peer add
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Start pairing on this machine (prints a name:ip:port:code peercode)</span>
+thrum peer add --<span class="hljs-built_in">type</span> tailscale
 
-<span class="hljs-comment"># Join a remote peer (prompts for pairing code)</span>
-thrum peer <span class="hljs-built_in">join</span> &lt;address:port&gt;
+<span class="hljs-comment"># Join a remote peer using the peercode from `peer add`</span>
+thrum peer <span class="hljs-built_in">join</span> --<span class="hljs-built_in">type</span> tailscale &lt;name:ip:port:code&gt;
 
 <span class="hljs-comment"># List all paired peers</span>
 thrum peer list

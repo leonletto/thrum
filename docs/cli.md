@@ -531,10 +531,10 @@ thrum send MESSAGE [flags]
 
 A recipient flag is **required**. `thrum send 'msg'` with no `--to` or
 `--broadcast` hard-errors (exit 1) with a conversational prompt offering both
-paths — the previous silent-broadcast default was a footgun (thrum-t698).
-`--to @agent_name` is the canonical directed-send form (matches CLAUDE.md
-convention); `--broadcast` is the explicit team-wide fanout form;
-`--to @everyone` continues to work as the legacy keyword form.
+paths — the previous silent-broadcast default was a footgun. `--to @agent_name`
+is the canonical directed-send form (matches CLAUDE.md convention);
+`--broadcast` is the explicit team-wide fanout form; `--to @everyone` continues
+to work as the legacy keyword form.
 
 This command emits contextual hints — see [CLI Hints](cli-hints.md).
 
@@ -1343,7 +1343,7 @@ $ thrum context sync
 Manage the preamble — the role-template header that prepends every
 `thrum context show` / `thrum context load` output. This is what gets injected
 into a session by `thrum prime` before the agent's own saved context. Preambles
-live at `.thrum/context/preambles/{agent}.md` and are produced by
+live at `.thrum/context/{agent}_preamble.md` and are produced by
 `thrum roles deploy` from templates under `.thrum/roles/`.
 
 ```text
@@ -1474,7 +1474,7 @@ Example:
 ```text
 $ thrum daemon status
 Daemon: running (PID 7718, uptime 3h24m)
-  Version:  v0.9.0
+  Version:  v0.10.6
   Socket:   .thrum/var/thrum.sock
   Repo:     /Users/leon/dev/opensource/thrum
 
@@ -1514,7 +1514,7 @@ Example:
 
 ```text
 $ thrum daemon logs
-2026/04/09 21:15:03.000000 [daemon] started (v0.8.0)
+2026/04/09 21:15:03.000000 [daemon] started (v0.10.6)
 2026/04/09 21:15:03.100000 [sync] loop started
 ...
 
@@ -1550,10 +1550,12 @@ Sync states: `stopped`, `idle`, `synced`, `error`.
 ### thrum sync force
 
 Trigger an immediate sync (non-blocking). Fetches new messages from the remote
-and pushes local messages. Routine sync is event-triggered (as of v0.10.6 — no
-polling interval); `sync force` exists for the moments you want to confirm state
-immediately. When local-only mode is active, displays "local-only (remote sync
-disabled)".
+and pushes local messages. Routine sync is event-triggered as of v0.10.6 — the
+old fixed 60-second poll was removed (legacy `sync_interval` config keys are
+ignored). A periodic safety-net still runs to catch missed notifications (every
+5 minutes, 15 seconds when Tailscale peers are connected), and `sync force`
+exists for the moments you want to confirm state immediately. When local-only
+mode is active, displays "local-only (remote sync disabled)".
 
 ```text
 thrum sync force
@@ -2172,15 +2174,16 @@ thrum tmux start [flags]
 | `--runtime` | Override runtime for this launch (default: from config or `claude`) |         |
 
 `thrum tmux start` operates on the **current working directory** — it infers the
-session name and agent identity from the worktree at `$PWD`. Use
+session name and agent identity from the worktree at `$PWD`. There's no `--cwd`
+flag; `cd` into the target worktree first. Use
 [thrum tmux create](#thrum-tmux-create) when you need to target a different path
-or pass agent registration flags (`--role`, `--module`, etc.).
+without changing directories.
 
 Example:
 
 ```text
-$ thrum tmux start impl-api --cwd ../worktrees/api-feature \
-    --name impl_api --role implementer --module api
+$ cd ../worktrees/api-feature
+$ thrum tmux start --name impl_api --role implementer --module api
 Session created: impl-api
 Agent registered: impl_api
 Runtime launched: opencode (PID 58421)
@@ -2561,11 +2564,11 @@ Worktree created: ~/.thrum/worktrees/thrum/api-feature
   Beads: .beads/redirect → /path/to/main/.beads
 
 $ thrum worktree create hotfix -b fix/urgent-bug
-Worktree created: ~/.workspaces/thrum/hotfix
+Worktree created: ~/.thrum/worktrees/thrum/hotfix
   Branch: fix/urgent-bug
 
 $ thrum worktree create auth-feature --name impl_auth --role implementer --module auth
-Worktree created: ~/.workspaces/thrum/auth-feature
+Worktree created: ~/.thrum/worktrees/thrum/auth-feature
   Branch: feature/auth-feature
   Thrum: .thrum/redirect → /path/to/main/.thrum
   Beads: .beads/redirect → /path/to/main/.beads
@@ -2602,7 +2605,7 @@ Example:
 ```text
 $ thrum worktree teardown api-feature
 ✓ Cleaned up 1 identity file(s)
-✓ Worktree removed: ~/.workspaces/thrum/api-feature
+✓ Worktree removed: ~/.thrum/worktrees/thrum/api-feature
 ```
 
 ### thrum worktree list

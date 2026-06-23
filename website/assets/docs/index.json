@@ -149,7 +149,7 @@
   {
     "path": "beta-channel.html",
     "title": "Beta Channel",
-    "description": "How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable",
+    "description": "How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable",
     "category": "guides",
     "order": 50,
     "tags": [
@@ -159,10 +159,9 @@
       "install",
       "rollback",
       "soak",
-      "plugin",
-      "substrate"
+      "plugin"
     ],
-    "lastUpdated": "2026-06-15"
+    "lastUpdated": "2026-06-23"
   },
   {
     "path": "identity.html",
@@ -669,7 +668,7 @@
       "migration",
       "version"
     ],
-    "lastUpdated": "2026-06-15"
+    "lastUpdated": "2026-06-23"
   },
   {
     "path": "quickstart.html",

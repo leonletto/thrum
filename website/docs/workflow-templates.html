@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -342,7 +342,7 @@ project-setup skill resolves these automatically, but you can also fill them
 manually.</p>
 <h3>Implementation agent placeholders</h3>
 <pre><code class="language-bash hljs">{{EPIC_ID}}          → bd-a3f8
-{{WORKTREE_PATH}}    → ~/.workspaces/myproject/auth
+{{WORKTREE_PATH}}    → ~/.thrum/worktrees/myproject/auth
 {{BRANCH_NAME}}      → feature/auth
 {{DESIGN_DOC}}       → /abs/path/to/dev-docs/plans/2026-02-auth-design.md
 {{PLAN_FILE}}        → /abs/path/to/dev-docs/plans/2026-02-auth-plan.md
@@ -358,7 +358,7 @@ resolve relative paths to them.</p>
 <h3>Example: Fill in for a real project</h3>
 <p>You&#39;re building authentication for a Go service:</p>
 <pre><code class="language-bash hljs">{{EPIC_ID}}          → bd-k7m2
-{{WORKTREE_PATH}}    → ~/.workspaces/myservice/auth
+{{WORKTREE_PATH}}    → ~/.thrum/worktrees/myservice/auth
 {{BRANCH_NAME}}      → feature/auth-jwt
 {{DESIGN_DOC}}       → /home/user/myservice/dev-docs/plans/2026-02-jwt-auth.md
 {{PLAN_FILE}}        → /home/user/myservice/dev-docs/plans/2026-02-jwt-auth-plan.md
@@ -406,8 +406,8 @@ thrum worktree setup auth -b feature/auth \
   --module auth
 thrum tmux launch auth</code></pre>
 <p>The worktree is created at <code>worktrees.base_path/&lt;name&gt;</code> (default
-<code>~/.workspaces/&lt;repo&gt;/&lt;name&gt;</code>). The first step creates the worktree, sets up
-thrum and beads redirects, registers the agent identity, and creates a tmux
+<code>~/.thrum/worktrees/&lt;repo&gt;/&lt;name&gt;</code>). The first step creates the worktree, sets
+up thrum and beads redirects, registers the agent identity, and creates a tmux
 session — but does <strong>not</strong> start the AI runtime. The second step
 (<code>thrum tmux launch</code>) is what actually boots Claude Code (or whichever runtime
 is configured) inside the session. The <code>setup-worktree-thrum.sh</code> script is also

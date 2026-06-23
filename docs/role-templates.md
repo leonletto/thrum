@@ -1,5 +1,3 @@
-## Role-Based Preamble Templates
-
 ## Overview
 
 Role templates automatically generate agent preambles during registration.

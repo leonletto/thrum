@@ -1,4 +1,4 @@
-# Thrum v0.10.5
+# Thrum v0.10.6
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -143,6 +143,35 @@ New in v0.9.1:
   runtimes (codex, cursor, opencode, kiro) and for Claude Code
   without the plugin.
 
+New in v0.10.6:
+- Sync re-architecture — cross-machine sync is notify-driven (real-time push)
+  instead of a fixed-interval poll. The old 60-second `sync_interval` poll was
+  removed (legacy `sync_interval` config keys are silently ignored); a periodic
+  safety-net still runs to catch missed notifications (5 minutes by default, 15
+  seconds when Tailscale peers are connected). Messages write to a new
+  `messages-v2/` path. Mixed-cluster note: a v0.10.5 peer can't read messages
+  from an upgraded v0.10.6 peer — upgrade every peer in the mesh together.
+- Schema forward-compatibility — a v0.10.6 binary opens and operates on a
+  database created by a newer-schema build without the one-way migration that
+  used to brick the older binary. DB-open compatibility only; the newer tables
+  are dead-end on v0.10.6 (no consumer code reads them).
+- Cross-host sync-storm fixes — a duplicate `message_id` in relayed history no
+  longer stalls inbound sync (`message.create` apply is idempotent), and the
+  daemon backstop only nudges locally-resident recipients (no more 15-minute
+  wakeups for other hosts' mail, no unbounded spool growth).
+- a-sync exposure guard — the daemon probes `origin` anonymously and refuses to
+  push message history to a publicly readable repo unless
+  `daemon.sync.public_exposure_override` is set to the exact remote.
+- Read-state unification — read truth is unified on `message_deliveries.read_at`
+  with a one-time backfill that clears historically-stuck "phantom unread."
+- Inbox defaults to newest-first — the reply-clustered chronological view is
+  opt-in via `--chronological` / `--oldest`.
+- Shell-safe message bodies — `thrum send`, `reply`, and `message edit` accept
+  `--stdin` / `--body-file <path>` / `-` so bodies with backticks or `$(...)`
+  arrive verbatim.
+- `thrum team` daemon/host filters — `--daemon <id>` and `--host <name>` narrow
+  the roster; `thrum team local` and `thrum team daemons` add per-daemon views.
+
 New in v0.10.5:
 - Daemon-side backstop nudger — daemon polls for stale-unread messages and
   re-emits delivery nudges, replacing the user-side `thrum-inbox-poll.sh`
@@ -159,7 +188,7 @@ New in v0.10.5:
   visible scrollback anchor confirming context loaded.
 - Headless `worktree.Create` / `worktree.Destroy` Go API — worktree lifecycle
   moves to a shared `internal/worktree` package used by both the cobra commands
-  and substrate-track programmatic callers. Behavior-equivalent to the previous
+  and newer programmatic callers. Behavior-equivalent to the previous
   cobra-only path; opens the door to ephemeral-worktree flows. No user-visible
   CLI change.
 - `runtime-init` overwrites stale daemon-managed scripts (thrum-akqv P1) —
@@ -767,7 +796,7 @@ All commands accept these flags:
 
   # OR for an existing worktree: create the session + run quickstart in one command
   thrum tmux create implementer-api \
-    --cwd ~/.workspaces/myproj/api-feature \
+    --cwd ~/.thrum/worktrees/myproj/api-feature \
     --name impl_api --role implementer --module api --runtime claude
   thrum tmux launch implementer-api
   # quickstart runs automatically inside the pane during create; tmux launch
@@ -888,7 +917,7 @@ All commands accept these flags:
   THRUM_LOCAL=1 thrum daemon start       # Via environment variable
 
   Persists in .thrum/config.json: { "daemon": { "local_only": true } }
-  Priority: CLI flag > env var > config file > default (true via thrum init)
+  Priority: CLI flag > env var > config file > hardcoded default false; thrum init writes local_only=true on a fresh install with no remote a-sync
   Check status: thrum sync status (shows "Mode: local-only" or "Mode: normal")
 
 ## Configuration Reference (.thrum/config.json)

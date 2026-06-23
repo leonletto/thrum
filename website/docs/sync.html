@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -229,7 +229,7 @@
       <div class="docs-content-inner" id="docs-content-inner">
 <h2>Sync Protocol</h2>
 <p>The sync protocol keeps message logs synchronized across repository clones using
-Git as the transport layer. This enables offline-first operation with eventual
+Git as the transport layer. This gives you offline-first operation with eventual
 consistency.</p>
 <h2>Overview</h2>
 <p>Thrum uses a dedicated <code>a-sync</code> orphan branch to synchronize message history
@@ -392,9 +392,9 @@ eventID, ok := obj[<span class="hljs-string">&quot;event_id&quot;</span>].(<span
     <span class="hljs-comment">// Same event_id = same content (immutability guarantee)</span>
     duplicates++
 }</code></pre>
-<p>The <code>event_id</code> (ULID) provides both uniqueness and lexicographic time-ordering.
-This avoids collisions between different event types that share the same entity
-ID (e.g., a <code>message.create</code> and <code>message.edit</code> for the same <code>message_id</code> are
+<p>The <code>event_id</code> (ULID) is both unique and lexicographically time-ordered. This
+avoids collisions between different event types that share the same entity ID
+(e.g., a <code>message.create</code> and <code>message.edit</code> for the same <code>message_id</code> are
 distinct events with distinct <code>event_id</code> values).</p>
 <h3>Sharded JSONL Files</h3>
 <p>Events are sharded across multiple files:</p>

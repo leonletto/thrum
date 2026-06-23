@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -435,9 +435,10 @@ content into it. From then on, Thrum maintains it for you.</p>
 <hr>
 <h2>What&#39;s Next</h2>
 <p>One more thing that shipped in this release: v0.7.0 includes <strong>peer transport</strong>
-— you pair two Thrum daemons via Tailscale (<code>thrum peer add</code> on one machine,
-<code>thrum peer join</code> on the other), configure which agents should be visible across
-repos (<code>thrum peer configure</code>), and messages route between them automatically.
+— you pair two Thrum daemons via Tailscale (<code>thrum peer add --type tailscale</code> on
+one machine, <code>thrum peer join --type tailscale</code> on the other), configure which
+agents should be visible across repos (<code>thrum peer configure</code>), and messages
+route between them automatically.
 No Telegram relay, no manual coordination.</p>
 <p>The Telegram group approach turned out to have a real limitation — bots can&#39;t
 see other bots&#39; messages in groups, so agent-to-agent communication didn&#39;t work

@@ -5,191 +5,18 @@ before being promoted to stable. Beta users help catch regressions before they
 hit `releases/latest`. This guide covers how to opt in, what to expect, and how
 to report what you find.
 
-## Choose a track
+## Current pre-release
 
-Thrum currently runs two parallel pre-release tracks. Pick one — they install
-the same binary, so you can only be on one track at a time.
+> **No current pre-release.** v0.10.6 was promoted to stable on 2026-06-23 — see
+> [What's New](whats-new.md) for the highlights. The next pre-release will be
+> tagged when the next release cycle opens; watch the
+> [GitHub releases](https://github.com/leonletto/thrum/releases) page for the
+> next `vX.Y.Z-rc.1`.
 
-- **Stable-track** (`v0.10.x` cycle) — bug-fix and small-feature RCs against the
-  current stable line. Recommended for production use; lower churn.
-- **Substrate-track** (`v0.11.x` cycle) — the
-  [Personal Agent Substrate](substrate/overview.md) work: unified scheduler,
-  scheduled-agent lifecycle, skill library, email transport, reminders. Rapid
-  iteration; expect breakage. Recommended only if you're actively helping shake
-  the substrate out.
-
-The sections below cover the current pre-release on each track. Install
-mechanics (binary + plugins + rollback) are shared further down the page —
-they're parameterized over `VERSION` and the release branch.
-
-## Stable-track current pre-release
-
-> **Current stable-track pre-release:
-> [`v0.10.6-rc.13`](https://github.com/leonletto/thrum/releases/tag/v0.10.6-rc.13)**
-> (tagged 2026-06-15, in soak). rc.13 adds two release-line features on top of
-> the rc.11/rc.12 cross-host sync-storm fix batch:
->
-> - **`thrum team` daemon/host filters + `local` / `daemons` subviews**
->   (thrum-l2kxw) — `thrum team --daemon <id>` and `--host <name>` filter the
->   roster to a single daemon or host; `thrum team local` is sugar for the
->   current daemon; `thrum team daemons` groups agents by origin daemon
->   (daemon_id, hostname, agent count, with an `unknown` bucket for unattributed
->   agents). Pure CLI presentation over the existing `team.list` payload — no
->   schema, RPC, or daemon change — and all four views honor `--json`.
->   `shared_messages` is omitted from filtered views since that team-global
->   aggregate would mislead on a subset.
-> - **Permission reminder ladder cancels when the modal clears** (thrum-g23nb) —
->   `fireReminder` re-captures the pane on each fire and, if the approval modal
->   has already cleared, runs recovery and stops the ladder instead of nagging
->   about a resolved prompt. It also skips the reminder send (while still
->   advancing cadence, so give-up escalation is preserved) once every real
->   supervisor recipient has read the thread, and fails open on a pane-capture
->   error so a flaky capture never silently drops a live reminder.
->
-> rc.12 was the **cross-host sync-storm fix batch** — two production-observed
-> storms on busy multi-host meshes:
->
-> - **Duplicate `message_id` in relayed history no longer stalls inbound sync**
->   (thrum-lv9x) — a durable-lane snapshot row colliding with the same event
->   arriving later via sync aborted the projector's whole batch without
->   advancing the checkpoint, and the notify-driven re-pull retried it forever
->   (observed as a pinned peer checkpoint and a 65–167/sec `sync.notify` storm).
->   `message.create` apply is now idempotent (`INSERT OR IGNORE` + a dup-no-op
->   that still commits the event record so the batch advances), with an event-id
->   dedup pre-check on the a-sync git ingest path. Live-verified two-node: 104
->   climbing apply-failures → 0, checkpoint converged.
-> - **Backstop nudges only locally-resident recipients** (thrum-wo2z) — the
->   daemon backstop's 15-minute ticker scanned unread deliveries with no
->   residency filter, so local sessions were woken every 15 minutes for remote
->   agents' mail (and spool envelopes accumulated unbounded — one host hit 107).
->   The scan now applies an identity-file residency predicate with a
->   defense-in-depth guard at the dispatcher. ⚠ **Deploy note:** spool envelopes
->   accumulated before the fix are not removed automatically — a one-time
->   cleanup of non-resident dirs under `.thrum/spool/` is recommended.
->
-> **rc.11 carries forward**, with its headliners:
->
-> - **a-sync exposure guard now gates on repository visibility** (thrum-44mt,
->   replaces the rc.10 host-denylist). The daemon probes `origin` with an
->   anonymous, credential-stripped `git ls-remote` and refuses pushing message
->   history only to a **publicly readable** repo. Classification is fail-safe
->   (only exit-0-with-refs counts as public; 404/401/403/auth-denied means
->   private), and an explicit remote-bound exact-match override
->   (`daemon.sync.public_exposure_override`) allows intentional public-repo
->   sync. The gate resolves once at boot, surfaces its reason in `sync status`
->   and the health endpoint / Settings UI, and warns active agents when the repo
->   transitions into exposed.
-> - **Read-state unification + one-time v40 backfill** (thrum-b6qw) — read truth
->   is unified on `message_deliveries.read_at`, and a one-time schema v39→v40
->   marker runs a data-only backfill that clears historically-stuck unread (the
->   "phantom unread" / backstop nudge-storm class). ⚠ **The v40 migration is
->   one-way:** binaries supporting ≤v39 cannot reopen a migrated DB. Take a
->   `.thrum/` backup before upgrading if you may need to roll back.
-> - **tsnet node released before PID removal on shutdown** (thrum-w8is) — daemon
->   restart no longer leaves the old tsnet node registered while the new process
->   re-binds the same state dir, fixing the post-restart cross-host inbound flap
->   (`:9177` RST/EOF masked by pull-sync).
-> - **Inbox defaults to newest-first** (thrum-4yjc) — recent mail is never
->   buried under backlog; the reply-clustered chronological view is opt-in via
->   `--chronological` / `--oldest`.
-> - **Shell-safe message bodies** (thrum-d3fp) — `thrum send`, `reply`, and
->   `message edit` accept `--stdin` / `--body-file <path>` / `-` so bodies
->   bypass shell interpolation (backticks, `${...}`, `$(...)` arrive verbatim).
->
-> Also in rc.11: the peer bridge self-heals after daemon restart (thrum-to7p),
-> the inbox hidden-count only counts delivery-backed unread so
-> `thrum message read --all` converges (thrum-eeio), the role preamble survives
-> the self-restart race (thrum-4ye2), and context-sweep alerts gain hysteresis
-> plus a correct 1M-token window for `claude-fable-5` (thrum-gqq3).
->
-> The rc.10 **directed-inbound back-port** (thrum-h4s4) lands with rc.11: a lean
-> 0.10.6 node can consume a directed/filtered inbound stream served by a 0.11
-> hub (the hub does all filtering). It brings a structured `daemon.sync` config
-> stanza (`{enabled, mechanisms:[{mechanism, scope}]}`) with startup validity
-> checks to supplement the overloaded `daemon.local_only` bool, the additive
-> `filtered` sync-pull response flag with checkpoint cursor-honesty, and a
-> pairing guard so `thrum peer add` / `peer join` refuse when sync is disabled
-> instead of silently half-connecting.
->
-> rc.9's cross-host sync fix carries forward: the auto-reconcile Manager no
-> longer advertises a loopback `:<port>` dialer identity that corrupted peers'
-> stored address and stalled cross-host sync for hours — the advertised address
-> now resolves lazily at dial time from the daemon's tsnet-reachable address
-> (thrum-hix5). rc.8's message-nudge hardening also carries: the chrome-quiet
-> gate so inbound nudges never land mid-keystroke (thrum-nlel / thrum-3i2s,
-> tunable via the `daemon.nudge` config block), nudges deferred to a redelivery
-> queue while an interactive selection dialog is up (thrum-7phu), and the daemon
-> start-wait surfacing live migration progress instead of a false timeout on
-> large-DB upgrades (thrum-vh2c). rc.7's agent-restart reliability also carries
-> forward: the un-restartable-agent class closed (thrum-5oui, thrum-ipbl,
-> thrum-6yt7, plus rc.6's thrum-mnhp dead-PID guard), the `thrum prime`
-> daemon-side `RLock` root-cause fix (thrum-5988), the snapshot/sleep skill
-> family (thrum-rwhg — `/thrum:restart-extended`, `/thrum:sleep`,
-> `/thrum:sleep-extended`), and the identity-guard message-read fail-open close
-> (thrum-tgqx).
->
-> Earlier v0.10.6 RCs carry forward — rc.6/rc.5 fleet-operations work: two sweep
-> ctx% corrections (thrum-4pd1 Opus 4.8 1M-window denominator, thrum-roeq
-> session-birth transcript selection), boot reconcile writing live AgentPIDs
-> back to the registry (thrum-qxr3), the `thrum tmux create --force`
-> prefix-match guard (thrum-z63b), agent-status Pattern D self-writes
-> (thrum-9neg), `thrum monitor --schedule` with continuous auto-restart
-> (thrum-puhr.9), and the restored `--json` / `--report-only` /
-> `THRUM_SWEEP_IDENTITY_GLOBS` sweep features (thrum-l9e6); plus rc.4's
-> `team.list` / dead-agent self-heal rework (thrum-1nkt), the 4MB
-> JSONL-compactor scanner buffer (thrum-10j0), the 1MB message-body write cap
-> (thrum-mhwt), `INSERT OR IGNORE` on `applySessionStart` (thrum-9jcb.3), the
-> identity-guard PID-ancestor split (thrum-xir.40) and cached peercred CWD
-> lookup (thrum-xir.45), and `thrum worktree teardown` cascade-deleting the
-> bound agent identity (thrum-wk7d).
->
-> The v0.10.6 story still leads with the **sync re-architecture** (thrum-s6os):
-> the cross-machine wire stream is event-triggered rather than 60-second-polled,
-> idle daemons produce zero commits on `a-sync`, and busy clusters stop
-> accumulating heartbeat noise. ⚠ **Mixed-cluster warning:** v0.10.5 peers
-> cannot read messages from upgraded v0.10.6 peers (v0.10.6 writes only to the
-> new `messages-v2/` path); upgrade all peers in one window. Other v0.10.6
-> changes: timestamped pre-migration DB backups (with a hard halt if backup
-> fails), an RC-tag plugin distribution scheme so `/plugin update` upgrades
-> cleanly through the rc pipeline, two new daemon config keys
-> (`events_retention_days`, `compaction_size_threshold_mb`), and
-> skill-review-loop improvements (`verify-against-source`, Phase 0 review gate).
-> Full notes: [What's New](whats-new.md) and the
-> [CHANGELOG `[Unreleased]` section](https://github.com/leonletto/thrum/blob/release/v0.10.6/CHANGELOG.md).
-
-### Quick install for `v0.10.6-rc.13`
-
-Binary and Codex plugin (run in your shell):
-
-```bash
-# Binary
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.6-rc.13 sh
-
-# Codex plugin (matches release/v0.10.6)
-THRUM_INSTALL_REF=release/v0.10.6 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.6/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
-```
-
-Claude Code plugin (run inside Claude):
-
-```text
-/plugin marketplace add leonletto/thrum#release/v0.10.6
-/plugin install thrum@thrum
-/reload-plugins
-```
-
-## Substrate-track current pre-release
-
-> No substrate-track pre-release yet. First will be `v0.11.0-rc.1`.
-
-When `v0.11.0-rc.1` publishes, this section will carry the substrate-track
-callout + Quick install block pinned to the `release/v0.11.0` branch. Watch the
-[GitHub releases](https://github.com/leonletto/thrum/releases) page or the
-[Personal Agent Substrate](substrate/overview.md) intro for the announcement.
-
-For refresh between rc.N bumps, switching tracks, switching back to stable, and
-the parameterized versions of these commands, see
-[How to install the matching plugins](#how-to-install-the-matching-claude-code-and-codex-plugins)
-below.
+When an RC is in soak, this section carries its callout plus a Quick install
+block pinned to the matching `release/vX.Y.Z` branch. The install mechanics
+(binary + plugins + rollback) below are shared and parameterized over `VERSION`
+and the release branch.
 
 ## What this is
 
@@ -228,7 +55,7 @@ curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/instal
 To find the current RC tag, browse the
 [GitHub releases page](https://github.com/leonletto/thrum/releases) and look for
 entries marked **Pre-release**. The RC pattern is `vX.Y.Z-rc.N` (e.g.
-`v0.11.0-rc.2`).
+`v0.10.7-rc.2`).
 
 After installing, restart the daemon so it picks up the new binary:
 
@@ -366,26 +193,6 @@ The `rc-feedback` label is what the coordinator filters on when triaging during
 soak — labelled issues block promotion at P0/P1; unlabelled bug reports may not
 be seen until after stable ships.
 
-## Switching between stable-track and substrate-track
-
-To move between the two tracks, install the binary with the target track's
-`VERSION=` and refresh both plugins against the matching release branch.
-
-```bash
-# Example: substrate-track → stable-track (when stable-track has a pre-release;
-# otherwise just install the latest stable release without VERSION=)
-curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
-thrum daemon restart
-# Then refresh plugins against the release branch (see Claude Code + Codex
-# sections above) — currently the stable line is the v0.10.3 release.
-```
-
-The binary and plugins share the same install paths regardless of track, so the
-switch is "install the other track's version" rather than uninstall + reinstall.
-The plugin remove-and-re-add step in the "Leaving the beta channel" section
-below applies in the same way if Claude Code has cached the previous track's
-marketplace ref.
-
 ## Leaving the beta channel
 
 When you're done testing, revert the binary and any plugins you installed from
@@ -447,3 +254,8 @@ an RC, run the curl command above; the install script writes to
 `~/.local/bin/thrum`, which takes precedence over the Homebrew binary on most
 `PATH` setups. To return to the Homebrew-managed binary, remove the local copy
 and run `brew upgrade thrum`.
+
+```bash
+# On Homebrew 6.0+ you may first need: brew trust leonletto/tap
+brew install leonletto/tap/thrum
+```

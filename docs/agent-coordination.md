@@ -185,7 +185,7 @@ NO_MESSAGES_TIMEOUT
 
 ## Beads Integration
 
-Run Thrum and [Beads](https://github.com/leonletto/thrum) together. Thrum
+Run Thrum and [Beads](https://github.com/steveyegge/beads) together. Thrum
 handles real-time messaging; Beads tracks the work. Neither tries to do the
 other's job:
 
@@ -207,7 +207,7 @@ thrum quickstart --name impl_auth --role implementer --module auth \
 bd ready
 
 # 3. Claim in Beads
-bd update bd-123 --status in_progress
+bd update bd-123 -s in_progress
 
 # 4. Announce via Thrum (use agent name, not role)
 thrum send "Starting bd-123: JWT authentication" --to @coord_main
@@ -238,7 +238,7 @@ thrum sync force
 | Concept    | Beads                  | Thrum                                   |
 | ---------- | ---------------------- | --------------------------------------- |
 | Task ID    | `bd-123`               | Include in message: "Working on bd-123" |
-| Status     | `bd update --status`   | Send message with update                |
+| Status     | `bd update -s`         | Send message with update                |
 | Assignment | `bd update --assignee` | Send message to specific agent          |
 | Completion | `bd close`             | Send completion message                 |
 | Discovery  | `bd create`            | Notify via message                      |
@@ -267,7 +267,7 @@ thrum inbox --unread
 bd ready
 
 # 4. Claim task (Beads)
-bd update <id> --status in_progress
+bd update <id> -s in_progress
 
 # 5. Announce start (Thrum) — use agent name from `thrum team`
 thrum send "Starting work on <id>: <description>" --to @<coordinator-name>

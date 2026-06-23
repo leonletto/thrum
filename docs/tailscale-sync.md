@@ -76,24 +76,30 @@ with the other operator.
 **On Machine A** (the one you want to share with):
 
 ```bash
-thrum peer add
-# Output: Waiting for connection... Pairing code: 7392
+thrum peer add --type tailscale
+# Output: Waiting for connection...
+# Peercode: my-laptop:100.x.y.z:9100:7392
 # (blocks up to 5 minutes)
 ```
 
 **On Machine B** (the one joining):
 
 ```bash
-thrum peer join <tailscale-ip>:9100
-# Prompts: Enter pairing code:
-# You type: 7392
+thrum peer join --type tailscale my-laptop:100.x.y.z:9100:7392
 # Output: Paired with "my-laptop". Syncing started.
 ```
 
-**Important:** Use the tsnet Tailscale IP address (e.g., `100.x.y.z:9100`), not
-the hostname. Regular DNS cannot resolve tsnet hostnames (the `-1` suffix
-variants). Find the IP with `tailscale status` — look for the entry with the
-`-1` suffix matching the other machine's `THRUM_TS_HOSTNAME`.
+`--type` is required on both commands. `peer add` prints a single peercode — the
+`name:ip:port:code` string — that you copy verbatim to Machine B. You can also
+pipe it in
+(`echo "my-laptop:100.x.y.z:9100:7392" | thrum peer join --type tailscale`) or
+pass it with `--peercode`.
+
+**Important:** the peercode embeds the tsnet Tailscale IP (e.g.,
+`100.x.y.z:9100`), not the hostname — regular DNS can't resolve tsnet hostnames
+(the `-1` suffix variants). `peer add --type tailscale` picks the tsnet address
+automatically; if you need to check it, `tailscale status` shows the entry with
+the `-1` suffix matching the other machine's `THRUM_TS_HOSTNAME`.
 
 Machine A will also show success:
 
@@ -275,11 +281,11 @@ your auth key.
 Manage sync peers:
 
 ```bash
-# Start pairing on this machine (displays 4-digit code)
-thrum peer add
+# Start pairing on this machine (prints a name:ip:port:code peercode)
+thrum peer add --type tailscale
 
-# Join a remote peer (prompts for pairing code)
-thrum peer join <address:port>
+# Join a remote peer using the peercode from `peer add`
+thrum peer join --type tailscale <name:ip:port:code>
 
 # List all paired peers
 thrum peer list

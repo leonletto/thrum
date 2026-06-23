@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -524,9 +524,9 @@ don&#39;t need to edit it. If you register an orchestrator agent with
 <p><strong>Register an orchestrator agent:</strong></p>
 <pre><code class="language-bash hljs">thrum quickstart --role orchestrator --name orchestrator_main --module main</code></pre>
 <p>Run this in the orchestrator&#39;s worktree (a detached HEAD worktree under
-<code>~/.workspaces/&lt;project&gt;/orchestrator/</code>). The orchestrator stays on detached
-HEAD — it never commits. All code work happens in the agent worktrees it
-creates.</p>
+<code>~/.thrum/worktrees/&lt;project&gt;/orchestrator/</code>). The orchestrator stays on
+detached HEAD — it never commits. All code work happens in the agent worktrees
+it creates.</p>
 <p><strong>Set agent status:</strong></p>
 <pre><code class="language-bash hljs">thrum agent set-status working    <span class="hljs-comment"># mark yourself working</span>
 thrum agent set-status idle       <span class="hljs-comment"># mark yourself idle</span>

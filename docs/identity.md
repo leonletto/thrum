@@ -176,8 +176,8 @@ export THRUM_AGENT_ID=furiosa      # Pin caller identity for daemon RPC
 `THRUM_NAME` environment variable takes highest priority in identity resolution,
 overriding the `--agent-id` flag and identity file auto-selection. It is the
 primary way to select which identity file to load, especially in multi-agent
-worktrees. It is also used by external orchestrators (e.g., Gastown) to inject
-identity into agent processes.
+worktrees. It is also used by external orchestrators to inject identity into
+agent processes.
 
 When `THRUM_NAME` is set and the corresponding identity file does not exist,
 loading **fails** rather than falling back to env vars. This ensures validation
@@ -625,11 +625,11 @@ Or if you need to register manually in an existing worktree:
 thrum quickstart --name coord_main --role coordinator --module all
 
 # Auth worktree - auth implementer
-cd ~/.workspaces/myapp/auth
+cd ~/.thrum/worktrees/myapp/auth
 thrum quickstart --name furiosa --role implementer --module auth
 
 # Sync worktree - sync implementer
-cd ~/.workspaces/myapp/sync
+cd ~/.thrum/worktrees/myapp/sync
 thrum quickstart --name nux --role implementer --module sync
 ```
 

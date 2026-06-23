@@ -212,7 +212,7 @@
         <div class="sidebar-category" data-category="guides">
           <span class="sidebar-category-label">Guides</span>
           <div class="sidebar-category-content">
-          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on either the stable-track (v0.10.x) or substrate-track (v0.11.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
+          <a class="sidebar-link" href="/docs/beta-channel.html" data-path="beta-channel.html" data-category="guides" title="How to opt into Thrum pre-release builds on the stable-track (v0.10.x), install RCs and their matching plugins, report bugs against them, and roll back to stable">Beta Channel</a>
           </div>
         </div>
         <div class="sidebar-category" data-category="troubleshooting">
@@ -284,7 +284,7 @@ thrum daemon status</code></pre>
 │   ├── identity/            # ID generation (ULID-based: repo, agent, session, message, event)
 │   │   └── guard/           # Cross-worktree identity guards, WritePID enforcement
 │   ├── jsonl/               # JSONL reader/writer with file locking
-│   ├── mcp/                 # MCP stdio server (4 tools, WebSocket waiter)
+│   ├── mcp/                 # MCP stdio server (5 tools: 4 active + 1 deprecated; polling waiter)
 │   ├── paths/               # Path resolution, .thrum/redirect, sync worktree path
 │   ├── projection/          # JSONL to SQLite event replay (projector)
 │   ├── schema/              # SQLite schema, DDL, and migrations (v24)
@@ -787,7 +787,7 @@ go <span class="hljs-built_in">test</span> ./internal/daemon/rpc/... -v
 <span class="hljs-comment"># State tests</span>
 go <span class="hljs-built_in">test</span> ./internal/daemon/state/... -v</code></pre>
 <p>Use the <code>StartTestDaemon()</code> helper in <code>internal/daemon/testutil_test.go</code> for
-integration tests. It provides automatic <code>t.Cleanup()</code> with force-kill to
+integration tests. It gives you automatic <code>t.Cleanup()</code> with force-kill to
 prevent test orphan processes on timeout or panic.</p>
 <h3>Debugging Daemon</h3>
 <p><strong>Check if daemon is running:</strong></p>
@@ -854,15 +854,16 @@ thrum daemon start</code></pre>
 <li>Verify socket file exists</li>
 </ul>
 <h2>MCP Server Development</h2>
-<p>The MCP server (<code>thrum mcp serve</code>) provides native MCP tools for Claude Code
-agents instead of shelling out to the CLI. It uses stdio transport (JSON-RPC
-over stdin/stdout).</p>
+<p>The MCP server (<code>thrum mcp serve</code>) gives Claude Code native MCP tools agents
+instead of shelling out to the CLI. It uses stdio transport (JSON-RPC over
+stdin/stdout).</p>
 <p><strong>Key files:</strong></p>
 <ul>
 <li><code>internal/mcp/server.go</code>: Server skeleton and tool registration</li>
 <li><code>internal/mcp/tools.go</code>: Tool handler implementations</li>
 <li><code>internal/mcp/types.go</code>: Request/response type definitions</li>
-<li><code>internal/mcp/waiter.go</code>: WebSocket-based blocking message waiter</li>
+<li><code>internal/mcp/waiter.go</code>: polling-based blocking message waiter (500ms over
+the Unix socket)</li>
 <li><code>cmd/thrum/mcp.go</code>: <code>thrum mcp serve</code> Cobra command</li>
 </ul>
 <p><strong>MCP Tools (5 total: 4 active + 1 deprecated):</strong></p>
@@ -929,8 +930,8 @@ the <code>.thrum/redirect</code> mechanism. Feature worktrees point to the main 
 <code>.thrum/</code> directory so all worktrees share one daemon, one SQLite database, and
 one set of JSONL files.</p>
 <h3>Setting Up a Worktree</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Option 1: Use the thrum setup command</span>
-thrum setup /path/to/worktree
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Option 1: Use the thrum worktree setup command (creates worktree + redirect + registration)</span>
+thrum worktree setup &lt;name&gt;
 
 <span class="hljs-comment"># Option 2: Use the setup script</span>
 ./scripts/setup-worktree-thrum.sh /path/to/worktree

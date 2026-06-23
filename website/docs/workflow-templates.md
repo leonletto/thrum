@@ -97,7 +97,7 @@ manually.
 
 ```bash
 {{EPIC_ID}}          → bd-a3f8
-{{WORKTREE_PATH}}    → ~/.workspaces/myproject/auth
+{{WORKTREE_PATH}}    → ~/.thrum/worktrees/myproject/auth
 {{BRANCH_NAME}}      → feature/auth
 {{DESIGN_DOC}}       → /abs/path/to/dev-docs/plans/2026-02-auth-design.md
 {{PLAN_FILE}}        → /abs/path/to/dev-docs/plans/2026-02-auth-plan.md
@@ -119,7 +119,7 @@ You're building authentication for a Go service:
 
 ```bash
 {{EPIC_ID}}          → bd-k7m2
-{{WORKTREE_PATH}}    → ~/.workspaces/myservice/auth
+{{WORKTREE_PATH}}    → ~/.thrum/worktrees/myservice/auth
 {{BRANCH_NAME}}      → feature/auth-jwt
 {{DESIGN_DOC}}       → /home/user/myservice/dev-docs/plans/2026-02-jwt-auth.md
 {{PLAN_FILE}}        → /home/user/myservice/dev-docs/plans/2026-02-jwt-auth-plan.md
@@ -186,8 +186,8 @@ thrum tmux launch auth
 ```
 
 The worktree is created at `worktrees.base_path/<name>` (default
-`~/.workspaces/<repo>/<name>`). The first step creates the worktree, sets up
-thrum and beads redirects, registers the agent identity, and creates a tmux
+`~/.thrum/worktrees/<repo>/<name>`). The first step creates the worktree, sets
+up thrum and beads redirects, registers the agent identity, and creates a tmux
 session — but does **not** start the AI runtime. The second step
 (`thrum tmux launch`) is what actually boots Claude Code (or whichever runtime
 is configured) inside the session. The `setup-worktree-thrum.sh` script is also
