@@ -18,6 +18,16 @@ func mustGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
+	// Hermetic git env. A clean CI runner has no global user.name/user.email,
+	// so `git commit` exits 128 ("committer identity unknown") — the test
+	// passes on dev machines (which have an identity) but fails on bare CI.
+	// Pin an identity, and neutralize host global/system config so these
+	// isolation-focused probe tests aren't perturbed by the runner's git setup.
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=thrum-test", "GIT_AUTHOR_EMAIL=test@thrum.local",
+		"GIT_COMMITTER_NAME=thrum-test", "GIT_COMMITTER_EMAIL=test@thrum.local",
+		"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
+	)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v in %s: %v\n%s", args, dir, err, out)
 	}
