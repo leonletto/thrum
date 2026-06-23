@@ -579,8 +579,14 @@ spawn_sub_fixture_claude() {
 clear_trust() {
   local pane="$1"
   wait_for_pane_idle "$pane" 30
+  # 60s content-confirm window (was 30s). On a box still carrying the live
+  # fleet, claude can take well over 30s to paint "Quick safety check" — the
+  # 30s gate fired before the dialog rendered, so the best-effort Enter was
+  # swallowed and the pane stayed stuck at trust (coord setup abort: dialog
+  # not detected -> whoami probe never landed). 60s mirrors+exceeds the
+  # spawn_sub_fixture_claude loop's 45s for the heavier first-pane boot.
   local waited=0
-  while [ "$waited" -lt 30 ]; do
+  while [ "$waited" -lt 60 ]; do
     if tmux capture-pane -t "$pane" -p 2>/dev/null \
         | grep -qiE "quick safety check|trust this folder|1\. Yes"; then
       break
@@ -588,8 +594,8 @@ clear_trust() {
     sleep 1
     waited=$((waited + 1))
   done
-  if [ "$waited" -ge 30 ]; then
-    echo "WARN: clear_trust($pane): trust dialog text not detected within 30s; sending Enter best-effort" >&2
+  if [ "$waited" -ge 60 ]; then
+    echo "WARN: clear_trust($pane): trust dialog text not detected within 60s; sending Enter best-effort" >&2
   fi
   tmux send-keys -t "$pane" Enter
 }

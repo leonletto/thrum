@@ -171,7 +171,11 @@ run_setup() {
   # screen writes ZERO JSONL until it receives user input that starts a
   # session; polling for a SessionStart attachment before the first `!` send
   # would be a chicken-and-egg deadlock. This whoami send IS what kicks the
-  # session alive.
+  # session alive. (The coord pane keeps the keystroke probe — unlike the
+  # impl pane below: the coordinator role does not proactively run
+  # `thrum wait`, so its pane stays idle and the `!`-bash probe lands; the
+  # daemon also skips its post-launch prime-inject during the gate, so the
+  # SessionStart attachment is NOT a reliable identity surface here.)
   #
   # Retry-with-bounded-resend (thrum-vjqn): on saturated dev boxes (~60+
   # tmux sessions, long daemon uptime) claude's interactive-input handler
