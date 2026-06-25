@@ -1064,16 +1064,16 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	}
 }
 
-func TestSchema_V51_CurrentVersion(t *testing.T) {
-	if schema.CurrentVersion != 51 {
-		t.Errorf("CurrentVersion = %d, want 51 (v40 read-state marker + v41–v51 dead-end DDL forward-port from thrum-agents per thrum-399av)", schema.CurrentVersion)
+func TestSchema_V52_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 52 {
+		t.Errorf("CurrentVersion = %d, want 52 (v40 read-state marker + v41–v51 dead-end DDL forward-port per thrum-399av + v52 agents.agent_status forward-port per thrum-ej6qn)", schema.CurrentVersion)
 	}
 	// The read-state crossing constant stays at the v40 marker version — the
 	// state.NewState gate compares the pre-migration version against it, and the
-	// v40 backfill must NOT re-fire on a v40→v51 upgrade. Forward-porting the
+	// v40 backfill must NOT re-fire on a v40→v52 upgrade. Forward-porting the
 	// schema does not move the read-state boundary.
 	if schema.SchemaVersionReadState != 40 {
-		t.Errorf("SchemaVersionReadState = %d, want 40 (unchanged by the v51 forward-port)", schema.SchemaVersionReadState)
+		t.Errorf("SchemaVersionReadState = %d, want 40 (unchanged by the v52 forward-port)", schema.SchemaVersionReadState)
 	}
 }
 

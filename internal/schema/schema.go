@@ -86,7 +86,10 @@ import (
 //     v46 was the post-rebuild read-state corrective — none have a runMigrations
 //     block, and the release line never references SchemaVersionReadStatePost-
 //     Rebuild, so no state.NewState change is needed.
-const CurrentVersion = 51
+//   - v52 (thrum-ej6qn): agents.agent_status / agents.agent_status_updated_at —
+//     purely-additive forward-port of private 0.11's thrum-v8uyw mirror columns.
+//     Dead-end (no release-line reader); the empty-string defaults carry existing rows.
+const CurrentVersion = 52
 
 // SchemaVersionReadState is the read-state unification crossing (thrum-b6qw,
 // backport of thrum-tcqw): at the first boot where the pre-migration version is
@@ -280,7 +283,10 @@ func createTables(tx *sql.Tx) error {
 			last_pane_alive_at       INTEGER,
 			-- v41/v48 forward-port (thrum-399av): dead-end columns, no release-line reader.
 			agent_pid_start_time     TEXT NOT NULL DEFAULT '',
-			phase                    TEXT NOT NULL DEFAULT 'active'
+			phase                    TEXT NOT NULL DEFAULT 'active',
+			-- v52 forward-port (thrum-ej6qn): dead-end columns, no release-line reader.
+			agent_status             TEXT NOT NULL DEFAULT '',
+			agent_status_updated_at  TEXT NOT NULL DEFAULT ''
 		)`,
 
 		// Sessions table
@@ -2421,6 +2427,35 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 			last_edited_by    TEXT NOT NULL DEFAULT ''
 		)`); err != nil {
 			return fmt.Errorf("migration 50→51: create memory_satellite: %w", err)
+		}
+	}
+
+	// v52 (thrum-ej6qn): agents.agent_status, agents.agent_status_updated_at —
+	// purely-additive forward-port of private 0.11's thrum-v8uyw mirror columns.
+	// Dead-end without a release-line reader; the '' defaults keep existing rows
+	// valid for a binary that never reads the columns. Column-set-guarded so a
+	// re-run on an already-migrated DB is a no-op (SQLite has no ADD COLUMN IF
+	// NOT EXISTS).
+	if startVersion < 52 && endVersion >= 52 {
+		hasAgents, aErr := tableExists(tx, "agents")
+		if aErr != nil {
+			return fmt.Errorf("migration 51→52: check agents table: %w", aErr)
+		}
+		if hasAgents {
+			aCols, err2 := columnSet(tx, "agents")
+			if err2 != nil {
+				return fmt.Errorf("migration 51→52: read agents columns: %w", err2)
+			}
+			if !aCols["agent_status"] {
+				if _, err := tx.Exec(`ALTER TABLE agents ADD COLUMN agent_status TEXT NOT NULL DEFAULT ''`); err != nil {
+					return fmt.Errorf("migration 51→52: add agents.agent_status: %w", err)
+				}
+			}
+			if !aCols["agent_status_updated_at"] {
+				if _, err := tx.Exec(`ALTER TABLE agents ADD COLUMN agent_status_updated_at TEXT NOT NULL DEFAULT ''`); err != nil {
+					return fmt.Errorf("migration 51→52: add agents.agent_status_updated_at: %w", err)
+				}
+			}
 		}
 	}
 

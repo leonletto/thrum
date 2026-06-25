@@ -58,8 +58,8 @@ func TestStateInit_v39_to_v40_BackfillsOnce(t *testing.T) {
 	}
 	defer func() { _ = st.Close() }()
 
-	// Migrate always advances to CurrentVersion (51 after the thrum-399av
-	// forward-port); the read-state backfill still crosses at v40 (the gate is
+	// Migrate always advances to CurrentVersion (52 after the thrum-399av v51 +
+	// thrum-ej6qn v52 forward-ports); the read-state backfill still crosses at v40 (the gate is
 	// oldVersion < SchemaVersionReadState), which is what this test exercises.
 	if v, err := schema.GetSchemaVersion(st.RawDB()); err != nil || v != schema.CurrentVersion {
 		t.Fatalf("schema version after crossing = %d (err %v), want %d", v, err, schema.CurrentVersion)
