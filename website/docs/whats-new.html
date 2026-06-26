@@ -232,6 +232,34 @@
 breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 <a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG.md</a>.</p>
+<h2>v0.10.7 — In Soak (RC)</h2>
+<p><strong>v0.10.7-rc.1</strong> was tagged 2026-06-26 and is the current pre-release. It carries
+two changes:</p>
+<ul>
+<li><strong>Public DB schema floor raised v51 → v52</strong> (thrum-ej6qn) — an open-core
+compatibility bump that moves the public release line&#39;s schema floor up one
+step. ⚠ <strong>The v52 migration is one-way:</strong> a binary that predates v52 cannot
+reopen a database once it has migrated. Downgrading to a <code>&lt;v52</code> binary requires
+restoring your pre-migration-v51 backup, so take a <code>.thrum/</code> backup before
+upgrading if you might need to roll back.</li>
+<li><strong>Stuck-pane queue dispatch watchdog</strong> (thrum-7yhs) — the daemon now detects
+queue-dispatch panes that wedge instead of draining their queued commands and
+recovers them, closing a class of silently-stalled command queues.</li>
+</ul>
+<p>Lint and security CI stages were waived for this RC owing to the known Go 1.26
+tooling gap (pre-existing, not specific to this release).</p>
+<h3>Upgrade Notes</h3>
+<ul>
+<li><strong>Schema migration is one-way (v51 → v52).</strong> Back up your <code>.thrum/</code> directory
+before upgrading. Rolling back to a pre-v52 binary requires restoring that
+pre-migration-v51 backup.</li>
+<li><strong>Install via the curl beta channel.</strong> See the
+<a href="beta-channel.html">Beta Channel</a> page for install commands pinned to
+<code>v0.10.7-rc.1</code> and the matching <code>release/v0.10.7</code> plugins.</li>
+</ul>
+<p>Full change list:
+<a href="https://github.com/leonletto/thrum/blob/main/CHANGELOG.html">CHANGELOG</a>. See the
+<a href="beta-channel.html">Beta Channel</a> page for install commands.</p>
 <h2>v0.10.6 — 2026-06-23</h2>
 <p><a href="https://github.com/leonletto/thrum/releases/tag/v0.10.6"><code>v0.10.6</code></a> was
 promoted to stable on 2026-06-23 after a long RC soak. It&#39;s a

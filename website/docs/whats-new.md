@@ -6,7 +6,7 @@ description:
 category: "overview"
 order: 2
 tags: ["release-notes", "changelog", "migration", "version"]
-last_updated: "2026-06-23"
+last_updated: "2026-06-26"
 ---
 
 ## What's New
@@ -15,6 +15,37 @@ This page tracks the user-visible changes in recent Thrum releases — highlight
 breaking changes, and anything that needs attention when you upgrade. The full
 machine-readable history lives in
 [CHANGELOG.md](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md).
+
+## v0.10.7 — In Soak (RC)
+
+**v0.10.7-rc.1** was tagged 2026-06-26 and is the current pre-release. It carries
+two changes:
+
+- **Public DB schema floor raised v51 → v52** (thrum-ej6qn) — an open-core
+  compatibility bump that moves the public release line's schema floor up one
+  step. ⚠ **The v52 migration is one-way:** a binary that predates v52 cannot
+  reopen a database once it has migrated. Downgrading to a `<v52` binary requires
+  restoring your pre-migration-v51 backup, so take a `.thrum/` backup before
+  upgrading if you might need to roll back.
+- **Stuck-pane queue dispatch watchdog** (thrum-7yhs) — the daemon now detects
+  queue-dispatch panes that wedge instead of draining their queued commands and
+  recovers them, closing a class of silently-stalled command queues.
+
+Lint and security CI stages were waived for this RC owing to the known Go 1.26
+tooling gap (pre-existing, not specific to this release).
+
+### Upgrade Notes
+
+- **Schema migration is one-way (v51 → v52).** Back up your `.thrum/` directory
+  before upgrading. Rolling back to a pre-v52 binary requires restoring that
+  pre-migration-v51 backup.
+- **Install via the curl beta channel.** See the
+  [Beta Channel](beta-channel.md) page for install commands pinned to
+  `v0.10.7-rc.1` and the matching `release/v0.10.7` plugins.
+
+Full change list:
+[CHANGELOG](https://github.com/leonletto/thrum/blob/main/CHANGELOG.md). See the
+[Beta Channel](beta-channel.md) page for install commands.
 
 ## v0.10.6 — 2026-06-23
 

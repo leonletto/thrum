@@ -7,16 +7,45 @@ to report what you find.
 
 ## Current pre-release
 
-> **No current pre-release.** v0.10.6 was promoted to stable on 2026-06-23 — see
-> [What's New](whats-new.md) for the highlights. The next pre-release will be
-> tagged when the next release cycle opens; watch the
-> [GitHub releases](https://github.com/leonletto/thrum/releases) page for the
-> next `vX.Y.Z-rc.1`.
+> **Current pre-release:
+> [`v0.10.7-rc.1`](https://github.com/leonletto/thrum/releases/tag/v0.10.7-rc.1)**
+> (tagged 2026-06-26, in soak). rc.1 carries two changes:
+>
+> - **Public DB schema floor raised v51 → v52** (thrum-ej6qn) — an open-core
+>   compatibility bump. ⚠ **The v52 migration is one-way:** downgrading to a
+>   pre-v52 (`<v52`) binary requires restoring your pre-migration-v51 backup.
+>   Take a `.thrum/` backup before upgrading if you may need to roll back.
+> - **Stuck-pane queue dispatch watchdog** (thrum-7yhs) — detects and recovers
+>   queue-dispatch panes that wedge instead of draining their queued commands.
+>
+> Lint/security CI stages were waived for this RC (Go 1.26 tooling gap,
+> pre-existing). See [What's New](whats-new.md) for the full write-up.
 
-When an RC is in soak, this section carries its callout plus a Quick install
-block pinned to the matching `release/vX.Y.Z` branch. The install mechanics
-(binary + plugins + rollback) below are shared and parameterized over `VERSION`
-and the release branch.
+### Quick install for `v0.10.7-rc.1`
+
+Binary and Codex plugin (run in your shell):
+
+```bash
+# Binary
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.7-rc.1 sh
+
+# Codex plugin (matches release/v0.10.7)
+THRUM_INSTALL_REF=release/v0.10.7 bash <(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.7/codex-plugin/plugins/thrum/scripts/install-plugin.sh)
+```
+
+Claude Code plugin (run inside Claude):
+
+```text
+/plugin marketplace add leonletto/thrum#release/v0.10.7
+/plugin install thrum@thrum
+/reload-plugins
+```
+
+For refresh between rc.N bumps, switching back to stable, and the parameterized
+versions of these commands, see
+[How to install the matching plugins](#how-to-install-the-matching-claude-code-and-codex-plugins)
+below. The install mechanics (binary + plugins + rollback) are shared and
+parameterized over `VERSION` and the release branch.
 
 ## What this is
 

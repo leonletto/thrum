@@ -234,16 +234,36 @@ hit <code>releases/latest</code>. This guide covers how to opt in, what to expec
 to report what you find.</p>
 <h2>Current pre-release</h2>
 <blockquote>
-<p><strong>No current pre-release.</strong> v0.10.6 was promoted to stable on 2026-06-23 — see
-<a href="whats-new.html">What&#39;s New</a> for the highlights. The next pre-release will be
-tagged when the next release cycle opens; watch the
-<a href="https://github.com/leonletto/thrum/releases">GitHub releases</a> page for the
-next <code>vX.Y.Z-rc.1</code>.</p>
+<p><strong>Current pre-release:
+<a href="https://github.com/leonletto/thrum/releases/tag/v0.10.7-rc.1"><code>v0.10.7-rc.1</code></a></strong>
+(tagged 2026-06-26, in soak). rc.1 carries two changes:</p>
+<ul>
+<li><strong>Public DB schema floor raised v51 → v52</strong> (thrum-ej6qn) — an open-core
+compatibility bump. ⚠ <strong>The v52 migration is one-way:</strong> downgrading to a
+pre-v52 (<code>&lt;v52</code>) binary requires restoring your pre-migration-v51 backup.
+Take a <code>.thrum/</code> backup before upgrading if you may need to roll back.</li>
+<li><strong>Stuck-pane queue dispatch watchdog</strong> (thrum-7yhs) — detects and recovers
+queue-dispatch panes that wedge instead of draining their queued commands.</li>
+</ul>
+<p>Lint/security CI stages were waived for this RC (Go 1.26 tooling gap,
+pre-existing). See <a href="whats-new.html">What&#39;s New</a> for the full write-up.</p>
 </blockquote>
-<p>When an RC is in soak, this section carries its callout plus a Quick install
-block pinned to the matching <code>release/vX.Y.Z</code> branch. The install mechanics
-(binary + plugins + rollback) below are shared and parameterized over <code>VERSION</code>
-and the release branch.</p>
+<h3>Quick install for <code>v0.10.7-rc.1</code></h3>
+<p>Binary and Codex plugin (run in your shell):</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Binary</span>
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | VERSION=v0.10.7-rc.1 sh
+
+<span class="hljs-comment"># Codex plugin (matches release/v0.10.7)</span>
+THRUM_INSTALL_REF=release/v0.10.7 bash &lt;(curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/release/v0.10.7/codex-plugin/plugins/thrum/scripts/install-plugin.sh)</code></pre>
+<p>Claude Code plugin (run inside Claude):</p>
+<pre><code class="language-text hljs">/plugin marketplace add leonletto/thrum#release/v0.10.7
+/plugin install thrum@thrum
+/reload-plugins</code></pre>
+<p>For refresh between rc.N bumps, switching back to stable, and the parameterized
+versions of these commands, see
+<a href="#how-to-install-the-matching-claude-code-and-codex-plugins">How to install the matching plugins</a>
+below. The install mechanics (binary + plugins + rollback) are shared and
+parameterized over <code>VERSION</code> and the release branch.</p>
 <h2>What this is</h2>
 <p>When a new version is ready for soak, the coordinator cuts a <code>release/vX.Y.Z</code>
 branch and tags <code>vX.Y.Z-rc.1</code>. GoReleaser publishes that tag as a <strong>GitHub
