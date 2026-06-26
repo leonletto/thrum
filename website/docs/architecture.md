@@ -709,7 +709,7 @@ schema_version      # Migration tracking
 
 ### Schema Version
 
-Current version: **36**
+Current version: **52**
 
 > **v0.10.6 note:** migrations 25-36 are forward-ported from the v0.11 substrate
 > work (`thrum-agents` + `feature/b-b1-impl` branches) so the v0.10.6 binary can
