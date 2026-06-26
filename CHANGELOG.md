@@ -8,6 +8,40 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- **Public DB schema floor raised to v52 for open-core compatibility
+  (thrum-ej6qn)** — the public `0.10.x` SQLite schema `CurrentVersion` is bumped
+  `v51 → v52`, forward-porting the `agents.agent_status` /
+  `agents.agent_status_updated_at` columns so a public `0.10.7` binary can OPEN a
+  database that a private `0.11` build has already migrated to v52. This upholds
+  the contract that the public schema never lags private: without it, a machine
+  running both lines against the same shared DB would brick the older binary on
+  the one-way migration (the multi-binary footgun documented in CLAUDE.md).
+  Fresh-init and `v<52 → v52` migration produce a byte-identical surface and
+  existing rows survive with safe defaults — no action required on upgrade, and
+  mixed public/private clusters stay openable for the DB-open path in both
+  directions.
+
+### Fixed
+
+- **`thrum tmux send` no longer stalls queued commands against a stuck/silent
+  pane (thrum-7yhs)** — when the target pane was frozen (e.g. a Claude TUI stuck
+  on an API rate-limit error while still emitting a periodic spinner), tmux's
+  alert-silence hook never fired, so the dispatch path left commands in
+  `StateQueued` indefinitely (`thrum tmux queue-status` showing `Active: (none)`
+  with N queued). A dispatch-side watchdog (`pollDispatchSilence`) now polls pane
+  silence every 2s while a command waits at the head of the queue, dispatches the
+  moment the pane goes quiet, and force-flushes after a 30s ceiling regardless of
+  pane state — bounding worst-case dispatch latency deterministically and well
+  under the auto-nudge cadence. A one-shot `dispatchClaimed` gate prevents the
+  new watchdog from racing the alert-silence hook into double-typing (also
+  closing a latent pre-existing race), and the watchdog is re-armed on daemon
+  restart / queue-state recovery so a restart while a pane is stuck cannot
+  reintroduce the bug.
+
+## [0.10.6] - 2026-06-23
+
 ### ⚠ Mixed-Cluster Upgrade Warning (v0.10.6)
 
 **v0.10.6 changes the sync wire format.** The local projection journal
