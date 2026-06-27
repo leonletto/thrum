@@ -213,6 +213,31 @@ func MessageMarkRead(client *Client, messageIDs []string, callerAgentID, markedB
 	return &resp, nil
 }
 
+// DrainHiddenResponse reports how many filter-hidden deliveries were drained.
+type DrainHiddenResponse struct {
+	DrainedCount int `json:"drained_count"`
+}
+
+// MessageDrainHidden marks read the caller's filter-hidden unread deliveries —
+// the "N unread outside your filter" residual that MarkRead cannot clear
+// (thrum-f37v3 Part B). When markedBefore is non-empty, only deliveries for
+// messages created at/before that RFC3339Nano timestamp are drained (the same
+// race guard `read --all` uses).
+func MessageDrainHidden(client *Client, callerAgentID, markedBefore string) (*DrainHiddenResponse, error) {
+	req := map[string]any{}
+	if callerAgentID != "" {
+		req["caller_agent_id"] = callerAgentID
+	}
+	if markedBefore != "" {
+		req["marked_before"] = markedBefore
+	}
+	var resp DrainHiddenResponse
+	if err := client.Call("message.drainHidden", req, &resp); err != nil {
+		return nil, fmt.Errorf("message.drainHidden RPC failed: %w", err)
+	}
+	return &resp, nil
+}
+
 // FormatMarkRead formats the mark-read response for display.
 func FormatMarkRead(resp *MarkReadResponse) string {
 	if resp.MarkedCount == 1 {
