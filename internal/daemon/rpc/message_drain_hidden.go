@@ -62,19 +62,29 @@ func (h *MessageHandler) HandleDrainHidden(ctx context.Context, params json.RawM
 	clause, clauseArgs := buildForAgentClause(values, agentID, role)
 	visiblePred := strings.TrimPrefix(clause, " AND ") // "(mention OR group OR ...)"
 
+	// Safety guard (review finding #2): an empty visibility predicate would
+	// drop the NOT-arm below and drain EVERY unread delivery — visible mail
+	// included — with no receipts. buildForAgentClause only returns "" when
+	// buildForAgentValues is empty, i.e. agentID == "", which resolveAgentAndSession
+	// already rejects; this guard makes the dangerous blast radius unreachable
+	// even if that invariant ever changes upstream.
+	if visiblePred == "" {
+		return nil, fmt.Errorf("drain hidden for %q: empty visibility predicate — refusing to drain (would clear ALL unread, including visible mail, with no receipts)", agentID)
+	}
+
 	// Select the caller's hidden, unread, delivery-backed message IDs. The
 	// EXISTS clause keeps the scan bounded to mail actually delivered to this
 	// agent (mirrors the hidden_by_filter advisory count in HandleList).
+	// visiblePred is guaranteed non-empty by the guard above, so the NOT-arm
+	// (the filter-hidden complement) is always applied — visible mail is never
+	// drained here.
 	sel := `SELECT m.message_id FROM messages m
 		WHERE EXISTS (SELECT 1 FROM message_deliveries md
 		              WHERE md.message_id = m.message_id
 		                AND md.recipient_agent_id = ?
-		                AND md.read_at IS NULL)`
-	selArgs := []any{agentID}
-	if visiblePred != "" {
-		sel += " AND NOT " + visiblePred
-		selArgs = append(selArgs, clauseArgs...)
-	}
+		                AND md.read_at IS NULL)
+		  AND NOT ` + visiblePred
+	selArgs := append([]any{agentID}, clauseArgs...)
 	if req.MarkedBefore != "" {
 		sel += " AND m.created_at <= ?"
 		selArgs = append(selArgs, req.MarkedBefore)

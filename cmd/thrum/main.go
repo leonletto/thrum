@@ -6879,15 +6879,30 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			messageHandler.NotifyMessageCreate(evt)
 		}(evt)
 
-		// thrum-wvpv: nudge tmux-managed recipients. This branch fires for
-		// BOTH local writes (HandleSend) and synced writes (sync_apply →
-		// State.WriteEvent), giving cross-machine and cross-repo recipients
-		// the same tmux pane notification that local recipients used to
-		// get exclusively. nudge.DispatchTmux is fire-and-forget; failures
-		// are intentionally swallowed because nudges are advisory.
+		// thrum-wvpv: nudge tmux-managed recipients. This fires for BOTH local
+		// writes (HandleSend) and synced writes (sync_apply → State.WriteEvent),
+		// giving cross-machine and cross-repo recipients the same tmux pane
+		// notification local recipients used to get exclusively.
 		//
-		// kfn3 instrumentation: capture every dispatch attempt so phantom
-		// self-echoes show up in slog with sender + recipients + origin.
+		// hook-inbox-delivery + tmux nudge: both the per-message tmux nudge and
+		// the spool write run on ONE async goroutine off the write lock.
+		//
+		// thrum-bsn7 / review finding #1: SetOnEventWrite fires INLINE inside
+		// State.WriteEvent (state.go), which HandleSend calls while holding the
+		// exclusive state.Lock(). Any heavy work here therefore runs under that
+		// lock — starving the walker/compactor and blocking every RLock reader,
+		// and amplifying lock-hold under the exact broadcast/relay STORM this
+		// fix targets. So the f37v3 visibility precompute (a per-recipient DB
+		// query) MUST NOT run inline; it lives inside this goroutine, which the
+		// scheduler runs only after WriteEvent returns and the lock is released.
+		// The message is already projected+committed in SQLite before
+		// onEventWrite fires (WriteEvent runs the projector before the hook), so
+		// the async check observes committed state — no not-yet-projected race.
+		//
+		// The goroutine also keeps the per-recipient git-worktree walk inside
+		// HasLocalIdentity off the hot write path (the original reason this was
+		// async). nudge.DispatchTmux is fire-and-forget; failures are swallowed
+		// because nudges are advisory.
 		slog.Info("[nudge] nudge.dispatch entry",
 			"site", "main.go:SetOnEventWrite",
 			"msg_id", evt.MessageID,
@@ -6897,81 +6912,69 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			"session_id", evt.SessionID,
 			"thrum_dir", thrumDir,
 		)
-
-		// thrum-f37v3: gate the per-message delivery nudge on inbox VISIBILITY.
-		// A message the recipient's for-agent filter HIDES (a relay scoped to a
-		// group they aren't in, a broadcast addressed elsewhere) must NOT fire a
-		// "check inbox" nudge — the recipient sees an empty filtered inbox and
-		// the unread delivery never clears, the phantom-nudge flood that trains
-		// agents to ignore nudges. Both the tmux nudge AND the spool envelope
-		// (which drives the same prompt when tmux is dead) are gated on this map.
-		//
-		// FAIL-OPEN: on a visibility-check error we treat the message as visible
-		// and still nudge — a missed real ping is worse than an occasional
-		// phantom, the INVERSE of the 15-min backstop's fail-CLOSED posture
-		// (there a phantom is the failure mode, so it suppresses on doubt). The
-		// message is already projected into SQLite here (State.WriteEvent runs
-		// the projector BEFORE invoking this hook), so a hidden result is
-		// genuine, not a not-yet-projected race. The map is fully populated on
-		// this synchronous goroutine before the spool dispatch goroutine below
-		// captures it (happens-before; read-only thereafter).
-		visibleToRecipient := make(map[string]bool, len(evt.Recipients))
-		for _, r := range evt.Recipients {
-			if r == evt.AgentID {
-				continue // author never nudged; the existing self-guards cover it
-			}
-			if _, done := visibleToRecipient[r]; done {
-				continue
-			}
-			visible, vErr := messageHandler.IsMessageVisibleToAgent(context.Background(), evt.MessageID, r)
-			if vErr != nil {
-				slog.Warn("[nudge] visibility check failed; failing OPEN (will nudge)",
-					"msg_id", evt.MessageID, "recipient", r, "err", vErr)
-				visible = true
-			}
-			visibleToRecipient[r] = visible
-		}
-
-		// Filter the tmux-nudge recipients to those who can SEE the message.
-		// Directed @mentions stay visible → still nudge; only filter-hidden
-		// relay/broadcast/group mail the recipient can't see is suppressed.
-		nudgeRecipients := make([]string, 0, len(evt.Recipients))
-		for _, r := range evt.Recipients {
-			if visibleToRecipient[r] {
-				nudgeRecipients = append(nudgeRecipients, r)
-			} else if r != evt.AgentID {
-				slog.Info("[nudge] tmux.skip hidden-by-filter",
-					"site", "main.go:SetOnEventWrite",
-					"msg_id", evt.MessageID, "sender", evt.AgentID, "recipient", r)
-			}
-		}
-
-		// context.Background(): the SetOnEventWrite hook has no ctx in its
-		// signature; DispatchTmux's goroutines are fire-and-forget and bounded
-		// by the chrome-quiet dispatch deadline, and die with the process on
-		// shutdown. (Matches this hook's existing context.Background() usage.)
-		nudge.DispatchTmux(context.Background(), thrumDir, nudgeRecipients, evt.AgentID)
-
-		// hook-inbox-delivery: write a spool file for every LOCAL recipient.
-		// "Local" means the recipient has an identity file reachable from
-		// this daemon (matching the implicit rule in nudge.DispatchTmux —
-		// cross-machine recipients are a no-op because their identity file
-		// isn't on this daemon's disk). The agent-side check-inbox hook
-		// reads the spool and decides whether to surface a nudge (tmux dead)
-		// or silently consume (tmux alive — tmux path already handled it).
-		//
-		// Dispatched on its own goroutine (same async pattern as
-		// nudge.DispatchTmux) so the SetOnEventWrite writer goroutine
-		// doesn't block on the per-recipient git-worktree walk inside
-		// HasLocalIdentity. The hook contract is "synchronous but must not
-		// block" — a git subprocess per recipient on the hot write path
-		// violates that on busy daemons.
 		go func(evt types.MessageCreateEvent) {
 			defer func() {
 				if r := recover(); r != nil {
 					slog.Error("[inbox] spool dispatch panic", "panic", r)
 				}
 			}()
+
+			// thrum-f37v3: gate the per-message delivery nudge on inbox
+			// VISIBILITY. A message the recipient's for-agent filter HIDES (a
+			// relay scoped to a group they aren't in, a broadcast addressed
+			// elsewhere) must NOT fire a "check inbox" nudge — the recipient
+			// sees an empty filtered inbox and the unread delivery never clears,
+			// the phantom-nudge flood that trains agents to ignore nudges. Both
+			// the tmux nudge AND the spool envelope (which drives the same
+			// prompt when tmux is dead) are gated on this map.
+			//
+			// FAIL-OPEN: on a visibility-check error we treat the message as
+			// visible and still nudge — a missed real ping is worse than an
+			// occasional phantom, the INVERSE of the 15-min backstop's
+			// fail-CLOSED posture (there a phantom is the failure mode, so it
+			// suppresses on doubt).
+			visibleToRecipient := make(map[string]bool, len(evt.Recipients))
+			for _, r := range evt.Recipients {
+				if r == evt.AgentID {
+					continue // author never nudged; the existing self-guards cover it
+				}
+				if _, done := visibleToRecipient[r]; done {
+					continue
+				}
+				visible, vErr := messageHandler.IsMessageVisibleToAgent(context.Background(), evt.MessageID, r)
+				if vErr != nil {
+					slog.Warn("[nudge] visibility check failed; failing OPEN (will nudge)",
+						"msg_id", evt.MessageID, "recipient", r, "err", vErr)
+					visible = true
+				}
+				visibleToRecipient[r] = visible
+			}
+
+			// Filter the tmux-nudge recipients to those who can SEE the message.
+			// Directed @mentions stay visible → still nudge; only filter-hidden
+			// relay/broadcast/group mail the recipient can't see is suppressed.
+			nudgeRecipients := make([]string, 0, len(evt.Recipients))
+			for _, r := range evt.Recipients {
+				if visibleToRecipient[r] {
+					nudgeRecipients = append(nudgeRecipients, r)
+				} else if r != evt.AgentID {
+					slog.Info("[nudge] tmux.skip hidden-by-filter",
+						"site", "main.go:SetOnEventWrite",
+						"msg_id", evt.MessageID, "sender", evt.AgentID, "recipient", r)
+				}
+			}
+			// context.Background(): DispatchTmux's goroutines are fire-and-forget,
+			// bounded by the chrome-quiet dispatch deadline, and die with the
+			// process on shutdown.
+			nudge.DispatchTmux(context.Background(), thrumDir, nudgeRecipients, evt.AgentID)
+
+			// hook-inbox-delivery: write a spool file for every LOCAL recipient.
+			// "Local" means the recipient has an identity file reachable from
+			// this daemon (matching the implicit rule in nudge.DispatchTmux —
+			// cross-machine recipients are a no-op because their identity file
+			// isn't on this daemon's disk). The agent-side check-inbox hook
+			// reads the spool and decides whether to surface a nudge (tmux dead)
+			// or silently consume (tmux alive — tmux path already handled it).
 			for _, recipient := range evt.Recipients {
 				// thrum-kfn3: never write a spool entry to the sender's
 				// own dir. HandleSend is supposed to exclude callerID
