@@ -4076,6 +4076,10 @@ Examples:
 		Short: "Mark messages as read",
 		Long: `Mark one or more messages as read, or all unread messages with --all.
 
+--all also clears filter-hidden deliveries — the "N unread outside your filter"
+residual (relays/broadcasts addressed elsewhere that your inbox filter hides)
+that a per-message mark can't reach — so your unread count converges to 0.
+
 Examples:
   thrum message read msg_01HXE...
   thrum message read msg_01 msg_02 msg_03
@@ -4122,52 +4126,88 @@ Examples:
 				if err != nil {
 					return fmt.Errorf("failed to list unread messages: %w", err)
 				}
-				if len(inboxResult.Messages) == 0 {
+				// Mark the VISIBLE unread via the normal receipt path (so
+				// read-state syncs to the mesh) when any exist.
+				var result *cli.MarkReadResponse
+				if len(inboxResult.Messages) > 0 {
+					messageIDs = make([]string, len(inboxResult.Messages))
+					for i, m := range inboxResult.Messages {
+						messageIDs[i] = m.MessageID
+					}
+					result, err = cli.MessageMarkRead(client, messageIDs, agentID, markedBefore)
+					if err != nil {
+						return err
+					}
+				}
+
+				// thrum-f37v3: ALWAYS drain filter-hidden unread deliveries too —
+				// the "N unread outside your filter" residual MarkRead can never
+				// clear (recipientgate refuses a receipt for mail the agent isn't
+				// a legitimate recipient of, e.g. a relay scoped to a group it
+				// isn't in). Without this, read --all leaves phantom backstop /
+				// nudge fuel that never converges. Must run even when the visible
+				// inbox is empty (the reported case: 0 visible, N hidden). Same
+				// watermark as the visible mark preserves the late-arrival guard.
+				drained := &cli.DrainHiddenResponse{}
+				if dr, derr := cli.MessageDrainHidden(client, agentID, markedBefore); derr != nil {
+					// Non-fatal: the visible mark already succeeded. Surface as a
+					// hint (see internal/cli/CLAUDE.md --json contract) rather
+					// than failing the whole command.
+					slog.Warn("message.drainHidden failed", "err", derr)
+				} else {
+					drained = dr
+				}
+
+				if flagJSON {
+					// Combined document: preserve MarkReadResponse field names at
+					// the top level (back-compat) and add drained_hidden.
+					out := map[string]any{"drained_hidden": drained.DrainedCount}
+					if result != nil {
+						out["marked_count"] = result.MarkedCount
+						out["markable_remaining"] = result.MarkableRemaining
+						out["skipped_count"] = result.SkippedCount
+					}
+					return cli.EmitJSON(out)
+				}
+
+				if result == nil && drained.DrainedCount == 0 {
 					if !flagQuiet {
 						fmt.Println("No unread messages.")
 					}
 					return nil
 				}
-				messageIDs = make([]string, len(inboxResult.Messages))
-				for i, m := range inboxResult.Messages {
-					messageIDs[i] = m.MessageID
-				}
 
-				result, err := cli.MessageMarkRead(client, messageIDs, agentID, markedBefore)
-				if err != nil {
-					return err
-				}
-
-				// thrum-1846: use the daemon's MarkableRemaining — the count
-				// of messages THIS caller can still legitimately mark (caller
-				// is a recipient, not yet read). The previous
-				// `inboxResult.Unread - MarkedCount` counted viewer-visible
-				// mail addressed to OTHER agents, which the caller can never
-				// mark, so it never reached 0 and the "run again" hint invited
-				// an infinite retry loop — each pass re-broadcasting receipt
-				// volume (the receipt-storm trap).
-				remaining := result.MarkableRemaining
-				if flagJSON {
-					return cli.EmitJSON(result)
-				}
 				if !flagQuiet {
-					fmt.Print(cli.FormatMarkRead(result))
-					if remaining > 0 {
-						fmt.Printf("  %d unread messages remaining (run again to mark more)\n", remaining)
-					}
-					// Addendum A: late-arrival warning. SkippedCount counts
-					// IDs the daemon refused via the marked_before watermark
-					// — those are messages that arrived between when we
-					// captured the watermark and when the daemon evaluated
-					// the mark. They stay unread and the user should
-					// re-check the inbox.
-					if result.SkippedCount > 0 {
-						msgWord := "messages"
-						if result.SkippedCount == 1 {
-							msgWord = "message"
+					if result != nil {
+						fmt.Print(cli.FormatMarkRead(result))
+						// thrum-1846: use the daemon's MarkableRemaining — the
+						// count of messages THIS caller can still legitimately
+						// mark. The previous `inboxResult.Unread - MarkedCount`
+						// counted viewer-visible mail addressed to OTHER agents,
+						// which the caller can never mark, so it never reached 0
+						// and the "run again" hint invited an infinite retry loop.
+						if result.MarkableRemaining > 0 {
+							fmt.Printf("  %d unread messages remaining (run again to mark more)\n", result.MarkableRemaining)
 						}
-						fmt.Printf("  %d new %s arrived since you started reading — run `thrum inbox --unread` to see them.\n",
-							result.SkippedCount, msgWord)
+						// Addendum A: late-arrival warning. SkippedCount counts
+						// IDs the daemon refused via the marked_before watermark
+						// — messages that arrived between capturing the watermark
+						// and the daemon evaluating the mark. They stay unread.
+						if result.SkippedCount > 0 {
+							msgWord := "messages"
+							if result.SkippedCount == 1 {
+								msgWord = "message"
+							}
+							fmt.Printf("  %d new %s arrived since you started reading — run `thrum inbox --unread` to see them.\n",
+								result.SkippedCount, msgWord)
+						}
+					}
+					if drained.DrainedCount > 0 {
+						msgWord := "deliveries"
+						if drained.DrainedCount == 1 {
+							msgWord = "delivery"
+						}
+						fmt.Printf("✓ Cleared %d filter-hidden %s outside your inbox\n", drained.DrainedCount, msgWord)
 					}
 				}
 				return nil
@@ -6624,6 +6664,7 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 	server.RegisterHandler("message.delete", messageHandler.HandleDelete)
 	server.RegisterHandler("message.edit", messageHandler.HandleEdit)
 	server.RegisterHandler("message.markRead", messageHandler.HandleMarkRead)
+	server.RegisterHandler("message.drainHidden", messageHandler.HandleDrainHidden)
 	server.RegisterHandler("message.deleteByScope", messageHandler.HandleDeleteByScope)
 	server.RegisterHandler("message.deleteByAgent", messageHandler.HandleDeleteByAgent)
 	server.RegisterHandler("message.archive", messageHandler.HandleArchive)
@@ -6856,11 +6897,60 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 			"session_id", evt.SessionID,
 			"thrum_dir", thrumDir,
 		)
+
+		// thrum-f37v3: gate the per-message delivery nudge on inbox VISIBILITY.
+		// A message the recipient's for-agent filter HIDES (a relay scoped to a
+		// group they aren't in, a broadcast addressed elsewhere) must NOT fire a
+		// "check inbox" nudge — the recipient sees an empty filtered inbox and
+		// the unread delivery never clears, the phantom-nudge flood that trains
+		// agents to ignore nudges. Both the tmux nudge AND the spool envelope
+		// (which drives the same prompt when tmux is dead) are gated on this map.
+		//
+		// FAIL-OPEN: on a visibility-check error we treat the message as visible
+		// and still nudge — a missed real ping is worse than an occasional
+		// phantom, the INVERSE of the 15-min backstop's fail-CLOSED posture
+		// (there a phantom is the failure mode, so it suppresses on doubt). The
+		// message is already projected into SQLite here (State.WriteEvent runs
+		// the projector BEFORE invoking this hook), so a hidden result is
+		// genuine, not a not-yet-projected race. The map is fully populated on
+		// this synchronous goroutine before the spool dispatch goroutine below
+		// captures it (happens-before; read-only thereafter).
+		visibleToRecipient := make(map[string]bool, len(evt.Recipients))
+		for _, r := range evt.Recipients {
+			if r == evt.AgentID {
+				continue // author never nudged; the existing self-guards cover it
+			}
+			if _, done := visibleToRecipient[r]; done {
+				continue
+			}
+			visible, vErr := messageHandler.IsMessageVisibleToAgent(context.Background(), evt.MessageID, r)
+			if vErr != nil {
+				slog.Warn("[nudge] visibility check failed; failing OPEN (will nudge)",
+					"msg_id", evt.MessageID, "recipient", r, "err", vErr)
+				visible = true
+			}
+			visibleToRecipient[r] = visible
+		}
+
+		// Filter the tmux-nudge recipients to those who can SEE the message.
+		// Directed @mentions stay visible → still nudge; only filter-hidden
+		// relay/broadcast/group mail the recipient can't see is suppressed.
+		nudgeRecipients := make([]string, 0, len(evt.Recipients))
+		for _, r := range evt.Recipients {
+			if visibleToRecipient[r] {
+				nudgeRecipients = append(nudgeRecipients, r)
+			} else if r != evt.AgentID {
+				slog.Info("[nudge] tmux.skip hidden-by-filter",
+					"site", "main.go:SetOnEventWrite",
+					"msg_id", evt.MessageID, "sender", evt.AgentID, "recipient", r)
+			}
+		}
+
 		// context.Background(): the SetOnEventWrite hook has no ctx in its
 		// signature; DispatchTmux's goroutines are fire-and-forget and bounded
 		// by the chrome-quiet dispatch deadline, and die with the process on
 		// shutdown. (Matches this hook's existing context.Background() usage.)
-		nudge.DispatchTmux(context.Background(), thrumDir, evt.Recipients, evt.AgentID)
+		nudge.DispatchTmux(context.Background(), thrumDir, nudgeRecipients, evt.AgentID)
 
 		// hook-inbox-delivery: write a spool file for every LOCAL recipient.
 		// "Local" means the recipient has an identity file reachable from
@@ -6894,6 +6984,20 @@ func runDaemon(repoPath string, flagLocal bool, flagForce bool) error {
 						"site", "main.go:WriteSpool",
 						"msg_id", evt.MessageID,
 						"sender", evt.AgentID,
+					)
+					continue
+				}
+				// thrum-f37v3: same visibility gate as the tmux path (cheap map
+				// lookup, checked before the expensive HasLocalIdentity git
+				// walk). Don't spool a "check inbox" envelope for a message the
+				// recipient's filter hides — the check-inbox hook would surface
+				// it as a phantom nudge when tmux is dead.
+				if !visibleToRecipient[recipient] {
+					slog.Info("[nudge] spool.skip hidden-by-filter",
+						"site", "main.go:WriteSpool",
+						"msg_id", evt.MessageID,
+						"sender", evt.AgentID,
+						"recipient", recipient,
 					)
 					continue
 				}
