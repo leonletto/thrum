@@ -89,7 +89,15 @@ import (
 //   - v52 (thrum-ej6qn): agents.agent_status / agents.agent_status_updated_at —
 //     purely-additive forward-port of private 0.11's thrum-v8uyw mirror columns.
 //     Dead-end (no release-line reader); the empty-string defaults carry existing rows.
-const CurrentVersion = 52
+//   - v53 (thrum-2q0wt): purge_tombstones table + idx_purge_tombstones_phase —
+//     forward-port of private 0.11's fleet-purge E1. Dead-end CREATE TABLE/INDEX.
+//   - v54 (thrum-klezv): NO DDL. Private value-convention retirement of
+//     agents.phase 'parked'→'sleeping'; public is phase-agnostic, so this is a
+//     pure dead-end version advance (the private data check is 0.11-only).
+//   - v55 (thrum-2q0wt): agents.hidden_from_gui — purely-additive forward-port
+//     of private 0.11's inert GUI-visibility column. Dead-end (no release-line
+//     reader); the 0 default carries existing rows.
+const CurrentVersion = 55
 
 // SchemaVersionReadState is the read-state unification crossing (thrum-b6qw,
 // backport of thrum-tcqw): at the first boot where the pre-migration version is
@@ -286,8 +294,29 @@ func createTables(tx *sql.Tx) error {
 			phase                    TEXT NOT NULL DEFAULT 'active',
 			-- v52 forward-port (thrum-ej6qn): dead-end columns, no release-line reader.
 			agent_status             TEXT NOT NULL DEFAULT '',
-			agent_status_updated_at  TEXT NOT NULL DEFAULT ''
+			agent_status_updated_at  TEXT NOT NULL DEFAULT '',
+			-- v55 forward-port (thrum-2q0wt): dead-end column, no release-line reader.
+			hidden_from_gui          INTEGER NOT NULL DEFAULT 0
 		)`,
+
+		// v53 forward-port (thrum-2q0wt): mirror of private 0.11's fleet-purge E1
+		// table. Dead-end DDL — the public 0.10.x binary never reads it; it exists
+		// only so a v53+ (0.11-schema) DB opens without the one-way-migration brick.
+		`CREATE TABLE IF NOT EXISTS purge_tombstones (
+			tombstone_id      TEXT PRIMARY KEY,
+			target_agent_id   TEXT NOT NULL,
+			initiator         TEXT NOT NULL,
+			authorized_by     TEXT,
+			author            TEXT NOT NULL DEFAULT 'user',
+			created_at        TEXT NOT NULL,
+			grace_until       TEXT NOT NULL,
+			grace_days        INTEGER NOT NULL,
+			phase             TEXT NOT NULL DEFAULT 'pending-purge',
+			prior_agent_phase TEXT,
+			recoverable       INTEGER NOT NULL DEFAULT 1,
+			origin_daemon_id  TEXT
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_purge_tombstones_phase ON purge_tombstones(phase, grace_until)`,
 
 		// Sessions table
 		`CREATE TABLE IF NOT EXISTS sessions (
@@ -2454,6 +2483,60 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 			if !aCols["agent_status_updated_at"] {
 				if _, err := tx.Exec(`ALTER TABLE agents ADD COLUMN agent_status_updated_at TEXT NOT NULL DEFAULT ''`); err != nil {
 					return fmt.Errorf("migration 51→52: add agents.agent_status_updated_at: %w", err)
+				}
+			}
+		}
+	}
+
+	// v53 (thrum-2q0wt): forward-port of private 0.11's fleet-purge E1 table.
+	// Additive CREATE TABLE + index, dead-end (no release-line reader). IF NOT
+	// EXISTS makes a re-run on an already-migrated DB a no-op.
+	if startVersion < 53 && endVersion >= 53 {
+		if _, err := tx.Exec(`CREATE TABLE IF NOT EXISTS purge_tombstones (
+			tombstone_id      TEXT PRIMARY KEY,
+			target_agent_id   TEXT NOT NULL,
+			initiator         TEXT NOT NULL,
+			authorized_by     TEXT,
+			author            TEXT NOT NULL DEFAULT 'user',
+			created_at        TEXT NOT NULL,
+			grace_until       TEXT NOT NULL,
+			grace_days        INTEGER NOT NULL,
+			phase             TEXT NOT NULL DEFAULT 'pending-purge',
+			prior_agent_phase TEXT,
+			recoverable       INTEGER NOT NULL DEFAULT 1,
+			origin_daemon_id  TEXT
+		)`); err != nil {
+			return fmt.Errorf("migration 52→53: create purge_tombstones: %w", err)
+		}
+		if _, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_purge_tombstones_phase ON purge_tombstones(phase, grace_until)`); err != nil {
+			return fmt.Errorf("migration 52→53: create idx_purge_tombstones_phase: %w", err)
+		}
+	}
+
+	// v54 (thrum-klezv): private-side value-convention retirement of
+	// agents.phase 'parked'→'sleeping' (+ a private data check). NO DDL and thus
+	// NO migration block — public is phase-agnostic (never reads agents.phase
+	// values), so v54 is a pure dead-end version advance carried by the final
+	// schema_version UPDATE below. The private migrateParkedToSleeping check is
+	// 0.11-only and intentionally NOT run here.
+
+	// v55 (thrum-2q0wt): forward-port of private 0.11's agents.hidden_from_gui.
+	// Additive ALTER ADD COLUMN, dead-end (the public binary never reads it).
+	// Column-set-guarded so a re-run on an already-migrated DB is a no-op
+	// (SQLite has no ADD COLUMN IF NOT EXISTS).
+	if startVersion < 55 && endVersion >= 55 {
+		hasAgents, aErr := tableExists(tx, "agents")
+		if aErr != nil {
+			return fmt.Errorf("migration 54→55: check agents table: %w", aErr)
+		}
+		if hasAgents {
+			aCols, err2 := columnSet(tx, "agents")
+			if err2 != nil {
+				return fmt.Errorf("migration 54→55: read agents columns: %w", err2)
+			}
+			if !aCols["hidden_from_gui"] {
+				if _, err := tx.Exec(`ALTER TABLE agents ADD COLUMN hidden_from_gui INTEGER NOT NULL DEFAULT 0`); err != nil {
+					return fmt.Errorf("migration 54→55: add agents.hidden_from_gui: %w", err)
 				}
 			}
 		}

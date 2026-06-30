@@ -137,8 +137,8 @@ func TestForwardPortV51_FreshInit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSchemaVersion: %v", err)
 	}
-	if v != 52 {
-		t.Errorf("fresh DB version = %d, want 52 (current floor; v51 surface is a subset)", v)
+	if v != 55 {
+		t.Errorf("fresh DB version = %d, want 55 (current floor; v51 surface is a subset)", v)
 	}
 	assertV51Surface(t, db)
 }
@@ -208,15 +208,15 @@ func TestForwardPortV51_MigrateFromV40(t *testing.T) {
 	bootstrapV40(t, db)
 
 	if err := schema.Migrate(db); err != nil {
-		t.Fatalf("Migrate v40→v52: %v", err)
+		t.Fatalf("Migrate v40→v55: %v", err)
 	}
 
 	v, err := schema.GetSchemaVersion(db)
 	if err != nil {
 		t.Fatalf("GetSchemaVersion: %v", err)
 	}
-	if v != 52 {
-		t.Fatalf("post-migration version = %d, want 52 (current floor; v51 surface is a subset)", v)
+	if v != 55 {
+		t.Fatalf("post-migration version = %d, want 55 (current floor; v51 surface is a subset)", v)
 	}
 
 	// All new columns/tables present, index swap landed.
