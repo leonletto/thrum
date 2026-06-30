@@ -54,8 +54,8 @@ func TestForwardPortV52_FreshInit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSchemaVersion: %v", err)
 	}
-	if v != 52 {
-		t.Errorf("fresh DB version = %d, want 52", v)
+	if v != 55 {
+		t.Errorf("fresh DB version = %d, want 55 (current floor; v52 surface is a subset)", v)
 	}
 	assertV52Surface(t, db)
 }
@@ -114,15 +114,15 @@ func TestForwardPortV52_MigrateFromV51(t *testing.T) {
 	bootstrapV51(t, db)
 
 	if err := schema.Migrate(db); err != nil {
-		t.Fatalf("Migrate v51→v52: %v", err)
+		t.Fatalf("Migrate v51→v55: %v", err)
 	}
 
 	v, err := schema.GetSchemaVersion(db)
 	if err != nil {
 		t.Fatalf("GetSchemaVersion: %v", err)
 	}
-	if v != 52 {
-		t.Fatalf("post-migration version = %d, want 52", v)
+	if v != 55 {
+		t.Fatalf("post-migration version = %d, want 55 (current floor; v52 surface is a subset)", v)
 	}
 
 	// Both new columns present on the agents table.
