@@ -10,20 +10,33 @@ and this project adheres to
 
 ### Changed
 
-- **Public DB schema floor raised to v52 for open-core compatibility
-  (thrum-ej6qn)** — the public `0.10.x` SQLite schema `CurrentVersion` is bumped
-  `v51 → v52`, forward-porting the `agents.agent_status` /
-  `agents.agent_status_updated_at` columns so a public `0.10.7` binary can OPEN a
-  database that a private `0.11` build has already migrated to v52. This upholds
-  the contract that the public schema never lags private: without it, a machine
-  running both lines against the same shared DB would brick the older binary on
-  the one-way migration (the multi-binary footgun documented in CLAUDE.md).
-  Fresh-init and `v<52 → v52` migration produce a byte-identical surface and
-  existing rows survive with safe defaults — no action required on upgrade, and
-  mixed public/private clusters stay openable for the DB-open path in both
-  directions.
+- **Public DB schema floor raised to v55 for open-core compatibility
+  (thrum-2q0wt)** — the public `0.10.x` SQLite schema `CurrentVersion` is bumped
+  `v52 → v55`, forward-porting the private `0.11` migration ladder so a public
+  `0.10.7` binary can OPEN a database a private build has already migrated to v55:
+  `v53` adds the `purge_tombstones` table, `v54` is a no-DDL phase-convention
+  bump, and `v55` adds the additive `agents.hidden_from_gui` column. Without it,
+  a real user who licenses `0.11` (DB migrates to v55) and then downgrades to the
+  published public `0.10.7` would STRAND — the older binary cannot open a v55 DB
+  on the one-way migration (the multi-binary footgun documented in CLAUDE.md).
+  All migrations are additive dead-end DDL: fresh-init and `v<55 → v55` produce a
+  byte-identical surface and existing rows survive with safe defaults — no action
+  required on upgrade, and mixed public/private clusters stay openable for the
+  DB-open path in both directions. (Supersedes the v52 floor raised in rc.1 via
+  thrum-ej6qn — the v52 forward-port of `agents.agent_status` /
+  `agents.agent_status_updated_at` is carried forward as part of the v55 ladder.)
 
 ### Fixed
+
+- **Phantom delivery-nudge storm against filter-hidden agents eliminated
+  (thrum-f37v3)** — the per-message tmux delivery-nudge is now visibility-gated
+  (fail-OPEN, evaluated off the daemon state lock inside the async dispatch
+  goroutine) so agents hidden from a recipient's filtered view no longer trigger
+  a steady stream of phantom nudges. A companion `drainHidden` RPC stamps
+  `read_at` on filter-hidden unread messages without emitting a receipt
+  (avoiding the receipt-storm vector) and is watermark-guarded, letting
+  `thrum message read --all` drain accumulated residuals cleanly. Dual-axis
+  reviewed; `-race` green across the daemon packages and `cmd/thrum`.
 
 - **`thrum tmux send` no longer stalls queued commands against a stuck/silent
   pane (thrum-7yhs)** — when the target pane was frozen (e.g. a Claude TUI stuck
